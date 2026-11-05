@@ -21,7 +21,7 @@ cmake_minimum_required (VERSION 3.31)
 
 # ==== Set target name and version
 set (target_name website_demos)
-set (target_version "1.0.0")
+set (target_version "2.0.0")
 
 project (${target_name} VERSION ${target_version})
 
@@ -30,7 +30,7 @@ project (${target_name} VERSION ${target_version})
 #      A shader without its own .vert uses the fullscreen triangle of the graphics example.
 set (source_dir "${CMAKE_CURRENT_LIST_DIR}/source")
 set (common_shaders_dir "${source_dir}/common/shaders")
-set (fullscreen_vertex "${CMAKE_CURRENT_LIST_DIR}/../../../examples/graphics/data/shaders/fullscreen.vert")
+set (fullscreen_vertex "${common_shaders_dir}/fullscreen.vert")
 file (GLOB shader_includes "${common_shaders_dir}/*.glsl")
 
 set (shader_libraries "")
@@ -66,12 +66,6 @@ yup_add_embedded_binary_resources (${target_name}_snippets
     RESOURCE_NAMES demoSnippet
     RESOURCES "${CMAKE_CURRENT_LIST_DIR}/../partials/snippets/demo.cpp")
 
-# ==== Optimize release builds for size with link time optimization, to keep the page download small
-set (size_options "")
-if (YUP_PLATFORM_EMSCRIPTEN)
-    set (size_options $<$<CONFIG:Release>:-Os> $<$<CONFIG:Release>:-flto>)
-endif()
-
 # ==== Prepare target, hosted by the website page instead of the shell
 yup_standalone_app (
     TARGET_NAME ${target_name}
@@ -80,8 +74,6 @@ yup_standalone_app (
     TARGET_APP_ID "org.yup.${target_name}"
     TARGET_APP_NAMESPACE "org.yup"
     CUSTOM_SHELL "${CMAKE_CURRENT_LIST_DIR}/shell.html"
-    COMPILE_OPTIONS ${size_options}
-    LINK_OPTIONS ${size_options}
     MODULES
         yup::yup_core
         yup::yup_events

@@ -50,7 +50,6 @@ jobs:
         with:
           version: ${{ env.EM_VERSION }}
 
-      # Builds website_demos, which copies its .js and .wasm into website/src/public/yup for Vite
       - name: Build home page demos
         working-directory: ${{ github.workspace }}
         run: |

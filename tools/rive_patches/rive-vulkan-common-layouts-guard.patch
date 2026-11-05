@@ -1,0 +1,14 @@
+Add the missing include guard to common_layouts.hpp for unity builds.
+
+- source/renderer/vulkan/common_layouts.hpp: add the missing include guard: several Vulkan sources include this header and YUP compiles them into one unity translation unit (rive_vulkan.cpp)
+
+diff --git a/source/renderer/vulkan/common_layouts.hpp b/source/renderer/vulkan/common_layouts.hpp
+index 89551689ae1d8c7470b999a06511ad82319380c1..b36de990154bf0e62c0d3a0204b150e6e76121ff 100644
+--- a/source/renderer/vulkan/common_layouts.hpp
++++ b/source/renderer/vulkan/common_layouts.hpp
+@@ -1,3 +1,5 @@
++#pragma once
++
+ #include "rive/renderer/gpu.hpp"
+ #include "rive/renderer/vulkan/vkutil.hpp"
+ #include "shaders/constants.glsl"

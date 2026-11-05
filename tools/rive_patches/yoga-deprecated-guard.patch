@@ -1,0 +1,24 @@
+Allow overriding YG_DEPRECATED.
+
+- upstream/yoga/YGMacros.h: patched YG_DEPRECATED override guard
+
+diff --git a/upstream/yoga/YGMacros.h b/upstream/yoga/YGMacros.h
+index cd137117d27d52a7b50223e3a1aac40f840b4620..38196218ebc37123cd79ecc63a891a79d5d84d7a 100644
+--- a/upstream/yoga/YGMacros.h
++++ b/upstream/yoga/YGMacros.h
+@@ -19,6 +19,7 @@
+ #define YG_EXTERN_C_END
+ #endif
+ 
++#if !defined(YG_DEPRECATED)
+ #if defined(__cplusplus)
+ #define YG_DEPRECATED(message) [[deprecated(message)]]
+ #elif defined(_MSC_VER)
+@@ -26,6 +27,7 @@
+ #else
+ #define YG_DEPRECATED(message) __attribute__((deprecated(message)))
+ #endif
++#endif
+ 
+ #ifdef _WINDLL
+ #define WIN_EXPORT __declspec(dllexport)

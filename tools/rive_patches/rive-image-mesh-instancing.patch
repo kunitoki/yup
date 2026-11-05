@@ -1,0 +1,137 @@
+Batch instanced image meshes and give split atomic-mode instances tight bounds.
+
+- include/rive/renderer.hpp: ImageMeshInstances mesh bounds: optional local-space bounds of the mesh the instances draw, so renderers that split instances can give each one tight pixel bounds
+- include/rive/renderer.hpp: ImageMeshInstances mesh bounds: storage for the optional mesh bounds
+- source/renderer/rive_renderer.cpp: Atomic mode instanced image meshes: give each split instance tight pixel bounds from the mesh bounds instead of fullscreen, so non-overlapping instances share a draw group and skip the per-instance atomic barriers (render pass restarts on WebGPU)
+- source/renderer/render_context.cpp: Image mesh batching: image meshes are batchable like other single ElementRange draw types (image rects still aren't)
+- source/renderer/render_context.cpp: Image mesh batching: adjacent image mesh draws merge only with the same vertex, uv and index buffers, index count, blend mode and draw contents
+- source/renderer/render_context.cpp: Image mesh batching: splice adjacent compatible image mesh draws into one instanced draw
+
+diff --git a/include/rive/renderer.hpp b/include/rive/renderer.hpp
+index 47b1cb6f36dd392460f4e3582bc061146d694986..02ee88a94e12a4fc1776eb0c4cf672b99ea4c8d4 100644
+--- a/include/rive/renderer.hpp
++++ b/include/rive/renderer.hpp
+@@ -142,6 +142,19 @@ public:
+ 
+   void endEdit();
+ 
++  // Optional local-space bounds of the mesh vertices the instances draw. When
++  // set, renderers that split instances into separate draws can give each one
++  // tight pixel bounds instead of covering the whole render target.
++  void meshBounds(const AABB& bounds)
++  {
++    m_meshBounds = bounds;
++    m_hasMeshBounds = true;
++  }
++  const AABB* meshBounds() const
++  {
++    return m_hasMeshBounds ? &m_meshBounds : nullptr;
++  }
++
+ #ifdef DEBUG
+   bool isEditing() const { return m_editCount != m_endEditCount; }
+   size_t editCount() const { return m_editCount; }
+@@ -152,6 +165,8 @@ protected:
+ 
+ private:
+   std::vector<ImageMeshInstanceData> m_instanceData;
++  AABB m_meshBounds;
++  bool m_hasMeshBounds = false;
+   RIVE_DEBUG_CODE(size_t m_editCount = 0;)
+   RIVE_DEBUG_CODE(size_t m_endEditCount = 0;)
+ };
+diff --git a/source/renderer/render_context.cpp b/source/renderer/render_context.cpp
+index 75626cba751b717bac075c88ccb262e614e188e7..ce500c9156bfd07df7f3bdb8319332757491418a 100644
+--- a/source/renderer/render_context.cpp
++++ b/source/renderer/render_context.cpp
+@@ -4237,6 +4237,7 @@ static bool drawTypeIsBatchable(
+     case DrawType::stencilOuterCubicWinding:
+     case DrawType::stencilOuterCubicCover:
+     case DrawType::clipReset:
++    case DrawType::imageMesh:
+       // Most drawTypes only support one ElementRange per batch.
+       assert(!drawTypeSupportsElementRangeList(drawType));
+       return enums::no_flags_set(
+@@ -4244,10 +4245,9 @@ static bool drawTypeIsBatchable(
+           gpu::BarrierFlags::drawBatchBreak |
+               gpu::BarrierFlags::elementRangeBreak);
+ 
+-    // Image draws can't be combined for now because they each have their
++    // Image rects can't be combined for now because they each have their
+     // own unique uniforms.
+     case DrawType::imageRect:
+-    case DrawType::imageMesh:
+     case DrawType::renderPassInitialize:
+     case DrawType::renderPassResolve:
+       assert(!drawTypeSupportsElementRangeList(drawType));
+@@ -4298,6 +4298,23 @@ static bool canCombineDrawImages(
+          (currentImageSamplerKey == nextImageSamplerKey);
+ }
+ 
++// Image meshes keep everything that varies per draw in their instance data, so
++// adjacent draws of the same mesh splice into one instanced draw. They still
++// need the same geometry and the same pipeline.
++static bool canCombineImageMeshes(
++    const gpu::DrawBatch* batch,
++    const Draw* draw,
++    gpu::DrawContents drawContents)
++{
++  const auto* meshDraw = static_cast<const ImageMeshDrawBase*>(draw);
++  return batch->vertexBuffer == meshDraw->vertexBuffer() &&
++         batch->uvBuffer == meshDraw->uvBuffer() &&
++         batch->indexBuffer == meshDraw->indexBuffer() &&
++         batch->indexCountPerInstance == meshDraw->indexCount() &&
++         batch->firstBlendMode == draw->blendMode() &&
++         batch->drawContents == drawContents;
++}
++
+ constexpr uint32_t patchIndexCount(DrawType drawType)
+ {
+   switch (drawType)
+@@ -4580,6 +4597,8 @@ gpu::DrawBatch& RenderContext::LogicalFlush::pushDraw(
+             draw->imageTexture(),
+             currentBatch->imageSampler,
+             draw->imageSampler()) &&
++        (drawType != DrawType::imageMesh ||
++         canCombineImageMeshes(currentBatch, draw, drawContents)) &&
+         (!m_ctx->platformFeatures().supportsClipScissor ||
+          currentBatch->scissorRect == draw->scissorRect()))
+     {
+diff --git a/source/renderer/rive_renderer.cpp b/source/renderer/rive_renderer.cpp
+index f96d2d6b2286425457cdc6221de9a352a4760a55..f33b8c75c5a98aee86c116053deece96ae4748a3 100644
+--- a/source/renderer/rive_renderer.cpp
++++ b/source/renderer/rive_renderer.cpp
+@@ -1033,15 +1033,31 @@ void RiveRenderer::drawImageMeshInstanced(
+     // instances may overlap. As a workaround, issue individual draw calls
+     // for each instance instead. This is slow, and I'm only doing it this
+     // way because atomic mode is soon going away.
++    //
++    // With known mesh bounds, each instance gets tight pixel bounds so
++    // instances that don't overlap can share a draw group and skip the
++    // atomic barriers (which restart the render pass on some backends).
++    const AABB* meshBounds = instances->meshBounds();
+     for (const auto& instanceData : instances->instanceData())
+     {
++      const Mat2D instanceMatrix =
++          m_renderStateStack.back().matrix * instanceData.transform;
++      const IAABB pixelBounds =
++          meshBounds != nullptr
++              ? instanceMatrix.mapBoundingBox(*meshBounds).roundOut()
++              : gpu::Draw::FULLSCREEN_PIXEL_BOUNDS;
++      if (pixelBounds.empty())
++      {
++        continue;
++      }
++
+       float finalOpacity = std::max(
+           0.0f,
+           instanceData.opacity * m_renderStateStack.back().modulatedOpacity);
+ 
+       clipAndPushDraw(gpu::DrawUniquePtr(m_context->make<gpu::ImageMeshDraw>(
+-          gpu::Draw::FULLSCREEN_PIXEL_BOUNDS,
+-          m_renderStateStack.back().matrix * instanceData.transform,
++          pixelBounds,
++          instanceMatrix,
+           BlendMode::srcOver,
+           instanceData.additiveness,
+           imageTexture,

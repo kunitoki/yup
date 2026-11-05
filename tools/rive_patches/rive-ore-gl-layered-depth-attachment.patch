@@ -1,0 +1,33 @@
+Attach depth array layers and cube faces with the matching GL call.
+
+- source/renderer/ore/gl/ore_context_gl.cpp: Ore GL beginRenderPass: attach a layer of a depth array or cube face with the matching call, as color attachments do, instead of always as a 2D texture
+
+diff --git a/source/renderer/ore/gl/ore_context_gl.cpp b/source/renderer/ore/gl/ore_context_gl.cpp
+index f6ca307d474486aef4fba23b1785f7b7de0c1251..539a2c5ac2afc290d517afb2284044096bf04669 100644
+--- a/source/renderer/ore/gl/ore_context_gl.cpp
++++ b/source/renderer/ore/gl/ore_context_gl.cpp
+@@ -1264,6 +1264,24 @@ std::unique_ptr<RenderPass> ContextGL::beginRenderPass(
+           GL_RENDERBUFFER,
+           depthTexGL->m_glRenderbuffer);
+     }
++    else if (depthTexGL->type() == TextureType::cube)
++    {
++      glFramebufferTexture2D(
++          GL_FRAMEBUFFER,
++          depthAttachment,
++          GL_TEXTURE_CUBE_MAP_POSITIVE_X + desc.depthStencil.view->baseLayer(),
++          depthTexGL->m_glTexture,
++          desc.depthStencil.view->baseMipLevel());
++    }
++    else if (depthTexGL->type() == TextureType::array2D)
++    {
++      glFramebufferTextureLayer(
++          GL_FRAMEBUFFER,
++          depthAttachment,
++          depthTexGL->m_glTexture,
++          desc.depthStencil.view->baseMipLevel(),
++          desc.depthStencil.view->baseLayer());
++    }
+     else
+     {
+       glFramebufferTexture2D(

@@ -176,7 +176,7 @@ private:
 
     void advance (float deltaSeconds) override
     {
-        const auto lift = layersLift.update (pointer, cardInView, deltaSeconds);
+        const auto lift = layersLift.update (pointer, cardInView, getLocalBounds(), deltaSeconds);
         view.setLift (lift);
 
         const auto center = cardInView.getCenter();

@@ -1,0 +1,91 @@
+Restore the whole mip chain of textures narrowed by a GL render pass.
+
+- source/renderer/ore/gl/ore_texture_gl.hpp: Ore GL: TextureGL::restoreSampledLevels hands a narrowed texture its whole mip chain back
+- source/renderer/ore/gl/ore_texture_gl.cpp: Ore GL: TextureGL::restoreSampledLevels implementation
+- source/renderer/ore/gl/ore_render_pass_gl.hpp: Ore GL: a render pass remembers the textures it narrowed to a mip range
+- source/renderer/ore/gl/ore_render_pass_gl.cpp: Ore GL applySampledLevels: record textures narrowed to a mip range
+- source/renderer/ore/gl/ore_render_pass_gl.cpp: Ore GL finish: restore the whole mip chain of narrowed textures so the GL object leaves the pass unnarrowed
+
+diff --git a/source/renderer/ore/gl/ore_render_pass_gl.cpp b/source/renderer/ore/gl/ore_render_pass_gl.cpp
+index e07f50f468d37e9ea61544032056ee17d5e9fe8e..4871dbe3f4defe12c109cb2e271436bed70283e9 100644
+--- a/source/renderer/ore/gl/ore_render_pass_gl.cpp
++++ b/source/renderer/ore/gl/ore_render_pass_gl.cpp
+@@ -615,7 +615,18 @@ void RenderPassGL::applySampledLevels()
+     }
+   }
+   for (const auto& l : m_sampledLevels)
++  {
+     l.texture->setSampledLevels(l.unit, l.base, l.max);
++    const bool narrowed =
++        l.base != 0 || l.max + 1 < std::max(l.texture->numMipmaps(), 1u);
++    if (narrowed &&
++        std::none_of(m_narrowedTextures.begin(),
++                     m_narrowedTextures.end(),
++                     [&](const auto& t) { return t.get() == l.texture; }))
++    {
++      m_narrowedTextures.push_back(ref_rcp(l.texture));
++    }
++  }
+ }
+ 
+ void RenderPassGL::setViewport(
+@@ -741,6 +752,10 @@ void RenderPassGL::finish()
+   m_currentPipeline = nullptr;
+   releaseBoundResources();
+ 
++  for (const auto& texture : m_narrowedTextures)
++    texture->restoreSampledLevels();
++  m_narrowedTextures.clear();
++
+   glDisable(GL_SCISSOR_TEST);
+   glDisable(GL_BLEND);
+   glDisable(GL_DEPTH_TEST);
+diff --git a/source/renderer/ore/gl/ore_render_pass_gl.hpp b/source/renderer/ore/gl/ore_render_pass_gl.hpp
+index 544c779effc3228e480ef4cdc38d4bc9b2c1a942..773bcaf1daf06ab3219013c8d7e3694adf5913b9 100644
+--- a/source/renderer/ore/gl/ore_render_pass_gl.hpp
++++ b/source/renderer/ore/gl/ore_render_pass_gl.hpp
+@@ -83,6 +83,8 @@ private:
+     uint32_t max;
+   };
+   std::vector<SampledLevels> m_sampledLevels;
++  // Textures this pass narrowed, restored to their whole chain at finish().
++  std::vector<rcp<TextureGL>> m_narrowedTextures;
+ 
+   // Buffers and textures at the pipeline's units, which differ from the
+   // layout's when the layout came from another shader.
+diff --git a/source/renderer/ore/gl/ore_texture_gl.cpp b/source/renderer/ore/gl/ore_texture_gl.cpp
+index 82d21e1049c6d0faf222e4b410f8e1648672a970..c2d4a0dbf37126e6e0e58b1a4aa70abea61cbf9c 100644
+--- a/source/renderer/ore/gl/ore_texture_gl.cpp
++++ b/source/renderer/ore/gl/ore_texture_gl.cpp
+@@ -340,6 +340,17 @@ void TextureGL::setSampledLevels(uint32_t unit, uint32_t base, uint32_t max)
+   m_glMaxLevel = max;
+ }
+ 
++void TextureGL::restoreSampledLevels()
++{
++  const uint32_t max = std::max(numMipmaps(), 1u) - 1;
++  if (m_glBaseLevel == 0 && m_glMaxLevel == max)
++    return;
++  glActiveTexture(GL_TEXTURE0);
++  glBindTexture(m_glTarget, m_glTexture);
++  setSampledLevels(0, 0, max);
++  glBindTexture(m_glTarget, 0);
++}
++
+ TextureGL::~TextureGL()
+ {
+   if (m_glRenderbuffer != 0 && m_glOwnsTexture)
+diff --git a/source/renderer/ore/gl/ore_texture_gl.hpp b/source/renderer/ore/gl/ore_texture_gl.hpp
+index 62ea3852b16849cf3438a8dc6a5488b5199fff06..0466a32b220df7f5ca59022cbe084736536b038c 100644
+--- a/source/renderer/ore/gl/ore_texture_gl.hpp
++++ b/source/renderer/ore/gl/ore_texture_gl.hpp
+@@ -15,6 +15,9 @@ public:
+   // GLES3 has no texture views, so a sampled view's mip range is texture
+   // state. Expects the texture bound at `unit`.
+   void setSampledLevels(uint32_t unit, uint32_t base, uint32_t max);
++  // Hands the whole mip chain back, so GL users outside ore never inherit a
++  // narrowed view's range. Binds and unbinds the texture on unit 0.
++  void restoreSampledLevels();
+ 
+ private:
+   friend class ContextGL;

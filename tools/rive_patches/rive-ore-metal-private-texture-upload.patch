@@ -1,0 +1,134 @@
+Upload into private Metal textures through a blit.
+
+- source/renderer/ore/metal/ore_texture_metal.hpp: Ore Metal texture: hold the owning ContextMetal, so an upload into a private storage texture can reach the device and command queue
+- source/renderer/ore/metal/ore_context_metal.mm: Ore Metal makeTexture: record the owning context on the texture, needed by uploads into private (render target) textures
+- source/renderer/ore/metal/ore_context_metal.mm: Ore Metal wrapRenderTarget/wrapCanvasTexture: record the owning context on the wrapped texture, so an upload into the private target texture does not dereference a null context
+- source/renderer/ore/metal/ore_context_metal.mm: Ore Metal wrapRiveTexture: record the owning context on the borrowed texture, which may be private, so uploads into it can blit
+- source/renderer/ore/metal/ore_texture_metal.mm: Ore Metal texture upload: include the Metal context, whose device and command queue the private storage upload path uses
+- source/renderer/ore/metal/ore_texture_metal.mm: Ore Metal texture upload: Metal forbids replaceRegion on MTLStorageModePrivate textures (render targets are private), and Metal API Validation aborts on it. Stage the bytes in a shared MTLBuffer and blit them into the requested mip, slice and region on the context queue, then wait, keeping replaceRegion's synchronous semantics. Shared and managed textures keep replaceRegion. The staging buffer covers only the bytes replaceRegion would read, since GpuTexture::upload does not pass dataSize. Combined depth-stencil formats (a plain buffer copy cannot fill them) and block-compressed formats are refused, and a failed staging allocation, command buffer creation or blit is reported, all through setLastError, which GpuTexture::upload turns into false.
+
+diff --git a/source/renderer/ore/metal/ore_context_metal.mm b/source/renderer/ore/metal/ore_context_metal.mm
+index 6f723d93d657d4c965d863cf52ce641eff55b6fc..7480732395be99608a08a668aa2312ad098a0c0e 100644
+--- a/source/renderer/ore/metal/ore_context_metal.mm
++++ b/source/renderer/ore/metal/ore_context_metal.mm
+@@ -519,6 +519,7 @@ inline rcp<Texture> ContextMetal::mtlMakeTexture(const TextureDesc& desc)
+   }
+ 
+   auto texture = rcp<TextureMetal>(new TextureMetal(desc));
++  texture->m_ctx = this;
+ #if RIVE_OBJC_EXCEPTIONS
+   @try
+   {
+@@ -1083,6 +1084,7 @@ inline rcp<TextureView> ContextMetal::mtlWrapTarget(gpu::RenderTarget* target)
+ 
+   auto texture = rcp<TextureMetal>(new TextureMetal(texDesc));
+   texture->m_mtlTexture = mtlTexture;
++  texture->m_ctx = this;
+ 
+   TextureViewDesc viewDesc{};
+   viewDesc.texture = texture.get();
+@@ -1318,6 +1320,7 @@ rcp<TextureView> ContextMetal::wrapRiveTexture(
+ 
+   auto texture = rcp<TextureMetal>(new TextureMetal(texDesc));
+   texture->m_mtlTexture = mtlTex; // Borrow — caller owns via RenderImage.
++  texture->m_ctx = this;
+ 
+   TextureViewDesc viewDesc{};
+   viewDesc.texture = texture.get();
+diff --git a/source/renderer/ore/metal/ore_texture_metal.hpp b/source/renderer/ore/metal/ore_texture_metal.hpp
+index 479ab9fda9ecf8c33c778f30cd90302419d62615..f65317424756cefc9c014f6d550b1f9515a41d3b 100644
+--- a/source/renderer/ore/metal/ore_texture_metal.hpp
++++ b/source/renderer/ore/metal/ore_texture_metal.hpp
+@@ -17,6 +17,7 @@ public:
+ private:
+   friend class ContextMetal;
+   id<MTLTexture> m_mtlTexture = nil;
++  ContextMetal* m_ctx = nullptr;
+ };
+ 
+ class TextureViewMetal
+diff --git a/source/renderer/ore/metal/ore_texture_metal.mm b/source/renderer/ore/metal/ore_texture_metal.mm
+index 830ca7e655420961dd31c816682f9bc1a693cd90..500048e965b2d6bc4a55f28563e365aedf82b9c3 100644
+--- a/source/renderer/ore/metal/ore_texture_metal.mm
++++ b/source/renderer/ore/metal/ore_texture_metal.mm
+@@ -3,6 +3,7 @@
+  */
+ 
+ #include "ore_texture_metal.hpp"
++#include "rive/renderer/ore/ore_context_metal.hpp"
+ #include "rive/rive_types.hpp"
+ 
+ #import <Metal/Metal.h>
+@@ -28,6 +29,72 @@ void TextureMetal::uploadImpl(const TextureDataDesc& data)
+                                                 data.rowsPerImage
+                                           : 0;
+ 
++  if (m_mtlTexture.storageMode == MTLStorageModePrivate)
++  {
++    assert(m_ctx != nullptr);
++    if (m_format == TextureFormat::depth24plusStencil8 ||
++      m_format == TextureFormat::depth32floatStencil8)
++    {
++      m_ctx->setLastError(
++        "upload: combined depth-stencil formats are not supported "
++        "on private textures");
++      return;
++    }
++    const uint32_t bpt = textureFormatBytesPerTexel(m_format);
++    if (bpt == 0)
++    {
++      m_ctx->setLastError("upload: block-compressed formats are not "
++                "supported on private textures");
++      return;
++    }
++    const NSUInteger stagingSize =
++      mtlBytesPerImage * (data.depth - 1) +
++      static_cast<NSUInteger>(data.bytesPerRow) * (data.height - 1) +
++      static_cast<NSUInteger>(data.width) * bpt;
++    @autoreleasepool
++    {
++      id<MTLBuffer> staging =
++        [m_ctx->device() newBufferWithBytes:data.data
++                      length:stagingSize
++                      options:MTLResourceStorageModeShared];
++      if (staging == nil)
++      {
++        m_ctx->setLastError(
++          "upload: staging buffer allocation failed (size=%llu)",
++          static_cast<unsigned long long>(stagingSize));
++        return;
++      }
++      id<MTLCommandBuffer> commandBuffer = [m_ctx->m_mtlQueue commandBuffer];
++      if (commandBuffer == nil)
++      {
++        m_ctx->setLastError("upload: command buffer creation failed");
++        return;
++      }
++      id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
++      [blit copyFromBuffer:staging
++           sourceOffset:0
++         sourceBytesPerRow:data.bytesPerRow
++        sourceBytesPerImage:mtlBytesPerImage
++            sourceSize:MTLSizeMake(
++                    data.width, data.height, data.depth)
++             toTexture:m_mtlTexture
++         destinationSlice:data.layer
++         destinationLevel:data.mipLevel
++         destinationOrigin:MTLOriginMake(data.x, data.y, data.z)];
++      [blit endEncoding];
++      [commandBuffer commit];
++      [commandBuffer waitUntilCompleted];
++      if (commandBuffer.status == MTLCommandBufferStatusError)
++      {
++        m_ctx->setLastError(
++          "upload: blit failed: %s",
++          commandBuffer.error.localizedDescription.UTF8String
++            ?: "unknown");
++      }
++    }
++    return;
++  }
++
+   [m_mtlTexture replaceRegion:region
+                   mipmapLevel:data.mipLevel
+                         slice:data.layer

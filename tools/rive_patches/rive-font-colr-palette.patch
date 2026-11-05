@@ -1,0 +1,19 @@
+Load the CPAL palette correctly so COLRv0 emoji render in color.
+
+- source/text/font_hb.cpp: load the CPAL palette: hb_ot_color_palette_get_colors returns the palette size, the in/out count only says how many colors to copy, so COLRv0 emoji (Twemoji, Segoe UI Emoji) drew every layer black
+
+diff --git a/source/text/font_hb.cpp b/source/text/font_hb.cpp
+index f490b9cb1a4743da985be271d839cd0fd2c4cf8e..bf18635190af367d266106d41d4327f259b7816d 100644
+--- a/source/text/font_hb.cpp
++++ b/source/text/font_hb.cpp
+@@ -844,8 +844,8 @@ HBFont::HBFont(
+   m_hasPNG = hb_ot_color_has_png(face);
+   if (m_hasColorLayers || m_hasColorPaint)
+   {
+-    unsigned int colorCount = 0;
+-    hb_ot_color_palette_get_colors(face, 0, 0, &colorCount, nullptr);
++    unsigned int colorCount =
++      hb_ot_color_palette_get_colors(face, 0, 0, nullptr, nullptr);
+     if (colorCount > 0)
+     {
+       m_paletteColors.resize(colorCount);

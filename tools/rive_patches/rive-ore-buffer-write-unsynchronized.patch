@@ -1,0 +1,188 @@
+Buffer::writeUnsynchronized for append-only uniform rings.
+
+- include/rive/renderer/ore/ore_buffer.hpp: Ore Buffer: writeUnsynchronized(data, size, offset, discard) for an append-only uniform ring that binds one buffer at many dynamic offsets within a frame. It writes [offset, offset + size) of the storage already bound, without the orphan update() does when the buffer was bound since its last update, because the caller guarantees no recorded command reads that range. discard marks the first write of a new use of the buffer: storage the GPU may still read is replaced without copying, so every byte outside the written range becomes undefined. The bound-since-update state is left alone, so a later update() still orphans. The base default is update(), correct but slow, which is what GL (glBufferSubData at the offset, implicitly synchronized) and D3D12 use. Contract the ring relies on: within a frame each range is written at most once and only before the commands reading it are recorded, since on WebGPU every queued write lands before that frame's submit
+- source/renderer/ore/metal/ore_buffer_metal.hpp: Ore Metal buffer: declare the writeUnsynchronized override (see the ore_buffer.hpp entry)
+- source/renderer/ore/metal/ore_buffer_metal.mm: Ore Metal buffer writeUnsynchronized: memcpy into the current shared backing at the offset, no orphan and no carry-forward copy. With discard, a current backing whose last bound serial is above completedSerial (the GPU may still read it) is swapped for a completed or new backing through acquireFreshBacking(0, m_size), whose whole-buffer range skips the copy; on allocation failure it writes in place like update(). m_boundSinceUpdate is never touched
+- source/renderer/ore/vulkan/ore_buffer_vulkan.hpp: Ore Vulkan buffer: declare the writeUnsynchronized override (see the ore_buffer.hpp entry)
+- source/renderer/ore/vulkan/ore_buffer_vulkan.cpp: Ore Vulkan buffer writeUnsynchronized: memcpy into the persistently mapped current backing at the offset, no orphan and no copy. With discard, a pooled current backing that acquireFreshBacking would not consider retired (frameStamp above safeFrameNumber or not before currentFrameNumber) is swapped for a retired or new one through acquireFreshBacking(0, m_size), which skips the copy and updates the mirrored handles. Staging buffers (empty pool) never swap. m_boundSinceUpdate is never touched
+- source/renderer/ore/wgpu/ore_buffer_wgpu.hpp: Ore WebGPU buffer: declare the writeUnsynchronized override (see the ore_buffer.hpp entry); discard is unused
+- source/renderer/ore/wgpu/ore_buffer_wgpu.cpp: Ore WebGPU buffer writeUnsynchronized: queue a WriteBuffer of just the range into the current backing, no orphan. Queue writes are ordered after the previous frame submit and land before this frame's, and ring ranges never overlap within a frame, so discard is a no-op. offset and size must be multiples of 4, as WriteBuffer requires. The CPU shadow is kept in sync so a later orphaning update() rewrites the ring bytes instead of stale or zero ones
+- source/renderer/ore/d3d11/ore_buffer_d3d11.hpp: Ore D3D11 buffer: declare the writeUnsynchronized override (see the ore_buffer.hpp entry)
+- source/renderer/ore/d3d11/ore_buffer_d3d11.cpp: Ore D3D11 buffer writeUnsynchronized: Map with WRITE_DISCARD when discard, else WRITE_NO_OVERWRITE, and write only the range; the shadow copy is kept in sync for a later partial update(). Precondition for constant buffers: D3D11_FEATURE_DATA_D3D11_OPTIONS::MapNoOverwriteOnDynamicConstantBuffer (NO_OVERWRITE on a dynamic CB) and ConstantBufferOffsetting (VS/PSSetConstantBuffers1 for the dynamic offsets); YUP must not call it on a uniform buffer without both. The first write of a buffer's use must be a discard. A failed Map is asserted and returns without writing
+
+diff --git a/include/rive/renderer/ore/ore_buffer.hpp b/include/rive/renderer/ore/ore_buffer.hpp
+index d069ed1f28947f0f7108d8d7c61c9c77f7450e68..c74c5c6fa84d94efb3b4af0111b4a450faf967d6 100644
+--- a/include/rive/renderer/ore/ore_buffer.hpp
++++ b/include/rive/renderer/ore/ore_buffer.hpp
+@@ -21,6 +21,12 @@ public:
+ 
+   virtual void update(const void* data, uint32_t size, uint32_t offset = 0) = 0;
+ 
++  virtual void writeUnsynchronized(
++      const void* data, uint32_t size, uint32_t offset, bool)
++  {
++    update(data, size, offset);
++  }
++
+   virtual ~Buffer() = default;
+ 
+ protected:
+diff --git a/source/renderer/ore/d3d11/ore_buffer_d3d11.cpp b/source/renderer/ore/d3d11/ore_buffer_d3d11.cpp
+index aaef12036362181039f811da81036c9c71d4d203..40fbfd14c4b06559dc25a968cd486d0d5a7efa30 100644
+--- a/source/renderer/ore/d3d11/ore_buffer_d3d11.cpp
++++ b/source/renderer/ore/d3d11/ore_buffer_d3d11.cpp
+@@ -47,6 +47,30 @@ void BufferD3D11::update(const void* data, uint32_t size, uint32_t offset)
+     memcpy(mapped.pData, m_shadow.data(), m_size);
+   m_d3d11Context->Unmap(m_d3d11Buffer.Get(), 0);
+ }
++
++void BufferD3D11::writeUnsynchronized(
++    const void* data, uint32_t size, uint32_t offset, bool discard)
++{
++  assert(offset + size <= m_size);
++  assert(m_d3d11Context != nullptr);
++  assert(m_d3d11Buffer != nullptr);
++
++  if (m_shadow.empty())
++    m_shadow.resize(m_size, 0);
++  memcpy(m_shadow.data() + offset, data, size);
++  D3D11_MAPPED_SUBRESOURCE mapped{};
++  HRESULT hr = m_d3d11Context->Map(
++      m_d3d11Buffer.Get(),
++      0,
++      discard ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE,
++      0,
++      &mapped);
++  assert(SUCCEEDED(hr));
++  if (FAILED(hr))
++    return;
++  memcpy(static_cast<uint8_t*>(mapped.pData) + offset, data, size);
++  m_d3d11Context->Unmap(m_d3d11Buffer.Get(), 0);
++}
+ #endif // ORE_BACKEND_D3D11 && !ORE_BACKEND_D3D12
+ 
+ } // namespace rive::ore
+diff --git a/source/renderer/ore/d3d11/ore_buffer_d3d11.hpp b/source/renderer/ore/d3d11/ore_buffer_d3d11.hpp
+index b2fca8fe0b412fc3abd6d39d43761b311a0c42a3..48c78830477c81c5bfcae9bf45f0641bf0fe5815 100644
+--- a/source/renderer/ore/d3d11/ore_buffer_d3d11.hpp
++++ b/source/renderer/ore/d3d11/ore_buffer_d3d11.hpp
+@@ -16,6 +16,10 @@ public:
+   {}
+   ~BufferD3D11() override = default; // ComPtr released automatically
+   void update(const void* data, uint32_t size, uint32_t offset) override;
++  void writeUnsynchronized(const void* data,
++                           uint32_t size,
++                           uint32_t offset,
++                           bool discard) override;
+ 
+ private:
+   friend class ContextD3D11;
+diff --git a/source/renderer/ore/metal/ore_buffer_metal.hpp b/source/renderer/ore/metal/ore_buffer_metal.hpp
+index 0ec62c1fd59d4dfe5f46b4bf75ab771b0aa2b0be..47334d2c59c66d0b5266947d0714428ae38ff58d 100644
+--- a/source/renderer/ore/metal/ore_buffer_metal.hpp
++++ b/source/renderer/ore/metal/ore_buffer_metal.hpp
+@@ -21,6 +21,10 @@ public:
+   ~BufferMetal() override = default; // ARC releases the backings
+ 
+   void update(const void* data, uint32_t size, uint32_t offset) override;
++  void writeUnsynchronized(const void* data,
++                           uint32_t size,
++                           uint32_t offset,
++                           bool discard) override;
+ 
+   // Backing to bind right now.
+   id<MTLBuffer> current() const { return m_pool[m_currentIndex].mtl; }
+diff --git a/source/renderer/ore/metal/ore_buffer_metal.mm b/source/renderer/ore/metal/ore_buffer_metal.mm
+index bba0786aebabeaab55d2f230cc2ded79cfeb0b1c..08264924ee3d35c2d6d8385fc0008bf79e34ede9 100644
+--- a/source/renderer/ore/metal/ore_buffer_metal.mm
++++ b/source/renderer/ore/metal/ore_buffer_metal.mm
+@@ -73,4 +73,16 @@ void BufferMetal::update(const void* data, uint32_t size, uint32_t offset)
+       size);
+ }
+ 
++void BufferMetal::writeUnsynchronized(
++    const void* data, uint32_t size, uint32_t offset, bool discard)
++{
++  assert(offset + size <= m_size);
++  if (discard && m_pool[m_currentIndex].serial > m_ctx->completedSerial())
++    acquireFreshBacking(0, m_size);
++  memcpy(
++      static_cast<uint8_t*>([m_pool[m_currentIndex].mtl contents]) + offset,
++      data,
++      size);
++}
++
+ } // namespace rive::ore
+diff --git a/source/renderer/ore/vulkan/ore_buffer_vulkan.cpp b/source/renderer/ore/vulkan/ore_buffer_vulkan.cpp
+index 179c751df1b0d49454c17e9bc351070df6ce9a21..1ac98fe44f7fbc8451d9ad0d60240c7d0b84ae03 100644
+--- a/source/renderer/ore/vulkan/ore_buffer_vulkan.cpp
++++ b/source/renderer/ore/vulkan/ore_buffer_vulkan.cpp
+@@ -117,4 +117,19 @@ void BufferVulkan::update(const void* data, uint32_t size, uint32_t offset)
+   memcpy(static_cast<uint8_t*>(m_vkMappedPtr) + offset, data, size);
+ }
+ 
++void BufferVulkan::writeUnsynchronized(
++    const void* data, uint32_t size, uint32_t offset, bool discard)
++{
++  assert(offset + size <= m_size);
++  if (discard && !m_pool.empty())
++  {
++    const uint64_t stamp = m_pool[m_currentIndex].frameStamp;
++    if (!(stamp <= m_manager->safeFrameNumber() &&
++          stamp < m_manager->currentFrameNumber()))
++      acquireFreshBacking(0, m_size);
++  }
++  assert(m_vkMappedPtr != nullptr);
++  memcpy(static_cast<uint8_t*>(m_vkMappedPtr) + offset, data, size);
++}
++
+ } // namespace rive::ore
+diff --git a/source/renderer/ore/vulkan/ore_buffer_vulkan.hpp b/source/renderer/ore/vulkan/ore_buffer_vulkan.hpp
+index 4529e182af82e8f4a89e3ad9035636904cea1eea..8d3fb2233c2cd39213008b32206d2658bd90a67d 100644
+--- a/source/renderer/ore/vulkan/ore_buffer_vulkan.hpp
++++ b/source/renderer/ore/vulkan/ore_buffer_vulkan.hpp
+@@ -23,6 +23,10 @@ public:
+   {}
+   ~BufferVulkan() override;
+   void update(const void* data, uint32_t size, uint32_t offset) override;
++  void writeUnsynchronized(const void* data,
++                           uint32_t size,
++                           uint32_t offset,
++                           bool discard) override;
+ 
+   // Backing to bind right now.
+   VkBuffer current() const { return m_vkBuffer; }
+diff --git a/source/renderer/ore/wgpu/ore_buffer_wgpu.cpp b/source/renderer/ore/wgpu/ore_buffer_wgpu.cpp
+index 7d81aebf01cb58f3f10a09c9b6aaf0c0f343087b..c9c6c5ef0eefdfa33fce17ef16634443ea9e9fab 100644
+--- a/source/renderer/ore/wgpu/ore_buffer_wgpu.cpp
++++ b/source/renderer/ore/wgpu/ore_buffer_wgpu.cpp
+@@ -83,4 +83,14 @@ void BufferWGPU::update(const void* data, uint32_t size, uint32_t offset)
+       .WriteBuffer(current(), begin, m_shadow.data() + begin, end - begin);
+ }
+ 
++void BufferWGPU::writeUnsynchronized(
++    const void* data, uint32_t size, uint32_t offset, bool)
++{
++  assert(offset + size <= m_size);
++  if (m_shadow.empty())
++    m_shadow.resize(m_size, 0);
++  memcpy(m_shadow.data() + offset, data, size);
++  m_wgpuQueue.WriteBuffer(current(), offset, data, size);
++}
++
+ } // namespace rive::ore
+diff --git a/source/renderer/ore/wgpu/ore_buffer_wgpu.hpp b/source/renderer/ore/wgpu/ore_buffer_wgpu.hpp
+index 288445249b30edb8f8a9ec3e8d264fc5b64ef9bb..72cf4039a2fbd1d37b3e3c6e5bea969485e95680 100644
+--- a/source/renderer/ore/wgpu/ore_buffer_wgpu.hpp
++++ b/source/renderer/ore/wgpu/ore_buffer_wgpu.hpp
+@@ -20,6 +20,10 @@ public:
+   ~BufferWGPU() override = default; // wgpu::Buffer RAII destructor releases
+ 
+   void update(const void* data, uint32_t size, uint32_t offset) override;
++  void writeUnsynchronized(const void* data,
++                           uint32_t size,
++                           uint32_t offset,
++                           bool) override;
+ 
+   // Backing to bind right now.
+   const wgpu::Buffer& current() const { return m_pool[m_currentIndex].buffer; }

@@ -215,11 +215,17 @@ update_emscripten_example NAME DEST DEMOPATH:
 [doc("update the example graphics demos")]
 update_emscripten_examples DEMOPATH="../yup-demos/demos":
   @just emscripten Release example_graphics
+  @just update_emscripten_example CodeEditor code-editor {{DEMOPATH}}
   @just update_emscripten_example Component3D component-3d {{DEMOPATH}}
   @just update_emscripten_example ComponentEffects component-effects {{DEMOPATH}}
+  @just update_emscripten_example ComputeParticles compute-particles {{DEMOPATH}}
+  @just update_emscripten_example Emoji emoji {{DEMOPATH}}
   @just update_emscripten_example Filter filter {{DEMOPATH}}
   @just update_emscripten_example FluidSimulation fluid-simulation {{DEMOPATH}}
+  @just update_emscripten_example ListBox list-box {{DEMOPATH}}
   @just update_emscripten_example Lottie lottie {{DEMOPATH}}
+  @just update_emscripten_example ImageMesh image-mesh {{DEMOPATH}}
+  @just update_emscripten_example Paths paths {{DEMOPATH}}
   @just update_emscripten_example Pbr pbr {{DEMOPATH}}
   @just update_emscripten_example Scene3D scene3d {{DEMOPATH}}
   @just update_emscripten_example Shaders shaders {{DEMOPATH}}
@@ -227,5 +233,6 @@ update_emscripten_examples DEMOPATH="../yup-demos/demos":
   @just update_emscripten_example Svg svg {{DEMOPATH}}
   @just update_emscripten_example TouchTrails touch-trails {{DEMOPATH}}
   @just update_emscripten_example Themes themes {{DEMOPATH}}
+  @just update_emscripten_example TreeView tree-view {{DEMOPATH}}
   @just update_emscripten_example Widgets widgets {{DEMOPATH}}
   @just update_emscripten_example YdspSynths ydsp-synths {{DEMOPATH}}

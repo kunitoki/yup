@@ -1,0 +1,60 @@
+Expose the Metal frame command buffer and honor externalCommandBuffer.
+
+- include/rive/renderer/ore/ore_context_metal.hpp: expose the frame command buffer, so YUP compute passes begun on a GpuFrame encode into it instead of committing their own
+- include/rive/renderer/ore/ore_context_metal.hpp: Ore Metal context: remember whether the frame command buffer was created by the context or handed in through FrameDescriptor::externalCommandBuffer, so endFrame commits only the ones it owns
+- source/renderer/ore/metal/ore_context_metal.mm: Ore Metal beginFrame: honor FrameDescriptor::externalCommandBuffer like the Vulkan and D3D12 contexts, so YUP owns the frame command buffer (created with encoder execution status, committed and waited on by GpuDevice, and checked for MTLCommandBufferStatusError so GPU failures are reported instead of silently producing blank frames). Without an external one the context still creates its own. A nil command buffer, e.g. from a nil queue once the GPU ran out of memory, is reported through setLastError so GpuFrame::begin fails instead of tripping the mtlBeginRenderPass assert later
+- source/renderer/ore/metal/ore_context_metal.mm: Ore Metal endFrame: commit only a command buffer the context created; an external one is committed by its owner after endFrame, which is still free to add completion handlers to it
+
+diff --git a/include/rive/renderer/ore/ore_context_metal.hpp b/include/rive/renderer/ore/ore_context_metal.hpp
+index 569e2d1845176eb21a537a3b4f0097b10f98ca9b..f57e6da7b7f63235208116bf0c69dfb65c256d0e 100644
+--- a/include/rive/renderer/ore/ore_context_metal.hpp
++++ b/include/rive/renderer/ore/ore_context_metal.hpp
+@@ -68,6 +68,8 @@ public:
+     return m_completedSerial->load(std::memory_order_relaxed);
+   }
+   id<MTLDevice> device() const { return m_mtlDevice; }
++  // The command buffer of the frame being recorded, nil outside a frame.
++  id<MTLCommandBuffer> commandBuffer() const { return m_mtlCommandBuffer; }
+ 
+   ContextMetal(const ContextMetal&) = delete;
+   ContextMetal& operator=(const ContextMetal&) = delete;
+@@ -99,6 +101,7 @@ private:
+   id<MTLDevice> m_mtlDevice = nil;
+   id<MTLCommandQueue> m_mtlQueue = nil;
+   id<MTLCommandBuffer> m_mtlCommandBuffer = nil;
++  bool m_ownsCommandBuffer = true;
+ 
+   std::vector<rcp<BindGroup>> m_deferredBindGroups;
+ 
+diff --git a/source/renderer/ore/metal/ore_context_metal.mm b/source/renderer/ore/metal/ore_context_metal.mm
+index 677995e76b55cfa7c8fded4a3ab2bdc556a4f634..6f723d93d657d4c965d863cf52ce641eff55b6fc 100644
+--- a/source/renderer/ore/metal/ore_context_metal.mm
++++ b/source/renderer/ore/metal/ore_context_metal.mm
+@@ -1119,9 +1119,15 @@ std::unique_ptr<ContextMetal> ContextMetal::Make(
+   return ctx;
+ }
+ 
+-void ContextMetal::beginFrame(const FrameDescriptor&)
++void ContextMetal::beginFrame(const FrameDescriptor& desc)
+ {
+-  m_mtlCommandBuffer = [m_mtlQueue commandBuffer];
++  m_ownsCommandBuffer = desc.externalCommandBuffer == nullptr;
++  m_mtlCommandBuffer =
++    m_ownsCommandBuffer
++      ? [m_mtlQueue commandBuffer]
++      : (__bridge id<MTLCommandBuffer>)desc.externalCommandBuffer;
++  if (m_mtlCommandBuffer == nil)
++    setLastError("ore: Metal command buffer creation failed");
+   // Serial of the command buffer about to be recorded.
+   ++m_currentSerial;
+   m_pendingFrame.reset();
+@@ -1171,7 +1177,8 @@ void ContextMetal::endFrame()
+       {
+       }
+     }];
+-    [m_mtlCommandBuffer commit];
++    if (m_ownsCommandBuffer)
++      [m_mtlCommandBuffer commit];
+     m_mtlCommandBuffer = nil;
+   }
+ }

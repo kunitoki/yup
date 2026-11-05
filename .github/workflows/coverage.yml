@@ -26,7 +26,8 @@ on:
       - "!**/native/*_webgpu.*"
       - "!**/native/*_windows.*"
     branches:
-      - "**"
+      - main
+      - "dev/**"
   pull_request:
     paths:
       - "CMakeLists.txt"

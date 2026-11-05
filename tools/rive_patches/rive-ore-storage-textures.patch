@@ -1,0 +1,75 @@
+Allocate textures that compute shaders can write (TextureDesc::storage).
+
+- include/rive/renderer/ore/ore_types.hpp: Ore TextureDesc: add the storage flag, so YUP can allocate textures that compute shaders write (GpuTextureDesc::storage)
+- source/renderer/ore/metal/ore_context_metal.mm: Ore Metal makeTexture: add MTLTextureUsageShaderWrite for storage textures, so YUP compute passes can write them
+- source/renderer/ore/d3d11/ore_context_d3d11.cpp: Ore D3D11 makeTexture: storage textures get D3D11_BIND_UNORDERED_ACCESS, so YUP compute passes can write them through a UAV
+- source/renderer/ore/vulkan/ore_context_vulkan.cpp: Ore Vulkan makeTexture: add storage usage for textures written as storage images
+- source/renderer/ore/wgpu/ore_context_wgpu.cpp: Ore WebGPU makeTexture: storage textures get StorageBinding usage so compute shaders can write them
+
+diff --git a/include/rive/renderer/ore/ore_types.hpp b/include/rive/renderer/ore/ore_types.hpp
+index 83e8d4621ce3cc0f488b22c4639708530eb960d0..9d43da291e899482bdb5e9bb4ae82a144af04e29 100644
+--- a/include/rive/renderer/ore/ore_types.hpp
++++ b/include/rive/renderer/ore/ore_types.hpp
+@@ -358,6 +358,7 @@ struct TextureDesc
+   TextureFormat format = TextureFormat::rgba8unorm;
+   TextureType type = TextureType::texture2D;
+   bool renderTarget = false;
++  bool storage = false;
+   uint32_t numMipmaps = 1;
+   uint32_t sampleCount = 1;
+   const char* label = nullptr;
+diff --git a/source/renderer/ore/d3d11/ore_context_d3d11.cpp b/source/renderer/ore/d3d11/ore_context_d3d11.cpp
+index 4e1afc58a63e20d04a20386e66fb0bfa2fe1a28b..c94caa423fcb9ba3d702a0a9c8b1fc77dd21eac4 100644
+--- a/source/renderer/ore/d3d11/ore_context_d3d11.cpp
++++ b/source/renderer/ore/d3d11/ore_context_d3d11.cpp
+@@ -555,6 +555,8 @@ rcp<Texture> ContextD3D11::d3d11MakeTexture(const TextureDesc& desc)
+     bindFlags |= D3D11_BIND_DEPTH_STENCIL;
+   else if (desc.renderTarget)
+     bindFlags |= D3D11_BIND_RENDER_TARGET;
++  if (desc.storage)
++    bindFlags |= D3D11_BIND_UNORDERED_ACCESS;
+ 
+   if (desc.type == TextureType::texture3D)
+   {
+diff --git a/source/renderer/ore/metal/ore_context_metal.mm b/source/renderer/ore/metal/ore_context_metal.mm
+index a1c575d67098b4ed30107b0dfa560d935ae74514..22be740280cb36559dc727a7976f7f4038b002c8 100644
+--- a/source/renderer/ore/metal/ore_context_metal.mm
++++ b/source/renderer/ore/metal/ore_context_metal.mm
+@@ -511,6 +511,11 @@ inline rcp<Texture> ContextMetal::mtlMakeTexture(const TextureDesc& desc)
+     td.usage |= MTLTextureUsageRenderTarget;
+   }
+ 
++  if (desc.storage)
++  {
++    td.usage |= MTLTextureUsageShaderWrite;
++  }
++
+   TextureFormat fmt = desc.format;
+   if (fmt == TextureFormat::depth24plusStencil8 ||
+       fmt == TextureFormat::depth32floatStencil8)
+diff --git a/source/renderer/ore/vulkan/ore_context_vulkan.cpp b/source/renderer/ore/vulkan/ore_context_vulkan.cpp
+index c5d99cb0742224e58a0cbc749a7efe4d30c982ed..e557e51b2afc6dd71e2fc8ceda387ca78f975d82 100644
+--- a/source/renderer/ore/vulkan/ore_context_vulkan.cpp
++++ b/source/renderer/ore/vulkan/ore_context_vulkan.cpp
+@@ -1144,6 +1144,8 @@ rcp<Texture> ContextVulkan::makeTexture(const TextureDesc& desc)
+     usage |= isDS ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+                   : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+   }
++  if (desc.storage)
++    usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+ 
+   VkImageType imageType = VK_IMAGE_TYPE_2D;
+   VkImageCreateFlags createFlags = 0;
+diff --git a/source/renderer/ore/wgpu/ore_context_wgpu.cpp b/source/renderer/ore/wgpu/ore_context_wgpu.cpp
+index 28e8fd8a32334841ab2d6c2dcedd6ce8cf74f6d9..db9bf384ac100754504499b127b33ace3bd05c7f 100644
+--- a/source/renderer/ore/wgpu/ore_context_wgpu.cpp
++++ b/source/renderer/ore/wgpu/ore_context_wgpu.cpp
+@@ -618,6 +618,8 @@ rcp<Texture> ContextWGPU::makeTexture(const TextureDesc& desc)
+                              wgpu::TextureUsage::CopyDst;
+   if (desc.renderTarget)
+     usage |= wgpu::TextureUsage::RenderAttachment;
++  if (desc.storage)
++    usage |= wgpu::TextureUsage::StorageBinding;
+ 
+   wgpu::TextureDescriptor wDesc{};
+   wDesc.label = desc.label;

@@ -1,0 +1,42 @@
+Report float and half-float color attachments on GL and GLES.
+
+- source/renderer/ore/gl/ore_context_gl.cpp: Ore GL features: report float and half-float color attachments on desktop GL, where they are core since 3.0 and the ES-only GL_EXT_color_buffer_float is never listed; desktop GL 4.3+ also reports storageBuffers when fragment shaders can bind shader storage blocks
+- source/renderer/ore/gl/ore_context_gl.cpp: Ore GL features: detect GL_EXT_color_buffer_half_float on OpenGL ES, which makes 16-bit float color attachments renderable without the full-float extension
+
+diff --git a/source/renderer/ore/gl/ore_context_gl.cpp b/source/renderer/ore/gl/ore_context_gl.cpp
+index 719846374383899a0cf1a0147898a6414b8a4b4a..90ccf9c95c1b557af44258701d75769168d666a1 100644
+--- a/source/renderer/ore/gl/ore_context_gl.cpp
++++ b/source/renderer/ore/gl/ore_context_gl.cpp
+@@ -341,6 +341,23 @@ std::unique_ptr<ContextGL> ContextGL::Make()
+   f.etc2 = true; // GLES3 mandates ETC2.
+   f.astc = false;
+ 
++#ifdef RIVE_DESKTOP_GL
++  f.colorBufferFloat = true;
++  f.colorBufferHalfFloat = true;
++#ifdef GL_MAX_FRAGMENT_SHADER_STORAGE_BLOCKS
++  // Desktop GL 4.3+ binds shader storage buffers to graphics stages.
++  {
++    GLint major = 0, minor = 0, fragmentSSBOs = 0;
++    glGetIntegerv(GL_MAJOR_VERSION, &major);
++    glGetIntegerv(GL_MINOR_VERSION, &minor);
++    if (major > 4 || (major == 4 && minor >= 3))
++      glGetIntegerv(GL_MAX_FRAGMENT_SHADER_STORAGE_BLOCKS,
++             &fragmentSSBOs);
++    f.storageBuffers = fragmentSSBOs > 0;
++  }
++#endif
++#endif
++
+   // Query limits.
+   GLint maxTexSize = 0, maxCubeSize = 0, max3DSize = 0, maxUBOSize = 0;
+   GLint maxDrawBuffers = 0, maxVertexAttribs = 0, maxTexUnits = 0;
+@@ -383,6 +400,8 @@ std::unique_ptr<ContextGL> ContextGL::Make()
+       f.colorBufferFloat = true;
+       f.colorBufferHalfFloat = true;
+     }
++    else if (strcmp(ext, "GL_EXT_color_buffer_half_float") == 0)
++      f.colorBufferHalfFloat = true;
+     else if (strcmp(ext, "GL_EXT_texture_filter_anisotropic") == 0)
+       f.anisotropicFiltering = true;
+     else if (strcmp(ext, "GL_KHR_texture_compression_astc_ldr") == 0)

@@ -204,7 +204,7 @@ private:
         const auto scale = contentScale();
         // While chords ring the board stays a little lifted, so the keys can show their notes.
         const auto heard = *std::max_element (hearing.notes.begin(), hearing.notes.end());
-        const auto lift = std::max (keysLift.update (pointer, board, deltaSeconds), 0.5f * heard);
+        const auto lift = std::max (keysLift.update (pointer, board, getLocalBounds(), deltaSeconds), 0.5f * heard);
         view.setLift (lift);
         view.setAudio (0.6f * hearing.hit, 0.0f);
 

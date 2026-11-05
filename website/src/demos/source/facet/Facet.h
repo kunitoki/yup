@@ -75,6 +75,7 @@ public:
 
         view.setContentScale (scale);
         screenBounds = getLocalBounds().withSizeKeepingCenter (designSize.getWidth() * scale, designSize.getHeight() * scale);
+        foldedBounds = yup::Rectangle<float> (2.8f * designEdge * scale, 2.8f * designEdge * scale).withCenter (screenBounds.getCenter());
         panel.setLayout (columns);
         panel.setBounds (screenBounds.getX(), screenBounds.getY(), designSize.getWidth(), designSize.getHeight());
 
@@ -400,7 +401,7 @@ private:
     //==============================================================================
     void advance (float deltaSeconds) override
     {
-        const auto lift = facetLift.update (pointer, screenBounds, deltaSeconds);
+        const auto lift = facetLift.update (pointer, foldedBounds, getLocalBounds(), deltaSeconds);
         view.setLift (lift);
 
         const auto fold = lift * lift * (3.0f - 2.0f * lift);
@@ -499,6 +500,7 @@ private:
     SurfaceView view;
     Panel panel;
     yup::Rectangle<float> screenBounds; // where the panel appears, scaled to fit
+    yup::Rectangle<float> foldedBounds; // footprint of the folded solid, the lift centers on it
     int surface = -1;
 
     std::array<Face, numFaces> faces;

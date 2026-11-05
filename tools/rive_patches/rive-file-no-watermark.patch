@@ -1,0 +1,18 @@
+Never attach the file watermark pre-roll.
+
+- source/file.cpp: never attach the file watermark pre-roll, so artboards draw and animate from their first frame
+
+diff --git a/source/file.cpp b/source/file.cpp
+index 2960deaf2b272e1072261b321fad9bf70c69d19f..8d7e4c75bc14b4a4407d1dd28d303021f14b2a8b 100644
+--- a/source/file.cpp
++++ b/source/file.cpp
+@@ -1662,6 +1662,9 @@ uint32_t File::customPropertyKey(
+ void File::attachWatermark(ArtboardInstance* instance, const Artboard* source)
+     const
+ {
++  // YUP never plays the file watermark pre-roll.
++  return;
++
+   auto manifestAsset = manifest();
+   // Index 0 is a legal watermark index, so the enabled flag is the only
+   // thing that says whether this file has one.

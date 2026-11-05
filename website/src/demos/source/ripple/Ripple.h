@@ -179,7 +179,7 @@ private:
     //==============================================================================
     void advance (float deltaSeconds) override
     {
-        const auto lift = rippleLift.update (pointer, cardBounds, deltaSeconds);
+        const auto lift = rippleLift.update (pointer, cardBounds, getLocalBounds(), deltaSeconds);
         const auto size = yup::Point<float> (panel.getWidth(), panel.getHeight());
 
         if (pointer.has_value() && panel.getHeight() > 0.0f)

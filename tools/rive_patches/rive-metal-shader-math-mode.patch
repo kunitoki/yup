@@ -1,0 +1,20 @@
+Use mathMode instead of the deprecated fastMathEnabled on macOS 15 / iOS 18.
+
+- source/renderer/metal/background_shader_compiler.mm: Metal shader compile options: fastMathEnabled is deprecated since macOS 15 / iOS 18, so set the equivalent mathMode there and keep the fastMathEnabled default (YES) on older systems
+
+diff --git a/source/renderer/metal/background_shader_compiler.mm b/source/renderer/metal/background_shader_compiler.mm
+index 6c61ac0bfd9e2aa627c33bd0beb88ef8a6e68b30..aac79e97175823949bfe9e337a2c97225d7943d7 100644
+--- a/source/renderer/metal/background_shader_compiler.mm
++++ b/source/renderer/metal/background_shader_compiler.mm
+@@ -380,7 +380,10 @@ void BackgroundShaderCompiler::threadMain()
+     compileOptions.languageVersion = MTLLanguageVersion2_3; // On mac, we need
+                                                             // version 2.3+
+ #endif
+-    compileOptions.fastMathEnabled = YES;
++    if (@available(macOS 15, iOS 18, *))
++    {
++      compileOptions.mathMode = MTLMathModeFast;
++    }
+     if (@available(iOS 14, *))
+     {
+       compileOptions.preserveInvariance = YES;
