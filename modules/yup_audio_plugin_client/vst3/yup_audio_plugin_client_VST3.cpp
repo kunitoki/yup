@@ -516,8 +516,9 @@ public:
 private:
     void componentResized (Component& component) override
     {
-        if (component.getSize() != Component::getSize())
-            setSize (component.getSize());
+        const auto editorSize = component.getBounds().getSize();
+        if (editorSize != getBounds().getSize())
+            setSize (editorSize);
     }
 
     void constrainViewRect (ViewRect& viewRect) const
