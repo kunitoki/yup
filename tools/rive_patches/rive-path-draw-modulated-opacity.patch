@@ -1,0 +1,18 @@
+A paint faded through modulateOpacity/modulateColor is not opaque.
+
+- source/renderer/draw.cpp: PathDraw: a paint faded through modulateOpacity or a translucent modulateColor is not opaque - otherwise MSAA mode (WebGL2 without PLS) moves it into the unblended opaque prepass and it replaces the pixels below instead of blending
+
+diff --git a/source/renderer/draw.cpp b/source/renderer/draw.cpp
+index 1ce1fbeb1205cf2d614109b818be0b6bf45c7416..3e21c2e2cc7a58faee06d18641c719689d82cd3f 100644
+--- a/source/renderer/draw.cpp
++++ b/source/renderer/draw.cpp
+@@ -929,7 +929,8 @@ PathDraw::PathDraw(
+   assert(!m_pathRef->getRawPath().empty());
+   assert(paint != nullptr);
+ 
+-  if (paint->getIsOpaque() &&
++  if (paint->getIsOpaque() && modulatedOpacity >= 1.0f &&
++      colorAlpha(modulatedColor) == 255 &&
+       // Inkbleed strokes introduce coverage, which is no longer opaque.
+       !(frameDesc.inkbleedOverride && paint->getIsStroked()))
+   {

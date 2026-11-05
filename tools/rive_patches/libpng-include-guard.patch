@@ -1,0 +1,29 @@
+Convert the pngpriv.h anti-double-include guard to a standard include guard for unity builds.
+
+- upstream/pngpriv.h: convert anti-double-include guard to a standard include guard for unity builds
+- upstream/pngpriv.h: add closing endif for PNGPRIV_H include guard at the end of the file (PNG_VERSION_INFO_ONLY closes twice, so anchor on the tail)
+
+diff --git a/upstream/pngpriv.h b/upstream/pngpriv.h
+index a6c91ac2c7a8ca226cd03cf781c1d461ad255291..d7c4b3a9111fff2c59db53aa6c7821b015463cbb 100644
+--- a/upstream/pngpriv.h
++++ b/upstream/pngpriv.h
+@@ -26,13 +26,6 @@
+  */
+ #ifndef PNGPRIV_H
+ #  define PNGPRIV_H
+-#else
+-#  error Duplicate inclusion of pngpriv.h; please check the libpng source files
+-#endif
+-
+-#if defined(PNG_H) || defined(PNGCONF_H) || defined(PNGLCONF_H)
+-#  error This file must not be included by applications; please include <png.h>
+-#endif
+ 
+ /* Feature Test Macros.  The following are defined here to ensure that correctly
+  * implemented libraries reveal the APIs libpng needs to build and hide those
+@@ -2426,3 +2419,5 @@ PNG_INTERNAL_FUNCTION(int,
+ #endif
+ 
+ #endif /* PNG_VERSION_INFO_ONLY */
++
++#endif /* PNGPRIV_H */

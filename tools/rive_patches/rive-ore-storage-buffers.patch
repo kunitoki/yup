@@ -1,0 +1,428 @@
+Bind read-only storage buffers passed as native handles (BindGroupDesc::storageBuffers).
+
+- include/rive/renderer/ore/ore_types.hpp: Ore BindGroupDesc: add read-only storage buffer entries, passed as native handles since YUP creates storage buffers outside ore (GpuRenderPass::setStorageBuffer)
+- source/renderer/ore/ore_bind_group_layout.cpp: Ore validateBindGroupDesc: count read-only storage buffer layout entries against BindGroupDesc::storageBuffers, not the UBO entries
+- source/renderer/ore/metal/ore_bind_group_metal.hpp: Ore Metal bind group: declare the read-only storage buffer binding (native MTLBuffer, offset and WGSL binding, resolved through the bound pipeline)
+- source/renderer/ore/metal/ore_bind_group_metal.hpp: Ore Metal bind group: hold the read-only storage buffer bindings
+- source/renderer/ore/metal/ore_context_metal.mm: Ore Metal makeBindGroup: record each read-only storage buffer entry, whose native handle is an id<MTLBuffer>
+- source/renderer/ore/metal/ore_render_pass_metal.mm: Ore Metal applyBindGroup: bind each read-only storage buffer to the vertex and fragment stages the bound pipeline reads it from
+- source/renderer/ore/d3d11/ore_context_d3d11.cpp: Ore D3D11 makeBindGroup: record read-only storage buffer SRVs (BindGroupDesc::storageBuffers) with their WGSL binding, resolved to t registers through the bound pipeline
+- source/renderer/ore/d3d11/ore_bind_group_d3d11.hpp: Ore D3D11 bind group: hold the read-only storage buffer SRVs
+- source/renderer/ore/d3d11/ore_render_pass_d3d11.cpp: Ore D3D11 applyBindGroup: bind read-only storage buffer SRVs with VSSetShaderResources / PSSetShaderResources at the bound pipeline's slots
+- source/renderer/ore/vulkan/ore_context_vulkan.cpp: Ore Vulkan makeBindGroup: record a storage buffer write for each read-only storage entry, whose native handle points to a VkBuffer
+- source/renderer/ore/vulkan/ore_bind_group_vulkan.hpp: Ore Vulkan BindGroupVulkan: keep the storage buffer writes in the replayable write recipe
+- source/renderer/ore/vulkan/ore_bind_group_vulkan.cpp: Ore Vulkan resolveDescriptorSet: size the descriptor writes for the storage buffer writes too
+- source/renderer/ore/vulkan/ore_bind_group_vulkan.cpp: Ore Vulkan resolveDescriptorSet: write the read-only storage buffers into every set
+- source/renderer/ore/wgpu/ore_context_wgpu.cpp: Ore WebGPU makeBindGroup: record read-only storage buffers passed as native WGPUBuffer handles
+- source/renderer/ore/wgpu/ore_bind_group_wgpu.hpp: Ore WebGPU BindGroupWGPU: storage buffer entries for the bind group recipe
+- source/renderer/ore/wgpu/ore_bind_group_wgpu.cpp: Ore WebGPU resolveBindGroup: reserve room for the storage buffer entries
+- source/renderer/ore/wgpu/ore_bind_group_wgpu.cpp: Ore WebGPU resolveBindGroup: add the read-only storage buffer entries
+- source/renderer/ore/gl/ore_bind_group_gl.hpp: Ore GL bind group: storage buffer bindings (native GL buffer name, range, WGSL binding)
+- source/renderer/ore/gl/ore_bind_group_gl.hpp: Ore GL bind group: storage buffer binding list
+- source/renderer/ore/gl/ore_context_gl.cpp: Ore GL makeBindGroup: record storage buffer entries, whose binding point resolves through the bound pipeline
+- source/renderer/ore/gl/ore_render_pass_gl.cpp: Ore GL applyBindGroup: bind storage buffer ranges at the bound pipeline's binding points
+
+diff --git a/include/rive/renderer/ore/ore_types.hpp b/include/rive/renderer/ore/ore_types.hpp
+index 9d43da291e899482bdb5e9bb4ae82a144af04e29..62d77a490bd34f33243dfc2e0955729efbd144ad 100644
+--- a/include/rive/renderer/ore/ore_types.hpp
++++ b/include/rive/renderer/ore/ore_types.hpp
+@@ -742,6 +742,15 @@ struct BindGroupDesc
+   uint32_t textureCount = 0;
+   const SampEntry* samplers = nullptr;
+   uint32_t samplerCount = 0;
++  struct StorageEntry
++  {
++    uint32_t slot = 0;
++    void* nativeBuffer = nullptr;
++    uint64_t offset = 0;
++    uint64_t size = 0;
++  };
++  const StorageEntry* storageBuffers = nullptr;
++  uint32_t storageBufferCount = 0;
+   const char* label = nullptr;
+ };
+ 
+diff --git a/source/renderer/ore/d3d11/ore_bind_group_d3d11.hpp b/source/renderer/ore/d3d11/ore_bind_group_d3d11.hpp
+index f9caa8dc7618c4f51d86dd83216776bf18db5b48..d85068df5a92997cb7b30dee92b6eb08714df1e4 100644
+--- a/source/renderer/ore/d3d11/ore_bind_group_d3d11.hpp
++++ b/source/renderer/ore/d3d11/ore_bind_group_d3d11.hpp
+@@ -41,5 +41,6 @@ private:
+   std::vector<D3D11UBOBinding> m_d3d11UBOs;
+   std::vector<D3D11TexBinding> m_d3d11Textures;
+   std::vector<D3D11SamplerBinding> m_d3d11Samplers;
++  std::vector<D3D11TexBinding> m_d3d11StorageBuffers;
+ };
+ } // namespace rive::ore
+diff --git a/source/renderer/ore/d3d11/ore_context_d3d11.cpp b/source/renderer/ore/d3d11/ore_context_d3d11.cpp
+index c94caa423fcb9ba3d702a0a9c8b1fc77dd21eac4..0bb21de25a7d532a0d693d709569ab21b4fcfe6c 100644
+--- a/source/renderer/ore/d3d11/ore_context_d3d11.cpp
++++ b/source/renderer/ore/d3d11/ore_context_d3d11.cpp
+@@ -1171,6 +1171,18 @@ rcp<BindGroup> ContextD3D11::d3d11MakeBindGroup(const BindGroupDesc& desc)
+     bg->m_retainedSamplers.push_back(ref_rcp(entry.sampler));
+   }
+ 
++  bg->m_d3d11StorageBuffers.reserve(desc.storageBufferCount);
++  for (uint32_t i = 0; i < desc.storageBufferCount; ++i)
++  {
++    const auto& entry = desc.storageBuffers[i];
++    BindGroupD3D11::D3D11TexBinding binding{};
++    binding.srv = static_cast<ID3D11ShaderResourceView*>(entry.nativeBuffer);
++    binding.binding = entry.slot;
++    if (binding.srv == nullptr)
++      continue;
++    bg->m_d3d11StorageBuffers.push_back(binding);
++  }
++
+   return bg;
+ }
+ 
+diff --git a/source/renderer/ore/d3d11/ore_render_pass_d3d11.cpp b/source/renderer/ore/d3d11/ore_render_pass_d3d11.cpp
+index f53b98fed3064ba2f51847f06644dbd1a192ecbb..be997baaf1a3ae6485d7c51d3a0b7dc23de078b7 100644
+--- a/source/renderer/ore/d3d11/ore_render_pass_d3d11.cpp
++++ b/source/renderer/ore/d3d11/ore_render_pass_d3d11.cpp
+@@ -333,6 +333,18 @@ void RenderPassD3D11::applyBindGroup(uint32_t groupIndex)
+       m_d3d11Context->PSSetShaderResources(slots.fs, 1, &tex.srv);
+   }
+ 
++  for (const auto& storage : bg->m_d3d11StorageBuffers)
++  {
++    const Pipeline::StageSlots slots = pipeline->slots(
++        groupIndex,
++        storage.binding,
++        SlotSpace::buffer);
++    if (slots.vs != BindingMap::kAbsent)
++      m_d3d11Context->VSSetShaderResources(slots.vs, 1, &storage.srv);
++    if (slots.fs != BindingMap::kAbsent)
++      m_d3d11Context->PSSetShaderResources(slots.fs, 1, &storage.srv);
++  }
++
+   for (const auto& samp : bg->m_d3d11Samplers)
+   {
+     const Pipeline::StageSlots slots = pipeline->slots(
+diff --git a/source/renderer/ore/gl/ore_bind_group_gl.hpp b/source/renderer/ore/gl/ore_bind_group_gl.hpp
+index e23a7762a2e7fe21c57fc412be69d84617a5fa24..51c5e157d25283af1ccb45093421792d4922448d 100644
+--- a/source/renderer/ore/gl/ore_bind_group_gl.hpp
++++ b/source/renderer/ore/gl/ore_bind_group_gl.hpp
+@@ -35,6 +35,13 @@ public:
+     unsigned int sampler = 0; // GLuint
+     uint32_t binding = 0;     // WGSL @binding, for pair lookup
+   };
++  struct GLStorageBinding
++  {
++    unsigned int buffer = 0; // GLuint
++    uint64_t offset = 0;
++    uint64_t size = 0;
++    uint32_t binding = 0; // WGSL @binding, resolved per pipeline
++  };
+ 
+   BindGroupGL() = default;
+   ~BindGroupGL() override = default;
+@@ -45,5 +52,6 @@ private:
+   std::vector<GLUBOBinding> m_glUBOs;
+   std::vector<GLTexBinding> m_glTextures;
+   std::vector<GLSamplerBinding> m_glSamplers;
++  std::vector<GLStorageBinding> m_glStorageBuffers;
+ };
+ } // namespace rive::ore
+diff --git a/source/renderer/ore/gl/ore_context_gl.cpp b/source/renderer/ore/gl/ore_context_gl.cpp
+index 539a2c5ac2afc290d517afb2284044096bf04669..02a12a29f24f663d593cee9217b01c932c369776 100644
+--- a/source/renderer/ore/gl/ore_context_gl.cpp
++++ b/source/renderer/ore/gl/ore_context_gl.cpp
+@@ -1082,6 +1082,23 @@ rcp<BindGroup> ContextGL::makeBindGroup(const BindGroupDesc& desc)
+     bg->m_retainedSamplers.push_back(ref_rcp(entry.sampler));
+   }
+ 
++  // Storage buffers arrive as native GL buffer names (a GLuint carried in
++  // the pointer), owned by the caller.
++  bg->m_glStorageBuffers.reserve(desc.storageBufferCount);
++  for (uint32_t i = 0; i < desc.storageBufferCount; ++i)
++  {
++    const auto& entry = desc.storageBuffers[i];
++    BindGroupGL::GLStorageBinding binding{};
++    binding.buffer = static_cast<unsigned int>(
++        reinterpret_cast<uintptr_t>(entry.nativeBuffer));
++    binding.offset = entry.offset;
++    binding.size = entry.size;
++    binding.binding = entry.slot;
++    if (binding.buffer == 0)
++      continue;
++    bg->m_glStorageBuffers.push_back(binding);
++  }
++
+   return bg;
+ }
+ 
+diff --git a/source/renderer/ore/gl/ore_render_pass_gl.cpp b/source/renderer/ore/gl/ore_render_pass_gl.cpp
+index 4871dbe3f4defe12c109cb2e271436bed70283e9..952663c86d2cc790b67e2cf8429ceec1e8859ea3 100644
+--- a/source/renderer/ore/gl/ore_render_pass_gl.cpp
++++ b/source/renderer/ore/gl/ore_render_pass_gl.cpp
+@@ -482,6 +482,22 @@ void RenderPassGL::applyBindGroup(uint32_t groupIndex)
+     glBindBufferRange(GL_UNIFORM_BUFFER, unit, ubo.buffer, offset, ubo.size);
+   }
+ 
++#ifdef GL_SHADER_STORAGE_BUFFER
++  for (const auto& ssbo : glBg->m_glStorageBuffers)
++  {
++    const uint16_t unit = glUnit(
++        pipeline->slots(groupIndex, ssbo.binding, SlotSpace::buffer));
++    if (unit == BindingMap::kAbsent)
++      continue;
++    glBindBufferRange(
++        GL_SHADER_STORAGE_BUFFER,
++        unit,
++        ssbo.buffer,
++        static_cast<GLintptr>(ssbo.offset),
++        static_cast<GLsizeiptr>(ssbo.size));
++  }
++#endif
++
+   for (const auto& tex : glBg->m_glTextures)
+   {
+     const uint16_t unit = glUnit(
+diff --git a/source/renderer/ore/metal/ore_bind_group_metal.hpp b/source/renderer/ore/metal/ore_bind_group_metal.hpp
+index 2891708a417d11d675508846e3af0217fc58adf8..a8774124569edbd77f6a5f789cff06a1c8ba3d0c 100644
+--- a/source/renderer/ore/metal/ore_bind_group_metal.hpp
++++ b/source/renderer/ore/metal/ore_bind_group_metal.hpp
+@@ -32,6 +32,12 @@ public:
+     id<MTLSamplerState> sampler = nil;
+     uint32_t binding = 0;
+   };
++  struct MTLStorageBinding
++  {
++    id<MTLBuffer> buffer = nil;
++    uint64_t offset = 0;
++    uint32_t binding = 0; // WGSL @binding, resolved per pipeline
++  };
+ 
+   BindGroupMetal() = default;
+   ~BindGroupMetal() override = default; // ARC releases Metal objects
+@@ -42,5 +48,6 @@ private:
+   std::vector<MTLBufferBinding> m_mtlBuffers;
+   std::vector<MTLTextureBinding> m_mtlTextures;
+   std::vector<MTLSamplerBinding> m_mtlSamplers;
++  std::vector<MTLStorageBinding> m_mtlStorageBuffers;
+ };
+ } // namespace rive::ore
+diff --git a/source/renderer/ore/metal/ore_context_metal.mm b/source/renderer/ore/metal/ore_context_metal.mm
+index 22be740280cb36559dc727a7976f7f4038b002c8..b35e53a435934cca35ee9b52fa6a5e678b5c2e8d 100644
+--- a/source/renderer/ore/metal/ore_context_metal.mm
++++ b/source/renderer/ore/metal/ore_context_metal.mm
+@@ -954,6 +954,19 @@ inline rcp<BindGroup> ContextMetal::mtlMakeBindGroup(const BindGroupDesc& desc)
+     bg->m_retainedSamplers.push_back(ref_rcp(s.sampler));
+   }
+ 
++  bg->m_mtlStorageBuffers.reserve(desc.storageBufferCount);
++  for (uint32_t i = 0; i < desc.storageBufferCount; i++)
++  {
++    const auto& s = desc.storageBuffers[i];
++    BindGroupMetal::MTLStorageBinding binding;
++    binding.buffer = (__bridge id<MTLBuffer>)s.nativeBuffer;
++    binding.offset = s.offset;
++    binding.binding = s.slot;
++    if (binding.buffer == nil)
++      continue;
++    bg->m_mtlStorageBuffers.push_back(binding);
++  }
++
+   return bg;
+ }
+ 
+diff --git a/source/renderer/ore/metal/ore_render_pass_metal.mm b/source/renderer/ore/metal/ore_render_pass_metal.mm
+index f8d5436df8ecf537f5ab42b43831679796dc8dd2..ad65473222d41b97f48df1e8fa2df08a98c10b0c 100644
+--- a/source/renderer/ore/metal/ore_render_pass_metal.mm
++++ b/source/renderer/ore/metal/ore_render_pass_metal.mm
+@@ -189,6 +189,17 @@ void RenderPassMetal::applyBindGroup(uint32_t groupIndex)
+     if (slots.fs != BindingMap::kAbsent)
+       [m_mtlEncoder setFragmentSamplerState:s.sampler atIndex:slots.fs];
+   }
++  for (auto& sb : bgMetal->m_mtlStorageBuffers)
++  {
++    const Pipeline::StageSlots slots = pipeline->slots(
++        groupIndex, sb.binding, SlotSpace::buffer);
++    if (slots.vs != BindingMap::kAbsent)
++      [m_mtlEncoder setVertexBuffer:sb.buffer offset:sb.offset atIndex:slots.vs];
++    if (slots.fs != BindingMap::kAbsent)
++      [m_mtlEncoder setFragmentBuffer:sb.buffer
++                               offset:sb.offset
++                              atIndex:slots.fs];
++  }
+ }
+ 
+ void RenderPassMetal::setViewport(
+diff --git a/source/renderer/ore/ore_bind_group_layout.cpp b/source/renderer/ore/ore_bind_group_layout.cpp
+index 74043719c286f40511d09f706db276f3af9e04f4..d919a2961c6d02d06c11c3ab67b41f0a71802ac7 100644
+--- a/source/renderer/ore/ore_bind_group_layout.cpp
++++ b/source/renderer/ore/ore_bind_group_layout.cpp
+@@ -1257,7 +1257,9 @@ bool validateBindGroupDesc(const BindGroupDesc& desc, std::string* outError)
+   for (const BindGroupLayoutEntry& e : desc.layout->entries())
+   {
+     const uint32_t
+-        n = isBufferKind(e.kind)
++        n = e.kind == BindingKind::storageBufferRO
++                ? countSlot(desc.storageBuffers, desc.storageBufferCount, e.binding)
++            : isBufferKind(e.kind)
+                 ? countSlot(desc.ubos, desc.uboCount, e.binding)
+             : isTextureKind(e.kind)
+                 ? countSlot(desc.textures, desc.textureCount, e.binding)
+diff --git a/source/renderer/ore/vulkan/ore_bind_group_vulkan.cpp b/source/renderer/ore/vulkan/ore_bind_group_vulkan.cpp
+index 8bb3958b44be05e3ca179f5c33da233f26e8280f..489f2b12fb1888298c5171bb749556f09213889b 100644
+--- a/source/renderer/ore/vulkan/ore_bind_group_vulkan.cpp
++++ b/source/renderer/ore/vulkan/ore_bind_group_vulkan.cpp
+@@ -46,7 +46,8 @@ VkDescriptorSet BindGroupVulkan::resolveDescriptorSet()
+   if (alloc.set == VK_NULL_HANDLE)
+     return VK_NULL_HANDLE;
+ 
+-  const size_t writeCount = m_uboWrites.size() + m_imageWrites.size();
++  const size_t writeCount =
++      m_uboWrites.size() + m_imageWrites.size() + m_storageWrites.size();
+   std::vector<VkWriteDescriptorSet> writes(writeCount);
+   std::vector<VkDescriptorBufferInfo> bufferInfos(writeCount);
+   std::vector<VkDescriptorImageInfo> imageInfos(writeCount);
+@@ -90,6 +91,23 @@ VkDescriptorSet BindGroupVulkan::resolveDescriptorSet()
+     w.pImageInfo = &ii;
+   }
+ 
++  for (const auto& s : m_storageWrites)
++  {
++    VkDescriptorBufferInfo& bi = bufferInfos[writeIdx];
++    bi.buffer = s.buffer;
++    bi.offset = s.offset;
++    bi.range = s.range;
++
++    VkWriteDescriptorSet& w = writes[writeIdx++];
++    w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
++    w.dstSet = alloc.set;
++    w.dstBinding = s.dstBinding;
++    w.dstArrayElement = 0;
++    w.descriptorCount = 1;
++    w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
++    w.pBufferInfo = &bi;
++  }
++
+   if (writeIdx > 0)
+     ctx->m_vk->UpdateDescriptorSets(
+         ctx->m_vk->device,
+diff --git a/source/renderer/ore/vulkan/ore_bind_group_vulkan.hpp b/source/renderer/ore/vulkan/ore_bind_group_vulkan.hpp
+index 303589e8cd44b285bf8e76eb7903531c06bce7cd..b58f38635b9aae4694ae035e658474a481d03218 100644
+--- a/source/renderer/ore/vulkan/ore_bind_group_vulkan.hpp
++++ b/source/renderer/ore/vulkan/ore_bind_group_vulkan.hpp
+@@ -47,8 +47,16 @@ private:
+     VkImageLayout imageLayout;
+     VkSampler sampler;
+   };
++  struct StorageWrite
++  {
++    VkBuffer buffer;
++    uint32_t dstBinding;
++    VkDeviceSize offset;
++    VkDeviceSize range;
++  };
+   std::vector<UBOWrite> m_uboWrites;
+   std::vector<ImageWrite> m_imageWrites;
++  std::vector<StorageWrite> m_storageWrites;
+ 
+   VkDescriptorSetLayout m_vkDSL = VK_NULL_HANDLE;
+ 
+diff --git a/source/renderer/ore/vulkan/ore_context_vulkan.cpp b/source/renderer/ore/vulkan/ore_context_vulkan.cpp
+index e557e51b2afc6dd71e2fc8ceda387ca78f975d82..e08d74693a8d03c3d9177c5e06c14191dd2cfe5d 100644
+--- a/source/renderer/ore/vulkan/ore_context_vulkan.cpp
++++ b/source/renderer/ore/vulkan/ore_context_vulkan.cpp
+@@ -1617,6 +1617,22 @@ rcp<BindGroup> ContextVulkan::makeBindGroup(const BindGroupDesc& desc)
+     bg->m_retainedSamplers.push_back(ref_rcp(samp.sampler));
+   }
+ 
++  for (uint32_t i = 0; i < desc.storageBufferCount; ++i)
++  {
++    const auto& sb = desc.storageBuffers[i];
++    uint32_t dstBinding = 0;
++    if (sb.nativeBuffer == nullptr ||
++        !resolveLayout(sb.slot, BindingKind::storageBufferRO, &dstBinding))
++      continue;
++
++    BindGroupVulkan::StorageWrite w;
++    w.buffer = *static_cast<const VkBuffer*>(sb.nativeBuffer);
++    w.dstBinding = dstBinding;
++    w.offset = sb.offset;
++    w.range = sb.size > 0 ? sb.size : VK_WHOLE_SIZE;
++    bg->m_storageWrites.push_back(w);
++  }
++
+   // Resolve once now to preserve fail-fast on device OOM (matching the WGPU
+   // path); later orphans allocate additional sets as their UBOs need them.
+   if (bg->resolveDescriptorSet() == VK_NULL_HANDLE)
+diff --git a/source/renderer/ore/wgpu/ore_bind_group_wgpu.cpp b/source/renderer/ore/wgpu/ore_bind_group_wgpu.cpp
+index 75f5c80cb86effabca881e05dd978a2d95f7f9d0..dd530424215391d59d2f8d972c57ff8505d209d8 100644
+--- a/source/renderer/ore/wgpu/ore_bind_group_wgpu.cpp
++++ b/source/renderer/ore/wgpu/ore_bind_group_wgpu.cpp
+@@ -36,7 +36,8 @@ const wgpu::BindGroup& BindGroupWGPU::resolveBindGroup()
+ 
+   std::vector<wgpu::BindGroupEntry> entries;
+   entries.reserve(
+-      m_uboEntries.size() + m_texEntries.size() + m_sampEntries.size());
++      m_uboEntries.size() + m_texEntries.size() + m_sampEntries.size() +
++      m_storageEntries.size());
+   CachedGroup cached;
+   cached.key.reserve(m_uboEntries.size());
+   for (const auto& u : m_uboEntries)
+@@ -63,6 +64,15 @@ const wgpu::BindGroup& BindGroupWGPU::resolveBindGroup()
+     e.sampler = s.sampler;
+     entries.push_back(e);
+   }
++  for (const auto& sb : m_storageEntries)
++  {
++    wgpu::BindGroupEntry e{};
++    e.binding = sb.binding;
++    e.buffer = sb.buffer;
++    e.offset = sb.offset;
++    e.size = sb.size;
++    entries.push_back(e);
++  }
+ 
+   auto* ctx = static_cast<ContextWGPU*>(m_context);
+   wgpu::BindGroupDescriptor bgDesc{};
+diff --git a/source/renderer/ore/wgpu/ore_bind_group_wgpu.hpp b/source/renderer/ore/wgpu/ore_bind_group_wgpu.hpp
+index 8c6052226fc1a525318ba1faf50bd19cd9dbc6b2..86dc6fd3cd2866d10fb85c1398a72c45054d0e18 100644
+--- a/source/renderer/ore/wgpu/ore_bind_group_wgpu.hpp
++++ b/source/renderer/ore/wgpu/ore_bind_group_wgpu.hpp
+@@ -48,9 +48,17 @@ private:
+     uint32_t binding;
+     wgpu::Sampler sampler;
+   };
++  struct StorageEntry
++  {
++    uint32_t binding;
++    wgpu::Buffer buffer;
++    uint64_t offset;
++    uint64_t size;
++  };
+   std::vector<UBOEntry> m_uboEntries;
+   std::vector<TexEntry> m_texEntries;
+   std::vector<SampEntry> m_sampEntries;
++  std::vector<StorageEntry> m_storageEntries;
+   wgpu::BindGroupLayout m_wgpuBGL;
+   std::string m_label; // propagated to rebuilt bind groups for GPU captures
+ 
+diff --git a/source/renderer/ore/wgpu/ore_context_wgpu.cpp b/source/renderer/ore/wgpu/ore_context_wgpu.cpp
+index db9bf384ac100754504499b127b33ace3bd05c7f..e3f897893d8b12e006e4257ef0d3282edcf46548 100644
+--- a/source/renderer/ore/wgpu/ore_context_wgpu.cpp
++++ b/source/renderer/ore/wgpu/ore_context_wgpu.cpp
+@@ -1118,6 +1118,19 @@ rcp<BindGroup> ContextWGPU::makeBindGroup(const BindGroupDesc& desc)
+     bg->m_retainedSamplers.push_back(ref_rcp(sampler));
+   }
+ 
++  for (uint32_t i = 0; i < desc.storageBufferCount; ++i)
++  {
++    const auto& sb = desc.storageBuffers[i];
++    if (sb.nativeBuffer == nullptr ||
++        !checkLayout(sb.slot, BindingKind::storageBufferRO))
++      continue;
++    bg->m_storageEntries.push_back(
++        {sb.slot,
++         wgpu::Buffer(static_cast<WGPUBuffer>(sb.nativeBuffer)),
++         sb.offset,
++         sb.size});
++  }
++
+   // Build the initial bind group against the current backings.
+   if (bg->resolveBindGroup() == nullptr)
+     return nullptr;

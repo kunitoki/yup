@@ -1,0 +1,31 @@
+Move YOGA_EXPORT after YG_DEPRECATED for older clang (Android NDK).
+
+- upstream/yoga/Yoga.h: move YOGA_EXPORT after YG_DEPRECATED: older clang (Android NDK) rejects a [[deprecated]] attribute list following __attribute__((visibility)) with 'an attribute list cannot appear here'
+
+diff --git a/upstream/yoga/Yoga.h b/upstream/yoga/Yoga.h
+index 7ba5361db8724ac5de4f5175955bfee15c8051f7..e295470897557df7c11017a12be6331f323ccb05 100644
+--- a/upstream/yoga/Yoga.h
++++ b/upstream/yoga/Yoga.h
+@@ -475,11 +475,10 @@ YOGA_EXPORT bool YGConfigIsMeasuringMinContent(YGConfigRef config);
+ // resulted in implicit behaviour similar to align-self: stretch; Because this
+ // was such a long-standing bug we must allow legacy users to switch back to
+ // this behaviour.
+-YOGA_EXPORT YG_DEPRECATED(
++YG_DEPRECATED(
+     "Please use "
+-    "\"YGConfigGetErrata()\"") bool YGConfigGetUseLegacyStretchBehaviour(YGConfigRef
++    "\"YGConfigGetErrata()\"") YOGA_EXPORT bool YGConfigGetUseLegacyStretchBehaviour(YGConfigRef
+                                                                              config);
+-YOGA_EXPORT
+ YG_DEPRECATED(
+     "\"YGConfigSetUseLegacyStretchBehaviour\" will be removed in the next "
+     "release. Usage should be replaced with \"YGConfigSetErrata(YGErrataAll)\" "
+@@ -487,7 +486,7 @@ YG_DEPRECATED(
+     "\"YGConfigSetErrata(YGErrataStretchFlexBasis)\" to opt out of the "
+     "specific conformance fix previously disabled by "
+     "\"UseLegacyStretchBehaviour\".")
+-void YGConfigSetUseLegacyStretchBehaviour(
++YOGA_EXPORT void YGConfigSetUseLegacyStretchBehaviour(
+     YGConfigRef config,
+     bool useLegacyStretchBehaviour);
+ 

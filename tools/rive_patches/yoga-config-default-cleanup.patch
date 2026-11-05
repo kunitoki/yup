@@ -1,0 +1,38 @@
+YGConfigGetDefault uses a RAII wrapper with cleanup.
+
+- upstream/yoga/Yoga.cpp: patched YGConfigGetDefault to use a proper RAII wrapper with cleanup
+
+diff --git a/upstream/yoga/Yoga.cpp b/upstream/yoga/Yoga.cpp
+index b7d223899b23c9cd8dd30d73bfbdb5992dc5ad29..6041c3ad2c259e53e440182f298ad4ae2a19a0f4 100644
+--- a/upstream/yoga/Yoga.cpp
++++ b/upstream/yoga/Yoga.cpp
+@@ -198,9 +198,27 @@ YOGA_EXPORT YGNodeRef YGNodeNewWithConfig(const YGConfigRef config) {
+   return node;
+ }
+ 
++namespace {
++struct YogaWrapperWithCleanup {
++  YogaWrapperWithCleanup()
++    : defaultConfig (YGConfigNew())
++  {
++  }
++
++  ~YogaWrapperWithCleanup() {
++    if (defaultConfig != nullptr) {
++      YGConfigFree (defaultConfig);
++      defaultConfig = nullptr;
++    }
++  }
++
++  YGConfigRef defaultConfig = nullptr;
++};
++} // namespace
++
+ YOGA_EXPORT YGConfigRef YGConfigGetDefault() {
+-  static YGConfigRef defaultConfig = YGConfigNew();
+-  return defaultConfig;
++  static auto defaultWrapper = YogaWrapperWithCleanup();
++  return defaultWrapper.defaultConfig;
+ }
+ 
+ YOGA_EXPORT YGNodeRef YGNodeNew(void) {

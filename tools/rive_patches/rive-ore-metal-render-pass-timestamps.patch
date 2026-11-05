@@ -1,0 +1,57 @@
+Write GPU timestamps of render passes into an armed Metal sample buffer.
+
+- include/rive/renderer/ore/ore_context_metal.hpp: Ore Metal context: setRenderPassSampleBuffer(sampleBuffer, firstSampleIndex) arms the render passes begun next to write GPU timestamps into an MTLCounterSampleBuffer, so YUP measures the GPU time of each scope of a GpuFrame (GpuFrameTimings::scopes). Ore builds the MTLRenderPassDescriptor and opens the encoder inside mtlBeginRenderPass, and RenderPassDesc has no native extension point, so YUP cannot reach the descriptor otherwise. The buffer is typed id so the header needs no availability annotation on targets older than macOS 11 / iOS 14. YUP arms it right before ContextMetal::beginRenderPass and disarms it (nil) right after, so a pass replayed at endFrame (the RIVE_ORE_DEFER path of scripted canvases) is never sampled
+- include/rive/renderer/ore/ore_context_metal.hpp: Ore Metal context: the sample buffer and first sample index set by setRenderPassSampleBuffer, nil when the next render pass is not sampled
+- source/renderer/ore/metal/ore_context_metal.mm: Ore Metal mtlBeginRenderPass: when a sample buffer is armed with setRenderPassSampleBuffer, attach it to the render pass descriptor at the stage boundaries, four consecutive samples from the first index (vertex start, vertex end, fragment start, fragment end), the only sampling point Apple GPUs support. YUP reads the earliest valid start and the latest valid end, as a stage without work writes no sample. Guarded by @available since sampleBufferAttachments needs macOS 11 / iOS 14
+
+diff --git a/include/rive/renderer/ore/ore_context_metal.hpp b/include/rive/renderer/ore/ore_context_metal.hpp
+index f57e6da7b7f63235208116bf0c69dfb65c256d0e..2bdca114d6dc98f9f061587606439b5346a6497c 100644
+--- a/include/rive/renderer/ore/ore_context_metal.hpp
++++ b/include/rive/renderer/ore/ore_context_metal.hpp
+@@ -71,6 +71,12 @@ public:
+   // The command buffer of the frame being recorded, nil outside a frame.
+   id<MTLCommandBuffer> commandBuffer() const { return m_mtlCommandBuffer; }
+ 
++  void setRenderPassSampleBuffer(id sampleBuffer, NSUInteger firstSampleIndex)
++  {
++    m_renderPassSampleBuffer = sampleBuffer;
++    m_renderPassSampleIndex = firstSampleIndex;
++  }
++
+   ContextMetal(const ContextMetal&) = delete;
+   ContextMetal& operator=(const ContextMetal&) = delete;
+ 
+@@ -105,6 +111,9 @@ private:
+ 
+   std::vector<rcp<BindGroup>> m_deferredBindGroups;
+ 
++  id m_renderPassSampleBuffer = nil;
++  NSUInteger m_renderPassSampleIndex = 0;
++
+   // Serial of the command buffer being recorded, bumped each frame.
+   uint64_t m_currentSerial = 0;
+   // Highest serial the GPU has finished. Written on the completion handler
+diff --git a/source/renderer/ore/metal/ore_context_metal.mm b/source/renderer/ore/metal/ore_context_metal.mm
+index 7480732395be99608a08a668aa2312ad098a0c0e..a1c575d67098b4ed30107b0dfa560d935ae74514 100644
+--- a/source/renderer/ore/metal/ore_context_metal.mm
++++ b/source/renderer/ore/metal/ore_context_metal.mm
+@@ -1034,6 +1034,19 @@ inline std::unique_ptr<RenderPass> ContextMetal::mtlBeginRenderPass(
+     }
+   }
+ 
++  if (m_renderPassSampleBuffer != nil)
++  {
++    if (@available(macOS 11.0, iOS 14.0, tvOS 14.0, *))
++    {
++      auto* sampling = rpd.sampleBufferAttachments[0];
++      sampling.sampleBuffer = m_renderPassSampleBuffer;
++      sampling.startOfVertexSampleIndex = m_renderPassSampleIndex;
++      sampling.endOfVertexSampleIndex = m_renderPassSampleIndex + 1;
++      sampling.startOfFragmentSampleIndex = m_renderPassSampleIndex + 2;
++      sampling.endOfFragmentSampleIndex = m_renderPassSampleIndex + 3;
++    }
++  }
++
+   id<MTLRenderCommandEncoder> encoder = [m_mtlCommandBuffer
+       renderCommandEncoderWithDescriptor:rpd];
+ 

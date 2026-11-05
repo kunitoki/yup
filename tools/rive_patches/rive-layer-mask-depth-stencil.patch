@@ -1,0 +1,147 @@
+Implement the layer mask blend in Vulkan and WebGPU depthStencil mode.
+
+- source/renderer/vulkan/draw_pipeline_vulkan.cpp: Vulkan layer mask: build the BlendEquation::layerMask fixed-function blend (src ZERO, dst SRC_ALPHA, op ADD) so depthStencil mode can apply a layer mask like the GL backend. vk_blend_op case.
+- source/renderer/vulkan/draw_pipeline_vulkan.cpp: Vulkan layer mask: add vk_src_blend_factor(), returning ZERO for layerMask and ONE otherwise.
+- source/renderer/vulkan/draw_pipeline_vulkan.cpp: Vulkan layer mask: vk_dst_blend_factor case returns SRC_ALPHA for layerMask.
+- source/renderer/vulkan/draw_pipeline_vulkan.cpp: Vulkan layer mask: feed vk_src_blend_factor() into the color/alpha src blend factors instead of a hardcoded ONE.
+- source/renderer/vulkan/render_context_vulkan_impl.cpp: Vulkan layer mask: advertise supportsDepthStencilLayerMask now that the pipeline builder implements the blend, so masks apply on devices without raster ordering (e.g. most mobile GPUs).
+- source/renderer/webgpu/render_context_webgpu_impl.cpp: WebGPU layer mask: advertise supportsDepthStencilLayerMask now that makeDrawPipeline builds the blend; YUP forces masked layers into depthStencil mode (atomic mode has no layer-mask op).
+- source/renderer/webgpu/render_context_webgpu_impl.cpp: WebGPU layer mask: wgpuBlendOp case returns ADD for layerMask (src ZERO, dst SRC_ALPHA).
+- source/renderer/webgpu/render_context_webgpu_impl.cpp: WebGPU layer mask: wgpuDstBlendFactor case returns SRC_ALPHA for layerMask, and add wgpuSrcBlendFactor() returning ZERO for layerMask.
+- source/renderer/webgpu/render_context_webgpu_impl.cpp: WebGPU layer mask: feed wgpuSrcBlendFactor() into the blend component src factor instead of a hardcoded ONE.
+
+diff --git a/source/renderer/vulkan/draw_pipeline_vulkan.cpp b/source/renderer/vulkan/draw_pipeline_vulkan.cpp
+index d780a6d76d1d91e082681cc86533c0208df81a13..23e616109561f558b19c37f9bb83c3e5b44d5f17 100644
+--- a/source/renderer/vulkan/draw_pipeline_vulkan.cpp
++++ b/source/renderer/vulkan/draw_pipeline_vulkan.cpp
+@@ -27,10 +27,9 @@ constexpr static VkBlendOp vk_blend_op(gpu::BlendEquation equation)
+     case gpu::BlendEquation::max:
+       return VK_BLEND_OP_MAX;
+     case gpu::BlendEquation::layerMask:
+-      // Needs a src factor of ZERO, which this pipeline builder does not
+-      // vary yet, so Vulkan leaves supportsDepthStencilLayerMask off and
+-      // is never asked for it.
+-      break;
++      // dst * srcAlpha: VK_BLEND_FACTOR_ZERO src, VK_BLEND_FACTOR_SRC_ALPHA
++      // dst, added together.
++      return VK_BLEND_OP_ADD;
+     case gpu::BlendEquation::screen:
+     case gpu::BlendEquation::overlay:
+     case gpu::BlendEquation::darken:
+@@ -51,6 +50,14 @@ constexpr static VkBlendOp vk_blend_op(gpu::BlendEquation equation)
+   RIVE_UNREACHABLE();
+ }
+ 
++constexpr static VkBlendFactor vk_src_blend_factor(gpu::BlendEquation equation)
++{
++  // dst * srcAlpha on the layer-mask path drops the src term entirely; every
++  // other equation this builder emits multiplies src by ONE.
++  return equation == gpu::BlendEquation::layerMask ? VK_BLEND_FACTOR_ZERO
++                                                   : VK_BLEND_FACTOR_ONE;
++}
++
+ constexpr static VkBlendFactor vk_dst_blend_factor(gpu::BlendEquation equation)
+ {
+   switch (equation)
+@@ -64,8 +71,8 @@ constexpr static VkBlendFactor vk_dst_blend_factor(gpu::BlendEquation equation)
+     case gpu::BlendEquation::max:
+       return VK_BLEND_FACTOR_ONE;
+     case gpu::BlendEquation::layerMask:
+-      // See vk_blend_op().
+-      break;
++      // dst * srcAlpha, matching the GL backend's GL_ZERO, GL_SRC_ALPHA.
++      return VK_BLEND_FACTOR_SRC_ALPHA;
+     case gpu::BlendEquation::screen:
+     case gpu::BlendEquation::overlay:
+     case gpu::BlendEquation::darken:
+@@ -438,10 +445,10 @@ DrawPipelineVulkan::DrawPipelineVulkan(
+           pipelineLayout.renderPassOptions()),
+       {
+           .blendEnable = blendEquation != gpu::BlendEquation::none,
+-          .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
++          .srcColorBlendFactor = vk_src_blend_factor(blendEquation),
+           .dstColorBlendFactor = vk_dst_blend_factor(blendEquation),
+           .colorBlendOp = vk_blend_op(blendEquation),
+-          .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
++          .srcAlphaBlendFactor = vk_src_blend_factor(blendEquation),
+           .dstAlphaBlendFactor = vk_dst_blend_factor(blendEquation),
+           .alphaBlendOp = vk_blend_op(blendEquation),
+           .colorWriteMask = colorWriteEnabled ? vkutil::kColorWriteMaskRGBA
+diff --git a/source/renderer/vulkan/render_context_vulkan_impl.cpp b/source/renderer/vulkan/render_context_vulkan_impl.cpp
+index 648f0d1be1da85f66f82e10293d0f3652f7611b6..49ad1c10a80bcd3a2e491c91efbf95b74c3a1c65 100644
+--- a/source/renderer/vulkan/render_context_vulkan_impl.cpp
++++ b/source/renderer/vulkan/render_context_vulkan_impl.cpp
+@@ -1244,6 +1244,10 @@ RenderContextVulkanImpl::RenderContextVulkanImpl(
+ #endif
+   m_platformFeatures.supportsClockwiseAtomicMode = m_platformFeatures
+                                                        .supportsAtomicMode;
++  // draw_pipeline_vulkan.cpp implements BlendEquation::layerMask, so the
++  // depthStencil path can mask a layer on any device (including those without
++  // raster ordering, e.g. most mobile GPUs).
++  m_platformFeatures.supportsDepthStencilLayerMask = true;
+   m_platformFeatures
+       .supportsClipPlanes = m_vk->features.shaderClipDistance &&
+                             // The Vulkan spec mandates that the minimum value
+diff --git a/source/renderer/webgpu/render_context_webgpu_impl.cpp b/source/renderer/webgpu/render_context_webgpu_impl.cpp
+index 477741d99461fc30630869cf327c9ae6c0ea06b5..b1e557c3a9c35373bdbb6f679c8359f6cd13627e 100644
+--- a/source/renderer/webgpu/render_context_webgpu_impl.cpp
++++ b/source/renderer/webgpu/render_context_webgpu_impl.cpp
+@@ -1995,6 +1995,11 @@ RenderContextWebGPUImpl::RenderContextWebGPUImpl(
+   }
+   m_platformFeatures.atomicPLSInitNeedsDraw = true;
+ 
++  // makeDrawPipeline implements BlendEquation::layerMask, so the depthStencil
++  // path can mask a layer (YUP forces masked layers into depthStencil mode,
++  // since atomic mode's blend step has no layer-mask op).
++  m_platformFeatures.supportsDepthStencilLayerMask = true;
++
+ #ifdef RIVE_WAGYU
+   // We can only use advanced blend if the client enabled it when setting up
+   // the device.
+@@ -3207,10 +3212,9 @@ static WGPUBlendOperation wgpuBlendOp(gpu::BlendEquation blendEquation)
+     case gpu::BlendEquation::max:
+       return WGPUBlendOperation_Max;
+     case gpu::BlendEquation::layerMask:
+-      // Needs a src factor of ZERO, which makeDrawPipeline does not vary
+-      // yet, so WebGPU leaves supportsDepthStencilLayerMask off and is
+-      // never asked for it.
+-      RIVE_UNREACHABLE();
++      // dst * srcAlpha: WGPUBlendFactor_Zero src, WGPUBlendFactor_SrcAlpha
++      // dst, added together.
++      return WGPUBlendOperation_Add;
+ #ifdef RIVE_WAGYU
+     case gpu::BlendEquation::multiply:
+       return WGPUBlendOperation_WagyuMultiply;
+@@ -3291,12 +3295,21 @@ static WGPUBlendFactor wgpuDstBlendFactor(gpu::BlendEquation blendEquation)
+     case gpu::BlendEquation::max:
+       return WGPUBlendFactor_One;
+     case gpu::BlendEquation::layerMask:
+-      // See wgpuBlendOp().
+-      RIVE_UNREACHABLE();
++      // dst * srcAlpha, matching the GL backend's GL_ZERO, GL_SRC_ALPHA.
++      return WGPUBlendFactor_SrcAlpha;
+   }
+   RIVE_UNREACHABLE();
+ }
+ 
++static WGPUBlendFactor wgpuSrcBlendFactor(gpu::BlendEquation blendEquation)
++{
++  // dst * srcAlpha on the layer-mask path drops the src term entirely; every
++  // other equation this builder emits multiplies src by ONE.
++  return blendEquation == gpu::BlendEquation::layerMask
++             ? WGPUBlendFactor_Zero
++             : WGPUBlendFactor_One;
++}
++
+ wgpu::RenderPipeline RenderContextWebGPUImpl::makeDrawPipeline(
+     gpu::DrawType drawType,
+     gpu::ShaderFeatures shaderFeatures,
+@@ -3474,7 +3487,7 @@ wgpu::RenderPipeline RenderContextWebGPUImpl::makeDrawPipeline(
+ 
+   const WGPUBlendComponent blendComponent = {
+       .operation = wgpuBlendOp(pipelineState.blendEquation),
+-      .srcFactor = WGPUBlendFactor_One,
++      .srcFactor = wgpuSrcBlendFactor(pipelineState.blendEquation),
+       .dstFactor = wgpuDstBlendFactor(pipelineState.blendEquation),
+   };
+ 

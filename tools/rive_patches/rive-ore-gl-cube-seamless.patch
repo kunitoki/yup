@@ -1,0 +1,22 @@
+Enable GL_TEXTURE_CUBE_MAP_SEAMLESS on desktop GL.
+
+- source/renderer/ore/gl/ore_context_gl.cpp: Ore GL context: enable GL_TEXTURE_CUBE_MAP_SEAMLESS on desktop GL, where cube lookups otherwise clamp to the face and rough prefiltered reflections show face seams (always on in OpenGL ES 3 and WebGL2); the enum is defined when the GLES-based loader header lacks it
+
+diff --git a/source/renderer/ore/gl/ore_context_gl.cpp b/source/renderer/ore/gl/ore_context_gl.cpp
+index 90ccf9c95c1b557af44258701d75769168d666a1..f6ca307d474486aef4fba23b1785f7b7de0c1251 100644
+--- a/source/renderer/ore/gl/ore_context_gl.cpp
++++ b/source/renderer/ore/gl/ore_context_gl.cpp
+@@ -438,6 +438,13 @@ std::unique_ptr<ContextGL> ContextGL::Make()
+     f.anisotropicFiltering = true;
+ #endif
+ 
++#ifdef RIVE_DESKTOP_GL
++#ifndef GL_TEXTURE_CUBE_MAP_SEAMLESS
++#define GL_TEXTURE_CUBE_MAP_SEAMLESS 0x884F
++#endif
++  glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
++#endif
++
+   return ctx;
+ }
+ 

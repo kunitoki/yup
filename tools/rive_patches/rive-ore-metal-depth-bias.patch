@@ -1,0 +1,25 @@
+Set the Metal depth bias for every pipeline, zero included.
+
+- source/renderer/ore/metal/ore_render_pass_metal.mm: Ore Metal setPipeline: set the depth bias for every pipeline, zero included. The bias is encoder state, so a pipeline without bias drawn after a biased one in the same render pass inherited its bias
+
+diff --git a/source/renderer/ore/metal/ore_render_pass_metal.mm b/source/renderer/ore/metal/ore_render_pass_metal.mm
+index 95b5eaeef3522225666c4beabc229ed8ab8bf7f7..f8d5436df8ecf537f5ab42b43831679796dc8dd2 100644
+--- a/source/renderer/ore/metal/ore_render_pass_metal.mm
++++ b/source/renderer/ore/metal/ore_render_pass_metal.mm
+@@ -110,13 +110,9 @@ void RenderPassMetal::setPipeline(Pipeline* pipeline)
+   m_mtlPrimitiveType = orePrimitiveTopologyToMTL(desc.topology);
+   m_currentPipeline = ref_rcp(pipeline);
+ 
+-  if (desc.depthStencil.depthBias != 0 ||
+-      desc.depthStencil.depthBiasSlopeScale != 0.0f)
+-  {
+-    [m_mtlEncoder setDepthBias:(float)desc.depthStencil.depthBias
+-                    slopeScale:desc.depthStencil.depthBiasSlopeScale
+-                         clamp:desc.depthStencil.depthBiasClamp];
+-  }
++  [m_mtlEncoder setDepthBias:(float)desc.depthStencil.depthBias
++                  slopeScale:desc.depthStencil.depthBiasSlopeScale
++                       clamp:desc.depthStencil.depthBiasClamp];
+ }
+ 
+ void RenderPassMetal::setVertexBuffer(

@@ -1,0 +1,83 @@
+Expose the tooling-only BindingMap API under RIVE_ORE_BINDING_MAP_TOOLS.
+
+- include/rive/renderer/ore/ore_binding_map.hpp: Ore BindingMap: expose the tooling-only construction and serialization API (push/finalize/toBlob) under RIVE_ORE_BINDING_MAP_TOOLS, since YUP builds binding maps at runtime from SPIR-V reflection
+- source/renderer/ore/ore_binding_map.cpp: Ore BindingMap: compile the tooling-only construction and serialization API under RIVE_ORE_BINDING_MAP_TOOLS
+
+diff --git a/include/rive/renderer/ore/ore_binding_map.hpp b/include/rive/renderer/ore/ore_binding_map.hpp
+index 5c9ef2b3bfcf72c82e7ca37bcd973fa19bfc9f37..ed55156abe4d5433f9c999d0c041ee3fcca0beb0 100644
+--- a/include/rive/renderer/ore/ore_binding_map.hpp
++++ b/include/rive/renderer/ore/ore_binding_map.hpp
+@@ -322,7 +322,7 @@ public:
+   // shipped runtime binary has none of this — no std::sort, no
+   // serialization, no state flag.
+   // ----------------------------------------------------------------
+-#ifdef WITH_RIVE_TOOLS
++#if defined(WITH_RIVE_TOOLS) || defined(RIVE_ORE_BINDING_MAP_TOOLS)
+   // Serialize to the on-disk RSTB sidecar format. Consumed by the
+   // RSTB emit path in scripting_workspace; mirrored by fromBlob
+   // which is always available at runtime.
+@@ -364,7 +364,7 @@ private:
+   // on the hot runtime path.
+   const Entry* findEntry(uint32_t group, uint32_t binding) const
+   {
+-#ifdef WITH_RIVE_TOOLS
++#if defined(WITH_RIVE_TOOLS) || defined(RIVE_ORE_BINDING_MAP_TOOLS)
+     assert(m_finalized && "BindingMap::lookup before finalize");
+ #endif
+     auto it = std::lower_bound(
+@@ -383,7 +383,7 @@ private:
+ 
+   std::vector<Entry> m_entries;
+   std::vector<GroupLayout> m_groupLayouts;
+-#ifdef WITH_RIVE_TOOLS
++#if defined(WITH_RIVE_TOOLS) || defined(RIVE_ORE_BINDING_MAP_TOOLS)
+   bool m_finalized = false;
+ #endif
+ };
+diff --git a/source/renderer/ore/ore_binding_map.cpp b/source/renderer/ore/ore_binding_map.cpp
+index c0ed4ef304c5a744f3e12b9b64443e6574c028fb..b2d50c342b0142282683556b884f6dbdf6c7583b 100644
+--- a/source/renderer/ore/ore_binding_map.cpp
++++ b/source/renderer/ore/ore_binding_map.cpp
+@@ -87,7 +87,7 @@ inline uint64_t readU64LE(const uint8_t* p)
+   return v;
+ }
+ 
+-#ifdef WITH_RIVE_TOOLS
++#if defined(WITH_RIVE_TOOLS) || defined(RIVE_ORE_BINDING_MAP_TOOLS)
+ inline void writeU16LE(uint8_t* p, uint16_t v)
+ {
+   p[0] = static_cast<uint8_t>(v & 0xFF);
+@@ -119,7 +119,7 @@ bool BindingMap::fromBlob(const uint8_t* data, size_t size, BindingMap* out)
+     return false;
+   out->m_entries.clear();
+   out->m_groupLayouts.clear();
+-#ifdef WITH_RIVE_TOOLS
++#if defined(WITH_RIVE_TOOLS) || defined(RIVE_ORE_BINDING_MAP_TOOLS)
+   out->m_finalized = false;
+ #endif
+ 
+@@ -183,7 +183,7 @@ bool BindingMap::fromBlob(const uint8_t* data, size_t size, BindingMap* out)
+     out->m_groupLayouts.push_back(g);
+     p += groupSize;
+   }
+-#ifdef WITH_RIVE_TOOLS
++#if defined(WITH_RIVE_TOOLS) || defined(RIVE_ORE_BINDING_MAP_TOOLS)
+   // Flip the finalized flag so tooling-build lookups satisfy their assert.
+   // The blob is already sorted by construction; no std::sort call.
+   out->m_finalized = true;
+@@ -249,13 +249,13 @@ void BindingMap::replaceStage(const BindingMap& other, Stage stage)
+   }
+ 
+   m_groupLayouts.clear();
+-#ifdef WITH_RIVE_TOOLS
++#if defined(WITH_RIVE_TOOLS) || defined(RIVE_ORE_BINDING_MAP_TOOLS)
+   // Insertion held the sort, so lookups stay legal without a finalize.
+   m_finalized = true;
+ #endif
+ }
+ 
+-#ifdef WITH_RIVE_TOOLS
++#if defined(WITH_RIVE_TOOLS) || defined(RIVE_ORE_BINDING_MAP_TOOLS)
+ 
+ std::vector<uint8_t> BindingMap::toBlob() const
+ {

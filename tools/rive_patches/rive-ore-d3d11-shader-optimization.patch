@@ -1,0 +1,17 @@
+Compile ore D3D11 shader modules with D3DCOMPILE_OPTIMIZATION_LEVEL1.
+
+- source/renderer/ore/d3d11/ore_shader_module_d3d11.cpp: Ore D3D11 shader modules compile with D3DCOMPILE_OPTIMIZATION_LEVEL1 (the fxc default, the level Rive's own D3D pipeline manager uses) instead of LEVEL3: D3DCompile at level 3 takes tens of seconds on the large lighting shaders of yup_renderer, and the driver optimizes the DXBC again anyway
+
+diff --git a/source/renderer/ore/d3d11/ore_shader_module_d3d11.cpp b/source/renderer/ore/d3d11/ore_shader_module_d3d11.cpp
+index 9566d735050c824ae1363f20597aef37be3f7157..9b5c3a30b0c261d379369d1bc3eb5cc34ded4aef 100644
+--- a/source/renderer/ore/d3d11/ore_shader_module_d3d11.cpp
++++ b/source/renderer/ore/d3d11/ore_shader_module_d3d11.cpp
+@@ -43,7 +43,7 @@ void ShaderModuleD3D11::ensureD3DShadersImpl(
+       nullptr,
+       entry,
+       target,
+-      D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3,
++      D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL1,
+       0,
+       compiledBlob.GetAddressOf(),
+       errors.GetAddressOf());

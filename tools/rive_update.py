@@ -400,34 +400,30 @@ def replace_module_version(header_path: Path, version: str) -> bool:
     return write_text_if_changed(header_path, new_text)
 
 
-def patch_text(value: str | list[str]) -> str:
-    if isinstance(value, list):
-        return "\n".join(value)
-    return value
+def git_apply(patch_path: Path, cwd: Path, *options: str) -> subprocess.CompletedProcess[str]:
+    """Runs `git apply` on a patch whose paths are relative to the dependency root."""
+    command = ["git", "apply", "--whitespace=nowarn", *options, str(patch_path)]
+    return subprocess.run(command, cwd=cwd, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
+def dependency_patch_paths(dep: dict[str, Any]) -> list[Path]:
+    paths: list[Path] = []
+    for patch in dep.get("patches", []):
+        path = (REPO_ROOT / patch).resolve()
+        if not path.is_file():
+            raise SystemExit(f"Missing patch file: {path}")
+        paths.append(path)
+    return paths
 
 
 def apply_dependency_patches(destination_root: Path, dep: dict[str, Any]) -> list[str]:
     notes: list[str] = []
-    for patch in dep.get("patches", []):
-        path = (destination_root / patch["path"]).resolve()
-        if not is_relative_to(path, destination_root):
-            raise SystemExit(f"Patch path escapes dependency root: {path}")
-        if not path.exists():
-            raise SystemExit(f"Missing patch target: {path}")
-
-        text = read_text(path)
-        already_contains = patch.get("already_contains")
-        if already_contains and already_contains in text:
-            continue
-
-        replacement = patch["replace"]
-        old = patch_text(replacement["from"])
-        new = patch_text(replacement["to"])
-        if old not in text:
-            raise SystemExit(f"Could not apply patch '{patch.get('note', patch['path'])}' to {path}")
-
-        if write_text_if_changed(path, text.replace(old, new, -1 if patch.get("replace_all") else 1)):
-            notes.append(patch.get("note", f"patched {patch['path']}"))
+    directory = f"--directory={posix(destination_root.relative_to(REPO_ROOT))}"
+    for patch_path in dependency_patch_paths(dep):
+        result = git_apply(patch_path, REPO_ROOT, directory)
+        if result.returncode != 0:
+            raise SystemExit(f"Could not apply patch {patch_path.name} to {dep['destination']}:\n{result.stderr}")
+        notes.append(f"applied {patch_path.name}")
 
     return notes
 

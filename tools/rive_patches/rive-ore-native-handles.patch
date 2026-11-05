@@ -1,0 +1,124 @@
+Expose native texture view and sampler handles to YUP compute passes.
+
+- source/renderer/ore/metal/ore_sampler_metal.hpp: Ore Metal sampler: expose the native MTLSamplerState, so YUP compute passes can bind samplers with setSamplerState
+- source/renderer/ore/d3d11/ore_texture_d3d11.hpp: Ore D3D11 texture view: expose the native SRV, so YUP compute passes can bind sampled textures and build storage UAVs
+- source/renderer/ore/d3d11/ore_sampler_d3d11.hpp: Ore D3D11 sampler: expose the native sampler state, so YUP compute passes can bind samplers with CSSetSamplers
+- source/renderer/ore/vulkan/ore_texture_vulkan.hpp: Ore Vulkan TextureVulkan: expose the image, its tracked layout and its written subresources, so compute work recorded outside ore can transition it and report back
+- source/renderer/ore/vulkan/ore_texture_vulkan.hpp: Ore Vulkan TextureViewVulkan: expose the image view for descriptors written outside ore
+- source/renderer/ore/vulkan/ore_sampler_vulkan.hpp: Ore Vulkan SamplerVulkan: expose the sampler for descriptors written outside ore
+- source/renderer/ore/wgpu/ore_texture_wgpu.hpp: Ore WebGPU TextureViewWGPU: public accessor for the native view so compute passes can bind it
+- source/renderer/ore/wgpu/ore_sampler_wgpu.hpp: Ore WebGPU SamplerWGPU: public accessor for the native sampler so compute passes can bind it
+
+diff --git a/source/renderer/ore/d3d11/ore_sampler_d3d11.hpp b/source/renderer/ore/d3d11/ore_sampler_d3d11.hpp
+index f219da1574194629d23e2f31b8388b9bfc458a4a..6ba2a346f30d2f8b9fd3831fb75d1d0978e8f0b0 100644
+--- a/source/renderer/ore/d3d11/ore_sampler_d3d11.hpp
++++ b/source/renderer/ore/d3d11/ore_sampler_d3d11.hpp
+@@ -13,6 +13,8 @@ public:
+   SamplerD3D11() = default;
+   ~SamplerD3D11() override = default; // ComPtr released automatically
+ 
++  ID3D11SamplerState* d3dSampler() const { return m_d3dSampler.Get(); }
++
+ private:
+   friend class ContextD3D11;
+   Microsoft::WRL::ComPtr<ID3D11SamplerState> m_d3dSampler;
+diff --git a/source/renderer/ore/d3d11/ore_texture_d3d11.hpp b/source/renderer/ore/d3d11/ore_texture_d3d11.hpp
+index 8b8e17f8190aaef66d0ed98f385d03493956c5b3..df8ae0280ce10eb877b1ba92db1258a8bb9d936a 100644
+--- a/source/renderer/ore/d3d11/ore_texture_d3d11.hpp
++++ b/source/renderer/ore/d3d11/ore_texture_d3d11.hpp
+@@ -30,6 +30,8 @@ public:
+   {}
+   ~TextureViewD3D11() override = default; // ComPtrs released automatically
+ 
++  ID3D11ShaderResourceView* d3dSRV() const { return m_d3dSRV.Get(); }
++
+ private:
+   friend class ContextD3D11;
+   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_d3dSRV;
+diff --git a/source/renderer/ore/metal/ore_sampler_metal.hpp b/source/renderer/ore/metal/ore_sampler_metal.hpp
+index 7388c81462f4c20ad03dc836d82ba785640d7ed8..aa1398d419f656be72dd65ed43abc2bacd9ee05d 100644
+--- a/source/renderer/ore/metal/ore_sampler_metal.hpp
++++ b/source/renderer/ore/metal/ore_sampler_metal.hpp
+@@ -11,6 +11,7 @@ class SamplerMetal : public LITE_RTTI_OVERRIDE(Sampler, SamplerMetal)
+ public:
+   SamplerMetal() = default;
+   ~SamplerMetal() override = default; // ARC releases m_mtlSampler
++  id<MTLSamplerState> mtlSampler() const { return m_mtlSampler; }
+ 
+ private:
+   friend class ContextMetal;
+diff --git a/source/renderer/ore/vulkan/ore_sampler_vulkan.hpp b/source/renderer/ore/vulkan/ore_sampler_vulkan.hpp
+index f9623953649ad2014d33f42f6b0f3468816f598c..3f4da9bf97bd35a75531338c17f23307c643ecee 100644
+--- a/source/renderer/ore/vulkan/ore_sampler_vulkan.hpp
++++ b/source/renderer/ore/vulkan/ore_sampler_vulkan.hpp
+@@ -14,6 +14,8 @@ public:
+   {}
+   ~SamplerVulkan() override;
+ 
++  VkSampler vkSampler() const { return m_vkSampler; }
++
+ private:
+   friend class ContextVulkan;
+   friend class RenderPassVulkan;
+diff --git a/source/renderer/ore/vulkan/ore_texture_vulkan.hpp b/source/renderer/ore/vulkan/ore_texture_vulkan.hpp
+index d5fa902fe9a7333590b2b2af23f2ee9003df431a..dc67d0360a1ac1c204cfb3c16b38d03329b946a9 100644
+--- a/source/renderer/ore/vulkan/ore_texture_vulkan.hpp
++++ b/source/renderer/ore/vulkan/ore_texture_vulkan.hpp
+@@ -22,6 +22,19 @@ public:
+   ~TextureVulkan() override;
+   void uploadImpl(const TextureDataDesc& data) override;
+ 
++  VkImage vkImage() const { return m_vkImage; }
++  VkImageLayout vkLayout() const { return m_vkLayout; }
++  void vkSetLayout(VkImageLayout layout) { m_vkLayout = layout; }
++  bool vkWasWritten(uint32_t mip, uint32_t layer) const
++  {
++    size_t i = static_cast<size_t>(layer) * m_numMipmaps + mip;
++    return i < m_vkWritten.size() && m_vkWritten[i];
++  }
++  void vkMarkWrittenExternally(uint32_t mip, uint32_t layer)
++  {
++    vkMarkWritten(mip, layer);
++  }
++
+ private:
+   friend class ContextVulkan;
+   friend class RenderPassVulkan;
+@@ -63,6 +76,8 @@ public:
+     return {aspect, baseMipLevel(), 1, baseLayer(), layerCount()};
+   }
+ 
++  VkImageView vkImageView() const { return m_vkImageView; }
++
+ private:
+   friend class ContextVulkan;
+   VkDevice m_vkDevice = VK_NULL_HANDLE; // Weak ref.
+diff --git a/source/renderer/ore/wgpu/ore_sampler_wgpu.hpp b/source/renderer/ore/wgpu/ore_sampler_wgpu.hpp
+index f792583ce24b473315146fee73225082acad4a30..45ac545759b36f0fffb1b78c3bd15179157d8202 100644
+--- a/source/renderer/ore/wgpu/ore_sampler_wgpu.hpp
++++ b/source/renderer/ore/wgpu/ore_sampler_wgpu.hpp
+@@ -12,6 +12,8 @@ public:
+   SamplerWGPU() = default;
+   ~SamplerWGPU() override = default; // wgpu::Sampler RAII destructor releases
+ 
++  const wgpu::Sampler& wgpuSampler() const { return m_wgpuSampler; }
++
+ private:
+   friend class ContextWGPU;
+   wgpu::Sampler m_wgpuSampler;
+diff --git a/source/renderer/ore/wgpu/ore_texture_wgpu.hpp b/source/renderer/ore/wgpu/ore_texture_wgpu.hpp
+index dbbd8b3adcdd88af259be145fc42b13277e7b8fb..9c832c52cb76b440dcdb7627756c1f88baaff2fe 100644
+--- a/source/renderer/ore/wgpu/ore_texture_wgpu.hpp
++++ b/source/renderer/ore/wgpu/ore_texture_wgpu.hpp
+@@ -28,6 +28,11 @@ public:
+   ~TextureViewWGPU() override =
+       default; // wgpu::TextureView RAII destructor releases
+ 
++  const wgpu::TextureView& wgpuTextureView() const
++  {
++    return m_wgpuTextureView;
++  }
++
+ private:
+   friend class ContextWGPU;
+   wgpu::TextureView m_wgpuTextureView;

@@ -1,0 +1,64 @@
+ContextWGPU creates and submits its own encoder when none is provided.
+
+- include/rive/renderer/ore/ore_context_wgpu.hpp: ContextWGPU owned-encoder mode: add m_ownsCommandEncoder flag
+- source/renderer/ore/wgpu/ore_context_wgpu.cpp: ContextWGPU owned-encoder mode: create/submit own encoder when beginFrame has no external one (fixes GpuFrame on Emscripten WebGPU)
+
+diff --git a/include/rive/renderer/ore/ore_context_wgpu.hpp b/include/rive/renderer/ore/ore_context_wgpu.hpp
+index 3fdf24e48c5430f8e30a24b8069f9b336fd1a8ab..2373acb60f6c41bd4db058bde68cad942242d63f 100644
+--- a/include/rive/renderer/ore/ore_context_wgpu.hpp
++++ b/include/rive/renderer/ore/ore_context_wgpu.hpp
+@@ -97,6 +97,7 @@ private:
+   wgpu::Device m_wgpuDevice;
+   wgpu::Queue m_wgpuQueue;
+   wgpu::CommandEncoder m_wgpuCommandEncoder;
++  bool m_ownsCommandEncoder = false;
+   uint64_t m_frameSerial = 0;
+   // WebGPU's default, for a device that does not report its limits.
+   uint64_t m_maxBufferSize = 256 * 1024 * 1024;
+diff --git a/source/renderer/ore/wgpu/ore_context_wgpu.cpp b/source/renderer/ore/wgpu/ore_context_wgpu.cpp
+index 4af0ff903d097ff1922422d4e7fe6612cde85f2b..28e8fd8a32334841ab2d6c2dcedd6ce8cf74f6d9 100644
+--- a/source/renderer/ore/wgpu/ore_context_wgpu.cpp
++++ b/source/renderer/ore/wgpu/ore_context_wgpu.cpp
+@@ -492,9 +492,23 @@ std::unique_ptr<ContextWGPU> ContextWGPU::Make(
+ 
+ void ContextWGPU::beginFrame(const FrameDescriptor& desc)
+ {
+-  assert(desc.externalCommandBuffer != nullptr);
++  if (desc.externalCommandBuffer != nullptr)
++  {
++    // External-encoder mode: record into the host's encoder; the host
++    // owns Finish()/Submit().
+   m_wgpuCommandEncoder = std::move(
+       *static_cast<wgpu::CommandEncoder*>(desc.externalCommandBuffer));
++    m_ownsCommandEncoder = false;
++  }
++  else
++  {
++    // Owned-encoder mode (matches the Metal/GL/D3D11 self-managed frame
++    // model): create our own encoder; endFrame() finishes and submits it,
++    // preserving the one-submit-per-frame-serial contract that
++    // BufferWGPU::acquireFreshBacking() relies on.
++    m_wgpuCommandEncoder = m_wgpuDevice.CreateCommandEncoder();
++    m_ownsCommandEncoder = true;
++  }
+   ++m_frameSerial;
+ }
+ 
+@@ -504,8 +518,15 @@ void ContextWGPU::endFrame()
+ {
+   assert(m_wgpuCommandEncoder != nullptr);
+ 
+-  // Host owns Finish()/Submit() and the frame fence; just drop our
+-  // reference to the shared encoder.
++  if (m_ownsCommandEncoder)
++  {
++    wgpu::CommandBuffer commands = m_wgpuCommandEncoder.Finish();
++    m_wgpuQueue.Submit(1, &commands);
++    m_ownsCommandEncoder = false;
++  }
++
++  // In external-encoder mode the host owns Finish()/Submit() and the frame
++  // fence; in both modes just drop our reference to the encoder.
+   m_wgpuCommandEncoder = nullptr;
+ }
+ 

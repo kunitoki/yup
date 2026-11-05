@@ -1,0 +1,17 @@
+Disable the scissor test for the duration of an ore GL render pass.
+
+- source/renderer/ore/gl/ore_context_gl.cpp: Ore GL render pass: disable the scissor test for the duration of the pass, since the host renderer may leave a stale scissor rect enabled that would clip the pass's clears and draws
+
+diff --git a/source/renderer/ore/gl/ore_context_gl.cpp b/source/renderer/ore/gl/ore_context_gl.cpp
+index 2ec9b3c3bb4620cbfd3453e884d97123129b41b1..719846374383899a0cf1a0147898a6414b8a4b4a 100644
+--- a/source/renderer/ore/gl/ore_context_gl.cpp
++++ b/source/renderer/ore/gl/ore_context_gl.cpp
+@@ -1112,6 +1112,8 @@ std::unique_ptr<RenderPass> ContextGL::beginRenderPass(
+   }
+   glBindFramebuffer(GL_FRAMEBUFFER, pass->m_glFBO);
+ 
++  glDisable(GL_SCISSOR_TEST);
++
+   // Hashes what decides completeness. A stale match only skips the report.
+   uint64_t attachmentKey = 14695981039346656037ull;
+   auto mixKey = [&attachmentKey](uint64_t v) {
