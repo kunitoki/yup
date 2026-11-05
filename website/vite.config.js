@@ -167,7 +167,7 @@ function docsSearchIndex() {
     return entries.map((e) => ({ ...e, k: [...e.k].join(" "), t: e.t.length > 200 ? `${e.t.slice(0, 200)}...` : e.t }));
 }
 
-const escapeHtml = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const escapeHtml = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 // The inline markdown of the release notes: code spans (taken verbatim), bold, links and #123
 // references to issues and pull requests.
