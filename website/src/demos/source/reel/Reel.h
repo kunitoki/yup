@@ -140,7 +140,7 @@ private:
     //==============================================================================
     void advance (float deltaSeconds) override
     {
-        const auto lift = reelLift.update (pointer, screenBounds, deltaSeconds);
+        const auto lift = reelLift.update (pointer, screenBounds, getLocalBounds(), deltaSeconds);
         view.setLift (lift);
 
         // +1 at the top (left) edge, -1 at the bottom (right) one; kept while the pointer is away so
