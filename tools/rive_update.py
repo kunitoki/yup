@@ -220,6 +220,9 @@ def ref_to_version(ref: str) -> str:
         return f"{libpng_match.group(1)}.{int(libpng_match.group(2))}"
 
     value = re.sub(r"^(rive_changes_|rive_|release[-_/])", "", value)
+    if SHA_RE.fullmatch(value.rsplit("_", 1)[-1]):
+        return "0.0.0"
+
     if value.startswith("v") and len(value) > 1 and value[1].isdigit():
         value = value[1:]
 
@@ -290,6 +293,16 @@ def parse_rive_dependency_premake(rive_checkout: Path, dep: dict[str, Any]) -> t
 
     if not premake_path.exists():
         raise SystemExit(f"Missing Rive dependency declaration for {dep['name']}: {premake_path}")
+
+    # Some declarations read their pinned ref from a sibling file instead of a literal
+    if config.get("ref_file"):
+        ref_path = rive_checkout / config["ref_file"]
+        if not ref_path.exists():
+            raise SystemExit(f"Missing Rive dependency ref file for {dep['name']}: {ref_path}")
+        ref = "".join(read_text(ref_path).split())
+        if not ref:
+            raise SystemExit(f"Empty Rive dependency ref file for {dep['name']}: {ref_path}")
+        return f"https://github.com/{expected_project}.git", ref
 
     for project, ref in PREMAKE_GITHUB_RE.findall(read_text(premake_path)):
         if project == expected_project:

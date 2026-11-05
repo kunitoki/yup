@@ -5,38 +5,38 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char blit_texture_as_draw[] = R"===(l2
-#ifdef GD
-E0 V(0,c,f2);
+const char blit_texture_as_draw[] = R"===(o2
+#ifdef JD
+I0 W(0,c,p2);
 #endif
-e2
-#ifdef BB
-j4 k4 P4 Q4 c1(d0) d1 v1(LF,d0,D,G,r){c y2;y2.x=(G&1)==0?-1.:1.;y2.y=(G&2)==0?-1.:1.;
-#ifdef GD
-T(f2,c);f2.x=y2.x*.5+.5;f2.y=y2.y*-.5+.5;Z(f2);
+P1
+#ifdef CB
+A4 B4 i5 j5 h1(d0) i1 n1(RF,d0,A,C,r){c I2;I2.x=(C&1)==0?-1.:1.;I2.y=(C&2)==0?-1.:1.;
+#ifdef JD
+V(p2,c);p2.x=I2.x*.5+.5;p2.y=I2.y*-.5+.5;e0(p2);
 #endif
-e I=e(y2,0,1);w1(I);}
+e I=e(I2,0,1);C1(I);}
 #endif
-#ifdef FB
-N3
-#ifdef SD
-Xf(w5,l4,IC);
+#ifdef EB
+X3
+#ifdef YD
+Zg(J5,C4,JC);
 #else
-i3(w5,l4,IC);
+Z2(J5,C4,JC);
 #endif
-O3
-#ifdef GD
-x5 m4(Yf) y5
+Y3
+#ifdef JD
+K5 D4(ah) L5
 #endif
-j3(i,PE){i C8;
-#ifdef GD
-q(f2,c);C8=i6(IC,Yf,f2,.0);
-#elif defined(SD)
-C8=(D8(IC,0,e0(floor(f0.xy)))+D8(IC,1,e0(floor(f0.xy)))+D8(IC,2,e0(floor(f0.xy)))+D8(IC,3,e0(floor(f0.xy))))*0.25;
+v2(i,SF){i m9;
+#ifdef JD
+q(p2,c);m9=k5(JC,ah,p2,.0);
+#elif defined(YD)
+m9=(n9(JC,0,f0(floor(Y.xy)))+n9(JC,1,f0(floor(Y.xy)))+n9(JC,2,f0(floor(Y.xy)))+n9(JC,3,f0(floor(Y.xy))))*0.25;
 #else
-C8=p1(IC,e0(floor(f0.xy)));
+m9=j1(JC,f0(floor(Y.xy)));
 #endif
-P2(C8);}
+w2(m9);}
 #endif
 )===";
 } // namespace glsl

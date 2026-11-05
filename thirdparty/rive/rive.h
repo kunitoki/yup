@@ -26,7 +26,7 @@
 
     ID:                 rive
     vendor:             rive
-    version:            0.1.512
+    version:            0.1.700
     name:               Rive C++ is a runtime library for Rive.
     description:        Rive C++ is a runtime library for Rive, a real-time interactive design and animation tool.
     website:            https://github.com/rive-app/rive-runtime
@@ -42,8 +42,7 @@
     iosSimDefines:      RIVE_IOS_SIMULATOR=1
     linuxDefines:       ORE_BACKEND_GL=1
     wasmDefines:        RIVE_WEBGL=1 ORE_BACKEND_GL=1
-    wasmOptions:        -sUSE_SDL=2
-    wasmLinkOptions:    -sUSE_SDL=2 -sMAX_WEBGL_VERSION=2
+    wasmLinkOptions:    -sMAX_WEBGL_VERSION=2
     windowsDefines:     RIVE_WINDOWS=1 ORE_BACKEND_D3D11=1 ORE_BACKEND_GL=1
     androidDefines:     RIVE_ANDROID=1 ORE_BACKEND_GL=1
     androidLibs:        EGL GLESv3
@@ -184,10 +183,11 @@
 #include "include/rive/renderer/rive_render_image.hpp"
 #include "include/rive/renderer/render_context.hpp"
 #include "include/rive/renderer/render_context_impl.hpp"
+#include "include/rive/renderer/rive_render_paint.hpp"
+#include "include/rive/renderer/ore/ore_script_guards.hpp"
 
 // Internals
 #include "source/renderer/rive_render_path.hpp"
-#include "source/renderer/rive_render_paint.hpp"
 
 #if __GNUC__
  #pragma GCC diagnostic pop

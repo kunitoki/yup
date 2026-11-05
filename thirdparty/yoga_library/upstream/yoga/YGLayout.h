@@ -25,6 +25,20 @@ private:
   uint8_t flags = 0;
 
 public:
+  // rive: bit i is set when cachedMeasurements[i] sized something below this
+  // node to the space it was offered rather than its content, so it can't
+  // stand in for a measurement under other limits. In the padding after
+  // flags.
+  uint8_t limitDependentMeasurements = 0;
+  // rive: bit i is set when cachedMeasurements[i] holds a container with
+  // children that measures as nothing in either axis, which a limit that
+  // only just holds it would leave nothing past its margins.
+  uint8_t emptyContainerMeasurements = 0;
+  // rive: YGNodeContentFlags' answer for this node, kept until it's dirtied.
+  uint8_t contentFlags = 0;
+  static_assert(
+      YG_MAX_CACHED_RESULT_COUNT <= 8,
+      "the measurement masks have a bit per cached measurement");
   uint32_t computedFlexBasisGeneration = 0;
   YGFloatOptional computedFlexBasis = {};
 
@@ -47,6 +61,10 @@ public:
   // tooling can hit-test a point to a grid cell.
   std::vector<float> gridColumnLineOffsets = {};
   std::vector<float> gridRowLineOffsets = {};
+  // rive: the gaps between those lines' tracks, as content distribution
+  // spaced them.
+  float gridColumnGap = 0.0f;
+  float gridRowGap = 0.0f;
 
   YGDirection direction() const {
     return facebook::yoga::detail::getEnumData<YGDirection>(

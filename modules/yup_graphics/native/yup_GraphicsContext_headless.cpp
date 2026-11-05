@@ -63,6 +63,8 @@ public:
 
     void shader (rive::rcp<rive::RenderShader>) override {}
 
+    void shaderTransform (const rive::Mat2D&) override {}
+
     void invalidateStroke() override {}
 
     void feather (float) override {}

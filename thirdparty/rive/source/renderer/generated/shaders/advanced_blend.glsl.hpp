@@ -5,25 +5,25 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char advanced_blend[] = R"===(#ifdef FB
-#ifdef LE
+const char advanced_blend[] = R"===(#ifdef EB
+#ifdef RE
 layout(
-#ifdef FC
+#ifdef GC
 blend_support_all_equations
 #else
 blend_support_multiply,blend_support_screen,blend_support_overlay,blend_support_darken,blend_support_lighten,blend_support_colordodge,blend_support_colorburn,blend_support_hardlight,blend_support_softlight,blend_support_difference,blend_support_exclusion
 #endif
 ) out;
 #endif
-#ifdef N
-#ifdef FC
-d dc(v O1){return dot(O1,W0(.30,.59,.11));}v F9(v ec,v G9){d H9=dc(G9);v I9=ec-dc(ec);C fc=H2(H9,1.0-H9)/max(H2(J9),H2(-v3(I9),Y5(I9)));d cf=min(H0(1.0),min(fc.x,fc.y));return I9*cf+H9;}v gc(v f8,v hc,v G9){float df=Y5(hc)-v3(hc);f8-=v3(f8);float ef=Y5(f8);float I2=df/max(J9,ef);return F9(f8*I2,G9);}
+#ifdef H
+#ifdef GC
+d gd(v Y1){return dot(Y1,e1(.30,.59,.11));}v sa(v hd,v ta){d ua=gd(ta);v va=hd-gd(hd);F id=V2(ua,1.0-ua)/max(V2(wa),V2(-E3(va),n6(va)));d eg=min(B0(1.0),min(id.x,id.y));return va*eg+ua;}v jd(v M8,v kd,v ta){float fg=n6(kd)-E3(kd);M8-=E3(M8);float gg=n6(M8);float W2=fg/max(wa,gg);return sa(M8*W2,ta);}
 #endif
-v ff(v r0,i G1,Q a4){v x0=Q6(G1);v g1;switch(a4){case gf:g1=r0.xyz*x0.xyz;break;case hf:g1=r0.xyz+x0.xyz-r0.xyz*x0.xyz;break;case jf:{v R6=r0*x0;g1=2.0*mix(R6,r0+x0-R6-0.5,greaterThan(x0,W0(0.5)));break;}case kf:g1=min(r0.xyz,x0.xyz);break;case lf:g1=max(r0.xyz,x0.xyz);break;case mf:{G1.xyz=clamp(G1.xyz,W0(.0),G1.www);v ic=clamp(1.-r0,W0(.0),W0(1.))*G1.w;g1=mix(min(W0(1.),G1.xyz/ic),sign(G1.xyz),equal(ic,W0(.0)));break;}case of:{r0=clamp(r0,W0(.0),W0(1.));G1.xyz=clamp(G1.xyz,W0(.0),G1.www);if(G1.w==.0) G1.w=1.;v jc=G1.w-G1.xyz;g1=1.-mix(min(W0(1.),jc/(r0*G1.w)),sign(jc),equal(r0,W0(.0)));break;}case pf:{v R6=r0*x0;g1=2.0*mix(R6,r0+x0-R6-0.5,greaterThan(r0,W0(0.5)));break;}case qf:{for(int L0=0;L0<3;++L0){if(r0[L0]<=0.5) g1[L0]=(1.0-x0[L0]);else if(x0[L0]<=0.25) g1[L0]=((16.0*x0[L0]-12.0)*x0[L0]+3.0);else g1[L0]=(inversesqrt(x0[L0])-1.0);}g1=x0+x0*(2.0*r0-1.0)*g1;break;}case rf:g1=abs(x0.xyz-r0.xyz);break;case sf:g1=r0.xyz+x0.xyz-2.*r0.xyz*x0.xyz;break;
-#ifdef FC
-case tf:if(FC){r0.xyz=clamp(r0.xyz,W0(.0),W0(1.));g1=gc(r0.xyz,x0.xyz,x0.xyz);}break;case uf:if(FC){r0.xyz=clamp(r0.xyz,W0(.0),W0(1.));g1=gc(x0.xyz,r0.xyz,x0.xyz);}break;case vf:if(FC){r0.xyz=clamp(r0.xyz,W0(.0),W0(1.));g1=F9(r0.xyz,x0.xyz);}break;case wf:if(FC){r0.xyz=clamp(r0.xyz,W0(.0),W0(1.));g1=F9(x0.xyz,r0.xyz);}break;
+v hg(v w0,i B1,O F3){v C0=o6(B1);v m1;switch(F3){case ig:m1=w0.xyz*C0.xyz;break;case jg:m1=w0.xyz+C0.xyz-w0.xyz*C0.xyz;break;case kg:{v l7=w0*C0;m1=2.0*mix(l7,w0+C0-l7-0.5,greaterThan(C0,e1(0.5)));break;}case lg:m1=min(w0.xyz,C0.xyz);break;case mg:m1=max(w0.xyz,C0.xyz);break;case ng:{B1.xyz=clamp(B1.xyz,e1(.0),B1.www);v ld=clamp(1.-w0,e1(.0),e1(1.))*B1.w;m1=mix(min(e1(1.),B1.xyz/ld),sign(B1.xyz),equal(ld,e1(.0)));break;}case pg:{w0=clamp(w0,e1(.0),e1(1.));B1.xyz=clamp(B1.xyz,e1(.0),B1.www);if(B1.w==.0) B1.w=1.;v md=B1.w-B1.xyz;m1=1.-mix(min(e1(1.),md/(w0*B1.w)),sign(md),equal(w0,e1(.0)));break;}case qg:{v l7=w0*C0;m1=2.0*mix(l7,w0+C0-l7-0.5,greaterThan(w0,e1(0.5)));break;}case rg:{for(int P0=0;P0<3;++P0){if(w0[P0]<=0.5) m1[P0]=(1.0-C0[P0]);else if(C0[P0]<=0.25) m1[P0]=((16.0*C0[P0]-12.0)*C0[P0]+3.0);else m1[P0]=(inversesqrt(C0[P0])-1.0);}m1=C0+C0*(2.0*w0-1.0)*m1;break;}case sg:m1=abs(C0.xyz-w0.xyz);break;case tg:m1=w0.xyz+C0.xyz-2.*w0.xyz*C0.xyz;break;
+#ifdef GC
+case ug:if(GC){w0.xyz=clamp(w0.xyz,e1(.0),e1(1.));m1=jd(w0.xyz,C0.xyz,C0.xyz);}break;case vg:if(GC){w0.xyz=clamp(w0.xyz,e1(.0),e1(1.));m1=jd(C0.xyz,w0.xyz,C0.xyz);}break;case wg:if(GC){w0.xyz=clamp(w0.xyz,e1(.0),e1(1.));m1=sa(w0.xyz,C0.xyz);}break;case xg:if(GC){w0.xyz=clamp(w0.xyz,e1(.0),e1(1.));m1=sa(C0.xyz,w0.xyz);}break;
 #endif
-}return g1;}f v h5(v r0,i G1,Q a4){v g1=ff(r0,G1,a4);return mix(r0,g1,W0(G1.w));}
+}return m1;}f v Y4(v w0,i B1,O F3){v m1=hg(w0,B1,F3);return mix(w0,m1,e1(B1.w));}
 #endif
 #endif
 )===";

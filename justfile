@@ -167,7 +167,7 @@ sample SECONDS="5" NAME="example_graphics" PID="":
   uv run python tools/sample_process.py --name {{NAME}} --seconds {{SECONDS}} {{ if PID != "" { "--pid " + PID } else { "" } }}
 
 [doc("update rive runtime")]
-rive_update REF="runtime-v0.1.512":
+rive_update REF="runtime-v0.1.700":
   uv run python tools/rive_update.py --rive-ref {{REF}} --allow-dirty --keep-work-dir
 
 [doc("check that every rive manifest patch is present in thirdparty/rive")]

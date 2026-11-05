@@ -64,6 +64,74 @@ static void layoutAbsoluteDescendants(
   }
 }
 
+// rive: a grid with nodeless items sizes its tracks from their contributions
+// alone, realized items being among them, so a pass's result depends only on
+// what it reads here and is reused while that matches.
+static void runGridSizing(YGNode* node, TrackSizing& trackSizing) {
+  auto virt = node->gridVirtual();
+  if (virt == nullptr) {
+    trackSizing.runGridSizingAlgorithm();
+    return;
+  }
+  auto same = [](float a, float b) {
+    return a == b || (std::isnan(a) && std::isnan(b));
+  };
+  auto& columns = trackSizing.columnTracks;
+  auto& rows = trackSizing.rowTracks;
+  for (const auto& sizing : virt->sizings) {
+    if (sizing.columnSizes.size() != columns.size() ||
+        sizing.rowSizes.size() != rows.size() ||
+        !same(sizing.innerWidth, trackSizing.containerInnerWidth) ||
+        !same(sizing.innerHeight, trackSizing.containerInnerHeight) ||
+        !same(sizing.ownerWidth, trackSizing.ownerWidth) ||
+        !same(sizing.ownerHeight, trackSizing.ownerHeight) ||
+        sizing.widthMode != trackSizing.widthSizingMode ||
+        sizing.heightMode != trackSizing.heightSizingMode ||
+        sizing.direction != trackSizing.direction ||
+        sizing.firstColumnLine != trackSizing.firstColumnLine ||
+        sizing.firstRowLine != trackSizing.firstRowLine ||
+        !(sizing.style == node->style())) {
+      continue;
+    }
+    for (size_t i = 0; i < columns.size(); i++) {
+      columns[i].baseSize = columns[i].growthLimit = sizing.columnSizes[i];
+    }
+    for (size_t i = 0; i < rows.size(); i++) {
+      rows[i].baseSize = rows[i].growthLimit = sizing.rowSizes[i];
+    }
+    trackSizing.hasPercentageColumnTracks = sizing.percentColumns;
+    trackSizing.hasPercentageRowTracks = sizing.percentRows;
+    return;
+  }
+  trackSizing.runGridSizingAlgorithm();
+  YGGridVirtual::Sizing sizing{
+      node->style(),
+      trackSizing.containerInnerWidth,
+      trackSizing.containerInnerHeight,
+      trackSizing.ownerWidth,
+      trackSizing.ownerHeight,
+      trackSizing.widthSizingMode,
+      trackSizing.heightSizingMode,
+      trackSizing.direction,
+      trackSizing.firstColumnLine,
+      trackSizing.firstRowLine,
+      {},
+      {},
+      trackSizing.hasPercentageColumnTracks,
+      trackSizing.hasPercentageRowTracks};
+  for (const auto& track : columns) {
+    sizing.columnSizes.push_back(track.baseSize);
+  }
+  for (const auto& track : rows) {
+    sizing.rowSizes.push_back(track.baseSize);
+  }
+  // A layout asks for a few sizes (measure, then lay out); keep that many.
+  if (virt->sizings.size() >= 4) {
+    virt->sizings.erase(virt->sizings.begin());
+  }
+  virt->sizings.push_back(std::move(sizing));
+}
+
 void calculateGridLayoutInternal(
     YGNode* node,
     float availableWidth,
@@ -134,6 +202,9 @@ void calculateGridLayoutInternal(
   auto& rowTracks = gridTracks.rowTracks;
   auto& columnTracks = gridTracks.columnTracks;
   auto& gridItems = autoPlacement.gridItems;
+  // rive: nodeless contributions cover the realized items too.
+  std::vector<GridItem> noItems;
+  auto& sizingItems = node->hasGridVirtualContributions() ? noItems : gridItems;
   bool needsSecondTrackSizingPass = true;
 
   if (!widthIsDefinite || !heightIsDefinite) {
@@ -143,7 +214,7 @@ void calculateGridLayoutInternal(
         rowTracks,
         containerInnerWidth,
         containerInnerHeight,
-        gridItems,
+        sizingItems,
         widthSizingMode,
         heightSizingMode,
         direction,
@@ -154,8 +225,10 @@ void calculateGridLayoutInternal(
         generationCount,
         config,
         layoutContext);
+    trackSizing.firstColumnLine = autoPlacement.minColumnStart;
+    trackSizing.firstRowLine = autoPlacement.minRowStart;
 
-    trackSizing.runGridSizingAlgorithm();
+    runGridSizing(node, trackSizing);
 
     bool containerSizeChanged = false;
 
@@ -233,7 +306,7 @@ void calculateGridLayoutInternal(
       rowTracks,
       containerInnerWidth,
       containerInnerHeight,
-      gridItems,
+      sizingItems,
       widthSizingMode,
       heightSizingMode,
       direction,
@@ -244,6 +317,8 @@ void calculateGridLayoutInternal(
       generationCount,
       config,
       layoutContext);
+  trackSizing.firstColumnLine = autoPlacement.minColumnStart;
+  trackSizing.firstRowLine = autoPlacement.minRowStart;
 
   // Step 3: Given the resulting grid container size, run the Grid Sizing
   // Algorithm to size the grid. Run track sizing with the new container
@@ -256,7 +331,7 @@ void calculateGridLayoutInternal(
   // 3. There are percentage tracks in indefinite dimensions that need
   // resolution
   if (needsSecondTrackSizingPass) {
-    trackSizing.runGridSizingAlgorithm();
+    runGridSizing(node, trackSizing);
   }
 
   // Step 4: Lay out the grid items into their respective containing blocks.
@@ -290,27 +365,18 @@ void calculateGridLayoutInternal(
   auto finalEffectiveColumnGap = inlineDistribution.effectiveGap;
   auto finalEffectiveRowGap = blockDistribution.effectiveGap;
 
-  std::vector<float> columnGridLineOffsets;
-  columnGridLineOffsets.reserve(columnTracks.size() + 1);
-  columnGridLineOffsets.push_back(0.0f);
-  for (size_t i = 0; i < columnTracks.size(); i++) {
-    float offset = columnGridLineOffsets[i] + columnTracks[i].baseSize;
-    if (i < columnTracks.size() - 1) {
-      offset += finalEffectiveColumnGap;
+  // rive: sized writes; virtualized grids have a line per row.
+  auto lineOffsets = [](const std::vector<GridTrack>& tracks, float gap) {
+    std::vector<float> offsets(tracks.size() + 1, 0.0f);
+    for (size_t i = 0; i < tracks.size(); i++) {
+      offsets[i + 1] = offsets[i] + tracks[i].baseSize +
+          (i < tracks.size() - 1 ? gap : 0.0f);
     }
-    columnGridLineOffsets.push_back(offset);
-  }
-
-  std::vector<float> rowGridLineOffsets;
-  rowGridLineOffsets.reserve(rowTracks.size() + 1);
-  rowGridLineOffsets.push_back(0.0f);
-  for (size_t i = 0; i < rowTracks.size(); i++) {
-    float offset = rowGridLineOffsets[i] + rowTracks[i].baseSize;
-    if (i < rowTracks.size() - 1) {
-      offset += finalEffectiveRowGap;
-    }
-    rowGridLineOffsets.push_back(offset);
-  }
+    return offsets;
+  };
+  auto columnGridLineOffsets =
+      lineOffsets(columnTracks, finalEffectiveColumnGap);
+  auto rowGridLineOffsets = lineOffsets(rowTracks, finalEffectiveRowGap);
 
   // Persist the resolved grid line positions in local content space (matching
   // child layout positions) so tooling can map a point back to a cell. The raw
@@ -318,17 +384,17 @@ void calculateGridLayoutInternal(
   // padding/border and the grid's alignment start offset to land in the same
   // space as each item's layout position (see finalLeft/finalTop below).
   auto& gridLayout = node->getLayout();
-  gridLayout.gridColumnLineOffsets.clear();
-  gridLayout.gridColumnLineOffsets.reserve(columnGridLineOffsets.size());
-  for (float o : columnGridLineOffsets) {
-    gridLayout.gridColumnLineOffsets.push_back(
-        leadingPaddingAndBorderInline + gridInlineStartOffset + o);
+  gridLayout.gridColumnLineOffsets.resize(columnGridLineOffsets.size());
+  for (size_t i = 0; i < columnGridLineOffsets.size(); i++) {
+    gridLayout.gridColumnLineOffsets[i] = leadingPaddingAndBorderInline +
+        gridInlineStartOffset + columnGridLineOffsets[i];
   }
-  gridLayout.gridRowLineOffsets.clear();
-  gridLayout.gridRowLineOffsets.reserve(rowGridLineOffsets.size());
-  for (float o : rowGridLineOffsets) {
-    gridLayout.gridRowLineOffsets.push_back(
-        leadingPaddingAndBorderBlock + gridBlockStartOffset + o);
+  gridLayout.gridColumnGap = finalEffectiveColumnGap;
+  gridLayout.gridRowGap = finalEffectiveRowGap;
+  gridLayout.gridRowLineOffsets.resize(rowGridLineOffsets.size());
+  for (size_t i = 0; i < rowGridLineOffsets.size(); i++) {
+    gridLayout.gridRowLineOffsets[i] = leadingPaddingAndBorderBlock +
+        gridBlockStartOffset + rowGridLineOffsets[i];
   }
 
   for (auto& item : gridItems) {
@@ -377,6 +443,59 @@ void calculateGridLayoutInternal(
             layoutContext,
         depth,
         generationCount);
+
+    // rive: a hugging anchor axis had no size to derive from before layout;
+    // take it from the measured size now and lay the item out again.
+    if (itemStyle.aspectRatio().isDefined() &&
+        itemStyle.aspectRatio().unwrap() > 0.0f &&
+        itemStyle.aspectRatioAxis() != YGAspectRatioAxisAuto) {
+      const bool anchorsRow =
+          itemStyle.aspectRatioAxis() == YGAspectRatioAxisWidth;
+      const auto anchorMode = anchorsRow ? itemConstraints.widthSizingMode
+                                         : itemConstraints.heightSizingMode;
+      if (anchorMode != YGMeasureModeExactly) {
+        const float ratio = itemStyle.aspectRatio().unwrap();
+        const float measuredWidth =
+            item.node->getLayout().measuredDimensions[YGDimensionWidth];
+        const float measuredHeight =
+            item.node->getLayout().measuredDimensions[YGDimensionHeight];
+        float width = anchorsRow ? measuredWidth : measuredHeight * ratio;
+        float height = anchorsRow ? measuredWidth / ratio : measuredHeight;
+        if (anchorsRow) {
+          height = boundAxis(
+              item.node,
+              YGFlexDirectionColumn,
+              direction,
+              height,
+              containingBlockHeight,
+              containingBlockWidth);
+        } else {
+          width = boundAxis(
+              item.node,
+              YGFlexDirectionRow,
+              direction,
+              width,
+              containingBlockWidth,
+              containingBlockWidth);
+        }
+        YGLayoutNodeInternal(
+            item.node,
+            width + marginInlineStart + marginInlineEnd,
+            height + marginBlockStart + marginBlockEnd,
+            direction,
+            YGMeasureModeExactly,
+            YGMeasureModeExactly,
+            containingBlockWidth,
+            containingBlockHeight,
+            true,
+            LayoutPassReason::kGridLayout,
+            config,
+            layoutMarkerData,
+            layoutContext,
+            depth,
+            generationCount);
+      }
+    }
 
     auto justifySelf = resolveChildJustification(node, item.node);
     auto alignSelf = resolveChildAlignment(node, item.node);

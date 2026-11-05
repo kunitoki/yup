@@ -74,6 +74,16 @@ GpuTexture::Ptr GpuTexture::create (ReferenceCountedObjectPtr<GpuDevice> device,
     if (desc.sampleCount > 1 && ! desc.renderTarget)
         return nullptr;
 
+    if (desc.sampleCount > 1 && (! isPowerOfTwo (desc.sampleCount) || desc.sampleCount > device->getMaximumSampleCount()))
+        return nullptr;
+
+    if (! device->isFormatSupported (desc.format))
+        return nullptr;
+
+    const auto maxSize = device->getMaximumTextureSize (desc.type);
+    if (desc.width > maxSize || desc.height > maxSize || (desc.type == GpuTextureType::texture3D && desc.depthOrArrayLayers > maxSize))
+        return nullptr;
+
     if (desc.storage && (desc.sampleCount > 1 || isDepthStencilFormat (desc.format) || ! device->isStorageTextureAvailable()))
         return nullptr;
 
@@ -171,6 +181,11 @@ rive::rcp<rive::ore::TextureView> GpuTexture::getOrCreateView (rive::ore::Contex
             desc.texture = oreTexture.get();
             desc.dimension = GpuPipelineHelpers::toOreViewDimension (viewDesc.dimension);
             desc.aspect = GpuPipelineHelpers::toOreTextureAspect (viewDesc.aspect);
+
+            const bool hasStencil = format == GpuTextureFormat::depth24plusStencil8 || format == GpuTextureFormat::depth32floatStencil8;
+            if (! forRenderTarget && hasStencil && viewDesc.aspect == GpuTextureAspect::all)
+                desc.aspect = rive::ore::TextureAspect::depthOnly;
+
             desc.baseMipLevel = viewDesc.baseMipLevel;
             desc.mipCount = viewDesc.mipCount;
             desc.baseLayer = viewDesc.baseLayer;

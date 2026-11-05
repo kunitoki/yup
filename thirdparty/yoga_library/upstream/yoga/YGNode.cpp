@@ -37,6 +37,7 @@ YGNode::YGNode(YGNode&& node) {
   children_ = std::move(node.children_);
   config_ = node.config_;
   resolvedDimensions_ = node.resolvedDimensions_;
+  gridVirtual_ = std::move(node.gridVirtual_);
   for (auto c : children_) {
     c->setOwner(this);
   }

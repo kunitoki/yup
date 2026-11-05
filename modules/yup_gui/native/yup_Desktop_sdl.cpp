@@ -73,9 +73,24 @@ void Desktop::updateScreens()
 
 void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
 {
-    static const auto cursors = []
+    // SDL cursors drive the native windowing API, which only the message thread may touch (AppKit
+    // asserts otherwise), while components can change their cursor while painting on the render thread
+    if (auto* messageManager = MessageManager::getInstanceWithoutCreating();
+        messageManager != nullptr && ! messageManager->isThisTheMessageThread())
     {
-        return std::unordered_map<MouseCursor::Type, SDL_Cursor*> {
+        MessageManager::callAsync ([cursorToSet]
+        {
+            if (auto* desktop = Desktop::getInstanceWithoutCreating())
+                desktop->setMouseCursor (cursorToSet);
+        });
+
+        return;
+    }
+
+    // Owned by SDL, which destroys every cursor when its video subsystem quits, so the cache lives as long as the Desktop
+    if (nativeCursors.empty())
+    {
+        nativeCursors = {
             { MouseCursor::Default, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_DEFAULT) },
             { MouseCursor::Text, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_TEXT) },
             { MouseCursor::Wait, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAIT) },
@@ -89,7 +104,7 @@ void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
             { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NESW_RESIZE) },
             { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_MOVE) }
         };
-    }();
+    }
 
     currentMouseCursor = cursorToSet;
 
@@ -99,9 +114,9 @@ void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
     }
     else
     {
-        auto it = cursors.find (cursorToSet.getType());
-        if (it != cursors.end())
-            SDL_SetCursor (it->second);
+        auto it = nativeCursors.find (cursorToSet.getType());
+        if (it != nativeCursors.end())
+            SDL_SetCursor (static_cast<SDL_Cursor*> (it->second));
 
         SDL_ShowCursor();
     }

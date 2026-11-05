@@ -101,6 +101,9 @@ public:
     //==============================================================================
     /** Sets the mouse cursor to the specified cursor.
 
+        Safe to call from any thread: off the message thread the change is posted to it, so it
+        applies asynchronously and getMouseCursor() reports it only once it has run.
+
         @param cursorToSet The cursor to set.
     */
     void setMouseCursor (const MouseCursor& cursorToSet);
@@ -202,6 +205,7 @@ private:
 
     Screen::Array screens;
     std::optional<MouseCursor> currentMouseCursor;
+    std::unordered_map<MouseCursor::Type, void*> nativeCursors;
 
     std::unordered_map<void*, ComponentNative*> nativeComponents;
 

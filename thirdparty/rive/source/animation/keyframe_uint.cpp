@@ -1,6 +1,7 @@
 #include "rive/animation/keyframe_uint.hpp"
 #include "rive/animation/keyframe_interpolator.hpp"
 #include "rive/generated/core_registry.hpp"
+#include "rive/animation/blend_accumulator.hpp"
 #include <cmath>
 
 using namespace rive;
@@ -15,69 +16,86 @@ using namespace rive;
 // the destination property is unsigned.
 static uint32_t roundToUint(float value)
 {
-    return value <= 0.0f ? 0u : static_cast<uint32_t>(std::lround(value));
+  return value <= 0.0f ? 0u : static_cast<uint32_t>(std::lround(value));
 }
 
 static void applyUint(Core* object, int propertyKey, float mix, uint32_t value)
 {
-    if (mix == 1.0f)
-    {
-        CoreRegistry::setUint(object, propertyKey, value);
-    }
-    else
-    {
-        float mixi = 1.0f - mix;
-        CoreRegistry::setUint(
-            object,
-            propertyKey,
-            roundToUint(CoreRegistry::getUint(object, propertyKey) * mixi +
-                        value * mix));
-    }
+  if (mix == 1.0f)
+  {
+    CoreRegistry::setUint(object, propertyKey, value);
+  }
+  else
+  {
+    float mixi = 1.0f - mix;
+    CoreRegistry::setUint(
+        object,
+        propertyKey,
+        roundToUint(
+            CoreRegistry::getUint(object, propertyKey) * mixi + value * mix));
+  }
 }
 
-void KeyFrameUint::apply(Core* object,
-                         int propertyKey,
-                         float mix,
-                         const LinearAnimationInstance* context)
+// A uint that doesn't interpolate is set whole, through the state machine's
+// accumulator when it collects the property.
+static void holdUint(
+    Core* object,
+    int propertyKey,
+    uint32_t value,
+    const LinearAnimationInstance* context)
 {
-    (void)context;
-    if (CoreRegistry::isInterpolatableUint(propertyKey))
-    {
-        applyUint(object, propertyKey, mix, value());
-        return;
-    }
-    CoreRegistry::setUint(object, propertyKey, value());
+  if (context != nullptr && context->blendAccumulator() != nullptr &&
+      context->blendAccumulator()->applyDiscrete(object, propertyKey, value))
+  {
+    return;
+  }
+  CoreRegistry::setUint(object, propertyKey, value);
 }
 
-void KeyFrameUint::applyInterpolation(Core* object,
-                                      int propertyKey,
-                                      float currentTime,
-                                      const KeyFrame* nextFrame,
-                                      float mix,
-                                      const LinearAnimationInstance* context)
+void KeyFrameUint::apply(
+    Core* object,
+    int propertyKey,
+    float mix,
+    const LinearAnimationInstance* context)
 {
-    if (!CoreRegistry::isInterpolatableUint(propertyKey))
-    {
-        CoreRegistry::setUint(object, propertyKey, value());
-        return;
-    }
+  (void)context;
+  if (CoreRegistry::isInterpolatableUint(propertyKey))
+  {
+    applyUint(object, propertyKey, mix, value());
+    return;
+  }
+  holdUint(object, propertyKey, value(), context);
+}
 
-    const KeyFrameUint& nextUint = *nextFrame->as<KeyFrameUint>();
-    float fromValue = static_cast<float>(value());
-    float toValue = static_cast<float>(nextUint.value());
-    float f = (currentTime - seconds()) / (nextUint.seconds() - seconds());
+void KeyFrameUint::applyInterpolation(
+    Core* object,
+    int propertyKey,
+    float currentTime,
+    const KeyFrame* nextFrame,
+    float mix,
+    const LinearAnimationInstance* context)
+{
+  if (!CoreRegistry::isInterpolatableUint(propertyKey))
+  {
+    holdUint(object, propertyKey, value(), context);
+    return;
+  }
 
-    float frameValue;
-    if (KeyFrameInterpolator* keyframeInterpolator =
-            effectiveInterpolator(context))
-    {
-        frameValue =
-            keyframeInterpolator->transformValue(fromValue, toValue, f);
-    }
-    else
-    {
-        frameValue = fromValue + (toValue - fromValue) * f;
-    }
+  const KeyFrameUint& nextUint = *nextFrame->as<KeyFrameUint>();
+  float fromValue = static_cast<float>(value());
+  float toValue = static_cast<float>(nextUint.value());
+  float f = (currentTime - seconds()) / (nextUint.seconds() - seconds());
 
-    applyUint(object, propertyKey, mix, roundToUint(frameValue));
+  float frameValue;
+  if (KeyFrameInterpolator* keyframeInterpolator = effectiveInterpolator(
+          context))
+  {
+    frameValue = keyframeInterpolator->transformValue(fromValue, toValue, f);
+  }
+  else
+  {
+    frameValue = fromValue + (toValue - fromValue) * f;
+  }
+
+  applyUint(object, propertyKey, mix, roundToUint(frameValue));
 }

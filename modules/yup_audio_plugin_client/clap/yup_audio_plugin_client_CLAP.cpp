@@ -506,8 +506,9 @@ public:
 private:
     void componentResized (Component& component) override
     {
-        if (component.getSize() != getSize())
-            setSize (component.getSize());
+        const auto editorSize = component.getBounds().getSize();
+        if (editorSize != getBounds().getSize())
+            setSize (editorSize);
     }
 
     ScopedYupInitialiser_Windowing scopeInitialiser;

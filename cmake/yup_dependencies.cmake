@@ -55,7 +55,7 @@ function (_yup_fetch_sdl)
 
     _yup_fetchcontent_declare (SDL3
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-        GIT_TAG release-3.4.12)
+        GIT_TAG release-3.4.20)
 
     set (BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     set (SDL_SHARED OFF CACHE BOOL "" FORCE)

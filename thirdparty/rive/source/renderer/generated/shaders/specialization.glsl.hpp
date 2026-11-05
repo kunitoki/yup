@@ -5,22 +5,25 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char specialization[] = R"===(layout(constant_id=Wg) const bool ki=true;layout(constant_id=Xg) const bool li=true;layout(constant_id=Yg) const bool mi=true;layout(constant_id=Zg) const bool ni=true;layout(constant_id=ah) const bool oi=true;layout(constant_id=bh) const bool pi=true;layout(constant_id=ch) const bool qi=true;layout(constant_id=dh) const bool ri=true;layout(constant_id=eh) const bool si=true;layout(constant_id=fh) const bool ti=true;layout(constant_id=gh) const bool ui=false;layout(constant_id=hh) const bool vi=false;layout(constant_id=ih) const bool wi=false;layout(constant_id=jh) const bool xi=false;layout(constant_id=kh) const bool yi=false;
-#define A ki
-#define AB li
-#define N mi
-#define HB ni
-#define XC oi
-#define AD pi
-#define FC qi
-#define OB ri
-#define GB si
-#define GE ti
-#define JD ui
-#define EC vi
-#define QD wi
-#define RD xi
-#define HD yi
+const char specialization[] = R"===(layout(constant_id=di) const bool Bj=true;layout(constant_id=ei) const bool Cj=true;layout(constant_id=fi) const bool Dj=true;layout(constant_id=gi) const bool Ej=true;layout(constant_id=hi) const bool Fj=true;layout(constant_id=ii) const bool Gj=true;layout(constant_id=ji) const bool Hj=true;layout(constant_id=ki) const bool Ij=true;layout(constant_id=li) const bool Jj=true;layout(constant_id=mi) const bool Kj=true;layout(constant_id=ni) const bool Lj=true;layout(constant_id=oi) const bool Mj=false;layout(constant_id=pi) const bool Nj=false;layout(constant_id=qi) const bool Oj=false;layout(constant_id=ri) const bool Pj=false;layout(constant_id=si) const bool Qj=false;layout(constant_id=ti) const bool Rj=false;layout(constant_id=ui) const bool Sj=false;
+#define N Bj
+#define AB Cj
+#define H Dj
+#define IB Ej
+#define GB Fj
+#define ZC Gj
+#define DD Hj
+#define GC Ij
+#define PB Jj
+#define JE Kj
+#define ME Lj
+#define PD Mj
+#define FC Nj
+#define WD Oj
+#define XD Pj
+#define KD Qj
+#define PC Rj
+#define QC Sj
 )===";
 } // namespace glsl
 } // namespace gpu

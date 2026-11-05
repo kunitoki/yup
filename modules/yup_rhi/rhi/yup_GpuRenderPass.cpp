@@ -580,6 +580,13 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
     if (indexed && indexOreBuffer == nullptr)
         return false;
 
+    // Backends without base instance support would silently drop the offsets
+    if ((firstInstance != 0 || baseVertex != 0) && ! oreCtx->features().drawBaseInstance)
+    {
+        jassertfalse;
+        return false;
+    }
+
     if (! ensurePassOpen())
         return false;
 

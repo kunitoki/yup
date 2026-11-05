@@ -77,8 +77,9 @@ public:
         @param device  A GpuDevice with a GPU context available.
         @param desc    The texture to allocate.
 
-        @returns A GpuTexture, or nullptr if the descriptor is invalid or the
-                 backend could not allocate it.
+        @returns A GpuTexture, or nullptr if the descriptor is invalid, exceeds the
+                 device limits (GpuDevice::getMaximumTextureSize(), getMaximumSampleCount(),
+                 isFormatSupported()) or the backend could not allocate it.
 
         @warning Requires device->isGpuAvailable(). Probe unusual formats with
                  GpuDevice::isFormatSupported() / isFormatRenderable() first.

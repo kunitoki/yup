@@ -16,30 +16,41 @@ class StateMachineInstance;
 class KeyboardListenerGroup : public KeyboardListener
 {
 public:
-    KeyboardListenerGroup(FocusData* focusData,
-                          const StateMachineListener* listener,
-                          StateMachineInstance* stateMachineInstance);
-    ~KeyboardListenerGroup();
+  KeyboardListenerGroup(
+      FocusData* focusData,
+      const StateMachineListener* listener,
+      StateMachineInstance* stateMachineInstance);
+  ~KeyboardListenerGroup();
 
-    /// Get the listener this group is managing.
-    const StateMachineListener* listener() const { return m_listener; }
+  /// Get the listener this group is managing.
+  const StateMachineListener* listener() const { return m_listener; }
 
-    /// Get the FocusData this group is attached to.
-    FocusData* focusData() const { return m_focusData; }
+  /// Get the FocusData this group is attached to.
+  FocusData* focusData() const { return m_focusData; }
 
-    /// Called when the associated FocusData receives a key input.
-    bool keyInput(Key key,
-                  KeyModifiers modifiers,
-                  bool isPressed,
-                  bool isRepeat) override;
+  /// Called when the associated FocusData receives a key input.
+  bool keyInput(Key key, KeyModifiers modifiers, bool isPressed, bool isRepeat)
+      override;
 
-    /// Called when the associated FocusData receives text input.
-    bool textInput(const std::string& text) override;
+  /// Called in the capture phase, for a capture-phase listener. Its actions
+  /// run on the key phases it asks for; it claims every phase of a key it
+  /// names exactly, so its own press and release both stay away from the
+  /// target.
+  bool captureKeyInput(
+      Key key,
+      KeyModifiers modifiers,
+      bool isPressed,
+      bool isRepeat) override;
+
+  /// Called when the associated FocusData receives text input.
+  bool textInput(const std::string& text) override;
 
 private:
-    FocusData* m_focusData;
-    const StateMachineListener* m_listener;
-    StateMachineInstance* m_stateMachineInstance;
+  FocusData* m_focusData;
+  const StateMachineListener* m_listener;
+  StateMachineInstance* m_stateMachineInstance;
+  /// Whether the listener's keyboard input sits in the capture phase.
+  bool m_capturesKeys;
 };
 
 } // namespace rive

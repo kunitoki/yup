@@ -553,6 +553,15 @@ void main()
         return lookupSampler;
     }
 
+    /** A point sampler, which a fetch-only texture's layout requires since WebGPU marks it non-filtering. */
+    GpuSampler::Ptr fetchSampler()
+    {
+        if (pointSampler == nullptr)
+            pointSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
+
+        return pointSampler;
+    }
+
     //==============================================================================
     void checkConstantRadianceStaysConstantAtEveryMip (float tolerance)
     {
@@ -827,7 +836,7 @@ void main()
                                         count * 4, 1, [&] (GpuRenderPass& pass)
         {
             pass.setTexture (0, 0, texture);
-            pass.setSampler (0, 1, sampler());
+            pass.setSampler (0, 1, fetchSampler());
             pass.setUniformBuffer (1, 0, &block, sizeof (block));
         });
 
@@ -1053,6 +1062,7 @@ vec4 packFloat(float v)
     std::unique_ptr<GraphicsContext> context;
     std::unique_ptr<ProbeRenderer> probes;
     GpuSampler::Ptr lookupSampler;
+    GpuSampler::Ptr pointSampler;
     std::map<String, MemoryBlock> compiledBundles;
 };
 #endif

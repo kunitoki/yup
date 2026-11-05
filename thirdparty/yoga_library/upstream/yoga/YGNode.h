@@ -8,6 +8,8 @@
 #pragma once
 
 #include <cstdint>
+#include <iterator>
+#include <memory>
 #include <stdio.h>
 #include "CompactValue.h"
 #include "YGConfig.h"
@@ -30,6 +32,51 @@ struct YGNodeFlags {
   bool hasError : 1;
 };
 #pragma pack(pop)
+
+// rive: see YGNodeSetGridVirtualContributions.
+struct YGGridVirtual {
+  // Rows first, then columns.
+  std::vector<float> contributions;
+  size_t rowCount = 0;
+  // Track sizes from earlier sizing passes. They only depend on the
+  // contributions and on what a pass reads below, not on the realized items,
+  // so they stay valid while those match.
+  struct Sizing {
+    YGStyle style;
+    float innerWidth;
+    float innerHeight;
+    float ownerWidth;
+    float ownerHeight;
+    YGMeasureMode widthMode;
+    YGMeasureMode heightMode;
+    YGDirection direction;
+    // Grid line of the first track, which maps tracks onto contributions.
+    int32_t firstColumnLine;
+    int32_t firstRowLine;
+    std::vector<float> columnSizes;
+    std::vector<float> rowSizes;
+    bool percentColumns;
+    bool percentRows;
+  };
+  std::vector<Sizing> sizings;
+};
+
+// Deep copies, as YGNode copies are clones.
+class YGGridVirtualPtr {
+public:
+  YGGridVirtualPtr() = default;
+  YGGridVirtualPtr(const YGGridVirtualPtr& other)
+      : ptr_(other.ptr_ ? std::make_unique<YGGridVirtual>(*other.ptr_)
+                        : nullptr) {}
+  YGGridVirtualPtr(YGGridVirtualPtr&&) = default;
+  YGGridVirtualPtr& operator=(YGGridVirtualPtr&&) = default;
+  YGGridVirtualPtr& operator=(const YGGridVirtualPtr&) = delete;
+  YGGridVirtual* get() const { return ptr_.get(); }
+  void reset(YGGridVirtual* value = nullptr) { ptr_.reset(value); }
+
+private:
+  std::unique_ptr<YGGridVirtual> ptr_;
+};
 
 struct YOGA_EXPORT YGNode {
   using MeasureWithContextFn =
@@ -61,6 +108,7 @@ private:
   YGConfigRef config_;
   std::array<YGValue, 2> resolvedDimensions_ = {
       {YGValueUndefined, YGValueUndefined}};
+  YGGridVirtualPtr gridVirtual_ = {};
 
   YGFloatOptional relativePosition(
       const YGFlexDirection axis,
@@ -167,6 +215,76 @@ public:
   YGNodeRef getParent() const { return getOwner(); }
 
   const YGVector& getChildren() const { return children_; }
+
+  YGGridVirtual* gridVirtual() const { return gridVirtual_.get(); }
+
+  bool hasGridVirtualContributions() const { return gridVirtual() != nullptr; }
+
+  size_t gridVirtualTrackCount(YGDimension dimension) const {
+    auto virt = gridVirtual();
+    if (virt == nullptr) {
+      return 0;
+    }
+    return dimension == YGDimensionHeight
+        ? virt->rowCount
+        : virt->contributions.size() - virt->rowCount;
+  }
+
+  // Content size of the nodeless items in a row or column counted from grid
+  // line 1, or 0.
+  float gridVirtualContribution(YGDimension dimension, int32_t index) const {
+    if (index < 0 ||
+        static_cast<size_t>(index) >= gridVirtualTrackCount(dimension)) {
+      return 0.0f;
+    }
+    auto virt = gridVirtual();
+    return virt->contributions
+        [static_cast<size_t>(index) +
+         (dimension == YGDimensionHeight ? 0 : virt->rowCount)];
+  }
+
+  // Returns whether anything changed.
+  bool setGridVirtualContributions(
+      const float* rows,
+      size_t rowCount,
+      const float* columns,
+      size_t columnCount) {
+    auto virt = gridVirtual();
+    if (rowCount + columnCount == 0) {
+      gridVirtual_.reset();
+      return virt != nullptr;
+    }
+    // A size that isn't finite would poison every track it reaches.
+    auto finite = [](float size) { return std::isfinite(size) ? size : 0.0f; };
+    auto same = [&](float given, float stored) {
+      return finite(given) == stored;
+    };
+    if (virt != nullptr && virt->rowCount == rowCount &&
+        virt->contributions.size() == rowCount + columnCount &&
+        std::equal(rows, rows + rowCount, virt->contributions.begin(), same) &&
+        std::equal(
+            columns,
+            columns + columnCount,
+            virt->contributions.begin() + rowCount,
+            same)) {
+      return false;
+    }
+    if (virt == nullptr) {
+      virt = new YGGridVirtual();
+      gridVirtual_.reset(virt);
+    }
+    virt->contributions.clear();
+    std::transform(
+        rows, rows + rowCount, std::back_inserter(virt->contributions), finite);
+    std::transform(
+        columns,
+        columns + columnCount,
+        std::back_inserter(virt->contributions),
+        finite);
+    virt->rowCount = rowCount;
+    virt->sizings.clear();
+    return true;
+  }
 
   // Applies a callback to all children, after cloning them if they are not
   // owned.

@@ -989,11 +989,36 @@ private:
             advance (slot->renderContext.get());
     }
 
+    MemoryBlock getPipelineCacheData() const override
+    {
+        const ScopedLock sl (vulkanDevice->getLock());
+
+        std::vector<uint8_t> data;
+        auto merge = [&data] (rive::gpu::RenderContext* context)
+        {
+            if (context == nullptr)
+                return;
+
+            auto merged = context->static_impl_cast<rive::gpu::RenderContextVulkanImpl>()->vulkanContext()->pipelineCacheData (data);
+            if (! merged.empty())
+                data = std::move (merged);
+        };
+
+        merge (renderContext.get());
+
+        for (const auto& slot : offscreenContextPool)
+            merge (slot->renderContext.get());
+
+        return { data.data(), data.size() };
+    }
+
     std::unique_ptr<rive::gpu::RenderContext> makeRenderContext() const
     {
         rive::gpu::RenderContextVulkanImpl::ContextOptions contextOptions;
         if (options.synchronousShaderCompilations)
             contextOptions.shaderCompilationMode = rive::gpu::ShaderCompilationMode::alwaysSynchronous;
+
+        contextOptions.pipelineCacheData = { static_cast<const uint8_t*> (options.pipelineCacheData.getData()), options.pipelineCacheData.getSize() };
 
         auto context = rive::gpu::RenderContextVulkanImpl::MakeContext (vulkanDevice->getInstance(),
                                                                         vulkanDevice->getPhysicalDevice(),

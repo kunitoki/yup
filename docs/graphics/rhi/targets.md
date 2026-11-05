@@ -161,6 +161,11 @@ per-frame GPU resource reallocation. `frameDesc` gives control over
 canvas. The default `{}` reproduces the previous behaviour (clear to
 transparent black, no msaa).
 
+`msaaSampleCount = 1` selects Rive's cheapest mode (depth/stencil without MSAA),
+which draws without antialiasing. Setting `inkbleedOverride` there antialiases
+strokes by bleeding them out half a pixel; fills stay aliased. It is ignored in
+every other mode.
+
 `frameDesc.triangulationThresholds` controls when large, simple fills are
 triangulated on the CPU to save GPU work: fills smaller than `minArea` pixels or
 with more than `maxVerbs` path segments are skipped, and at most `frameBudgetMs`

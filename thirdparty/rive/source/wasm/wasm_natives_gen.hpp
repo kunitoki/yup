@@ -71,18 +71,6 @@ typedef struct rive_gpu_texture_view_desc_v1
     uint32_t layerCount;
 } rive_gpu_texture_view_desc_v1;
 
-typedef struct rive_gpu_shader_module_desc_v1
-{
-    uint32_t language;
-    uint32_t stage;
-    uint32_t codeSize;
-    uint32_t hlslSourceSize;
-    uint32_t hlslEntryPointSize;
-    uint32_t bindingMapSize;
-    uint32_t glFixupSize;
-    uint32_t shaderAssetId;
-} rive_gpu_shader_module_desc_v1;
-
 typedef struct rive_gpu_bind_group_layout_entry_v1
 {
     uint32_t binding;
@@ -208,12 +196,16 @@ void rtLogImpl(WasmScriptingVM* vm, int32_t level, const char* message, uint32_t
 void rtMarkNeedsUpdateImpl(WasmScriptingVM* vm, uint32_t object);
 void rtBudgetExceededImpl(WasmScriptingVM* vm, uint32_t ms);
 void rtErrorImpl(WasmScriptingVM* vm, const char* message, uint32_t length);
+double rtNowImpl(WasmScriptingVM* vm);
+double rtDateNowImpl(WasmScriptingVM* vm);
+uint32_t rtFeaturesImpl(WasmScriptingVM* vm);
 void rtDebugEnterImpl(WasmScriptingVM* vm, uint32_t func, uint32_t line);
 uint32_t rtDebugLineImpl(WasmScriptingVM* vm, uint32_t line);
 void rtDebugLeaveImpl(WasmScriptingVM* vm);
 uint32_t rtUtcOffsetImpl(WasmScriptingVM* vm, double epochSeconds);
 uint32_t rtIsDstImpl(WasmScriptingVM* vm, double epochSeconds);
 uint32_t rtZoneNameImpl(WasmScriptingVM* vm, double epochSeconds, char* buffer, uint32_t capacity);
+uint32_t rtArgImpl(WasmScriptingVM* vm, const char* name, uint32_t nameLength, char* buffer, uint32_t capacity);
 uint32_t dataViewModelImpl(WasmScriptingVM* vm, uint32_t object);
 uint32_t dataRootViewModelImpl(WasmScriptingVM* vm, uint32_t object);
 uint32_t dataGlobalViewModelImpl(WasmScriptingVM* vm, uint32_t object, const char* name, uint32_t nameLength);
@@ -296,6 +288,7 @@ uint32_t artboardFrameOriginImpl(WasmScriptingVM* vm, uint32_t artboard);
 void artboardSetFrameOriginImpl(WasmScriptingVM* vm, uint32_t artboard, uint32_t value);
 void artboardBoundsImpl(WasmScriptingVM* vm, uint32_t artboard, float* out, uint32_t outCount);
 uint32_t artboardPointerEventImpl(WasmScriptingVM* vm, uint32_t artboard, uint32_t kind, uint32_t pointerId, float x, float y);
+uint32_t artboardScrollEventImpl(WasmScriptingVM* vm, uint32_t artboard, uint32_t pointerId, float x, float y, float dx, float dy, uint32_t phase, uint32_t precise, float timeStamp);
 uint32_t artboardGamepadEventImpl(WasmScriptingVM* vm, uint32_t artboard, const uint8_t* payload, uint32_t byteCount);
 uint32_t artboardAnimationImpl(WasmScriptingVM* vm, uint32_t artboard, const char* name, uint32_t length);
 void artboardAnimationReleaseImpl(WasmScriptingVM* vm, uint32_t animation);
@@ -329,6 +322,16 @@ void audioSourceReleaseImpl(WasmScriptingVM* vm, uint32_t source);
 float audioSourceDurationImpl(WasmScriptingVM* vm, uint32_t source);
 uint32_t audioSourceSampleRateImpl(WasmScriptingVM* vm, uint32_t source);
 uint32_t audioSourceChannelsImpl(WasmScriptingVM* vm, uint32_t source);
+uint32_t audioSourceToBlobImpl(WasmScriptingVM* vm, uint32_t source, uint32_t sampleRate, uint32_t channels);
+uint32_t audioStreamImpl(WasmScriptingVM* vm, uint32_t source, uint32_t sampleRate, uint32_t channels, uint32_t chunkFrames, uint32_t bufferFrames);
+uint32_t audioStreamRingImpl(WasmScriptingVM* vm, uint32_t stream);
+uint32_t audioStreamSeeksImpl(WasmScriptingVM* vm, uint32_t stream);
+uint32_t audioStreamChannelsImpl(WasmScriptingVM* vm, uint32_t stream);
+uint32_t audioStreamSampleRateImpl(WasmScriptingVM* vm, uint32_t stream);
+uint32_t audioStreamSeekFrameImpl(WasmScriptingVM* vm, uint32_t stream, double frame);
+void audioStreamSetLoopImpl(WasmScriptingVM* vm, uint32_t stream, uint32_t loop);
+uint32_t audioStreamEndedImpl(WasmScriptingVM* vm, uint32_t stream);
+void audioStreamReleaseImpl(WasmScriptingVM* vm, uint32_t stream);
 uint32_t audioPlayImpl(WasmScriptingVM* vm, uint32_t source);
 uint32_t audioPlayAtTimeImpl(WasmScriptingVM* vm, uint32_t source, float seconds);
 uint32_t audioPlayInTimeImpl(WasmScriptingVM* vm, uint32_t source, float seconds);
@@ -337,6 +340,8 @@ uint32_t audioPlayInFrameImpl(WasmScriptingVM* vm, uint32_t source, double frame
 float audioTimeImpl(WasmScriptingVM* vm);
 double audioTimeFrameImpl(WasmScriptingVM* vm);
 uint32_t audioSampleRateImpl(WasmScriptingVM* vm);
+uint32_t audioProcessorSampleRateImpl(WasmScriptingVM* vm);
+uint32_t audioProcessorChannelsImpl(WasmScriptingVM* vm);
 void audioSoundReleaseImpl(WasmScriptingVM* vm, uint32_t sound);
 void audioSoundPlayImpl(WasmScriptingVM* vm, uint32_t sound);
 void audioSoundPauseImpl(WasmScriptingVM* vm, uint32_t sound);
@@ -376,6 +381,7 @@ void paintCapImpl(WasmScriptingVM* vm, uint32_t paint, uint32_t value);
 void paintBlendModeImpl(WasmScriptingVM* vm, uint32_t paint, uint32_t value);
 void paintFeatherImpl(WasmScriptingVM* vm, uint32_t paint, float value);
 void paintShaderImpl(WasmScriptingVM* vm, uint32_t paint, uint32_t shader);
+void paintShaderTransformImpl(WasmScriptingVM* vm, uint32_t paint, const float* values, uint32_t floatCount);
 uint32_t canvasNewImpl(WasmScriptingVM* vm, uint32_t width, uint32_t height);
 void canvasReleaseImpl(WasmScriptingVM* vm, uint32_t canvas);
 uint32_t canvasWidthImpl(WasmScriptingVM* vm, uint32_t canvas);
@@ -407,6 +413,8 @@ void gpuPassReleaseImpl(WasmScriptingVM* vm, uint32_t pass);
 uint32_t gpuImageViewImpl(WasmScriptingVM* vm, uint32_t image, uint32_t width, uint32_t height);
 uint32_t gpuBufferNewImpl(WasmScriptingVM* vm, uint32_t usage, uint32_t sizeInBytes, uint32_t immutable, const uint8_t* data, uint32_t dataCount);
 void gpuBufferUpdateImpl(WasmScriptingVM* vm, uint32_t buffer, uint32_t dstOffset, const uint8_t* data, uint32_t dataCount);
+void gpuBufferUpdateBlobImpl(WasmScriptingVM* vm, uint32_t buffer, uint32_t dstOffset, uint32_t blob, uint32_t srcOffset, uint32_t byteCount);
+uint32_t gpuBufferNewBlobImpl(WasmScriptingVM* vm, uint32_t usage, uint32_t immutable, uint32_t blob, uint32_t srcOffset, uint32_t byteCount);
 void gpuBufferReleaseImpl(WasmScriptingVM* vm, uint32_t buffer);
 uint32_t gpuTextureNewImpl(WasmScriptingVM* vm, const rive_gpu_texture_desc_v1* desc, uint32_t descByteCount);
 void gpuTextureUploadImpl(WasmScriptingVM* vm, uint32_t texture, const rive_gpu_texture_upload_v1* region, uint32_t regionByteCount, const uint8_t* data, uint32_t dataCount);
@@ -418,12 +426,16 @@ void gpuTextureViewReleaseImpl(WasmScriptingVM* vm, uint32_t view);
 uint32_t gpuShaderTargetImpl(WasmScriptingVM* vm);
 uint32_t gpuShaderAssetBytesImpl(WasmScriptingVM* vm, uint32_t object, const char* name, uint32_t nameLength, uint8_t* out, uint32_t outCount);
 uint32_t gpuShaderAssetIdImpl(WasmScriptingVM* vm, uint32_t object, const char* name, uint32_t nameLength);
-uint32_t gpuShaderModuleNewImpl(WasmScriptingVM* vm, const rive_gpu_shader_module_desc_v1* desc, uint32_t descByteCount, const uint8_t* blob, uint32_t blobCount);
+uint32_t gpuShaderModuleFromAssetImpl(WasmScriptingVM* vm, uint32_t object, const char* name, uint32_t nameLength, uint32_t entry);
+#ifdef WITH_RIVE_TOOLS
+uint32_t gpuShaderModuleFromRstbImpl(WasmScriptingVM* vm, const uint8_t* rstb, uint32_t rstbCount, uint32_t assetId, uint32_t entry);
+#endif
 void gpuShaderModuleReleaseImpl(WasmScriptingVM* vm, uint32_t shaderModule);
 uint32_t gpuBindGroupLayoutNewImpl(WasmScriptingVM* vm, uint32_t groupIndex, const rive_gpu_bind_group_layout_entry_v1* entries, uint32_t entryByteCount);
 void gpuBindGroupLayoutReleaseImpl(WasmScriptingVM* vm, uint32_t layout);
 uint32_t gpuBindGroupLayoutFromShaderImpl(WasmScriptingVM* vm, uint32_t shaderModule, uint32_t groupIndex, const uint32_t* dynamicUBOs, uint32_t dynamicUBOCount);
 uint32_t gpuBindGroupLayoutFromShadersImpl(WasmScriptingVM* vm, uint32_t vertexModule, uint32_t fragmentModule, uint32_t groupIndex, const uint32_t* dynamicUBOs, uint32_t dynamicUBOCount);
+uint32_t gpuBindGroupLayoutFromEntriesImpl(WasmScriptingVM* vm, uint32_t vertexModule, const char* vertexEntry, uint32_t vertexEntryLength, uint32_t fragmentModule, const char* fragmentEntry, uint32_t fragmentEntryLength, uint32_t groupIndex);
 uint32_t gpuBindGroupNewImpl(WasmScriptingVM* vm, uint32_t layout, const rive_gpu_bind_group_ubo_v1* ubos, uint32_t uboByteCount, const rive_gpu_bind_group_texture_v1* textures, uint32_t textureByteCount, const rive_gpu_bind_group_sampler_v1* samplers, uint32_t samplerByteCount);
 void gpuBindGroupReleaseImpl(WasmScriptingVM* vm, uint32_t bindGroup);
 uint32_t gpuPipelineNewImpl(WasmScriptingVM* vm, const rive_gpu_pipeline_desc_v1* desc, uint32_t descByteCount, const uint8_t* blob, uint32_t blobCount);
@@ -534,6 +546,58 @@ void fileBindableReleaseImpl(WasmScriptingVM* vm, uint32_t bindable);
 uint32_t fileBindableNameImpl(WasmScriptingVM* vm, uint32_t bindable, char* buffer, uint32_t capacity);
 uint32_t fileBindableDataImpl(WasmScriptingVM* vm, uint32_t bindable);
 uint32_t fileBindableEqualImpl(WasmScriptingVM* vm, uint32_t a, uint32_t b);
+uint32_t lanesStartImpl(WasmScriptingVM* vm, uint32_t kind, uint32_t entry, const uint8_t* input, uint32_t inputByteCount, const uint32_t* holds, uint32_t holdCount);
+uint32_t lanesStateImpl(WasmScriptingVM* vm, uint32_t lane);
+uint32_t lanesFailedImpl(WasmScriptingVM* vm, uint32_t lane, char* buffer, uint32_t capacity);
+void lanesStopImpl(WasmScriptingVM* vm, uint32_t lane);
+void lanesReleaseImpl(WasmScriptingVM* vm, uint32_t lane);
+uint32_t lanesResultImpl(WasmScriptingVM* vm, uint32_t lane, uint32_t out, uint32_t outCount);
+uint32_t lanesWatchImpl(WasmScriptingVM* vm, uint32_t lane);
+uint32_t lanesWaitImpl(WasmScriptingVM* vm, uint32_t signal, double after, double timeoutSeconds);
+void lanesCancelWaitImpl(WasmScriptingVM* vm, uint32_t token);
+double lanesWaitWithinImpl(WasmScriptingVM* vm, uint32_t signal, double after, double timeoutSeconds);
+uint32_t jobsThreadsImpl(WasmScriptingVM* vm);
+uint32_t jobsJoinImpl(WasmScriptingVM* vm, uint32_t job, double timeoutSeconds);
+uint32_t jobsJoinAnyImpl(WasmScriptingVM* vm, const uint32_t* jobs, uint32_t count, double timeoutSeconds);
+uint32_t parallelSizeImpl(WasmScriptingVM* vm);
+#ifdef RIVE_WASM_PARALLEL
+uint32_t parallelRunImpl(WasmScriptingVM* vm, uint32_t control);
+#endif
+void parallelWaitingImpl(WasmScriptingVM* vm, uint32_t control);
+uint32_t sharedRegionCreateImpl(WasmScriptingVM* vm, uint32_t size);
+uint32_t sharedRegionSizeImpl(WasmScriptingVM* vm, uint32_t region);
+uint32_t sharedRegionLockImpl(WasmScriptingVM* vm, uint32_t region, double timeoutSeconds);
+void sharedRegionUnlockImpl(WasmScriptingVM* vm, uint32_t region);
+uint32_t sharedRegionReadImpl(WasmScriptingVM* vm, uint32_t region, uint32_t offset, uint8_t* out, uint32_t outByteCount);
+uint32_t sharedRegionWriteImpl(WasmScriptingVM* vm, uint32_t region, uint32_t offset, const uint8_t* data, uint32_t dataByteCount);
+uint32_t sharedRegionPoisonedImpl(WasmScriptingVM* vm, uint32_t region);
+double sharedAtomicLoadImpl(WasmScriptingVM* vm, uint32_t region, uint32_t offset);
+double sharedAtomicStoreImpl(WasmScriptingVM* vm, uint32_t region, uint32_t offset, uint32_t value);
+double sharedAtomicAddImpl(WasmScriptingVM* vm, uint32_t region, uint32_t offset, uint32_t value);
+double sharedAtomicCasImpl(WasmScriptingVM* vm, uint32_t region, uint32_t offset, uint32_t expected, uint32_t desired);
+uint32_t sharedRingCreateImpl(WasmScriptingVM* vm, uint32_t capacity);
+uint32_t sharedRingWriteImpl(WasmScriptingVM* vm, uint32_t ring, const uint8_t* data, uint32_t dataByteCount, const uint32_t* holds, uint32_t holdCount);
+uint32_t sharedRingReadImpl(WasmScriptingVM* vm, uint32_t ring, uint8_t* out, uint32_t outByteCount);
+uint32_t sharedRingDropImpl(WasmScriptingVM* vm, uint32_t ring, uint32_t capacity);
+uint32_t sharedRingUsedImpl(WasmScriptingVM* vm, uint32_t ring);
+uint32_t sharedRingSignalImpl(WasmScriptingVM* vm, uint32_t ring, uint32_t space);
+uint32_t sharedSnapshotCreateImpl(WasmScriptingVM* vm, uint32_t capacity);
+uint32_t sharedSnapshotPublishImpl(WasmScriptingVM* vm, uint32_t snapshot, const uint8_t* data, uint32_t dataByteCount, const uint32_t* holds, uint32_t holdCount);
+uint32_t sharedSnapshotReadImpl(WasmScriptingVM* vm, uint32_t snapshot, uint8_t* out, uint32_t outByteCount);
+double sharedSnapshotSeqImpl(WasmScriptingVM* vm, uint32_t snapshot);
+void sharedReadDoneImpl(WasmScriptingVM* vm);
+uint32_t sharedSignalCreateImpl(WasmScriptingVM* vm);
+void sharedSignalNotifyImpl(WasmScriptingVM* vm, uint32_t signal);
+double sharedSignalSeqImpl(WasmScriptingVM* vm, uint32_t signal);
+uint32_t sharedBlobCreateImpl(WasmScriptingVM* vm, const uint8_t* data, uint32_t dataByteCount);
+uint32_t sharedBlobSizeImpl(WasmScriptingVM* vm, uint32_t blob);
+uint32_t sharedBlobReadImpl(WasmScriptingVM* vm, uint32_t blob, uint32_t offset, uint8_t* out, uint32_t outByteCount);
+uint32_t sharedRetainImpl(WasmScriptingVM* vm, uint32_t object);
+void sharedReleaseImpl(WasmScriptingVM* vm, uint32_t object);
+
+#ifndef __EMSCRIPTEN__
+// What rt.features answers.
+constexpr uint32_t kHostFeatures = 0x1u;
 
 void rtLog(wasm_exec_env_t env, int32_t level, const char* message, uint32_t length)
 {
@@ -551,7 +615,7 @@ void rtBudgetExceeded(wasm_exec_env_t env, uint32_t ms)
     WasmScriptingVM* vm = bootVmFromEnv(env);
     if (vm == nullptr)
     {
-        wasm_runtime_set_exception(wasm_runtime_get_module_inst(env), "execution exceeded timeout");
+        vmlessTrap(env, "execution exceeded timeout");
         return;
     }
     rtBudgetExceededImpl(vm, ms);
@@ -561,11 +625,26 @@ void rtError(wasm_exec_env_t env, const char* message, uint32_t length)
     WasmScriptingVM* vm = bootVmFromEnv(env);
     if (vm == nullptr)
     {
-        wasm_runtime_set_exception(wasm_runtime_get_module_inst(env), "script threw");
+        vmlessTrap(env, "script threw", message, length);
         return;
     }
     WasmStringArg messageUtf8(vm, message, length);
     rtErrorImpl(vm, messageUtf8.data(), messageUtf8.size());
+}
+double rtNow(wasm_exec_env_t env)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return rtNowImpl(vm);
+}
+double rtDateNow(wasm_exec_env_t env)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return rtDateNowImpl(vm);
+}
+uint32_t rtFeatures(wasm_exec_env_t env)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return rtFeaturesImpl(vm);
 }
 void rtDebugEnter(wasm_exec_env_t env, uint32_t func, uint32_t line)
 {
@@ -596,6 +675,12 @@ uint32_t rtZoneName(wasm_exec_env_t env, double epochSeconds, char* buffer, uint
 {
     WasmScriptingVM* vm = vmFromEnv(env);
     return rtZoneNameImpl(vm, epochSeconds, buffer, capacity);
+}
+uint32_t rtArg(wasm_exec_env_t env, const char* name, uint32_t nameLength, char* buffer, uint32_t capacity)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    WasmStringArg nameUtf8(vm, name, nameLength);
+    return rtArgImpl(vm, nameUtf8.data(), nameUtf8.size(), buffer, capacity);
 }
 uint32_t dataViewModel(wasm_exec_env_t env, uint32_t object)
 {
@@ -1036,6 +1121,11 @@ uint32_t artboardPointerEvent(wasm_exec_env_t env, uint32_t artboard, uint32_t k
     WasmScriptingVM* vm = vmFromEnv(env);
     return artboardPointerEventImpl(vm, artboard, kind, pointerId, x, y);
 }
+uint32_t artboardScrollEvent(wasm_exec_env_t env, uint32_t artboard, uint32_t pointerId, float x, float y, float dx, float dy, uint32_t phase, uint32_t precise, float timeStamp)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return artboardScrollEventImpl(vm, artboard, pointerId, x, y, dx, dy, phase, precise, timeStamp);
+}
 uint32_t artboardGamepadEvent(wasm_exec_env_t env, uint32_t artboard, const uint8_t* payload, uint32_t byteCount)
 {
     WasmScriptingVM* vm = vmFromEnv(env);
@@ -1229,6 +1319,56 @@ uint32_t audioSourceChannels(wasm_exec_env_t env, uint32_t source)
     WasmScriptingVM* vm = vmFromEnv(env);
     return audioSourceChannelsImpl(vm, source);
 }
+uint32_t audioSourceToBlob(wasm_exec_env_t env, uint32_t source, uint32_t sampleRate, uint32_t channels)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return audioSourceToBlobImpl(vm, source, sampleRate, channels);
+}
+uint32_t audioStream(wasm_exec_env_t env, uint32_t source, uint32_t sampleRate, uint32_t channels, uint32_t chunkFrames, uint32_t bufferFrames)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return audioStreamImpl(vm, source, sampleRate, channels, chunkFrames, bufferFrames);
+}
+uint32_t audioStreamRing(wasm_exec_env_t env, uint32_t stream)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return audioStreamRingImpl(vm, stream);
+}
+uint32_t audioStreamSeeks(wasm_exec_env_t env, uint32_t stream)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return audioStreamSeeksImpl(vm, stream);
+}
+uint32_t audioStreamChannels(wasm_exec_env_t env, uint32_t stream)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return audioStreamChannelsImpl(vm, stream);
+}
+uint32_t audioStreamSampleRate(wasm_exec_env_t env, uint32_t stream)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return audioStreamSampleRateImpl(vm, stream);
+}
+uint32_t audioStreamSeekFrame(wasm_exec_env_t env, uint32_t stream, double frame)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return audioStreamSeekFrameImpl(vm, stream, frame);
+}
+void audioStreamSetLoop(wasm_exec_env_t env, uint32_t stream, uint32_t loop)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    audioStreamSetLoopImpl(vm, stream, loop);
+}
+uint32_t audioStreamEnded(wasm_exec_env_t env, uint32_t stream)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return audioStreamEndedImpl(vm, stream);
+}
+void audioStreamRelease(wasm_exec_env_t env, uint32_t stream)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    audioStreamReleaseImpl(vm, stream);
+}
 uint32_t audioPlay(wasm_exec_env_t env, uint32_t source)
 {
     WasmScriptingVM* vm = vmFromEnv(env);
@@ -1268,6 +1408,16 @@ uint32_t audioSampleRate(wasm_exec_env_t env)
 {
     WasmScriptingVM* vm = vmFromEnv(env);
     return audioSampleRateImpl(vm);
+}
+uint32_t audioProcessorSampleRate(wasm_exec_env_t env)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return audioProcessorSampleRateImpl(vm);
+}
+uint32_t audioProcessorChannels(wasm_exec_env_t env)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return audioProcessorChannelsImpl(vm);
 }
 void audioSoundRelease(wasm_exec_env_t env, uint32_t sound)
 {
@@ -1496,6 +1646,15 @@ void paintShader(wasm_exec_env_t env, uint32_t paint, uint32_t shader)
     WasmScriptingVM* vm = vmFromEnv(env);
     paintShaderImpl(vm, paint, shader);
 }
+void paintShaderTransform(wasm_exec_env_t env, uint32_t paint, const float* values, uint32_t floatCount)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    if (floatCount != 0 && !wasm_runtime_validate_native_addr(wasm_runtime_get_module_inst(env), (void*)values, (uint64_t)floatCount * 4))
+    {
+        return;
+    }
+    paintShaderTransformImpl(vm, paint, values, floatCount);
+}
 uint32_t canvasNew(wasm_exec_env_t env, uint32_t width, uint32_t height)
 {
     WasmScriptingVM* vm = vmFromEnv(env);
@@ -1667,6 +1826,16 @@ void gpuBufferUpdate(wasm_exec_env_t env, uint32_t buffer, uint32_t dstOffset, c
     WasmScriptingVM* vm = vmFromEnv(env);
     gpuBufferUpdateImpl(vm, buffer, dstOffset, data, dataCount);
 }
+void gpuBufferUpdateBlob(wasm_exec_env_t env, uint32_t buffer, uint32_t dstOffset, uint32_t blob, uint32_t srcOffset, uint32_t byteCount)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    gpuBufferUpdateBlobImpl(vm, buffer, dstOffset, blob, srcOffset, byteCount);
+}
+uint32_t gpuBufferNewBlob(wasm_exec_env_t env, uint32_t usage, uint32_t immutable, uint32_t blob, uint32_t srcOffset, uint32_t byteCount)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return gpuBufferNewBlobImpl(vm, usage, immutable, blob, srcOffset, byteCount);
+}
 void gpuBufferRelease(wasm_exec_env_t env, uint32_t buffer)
 {
     WasmScriptingVM* vm = vmFromEnv(env);
@@ -1724,11 +1893,19 @@ uint32_t gpuShaderAssetId(wasm_exec_env_t env, uint32_t object, const char* name
     WasmStringArg nameUtf8(vm, name, nameLength);
     return gpuShaderAssetIdImpl(vm, object, nameUtf8.data(), nameUtf8.size());
 }
-uint32_t gpuShaderModuleNew(wasm_exec_env_t env, const rive_gpu_shader_module_desc_v1* desc, uint32_t descByteCount, const uint8_t* blob, uint32_t blobCount)
+uint32_t gpuShaderModuleFromAsset(wasm_exec_env_t env, uint32_t object, const char* name, uint32_t nameLength, uint32_t entry)
 {
     WasmScriptingVM* vm = vmFromEnv(env);
-    return gpuShaderModuleNewImpl(vm, desc, descByteCount, blob, blobCount);
+    WasmStringArg nameUtf8(vm, name, nameLength);
+    return gpuShaderModuleFromAssetImpl(vm, object, nameUtf8.data(), nameUtf8.size(), entry);
 }
+#ifdef WITH_RIVE_TOOLS
+uint32_t gpuShaderModuleFromRstb(wasm_exec_env_t env, const uint8_t* rstb, uint32_t rstbCount, uint32_t assetId, uint32_t entry)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    return gpuShaderModuleFromRstbImpl(vm, rstb, rstbCount, assetId, entry);
+}
+#endif
 void gpuShaderModuleRelease(wasm_exec_env_t env, uint32_t shaderModule)
 {
     WasmScriptingVM* vm = vmFromEnv(env);
@@ -1761,6 +1938,13 @@ uint32_t gpuBindGroupLayoutFromShaders(wasm_exec_env_t env, uint32_t vertexModul
         return {};
     }
     return gpuBindGroupLayoutFromShadersImpl(vm, vertexModule, fragmentModule, groupIndex, dynamicUBOs, dynamicUBOCount);
+}
+uint32_t gpuBindGroupLayoutFromEntries(wasm_exec_env_t env, uint32_t vertexModule, const char* vertexEntry, uint32_t vertexEntryLength, uint32_t fragmentModule, const char* fragmentEntry, uint32_t fragmentEntryLength, uint32_t groupIndex)
+{
+    WasmScriptingVM* vm = vmFromEnv(env);
+    WasmStringArg vertexEntryUtf8(vm, vertexEntry, vertexEntryLength);
+    WasmStringArg fragmentEntryUtf8(vm, fragmentEntry, fragmentEntryLength);
+    return gpuBindGroupLayoutFromEntriesImpl(vm, vertexModule, vertexEntryUtf8.data(), vertexEntryUtf8.size(), fragmentModule, fragmentEntryUtf8.data(), fragmentEntryUtf8.size(), groupIndex);
 }
 uint32_t gpuBindGroupNew(wasm_exec_env_t env, uint32_t layout, const rive_gpu_bind_group_ubo_v1* ubos, uint32_t uboByteCount, const rive_gpu_bind_group_texture_v1* textures, uint32_t textureByteCount, const rive_gpu_bind_group_sampler_v1* samplers, uint32_t samplerByteCount)
 {
@@ -2234,18 +2418,270 @@ uint32_t fileBindableEqual(wasm_exec_env_t env, uint32_t a, uint32_t b)
     WasmScriptingVM* vm = vmFromEnv(env);
     return fileBindableEqualImpl(vm, a, b);
 }
+uint32_t lanesStart(wasm_exec_env_t env, uint32_t kind, uint32_t entry, const uint8_t* input, uint32_t inputByteCount, const uint32_t* holds, uint32_t holdCount)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    if (holdCount != 0 && !wasm_runtime_validate_native_addr(wasm_runtime_get_module_inst(env), (void*)holds, (uint64_t)holdCount * 4))
+    {
+        return {};
+    }
+    return lanesStartImpl(vm, kind, entry, input, inputByteCount, holds, holdCount);
+}
+uint32_t lanesState(wasm_exec_env_t env, uint32_t lane)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return lanesStateImpl(vm, lane);
+}
+uint32_t lanesFailed(wasm_exec_env_t env, uint32_t lane, char* buffer, uint32_t capacity)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return lanesFailedImpl(vm, lane, buffer, capacity);
+}
+void lanesStop(wasm_exec_env_t env, uint32_t lane)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    lanesStopImpl(vm, lane);
+}
+void lanesRelease(wasm_exec_env_t env, uint32_t lane)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    lanesReleaseImpl(vm, lane);
+}
+uint32_t lanesResult(wasm_exec_env_t env, uint32_t lane, uint32_t out, uint32_t outCount)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return lanesResultImpl(vm, lane, out, outCount);
+}
+uint32_t lanesWatch(wasm_exec_env_t env, uint32_t lane)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return lanesWatchImpl(vm, lane);
+}
+uint32_t lanesWait(wasm_exec_env_t env, uint32_t signal, double after, double timeoutSeconds)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return lanesWaitImpl(vm, signal, after, timeoutSeconds);
+}
+void lanesCancelWait(wasm_exec_env_t env, uint32_t token)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    lanesCancelWaitImpl(vm, token);
+}
+double lanesWaitWithin(wasm_exec_env_t env, uint32_t signal, double after, double timeoutSeconds)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return lanesWaitWithinImpl(vm, signal, after, timeoutSeconds);
+}
+uint32_t jobsThreads(wasm_exec_env_t env)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return jobsThreadsImpl(vm);
+}
+uint32_t jobsJoin(wasm_exec_env_t env, uint32_t job, double timeoutSeconds)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return jobsJoinImpl(vm, job, timeoutSeconds);
+}
+uint32_t jobsJoinAny(wasm_exec_env_t env, const uint32_t* jobs, uint32_t count, double timeoutSeconds)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    if (count != 0 && !wasm_runtime_validate_native_addr(wasm_runtime_get_module_inst(env), (void*)jobs, (uint64_t)count * 4))
+    {
+        return {};
+    }
+    return jobsJoinAnyImpl(vm, jobs, count, timeoutSeconds);
+}
+uint32_t parallelSize(wasm_exec_env_t env)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return parallelSizeImpl(vm);
+}
+#ifdef RIVE_WASM_PARALLEL
+uint32_t parallelRun(wasm_exec_env_t env, uint32_t control)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return parallelRunImpl(vm, control);
+}
+#endif
+void parallelWaiting(wasm_exec_env_t env, uint32_t control)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    parallelWaitingImpl(vm, control);
+}
+uint32_t sharedRegionCreate(wasm_exec_env_t env, uint32_t size)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedRegionCreateImpl(vm, size);
+}
+uint32_t sharedRegionSize(wasm_exec_env_t env, uint32_t region)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedRegionSizeImpl(vm, region);
+}
+uint32_t sharedRegionLock(wasm_exec_env_t env, uint32_t region, double timeoutSeconds)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedRegionLockImpl(vm, region, timeoutSeconds);
+}
+void sharedRegionUnlock(wasm_exec_env_t env, uint32_t region)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    sharedRegionUnlockImpl(vm, region);
+}
+uint32_t sharedRegionRead(wasm_exec_env_t env, uint32_t region, uint32_t offset, uint8_t* out, uint32_t outByteCount)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedRegionReadImpl(vm, region, offset, out, outByteCount);
+}
+uint32_t sharedRegionWrite(wasm_exec_env_t env, uint32_t region, uint32_t offset, const uint8_t* data, uint32_t dataByteCount)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedRegionWriteImpl(vm, region, offset, data, dataByteCount);
+}
+uint32_t sharedRegionPoisoned(wasm_exec_env_t env, uint32_t region)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedRegionPoisonedImpl(vm, region);
+}
+double sharedAtomicLoad(wasm_exec_env_t env, uint32_t region, uint32_t offset)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedAtomicLoadImpl(vm, region, offset);
+}
+double sharedAtomicStore(wasm_exec_env_t env, uint32_t region, uint32_t offset, uint32_t value)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedAtomicStoreImpl(vm, region, offset, value);
+}
+double sharedAtomicAdd(wasm_exec_env_t env, uint32_t region, uint32_t offset, uint32_t value)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedAtomicAddImpl(vm, region, offset, value);
+}
+double sharedAtomicCas(wasm_exec_env_t env, uint32_t region, uint32_t offset, uint32_t expected, uint32_t desired)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedAtomicCasImpl(vm, region, offset, expected, desired);
+}
+uint32_t sharedRingCreate(wasm_exec_env_t env, uint32_t capacity)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedRingCreateImpl(vm, capacity);
+}
+uint32_t sharedRingWrite(wasm_exec_env_t env, uint32_t ring, const uint8_t* data, uint32_t dataByteCount, const uint32_t* holds, uint32_t holdCount)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    if (holdCount != 0 && !wasm_runtime_validate_native_addr(wasm_runtime_get_module_inst(env), (void*)holds, (uint64_t)holdCount * 4))
+    {
+        return {};
+    }
+    return sharedRingWriteImpl(vm, ring, data, dataByteCount, holds, holdCount);
+}
+uint32_t sharedRingRead(wasm_exec_env_t env, uint32_t ring, uint8_t* out, uint32_t outByteCount)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedRingReadImpl(vm, ring, out, outByteCount);
+}
+uint32_t sharedRingDrop(wasm_exec_env_t env, uint32_t ring, uint32_t capacity)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedRingDropImpl(vm, ring, capacity);
+}
+uint32_t sharedRingUsed(wasm_exec_env_t env, uint32_t ring)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedRingUsedImpl(vm, ring);
+}
+uint32_t sharedRingSignal(wasm_exec_env_t env, uint32_t ring, uint32_t space)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedRingSignalImpl(vm, ring, space);
+}
+uint32_t sharedSnapshotCreate(wasm_exec_env_t env, uint32_t capacity)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedSnapshotCreateImpl(vm, capacity);
+}
+uint32_t sharedSnapshotPublish(wasm_exec_env_t env, uint32_t snapshot, const uint8_t* data, uint32_t dataByteCount, const uint32_t* holds, uint32_t holdCount)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    if (holdCount != 0 && !wasm_runtime_validate_native_addr(wasm_runtime_get_module_inst(env), (void*)holds, (uint64_t)holdCount * 4))
+    {
+        return {};
+    }
+    return sharedSnapshotPublishImpl(vm, snapshot, data, dataByteCount, holds, holdCount);
+}
+uint32_t sharedSnapshotRead(wasm_exec_env_t env, uint32_t snapshot, uint8_t* out, uint32_t outByteCount)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedSnapshotReadImpl(vm, snapshot, out, outByteCount);
+}
+double sharedSnapshotSeq(wasm_exec_env_t env, uint32_t snapshot)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedSnapshotSeqImpl(vm, snapshot);
+}
+void sharedReadDone(wasm_exec_env_t env)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    sharedReadDoneImpl(vm);
+}
+uint32_t sharedSignalCreate(wasm_exec_env_t env)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedSignalCreateImpl(vm);
+}
+void sharedSignalNotify(wasm_exec_env_t env, uint32_t signal)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    sharedSignalNotifyImpl(vm, signal);
+}
+double sharedSignalSeq(wasm_exec_env_t env, uint32_t signal)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedSignalSeqImpl(vm, signal);
+}
+uint32_t sharedBlobCreate(wasm_exec_env_t env, const uint8_t* data, uint32_t dataByteCount)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedBlobCreateImpl(vm, data, dataByteCount);
+}
+uint32_t sharedBlobSize(wasm_exec_env_t env, uint32_t blob)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedBlobSizeImpl(vm, blob);
+}
+uint32_t sharedBlobRead(wasm_exec_env_t env, uint32_t blob, uint32_t offset, uint8_t* out, uint32_t outByteCount)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedBlobReadImpl(vm, blob, offset, out, outByteCount);
+}
+uint32_t sharedRetain(wasm_exec_env_t env, uint32_t object)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    return sharedRetainImpl(vm, object);
+}
+void sharedRelease(wasm_exec_env_t env, uint32_t object)
+{
+    WasmScriptingVM* vm = bootVmFromEnv(env);
+    sharedReleaseImpl(vm, object);
+}
 
 NativeSymbol kRtNatives[] = {
     {"log", (void*)rtLog, "(i*~)", nullptr},
     {"mark_needs_update", (void*)rtMarkNeedsUpdate, "(i)", nullptr},
     {"budget_exceeded", (void*)rtBudgetExceeded, "(i)", nullptr},
     {"error", (void*)rtError, "(*~)", nullptr},
+    {"now", (void*)rtNow, "()F", nullptr},
+    {"date_now", (void*)rtDateNow, "()F", nullptr},
+    {"features", (void*)rtFeatures, "()i", nullptr},
     {"debug_enter", (void*)rtDebugEnter, "(ii)", nullptr},
     {"debug_line", (void*)rtDebugLine, "(i)i", nullptr},
     {"debug_leave", (void*)rtDebugLeave, "()", nullptr},
     {"utc_offset", (void*)rtUtcOffset, "(F)i", nullptr},
     {"is_dst", (void*)rtIsDst, "(F)i", nullptr},
     {"zone_name", (void*)rtZoneName, "(F*~)i", nullptr},
+    {"arg", (void*)rtArg, "(*~*~)i", nullptr},
 };
 
 NativeSymbol kDataNatives[] = {
@@ -2334,6 +2770,7 @@ NativeSymbol kArtboardNatives[] = {
     {"set_frame_origin", (void*)artboardSetFrameOrigin, "(ii)", nullptr},
     {"bounds", (void*)artboardBounds, "(i*~)", (void*)&wasm_runtime_rive_leaf_native},
     {"pointer_event", (void*)artboardPointerEvent, "(iiiff)i", nullptr},
+    {"scroll_event", (void*)artboardScrollEvent, "(iiffffiif)i", nullptr},
     {"gamepad_event", (void*)artboardGamepadEvent, "(i*~)i", nullptr},
     {"animation", (void*)artboardAnimation, "(i*~)i", nullptr},
     {"animation_release", (void*)artboardAnimationRelease, "(i)", nullptr},
@@ -2370,6 +2807,16 @@ NativeSymbol kAudioNatives[] = {
     {"source_duration", (void*)audioSourceDuration, "(i)f", nullptr},
     {"source_sample_rate", (void*)audioSourceSampleRate, "(i)i", nullptr},
     {"source_channels", (void*)audioSourceChannels, "(i)i", nullptr},
+    {"source_to_blob", (void*)audioSourceToBlob, "(iii)i", nullptr},
+    {"stream", (void*)audioStream, "(iiiii)i", nullptr},
+    {"stream_ring", (void*)audioStreamRing, "(i)i", nullptr},
+    {"stream_seeks", (void*)audioStreamSeeks, "(i)i", nullptr},
+    {"stream_channels", (void*)audioStreamChannels, "(i)i", nullptr},
+    {"stream_sample_rate", (void*)audioStreamSampleRate, "(i)i", nullptr},
+    {"stream_seek_frame", (void*)audioStreamSeekFrame, "(iF)i", nullptr},
+    {"stream_set_loop", (void*)audioStreamSetLoop, "(ii)", nullptr},
+    {"stream_ended", (void*)audioStreamEnded, "(i)i", nullptr},
+    {"stream_release", (void*)audioStreamRelease, "(i)", nullptr},
     {"play", (void*)audioPlay, "(i)i", nullptr},
     {"play_at_time", (void*)audioPlayAtTime, "(if)i", nullptr},
     {"play_in_time", (void*)audioPlayInTime, "(if)i", nullptr},
@@ -2378,6 +2825,8 @@ NativeSymbol kAudioNatives[] = {
     {"time", (void*)audioTime, "()f", nullptr},
     {"time_frame", (void*)audioTimeFrame, "()F", nullptr},
     {"sample_rate", (void*)audioSampleRate, "()i", nullptr},
+    {"processor_sample_rate", (void*)audioProcessorSampleRate, "()i", nullptr},
+    {"processor_channels", (void*)audioProcessorChannels, "()i", nullptr},
     {"sound_release", (void*)audioSoundRelease, "(i)", nullptr},
     {"sound_play", (void*)audioSoundPlay, "(i)", nullptr},
     {"sound_pause", (void*)audioSoundPause, "(i)", nullptr},
@@ -2426,6 +2875,7 @@ NativeSymbol kPaintNatives[] = {
     {"blend_mode", (void*)paintBlendMode, "(ii)", (void*)&wasm_runtime_rive_leaf_native},
     {"feather", (void*)paintFeather, "(if)", (void*)&wasm_runtime_rive_leaf_native},
     {"shader", (void*)paintShader, "(ii)", (void*)&wasm_runtime_rive_leaf_native},
+    {"shader_transform", (void*)paintShaderTransform, "(i*~)", (void*)&wasm_runtime_rive_leaf_native},
 };
 
 NativeSymbol kCanvasNatives[] = {
@@ -2463,6 +2913,8 @@ NativeSymbol kGpuNatives[] = {
     {"image_view", (void*)gpuImageView, "(iii)i", nullptr},
     {"buffer_new", (void*)gpuBufferNew, "(iii*~)i", nullptr},
     {"buffer_update", (void*)gpuBufferUpdate, "(ii*~)", (void*)&wasm_runtime_rive_leaf_native},
+    {"buffer_update_blob", (void*)gpuBufferUpdateBlob, "(iiiii)", (void*)&wasm_runtime_rive_leaf_native},
+    {"buffer_new_blob", (void*)gpuBufferNewBlob, "(iiiii)i", nullptr},
     {"buffer_release", (void*)gpuBufferRelease, "(i)", nullptr},
     {"texture_new", (void*)gpuTextureNew, "(*~)i", nullptr},
     {"texture_upload", (void*)gpuTextureUpload, "(i*~*~)", nullptr},
@@ -2474,12 +2926,16 @@ NativeSymbol kGpuNatives[] = {
     {"shader_target", (void*)gpuShaderTarget, "()i", nullptr},
     {"shader_asset_bytes", (void*)gpuShaderAssetBytes, "(i*~*~)i", nullptr},
     {"shader_asset_id", (void*)gpuShaderAssetId, "(i*~)i", nullptr},
-    {"shader_module_new", (void*)gpuShaderModuleNew, "(*~*~)i", nullptr},
+    {"shader_module_from_asset", (void*)gpuShaderModuleFromAsset, "(i*~i)i", nullptr},
+#ifdef WITH_RIVE_TOOLS
+    {"shader_module_from_rstb", (void*)gpuShaderModuleFromRstb, "(*~ii)i", nullptr},
+#endif
     {"shader_module_release", (void*)gpuShaderModuleRelease, "(i)", nullptr},
     {"bind_group_layout_new", (void*)gpuBindGroupLayoutNew, "(i*~)i", nullptr},
     {"bind_group_layout_release", (void*)gpuBindGroupLayoutRelease, "(i)", nullptr},
     {"bind_group_layout_from_shader", (void*)gpuBindGroupLayoutFromShader, "(ii*~)i", nullptr},
     {"bind_group_layout_from_shaders", (void*)gpuBindGroupLayoutFromShaders, "(iii*~)i", nullptr},
+    {"bind_group_layout_from_entries", (void*)gpuBindGroupLayoutFromEntries, "(i*~i*~i)i", nullptr},
     {"bind_group_new", (void*)gpuBindGroupNew, "(i*~*~*~)i", nullptr},
     {"bind_group_release", (void*)gpuBindGroupRelease, "(i)", nullptr},
     {"pipeline_new", (void*)gpuPipelineNew, "(*~*~)i", nullptr},
@@ -2631,6 +3087,66 @@ NativeSymbol kFileNatives[] = {
     {"bindable_equal", (void*)fileBindableEqual, "(ii)i", nullptr},
 };
 
+NativeSymbol kLanesNatives[] = {
+    {"start", (void*)lanesStart, "(ii*~*~)i", nullptr},
+    {"state", (void*)lanesState, "(i)i", nullptr},
+    {"failed", (void*)lanesFailed, "(i*~)i", nullptr},
+    {"stop", (void*)lanesStop, "(i)", nullptr},
+    {"release", (void*)lanesRelease, "(i)", nullptr},
+    {"result", (void*)lanesResult, "(iii)i", nullptr},
+    {"watch", (void*)lanesWatch, "(i)i", nullptr},
+    {"wait", (void*)lanesWait, "(iFF)i", nullptr},
+    {"cancel_wait", (void*)lanesCancelWait, "(i)", nullptr},
+    {"wait_within", (void*)lanesWaitWithin, "(iFF)F", nullptr},
+};
+
+NativeSymbol kJobsNatives[] = {
+    {"threads", (void*)jobsThreads, "()i", nullptr},
+    {"join", (void*)jobsJoin, "(iF)i", nullptr},
+    {"join_any", (void*)jobsJoinAny, "(*~F)i", nullptr},
+};
+
+NativeSymbol kParallelNatives[] = {
+    {"size", (void*)parallelSize, "()i", nullptr},
+#ifdef RIVE_WASM_PARALLEL
+    {"run", (void*)parallelRun, "(i)i", nullptr},
+#endif
+    {"waiting", (void*)parallelWaiting, "(i)", nullptr},
+};
+
+NativeSymbol kSharedNatives[] = {
+    {"region_create", (void*)sharedRegionCreate, "(i)i", nullptr},
+    {"region_size", (void*)sharedRegionSize, "(i)i", nullptr},
+    {"region_lock", (void*)sharedRegionLock, "(iF)i", nullptr},
+    {"region_unlock", (void*)sharedRegionUnlock, "(i)", nullptr},
+    {"region_read", (void*)sharedRegionRead, "(ii*~)i", nullptr},
+    {"region_write", (void*)sharedRegionWrite, "(ii*~)i", nullptr},
+    {"region_poisoned", (void*)sharedRegionPoisoned, "(i)i", nullptr},
+    {"atomic_load", (void*)sharedAtomicLoad, "(ii)F", nullptr},
+    {"atomic_store", (void*)sharedAtomicStore, "(iii)F", nullptr},
+    {"atomic_add", (void*)sharedAtomicAdd, "(iii)F", nullptr},
+    {"atomic_cas", (void*)sharedAtomicCas, "(iiii)F", nullptr},
+    {"ring_create", (void*)sharedRingCreate, "(i)i", nullptr},
+    {"ring_write", (void*)sharedRingWrite, "(i*~*~)i", nullptr},
+    {"ring_read", (void*)sharedRingRead, "(i*~)i", nullptr},
+    {"ring_drop", (void*)sharedRingDrop, "(ii)i", nullptr},
+    {"ring_used", (void*)sharedRingUsed, "(i)i", nullptr},
+    {"ring_signal", (void*)sharedRingSignal, "(ii)i", nullptr},
+    {"snapshot_create", (void*)sharedSnapshotCreate, "(i)i", nullptr},
+    {"snapshot_publish", (void*)sharedSnapshotPublish, "(i*~*~)i", nullptr},
+    {"snapshot_read", (void*)sharedSnapshotRead, "(i*~)i", nullptr},
+    {"snapshot_seq", (void*)sharedSnapshotSeq, "(i)F", nullptr},
+    {"read_done", (void*)sharedReadDone, "()", nullptr},
+    {"signal_create", (void*)sharedSignalCreate, "()i", nullptr},
+    {"signal_notify", (void*)sharedSignalNotify, "(i)", nullptr},
+    {"signal_seq", (void*)sharedSignalSeq, "(i)F", nullptr},
+    {"blob_create", (void*)sharedBlobCreate, "(*~)i", nullptr},
+    {"blob_size", (void*)sharedBlobSize, "(i)i", nullptr},
+    {"blob_read", (void*)sharedBlobRead, "(ii*~)i", nullptr},
+    {"retain", (void*)sharedRetain, "(i)i", nullptr},
+    {"release", (void*)sharedRelease, "(i)", nullptr},
+};
+
 inline bool registerRiveBindingNatives()
 {
     return wasm_runtime_register_natives(
@@ -2720,5 +3236,22 @@ inline bool registerRiveBindingNatives()
            wasm_runtime_register_natives(
                "rive_file_v1",
                kFileNatives,
-               sizeof(kFileNatives) / sizeof(NativeSymbol));
+               sizeof(kFileNatives) / sizeof(NativeSymbol)) &&
+           wasm_runtime_register_natives(
+               "rive_lanes_v1",
+               kLanesNatives,
+               sizeof(kLanesNatives) / sizeof(NativeSymbol)) &&
+           wasm_runtime_register_natives(
+               "rive_jobs_v1",
+               kJobsNatives,
+               sizeof(kJobsNatives) / sizeof(NativeSymbol)) &&
+           wasm_runtime_register_natives(
+               "rive_parallel_v1",
+               kParallelNatives,
+               sizeof(kParallelNatives) / sizeof(NativeSymbol)) &&
+           wasm_runtime_register_natives(
+               "rive_shared_v1",
+               kSharedNatives,
+               sizeof(kSharedNatives) / sizeof(NativeSymbol));
 }
+#endif

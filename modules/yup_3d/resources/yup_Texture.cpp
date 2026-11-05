@@ -146,16 +146,7 @@ GpuSampler::Ptr Texture::getGpuSampler (const GpuDevice::Ptr& device)
     useDevice (device);
 
     if (gpuSampler == nullptr)
-    {
-        // Anisotropy needs device support, and linear filtering everywhere on some backends
-        auto desc = samplerDesc;
-        const auto allLinear = desc.minFilter == GpuFilter::linear && desc.magFilter == GpuFilter::linear && desc.mipmapFilter == GpuFilter::linear;
-
-        if (! allLinear || ! device->isAnisotropicFilteringAvailable())
-            desc.maxAnisotropy = 1;
-
-        gpuSampler = GpuSampler::create (device, desc);
-    }
+        gpuSampler = GpuSampler::create (device, samplerDesc);
 
     return gpuSampler;
 }

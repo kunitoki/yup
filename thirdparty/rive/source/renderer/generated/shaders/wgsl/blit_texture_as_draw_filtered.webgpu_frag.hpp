@@ -18,8 +18,8 @@ struct Shader
 
 inline constexpr Shader blit_texture_as_draw_filtered_webgpu_frag = {
     .source = R"WGSL(
-struct UB{Qc:f32,Td:f32,bg:f32,cg:f32,A6_:u32,X9_:u32,Nf:u32,Of:u32,j8_:vec4<i32>,Lh:vec2<f32>,Ud:vec2<f32>,j2_:u32,Ph:f32,T4_:u32,a3_:f32,Vd:f32,Hf:u32,L3_:f32,M3_:f32,Wd:f32,Ih:u32,W9_:u32,wc:f32,xc:f32,}@group(1)@binding(11) var IC:texture_2d<f32>;@group(1)@binding(13) var Yf:sampler;var<private>f2_1:vec2<f32>;var<private>Sh:vec4<f32>;@group(0)@binding(0) var<uniform>j:UB;fn _d(){let _a=f2_1;let _c=textureSampleLevel(IC,Yf,_a,0f);Sh=_c;return;}@fragment fn main(@location(0) f2_:vec2<f32>)->@location(0) vec4<f32>{f2_1=f2_;_d();let _b=Sh;return _b;})WGSL",
-    .usedOverrides = {{false, false, false, false, false, false, false, false, false, false, false, false, false, false, false}},
+struct RB{Od:f32,Ze:f32,dh:f32,eh:f32,X5_:u32,Ka:u32,Og:u32,Qg:u32,Q8_:vec4<i32>,Yi:vec2<f32>,af:vec2<f32>,z2_:u32,cj:f32,B6_:u32,m3_:f32,bf:f32,Hg:u32,J3_:f32,K3_:f32,cf:f32,Vi:u32,Ja:u32,X8_:f32,Y8_:f32,}@group(1)@binding(11) var JC:texture_2d<f32>;@group(1)@binding(13) var ah:sampler;var<private>p2_1:vec2<f32>;var<private>fj:vec4<f32>;@group(0)@binding(0) var<uniform>j:RB;fn _a(){let _c=p2_1;let _d=textureSampleLevel(JC,ah,_c,0f);fj=_d;return;}@fragment fn main(@location(0) p2_:vec2<f32>)->@location(0) vec4<f32>{p2_1=p2_;_a();let _b=fj;return _b;})WGSL",
+    .usedOverrides = {{false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false}},
     .label = "blit_texture_as_draw_filtered.webgpu_frag",
 };
 } // namespace wgsl

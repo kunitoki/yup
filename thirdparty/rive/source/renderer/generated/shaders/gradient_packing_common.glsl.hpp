@@ -5,11 +5,16 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char gradient_packing_common[] = R"===(#ifdef BB
-f e Y9(c l0,Y k9,c m2,float Uh,c ke,float y){e x2;x2.w=y;c le=M0(k9,l0)+m2;float Vh=ke.x;if(Vh>0.9){x2.z=2.0;}else{x2.z=ke.y;}if(Uh==float(uc)){x2.x=le.x;x2.y=0.0;}else{x2.z=-x2.z;x2.xy=le;}return x2;}
+const char gradient_packing_common[] = R"===(#define uc 8.0
+#ifdef CB
+f e La(c n0,X ba,c C2,c v8,uint x5,float w4,float n){e W1;W1.xy=G0(ba,n0)+C2;bool v4=(v8.x<0.0);v8.x=max(v8.x,0.0);W1.z=v8.y+(float(x5)/uc)+(v8.x*(l5/uc));W1.z=(v4)?-W1.z:W1.z;W1.w=(n*-0.5-0.25)-round(w4*255.0);return W1;}
 #endif
-#ifdef FB
-f c Cc(e x2){float t=x2.z>0.0?x2.x:length(x2.xy);t=clamp(t,0.0,1.0);float me=abs(x2.z);float x=me>1.0?(1.0-1.0/Ka)*t+(0.5/Ka):(1.0/Ka)*t+me;float Wh=x2.w;return c(x,Wh);}
+#ifdef EB
+f c pf(float x5,c w8,c e3,bool v4){
+#ifdef JE
+if(JE&&x5==float(Qh)){float t=nb(w8)*(1.0/D7);return c(t,e3.y);}else
+#endif
+{float t=(x5==float(Ph))?w8.x:length(w8.xy);t=clamp(t,0.0,1.0);float hj=v4?(1.0-l5):l5;float x=t*hj+e3.x;return c(x,e3.y);}}f c Mg(float x5,c w8,c qf,bool v4,float vc,float wc){const float xc=0.5*l5;c e3=c(qf.x*l5+xc,qf.y*vc+wc);return pf(x5,w8,e3,v4);}f c cb(e W1,float vc,float wc){const float xc=0.5*l5;bool v4=W1.z<0.0;W1.z=abs(W1.z);c e3;e3.y=floor(W1.z);e3.x=(W1.z-e3.y)*uc+xc;e3.y=e3.y*vc+wc;float x5=floor(e3.x);return pf(x5,W1.xy,e3,v4);}f d Ci(e W1){return fract(W1.w)*-2.0+1.5;}f d Ee(e W1){const float ij=-1.0/255.0;return ceil(W1.w)*ij;}
 #endif
 )===";
 } // namespace glsl

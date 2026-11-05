@@ -9,13 +9,13 @@ class ContextWGPU;
 class SamplerWGPU : public LITE_RTTI_OVERRIDE(Sampler, SamplerWGPU)
 {
 public:
-    SamplerWGPU() = default;
-    ~SamplerWGPU() override = default; // wgpu::Sampler RAII destructor releases
+  SamplerWGPU() = default;
+  ~SamplerWGPU() override = default; // wgpu::Sampler RAII destructor releases
 
-    const wgpu::Sampler& wgpuSampler() const { return m_wgpuSampler; }
+  const wgpu::Sampler& wgpuSampler() const { return m_wgpuSampler; }
 
 private:
-    friend class ContextWGPU;
-    wgpu::Sampler m_wgpuSampler;
+  friend class ContextWGPU;
+  wgpu::Sampler m_wgpuSampler;
 };
 } // namespace rive::ore

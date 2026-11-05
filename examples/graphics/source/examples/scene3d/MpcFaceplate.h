@@ -132,6 +132,7 @@ public:
         }
 
         yup::GpuSamplerDesc sampler (yup::GpuFilter::linear, yup::GpuWrapMode::clampToEdge);
+        sampler.mipmapFilter = yup::GpuFilter::linear;
         sampler.maxAnisotropy = 16;
 
         texture = new yup::Texture (std::move (gpuTexture), sampler, true);

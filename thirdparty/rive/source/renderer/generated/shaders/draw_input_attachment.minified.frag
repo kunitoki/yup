@@ -5,5 +5,5 @@ binding=INPUT_ATTACHMENT_BINDING,
 #else
 binding=0,
 #endif
-set=C3) uniform lowp subpassInput cj;layout(location=0) out i bc;void main(){bc=subpassLoad(cj);}
+set=N3) uniform lowp subpassInput tk;layout(location=0) out i ed;void main(){ed=subpassLoad(tk);}
 #endif

@@ -243,12 +243,6 @@ void Drawable::prepareElement (SVGData& data, SVGElement& element, std::unordere
                 bounds = getPathBounds (*referenced);
         }
 
-        if (gradient->type == SVGGradient::Radial
-            && element.path.has_value()
-            && bounds.has_value()
-            && ! gradient->transform.isIdentity())
-            return;
-
         destination = createColorGradientFromSVG (*gradient, bounds ? std::addressof (*bounds) : nullptr);
     };
 
@@ -522,8 +516,6 @@ void Drawable::paintElement (Graphics& g,
 
     bool isFillDefined = hasParentFillEnabled;
     bool isStrokeDefined = hasParentStrokeEnabled;
-    std::optional<Path> localGradientFillPath;
-    std::optional<AffineTransform> localGradientFillTransform;
 
     if (element.color)
         currentColor = *element.color;
@@ -775,21 +767,6 @@ void Drawable::paintElement (Graphics& g,
             ColorGradient colorGradient = createColorGradientFromSVG (*resolvedGradient,
                                                                       gradientBounds ? std::addressof (*gradientBounds) : nullptr);
 
-            if (resolvedGradient->type == SVGGradient::Radial && element.path && gradientBounds && ! resolvedGradient->transform.isIdentity())
-            {
-                const auto gradientSpaceTransform = createGradientSpaceTransform (*resolvedGradient, std::addressof (*gradientBounds));
-
-                if (! gradientSpaceTransform.isIdentity() && std::abs (gradientSpaceTransform.getDeterminant()) > 1.0e-6f)
-                {
-                    localGradientFillPath = element.path->transformed (gradientSpaceTransform.inverted());
-                    localGradientFillTransform = gradientSpaceTransform;
-
-                    const auto localGradient = createLocalGradientSpaceGradient (*resolvedGradient);
-                    const auto localGradientBounds = localGradientFillPath->getBounds();
-                    colorGradient = createColorGradientFromSVG (localGradient, std::addressof (localGradientBounds));
-                }
-            }
-
             g.setFillColorGradient (colorGradient);
             isFillDefined = true;
         }
@@ -805,21 +782,6 @@ void Drawable::paintElement (Graphics& g,
 
     if (isFillDefined && ! element.noFill)
     {
-        const auto fillElementPath = [&]
-        {
-            if (localGradientFillPath && localGradientFillTransform)
-            {
-                const auto savedFillTransform = g.getTransform();
-                g.setTransform (localGradientFillTransform->followedBy (savedFillTransform));
-                g.fillPath (*localGradientFillPath);
-                g.setTransform (savedFillTransform);
-            }
-            else
-            {
-                g.fillPath (*element.path);
-            }
-        };
-
         if (element.path)
         {
             if (element.fillUrl)
@@ -834,7 +796,7 @@ void Drawable::paintElement (Graphics& g,
                                                              << " id: " << (element.id ? *element.id : "none")
                                                              << " bounds: " << getPathBounds (element).toString()
                                                              << " clip: " << (hasClipping ? "true" : "false"));
-                    fillElementPath();
+                    g.fillPath (*element.path);
                 }
             }
             else
@@ -843,7 +805,7 @@ void Drawable::paintElement (Graphics& g,
                                                          << " id: " << (element.id ? *element.id : "none")
                                                          << " bounds: " << getPathBounds (element).toString()
                                                          << " clip: " << (hasClipping ? "true" : "false"));
-                fillElementPath();
+                g.fillPath (*element.path);
             }
         }
         else if (element.reference && instancedShape == nullptr)
@@ -1526,6 +1488,35 @@ ColorGradient Drawable::createColorGradientFromSVG (const SVGGradient& gradient,
     }
 
     const AffineTransform gradientSpaceTransform = createGradientSpaceTransform (gradient, objectBounds);
+
+    // Non uniform radial gradients are built in their own space and drawn through the gradient transform.
+    if (gradient.type == SVGGradient::Radial
+        && ! gradient.transform.isIdentity()
+        && objectBounds != nullptr
+        && std::abs (gradientSpaceTransform.getDeterminant()) > 1.0e-6f)
+    {
+        const auto inverse = gradientSpaceTransform.inverted();
+        const Point<float> corners[] = {
+            objectBounds->getTopLeft().transformed (inverse),
+            objectBounds->getTopRight().transformed (inverse),
+            objectBounds->getBottomLeft().transformed (inverse),
+            objectBounds->getBottomRight().transformed (inverse)
+        };
+
+        auto minX = corners[0].getX(), maxX = minX, minY = corners[0].getY(), maxY = minY;
+        for (const auto& corner : corners)
+        {
+            minX = jmin (minX, corner.getX());
+            maxX = jmax (maxX, corner.getX());
+            minY = jmin (minY, corner.getY());
+            maxY = jmax (maxY, corner.getY());
+        }
+
+        const auto localBounds = Rectangle<float> (minX, minY, maxX - minX, maxY - minY);
+
+        return createColorGradientFromSVG (createLocalGradientSpaceGradient (gradient), std::addressof (localBounds))
+            .withTransform (gradientSpaceTransform);
+    }
 
     auto transformPoint = [&gradientSpaceTransform] (Point<float> p)
     {

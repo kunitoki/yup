@@ -40,9 +40,14 @@ Beyond availability, the device reports what it can do:
 | `isStorageTextureAvailable()` | Whether compute passes can write `GpuTextureDesc::storage` textures. |
 | `isFragmentStorageBufferAvailable()` | Whether render passes can read storage buffers (`setStorageBuffer`). |
 | `isDynamicUniformOffsetAvailable()` | Whether pipelines honor `GpuPipelineOptions::dynamicUniformBuffers`. |
+| `getMaximumTextureSize (type)` | Largest width and height (and 3D depth) `GpuTexture::create` accepts for a texture type. |
+| `isBaseInstanceAvailable()` | Whether draws take a non-zero `firstInstance` and `baseVertex`; they fail without it. |
+| `isPerTargetBlendAvailable()` | Whether each color target keeps its own blend state and write mask; otherwise the first one's apply to all. |
+| `isMultisampledTextureReadAvailable()` | Whether shaders can `texelFetch` a multisampled texture; OpenGL ES 3.0 and WebGL2 cannot, so resolve it first there. |
 
 Desktop OpenGL, OpenGL ES and WebGL2 are raster-only: they report no storage
-textures and no fragment storage buffers.
+textures and no fragment storage buffers. They also report no base instance and
+no per-target blending.
 
 On the web, the page asks the browser for a full WebGPU device and falls back to
 *compatibility mode* when it cannot get one, as on older GPUs or browsers that

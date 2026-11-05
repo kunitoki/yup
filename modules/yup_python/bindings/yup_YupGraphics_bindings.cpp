@@ -1232,6 +1232,7 @@ void registerYupGraphicsBindings (py::module_& m)
     py::enum_<ColorGradient::Type> (classColorGradient, "Type")
         .value ("Linear", ColorGradient::Type::Linear)
         .value ("Radial", ColorGradient::Type::Radial)
+        .value ("Angular", ColorGradient::Type::Angular)
         .export_values();
 
     py::enum_<ColorGradient::Spread> (classColorGradient, "Spread")
@@ -1261,6 +1262,9 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getType", &ColorGradient::getType)
         .def ("getSpread", &ColorGradient::getSpread)
         .def ("withSpread", &ColorGradient::withSpread, "newSpread"_a)
+        .def ("getTransform", &ColorGradient::getTransform)
+        .def ("withTransform", &ColorGradient::withTransform, "newTransform"_a)
+        .def ("getStartAngle", &ColorGradient::getStartAngle)
         .def ("getStartColor", &ColorGradient::getStartColor)
         .def ("getStartX", &ColorGradient::getStartX)
         .def ("getStartY", &ColorGradient::getStartY)
@@ -1297,7 +1301,7 @@ void registerYupGraphicsBindings (py::module_& m)
             String result;
             result
                 << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
-                << "(" << (self.getType() == ColorGradient::Type::Radial ? "Radial" : "Linear")
+                << "(" << (self.getType() == ColorGradient::Type::Radial ? "Radial" : (self.getType() == ColorGradient::Type::Angular ? "Angular" : "Linear"))
                 << ", " << (int) self.getNumStops() << " stops)";
             return result;
         });

@@ -395,3 +395,22 @@ if (result.wasOk())
 
 The cache references an keeps the `GpuDevice` alive via `Ptr`.
 Eviction is LRU by access order.
+
+### Driver pipeline cache
+
+`GpuPipelineCache` lives for one run. To also skip driver compilation on the
+next launch, save `GpuDevice::getPipelineCacheData()` on shutdown and pass it back
+through `GpuDevice::Options::pipelineCacheData` when creating the device. It
+covers both Rive's own pipelines and every `GpuPipeline`. Only Vulkan uses it
+today; other backends return an empty block. Data from another driver or GPU is
+ignored, so a stale file is harmless.
+
+```cpp
+GpuDevice::Options options;
+cacheFile.loadFileAsData (options.pipelineCacheData);
+auto device = GpuDevice::create (GpuPlatform::Vulkan, options);
+
+// ... on shutdown
+const auto data = device->getPipelineCacheData();
+cacheFile.replaceWithData (data.getData(), data.getSize());
+```

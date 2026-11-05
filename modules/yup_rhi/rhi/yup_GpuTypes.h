@@ -541,8 +541,9 @@ struct GpuSamplerDesc
     float minLod = 0.0f;  ///< Lowest mip level this sampler will read.
     float maxLod = 32.0f; ///< Highest mip level this sampler will read.
 
-    /** Maximum anisotropy. 1 disables anisotropic filtering; higher values
-        require GpuDevice::isAnisotropicFilteringAvailable(). */
+    /** Maximum anisotropy: 1 disables anisotropic filtering, otherwise a power of two
+        up to 16. It is lowered to 1 unless every filter is linear and
+        GpuDevice::isAnisotropicFilteringAvailable(). */
     uint32_t maxAnisotropy = 1;
 
     /** Optional debug label passed through to the native API. */
@@ -720,6 +721,9 @@ struct GpuPipelineOptions
         has no color output and draws into a pass begun on a depth-format
         GpuTarget. When empty without depth, a single default alpha-blended
         rgba8unorm target is used.
+
+        Without GpuDevice::isPerTargetBlendAvailable() the first target's blend
+        state and write mask apply to every target.
     */
     std::vector<GpuColorTarget> colorTargets;
 
@@ -866,6 +870,7 @@ struct GpuFrameDescriptor
     bool fillsDisabled = false;
     bool strokesDisabled = false;
     bool clockwiseFillOverride = false; ///< Override all paths' fill rules to emulate clockwiseAtomic mode.
+    bool inkbleedOverride = false;      ///< With msaaSampleCount 1, antialias strokes by bleeding them out 1/2 pixel; fills stay aliased. Ignored in every other mode.
 };
 
 //==============================================================================

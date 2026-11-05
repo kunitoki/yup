@@ -11,20 +11,40 @@ namespace rive
 class DataBindContext : public DataBindContextBase
 {
 protected:
-    std::vector<uint32_t> m_SourcePathIdsBuffer;
+  std::vector<uint32_t> m_SourcePathIdsBuffer;
+#ifdef WITH_RIVE_EDITOR
+  std::vector<Id> m_editorSourcePath;
+  bool m_hasEditorSourcePath = false;
+#endif
 
 public:
-    void decodeSourcePathIds(Span<const uint8_t> value) override;
-    void copySourcePathIds(const DataBindContextBase& object) override;
-    void bindFromContext(DataContext* dataContext);
-    const std::vector<uint32_t>& sourcePathIds() const
+  void decodeSourcePathIds(Span<const uint8_t> value) override;
+  void copySourcePathIds(const DataBindContextBase& object) override;
+  void bindFromContext(DataContext* dataContext);
+#ifdef WITH_RIVE_EDITOR
+  // Coop paths retain (client, object) IDs, unlike RIV's flat indices.
+  void decodeEditorSourcePathIds(BinaryReader& reader);
+#endif
+  const std::vector<uint32_t>& sourcePathIds() const
+  {
+    return m_SourcePathIdsBuffer;
+  }
+  // The source path's length. A path the editor hydrated is kept apart and
+  // leaves sourcePathIds empty.
+  size_t sourcePathLength() const
+  {
+#ifdef WITH_RIVE_EDITOR
+    if (m_hasEditorSourcePath)
     {
-        return m_SourcePathIdsBuffer;
+      return m_editorSourcePath.size();
     }
+#endif
+    return m_SourcePathIdsBuffer.size();
+  }
 
 private:
-    void resolvePath();
-    bool m_isPathResolved = false;
+  void resolvePath();
+  bool m_isPathResolved = false;
 };
 } // namespace rive
 

@@ -19,6 +19,7 @@ bool operator==(const YGStyle& lhs, const YGStyle& rhs) {
       lhs.positionType() == rhs.positionType() &&
       lhs.flexWrap() == rhs.flexWrap() && lhs.overflow() == rhs.overflow() &&
       lhs.display() == rhs.display() &&
+      lhs.aspectRatioAxis() == rhs.aspectRatioAxis() &&
       YGValueEqual(lhs.flexBasis(), rhs.flexBasis()) &&
       lhs.margin() == rhs.margin() && lhs.position() == rhs.position() &&
       lhs.padding() == rhs.padding() && lhs.border() == rhs.border() &&

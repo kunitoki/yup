@@ -133,6 +133,14 @@ public:
 
         /** Windowing hooks of the Vulkan backend. */
         VulkanOptions vulkan;
+
+        /** Driver pipeline cache saved by getPipelineCacheData() in an earlier run.
+
+            Seeding it lets the device skip compiling the Rive and GpuPipeline pipelines it
+            already holds, which shortens the first frames after launch. Data from another
+            driver or GPU is ignored. Only the Vulkan backend uses it.
+        */
+        MemoryBlock pipelineCacheData;
     };
 
     //==============================================================================
@@ -309,6 +317,14 @@ public:
     */
     virtual bool isDeviceLost() const noexcept { return false; }
 
+    /** Returns the driver pipeline cache, to save and pass back through
+        Options::pipelineCacheData on the next launch.
+
+        Holds every pipeline the device compiled so far, so call it late, for example
+        on shutdown. Empty on backends without a driver pipeline cache (all but Vulkan).
+    */
+    virtual MemoryBlock getPipelineCacheData() const { return {}; }
+
     /** Returns true if this device measures the GPU time of the frames that ask for it
         with GpuFrame::setTimingEnabled().
 
@@ -395,6 +411,35 @@ public:
 
     /** Returns true if GpuSamplerDesc::maxAnisotropy above 1 has any effect. */
     bool isAnisotropicFilteringAvailable() const noexcept;
+
+    /** Returns true if shaders can read multisampled textures (texelFetch on a texture2DMS).
+
+        OpenGL ES 3.0 and WebGL2 cannot, so resolve the texture first and read the
+        resolved one there.
+    */
+    bool isMultisampledTextureReadAvailable() const noexcept;
+
+    /** Returns true if GpuRenderPass draws accept a non-zero firstInstance, and
+        GpuRenderPass::drawIndexed() a non-zero baseVertex.
+
+        OpenGL, OpenGL ES and WebGL2 cannot, and those draws fail there: offset the
+        vertex and instance buffers with setVertexBuffer() instead.
+    */
+    bool isBaseInstanceAvailable() const noexcept;
+
+    /** Returns true if every GpuPipelineOptions::colorTargets entry keeps its own blend
+        state and write mask.
+
+        OpenGL, OpenGL ES and WebGL2 apply the first target's to all of them.
+    */
+    bool isPerTargetBlendAvailable() const noexcept;
+
+    /** Returns the largest width and height of a texture of the given type, which
+        GpuTexture::create() enforces. For texture3D it also bounds the depth.
+
+        0 when no GPU context is available.
+    */
+    uint32_t getMaximumTextureSize (GpuTextureType type) const noexcept;
 
     /** Returns the highest MSAA sample count supported for color render targets.
 
