@@ -362,28 +362,32 @@ public:
     */
     Result takeGpuFailure();
 
-    /** @internal Test hook, not for production use: makes the next frame begun on this
-        device report @p error once it completes, as if the GPU had failed to execute it.
-    */
-    void failNextFrameForTesting (const String& error);
+    //==============================================================================
+    /** Loads the shader bundle stored in @p data, parsing the same bytes once per device.
 
-    /** @internal Test hook, not for production use: caps the GPU timestamp samples each frame
-        measuring its scopes can take, so a test runs out of them with a few encoders. On Metal
-        a render pass takes 4 samples and a compute pass 2; on Vulkan every pass takes 2.
-        0 restores the default. Only devices where
-        isScopeTimingAvailable() is true take samples.
-    */
-    virtual void setScopeSampleCapacityForTesting (int samples) { ignoreUnused (samples); }
+        Renderers build their pipelines from bundles compiled into the binary, and
+        every pass, renderer and texture of a device would otherwise parse the same
+        bundle again, decoding the shaders of every target language each time. The
+        parsed bundle is kept by the device with a hash of its bytes, and returned again
+        for the same bytes at the same address: bytes that changed since are parsed again.
 
-    /** @internal Test accessor, not for production use: the number of uniform buffers this device keeps for reuse, pooled or
-        held by submitted frames until the GPU is done with them, and their total capacity in bytes.
-    */
-    std::pair<int, size_t> getUniformBufferPoolSizeForTesting() const noexcept;
+        Safe to call from any thread.
 
-    /** @internal Test accessor, not for production use: the number of shader modules this device shares across
-        its pipelines.
+        @param data  Start of the bundle bytes.
+        @param size  Size of the bundle in bytes.
+
+        @returns The bundle, shared with the device, or the parse error (failures are not kept).
     */
-    int getShaderModuleCountForTesting() const;
+    ResultValue<ShaderBundle::Ptr> loadShaderBundle (const void* data, size_t size);
+
+    /** Drops every bundle kept by loadShaderBundle().
+
+        Bundles loaded from bytes at changing addresses, such as bundles compiled at runtime,
+        each keep an entry until the device goes away: clear them after recompiling, or to
+        free memory. Bundles still referenced elsewhere stay valid, and the next load of
+        any bytes parses them again.
+    */
+    void clearShaderBundleCache();
 
     //==============================================================================
     /** Returns true if textures of the given format can be created and sampled.
@@ -637,6 +641,30 @@ public:
         @returns true on success.
     */
     virtual bool updateBuffer (ReferenceCountedObjectPtr<GpuBuffer> buffer, const void* data, size_t byteSize);
+
+    //==============================================================================
+    /** @internal Test hook, not for production use: caps the GPU timestamp samples each frame
+        measuring its scopes can take, so a test runs out of them with a few encoders. On Metal
+        a render pass takes 4 samples and a compute pass 2; on Vulkan every pass takes 2.
+        0 restores the default. Only devices where
+        isScopeTimingAvailable() is true take samples.
+    */
+    virtual void setScopeSampleCapacityForTesting (int samples) { ignoreUnused (samples); }
+
+    /** @internal Test hook, not for production use: makes the next frame begun on this
+        device report @p error once it completes, as if the GPU had failed to execute it.
+    */
+    void failNextFrameForTesting (const String& error);
+
+    /** @internal Test accessor, not for production use: the number of uniform buffers this device keeps for reuse, pooled or
+        held by submitted frames until the GPU is done with them, and their total capacity in bytes.
+    */
+    std::pair<int, size_t> getUniformBufferPoolSizeForTesting() const noexcept;
+
+    /** @internal Test accessor, not for production use: the number of shader modules this device shares across
+        its pipelines.
+    */
+    int getShaderModuleCountForTesting() const;
 
 protected:
     /** Default constructor. */
@@ -926,6 +954,15 @@ private:
     };
 
     ShaderModuleCache shaderModuleCache;
+
+    struct EmbeddedBundle
+    {
+        uint64 contentHash = 0;
+        ShaderBundle::Ptr bundle;
+    };
+
+    CriticalSection embeddedBundlesLock;
+    std::map<std::pair<const void*, size_t>, EmbeddedBundle> embeddedBundles;
 
     //==============================================================================
     /** Pool of small uniform buffers recycled across frames.

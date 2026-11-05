@@ -189,32 +189,36 @@ protected:
         return result;
     }
 
-    /** The share of the normalized GGX lobe inside a region. */
+    /** The shares of the normalized GGX lobe inside each region, in one pass over the quadrature. */
     template <typename Region>
-    static double getGgxMass (const Lobe& lobe, const Reference& reference, const Region& region)
+    static std::vector<double> getGgxMasses (const Lobe& lobe, const Reference& reference, const std::vector<Region>& regions)
     {
-        auto mass = 0.0;
+        std::vector<double> masses (regions.size(), 0.0);
 
         forEachGgxSample (lobe, [&] (const Direction& l, double weight, double)
         {
-            if (region.contains (l))
-                mass += weight;
+            for (size_t r = 0; r < regions.size(); ++r)
+                if (regions[r].contains (l))
+                    masses[r] += weight;
         });
 
-        return mass / reference.magnitude;
+        for (auto& mass : masses)
+            mass /= reference.magnitude;
+
+        return masses;
     }
 
-    /** The share of the fitted distribution inside a region and over the horizon, which is what
+    /** The shares of the fitted distribution inside each region and over the horizon, which is what
         a shader integrates after clipping a polygon: the cosine integrated over the directions
-        that M (the inverse of the stored M^-1) maps into it.
+        that M (the inverse of the stored M^-1) maps into it. One pass over the quadrature.
     */
     template <typename Region>
-    static double getLtcMass (const Fit& fit, const Region& region)
+    static std::vector<double> getLtcMasses (const Fit& fit, const std::vector<Region>& regions)
     {
         const auto [m00, m02, m11, m20] = fit.inverse;
         const auto determinant = m00 - m02 * m20; // of the xz block, m22 being 1
 
-        auto inside = 0;
+        std::vector<int> inside (regions.size(), 0);
 
         for (int i = 0; i < quadratureSize; ++i)
         {
@@ -227,12 +231,26 @@ protected:
                 const Direction w { radius * std::cos (phi), radius * std::sin (phi), std::sqrt (1.0 - u) };
 
                 const auto l = Direction { (w.x - m02 * w.z) / determinant, w.y / m11, (m00 * w.z - m20 * w.x) / determinant }.normalized();
-                if (l.z > 0.0 && region.contains (l))
-                    ++inside;
+                if (l.z <= 0.0)
+                    continue;
+
+                for (size_t r = 0; r < regions.size(); ++r)
+                    inside[r] += regions[r].contains (l) ? 1 : 0;
             }
         }
 
-        return static_cast<double> (inside) / (quadratureSize * quadratureSize);
+        std::vector<double> masses;
+        for (const auto count : inside)
+            masses.push_back (static_cast<double> (count) / (quadratureSize * quadratureSize));
+
+        return masses;
+    }
+
+    /** The share of the fitted distribution inside a region and over the horizon. */
+    template <typename Region>
+    static double getLtcMass (const Fit& fit, const Region& region)
+    {
+        return getLtcMasses (fit, std::vector<Region> { region })[0];
     }
 
     /** Caps around the lobe's mean direction and beside it, sized by the lobe's spread. */
@@ -286,11 +304,16 @@ protected:
         EXPECT_NEAR (fit.amplitude[0], reference.magnitude, 2.0e-3);
         EXPECT_NEAR (fit.amplitude[1], reference.fresnel, 2.0e-3);
 
-        for (const auto& cap : getCapsAround (reference))
-            EXPECT_NEAR (getLtcMass (fit, cap), getGgxMass (lobe, reference, cap), massTolerance);
+        // The upper hemisphere goes last, after the caps
+        auto caps = getCapsAround (reference);
+        const auto ggxMasses = getGgxMasses (lobe, reference, caps);
+        caps.push_back ({ { 0.0, 0.0, 1.0 }, 0.0 });
+        const auto ltcMasses = getLtcMasses (fit, caps);
 
-        const Cap upperHemisphere { { 0.0, 0.0, 1.0 }, 0.0 };
-        EXPECT_GT (getLtcMass (fit, upperHemisphere), 1.0 - massTolerance);
+        for (size_t c = 0; c < ggxMasses.size(); ++c)
+            EXPECT_NEAR (ltcMasses[c], ggxMasses[c], massTolerance);
+
+        EXPECT_GT (ltcMasses.back(), 1.0 - massTolerance);
     }
 
     static std::vector<int> getTestedIndices()
@@ -406,10 +429,11 @@ TEST_F (LtcTablesTests, GrazingMassPerElevationMatchesGgx)
             const auto reference = integrateGgx (lobe);
             const auto fit = getFit (r, a);
 
-            for (const auto& band : bands)
-            {
-                EXPECT_NEAR (getLtcMass (fit, band), getGgxMass (lobe, reference, band), 0.1);
-            }
+            const auto ltcMasses = getLtcMasses (fit, bands);
+            const auto ggxMasses = getGgxMasses (lobe, reference, bands);
+
+            for (size_t b = 0; b < bands.size(); ++b)
+                EXPECT_NEAR (ltcMasses[b], ggxMasses[b], 0.1) << "band " << b;
         }
     }
 }

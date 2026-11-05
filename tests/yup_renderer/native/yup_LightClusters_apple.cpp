@@ -161,7 +161,7 @@ TEST_F (LightClustersMetalTests, ClusterCullingMatchesCpuReference)
 
     EXPECT_GT (assigned, lights.size()); // not vacuous: lights reach several clusters
 
-    // The cap counts against the pairs that can differ at all: listed on the CPU, or ambiguous
+    // The cap counts against the pairs listed on either side, ambiguity is only checked on a mismatch
     int candidatePairs = 0;
     int ambiguousMismatches = 0;
 
@@ -186,13 +186,12 @@ TEST_F (LightClustersMetalTests, ClusterCullingMatchesCpuReference)
                 {
                     const auto onCpu = std::binary_search (reference.begin(), reference.end(), index);
                     const auto onGpu = std::binary_search (list.begin(), list.end(), index);
-                    const auto ambiguous = isAmbiguous (lights[index], cullView, bounds);
-                    candidatePairs += onCpu || ambiguous ? 1 : 0;
+                    candidatePairs += onCpu || onGpu ? 1 : 0;
 
                     if (onCpu == onGpu)
                         continue;
 
-                    if (ambiguous)
+                    if (isAmbiguous (lights[index], cullView, bounds))
                         ++ambiguousMismatches;
                     else
                         ADD_FAILURE() << "cluster " << cluster << " light " << index << (onCpu ? " missing on the GPU" : " extra on the GPU");

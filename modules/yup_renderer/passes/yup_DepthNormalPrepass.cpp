@@ -67,7 +67,7 @@ Result DepthNormalPrepass::prepare()
         if (auto result = geometry.prepare (device); result.failed())
             return result;
 
-        auto bundle = ShaderBundle::loadFromData (depthNormalPrepassShaderBundle, sizeof (depthNormalPrepassShaderBundle));
+        auto bundle = device->loadShaderBundle (depthNormalPrepassShaderBundle, sizeof (depthNormalPrepassShaderBundle));
         if (bundle.failed())
             return Result::fail ("Unable to load the depth and normal prepass shader bundle: " + bundle.getErrorMessage());
 
@@ -86,7 +86,7 @@ Result DepthNormalPrepass::prepare()
             options.depthStencil.depthCompare = GpuCompareFunction::less;
             options.depthStencil.depthWriteEnabled = true;
 
-            auto pipeline = GpuPipeline::compileFromBundle (device, bundle.getReference(), options);
+            auto pipeline = GpuPipeline::compileFromBundle (device, *bundle.getValue(), options);
             if (pipeline.failed())
                 return Result::fail ("Unable to compile the depth and normal prepass pipeline: " + pipeline.getErrorMessage());
 

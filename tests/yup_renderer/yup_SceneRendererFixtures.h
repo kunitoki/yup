@@ -5044,9 +5044,9 @@ vec4 encodeLuma(vec3 c)
     {
         Scene scene;
         buildRedRoomScene (scene, false);
-        addIrradianceVolume (scene, 7, 7, 7);
+        addIrradianceVolume (scene, 5, 5, 4);
 
-        const auto positions = 7 * 7 * 7;
+        const auto positions = 5 * 5 * 4;
         ASSERT_GT (positions, ProbeBaker::maxVolumeProbesPerBake);
         const auto expectedFrames = (positions + ProbeBaker::maxVolumeProbesPerBake - 1) / ProbeBaker::maxVolumeProbesPerBake;
 
@@ -5208,9 +5208,9 @@ vec4 encodeLuma(vec3 c)
     {
         Scene scene;
         buildRedRoomScene (scene, false);
-        addIrradianceVolume (scene, 7, 7, 7);
+        addIrradianceVolume (scene, 5, 5, 4);
 
-        const auto callsPerBake = (7 * 7 * 7 + ProbeBaker::maxVolumeProbesPerBake - 1) / ProbeBaker::maxVolumeProbesPerBake;
+        const auto callsPerBake = (5 * 5 * 4 + ProbeBaker::maxVolumeProbesPerBake - 1) / ProbeBaker::maxVolumeProbesPerBake;
 
         SceneRenderer renderer;
         setTier (renderer, tier);

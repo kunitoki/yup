@@ -200,11 +200,11 @@ Result LightClusters::prepare (const GpuDevice::Ptr& device)
     if (preparation)
         return *preparation;
 
-    auto bundle = ShaderBundle::loadFromData (lightClustersShaderBundle, sizeof (lightClustersShaderBundle));
+    auto bundle = device->loadShaderBundle (lightClustersShaderBundle, sizeof (lightClustersShaderBundle));
     if (bundle.failed())
         return *(preparation = Result::fail ("Unable to load the light clusters shader bundle: " + bundle.getErrorMessage()));
 
-    auto compiled = GpuComputePipeline::compileFromBundle (device, bundle.getReference());
+    auto compiled = GpuComputePipeline::compileFromBundle (device, *bundle.getValue());
     if (compiled.failed())
         return *(preparation = Result::fail ("Unable to compile the light clusters pipeline: " + compiled.getErrorMessage()));
 

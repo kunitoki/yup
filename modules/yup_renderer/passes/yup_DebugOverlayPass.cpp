@@ -84,7 +84,7 @@ Result DebugOverlayPass::prepare (GpuTextureFormat format)
 
         const auto compile = [&] (const uint8_t* data, size_t size, bool boxes) -> ResultValue<GpuPipeline::Ptr>
         {
-            auto bundle = ShaderBundle::loadFromData (data, size);
+            auto bundle = device->loadShaderBundle (data, size);
             if (bundle.failed())
                 return makeResultValueFail ("Unable to load the debug overlay shader bundle: " + bundle.getErrorMessage());
 
@@ -103,7 +103,7 @@ Result DebugOverlayPass::prepare (GpuTextureFormat format)
                 options.indexFormat = GpuIndexFormat::uint32;
             }
 
-            return GpuPipeline::compileFromBundle (device, bundle.getReference(), options);
+            return GpuPipeline::compileFromBundle (device, *bundle.getValue(), options);
         };
 
         auto wireframe = compile (debugOverlayShaderBundle, sizeof (debugOverlayShaderBundle), false);

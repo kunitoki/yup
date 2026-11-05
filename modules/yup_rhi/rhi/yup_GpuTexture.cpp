@@ -229,7 +229,7 @@ bool GpuTexture::generateMips (GpuFrame& frame)
     auto entry = std::find_if (mipPipelines.begin(), mipPipelines.end(), [this] (const auto& item) { return item.first == format; });
     if (entry == mipPipelines.end())
     {
-        auto bundle = ShaderBundle::loadFromData (mipDownsampleShaderBundle, sizeof (mipDownsampleShaderBundle));
+        auto bundle = device->loadShaderBundle (mipDownsampleShaderBundle, sizeof (mipDownsampleShaderBundle));
         if (bundle.failed())
             return false;
 
@@ -240,7 +240,7 @@ bool GpuTexture::generateMips (GpuFrame& frame)
         colorTarget.format = format;
         colorTarget.blendEnabled = false;
 
-        auto pipeline = GpuPipeline::compileFromBundle (device, bundle.getReference(), options);
+        auto pipeline = GpuPipeline::compileFromBundle (device, *bundle.getValue(), options);
         if (pipeline.failed())
             return false;
 

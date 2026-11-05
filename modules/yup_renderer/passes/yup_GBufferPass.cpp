@@ -59,11 +59,11 @@ void setGBufferTargets (GpuPipelineOptions& options, bool depthWrite, GpuCompare
 
 ResultValue<GpuPipeline::Ptr> compileGBufferPipeline (const GpuDevice::Ptr& device, const uint8* data, size_t size, const GpuPipelineOptions& options)
 {
-    auto bundle = ShaderBundle::loadFromData (data, size);
+    auto bundle = device->loadShaderBundle (data, size);
     if (bundle.failed())
         return makeResultValueFail ("Unable to load the G-buffer shader bundle: " + bundle.getErrorMessage());
 
-    auto result = GpuPipeline::compileFromBundle (device, bundle.getReference(), options);
+    auto result = GpuPipeline::compileFromBundle (device, *bundle.getValue(), options);
     if (result.failed())
         return makeResultValueFail ("Unable to compile the G-buffer pipeline: " + result.getErrorMessage());
 

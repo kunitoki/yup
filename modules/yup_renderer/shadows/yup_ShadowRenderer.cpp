@@ -214,8 +214,8 @@ Result ShadowRenderer::preparePipelines (const GpuDevice::Ptr& device)
     if (auto result = geometry.prepare (device); result.failed())
         return result;
 
-    auto opaqueBundle = ShaderBundle::loadFromData (shadowPassShaderBundle, sizeof (shadowPassShaderBundle));
-    auto maskedBundle = ShaderBundle::loadFromData (shadowPassMaskedShaderBundle, sizeof (shadowPassMaskedShaderBundle));
+    auto opaqueBundle = device->loadShaderBundle (shadowPassShaderBundle, sizeof (shadowPassShaderBundle));
+    auto maskedBundle = device->loadShaderBundle (shadowPassMaskedShaderBundle, sizeof (shadowPassMaskedShaderBundle));
 
     for (const auto* bundle : { &opaqueBundle, &maskedBundle })
         if (bundle->failed())
@@ -243,13 +243,13 @@ Result ShadowRenderer::preparePipelines (const GpuDevice::Ptr& device)
         return Result::ok();
     };
 
-    if (auto result = compile (opaqueBundle.getReference(), false, opaquePipeline); result.failed())
+    if (auto result = compile (*opaqueBundle.getValue(), false, opaquePipeline); result.failed())
         return result;
 
-    if (auto result = compile (maskedBundle.getReference(), false, maskedPipeline); result.failed())
+    if (auto result = compile (*maskedBundle.getValue(), false, maskedPipeline); result.failed())
         return result;
 
-    if (auto result = compile (opaqueBundle.getReference(), true, tileClearPipeline); result.failed())
+    if (auto result = compile (*opaqueBundle.getValue(), true, tileClearPipeline); result.failed())
         return result;
 
     // A unit quad in the plane z = 0, drawn over a tile through makeTileClearBlock()

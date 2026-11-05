@@ -45,7 +45,7 @@ Result FullscreenPass::prepare (const GpuDevice::Ptr& newDevice, const uint8* bu
     if (newDevice == nullptr || bundleData == nullptr || bundleSize == 0 || outputFormats.empty())
         return Result::fail ("No device, shader bundle or output format");
 
-    auto bundle = ShaderBundle::loadFromData (bundleData, bundleSize);
+    auto bundle = newDevice->loadShaderBundle (bundleData, bundleSize);
     if (bundle.failed())
         return Result::fail ("Unable to load the fullscreen shader bundle: " + bundle.getErrorMessage());
 
@@ -67,7 +67,7 @@ Result FullscreenPass::prepare (const GpuDevice::Ptr& newDevice, const uint8* bu
         target.blend.dstAlpha = destination;
     }
 
-    auto compiled = GpuPipeline::compileFromBundle (newDevice, bundle.getReference(), options);
+    auto compiled = GpuPipeline::compileFromBundle (newDevice, *bundle.getValue(), options);
     if (compiled.failed())
         return Result::fail ("Unable to compile the fullscreen pipeline: " + compiled.getErrorMessage());
 
