@@ -280,23 +280,33 @@ int YUPApplicationBase::main()
     }
 #endif
 
-    ScopedYupInitialiser_GUI libraryInitialiser;
     jassert (createInstance != nullptr);
 
+#if YUP_EMSCRIPTEN
+    static ScopedYupInitialiser_GUI libraryInitialiser;
+    static const std::unique_ptr<YUPApplicationBase> app (createInstance());
+#else
+    ScopedYupInitialiser_GUI libraryInitialiser;
     const std::unique_ptr<YUPApplicationBase> app (createInstance());
-    jassert (app != nullptr);
+#endif
 
+    jassert (app != nullptr);
     if (! app->initialiseApp())
         return app->shutdownApp();
 
+#if YUP_EMSCRIPTEN
+    MessageManager::getInstance()->runDispatchLoop();
+
+    return 0;
+#else
     YUP_TRY
     {
-        // loop until a quit message is received..
         MessageManager::getInstance()->runDispatchLoop();
     }
     YUP_CATCH_EXCEPTION
 
     return app->shutdownApp();
+#endif
 }
 
 //==============================================================================
@@ -313,10 +323,7 @@ bool YUPApplicationBase::initialiseApp()
 #if YUP_WINDOWS && (! defined(_CONSOLE))
     if (isStandaloneApp() && AttachConsole (ATTACH_PARENT_PROCESS) != 0)
     {
-        // if we've launched a GUI app from cmd.exe or PowerShell, we need this to enable printf etc.
-        // However, only reassign stdout, stderr, stdin if they have not been already opened by
-        // a redirect or similar.
-        FILE* ignore;
+        FILE* ignore = nullptr;
 
         if (_fileno (stdout) < 0)
             freopen_s (&ignore, "CONOUT$", "w", stdout);

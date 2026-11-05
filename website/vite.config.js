@@ -180,14 +180,30 @@ const inlineMarkdown = (text) => text.split(/(`[^`]+`)/).map((part) => part.star
 
 // The release notes of partials/releases/<version>.md, newest first, as one collapsible section each
 // with the newest open. Each file starts with "## [<version>] - <date>" (a date of "Unreleased" keeps
-// a draft off the page), then ### and #### groups, bullets (continued on indented lines) and plain or
-// bold paragraphs.
+// a draft off the page), then ### and #### groups, bullets (continued on indented lines), plain or
+// bold paragraphs, and images: ![caption](file) or [![caption](file)](url) lines, with file in
+// docs/_static/images, grouped into a gallery while consecutive.
+const releaseImage = (line) => {
+    const image = line.match(/^\s*(?:\[!\[([^\]]*)\]\(([^)\s]+)\)\]\(([^)\s]+)\)|!\[([^\]]*)\]\(([^)\s]+)\))\s*$/);
+    if (!image)
+        return null;
+
+    const [, linkedCaption, linkedFile, url, caption = linkedCaption, file = linkedFile] = image;
+    const img = `<img src="../../docs/_static/images/${escapeHtml(file)}" alt="${escapeHtml(caption)}" loading="lazy" />`;
+    const link = (body) => `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${body}</a>`;
+
+    return url
+        ? `<figure>${link(img)}<figcaption><span>${escapeHtml(caption)}</span><span>${link(/^https:\/\/github\.com\//.test(url) ? "source" : "live demo")}</span></figcaption></figure>`
+        : `<figure>${img}<figcaption><span>${escapeHtml(caption)}</span></figcaption></figure>`;
+};
+
 const versionKey = (file) => basename(file, ".md").split(".").map((part) => part.padStart(6, "0")).join(".");
 
 function releasesHtml() {
     const out = [];
     let item = null;
     let inList = false;
+    let inGallery = false;
     let inVersion = false;
 
     const flushItem = () => {
@@ -200,6 +216,9 @@ function releasesHtml() {
         if (inList)
             out.push("</ul>");
         inList = false;
+        if (inGallery)
+            out.push("</div>");
+        inGallery = false;
     };
     const closeVersion = () => {
         closeList();
@@ -236,12 +255,22 @@ function releasesHtml() {
 
         const heading = line.match(/^(#{3,4})\s+(.+)/);
         const bullet = line.match(/^\s*[-*]\s+(.+)/);
+        const figure = releaseImage(line);
 
-        if (heading) {
+        if (figure) {
+            if (!inGallery) {
+                closeList();
+                out.push('<div class="gallery release-gallery">');
+            }
+            inGallery = true;
+            out.push(figure);
+        } else if (heading) {
             closeList();
             const tag = heading[1].length === 3 ? "h3" : "h4";
             out.push(`<${tag}>${inlineMarkdown(heading[2])}</${tag}>`);
         } else if (bullet) {
+            if (inGallery)
+                closeList();
             flushItem();
             if (!inList)
                 out.push("<ul>");

@@ -292,7 +292,7 @@ foreach (module ${target_test_modules})
     add_test (NAME ${module} COMMAND ${module_target_name} WORKING_DIRECTORY "${module_working_directory}")
     set_tests_properties (${module} PROPERTIES LABELS "${module}")
 
-    # Debug wasm frames are large and exceptions add JS trampolines: the default ~1MB V8 stack of node
+    # Debug wasm frames are large: the default ~1MB V8 stack of node
     # overflows on deep recursion tests, so give the main thread 4MB of its 8MB native stack
     if (YUP_PLATFORM_EMSCRIPTEN AND CMAKE_CROSSCOMPILING_EMULATOR)
         set_target_properties (${module_target_name} PROPERTIES

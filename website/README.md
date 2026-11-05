@@ -3,6 +3,12 @@
 Static showcase site for YUP, built with Vite and plain CSS: one black field, YUP blue (`#005aff`) as the only signal color, huge lowercase words, small wide-tracked capitals and monospace text.
 
 ```bash
+just website     # builds the home page demos, then serves http://localhost:5173
+```
+
+Or by hand, without rebuilding the demos:
+
+```bash
 cd website
 npm install
 npm run dev      # http://localhost:5173
@@ -43,14 +49,14 @@ The shaders are precompiled at configure time and embedded in the binary. `home.
 Build it from the repository root; the target copies `website_demos.js` and `.wasm` into `src/public/yup/` (ignored by git), which the dev server and the build serve as `/yup/`:
 
 ```bash
-just emscripten Release website_demos
+just website_demos   # or just website, which also starts the dev server
 ```
 
-Until it is built, or where the browser lacks WebGPU or cross-origin isolation, the page still works: the boot line says why and the active word is simply lit. The module is threaded, so the page needs cross-origin isolation: the dev and preview servers send the COOP/COEP headers, and on GitHub Pages `mini-coi.js` (served from `cmake/platforms/emscripten/`) adds them through a service worker that reloads the page once on the first visit.
+Until it is built the page still works: the boot line says why and the active word is simply lit. Where the browser lacks WebGPU or cross-origin isolation, the page shows a still of each work through the words instead, from `src/posters/<word>.jpg` (one per word in the list, `start` included; a missing one stays black), and only opening a work is unavailable. The module is threaded, so the page needs cross-origin isolation: the dev and preview servers send the COOP/COEP headers, and on GitHub Pages `mini-coi.js` (served from `cmake/platforms/emscripten/`) adds them through a service worker that reloads the page once on the first visit.
 
 ## Build-time data
 
-- `<!-- @releases -->` (on `releases.html`) becomes the release notes in `src/partials/releases/<version>.md`, newest first, one collapsible section each with the newest open. The notes are short summaries written for the site, not the changelog: each file starts with `## [<version>] - <date>` (a date of `Unreleased` keeps a draft off the page), followed by `###` groups, bullets and paragraphs, with bold, code, links and `#123` references. Add a file for each new release.
+- `<!-- @releases -->` (on `releases.html`) becomes the release notes in `src/partials/releases/<version>.md`, newest first, one collapsible section each with the newest open. The notes are short summaries written for the site, not the changelog: each file starts with `## [<version>] - <date>` (a date of `Unreleased` keeps a draft off the page), followed by `###` groups, bullets and paragraphs, with bold, code, links and `#123` references. Lines of `![caption](file.jpg)` or `[![caption](file.jpg)](url)` show screenshots from `docs/_static/images` as a gallery, with consecutive lines sharing one gallery. Add a file for each new release.
 - Docs search (the `search` corner, `Cmd/Ctrl+K` or `/`) reads `virtual:docs-index`, which the `yup-partials` plugin builds from the h1-h3 sections of `docs/**/*.md` and which loads only when the dialog first opens. Links point to the matching section ids on yup.readthedocs.io. Restart the dev server after editing the docs.
 
 ## Analytics

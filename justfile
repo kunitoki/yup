@@ -193,9 +193,15 @@ rive_shaders_d3d:
   cp thirdparty/rive/source/renderer/shaders/out/generated/d3d/*.h thirdparty/rive/source/renderer/generated/shaders/d3d/
   rm -Rf thirdparty/rive/source/renderer/shaders/out build/rive-shaders-ply
 
+[doc("build the home page demos into website/src/public/yup")]
+website_demos CONFIG="Release":
+  @just emscripten {{CONFIG}} website_demos
+  cp build/emscripten/website/src/demos/{{CONFIG}}/website_demos.js website/src/public/yup/
+  cp build/emscripten/website/src/demos/{{CONFIG}}/website_demos.wasm website/src/public/yup/
+
 [doc("develop website")]
 [working-directory: 'website']
-website:
+website: website_demos
   npm install
   npm run dev
 

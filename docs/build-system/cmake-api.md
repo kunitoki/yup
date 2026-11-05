@@ -342,7 +342,7 @@ These arguments only affect the Emscripten build and are ignored elsewhere.
 | `EMSCRIPTEN_DEBUG_INFO` | FULL\|NAMES | `FULL` | Debug information of Debug links. `FULL` keeps DWARF and writes a source map (`-gsource-map -g`), `NAMES` keeps only function names (`-g2`) for much faster links, still enough for readable stack traces. |
 | `CUSTOM_SHELL` | path | *(built-in)* | Custom Emscripten shell HTML (`--shell-file`). |
 | `PRELOAD_FILES` | list | - | Files to preload into the virtual filesystem (`--preload-file`), e.g. `"local/path@/vfs/path"`. |
-| `ENABLE_EMSCRIPTEN_WEBGPU` | boolean | `ON` | Enable the native WebGPU rendering backend via the Emdawnwebgpu port (`--use-port=emdawnwebgpu`). Per-target parameter on `yup_standalone_app`. Requires Emscripten 4.0.22+. Set `OFF` to build for WebGL2 instead, for browsers without WebGPU; WebGL2 antialiases with 4x MSAA, so text and thin edges look rougher on displays with a device pixel ratio of 1. |
+| `ENABLE_EMSCRIPTEN_WEBGPU` | boolean | `ON` | Enable the native WebGPU rendering backend via the Emdawnwebgpu port (`--use-port=emdawnwebgpu`). Per-target parameter on `yup_standalone_app`. Requires Emscripten 4.0.22+. Set `OFF` to build for WebGL2 instead, for browsers without WebGPU; WebGL2 antialiases with 4x MSAA, so text and thin edges look rougher on displays with a device pixel ratio of 1. With the default shell, a WebGPU build opened in a browser without WebGPU stops before `main()` and says so on the loading screen. |
 | `ENABLE_EMSCRIPTEN_GL_DEBUGGING` | boolean | `OFF` | Enable OpenGL debugging assertions (`-sGL_ASSERTIONS=1 -sGL_DEBUG=1`). Per-target parameter on `yup_standalone_app`. |
 
 ##### Apple

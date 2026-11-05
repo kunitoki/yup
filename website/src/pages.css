@@ -515,6 +515,13 @@ pre.code code {
     margin-top: 16px;
 }
 
+.release-gallery {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
+    gap: 28px 24px;
+    max-width: 80ch;
+    margin-top: 24px;
+}
+
 /* ------------------------------------------------------------------- 404 */
 
 .crt {
