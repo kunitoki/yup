@@ -43,6 +43,13 @@ function (_yup_fetch_vst3sdk)
             GIT_SUBMODULES "base" "cmake" "pluginterfaces" "public.sdk")
 
         FetchContent_MakeAvailable (vst3sdk)
+
+        foreach (vst3sdk_target base pluginterfaces sdk_common sdk sdk_hosting)
+            if (TARGET ${vst3sdk_target})
+                target_compile_options (${vst3sdk_target} PRIVATE
+                    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-deprecated-declarations>)
+            endif()
+        endforeach()
     endif()
 
     if (NOT TARGET yup_audio_plugin_host_vst3sdk)
