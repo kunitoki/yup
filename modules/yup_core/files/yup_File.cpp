@@ -83,40 +83,64 @@ File& File::operator= (File&& other) noexcept
 //==============================================================================
 static String removeEllipsis (const String& path)
 {
-    // This will quickly find both /../ and /./ at the expense of a minor
-    // false-positive performance hit when path elements end in a dot.
+    const auto separator = File::getSeparatorString();
+
+    if (! path.contains (separator + ".") && ! path.startsWithChar ('.'))
+        return path;
+
+    StringArray toks;
+    toks.addTokens (path, separator, {});
+
+    int rootSize = 0;
+
+    while (rootSize < toks.size() && toks[rootSize].isEmpty())
+        ++rootSize;
+
 #if YUP_WINDOWS
-    if (path.contains (".\\"))
-#else
-    if (path.contains ("./"))
+    if (rootSize == 0 && toks.size() > 0 && toks[0].endsWithChar (':'))
+        rootSize = 1;
 #endif
+
+    StringArray result;
+    bool anythingChanged = false;
+
+    for (int i = 0; i < toks.size(); ++i)
     {
-        StringArray toks;
-        toks.addTokens (path, File::getSeparatorString(), {});
-        bool anythingChanged = false;
+        const auto& t = toks[i];
 
-        for (int i = 1; i < toks.size(); ++i)
+        if (i < rootSize || i == 0)
         {
-            auto& t = toks[i];
-
-            if (t == ".." && toks[i - 1] != "..")
-            {
-                anythingChanged = true;
-                toks.removeRange (i - 1, 2);
-                i = jmax (0, i - 2);
-            }
-            else if (t == ".")
-            {
-                anythingChanged = true;
-                toks.remove (i--);
-            }
+            result.add (t);
         }
+        else if (t == ".")
+        {
+            anythingChanged = true;
+        }
+        else if (t == "..")
+        {
+            anythingChanged = true;
 
-        if (anythingChanged)
-            return toks.joinIntoString (File::getSeparatorString());
+            if (result.size() > rootSize && result[result.size() - 1] != "..")
+                result.remove (result.size() - 1);
+            else if (rootSize == 0)
+                result.add (t); // a relative path keeps the elements going above its start
+        }
+        else if (t.isNotEmpty())
+        {
+            result.add (t);
+        }
+        else
+        {
+            anythingChanged = true;
+        }
     }
 
-    return path;
+    if (! anythingChanged)
+        return path;
+
+    auto joined = result.joinIntoString (separator);
+
+    return result.size() == rootSize && rootSize > 0 ? joined + separator : joined;
 }
 
 static String normaliseSeparators (const String& path)
@@ -205,7 +229,13 @@ String File::parseAbsolutePath (const String& p)
             // expand a name of type "~dave/abc"
             auto userName = path.substring (1).upToFirstOccurrenceOf ("/", false, false);
 
-            if (auto* pw = getpwnam (userName.toUTF8()))
+            const auto maxBufferSize = sysconf (_SC_GETPW_R_SIZE_MAX);
+            const auto bufferSize = (size_t) (maxBufferSize > 0 ? maxBufferSize : 16384);
+            HeapBlock<char> buffer (bufferSize);
+            struct passwd pwd;
+            struct passwd* pw = nullptr;
+
+            if (getpwnam_r (userName.toUTF8(), &pwd, buffer, bufferSize, &pw) == 0 && pw != nullptr)
                 path = addTrailingSeparator (pw->pw_dir) + path.fromFirstOccurrenceOf ("/", false, false);
         }
     }
@@ -282,9 +312,11 @@ bool File::setReadOnly (const bool shouldBeReadOnly,
 {
     bool worked = true;
 
+    // Symbolic links inside the tree are not followed, so files outside of it never change
     if (applyRecursively && isDirectory())
-        for (auto& f : findChildFiles (File::findFilesAndDirectories, false))
-            worked = f.setReadOnly (shouldBeReadOnly, true) && worked;
+        for (auto& f : findChildFiles (File::findFilesAndDirectories, false, "*", FollowSymlinks::no))
+            if (! f.isSymbolicLink())
+                worked = f.setReadOnly (shouldBeReadOnly, true) && worked;
 
     return setFileReadOnlyInternal (shouldBeReadOnly) && worked;
 }
@@ -294,8 +326,17 @@ bool File::setExecutePermission (bool shouldBeExecutable) const
     return setFileExecutableInternal (shouldBeExecutable);
 }
 
+#if ! YUP_WINDOWS
+static bool yup_deleteRecursivelyWithoutFollowingLinks (const File& file);
+#endif
+
 bool File::deleteRecursively (bool followSymlinks) const
 {
+#if ! YUP_WINDOWS
+    if (! followSymlinks)
+        return yup_deleteRecursivelyWithoutFollowingLinks (*this);
+#endif
+
     bool worked = true;
 
     if (isDirectory() && (followSymlinks || ! isSymbolicLink()))
@@ -345,11 +386,15 @@ bool File::replaceFileIn (const File& newFile) const
 
 bool File::copyDirectoryTo (const File& newDirectory) const
 {
+    if (newDirectory == *this || newDirectory.isAChildOf (*this))
+        return false;
+
     if (isDirectory() && newDirectory.createDirectory())
     {
         for (auto& f : findChildFiles (File::findFiles, false))
-            if (! f.copyFileTo (newDirectory.getChildFile (f.getFileName())))
-                return false;
+            if (! f.isSymbolicLink())
+                if (! f.copyFileTo (newDirectory.getChildFile (f.getFileName())))
+                    return false;
 
         for (auto& f : findChildFiles (File::findDirectories, false))
             if (! f.isSymbolicLink())
@@ -411,15 +456,21 @@ bool File::isAChildOf (const File& potentialParent) const
     if (potentialParent.fullPath.isEmpty())
         return false;
 
-    auto ourPath = getPathUpToLastSlash();
+    for (auto ourPath = getPathUpToLastSlash();;)
+    {
+        if (compareFilenames (potentialParent.fullPath, ourPath) == 0)
+            return true;
 
-    if (compareFilenames (potentialParent.fullPath, ourPath) == 0)
-        return true;
+        if (potentialParent.fullPath.length() >= ourPath.length())
+            return false;
 
-    if (potentialParent.fullPath.length() >= ourPath.length())
-        return false;
+        auto parentPath = createFileWithoutCheckingPath (ourPath).getPathUpToLastSlash();
 
-    return getParentDirectory().isAChildOf (potentialParent);
+        if (parentPath == ourPath)
+            return false;
+
+        ourPath = std::move (parentPath);
+    }
 }
 
 int File::hashCode() const { return fullPath.hashCode(); }
@@ -453,7 +504,7 @@ File File::getChildFile (StringRef relativePath) const
     {
         const auto root = [&]() -> String
         {
-            if (fullPath[1] == ':')
+            if (fullPath.length() > 1 && fullPath[1] == ':')
                 return fullPath.substring (0, 2);
 
             if (! fullPath.startsWith ("\\\\"))
@@ -710,6 +761,7 @@ File File::getNonexistentChildFile (const String& suggestedPrefix,
 
             if (openBracks > 0
                 && closeBracks > openBracks
+                && closeBracks - openBracks <= 10
                 && prefix.substring (openBracks + 1, closeBracks).containsOnly ("0123456789"))
             {
                 number = prefix.substring (openBracks + 1, closeBracks).getIntValue();
@@ -861,6 +913,14 @@ bool File::appendData (const void* const dataToAppend,
     return fout.openedOk() && fout.write (dataToAppend, numberOfBytes);
 }
 
+static bool yup_createOwnerOnlyFile (const File& file);
+
+static void createReplacementFile (const File& target, const File& temporary)
+{
+    if (target.exists())
+        yup_createOwnerOnlyFile (temporary);
+}
+
 bool File::replaceWithData (const void* const dataToWrite,
                             const size_t numberOfBytes) const
 {
@@ -868,6 +928,7 @@ bool File::replaceWithData (const void* const dataToWrite,
         return deleteFile();
 
     TemporaryFile tempFile (*this, TemporaryFile::useHiddenFile);
+    createReplacementFile (*this, tempFile.getFile());
     tempFile.getFile().appendData (dataToWrite, numberOfBytes);
     return tempFile.overwriteTargetFileWithTemporary();
 }
@@ -885,6 +946,7 @@ bool File::appendText (const String& text, bool asUnicode, bool writeHeaderBytes
 bool File::replaceWithText (const String& textToWrite, bool asUnicode, bool writeHeaderBytes, const char* lineFeed) const
 {
     TemporaryFile tempFile (*this, TemporaryFile::useHiddenFile);
+    createReplacementFile (*this, tempFile.getFile());
     tempFile.getFile().appendText (textToWrite, asUnicode, writeHeaderBytes, lineFeed);
     return tempFile.overwriteTargetFileWithTemporary();
 }
@@ -940,7 +1002,17 @@ String File::createLegalPathName (const String& original)
 
 String File::createLegalFileName (const String& original)
 {
-    auto s = original.removeCharacters ("\"#@,;:<>*^|?\\/");
+    static const String illegalCharacters = []
+    {
+        String chars ("\"#@,;:<>*^|?\\/");
+
+        for (yup_wchar c = 1; c < 0x20; ++c)
+            chars << String::charToString (c);
+
+        return chars + String::charToString (0x7f);
+    }();
+
+    auto s = original.removeCharacters (illegalCharacters).trimCharactersAtStart ("~");
 
     const int maxLength = 128; // only the length of the filename, not the whole path
     auto len = s.length();
@@ -959,6 +1031,15 @@ String File::createLegalFileName (const String& original)
             s = s.substring (0, maxLength);
         }
     }
+
+    s = s.trimCharactersAtEnd (". ");
+
+    static const StringArray reservedNames { "CON", "PRN", "AUX", "NUL",
+                                             "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+                                             "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9" };
+
+    if (reservedNames.contains (s.upToFirstOccurrenceOf (".", false, false).trimEnd(), true))
+        s = "_" + s;
 
     return s;
 }
