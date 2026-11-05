@@ -17,8 +17,6 @@
 #
 # ==============================================================================
 
-add_compile_options (-msimd128)
-
 # ==============================================================================
 
 # Returns the compile definitions and options every emscripten target compiling the YUP modules needs.
@@ -30,8 +28,7 @@ function (_yup_emscripten_get_compile_settings enable_webgpu output_definitions 
         -fexceptions
         -pthread
         -msimd128
-        -Wno-nontrivial-memcall
-        -sDISABLE_EXCEPTION_CATCHING=0)
+        -Wno-nontrivial-memcall)
 
     if (enable_webgpu)
         list (APPEND definitions RIVE_WEBGPU=2)
@@ -84,7 +81,6 @@ function (_yup_platform_setup_standalone_app target_name)
         -sALLOW_MEMORY_GROWTH=1
         -sASSERTIONS=1
         -sEXIT_RUNTIME=1
-        -sDISABLE_EXCEPTION_CATCHING=0
         -sERROR_ON_UNDEFINED_SYMBOLS=1
         -sSTACK_OVERFLOW_CHECK=2
         -sSTACK_SIZE=${YUP_ARG_STACK_SIZE}
@@ -107,7 +103,8 @@ function (_yup_platform_setup_standalone_app target_name)
 
     if (YUP_ARG_ENABLE_EMSCRIPTEN_WEBGPU)
         list (APPEND additional_link_options
-            --use-port=emdawnwebgpu)
+            --use-port=emdawnwebgpu
+            "--pre-js=${CMAKE_CURRENT_FUNCTION_LIST_DIR}/${YUP_PLATFORM}/webgpu.pre.js")
     endif()
 
     foreach (preload_file IN ITEMS ${YUP_ARG_PRELOAD_FILES})

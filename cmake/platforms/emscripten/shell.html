@@ -620,12 +620,23 @@
 
       var totalDependencies = 0;
 
+      // Keeps main() from running and leaves the reason on the boot screen, instead of a crash later on.
+      function haltStartup(reason) {
+        document.body.classList.add('has-error');
+        Module.setStatus(reason);
+        Module.setStatus = function () {};
+      }
+
       var Module = {
         preRun: [
           function () {
-            if (typeof navigator === 'undefined' || !navigator.gpu)
+            if (!Module.yupRequiresWebGPU)
               return;
             addRunDependency('webgpu-device');
+            if (typeof navigator === 'undefined' || !navigator.gpu) {
+              haltStartup('This browser does not support WebGPU. Try a recent Chrome, Edge, Safari or Firefox.');
+              return;
+            }
             var requestedCompatibility = false;
             navigator.gpu.requestAdapter().then(function (adapter) {
               if (adapter != null)
@@ -644,7 +655,7 @@
               removeRunDependency('webgpu-device');
             }).catch(function (e) {
               console.error('WebGPU initialization failed: ' + e);
-              removeRunDependency('webgpu-device');
+              haltStartup('WebGPU is not available. Check that hardware acceleration is enabled.');
             });
           }
         ],

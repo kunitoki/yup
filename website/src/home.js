@@ -9,13 +9,18 @@ const moduleNames = "core events graphics gui audio dsp";
 const body = document.body;
 const links = [...document.querySelectorAll("main .works a")];
 const mask = document.querySelector(".mask");
+const stillsBox = document.querySelector(".stills");
 const readout = document.querySelector(".readout");
 const bootText = document.querySelector(".boot-text");
 const hoverless = window.matchMedia("(hover: none)");
 
+// A still of each work, src/posters/<word>.jpg, stands in for the demos where the browser can't run them.
+const posterUrls = import.meta.glob("./posters/*.jpg", { eager: true, query: "?url", import: "default" });
+
 let active = 0;
 let running = false;
 let failure = "";
+let stills = [];
 
 // The mask repeats the list as solid letters: black hides the demo, white lets it through.
 const cut = document.querySelector("main .works").cloneNode(true);
@@ -44,6 +49,7 @@ const pick = (index) => {
     active = index;
     links.forEach((link, i) => link.setAttribute("aria-current", String(i === index)));
     letters.forEach((letter, i) => letter.classList.toggle("on", i === index));
+    stills.forEach((still, i) => still?.classList.toggle("on", i === index));
 
     const box = links[index].getBoundingClientRect();
     body.style.setProperty("--leak-top", `${box.top + box.height / 2 - 0.15 * innerHeight}px`);
@@ -177,6 +183,20 @@ const fail = (reason) => {
     }, 1600);
 };
 
+// Without WebGPU or cross-origin isolation the page shows the stills of the works through the
+// words instead, with no error: only opening a work needs the live demos.
+const showStills = () => {
+    running = false;
+    stills = links.map((link) => {
+        const url = posterUrls[`./posters/${link.textContent}.jpg`];
+        return url ? Object.assign(document.createElement("img"), { src: url, alt: "", decoding: "async" }) : null;
+    });
+    stillsBox.replaceChildren(...stills.filter(Boolean));
+    body.classList.remove("ready", "open");
+    body.classList.add("still");
+    pick(active);
+};
+
 // The window exists once the frame rate getters stop returning -1.
 const waitForWindow = () => {
     if (window.Module._yupIsVsyncEnabled() < 0) {
@@ -191,13 +211,13 @@ const waitForWindow = () => {
 
 const startYup = () => {
     if (!navigator.gpu) {
-        fail("needs webgpu");
+        showStills();
         return;
     }
 
     // mini-coi.js reloads the page once its service worker isolates it.
     if (!window.crossOriginIsolated) {
-        setTimeout(() => fail("needs isolation"), 4000);
+        setTimeout(showStills, 4000);
         return;
     }
 
@@ -224,7 +244,7 @@ const startYup = () => {
                     removeRunDependency("webgpu-device");
                 }).catch((e) => {
                     console.error(`WebGPU initialization failed: ${e}`);
-                    fail("needs webgpu");
+                    showStills();
                 });
             },
         ],
