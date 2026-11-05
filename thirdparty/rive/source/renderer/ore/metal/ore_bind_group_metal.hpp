@@ -13,46 +13,41 @@ class BufferMetal;
 class BindGroupMetal : public LITE_RTTI_OVERRIDE(BindGroup, BindGroupMetal)
 {
 public:
-    struct MTLBufferBinding
-    {
-        // Source buffer, not a raw handle, so the live backing resolves at
-        // encode time. Kept alive by m_retainedBuffers.
-        BufferMetal* src = nullptr;
-        uint32_t offset = 0;
-        uint32_t binding = 0; // WGSL @binding, for sort
-        bool hasDynamicOffset = false;
-        uint16_t vsSlot = BindingMap::kAbsent;
-        uint16_t fsSlot = BindingMap::kAbsent;
-    };
-    struct MTLTextureBinding
-    {
-        id<MTLTexture> texture = nil;
-        uint16_t vsSlot = BindingMap::kAbsent;
-        uint16_t fsSlot = BindingMap::kAbsent;
-    };
-    struct MTLSamplerBinding
-    {
-        id<MTLSamplerState> sampler = nil;
-        uint16_t vsSlot = BindingMap::kAbsent;
-        uint16_t fsSlot = BindingMap::kAbsent;
-    };
-    struct MTLStorageBinding
-    {
-        id<MTLBuffer> buffer = nil;
-        uint64_t offset = 0;
-        uint16_t vsSlot = BindingMap::kAbsent;
-        uint16_t fsSlot = BindingMap::kAbsent;
-    };
+  struct MTLBufferBinding
+  {
+    // Source buffer, not a raw handle, so the live backing resolves at
+    // encode time. Kept alive by m_retainedBuffers.
+    BufferMetal* src = nullptr;
+    uint32_t offset = 0;
+    uint32_t binding = 0; // WGSL @binding, for sort
+    bool hasDynamicOffset = false;
+  };
+  struct MTLTextureBinding
+  {
+    id<MTLTexture> texture = nil;
+    uint32_t binding = 0;
+  };
+  struct MTLSamplerBinding
+  {
+    id<MTLSamplerState> sampler = nil;
+    uint32_t binding = 0;
+  };
+  struct MTLStorageBinding
+  {
+    id<MTLBuffer> buffer = nil;
+    uint64_t offset = 0;
+    uint32_t binding = 0; // WGSL @binding, resolved per pipeline
+  };
 
-    BindGroupMetal() = default;
-    ~BindGroupMetal() override = default; // ARC releases Metal objects
+  BindGroupMetal() = default;
+  ~BindGroupMetal() override = default; // ARC releases Metal objects
 
 private:
-    friend class ContextMetal;
-    friend class RenderPassMetal;
-    std::vector<MTLBufferBinding> m_mtlBuffers;
-    std::vector<MTLTextureBinding> m_mtlTextures;
-    std::vector<MTLSamplerBinding> m_mtlSamplers;
-    std::vector<MTLStorageBinding> m_mtlStorageBuffers;
+  friend class ContextMetal;
+  friend class RenderPassMetal;
+  std::vector<MTLBufferBinding> m_mtlBuffers;
+  std::vector<MTLTextureBinding> m_mtlTextures;
+  std::vector<MTLSamplerBinding> m_mtlSamplers;
+  std::vector<MTLStorageBinding> m_mtlStorageBuffers;
 };
 } // namespace rive::ore

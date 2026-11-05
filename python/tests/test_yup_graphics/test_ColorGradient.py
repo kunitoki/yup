@@ -191,3 +191,16 @@ def test_get_stops_and_repr():
 
     radial = yup.ColorGradient(yup.Colors.red, 0.0, 0.0, yup.Colors.blue, 10.0, 0.0, yup.ColorGradient.Type.Radial)
     assert repr(radial).endswith(f"(Radial, {radial.getNumStops()} stops)")
+
+    angular = yup.ColorGradient(yup.Colors.red, 0.0, 0.0, yup.Colors.blue, 10.0, 0.0, yup.ColorGradient.Type.Angular)
+    assert repr(angular).endswith(f"(Angular, {angular.getNumStops()} stops)")
+
+#==================================================================================================
+
+def test_with_transform():
+    gradient = yup.ColorGradient(yup.Colors.red, 0.0, 0.0, yup.Colors.blue, 10.0, 0.0)
+    assert gradient.getTransform().isIdentity()
+
+    scaled = gradient.withTransform(yup.AffineTransform.scaling(2.0, 1.0))
+    assert not scaled.getTransform().isIdentity()
+    assert gradient.getTransform().isIdentity()

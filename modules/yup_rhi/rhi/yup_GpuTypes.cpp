@@ -83,6 +83,7 @@ rive::gpu::RenderContext::FrameDescriptor toRiveFrameDescriptor (const GpuFrameD
     frameDesc.fillsDisabled = desc.fillsDisabled;
     frameDesc.strokesDisabled = desc.strokesDisabled;
     frameDesc.clockwiseFillOverride = desc.clockwiseFillOverride;
+    frameDesc.inkbleedOverride = desc.inkbleedOverride;
     return frameDesc;
 }
 

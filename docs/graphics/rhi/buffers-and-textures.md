@@ -142,8 +142,9 @@ pass.setSampler (0, 1, sampler);
 ```
 
 Set `GpuSamplerDesc::compare` to turn it into a comparison (shadow) sampler; a
-binding declared as a comparison sampler requires it. `maxAnisotropy` above 1
-requires `GpuDevice::isAnisotropicFilteringAvailable()`.
+binding declared as a comparison sampler requires it. `maxAnisotropy` takes a
+power of two up to 16, and is quietly lowered to 1 unless all three filters are
+linear and `GpuDevice::isAnisotropicFilteringAvailable()`.
 
 A LOD-clamped sampler is also the **portable** way to read one specific level of
 a mip chain - see the warning under `GpuTarget::createFromTexture` in

@@ -198,6 +198,10 @@ rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const Col
 
         return factory.makeLinearGradient (x1, y1, x2, y2, colors.data(), stops.data(), colors.size());
     }
+    else if (gradient.getType() == ColorGradient::Angular)
+    {
+        return factory.makeAngularGradient (colors.data(), stops.data(), colors.size());
+    }
     else
     {
         float centerX = gradient.getStartX();
@@ -207,6 +211,25 @@ rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const Col
 
         return factory.makeRadialGradient (centerX, centerY, radiusX, colors.data(), stops.data(), colors.size());
     }
+}
+
+rive::Mat2D toShaderTransform (const ColorGradient& gradient)
+{
+    if (gradient.getType() == ColorGradient::Angular && gradient.getNumStops() > 1)
+    {
+        return AffineTransform::rotation (gradient.getStartAngle())
+            .translated (gradient.getStartX(), gradient.getStartY())
+            .followedBy (gradient.getTransform())
+            .toMat2D();
+    }
+
+    return gradient.getTransform().toMat2D();
+}
+
+void setupGradientPaint (rive::Factory& factory, rive::RiveRenderPaint& paint, const ColorGradient& gradient, const AffineTransform& transform)
+{
+    paint.shader (toColorGradient (factory, gradient, transform));
+    paint.shaderTransform (toShaderTransform (gradient));
 }
 
 //==============================================================================
@@ -1158,7 +1181,7 @@ bool Graphics::setupFillPaint (rive::RiveRenderPaint& paint, const RenderOptions
     if (options.isFillColor())
         paint.color ((rive::ColorInt) options.getFillColor());
     else
-        paint.shader (toColorGradient (factory, options.getFillColorGradient(), transform));
+        setupGradientPaint (factory, paint, options.getFillColorGradient(), transform);
 
     return true;
 }
@@ -1178,7 +1201,7 @@ bool Graphics::setupStrokePaint (rive::RiveRenderPaint& paint, const RenderOptio
     if (options.isStrokeColor())
         paint.color ((rive::ColorInt) options.getStrokeColor());
     else
-        paint.shader (toColorGradient (factory, options.getStrokeColorGradient(), transform));
+        setupGradientPaint (factory, paint, options.getStrokeColorGradient(), transform);
 
     return true;
 }
@@ -1582,11 +1605,14 @@ void Graphics::renderColorGlyphLayer (const StyledText::ColorGlyphLayer& glyphLa
     using PaintType = rive::Font::ColorGlyphPaintType;
     const auto& layer = glyphLayer.layer;
 
-    // The rules of rive::drawColorGlyphLayer: sweeps, single stops and singular radials are one color
+    // Single stops, singular radials and empty or singular sweeps are one color
     rive::Mat2D toUnitCircle;
     const bool isLinear = layer.paintType == PaintType::linearGradient;
     const bool isRadial = layer.paintType == PaintType::radialGradient && layer.radialTransform.invert (&toUnitCircle);
-    const bool isGradient = layer.stops.size() >= 2 && (isLinear || isRadial);
+    const float sweepSpan = layer.endAngle - layer.startAngle;
+    const bool isSweep = layer.paintType == PaintType::sweepGradient && std::isfinite (sweepSpan) && sweepSpan != 0.0f
+                      && layer.radialTransform.invert (&toUnitCircle);
+    const bool isGradient = layer.stops.size() >= 2 && (isLinear || isRadial || isSweep);
 
     // The layers were decoded with a black text color, so only their alpha is kept
     const auto colorOf = [foregroundColor] (rive::ColorInt decodedColor, bool usesForeground)
@@ -1594,13 +1620,73 @@ void Graphics::renderColorGlyphLayer (const StyledText::ColorGlyphLayer& glyphLa
         return usesForeground ? rive::colorModulateOpacity (foregroundColor, rive::colorOpacity (decodedColor)) : decodedColor;
     };
 
+    const auto colorOfStop = [&colorOf] (const rive::Font::GradientStop& stop)
+    {
+        return colorOf (stop.color, stop.isForeground);
+    };
+
+    const auto makeSweepGradient = [&]
+    {
+        const auto& sweepStops = layer.stops;
+
+        const auto colorAt = [&] (float offset)
+        {
+            if (offset <= sweepStops.front().offset)
+                return colorOfStop (sweepStops.front());
+
+            for (size_t i = 1; i < sweepStops.size(); ++i)
+            {
+                const auto& from = sweepStops[i - 1];
+                const auto& to = sweepStops[i];
+                if (offset > to.offset)
+                    continue;
+
+                const float range = to.offset - from.offset;
+                return rive::colorLerp (colorOfStop (from), colorOfStop (to), range > 0.0f ? (offset - from.offset) / range : 1.0f);
+            }
+
+            return colorOfStop (sweepStops.back());
+        };
+
+        const auto offsetOfTurn = [&] (float turn)
+        {
+            return (turn * MathConstants<float>::twoPi - layer.startAngle) / sweepSpan;
+        };
+
+        std::vector<rive::ColorInt> colors { colorAt (offsetOfTurn (0.0f)) };
+        std::vector<float> stops { 0.0f };
+
+        const auto addStop = [&] (const rive::Font::GradientStop& stop)
+        {
+            const float turn = (layer.startAngle + stop.offset * sweepSpan) / MathConstants<float>::twoPi;
+            if (turn <= 0.0f || turn >= 1.0f)
+                return;
+
+            colors.push_back (colorOfStop (stop));
+            stops.push_back (turn);
+        };
+
+        if (sweepSpan > 0.0f)
+            std::for_each (sweepStops.begin(), sweepStops.end(), addStop);
+        else
+            std::for_each (sweepStops.rbegin(), sweepStops.rend(), addStop);
+
+        colors.push_back (colorAt (offsetOfTurn (1.0f)));
+        stops.push_back (1.0f);
+
+        return factory.makeAngularGradient (colors.data(), stops.data(), colors.size());
+    };
+
     const auto makeGradient = [&]
     {
+        if (isSweep)
+            return makeSweepGradient();
+
         std::vector<rive::ColorInt> colors;
         std::vector<float> stops;
         for (const auto& stop : layer.stops)
         {
-            colors.push_back (colorOf (stop.color, stop.isForeground));
+            colors.push_back (colorOfStop (stop));
             stops.push_back (stop.offset);
         }
 
@@ -1624,6 +1710,9 @@ void Graphics::renderColorGlyphLayer (const StyledText::ColorGlyphLayer& glyphLa
         glyphLayer.renderPath = factory.makeRenderPath (path, rive::FillRule::nonZero);
         glyphLayer.renderPaint = factory.makeRenderPaint();
         glyphLayer.renderPaint->style (rive::RenderPaintStyle::fill);
+
+        if (isGradient && isSweep)
+            glyphLayer.renderPaint->shaderTransform (layer.radialTransform);
 
         if (isGradient && ! hasForegroundStops)
             glyphLayer.renderPaint->shader (makeGradient());

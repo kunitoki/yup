@@ -1,6 +1,7 @@
+o2 P1
 #ifdef VERTEX
-c1(d0) K(0,c4,MB);d1 j4 k4 P4 Q4 v1(FG,d0,D,G,r){L(G,D,MB,c4);e I=H3(MB.xy);uint zi=floatBitsToUint(MB.z)&0xffffu;I.z=I8(zi,0xffu);w1(I);}
+h1(d0) K(0,l4,MB);i1 A4 B4 i5 j5 n1(MG,d0,A,C,r){L(C,A,MB,l4);e I=T3(MB.xy);uint Tj=floatBitsToUint(MB.z)&0xffffu;I.z=v9(Tj,0xffu);C1(I);}
 #endif
 #ifdef FRAGMENT
-N3 O3 j3(i,PE){P2(I0(.0));}
+X3 Y3 v2(i,NG){w2(A0(.0));}
 #endif

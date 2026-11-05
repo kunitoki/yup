@@ -988,6 +988,39 @@ void main()
     }
 }
 
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_MarksFetchedOnlyTexturesAsUnfiltered)
+{
+    auto spirv = transpiler->compileToSPIRV (R"(#version 450
+layout(set = 0, binding = 0) uniform sampler pointClamp;
+layout(set = 0, binding = 1) uniform texture2D fetched;
+layout(set = 0, binding = 2) uniform texture2D sampled;
+layout(set = 0, binding = 3) uniform texture2D both;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    ivec2 size = textureSize (sampler2D (fetched, pointClamp), 0);
+    color = texelFetch (sampler2D (fetched, pointClamp), size / 2, 0);
+    color += texture (sampler2D (sampled, pointClamp), uv);
+    color += texelFetch (sampler2D (both, pointClamp), ivec2 (0), 0) + texture (sampler2D (both, pointClamp), uv);
+})",
+                                             ShaderStage::fragment,
+                                             ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk()) << spirv.getErrorMessage();
+
+    auto result = transpiler->reflectFromSPIRV (spirv.getValue(), ShaderLanguage::msl);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    std::map<uint32_t, bool> unfiltered;
+    for (const auto& image : result.getValue().separateImages)
+        unfiltered[image.binding] = image.imageUnfiltered;
+
+    ASSERT_EQ (unfiltered.size(), 3u);
+    EXPECT_TRUE (unfiltered[1]);
+    EXPECT_FALSE (unfiltered[2]);
+    EXPECT_FALSE (unfiltered[3]);
+}
+
 TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_ToESSL_ComputeDoesNotFail)
 {
     auto spirv = transpiler->compileToSPIRV (

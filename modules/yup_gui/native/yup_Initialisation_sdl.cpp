@@ -341,6 +341,11 @@ YUP_API void YUP_CALLTYPE shutdownYup_Windowing()
         std::atexit (&SDL_Quit);
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered SDL_Quit at exit");
     }
+    else
+    {
+        SDL_Quit();
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: quit");
+    }
 }
 
 //==============================================================================

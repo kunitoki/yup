@@ -1,0 +1,73 @@
+#ifndef _RIVE_WASM_LANE_POLICY_HPP_
+#define _RIVE_WASM_LANE_POLICY_HPP_
+
+#ifdef WITH_RIVE_SCRIPTING_WASM
+
+#include <cstdint>
+
+namespace rive
+{
+
+/// The limits a host sets on scripts, applied to files loaded after it.
+/// Jobs and workers have none, except a call's budget on the page's thread.
+struct ScriptingLimits
+{
+  /// How long one call into a file's scripts may run, 0 for no limit.
+  uint32_t mainCallBudgetMs = 200;
+  /// How long one block of an audio processor may take, in blocks of
+  /// audio, 0 for no limit; a block past it silences only that processor.
+  /// Offline renders have no limit.
+  uint32_t audioHardBlocks = 2;
+  /// The shared memory one file's scripts and their lanes may hold at once.
+  uint64_t sharedBytesPerFile = 512ull << 20;
+  /// The threads of the process wide job and worker pools, 0 to size them
+  /// to the device; read when each pool is made.
+  uint32_t jobThreads = 0;
+  uint32_t workerThreads = 0;
+  /// The most memory a job's instance may have grown to and still be kept
+  /// for the next job of its script module, which then starts without
+  /// instantiating. Each module keeps at most one per job thread. 0 keeps
+  /// none.
+  uint64_t jobReuseBytes = 64ull << 20;
+  /// Runs every parallel call one part at a time on the caller's thread,
+  /// as a host without threads does, so code that writes the heap in place
+  /// cannot race. Parallel.size() is then 1.
+  bool parallelSafeMode = false;
+  /// As many as fit in half the device's address space.
+  static constexpr uint32_t kHardwareBoundsDefault = UINT32_MAX;
+  /// How many script memories may use hardware bounds at once, each reserving
+  /// 4 GB of address space but no RAM. 0 turns them off. Native only.
+  uint32_t hardwareBoundsMemories = kHardwareBoundsDefault;
+
+  /// Safe from any thread.
+  static void set(const ScriptingLimits& limits);
+  static ScriptingLimits get();
+};
+
+/// Timings the runtime keeps for itself.
+namespace lane_timing
+{
+/// A pool worker's step running past this gets its thread to itself.
+constexpr uint32_t kWorkerSliceMs = 20;
+/// A web worker stays on the thread it began on, so each gets one of its own
+/// up to this many per VM, sharing only past it.
+constexpr uint32_t kWebWorkerThreadsPerVM = 8;
+/// How long each poll runs lanes on the VM's thread where there are no
+/// threads to run them.
+constexpr uint32_t kCooperativeSliceMs = 2;
+/// How long a stopped worker that never awaits again runs before it is
+/// interrupted.
+constexpr uint32_t kWorkerStopGraceMs = 50;
+/// The longest a wait lasts without a call deadline, on the web's main
+/// thread and elsewhere.
+constexpr uint32_t kMainWaitMs = 100;
+constexpr uint32_t kLaneWaitMs = 2000;
+/// How long a VM whose print sink takes any thread may go without a poll
+/// before a thread of its own hands over its lanes' console lines.
+constexpr uint32_t kLaneLogStallMs = 500;
+} // namespace lane_timing
+
+} // namespace rive
+
+#endif
+#endif

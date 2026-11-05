@@ -12,6 +12,15 @@
 
 #define RIVE_BINDINGS_ABI_VERSION 1
 
+// The import surface below, digested. A wasm module built against
+// one contract and run against another links its imports to
+// nothing, so a build that carries this can be told apart from one
+// that predates a change to it.
+#define RIVE_BINDINGS_V1_CONTRACT "5e80f7bbbb0cd2db"
+
+// The bits rive_rt_features answers.
+#define RIVE_HOST_FEATURE_PARALLEL_CALLS (1u << 0)
+
 #define RIVE_BINDING_IMPORT(module, name)                            \
     __attribute__((import_module(module), import_name(name)))
 
@@ -82,18 +91,6 @@ typedef struct rive_gpu_texture_view_desc_v1
     uint32_t baseLayer;
     uint32_t layerCount;
 } rive_gpu_texture_view_desc_v1;
-
-typedef struct rive_gpu_shader_module_desc_v1
-{
-    uint32_t language;
-    uint32_t stage;
-    uint32_t codeSize;
-    uint32_t hlslSourceSize;
-    uint32_t hlslEntryPointSize;
-    uint32_t bindingMapSize;
-    uint32_t glFixupSize;
-    uint32_t shaderAssetId;
-} rive_gpu_shader_module_desc_v1;
 
 typedef struct rive_gpu_bind_group_layout_entry_v1
 {
@@ -225,6 +222,12 @@ RIVE_BINDING_IMPORT("rive_rt_v1", "budget_exceeded")
 void rive_rt_budget_exceeded(uint32_t ms);
 RIVE_BINDING_IMPORT("rive_rt_v1", "error")
 void rive_rt_error(const char* message, uint32_t length);
+RIVE_BINDING_IMPORT("rive_rt_v1", "now")
+double rive_rt_now(void);
+RIVE_BINDING_IMPORT("rive_rt_v1", "date_now")
+double rive_rt_date_now(void);
+RIVE_BINDING_IMPORT("rive_rt_v1", "features")
+uint32_t rive_rt_features(void);
 RIVE_BINDING_IMPORT("rive_rt_v1", "debug_enter")
 void rive_rt_debug_enter(uint32_t func, uint32_t line);
 RIVE_BINDING_IMPORT("rive_rt_v1", "debug_line")
@@ -237,6 +240,8 @@ RIVE_BINDING_IMPORT("rive_rt_v1", "is_dst")
 uint32_t rive_rt_is_dst(double epochSeconds);
 RIVE_BINDING_IMPORT("rive_rt_v1", "zone_name")
 uint32_t rive_rt_zone_name(double epochSeconds, char* buffer, uint32_t capacity);
+RIVE_BINDING_IMPORT("rive_rt_v1", "arg")
+uint32_t rive_rt_arg(const char* name, uint32_t nameLength, char* buffer, uint32_t capacity);
 
 // rive_data_v1
 RIVE_BINDING_IMPORT("rive_data_v1", "view_model")
@@ -405,6 +410,8 @@ RIVE_BINDING_IMPORT("rive_artboard_v1", "bounds")
 void rive_artboard_bounds(uint32_t artboard, float* out, uint32_t outCount);
 RIVE_BINDING_IMPORT("rive_artboard_v1", "pointer_event")
 uint32_t rive_artboard_pointer_event(uint32_t artboard, uint32_t kind, uint32_t pointerId, float x, float y);
+RIVE_BINDING_IMPORT("rive_artboard_v1", "scroll_event")
+uint32_t rive_artboard_scroll_event(uint32_t artboard, uint32_t pointerId, float x, float y, float dx, float dy, uint32_t phase, uint32_t precise, float timeStamp);
 RIVE_BINDING_IMPORT("rive_artboard_v1", "gamepad_event")
 uint32_t rive_artboard_gamepad_event(uint32_t artboard, const uint8_t* payload, uint32_t byteCount);
 RIVE_BINDING_IMPORT("rive_artboard_v1", "animation")
@@ -469,6 +476,26 @@ RIVE_BINDING_IMPORT("rive_audio_v1", "source_sample_rate")
 uint32_t rive_audio_source_sample_rate(uint32_t source);
 RIVE_BINDING_IMPORT("rive_audio_v1", "source_channels")
 uint32_t rive_audio_source_channels(uint32_t source);
+RIVE_BINDING_IMPORT("rive_audio_v1", "source_to_blob")
+uint32_t rive_audio_source_to_blob(uint32_t source, uint32_t sampleRate, uint32_t channels);
+RIVE_BINDING_IMPORT("rive_audio_v1", "stream")
+uint32_t rive_audio_stream(uint32_t source, uint32_t sampleRate, uint32_t channels, uint32_t chunkFrames, uint32_t bufferFrames);
+RIVE_BINDING_IMPORT("rive_audio_v1", "stream_ring")
+uint32_t rive_audio_stream_ring(uint32_t stream);
+RIVE_BINDING_IMPORT("rive_audio_v1", "stream_seeks")
+uint32_t rive_audio_stream_seeks(uint32_t stream);
+RIVE_BINDING_IMPORT("rive_audio_v1", "stream_channels")
+uint32_t rive_audio_stream_channels(uint32_t stream);
+RIVE_BINDING_IMPORT("rive_audio_v1", "stream_sample_rate")
+uint32_t rive_audio_stream_sample_rate(uint32_t stream);
+RIVE_BINDING_IMPORT("rive_audio_v1", "stream_seek_frame")
+uint32_t rive_audio_stream_seek_frame(uint32_t stream, double frame);
+RIVE_BINDING_IMPORT("rive_audio_v1", "stream_set_loop")
+void rive_audio_stream_set_loop(uint32_t stream, uint32_t loop);
+RIVE_BINDING_IMPORT("rive_audio_v1", "stream_ended")
+uint32_t rive_audio_stream_ended(uint32_t stream);
+RIVE_BINDING_IMPORT("rive_audio_v1", "stream_release")
+void rive_audio_stream_release(uint32_t stream);
 RIVE_BINDING_IMPORT("rive_audio_v1", "play")
 uint32_t rive_audio_play(uint32_t source);
 RIVE_BINDING_IMPORT("rive_audio_v1", "play_at_time")
@@ -485,6 +512,10 @@ RIVE_BINDING_IMPORT("rive_audio_v1", "time_frame")
 double rive_audio_time_frame(void);
 RIVE_BINDING_IMPORT("rive_audio_v1", "sample_rate")
 uint32_t rive_audio_sample_rate(void);
+RIVE_BINDING_IMPORT("rive_audio_v1", "processor_sample_rate")
+uint32_t rive_audio_processor_sample_rate(void);
+RIVE_BINDING_IMPORT("rive_audio_v1", "processor_channels")
+uint32_t rive_audio_processor_channels(void);
 RIVE_BINDING_IMPORT("rive_audio_v1", "sound_release")
 void rive_audio_sound_release(uint32_t sound);
 RIVE_BINDING_IMPORT("rive_audio_v1", "sound_play")
@@ -569,6 +600,8 @@ RIVE_BINDING_IMPORT("rive_paint_v1", "feather")
 void rive_paint_feather(uint32_t paint, float value);
 RIVE_BINDING_IMPORT("rive_paint_v1", "shader")
 void rive_paint_shader(uint32_t paint, uint32_t shader);
+RIVE_BINDING_IMPORT("rive_paint_v1", "shader_transform")
+void rive_paint_shader_transform(uint32_t paint, const float* values, uint32_t floatCount);
 
 // rive_canvas_v1
 RIVE_BINDING_IMPORT("rive_canvas_v1", "new")
@@ -635,6 +668,10 @@ RIVE_BINDING_IMPORT("rive_gpu_v1", "buffer_new")
 uint32_t rive_gpu_buffer_new(uint32_t usage, uint32_t sizeInBytes, uint32_t immutable, const uint8_t* data, uint32_t dataCount);
 RIVE_BINDING_IMPORT("rive_gpu_v1", "buffer_update")
 void rive_gpu_buffer_update(uint32_t buffer, uint32_t dstOffset, const uint8_t* data, uint32_t dataCount);
+RIVE_BINDING_IMPORT("rive_gpu_v1", "buffer_update_blob")
+void rive_gpu_buffer_update_blob(uint32_t buffer, uint32_t dstOffset, uint32_t blob, uint32_t srcOffset, uint32_t byteCount);
+RIVE_BINDING_IMPORT("rive_gpu_v1", "buffer_new_blob")
+uint32_t rive_gpu_buffer_new_blob(uint32_t usage, uint32_t immutable, uint32_t blob, uint32_t srcOffset, uint32_t byteCount);
 RIVE_BINDING_IMPORT("rive_gpu_v1", "buffer_release")
 void rive_gpu_buffer_release(uint32_t buffer);
 RIVE_BINDING_IMPORT("rive_gpu_v1", "texture_new")
@@ -657,8 +694,10 @@ RIVE_BINDING_IMPORT("rive_gpu_v1", "shader_asset_bytes")
 uint32_t rive_gpu_shader_asset_bytes(uint32_t object, const char* name, uint32_t nameLength, uint8_t* out, uint32_t outCount);
 RIVE_BINDING_IMPORT("rive_gpu_v1", "shader_asset_id")
 uint32_t rive_gpu_shader_asset_id(uint32_t object, const char* name, uint32_t nameLength);
-RIVE_BINDING_IMPORT("rive_gpu_v1", "shader_module_new")
-uint32_t rive_gpu_shader_module_new(const rive_gpu_shader_module_desc_v1* desc, uint32_t descByteCount, const uint8_t* blob, uint32_t blobCount);
+RIVE_BINDING_IMPORT("rive_gpu_v1", "shader_module_from_asset")
+uint32_t rive_gpu_shader_module_from_asset(uint32_t object, const char* name, uint32_t nameLength, uint32_t entry);
+RIVE_BINDING_IMPORT("rive_gpu_v1", "shader_module_from_rstb")
+uint32_t rive_gpu_shader_module_from_rstb(const uint8_t* rstb, uint32_t rstbCount, uint32_t assetId, uint32_t entry);
 RIVE_BINDING_IMPORT("rive_gpu_v1", "shader_module_release")
 void rive_gpu_shader_module_release(uint32_t shaderModule);
 RIVE_BINDING_IMPORT("rive_gpu_v1", "bind_group_layout_new")
@@ -669,6 +708,8 @@ RIVE_BINDING_IMPORT("rive_gpu_v1", "bind_group_layout_from_shader")
 uint32_t rive_gpu_bind_group_layout_from_shader(uint32_t shaderModule, uint32_t groupIndex, const uint32_t* dynamicUBOs, uint32_t dynamicUBOCount);
 RIVE_BINDING_IMPORT("rive_gpu_v1", "bind_group_layout_from_shaders")
 uint32_t rive_gpu_bind_group_layout_from_shaders(uint32_t vertexModule, uint32_t fragmentModule, uint32_t groupIndex, const uint32_t* dynamicUBOs, uint32_t dynamicUBOCount);
+RIVE_BINDING_IMPORT("rive_gpu_v1", "bind_group_layout_from_entries")
+uint32_t rive_gpu_bind_group_layout_from_entries(uint32_t vertexModule, const char* vertexEntry, uint32_t vertexEntryLength, uint32_t fragmentModule, const char* fragmentEntry, uint32_t fragmentEntryLength, uint32_t groupIndex);
 RIVE_BINDING_IMPORT("rive_gpu_v1", "bind_group_new")
 uint32_t rive_gpu_bind_group_new(uint32_t layout, const rive_gpu_bind_group_ubo_v1* ubos, uint32_t uboByteCount, const rive_gpu_bind_group_texture_v1* textures, uint32_t textureByteCount, const rive_gpu_bind_group_sampler_v1* samplers, uint32_t samplerByteCount);
 RIVE_BINDING_IMPORT("rive_gpu_v1", "bind_group_release")
@@ -847,6 +888,106 @@ RIVE_BINDING_IMPORT("rive_file_v1", "bindable_data")
 uint32_t rive_file_bindable_data(uint32_t bindable);
 RIVE_BINDING_IMPORT("rive_file_v1", "bindable_equal")
 uint32_t rive_file_bindable_equal(uint32_t a, uint32_t b);
+
+// rive_lanes_v1
+RIVE_BINDING_IMPORT("rive_lanes_v1", "start")
+uint32_t rive_lanes_start(uint32_t kind, uint32_t entry, const uint8_t* input, uint32_t inputByteCount, const uint32_t* holds, uint32_t holdCount);
+RIVE_BINDING_IMPORT("rive_lanes_v1", "state")
+uint32_t rive_lanes_state(uint32_t lane);
+RIVE_BINDING_IMPORT("rive_lanes_v1", "failed")
+uint32_t rive_lanes_failed(uint32_t lane, char* buffer, uint32_t capacity);
+RIVE_BINDING_IMPORT("rive_lanes_v1", "stop")
+void rive_lanes_stop(uint32_t lane);
+RIVE_BINDING_IMPORT("rive_lanes_v1", "release")
+void rive_lanes_release(uint32_t lane);
+RIVE_BINDING_IMPORT("rive_lanes_v1", "result")
+uint32_t rive_lanes_result(uint32_t lane, uint8_t* out, uint32_t outCount);
+RIVE_BINDING_IMPORT("rive_lanes_v1", "watch")
+uint32_t rive_lanes_watch(uint32_t lane);
+RIVE_BINDING_IMPORT("rive_lanes_v1", "wait")
+uint32_t rive_lanes_wait(uint32_t signal, double after, double timeoutSeconds);
+RIVE_BINDING_IMPORT("rive_lanes_v1", "cancel_wait")
+void rive_lanes_cancel_wait(uint32_t token);
+RIVE_BINDING_IMPORT("rive_lanes_v1", "wait_within")
+double rive_lanes_wait_within(uint32_t signal, double after, double timeoutSeconds);
+
+// rive_jobs_v1
+RIVE_BINDING_IMPORT("rive_jobs_v1", "threads")
+uint32_t rive_jobs_threads(void);
+RIVE_BINDING_IMPORT("rive_jobs_v1", "join")
+uint32_t rive_jobs_join(uint32_t job, double timeoutSeconds);
+RIVE_BINDING_IMPORT("rive_jobs_v1", "join_any")
+uint32_t rive_jobs_join_any(const uint32_t* jobs, uint32_t count, double timeoutSeconds);
+
+// rive_parallel_v1
+RIVE_BINDING_IMPORT("rive_parallel_v1", "size")
+uint32_t rive_parallel_size(void);
+RIVE_BINDING_IMPORT("rive_parallel_v1", "run")
+uint32_t rive_parallel_run(uint32_t control);
+RIVE_BINDING_IMPORT("rive_parallel_v1", "waiting")
+void rive_parallel_waiting(uint32_t control);
+
+// rive_shared_v1
+RIVE_BINDING_IMPORT("rive_shared_v1", "region_create")
+uint32_t rive_shared_region_create(uint32_t size);
+RIVE_BINDING_IMPORT("rive_shared_v1", "region_size")
+uint32_t rive_shared_region_size(uint32_t region);
+RIVE_BINDING_IMPORT("rive_shared_v1", "region_lock")
+uint32_t rive_shared_region_lock(uint32_t region, double timeoutSeconds);
+RIVE_BINDING_IMPORT("rive_shared_v1", "region_unlock")
+void rive_shared_region_unlock(uint32_t region);
+RIVE_BINDING_IMPORT("rive_shared_v1", "region_read")
+uint32_t rive_shared_region_read(uint32_t region, uint32_t offset, uint8_t* out, uint32_t outByteCount);
+RIVE_BINDING_IMPORT("rive_shared_v1", "region_write")
+uint32_t rive_shared_region_write(uint32_t region, uint32_t offset, const uint8_t* data, uint32_t dataByteCount);
+RIVE_BINDING_IMPORT("rive_shared_v1", "region_poisoned")
+uint32_t rive_shared_region_poisoned(uint32_t region);
+RIVE_BINDING_IMPORT("rive_shared_v1", "atomic_load")
+double rive_shared_atomic_load(uint32_t region, uint32_t offset);
+RIVE_BINDING_IMPORT("rive_shared_v1", "atomic_store")
+double rive_shared_atomic_store(uint32_t region, uint32_t offset, uint32_t value);
+RIVE_BINDING_IMPORT("rive_shared_v1", "atomic_add")
+double rive_shared_atomic_add(uint32_t region, uint32_t offset, uint32_t value);
+RIVE_BINDING_IMPORT("rive_shared_v1", "atomic_cas")
+double rive_shared_atomic_cas(uint32_t region, uint32_t offset, uint32_t expected, uint32_t desired);
+RIVE_BINDING_IMPORT("rive_shared_v1", "ring_create")
+uint32_t rive_shared_ring_create(uint32_t capacity);
+RIVE_BINDING_IMPORT("rive_shared_v1", "ring_write")
+uint32_t rive_shared_ring_write(uint32_t ring, const uint8_t* data, uint32_t dataByteCount, const uint32_t* holds, uint32_t holdCount);
+RIVE_BINDING_IMPORT("rive_shared_v1", "ring_read")
+uint32_t rive_shared_ring_read(uint32_t ring, uint8_t* out, uint32_t outByteCount);
+RIVE_BINDING_IMPORT("rive_shared_v1", "ring_drop")
+uint32_t rive_shared_ring_drop(uint32_t ring, uint32_t capacity);
+RIVE_BINDING_IMPORT("rive_shared_v1", "ring_used")
+uint32_t rive_shared_ring_used(uint32_t ring);
+RIVE_BINDING_IMPORT("rive_shared_v1", "ring_signal")
+uint32_t rive_shared_ring_signal(uint32_t ring, uint32_t space);
+RIVE_BINDING_IMPORT("rive_shared_v1", "snapshot_create")
+uint32_t rive_shared_snapshot_create(uint32_t capacity);
+RIVE_BINDING_IMPORT("rive_shared_v1", "snapshot_publish")
+uint32_t rive_shared_snapshot_publish(uint32_t snapshot, const uint8_t* data, uint32_t dataByteCount, const uint32_t* holds, uint32_t holdCount);
+RIVE_BINDING_IMPORT("rive_shared_v1", "snapshot_read")
+uint32_t rive_shared_snapshot_read(uint32_t snapshot, uint8_t* out, uint32_t outByteCount);
+RIVE_BINDING_IMPORT("rive_shared_v1", "snapshot_seq")
+double rive_shared_snapshot_seq(uint32_t snapshot);
+RIVE_BINDING_IMPORT("rive_shared_v1", "read_done")
+void rive_shared_read_done(void);
+RIVE_BINDING_IMPORT("rive_shared_v1", "signal_create")
+uint32_t rive_shared_signal_create(void);
+RIVE_BINDING_IMPORT("rive_shared_v1", "signal_notify")
+void rive_shared_signal_notify(uint32_t signal);
+RIVE_BINDING_IMPORT("rive_shared_v1", "signal_seq")
+double rive_shared_signal_seq(uint32_t signal);
+RIVE_BINDING_IMPORT("rive_shared_v1", "blob_create")
+uint32_t rive_shared_blob_create(const uint8_t* data, uint32_t dataByteCount);
+RIVE_BINDING_IMPORT("rive_shared_v1", "blob_size")
+uint32_t rive_shared_blob_size(uint32_t blob);
+RIVE_BINDING_IMPORT("rive_shared_v1", "blob_read")
+uint32_t rive_shared_blob_read(uint32_t blob, uint32_t offset, uint8_t* out, uint32_t outByteCount);
+RIVE_BINDING_IMPORT("rive_shared_v1", "retain")
+uint32_t rive_shared_retain(uint32_t object);
+RIVE_BINDING_IMPORT("rive_shared_v1", "release")
+void rive_shared_release(uint32_t object);
 
 #ifdef __cplusplus
 }

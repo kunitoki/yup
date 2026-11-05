@@ -20,6 +20,8 @@ bool YGLayout::operator==(YGLayout layout) const {
       hadOverflow() == layout.hadOverflow() &&
       lastOwnerDirection == layout.lastOwnerDirection &&
       nextCachedMeasurementsIndex == layout.nextCachedMeasurementsIndex &&
+      limitDependentMeasurements == layout.limitDependentMeasurements &&
+      emptyContainerMeasurements == layout.emptyContainerMeasurements &&
       cachedLayout == layout.cachedLayout &&
       computedFlexBasis == layout.computedFlexBasis;
 

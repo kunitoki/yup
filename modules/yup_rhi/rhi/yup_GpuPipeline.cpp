@@ -624,6 +624,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
         rive::ore::TextureViewDim texViewDim;
         rive::ore::TextureSampleType texSampleType;
         bool texMultisampled;
+        bool samplerNonFiltering = false;
     };
 
     std::vector<MergedEntry> merged;
@@ -644,6 +645,9 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
 
                 if (e.backendSlot[1] != rive::ore::BindingMap::kAbsent)
                     m.slotFS = e.backendSlot[1];
+
+                if (m.texSampleType == rive::ore::TextureSampleType::UnfilterableFloat && e.textureSampleType == rive::ore::TextureSampleType::Float)
+                    m.texSampleType = e.textureSampleType;
 
                 return;
             }
@@ -698,6 +702,76 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
             {
                 me.texSampleType = rive::ore::TextureSampleType::UnfilterableFloat;
             }
+        }
+    }
+
+    // GLSL pairs a texture it only fetches with a sampler, so a sampler serving nothing but
+    // unfilterable textures is laid out non-filtering, as WebGPU's own default layout would
+    {
+        std::vector<rive::ore::TextureSamplerPair> pairs (vertModule->samplerPairs (nullptr));
+        const auto& fsPairs = fragModule->samplerPairs (nullptr);
+        pairs.insert (pairs.end(), fsPairs.begin(), fsPairs.end());
+
+        auto findMerged = [&] (uint32_t group, uint32_t binding) -> const MergedEntry*
+        {
+            for (const auto& me : merged)
+            {
+                if (me.group == group && me.binding == binding)
+                    return &me;
+            }
+
+            return nullptr;
+        };
+
+        for (auto& me : merged)
+        {
+            if (me.kind != rive::ore::ResourceKind::Sampler)
+                continue;
+
+            bool paired = false, onlyUnfilterable = true;
+            for (const auto& pair : pairs)
+            {
+                if (pair.samplerGroup != me.group || pair.samplerBinding != me.binding)
+                    continue;
+
+                const auto* texture = findMerged (pair.textureGroup, pair.textureBinding);
+                if (texture == nullptr)
+                    continue;
+
+                paired = true;
+                onlyUnfilterable = onlyUnfilterable && texture->texSampleType == rive::ore::TextureSampleType::UnfilterableFloat;
+            }
+
+            me.samplerNonFiltering = paired && onlyUnfilterable;
+        }
+    }
+
+    {
+        std::vector<rive::ore::TextureSamplerPair> pairs (vertModule->samplerPairs (nullptr));
+        const auto& fsPairs = fragModule->samplerPairs (nullptr);
+        pairs.insert (pairs.end(), fsPairs.begin(), fsPairs.end());
+
+        auto findMerged = [&] (uint32_t group, uint32_t binding) -> MergedEntry*
+        {
+            for (auto& me : merged)
+            {
+                if (me.group == group && me.binding == binding)
+                    return &me;
+            }
+
+            return nullptr;
+        };
+
+        for (const auto& pair : pairs)
+        {
+            auto* texture = findMerged (pair.textureGroup, pair.textureBinding);
+            const auto* sampler = findMerged (pair.samplerGroup, pair.samplerBinding);
+
+            if (texture == nullptr || sampler == nullptr)
+                continue;
+
+            if (texture->texSampleType == rive::ore::TextureSampleType::UnfilterableFloat && ! sampler->samplerNonFiltering)
+                texture->texSampleType = rive::ore::TextureSampleType::Float;
         }
     }
 
@@ -758,6 +832,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
 
             entry.nativeSlotVS = (me.slotVS != rive::ore::BindingMap::kAbsent) ? me.slotVS : rive::ore::BindGroupLayoutEntry::kNativeSlotAbsent;
             entry.nativeSlotFS = (me.slotFS != rive::ore::BindingMap::kAbsent) ? me.slotFS : rive::ore::BindGroupLayoutEntry::kNativeSlotAbsent;
+            entry.samplerNonFiltering = me.samplerNonFiltering;
 
             if (me.kind == rive::ore::ResourceKind::SampledTexture
                 || me.kind == rive::ore::ResourceKind::StorageTexture)
@@ -966,6 +1041,9 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     pipeDesc.label = "GpuPipeline Pipeline";
 
     std::string pipeError;
+    if (! rive::ore::validateVertexLayout (oreCtx, pipeDesc, &pipeError))
+        return makeResultValueFail ("Invalid vertex layout: " + pipeError);
+
     auto pipeline = oreCtx->makePipeline (pipeDesc, &pipeError);
     if (pipeline == nullptr)
         return makeResultValueFail ("Failed to create pipeline: " + pipeError);

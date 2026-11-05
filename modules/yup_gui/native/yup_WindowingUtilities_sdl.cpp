@@ -307,8 +307,8 @@ void* getNativeWindowHandle (SDL_Window* window)
 
 /** Returns the top left of a window's content in global SDL coordinates.
 
-    On macOS this is read from the window itself: SDL caches it from move events, which embedded windows miss when
-    their host relocates them while resizing.
+    On macOS and Windows this is read from the window itself: SDL caches it from move events, which embedded windows
+    miss when their host relocates them (an embedded child never receives a move when only its parent moves).
 */
 Point<float> getWindowContentPosition (SDL_Window* window)
 {
@@ -319,6 +319,13 @@ Point<float> getWindowContentPosition (SDL_Window* window)
         const auto mainScreenHeight = NSMaxY ([[NSScreen screens].firstObject frame]);
 
         return { static_cast<float> (NSMinX (contentRect)), static_cast<float> (mainScreenHeight - NSMaxY (contentRect)) };
+    }
+#elif YUP_WINDOWS
+    if (auto hwnd = reinterpret_cast<HWND> (getNativeWindowHandle (window)))
+    {
+        POINT clientOrigin = { 0, 0 };
+        if (ClientToScreen (hwnd, &clientOrigin))
+            return { static_cast<float> (clientOrigin.x), static_cast<float> (clientOrigin.y) };
     }
 #endif
 

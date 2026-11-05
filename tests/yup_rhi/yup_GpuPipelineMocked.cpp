@@ -3704,10 +3704,17 @@ TEST_F (GpuPipelineMockTests, CompileFromGlslWithOptions)
 class GpuPipelineMappingMockTests : public ::testing::Test
 {
 protected:
+    /** A mocked ore context reporting more vertex attributes than the portable 16, so every format fits in one buffer. */
+    class WideVertexOreContext : public MockOreContext
+    {
+    public:
+        WideVertexOreContext() { m_features.maxVertexAttributes = 32; }
+    };
+
     /** Compiles a pipeline with @p options through a fresh mocked context, and hands the descriptor ore receives to @p inspect. */
     static void compileInspecting (const GpuPipelineOptions& options, const std::function<void (const rive::ore::PipelineDesc&)>& inspect)
     {
-        NiceMock<MockOreContext> oreCtx;
+        NiceMock<WideVertexOreContext> oreCtx;
         ON_CALL (oreCtx, makeShaderModule (_))
             .WillByDefault (Invoke ([] (const rive::ore::ShaderModuleDesc&)
         {
@@ -3792,6 +3799,34 @@ TEST_F (GpuPipelineMappingMockTests, EveryVertexFormatAndStepModeReachesOre)
             EXPECT_EQ (desc.vertexBuffers[0].attributes[i].shaderSlot, (uint32_t) i);
         }
     });
+}
+
+TEST_F (GpuPipelineMappingMockTests, AttributeSlotBeyondTheDeviceLimitFailsBeforeReachingOre)
+{
+    NiceMock<MockOreContext> oreCtx;
+    ON_CALL (oreCtx, makeShaderModule (_))
+        .WillByDefault (Invoke ([] (const rive::ore::ShaderModuleDesc&)
+    {
+        return rive::rcp<rive::ore::ShaderModule> (makeShaderModuleWithBindingMap());
+    }));
+    ON_CALL (oreCtx, makeBindGroupLayout (_))
+        .WillByDefault (Invoke ([] (const rive::ore::BindGroupLayoutDesc&)
+    {
+        return rive::rcp<rive::ore::BindGroupLayout> (rive::make_rcp<TestOreBindGroupLayout>());
+    }));
+    EXPECT_CALL (oreCtx, makePipeline (_, _)).Times (0);
+
+    GpuVertexBufferLayout layout;
+    layout.stride = 16;
+    layout.attributes.push_back ({ GpuVertexFormat::float4, 0, oreCtx.features().maxVertexAttributes });
+
+    GpuPipelineOptions options;
+    options.vertexBuffers = { layout };
+
+    GpuDevice::Ptr device = new OreInjectedGpuDevice (&oreCtx);
+    const auto result = GpuPipeline::compile (device, makeShaderSource ("// VS"), makeShaderSource ("// FS"), options);
+    EXPECT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().contains ("Invalid vertex layout"));
 }
 
 TEST_F (GpuPipelineMappingMockTests, EveryTopologyReachesOre)
@@ -4059,7 +4094,6 @@ TEST_F (GpuPipelineMappingMockTests, EverySamplerFilterWrapModeAndCompareReaches
         desc.wrapV = wrapModes[(i + 1) % wrapModes.size()].first;
         desc.wrapW = wrapModes[(i + 2) % wrapModes.size()].first;
         desc.compare = compares[i].first;
-        desc.maxAnisotropy = 4;
 
         GpuDevice::Ptr device = new OreInjectedGpuDevice (&oreCtx);
         EXPECT_NE (GpuSampler::create (device, desc), nullptr);
@@ -4072,6 +4106,5 @@ TEST_F (GpuPipelineMappingMockTests, EverySamplerFilterWrapModeAndCompareReaches
         EXPECT_EQ (captured->wrapV, wrapModes[(i + 1) % wrapModes.size()].second);
         EXPECT_EQ (captured->wrapW, wrapModes[(i + 2) % wrapModes.size()].second);
         EXPECT_EQ (captured->compare, compares[i].second);
-        EXPECT_EQ (captured->maxAnisotropy, 4u);
     }
 }

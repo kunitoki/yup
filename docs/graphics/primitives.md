@@ -95,8 +95,8 @@ g.setStrokeColor (Colors::white);
 
 ## ColorGradient
 
-`ColorGradient` describes a `Linear` or `Radial` gradient built from color
-stops. Each stop has a color, a position, and a delta along the gradient.
+`ColorGradient` describes a `Linear`, `Radial` or `Angular` gradient built from
+color stops. Each stop has a color, a position, and a delta along the gradient.
 
 ```cpp
 ColorGradient gradient {
@@ -112,6 +112,26 @@ g.fillRect (bounds);
 Gradients support a `Spread` mode - `Pad` (clamp to endpoints), `Repeat`
 (tile), or `Reflect` (mirrored tile) - and any number of intermediate stops for
 multi-color gradients.
+
+An `Angular` (sweep) gradient turns clockwise around the first stop position,
+starting in the direction of the last stop position, and its deltas span one
+full turn:
+
+```cpp
+ColorGradient sweep {
+    Colors::red, center,                       // center
+    Colors::blue, center.translated (1.0f, 0.0f), // start towards +x
+    ColorGradient::Angular
+};
+```
+
+`withTransform()` maps the gradient into drawing space, for elliptical, skewed
+or rotated gradients without changing the stops:
+
+```cpp
+auto ellipse = ColorGradient (Colors::white, 0.0f, 0.0f, Colors::black, 50.0f, 0.0f, ColorGradient::Radial)
+                   .withTransform (AffineTransform::scaling (2.0f, 1.0f).translated (100.0f, 60.0f));
+```
 
 ## Path
 

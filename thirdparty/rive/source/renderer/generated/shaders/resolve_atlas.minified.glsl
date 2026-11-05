@@ -1,28 +1,28 @@
 #ifdef VERTEX
-v1(ZF,d0,D,G,r){e I;I.x=(G!=2)?-1.:3.;I.y=(G!=1)?-1.:3.;I.zw=c(.0,1.);w1(I);}
+n1(GG,d0,A,C,r){e I;I.x=(C!=2)?-1.:3.;I.y=(C!=1)?-1.:3.;I.zw=c(.0,1.);C1(I);}
 #endif
 #ifdef FRAGMENT
-f ivec2 se(){return ivec2(floor(gl_FragCoord));}
+f ivec2 zf(){return ivec2(floor(gl_FragCoord));}
 #ifdef ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH
-layout(location=0) inout M w0;layout(location=1) out i C4;void main(){C4.x=uintBitsToFloat(w0.x);}
+layout(location=0) inout R x0;layout(location=1) out i U4;void main(){U4.x=uintBitsToFloat(x0.x);}
 #elif defined(ATLAS_RENDER_TARGET_R8_PLS_EXT)
 #ifdef CLEAR_COVERAGE
-__pixel_local_outEXT a2{layout(r32f) float w0;};
+__pixel_local_outEXT V1{layout(r32f) float x0;};
 #else
-__pixel_local_inEXT a2{layout(r32f) float w0;};layout(location=0) out i C4;
+__pixel_local_inEXT V1{layout(r32f) float x0;};layout(location=0) out i U4;
 #endif
 void main(){
 #ifdef CLEAR_COVERAGE
-w0=.0;
+x0=.0;
 #else
-C4.x=w0;
+U4.x=x0;
 #endif
 }
 #elif defined(ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE)
-layout(binding=0,r32ui) uniform highp upixelLocalANGLE w0;layout(location=0) out i C4;void main(){C4.x=uintBitsToFloat(pixelLocalLoadANGLE(w0).x);}
+layout(binding=0,r32ui) uniform highp upixelLocalANGLE x0;layout(location=0) out i U4;void main(){U4.x=uintBitsToFloat(pixelLocalLoadANGLE(x0).x);}
 #elif defined(ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE)
-layout(binding=0,r32i) uniform highp coherent iimage2D p9;layout(location=0) out i C4;void main(){C4.x=float(imageLoad(p9,se()).x)*(1./Bd);}
+layout(binding=0,r32i) uniform highp coherent iimage2D fa;layout(location=0) out i U4;void main(){U4.x=float(imageLoad(fa,zf()).x)*(1./we);}
 #elif defined(ATLAS_RENDER_TARGET_RGBA8_UNORM)
-i3(l3,0,DF);layout(location=0) out i C4;void main(){i U=p1(DF,se());C4.x=(U.x-U.y)*Sa+(U.z-U.w)*255.;}
+Z2(O2,0,KF);layout(location=0) out i U4;void main(){i T=j1(KF,zf());U4.x=(T.x-T.y)*Nb+(T.z-T.w)*255.;}
 #endif
 #endif

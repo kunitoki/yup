@@ -25,44 +25,71 @@ using namespace rive;
 
 TransitionPropertyViewModelComparator::~TransitionPropertyViewModelComparator()
 {
-    if (m_bindableProperty != nullptr)
-    {
-        delete m_bindableProperty;
-        m_bindableProperty = nullptr;
-    }
+#ifdef WITH_RIVE_EDITOR
+  if (m_editorBindable)
+    return;
+#endif
+  if (m_bindableProperty != nullptr)
+  {
+    delete m_bindableProperty;
+    m_bindableProperty = nullptr;
+  }
 }
 
 StatusCode TransitionPropertyViewModelComparator::import(
     ImportStack& importStack)
 {
-    auto bindablePropertyImporter =
-        importStack.latest<BindablePropertyImporter>(
-            BindablePropertyBase::typeKey);
-    if (bindablePropertyImporter == nullptr)
-    {
-        return StatusCode::MissingObject;
-    }
-    m_bindableProperty = bindablePropertyImporter->bindableProperty();
+  auto bindablePropertyImporter = importStack.latest<BindablePropertyImporter>(
+      BindablePropertyBase::typeKey);
+  if (bindablePropertyImporter == nullptr)
+  {
+    return StatusCode::MissingObject;
+  }
+  m_bindableProperty = bindablePropertyImporter->bindableProperty();
 
-    return Super::import(importStack);
+  return Super::import(importStack);
+}
+
+ViewModelInstanceValue* TransitionPropertyViewModelComparator::source(
+    const StateMachineInstance* stateMachineInstance) const
+{
+  auto bindableInstance = stateMachineInstance->bindablePropertyInstance(
+      m_bindableProperty);
+  if (bindableInstance == nullptr)
+  {
+    return nullptr;
+  }
+  auto dataBind = stateMachineInstance->bindableDataBindToTarget(
+      bindableInstance);
+  return dataBind == nullptr ? nullptr : dataBind->source();
 }
 
 void TransitionPropertyViewModelComparator::useInLayer(
     const StateMachineInstance* stateMachineInstance,
     StateMachineLayerInstance* layerInstance) const
 {
+  auto source = this->source(stateMachineInstance);
+  if (source != nullptr)
+  {
+    stateMachineInstance->useViewModelValue(source, layerInstance);
+  }
+}
 
-    auto bindableInstance =
-        stateMachineInstance->bindablePropertyInstance(m_bindableProperty);
-    if (bindableInstance == nullptr)
-    {
-        return;
-    }
-    auto dataBind =
-        stateMachineInstance->bindableDataBindToTarget(bindableInstance);
-    auto source = dataBind->source();
-    if (source != nullptr)
-    {
-        source->useInLayer(layerInstance);
-    }
+void TransitionPropertyViewModelComparator::useTriggerFireInLayer(
+    const StateMachineInstance* stateMachineInstance,
+    StateMachineLayerInstance* layerInstance) const
+{
+  if (m_bindableProperty == nullptr ||
+      !m_bindableProperty->is<BindablePropertyTrigger>())
+  {
+    return;
+  }
+  auto source = this->source(stateMachineInstance);
+  // Only a fire the layer could read: noting a trigger that hasn't fired
+  // would hide a fire later in the frame.
+  if (source != nullptr &&
+      stateMachineInstance->viewModelValueChanged(source, layerInstance))
+  {
+    stateMachineInstance->useViewModelValue(source, layerInstance);
+  }
 }

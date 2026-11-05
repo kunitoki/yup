@@ -5,129 +5,129 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char draw_mesh_frag[] = R"===(#ifdef FB
-#if(defined(W)&&!defined(A))||defined(QB)
-#undef cc
+const char draw_mesh_frag[] = R"===(#ifdef EB
+#if(defined(Q)&&!defined(N))||defined(TB)
+#undef fd
 #else
-#define cc
+#define fd
 #endif
-R1
-#ifndef W
-B0(K2,n0);
+I1
+#ifndef Q
+z0(B2,q0);
 #endif
-#ifndef QB
-o1(c3,m0);
-#ifndef W
-B0(o6,B4);
+#ifndef TB
+x1(o3,o0);
+#ifndef Q
+z0(F6,T4);
 #endif
-o1(U6,V0);
+x1(o7,d1);
 #else
-B0(c3,m0);
+z0(o3,o0);
 #endif
-S1
-#ifdef NB
-N3 i3(w5,l4,CC);O3 x5 m4(r5) y5 f4 g4
+J1
+#ifdef OB
+X3 Z2(J5,C4,SB);Y3 K5 D4(x4) L5 n4 p4
 #endif
-#ifdef W
-#ifdef NB
-z2(IB)
+#ifdef Q
+#ifdef OB
+K2(HB)
 #else
-z2(IB)
+K2(HB)
 #endif
 #else
-#ifdef NB
-T1(IB)
+#ifdef OB
+E1(HB)
 #else
-T1(IB)
+E1(HB)
 #endif
 #endif
 {
-#ifdef EB
-q(a1,e);
+#ifdef FB
+q(N0,e);
 #if defined(GB)
-q(r1,O);
+q(O0,M);
 #endif
-q(J2,c);
+q(X2,c);
 #endif
-#ifdef A
-q(Y3,d);
+#ifdef N
+q(j4,d);
 #endif
 #ifdef AB
-q(R0,e);
+q(Y0,e);
 #endif
-#if defined(EB)&&defined(N)
-q(Q0,d);
+#if defined(FB)&&defined(H)
+q(S0,d);
 #endif
-#ifdef NB
-q(V5,c);q(Q1,i);
-#ifdef N
-q(H1,Q);
+#ifdef OB
+q(j6,c);q(a2,i);
+#ifdef H
+q(Q1,O);
 #endif
 #endif
-#ifdef EB
-i p=Y7(
+#ifdef FB
+i k=G8(
 #ifdef GB
-r1,
+O0,
 #endif
-#ifdef N
-k3(Q0),
+#ifdef H
+a3(S0),
 #endif
-a1 e3);d n=clamp(o2(FD,ma,J2,.0).x,H0(.0),H0(1.));
+N0 q3);d n=clamp(r2(ID,Za,X2,.0).x,B0(.0),B0(1.));
 #endif
-#ifdef NB
-i p=K7(CC,r5,V5,j.Vd);d n=1.;
+#ifdef OB
+i k=m8(SB,x4,j6,j.bf);d n=1.;
 #endif
 #ifdef AB
-if(AB){d m5=max(v3(v5(R0)),H0(.0));n=min(m5,n);}
+if(AB){d G5=max(E3(y4(Y0)),B0(.0));n=min(G5,n);}
 #endif
-#ifdef cc
-E2;
+#ifdef fd
+R2;
 #endif
-#if defined(A)
-if(A&&Y3!=.0){d F3;
-#ifndef QB
-C T0=unpackHalf2x16(h1(m0));d P6=T0.y;F3=max(P6==Y3?T0.x:H0(.0),H0(.0));
+#if defined(N)
+if(N&&j4!=.0){d R3;
+#ifndef TB
+F Z0=unpackHalf2x16(o1(o0));d k7=Z0.y;R3=max(k7==j4?Z0.x:B0(.0),B0(.0));
 #else
-F3=N0(m0).x;
+R3=L0(o0).x;
 #endif
-F3=max(F3,H0(.0));n=min(n,F3);}
+R3=max(R3,B0(.0));n=min(n,R3);}
 #endif
-#ifdef NB
-p*=Q1;
+#ifdef OB
+k*=a2;
 #endif
-#if!defined(W)
-i I1=N0(n0);
-#ifdef N
-#ifdef EB
-Q y3=k3(Q0);
+#if!defined(Q)
+i X0=L0(q0);
+#ifdef H
+#ifdef FB
+O c2=a3(S0);
 #endif
-#ifdef NB
-Q y3=H1;
+#ifdef OB
+O c2=Q1;
 #endif
-if(N&&y3!=L4){
-#ifdef NB
-p.xyz=Q6(p);
+if(H&&c2!=W3){
+#ifdef OB
+k.xyz=o6(k);
 #endif
-p.xyz=h5(p.xyz,I1,y3)*p.w;}
+k.xyz=Y4(k.xyz,X0,c2)*k.w;}
 #endif
-p*=n;p.xyz=M2(p.xyz,p.w,f0.xy,j.L3,j.M3);
-#ifndef QB
-p=I1*(1.-p.w)+p;
+k*=n;k.xyz=M2(k.xyz,k.w,Y.xy,j.J3,j.K3);
+#ifndef TB
+k=X0*(1.-k.w)+k;
 #endif
-y0(n0,p);
+y0(q0,k);
 #endif
-#ifndef QB
-Z1(m0);Z1(V0);
+#ifndef TB
+l2(o0);l2(d1);
 #else
-y0(m0,I0(.0));
+y0(o0,A0(.0));
 #endif
-#ifdef cc
-F2;
+#ifdef fd
+S2;
 #endif
-#ifdef W
-p=(p*n);p.xyz=M2(p.xyz,p.w,f0.xy,j.L3,j.M3);K1=p;z3
+#ifdef Q
+k=(k*n);k.xyz=M2(k.xyz,k.w,Y.xy,j.J3,j.K3);S1=k;I3
 #else
-h2;
+L1;
 #endif
 }
 #endif

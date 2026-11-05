@@ -120,6 +120,19 @@ inline yup::String exportSvg (const yup::DataTree& document)
         if (! isGradientKind (kind))
             return yup::String (" ") + attribute + "=\"none\"";
 
+        // SVG has no sweep gradient, so angular paints export as their first stop color.
+        if (kind == "angular")
+        {
+            const auto color = getPaddedStops (paint).front().color;
+            yup::String result;
+            result << " " << attribute << "=\"" << toSvgColor (color) << "\"";
+
+            if (! color.isOpaque())
+                result << " " << attribute << "-opacity=\"" << toSvgNumber (color.getAlphaFloat()) << "\"";
+
+            return result;
+        }
+
         const auto id = "gradient" + yup::String (++numDefinitions);
         const auto start = getPoint (paint, Ids::x1, Ids::y1);
         const auto end = getPoint (paint, Ids::x2, Ids::y2);

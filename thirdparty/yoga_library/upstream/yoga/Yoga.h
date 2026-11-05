@@ -302,6 +302,14 @@ YOGA_EXPORT YGValue YGNodeStyleGetMaxHeight(YGNodeConstRef node);
 // - Aspect ratio takes min/max dimensions into account
 YOGA_EXPORT void YGNodeStyleSetAspectRatio(YGNodeRef node, float aspectRatio);
 YOGA_EXPORT float YGNodeStyleGetAspectRatio(YGNodeConstRef node);
+// rive: which axis the aspect ratio is computed from. Auto is Yoga's own rule
+// (the owner's main axis); width or height anchors that axis whatever the
+// owner's direction, and the other axis is always derived from it.
+YOGA_EXPORT void YGNodeStyleSetAspectRatioAxis(
+    YGNodeRef node,
+    YGAspectRatioAxis axis);
+YOGA_EXPORT YGAspectRatioAxis
+YGNodeStyleGetAspectRatioAxis(YGNodeConstRef node);
 
 // rive: grid style backport (facebook/yoga PR #1893)
 
@@ -418,6 +426,18 @@ YOGA_EXPORT uint32_t YGNodeLayoutGetGridColumnLineCount(YGNodeRef node);
 YOGA_EXPORT float YGNodeLayoutGetGridColumnLineOffset(
     YGNodeRef node,
     uint32_t index);
+// rive: content sizes of single-cell grid items that have no node, per row and
+// column from grid line 1. They stand for every item, so while any are set the
+// node's children don't size tracks on either axis. Rows or columns past the
+// last item become implicit tracks; both counts zero clears. Returns whether
+// they changed, which dirties the node.
+YOGA_EXPORT bool YGNodeSetGridVirtualContributions(
+    YGNodeRef node,
+    const float* rowSizes,
+    size_t rowCount,
+    const float* columnSizes,
+    size_t columnCount);
+
 YOGA_EXPORT uint32_t YGNodeLayoutGetGridRowLineCount(YGNodeRef node);
 YOGA_EXPORT float YGNodeLayoutGetGridRowLineOffset(
     YGNodeRef node,

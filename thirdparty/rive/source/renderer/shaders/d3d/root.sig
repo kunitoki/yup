@@ -8,9 +8,9 @@
 // srv
 // these are dynamic
 #define PATH_BUFFER_HEAP_OFFSET 0
-#define PAINT_BUFFER_HEAP_OFFSET 1
-#define PAINT_AUX_BUFFER_HEAP_OFFSET 2
-#define CONTOUR_BUFFER_HEAP_OFFSET 3
+#define PAINT_AUX_BUFFER_HEAP_OFFSET 1
+#define CONTOUR_BUFFER_HEAP_OFFSET 2
+#define VIRTUAL_PATCH_BUFFER_HEAP_OFFSET 3
 // these are static
 #define TESS_IMAGE_HEAP_OFFSET 4
 #define GRAD_IMAGE_HEAP_OFFSET 5
@@ -28,7 +28,8 @@
 #define DYNAMIC_SRV_UAV_HEAP_DESCRIPTOPR_START PATH_BUFFER_HEAP_OFFSET
 
 // this is for copies that happen every logical flush
-#define NUM_DYNAMIC_SRV_HEAP_DESCRIPTORS CONTOUR_BUFFER_HEAP_OFFSET + 1
+#define NUM_DYNAMIC_SRV_HEAP_DESCRIPTORS                                       \
+    VIRTUAL_PATCH_BUFFER_HEAP_OFFSET + 1
 #define NUM_SRV_HEAP_DESCRIPTORS FEATHER_ATLAS_IMAGE_HEAP_OFFSET + 1
 // this is for the first flush where we copy everything the things that don't
 // change only once
@@ -66,6 +67,7 @@
 #define TESS_RTV_HEAP_OFFSET 1
 #define FEATHER_ATLAS_RTV_HEAP_OFFSET 2
 #define TARGET_RTV_HEAP_OFFSET 3
+#define OFFSCREEN_RTV_HEAP_OFFSET 4
 
 // ROOT_SIG is only consumed by fxc when compiling the root signature. Guard it
 // (and its constants.glsl include) out of the C++ translation units that pull in
@@ -79,11 +81,11 @@
 
 #define ROOT_SIG "RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT), " \
     "CBV(b" RIVE_STR(FLUSH_UNIFORM_BUFFER_IDX) ", flags=DATA_VOLATILE, visibility=SHADER_VISIBILITY_ALL), "\
-    "RootConstants(num32BitConstants=1, b" RIVE_STR(PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX) ", visibility=SHADER_VISIBILITY_VERTEX), "\
+    "RootConstants(num32BitConstants=2, b" RIVE_STR(DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX) ", visibility=SHADER_VISIBILITY_VERTEX), "\
     "DescriptorTable(SRV(t" RIVE_STR(PATH_BUFFER_IDX) "), "\
-                    "SRV(t" RIVE_STR(PAINT_BUFFER_IDX) "),"\
                     "SRV(t" RIVE_STR(PAINT_AUX_BUFFER_IDX) "),"\
-                    "SRV(t" RIVE_STR(CONTOUR_BUFFER_IDX) "), visibility=SHADER_VISIBILITY_ALL), "\
+                    "SRV(t" RIVE_STR(CONTOUR_BUFFER_IDX) "),"\
+                    "SRV(t" RIVE_STR(VIRTUAL_PATCH_BUFFER_IDX) "), visibility=SHADER_VISIBILITY_ALL), "\
     "DescriptorTable(SRV(t" RIVE_STR(TESS_VERTEX_TEXTURE_IDX) ", flags=DESCRIPTORS_VOLATILE),"\
                     "SRV(t" RIVE_STR(GRAD_TEXTURE_IDX) ", flags=DESCRIPTORS_VOLATILE), "\
                     "SRV(t" RIVE_STR(GAUSSIAN_INTEGRAL_TEXTURE_IDX) ", flags=DESCRIPTORS_VOLATILE), "\

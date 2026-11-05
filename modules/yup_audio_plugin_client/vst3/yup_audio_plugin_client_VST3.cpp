@@ -375,6 +375,11 @@ public:
         }
     }
 
+    void paint (Graphics& g) override
+    {
+        // Paint nothing to save CPU cycles
+    }
+
     tresult PLUGIN_API attached (void* parent, FIDString type) override
     {
         auto result = Vst::EditorView::attached (parent, type);
@@ -516,8 +521,9 @@ public:
 private:
     void componentResized (Component& component) override
     {
-        if (component.getSize() != Component::getSize())
-            setSize (component.getSize());
+        const auto editorSize = component.getBounds().getSize();
+        if (editorSize != getBounds().getSize())
+            setSize (editorSize);
     }
 
     void constrainViewRect (ViewRect& viewRect) const

@@ -5,16 +5,16 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char init_clockwise_atomic_workaround_frag[] = R"===(#ifdef FB
-R1
-#ifndef W
-B0(K2,n0);
+const char init_clockwise_atomic_workaround_frag[] = R"===(#ifdef EB
+I1
+#ifndef Q
+z0(B2,q0);
 #endif
-B0(c3,m0);S1 z5(IB){y0(m0,I0(N0(m0).x,.0,.0,1.));
-#ifndef W
-n4(N0(n0));
+z0(o3,o0);J1 M5(HB){y0(o0,A0(L0(o0).x,.0,.0,1.));
+#ifndef Q
+E4(L0(q0));
 #else
-n4(I0(.0));
+E4(A0(.0));
 #endif
 }
 #endif

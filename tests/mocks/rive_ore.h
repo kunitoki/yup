@@ -43,6 +43,12 @@ public:
     explicit MockOreContext()
         : rive::ore::Context (nullptr)
     {
+        // A capable device, so the capability checks in front of ore pass by default
+        m_features.anisotropicFiltering = true;
+        m_features.drawBaseInstance = true;
+        m_features.bc = true;
+        m_features.etc2 = true;
+        m_features.astc = true;
     }
 
     MOCK_METHOD (rive::rcp<rive::ore::Buffer>, makeBuffer, (const rive::ore::BufferDesc&), (override));

@@ -25,9 +25,12 @@ namespace yup
 //==============================================================================
 /** Represents a gradient for graphical use, defined by multiple colors and their positions.
 
-    This class encapsulates a gradient, which can be either linear or radial, specified by color stops.
+    This class encapsulates a gradient, which can be linear, radial or angular, specified by color stops.
     Each stop has a color and a position, and in the case of radial gradients, a radius is calculated.
     Supports multiple color stops for complex gradients while maintaining backward compatibility.
+
+    An optional gradient transform (see withTransform()) maps the gradient space, in which the stops
+    are expressed, into drawing space. It allows elliptical, skewed or rotated gradients.
 */
 class YUP_API ColorGradient
 {
@@ -37,7 +40,10 @@ public:
     enum Type : unsigned int
     {
         Linear, ///< A linear gradient transitions smoothly between colors along a straight line.
-        Radial  ///< A radial gradient transitions smoothly between colors in a circular pattern.
+        Radial, ///< A radial gradient transitions smoothly between colors in a circular pattern.
+        Angular ///< An angular (sweep or conic) gradient transitions smoothly between colors around a center point.
+                ///< The center is the first stop position, the start direction points from the first to the last
+                ///< stop position, and the stop deltas span one full clockwise turn.
     };
 
     //==============================================================================
@@ -100,7 +106,7 @@ public:
         @param color2 The ending color of the gradient.
         @param x2 The x-coordinate of the ending color.
         @param y2 The y-coordinate of the ending color.
-        @param type The type of gradient (Linear or Radial).
+        @param type The type of gradient (Linear, Radial or Angular).
     */
     ColorGradient (Color color1, float x1, float y1, Color color2, float x2, float y2, Type type = Type::Linear) noexcept
         : type (type)
@@ -118,7 +124,7 @@ public:
         @param p1 The pointof the starting color.
         @param color2 The ending color of the gradient.
         @param p2 The point of the ending color.
-        @param type The type of gradient (Linear or Radial).
+        @param type The type of gradient (Linear, Radial or Angular).
     */
     ColorGradient (Color color1, const Point<float>& p1, Color color2, const Point<float>& p2, Type type = Type::Linear) noexcept
         : ColorGradient (color1, p1.getX(), p1.getY(), color2, p2.getX(), p2.getY(), type)
@@ -127,7 +133,7 @@ public:
 
     /** Constructs a gradient with multiple color stops.
 
-        @param type The type of gradient (Linear or Radial).
+        @param type The type of gradient (Linear, Radial or Angular).
         @param colorStops Vector of ColorStop objects defining the gradient.
     */
     ColorGradient (Type type, std::vector<ColorStop> colorStops) noexcept
@@ -144,7 +150,7 @@ public:
 
     /** Constructs a gradient with multiple color stops.
 
-        @param type The type of gradient (Linear or Radial).
+        @param type The type of gradient (Linear, Radial or Angular).
         @param colorStops Initializer list of ColorStop objects defining the gradient.
     */
     ColorGradient (Type type, std::initializer_list<ColorStop> colorStops) noexcept
@@ -169,7 +175,7 @@ public:
     //==============================================================================
     /** Gets the type of the gradient.
 
-        @return The type of the gradient, either Linear or Radial.
+        @return The type of the gradient: Linear, Radial or Angular.
     */
     Type getType() const noexcept
     {
@@ -188,6 +194,55 @@ public:
         auto copy = *this;
         copy.spread = newSpread;
         return copy;
+    }
+
+    //==============================================================================
+    /** Gets the gradient transform.
+
+        The transform maps the gradient space, in which the color stop positions are expressed,
+        into drawing space. It is the identity by default.
+
+        @return The gradient transform.
+    */
+    const AffineTransform& getTransform() const noexcept
+    {
+        return transform;
+    }
+
+    /** Returns a copy of this gradient with the given gradient transform.
+
+        Use it to draw elliptical, skewed or rotated gradients. For example, a radial gradient
+        with a transform of `AffineTransform::scaling (2.0f, 1.0f)` is drawn as an ellipse twice
+        as wide as tall.
+
+        @param newTransform The transform mapping gradient space into drawing space.
+
+        @return A copy of this gradient with the new transform.
+    */
+    ColorGradient withTransform (const AffineTransform& newTransform) const noexcept
+    {
+        auto copy = *this;
+        copy.transform = newTransform;
+        return copy;
+    }
+
+    /** Gets the start angle of an angular gradient, in gradient space.
+
+        The angle is measured in radians from the positive x axis towards the positive y axis
+        (clockwise on screen), following the direction from the first to the last stop position.
+        It is zero when the two positions coincide.
+
+        @return The start angle in radians.
+    */
+    float getStartAngle() const noexcept
+    {
+        if (stops.size() < 2)
+            return 0.0f;
+
+        const float dx = stops.back().x - stops.front().x;
+        const float dy = stops.back().y - stops.front().y;
+
+        return (dx == 0.0f && dy == 0.0f) ? 0.0f : std::atan2 (dy, dx);
     }
 
     //==============================================================================
@@ -327,14 +382,27 @@ public:
         return stops.back().color;
     }
 
-    /** Returns the interpolated color at a given point in gradient space. */
+    /** Returns the interpolated color at a given point in drawing space.
+
+        The point is mapped into gradient space through the inverse of the gradient transform.
+    */
     Color getColorAt (float x, float y) const noexcept
     {
         if (stops.empty())
             return {};
 
+        if (! transform.isIdentity())
+            transform.inverted().transformPoint (x, y);
+
         const auto start = Point<float> (stops.front().x, stops.front().y);
         const auto end = Point<float> (stops.back().x, stops.back().y);
+
+        if (type == Type::Angular)
+        {
+            float t = (std::atan2 (y - start.getY(), x - start.getX()) - getStartAngle()) / MathConstants<float>::twoPi;
+            t -= std::floor (t);
+            return getColorAt (t);
+        }
 
         if (type == Type::Radial)
         {
@@ -361,7 +429,7 @@ public:
         return getColorAt (t);
     }
 
-    /** Returns the interpolated color at a given point in gradient space. */
+    /** Returns the interpolated color at a given point in drawing space. */
     Color getColorAt (const Point<float>& p) const noexcept
     {
         return getColorAt (p.getX(), p.getY());
@@ -581,7 +649,7 @@ public:
         @param x2 The x-coordinate of the ending color.
         @param y2 The y-coordinate of the ending color.
         @param numColors The number of color stops to generate (including start and end).
-        @param type The type of gradient (Linear or Radial).
+        @param type The type of gradient (Linear, Radial or Angular).
         @param colorSpace The color space used for mixing.
 
         @return A ColorGradient with evenly spaced stops between the given colors.
@@ -633,7 +701,7 @@ public:
         @param color2 The ending color of the gradient.
         @param p2 The point of the ending color.
         @param numColors The number of color stops to generate (including start and end).
-        @param type The type of gradient (Linear or Radial).
+        @param type The type of gradient (Linear, Radial or Angular).
         @param colorSpace The color space used for mixing.
 
         @return A ColorGradient with evenly spaced stops between the given colors.
@@ -653,6 +721,7 @@ private:
     Type type = Type::Linear;
     Spread spread = Spread::Pad;
     std::vector<ColorStop> stops;
+    AffineTransform transform;
     float radius = 0.0f;
 
     float applySpread (float t) const noexcept

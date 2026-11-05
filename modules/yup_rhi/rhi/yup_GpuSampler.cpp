@@ -33,10 +33,20 @@ GpuSampler::Ptr GpuSampler::create (ReferenceCountedObjectPtr<GpuDevice> device,
     if (oreCtx == nullptr)
         return nullptr;
 
-    jassert (desc.maxAnisotropy >= 1);
-    jassert (desc.minLod <= desc.maxLod);
+    auto oreDesc = GpuPipelineHelpers::toOreSamplerDesc (desc);
 
-    const auto oreDesc = GpuPipelineHelpers::toOreSamplerDesc (desc);
+    const auto allLinear = desc.minFilter == GpuFilter::linear && desc.magFilter == GpuFilter::linear && desc.mipmapFilter == GpuFilter::linear;
+    if (! allLinear || ! device->isAnisotropicFilteringAvailable())
+        oreDesc.maxAnisotropy = 1;
+
+    std::string error;
+    if (! rive::ore::validateSamplerDesc (oreCtx, oreDesc, &error))
+    {
+        YUP_DBG ("GpuSampler::create: " << String (error));
+
+        jassertfalse;
+        return nullptr;
+    }
 
     rive::rcp<rive::ore::Sampler> oreSampler;
     device->runOnGraphicsContext ([&]

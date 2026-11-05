@@ -1,16 +1,19 @@
-layout(constant_id=Wg) const bool ki=true;layout(constant_id=Xg) const bool li=true;layout(constant_id=Yg) const bool mi=true;layout(constant_id=Zg) const bool ni=true;layout(constant_id=ah) const bool oi=true;layout(constant_id=bh) const bool pi=true;layout(constant_id=ch) const bool qi=true;layout(constant_id=dh) const bool ri=true;layout(constant_id=eh) const bool si=true;layout(constant_id=fh) const bool ti=true;layout(constant_id=gh) const bool ui=false;layout(constant_id=hh) const bool vi=false;layout(constant_id=ih) const bool wi=false;layout(constant_id=jh) const bool xi=false;layout(constant_id=kh) const bool yi=false;
-#define ENABLE_CLIPPING ki
-#define ENABLE_CLIP_RECT li
-#define ENABLE_ADVANCED_BLEND mi
-#define ENABLE_FEATHER ni
-#define ENABLE_EVEN_ODD oi
-#define ENABLE_NESTED_CLIPPING pi
-#define ENABLE_HSL_BLEND_MODES qi
-#define ENABLE_DITHER ri
-#define ENABLE_MODULATED_IMAGE si
-#define CLOCKWISE_FILL ti
-#define NESTED_CLIP_UPDATE_ONLY ui
-#define BORROWED_COVERAGE_PASS vi
-#define STORE_COLOR_CLEAR wi
-#define LOAD_COLOR_FROM_DST_TEXTURE xi
-#define VULKAN_VENDOR_ARM yi
+layout(constant_id=di) const bool Bj=true;layout(constant_id=ei) const bool Cj=true;layout(constant_id=fi) const bool Dj=true;layout(constant_id=gi) const bool Ej=true;layout(constant_id=hi) const bool Fj=true;layout(constant_id=ii) const bool Gj=true;layout(constant_id=ji) const bool Hj=true;layout(constant_id=ki) const bool Ij=true;layout(constant_id=li) const bool Jj=true;layout(constant_id=mi) const bool Kj=true;layout(constant_id=ni) const bool Lj=true;layout(constant_id=oi) const bool Mj=false;layout(constant_id=pi) const bool Nj=false;layout(constant_id=qi) const bool Oj=false;layout(constant_id=ri) const bool Pj=false;layout(constant_id=si) const bool Qj=false;layout(constant_id=ti) const bool Rj=false;layout(constant_id=ui) const bool Sj=false;
+#define ENABLE_CLIPPING Bj
+#define ENABLE_CLIP_RECT Cj
+#define ENABLE_ADVANCED_BLEND Dj
+#define ENABLE_FEATHER Ej
+#define ENABLE_MODULATED_IMAGE Fj
+#define ENABLE_EVEN_ODD Gj
+#define ENABLE_NESTED_CLIPPING Hj
+#define ENABLE_HSL_BLEND_MODES Ij
+#define ENABLE_DITHER Jj
+#define ENABLE_ANGULAR_GRADIENT Kj
+#define CLOCKWISE_FILL Lj
+#define NESTED_CLIP_UPDATE_ONLY Mj
+#define BORROWED_COVERAGE_PASS Nj
+#define STORE_COLOR_CLEAR Oj
+#define LOAD_COLOR_FROM_DST_TEXTURE Pj
+#define VULKAN_VENDOR_ARM Qj
+#define DS_POLAR_STROKE Rj
+#define DS_HAIRLINE_STROKE Sj

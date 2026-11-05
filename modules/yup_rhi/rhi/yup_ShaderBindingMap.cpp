@@ -103,7 +103,9 @@ std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflectio
         if (isTexture)
         {
             e.textureViewDim = toRstbViewDim (res.imageDim, res.imageArrayed);
-            e.textureSampleType = res.imageIsDepth ? TextureSampleType::Depth : TextureSampleType::Float;
+            e.textureSampleType = res.imageIsDepth ? TextureSampleType::Depth
+                                : res.imageUnfiltered ? TextureSampleType::UnfilterableFloat
+                                                      : TextureSampleType::Float;
             e.textureMultisampled = res.imageMS;
         }
 

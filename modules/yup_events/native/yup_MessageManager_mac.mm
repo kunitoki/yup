@@ -117,6 +117,27 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
             focusChanged();
         });
 
+        addMethod(@selector(applicationShouldHandleReopen:hasVisibleWindows:), [](id /*self*/, SEL, NSApplication*, BOOL) -> BOOL
+        {
+            if (@available (macOS 14.0, *))
+                [NSApp activate];
+            else
+                [NSApp activateIgnoringOtherApps:YES];
+
+            for (NSWindow* window in [NSApp windows])
+                if ([window isMiniaturized])
+                    [window deminiaturize:nil];
+
+            [NSApp arrangeInFront:nil];
+
+            return YES;
+        });
+
+        addMethod(@selector(applicationSupportsSecureRestorableState:), [](id /*self*/, SEL, NSApplication*) -> BOOL
+        {
+            return YES;
+        });
+
         YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
         addMethod(@selector(getUrl:withReplyEvent:), [](id /*self*/, SEL, NSAppleEventDescriptor* event, NSAppleEventDescriptor*)
         {

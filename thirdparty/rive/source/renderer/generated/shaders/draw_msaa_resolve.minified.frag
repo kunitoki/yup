@@ -1,3 +1,3 @@
 #ifdef FRAGMENT
-layout(input_attachment_index=0,binding=K2,set=C3) uniform lowp subpassInputMS E9;layout(location=0) out i bc;void main(){bc=(subpassLoad(E9,0)+subpassLoad(E9,1)+subpassLoad(E9,2)+subpassLoad(E9,3))*.25;}
+layout(input_attachment_index=0,binding=B2,set=N3) uniform lowp subpassInputMS ra;layout(location=0) out i ed;void main(){ed=(subpassLoad(ra,0)+subpassLoad(ra,1)+subpassLoad(ra,2)+subpassLoad(ra,3))*.25;}
 #endif

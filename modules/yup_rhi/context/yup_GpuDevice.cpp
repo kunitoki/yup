@@ -216,6 +216,48 @@ bool GpuDevice::isAnisotropicFilteringAvailable() const noexcept
     return oreCtx != nullptr && oreCtx->features().anisotropicFiltering;
 }
 
+bool GpuDevice::isMultisampledTextureReadAvailable() const noexcept
+{
+    auto* oreCtx = getGpuContext();
+    return oreCtx != nullptr && oreCtx->features().multisampledTextureRead;
+}
+
+bool GpuDevice::isBaseInstanceAvailable() const noexcept
+{
+    auto* oreCtx = getGpuContext();
+    return oreCtx != nullptr && oreCtx->features().drawBaseInstance;
+}
+
+bool GpuDevice::isPerTargetBlendAvailable() const noexcept
+{
+    auto* oreCtx = getGpuContext();
+    return oreCtx != nullptr && oreCtx->features().perTargetBlend && oreCtx->features().perTargetWriteMask;
+}
+
+uint32_t GpuDevice::getMaximumTextureSize (GpuTextureType type) const noexcept
+{
+    auto* oreCtx = getGpuContext();
+    if (oreCtx == nullptr)
+        return 0;
+
+    const auto& features = oreCtx->features();
+
+    switch (type)
+    {
+        case GpuTextureType::cube:
+            return features.maxTextureSizeCube;
+
+        case GpuTextureType::texture3D:
+            return features.maxTextureSize3D;
+
+        case GpuTextureType::texture2D:
+        case GpuTextureType::array2D:
+            break;
+    }
+
+    return features.maxTextureSize2D;
+}
+
 uint32_t GpuDevice::getMaximumSampleCount() const noexcept
 {
     auto* oreCtx = getGpuContext();

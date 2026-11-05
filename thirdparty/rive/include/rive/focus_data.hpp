@@ -7,6 +7,7 @@
 #include "rive/input/gamepad_listener.hpp"
 #include "rive/input/keyboard_listener.hpp"
 #include "rive/input/focusable.hpp"
+#include "rive/lazy_vector.hpp"
 #include "rive/math/aabb.hpp"
 #include "rive/refcnt.hpp"
 #include <vector>
@@ -19,104 +20,132 @@ class FocusListener;
 class FocusData : public FocusDataBase, public Focusable
 {
 public:
-    ~FocusData() override;
+  ~FocusData() override;
 
-    rcp<FocusNode> focusNode();
+  rcp<FocusNode> focusNode();
 
-    void detachFocusable()
+  void detachFocusable()
+  {
+    if (m_focusNode != nullptr)
     {
-        if (m_focusNode != nullptr)
-        {
-            m_focusNode->clearFocusable();
-        }
+      m_focusNode->clearFocusable();
     }
+  }
 
-    /// Register a listener to be notified of focus/blur events.
-    void addFocusListener(FocusListener* listener);
+  /// Register a listener to be notified of focus/blur events.
+  void addFocusListener(FocusListener* listener);
 
-    /// Unregister a listener.
-    void removeFocusListener(FocusListener* listener);
+  /// Unregister a listener.
+  void removeFocusListener(FocusListener* listener);
 
-    /// Register a listener to be notified of key input events.
-    void addKeyboardListener(KeyboardListener* listener);
+  /// Register a listener to be notified of key input events.
+  void addKeyboardListener(KeyboardListener* listener);
 
-    /// Unregister a keyboard listener.
-    void removeKeyboardListener(KeyboardListener* listener);
+  /// Unregister a keyboard listener.
+  void removeKeyboardListener(KeyboardListener* listener);
 
-    /// Register a listener to be notified of text input events.
-    void addTextInputListener(KeyboardListener* listener);
+  /// Register a listener for the capture phase of key events, which runs
+  /// before the bubble and outermost first. Flags this node's FocusNode so
+  /// FocusManager::keyInput knows to run that phase at all.
+  void addCaptureKeyboardListener(KeyboardListener* listener);
 
-    /// Unregister a text input listener.
-    void removeTextInputListener(KeyboardListener* listener);
+  /// Unregister a capture-phase keyboard listener.
+  void removeCaptureKeyboardListener(KeyboardListener* listener);
 
-    void addGamepadListener(GamepadListener* listener);
-    void removeGamepadListener(GamepadListener* listener);
+  /// Register a listener to be notified of text input events.
+  void addTextInputListener(KeyboardListener* listener);
 
-    /// Programmatically focus this node.
-    void focus();
+  /// Unregister a text input listener.
+  void removeTextInputListener(KeyboardListener* listener);
 
-    /// Find the parent FocusData by walking up the component hierarchy.
-    /// Returns nullptr if no parent FocusData exists.
-    FocusData* findParentFocusData() const;
+  void addGamepadListener(GamepadListener* listener);
+  void removeGamepadListener(GamepadListener* listener);
 
-    /// Find the closest FocusNode for a component by walking up the hierarchy.
-    /// Checks parent nodes for FocusData children, and crosses artboard
-    /// boundaries using externalParentFocusNode.
-    /// @param component The component to start searching from
-    /// @return The closest FocusNode, or nullptr if none found
-    static rcp<FocusNode> findClosestFocusNode(Component* component);
+  /// Programmatically focus this node.
+  void focus();
 
-    /// True if this focus target should participate in tab/spatial navigation
-    /// and pointer focus (not under a collapsed/hidden/opacity-zero branch,
-    /// including nested artboard hosts). Non-FocusData focusables are treated
-    /// as visible by FocusManager.
-    bool isEligibleForFocusTraversal() const override;
+  /// Find the parent FocusData by walking up the component hierarchy.
+  /// Returns nullptr if no parent FocusData exists.
+  FocusData* findParentFocusData() const;
 
-    // Focusable interface implementation
-    bool keyInput(Key value,
-                  KeyModifiers modifiers,
-                  bool isPressed,
-                  bool isRepeat) override;
-    bool textInput(const std::string& text) override;
-    /// Forwards to the parent TextInput's selection (mirroring how
-    /// key/text input special-case a TextInput parent).
-    bool selectedText(std::string& outText) const override;
-    /// True when the parent is a TextInput (same special case).
-    bool acceptsTextInput() const override;
-    bool gamepadDispatch(
-        const ListenerInvocation& invocation,
-        ScriptedDrawable** outDispatchedScriptedDrawable = nullptr) override;
-    void focused() override;
-    void blurred() override;
-    bool worldPosition(Vec2D& outPosition) override;
-    /// Root-space bounds computed at call time; the FocusNode's cached bounds
-    /// go stale when an ancestor host moves this artboard instance.
-    bool worldBounds(AABB& outBounds) override;
-    Artboard* focusableArtboard() const override { return artboard(); }
-    bool acceptsKeyboardInput() const override
-    {
-        return !m_keyboardListeners.empty() || !m_textInputListeners.empty();
-    }
+  /// Find the closest FocusNode for a component by walking up the hierarchy.
+  /// Checks parent nodes for FocusData children, and crosses artboard
+  /// boundaries using externalParentFocusNode.
+  /// @param component The component to start searching from
+  /// @return The closest FocusNode, or nullptr if none found
+  static rcp<FocusNode> findClosestFocusNode(Component* component);
 
-    // Component overrides for update cycle
-    void buildDependencies() override;
-    void update(ComponentDirt value) override;
+  /// True if this focus target should participate in tab/spatial navigation
+  /// and pointer focus (not under a collapsed/hidden/opacity-zero branch,
+  /// including nested artboard hosts). Non-FocusData focusables are treated
+  /// as visible by FocusManager.
+  bool isEligibleForFocusTraversal() const override;
+
+  // Focusable interface implementation
+  /// The bubble. A TextInput parent edits first, once, when any keyboard
+  /// listener opted it in; then every normal listener is offered the key.
+  bool keyInput(
+      Key value,
+      KeyModifiers modifiers,
+      bool isPressed,
+      bool isRepeat) override;
+  /// The capture phase: every capture listener is offered the key, as
+  /// peers, and any one of them claiming it claims it for the node.
+  bool captureKeyInput(
+      Key value,
+      KeyModifiers modifiers,
+      bool isPressed,
+      bool isRepeat) override;
+  bool textInput(const std::string& text) override;
+  /// Forwards to the parent TextInput's selection (mirroring how
+  /// key/text input special-case a TextInput parent).
+  bool selectedText(std::string& outText) const override;
+  /// True when the parent is a TextInput (same special case).
+  bool acceptsTextInput() const override;
+  /// Forwards to the parent TextInput (same special case): it asks to blur
+  /// on an outside press and owns the hit test for it.
+  bool blursOnOutsidePress() const override;
+  bool hitTestFocusable(const Vec2D& rootPosition) override;
+  bool gamepadDispatch(
+      const ListenerInvocation& invocation,
+      ScriptedDrawable** outDispatchedScriptedDrawable = nullptr) override;
+  void focused() override;
+  void blurred() override;
+  bool worldPosition(Vec2D& outPosition) override;
+  /// Root-space bounds computed at call time; the FocusNode's cached bounds
+  /// go stale when an ancestor host moves this artboard instance.
+  bool worldBounds(AABB& outBounds) override;
+  Artboard* focusableArtboard() const override { return artboard(); }
+  bool acceptsKeyboardInput() const override
+  {
+    return !m_keyboardListeners.empty() ||
+           !m_captureKeyboardListeners.empty() || !m_textInputListeners.empty();
+  }
+
+  // Component overrides for update cycle
+  void buildDependencies() override;
+  void update(ComponentDirt value) override;
 
 protected:
-    void focusFlagsChanged() override;
-    void edgeBehaviorValueChanged() override;
-    void nameChanged() override;
+  void focusFlagsChanged() override;
+  void edgeBehaviorValueChanged() override;
+  void nameChanged() override;
 
 private:
-    void updateWorldBounds();
-    void scrollIntoView();
-    void scrollConstraintToShowBounds(class ScrollConstraint* constraint,
-                                      const AABB& elementBounds);
-    rcp<FocusNode> m_focusNode;
-    std::vector<FocusListener*> m_focusListeners;
-    std::vector<KeyboardListener*> m_keyboardListeners;
-    std::vector<KeyboardListener*> m_textInputListeners;
-    std::vector<GamepadListener*> m_gamepadListeners;
+  void updateWorldBounds();
+  void scrollIntoView();
+  void scrollConstraintToShowBounds(
+      class ScrollConstraint* constraint,
+      const AABB& elementBounds);
+  rcp<FocusNode> m_focusNode;
+  // Lazy: most FocusData have no listeners of a given kind (text input and
+  // gamepad ones are rare, capture ones rarer), and a FocusData exists per
+  // artboard instance, so per list row.
+  LazyVector<FocusListener*> m_focusListeners;
+  LazyVector<KeyboardListener*> m_keyboardListeners;
+  LazyVector<KeyboardListener*> m_captureKeyboardListeners;
+  LazyVector<KeyboardListener*> m_textInputListeners;
+  LazyVector<GamepadListener*> m_gamepadListeners;
 };
 } // namespace rive
 

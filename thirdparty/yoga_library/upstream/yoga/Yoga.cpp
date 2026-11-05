@@ -815,6 +815,18 @@ YOGA_EXPORT void YGNodeStyleSetAspectRatio(
       node, &YGStyle::aspectRatio, YGFloatOptional{aspectRatio});
 }
 
+// rive: explicit aspect ratio axis
+YOGA_EXPORT void YGNodeStyleSetAspectRatioAxis(
+    const YGNodeRef node,
+    const YGAspectRatioAxis axis) {
+  updateStyle<MSVC_HINT(aspectRatioAxis)>(
+      node, &YGStyle::aspectRatioAxis, axis);
+}
+YOGA_EXPORT YGAspectRatioAxis
+YGNodeStyleGetAspectRatioAxis(const YGNodeConstRef node) {
+  return node->getStyle().aspectRatioAxis();
+}
+
 // rive: grid style backport (facebook/yoga PR #1893)
 
 YOGA_EXPORT void YGNodeStyleSetJustifyItems(
@@ -1348,6 +1360,20 @@ YOGA_EXPORT uint32_t YGNodeLayoutGetGridRowLineCount(const YGNodeRef node) {
   return static_cast<uint32_t>(node->getLayout().gridRowLineOffsets.size());
 }
 
+YOGA_EXPORT bool YGNodeSetGridVirtualContributions(
+    const YGNodeRef node,
+    const float* rowSizes,
+    const size_t rowCount,
+    const float* columnSizes,
+    const size_t columnCount) {
+  if (!node->setGridVirtualContributions(
+          rowSizes, rowCount, columnSizes, columnCount)) {
+    return false;
+  }
+  node->markDirtyAndPropagate();
+  return true;
+}
+
 YOGA_EXPORT float YGNodeLayoutGetGridRowLineOffset(
     const YGNodeRef node,
     const uint32_t index) {
@@ -1610,6 +1636,75 @@ void YGConstrainMaxSizeForMode(
   }
 }
 
+// rive: explicit aspect ratio axis.
+//
+// Yoga's own rule (YGAspectRatioAxisAuto) anchors a child's aspect ratio to
+// the owner's main axis: the main size is measured or flexed and the cross
+// size is always recomputed from it. An explicit axis is the anchor whatever
+// the owner's direction. Anchored to the owner's main axis that is the auto
+// rule again; anchored to the cross axis the main size is derived from the
+// cross size instead, and the child must not flex or the derived size would
+// be grown or shrunk away from the ratio.
+static inline bool YGNodeHasAspectRatio(const YGNodeConstRef node) {
+  return !node->getStyle().aspectRatio().isUndefined();
+}
+
+// Whether the ratio is computed from the child's width.
+static inline bool YGNodeAspectRatioAnchorsRow(
+    const YGNodeConstRef node,
+    const bool isMainAxisRow) {
+  switch (node->getStyle().aspectRatioAxis()) {
+    case YGAspectRatioAxisWidth:
+      return true;
+    case YGAspectRatioAxisHeight:
+      return false;
+    case YGAspectRatioAxisAuto:
+    default:
+      return isMainAxisRow;
+  }
+}
+
+// An explicit axis that is the owner's cross axis: the one arrangement the
+// auto rule cannot express.
+static inline bool YGNodeAspectRatioLocksCrossAxis(
+    const YGNodeConstRef node,
+    const bool isMainAxisRow) {
+  return YGNodeHasAspectRatio(node) &&
+      node->getStyle().aspectRatioAxis() != YGAspectRatioAxisAuto &&
+      YGNodeAspectRatioAnchorsRow(node, isMainAxisRow) != isMainAxisRow;
+}
+
+// Flex factors as the line sees them: a child whose ratio is anchored to the
+// cross axis keeps the main size derived from it.
+static inline float YGNodeLineFlexGrow(
+    const YGNodeConstRef node,
+    const bool isMainAxisRow) {
+  return YGNodeAspectRatioLocksCrossAxis(node, isMainAxisRow)
+      ? 0.0f
+      : node->resolveFlexGrow();
+}
+static inline float YGNodeLineFlexShrink(
+    const YGNodeConstRef node,
+    const bool isMainAxisRow) {
+  return YGNodeAspectRatioLocksCrossAxis(node, isMainAxisRow)
+      ? 0.0f
+      : node->resolveFlexShrink();
+}
+static inline bool YGNodeIsLineFlexible(
+    const YGNodeRef node,
+    const bool isMainAxisRow) {
+  return node->isNodeFlexible() &&
+      !YGNodeAspectRatioLocksCrossAxis(node, isMainAxisRow);
+}
+
+// One axis from the other through the ratio, margins excluded.
+static inline float YGAspectRatioDerive(
+    const float anchor,
+    const bool anchorIsWidth,
+    const float aspectRatio) {
+  return anchorIsWidth ? anchor / aspectRatio : anchor * aspectRatio;
+}
+
 static void YGNodeComputeFlexBasisForChild(
     const YGNodeRef node,
     const YGNodeRef child,
@@ -1642,8 +1737,13 @@ static void YGNodeComputeFlexBasisForChild(
       YGNodeIsStyleDimDefined(child, YGFlexDirectionRow, ownerWidth);
   const bool isColumnStyleDimDefined =
       YGNodeIsStyleDimDefined(child, YGFlexDirectionColumn, ownerHeight);
+  // rive: a ratio anchored to the cross axis derives the main size from it,
+  // whatever basis or main size the style declares.
+  const bool locksCrossAxis =
+      YGNodeAspectRatioLocksCrossAxis(child, isMainAxisRow);
 
-  if (!resolvedFlexBasis.isUndefined() && !YGFloatIsUndefined(mainAxisSize)) {
+  if (!locksCrossAxis && !resolvedFlexBasis.isUndefined() &&
+      !YGFloatIsUndefined(mainAxisSize)) {
     if (child->getLayout().computedFlexBasis.isUndefined() ||
         (child->getConfig()->isExperimentalFeatureEnabled(
              YGExperimentalFeatureWebFlexBasis) &&
@@ -1653,7 +1753,7 @@ static void YGNodeComputeFlexBasisForChild(
       child->setLayoutComputedFlexBasis(
           YGFloatOptionalMax(resolvedFlexBasis, paddingAndBorder));
     }
-  } else if (isMainAxisRow && isRowStyleDimDefined) {
+  } else if (!locksCrossAxis && isMainAxisRow && isRowStyleDimDefined) {
     // The width is definite, so use that as the flex basis.
     const YGFloatOptional paddingAndBorder = YGFloatOptional(
         YGNodePaddingAndBorderForAxis(child, YGFlexDirectionRow, ownerWidth));
@@ -1662,7 +1762,7 @@ static void YGNodeComputeFlexBasisForChild(
         YGResolveValue(
             child->getResolvedDimensions()[YGDimensionWidth], ownerWidth),
         paddingAndBorder));
-  } else if (!isMainAxisRow && isColumnStyleDimDefined) {
+  } else if (!locksCrossAxis && !isMainAxisRow && isColumnStyleDimDefined) {
     // The height is definite, so use that as the flex basis.
     const YGFloatOptional paddingAndBorder =
         YGFloatOptional(YGNodePaddingAndBorderForAxis(
@@ -1720,7 +1820,14 @@ static void YGNodeComputeFlexBasisForChild(
     }
 
     const auto& childStyle = child->getStyle();
-    if (!childStyle.aspectRatio().isUndefined()) {
+    // rive: a definite cross size gives the main size through the ratio
+    // under the auto rule and a cross-axis anchor alike. A main-axis anchor
+    // derives nothing here: its main size is measured or flexed first and
+    // the cross size follows it in the second pass.
+    const bool anchorsMainAxis = !childStyle.aspectRatio().isUndefined() &&
+        childStyle.aspectRatioAxis() != YGAspectRatioAxisAuto &&
+        !locksCrossAxis;
+    if (!childStyle.aspectRatio().isUndefined() && !anchorsMainAxis) {
       if (!isMainAxisRow && childWidthMeasureMode == YGMeasureModeExactly) {
         childHeight = marginColumn +
             (childWidth - marginRow) / childStyle.aspectRatio().unwrap();
@@ -1745,7 +1852,7 @@ static void YGNodeComputeFlexBasisForChild(
         childWidthStretch) {
       childWidth = width;
       childWidthMeasureMode = YGMeasureModeExactly;
-      if (!childStyle.aspectRatio().isUndefined()) {
+      if (!childStyle.aspectRatio().isUndefined() && !anchorsMainAxis) {
         childHeight =
             (childWidth - marginRow) / childStyle.aspectRatio().unwrap();
         childHeightMeasureMode = YGMeasureModeExactly;
@@ -1762,27 +1869,56 @@ static void YGNodeComputeFlexBasisForChild(
       childHeight = height;
       childHeightMeasureMode = YGMeasureModeExactly;
 
-      if (!childStyle.aspectRatio().isUndefined()) {
+      if (!childStyle.aspectRatio().isUndefined() && !anchorsMainAxis) {
         childWidth =
             (childHeight - marginColumn) * childStyle.aspectRatio().unwrap();
         childWidthMeasureMode = YGMeasureModeExactly;
       }
     }
 
-    YGConstrainMaxSizeForMode(
-        child,
-        YGFlexDirectionRow,
-        ownerWidth,
-        ownerWidth,
-        &childWidthMeasureMode,
-        &childWidth);
-    YGConstrainMaxSizeForMode(
-        child,
-        YGFlexDirectionColumn,
-        ownerHeight,
-        ownerWidth,
-        &childHeightMeasureMode,
-        &childHeight);
+    // rive: a hugging explicit anchor is measured with the computed axis
+    // free, whichever of the owner's axes it is. Whatever that axis was
+    // authored at, stretched to or offered by the owner is the size the
+    // ratio overrides, and wrapping content measured at it would move the
+    // anchor first. The anchor's size is then the one the ratio works from:
+    // below for a cross-axis anchor, in the second pass for a main-axis one.
+    const bool explicitAspectRatioAxis = anchorsMainAxis || locksCrossAxis;
+    const bool aspectRatioAnchorsRow = explicitAspectRatioAxis &&
+        YGNodeAspectRatioAnchorsRow(child, isMainAxisRow);
+    if (explicitAspectRatioAxis) {
+      if (aspectRatioAnchorsRow &&
+          childWidthMeasureMode != YGMeasureModeExactly) {
+        childHeight = YGUndefined;
+        childHeightMeasureMode = YGMeasureModeUndefined;
+      } else if (
+          !aspectRatioAnchorsRow &&
+          childHeightMeasureMode != YGMeasureModeExactly) {
+        childWidth = YGUndefined;
+        childWidthMeasureMode = YGMeasureModeUndefined;
+      }
+    }
+
+    // rive: the computed axis's max stays out of the anchor's measure too --
+    // at most that much, wrapping content would move the anchor -- and
+    // bounds the derived size afterwards instead.
+    if (!(explicitAspectRatioAxis && !aspectRatioAnchorsRow)) {
+      YGConstrainMaxSizeForMode(
+          child,
+          YGFlexDirectionRow,
+          ownerWidth,
+          ownerWidth,
+          &childWidthMeasureMode,
+          &childWidth);
+    }
+    if (!(explicitAspectRatioAxis && aspectRatioAnchorsRow)) {
+      YGConstrainMaxSizeForMode(
+          child,
+          YGFlexDirectionColumn,
+          ownerHeight,
+          ownerWidth,
+          &childHeightMeasureMode,
+          &childHeight);
+    }
 
     // Measure the child
     YGLayoutNodeInternal(
@@ -1802,9 +1938,18 @@ static void YGNodeComputeFlexBasisForChild(
         depth,
         generationCount);
 
+    float mainSize = child->getLayout().measuredDimensions[dim[mainAxis]];
+    if (locksCrossAxis) {
+      // rive: the measured cross size is the anchor; the main size follows.
+      const YGFlexDirection crossAxis =
+          YGFlexDirectionCross(mainAxis, direction);
+      mainSize = YGAspectRatioDerive(
+          child->getLayout().measuredDimensions[dim[crossAxis]],
+          !isMainAxisRow,
+          childStyle.aspectRatio().unwrap());
+    }
     child->setLayoutComputedFlexBasis(YGFloatOptional(YGFloatMax(
-        child->getLayout().measuredDimensions[dim[mainAxis]],
-        YGNodePaddingAndBorderForAxis(child, mainAxis, ownerWidth))));
+        mainSize, YGNodePaddingAndBorderForAxis(child, mainAxis, ownerWidth))));
   }
   child->setLayoutComputedFlexBasisGeneration(generationCount);
 }
@@ -1881,7 +2026,35 @@ void YGNodeAbsoluteLayoutChild(
   // ratio calculation. One dimension being the anchor and the other being
   // flexible.
   const auto& childStyle = child->getStyle();
-  if (YGFloatIsUndefined(childWidth) ^ YGFloatIsUndefined(childHeight)) {
+  // rive: an explicit axis is the anchor even when both sizes are given; a
+  // hugging anchor is measured below and the other size taken from it then.
+  const bool explicitAspectRatioAxis =
+      !childStyle.aspectRatio().isUndefined() &&
+      childStyle.aspectRatioAxis() != YGAspectRatioAxisAuto;
+  const bool aspectRatioAnchorsRow =
+      YGNodeAspectRatioAnchorsRow(child, isMainAxisRow);
+  if (explicitAspectRatioAxis) {
+    // rive: the anchor is bounded by its own min/max before the other side
+    // follows it, as the final layout will bound it.
+    if (aspectRatioAnchorsRow && !YGFloatIsUndefined(childWidth)) {
+      childWidth = marginRow +
+          YGNodeBoundAxis(
+              child, YGFlexDirectionRow, childWidth - marginRow, width, width);
+      childHeight = marginColumn +
+          (childWidth - marginRow) / childStyle.aspectRatio().unwrap();
+    } else if (!aspectRatioAnchorsRow && !YGFloatIsUndefined(childHeight)) {
+      childHeight = marginColumn +
+          YGNodeBoundAxis(
+              child,
+              YGFlexDirectionColumn,
+              childHeight - marginColumn,
+              height,
+              width);
+      childWidth = marginRow +
+          (childHeight - marginColumn) * childStyle.aspectRatio().unwrap();
+    }
+  } else if (
+      YGFloatIsUndefined(childWidth) ^ YGFloatIsUndefined(childHeight)) {
     if (!childStyle.aspectRatio().isUndefined()) {
       if (YGFloatIsUndefined(childWidth)) {
         childWidth = marginRow +
@@ -1890,6 +2063,17 @@ void YGNodeAbsoluteLayoutChild(
         childHeight = marginColumn +
             (childWidth - marginRow) / childStyle.aspectRatio().unwrap();
       }
+    }
+  }
+
+  if (explicitAspectRatioAxis) {
+    // rive: a hugging anchor measures with the computed axis free: the size
+    // authored or inset there is the one the ratio overrides, and at that
+    // size wrapping content would move the anchor.
+    if (aspectRatioAnchorsRow && YGFloatIsUndefined(childWidth)) {
+      childHeight = YGUndefined;
+    } else if (!aspectRatioAnchorsRow && YGFloatIsUndefined(childHeight)) {
+      childWidth = YGUndefined;
     }
   }
 
@@ -1906,7 +2090,10 @@ void YGNodeAbsoluteLayoutChild(
     // child to that size as well. This allows text within the absolute child to
     // wrap to the size of its owner. This is the same behavior as many browsers
     // implement.
+    // rive: not for a width the ratio computes -- the anchor's measure
+    // stays free of it whatever the owner's direction.
     if (!isMainAxisRow && YGFloatIsUndefined(childWidth) &&
+        !(explicitAspectRatioAxis && !aspectRatioAnchorsRow) &&
         widthMode != YGMeasureModeUndefined && !YGFloatIsUndefined(width) &&
         width > 0) {
       childWidth = width;
@@ -1933,6 +2120,17 @@ void YGNodeAbsoluteLayoutChild(
         child->getMarginForAxis(YGFlexDirectionRow, width).unwrap();
     childHeight = child->getLayout().measuredDimensions[YGDimensionHeight] +
         child->getMarginForAxis(YGFlexDirectionColumn, width).unwrap();
+  }
+
+  if (explicitAspectRatioAxis) {
+    // rive: the anchor is known now, declared or measured.
+    if (aspectRatioAnchorsRow) {
+      childHeight = marginColumn +
+          (childWidth - marginRow) / childStyle.aspectRatio().unwrap();
+    } else {
+      childWidth = marginRow +
+          (childHeight - marginColumn) * childStyle.aspectRatio().unwrap();
+    }
   }
 
   YGLayoutNodeInternal(
@@ -2294,11 +2492,12 @@ static float YGNodeComputeFlexBasisForChildren(
   // the computedFlexBasis to 0 instead of measuring and shrinking / flexing the
   // child to exactly match the remaining space
   if (measureModeMainDim == YGMeasureModeExactly) {
+    const bool lineIsRow = YGFlexDirectionIsRow(mainAxis);
     for (auto child : children) {
-      if (child->isNodeFlexible()) {
+      if (YGNodeIsLineFlexible(child, lineIsRow)) {
         if (singleFlexChild != nullptr ||
-            YGFloatsEqual(child->resolveFlexGrow(), 0.0f) ||
-            YGFloatsEqual(child->resolveFlexShrink(), 0.0f)) {
+            YGFloatsEqual(YGNodeLineFlexGrow(child, lineIsRow), 0.0f) ||
+            YGFloatsEqual(YGNodeLineFlexShrink(child, lineIsRow), 0.0f)) {
           // There is already a flexible child, or this flexible child doesn't
           // have flexGrow and flexShrink, abort
           singleFlexChild = nullptr;
@@ -2427,13 +2626,14 @@ static YGCollectFlexItemsRowValues YGCalculateCollectFlexItemsRowValues(
         childLeadingGapMainAxis;
     flexAlgoRowMeasurement.itemsOnLine++;
 
-    if (child->isNodeFlexible()) {
-      flexAlgoRowMeasurement.totalFlexGrowFactors += child->resolveFlexGrow();
+    if (YGNodeIsLineFlexible(child, YGFlexDirectionIsRow(mainAxis))) {
+      flexAlgoRowMeasurement.totalFlexGrowFactors +=
+          YGNodeLineFlexGrow(child, YGFlexDirectionIsRow(mainAxis));
 
       // Unlike the grow factor, the shrink factor is scaled relative to the
       // child dimension.
       flexAlgoRowMeasurement.totalFlexShrinkScaledFactors +=
-          -child->resolveFlexShrink() *
+          -YGNodeLineFlexShrink(child, YGFlexDirectionIsRow(mainAxis)) *
           child->getLayout().computedFlexBasis.unwrap();
     }
 
@@ -2496,7 +2696,7 @@ static float YGDistributeFreeSpaceSecondPass(
     if (!YGFloatIsUndefined(collectedFlexItemsValues.remainingFreeSpace) &&
         collectedFlexItemsValues.remainingFreeSpace < 0) {
       flexShrinkScaledFactor =
-          -currentRelativeChild->resolveFlexShrink() * childFlexBasis;
+          -YGNodeLineFlexShrink(currentRelativeChild, YGFlexDirectionIsRow(mainAxis)) * childFlexBasis;
       // Is this child able to shrink?
       if (flexShrinkScaledFactor != 0) {
         float childSize;
@@ -2522,7 +2722,7 @@ static float YGDistributeFreeSpaceSecondPass(
     } else if (
         !YGFloatIsUndefined(collectedFlexItemsValues.remainingFreeSpace) &&
         collectedFlexItemsValues.remainingFreeSpace > 0) {
-      flexGrowFactor = currentRelativeChild->resolveFlexGrow();
+      flexGrowFactor = YGNodeLineFlexGrow(currentRelativeChild, YGFlexDirectionIsRow(mainAxis));
 
       // Is this child able to grow?
       if (!YGFloatIsUndefined(flexGrowFactor) && flexGrowFactor != 0) {
@@ -2553,7 +2753,15 @@ static float YGDistributeFreeSpaceSecondPass(
     YGMeasureMode childMainMeasureMode = YGMeasureModeExactly;
 
     const auto& childStyle = currentRelativeChild->getStyle();
-    if (!childStyle.aspectRatio().isUndefined()) {
+    // rive: a cross-axis anchor keeps the cross size its basis was derived
+    // from, held exactly: measured again at the derived main size, content
+    // that wraps would move the anchor out from under the ratio.
+    if (YGNodeAspectRatioLocksCrossAxis(currentRelativeChild, isMainAxisRow)) {
+      childCrossSize =
+          currentRelativeChild->getLayout().measuredDimensions[dim[crossAxis]] +
+          marginCross;
+      childCrossMeasureMode = YGMeasureModeExactly;
+    } else if (!childStyle.aspectRatio().isUndefined()) {
       childCrossSize = isMainAxisRow
           ? (childMainSize - marginMain) / childStyle.aspectRatio().unwrap()
           : (childMainSize - marginMain) * childStyle.aspectRatio().unwrap();
@@ -2611,9 +2819,12 @@ static float YGDistributeFreeSpaceSecondPass(
         &childCrossMeasureMode,
         &childCrossSize);
 
+    // rive: a cross-axis anchor gets its real layout here; the stretch pass
+    // leaves it alone, so deferring to it would leave the child unlaid.
     const bool requiresStretchLayout =
         !YGNodeIsStyleDimDefined(
             currentRelativeChild, crossAxis, availableInnerCrossDim) &&
+        !YGNodeAspectRatioLocksCrossAxis(currentRelativeChild, isMainAxisRow) &&
         YGNodeAlignItem(node, currentRelativeChild) == YGAlignStretch &&
         currentRelativeChild->marginLeadingValue(crossAxis).unit !=
             YGUnitAuto &&
@@ -2680,7 +2891,7 @@ static void YGDistributeFreeSpaceFirstPass(
 
     if (collectedFlexItemsValues.remainingFreeSpace < 0) {
       flexShrinkScaledFactor =
-          -currentRelativeChild->resolveFlexShrink() * childFlexBasis;
+          -YGNodeLineFlexShrink(currentRelativeChild, YGFlexDirectionIsRow(mainAxis)) * childFlexBasis;
 
       // Is this child able to shrink?
       if (!YGFloatIsUndefined(flexShrinkScaledFactor) &&
@@ -2704,14 +2915,14 @@ static void YGDistributeFreeSpaceFirstPass(
           // first and second passes.
           deltaFreeSpace += boundMainSize - childFlexBasis;
           collectedFlexItemsValues.totalFlexShrinkScaledFactors -=
-              (-currentRelativeChild->resolveFlexShrink() *
+              (-YGNodeLineFlexShrink(currentRelativeChild, YGFlexDirectionIsRow(mainAxis)) *
                currentRelativeChild->getLayout().computedFlexBasis.unwrap());
         }
       }
     } else if (
         !YGFloatIsUndefined(collectedFlexItemsValues.remainingFreeSpace) &&
         collectedFlexItemsValues.remainingFreeSpace > 0) {
-      flexGrowFactor = currentRelativeChild->resolveFlexGrow();
+      flexGrowFactor = YGNodeLineFlexGrow(currentRelativeChild, YGFlexDirectionIsRow(mainAxis));
 
       // Is this child able to grow?
       if (!YGFloatIsUndefined(flexGrowFactor) && flexGrowFactor != 0) {
@@ -3213,7 +3424,8 @@ static void YGNodelayoutImpl(
   }
 
   const uint32_t childCount = YGNodeGetChildCount(node);
-  if (childCount == 0) {
+  // rive: a grid with nodeless items still has tracks to size.
+  if (childCount == 0 && !node->hasGridVirtualContributions()) {
     YGNodeEmptyContainerSetMeasuredDimensions(
         node,
         availableWidth - marginAxisRow,
@@ -3236,6 +3448,13 @@ static void YGNodelayoutImpl(
           heightMeasureMode,
           ownerWidth,
           ownerHeight)) {
+    // rive: short of two exact sizes, that sized the node to the space it was
+    // offered rather than its content, so no measurement it's part of stands
+    // in for one under other limits (YGContainerAxisCanUseCachedMeasurement).
+    if (widthMeasureMode != YGMeasureModeExactly ||
+        heightMeasureMode != YGMeasureModeExactly) {
+      layoutMarkerData.limitDependentMeasures++;
+    }
     return;
   }
 
@@ -3582,8 +3801,13 @@ static void YGNodelayoutImpl(
               child->marginTrailingValue(crossAxis).unit != YGUnitAuto) {
             // If the child defines a definite size for its cross axis, there's
             // no need to stretch.
+            // rive: a cross-axis anchor's size was settled with its basis --
+            // the line's cross size, or its content when the owner had none
+            // to give -- and stretching it here would leave the main size
+            // behind the ratio.
             if (!YGNodeIsStyleDimDefined(
-                    child, crossAxis, availableInnerCrossDim)) {
+                    child, crossAxis, availableInnerCrossDim) &&
+                !YGNodeAspectRatioLocksCrossAxis(child, isMainAxisRow)) {
               float childMainSize =
                   child->getLayout().measuredDimensions[dim[mainAxis]];
               const auto& childStyle = child->getStyle();
@@ -3832,8 +4056,11 @@ static void YGNodelayoutImpl(
 
                 // Remeasure child with the line height as it as been only
                 // measured with the owners height yet.
+                // rive: not a cross-axis anchor, whose size was settled with
+                // its basis.
                 if (!YGNodeIsStyleDimDefined(
-                        child, crossAxis, availableInnerCrossDim)) {
+                        child, crossAxis, availableInnerCrossDim) &&
+                    !YGNodeAspectRatioLocksCrossAxis(child, isMainAxisRow)) {
                   const float childWidth = isMainAxisRow
                       ? (child->getLayout()
                              .measuredDimensions[YGDimensionWidth] +
@@ -4236,6 +4463,137 @@ YOGA_EXPORT bool YGNodeCanUseCachedMeasurement(
   return widthIsCompatible && heightIsCompatible;
 }
 
+// rive: whether a container's measured size depends only on its content
+// (YGContentFlagMeasuresByContent), so that a measurement it made under one
+// set of constraints stands in for another the measured size still fits
+// (YGContainerAxisCanUseCachedMeasurement). That holds for a flex container:
+// unless the legacy stretch errata is on, an at-most measure sizes it to its
+// content and doesn't grow flexible children into the room left. It doesn't
+// hold once the container or anything below it resolves against the space
+// it's offered: a percentage, an aspect ratio, a scrolling overflow, or a
+// grid's track sizing.
+template <size_t Size>
+static bool YGValuesHavePercent(
+    const facebook::yoga::detail::Values<Size>& values) {
+  for (size_t i = 0; i < Size; i++) {
+    if (YGValue(values[i]).unit == YGUnitPercent) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool YGStyleSizesByPercent(const YGStyle& style) {
+  return YGValue(style.flexBasis()).unit == YGUnitPercent ||
+      YGValuesHavePercent(style.dimensions()) ||
+      YGValuesHavePercent(style.minDimensions()) ||
+      YGValuesHavePercent(style.maxDimensions()) ||
+      YGValuesHavePercent(style.margin()) ||
+      YGValuesHavePercent(style.padding()) ||
+      YGValuesHavePercent(style.border());
+}
+
+// rive: what a node's styles say about measuring it (YGLayout::contentFlags):
+// whether its measured size depends only on its content, as above, and
+// whether it stretches a child across its cross axis.
+enum : uint8_t {
+  YGContentFlagsKnown = 1 << 0,
+  YGContentFlagMeasuresByContent = 1 << 1,
+  YGContentFlagStretchesChildren = 1 << 2,
+};
+
+// rive: worked out once since the node was last dirtied. A node's flags are
+// only trusted while it's clean or once this solve has visited it, so a style
+// change waiting on a dirty node is never missed.
+static uint8_t YGNodeContentFlags(
+    const YGNodeRef node,
+    const uint32_t generationCount) {
+  YGLayout& layout = node->getLayout();
+  if ((layout.contentFlags & YGContentFlagsKnown) != 0 &&
+      (!node->isDirty() || layout.generationCount == generationCount)) {
+    return layout.contentFlags;
+  }
+  const YGStyle& style = node->getStyle();
+  bool byContent = style.display() != YGDisplayGrid &&
+      style.overflow() != YGOverflowScroll &&
+      style.aspectRatio().isUndefined() && !YGValuesHavePercent(style.gap()) &&
+      !YGStyleSizesByPercent(style) &&
+      !node->hasErrata(YGErrataStretchFlexBasis);
+  bool stretches = false;
+  const YGDimension crossDimension =
+      YGFlexDirectionIsRow(style.flexDirection()) ? YGDimensionHeight
+                                                  : YGDimensionWidth;
+  for (const YGNodeRef child : node->getChildren()) {
+    if (!byContent) {
+      break;
+    }
+    const YGStyle& childStyle = child->getStyle();
+    if (childStyle.display() == YGDisplayNone ||
+        childStyle.positionType() == YGPositionTypeAbsolute) {
+      continue;
+    }
+    byContent = child->hasMeasureFunc()
+        ? childStyle.aspectRatio().isUndefined() &&
+            !YGStyleSizesByPercent(childStyle)
+        : (YGNodeContentFlags(child, generationCount) &
+           YGContentFlagMeasuresByContent) != 0;
+    if (!stretches && YGNodeAlignItem(node, child) == YGAlignStretch) {
+      const YGValue crossSize =
+          YGValue(childStyle.dimensions()[crossDimension]);
+      stretches =
+          !(crossSize.unit == YGUnitPoint && crossSize.value >= 0.0f);
+    }
+  }
+  layout.contentFlags = YGContentFlagsKnown |
+      (byContent ? YGContentFlagMeasuresByContent : 0) |
+      (stretches ? YGContentFlagStretchesChildren : 0);
+  return layout.contentFlags;
+}
+
+// rive: whether a container's measurement along one axis, made under
+// [lastMode] [lastSize], stands in for one under [mode] [size]: the same
+// constraint, an at-most limit no looser than the last one (or the last one
+// had none) that the measured size fits inside, or an exact size equal to the
+// measured size.
+//
+// Yoga measures a container offered at most nothing past its margins as the
+// space it's offered rather than its content
+// (YGNodeFixedSizeSetMeasuredDimensions). A limit that only just holds the
+// content, or an exact size equal to it, offers that to any container inside
+// that measures as nothing. So unless [tight] says the measurement had none,
+// the measured size has to fit strictly inside an at-most limit, and an exact
+// size never stands in. Nor does an exact size across a container that
+// [stretches] a child: an at-most measurement didn't stretch it. Unlike
+// YGNodeCanUseCachedMeasurement, the limits aren't rounded to the pixel grid,
+// where a fraction narrower can wrap a line.
+static bool YGContainerAxisCanUseCachedMeasurement(
+    const YGMeasureMode mode,
+    const float size,
+    const YGMeasureMode lastMode,
+    const float lastSize,
+    const float lastComputedSize,
+    const float margin,
+    const bool tight,
+    const bool stretches) {
+  if (mode == lastMode && YGFloatsEqual(size, lastSize)) {
+    return true;
+  }
+  if (YGFloatIsUndefined(size) || YGFloatIsUndefined(lastComputedSize) ||
+      lastComputedSize < 0) {
+    return false;
+  }
+  const bool fills = YGFloatsEqual(lastComputedSize, size - margin);
+  if (mode == YGMeasureModeExactly) {
+    return tight && !stretches && fills;
+  }
+  if (mode != YGMeasureModeAtMost) {
+    return false;
+  }
+  const bool noLooser = lastMode == YGMeasureModeUndefined ||
+      (lastMode == YGMeasureModeAtMost && lastSize > size);
+  return noLooser && (fills ? tight : lastComputedSize < size - margin);
+}
+
 //
 // This is a wrapper around the YGNodelayoutImpl function. It determines whether
 // the layout request is redundant and can be skipped.
@@ -4271,6 +4629,9 @@ bool YGLayoutNodeInternal(
   if (needToVisitNode) {
     // Invalidate the cached results.
     layout->nextCachedMeasurementsIndex = 0;
+    layout->limitDependentMeasurements = 0;
+    layout->emptyContainerMeasurements = 0;
+    layout->contentFlags = 0;
     layout->cachedLayout.availableWidth = -1;
     layout->cachedLayout.availableHeight = -1;
     layout->cachedLayout.widthMeasureMode = YGMeasureModeUndefined;
@@ -4280,6 +4641,8 @@ bool YGLayoutNodeInternal(
   }
 
   YGCachedMeasurement* cachedResults = nullptr;
+  // rive: which of cachedMeasurements cachedResults is, if one.
+  int cachedMeasurementIndex = -1;
 
   // Determine whether the results are already cached. We maintain a separate
   // cache for layouts and measurements. A layout operation modifies the
@@ -4329,6 +4692,7 @@ bool YGLayoutNodeInternal(
                 marginAxisColumn,
                 config)) {
           cachedResults = &layout->cachedMeasurements[i];
+          cachedMeasurementIndex = i;
           break;
         }
       }
@@ -4350,12 +4714,78 @@ bool YGLayoutNodeInternal(
           layout->cachedMeasurements[i].heightMeasureMode ==
               heightMeasureMode) {
         cachedResults = &layout->cachedMeasurements[i];
+        cachedMeasurementIndex = i;
         break;
+      }
+    }
+    // rive: a container that sizes to its content reuses a measurement the
+    // new constraints still fit, much as a node with a measure function does
+    // above. A hug container is measured under many different limits while
+    // its parents resolve their own sizes, and each miss measures its whole
+    // subtree again. Not a measurement that sized something to the space it
+    // was offered, though (limitDependentMeasurements). Two exact sizes are
+    // quicker measured than looked up: Yoga sizes a container offered them
+    // without measuring its content.
+    const uint8_t contentFlags = cachedResults == nullptr &&
+            layout->nextCachedMeasurementsIndex > 0 &&
+            !(widthMeasureMode == YGMeasureModeExactly &&
+              heightMeasureMode == YGMeasureModeExactly)
+        ? YGNodeContentFlags(node, generationCount)
+        : 0;
+    if ((contentFlags & YGContentFlagMeasuresByContent) != 0) {
+      const float marginAxisRow =
+          node->getMarginForAxis(YGFlexDirectionRow, ownerWidth).unwrap();
+      const float marginAxisColumn =
+          node->getMarginForAxis(YGFlexDirectionColumn, ownerWidth).unwrap();
+      const bool stretches =
+          (contentFlags & YGContentFlagStretchesChildren) != 0;
+      const bool rowMain =
+          YGFlexDirectionIsRow(node->getStyle().flexDirection());
+      for (uint32_t i = 0; i < layout->nextCachedMeasurementsIndex; i++) {
+        const uint8_t bit = static_cast<uint8_t>(1u << i);
+        if ((layout->limitDependentMeasurements & bit) != 0) {
+          continue;
+        }
+        const bool tight = (layout->emptyContainerMeasurements & bit) == 0;
+        const YGCachedMeasurement& cached = layout->cachedMeasurements[i];
+        if (YGContainerAxisCanUseCachedMeasurement(
+                widthMeasureMode,
+                availableWidth,
+                cached.widthMeasureMode,
+                cached.availableWidth,
+                cached.computedWidth,
+                marginAxisRow,
+                tight,
+                stretches && !rowMain) &&
+            YGContainerAxisCanUseCachedMeasurement(
+                heightMeasureMode,
+                availableHeight,
+                cached.heightMeasureMode,
+                cached.availableHeight,
+                cached.computedHeight,
+                marginAxisColumn,
+                tight,
+                stretches && rowMain)) {
+          cachedResults = &layout->cachedMeasurements[i];
+          cachedMeasurementIndex = i;
+          break;
+        }
       }
     }
   }
 
   if (!needToVisitNode && cachedResults != nullptr) {
+    // rive: a reused measurement passes its marks on to whatever is
+    // measuring this node.
+    if (cachedMeasurementIndex >= 0) {
+      const uint8_t bit = static_cast<uint8_t>(1u << cachedMeasurementIndex);
+      if ((layout->limitDependentMeasurements & bit) != 0) {
+        layoutMarkerData.limitDependentMeasures++;
+      }
+      if ((layout->emptyContainerMeasurements & bit) != 0) {
+        layoutMarkerData.emptyContainerMeasures++;
+      }
+    }
     layout->measuredDimensions[YGDimensionWidth] = cachedResults->computedWidth;
     layout->measuredDimensions[YGDimensionHeight] =
         cachedResults->computedHeight;
@@ -4408,6 +4838,8 @@ bool YGLayoutNodeInternal(
           LayoutPassReasonToString(reason));
     }
 
+    const int limitDependentMeasures = layoutMarkerData.limitDependentMeasures;
+    const int emptyContainerMeasures = layoutMarkerData.emptyContainerMeasures;
     YGNodelayoutImpl(
         node,
         availableWidth,
@@ -4470,6 +4902,27 @@ bool YGLayoutNodeInternal(
         // Allocate a new measurement cache entry.
         newCacheEntry =
             &layout->cachedMeasurements[layout->nextCachedMeasurementsIndex];
+        // rive: whether anything in this measurement was sized to the space
+        // it was offered, and whether it holds a container with children
+        // that measures as nothing, this one included.
+        if (!node->getChildren().empty() &&
+            (YGFloatsEqual(
+                 layout->measuredDimensions[YGDimensionWidth], 0.0f) ||
+             YGFloatsEqual(
+                 layout->measuredDimensions[YGDimensionHeight], 0.0f))) {
+          layoutMarkerData.emptyContainerMeasures++;
+        }
+        const uint8_t bit =
+            static_cast<uint8_t>(1u << layout->nextCachedMeasurementsIndex);
+        const uint8_t clear = static_cast<uint8_t>(~bit);
+        layout->limitDependentMeasurements =
+            layoutMarkerData.limitDependentMeasures != limitDependentMeasures
+            ? layout->limitDependentMeasurements | bit
+            : layout->limitDependentMeasurements & clear;
+        layout->emptyContainerMeasurements =
+            layoutMarkerData.emptyContainerMeasures != emptyContainerMeasures
+            ? layout->emptyContainerMeasurements | bit
+            : layout->emptyContainerMeasurements & clear;
         layout->nextCachedMeasurementsIndex++;
       }
 

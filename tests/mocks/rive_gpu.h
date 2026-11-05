@@ -64,6 +64,7 @@ public:
     void cap (rive::StrokeCap) override {}
     void blendMode (rive::BlendMode) override {}
     void shader (rive::rcp<rive::RenderShader>) override {}
+    void shaderTransform (const rive::Mat2D&) override {}
     void invalidateStroke() override {}
 };
 
