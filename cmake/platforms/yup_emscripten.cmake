@@ -25,7 +25,7 @@ function (_yup_emscripten_get_compile_settings enable_webgpu output_definitions 
     set (options
         $<$<CONFIG:DEBUG>:-O0 -g>
         $<$<CONFIG:RELEASE>:-O3>
-        -fwasm-exceptions
+        -fexceptions
         -pthread
         -msimd128
         -Wno-nontrivial-memcall)
@@ -70,7 +70,7 @@ function (_yup_platform_setup_standalone_app target_name)
     list (APPEND additional_link_options
         "$<$<CONFIG:DEBUG>:${debug_link_options}>"
         $<$<CONFIG:RELEASE>:-O2 -flto>
-        -fwasm-exceptions
+        -fexceptions
         -pthread
         -Wno-pthreads-mem-growth
         -sWASM=1

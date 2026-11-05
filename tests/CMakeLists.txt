@@ -44,7 +44,7 @@ FetchContent_MakeAvailable (googletest)
 
 if (YUP_PLATFORM_EMSCRIPTEN)
     foreach (gtest_target gtest gtest_main gmock gmock_main)
-        target_compile_options (${gtest_target} PRIVATE -pthread -fwasm-exceptions)
+        target_compile_options (${gtest_target} PRIVATE -pthread -fexceptions)
     endforeach()
 endif()
 
