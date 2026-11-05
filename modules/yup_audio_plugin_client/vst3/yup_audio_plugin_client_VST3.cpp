@@ -375,6 +375,11 @@ public:
         }
     }
 
+    void paint (Graphics& g) override
+    {
+        // Paint nothing to save CPU cycles
+    }
+
     tresult PLUGIN_API attached (void* parent, FIDString type) override
     {
         auto result = Vst::EditorView::attached (parent, type);
