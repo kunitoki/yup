@@ -30,7 +30,7 @@ project (${target_name} VERSION ${target_version})
 #      A shader without its own .vert uses the fullscreen triangle of the graphics example.
 set (source_dir "${CMAKE_CURRENT_LIST_DIR}/source")
 set (common_shaders_dir "${source_dir}/common/shaders")
-set (fullscreen_vertex "${CMAKE_CURRENT_LIST_DIR}/../../../examples/graphics/data/shaders/fullscreen.vert")
+set (fullscreen_vertex "${common_shaders_dir}/fullscreen.vert")
 file (GLOB shader_includes "${common_shaders_dir}/*.glsl")
 
 set (shader_libraries "")
