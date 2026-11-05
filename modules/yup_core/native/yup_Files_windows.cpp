@@ -128,10 +128,12 @@ static int64 fileTimeToTime (const FILETIME* const ft) noexcept
 
 static FILETIME* timeToFileTime (const int64 time, FILETIME* const ft) noexcept
 {
-    if (time <= 0)
+    constexpr int64 unixEpochOffset = 116444736000000000LL;
+
+    if (time <= 0 || time > (std::numeric_limits<int64>::max() - unixEpochOffset) / 10000)
         return nullptr;
 
-    reinterpret_cast<ULARGE_INTEGER*> (ft)->QuadPart = (ULONGLONG) (time * 10000 + 116444736000000000LL);
+    reinterpret_cast<ULARGE_INTEGER*> (ft)->QuadPart = (ULONGLONG) (time * 10000 + unixEpochOffset);
     return ft;
 }
 
@@ -357,6 +359,11 @@ bool File::setFileReadOnlyInternal (bool shouldBeReadOnly) const
     return WindowsFileHelpers::changeAtts (fullPath,
                                            shouldBeReadOnly ? FILE_ATTRIBUTE_READONLY : 0,
                                            shouldBeReadOnly ? 0 : FILE_ATTRIBUTE_READONLY);
+}
+
+static bool yup_createOwnerOnlyFile (const File& file)
+{
+    return file.create().wasOk();
 }
 
 bool File::setFileExecutableInternal (bool /*shouldBeExecutable*/) const
@@ -1009,21 +1016,31 @@ static String readWindowsShortcutOrLink (const File& shortcut, bool wantsAbsolut
                 {
                     String targetPath;
 
+                    const auto isWithinReparseData = [&] (const WCHAR* pathBuffer, USHORT offset, USHORT length)
+                    {
+                        const auto pathStart = (size_t) (reinterpret_cast<const char*> (pathBuffer) - reinterpret_cast<const char*> (reparseData.getData()));
+                        return pathStart + offset + length <= (size_t) bytesReturned;
+                    };
+
                     switch (reparseData->ReparseTag)
                     {
                         case IO_REPARSE_TAG_SYMLINK:
                         {
                             auto& symlinkData = reparseData->SymbolicLinkReparseBuffer;
-                            targetPath = { symlinkData.PathBuffer + (symlinkData.SubstituteNameOffset / sizeof (WCHAR)),
-                                           symlinkData.SubstituteNameLength / sizeof (WCHAR) };
+
+                            if (isWithinReparseData (symlinkData.PathBuffer, symlinkData.SubstituteNameOffset, symlinkData.SubstituteNameLength))
+                                targetPath = { symlinkData.PathBuffer + (symlinkData.SubstituteNameOffset / sizeof (WCHAR)),
+                                               symlinkData.SubstituteNameLength / sizeof (WCHAR) };
                         }
                         break;
 
                         case IO_REPARSE_TAG_MOUNT_POINT:
                         {
                             auto& mountData = reparseData->MountPointReparseBuffer;
-                            targetPath = { mountData.PathBuffer + (mountData.SubstituteNameOffset / sizeof (WCHAR)),
-                                           mountData.SubstituteNameLength / sizeof (WCHAR) };
+
+                            if (isWithinReparseData (mountData.PathBuffer, mountData.SubstituteNameOffset, mountData.SubstituteNameLength))
+                                targetPath = { mountData.PathBuffer + (mountData.SubstituteNameOffset / sizeof (WCHAR)),
+                                               mountData.SubstituteNameLength / sizeof (WCHAR) };
                         }
                         break;
 

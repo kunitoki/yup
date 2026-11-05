@@ -300,6 +300,26 @@ TEST_F (FileTests, ParentChildRelationships)
     EXPECT_TRUE (childFile.getSiblingFile ("foo").isAChildOf (temp));
 }
 
+TEST_F (FileTests, IsAChildOfTerminatesWhenParentIsItself)
+{
+    const auto noSeparator = File::createFileWithoutCheckingPath ("abcdef");
+    const auto shortParent = File::createFileWithoutCheckingPath ("ab");
+
+    EXPECT_FALSE (noSeparator.isAChildOf (shortParent));
+    EXPECT_FALSE (File::createFileWithoutCheckingPath ("abcdef/x").isAChildOf (shortParent));
+}
+
+#if ! YUP_WINDOWS
+TEST_F (FileTests, RemovesEllipsisWithoutEscapingRoot)
+{
+    EXPECT_EQ (File ("/sandbox/.."), File ("/"));
+    EXPECT_EQ (File ("/../etc"), File ("/etc"));
+    EXPECT_EQ (File ("/a/./b"), File ("/a/b"));
+    EXPECT_EQ (File ("/a/b/../c"), File ("/a/c"));
+    EXPECT_FALSE (File ("/a/b/..").isAChildOf (File ("/a/b")));
+}
+#endif
+
 TEST_F (FileTests, FileAccess)
 {
     File nonExistent;
@@ -655,6 +675,20 @@ TEST_F (FileTests, CreateLegalFileName)
     EXPECT_EQ (File::createLegalFileName ("hello|world.txt"), "helloworld.txt");
 }
 
+TEST_F (FileTests, CreateLegalFileNameRejectsSpecialNames)
+{
+    EXPECT_EQ (File::createLegalFileName (".."), "");
+    EXPECT_EQ (File::createLegalFileName ("."), "");
+    EXPECT_EQ (File::createLegalFileName ("~"), "");
+    EXPECT_EQ (File::createLegalFileName ("~root"), "root");
+    EXPECT_EQ (File::createLegalFileName ("name. . "), "name");
+    EXPECT_EQ (File::createLegalFileName ("a\tb\x01" "c\x7f"), "abc");
+    EXPECT_EQ (File::createLegalFileName ("CON"), "_CON");
+    EXPECT_EQ (File::createLegalFileName ("nul.txt"), "_nul.txt");
+    EXPECT_EQ (File::createLegalFileName ("com1"), "_com1");
+    EXPECT_EQ (File::createLegalFileName ("CONSOLE"), "CONSOLE");
+}
+
 TEST_F (FileTests, CreateLegalPathName)
 {
     // createLegalPathName should preserve slashes
@@ -921,6 +955,16 @@ TEST_F (FileTests, CopyDirectory)
     EXPECT_TRUE (destDir.getChildFile ("subdir").isDirectory());
     EXPECT_TRUE (destDir.getChildFile ("subdir/file2.txt").exists());
     EXPECT_EQ (destDir.getChildFile ("subdir/file2.txt").loadFileAsString(), "Content 2");
+}
+
+TEST_F (FileTests, CopyDirectoryIntoItselfFails)
+{
+    const auto sourceDir = tempFolder.getChildFile ("source");
+    sourceDir.getChildFile ("subdir").createDirectory();
+
+    EXPECT_FALSE (sourceDir.copyDirectoryTo (sourceDir));
+    EXPECT_FALSE (sourceDir.copyDirectoryTo (sourceDir.getChildFile ("subdir/copy")));
+    EXPECT_FALSE (sourceDir.getChildFile ("subdir/copy").exists());
 }
 
 TEST_F (FileTests, ReplaceFileIn)
@@ -1247,5 +1291,80 @@ TEST_F (FileTests, ReplaceWithTextPreservesPermissions)
     ASSERT_TRUE (target.replaceWithText ("new"));
     EXPECT_EQ (target.loadFileAsString(), "new");
     EXPECT_EQ (getPermissions (target), (mode_t) 0600);
+}
+
+TEST_F (FileTests, SetReadOnlyFalseOnlyGrantsOwnerWrite)
+{
+    ASSERT_TRUE (tempFolder.createDirectory().wasOk());
+
+    auto file = tempFolder.getChildFile ("file.txt");
+    ASSERT_TRUE (file.replaceWithText ("data"));
+    ASSERT_EQ (chmod (file.getFullPathName().toRawUTF8(), 0444), 0);
+
+    EXPECT_TRUE (file.setReadOnly (false));
+    EXPECT_EQ (getPermissions (file), (mode_t) 0644);
+
+    EXPECT_TRUE (file.setReadOnly (true));
+    EXPECT_EQ (getPermissions (file), (mode_t) 0444);
+}
+
+TEST_F (FileTests, SetReadOnlyRecursiveSkipsSymlinks)
+{
+    const auto inside = tempFolder.getChildFile ("inside");
+    const auto outside = tempFolder.getChildFile ("outside.txt");
+    ASSERT_TRUE (inside.createDirectory().wasOk());
+    ASSERT_TRUE (outside.replaceWithText ("data"));
+    ASSERT_EQ (chmod (outside.getFullPathName().toRawUTF8(), 0600), 0);
+    ASSERT_TRUE (outside.createSymbolicLink (inside.getChildFile ("link"), true));
+
+    EXPECT_TRUE (inside.setReadOnly (true, true));
+    EXPECT_EQ (getPermissions (outside), (mode_t) 0600);
+
+    inside.setReadOnly (false, true);
+}
+
+TEST_F (FileTests, CopyFilePreservesPermissions)
+{
+    ASSERT_TRUE (tempFolder.createDirectory().wasOk());
+
+    const auto source = tempFolder.getChildFile ("source.txt");
+    const auto target = tempFolder.getChildFile ("target.txt");
+    ASSERT_TRUE (source.replaceWithText ("secret"));
+    ASSERT_EQ (chmod (source.getFullPathName().toRawUTF8(), 0600), 0);
+
+    ASSERT_TRUE (source.copyFileTo (target));
+    EXPECT_EQ (target.loadFileAsString(), "secret");
+    EXPECT_EQ (getPermissions (target), (mode_t) 0600);
+}
+
+TEST_F (FileTests, CopyDirectorySkipsSymlinks)
+{
+    const auto sourceDir = tempFolder.getChildFile ("source");
+    const auto destDir = tempFolder.getChildFile ("dest");
+    const auto outside = tempFolder.getChildFile ("outside.txt");
+    ASSERT_TRUE (sourceDir.createDirectory().wasOk());
+    ASSERT_TRUE (sourceDir.getChildFile ("file.txt").replaceWithText ("data"));
+    ASSERT_TRUE (outside.replaceWithText ("secret"));
+    ASSERT_TRUE (outside.createSymbolicLink (sourceDir.getChildFile ("link.txt"), true));
+
+    EXPECT_TRUE (sourceDir.copyDirectoryTo (destDir));
+    EXPECT_TRUE (destDir.getChildFile ("file.txt").existsAsFile());
+    EXPECT_FALSE (destDir.getChildFile ("link.txt").exists());
+}
+
+TEST_F (FileTests, DeleteRecursivelyDoesNotFollowSymlinks)
+{
+    const auto toDelete = tempFolder.getChildFile ("toDelete");
+    const auto outsideDir = tempFolder.getChildFile ("outside");
+    const auto outsideFile = outsideDir.getChildFile ("keep.txt");
+    ASSERT_TRUE (toDelete.getChildFile ("sub").createDirectory().wasOk());
+    ASSERT_TRUE (toDelete.getChildFile ("sub/file.txt").replaceWithText ("data"));
+    ASSERT_TRUE (outsideFile.create().wasOk());
+    ASSERT_TRUE (outsideDir.createSymbolicLink (toDelete.getChildFile ("sub/dirLink"), true));
+    ASSERT_TRUE (outsideFile.createSymbolicLink (toDelete.getChildFile ("fileLink"), true));
+
+    EXPECT_TRUE (toDelete.deleteRecursively());
+    EXPECT_FALSE (toDelete.exists());
+    EXPECT_TRUE (outsideFile.existsAsFile());
 }
 #endif

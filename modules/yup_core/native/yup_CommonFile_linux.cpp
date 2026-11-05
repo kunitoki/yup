@@ -46,6 +46,7 @@ bool File::copyInternal (const File& dest) const
 
     if (dest.deleteFile())
     {
+        if (yup_createOwnerOnlyFile (dest))
         {
             FileOutputStream out (dest);
 
@@ -53,7 +54,14 @@ bool File::copyInternal (const File& dest) const
                 return false;
 
             if (out.writeFromInputStream (in, -1) == getSize())
+            {
+                yup_statStruct info;
+
+                if (yup_stat (fullPath, info))
+                    chmod (dest.getFullPathName().toUTF8(), info.st_mode & 0777);
+
                 return true;
+            }
         }
 
         dest.deleteFile();

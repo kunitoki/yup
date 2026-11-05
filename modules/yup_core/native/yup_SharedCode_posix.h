@@ -421,6 +421,65 @@ bool File::hasReadAccess() const
         && access (fullPath.toUTF8(), R_OK) == 0;
 }
 
+static bool yup_createOwnerOnlyFile (const File& file)
+{
+    const auto fd = open (file.getFullPathName().toUTF8(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+
+    if (fd < 0)
+        return false;
+
+    close (fd);
+    return true;
+}
+
+static bool yup_removeDirectoryContents (int dirFd)
+{
+    auto* dir = fdopendir (dirFd);
+
+    if (dir == nullptr)
+    {
+        close (dirFd);
+        return false;
+    }
+
+    std::vector<std::string> names;
+
+    while (auto* entry = readdir (dir))
+        if (std::strcmp (entry->d_name, ".") != 0 && std::strcmp (entry->d_name, "..") != 0)
+            names.emplace_back (entry->d_name);
+
+    bool worked = true;
+
+    for (const auto& name : names)
+    {
+        const auto childFd = openat (dirfd (dir), name.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+
+        if (childFd >= 0)
+        {
+            worked = yup_removeDirectoryContents (childFd) && worked;
+            worked = unlinkat (dirfd (dir), name.c_str(), AT_REMOVEDIR) == 0 && worked;
+        }
+        else
+        {
+            worked = unlinkat (dirfd (dir), name.c_str(), 0) == 0 && worked;
+        }
+    }
+
+    closedir (dir);
+    return worked;
+}
+
+static bool yup_deleteRecursivelyWithoutFollowingLinks (const File& file)
+{
+    const auto fd = open (file.getFullPathName().toUTF8(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+
+    if (fd < 0)
+        return file.deleteFile();
+
+    const auto worked = yup_removeDirectoryContents (fd);
+    return file.deleteFile() && worked;
+}
+
 static bool setFileModeFlags (const String& fullPath, mode_t flags, bool shouldSet) noexcept
 {
     yup_statStruct info;
@@ -440,8 +499,9 @@ static bool setFileModeFlags (const String& fullPath, mode_t flags, bool shouldS
 
 bool File::setFileReadOnlyInternal (bool shouldBeReadOnly) const
 {
-    // Hmm.. should we give global write permission or just the current user?
-    return setFileModeFlags (fullPath, S_IWUSR | S_IWGRP | S_IWOTH, ! shouldBeReadOnly);
+    // Write access is only given back to the owner, never to group or others
+    return shouldBeReadOnly ? setFileModeFlags (fullPath, S_IWUSR | S_IWGRP | S_IWOTH, false)
+                            : setFileModeFlags (fullPath, S_IWUSR, true);
 }
 
 bool File::setFileExecutableInternal (bool shouldBeExecutable) const
@@ -604,7 +664,7 @@ void FileInputStream::openHandle()
     }
 #endif
 
-    auto f = open (file.getFullPathName().toUTF8(), O_RDONLY);
+    auto f = open (file.getFullPathName().toUTF8(), O_RDONLY | O_CLOEXEC);
     if (f != -1)
     {
         fileHandle = fdToVoidPointer (f);
@@ -680,7 +740,7 @@ void FileOutputStream::openHandle()
 
     if (file.exists())
     {
-        auto f = open (file.getFullPathName().toUTF8(), O_RDWR);
+        auto f = open (file.getFullPathName().toUTF8(), O_RDWR | O_CLOEXEC);
 
         if (f != -1)
         {
@@ -703,7 +763,7 @@ void FileOutputStream::openHandle()
     }
     else
     {
-        auto f = open (file.getFullPathName().toUTF8(), O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW, 00644);
+        auto f = open (file.getFullPathName().toUTF8(), O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 00644);
 
         if (f != -1)
             fileHandle = fdToVoidPointer (f);
@@ -775,9 +835,9 @@ void MemoryMappedFile::openInternal (const File& file, AccessMode mode, bool exc
     auto filename = file.getFullPathName().toUTF8();
 
     if (mode == readWrite)
-        fileHandle = open (filename, O_CREAT | O_RDWR, 00644);
+        fileHandle = open (filename, O_CREAT | O_RDWR | O_CLOEXEC, 00644);
     else
-        fileHandle = open (filename, O_RDONLY);
+        fileHandle = open (filename, O_RDONLY | O_CLOEXEC);
 
     if (fileHandle != -1)
     {
@@ -951,7 +1011,7 @@ public:
     bool createLockFile (const File& file, int timeOutMillisecs)
     {
         file.getParentDirectory().createDirectory();
-        handle = open (file.getFullPathName().toUTF8(), O_RDWR | O_CREAT | O_NOFOLLOW, 0600);
+        handle = open (file.getFullPathName().toUTF8(), O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0600);
 
         if (handle < 0)
         {

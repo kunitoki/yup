@@ -371,10 +371,11 @@ public:
 
     /** Changes the write-permission of a file or directory.
 
-        @param shouldBeReadOnly     whether to add or remove write-permission
+        @param shouldBeReadOnly     whether to add or remove write-permission. On POSIX systems
+                                    removing it gives write access back to the owner only
         @param applyRecursively     if the file is a directory and this is true, it will
                                     recurse through all the subfolders changing the permissions
-                                    of all files
+                                    of all files. Symbolic links inside it are skipped
         @returns    true if it manages to change the file's permissions.
         @see hasWriteAccess
     */
@@ -504,7 +505,10 @@ public:
 
 
         @param followSymlinks If true, then any symlink pointing to a directory will also
-                              recursively delete the contents of that directory
+                              recursively delete the contents of that directory. If false,
+                              symlinks are removed without touching their targets, and on
+                              POSIX platforms the deletion can't be redirected outside the
+                              directory by links swapped in while it runs.
         @returns              true if the file and all its subfolders have been successfully
                               deleted (or if it didn't exist to begin with).
         @see deleteFile
@@ -567,8 +571,9 @@ public:
 
         Tries to copy an entire directory, recursively.
 
-        If this file isn't a directory or if any target files can't be created, this
-        will return false.
+        If this file isn't a directory, if newDirectory is this directory or inside it, or if
+        any target files can't be created, this will return false. Symbolic links inside the
+        directory are skipped, so nothing outside of it is copied.
 
         @param newDirectory    the directory that this one should be copied to. Note that this
                                is the name of the actual directory to create, not the directory
@@ -1087,6 +1092,11 @@ public:
         This will return a copy of the given string after removing characters
         that are not allowed in a legal filename, and possibly shortening the
         string if it's too long.
+
+        The result is always a plain name inside a directory: leading '~', trailing dots
+        and spaces are removed, so "." and ".." become an empty string, and Windows device
+        names such as "CON" or "NUL" get a leading underscore. Check for an empty result
+        before passing it to getChildFile(), which would return the directory itself.
 
         Because this will remove slashes, don't use it on an absolute pathname - use
         createLegalPathName() for that.

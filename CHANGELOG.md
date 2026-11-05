@@ -416,6 +416,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - SDL3 windowing: the render thread no longer queries the window pixel size from UIKit / AppKit, which are main thread only (flagged by Xcode's Main Thread Checker on iOS). The size is cached from `SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED`.
 - iOS: builds with Xcode 27 failed because the toolchain kept iOS 13.0 as deployment target; it now follows the minimum YUP picks for the installed Xcode.
 - iOS audio: fewer blocking AVAudioSession calls on the main thread. The session is no longer switched off and on between creating and opening a device, unchanged categories are not reapplied, and deactivation is asynchronous on iOS 27. Closing or probing a device no longer deactivates the session while another device is open.
+- Emscripten: the `rive` module no longer pulls in Emscripten's unused SDL2 port (`-sUSE_SDL=2`). Parallel compiles raced to build it in the shared Emscripten cache and failed CI builds.
+- `File::isAChildOf` no longer recurses forever (stack overflow) when the path runs out of separators before getting shorter than the potential parent, e.g. `File ("~unknownuser/x")` on POSIX or a drive path checked against a UNC root on Windows. It is also iterative now. `File::copyDirectoryTo` now fails straight away when the destination is the source or inside it, instead of copying into its own copy until the path got too long.
+- `File` hardening:
+  - `..` can no longer climb above the root of an absolute path.
+  - `createLegalFileName` strips control characters, leading `~` and trailing dots/spaces (so `.` and `..` become empty), and prefixes Windows reserved device names with `_`.
+  - `setReadOnly (false)` grants write access to the owner only, and the recursive version no longer follows symlinks.
+  - `copyFileTo` (Linux/Android/WASM) and `replaceWithData` / `replaceWithText` never expose a private file's contents through a wider-permission copy.
+  - `copyDirectoryTo` skips symlinks.
+  - On POSIX, `deleteRecursively` walks the tree with `openat` / `unlinkat` and doesn't follow links swapped in while it runs.
+  - File descriptors are opened with `O_CLOEXEC`.
+  - `~user` paths use the reentrant `getpwnam_r`.
+  - Fixed integer overflows in `getNonexistentChildFile` and in Windows file time setting, an out-of-bounds read in Windows `getChildFile`, and an unchecked Windows reparse point buffer.
 - UBSAN and ASAN fixes throughout the codebase
 
 ### Documentation
