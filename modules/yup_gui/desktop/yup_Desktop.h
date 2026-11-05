@@ -205,6 +205,7 @@ private:
 
     Screen::Array screens;
     std::optional<MouseCursor> currentMouseCursor;
+    std::unordered_map<MouseCursor::Type, void*> nativeCursors;
 
     std::unordered_map<void*, ComponentNative*> nativeComponents;
 
