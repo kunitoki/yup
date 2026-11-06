@@ -435,6 +435,10 @@ TEST_F (HalfbandOversamplerTest, ChannelCapacityDoesNotShrinkAfterAMonoBlock)
 
 TEST_F (HalfbandOversamplerTest, OversizedBlocksAreRejected)
 {
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "Oversized and invalid blocks trigger an assertion when assertions are enabled or logged";
+#endif
+
     HalfbandOversampler<float, 4> os;
     os.prepare (sampleRate, 1, 64);
 

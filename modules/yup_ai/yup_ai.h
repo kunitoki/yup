@@ -26,7 +26,7 @@
 
     ID:                 yup_ai
     vendor:             yup
-    version:            1.0.0
+    version:            2.0.0
     name:               YUP AI
     description:        LLM client and AI integration classes.
     website:            https://github.com/kunitoki/yup

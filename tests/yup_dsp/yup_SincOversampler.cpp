@@ -435,6 +435,10 @@ TEST_F (SincOversamplerTest, InvalidGenerationRequestsPreserveThePendingBlock)
 
 TEST_F (SincOversamplerTest, OversizedBlocksAreRejected)
 {
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "Oversized and invalid blocks trigger an assertion when assertions are enabled or logged";
+#endif
+
     std::vector<float> input (blockSize * 2, 0.5f);
     const float* inputPtrs[] = { input.data() };
     os2x.upsample (inputPtrs, 1, blockSize * 2);
