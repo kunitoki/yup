@@ -57,7 +57,7 @@ var makeInitializeParams (const MCPCapabilities& capabilities)
 
     auto clientInfo = makeMCPClientObject();
     setMCPClientProperty (clientInfo, "name", "YUP");
-    setMCPClientProperty (clientInfo, "version", "1.0.0");
+    setMCPClientProperty (clientInfo, "version", "2.0.0");
     setMCPClientProperty (params, "clientInfo", clientInfo);
 
     return params;

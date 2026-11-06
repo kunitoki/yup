@@ -437,4 +437,17 @@ private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SincOversampler)
 };
 
+//==============================================================================
+/** @name Convenience type aliases for common oversampling configurations (90 dB, passband 0.45) */
+using SincOversampler2xFloat = SincOversampler<float, 2, 16>;     /**< 2x sinc oversampler, float */
+using SincOversampler4xFloat = SincOversampler<float, 4, 16>;     /**< 4x sinc oversampler, float */
+using SincOversampler8xFloat = SincOversampler<float, 8, 16>;     /**< 8x sinc oversampler, float */
+using SincOversampler16xFloat = SincOversampler<float, 16, 16>;   /**< 16x sinc oversampler, float */
+using SincOversampler32xFloat = SincOversampler<float, 32, 16>;   /**< 32x sinc oversampler, float */
+using SincOversampler2xDouble = SincOversampler<double, 2, 16>;   /**< 2x sinc oversampler, double */
+using SincOversampler4xDouble = SincOversampler<double, 4, 16>;   /**< 4x sinc oversampler, double */
+using SincOversampler8xDouble = SincOversampler<double, 8, 16>;   /**< 8x sinc oversampler, double */
+using SincOversampler16xDouble = SincOversampler<double, 16, 16>; /**< 16x sinc oversampler, double */
+using SincOversampler32xDouble = SincOversampler<double, 32, 16>; /**< 32x sinc oversampler, double */
+
 } // namespace yup

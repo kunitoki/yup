@@ -212,6 +212,10 @@ TEST_F (ResamplerTest, LatencyReturnsCorrectValue)
 
 TEST_F (ResamplerTest, OversizedBlocksAreRejected)
 {
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "Oversized and invalid blocks trigger an assertion when assertions are enabled or logged";
+#endif
+
     std::vector<float> input (blockSize * 2, 0.5f);
     std::vector<float> output (blockSize * 4, 0.0f);
     const float* inPtrs[] = { input.data(), input.data(), input.data() };
