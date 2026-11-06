@@ -307,7 +307,7 @@ Path createStrokeClipOutline (const Path& path, const StrokeType& stroke)
 }
 
 // An offscreen Graphics covering a transparency layer's area, in layer-local coordinates.
-std::unique_ptr<Graphics> createLayerGraphics (Graphics& parent, Rectangle<float> targetArea)
+std::unique_ptr<Graphics> createLayerGraphics (Graphics& parent, Rectangle<float> targetArea, bool forceDepthStencil = false)
 {
     const int width = static_cast<int> (std::ceil (targetArea.getWidth()));
     const int height = static_cast<int> (std::ceil (targetArea.getHeight()));
@@ -319,7 +319,21 @@ std::unique_ptr<Graphics> createLayerGraphics (Graphics& parent, Rectangle<float
     if (target == nullptr)
         return nullptr;
 
-    auto graphics = std::make_unique<Graphics> (parent.getGraphicsContext(), std::move (target), 0x00000000);
+    GpuFrameDescriptor frameDesc;
+    frameDesc.clearColor = GpuColor (0x00000000);
+
+    if (forceDepthStencil)
+    {
+        if (auto* renderContext = parent.getGraphicsContext().getGpuDevice()->getRenderContext();
+            renderContext != nullptr
+                && ! renderContext->platformFeatures().supportsRasterOrderingMode
+                && renderContext->platformFeatures().supportsDepthStencilLayerMask)
+        {
+            frameDesc.msaaSampleCount = 1;
+        }
+    }
+
+    auto graphics = std::make_unique<Graphics> (parent.getGraphicsContext(), std::move (target), frameDesc);
 
     if (! graphics->isOffscreen())
         return nullptr;
@@ -397,6 +411,24 @@ Graphics::Graphics (GraphicsContext& context, std::unique_ptr<RenderableTarget> 
     currentRenderOptions().scale = 1.0f;
 
     beginOffscreenFrame ({ .clearColor = GpuColor (clearColor) });
+}
+
+Graphics::Graphics (GraphicsContext& context, std::unique_ptr<RenderableTarget> target, const GpuFrameDescriptor& frameDesc) noexcept
+    : context (context)
+    , ownedOffscreenTarget (std::move (target))
+    , offscreenTarget (ownedOffscreenTarget.get())
+    , factory (*getOffscreenFactory (context, offscreenTarget))
+    , ownedRenderer (makeOffscreenRenderer (context,
+                                            offscreenTarget,
+                                            offscreenTarget != nullptr ? offscreenTarget->getWidth() : 0,
+                                            offscreenTarget != nullptr ? offscreenTarget->getHeight() : 0))
+    , renderer (*ownedRenderer)
+    , contextScale (1.0f)
+{
+    renderOptions.emplace_back();
+    currentRenderOptions().scale = 1.0f;
+
+    beginOffscreenFrame (frameDesc);
 }
 
 Graphics::Graphics (GraphicsContext& context, RenderableTarget& target, uint32_t clearColor) noexcept
@@ -578,11 +610,11 @@ Graphics::TransparencyLayer& Graphics::TransparencyLayer::operator= (Transparenc
 
 Graphics::TransparencyLayer::~TransparencyLayer() = default;
 
-Graphics::TransparencyLayer::TransparencyLayer (Graphics& parent, Rectangle<float> targetArea, float opacity)
+Graphics::TransparencyLayer::TransparencyLayer (Graphics& parent, Rectangle<float> targetArea, float opacity, bool enableMasking)
     : parent (std::addressof (parent))
     , targetArea (targetArea)
     , opacity (jlimit (0.0f, 1.0f, opacity))
-    , graphics (createLayerGraphics (parent, targetArea))
+    , graphics (createLayerGraphics (parent, targetArea, enableMasking))
 {
 }
 
@@ -773,9 +805,9 @@ float Graphics::getOpacity() const
     return currentRenderOptions().opacity;
 }
 
-Graphics::TransparencyLayer Graphics::beginTransparencyLayer (Rectangle<float> targetArea, float opacity)
+Graphics::TransparencyLayer Graphics::beginTransparencyLayer (Rectangle<float> targetArea, float opacity, bool enableMasking)
 {
-    return { *this, targetArea, opacity };
+    return { *this, targetArea, opacity, enableMasking };
 }
 
 void Graphics::setTint (Color tint)
@@ -1308,6 +1340,17 @@ void Graphics::drawImageMeshInstanced (const Image& image, const ImageMesh& mesh
         data.additiveness = jlimit (0.0f, 1.0f, instance.additiveAmount);
     }
     meshInstances->endEdit();
+
+    const auto vertices = mesh.getVertices();
+    rive::AABB meshBounds { vertices[0].getX(), vertices[0].getY(), vertices[0].getX(), vertices[0].getY() };
+    for (const auto& vertex : vertices)
+    {
+        meshBounds.minX = jmin (meshBounds.minX, vertex.getX());
+        meshBounds.minY = jmin (meshBounds.minY, vertex.getY());
+        meshBounds.maxX = jmax (meshBounds.maxX, vertex.getX());
+        meshBounds.maxY = jmax (meshBounds.maxY, vertex.getY());
+    }
+    meshInstances->meshBounds (meshBounds);
 
     const auto& options = currentRenderOptions();
     const auto renderImage = rive::make_rcp<rive::RiveRenderImage> (image.getTexture());

@@ -4237,6 +4237,7 @@ static bool drawTypeIsBatchable(
     case DrawType::stencilOuterCubicWinding:
     case DrawType::stencilOuterCubicCover:
     case DrawType::clipReset:
+    case DrawType::imageMesh:
       // Most drawTypes only support one ElementRange per batch.
       assert(!drawTypeSupportsElementRangeList(drawType));
       return enums::no_flags_set(
@@ -4244,10 +4245,9 @@ static bool drawTypeIsBatchable(
           gpu::BarrierFlags::drawBatchBreak |
               gpu::BarrierFlags::elementRangeBreak);
 
-    // Image draws can't be combined for now because they each have their
+    // Image rects can't be combined for now because they each have their
     // own unique uniforms.
     case DrawType::imageRect:
-    case DrawType::imageMesh:
     case DrawType::renderPassInitialize:
     case DrawType::renderPassResolve:
       assert(!drawTypeSupportsElementRangeList(drawType));
@@ -4296,6 +4296,23 @@ static bool canCombineDrawImages(
   // can't combine draws that use different textures.
   return (currentDrawTexture == nextDrawTexture) &&
          (currentImageSamplerKey == nextImageSamplerKey);
+}
+
+// Image meshes keep everything that varies per draw in their instance data, so
+// adjacent draws of the same mesh splice into one instanced draw. They still
+// need the same geometry and the same pipeline.
+static bool canCombineImageMeshes(
+    const gpu::DrawBatch* batch,
+    const Draw* draw,
+    gpu::DrawContents drawContents)
+{
+  const auto* meshDraw = static_cast<const ImageMeshDrawBase*>(draw);
+  return batch->vertexBuffer == meshDraw->vertexBuffer() &&
+         batch->uvBuffer == meshDraw->uvBuffer() &&
+         batch->indexBuffer == meshDraw->indexBuffer() &&
+         batch->indexCountPerInstance == meshDraw->indexCount() &&
+         batch->firstBlendMode == draw->blendMode() &&
+         batch->drawContents == drawContents;
 }
 
 constexpr uint32_t patchIndexCount(DrawType drawType)
@@ -4580,6 +4597,8 @@ gpu::DrawBatch& RenderContext::LogicalFlush::pushDraw(
             draw->imageTexture(),
             currentBatch->imageSampler,
             draw->imageSampler()) &&
+        (drawType != DrawType::imageMesh ||
+         canCombineImageMeshes(currentBatch, draw, drawContents)) &&
         (!m_ctx->platformFeatures().supportsClipScissor ||
          currentBatch->scissorRect == draw->scissorRect()))
     {

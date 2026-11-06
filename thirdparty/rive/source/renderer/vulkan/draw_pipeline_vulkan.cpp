@@ -27,10 +27,9 @@ constexpr static VkBlendOp vk_blend_op(gpu::BlendEquation equation)
     case gpu::BlendEquation::max:
       return VK_BLEND_OP_MAX;
     case gpu::BlendEquation::layerMask:
-      // Needs a src factor of ZERO, which this pipeline builder does not
-      // vary yet, so Vulkan leaves supportsDepthStencilLayerMask off and
-      // is never asked for it.
-      break;
+      // dst * srcAlpha: VK_BLEND_FACTOR_ZERO src, VK_BLEND_FACTOR_SRC_ALPHA
+      // dst, added together.
+      return VK_BLEND_OP_ADD;
     case gpu::BlendEquation::screen:
     case gpu::BlendEquation::overlay:
     case gpu::BlendEquation::darken:
@@ -51,6 +50,14 @@ constexpr static VkBlendOp vk_blend_op(gpu::BlendEquation equation)
   RIVE_UNREACHABLE();
 }
 
+constexpr static VkBlendFactor vk_src_blend_factor(gpu::BlendEquation equation)
+{
+  // dst * srcAlpha on the layer-mask path drops the src term entirely; every
+  // other equation this builder emits multiplies src by ONE.
+  return equation == gpu::BlendEquation::layerMask ? VK_BLEND_FACTOR_ZERO
+                                                   : VK_BLEND_FACTOR_ONE;
+}
+
 constexpr static VkBlendFactor vk_dst_blend_factor(gpu::BlendEquation equation)
 {
   switch (equation)
@@ -64,8 +71,8 @@ constexpr static VkBlendFactor vk_dst_blend_factor(gpu::BlendEquation equation)
     case gpu::BlendEquation::max:
       return VK_BLEND_FACTOR_ONE;
     case gpu::BlendEquation::layerMask:
-      // See vk_blend_op().
-      break;
+      // dst * srcAlpha, matching the GL backend's GL_ZERO, GL_SRC_ALPHA.
+      return VK_BLEND_FACTOR_SRC_ALPHA;
     case gpu::BlendEquation::screen:
     case gpu::BlendEquation::overlay:
     case gpu::BlendEquation::darken:
@@ -438,10 +445,10 @@ DrawPipelineVulkan::DrawPipelineVulkan(
           pipelineLayout.renderPassOptions()),
       {
           .blendEnable = blendEquation != gpu::BlendEquation::none,
-          .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+          .srcColorBlendFactor = vk_src_blend_factor(blendEquation),
           .dstColorBlendFactor = vk_dst_blend_factor(blendEquation),
           .colorBlendOp = vk_blend_op(blendEquation),
-          .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+          .srcAlphaBlendFactor = vk_src_blend_factor(blendEquation),
           .dstAlphaBlendFactor = vk_dst_blend_factor(blendEquation),
           .alphaBlendOp = vk_blend_op(blendEquation),
           .colorWriteMask = colorWriteEnabled ? vkutil::kColorWriteMaskRGBA

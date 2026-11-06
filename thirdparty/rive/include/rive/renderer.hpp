@@ -142,6 +142,19 @@ public:
 
   void endEdit();
 
+  // Optional local-space bounds of the mesh vertices the instances draw. When
+  // set, renderers that split instances into separate draws can give each one
+  // tight pixel bounds instead of covering the whole render target.
+  void meshBounds(const AABB& bounds)
+  {
+    m_meshBounds = bounds;
+    m_hasMeshBounds = true;
+  }
+  const AABB* meshBounds() const
+  {
+    return m_hasMeshBounds ? &m_meshBounds : nullptr;
+  }
+
 #ifdef DEBUG
   bool isEditing() const { return m_editCount != m_endEditCount; }
   size_t editCount() const { return m_editCount; }
@@ -152,6 +165,8 @@ protected:
 
 private:
   std::vector<ImageMeshInstanceData> m_instanceData;
+  AABB m_meshBounds;
+  bool m_hasMeshBounds = false;
   RIVE_DEBUG_CODE(size_t m_editCount = 0;)
   RIVE_DEBUG_CODE(size_t m_endEditCount = 0;)
 };

@@ -813,13 +813,13 @@ protected:
     }
 
     /** Draws into a transparent size x size canvas and returns its RGBA pixels, or nothing on failure. */
-    static std::vector<uint8> render (const std::function<void (Graphics&)>& draw)
+    static std::vector<uint8> render (const std::function<void (Graphics&)>& draw, const GpuFrameDescriptor& frameDesc = {})
     {
         auto canvas = GpuCanvas::create (*gpuContext, size, size);
         if (canvas == nullptr)
             return {};
 
-        draw (canvas->beginDraw());
+        draw (canvas->beginDraw (frameDesc));
 
         std::vector<uint8> pixels (static_cast<std::size_t> (size * size * 4));
         if (! canvas->commit() || ! canvas->readPixels (pixels.data(), pixels.size()))
@@ -1087,6 +1087,34 @@ TEST_F (GraphicsGpuPixelTests, MeshInstancesLandAtTheirTransforms)
 
     EXPECT_GT (alphaAt (pixels, 12, 12), 200);
     EXPECT_GT (alphaAt (pixels, 44, 44), 200);
+    EXPECT_LT (alphaAt (pixels, 28, 28), 50);
+}
+
+TEST_F (GraphicsGpuPixelTests, MeshInstancesDrawWithoutRasterOrdering)
+{
+    GpuFrameDescriptor frameDesc;
+    frameDesc.disableRasterOrdering = true;
+
+    const auto pixels = render ([] (Graphics& g)
+    {
+        // Apart, overlapping, partly and fully outside the canvas
+        std::vector<ImageMeshInstance> instances (5);
+        instances[0].transform = AffineTransform::translation (4.0f, 4.0f);
+        instances[1].transform = AffineTransform::translation (40.0f, 4.0f);
+        instances[2].transform = AffineTransform::translation (44.0f, 8.0f);
+        instances[3].transform = AffineTransform::translation (-4.0f, 56.0f);
+        instances[4].transform = AffineTransform::translation (200.0f, 200.0f);
+
+        g.drawImageMeshInstanced (createWhiteImage(), ImageMesh::createGrid ({ 0.0f, 0.0f, 8.0f, 8.0f }, 1, 1), instances);
+    },
+                                frameDesc);
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 8, 8), 200);
+    EXPECT_GT (alphaAt (pixels, 42, 6), 200);
+    EXPECT_GT (alphaAt (pixels, 46, 10), 200);
+    EXPECT_GT (alphaAt (pixels, 50, 14), 200);
+    EXPECT_GT (alphaAt (pixels, 2, 60), 200);
     EXPECT_LT (alphaAt (pixels, 28, 28), 50);
 }
 
