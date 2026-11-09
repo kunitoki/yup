@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2.0.1] - 2026-11-09
+
+### Plugins
+
+- Fixed an issue compiling VST3 on macOS in Release because VSTSDK could not respect `CMAKE_OSX_ARCHITECTURES` set by the framework.
+
+---
+
 ## [2.0.0] - 2026-11-06
 
 ### New modules

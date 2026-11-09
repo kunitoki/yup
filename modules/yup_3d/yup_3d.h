@@ -26,7 +26,7 @@
 
     ID:                   yup_3d
     vendor:               yup
-    version:              2.0.0
+    version:              2.0.1
     name:                 YUP 3D
     description:          3D scenes made of entities and attached parts, their meshes, materials and lights, and glTF loading.
     website:              https://github.com/kunitoki/yup

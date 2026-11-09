@@ -31,6 +31,13 @@ function (_yup_fetch_vst3sdk)
         set (SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF)
         set (SMTG_ENABLE_VSTGUI_SUPPORT OFF)
         set (SMTG_CREATE_PLUGIN_LINK OFF)
+
+        if (CMAKE_OSX_ARCHITECTURES MATCHES "x86_64" AND CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
+            set (SMTG_BUILD_UNIVERSAL_BINARY ON CACHE BOOL "Build VST3 as a universal binary" FORCE)
+        else()
+            set (SMTG_BUILD_UNIVERSAL_BINARY OFF CACHE BOOL "Build VST3 as a universal binary" FORCE)
+        endif()
+
         if (NOT YUP_PLATFORM_MAC OR XCODE)
             set (SMTG_RUN_VST_VALIDATOR ON)
         else()

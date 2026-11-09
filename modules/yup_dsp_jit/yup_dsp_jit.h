@@ -26,7 +26,7 @@
 
     ID:                   yup_dsp_jit
     vendor:               yup
-    version:              2.0.0
+    version:              2.0.1
     name:                 YUP DSP JIT
     description:          YDSP, a realtime JIT-compiled audio DSP language.
     website:              https://github.com/kunitoki/yup

@@ -24,9 +24,11 @@ Bump YUP version across the entire codebase.
 
 Updates:
   1. modules/yup_core/system/yup_StandardHeader.h   (YUP_MAJOR/MINOR/BUILDNUMBER defines)
-  2. modules/yup_*/yup_*.h                           (version: field in BEGIN_YUP_MODULE_DECLARATION)
-  3. tests/CMakeLists.txt                             (target_version variable)
-  4. examples/*/CMakeLists.txt                        (target_version variable)
+  2. modules/yup_*/yup_*.h                          (version: field in BEGIN_YUP_MODULE_DECLARATION)
+  3. modules/**/package.json                        (version field)
+  4. tests/CMakeLists.txt                           (target_version variable)
+  5. cmake/tools/*/CMakeLists.txt                   (target_version variable)
+  6. examples/*/CMakeLists.txt                      (target_version variable)
 
 Usage:
   bump_version.py 1.1.0                     # Set exact version
@@ -47,8 +49,10 @@ ROOT = Path(__file__).resolve().parent.parent
 
 STANDARD_HEADER = ROOT / "modules/yup_core/system/yup_StandardHeader.h"
 MODULE_HEADERS = sorted(ROOT.glob("modules/yup_*/yup_*.h"))
+PACKAGE_JSON = sorted(ROOT.glob("modules/**/package.json"))
 CMAKE_FILES = sorted(
     list(ROOT.glob("tests/CMakeLists.txt"))
+    + list(ROOT.glob("cmake/tools/*/CMakeLists.txt"))
     + list(ROOT.glob("examples/*/CMakeLists.txt"))
 )
 
@@ -108,6 +112,24 @@ def update_module_headers(new_version_str, dry_run):
     return updated
 
 
+def update_package_json(new_version_str, dry_run):
+    """Update version field in all package.json files under modules/**/package.json."""
+    updated = False
+    for package_json in PACKAGE_JSON:
+        text = package_json.read_text()
+        new_text = re.sub(
+            r'("version"\s*:\s*")\S+(")',
+            rf'\g<1>{new_version_str}\g<2>',
+            text,
+        )
+        if new_text != text:
+            print(f"  {package_json.relative_to(ROOT)}")
+            if not dry_run:
+                package_json.write_text(new_text)
+            updated = True
+    return updated
+
+
 def update_cmake_files(new_version_str, dry_run):
     """Update set (target_version "...") in tests/ and examples/*/CMakeLists.txt."""
     updated = False
@@ -115,7 +137,7 @@ def update_cmake_files(new_version_str, dry_run):
         text = cmake_file.read_text()
         new_text = re.sub(
             r'(set\s*\(\s*target_version\s+)"[^"]*"',
-            rf'\1"{new_version_str}"',
+            rf'\g<1>"{new_version_str}"',
             text,
         )
         if new_text != text:
@@ -164,6 +186,7 @@ def main():
 
     update_standard_header(new_major, new_minor, new_build, args.dry_run)
     update_module_headers(new_version_str, args.dry_run)
+    update_package_json(new_version_str, args.dry_run)
     update_cmake_files(new_version_str, args.dry_run)
 
     if args.dry_run:

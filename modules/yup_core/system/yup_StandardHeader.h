@@ -46,7 +46,7 @@
 */
 #define YUP_MAJOR_VERSION 2
 #define YUP_MINOR_VERSION 0
-#define YUP_BUILDNUMBER 0
+#define YUP_BUILDNUMBER 1
 
 /** Current YUP version number.
 

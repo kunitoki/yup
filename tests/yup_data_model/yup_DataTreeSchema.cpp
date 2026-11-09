@@ -307,7 +307,7 @@ TEST_F (DataTreeSchemaTests, CompleteTreeValidation)
     // Set required properties
     {
         auto rootTx = root.beginTransaction();
-        rootTx.setProperty ("version", "2.0.0");
+        rootTx.setProperty ("version", "1.1.1");
     }
     {
         auto settingsTx = settings.beginTransaction();
