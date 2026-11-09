@@ -93,11 +93,6 @@ YUP_IMPLEMENT_SINGLETON (X11Functions)
 
 //==============================================================================
 
-Rectangle<int> getNativeWindowPosition (void* nativeWindow)
-{
-    return {};
-}
-
 void focusNativeWindow (void* nativeWindow)
 {
     ignoreUnused (nativeWindow);

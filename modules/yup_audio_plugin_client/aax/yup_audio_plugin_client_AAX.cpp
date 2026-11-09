@@ -83,13 +83,6 @@ namespace yup
 {
 
 //==============================================================================
-#if YUP_ENABLE_PLUGIN_CLIENT_AAX_LOGGING
-#define YUP_AAX_LOG(x) Logger::writeToLog (x)
-#else
-#define YUP_AAX_LOG(x)
-#endif
-
-//==============================================================================
 // Forward declarations
 //==============================================================================
 
@@ -279,14 +272,26 @@ public:
     YupAAX_Processor()
     {
         processor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::aax, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
+
+        if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "createPluginProcessorForWrapper returned null");
+            return;
+        }
+
         processor->addListener (this);
 
         AAX_CEffectParameters::GetNumberOfChunks (&yupChunkIndex);
-        YUP_AAX_LOG ("YupAAX_Processor: created");
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "created effect parameters: wrapper=" << describePointer (this) << ", processor=" << describePointer (processor.get()) << ", chunkIndex=" << String (yupChunkIndex));
     }
 
     ~YupAAX_Processor() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "destroying effect parameters: wrapper=" << describePointer (this) << ", processor=" << describePointer (processor.get()));
+
+        if (processor == nullptr)
+            return;
+
         processor->removeListener (this);
         endActiveParameterGestures (processor.get());
     }
@@ -297,6 +302,8 @@ public:
 
     AAX_Result Uninitialize() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "Uninitialize requested: wrapper=" << describePointer (this) << ", isPrepared=" << String (isPrepared ? "true" : "false"));
+
         if (isPrepared && processor != nullptr)
         {
             isPrepared = false;
@@ -308,11 +315,14 @@ public:
 
     AAX_Result EffectInit() override
     {
-        YUP_AAX_LOG ("YupAAX_Processor::EffectInit");
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "EffectInit requested: wrapper=" << describePointer (this));
 
         auto* ctrl = Controller();
         if (ctrl == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "EffectInit failed: controller is null");
             return AAX_ERROR_NULL_OBJECT;
+        }
 
         AAX_CSampleRate sampleRate = 0;
         ctrl->GetSampleRate (&sampleRate);
@@ -322,11 +332,18 @@ public:
         ctrl->GetInputStemFormat (&inputFormat);
         ctrl->GetOutputStemFormat (&outputFormat);
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "EffectInit host config: sampleRate=" << String (static_cast<double> (sampleRate)) << ", inputStemFormat=" << String (static_cast<int> (inputFormat)) << ", outputStemFormat=" << String (static_cast<int> (outputFormat)));
+
         auto err = preparePlugin (static_cast<float> (sampleRate), inputFormat, outputFormat);
         if (err != AAX_SUCCESS)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "EffectInit failed: preparePlugin result=" << String (static_cast<int> (err)));
             return err;
+        }
 
         addAudioProcessorParameters();
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "EffectInit completed");
         return AAX_SUCCESS;
     }
 
@@ -453,6 +470,8 @@ public:
         {
             case fieldPluginInfo:
             {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "ResetFieldData plugin info: wrapper=" << describePointer (this) << ", data=" << describePointer (data) << ", dataSize=" << String (static_cast<int> (dataSize)));
+
                 const auto numObjects = dataSize / sizeof (YupPluginInstanceInfo);
 
                 auto* objects = static_cast<YupPluginInstanceInfo*> (data);
@@ -464,6 +483,8 @@ public:
 
             case fieldPreparedFlag:
             {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "ResetFieldData prepared flag: wrapper=" << describePointer (this) << ", dataSize=" << String (static_cast<int> (dataSize)));
+
                 const_cast<YupAAX_Processor*> (this)->preparePlugin (lastSampleRate, lastInputFormat, lastOutputFormat);
 
                 const auto numObjects = dataSize / sizeof (uint32_t);
@@ -513,8 +534,15 @@ public:
     {
         if (chunkID == YupPlugin_AAX_ChunkID)
         {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunkSize requested");
+
             MemoryBlock processorState;
-            processor->saveStateIntoMemory (processorState);
+            const auto result = processor->saveStateIntoMemory (processorState);
+
+            if (result.failed())
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunkSize saving processor state failed: " << result.getErrorMessage());
+            }
 
             auto& tls = chunkData.get();
             tls.data = writeWrapperBypassState (
@@ -526,6 +554,8 @@ public:
             tls.isValid = true;
 
             *size = static_cast<uint32_t> (tls.data.getSize());
+
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunkSize completed: bytes=" << String (static_cast<int64> (*size)) << ", processorBytes=" << String (static_cast<int64> (processorState.getSize())) << ", bypassed=" << String (isBypassed.load() ? "true" : "false"));
             return AAX_SUCCESS;
         }
 
@@ -536,9 +566,14 @@ public:
     {
         if (chunkID == YupPlugin_AAX_ChunkID)
         {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunk requested: chunk=" << describePointer (chunk));
+
             auto& tls = chunkData.get();
             if (! tls.isValid)
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunk failed: GetChunkSize was not called on this thread");
                 return 20700; // AAX_ERROR_PLUGIN_API_INVALID_THREAD
+            }
 
             // The host allocates the chunk using the size returned by
             // GetChunkSize, fData is a variable length trailing array
@@ -549,6 +584,8 @@ public:
                 tls.data.copyTo (chunk->fData, 0, static_cast<size_t> (size));
 
             tls.isValid = false;
+
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunk completed: bytes=" << String (size));
             return AAX_SUCCESS;
         }
 
@@ -559,23 +596,39 @@ public:
     {
         if (chunkID == YupPlugin_AAX_ChunkID)
         {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "SetChunk requested: bytes=" << String (static_cast<int> (chunk->fSize)));
+
             MemoryBlock rawData (chunk->fData, static_cast<size_t> (chunk->fSize));
             auto state = readWrapperBypassState (rawData, YupPlugin_AAX_ChunkMagic, YupPlugin_AAX_ChunkVersion);
 
             if (state.hasWrapperState)
             {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "SetChunk wrapper state: bypassed=" << String (state.isBypassed ? "true" : "false") << ", hasProcessorState=" << String (state.hasProcessorState ? "true" : "false") << ", processorBytes=" << String (static_cast<int64> (state.processorState.getSize())));
+
                 setBypassed (state.isBypassed);
                 SetParameterNormalizedValue (cDefaultMasterBypassID, state.isBypassed ? 1.0 : 0.0);
 
                 if (state.hasProcessorState && ! state.processorState.isEmpty())
-                    processor->loadStateFromMemory (state.processorState);
+                {
+                    const auto result = processor->loadStateFromMemory (state.processorState);
+                    ignoreUnused (result);
+
+                    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "SetChunk processor state " << (result.wasOk() ? String ("loaded") : "failed: " + result.getErrorMessage()));
+                }
             }
             else
             {
-                processor->loadStateFromMemory (rawData);
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "SetChunk without wrapper state, loading raw processor state");
+
+                const auto result = processor->loadStateFromMemory (rawData);
+                ignoreUnused (result);
+
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "SetChunk processor state " << (result.wasOk() ? String ("loaded") : "failed: " + result.getErrorMessage()));
             }
 
             resyncParameterValues();
+
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "SetChunk completed");
             return AAX_SUCCESS;
         }
 
@@ -599,10 +652,12 @@ public:
     {
         if (notificationType == AAX_eNotificationEvent_EnteringOfflineMode)
         {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "entering offline mode");
             processor->suspendProcessing (true);
         }
         else if (notificationType == AAX_eNotificationEvent_ExitingOfflineMode)
         {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "exiting offline mode");
             processor->suspendProcessing (false);
         }
 
@@ -781,6 +836,8 @@ private:
         lastInputFormat = inputFormat;
         lastOutputFormat = outputFormat;
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "preparing processor: sampleRate=" << String (static_cast<double> (sampleRate)) << ", maxBlockSize=" << String (maxAaxBufferSize) << ", inputStemFormat=" << String (static_cast<int> (inputFormat)) << ", outputStemFormat=" << String (static_cast<int> (outputFormat)) << ", inCh=" << String (processor->getBusLayout().getNumAudioInputChannels()) << ", outCh=" << String (processor->getBusLayout().getNumAudioOutputChannels()));
+
         processor->setPlaybackConfiguration (sampleRate, maxAaxBufferSize);
         isPrepared = true;
 
@@ -794,6 +851,8 @@ private:
 
         if (auto* ctrl = Controller())
             ctrl->SetSignalLatency (processor->getLatencySamples());
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "processor prepared: latency=" << String (processor->getLatencySamples()));
 
         return AAX_SUCCESS;
     }
@@ -826,6 +885,8 @@ private:
             const auto hash = getAaxParamHash (aaxParamID.toRawUTF8());
             paramMap[hash] = param;
         }
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "registered parameters: processorParameters=" << String (static_cast<int> (parameters.size())) << ", aaxParameters=" << String (static_cast<int> (paramMap.size())) << ", meters=" << String (static_cast<int> (aaxMeters.size())));
     }
 
     void addMasterBypassParameter()
@@ -1038,6 +1099,7 @@ private:
     };
 
     ScopedYupInitialiser_GUI scopeInitialiser;
+    ScopedYupInitialiser_Windowing scopeWindowingInitialiser;
 
     std::unique_ptr<AudioProcessor> processor;
     int32_t yupChunkIndex = 0;
@@ -1084,9 +1146,16 @@ public:
         return new YupAAX_GUI();
     }
 
-    YupAAX_GUI() = default;
+    YupAAX_GUI()
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "created effect GUI: gui=" << describePointer (this));
+    }
 
-    ~YupAAX_GUI() override { DeleteViewContainer(); }
+    ~YupAAX_GUI() override
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "destroying effect GUI: gui=" << describePointer (this) << ", editor=" << describePointer (editorComponent.get()));
+        DeleteViewContainer();
+    }
 
     //==========================================================================
     // AAX_CEffectGUI overrides (all return void!)
@@ -1094,41 +1163,77 @@ public:
 
     void CreateViewContents() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContents requested: gui=" << describePointer (this));
+
         auto* params = GetEffectParameters();
         if (params == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContents failed: effect parameters are null");
             return;
+        }
 
         auto* yupParams = dynamic_cast<YupAAX_Processor*> (params);
         if (yupParams == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContents failed: effect parameters are not a YUP processor");
             return;
+        }
 
         if (editorComponent != nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContents skipped: editor already exists");
             return;
+        }
 
         auto& audioProcessor = yupParams->getAudioProcessor();
 
         if (audioProcessor.hasEditor())
         {
             editorComponent.reset (audioProcessor.createEditor());
-            YUP_AAX_LOG ("YupAAX_GUI: created editor");
+
+            if (editorComponent == nullptr)
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "processor returned null editor");
+            }
+            else
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "created editor: preferredSize=" << editorComponent->getPreferredSize().toString() << ", editor=" << describePointer (editorComponent.get()));
+            }
+        }
+        else
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "processor has no editor");
         }
     }
 
     void CreateViewContainer() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContainer requested: gui=" << describePointer (this) << ", editor=" << describePointer (editorComponent.get()));
+
         if (editorComponent == nullptr)
             CreateViewContents();
 
         if (editorComponent == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContainer failed: editor is null");
             return;
+        }
 
         auto* viewContainer = GetViewContainer();
         if (viewContainer == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContainer failed: view container is null");
             return;
+        }
 
         auto* nativeView = viewContainer->GetPtr();
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "view container: type=" << String (static_cast<int> (viewContainer->GetType())) << ", nativeView=" << describePointer (nativeView));
+
         if (nativeView == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContainer failed: native view is null");
             return;
+        }
 
         ComponentNative::Flags flags =
             ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow;
@@ -1148,13 +1253,15 @@ public:
         editorComponent->setVisible (true);
         editorComponent->attachedToNative();
 
-        YUP_AAX_LOG ("YupAAX_GUI: attached to native view");
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "editor attached to native view: bounds=" << editorComponent->getBounds().toString() << ", resizable=" << String (editorComponent->isResizable() ? "true" : "false") << ", renderContinuous=" << String (editorComponent->shouldRenderContinuous() ? "true" : "false") << ", isOnDesktop=" << String (editorComponent->isOnDesktop() ? "true" : "false"));
     }
 
     void DeleteViewContainer() override
     {
         if (editorComponent != nullptr)
         {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "DeleteViewContainer destroying editor: editor=" << describePointer (editorComponent.get()));
+
             editorComponent->removeFromDesktop();
             editorComponent.reset();
         }
@@ -1242,6 +1349,13 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
 {
     std::unique_ptr<AudioProcessor> plugin (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::aax, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
 
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "describing plugin: processor=" << describePointer (plugin.get()) << ", hasEditor=" << String (plugin != nullptr && plugin->hasEditor() ? "true" : "false"));
+
+    if (plugin == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "createPluginProcessorForWrapper returned null");
+    }
+
     descriptor.AddName (YupPlugin_Name);
     descriptor.AddName (YupPlugin_Description);
     descriptor.AddCategory (YupPlugin_AAXCategory);
@@ -1267,7 +1381,10 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
 
         auto* meterProps = descriptor.NewPropertyMap();
         if (meterProps == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "skipping meter: property map is null, name=" << param->getName());
             continue;
+        }
 
         meterProps->AddProperty (AAX_eProperty_Meter_Type, getMeterTypeFromParam (*param));
         meterProps->AddProperty (AAX_eProperty_Meter_Orientation, AAX_eMeterOrientation_TopRight);
@@ -1275,6 +1392,8 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
         const auto meterID = static_cast<AAX_CTypeID> ('Mtr0' + static_cast<AAX_CTypeID> (meterIDs.size()));
 
         descriptor.AddMeterDescription (meterID, param->getName().toRawUTF8(), meterProps);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "registered meter: id=" << String (static_cast<int64> (meterID)) << ", name=" << param->getName());
 
         meterIDs.push_back (meterID);
     }
@@ -1293,9 +1412,19 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
     jassert (inputFormat != AAX_eStemFormat_INT32_MAX);
     jassert (outputFormat != AAX_eStemFormat_INT32_MAX);
 
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "stem formats: inCh=" << String (numInCh) << ", outCh=" << String (numOutCh) << ", inputStemFormat=" << String (static_cast<int> (inputFormat)) << ", outputStemFormat=" << String (static_cast<int> (outputFormat)) << ", acceptsMidi=" << String (plugin->acceptsMidi() ? "true" : "false") << ", producesMidi=" << String (plugin->producesMidi() ? "true" : "false"));
+
+    if (inputFormat == AAX_eStemFormat_INT32_MAX || outputFormat == AAX_eStemFormat_INT32_MAX)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "unsupported channel count for AAX stem format");
+    }
+
     auto* compDesc = descriptor.NewComponentDescriptor();
     if (compDesc == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "describing plugin failed: component descriptor is null");
         return;
+    }
 
     aaxCheck (compDesc->AddAudioIn (fieldAudioIn));
     aaxCheck (compDesc->AddAudioOut (fieldAudioOut));
@@ -1316,7 +1445,12 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
 
     auto* properties = compDesc->NewPropertyMap();
     if (properties == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "describing plugin failed: component property map is null");
         return;
+    }
+
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "plugin ids: manufacturer=" << String (static_cast<int64> (YupPlugin_AAX_ManufacturerID)) << ", product=" << String (static_cast<int64> (YupPlugin_AAX_ProductID)) << ", native=" << String (static_cast<int64> (YupPlugin_AAX_PlugInID_Native)) << ", audioSuite=" << String (static_cast<int64> (YupPlugin_AAX_PlugInID_AudioSuite)));
 
     aaxCheck (properties->AddProperty (AAX_eProperty_ManufacturerID, static_cast<AAX_CPropertyValue> (YupPlugin_AAX_ManufacturerID)));
     aaxCheck (properties->AddProperty (AAX_eProperty_ProductID, static_cast<AAX_CPropertyValue> (YupPlugin_AAX_ProductID)));
@@ -1333,6 +1467,8 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
     aaxCheck (compDesc->AddProcessProc_Native (reinterpret_cast<AAX_CProcessProc> (yupAAXAlgorithmCallback), properties));
 
     aaxCheck (descriptor.AddComponent (compDesc));
+
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "described plugin: meters=" << String (static_cast<int> (meterIDs.size())) << ", usesClientGUI=" << String (plugin->hasEditor() ? "false" : "true"));
 }
 
 } // namespace yup
@@ -1343,12 +1479,20 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
 
 AAX_Result GetEffectDescriptions (AAX_ICollection* collection)
 {
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetEffectDescriptions requested: collection=" << yup::describePointer (collection));
+
     if (collection == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetEffectDescriptions failed: collection is null");
         return AAX_ERROR_NULL_OBJECT;
+    }
 
     AAX_IEffectDescriptor* descriptor = collection->NewDescriptor();
     if (descriptor == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetEffectDescriptions failed: descriptor is null");
         return AAX_ERROR_NULL_OBJECT;
+    }
     yup::getPlugInDescription (*descriptor);
 
     collection->AddEffect (YupPlugin_Id, descriptor);
@@ -1362,6 +1506,8 @@ AAX_Result GetEffectDescriptions (AAX_ICollection* collection)
         collection->AddPackageName (pluginName.substring (0, 16).toRawUTF8());
 
     collection->SetPackageVersion (1);
+
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetEffectDescriptions completed: id=" << yup::String (YupPlugin_Id) << ", vendor=" << yup::String (YupPlugin_Vendor) << ", package=" << pluginName);
 
     return AAX_SUCCESS;
 }

@@ -27,6 +27,48 @@
 namespace yup
 {
 
+/** Returns a hex string describing a pointer, for debug logging. */
+inline String describePointer (const void* value)
+{
+    return "0x" + String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (value)));
+}
+
+/** Applies an editor's size constraint once the user stops resizing the host window.
+
+    While the host window edges are dragged, wrappers fill the host area and fit the editor inside it,
+    because constraining every intermediate size makes the host window jump between the dragged and the
+    constrained size. Once the mouse button is released, onSnap is called so the wrapper can resize the
+    host window to the constrained size in a single step.
+*/
+class HostResizeSnapper final : private Timer
+{
+public:
+    explicit HostResizeSnapper (std::function<void()> onSnap)
+        : onSnap (std::move (onSnap))
+    {
+    }
+
+    /** Call whenever the host resizes the editor area. */
+    void hostResized() { startTimer (100); }
+
+    /** Cancels a pending snap. */
+    void cancel() { stopTimer(); }
+
+private:
+    void timerCallback() override
+    {
+        if (Desktop::getInstance()->isMouseButtonDown())
+            return;
+
+        stopTimer();
+
+        if (onSnap)
+            onSnap();
+    }
+
+    std::function<void()> onSnap;
+};
+
 /** Returns the first host-facing parameter ID not used by the processor.
 
     This is useful for wrapper-owned synthetic parameters, such as bypass, that

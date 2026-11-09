@@ -126,6 +126,15 @@ public:
     */
     void setCurrentMouseLocation (const Point<float>& location);
 
+    /** Returns whether any mouse button is currently held down, anywhere on the desktop.
+
+        This also reports buttons pressed over windows not owned by this process, such as a
+        plugin host window whose edges are being dragged.
+
+        @return True if at least one mouse button is down.
+    */
+    bool isMouseButtonDown() const;
+
     //==============================================================================
     /** Adds a global mouse listener that will receive mouse events from anywhere on the desktop.
 

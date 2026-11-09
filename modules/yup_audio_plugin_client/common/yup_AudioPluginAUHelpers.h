@@ -34,12 +34,6 @@
 namespace yup
 {
 
-/** Returns a hex string describing a pointer, for debug logging. */
-inline String describePointer (const void* value)
-{
-    return "0x" + String::toHexString (static_cast<int64> (reinterpret_cast<uintptr_t> (value)));
-}
-
 /** Returns the dictionary key used to store the YUP processor state
     alongside the host's own AU state (shared by the AUv2 and AUv3 clients). */
 inline CFStringRef getAUProcessorStateKey()

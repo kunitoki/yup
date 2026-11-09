@@ -1277,11 +1277,13 @@ public:
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view moved to window: view=" << describePointer ((__bridge void*) view) << ", window=" << describePointer ((__bridge void*) [view window]) << ", contentView=" << describePointer ((__bridge void*) [[view window] contentView]));
 
             attachEditorIfNeeded();
+            observeHostView();
         }
         else
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view removed from window: view=" << describePointer ((__bridge void*) view));
 
+            stopObservingHostView();
             detachEditorIfNeeded();
         }
     }
@@ -1305,10 +1307,8 @@ public:
 
         const ScopedValueSetter<bool> scoped (resizingEditorToBounds, true);
 
-        editorComponent->setBounds ({ 0.0f,
-                                      0.0f,
-                                      jmax (1.0f, static_cast<float> (NSWidth (bounds))),
-                                      jmax (1.0f, static_cast<float> (NSHeight (bounds))) });
+        editorComponent->setSize ({ jmax (1.0f, static_cast<float> (NSWidth (bounds))),
+                                    jmax (1.0f, static_cast<float> (NSHeight (bounds))) });
     }
 
     NSSize getConstrainedFrameSize (NSSize size) const
@@ -1316,7 +1316,7 @@ public:
         if (editorComponent == nullptr)
             return size;
 
-        const auto constrained = editorComponent->getEditor().getConstrainedSize ({ static_cast<int> (size.width), static_cast<int> (size.height) });
+        const auto constrained = editorComponent->getEditor().getConstrainedSizeToFit ({ static_cast<int> (size.width), static_cast<int> (size.height) });
         return NSMakeSize (constrained.getWidth(), constrained.getHeight());
     }
 
@@ -1388,8 +1388,105 @@ private:
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor detached from native view: isOnDesktop=" << String (editorComponent->isOnDesktop() ? "true" : "false"));
     }
 
+    /* Some hosts (Reaper) resize the container view on window edge drags without resizing the plugin
+       view, so the plugin view follows its superview size like VST3 and CLAP editors follow onSize. */
+    void observeHostView()
+    {
+        stopObservingHostView();
+
+        NSView* hostView = [view superview];
+        if (hostView == nil || editorComponent == nullptr || ! editorComponent->getEditor().isResizable())
+            return;
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "observing host view: hostView=" << describePointer ((__bridge void*) hostView) << ", class=" << String ([NSStringFromClass ([hostView class]) UTF8String]) << ", frame=" << String ([NSStringFromRect ([hostView frame]) UTF8String]) << ", viewFrame=" << String ([NSStringFromRect ([view frame]) UTF8String]) << ", flipped=" << String ([hostView isFlipped] ? "true" : "false") << ", autoresizesSubviews=" << String ([hostView autoresizesSubviews] ? "true" : "false"));
+
+        observedHostView = hostView;
+        lastHostViewSize = [hostView bounds].size;
+
+        [hostView setPostsFrameChangedNotifications:YES];
+
+        hostViewObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSViewFrameDidChangeNotification
+                                                                             object:hostView
+                                                                              queue:nil
+                                                                         usingBlock:^(NSNotification*)
+                                                                         {
+                                                                             hostViewResized();
+                                                                         }];
+    }
+
+    void stopObservingHostView()
+    {
+        hostResizeSnapper.cancel();
+
+        if (hostViewObserver != nil)
+            [[NSNotificationCenter defaultCenter] removeObserver:hostViewObserver];
+
+        hostViewObserver = nil;
+        observedHostView = nil;
+    }
+
+    void hostViewResized()
+    {
+        if (observedHostView == nil || editorComponent == nullptr)
+            return;
+
+        const auto hostBounds = [observedHostView bounds];
+        if (NSEqualSizes (hostBounds.size, lastHostViewSize))
+            return;
+
+        lastHostViewSize = hostBounds.size;
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "host view resized: size=" << String ([NSStringFromSize (hostBounds.size) UTF8String]) << ", viewFrame=" << String ([NSStringFromRect ([view frame]) UTF8String]) << ", resizingViewToEditor=" << String (resizingViewToEditor ? "true" : "false"));
+
+        // The host adapting its container to a plugin driven resize, nothing to follow
+        if (resizingViewToEditor)
+            return;
+
+        fitEditorInsideHostView (hostBounds.size);
+        hostResizeSnapper.hostResized();
+    }
+
+    /* Hosts echo plugin view frame changes back to their window, so constraining the view while the user
+       drags the window edges makes the window jump between the dragged and the constrained size. The view
+       keeps matching the host view, and only the editor inside it is constrained until the drag ends. */
+    void fitEditorInsideHostView (NSSize hostSize)
+    {
+        if (! NSEqualSizes (hostSize, [view frame].size))
+        {
+            const ScopedValueSetter<bool> scoped (resizingViewToEditor, true);
+            ObjCClass<NSView>::sendSuperclassMessage<void> (view, @selector (setFrameSize:), hostSize);
+            alignToHostViewTop();
+        }
+
+        const auto size = editorComponent->getEditor().getConstrainedSizeToFit ({ static_cast<int> (hostSize.width), static_cast<int> (hostSize.height) });
+
+        const ScopedValueSetter<bool> scoped (resizingEditorToBounds, true);
+        editorComponent->setSize (size.to<float>());
+    }
+
+    void snapToConstrainedSize()
+    {
+        if (observedHostView == nil || editorComponent == nullptr)
+            return;
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "snapping to constrained size: hostSize=" << String ([NSStringFromSize ([observedHostView bounds].size) UTF8String]) << ", viewFrame=" << String ([NSStringFromRect ([view frame]) UTF8String]));
+
+        // Our setFrameSize: override constrains the size, the host then fits its window to the view
+        [view setFrameSize:[observedHostView bounds].size];
+        alignToHostViewTop();
+    }
+
+    void alignToHostViewTop()
+    {
+        if (observedHostView == nil || [observedHostView isFlipped])
+            return;
+
+        [view setFrameOrigin:NSMakePoint (NSMinX ([view frame]), NSHeight ([observedHostView bounds]) - NSHeight ([view frame]))];
+    }
+
     void closeEditorIfNeeded()
     {
+        stopObservingHostView();
         detachEditorIfNeeded();
 
         endActiveParameterGestures (processor);
@@ -1413,15 +1510,30 @@ private:
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "resizing editor view to editor: width=" << String (static_cast<double> (newSize.width)) << ", height=" << String (static_cast<double> (newSize.height)) << ", editor=" << describePointer (editorComponent.get()));
 
+        const ScopedValueSetter<bool> scoped (resizingViewToEditor, true);
+
         // Skip our own override, which would resize the editor back to the view
         ObjCClass<NSView>::sendSuperclassMessage<void> (view, @selector (setFrameSize:), newSize);
+
+        if (observedHostView != nil)
+            lastHostViewSize = [observedHostView bounds].size;
     }
+
+    friend struct AudioPluginEditorViewAUClass;
 
     __unsafe_unretained NSView* view = nil;
     AudioPluginProcessorAU* processorWrapper = nullptr;
     AudioProcessor* processor = nullptr;
     std::unique_ptr<AudioPluginEditorAU> editorComponent;
+    __weak NSView* observedHostView = nil;
+    id hostViewObserver = nil;
+    NSSize lastHostViewSize = NSZeroSize;
     bool resizingEditorToBounds = false;
+    bool resizingViewToEditor = false;
+    HostResizeSnapper hostResizeSnapper { [this]
+                                          {
+                                              snapToConstrainedSize();
+                                          } };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginEditorViewAU)
 };

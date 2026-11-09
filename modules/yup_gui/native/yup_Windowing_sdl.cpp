@@ -193,13 +193,11 @@ SDLComponentNative::SDLComponentNative (Component& component,
 
     windowUnitsPerPoint = getWindowUnitsPerPoint (window);
 
-#if ! YUP_WINDOWS
     if (parent != nullptr)
     {
-        setNativeParent (parent, window);
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: set native parent");
+        parentAttachment = std::make_unique<NativeParentAttachment> (parent, window);
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: attached to native parent");
     }
-#endif
 
 #if YUP_MAC
     if (! YUPApplicationBase::isStandaloneApp())
@@ -357,8 +355,7 @@ SDLComponentNative::~SDLComponentNative()
             windowContext = nullptr;
         }
 
-        if (parentWindow != nullptr)
-            removeNativeParent (window);
+        parentAttachment.reset();
 
         SDL_DestroyProperties (SDL_GetWindowProperties (window));
         SDL_DestroyWindow (window);
@@ -511,6 +508,9 @@ void SDLComponentNative::setSize (const Size<int>& newSize)
 
     screenBounds = screenBounds.withSize (newSize);
 
+    if (parentAttachment != nullptr)
+        parentAttachment->setSize (newSize);
+
     if (auto currentSize = getSize(); currentSize != newSize)
     {
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setSize " << currentSize.toString() << " -> " << newSize.toString());
@@ -540,6 +540,10 @@ void SDLComponentNative::setPosition (const Point<int>& newPosition)
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setPosition skipped: window is null, position=" << newPosition.toString());
         return;
     }
+
+    // Embedded windows always sit over the area the host gives them
+    if (parentAttachment != nullptr)
+        return;
 
     screenBounds = screenBounds.withPosition (newPosition);
 
@@ -578,6 +582,13 @@ void SDLComponentNative::setBounds (const Rectangle<int>& newBounds)
     if (window == nullptr)
     {
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setBounds skipped: window is null, bounds=" << newBounds.toString());
+        return;
+    }
+
+    // Embedded windows always sit over the area the host gives them
+    if (parentAttachment != nullptr)
+    {
+        setSize (newBounds.getSize());
         return;
     }
 
@@ -2569,21 +2580,14 @@ void SDLComponentNative::handleMoved (int xpos, int ypos)
     if (context == nullptr)
         return;
 
-    if (parentWindow != nullptr)
+    if (parentAttachment != nullptr)
     {
-        auto preventBoundsChange = ScopedValueSetter<bool> (internalBoundsChange, true);
+        parentAttachment->glue();
 
-#if YUP_MAC
-        auto nativeWindowPos = getNativeWindowPosition (parentWindow);
-#else
-        auto nativeWindowPos = Rectangle<int> (0, 0, 1, 1);
+#if ! YUP_MAC
+        xpos = 0;
+        ypos = 0;
 #endif
-
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: parent window position sync after move: " << nativeWindowPos.toString());
-        setPosition (nativeWindowPos.getTopLeft());
-
-        xpos = nativeWindowPos.getX();
-        ypos = nativeWindowPos.getY();
     }
 
     component.internalMoved (xpos, ypos);
@@ -2604,19 +2608,8 @@ void SDLComponentNative::handleResized (int width, int height)
 
     screenBounds = screenBounds.withSize (width, height);
 
-    if (parentWindow != nullptr)
-    {
-        auto preventBoundsChange = ScopedValueSetter<bool> (internalBoundsChange, true);
-
-#if YUP_MAC
-        auto nativeWindowPos = getNativeWindowPosition (parentWindow);
-#else
-        auto nativeWindowPos = Rectangle<int> (0, 0, 1, 1);
-#endif
-
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: parent window position sync after resize: " << nativeWindowPos.toString());
-        setPosition (nativeWindowPos.getTopLeft());
-    }
+    if (parentAttachment != nullptr)
+        parentAttachment->glue();
 
     if (dynamic_cast<PopupMenu*> (&component) == nullptr)
         PopupMenu::dismissAllPopups();

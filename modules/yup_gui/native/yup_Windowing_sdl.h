@@ -289,6 +289,7 @@ private:
     bool computeContextLost = false;
 
     void* parentWindow = nullptr;
+    std::unique_ptr<NativeParentAttachment> parentAttachment;
     String windowTitle;
     uint32 windowFlags = 0;
 

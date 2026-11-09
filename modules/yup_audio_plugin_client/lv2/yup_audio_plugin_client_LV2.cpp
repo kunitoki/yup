@@ -203,13 +203,18 @@ public:
     {
         ignoreUnused (bundlePath);
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "instantiate requested: sampleRate=" << String (sampleRate) << ", bundlePath=" << String (bundlePath != nullptr ? bundlePath : "<null>"));
+
         processFeatures (features);
 
         processor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::lv2, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
         jassert (processor != nullptr);
 
         if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "createPluginProcessor returned null");
             return;
+        }
 
         numInputChannels = processor->getBusLayout().getNumAudioInputChannels();
         numOutputChannels = processor->getBusLayout().getNumAudioOutputChannels();
@@ -248,10 +253,14 @@ public:
         prepare();
 
         processor->addListener (this);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "created processor instance: wrapper=" << describePointer (this) << ", processor=" << describePointer (processor.get()) << ", inputs=" << String (numInputChannels) << ", outputs=" << String (numOutputChannels) << ", parameters=" << String (static_cast<int> (params.size())) << ", maxBlockSize=" << String (maxBlockSize));
     }
 
     ~AudioPluginProcessorLV2() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "destroying processor instance: wrapper=" << describePointer (this) << ", processor=" << describePointer (processor.get()));
+
         if (processor != nullptr)
         {
             processor->removeListener (this);
@@ -291,8 +300,15 @@ public:
 
     void activate()
     {
-        if (processor != nullptr)
-            processor->setPlaybackConfiguration (static_cast<float> (sampleRate), maxBlockSize);
+        YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "activate requested: sampleRate=" << String (sampleRate) << ", maxBlockSize=" << String (maxBlockSize));
+
+        if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "activate skipped: processor is null");
+            return;
+        }
+
+        processor->setPlaybackConfiguration (static_cast<float> (sampleRate), maxBlockSize);
     }
 
     void run (uint32_t numSamples)
@@ -438,6 +454,7 @@ public:
 
     void deactivate()
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "deactivate requested: wrapper=" << describePointer (this));
     }
 
     const void* extensionData (const char* uri) const
@@ -451,19 +468,29 @@ public:
 private:
     void processFeatures (const LV2_Feature* const* features)
     {
+        bool hasMap = false;
+        bool hasUnmap = false;
+        bool hasOptions = false;
+
         for (auto* feature = features; feature != nullptr && *feature != nullptr; ++feature)
         {
             if (std::strcmp ((*feature)->URI, LV2_URID__map) == 0)
             {
                 auto* hostMap = static_cast<LV2_URID_Map*> ((*feature)->data);
                 if (hostMap != nullptr)
+                {
                     urids.map = *hostMap;
+                    hasMap = true;
+                }
             }
             else if (std::strcmp ((*feature)->URI, LV2_URID__unmap) == 0)
             {
                 auto* hostUnmap = static_cast<LV2_URID_Unmap*> ((*feature)->data);
                 if (hostUnmap != nullptr)
+                {
                     urids.unmap = *hostUnmap;
+                    hasUnmap = true;
+                }
             }
             else if (std::strcmp ((*feature)->URI, LV2_WORKER__schedule) == 0)
             {
@@ -476,6 +503,8 @@ private:
         {
             if (std::strcmp ((*feature)->URI, LV2_OPTIONS__options) == 0)
             {
+                hasOptions = true;
+
                 auto* options = static_cast<const LV2_Options_Option*> ((*feature)->data);
                 for (auto* opt = options; opt->key != 0 && opt->value != nullptr; ++opt)
                 {
@@ -484,6 +513,9 @@ private:
                 }
             }
         }
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "host features: urid:map=" << String (hasMap ? "found" : "missing") << ", urid:unmap=" << String (hasUnmap ? "found" : "missing") << ", worker:schedule=" << String (workerSchedule != nullptr ? "found" : "missing") << ", options=" << String (hasOptions ? "found" : "missing") << ", maxBlockSize=" << String (maxBlockSize));
+        ignoreUnused (hasMap, hasUnmap, hasOptions);
     }
 
     void prepare()
@@ -492,6 +524,7 @@ private:
             return;
 
         const auto blockSize = jmax (maxBlockSize, 256);
+        YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "preparing processor: sampleRate=" << String (sampleRate) << ", blockSize=" << String (blockSize));
         processor->setPlaybackConfiguration (static_cast<float> (sampleRate), blockSize);
     }
 
@@ -762,12 +795,23 @@ public:
                                        const LV2_Feature* const* features)
     {
         auto* self = static_cast<AudioPluginProcessorLV2*> (instance);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "state save requested: wrapper=" << describePointer (self));
+
         if (self == nullptr || self->processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "state save failed: wrapper=" << describePointer (self) << ", processor is null");
             return LV2_STATE_ERR_UNKNOWN;
+        }
 
         MemoryBlock processorState;
         const auto stateResult = self->processor->saveStateIntoMemory (processorState);
         const bool hasProcessorState = stateResult.wasOk() && ! processorState.isEmpty();
+
+        if (stateResult.failed())
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "state save without processor state: " << stateResult.getErrorMessage());
+        }
 
         const auto data = writeWrapperBypassState (lv2WrapperStateMagic,
                                                    lv2WrapperStateVersion,
@@ -784,6 +828,8 @@ public:
                self->urids.atom_String,
                LV2_STATE_IS_POD | LV2_STATE_IS_PORTABLE);
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "state save completed: processorBytes=" << String (static_cast<int64> (processorState.getSize())) << ", wrapperBytes=" << String (static_cast<int64> (data.getSize())) << ", bypassed=" << String (self->isBypassed ? "true" : "false"));
+
         return LV2_STATE_SUCCESS;
     }
 
@@ -794,8 +840,14 @@ public:
                                           const LV2_Feature* const* features)
     {
         auto* self = static_cast<AudioPluginProcessorLV2*> (instance);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "state restore requested: wrapper=" << describePointer (self));
+
         if (self == nullptr || self->processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "state restore failed: wrapper=" << describePointer (self) << ", processor is null");
             return LV2_STATE_ERR_UNKNOWN;
+        }
 
         size_t size = 0;
         uint32_t type = 0;
@@ -807,10 +859,18 @@ public:
         if (programData != nullptr && type == self->urids.atom_Int && size == sizeof (int32_t))
         {
             const auto programIndex = *static_cast<const int32_t*> (programData);
+
+            YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "state restore program requested: program=" << String (programIndex));
+
             if (! isPositiveAndBelow (programIndex, self->processor->getNumPresets()))
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "state restore failed: program out of range, numPresets=" << String (self->processor->getNumPresets()));
                 return LV2_STATE_ERR_UNKNOWN;
+            }
 
             self->processor->setCurrentPreset (programIndex);
+
+            YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "state restore program completed");
             return LV2_STATE_SUCCESS;
         }
 
@@ -818,29 +878,48 @@ public:
         const auto* data = retrieve (handle, self->stateUrid, &size, &type, &dataFlags);
 
         if (data == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "state restore failed: state property not found");
             return LV2_STATE_ERR_NO_PROPERTY;
+        }
 
         if (type != self->urids.atom_String)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "state restore failed: unexpected state type=" << String (static_cast<int64> (type)));
             return LV2_STATE_ERR_BAD_TYPE;
+        }
 
         String text (static_cast<const char*> (data), size);
         MemoryBlock block;
         if (! block.fromBase64Encoding (text))
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "state restore failed: invalid base64 data, size=" << String (static_cast<int64> (size)));
             return LV2_STATE_ERR_BAD_TYPE;
+        }
 
         const auto wrapperState = readWrapperBypassState (block, lv2WrapperStateMagic, lv2WrapperStateVersion);
+
+        Result result = Result::ok();
+        int64 processorBytes = 0;
 
         if (wrapperState.hasWrapperState)
         {
             self->isBypassed = wrapperState.isBypassed;
 
             if (wrapperState.hasProcessorState && ! wrapperState.processorState.isEmpty())
-                self->processor->loadStateFromMemory (wrapperState.processorState);
+            {
+                processorBytes = static_cast<int64> (wrapperState.processorState.getSize());
+                result = self->processor->loadStateFromMemory (wrapperState.processorState);
+            }
         }
         else
         {
-            self->processor->loadStateFromMemory (block);
+            processorBytes = static_cast<int64> (block.getSize());
+            result = self->processor->loadStateFromMemory (block);
         }
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "state restore " << String (result.wasOk() ? "completed" : "failed") << ": wrapperState=" << String (wrapperState.hasWrapperState ? "true" : "false") << ", bypassed=" << String (self->isBypassed ? "true" : "false") << ", processorBytes=" << String (processorBytes) << (result.wasOk() ? String() : ", error=" + result.getErrorMessage()));
+        ignoreUnused (result, processorBytes);
 
         return LV2_STATE_SUCCESS;
     }
@@ -858,6 +937,7 @@ static LV2_Handle lv2Instantiate (const LV2_Descriptor* descriptor,
                                   const LV2_Feature* const* features)
 {
     auto* instance = new AudioPluginProcessorLV2 (sampleRate, bundlePath, features);
+    YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "instantiated: descriptor=" << describePointer (descriptor) << ", instance=" << describePointer (instance));
     return static_cast<LV2_Handle> (instance);
 }
 
@@ -887,11 +967,14 @@ static void lv2Deactivate (LV2_Handle instance)
 
 static void lv2Cleanup (LV2_Handle instance)
 {
+    YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "cleanup requested: instance=" << describePointer (instance));
     delete static_cast<AudioPluginProcessorLV2*> (instance);
 }
 
 static const void* lv2ExtensionData (const char* uri)
 {
+    YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "extension data requested: uri=" << String (uri != nullptr ? uri : "<null>"));
+
     if (std::strcmp (uri, LV2_STATE__interface) == 0)
     {
         static const LV2_State_Interface stateInterface = {

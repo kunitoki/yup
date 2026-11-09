@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [3.0.0] - Unreleases
+
+### Plugins
+
+- Fixed embedded plugin editors on macOS ignoring host window resizes, appearing offset until the first resize, covering host UI in CLAP, and leaving an empty window on the desktop when removed: the editor window now follows a placeholder view the host lays out like any embedded plugin view.
+- Embedded editors on every platform now always sit at the origin of their host area and ignore position requests.
+- Fixed the VST3 editor growing past the host window (covering host UI) when a host resized it freely: `onSize` now fills exactly the size the host provides instead of re-applying the editor's aspect-ratio constraint, which is already negotiated through `checkSizeConstraint`/`getSize`.
+- Fixed aspect-ratio editors refusing or fighting host window resizes in VST3, CLAP and AU: while the host window is dragged the editor is fitted inside it (new `AudioProcessorEditor::getConstrainedSizeToFit`), and once the mouse is released the host window snaps to the constrained editor size.
+- Fixed AU editors ignoring host window resizes in hosts that only resize their container view (Reaper): the editor view now follows its host view size.
+- Added `Desktop::isMouseButtonDown` to query the global mouse button state.
+- Fixed CLAP and VST3 crashing when the editor was closed and reopened (or the plugin removed) on macOS: the windowing subsystem now lives as long as the plugin instance, as in AU, so it is never shut down while the host re-enters and creates a new editor.
+
+---
+
 ## [2.0.1] - 2026-11-09
 
 ### Plugins

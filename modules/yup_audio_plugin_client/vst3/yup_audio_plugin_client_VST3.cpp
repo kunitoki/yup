@@ -309,13 +309,23 @@ public:
         : Vst::EditorView (controller, size)
         , processor (processor)
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "creating editor view: view=" << describePointer (this) << ", processor=" << describePointer (processor) << ", controller=" << describePointer (controller));
+
         jassert (processor != nullptr);
         if (processor == nullptr || ! processor->hasEditor())
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "processor has no editor: processor=" << describePointer (processor));
             return;
+        }
 
         editor.reset (processor->createEditor());
         if (editor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "processor returned null editor");
             return;
+        }
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "created editor: preferredSize=" << editor->getPreferredSize().toString() << ", resizable=" << String (editor->isResizable() ? "true" : "false") << ", editor=" << describePointer (editor.get()));
 
         addAndMakeVisible (editor.get());
 
@@ -346,6 +356,8 @@ public:
 
     ~AudioPluginEditorViewVST3()
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "destroying editor view: onDesktop=" << String (isOnDesktop() ? "true" : "false"));
+
         if (editor != nullptr)
         {
             endActiveParameterGestures (processor);
@@ -361,7 +373,9 @@ public:
 
     void resized() override
     {
-        editor->setBounds (getLocalBounds());
+        fitEditorInsideBounds();
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "resized: bounds=" << getBounds().toString() << ", hostTriggered=" << String (hostTriggeredResizing ? "true" : "false"));
 
         if (plugFrame != nullptr && ! hostTriggeredResizing)
         {
@@ -371,23 +385,36 @@ public:
             viewRect.right = getWidth();
             viewRect.bottom = getHeight();
 
-            plugFrame->resizeView (this, std::addressof (viewRect));
+            const auto result = plugFrame->resizeView (this, std::addressof (viewRect));
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "requested host resizeView: " << viewRect.getWidth() << "x" << viewRect.getHeight() << ", result=" << static_cast<int> (result));
+            ignoreUnused (result);
         }
     }
 
     void paint (Graphics& g) override
     {
-        // Paint nothing to save CPU cycles
+        // Only the area left uncovered by a fitted editor needs painting
+        if (editor == nullptr || editor->getBounds() == getLocalBounds())
+            return;
+
+        g.setFillColor (Colors::black);
+        g.fillAll();
     }
 
     tresult PLUGIN_API attached (void* parent, FIDString type) override
     {
         auto result = Vst::EditorView::attached (parent, type);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "attached: parent=" << describePointer (parent) << ", type=" << String (type) << ", result=" << static_cast<int> (result) << ", bounds=" << getBounds().toString());
+
         if (result != kResultOk)
             return result;
 
         if (editor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "attached failed: editor is null");
             return kInternalError;
+        }
 
         ComponentNative::Flags flags = ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow;
 
@@ -408,6 +435,8 @@ public:
 
     tresult PLUGIN_API removed() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "removed: onDesktop=" << String (isOnDesktop() ? "true" : "false"));
+
         if (editor != nullptr)
         {
             endActiveParameterGestures (processor);
@@ -420,7 +449,11 @@ public:
 
     tresult PLUGIN_API canResize() override
     {
-        if (editor != nullptr && editor->isResizable())
+        const auto resizable = editor != nullptr && editor->isResizable();
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "canResize: editor=" << describePointer (editor.get()) << ", result=" << String (resizable ? "true" : "false"));
+
+        if (resizable)
             return kResultTrue;
 
         return kResultFalse;
@@ -428,33 +461,58 @@ public:
 
     tresult PLUGIN_API checkSizeConstraint (ViewRect* rect) override
     {
+        if (editor == nullptr || rect == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "checkSizeConstraint failed: editor=" << describePointer (editor.get()) << ", rect=" << describePointer (rect));
+        }
+
         if (editor == nullptr)
             return kInternalError;
 
         if (rect == nullptr)
             return kInvalidArgument;
 
-        constrainViewRect (*rect);
+        const auto requestedWidth = rect->getWidth();
+        const auto requestedHeight = rect->getHeight();
+
+        // Resizable editors accept any host size while dragging, they are fitted inside and snapped afterwards
+        if (! editor->isResizable())
+            constrainViewRect (*rect);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "checkSizeConstraint: " << requestedWidth << "x" << requestedHeight << " -> " << rect->getWidth() << "x" << rect->getHeight());
+        ignoreUnused (requestedWidth, requestedHeight);
+
         return kResultTrue;
     }
 
     tresult PLUGIN_API onSize (ViewRect* newSize) override
     {
         if (editor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "onSize failed: editor is null");
             return kInternalError;
+        }
 
         if (newSize != nullptr)
         {
-            constrainViewRect (*newSize);
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "onSize: left=" << newSize->left << ", top=" << newSize->top << ", size=" << newSize->getWidth() << "x" << newSize->getHeight() << ", current=" << getBounds().toString());
+
+            if (! editor->isResizable())
+            {
+                const auto preferredSize = editor->getPreferredSize();
+                newSize->right = newSize->left + preferredSize.getWidth();
+                newSize->bottom = newSize->top + preferredSize.getHeight();
+            }
 
             rect = *newSize;
 
             const auto scoped = ScopedValueSetter<bool> (hostTriggeredResizing, true);
 
-            setBounds ({ static_cast<float> (rect.left),
-                         static_cast<float> (rect.top),
-                         static_cast<float> (rect.getWidth()),
-                         static_cast<float> (rect.getHeight()) });
+            setSize ({ static_cast<float> (rect.getWidth()),
+                       static_cast<float> (rect.getHeight()) });
+
+            if (editor->isResizable())
+                hostResizeSnapper.hostResized();
         }
 
         return kResultTrue;
@@ -462,6 +520,11 @@ public:
 
     tresult PLUGIN_API getSize (ViewRect* size) override
     {
+        if (editor == nullptr || size == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getSize failed: editor=" << describePointer (editor.get()) << ", size=" << describePointer (size));
+        }
+
         if (editor == nullptr)
             return kInternalError;
 
@@ -484,6 +547,8 @@ public:
             size->bottom = preferredSize.getHeight();
         }
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getSize: " << size->getWidth() << "x" << size->getHeight());
+
         return kResultTrue;
     }
 
@@ -502,6 +567,8 @@ public:
 
     tresult PLUGIN_API isPlatformTypeSupported (FIDString type) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "isPlatformTypeSupported requested: type=" << String (type));
+
 #if YUP_WINDOWS
         if (std::string_view (type) == kPlatformTypeHWND)
             return kResultTrue;
@@ -521,14 +588,38 @@ public:
 private:
     void componentResized (Component& component) override
     {
+        if (fittingEditor)
+            return;
+
         const auto editorSize = component.getBounds().getSize();
         if (editorSize != getBounds().getSize())
             setSize (editorSize);
     }
 
+    void fitEditorInsideBounds()
+    {
+        const auto size = editor->getConstrainedSizeToFit (getBounds().getSize().to<int>());
+
+        const auto scoped = ScopedValueSetter<bool> (fittingEditor, true);
+        editor->setBounds ({ 0.0f, 0.0f, size.to<float>() });
+    }
+
+    void snapToConstrainedSize()
+    {
+        if (editor == nullptr)
+            return;
+
+        const auto size = editor->getConstrainedSizeToFit (getBounds().getSize().to<int>()).to<float>();
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "snapping to constrained size: " << getBounds().getSize().toString() << " -> " << size.toString());
+
+        if (size != getBounds().getSize())
+            setSize (size);
+    }
+
     void constrainViewRect (ViewRect& viewRect) const
     {
-        const auto size = editor->getConstrainedSize ({ viewRect.getWidth(), viewRect.getHeight() });
+        const auto size = editor->getConstrainedSizeToFit ({ viewRect.getWidth(), viewRect.getHeight() });
 
         viewRect.right = viewRect.left + size.getWidth();
         viewRect.bottom = viewRect.top + size.getHeight();
@@ -539,6 +630,11 @@ private:
     std::unique_ptr<AudioProcessorEditor> editor;
     std::unique_ptr<ResizableCorner> resizableCorner;
     bool hostTriggeredResizing = false;
+    bool fittingEditor = false;
+    HostResizeSnapper hostResizeSnapper { [this]
+                                          {
+                                              snapToConstrainedSize();
+                                          } };
 };
 
 //==============================================================================
@@ -572,7 +668,9 @@ public:
 
     static FUnknown* createInstance ([[maybe_unused]] void* context)
     {
-        return (Vst::IEditController*) new AudioPluginControllerVST3;
+        auto* instance = new AudioPluginControllerVST3;
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "created controller instance: controller=" << describePointer (instance));
+        return (Vst::IEditController*) instance;
     }
 
     //==============================================================================
@@ -583,6 +681,8 @@ public:
 
     ~AudioPluginControllerVST3()
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "destroying controller instance: controller=" << describePointer (this) << ", processor=" << describePointer (processor));
+
         removeParameterListeners();
         removeProcessorListener();
     }
@@ -591,15 +691,22 @@ public:
 
     tresult PLUGIN_API initialize (FUnknown* context) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller initialize requested: context=" << describePointer (context));
+
         auto result = Vst::EditController::initialize (context);
         if (result != kResultOk)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller initialize failed: base result=" << static_cast<int> (result));
             return result;
+        }
 
         return kResultOk;
     }
 
     tresult PLUGIN_API terminate() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller terminate requested: controller=" << describePointer (this) << ", processor=" << describePointer (processor));
+
         removeParameterListeners();
         removeProcessorListener();
         processor = nullptr;
@@ -611,11 +718,15 @@ public:
 
     tresult PLUGIN_API connect (Vst::IConnectionPoint* other) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller connect requested: other=" << describePointer (other));
+
         return Vst::EditController::connect (other);
     }
 
     tresult PLUGIN_API disconnect (Vst::IConnectionPoint* other) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller disconnect requested: other=" << describePointer (other));
+
         removeParameterListeners();
         removeProcessorListener();
         processor = nullptr;
@@ -625,11 +736,17 @@ public:
     tresult PLUGIN_API notify (Vst::IMessage* message) override
     {
         if (message == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller notify failed: message is null");
             return kInvalidArgument;
+        }
 
         auto msgID = message->getMessageID();
         if (std::string_view (msgID) != "processor")
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller notify ignored: messageID=" << String (msgID));
             return kResultFalse;
+        }
 
         if (auto attributes = message->getAttributes())
         {
@@ -645,10 +762,16 @@ public:
                 setupParameters();
                 addProcessorListener();
 
+                YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller connected to processor: processor=" << describePointer (processor) << ", parameters=" << String (static_cast<int> (parameters.getParameterCount())));
+
                 return result;
             }
+
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller notify failed: invalid processor data, getBinary result=" << static_cast<int> (result));
+            return kResultFalse;
         }
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller notify failed: message has no attributes");
         return kResultFalse;
     }
 
@@ -657,23 +780,36 @@ public:
     tresult PLUGIN_API setState (IBStream* state) override
     {
         if (state == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller setState failed: state is null");
             return kInvalidArgument;
+        }
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller setState completed: nothing to restore");
         return kResultOk;
     }
 
     tresult PLUGIN_API getState (IBStream* state) override
     {
         if (state == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller getState failed: state is null");
             return kInvalidArgument;
+        }
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller getState completed: nothing to save");
         return kResultOk;
     }
 
     tresult PLUGIN_API setComponentState (IBStream* state) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setComponentState requested");
+
         if (processor == nullptr || state == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setComponentState failed: processor=" << describePointer (processor) << ", state=" << describePointer (state));
             return kResultFalse;
+        }
 
         const auto wrapperState = readWrapperBypassState (readVST3StreamData (*state),
                                                           vst3WrapperStateMagic,
@@ -681,6 +817,7 @@ public:
         if (! wrapperState.hasWrapperState)
         {
             syncProcessorParametersToController();
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setComponentState completed without wrapper state");
             return kResultOk;
         }
 
@@ -688,6 +825,8 @@ public:
                                                  wrapperState.isBypassed ? 1.0 : 0.0);
 
         syncProcessorParametersToController();
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setComponentState completed: bypassed=" << String (wrapperState.isBypassed ? "true" : "false"));
 
         return kResultOk;
     }
@@ -909,6 +1048,8 @@ public:
 
     tresult PLUGIN_API setUnitProgramData (int32 listOrUnitId, int32 programIndex, IBStream* data) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setUnitProgramData not implemented: listOrUnitId=" << String (listOrUnitId) << ", program=" << String (programIndex));
+
         return kNotImplemented;
     }
 
@@ -917,16 +1058,21 @@ public:
     tresult PLUGIN_API getProgramListInfo (int32 listIndex, Vst::ProgramListInfo& info) override
     {
         if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getProgramListInfo failed: processor is null");
             return kInternalError;
+        }
 
         if (listIndex == 0)
         {
             toString128 ("Default Programs", info.name);
             info.id = 0;
             info.programCount = static_cast<int32> (processor->getNumPresets());
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getProgramListInfo returned " << String (static_cast<int> (info.programCount)) << " programs");
             return kResultOk;
         }
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getProgramListInfo failed: list out of range, listIndex=" << String (listIndex));
         return kNotImplemented;
     }
 
@@ -940,10 +1086,16 @@ public:
                                        Vst::String128 name) override
     {
         if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getProgramName failed: processor is null");
             return kInternalError;
+        }
 
         if (listId != 0)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getProgramName failed: unknown listId=" << String (static_cast<int> (listId)));
             return kResultFalse;
+        }
 
         if (isPositiveAndBelow (programIndex, processor->getNumPresets()))
         {
@@ -951,6 +1103,7 @@ public:
             return kResultOk;
         }
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getProgramName failed: program out of range, program=" << String (programIndex));
         return kResultFalse;
     }
 
@@ -960,13 +1113,22 @@ public:
                                        Vst::String128 attributeValue) override
     {
         if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getProgramInfo failed: processor is null");
             return kInternalError;
+        }
 
         if (listId != 0)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getProgramInfo failed: unknown listId=" << String (static_cast<int> (listId)));
             return kResultFalse;
+        }
 
         if (std::string_view (attributeId) != Vst::PresetAttributes::kName)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getProgramInfo failed: unsupported attribute=" << String (attributeId));
             return kResultFalse;
+        }
 
         if (isPositiveAndBelow (programIndex, processor->getNumPresets()))
         {
@@ -974,6 +1136,7 @@ public:
             return kResultOk;
         }
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getProgramInfo failed: program out of range, program=" << String (programIndex));
         return kResultFalse;
     }
 
@@ -1001,9 +1164,12 @@ public:
 
     IPlugView* PLUGIN_API createView (FIDString name) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "createView requested: name=" << String (name) << ", processor=" << describePointer (processor));
+
         if (std::string_view (name) == Vst::ViewType::kEditor)
             return new AudioPluginEditorViewVST3 (processor, this);
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "createView failed: unsupported view type");
         return nullptr;
     }
 
@@ -1167,11 +1333,20 @@ public:
     {
         processor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::vst3, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "created processor instance: component=" << describePointer (this) << ", processor=" << describePointer (processor.get()));
+
+        if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "createPluginProcessor returned null");
+        }
+
         setControllerClass (YupPlugin_Controller_UID);
     }
 
     virtual ~AudioPluginProcessorVST3()
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "destroying processor instance: component=" << describePointer (this) << ", processor=" << describePointer (processor.get()));
+
         endActiveParameterGestures (processor.get());
         processor.reset();
     }
@@ -1184,16 +1359,23 @@ public:
 
     static FUnknown* createInstance ([[maybe_unused]] void* context)
     {
-        return (Vst::IAudioProcessor*) new AudioPluginProcessorVST3();
+        auto* instance = new AudioPluginProcessorVST3();
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "created component instance: component=" << describePointer (instance));
+        return (Vst::IAudioProcessor*) instance;
     }
 
     //==============================================================================
 
     tresult PLUGIN_API initialize (FUnknown* context) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component initialize requested: context=" << describePointer (context));
+
         auto result = AudioEffect::initialize (context);
         if (result != kResultOk || processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component initialize failed: base result=" << static_cast<int> (result) << ", processor=" << describePointer (processor.get()));
             return result;
+        }
 
         for (const auto& inputBus : processor->getBusLayout().getInputBuses())
         {
@@ -1243,11 +1425,15 @@ public:
             addEventInput (STR16 ("Midi In"));
 #endif
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component initialize completed: audioInputs=" << String (static_cast<int> (getBusCount (Vst::kAudio, Vst::kInput))) << ", audioOutputs=" << String (static_cast<int> (getBusCount (Vst::kAudio, Vst::kOutput))) << ", eventInputs=" << String (static_cast<int> (getBusCount (Vst::kEvent, Vst::kInput))) << ", eventOutputs=" << String (static_cast<int> (getBusCount (Vst::kEvent, Vst::kOutput))));
+
         return kResultOk;
     }
 
     tresult PLUGIN_API terminate() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component terminate requested: component=" << describePointer (this) << ", processor=" << describePointer (processor.get()));
+
         if (processor != nullptr)
         {
             endActiveParameterGestures (processor.get());
@@ -1262,6 +1448,8 @@ public:
     tresult PLUGIN_API connect (Vst::IConnectionPoint* other) override
     {
         auto result = AudioEffect::connect (other);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component connect: other=" << describePointer (other) << ", result=" << static_cast<int> (result) << ", processor=" << describePointer (processor.get()));
 
         if (IPtr<Vst::IMessage> message = owned (allocateMessage()))
         {
@@ -1281,6 +1469,8 @@ public:
 
     tresult PLUGIN_API disconnect (Vst::IConnectionPoint* other) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component disconnect requested: other=" << describePointer (other));
+
         return AudioEffect::disconnect (other);
     }
 
@@ -1297,8 +1487,13 @@ public:
         Vst::SpeakerArrangement* outputs,
         int32 numOuts) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements requested: numIns=" << String (numIns) << ", numOuts=" << String (numOuts));
+
         if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements failed: processor is null");
             return kResultFalse;
+        }
 
         const auto& busLayout = processor->getBusLayout();
 
@@ -1314,7 +1509,10 @@ public:
                 ++audioOutputCount;
 
         if (numIns != audioInputCount || numOuts != audioOutputCount)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements rejected: bus count mismatch, expectedIns=" << String (audioInputCount) << ", expectedOuts=" << String (audioOutputCount));
             return kResultFalse;
+        }
 
         int32 idx = 0;
         for (const auto& bus : busLayout.getInputBuses())
@@ -1322,7 +1520,10 @@ public:
             if (bus.getType() != AudioBus::Type::Audio)
                 continue;
             if (Vst::SpeakerArr::getChannelCount (inputs[idx]) != bus.getNumChannels())
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements rejected: input bus=" << String (idx) << ", requestedChannels=" << String (Vst::SpeakerArr::getChannelCount (inputs[idx])) << ", supportedChannels=" << String (bus.getNumChannels()));
                 return kResultFalse;
+            }
             ++idx;
         }
 
@@ -1332,9 +1533,14 @@ public:
             if (bus.getType() != AudioBus::Type::Audio)
                 continue;
             if (Vst::SpeakerArr::getChannelCount (outputs[idx]) != bus.getNumChannels())
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements rejected: output bus=" << String (idx) << ", requestedChannels=" << String (Vst::SpeakerArr::getChannelCount (outputs[idx])) << ", supportedChannels=" << String (bus.getNumChannels()));
                 return kResultFalse;
+            }
             ++idx;
         }
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements accepted");
 
         return kResultOk;
     }
@@ -1343,6 +1549,8 @@ public:
 
     tresult PLUGIN_API setActive (TBool state) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setActive requested: state=" << String (state ? "true" : "false") << ", sampleRate=" << String (processSetup.sampleRate) << ", maxSamplesPerBlock=" << String (static_cast<int> (processSetup.maxSamplesPerBlock)) << ", processor=" << describePointer (processor.get()));
+
         if (processor != nullptr)
         {
             if (state)
@@ -1352,6 +1560,24 @@ public:
         }
 
         return AudioEffect::setActive (state);
+    }
+
+    tresult PLUGIN_API getBusArrangement (Vst::BusDirection dir, int32 index, Vst::SpeakerArrangement& arr) override
+    {
+        const auto result = AudioEffect::getBusArrangement (dir, index, arr);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getBusArrangement: direction=" << String (dir == Vst::kInput ? "input" : "output") << ", index=" << String (index) << ", channels=" << String (result == kResultOk ? Vst::SpeakerArr::getChannelCount (arr) : 0) << ", result=" << static_cast<int> (result));
+
+        return result;
+    }
+
+    tresult PLUGIN_API activateBus (Vst::MediaType type, Vst::BusDirection dir, int32 index, TBool state) override
+    {
+        const auto result = AudioEffect::activateBus (type, dir, index, state);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "activateBus: type=" << String (type == Vst::kAudio ? "audio" : "event") << ", direction=" << String (dir == Vst::kInput ? "input" : "output") << ", index=" << String (index) << ", state=" << String (state ? "true" : "false") << ", result=" << static_cast<int> (result));
+
+        return result;
     }
 
     //==============================================================================
@@ -1368,6 +1594,7 @@ public:
             return kResultTrue;
         }
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "canProcessSampleSize rejected: symbolicSampleSize=" << String (symbolicSampleSize));
         return kResultFalse;
     }
 
@@ -1388,8 +1615,13 @@ public:
 
     tresult PLUGIN_API setProcessing (TBool state) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setProcessing requested: state=" << String (state ? "true" : "false"));
+
         if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setProcessing failed: processor is null");
             return kResultFalse;
+        }
 
         processor->suspendProcessing (! state);
 
@@ -1403,11 +1635,22 @@ public:
 
     tresult PLUGIN_API getState (IBStream* stream) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component getState requested");
+
         if (processor == nullptr || stream == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component getState failed: processor=" << describePointer (processor.get()) << ", stream=" << describePointer (stream));
             return kResultFalse;
+        }
 
         MemoryBlock processorState;
-        const auto hasProcessorState = processor->saveStateIntoMemory (processorState).wasOk();
+        const auto saveResult = processor->saveStateIntoMemory (processorState);
+        const auto hasProcessorState = saveResult.wasOk();
+
+        if (! hasProcessorState)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component getState without processor state: " << saveResult.getErrorMessage());
+        }
 
         auto data = writeWrapperBypassState (vst3WrapperStateMagic,
                                              vst3WrapperStateVersion,
@@ -1416,39 +1659,63 @@ public:
                                              hasProcessorState);
 
         int32 written = 0;
-        return stream->write (data.getData(), static_cast<int32> (data.getSize()), &written) == kResultOk
-                    && written == static_cast<int32> (data.getSize())
-                 ? kResultOk
-                 : kResultFalse;
+        const auto ok = stream->write (data.getData(), static_cast<int32> (data.getSize()), &written) == kResultOk
+                     && written == static_cast<int32> (data.getSize());
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component getState " << String (ok ? "completed" : "failed") << ": bytes=" << String (static_cast<int64> (data.getSize())) << ", written=" << String (written) << ", processorBytes=" << String (static_cast<int64> (processorState.getSize())));
+
+        return ok ? kResultOk : kResultFalse;
     }
 
     tresult PLUGIN_API setState (IBStream* stream) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component setState requested");
+
         if (processor == nullptr || stream == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component setState failed: processor=" << describePointer (processor.get()) << ", stream=" << describePointer (stream));
             return kResultFalse;
+        }
 
         const auto data = readVST3StreamData (*stream);
         if (data.isEmpty())
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component setState failed: stream is empty");
             return kResultFalse;
+        }
 
         const auto wrapperState = readWrapperBypassState (data, vst3WrapperStateMagic, vst3WrapperStateVersion);
         if (! wrapperState.hasWrapperState)
-            return processor->loadStateFromMemory (wrapperState.processorState).wasOk() ? kResultOk : kResultFalse;
+        {
+            const auto result = processor->loadStateFromMemory (wrapperState.processorState);
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component setState " << String (result.wasOk() ? "completed" : "failed") << " without wrapper state: bytes=" << String (static_cast<int64> (wrapperState.processorState.getSize())) << (result.wasOk() ? String() : ", error=" + result.getErrorMessage()));
+            return result.wasOk() ? kResultOk : kResultFalse;
+        }
 
         isBypassed = wrapperState.isBypassed;
 
         if (! wrapperState.hasProcessorState)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component setState completed without processor state: bypassed=" << String (isBypassed ? "true" : "false"));
             return kResultOk;
+        }
 
-        return processor->loadStateFromMemory (wrapperState.processorState).wasOk() ? kResultOk : kResultFalse;
+        const auto result = processor->loadStateFromMemory (wrapperState.processorState);
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component setState " << String (result.wasOk() ? "completed" : "failed") << ": bytes=" << String (static_cast<int64> (wrapperState.processorState.getSize())) << ", bypassed=" << String (isBypassed ? "true" : "false") << (result.wasOk() ? String() : ", error=" + result.getErrorMessage()));
+        return result.wasOk() ? kResultOk : kResultFalse;
     }
 
     //==============================================================================
 
     tresult PLUGIN_API setupProcessing (Vst::ProcessSetup& setup) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setupProcessing requested: sampleRate=" << String (setup.sampleRate) << ", maxSamplesPerBlock=" << String (static_cast<int> (setup.maxSamplesPerBlock)) << ", processMode=" << String (static_cast<int> (setup.processMode)) << ", offline=" << String (setup.processMode == Vst::kOffline ? "true" : "false") << ", symbolicSampleSize=" << String (static_cast<int> (setup.symbolicSampleSize)));
+
         if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setupProcessing failed: processor is null");
             return kResultFalse;
+        }
 
         processSetup = setup;
 
@@ -1473,6 +1740,8 @@ public:
             inputBusViewsDouble.reserve (numAudioInputs);
             outputBusViewsDouble.reserve (numAudioOutputs);
         }
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setupProcessing completed: outputChannels=" << String (totalOutputChannels) << ", audioInputs=" << String (processor->getNumAudioInputs()) << ", audioOutputs=" << String (processor->getNumAudioOutputs()));
 
         return kResultOk;
     }
@@ -1721,6 +1990,7 @@ public:
 
 private:
     ScopedYupInitialiser_GUI scopeInitialiser;
+    ScopedYupInitialiser_Windowing scopeWindowingInitialiser;
 
     std::unique_ptr<AudioProcessor> processor;
 

@@ -36,11 +36,21 @@ AudioProcessorEditor::~AudioProcessorEditor()
 
 Size<int> AudioProcessorEditor::getConstrainedSize (Size<int> requestedSize) const
 {
+    return constrainSize (requestedSize, false);
+}
+
+Size<int> AudioProcessorEditor::getConstrainedSizeToFit (Size<int> availableSize) const
+{
+    return constrainSize (availableSize, true);
+}
+
+Size<int> AudioProcessorEditor::constrainSize (Size<int> size, bool fitInside) const
+{
     if (! isResizable())
         return getPreferredSize();
 
-    const auto width = jmax (1, requestedSize.getWidth());
-    const auto height = jmax (1, requestedSize.getHeight());
+    const auto width = jmax (1, size.getWidth());
+    const auto height = jmax (1, size.getHeight());
 
     const auto ratioSize = getPreferredAspectRatioSize();
     if (! shouldPreserveAspectRatio() || ratioSize.getWidth() <= 0 || ratioSize.getHeight() <= 0)
@@ -48,11 +58,17 @@ Size<int> AudioProcessorEditor::getConstrainedSize (Size<int> requestedSize) con
 
     const auto ratio = static_cast<double> (ratioSize.getWidth()) / static_cast<double> (ratioSize.getHeight());
 
-    // Independent of the current size, so hosts repeating unconstrained sizes while dragging always get the same answer
-    if (static_cast<double> (width) / static_cast<double> (height) >= ratio)
-        return { width, jmax (1, roundToInt (width / ratio)) };
+    const auto heightFromWidth = jmax (1, roundToInt (width / ratio));
+    const auto widthFromHeight = jmax (1, roundToInt (height * ratio));
+    if (height == heightFromWidth || width == widthFromHeight)
+        return { width, height };
 
-    return { jmax (1, roundToInt (height * ratio)), height };
+    // Independent of the current size, so hosts repeating unconstrained sizes while dragging always get the same answer
+    const auto isWider = static_cast<double> (width) / static_cast<double> (height) >= ratio;
+    if (isWider != fitInside)
+        return { width, heightFromWidth };
+
+    return { widthFromHeight, height };
 }
 
 } // namespace yup

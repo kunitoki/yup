@@ -63,6 +63,18 @@ public:
     */
     Size<int> getConstrainedSize (Size<int> requestedSize) const;
 
+    /** Returns the largest size this editor accepts that fits inside the available one.
+
+        Use this for sizes proposed by a host window, which the editor must fill without exceeding.
+        Non resizable editors always return getPreferredSize(). Resizable editors which preserve their aspect
+        ratio shrink the dimension that exceeds getPreferredAspectRatioSize(), never growing the other one.
+
+        @param availableSize  The size offered by the host.
+
+        @returns The constrained size.
+    */
+    Size<int> getConstrainedSizeToFit (Size<int> availableSize) const;
+
     /** Returns whether this editor should preserve its aspect ratio when resized. */
     virtual bool shouldPreserveAspectRatio() const { return false; }
 
@@ -83,6 +95,9 @@ public:
     //==============================================================================
     /** Returns whether this editor should render continuously. */
     virtual bool shouldRenderContinuous() const { return false; }
+
+private:
+    Size<int> constrainSize (Size<int> size, bool fitInside) const;
 };
 
 } // namespace yup
