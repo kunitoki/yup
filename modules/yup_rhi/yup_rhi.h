@@ -26,7 +26,7 @@
 
     ID:                 yup_rhi
     vendor:             yup
-    version:            2.0.0
+    version:            2.0.1
     name:               YUP RHI Classes
     description:        Low-level GPU abstraction layer (RHI) with compute and render-pipeline support.
     website:            https://github.com/kunitoki/yup

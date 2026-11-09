@@ -26,7 +26,7 @@
 
     ID:                 yup_shading
     vendor:             yup
-    version:            2.0.0
+    version:            2.0.1
     name:               YUP Shading Classes
     description:        The essential set of basic YUP shader classes.
     website:            https://github.com/kunitoki/yup

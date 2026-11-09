@@ -26,7 +26,7 @@
 
     ID:                   yup_renderer
     vendor:               yup
-    version:              2.0.0
+    version:              2.0.1
     name:                 YUP Renderer
     description:          PBR rendering of yup_3d scenes through the RHI, on a raster and a full (deferred, temporal) tier.
     website:              https://github.com/kunitoki/yup

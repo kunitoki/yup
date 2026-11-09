@@ -55,7 +55,7 @@ set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 
 # ==== Modules linked by the test runners
 set (target_name yup_tests)
-set (target_version "2.0.0")
+set (target_version "2.0.1")
 set (target_console OFF)
 set (target_gtest_modules "")
 set (target_modules

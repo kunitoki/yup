@@ -21,7 +21,7 @@ cmake_minimum_required(VERSION 3.31)
 
 # ==== Prepare target
 set (target_name example_plugin)
-set (target_version "2.0.0")
+set (target_version "2.0.1")
 
 project (${target_name} VERSION ${target_version})
 
@@ -152,9 +152,6 @@ yup_audio_plugin (
 include (CheckIPOSupported)
 check_ipo_supported (RESULT ipo_supported OUTPUT ipo_output)
 if (ipo_supported)
-    set_target_properties (${target_name}_shared PROPERTIES
-        INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
-
     foreach (plugin_format clap vst3 standalone au auv3 aax lv2)
         if (TARGET ${target_name}_${plugin_format}_plugin)
             set_target_properties (${target_name}_${plugin_format}_plugin PROPERTIES
