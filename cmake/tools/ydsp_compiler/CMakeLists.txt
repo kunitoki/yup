@@ -23,7 +23,7 @@ cmake_minimum_required (VERSION 3.31)
 set (target_name yup_dsp_compiler)
 set (target_version "2.0.1")
 
-project (${target_name} VERSION 2.0.0)
+project (${target_name} VERSION ${target_version})
 
 # ==== Bootstrap YUP modules (this is always built as a standalone host tool)
 get_filename_component (yup_root "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)

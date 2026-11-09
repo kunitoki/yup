@@ -39,7 +39,7 @@ public:
     struct Options
     {
         String serverName = "YUP Application";
-        String serverVersion = "2.0.0";
+        String serverVersion = YUP_VERSION_STRING;
         String instructions; /**< Optional usage hints returned to clients from `initialize`. */
         MCPCapabilities capabilities = {};
     };

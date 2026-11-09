@@ -56,8 +56,8 @@ var makeInitializeParams (const MCPCapabilities& capabilities)
     setMCPClientProperty (params, "capabilities", capabilities.toVar());
 
     auto clientInfo = makeMCPClientObject();
-    setMCPClientProperty (clientInfo, "name", "YUP");
-    setMCPClientProperty (clientInfo, "version", "2.0.0");
+    setMCPClientProperty (clientInfo, "name", "YUP Application");
+    setMCPClientProperty (clientInfo, "version", YUP_VERSION_STRING);
     setMCPClientProperty (params, "clientInfo", clientInfo);
 
     return params;
