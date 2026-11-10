@@ -801,6 +801,8 @@ public:
 
     AudioProcessor& getAudioProcessor() noexcept { return *processor; }
 
+    void ensureWindowingInitialised() { windowing.ensureInitialised(); }
+
 private:
     //==========================================================================
     // AudioProcessorBase::Listener
@@ -1113,7 +1115,7 @@ private:
     };
 
     ScopedYupInitialiser_GUI scopeInitialiser;
-    ScopedYupInitialiser_Windowing scopeWindowingInitialiser;
+    WrapperWindowing windowing;
 
     std::unique_ptr<AudioProcessor> processor;
     int32_t yupChunkIndex = 0;
@@ -1199,6 +1201,7 @@ public:
             return;
         }
 
+        yupParams->ensureWindowingInitialised();
         auto& audioProcessor = yupParams->getAudioProcessor();
 
         if (audioProcessor.hasEditor())

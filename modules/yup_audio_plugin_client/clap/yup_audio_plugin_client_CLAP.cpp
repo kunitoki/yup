@@ -608,7 +608,7 @@ private:
     }
 
     ScopedYupInitialiser_GUI scopeInitialiser;
-    ScopedYupInitialiser_Windowing scopeWindowingInitialiser;
+    WrapperWindowing windowing;
 
     std::unique_ptr<AudioProcessor> audioProcessor;
     std::unique_ptr<AudioPluginEditorCLAP> audioPluginEditor;
@@ -1505,7 +1505,7 @@ bool AudioPluginProcessorCLAP::initialise()
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui create: api=" << String (api) << ", hadEditor=" << String (wrapper->audioPluginEditor != nullptr ? "true" : "false"));
 
-        ScopedYupInitialiser_Windowing windowingInitialiser;
+        wrapper->windowing.ensureInitialised();
 
         auto processorEditor = wrapper->audioProcessor->createEditor();
         if (processorEditor == nullptr)

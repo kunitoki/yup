@@ -1027,13 +1027,44 @@ public:
                 continue;
             }
 
-            return std::make_unique<CLAPInstance> (desc, context, std::move (mod), std::move (yupHost), plugin);
+            return std::make_unique<CLAPInstance> (withPortCounts (desc, plugin), context, std::move (mod), std::move (yupHost), plugin);
         }
 
         return nullptr;
     }
 
 private:
+    static AudioPluginDescription withPortCounts (AudioPluginDescription desc, const clap_plugin_t* plugin)
+    {
+        if (auto* portsExt = static_cast<const clap_plugin_audio_ports_t*> (plugin->get_extension (plugin, CLAP_EXT_AUDIO_PORTS)))
+        {
+            const auto countChannels = [&] (bool isInput)
+            {
+                int numChannels = 0;
+
+                for (uint32_t i = 0; i < portsExt->count (plugin, isInput); ++i)
+                {
+                    clap_audio_port_info_t info {};
+                    if (portsExt->get (plugin, i, isInput, &info))
+                        numChannels += static_cast<int> (info.channel_count);
+                }
+
+                return numChannels;
+            };
+
+            desc.numInputChannels = countChannels (true);
+            desc.numOutputChannels = countChannels (false);
+        }
+
+        if (auto* notePortsExt = static_cast<const clap_plugin_note_ports_t*> (plugin->get_extension (plugin, CLAP_EXT_NOTE_PORTS)))
+        {
+            desc.numMidiInputPorts = static_cast<int> (notePortsExt->count (plugin, true));
+            desc.numMidiOutputPorts = static_cast<int> (notePortsExt->count (plugin, false));
+        }
+
+        return desc;
+    }
+
     static AudioBusLayout buildBusLayout (const clap_plugin_t* plugin)
     {
         std::vector<AudioBus> inputs, outputs;
@@ -1239,71 +1270,36 @@ ResultValue<std::vector<AudioPluginDescription>> CLAPFormat::scanFile (const Fil
         desc.version = String (plugDesc->version);
         desc.identifier = String (plugDesc->id);
 
+        bool isNoteEffect = false, isMono = false;
+
         if (plugDesc->features != nullptr)
         {
             for (int j = 0; plugDesc->features[j] != nullptr; ++j)
             {
                 const String feature (plugDesc->features[j]);
-                if (feature == CLAP_PLUGIN_FEATURE_INSTRUMENT)
-                    desc.isInstrument = true;
-                if (feature == CLAP_PLUGIN_FEATURE_AUDIO_EFFECT)
-                    desc.isEffect = true;
+                desc.isInstrument = desc.isInstrument || feature == CLAP_PLUGIN_FEATURE_INSTRUMENT;
+                desc.isEffect = desc.isEffect || feature == CLAP_PLUGIN_FEATURE_AUDIO_EFFECT;
+                isNoteEffect = isNoteEffect || feature == CLAP_PLUGIN_FEATURE_NOTE_EFFECT;
+                isMono = isMono || feature == CLAP_PLUGIN_FEATURE_MONO;
             }
         }
 
-        // Briefly instantiate the plugin to collect channel counts
+        const int numAudioChannels = isMono ? 1 : 2;
+
+        if (desc.isInstrument)
         {
-            clap_host_t host {};
-            host.clap_version = CLAP_VERSION;
-            host.host_data = nullptr;
-            host.name = "YUP Audio Plugin Host Scanner";
-            host.vendor = "YUP";
-            host.url = "";
-            host.version = YUP_VERSION_STRING;
-            host.get_extension = [] (const clap_host_t*, const char*) -> const void*
-            {
-                return nullptr;
-            };
-            host.request_restart = [] (const clap_host_t*) {};
-            host.request_process = [] (const clap_host_t*) {};
-            host.request_callback = [] (const clap_host_t*) {};
-
-            const clap_plugin_t* plugin = factory->create_plugin (factory, &host, plugDesc->id);
-            if (plugin != nullptr && plugin->init (plugin))
-            {
-                auto* portsExt = reinterpret_cast<const clap_plugin_audio_ports_t*> (
-                    plugin->get_extension (plugin, CLAP_EXT_AUDIO_PORTS));
-
-                if (portsExt != nullptr)
-                {
-                    const uint32_t numInputs = portsExt->count (plugin, true);
-                    for (uint32_t p = 0; p < numInputs; ++p)
-                    {
-                        clap_audio_port_info_t info {};
-                        if (portsExt->get (plugin, p, true, &info))
-                            desc.numInputChannels += static_cast<int> (info.channel_count);
-                    }
-
-                    const uint32_t numOutputs = portsExt->count (plugin, false);
-                    for (uint32_t p = 0; p < numOutputs; ++p)
-                    {
-                        clap_audio_port_info_t info {};
-                        if (portsExt->get (plugin, p, false, &info))
-                            desc.numOutputChannels += static_cast<int> (info.channel_count);
-                    }
-                }
-
-                auto* notePortsExt = reinterpret_cast<const clap_plugin_note_ports_t*> (
-                    plugin->get_extension (plugin, CLAP_EXT_NOTE_PORTS));
-
-                if (notePortsExt != nullptr)
-                {
-                    desc.numMidiInputPorts = static_cast<int> (notePortsExt->count (plugin, true));
-                    desc.numMidiOutputPorts = static_cast<int> (notePortsExt->count (plugin, false));
-                }
-
-                plugin->destroy (plugin);
-            }
+            desc.numOutputChannels = numAudioChannels;
+            desc.numMidiInputPorts = 1;
+        }
+        else if (isNoteEffect && ! desc.isEffect)
+        {
+            desc.numMidiInputPorts = 1;
+            desc.numMidiOutputPorts = 1;
+        }
+        else
+        {
+            desc.numInputChannels = numAudioChannels;
+            desc.numOutputChannels = numAudioChannels;
         }
 
         YUP_MODULE_DBG (PLUGIN_HOST_CLAP, "scan found: " << desc.name << " [" << desc.identifier << "]");

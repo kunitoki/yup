@@ -1003,6 +1003,8 @@ public:
 
     AudioProcessor* getProcessor() const { return processor.get(); }
 
+    void ensureWindowingInitialised() { windowing.ensureInitialised(); }
+
     void registerEditorView (AudioPluginEditorViewAU* view)
     {
         if (view == nullptr)
@@ -1125,7 +1127,7 @@ private:
     }
 
     ScopedYupInitialiser_GUI scopeInitialiser;
-    ScopedYupInitialiser_Windowing scopeWindowingInitialiser;
+    WrapperWindowing windowing;
     std::unique_ptr<AudioProcessor> processor;
 
     MidiBuffer midiBuffer;
@@ -1254,6 +1256,8 @@ public:
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "processor has no editor");
             return;
         }
+
+        processorWrapper->ensureWindowingInitialised();
 
         std::unique_ptr<AudioProcessorEditor> processorEditor (processor->createEditor());
 

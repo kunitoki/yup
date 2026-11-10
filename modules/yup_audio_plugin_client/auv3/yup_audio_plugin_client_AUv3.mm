@@ -2013,6 +2013,7 @@ private:
 
         if (processor->hasEditor())
         {
+            windowing.ensureInitialised();
             editor = processor->createEditor();
 
             if (editor != nullptr)
@@ -2047,6 +2048,7 @@ private:
     }
 
     AUViewController<AUAudioUnitFactory>* myself = nil;
+    WrapperWindowing windowing;
     AudioProcessor* processor = nullptr;
     AudioProcessorEditor* editor = nullptr;
     Rectangle<float> preferredSize { 1.0f, 1.0f };

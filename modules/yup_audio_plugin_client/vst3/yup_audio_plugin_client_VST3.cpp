@@ -1184,7 +1184,10 @@ public:
         YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "createView requested: name=" << String (name) << ", processor=" << describePointer (processor));
 
         if (std::string_view (name) == Vst::ViewType::kEditor)
+        {
+            windowing.ensureInitialised();
             return new AudioPluginEditorViewVST3 (processor, this);
+        }
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "createView failed: unsupported view type");
         return nullptr;
@@ -1343,6 +1346,7 @@ private:
             && isPositiveAndBelow (indexInContainer, static_cast<int> (processor->getParameters().size()));
     }
 
+    WrapperWindowing windowing;
     AudioProcessor* processor = nullptr;
     WrapperBypass bypass;
     std::vector<AudioParameter::Ptr> listenedParameters;
@@ -2022,7 +2026,6 @@ public:
 
 private:
     ScopedYupInitialiser_GUI scopeInitialiser;
-    ScopedYupInitialiser_Windowing scopeWindowingInitialiser;
 
     std::unique_ptr<AudioProcessor> processor;
 

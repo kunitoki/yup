@@ -85,16 +85,15 @@ bool AudioPluginInstance::isNonRealtime() const noexcept
 
 void AudioPluginInstance::setBypassed (bool shouldBeBypassed) noexcept
 {
-    if (bypassed == shouldBeBypassed)
+    if (bypassed.exchange (shouldBeBypassed) == shouldBeBypassed)
         return;
 
-    bypassed = shouldBeBypassed;
     bypassStateChanged();
 }
 
 bool AudioPluginInstance::isBypassed() const noexcept
 {
-    return bypassed;
+    return bypassed.load();
 }
 
 void AudioPluginInstance::processBlockBypassed (AudioProcessContext<float>& context)

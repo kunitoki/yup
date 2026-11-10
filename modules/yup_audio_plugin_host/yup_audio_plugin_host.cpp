@@ -25,15 +25,22 @@
 
 #include "yup_audio_plugin_host.h"
 
+#include <algorithm>
+#include <array>
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <deque>
+#include <limits>
 #include <map>
+#include <optional>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 //==============================================================================
+#include "host/yup_AudioPluginFormat.cpp"
 #include "host/yup_AudioPluginScanner.cpp"
 #include "host/yup_AudioPluginInstance.cpp"
 
@@ -49,11 +56,15 @@
 #include <pluginterfaces/vst/ivstmidicontrollers.h>
 #include <pluginterfaces/vst/ivsteditcontroller.h>
 #include <pluginterfaces/vst/ivsthostapplication.h>
+#include <pluginterfaces/vst/ivstunits.h>
 #include <pluginterfaces/vst/vstpresetkeys.h>
 #include <pluginterfaces/gui/iplugview.h>
+#include <pluginterfaces/gui/iplugviewcontentscalesupport.h>
 #include <public.sdk/source/common/memorystream.h>
 #include <public.sdk/source/vst/hosting/eventlist.h>
 #include <public.sdk/source/vst/hosting/parameterchanges.h>
+#include <public.sdk/source/vst/moduleinfo/moduleinfoparser.h>
+#include <public.sdk/source/vst/vstpresetfile.h>
 
 #if YUP_MAC
 #import <AppKit/AppKit.h>

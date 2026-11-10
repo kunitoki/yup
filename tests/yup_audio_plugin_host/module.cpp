@@ -20,6 +20,7 @@
 */
 
 #include "yup_AudioPluginDescription.cpp"
+#include "yup_AudioPluginFormat.cpp"
 #include "yup_AudioPluginLV2Format.cpp"
 #include "yup_AudioPluginScanner.cpp"
 #include "yup_AudioPluginInstance.cpp"

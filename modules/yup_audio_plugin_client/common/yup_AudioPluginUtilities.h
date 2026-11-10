@@ -96,6 +96,27 @@ inline uint32 getBypassHostParameterID (const AudioProcessor& processor)
     return findFirstUnusedHostParameterID (processor, static_cast<uint32> (processor.getParameters().size()));
 }
 
+/** Starts the windowing subsystem for a plugin instance the first time it opens an editor.
+
+    Hosts may create plugin instances off the main thread (scanners often do), while windowing
+    can only start on the main thread, so it is not started on construction. Once started it
+    runs until the instance is destroyed, so it is never shut down while a host closes an editor
+    and immediately opens a new one.
+*/
+class WrapperWindowing
+{
+public:
+    /** Starts windowing if needed. Call on the message thread before creating an editor. */
+    void ensureInitialised()
+    {
+        if (! initialiser.has_value())
+            initialiser.emplace();
+    }
+
+private:
+    std::optional<ScopedYupInitialiser_Windowing> initialiser;
+};
+
 /** The host-facing bypass control of a plugin wrapper.
 
     When the processor designates a bypass parameter (AudioParameterBuilder::withBypass) that
