@@ -106,6 +106,26 @@ by the host or the corner goes through `getConstrainedSize()`, which applies
 `shouldPreserveAspectRatio()` and `getPreferredAspectRatioSize()`. An editor
 calling `setSize()` on itself resizes the host window as well.
 
+### Host integration
+
+Processors can describe themselves to hosts through optional overrides and metadata:
+
+- **Bypass**: build a parameter with `AudioParameterBuilder::withBypass()`. Wrappers expose it as the
+  host bypass control (VST3 `kIsBypass`, CLAP `CLAP_PARAM_IS_BYPASS`, AU bypass property, AAX master
+  bypass) instead of adding their own, and call `processBlockBypassed()` while it is on.
+  `getBypassParameter()` returns it.
+- **MIDI CC mapping**: override `getParameterIndexForMidiController (channel, controller)` to map
+  controllers to parameter indices (return -1 for none).
+- **Bus layouts**: override `isBusLayoutSupported()` to accept layouts other than the current one,
+  `setBusLayout()` applies a supported layout and notifies listeners.
+- **Host details**: `getHostInfo()` returns the track name and color when the host provides them
+  (VST3 and CLAP; AU, AAX and LV2 have no such API),
+  `hostInfoChanged()` is called when they change. `AudioProcessor::getHostType()` identifies the host
+  (`PluginHostType`) for host-specific workarounds.
+- **Note expression**: return true from `supportsNoteExpression()` to receive per-note expressions in
+  `AudioProcessContext::noteExpressions`. Otherwise they are converted to MIDI, either channel-wide or
+  as MPE when `supportsMpe()` returns true.
+
 ## Building with CMake
 
 Create a `CMakeLists.txt` file for your plugin:

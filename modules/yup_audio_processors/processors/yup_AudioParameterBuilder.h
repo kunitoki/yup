@@ -116,8 +116,22 @@ public:
     /** Sets whether this parameter supports CLAP per-note modulation events. */
     AudioParameterBuilder& withPerNoteModulatable (bool shouldBePerNoteModulatable);
 
-    /** Sets the optional host-facing module path, using "/" as a separator. */
+    /** Sets the optional host-facing module path, using "/" as a separator.
+
+        The path is used as the parameter group hierarchy (VST3 units, CLAP modules,
+        AU clumps), e.g. "Filter/Envelope".
+    */
     AudioParameterBuilder& withModulePath (const String& modulePath);
+
+    /**
+        Marks this parameter as the processor's designated bypass switch.
+
+        A bypass parameter is a stepped 0..1 toggle where values >= 0.5 mean bypassed.
+        When a processor owns one, plugin wrappers expose it as the host bypass
+        control and keep calling processBlock(), so the processor is responsible for
+        implementing a click-free, latency-compensated bypass.
+    */
+    AudioParameterBuilder& withBypass (bool shouldBeBypass);
 
     /**
         Sets the measurement unit for this parameter.

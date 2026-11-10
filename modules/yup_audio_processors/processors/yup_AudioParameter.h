@@ -159,7 +159,8 @@ public:
             enumeratedFlag = 1 << 3,
             modulatableFlag = 1 << 4,
             perNoteModulatableFlag = 1 << 5,
-            smoothingEnabledFlag = 1 << 6
+            smoothingEnabledFlag = 1 << 6,
+            bypassFlag = 1 << 7
         };
 
         /** Returns true if the supplied flag is set. */
@@ -216,6 +217,12 @@ public:
 
         /** Sets whether smoothing is enabled. */
         void setSmoothingEnabled (bool shouldBeEnabled) noexcept { setFlag (smoothingEnabledFlag, shouldBeEnabled); }
+
+        /** Returns true when this parameter is the processor's designated bypass switch. */
+        bool isBypass() const noexcept { return isFlagSet (bypassFlag); }
+
+        /** Sets whether this parameter is the processor's designated bypass switch. */
+        void setBypass (bool shouldBeBypass) noexcept { setFlag (bypassFlag, shouldBeBypass); }
 
         /** The parameter display name. */
         String name;
@@ -348,7 +355,19 @@ public:
     /** Returns true when this parameter supports CLAP per-note modulation events. */
     bool isPerNoteModulatable() const noexcept { return metadata.isPerNoteModulatable(); }
 
-    /** Returns the module path of this parameter. */
+    /** Returns true when this parameter is the processor's designated bypass switch.
+
+        Values >= 0.5 mean bypassed. Plugin wrappers expose such a parameter as the
+        host bypass control instead of creating their own.
+    */
+    bool isBypass() const noexcept { return metadata.isBypass(); }
+
+    /** Returns the module path of this parameter.
+
+        The path groups parameters hierarchically using "/" as a separator (for
+        example "Filter/Envelope"). Wrappers map it to VST3 units, CLAP modules
+        and AU clumps.
+    */
     String getModulePath() const { return metadata.modulePath; }
 
     /** Returns the measurement unit of this parameter. */

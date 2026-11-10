@@ -136,6 +136,8 @@ public:
 
         if (processor == nullptr)
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "createPluginProcessor returned null");
+        else
+            bypass.attach (*processor);
 
         addParameterListeners();
         registerInstance (componentInstance, this);
@@ -503,7 +505,7 @@ public:
                                                  renderMidiBuffer,
                                                  processParamChangeBuffer,
                                                  &playHead };
-            processAudioBlock (*processor, context, isBypassed);
+            processAudioBlock (*processor, context, bypass.isBypassed());
 
             renderMidiBuffer.clear();
             processParamChangeBuffer.clear();
@@ -704,7 +706,7 @@ public:
                                              &playHead,
                                              { renderViews.inputBusViews.data(), renderViews.inputBusViews.size() },
                                              { renderViews.outputBusViews.data(), renderViews.outputBusViews.size() } };
-        processAudioBlock (*processor, context, isBypassed);
+        processAudioBlock (*processor, context, bypass.isBypassed());
         midiBuffer.clear();
         processParamChangeBuffer.clear();
 
@@ -984,7 +986,7 @@ public:
             if (inData == nullptr || inDataSize < sizeof (UInt32))
                 return kAudioUnitErr_InvalidPropertyValue;
 
-            isBypassed = *static_cast<const UInt32*> (inData) != 0;
+            bypass.setBypassed (*static_cast<const UInt32*> (inData) != 0);
             return noErr;
         }
 
@@ -1102,6 +1104,9 @@ private:
                                          0,
                                          static_cast<AudioUnitParameterValue> (parameter->getValue()),
                                          0);
+
+        if (parameter->isBypass())
+            PropertyChanged (kAudioUnitProperty_BypassEffect, kAudioUnitScope_Global, 0);
     }
 
     void parameterGestureBegin (const AudioParameter::Ptr& parameter, int indexInContainer) override
@@ -1141,7 +1146,7 @@ private:
     std::vector<uint8_t> auxiliaryInputValid; // per-element pull success (effect path)
     AudioUnit componentInstance = nullptr;
     bool renderingOffline = false;
-    bool isBypassed = false;
+    WrapperBypass bypass;
 };
 
 } // namespace yup
@@ -1442,23 +1447,39 @@ private:
         if (resizingViewToEditor)
             return;
 
-        fitEditorInsideHostView (hostBounds.size);
+        fitEditorInsideHostView (getAvailableHostViewSize());
         hostResizeSnapper.hostResized();
+    }
+
+    /* Hosts like Waveform place the plugin view inside their container with a border and a title bar, and
+       size the container to the view plus those margins. Filling the whole container would make the host grow
+       it again by the margins, forever. The view origin gives the leading margins, the trailing ones are
+       assumed to match the side margin. */
+    NSSize getAvailableHostViewSize() const
+    {
+        const auto hostSize = [observedHostView bounds].size;
+        const auto frame = [view frame];
+
+        const auto sideMargin = jmax (0.0, static_cast<double> (NSMinX (frame)));
+        const auto verticalMargins = [observedHostView isFlipped] ? jmax (0.0, static_cast<double> (NSMinY (frame))) + sideMargin : 0.0;
+
+        return NSMakeSize (jmax (1.0, hostSize.width - sideMargin * 2.0),
+                           jmax (1.0, hostSize.height - verticalMargins));
     }
 
     /* Hosts echo plugin view frame changes back to their window, so constraining the view while the user
        drags the window edges makes the window jump between the dragged and the constrained size. The view
        keeps matching the host view, and only the editor inside it is constrained until the drag ends. */
-    void fitEditorInsideHostView (NSSize hostSize)
+    void fitEditorInsideHostView (NSSize availableSize)
     {
-        if (! NSEqualSizes (hostSize, [view frame].size))
+        if (! NSEqualSizes (availableSize, [view frame].size))
         {
             const ScopedValueSetter<bool> scoped (resizingViewToEditor, true);
-            ObjCClass<NSView>::sendSuperclassMessage<void> (view, @selector (setFrameSize:), hostSize);
+            ObjCClass<NSView>::sendSuperclassMessage<void> (view, @selector (setFrameSize:), availableSize);
             alignToHostViewTop();
         }
 
-        const auto size = editorComponent->getEditor().getConstrainedSizeToFit ({ static_cast<int> (hostSize.width), static_cast<int> (hostSize.height) });
+        const auto size = editorComponent->getEditor().getConstrainedSizeToFit ({ static_cast<int> (availableSize.width), static_cast<int> (availableSize.height) });
 
         const ScopedValueSetter<bool> scoped (resizingEditorToBounds, true);
         editorComponent->setSize (size.to<float>());
@@ -1469,10 +1490,10 @@ private:
         if (observedHostView == nil || editorComponent == nullptr)
             return;
 
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "snapping to constrained size: hostSize=" << String ([NSStringFromSize ([observedHostView bounds].size) UTF8String]) << ", viewFrame=" << String ([NSStringFromRect ([view frame]) UTF8String]));
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "snapping to constrained size: hostSize=" << String ([NSStringFromSize ([observedHostView bounds].size) UTF8String]) << ", availableSize=" << String ([NSStringFromSize (getAvailableHostViewSize()) UTF8String]) << ", viewFrame=" << String ([NSStringFromRect ([view frame]) UTF8String]));
 
         // Our setFrameSize: override constrains the size, the host then fits its window to the view
-        [view setFrameSize:[observedHostView bounds].size];
+        [view setFrameSize:getAvailableHostViewSize()];
         alignToHostViewTop();
     }
 
@@ -1709,7 +1730,7 @@ OSStatus AudioPluginProcessorAU::GetProperty (AudioUnitPropertyID inID,
         if (outData == nullptr)
             return kAudioUnitErr_InvalidPropertyValue;
 
-        *static_cast<UInt32*> (outData) = isBypassed ? 1u : 0u;
+        *static_cast<UInt32*> (outData) = bypass.isBypassed() ? 1u : 0u;
         return noErr;
     }
 

@@ -76,6 +76,11 @@ struct AudioProcessContext
         Empty when there are no audio outputs. */
     Span<AudioBusBufferView<FloatType>> outputs;
 
+    /** Per-note expression events for this block, sorted by sampleOffset in [0, blockSize).
+        Only provided to processors returning true from AudioProcessor::supportsNoteExpression(),
+        null otherwise (expressions are then folded into @c midi). */
+    const NoteExpressionBuffer* noteExpressions = nullptr;
+
     //==============================================================================
     /** @name Convenience accessors for common bus layouts.
         These helpers return the first bus matching the requested role and direction.

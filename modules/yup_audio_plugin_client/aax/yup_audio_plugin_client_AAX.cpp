@@ -280,6 +280,7 @@ public:
         }
 
         processor->addListener (this);
+        bypass.attach (*processor);
 
         AAX_CEffectParameters::GetNumberOfChunks (&yupChunkIndex);
         YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "created effect parameters: wrapper=" << describePointer (this) << ", processor=" << describePointer (processor.get()) << ", chunkIndex=" << String (yupChunkIndex));
@@ -548,14 +549,14 @@ public:
             tls.data = writeWrapperBypassState (
                 YupPlugin_AAX_ChunkMagic,
                 YupPlugin_AAX_ChunkVersion,
-                isBypassed.load(),
+                bypass.isBypassed(),
                 processorState,
                 ! processorState.isEmpty());
             tls.isValid = true;
 
             *size = static_cast<uint32_t> (tls.data.getSize());
 
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunkSize completed: bytes=" << String (static_cast<int64> (*size)) << ", processorBytes=" << String (static_cast<int64> (processorState.getSize())) << ", bypassed=" << String (isBypassed.load() ? "true" : "false"));
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunkSize completed: bytes=" << String (static_cast<int64> (*size)) << ", processorBytes=" << String (static_cast<int64> (processorState.getSize())) << ", bypassed=" << String (bypass.isBypassed() ? "true" : "false"));
             return AAX_SUCCESS;
         }
 
@@ -865,6 +866,7 @@ private:
         addMasterBypassParameter();
 
         const auto parameters = processor->getParameters();
+        const auto bypassParameter = processor->getBypassParameter();
 
         for (size_t i = 0; i < parameters.size(); ++i)
         {
@@ -872,6 +874,13 @@ private:
 
             if (param == nullptr)
                 continue;
+
+            // The processor bypass parameter is driven by the host master bypass
+            if (param == bypassParameter.get())
+            {
+                paramMap[getAaxParamHash (cDefaultMasterBypassID)] = param;
+                continue;
+            }
 
             if (isMeterParameter (*param))
             {
@@ -931,12 +940,13 @@ private:
     void syncParameterAttributes()
     {
         const auto parameters = processor->getParameters();
+        const auto bypassParameter = processor->getBypassParameter();
 
         for (size_t i = 0; i < parameters.size(); ++i)
         {
             auto* param = parameters[i].get();
 
-            if (param == nullptr || isMeterParameter (*param))
+            if (param == nullptr || param == bypassParameter.get() || isMeterParameter (*param))
                 continue;
 
             const auto aaxParamID = getAaxParamIDFromIndex (static_cast<int> (i));
@@ -963,9 +973,13 @@ private:
     void resyncParameterValues()
     {
         const auto parameters = processor->getParameters();
+        const auto bypassParameter = processor->getBypassParameter();
 
         for (size_t i = 0; i < parameters.size(); ++i)
         {
+            if (parameters[i] == bypassParameter)
+                continue;
+
             const auto aaxParamID = getAaxParamIDFromIndex (static_cast<int> (i));
 
             inParameterChangedCallback = true;
@@ -985,7 +999,7 @@ private:
 
     void setBypassed (bool shouldBypass)
     {
-        isBypassed.store (shouldBypass);
+        bypass.setBypassed (shouldBypass);
     }
 
     //==========================================================================
@@ -1107,7 +1121,7 @@ private:
     AAX_EStemFormat lastInputFormat = AAX_eStemFormat_None;
     AAX_EStemFormat lastOutputFormat = AAX_eStemFormat_None;
     bool isPrepared = false;
-    std::atomic<bool> isBypassed { false };
+    WrapperBypass bypass;
     mutable std::atomic<int> numSetDirtyCalls { 0 };
 
     MidiBuffer midiBuffer;

@@ -239,18 +239,7 @@ public:
             addressForIndex[i] = address;
         }
 
-        // Wrapper-owned bypass parameter backing the host's AUv3 bypass property.
-        // It is deliberately not added to the processor or the AU parameter tree:
-        // the host drives it through setShouldBypassEffect:, the render callback
-        // reads it directly, and it is persisted inside the YUPProcessorState blob.
-        auto bypassMetadata = AudioParameter::Metadata {};
-        bypassMetadata.name = "Bypass";
-        bypassMetadata.hostParameterID = getBypassHostParameterID (*processor);
-        bypassMetadata.valueRange = { 0.0f, 1.0f, 1.0f };
-        bypassMetadata.defaultValue = 0.0f;
-        bypassMetadata.setStepped (true);
-
-        bypassHostParam = std::make_unique<AudioParameter> ("bypass", bypassMetadata);
+        bypass.attach (*processor);
 
         installParameterTree (createTopLevelNodes());
     }
@@ -579,6 +568,9 @@ public:
         {
             const auto result = processor->loadStateFromMemory (wrapperState.processorState);
             ignoreUnused (result);
+
+            if (wrapperState.hasWrapperState)
+                setShouldBypassEffect (wrapperState.isBypassed);
 
             YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setFullState " << String (result.wasOk() ? "completed" : "failed") << ": bytes=" << String (numBytes) << ", processorBytes=" << String (static_cast<int64> (wrapperState.processorState.getSize())) << ", hasWrapperState=" << String (wrapperState.hasWrapperState ? "true" : "false") << (result.wasOk() ? String() : ", error=" + result.getErrorMessage()));
         }
@@ -1107,10 +1099,7 @@ public:
                     { renderViews.outputBusViews.data(), renderViews.outputBusViews.size() }
                 };
 
-                if (bypassHostParam != nullptr)
-                    processAudioBlock (*processor, context, bypassHostParam->getNormalizedValue() > 0.5f);
-                else
-                    processAudioBlock (*processor, context, false);
+                processAudioBlock (*processor, context, bypass.isBypassed());
             }
 
             sendMidi (static_cast<int64_t> (timestamp->mSampleTime + 0.5), frameCount);
@@ -1333,18 +1322,14 @@ public:
 
     bool getShouldBypassEffect() const
     {
-        if (bypassHostParam != nullptr)
-            return bypassHostParam->getNormalizedValue() > 0.5f;
-
-        return false;
+        return bypass.isBypassed();
     }
 
     void setShouldBypassEffect (bool shouldBypass)
     {
         YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "bypass set to " << String (shouldBypass ? "true" : "false"));
 
-        if (bypassHostParam != nullptr)
-            bypassHostParam->setNormalizedValue (shouldBypass ? 1.0f : 0.0f);
+        bypass.setBypassed (shouldBypass);
     }
 
     //==============================================================================
@@ -1699,7 +1684,7 @@ private:
 
     AudioTimeStamp lastTimeStamp;
 
-    std::unique_ptr<AudioParameter> bypassHostParam;
+    WrapperBypass bypass;
 
     double viewConfigWidth = 0;
     double viewConfigHeight = 0;

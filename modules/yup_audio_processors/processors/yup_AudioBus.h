@@ -104,6 +104,17 @@ public:
     /** Returns true if the bus is stereo. */
     bool isStereo() const noexcept { return numChannels == 2; }
 
+    /** Returns a copy of this bus with a different channel count. */
+    AudioBus withNumChannels (int newNumChannels) const
+    {
+        auto copy = *this;
+        copy.numChannels = jmax (0, newNumChannels);
+        return copy;
+    }
+
+    /** Compares every property of two buses. */
+    bool operator== (const AudioBus& other) const noexcept = default;
+
 private:
     String name;
     Type type = Type::Audio;

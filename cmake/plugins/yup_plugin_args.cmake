@@ -55,6 +55,19 @@ endfunction()
 
 #==============================================================================
 
+# AudioUnit types, subtypes and manufacturers are OSType four character codes
+function (_yup_audio_plugin_check_au_codes subtype manufacturer)
+    foreach (code_name subtype manufacturer)
+        string (LENGTH "${${code_name}}" code_length)
+        if (NOT code_length EQUAL 4)
+            string (TOUPPER "${code_name}" arg_name)
+            _yup_message (FATAL_ERROR "PLUGIN_AU_${arg_name} must be exactly 4 characters, got \"${${code_name}}\"")
+        endif()
+    endforeach()
+endfunction()
+
+#==============================================================================
+
 function (_yup_apply_binary_optimizations target_name)
     cmake_parse_arguments (YUP_ARG "" "" "EXPORTED_SYMBOLS" ${ARGN})
 

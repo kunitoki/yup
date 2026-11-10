@@ -252,6 +252,9 @@ clap_param_info_flags getCLAPParameterFlags (const AudioParameter& parameter) no
     if (parameter.isPerNoteModulatable())
         flags |= CLAP_PARAM_IS_MODULATABLE | CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID;
 
+    if (parameter.isBypass())
+        flags |= CLAP_PARAM_IS_BYPASS;
+
     return flags;
 }
 
@@ -594,6 +597,7 @@ private:
     void enqueueParameterEvent (uint16 eventType, clap_id parameterId, double value = 0.0) noexcept;
     void drainParameterEvents (const clap_output_events_t* out) noexcept;
     void requestParameterFlush() const noexcept;
+    void updateHostTrackInfo();
     void requestMainThreadCallback() const noexcept;
     void handleMainThreadNotifications() noexcept;
     void handleAudioThreadNotifications() noexcept;
@@ -623,6 +627,7 @@ private:
     clap_plugin_gui_t extensionGUI;
     clap_plugin_render_t extensionRender;
     clap_plugin_voice_info_t extensionVoiceInfo;
+    clap_plugin_track_info_t extensionTrackInfo;
 
     const clap_host_params_t* hostParams = nullptr;
     const clap_host_state_t* hostState = nullptr;
@@ -630,6 +635,7 @@ private:
     const clap_host_latency_t* hostLatency = nullptr;
     const clap_host_timer_support_t* hostTimerSupport = nullptr;
     const clap_host_gui_t* hostGUI = nullptr;
+    const clap_host_track_info_t* hostTrackInfo = nullptr;
 
     clap_id guiTimerId;
     bool hostTriggeredResizing = false;
@@ -645,7 +651,7 @@ private:
     std::vector<AudioBusBufferView<const double>> inputBusViewsDouble;
     std::vector<AudioBusBufferView<double>> outputBusViewsDouble;
 
-    bool isBypassed = false;
+    WrapperBypass bypass;
     std::atomic<bool> isActive { false };
 
     std::atomic<bool> isInsideProcessBlock { false };
@@ -747,8 +753,8 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         midiBuffer.clear();
         wrapper->paramChangeBuffer.clear();
 
-        bool bypassed = wrapper->isBypassed;
-        const auto bypassParameterID = getBypassHostParameterID (audioProcessor);
+        bool bypassed = wrapper->bypass.isBypassed();
+        const auto bypassParameterID = wrapper->bypass.getHostParameterID();
         const int lastSampleOffset = jmax (0, static_cast<int> (process->frames_count) - 1);
 
         const uint32_t inputEventCount = process->in_events->size (process->in_events);
@@ -768,7 +774,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                 if (paramEvent->param_id == bypassParameterID)
                 {
                     bypassed = paramEvent->value >= 0.5;
-                    wrapper->isBypassed = bypassed;
+                    wrapper->bypass.setBypassed (bypassed);
                     continue;
                 }
 
@@ -1005,19 +1011,22 @@ bool AudioPluginProcessorCLAP::initialise()
 
     YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "init requested: wrapper=" << describePointer (this) << ", host=" << describePointer (host));
 
-    audioProcessor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::clap, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
+    audioProcessor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::clap, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION, host->name != nullptr ? host->name : ""));
     if (audioProcessor == nullptr)
     {
         YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "init failed: createPluginProcessor returned null");
         return false;
     }
 
+    bypass.attach (*audioProcessor);
+
     YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "created processor instance: wrapper=" << describePointer (this) << ", processor=" << describePointer (audioProcessor.get()));
 
     // ==== Setup extensions: parameters
     extensionParams.count = [] (const clap_plugin_t* plugin) -> uint32_t
     {
-        return static_cast<uint32_t> (getWrapper (plugin)->audioProcessor->getParameters().size() + 1);
+        const auto wrapper = getWrapper (plugin);
+        return static_cast<uint32_t> (wrapper->audioProcessor->getParameters().size() + (wrapper->bypass.isProcessorOwned() ? 0 : 1));
     };
 
     extensionParams.get_info = [] (const clap_plugin_t* plugin, uint32_t index, clap_param_info_t* information) -> bool
@@ -1032,7 +1041,10 @@ bool AudioPluginProcessorCLAP::initialise()
 
         if (index == static_cast<uint32_t> (parameters.size()))
         {
-            information->id = getBypassHostParameterID (*wrapper->audioProcessor);
+            if (wrapper->bypass.isProcessorOwned())
+                return false;
+
+            information->id = wrapper->bypass.getHostParameterID();
             information->flags = CLAP_PARAM_IS_AUTOMATABLE | CLAP_PARAM_IS_STEPPED | CLAP_PARAM_IS_BYPASS;
             information->min_value = 0.0;
             information->max_value = 1.0;
@@ -1063,9 +1075,9 @@ bool AudioPluginProcessorCLAP::initialise()
         const auto parameterIndex = wrapper->audioProcessor->getParameterIndexByHostID (parameterId);
         if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
         {
-            if (parameterId == getBypassHostParameterID (*wrapper->audioProcessor))
+            if (wrapper->bypass.isSyntheticParameter (parameterId))
             {
-                *value = wrapper->isBypassed ? 1.0 : 0.0;
+                *value = wrapper->bypass.isBypassed() ? 1.0 : 0.0;
                 return true;
             }
 
@@ -1085,7 +1097,7 @@ bool AudioPluginProcessorCLAP::initialise()
         const auto parameterIndex = wrapper->audioProcessor->getParameterIndexByHostID (parameterId);
         if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
         {
-            if (parameterId == getBypassHostParameterID (*wrapper->audioProcessor))
+            if (wrapper->bypass.isSyntheticParameter (parameterId))
             {
                 const auto text = value >= 0.5 ? String ("On") : String ("Off");
                 text.copyToUTF8 (display, size);
@@ -1109,7 +1121,7 @@ bool AudioPluginProcessorCLAP::initialise()
         const auto parameterIndex = wrapper->audioProcessor->getParameterIndexByHostID (parameterId);
         if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
         {
-            if (parameterId == getBypassHostParameterID (*wrapper->audioProcessor))
+            if (wrapper->bypass.isSyntheticParameter (parameterId))
             {
                 const String text (display);
                 *value = (text == "On" || text == "1") ? 1.0 : 0.0;
@@ -1134,7 +1146,7 @@ bool AudioPluginProcessorCLAP::initialise()
             return;
 
         const uint32_t count = in->size (in);
-        const auto bypassParameterID = getBypassHostParameterID (*wrapper->audioProcessor);
+        const auto bypassParameterID = wrapper->bypass.getHostParameterID();
 
         for (uint32_t i = 0; i < count; ++i)
         {
@@ -1149,7 +1161,7 @@ bool AudioPluginProcessorCLAP::initialise()
 
                 if (paramEvent->param_id == bypassParameterID)
                 {
-                    wrapper->isBypassed = paramEvent->value >= 0.5;
+                    wrapper->bypass.setBypassed (paramEvent->value >= 0.5);
                     continue;
                 }
 
@@ -1333,7 +1345,7 @@ bool AudioPluginProcessorCLAP::initialise()
 
         const auto wrapperState = writeWrapperBypassState (clapWrapperStateMagic,
                                                            clapWrapperStateVersion,
-                                                           wrapper->isBypassed,
+                                                           wrapper->bypass.isBypassed(),
                                                            data,
                                                            saved);
 
@@ -1376,7 +1388,7 @@ bool AudioPluginProcessorCLAP::initialise()
         const auto wrapperState = readWrapperBypassState (data, clapWrapperStateMagic, clapWrapperStateVersion);
         if (wrapperState.hasWrapperState)
         {
-            wrapper->isBypassed = wrapperState.isBypassed;
+            wrapper->bypass.setBypassed (wrapperState.isBypassed);
 
             if (! wrapperState.hasProcessorState)
             {
@@ -1390,6 +1402,10 @@ bool AudioPluginProcessorCLAP::initialise()
         wrapper->audioProcessor->suspendProcessing (true);
         const auto loadResult = wrapper->audioProcessor->loadStateFromMemory (processorState);
         const bool ok = loadResult.wasOk();
+
+        if (wrapperState.hasWrapperState)
+            wrapper->bypass.setBypassed (wrapperState.isBypassed);
+
         wrapper->audioProcessor->suspendProcessing (false);
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "state load " << String (ok ? "completed" : "failed") << ": bytes=" << String (static_cast<int64> (data.getSize())) << ", processorBytes=" << String (static_cast<int64> (processorState.getSize())) << ", wrapperState=" << String (wrapperState.hasWrapperState ? "true" : "false") << (ok ? String() : ", error=" + loadResult.getErrorMessage()));
@@ -1446,6 +1462,12 @@ bool AudioPluginProcessorCLAP::initialise()
         info->voice_capacity = static_cast<uint32_t> (voices);
         info->flags = CLAP_VOICE_INFO_SUPPORTS_OVERLAPPING_NOTES;
         return true;
+    };
+
+    // ==== Setup extensions: track info
+    extensionTrackInfo.changed = [] (const clap_plugin_t* plugin)
+    {
+        getWrapper (plugin)->updateHostTrackInfo();
     };
 
     // ==== Setup extensions: gui
@@ -1734,6 +1756,11 @@ bool AudioPluginProcessorCLAP::initialise()
     hostLatency = reinterpret_cast<const clap_host_latency_t*> (host->get_extension (host, CLAP_EXT_LATENCY));
     hostTimerSupport = reinterpret_cast<const clap_host_timer_support_t*> (host->get_extension (host, CLAP_EXT_TIMER_SUPPORT));
     hostGUI = reinterpret_cast<const clap_host_gui_t*> (host->get_extension (host, CLAP_EXT_GUI));
+    hostTrackInfo = reinterpret_cast<const clap_host_track_info_t*> (host->get_extension (host, CLAP_EXT_TRACK_INFO));
+    if (hostTrackInfo == nullptr)
+        hostTrackInfo = reinterpret_cast<const clap_host_track_info_t*> (host->get_extension (host, CLAP_EXT_TRACK_INFO_COMPAT));
+
+    updateHostTrackInfo();
 
     audioProcessor->addListener (this);
     addParameterListeners();
@@ -1880,8 +1907,38 @@ const void* AudioPluginProcessorCLAP::getExtension (std::string_view id)
         return std::addressof (extensionRender);
     if (id == CLAP_EXT_VOICE_INFO)
         return audioProcessor->getNumVoices() > 0 ? std::addressof (extensionVoiceInfo) : nullptr;
+    if (id == CLAP_EXT_TRACK_INFO || id == CLAP_EXT_TRACK_INFO_COMPAT)
+        return std::addressof (extensionTrackInfo);
 
     return nullptr;
+}
+
+//==============================================================================
+
+void AudioPluginProcessorCLAP::updateHostTrackInfo()
+{
+    if (audioProcessor == nullptr || hostTrackInfo == nullptr || hostTrackInfo->get == nullptr)
+        return;
+
+    clap_track_info_t trackInfo {};
+    if (! hostTrackInfo->get (host, &trackInfo))
+        return;
+
+    AudioProcessorBase::HostInfo info;
+
+    if ((trackInfo.flags & CLAP_TRACK_INFO_HAS_TRACK_NAME) != 0)
+        info.trackName = String::fromUTF8 (trackInfo.name, static_cast<int> (strnlen (trackInfo.name, CLAP_NAME_SIZE)));
+
+    if ((trackInfo.flags & CLAP_TRACK_INFO_HAS_TRACK_COLOR) != 0)
+    {
+        const auto& color = trackInfo.color;
+        info.trackColor = (static_cast<uint32> (color.alpha) << 24)
+                        | (static_cast<uint32> (color.red) << 16)
+                        | (static_cast<uint32> (color.green) << 8)
+                        | static_cast<uint32> (color.blue);
+    }
+
+    audioProcessor->setHostInfo (info);
 }
 
 //==============================================================================

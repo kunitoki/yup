@@ -96,6 +96,57 @@ inline uint32 getBypassHostParameterID (const AudioProcessor& processor)
     return findFirstUnusedHostParameterID (processor, static_cast<uint32> (processor.getParameters().size()));
 }
 
+/** The host-facing bypass control of a plugin wrapper.
+
+    When the processor designates a bypass parameter (AudioParameterBuilder::withBypass) that
+    parameter is the bypass control and holds the state. Otherwise the wrapper exposes a synthetic
+    parameter, with an ID from getBypassHostParameterID(), and the state lives here.
+
+    Reads and writes are lock-free and safe on the audio thread.
+*/
+class WrapperBypass
+{
+public:
+    /** Binds to the processor, call again when its parameters change. */
+    void attach (const AudioProcessor& processor)
+    {
+        parameter = processor.getBypassParameter();
+        hostParameterID = parameter != nullptr ? parameter->getHostParameterID() : getBypassHostParameterID (processor);
+    }
+
+    /** Returns true when the processor owns the bypass parameter. */
+    bool isProcessorOwned() const noexcept { return parameter != nullptr; }
+
+    /** Returns the host-facing ID of the bypass control. */
+    uint32 getHostParameterID() const noexcept { return hostParameterID; }
+
+    /** Returns true when the ID refers to the wrapper's synthetic bypass parameter. */
+    bool isSyntheticParameter (uint32 parameterID) const noexcept { return parameter == nullptr && parameterID == hostParameterID; }
+
+    /** Returns true when the bypass is engaged. */
+    bool isBypassed() const noexcept
+    {
+        if (parameter != nullptr)
+            return parameter->getNormalizedValue() >= 0.5f;
+
+        return bypassed.load (std::memory_order_relaxed);
+    }
+
+    /** Engages or releases the bypass without notifying listeners. */
+    void setBypassed (bool shouldBeBypassed) noexcept
+    {
+        bypassed.store (shouldBeBypassed, std::memory_order_relaxed);
+
+        if (parameter != nullptr)
+            parameter->setNormalizedValue (shouldBeBypassed ? 1.0f : 0.0f);
+    }
+
+private:
+    AudioParameter::Ptr parameter;
+    uint32 hostParameterID = 0;
+    std::atomic<bool> bypassed { false };
+};
+
 /** Returns the total number of output audio channels across all output audio buses. */
 inline int getTotalAudioOutputChannels (const AudioProcessor& processor)
 {
@@ -120,15 +171,32 @@ inline int getTotalAudioInputChannels (const AudioProcessor& processor)
     return count;
 }
 
-/** Declares the wrapper type of the current binary, then creates the plugin processor.
+/** Detects the host application from its reported name (when the format provides one) and
+    the current process, and declares it through AudioProcessor::setHostType().
+
+    A host detected earlier is kept when the new detection finds nothing.
+*/
+inline void updatePluginHostType (StringRef hostName = {})
+{
+    const auto hostType = PluginHostType::detectFromCurrentProcess (hostName);
+
+    if (hostType.getHost() != PluginHostType::Host::unknown)
+        AudioProcessor::setHostType (hostType);
+}
+
+/** Declares the wrapper type of the current binary and the host application, then creates the plugin processor.
 
     Wrappers must create processors through this, so processor constructors can query
-    AudioProcessor::getWrapperType().
+    AudioProcessor::getWrapperType() and AudioProcessor::getHostType().
 */
 template <class CreateFunction>
-AudioProcessor* createPluginProcessorForWrapper (AudioPluginWrapperType wrapperType, CreateFunction&& createFunction)
+AudioProcessor* createPluginProcessorForWrapper (AudioPluginWrapperType wrapperType, CreateFunction&& createFunction, StringRef hostName = {})
 {
     AudioProcessor::setWrapperType (wrapperType);
+
+    if (wrapperType != AudioPluginWrapperType::standalone)
+        updatePluginHostType (hostName);
+
     return createFunction();
 }
 

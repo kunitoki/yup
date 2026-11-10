@@ -216,6 +216,8 @@ public:
             return;
         }
 
+        processorBypass.attach (*processor);
+
         numInputChannels = processor->getBusLayout().getNumAudioInputChannels();
         numOutputChannels = processor->getBusLayout().getNumAudioOutputChannels();
 
@@ -369,7 +371,7 @@ public:
             }
             else
             {
-                processAudioBlock (*processor, context, isBypassed);
+                processAudioBlock (*processor, context, isBypassed || processorBypass.isBypassed());
             }
         }
 
@@ -763,7 +765,8 @@ public:
     String programUri;
     LV2_URID programUrid = 0;
 
-    bool isBypassed = false;
+    bool isBypassed = false; // Host-driven through the lv2:enabled port
+    WrapperBypass processorBypass;
     std::atomic<bool> shouldSendStateChange { false };
     AudioPlayHead::PositionInfo lastPosition;
 

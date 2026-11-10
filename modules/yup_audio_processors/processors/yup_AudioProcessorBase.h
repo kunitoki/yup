@@ -88,6 +88,14 @@ public:
             return copy;
         }
 
+        /** Returns a copy of these details with the bus layout change flag set. */
+        ChangeDetails withBusLayoutChanged (bool shouldBeBusLayoutChanged) const noexcept
+        {
+            auto copy = *this;
+            copy.busLayoutChanged = shouldBeBusLayoutChanged;
+            return copy;
+        }
+
         /** True when the processor latency may have changed. */
         bool latencyChanged = false;
 
@@ -105,6 +113,9 @@ public:
 
         /** True when the program/preset has changed. */
         bool programChanged = false;
+
+        /** True when the bus layout (number of buses or channels) has changed. */
+        bool busLayoutChanged = false;
     };
 
     //==============================================================================
@@ -144,6 +155,41 @@ public:
 
     /** Adds a parameter. */
     void addParameter (AudioParameter::Ptr parameter);
+
+    /** Returns the first parameter flagged as the designated bypass switch, or nullptr.
+
+        @see AudioParameterBuilder::withBypass
+    */
+    AudioParameter::Ptr getBypassParameter() const;
+
+    //==============================================================================
+    /** Information about the host track or channel this processor is placed on.
+
+        Fields are empty or unset when the host doesn't provide them.
+    */
+    struct HostInfo
+    {
+        /** The host track or channel name. */
+        String trackName;
+
+        /** The host track or channel color as 0xAARRGGBB, when available. */
+        std::optional<uint32> trackColor;
+
+        /** Returns true when both infos describe the same track. */
+        bool operator== (const HostInfo& other) const noexcept = default;
+    };
+
+    /** Returns the latest track information provided by the host. Call from the message thread. */
+    const HostInfo& getHostInfo() const noexcept { return hostInfo; }
+
+    /** Called on the message thread when the host provides new track information.
+
+        The default implementation does nothing; getHostInfo() already returns the new values.
+    */
+    virtual void hostInfoChanged (const HostInfo& newInfo) { ignoreUnused (newInfo); }
+
+    /** @internal Used by plugin wrappers to forward host track information. */
+    void setHostInfo (const HostInfo& newInfo);
 
     //==============================================================================
     /** Adds a processor-level change listener. */
@@ -326,6 +372,7 @@ private:
     std::unordered_map<String, AudioParameter::Ptr> parameterMap;
     std::unordered_map<uint32, AudioParameter::Ptr> parameterHostIDMap;
     ListenerList<Listener, Array<Listener*, CriticalSection>> listeners;
+    HostInfo hostInfo;
 
     float sampleRate = 44100.0f;
     int samplesPerBlock = 1024;

@@ -39,7 +39,18 @@ AudioProcessor::~AudioProcessor() = default;
 namespace
 {
 std::atomic<AudioPluginWrapperType> currentWrapperType { AudioPluginWrapperType::unknown };
+std::atomic<PluginHostType::Host> currentHostType { PluginHostType::Host::unknown };
 } // namespace
+
+PluginHostType AudioProcessor::getHostType() noexcept
+{
+    return PluginHostType (currentHostType.load (std::memory_order_relaxed));
+}
+
+void AudioProcessor::setHostType (PluginHostType hostType) noexcept
+{
+    currentHostType.store (hostType.getHost(), std::memory_order_relaxed);
+}
 
 AudioPluginWrapperType AudioProcessor::getWrapperType() noexcept
 {
@@ -98,6 +109,34 @@ int AudioProcessor::getNumAudioInputs() const
             ++count;
 
     return count;
+}
+
+bool AudioProcessor::isBusLayoutSupported (const AudioBusLayout& layout) const
+{
+    return layout == busLayout;
+}
+
+Result AudioProcessor::setBusLayout (const AudioBusLayout& newLayout)
+{
+    if (newLayout == busLayout)
+        return Result::ok();
+
+    if (! newLayout.hasSameBusStructure (busLayout))
+        return Result::fail ("Bus layout has a different bus structure");
+
+    if (! isBusLayoutSupported (newLayout))
+        return Result::fail ("Bus layout is not supported by the processor");
+
+    busLayout = newLayout;
+    updateHostDisplay (ChangeDetails().withBusLayoutChanged (true));
+
+    return Result::ok();
+}
+
+int AudioProcessor::getParameterIndexForMidiController (int channel, int controller) const
+{
+    ignoreUnused (channel, controller);
+    return -1;
 }
 
 //==============================================================================

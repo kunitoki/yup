@@ -160,6 +160,19 @@ AudioParameterBuilder& AudioParameterBuilder::withModulePath (const String& modu
     return *this;
 }
 
+AudioParameterBuilder& AudioParameterBuilder::withBypass (bool shouldBeBypass)
+{
+    metadata.setBypass (shouldBeBypass);
+
+    if (shouldBeBypass)
+    {
+        metadata.valueRange = { 0.0f, 1.0f, 1.0f };
+        metadata.setStepped (true);
+    }
+
+    return *this;
+}
+
 AudioParameterBuilder& AudioParameterBuilder::withUnit (AudioParameter::ParameterUnit parameterUnit,
                                                         const String& parameterUnitName)
 {

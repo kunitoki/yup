@@ -81,6 +81,18 @@ String toString (Vst::TChar* source)
     return CharPointer_UTF16 (reinterpret_cast<CharPointer_UTF16::CharType*> (source));
 }
 
+/** Declares the host application from the name the host context reports. */
+void updatePluginHostTypeFromContext (FUnknown* context)
+{
+    FUnknownPtr<Vst::IHostApplication> hostApplication (context);
+    if (hostApplication == nullptr)
+        return;
+
+    Vst::String128 name {};
+    if (hostApplication->getName (name) == kResultOk)
+        updatePluginHostType (toString (name));
+}
+
 //==============================================================================
 
 void toString128 (const String& source, Vst::String128 destination)
@@ -110,11 +122,6 @@ void toString128 (const String& source, Vst::String128 destination)
 Vst::ParamID getVST3ParameterID (const AudioParameter::Ptr& parameter)
 {
     return static_cast<Vst::ParamID> (parameter->getHostParameterID());
-}
-
-Vst::ParamID getVST3BypassParameterID (const AudioProcessor& processor)
-{
-    return static_cast<Vst::ParamID> (getBypassHostParameterID (processor));
 }
 
 constexpr int vst3WrapperStateMagic = 0x33535659; // "YVS3"
@@ -694,6 +701,8 @@ public:
         YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller initialize requested: context=" << describePointer (context));
 
         auto result = Vst::EditController::initialize (context);
+        updatePluginHostTypeFromContext (context);
+
         if (result != kResultOk)
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller initialize failed: base result=" << static_cast<int> (result));
@@ -821,7 +830,7 @@ public:
             return kResultOk;
         }
 
-        Vst::EditController::setParamNormalized (getVST3BypassParameterID (*processor),
+        Vst::EditController::setParamNormalized (bypass.getHostParameterID(),
                                                  wrapperState.isBypassed ? 1.0 : 0.0);
 
         syncProcessorParametersToController();
@@ -852,11 +861,8 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
-        const auto bypassParameterID = getVST3BypassParameterID (*processor);
-
-        if (tag == bypassParameterID)
+        if (bypass.isSyntheticParameter (tag))
         {
-            // Bypass parameter
             toString128 (valueNormalized >= 0.5 ? "On" : "Off", string);
             return kResultOk;
         }
@@ -875,11 +881,8 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
-        const auto bypassParameterID = getVST3BypassParameterID (*processor);
-
-        if (tag == bypassParameterID)
+        if (bypass.isSyntheticParameter (tag))
         {
-            // Bypass parameter
             const auto str = toString (string);
             valueNormalized = (str == "On" || str == "1") ? 1.0 : 0.0;
             return kResultOk;
@@ -899,7 +902,7 @@ public:
         if (processor == nullptr)
             return valueNormalized;
 
-        if (tag == getVST3BypassParameterID (*processor))
+        if (bypass.isSyntheticParameter (tag))
             return valueNormalized;
 
         if (auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag)))
@@ -913,7 +916,7 @@ public:
         if (processor == nullptr)
             return plainValue;
 
-        if (tag == getVST3BypassParameterID (*processor))
+        if (bypass.isSyntheticParameter (tag))
             return plainValue;
 
         if (auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag)))
@@ -927,7 +930,7 @@ public:
         if (processor == nullptr)
             return 0.0;
 
-        if (tag == getVST3BypassParameterID (*processor))
+        if (bypass.isSyntheticParameter (tag))
             return Vst::EditController::getParamNormalized (tag);
 
         if (auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag)))
@@ -941,7 +944,7 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
-        if (tag == getVST3BypassParameterID (*processor))
+        if (bypass.isSyntheticParameter (tag))
             return Vst::EditController::setParamNormalized (tag, value);
 
         if (auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag)))
@@ -962,7 +965,7 @@ public:
             return kInternalError;
 
         if (processor->getParameterByHostID (static_cast<uint32> (oldParamID)) != nullptr
-            || oldParamID == getVST3BypassParameterID (*processor))
+            || bypass.isSyntheticParameter (oldParamID))
         {
             newParamID = oldParamID;
             return kResultOk;
@@ -1157,7 +1160,21 @@ public:
 
     tresult PLUGIN_API setChannelContextInfos (Vst::IAttributeList* list) override
     {
-        return kNotImplemented;
+        if (list == nullptr || processor == nullptr)
+            return kInvalidArgument;
+
+        AudioProcessorBase::HostInfo info;
+
+        Vst::String128 name {};
+        if (list->getString (Vst::ChannelContext::kChannelNameKey, name, sizeof (name)) == kResultTrue)
+            info.trackName = toString (name);
+
+        int64 color = 0;
+        if (list->getInt (Vst::ChannelContext::kChannelColorKey, color) == kResultTrue)
+            info.trackColor = static_cast<uint32> (color);
+
+        processor->setHostInfo (info);
+        return kResultTrue;
     }
 
     //==============================================================================
@@ -1182,12 +1199,17 @@ private:
         if (processor == nullptr)
             return;
 
+        bypass.attach (*processor);
+
         for (size_t parameterIndex = 0; parameterIndex < processor->getParameters().size(); ++parameterIndex)
         {
             const auto parameter = processor->getParameters()[parameterIndex];
-            const auto flags = (parameter->isAutomatable() && ! parameter->isReadOnly())
-                                 ? Vst::ParameterInfo::kCanAutomate
-                                 : 0;
+            auto flags = (parameter->isAutomatable() && ! parameter->isReadOnly())
+                           ? Vst::ParameterInfo::kCanAutomate
+                           : 0;
+
+            if (parameter->isBypass())
+                flags |= Vst::ParameterInfo::kIsBypass;
 
             const auto unitShortName = String (AudioParameter::getParameterUnitShortName (parameter->getUnit(), parameter->getUnitName()));
 
@@ -1205,6 +1227,9 @@ private:
             listenedParameters.push_back (parameter);
         }
 
+        if (bypass.isProcessorOwned())
+            return;
+
         // VST3 bypass parameter (always the last parameter)
         parameters.addParameter (
             STR16 ("Bypass"),
@@ -1212,7 +1237,7 @@ private:
             1, // step count 1 = toggle
             0, // default: not bypassed
             Vst::ParameterInfo::kCanAutomate | Vst::ParameterInfo::kIsBypass,
-            getVST3BypassParameterID (*processor),
+            static_cast<Vst::ParamID> (bypass.getHostParameterID()),
             Vst::kRootUnitId,
             nullptr);
     }
@@ -1319,6 +1344,7 @@ private:
     }
 
     AudioProcessor* processor = nullptr;
+    WrapperBypass bypass;
     std::vector<AudioParameter::Ptr> listenedParameters;
 };
 
@@ -1338,6 +1364,10 @@ public:
         if (processor == nullptr)
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "createPluginProcessor returned null");
+        }
+        else
+        {
+            bypass.attach (*processor);
         }
 
         setControllerClass (YupPlugin_Controller_UID);
@@ -1371,6 +1401,8 @@ public:
         YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component initialize requested: context=" << describePointer (context));
 
         auto result = AudioEffect::initialize (context);
+        updatePluginHostTypeFromContext (context);
+
         if (result != kResultOk || processor == nullptr)
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component initialize failed: base result=" << static_cast<int> (result) << ", processor=" << describePointer (processor.get()));
@@ -1654,7 +1686,7 @@ public:
 
         auto data = writeWrapperBypassState (vst3WrapperStateMagic,
                                              vst3WrapperStateVersion,
-                                             isBypassed,
+                                             bypass.isBypassed(),
                                              processorState,
                                              hasProcessorState);
 
@@ -1692,16 +1724,16 @@ public:
             return result.wasOk() ? kResultOk : kResultFalse;
         }
 
-        isBypassed = wrapperState.isBypassed;
-
         if (! wrapperState.hasProcessorState)
         {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component setState completed without processor state: bypassed=" << String (isBypassed ? "true" : "false"));
+            bypass.setBypassed (wrapperState.isBypassed);
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component setState completed without processor state: bypassed=" << String (wrapperState.isBypassed ? "true" : "false"));
             return kResultOk;
         }
 
         const auto result = processor->loadStateFromMemory (wrapperState.processorState);
-        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component setState " << String (result.wasOk() ? "completed" : "failed") << ": bytes=" << String (static_cast<int64> (wrapperState.processorState.getSize())) << ", bypassed=" << String (isBypassed ? "true" : "false") << (result.wasOk() ? String() : ", error=" + result.getErrorMessage()));
+        bypass.setBypassed (wrapperState.isBypassed);
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component setState " << String (result.wasOk() ? "completed" : "failed") << ": bytes=" << String (static_cast<int64> (wrapperState.processorState.getSize())) << ", bypassed=" << String (wrapperState.isBypassed ? "true" : "false") << (result.wasOk() ? String() : ", error=" + result.getErrorMessage()));
         return result.wasOk() ? kResultOk : kResultFalse;
     }
 
@@ -1759,12 +1791,12 @@ public:
         const int32 lastSampleOffset = jmax (0, data.numSamples - 1);
 
         // --- Process Parameters ---
-        bool bypassed = isBypassed;
+        bool bypassed = bypass.isBypassed();
         paramChangeBuffer.clear();
 
         if (data.inputParameterChanges)
         {
-            const auto bypassTag = getVST3BypassParameterID (*processor);
+            const auto bypassTag = static_cast<Vst::ParamID> (bypass.getHostParameterID());
 
             const int32 numParams = data.inputParameterChanges->getParameterCount();
             for (int32 i = 0; i < numParams; ++i)
@@ -1786,7 +1818,7 @@ public:
                     if (queue->getPoint (numPoints - 1, sampleOffset, value) == kResultOk)
                     {
                         bypassed = (value >= 0.5);
-                        isBypassed = bypassed;
+                        bypass.setBypassed (bypassed);
                     }
                 }
                 else
@@ -2007,7 +2039,7 @@ private:
     std::vector<AudioBusBufferView<const double>> inputBusViewsDouble;
     std::vector<AudioBusBufferView<double>> outputBusViewsDouble;
 
-    bool isBypassed = false;
+    WrapperBypass bypass;
 
     //==============================================================================
     /** Looks up the role of a VST3 audio bus by its audio-bus index.

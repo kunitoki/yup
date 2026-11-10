@@ -101,20 +101,28 @@ yup_add_embedded_binary_resources (${target_name}_factory_bank
     RESOURCES "${factory_bank}")
 
 # ==== Define the audio plugin target and its properties
+set (plugin_name "Retrace")
+set (plugin_description "A spectral frequency modulated synthesiser.")
+set (plugin_id "YpRT")
+set (plugin_manufacturer "yup.audio")
+set (plugin_manufacturer_id "yup!")
+set (plugin_manufacturer_email "kunitoki@gmail.com")
+set (plugin_website "https://github.com/kunitoki/yup")
+
 yup_audio_plugin (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
-    TARGET_IDE_GROUP "Examples"
-    TARGET_APP_ID "yup.audio.${target_name}"
-    TARGET_APP_NAMESPACE "yup.audio"
+    TARGET_APP_ID "${plugin_manufacturer}.${plugin_name}"
+    TARGET_APP_NAMESPACE "${plugin_manufacturer}"
     TARGET_CXX_STANDARD 20
-    PLUGIN_ID "yup.audio.Retrace"
-    PLUGIN_NAME "Retrace"
-    PLUGIN_VENDOR "yup.audio"
-    PLUGIN_EMAIL "kunitoki@gmail.com"
+    TARGET_IDE_GROUP "Examples"
+    PLUGIN_ID "${plugin_manufacturer}.${plugin_name}"
+    PLUGIN_NAME "${plugin_name}"
+    PLUGIN_VENDOR "${plugin_manufacturer_id}"
+    PLUGIN_EMAIL "${plugin_manufacturer_email}"
     PLUGIN_VERSION "${target_version}"
-    PLUGIN_DESCRIPTION "A spectral frequency modulated synthesiser."
-    PLUGIN_URL "https://github.com/kunitoki/yup"
+    PLUGIN_DESCRIPTION "${plugin_description}"
+    PLUGIN_URL "${plugin_website}"
     PLUGIN_IS_SYNTH ON
     PLUGIN_IS_MONO OFF
     PLUGIN_CREATE_CLAP ON
@@ -124,13 +132,14 @@ yup_audio_plugin (
     PLUGIN_CREATE_LV2 ON
     PLUGIN_CREATE_STANDALONE ON
     PLUGIN_CREATE_AAX ${plugin_create_aax}
-    PLUGIN_AAX_MANUFACTURER_ID YUPP
-    PLUGIN_AAX_PRODUCT_ID YpSy
-    PLUGIN_AAX_PLUGIN_ID_NATIVE YpSN
-    PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE YpSA
-    PLUGIN_AAX_CATEGORY AAX_ePlugInCategory_Example
+    PLUGIN_AU_MANUFACTURER "${plugin_manufacturer_id}"
+    PLUGIN_AU_SUBTYPE "${plugin_id}"
+    PLUGIN_AAX_MANUFACTURER_ID "YUPA"
+    PLUGIN_AAX_PRODUCT_ID ${plugin_id}
+    PLUGIN_AAX_PLUGIN_ID_NATIVE "YpRN"
+    PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE "YpRA"
+    PLUGIN_AAX_CATEGORY "AAX_ePlugInCategory_Example"
     PLUGIN_COPY_AFTER_BUILD ON
-    # Embed Roboto Flex on every platform, so text measures the same everywhere
     DEFINITIONS
         YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT=1
     MODULES

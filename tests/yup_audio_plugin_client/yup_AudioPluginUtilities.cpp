@@ -370,6 +370,54 @@ TEST_F (HostParameterIDTests, BypassIDStartsAtParameterCount)
 }
 
 //==============================================================================
+// WrapperBypass
+//==============================================================================
+
+class WrapperBypassTests : public ::testing::Test
+{
+protected:
+    AudioParameter::Ptr addBypassParameter()
+    {
+        auto parameter = AudioParameterBuilder().withID ("bypass").withName ("Bypass").withBypass (true).build();
+        processor.addParameter (parameter);
+        return parameter;
+    }
+
+    UtilitiesTestProcessor processor;
+    WrapperBypass bypass;
+};
+
+TEST_F (WrapperBypassTests, UsesSyntheticParameterWhenProcessorHasNone)
+{
+    bypass.attach (processor);
+
+    EXPECT_FALSE (bypass.isProcessorOwned());
+    EXPECT_EQ (getBypassHostParameterID (processor), bypass.getHostParameterID());
+    EXPECT_TRUE (bypass.isSyntheticParameter (bypass.getHostParameterID()));
+    EXPECT_FALSE (bypass.isSyntheticParameter (100));
+
+    EXPECT_FALSE (bypass.isBypassed());
+    bypass.setBypassed (true);
+    EXPECT_TRUE (bypass.isBypassed());
+}
+
+TEST_F (WrapperBypassTests, DrivesProcessorBypassParameter)
+{
+    const auto parameter = addBypassParameter();
+    bypass.attach (processor);
+
+    EXPECT_TRUE (bypass.isProcessorOwned());
+    EXPECT_EQ (parameter->getHostParameterID(), bypass.getHostParameterID());
+    EXPECT_FALSE (bypass.isSyntheticParameter (bypass.getHostParameterID()));
+
+    bypass.setBypassed (true);
+    EXPECT_FLOAT_EQ (1.0f, parameter->getNormalizedValue());
+
+    parameter->setNormalizedValue (0.0f);
+    EXPECT_FALSE (bypass.isBypassed());
+}
+
+//==============================================================================
 // getTotalAudioOutputChannels / getTotalAudioInputChannels
 //==============================================================================
 
