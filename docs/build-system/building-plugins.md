@@ -106,6 +106,11 @@ by the host or the corner goes through `getConstrainedSize()`, which applies
 `shouldPreserveAspectRatio()` and `getPreferredAspectRatioSize()`. An editor
 calling `setSize()` on itself resizes the host window as well.
 
+Wrappers open a new editor at `getInitialSize()`, which returns `getPreferredSize()` by
+default. To let each plugin instance reopen at the size the user left it, remember the size
+in the processor state (for example from the editor's `resized()`) and return it from
+`getInitialSize()`. Keep `getPreferredSize()` as the design size the editor is laid out for.
+
 Editor sizes are always in YUP points. On Windows and Linux, where VST3 and CLAP
 hosts size plugin views in physical pixels, the wrappers convert them with the
 editor window's display scale (or the host's suggested scale before the window

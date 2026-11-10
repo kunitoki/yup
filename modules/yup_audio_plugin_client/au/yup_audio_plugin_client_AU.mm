@@ -1460,15 +1460,15 @@ public:
             return;
         }
 
-        const auto preferredSize = processorEditor->getPreferredSize();
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "created editor: preferredWidth=" << String (preferredSize.getWidth()) << ", preferredHeight=" << String (preferredSize.getHeight()) << ", editor=" << describePointer (processorEditor.get()));
+        const auto initialSize = processorEditor->getConstrainedSize (processorEditor->getInitialSize());
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "created editor: initialWidth=" << String (initialSize.getWidth()) << ", initialHeight=" << String (initialSize.getHeight()) << ", editor=" << describePointer (processorEditor.get()));
 
         [view setAutoresizingMask:processorEditor->isResizable() ? (NSViewWidthSizable | NSViewHeightSizable) : NSViewNotSizable];
 
         editorComponent = std::make_unique<AudioPluginEditorAU> (std::move (processorEditor));
         editorComponent->addComponentListener (this);
 
-        [view setFrameSize:NSMakeSize (preferredSize.getWidth(), preferredSize.getHeight())];
+        [view setFrameSize:NSMakeSize (initialSize.getWidth(), initialSize.getHeight())];
         resizeEditorToBounds();
     }
 

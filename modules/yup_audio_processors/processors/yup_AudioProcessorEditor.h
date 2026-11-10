@@ -51,6 +51,14 @@ public:
     /** Returns the preferred size of this editor. */
     virtual Size<int> getPreferredSize() const = 0;
 
+    /** Returns the size plugin wrappers and the standalone open this editor at.
+
+        By default it returns getPreferredSize(). Resizable editors which remember the size the user left
+        them at, for example in the processor state, return it here so each instance reopens at its own
+        size. Wrappers pass the result through getConstrainedSize().
+    */
+    virtual Size<int> getInitialSize() const { return getPreferredSize(); }
+
     /** Returns the closest size to the requested one this editor accepts.
 
         Non resizable editors always return getPreferredSize(). Resizable editors which preserve their aspect

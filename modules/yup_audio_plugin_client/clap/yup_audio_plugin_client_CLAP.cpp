@@ -481,6 +481,7 @@ public:
         : wrapper (wrapper)
         , processorEditor (editor)
     {
+        processorEditor->setSize (processorEditor->getConstrainedSize (processorEditor->getInitialSize()).to<float>());
         addAndMakeVisible (*processorEditor);
 
         if (processorEditor->shouldShowResizableCorner())
@@ -1603,7 +1604,7 @@ bool AudioPluginProcessorCLAP::initialise()
 
         const auto editorSize = audioProcessorEditor->isResizable() && audioProcessorEditor->getWidth() != 0
                                   ? audioProcessorEditor->getBounds().getSize().to<int>()
-                                  : audioProcessorEditor->getPreferredSize();
+                                  : audioProcessorEditor->getConstrainedSize (audioProcessorEditor->getInitialSize());
 
         const auto hostSize = wrapper->editorViewScale.toHost (editorSize, *wrapper->audioPluginEditor);
         *width = static_cast<uint32_t> (hostSize.getWidth());

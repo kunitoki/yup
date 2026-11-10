@@ -499,9 +499,9 @@ public:
             setSize (viewScale.fromHost ({ size->getWidth(), size->getHeight() }, *this).to<float>());
         else
         {
-            const auto preferredSize = editor->getPreferredSize();
-            setSize ({ static_cast<float> (preferredSize.getWidth()),
-                       static_cast<float> (preferredSize.getHeight()) });
+            const auto initialSize = editor->getConstrainedSize (editor->getInitialSize());
+            setSize ({ static_cast<float> (initialSize.getWidth()),
+                       static_cast<float> (initialSize.getHeight()) });
         }
 
         if (editor->shouldShowResizableCorner())
@@ -703,7 +703,7 @@ public:
 
         const auto editorSize = editor->isResizable() && editor->getWidth() != 0 && editor->getHeight() != 0
                                   ? getBounds().getSize().to<int>()
-                                  : editor->getPreferredSize();
+                                  : editor->getConstrainedSize (editor->getInitialSize());
 
         const auto hostSize = viewScale.toHost (editorSize, *this);
         size->left = 0;

@@ -360,6 +360,10 @@ protected:
 
         bool shouldPreserveAspectRatio() const override { return keepsAspect; }
 
+        Size<int> getInitialSize() const override { return initialSize; }
+
+        Size<int> initialSize { 400, 200 };
+
     private:
         bool keepsAspect;
     };
@@ -497,6 +501,39 @@ TEST_F (StandaloneContentTests, StretchesEditorsThatDoNotKeepTheirAspectRatio)
 
     ASSERT_NE (nullptr, content.getEditor());
     EXPECT_EQ (Rectangle<float> (0, 0, 1000, 200), content.getEditor()->getBounds());
+}
+
+TEST_F (StandaloneContentTests, OpensEditorAtItsConstrainedInitialSize)
+{
+    processor.editorFactory = []
+    {
+        auto* editor = new FixedAspectEditor (true);
+        editor->initialSize = { 800, 300 };
+        return editor;
+    };
+
+    StandaloneContent content (processor, deviceManager, collector, false);
+
+    ASSERT_NE (nullptr, content.getEditor());
+    EXPECT_EQ (Size<float> (800, 400), content.getEditor()->getSize());
+    EXPECT_EQ (Size<int> (800, 400 + 28), content.getPreferredSize());
+}
+
+TEST_F (StandaloneContentTests, PreferredSizeKeepsTheEditorSize)
+{
+    processor.editorFactory = [] { return new FixedAspectEditor (false); };
+    StandaloneContent content (processor, deviceManager, collector, true);
+    content.onPreferredSizeChanged = [&]
+    {
+        content.setSize (content.getPreferredSize().to<float>());
+    };
+
+    content.setBounds (0, 0, 900, 300 + 28);
+    content.setKeyboardVisible (true);
+
+    ASSERT_NE (nullptr, content.getEditor());
+    EXPECT_EQ (Size<float> (900, 300), content.getEditor()->getSize());
+    EXPECT_EQ (Size<int> (900, 300 + 28 + 80), content.getPreferredSize());
 }
 
 TEST_F (StandaloneContentTests, KeyboardIsOnlyOfferedToNotePlayers)

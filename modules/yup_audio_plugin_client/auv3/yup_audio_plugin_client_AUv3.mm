@@ -2081,6 +2081,7 @@ private:
 
             if (editor != nullptr)
             {
+                editor->setSize (editor->getConstrainedSize (editor->getInitialSize()).to<float>());
                 preferredSize = { editor->getWidth(), editor->getHeight() };
 
                 YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "created editor: preferredWidth=" << String (preferredSize.getWidth()) << ", preferredHeight=" << String (preferredSize.getHeight()) << ", editor=" << describePointer (editor));

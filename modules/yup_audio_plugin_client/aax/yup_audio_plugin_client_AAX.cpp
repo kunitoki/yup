@@ -1262,9 +1262,9 @@ public:
                            .withFlags (flags)
                            .withResizableWindow (editorComponent->isResizable());
 
-        const auto preferredSize = editorComponent->getPreferredSize();
-        editorComponent->setSize ({ static_cast<float> (preferredSize.getWidth()),
-                                    static_cast<float> (preferredSize.getHeight()) });
+        const auto initialSize = editorComponent->getConstrainedSize (editorComponent->getInitialSize());
+        editorComponent->setSize ({ static_cast<float> (initialSize.getWidth()),
+                                    static_cast<float> (initialSize.getHeight()) });
 
         editorComponent->addToDesktop (options, nativeView);
         editorComponent->setVisible (true);
@@ -1301,9 +1301,9 @@ public:
             }
             else
             {
-                const auto preferredSize = editorComponent->getPreferredSize();
-                size->horz = static_cast<float> (preferredSize.getWidth());
-                size->vert = static_cast<float> (preferredSize.getHeight());
+                const auto initialSize = editorComponent->getConstrainedSize (editorComponent->getInitialSize());
+                size->horz = static_cast<float> (initialSize.getWidth());
+                size->vert = static_cast<float> (initialSize.getHeight());
             }
         }
 

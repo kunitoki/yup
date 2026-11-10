@@ -77,6 +77,7 @@ public:
 
         if (editor != nullptr)
         {
+            editor->setSize (editor->getConstrainedSize (editor->getInitialSize()).to<float>());
             addAndMakeVisible (*editor);
         }
         else
@@ -168,10 +169,20 @@ public:
     /** Returns the editor, or nullptr when the plugin has none. */
     AudioProcessorEditor* getEditor() const noexcept { return editor.get(); }
 
-    /** Returns the size that fits the editor, the toolbar and the keyboard. */
+    /** Returns the size that fits the editor at its current size (its initial size until it
+        has one), the toolbar and the keyboard.
+    */
     Size<int> getPreferredSize() const
     {
-        const auto editorSize = editor != nullptr ? editor->getPreferredSize() : Size<int> (400, 300);
+        auto editorSize = Size<int> (400, 300);
+
+        if (editor != nullptr)
+        {
+            editorSize = editor->getBounds().getSize().roundToInt();
+
+            if (editorSize.getWidth() <= 0 || editorSize.getHeight() <= 0)
+                editorSize = editor->getConstrainedSize (editor->getInitialSize());
+        }
 
         return { editorSize.getWidth(),
                  editorSize.getHeight()
@@ -333,10 +344,11 @@ private:
 
     void preferredSizeChanged()
     {
-        resized();
-
+        // The window follows first, while the editor still has the size it is meant to keep.
         if (onPreferredSizeChanged)
             onPreferredSizeChanged();
+
+        resized();
     }
 
     //==============================================================================
