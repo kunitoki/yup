@@ -31,6 +31,7 @@
 #include <bitset>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <map>
 #include <memory>
@@ -49,6 +50,8 @@
 #endif
 #include <windows.h>
 #elif YUP_MAC || YUP_LINUX
+#include <cerrno>
+#include <signal.h>
 #include <unistd.h>
 #endif
 
@@ -60,6 +63,11 @@
 #include "host/yup_AudioPluginScannerWorker.cpp"
 #include "host/yup_AudioPluginScanner.cpp"
 #include "host/yup_AudioPluginInstance.cpp"
+
+#if YUP_LINUX
+#include <poll.h>
+#include "native/yup_PluginFdDispatcher_linux.cpp"
+#endif
 
 #if YUP_DESKTOP
 #include "host/yup_AudioPluginBridgeServer.cpp"
@@ -119,10 +127,6 @@ using CLAPModuleHandle = void*;
 #define clapLoadModule(p) dlopen (p, RTLD_LAZY | RTLD_LOCAL)
 #define clapGetAddress dlsym
 #define clapUnloadModule dlclose
-#endif
-
-#if YUP_LINUX
-#include <poll.h>
 #endif
 
 #include "native/yup_AudioPluginInstance_CLAP.cpp"

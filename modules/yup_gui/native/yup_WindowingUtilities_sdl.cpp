@@ -904,7 +904,11 @@ void setTransientForForeignWindow (SDL_Window* window, uint64 ownerWindowId)
 
     if (auto* display = reinterpret_cast<::Display*> (getNativeDisplayHandle (window)))
     {
-        x11->XSetTransientForHint (display, static_cast<::Window> (windowId), static_cast<::Window> (ownerWindowId));
+        if (ownerWindowId != 0)
+            x11->XSetTransientForHint (display, static_cast<::Window> (windowId), static_cast<::Window> (ownerWindowId));
+        else
+            x11->XDeleteProperty (display, static_cast<::Window> (windowId), XA_WM_TRANSIENT_FOR);
+
         x11->XFlush (display);
     }
 }

@@ -97,21 +97,13 @@ struct CLAPModule
         if (m->handle == nullptr)
             return nullptr;
 
-        m->entry = reinterpret_cast<const clap_plugin_entry_t*> (
-            clapGetAddress (m->handle, "clap_entry"));
+        // The destructor unloads the library, and only deinitialises an entry whose init succeeded
+        const auto* entry = reinterpret_cast<const clap_plugin_entry_t*> (clapGetAddress (m->handle, "clap_entry"));
 
-        if (m->entry == nullptr || m->entry->init == nullptr)
-        {
-            clapUnloadModule (m->handle);
+        if (entry == nullptr || entry->init == nullptr || ! entry->init (file.getFullPathName().toRawUTF8()))
             return nullptr;
-        }
 
-        if (! m->entry->init (file.getFullPathName().toRawUTF8()))
-        {
-            clapUnloadModule (m->handle);
-            return nullptr;
-        }
-
+        m->entry = entry;
         return m;
     }
 
@@ -418,8 +410,8 @@ struct YUPCLAPHost
         timers.clear();
 
 #if YUP_LINUX
-        for (const auto& [fd, flags] : fds)
-            LinuxEventLoop::unregisterFdCallback (fd);
+        for (const auto& [fd, registration] : fds)
+            PluginFdDispatcher::remove (fd, registration.second);
 #endif
     }
 
@@ -541,27 +533,30 @@ private:
         eventMask |= (flags & CLAP_POSIX_FD_WRITE) != 0 ? POLLOUT : 0;
         eventMask |= (flags & CLAP_POSIX_FD_ERROR) != 0 ? POLLERR : 0;
 
-        fds[fd] = flags;
-        LinuxEventLoop::registerFdCallback (fd, [this, flags] (int readyFd)
+        const auto token = PluginFdDispatcher::add (fd, [this, flags] (int readyFd)
         {
             if (auto* extension = getCLAPExtension<clap_plugin_posix_fd_support_t> (plugin, CLAP_EXT_POSIX_FD_SUPPORT); extension != nullptr && extension->on_fd != nullptr)
                 extension->on_fd (plugin, readyFd, flags);
         },
-                                            eventMask);
+                                                    eventMask);
+
+        fds[fd] = { flags, token };
 
         return true;
     }
 
     bool unregisterFd (int fd)
     {
-        if (fds.erase (fd) == 0)
+        const auto it = fds.find (fd);
+        if (it == fds.end())
             return false;
 
-        LinuxEventLoop::unregisterFdCallback (fd);
+        PluginFdDispatcher::remove (fd, it->second.second);
+        fds.erase (it);
         return true;
     }
 
-    std::map<int, clap_posix_fd_flags_t> fds;
+    std::map<int, std::pair<clap_posix_fd_flags_t, int>> fds;
     clap_host_posix_fd_support_t posixFdSupport {};
 #endif
 
@@ -927,7 +922,7 @@ public:
         event.expression.expression_id = static_cast<clap_note_expression> (expression.type);
         event.expression.note_id = -1;
         event.expression.port_index = 0;
-        event.expression.channel = expression.channel;
+        event.expression.channel = expression.channel >= 1 ? static_cast<int16_t> (expression.channel - 1) : -1;
         event.expression.key = expression.key;
         event.expression.value = static_cast<double> (expression.value);
         push (event);
@@ -1792,8 +1787,8 @@ private:
         if (host.restartRequested.exchange (false) && activated && lastSpec.has_value())
             prepareToPlay (*lastSpec);
 
-        if (host.audioPortsRescanFlags.exchange (0) != 0)
-            reconfigureAudioPorts();
+        if (const auto flags = host.audioPortsRescanFlags.exchange (0); flags != 0)
+            reconfigureAudioPorts (flags);
 
         if (const auto flags = host.paramsRescanFlags.exchange (0); flags != 0)
             rescanParameters (flags);
@@ -1833,9 +1828,12 @@ private:
     // While deactivated the plugin only learns about value changes through params.flush
     void flushParametersWhileInactive (bool flushRequested)
     {
+        if (activated || paramsExtension == nullptr || paramsExtension->flush == nullptr)
+            return;
+
         const ScopedLock lock (getProcessLock());
 
-        if (activated || paramsExtension == nullptr || paramsExtension->flush == nullptr)
+        if (activated)
             return;
 
         inputEvents.clear();
@@ -1902,12 +1900,15 @@ private:
         }
     }
 
-    void reconfigureAudioPorts()
+    void reconfigureAudioPorts (uint32_t rescanFlags)
     {
         const ScopedLock lock (getProcessLock());
 
+        const bool namesOnly = (rescanFlags & ~static_cast<uint32_t> (CLAP_AUDIO_PORTS_RESCAN_NAMES)) == 0;
         const bool wasActivated = activated;
-        releaseResources();
+
+        if (! namesOnly)
+            releaseResources();
 
         const auto newLayout = buildBusLayout (clapPlugin);
 
@@ -1916,7 +1917,7 @@ private:
         else if (const auto result = setBusLayout (newLayout); result.failed())
             YUP_MODULE_DBG (PLUGIN_HOST_CLAP, "bus layout update failed: " << result.getErrorMessage());
 
-        if (wasActivated && lastSpec.has_value())
+        if (! namesOnly && wasActivated && lastSpec.has_value())
             prepareToPlay (*lastSpec);
     }
 
@@ -2162,7 +2163,7 @@ private:
 
     std::optional<AudioSpec> lastSpec;
     int64 steadyTime = 0;
-    bool activated = false;
+    std::atomic<bool> activated { false };
     bool processingStarted = false;
     bool noteExpressionSupported = false;
     bool doublePrecisionSupported = false;

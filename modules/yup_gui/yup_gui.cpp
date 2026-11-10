@@ -139,6 +139,7 @@
 
 #elif YUP_LINUX
 #include <X11/Xlib.h>
+#include <X11/Xatom.h>
 #include <dlfcn.h>
 #include <fcntl.h>
 

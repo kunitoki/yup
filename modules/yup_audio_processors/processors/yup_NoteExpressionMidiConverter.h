@@ -81,7 +81,7 @@ private:
         int memberChannel = 0;
     };
 
-    void processMidi (const MidiMessage& message, int samplePosition);
+    void processMidi (const MidiMessage& message, int samplePosition, const NoteExpression* pending, const NoteExpression* pendingEnd);
     void processExpression (const NoteExpression& expression);
     void addExpressionMessages (const NoteExpression& expression, int channel);
     int allocateMemberChannel() noexcept;

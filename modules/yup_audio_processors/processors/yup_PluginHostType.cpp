@@ -94,15 +94,27 @@ PluginHostType PluginHostType::detect (StringRef hostName, StringRef executableP
     if (const auto host = matchPluginHost (String (hostName).trim()))
         return PluginHostType (*host);
 
-    const auto executableName = File::createFileWithoutCheckingPath (executablePath).getFileName();
+    const auto executable = File::createFileWithoutCheckingPath (executablePath);
+    const auto executableName = executable.getFileName();
     if (executableName.equalsIgnoreCase ("Live"))
         return PluginHostType (Host::abletonLive);
 
     if (const auto host = matchPluginHost (executableName))
         return PluginHostType (*host);
 
-    if (const auto host = matchPluginHost (String (executablePath)))
+    if (const auto host = matchPluginHost (executable.getParentDirectory().getFileName()))
         return PluginHostType (*host);
+
+    for (auto bundle = executable.getParentDirectory(); bundle.getFullPathName().isNotEmpty() && bundle != bundle.getParentDirectory(); bundle = bundle.getParentDirectory())
+    {
+        if (! bundle.getFileExtension().equalsIgnoreCase (".app"))
+            continue;
+
+        if (const auto host = matchPluginHost (bundle.getFileNameWithoutExtension()))
+            return PluginHostType (*host);
+
+        break;
+    }
 
     return {};
 }

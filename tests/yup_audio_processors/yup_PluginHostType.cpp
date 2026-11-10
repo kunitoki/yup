@@ -68,3 +68,9 @@ TEST (PluginHostTypeTests, UnmatchedInputsStayUnknown)
     EXPECT_TRUE (PluginHostType::detect ("", "").isUnknown());
     EXPECT_TRUE (PluginHostType::detect ("My Custom Host", "/opt/custom/host").isUnknown());
 }
+
+TEST (PluginHostTypeTests, IgnoresUnrelatedFoldersInExecutablePath)
+{
+    EXPECT_TRUE (PluginHostType::detect ("", "/home/carla/.local/opt/SomeDAW/SomeDAW").isUnknown());
+    EXPECT_TRUE (PluginHostType::detect ("", "/Users/reason/Applications/Some Host.app/Contents/MacOS/Some Host").isUnknown());
+}

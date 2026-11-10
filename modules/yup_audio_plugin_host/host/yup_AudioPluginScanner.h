@@ -175,6 +175,7 @@ private:
     std::vector<std::unique_ptr<AudioPluginFormat>> formats;
     std::shared_ptr<AudioPluginDatabase> database;
     std::optional<OutOfProcessOptions> outOfProcessOptions;
+    CriticalSection inProcessScanLock;
     ThreadPool backgroundScanPool;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginScanner)

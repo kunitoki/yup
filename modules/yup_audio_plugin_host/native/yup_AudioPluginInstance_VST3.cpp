@@ -808,8 +808,8 @@ public:
 
     ~VST3HostRunLoop() noexcept
     {
-        for (const auto& [fd, handlers] : eventHandlers)
-            LinuxEventLoop::unregisterFdCallback (fd);
+        for (const auto& [fd, token] : fdTokens)
+            PluginFdDispatcher::remove (fd, token);
 
         FUNKNOWN_DTOR
     }
@@ -821,7 +821,7 @@ public:
 
         auto& handlers = eventHandlers[fd];
         if (handlers.empty())
-            LinuxEventLoop::registerFdCallback (fd, [this] (int readyFd) { dispatchEvent (readyFd); });
+            fdTokens[fd] = PluginFdDispatcher::add (fd, [this] (int readyFd) { dispatchEvent (readyFd); }, POLLIN);
 
         handlers.emplace_back (handler);
         return kResultTrue;
@@ -844,7 +844,8 @@ public:
                 continue;
             }
 
-            LinuxEventLoop::unregisterFdCallback (it->first);
+            PluginFdDispatcher::remove (it->first, fdTokens[it->first]);
+            fdTokens.erase (it->first);
             it = eventHandlers.erase (it);
         }
 
@@ -900,6 +901,7 @@ private:
     }
 
     std::map<int, std::vector<IPtr<Linux::IEventHandler>>> eventHandlers;
+    std::map<int, int> fdTokens;
     std::vector<std::unique_ptr<HandlerTimer>> timers;
 };
 
@@ -1452,6 +1454,7 @@ public:
         doublePrecisionBuffer.makeCopyOf (audioBuffer, true);
 
         AudioProcessContext<double> doubleContext { doublePrecisionBuffer, context.midi, context.params, context.playHead };
+        doubleContext.noteExpressions = context.noteExpressions;
         processWithPlugin (doubleContext, Vst::kSample64);
 
         const int numChannels = jmin (audioBuffer.getNumChannels(), doublePrecisionBuffer.getNumChannels());

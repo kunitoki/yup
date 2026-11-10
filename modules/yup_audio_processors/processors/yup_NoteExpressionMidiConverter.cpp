@@ -84,7 +84,7 @@ void NoteExpressionMidiConverter::process (MidiBuffer& midi, const NoteExpressio
             processExpression (*expression);
 
         if (remapsMidi)
-            processMidi (metadata.getMessage(), metadata.samplePosition);
+            processMidi (metadata.getMessage(), metadata.samplePosition, expression, expressions.end());
         else
             scratch.addEvent (metadata.data, metadata.numBytes, metadata.samplePosition);
     }
@@ -97,7 +97,7 @@ void NoteExpressionMidiConverter::process (MidiBuffer& midi, const NoteExpressio
 
 //==============================================================================
 
-void NoteExpressionMidiConverter::processMidi (const MidiMessage& message, int samplePosition)
+void NoteExpressionMidiConverter::processMidi (const MidiMessage& message, int samplePosition, const NoteExpression* pending, const NoteExpression* pendingEnd)
 {
     auto remapped = message;
 
@@ -105,10 +105,26 @@ void NoteExpressionMidiConverter::processMidi (const MidiMessage& message, int s
     {
         const auto memberChannel = allocateMemberChannel();
 
+        if (notesPerChannel[static_cast<size_t> (memberChannel)] == 0)
+        {
+            scratch.addEvent (MidiMessage::pitchWheel (memberChannel, 8192), samplePosition);
+            scratch.addEvent (MidiMessage::channelPressureChange (memberChannel, 0), samplePosition);
+            scratch.addEvent (MidiMessage::controllerEvent (memberChannel, 74, 64), samplePosition);
+        }
+
         if (activeNotes.size() < activeNotes.capacity())
         {
             activeNotes.push_back ({ message.getChannel(), message.getNoteNumber(), memberChannel });
             ++notesPerChannel[static_cast<size_t> (memberChannel)];
+        }
+
+        for (; pending != pendingEnd && pending->sampleOffset == samplePosition; ++pending)
+        {
+            if ((pending->channel <= 0 || pending->channel == message.getChannel())
+                && (pending->key < 0 || pending->key == message.getNoteNumber()))
+            {
+                addExpressionMessages (*pending, memberChannel);
+            }
         }
 
         remapped.setChannel (memberChannel);

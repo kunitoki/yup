@@ -278,7 +278,7 @@ private:
                 vendorName = {};
             }
 
-            if (vendorFolder == nullptr || thisVendor != vendorName)
+            if (vendorFolder == nullptr || thisVendor.compareIgnoreCase (vendorName) != 0)
             {
                 flushVendor();
                 vendorFolder = std::make_unique<FolderItem> (thisVendor);
@@ -314,13 +314,17 @@ private:
         pluginMenu->addItem ("Run Sandboxed", 2, setPluginSandboxed != nullptr, sandboxed);
 
         yup::WeakReference<yup::Component> weakThis (this);
-        pluginMenu->show ([this, weakThis, desc, sandboxed, pluginIndex] (int selectedID)
+        pluginMenu->show ([this, weakThis, desc, sandboxed] (int selectedID)
         {
             if (weakThis == nullptr)
                 return;
 
             if (selectedID == 1)
-                choose (makePluginKey (pluginIndex));
+            {
+                const auto& current = registry.getDiscoveredPlugins();
+                if (const auto it = std::find (current.begin(), current.end(), desc); it != current.end())
+                    choose (makePluginKey (static_cast<int> (std::distance (current.begin(), it))));
+            }
             else if (selectedID == 2)
                 setPluginSandboxed (desc, ! sandboxed);
         });

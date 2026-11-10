@@ -1371,6 +1371,7 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
     if (plugin == nullptr)
     {
         YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "createPluginProcessorForWrapper returned null");
+        return;
     }
 
     descriptor.AddName (YupPlugin_Name);

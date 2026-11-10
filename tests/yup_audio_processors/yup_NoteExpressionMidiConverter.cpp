@@ -162,20 +162,23 @@ TEST_F (NoteExpressionMidiConverterTests, MpeModeGivesEachNoteItsOwnChannel)
 
     converter.process (midi, expressions);
 
+    // Each note-on is preceded by a pitch bend, pressure and CC74 reset on its member channel
     const auto events = collect (midi);
-    ASSERT_EQ (4u, events.size());
+    ASSERT_EQ (10u, events.size());
 
-    const auto firstChannel = events[0].second.getChannel();
-    const auto secondChannel = events[1].second.getChannel();
+    ASSERT_TRUE (events[3].second.isNoteOn());
+    ASSERT_TRUE (events[7].second.isNoteOn());
+    const auto firstChannel = events[3].second.getChannel();
+    const auto secondChannel = events[7].second.getChannel();
     EXPECT_GE (firstChannel, 2);
     EXPECT_GE (secondChannel, 2);
     EXPECT_NE (firstChannel, secondChannel);
 
-    EXPECT_EQ (1, events[2].second.getChannel());
+    EXPECT_EQ (1, events[8].second.getChannel());
 
-    EXPECT_TRUE (events[3].second.isPitchWheel());
-    EXPECT_EQ (secondChannel, events[3].second.getChannel());
-    EXPECT_EQ (0, events[3].second.getPitchWheelValue());
+    EXPECT_TRUE (events[9].second.isPitchWheel());
+    EXPECT_EQ (secondChannel, events[9].second.getChannel());
+    EXPECT_EQ (0, events[9].second.getPitchWheelValue());
 }
 
 TEST_F (NoteExpressionMidiConverterTests, MpeModeRoutesNoteOffToNoteChannelAndReusesIt)
@@ -189,14 +192,50 @@ TEST_F (NoteExpressionMidiConverterTests, MpeModeRoutesNoteOffToNoteChannelAndRe
     converter.process (midi, expressions);
 
     const auto events = collect (midi);
-    ASSERT_EQ (2u, events.size());
-    EXPECT_EQ (events[0].second.getChannel(), events[1].second.getChannel());
+    ASSERT_EQ (5u, events.size());
+    ASSERT_TRUE (events[3].second.isNoteOn());
+    ASSERT_TRUE (events[4].second.isNoteOff());
+    EXPECT_EQ (events[3].second.getChannel(), events[4].second.getChannel());
 
     midi.clear();
     midi.addEvent (MidiMessage::noteOn (1, 62, 0.8f), 0);
     converter.process (midi, expressions);
 
     const auto next = collect (midi);
-    ASSERT_EQ (1u, next.size());
-    EXPECT_GE (next[0].second.getChannel(), 2);
+    ASSERT_EQ (4u, next.size());
+    ASSERT_TRUE (next[3].second.isNoteOn());
+    EXPECT_GE (next[3].second.getChannel(), 2);
+}
+
+TEST_F (NoteExpressionMidiConverterTests, MpeModeNewNoteDoesNotInheritPreviousExpression)
+{
+    NoteExpressionMidiConverter converter (NoteExpressionMidiConverter::Mode::mpe);
+    converter.process (midi, expressions);
+
+    // Cycle through every member channel with a bent note, so the next note reuses a bent channel
+    for (int note = 0; note < 15; ++note)
+    {
+        midi.clear();
+        expressions.clear();
+        midi.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
+        midi.addEvent (MidiMessage::noteOff (1, 60), 2);
+        expressions.add (makeExpression (1, 1, 60, NoteExpression::Type::tuning, 12.0f));
+        converter.process (midi, expressions);
+    }
+
+    midi.clear();
+    expressions.clear();
+    midi.addEvent (MidiMessage::noteOn (1, 62, 0.8f), 0);
+    expressions.add (makeExpression (0, 1, 62, NoteExpression::Type::tuning, -48.0f));
+    converter.process (midi, expressions);
+
+    const auto events = collect (midi);
+    const auto noteOn = std::find_if (events.begin(), events.end(), [] (const auto& e) { return e.second.isNoteOn(); });
+    ASSERT_NE (events.end(), noteOn);
+
+    // The last bend before the note-on is the note's own tuning, never the previous note's
+    const auto lastBend = std::find_if (std::make_reverse_iterator (noteOn), events.rend(), [] (const auto& e) { return e.second.isPitchWheel(); });
+    ASSERT_NE (events.rend(), lastBend);
+    EXPECT_EQ (noteOn->second.getChannel(), lastBend->second.getChannel());
+    EXPECT_EQ (0, lastBend->second.getPitchWheelValue());
 }

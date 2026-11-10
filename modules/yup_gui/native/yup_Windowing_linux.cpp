@@ -43,6 +43,7 @@ public:
 
     void (*XReparentWindow) (Display*, Window, Window, int, int) = nullptr;
     int (*XSetTransientForHint) (Display*, Window, Window) = nullptr;
+    int (*XDeleteProperty) (Display*, Window, Atom) = nullptr;
     int (*XFlush) (Display*) = nullptr;
 
     YUP_DECLARE_SINGLETON (X11Functions, false)
@@ -74,6 +75,7 @@ private:
     {
         this->XReparentWindow = nullptr;
         this->XSetTransientForHint = nullptr;
+        this->XDeleteProperty = nullptr;
         this->XFlush = nullptr;
     }
 
@@ -88,6 +90,7 @@ private:
 
         if (! lookupFunction ("XReparentWindow", this->XReparentWindow)
             || ! lookupFunction ("XSetTransientForHint", this->XSetTransientForHint)
+            || ! lookupFunction ("XDeleteProperty", this->XDeleteProperty)
             || ! lookupFunction ("XFlush", this->XFlush))
             return;
     }

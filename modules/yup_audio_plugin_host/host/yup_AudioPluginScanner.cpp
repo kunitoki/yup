@@ -196,6 +196,7 @@ struct FileScanTask
     AudioPluginFormat* format = nullptr;
     AudioPluginDatabase* database = nullptr;
     ScannerProcessPool* processes = nullptr;
+    CriticalSection* inProcessScanLock = nullptr;
     std::vector<AudioPluginDescription> discovered;
     String failedPath;
 };
@@ -217,16 +218,24 @@ void runFileScanTask (FileScanTask& task)
 
     const auto formatType = task.format->getFormatType();
 
-    if (task.database != nullptr)
-        task.database->beginScan (task.file, formatType);
-
     std::optional<ScanOutcome> outcome;
 
     if (task.processes != nullptr)
         outcome = task.processes->scan (task.file, formatType);
 
+    std::optional<ScopedLock> scanLock;
+
     if (! outcome.has_value())
+    {
+        if (task.database != nullptr)
+        {
+            jassert (task.inProcessScanLock != nullptr);
+            scanLock.emplace (*task.inProcessScanLock);
+            task.database->beginScan (task.file, formatType);
+        }
+
         outcome = scanInProcess (*task.format, task.file);
+    }
 
     if (! outcome->failure.has_value())
     {
@@ -392,6 +401,7 @@ AudioPluginScanner::ScanResult AudioPluginScanner::scan (const FileSearchPath& s
                 task.file = file;
                 task.format = format.get();
                 task.database = scanDatabase.get();
+                task.inProcessScanLock = &inProcessScanLock;
                 tasks.push_back (std::move (task));
             }
         }

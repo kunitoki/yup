@@ -476,11 +476,9 @@ void SDLComponentNative::setForeignOwner (uint64 ownerWindowId, int ownerProcess
     if (wasTracking)
         SDL_SetWindowAlwaysOnTop (window, (windowFlags & SDL_WINDOW_ALWAYS_ON_TOP) != 0);
 
-    if (ownerWindowId == 0)
-        return;
-
 #if YUP_MAC || YUP_WINDOWS
-    foreignOwnerTracker = std::make_unique<ForeignOwnerTracker> (window, ownerProcessId);
+    if (ownerWindowId != 0)
+        foreignOwnerTracker = std::make_unique<ForeignOwnerTracker> (window, ownerProcessId);
 #elif YUP_LINUX
     ignoreUnused (ownerProcessId);
     setTransientForForeignWindow (window, ownerWindowId);

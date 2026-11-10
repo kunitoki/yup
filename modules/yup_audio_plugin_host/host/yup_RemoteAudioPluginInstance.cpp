@@ -287,6 +287,20 @@ public:
         timedOut
     };
 
+    /** Returns false while the server still owns the shared memory, until it completes a block abandoned after a timeout. */
+    bool isReady() noexcept
+    {
+        if (! waitingForLateBlock)
+            return true;
+
+        if (block.header->doneSequence.load() != sequence)
+            return false;
+
+        doneSemaphore.wait (0);
+        waitingForLateBlock = false;
+        return true;
+    }
+
     /** Writes the inputs, lets the server process them and reads back the outputs. */
     template <class IsServerLost>
     Outcome process (AudioProcessContext<float>& context, int timeoutMs, IsServerLost&& isServerLost)
@@ -294,15 +308,8 @@ public:
         auto& header = *block.header;
         const auto numSamples = jmin (context.audio.getNumSamples(), layout.blockSize);
 
-        if (waitingForLateBlock)
-        {
-            // The server still owns the shared memory until it completes the abandoned block
-            if (header.doneSequence.load() != sequence)
-                return Outcome::late;
-
-            doneSemaphore.wait (0);
-            waitingForLateBlock = false;
-        }
+        if (! isReady())
+            return Outcome::late;
 
         writeInputs (context, numSamples);
 
@@ -773,7 +780,22 @@ void RemoteAudioPluginInstance::processBlock (AudioProcessContext<float>& contex
         return;
     }
 
-    writeParameterChanges (context.params);
+    const auto ready = audioChannel->isReady();
+
+    if (ready)
+    {
+        writeParameterChanges (context.params);
+    }
+    else
+    {
+        const auto parameters = getParameters();
+
+        for (const auto& change : context.params)
+        {
+            if (isPositiveAndBelow (change.parameterIndex, static_cast<int> (parameters.size())))
+                parameters[static_cast<std::size_t> (change.parameterIndex)]->setNormalizedValue (change.normalizedValue);
+        }
+    }
 
     const auto nonRealtime = isNonRealtime();
     const auto timeoutMs = nonRealtime ? options.timeoutMs : audioChannel->getRealtimeTimeoutMs (context.audio.getNumSamples());
@@ -784,7 +806,7 @@ void RemoteAudioPluginInstance::processBlock (AudioProcessContext<float>& contex
         return crashed.load() || (nonRealtime && ! connection->isServerRunning());
     };
 
-    if (audioChannel->process (context, timeoutMs, isServerLost) == AudioChannel::Outcome::processed)
+    if (ready && audioChannel->process (context, timeoutMs, isServerLost) == AudioChannel::Outcome::processed)
     {
         lateSinceMs = 0;
         return;

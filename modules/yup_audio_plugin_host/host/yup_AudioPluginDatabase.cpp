@@ -25,7 +25,42 @@ namespace yup
 namespace
 {
 
-constexpr int pluginDatabaseSchemaVersion = 1;
+constexpr int pluginDatabaseSchemaVersion = 2;
+
+int getCurrentScanProcessId() noexcept
+{
+#if YUP_WINDOWS
+    return static_cast<int> (GetCurrentProcessId());
+#elif YUP_MAC || YUP_LINUX
+    return static_cast<int> (getpid());
+#else
+    return 0;
+#endif
+}
+
+bool isOtherScanProcessRunning (int processId) noexcept
+{
+    if (processId == getCurrentScanProcessId())
+        return false;
+
+#if YUP_WINDOWS
+    if (processId <= 0)
+        return false;
+
+    auto* process = OpenProcess (PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD> (processId));
+    if (process == nullptr)
+        return false;
+
+    DWORD exitCode = 0;
+    const auto running = GetExitCodeProcess (process, &exitCode) && exitCode == STILL_ACTIVE;
+    CloseHandle (process);
+    return running;
+#elif YUP_MAC || YUP_LINUX
+    return processId > 0 && (::kill (static_cast<pid_t> (processId), 0) == 0 || errno == EPERM);
+#else
+    return false;
+#endif
+}
 
 enum class PluginFileStatus
 {
@@ -161,7 +196,8 @@ Result AudioPluginDatabase::initialise()
             " num_midi_inputs INTEGER NOT NULL, num_midi_outputs INTEGER NOT NULL);"
             "CREATE INDEX IF NOT EXISTS plugins_by_file ON plugins (path, format);"
             "CREATE TABLE IF NOT EXISTS scan_state ("
-            " path TEXT NOT NULL, format INTEGER NOT NULL, started INTEGER NOT NULL, PRIMARY KEY (path, format));"
+            " path TEXT NOT NULL, format INTEGER NOT NULL, started INTEGER NOT NULL, pid INTEGER NOT NULL DEFAULT 0,"
+            " PRIMARY KEY (path, format));"
             "CREATE TABLE IF NOT EXISTS plugin_settings ("
             " format INTEGER NOT NULL, identifier TEXT NOT NULL, sandboxed INTEGER NOT NULL, PRIMARY KEY (format, identifier));");
         result.failed())
@@ -183,8 +219,12 @@ Result AudioPluginDatabase::recoverInterruptedScans()
 {
     std::vector<std::pair<File, AudioPluginFormatType>> interrupted;
 
-    for (auto statement = database.prepareStatement ("SELECT path, format FROM scan_state"); statement.step() == SQLITE_ROW;)
-        interrupted.emplace_back (statement.columnFile (0), static_cast<AudioPluginFormatType> (statement.columnInt (1)));
+    for (auto statement = database.prepareStatement ("SELECT path, format, pid FROM scan_state"); statement.step() == SQLITE_ROW;)
+    {
+        // Rows of a process still scanning (another host sharing this database) are not interrupted
+        if (! isOtherScanProcessRunning (statement.columnInt (2)))
+            interrupted.emplace_back (statement.columnFile (0), static_cast<AudioPluginFormatType> (statement.columnInt (1)));
+    }
 
     for (const auto& [file, formatType] : interrupted)
     {
@@ -242,10 +282,11 @@ Result AudioPluginDatabase::beginScan (const File& file, AudioPluginFormatType f
 {
     const ScopedLock sl (lock);
 
-    return runStatement (database.prepareStatement ("INSERT OR REPLACE INTO scan_state (path, format, started) VALUES (?, ?, ?)",
+    return runStatement (database.prepareStatement ("INSERT OR REPLACE INTO scan_state (path, format, started, pid) VALUES (?, ?, ?, ?)",
                                                     file.getFullPathName(),
                                                     static_cast<int> (formatType),
-                                                    Time::currentTimeMillis()));
+                                                    Time::currentTimeMillis(),
+                                                    getCurrentScanProcessId()));
 }
 
 Result AudioPluginDatabase::storeScanResult (const File& file, AudioPluginFormatType formatType, const std::vector<AudioPluginDescription>& descriptions)
