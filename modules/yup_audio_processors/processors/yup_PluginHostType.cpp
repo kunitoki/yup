@@ -94,23 +94,23 @@ PluginHostType PluginHostType::detect (StringRef hostName, StringRef executableP
     if (const auto host = matchPluginHost (String (hostName).trim()))
         return PluginHostType (*host);
 
-    const auto executable = File::createFileWithoutCheckingPath (executablePath);
-    const auto executableName = executable.getFileName();
+    const auto pathParts = StringArray::fromTokens (String (executablePath), "/\\", "");
+    const auto executableName = pathParts.isEmpty() ? String() : pathParts[pathParts.size() - 1];
     if (executableName.equalsIgnoreCase ("Live"))
         return PluginHostType (Host::abletonLive);
 
     if (const auto host = matchPluginHost (executableName))
         return PluginHostType (*host);
 
-    if (const auto host = matchPluginHost (executable.getParentDirectory().getFileName()))
+    if (const auto host = matchPluginHost (pathParts[pathParts.size() - 2]))
         return PluginHostType (*host);
 
-    for (auto bundle = executable.getParentDirectory(); bundle.getFullPathName().isNotEmpty() && bundle != bundle.getParentDirectory(); bundle = bundle.getParentDirectory())
+    for (int i = pathParts.size() - 2; i >= 0; --i)
     {
-        if (! bundle.getFileExtension().equalsIgnoreCase (".app"))
+        if (! pathParts[i].endsWithIgnoreCase (".app"))
             continue;
 
-        if (const auto host = matchPluginHost (bundle.getFileNameWithoutExtension()))
+        if (const auto host = matchPluginHost (pathParts[i].dropLastCharacters (4)))
             return PluginHostType (*host);
 
         break;

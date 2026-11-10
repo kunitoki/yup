@@ -138,14 +138,7 @@ void AudioPluginScannerWorker::setHostContext (const AudioPluginHostContext& new
 
 bool AudioPluginScannerWorker::initialiseFromCommandLine (const String& commandLine, const String& commandLineUniqueID)
 {
-    if (! ChildProcessWorker::initialiseFromCommandLine (commandLine, commandLineUniqueID))
-        return false;
-
-#if YUP_MAC
-    Process::setDockIconVisible (false);
-#endif
-
-    return true;
+    return ChildProcessWorker::initialiseFromCommandLine (commandLine, commandLineUniqueID);
 }
 
 void AudioPluginScannerWorker::handleMessageFromCoordinator (const MemoryBlock& message)

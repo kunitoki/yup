@@ -173,7 +173,13 @@ namespace
 {
 const bool scannerWorkerEntryPointRegistered = []
 {
-    yup_tests::getChildProcessEntryPoint() = &AudioPluginScannerWorkerTests::runWorker;
+    auto& entryPoint = yup_tests::getChildProcessEntryPoint();
+
+    entryPoint = [previous = entryPoint] (const String& commandLine)
+    {
+        return AudioPluginScannerWorkerTests::runWorker (commandLine) || (previous && previous (commandLine));
+    };
+
     return true;
 }();
 } // namespace

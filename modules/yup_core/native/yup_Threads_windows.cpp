@@ -315,8 +315,9 @@ void YUP_CALLTYPE Process::terminate()
     _CrtDumpMemoryLeaks();
 #endif
 
-    // bullet in the head in case there's a problem shutting down..
-    ExitProcess (1);
+    // bullet in the head in case there's a problem shutting down: unlike ExitProcess, this doesn't
+    // run DLL detach routines, which can stall or deadlock while other threads hold the loader lock
+    TerminateProcess (GetCurrentProcess(), 1);
 }
 
 bool YUP_CALLTYPE Process::isForegroundProcess()

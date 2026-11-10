@@ -73,6 +73,7 @@ TEST (PluginHostTypeTests, IgnoresUnrelatedFoldersInExecutablePath)
 {
     EXPECT_TRUE (PluginHostType::detect ("", "/home/carla/.local/opt/SomeDAW/SomeDAW").isUnknown());
     EXPECT_TRUE (PluginHostType::detect ("", "/Users/reason/Applications/Some Host.app/Contents/MacOS/Some Host").isUnknown());
+    EXPECT_TRUE (PluginHostType::detect ("", "C:\\Users\\reason\\Some Host\\host.exe").isUnknown());
 }
 
 TEST (PluginHostTypeTests, KnownHostsReportDisplayNames)
@@ -87,4 +88,5 @@ TEST (PluginHostTypeTests, DetectsFromParentFolderAndAppBundle)
     EXPECT_TRUE (PluginHostType::detect ("", "/opt/Renoise/launcher").isRenoise());
     EXPECT_TRUE (PluginHostType::detect ("", "/Applications/GarageBand.app/Contents/MacOS/Helper").isAppleGarageBand());
     EXPECT_TRUE (PluginHostType::detect ("", "/usr/local/bin/Live").isAbletonLive());
+    EXPECT_TRUE (PluginHostType::detect ("", "C:\\Program Files\\Renoise\\launcher.exe").isRenoise());
 }

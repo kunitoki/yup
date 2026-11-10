@@ -131,6 +131,50 @@ protected:
 
     String commandLineFor (const String& name) const { return "  --yuptest:" + name + " --other-arg"; }
 
+public:
+    static constexpr const char* flagReportingWorkerID = "yupWorkerFlagTests";
+
+    class ExitingWorker : public ChildProcessWorker
+    {
+    public:
+        void handleConnectionLost() override { Process::terminate(); }
+    };
+
+    /** Reports to the coordinator whether the launched process sees itself as a worker. */
+    static bool runFlagReportingWorker (const String& commandLine)
+    {
+        static std::unique_ptr<ExitingWorker> worker;
+
+        auto newWorker = std::make_unique<ExitingWorker>();
+        if (! newWorker->initialiseFromCommandLine (commandLine, flagReportingWorkerID))
+            return false;
+
+        const char flag = ChildProcessWorker::isWorkerProcess() ? 1 : 0;
+        newWorker->sendMessageToCoordinator (MemoryBlock (&flag, 1));
+
+        worker = std::move (newWorker);
+        return true;
+    }
+
+protected:
+    class FlagCoordinator : public ChildProcessCoordinator
+    {
+    public:
+        ~FlagCoordinator() override { terminateWorkerProcess(); }
+
+        void handleMessageFromWorker (const MemoryBlock& message) override
+        {
+            if (message.getSize() == 1)
+            {
+                workerFlag.store (message[0] != 0);
+                flagReceived.signal();
+            }
+        }
+
+        std::atomic<bool> workerFlag { false };
+        WaitableEvent flagReceived;
+    };
+
 #if YUP_MODAL_LOOPS_PERMITTED
     template <typename Predicate>
     static bool dispatchUntil (Predicate&& done, int timeoutMs = 3000)
@@ -146,6 +190,39 @@ protected:
 
     String pipeName;
 };
+
+#if YUP_MAC || YUP_WINDOWS || YUP_LINUX
+namespace yup_tests
+{
+std::function<bool (const String&)>& getChildProcessEntryPoint();
+} // namespace yup_tests
+
+namespace
+{
+const bool flagReportingWorkerEntryPointRegistered = []
+{
+    auto& entryPoint = yup_tests::getChildProcessEntryPoint();
+
+    entryPoint = [previous = entryPoint] (const String& commandLine)
+    {
+        return ConnectedChildProcessTests::runFlagReportingWorker (commandLine) || (previous && previous (commandLine));
+    };
+
+    return true;
+}();
+} // namespace
+
+TEST_F (ConnectedChildProcessTests, OnlyLaunchedWorkersAreFlaggedAsWorkerProcesses)
+{
+    EXPECT_FALSE (ChildProcessWorker::isWorkerProcess());
+
+    FlagCoordinator coordinator;
+    ASSERT_TRUE (coordinator.launchWorkerProcess (File::getSpecialLocation (File::currentExecutableFile), flagReportingWorkerID, connectionTimeoutMs, 0));
+
+    ASSERT_TRUE (coordinator.flagReceived.wait (connectionTimeoutMs * 2));
+    EXPECT_TRUE (coordinator.workerFlag.load());
+}
+#endif
 
 //==============================================================================
 TEST_F (ConnectedChildProcessTests, DefaultCallbacksAndSendingWithoutConnectionDoNothing)

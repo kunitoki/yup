@@ -439,14 +439,7 @@ void AudioPluginBridgeServer::addFormat (std::unique_ptr<AudioPluginFormat> form
 
 bool AudioPluginBridgeServer::initialiseFromCommandLine (const String& commandLine, const String& commandLineUniqueID)
 {
-    if (! ChildProcessWorker::initialiseFromCommandLine (commandLine, commandLineUniqueID))
-        return false;
-
-#if YUP_MAC
-    Process::setDockIconVisible (false);
-#endif
-
-    return true;
+    return ChildProcessWorker::initialiseFromCommandLine (commandLine, commandLineUniqueID);
 }
 
 void AudioPluginBridgeServer::handleMessageFromCoordinator (const MemoryBlock& message)

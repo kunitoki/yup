@@ -142,6 +142,14 @@ struct TestApplication : yup::YUPApplication
         if (auto& entryPoint = yup_tests::getChildProcessEntryPoint(); entryPoint && entryPoint (commandLineParameters))
             return;
 
+        // A worker that failed to connect must never run the tests: they would launch more workers
+        if (yup::ChildProcessWorker::isWorkerProcess())
+        {
+            setApplicationReturnValue (1);
+            quit();
+            return;
+        }
+
         yup::SystemStats::setApplicationCrashHandler ([] (void*)
         {
             auto trace = yup::SystemStats::getStackBacktrace();

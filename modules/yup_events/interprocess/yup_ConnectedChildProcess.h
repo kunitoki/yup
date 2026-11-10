@@ -90,6 +90,17 @@ public:
                                     const String& commandLineUniqueID,
                                     int timeoutMs = 0);
 
+    /** Returns true when this process was started by ChildProcessCoordinator::launchWorkerProcess().
+
+        This only looks at the process arguments, so it can be called before connecting and even
+        before the application is initialised. A worker process that fails to connect should exit
+        rather than carry on with its normal startup, which could launch more workers.
+
+        On macOS, worker processes start without a Dock icon: call Process::setDockIconVisible()
+        to show it.
+    */
+    static bool isWorkerProcess();
+
     //==============================================================================
     /** This will be called to deliver messages from the coordinator process.
         The call will probably be made on a background thread, so be careful with your
