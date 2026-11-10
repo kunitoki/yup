@@ -853,3 +853,126 @@ TEST_F (VST3BypassTests, StateRoundTripsBypassState)
     EXPECT_EQ (1, processor->bypassCallCount);
     EXPECT_EQ (0, processor->processCallCount);
 }
+
+//------------------------------------------------------------------------------
+// Note expression tests
+//------------------------------------------------------------------------------
+
+class VST3NoteExpressionTests : public VST3BypassTests
+{
+protected:
+    class EventList final : public Steinberg::Vst::IEventList
+    {
+    public:
+        tresult PLUGIN_API queryInterface (const Steinberg::TUID, void**) override { return Steinberg::kNoInterface; }
+
+        uint32 PLUGIN_API addRef() override { return 1; }
+
+        uint32 PLUGIN_API release() override { return 1; }
+
+        int32 PLUGIN_API getEventCount() override { return static_cast<int32> (events.size()); }
+
+        tresult PLUGIN_API getEvent (int32 index, Steinberg::Vst::Event& e) override
+        {
+            if (! yup::isPositiveAndBelow (index, static_cast<int32> (events.size())))
+                return Steinberg::kResultFalse;
+
+            e = events[static_cast<size_t> (index)];
+            return Steinberg::kResultOk;
+        }
+
+        tresult PLUGIN_API addEvent (Steinberg::Vst::Event& e) override
+        {
+            events.push_back (e);
+            return Steinberg::kResultOk;
+        }
+
+        std::vector<Steinberg::Vst::Event> events;
+    };
+
+    void reconfigure (bool wantsNoteExpression)
+    {
+        ASSERT_EQ (Steinberg::kResultOk, component->setActive (false));
+        processor->wantsNoteExpression = wantsNoteExpression;
+
+        Steinberg::Vst::ProcessSetup setup {};
+        setup.sampleRate = 44100.0;
+        setup.maxSamplesPerBlock = 512;
+        setup.processMode = Steinberg::Vst::kRealtime;
+        setup.symbolicSampleSize = Steinberg::Vst::kSample32;
+        ASSERT_EQ (Steinberg::kResultOk, audioProcessor->setupProcessing (setup));
+        ASSERT_EQ (Steinberg::kResultOk, component->setActive (true));
+    }
+
+    void processNoteWithTuning (Steinberg::Vst::NoteExpressionValue normalizedTuning)
+    {
+        EventList eventList;
+
+        Steinberg::Vst::Event noteOn {};
+        noteOn.type = Steinberg::Vst::Event::kNoteOnEvent;
+        noteOn.noteOn.channel = 0;
+        noteOn.noteOn.pitch = 60;
+        noteOn.noteOn.velocity = 1.0f;
+        noteOn.noteOn.noteId = 5;
+        eventList.addEvent (noteOn);
+
+        Steinberg::Vst::Event expression {};
+        expression.type = Steinberg::Vst::Event::kNoteExpressionValueEvent;
+        expression.sampleOffset = 8;
+        expression.noteExpressionValue.typeId = Steinberg::Vst::kTuningTypeID;
+        expression.noteExpressionValue.noteId = 5;
+        expression.noteExpressionValue.value = normalizedTuning;
+        eventList.addEvent (expression);
+
+        float outputData[2][64] = {};
+        float* outputChannels[2] = { outputData[0], outputData[1] };
+
+        Steinberg::Vst::AudioBusBuffers outputBus {};
+        outputBus.numChannels = 2;
+        outputBus.channelBuffers32 = outputChannels;
+
+        Steinberg::Vst::ProcessData data {};
+        data.processMode = Steinberg::Vst::kRealtime;
+        data.symbolicSampleSize = Steinberg::Vst::kSample32;
+        data.numSamples = 64;
+        data.numOutputs = 1;
+        data.outputs = &outputBus;
+        data.inputEvents = &eventList;
+
+        EXPECT_EQ (Steinberg::kResultOk, audioProcessor->process (data));
+    }
+};
+
+TEST_F (VST3NoteExpressionTests, OptedInProcessorReceivesPlainTuning)
+{
+    reconfigure (true);
+
+    processNoteWithTuning (0.5 + 2.0 / 240.0);
+
+    ASSERT_EQ (1u, processor->lastNoteExpressions.size());
+    const auto& expression = processor->lastNoteExpressions.front();
+    EXPECT_EQ (yup::NoteExpression::Type::tuning, expression.type);
+    EXPECT_NEAR (2.0f, expression.value, 1.0e-4f);
+    EXPECT_EQ (8, expression.sampleOffset);
+    EXPECT_EQ (5, expression.noteId);
+    EXPECT_EQ (1, expression.channel);
+    EXPECT_EQ (60, expression.key);
+}
+
+TEST_F (VST3NoteExpressionTests, TuningFallsBackToPitchBend)
+{
+    reconfigure (false);
+
+    processNoteWithTuning (0.5 + 1.0 / 240.0);
+
+    EXPECT_TRUE (processor->lastNoteExpressions.empty());
+
+    const auto pitchBend = std::find_if (processor->lastMidiMessages.begin(), processor->lastMidiMessages.end(), [] (const yup::MidiMessage& message)
+    {
+        return message.isPitchWheel();
+    });
+
+    ASSERT_NE (processor->lastMidiMessages.end(), pitchBend);
+    EXPECT_EQ (1, pitchBend->getChannel());
+    EXPECT_EQ (8192 + 4096, pitchBend->getPitchWheelValue());
+}

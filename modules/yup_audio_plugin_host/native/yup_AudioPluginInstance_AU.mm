@@ -19,8 +19,6 @@
   ==============================================================================
 */
 
-#if YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC
-
 namespace yup
 {
 
@@ -66,8 +64,15 @@ AudioPluginDescription descriptionFromComponent(AudioComponent comp,
         CFRelease(nameRef);
     }
 
-    // Collect vendor from the manufacturer four-char code
-    desc.vendor = fourCCToString(acd.componentManufacturer);
+    // Component names follow the "Manufacturer: Plugin Name" convention
+    if (const auto separator = desc.name.indexOfChar(':'); separator > 0)
+    {
+        desc.vendor = desc.name.substring(0, separator).trim();
+        desc.name = desc.name.substring(separator + 1).trim();
+    }
+
+    if (desc.vendor.isEmpty())
+        desc.vendor = fourCCToString(acd.componentManufacturer);
 
     desc.isInstrument = (acd.componentType == kAudioUnitType_MusicDevice);
     desc.isEffect = (acd.componentType == kAudioUnitType_Effect || acd.componentType == kAudioUnitType_MusicEffect);
@@ -1621,5 +1626,3 @@ ResultValue<std::unique_ptr<AudioPluginInstance>> AUFormat::loadPlugin(
 }
 
 } // namespace yup
-
-#endif // YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC

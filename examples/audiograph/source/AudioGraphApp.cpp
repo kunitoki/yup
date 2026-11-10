@@ -21,41 +21,23 @@
 
 #include "AudioGraphApp.h"
 
-namespace
-{
-
-yup::String formatTypeToString (yup::AudioPluginFormatType type)
-{
-    switch (type)
-    {
-        case yup::AudioPluginFormatType::vst3:
-            return "VST3";
-
-        case yup::AudioPluginFormatType::clap:
-            return "CLAP";
-
-        case yup::AudioPluginFormatType::audioUnit:
-            return "AU";
-
-        default:
-            return "?";
-    }
-}
-
-} // namespace
-
 //==============================================================================
 
 AudioGraphApp::AudioGraphApp()
 {
-    deviceManager.initialiseWithDefaultDevices (2, 2);
+    const auto settings = loadSettings();
+    const auto* deviceState = settings != nullptr ? settings->getChildByName ("DEVICESETUP") : nullptr;
+
+    deviceManager.initialise (2, 2, deviceState, true);
 
     if (auto defaultMidiIn = yup::MidiInput::getDefaultDevice();
-        defaultMidiIn != yup::MidiDeviceInfo())
+        deviceState == nullptr && defaultMidiIn != yup::MidiDeviceInfo())
     {
         deviceManager.setMidiInputDeviceEnabled (defaultMidiIn.identifier, true);
-        deviceManager.addMidiInputDeviceCallback (defaultMidiIn.identifier, &midiCollector);
     }
+
+    deviceManager.addMidiInputDeviceCallback ({}, &midiCollector);
+    deviceManager.addChangeListener (this);
 
     model = std::make_shared<yup::AudioGraphModel>();
     graph = std::make_shared<yup::AudioGraphProcessor> (model);
@@ -63,6 +45,18 @@ AudioGraphApp::AudioGraphApp()
 
 #if YUP_DESKTOP
     scanner = std::make_unique<yup::AudioPluginScanner>();
+
+    {
+        const auto databaseFile = yup::File::getSpecialLocation (yup::File::userApplicationDataDirectory)
+                                      .getChildFile ("YUP/AudioGraph/plugins.db");
+        databaseFile.getParentDirectory().createDirectory();
+
+        auto pluginDatabase = std::make_shared<yup::AudioPluginDatabase>();
+        if (pluginDatabase->open (databaseFile).wasOk())
+            scanner->setDatabase (std::move (pluginDatabase));
+    }
+
+    setOutOfProcessScanning (settings == nullptr || settings->getBoolAttribute ("outOfProcessScanning", true));
 
 #if YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3
     scanner->addFormat (std::make_unique<yup::VST3Format>());
@@ -73,15 +67,21 @@ AudioGraphApp::AudioGraphApp()
 #if YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC
     scanner->addFormat (std::make_unique<yup::AUFormat>());
 #endif
-    nodeRegistry.registerPluginFormats (scanner.get(), makeHostContext());
+    nodeRegistry.registerPluginFormats ([this] (const yup::AudioPluginDescription& desc)
+    {
+        return loadPlugin (desc);
+    });
+
+    if (auto database = scanner->getDatabase())
+        nodeRegistry.setDiscoveredPlugins (database->getPlugins());
 #endif
 
     model->setNodeFactory (nodeRegistry.makeProcessorFactory());
 
     editorPanel = createMainPanel();
-    addAndMakeVisible (*editorPanel);
 
     setupToolbar();
+    setupWorkspace();
     resetToEmptyGraph();
 
 #if YUP_DESKTOP
@@ -95,15 +95,12 @@ AudioGraphApp::~AudioGraphApp()
     scanLifetime->store (false);
 #endif
 
-    if (auto defaultMidiIn = yup::MidiInput::getDefaultDevice();
-        defaultMidiIn != yup::MidiDeviceInfo())
-    {
-        deviceManager.removeMidiInputDeviceCallback (defaultMidiIn.identifier, &midiCollector);
-        deviceManager.setMidiInputDeviceEnabled (defaultMidiIn.identifier, false);
-    }
+    deviceManager.removeChangeListener (this);
+    deviceManager.removeMidiInputDeviceCallback ({}, &midiCollector);
 
     closePluginEditor();
     closeAllSubgraphEditors();
+    closeSettings();
 
     if (audioCallbackRegistered)
     {
@@ -124,12 +121,12 @@ void AudioGraphApp::resized()
     newButton.setBounds (toolbar.removeFromLeft (70).reduced (4, 4));
     openButton.setBounds (toolbar.removeFromLeft (70).reduced (4, 4));
     saveButton.setBounds (toolbar.removeFromLeft (70).reduced (4, 4));
+    settingsButton.setBounds (toolbar.removeFromRight (90).reduced (4, 4));
     toolbar.removeFromLeft (8);
-    scanButton.setBounds (toolbar.removeFromLeft (100).reduced (4, 4));
-    settingsButton.setBounds (toolbar.removeFromLeft (80).reduced (4, 4));
     statusLabel.setBounds (toolbar.reduced (4, 4));
 
-    editorPanel->setBounds (bounds);
+    browser->setBounds (bounds.removeFromLeft (260));
+    workspace.setBounds (bounds);
 }
 
 void AudioGraphApp::paint (yup::Graphics& g)
@@ -198,13 +195,6 @@ void AudioGraphApp::audioDeviceAboutToStart (yup::AudioIODevice* device)
 
     midiBuffer.ensureSize (4096);
 
-#if YUP_DESKTOP
-    yup::AudioPluginHostContext ctx;
-    ctx.sampleRate = static_cast<float> (device->getCurrentSampleRate());
-    ctx.maxBlockSize = device->getCurrentBufferSizeSamples();
-    nodeRegistry.setPluginScanner (scanner.get(), ctx);
-#endif
-
     const auto spec = yup::AudioSpec (
         static_cast<float> (device->getCurrentSampleRate()),
         device->getCurrentBufferSizeSamples());
@@ -243,25 +233,142 @@ void AudioGraphApp::setupToolbar()
     };
     addAndMakeVisible (saveButton);
 
-    scanButton.setButtonText ("Scan Plugins");
-    scanButton.onClick = [this]
-    {
-        startPluginScan();
-    };
-    addAndMakeVisible (scanButton);
-
     settingsButton.setButtonText ("Settings");
     settingsButton.onClick = [this]
     {
-        if (deviceManagerWindow == nullptr)
-            deviceManagerWindow = std::make_unique<yup::AudioDeviceManagerWindow> (deviceManager);
-        deviceManagerWindow->setVisible (true);
-        deviceManagerWindow->toFront (true);
+        showSettings();
     };
     addAndMakeVisible (settingsButton);
 
     statusLabel.setText ("Ready.", yup::dontSendNotification);
     addAndMakeVisible (statusLabel);
+}
+
+void AudioGraphApp::setupWorkspace()
+{
+    browser = std::make_unique<NodeBrowser> (nodeRegistry);
+    browser->onItemChosen = [this] (const yup::String& key)
+    {
+        auto& panel = getActiveEditorPanel();
+        panel.addBrowserItem (key, panel.getVisibleCanvasCenter());
+    };
+
+#if YUP_DESKTOP
+    browser->isPluginSandboxed = [this] (const yup::AudioPluginDescription& desc)
+    {
+        auto database = scanner->getDatabase();
+        return database != nullptr && database->shouldRunSandboxed (desc);
+    };
+
+    browser->setPluginSandboxed = [this] (const yup::AudioPluginDescription& desc, bool shouldRunSandboxed)
+    {
+        if (auto database = scanner->getDatabase())
+            database->setRunSandboxed (desc, shouldRunSandboxed);
+
+        browser->refresh();
+        statusLabel.setText (desc.name + (shouldRunSandboxed ? " will run sandboxed" : " will run in process")
+                                 + " when added next time.",
+                             yup::dontSendNotification);
+    };
+
+    browser->refresh();
+#endif
+
+    addAndMakeVisible (*browser);
+
+    workspace.addTab ("graph", "Graph", *editorPanel);
+    workspace.getTabBar().onTabCloseRequested = [this] (const yup::Identifier& tabId)
+    {
+        if (tabId == yup::Identifier ("settings"))
+            closeSettings();
+        else
+            closeSubgraphTab (tabId);
+    };
+    addAndMakeVisible (workspace);
+}
+
+void AudioGraphApp::showSettings()
+{
+    if (settingsPanel == nullptr)
+    {
+        auto panel = std::make_unique<SettingsPanel> (deviceManager);
+
+#if YUP_DESKTOP
+        auto pluginPage = std::make_unique<PluginSettingsPage> (scanner->getDatabase());
+        pluginPage->onRescanRequested = [this]
+        {
+            startPluginScan();
+        };
+        pluginPage->isOutOfProcessScanning = [this]
+        {
+            return scanner->getOutOfProcessScanning().has_value();
+        };
+        pluginPage->onOutOfProcessScanningChanged = [this] (bool shouldScanOutOfProcess)
+        {
+            setOutOfProcessScanning (shouldScanOutOfProcess);
+            saveSettings();
+        };
+        pluginPage->onPluginsChanged = [this]
+        {
+            refreshPluginLists();
+        };
+
+        pluginSettingsPage = pluginPage.get();
+        panel->addSection ("plugins", "Plugins", std::move (pluginPage));
+#endif
+
+        settingsPanel = panel.get();
+        workspace.addTab ("settings", "Settings", std::move (panel)).setClosable (true);
+    }
+
+    workspace.getTabBar().setSelectedTab ("settings");
+}
+
+void AudioGraphApp::closeSettings()
+{
+    if (settingsPanel == nullptr)
+        return;
+
+#if YUP_DESKTOP
+    pluginSettingsPage = nullptr;
+#endif
+    settingsPanel = nullptr;
+    workspace.removeTab ("settings");
+}
+
+//==============================================================================
+
+yup::File AudioGraphApp::getSettingsFile() const
+{
+    return yup::File::getSpecialLocation (yup::File::userApplicationDataDirectory)
+        .getChildFile ("YUP/AudioGraph/settings.xml");
+}
+
+std::unique_ptr<yup::XmlElement> AudioGraphApp::loadSettings() const
+{
+    const auto file = getSettingsFile();
+    return file.existsAsFile() ? yup::parseXMLIfTagMatches (file, "AudioGraphSettings") : nullptr;
+}
+
+void AudioGraphApp::saveSettings()
+{
+    yup::XmlElement settings ("AudioGraphSettings");
+
+#if YUP_DESKTOP
+    settings.setAttribute ("outOfProcessScanning", scanner->getOutOfProcessScanning().has_value());
+#endif
+
+    if (auto deviceState = deviceManager.createStateXml())
+        settings.addChildElement (deviceState.release());
+
+    const auto file = getSettingsFile();
+    file.getParentDirectory().createDirectory();
+    settings.writeTo (file);
+}
+
+void AudioGraphApp::changeListenerCallback (yup::ChangeBroadcaster*)
+{
+    saveSettings();
 }
 
 //==============================================================================
@@ -410,6 +517,23 @@ void AudioGraphApp::openPluginEditor (std::shared_ptr<yup::AudioGraphProcessor> 
 
     auto ownerModel = ownerGraph->getModel();
     auto* proc = ownerModel->getNodeProcessor (nodeID);
+
+#if YUP_DESKTOP
+    if (auto* remote = dynamic_cast<yup::RemoteAudioPluginInstance*> (proc))
+    {
+        if (! remote->hasCrashed())
+        {
+            remote->showEditor (this);
+            return;
+        }
+
+        const auto result = remote->reload();
+        statusLabel.setText (result.wasOk() ? "Reloaded: " + proc->getName() : "Reload failed: " + result.getErrorMessage(),
+                             yup::dontSendNotification);
+        return;
+    }
+#endif
+
     if (proc == nullptr || ! proc->hasEditor())
         return;
 
@@ -436,6 +560,10 @@ void AudioGraphApp::openPluginEditor (std::shared_ptr<yup::AudioGraphProcessor> 
 
     pluginEditorWindow->centreWithSize (preferredSize);
     pluginEditorWindow->setVisible (true);
+
+    if (auto* native = pluginEditorWindow->getNativeComponent())
+        native->setOwner (getTopLevelComponent()->getNativeComponent());
+
     pluginEditorWindow->toFront (true);
 }
 
@@ -447,14 +575,6 @@ void AudioGraphApp::closePluginEditor()
 }
 
 //==============================================================================
-
-struct SubgraphEditorRecord
-{
-    const yup::AudioGraphProcessor* ownerGraphRaw = nullptr;
-    yup::AudioGraphNodeID nodeID;
-    std::shared_ptr<yup::AudioGraphProcessor> ownerGraph;
-    std::unique_ptr<SubgraphEditorWindow> window;
-};
 
 std::unique_ptr<AudioGraphEditorPanel> AudioGraphApp::createMainPanel()
 {
@@ -480,6 +600,19 @@ std::unique_ptr<AudioGraphEditorPanel> AudioGraphApp::createSubgraphPanel (std::
     return panel;
 }
 
+AudioGraphEditorPanel& AudioGraphApp::getActiveEditorPanel()
+{
+    const auto selectedTab = workspace.getTabBar().getSelectedTabId();
+
+    for (auto& record : subgraphEditors)
+    {
+        if (record.tabId == selectedTab && record.page != nullptr)
+            return *record.page->getEditorPanel();
+    }
+
+    return *editorPanel;
+}
+
 void AudioGraphApp::configurePanelCallbacks (AudioGraphEditorPanel& panel)
 {
     panel.onStatusMessage = [this] (const yup::String& message)
@@ -501,19 +634,9 @@ void AudioGraphApp::configurePanelCallbacks (AudioGraphEditorPanel& panel)
     };
 
 #if YUP_DESKTOP
-    panel.getDiscoveredPlugins = [this]() -> const std::vector<yup::AudioPluginDescription>&
-    {
-        return nodeRegistry.getDiscoveredPlugins();
-    };
-
-    panel.getPluginMenuItemText = [] (const yup::AudioPluginDescription& desc)
-    {
-        return desc.name + " [" + formatTypeToString (desc.formatType) + "]";
-    };
-
-    panel.onPluginSelected = [this] (AudioGraphEditorPanel& editor,
-                                     const yup::AudioPluginDescription& desc,
-                                     yup::Point<float> canvasPos)
+    panel.onPluginRequested = [this] (AudioGraphEditorPanel& editor,
+                                      const yup::AudioPluginDescription& desc,
+                                      yup::Point<float> canvasPos)
     {
         addPluginNodeToPanel (editor, desc, canvasPos);
     };
@@ -526,34 +649,26 @@ void AudioGraphApp::openSubgraphEditor (std::shared_ptr<yup::AudioGraphProcessor
 {
     if (auto* record = findSubgraphEditorRecord (ownerGraph.get(), nodeID))
     {
-        record->window->toFront (true);
+        workspace.getTabBar().setSelectedTab (record->tabId);
         return;
     }
 
-    auto childGraph = processor.getGraph();
-    auto panel = createSubgraphPanel (childGraph);
-
     yup::WeakReference<AudioGraphApp> weakThis (this);
-    auto window = std::make_unique<SubgraphEditorWindow> (
-        processor.getConfig().getDisplayName(),
-        std::move (panel),
+    auto page = std::make_unique<SubgraphEditorPage> (
+        createSubgraphPanel (processor.getGraph()),
         processor.getConfig(),
         [weakThis, ownerGraph, nodeID] (int presetID)
     {
         if (auto* self = weakThis.get())
             self->reconfigureSubgraph (ownerGraph, nodeID, SubgraphConfig::fromPreset (presetID));
-    },
-        [weakThis, ownerGraph, nodeID]
-    {
-        if (auto* self = weakThis.get())
-            self->closeSubgraphEditorForNode (ownerGraph, nodeID);
     });
 
-    subgraphEditorWindows.push_back ({ ownerGraph.get(), nodeID, ownerGraph, std::move (window) });
-    auto& record = subgraphEditorWindows.back();
-    record.window->centreWithSize ({ 900, 620 });
-    record.window->setVisible (true);
-    record.window->toFront (true);
+    const auto tabId = yup::Identifier ("subgraph" + yup::String (++nextSubgraphTabNumber));
+    auto* pagePtr = page.get();
+
+    workspace.addTab (tabId, processor.getConfig().getDisplayName(), std::move (page)).setClosable (true);
+    subgraphEditors.push_back ({ ownerGraph.get(), nodeID, ownerGraph, tabId, pagePtr });
+    workspace.getTabBar().setSelectedTab (tabId);
 }
 
 void AudioGraphApp::reconfigureSubgraph (std::shared_ptr<yup::AudioGraphProcessor> ownerGraph,
@@ -612,8 +727,10 @@ void AudioGraphApp::reconfigureSubgraph (std::shared_ptr<yup::AudioGraphProcesso
 
     if (newProcessor != nullptr && record != nullptr)
     {
-        record->window->setTitle (config.getDisplayName());
-        record->window->setEditorPanel (createSubgraphPanel (newProcessor->getGraph()), config);
+        if (auto* tab = workspace.getTabBar().getTabButton (record->tabId))
+            tab->setText (config.getDisplayName());
+
+        record->page->setEditorPanel (createSubgraphPanel (newProcessor->getGraph()), config);
     }
 }
 
@@ -622,12 +739,12 @@ void AudioGraphApp::refreshNodeViewsForGraph (const yup::AudioGraphProcessor* gr
     if (graphToRefresh == graph.get())
         editorPanel->refreshNodeView (nodeID);
 
-    for (auto& record : subgraphEditorWindows)
+    for (auto& record : subgraphEditors)
     {
-        if (record.window == nullptr)
+        if (record.page == nullptr)
             continue;
 
-        auto* panel = record.window->getEditorPanel();
+        auto* panel = record.page->getEditorPanel();
         if (panel != nullptr && panel->getGraph().get() == graphToRefresh)
             panel->refreshNodeView (nodeID);
     }
@@ -642,7 +759,7 @@ void AudioGraphApp::closeSubgraphEditorForNode (std::shared_ptr<yup::AudioGraphP
     if (auto* subgraph = dynamic_cast<SubgraphProcessor*> (ownerModel->getNodeProcessor (nodeID)))
         closeSubgraphEditorsForGraph (subgraph->getGraph().get());
 
-    std::erase_if (subgraphEditorWindows, [ownerGraphRaw = ownerGraph.get(), nodeID] (SubgraphEditorRecord& record)
+    removeSubgraphEditors ([ownerGraphRaw = ownerGraph.get(), nodeID] (const SubgraphEditorRecord& record)
     {
         return record.ownerGraphRaw == ownerGraphRaw && record.nodeID == nodeID;
     });
@@ -656,7 +773,7 @@ void AudioGraphApp::closeSubgraphEditorsForGraph (const yup::AudioGraphProcessor
     {
         removed = false;
 
-        for (auto& record : subgraphEditorWindows)
+        for (auto& record : subgraphEditors)
         {
             if (record.ownerGraphRaw == graphToClose)
             {
@@ -670,17 +787,49 @@ void AudioGraphApp::closeSubgraphEditorsForGraph (const yup::AudioGraphProcessor
 
 void AudioGraphApp::closeAllSubgraphEditors()
 {
-    subgraphEditorWindows.clear();
+    removeSubgraphEditors ([] (const SubgraphEditorRecord&)
+    {
+        return true;
+    });
+}
+
+void AudioGraphApp::closeSubgraphTab (const yup::Identifier& tabId)
+{
+    for (const auto& record : subgraphEditors)
+    {
+        if (record.tabId == tabId)
+        {
+            closeSubgraphEditorForNode (record.ownerGraph, record.nodeID);
+            return;
+        }
+    }
+}
+
+void AudioGraphApp::removeSubgraphEditors (std::function<bool (const SubgraphEditorRecord&)> shouldRemove)
+{
+    std::vector<yup::Identifier> tabsToRemove;
+
+    std::erase_if (subgraphEditors, [&] (const SubgraphEditorRecord& record)
+    {
+        if (! shouldRemove (record))
+            return false;
+
+        tabsToRemove.push_back (record.tabId);
+        return true;
+    });
+
+    for (const auto& tabId : tabsToRemove)
+        workspace.removeTab (tabId);
 }
 
 AudioGraphApp::SubgraphEditorRecord* AudioGraphApp::findSubgraphEditorRecord (const yup::AudioGraphProcessor* ownerGraph, yup::AudioGraphNodeID nodeID)
 {
-    const auto iterator = std::find_if (subgraphEditorWindows.begin(), subgraphEditorWindows.end(), [ownerGraph, nodeID] (const SubgraphEditorRecord& record)
+    const auto iterator = std::find_if (subgraphEditors.begin(), subgraphEditors.end(), [ownerGraph, nodeID] (const SubgraphEditorRecord& record)
     {
         return record.ownerGraphRaw == ownerGraph && record.nodeID == nodeID;
     });
 
-    return iterator != subgraphEditorWindows.end() ? &*iterator : nullptr;
+    return iterator != subgraphEditors.end() ? &*iterator : nullptr;
 }
 
 #if YUP_DESKTOP
@@ -688,14 +837,7 @@ void AudioGraphApp::addPluginNodeToPanel (AudioGraphEditorPanel& editor,
                                           const yup::AudioPluginDescription& desc,
                                           yup::Point<float> canvasPos)
 {
-    auto* format = scanner->getFormatForType (desc.formatType);
-    if (format == nullptr)
-    {
-        statusLabel.setText ("No format backend for: " + desc.name, yup::dontSendNotification);
-        return;
-    }
-
-    auto result = format->loadPlugin (desc, makeHostContext());
+    auto result = loadPlugin (desc);
     if (result.failed())
     {
         statusLabel.setText ("Load failed: " + result.getErrorMessage(), yup::dontSendNotification);
@@ -712,6 +854,36 @@ void AudioGraphApp::addPluginNodeToPanel (AudioGraphEditorPanel& editor,
     if (editor.addProcessorNode (std::move (result).getValue(), std::move (props), canvasPos))
         statusLabel.setText ("Loaded: " + desc.name, yup::dontSendNotification);
 }
+
+yup::ResultValue<std::unique_ptr<yup::AudioPluginInstance>> AudioGraphApp::loadPlugin (const yup::AudioPluginDescription& desc)
+{
+    if (auto database = scanner->getDatabase(); database != nullptr && database->shouldRunSandboxed (desc))
+    {
+        yup::RemoteAudioPluginInstance::Options options;
+        options.executable = yup::File::getSpecialLocation (yup::File::currentExecutableFile);
+
+        auto result = yup::RemoteAudioPluginInstance::load (desc, makeHostContext(), options);
+        if (result.failed())
+            return yup::makeResultValueFail ("Sandboxed load failed: " + result.getErrorMessage());
+
+        auto instance = std::move (result.getReference());
+
+        yup::WeakReference<AudioGraphApp> weakThis (this);
+        instance->onCrashed = [weakThis, name = desc.name]
+        {
+            if (auto* self = weakThis.get())
+                self->statusLabel.setText (name + " crashed. Double-click the node to reload it.", yup::dontSendNotification);
+        };
+
+        return yup::makeResultValueOk (std::unique_ptr<yup::AudioPluginInstance> (std::move (instance)));
+    }
+
+    auto* format = scanner->getFormatForType (desc.formatType);
+    if (format == nullptr)
+        return yup::makeResultValueFail ("No format backend for: " + desc.name);
+
+    return format->loadPlugin (desc, makeHostContext());
+}
 #endif
 
 //==============================================================================
@@ -723,7 +895,6 @@ void AudioGraphApp::startPluginScan()
         return;
 
     statusLabel.setText ("Scanning for plugins...", yup::dontSendNotification);
-    scanButton.setEnabled (false);
 
     auto lifetime = scanLifetime;
 
@@ -738,13 +909,37 @@ void AudioGraphApp::startPluginScan()
                 return;
 
             nodeRegistry.setDiscoveredPlugins (std::move (result.discovered));
+            browser->refresh();
+
+            if (pluginSettingsPage != nullptr)
+                pluginSettingsPage->refresh();
 
             const auto count = static_cast<int> (nodeRegistry.getDiscoveredPlugins().size());
             statusLabel.setText ("Found " + yup::String (count) + " plugins.", yup::dontSendNotification);
-            scanButton.setEnabled (true);
             scanInProgress = false;
         });
     });
+}
+
+void AudioGraphApp::setOutOfProcessScanning (bool shouldScanOutOfProcess)
+{
+    if (! shouldScanOutOfProcess)
+    {
+        scanner->setOutOfProcessScanning (std::nullopt);
+        return;
+    }
+
+    yup::AudioPluginScanner::OutOfProcessOptions scanOptions;
+    scanOptions.executable = yup::File::getSpecialLocation (yup::File::currentExecutableFile);
+    scanner->setOutOfProcessScanning (scanOptions);
+}
+
+void AudioGraphApp::refreshPluginLists()
+{
+    if (auto database = scanner->getDatabase())
+        nodeRegistry.setDiscoveredPlugins (database->getPlugins());
+
+    browser->refresh();
 }
 
 yup::AudioPluginHostContext AudioGraphApp::makeHostContext() const

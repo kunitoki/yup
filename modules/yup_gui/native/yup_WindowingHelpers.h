@@ -24,17 +24,6 @@ namespace yup
 
 //==============================================================================
 /**
-    Get native window position from a native window handle.
-
-    @param nativeWindow The native window handle.
-
-    @return The position of the native window.
-
-    @see setNativeParent
- */
-Rectangle<int> getNativeWindowPosition (void* nativeWindow);
-
-/**
     Gives focus to a native window handle when supported by the current platform.
 
     @param nativeWindow The native window handle.

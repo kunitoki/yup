@@ -59,17 +59,6 @@ std::optional<MidiMessage> clapEventToMidiMessage (const clap_event_header_t* ev
         return static_cast<int> (value);
     };
 
-    const auto clampPitchBendValue = [] (double value) noexcept
-    {
-        if (! (value >= 0.0))
-            return 0;
-
-        if (value >= 16383.0)
-            return 16383;
-
-        return static_cast<int> (value);
-    };
-
     switch (event->type)
     {
         case CLAP_EVENT_NOTE_ON:
@@ -120,26 +109,6 @@ std::optional<MidiMessage> clapEventToMidiMessage (const clap_event_header_t* ev
             return MidiMessage (midiEvent->data, messageLength);
         }
 
-        case CLAP_EVENT_NOTE_EXPRESSION:
-        {
-            const auto* ev = reinterpret_cast<const clap_event_note_expression_t*> (event);
-            const int channel = clampMidiChannel (ev->channel);
-
-            if (ev->expression_id == CLAP_NOTE_EXPRESSION_TUNING)
-            {
-                const int pitchBendValue = clampPitchBendValue (ev->value * 8192.0 + 8192.0);
-                return MidiMessage::pitchWheel (channel, pitchBendValue);
-            }
-
-            if (ev->expression_id == CLAP_NOTE_EXPRESSION_PRESSURE)
-                return MidiMessage::channelPressureChange (channel, clampMidiValue (ev->value * 127.0));
-
-            if (ev->expression_id == CLAP_NOTE_EXPRESSION_BRIGHTNESS)
-                return MidiMessage::controllerEvent (channel, 74, clampMidiValue (ev->value * 127.0));
-
-            break;
-        }
-
         case CLAP_EVENT_MIDI_SYSEX:
         {
             const auto* sysexEvent = reinterpret_cast<const clap_event_midi_sysex_t*> (event);
@@ -154,6 +123,47 @@ std::optional<MidiMessage> clapEventToMidiMessage (const clap_event_header_t* ev
     }
 
     return std::nullopt;
+}
+
+//==============================================================================
+
+std::optional<NoteExpression> clapEventToNoteExpression (const clap_event_note_expression_t& event, int sampleOffset)
+{
+    NoteExpression expression;
+    expression.sampleOffset = sampleOffset;
+    expression.noteId = event.note_id;
+    expression.channel = static_cast<int8> (isPositiveAndBelow (event.channel, 16) ? event.channel + 1 : -1);
+    expression.key = static_cast<int8> (isPositiveAndBelow (event.key, 128) ? event.key : -1);
+    expression.value = static_cast<float> (event.value);
+
+    switch (event.expression_id)
+    {
+        case CLAP_NOTE_EXPRESSION_VOLUME:
+            expression.type = NoteExpression::Type::volume;
+            break;
+        case CLAP_NOTE_EXPRESSION_PAN:
+            expression.type = NoteExpression::Type::pan;
+            break;
+        case CLAP_NOTE_EXPRESSION_TUNING:
+            expression.type = NoteExpression::Type::tuning;
+            break;
+        case CLAP_NOTE_EXPRESSION_VIBRATO:
+            expression.type = NoteExpression::Type::vibrato;
+            break;
+        case CLAP_NOTE_EXPRESSION_EXPRESSION:
+            expression.type = NoteExpression::Type::expression;
+            break;
+        case CLAP_NOTE_EXPRESSION_BRIGHTNESS:
+            expression.type = NoteExpression::Type::brightness;
+            break;
+        case CLAP_NOTE_EXPRESSION_PRESSURE:
+            expression.type = NoteExpression::Type::pressure;
+            break;
+        default:
+            return std::nullopt;
+    }
+
+    return expression;
 }
 
 //==============================================================================
@@ -251,6 +261,9 @@ clap_param_info_flags getCLAPParameterFlags (const AudioParameter& parameter) no
 
     if (parameter.isPerNoteModulatable())
         flags |= CLAP_PARAM_IS_MODULATABLE | CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID;
+
+    if (parameter.isBypass())
+        flags |= CLAP_PARAM_IS_BYPASS;
 
     return flags;
 }
@@ -461,6 +474,7 @@ private:
 
 class AudioPluginEditorCLAP final
     : public Component
+    , private AudioProcessorEditor::HostContext
     , private ComponentListener
 {
 public:
@@ -468,6 +482,7 @@ public:
         : wrapper (wrapper)
         , processorEditor (editor)
     {
+        processorEditor->setSize (processorEditor->getConstrainedSize (processorEditor->getInitialSize()).to<float>());
         addAndMakeVisible (*processorEditor);
 
         if (processorEditor->shouldShowResizableCorner())
@@ -481,16 +496,20 @@ public:
         }
 
         processorEditor->addComponentListener (this);
+        processorEditor->setHostContext (this);
     }
 
     ~AudioPluginEditorCLAP() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "destroying editor: onDesktop=" << String (isOnDesktop() ? "true" : "false") << ", hasProcessorEditor=" << String (processorEditor != nullptr ? "true" : "false"));
+
         if (processorEditor != nullptr)
         {
             setVisible (false);
             removeFromDesktop();
 
             processorEditor->removeComponentListener (this);
+            processorEditor->setHostContext (nullptr);
             resizableCorner.reset();
             removeChildComponent (processorEditor.get());
             processorEditor.reset();
@@ -503,10 +522,35 @@ public:
 
     void resized() override;
 
+    void paint (Graphics& g) override
+    {
+        // Only the area left uncovered by a fitted editor needs painting
+        if (processorEditor == nullptr || processorEditor->getBounds() == getLocalBounds())
+            return;
+
+        g.setFillColor (Colors::black);
+        g.fillAll();
+    }
+
+    /** Called after the host resized the editor, so a resizable editor snaps to its constraints once the user stops dragging. */
+    void hostResized()
+    {
+        if (processorEditor != nullptr && processorEditor->isResizable())
+            hostResizeSnapper.hostResized();
+    }
+
 private:
+    bool showParameterContextMenu (const AudioParameter::Ptr& parameter, Point<float> position) override;
+
     void componentResized (Component& component) override
     {
+        if (fittingEditor)
+            return;
+
         const auto editorSize = component.getBounds().getSize();
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "editor componentResized: editorSize=" << editorSize.toString() << ", wrapperSize=" << getBounds().getSize().toString());
+
         if (editorSize != getBounds().getSize())
             setSize (editorSize);
     }
@@ -515,6 +559,13 @@ private:
     AudioPluginProcessorCLAP* wrapper = nullptr;
     std::unique_ptr<AudioProcessorEditor> processorEditor;
     std::unique_ptr<ResizableCorner> resizableCorner;
+    bool fittingEditor = false;
+    HostResizeSnapper hostResizeSnapper { [this]
+                                          {
+                                              snapToConstrainedSize();
+                                          } };
+
+    void snapToConstrainedSize();
 };
 
 //==============================================================================
@@ -548,6 +599,8 @@ public:
     void editorResized();
     ScopedValueSetter<bool> scopedHostEditorResizing();
 
+    bool showHostParameterContextMenu (const AudioParameter::Ptr& parameter, Point<float> editorPosition);
+
 private:
     void addParameterListeners();
     void removeParameterListeners();
@@ -562,9 +615,12 @@ private:
     void enqueueParameterEvent (uint16 eventType, clap_id parameterId, double value = 0.0) noexcept;
     void drainParameterEvents (const clap_output_events_t* out) noexcept;
     void requestParameterFlush() const noexcept;
+    void updateHostTrackInfo();
     void requestMainThreadCallback() const noexcept;
     void handleMainThreadNotifications() noexcept;
     void handleAudioThreadNotifications() noexcept;
+    void addUniversalMidiPacket (const uint32* words, int numWords, int sampleOffset, MidiBuffer& midiBuffer);
+    std::vector<AudioParameter::Ptr> getRemoteControlParameters() const;
 
     bool isCLAPAudioBusMain (uint32_t clapAudioBusIndex, bool isInput) const noexcept
     {
@@ -572,9 +628,11 @@ private:
     }
 
     ScopedYupInitialiser_GUI scopeInitialiser;
+    WrapperWindowing windowing;
 
     std::unique_ptr<AudioProcessor> audioProcessor;
     std::unique_ptr<AudioPluginEditorCLAP> audioPluginEditor;
+    WrapperViewScale editorViewScale;
 
     const clap_host_t* host = nullptr;
 
@@ -590,6 +648,9 @@ private:
     clap_plugin_gui_t extensionGUI;
     clap_plugin_render_t extensionRender;
     clap_plugin_voice_info_t extensionVoiceInfo;
+    clap_plugin_track_info_t extensionTrackInfo;
+    clap_plugin_state_context_t extensionStateContext;
+    clap_plugin_remote_controls_t extensionRemoteControls;
 
     const clap_host_params_t* hostParams = nullptr;
     const clap_host_state_t* hostState = nullptr;
@@ -597,11 +658,15 @@ private:
     const clap_host_latency_t* hostLatency = nullptr;
     const clap_host_timer_support_t* hostTimerSupport = nullptr;
     const clap_host_gui_t* hostGUI = nullptr;
+    const clap_host_track_info_t* hostTrackInfo = nullptr;
+    const clap_host_context_menu_t* hostContextMenu = nullptr;
 
     clap_id guiTimerId;
     bool hostTriggeredResizing = false;
 
     MidiBuffer midiEvents;
+    WrapperNoteExpressions noteExpressions;
+    ump::ToBytestreamConverter umpConverter { 2048 };
     ParameterChangeBuffer paramChangeBuffer;
     std::vector<AudioParameter::Ptr> listenedParameters;
     std::vector<float*> outputChannelsFloat;
@@ -612,7 +677,7 @@ private:
     std::vector<AudioBusBufferView<const double>> inputBusViewsDouble;
     std::vector<AudioBusBufferView<double>> outputBusViewsDouble;
 
-    bool isBypassed = false;
+    WrapperBypass bypass;
     std::atomic<bool> isActive { false };
 
     std::atomic<bool> isInsideProcessBlock { false };
@@ -668,6 +733,8 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
 
     plugin.activate = [] (const clap_plugin* plugin, double sampleRate, uint32_t minimumFramesCount, uint32_t maximumFramesCount) -> bool
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "activate requested: sampleRate=" << String (sampleRate) << ", minFrames=" << String (static_cast<int64> (minimumFramesCount)) << ", maxFrames=" << String (static_cast<int64> (maximumFramesCount)));
+
         return getWrapper (plugin)->activate (static_cast<float> (sampleRate), static_cast<int> (maximumFramesCount));
     };
 
@@ -711,9 +778,10 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         // Process incoming parameter and MIDI events (CLAP guarantees time-sorted order)
         midiBuffer.clear();
         wrapper->paramChangeBuffer.clear();
+        wrapper->noteExpressions.clear();
 
-        bool bypassed = wrapper->isBypassed;
-        const auto bypassParameterID = getBypassHostParameterID (audioProcessor);
+        bool bypassed = wrapper->bypass.isBypassed();
+        const auto bypassParameterID = wrapper->bypass.getHostParameterID();
         const int lastSampleOffset = jmax (0, static_cast<int> (process->frames_count) - 1);
 
         const uint32_t inputEventCount = process->in_events->size (process->in_events);
@@ -733,7 +801,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                 if (paramEvent->param_id == bypassParameterID)
                 {
                     bypassed = paramEvent->value >= 0.5;
-                    wrapper->isBypassed = bypassed;
+                    wrapper->bypass.setBypassed (bypassed);
                     continue;
                 }
 
@@ -750,11 +818,23 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                 const auto* modEvent = reinterpret_cast<const clap_event_param_mod_t*> (event);
                 addParameterModByCLAPEvent (audioProcessor, wrapper->paramChangeBuffer, modEvent, sampleOffset);
             }
+            else if (event->type == CLAP_EVENT_NOTE_EXPRESSION)
+            {
+                if (const auto expression = clapEventToNoteExpression (*reinterpret_cast<const clap_event_note_expression_t*> (event), sampleOffset))
+                    wrapper->noteExpressions.add (*expression);
+            }
+            else if (event->type == CLAP_EVENT_MIDI2)
+            {
+                const auto* midi2Event = reinterpret_cast<const clap_event_midi2_t*> (event);
+                wrapper->addUniversalMidiPacket (midi2Event->data, 4, sampleOffset, midiBuffer);
+            }
             else if (auto convertedEvent = clapEventToMidiMessage (event))
             {
                 midiBuffer.addEvent (*convertedEvent, sampleOffset);
             }
         }
+
+        const auto* noteExpressionBuffer = wrapper->noteExpressions.apply (midiBuffer);
 
         AudioPluginPlayHeadCLAP playHead (audioProcessor.getSampleRate(), process);
         auto* const playHeadPtr = process->transport != nullptr ? &playHead : nullptr;
@@ -826,6 +906,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                 { wrapper->inputBusViewsDouble.data(), wrapper->inputBusViewsDouble.size() },
                 { wrapper->outputBusViewsDouble.data(), wrapper->outputBusViewsDouble.size() }
             };
+            context.noteExpressions = noteExpressionBuffer;
 
             wrapper->isInsideProcessBlock.store (true);
             processAudioBlock (audioProcessor, context, bypassed);
@@ -894,6 +975,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                 { wrapper->inputBusViewsFloat.data(), wrapper->inputBusViewsFloat.size() },
                 { wrapper->outputBusViewsFloat.data(), wrapper->outputBusViewsFloat.size() }
             };
+            context.noteExpressions = noteExpressionBuffer;
 
             wrapper->isInsideProcessBlock.store (true);
             processAudioBlock (audioProcessor, context, bypassed);
@@ -936,10 +1018,30 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                     std::memcpy (ev.data, message.getRawData(), static_cast<size_t> (message.getRawDataSize()));
                     process->out_events->try_push (process->out_events, &ev.header);
                 }
+                else if (message.isSysEx())
+                {
+                    clap_event_midi_sysex_t ev = {};
+                    ev.header.size = sizeof (ev);
+                    ev.header.time = static_cast<uint32_t> (metadata.samplePosition);
+                    ev.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+                    ev.header.type = CLAP_EVENT_MIDI_SYSEX;
+                    ev.header.flags = 0;
+                    ev.port_index = 0;
+                    ev.buffer = metadata.data;
+                    ev.size = static_cast<uint32_t> (metadata.numBytes);
+                    process->out_events->try_push (process->out_events, &ev.header);
+                }
             }
         }
 
-        return CLAP_PROCESS_CONTINUE;
+        const auto tailSamples = audioProcessor.getTailSamples();
+        if (tailSamples < 0 || tailSamples == std::numeric_limits<int>::max())
+            return CLAP_PROCESS_CONTINUE;
+
+        if (audioProcessor.getBusLayout().getNumAudioInputChannels() == 0)
+            return CLAP_PROCESS_CONTINUE_IF_NOT_QUIET;
+
+        return CLAP_PROCESS_TAIL;
     };
 
     plugin.get_extension = [] (const clap_plugin* plugin, const char* id) -> const void*
@@ -957,6 +1059,8 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
 
 AudioPluginProcessorCLAP::~AudioPluginProcessorCLAP()
 {
+    YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "destroying processor instance: wrapper=" << describePointer (this) << ", processor=" << describePointer (audioProcessor.get()));
+
     endActiveParameterGestures (audioProcessor.get());
 }
 
@@ -966,14 +1070,24 @@ bool AudioPluginProcessorCLAP::initialise()
 {
     jassert (audioProcessor == nullptr);
 
-    audioProcessor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::clap, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
+    YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "init requested: wrapper=" << describePointer (this) << ", host=" << describePointer (host));
+
+    audioProcessor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::clap, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION, host->name != nullptr ? host->name : ""));
     if (audioProcessor == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "init failed: createPluginProcessor returned null");
         return false;
+    }
+
+    bypass.attach (*audioProcessor);
+
+    YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "created processor instance: wrapper=" << describePointer (this) << ", processor=" << describePointer (audioProcessor.get()));
 
     // ==== Setup extensions: parameters
     extensionParams.count = [] (const clap_plugin_t* plugin) -> uint32_t
     {
-        return static_cast<uint32_t> (getWrapper (plugin)->audioProcessor->getParameters().size() + 1);
+        const auto wrapper = getWrapper (plugin);
+        return static_cast<uint32_t> (wrapper->audioProcessor->getParameters().size() + (wrapper->bypass.isProcessorOwned() ? 0 : 1));
     };
 
     extensionParams.get_info = [] (const clap_plugin_t* plugin, uint32_t index, clap_param_info_t* information) -> bool
@@ -988,7 +1102,10 @@ bool AudioPluginProcessorCLAP::initialise()
 
         if (index == static_cast<uint32_t> (parameters.size()))
         {
-            information->id = getBypassHostParameterID (*wrapper->audioProcessor);
+            if (wrapper->bypass.isProcessorOwned())
+                return false;
+
+            information->id = wrapper->bypass.getHostParameterID();
             information->flags = CLAP_PARAM_IS_AUTOMATABLE | CLAP_PARAM_IS_STEPPED | CLAP_PARAM_IS_BYPASS;
             information->min_value = 0.0;
             information->max_value = 1.0;
@@ -1019,9 +1136,9 @@ bool AudioPluginProcessorCLAP::initialise()
         const auto parameterIndex = wrapper->audioProcessor->getParameterIndexByHostID (parameterId);
         if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
         {
-            if (parameterId == getBypassHostParameterID (*wrapper->audioProcessor))
+            if (wrapper->bypass.isSyntheticParameter (parameterId))
             {
-                *value = wrapper->isBypassed ? 1.0 : 0.0;
+                *value = wrapper->bypass.isBypassed() ? 1.0 : 0.0;
                 return true;
             }
 
@@ -1041,7 +1158,7 @@ bool AudioPluginProcessorCLAP::initialise()
         const auto parameterIndex = wrapper->audioProcessor->getParameterIndexByHostID (parameterId);
         if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
         {
-            if (parameterId == getBypassHostParameterID (*wrapper->audioProcessor))
+            if (wrapper->bypass.isSyntheticParameter (parameterId))
             {
                 const auto text = value >= 0.5 ? String ("On") : String ("Off");
                 text.copyToUTF8 (display, size);
@@ -1065,7 +1182,7 @@ bool AudioPluginProcessorCLAP::initialise()
         const auto parameterIndex = wrapper->audioProcessor->getParameterIndexByHostID (parameterId);
         if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
         {
-            if (parameterId == getBypassHostParameterID (*wrapper->audioProcessor))
+            if (wrapper->bypass.isSyntheticParameter (parameterId))
             {
                 const String text (display);
                 *value = (text == "On" || text == "1") ? 1.0 : 0.0;
@@ -1090,7 +1207,7 @@ bool AudioPluginProcessorCLAP::initialise()
             return;
 
         const uint32_t count = in->size (in);
-        const auto bypassParameterID = getBypassHostParameterID (*wrapper->audioProcessor);
+        const auto bypassParameterID = wrapper->bypass.getHostParameterID();
 
         for (uint32_t i = 0; i < count; ++i)
         {
@@ -1105,7 +1222,7 @@ bool AudioPluginProcessorCLAP::initialise()
 
                 if (paramEvent->param_id == bypassParameterID)
                 {
-                    wrapper->isBypassed = paramEvent->value >= 0.5;
+                    wrapper->bypass.setBypassed (paramEvent->value >= 0.5);
                     continue;
                 }
 
@@ -1133,7 +1250,12 @@ bool AudioPluginProcessorCLAP::initialise()
 
         // Fallback: synths with no declared MIDI input bus always get one
         if (isInput && count == 0 && YupPlugin_IsSynth)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "note ports count: isInput=true, count=1 (synth fallback)");
             return 1;
+        }
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "note ports count: isInput=" << String (isInput ? "true" : "false") << ", count=" << String (static_cast<int> (count)));
 
         return count;
     };
@@ -1154,9 +1276,10 @@ bool AudioPluginProcessorCLAP::initialise()
             if (midiIndex == index)
             {
                 info->id = index;
-                info->supported_dialects = CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI;
+                info->supported_dialects = CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI | (isInput ? CLAP_NOTE_DIALECT_MIDI2 : 0u);
                 info->preferred_dialect = CLAP_NOTE_DIALECT_CLAP;
                 bus.getName().copyToUTF8 (info->name, sizeof (info->name));
+                YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "note port info: index=" << String (static_cast<int> (index)) << ", isInput=" << String (isInput ? "true" : "false") << ", name=" << bus.getName());
                 return true;
             }
 
@@ -1167,12 +1290,14 @@ bool AudioPluginProcessorCLAP::initialise()
         if (isInput && index == 0 && midiIndex == 0 && YupPlugin_IsSynth)
         {
             info->id = 0;
-            info->supported_dialects = CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI;
+            info->supported_dialects = CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI2;
             info->preferred_dialect = CLAP_NOTE_DIALECT_CLAP;
             std::snprintf (info->name, sizeof (info->name), "%s", "Midi In");
+            YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "note port info: index=0, isInput=true, name=Midi In (synth fallback)");
             return true;
         }
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "note port info failed: index=" << String (static_cast<int> (index)) << ", isInput=" << String (isInput ? "true" : "false") << " out of range");
         return false;
     };
 
@@ -1190,6 +1315,8 @@ bool AudioPluginProcessorCLAP::initialise()
         for (const auto& bus : busses)
             if (bus.getType() == AudioBus::Type::Audio)
                 ++count;
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "audio ports count: isInput=" << String (isInput ? "true" : "false") << ", count=" << String (static_cast<int> (count)));
 
         return count;
     };
@@ -1221,7 +1348,10 @@ bool AudioPluginProcessorCLAP::initialise()
         }
 
         if (audioBus == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "audio port info failed: index=" << String (static_cast<int> (index)) << ", isInput=" << String (isInput ? "true" : "false") << " out of range");
             return false;
+        }
 
         info->id = index;
         info->channel_count = audioBus->getNumChannels();
@@ -1251,6 +1381,8 @@ bool AudioPluginProcessorCLAP::initialise()
 
         audioBus->getName().copyToUTF8 (info->name, sizeof (info->name));
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "audio port info: index=" << String (static_cast<int> (index)) << ", isInput=" << String (isInput ? "true" : "false") << ", name=" << audioBus->getName() << ", channels=" << String (static_cast<int> (info->channel_count)) << ", main=" << String ((flags & CLAP_AUDIO_PORT_IS_MAIN) != 0 ? "true" : "false") << ", inPlacePair=" << String (static_cast<int64> (info->in_place_pair)));
+
         return true;
     };
 
@@ -1260,17 +1392,29 @@ bool AudioPluginProcessorCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         MemoryBlock data;
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "state save requested");
+
         wrapper->audioProcessor->suspendProcessing (true);
-        const bool saved = wrapper->audioProcessor->saveStateIntoMemory (data).wasOk();
+        const auto saveResult = wrapper->audioProcessor->saveStateIntoMemory (data);
+        const bool saved = saveResult.wasOk();
         wrapper->audioProcessor->suspendProcessing (false);
+
+        if (! saved)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "state save without processor state: " << saveResult.getErrorMessage());
+        }
 
         const auto wrapperState = writeWrapperBypassState (clapWrapperStateMagic,
                                                            clapWrapperStateVersion,
-                                                           wrapper->isBypassed,
+                                                           wrapper->bypass.isBypassed(),
                                                            data,
                                                            saved);
 
-        return writeAllToCLAPStream (stream, wrapperState.getData(), wrapperState.getSize());
+        const bool written = writeAllToCLAPStream (stream, wrapperState.getData(), wrapperState.getSize());
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "state save " << String (written ? "completed" : "failed: stream write error") << ": processorBytes=" << String (static_cast<int64> (data.getSize())) << ", totalBytes=" << String (static_cast<int64> (wrapperState.getSize())));
+
+        return written;
     };
 
     extensionState.load = [] (const clap_plugin_t* plugin, const clap_istream_t* stream) -> bool
@@ -1278,12 +1422,17 @@ bool AudioPluginProcessorCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         MemoryBlock data;
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "state load requested");
+
         char buf[4096];
         for (;;)
         {
             const int64_t n = stream->read (stream, buf, sizeof (buf));
             if (n < 0)
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "state load failed: stream read error after bytes=" << String (static_cast<int64> (data.getSize())));
                 return false;
+            }
 
             if (n == 0)
                 break;
@@ -1292,22 +1441,35 @@ bool AudioPluginProcessorCLAP::initialise()
         }
 
         if (data.isEmpty())
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "state load failed: stream is empty");
             return false;
+        }
 
         const auto wrapperState = readWrapperBypassState (data, clapWrapperStateMagic, clapWrapperStateVersion);
         if (wrapperState.hasWrapperState)
         {
-            wrapper->isBypassed = wrapperState.isBypassed;
+            wrapper->bypass.setBypassed (wrapperState.isBypassed);
 
             if (! wrapperState.hasProcessorState)
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "state load completed without processor state: bytes=" << String (static_cast<int64> (data.getSize())) << ", bypassed=" << String (wrapperState.isBypassed ? "true" : "false"));
                 return true;
+            }
         }
 
         const auto& processorState = wrapperState.hasWrapperState ? wrapperState.processorState : data;
 
         wrapper->audioProcessor->suspendProcessing (true);
-        const bool ok = wrapper->audioProcessor->loadStateFromMemory (processorState).wasOk();
+        const auto loadResult = wrapper->audioProcessor->loadStateFromMemory (processorState);
+        const bool ok = loadResult.wasOk();
+
+        if (wrapperState.hasWrapperState)
+            wrapper->bypass.setBypassed (wrapperState.isBypassed);
+
         wrapper->audioProcessor->suspendProcessing (false);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "state load " << String (ok ? "completed" : "failed") << ": bytes=" << String (static_cast<int64> (data.getSize())) << ", processorBytes=" << String (static_cast<int64> (processorState.getSize())) << ", wrapperState=" << String (wrapperState.hasWrapperState ? "true" : "false") << (ok ? String() : ", error=" + loadResult.getErrorMessage()));
 
         return ok;
     };
@@ -1323,7 +1485,9 @@ bool AudioPluginProcessorCLAP::initialise()
     extensionLatency.get = [] (const clap_plugin_t* plugin) -> uint32_t
     {
         auto wrapper = getWrapper (plugin);
-        return static_cast<uint32_t> (wrapper->audioProcessor->getLatencySamples());
+        const auto latencySamples = wrapper->audioProcessor->getLatencySamples();
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "latency get: samples=" << String (latencySamples));
+        return static_cast<uint32_t> (latencySamples);
     };
 
     // ==== Setup extensions: timer support
@@ -1331,7 +1495,7 @@ bool AudioPluginProcessorCLAP::initialise()
     {
 #if YUP_LINUX
         if (auto wrapper = getWrapper (plugin); wrapper->guiTimerId == timerId)
-            MessageManager::getInstance()->runDispatchLoopUntil (10);
+            dispatchPendingMessagesFromHostTimer();
 #endif
     };
 
@@ -1343,6 +1507,7 @@ bool AudioPluginProcessorCLAP::initialise()
 
     extensionRender.set = [] (const clap_plugin_t* plugin, clap_plugin_render_mode mode) -> bool
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "render set: offline=" << String (mode == CLAP_RENDER_OFFLINE ? "true" : "false"));
         getWrapper (plugin)->audioProcessor->setOfflineProcessing (mode == CLAP_RENDER_OFFLINE);
         return true;
     };
@@ -1360,35 +1525,100 @@ bool AudioPluginProcessorCLAP::initialise()
         return true;
     };
 
+    // ==== Setup extensions: track info
+    extensionTrackInfo.changed = [] (const clap_plugin_t* plugin)
+    {
+        getWrapper (plugin)->updateHostTrackInfo();
+    };
+
+    // ==== Setup extensions: state context (every context stores the full state)
+    extensionStateContext.save = [] (const clap_plugin_t* plugin, const clap_ostream_t* stream, uint32_t contextType) -> bool
+    {
+        ignoreUnused (contextType);
+        return getWrapper (plugin)->extensionState.save (plugin, stream);
+    };
+
+    extensionStateContext.load = [] (const clap_plugin_t* plugin, const clap_istream_t* stream, uint32_t contextType) -> bool
+    {
+        ignoreUnused (contextType);
+        return getWrapper (plugin)->extensionState.load (plugin, stream);
+    };
+
+    // ==== Setup extensions: remote controls (automatable parameters in pages of eight)
+    extensionRemoteControls.count = [] (const clap_plugin_t* plugin) -> uint32_t
+    {
+        const auto numParameters = getWrapper (plugin)->getRemoteControlParameters().size();
+        return static_cast<uint32_t> ((numParameters + CLAP_REMOTE_CONTROLS_COUNT - 1) / CLAP_REMOTE_CONTROLS_COUNT);
+    };
+
+    extensionRemoteControls.get = [] (const clap_plugin_t* plugin, uint32_t pageIndex, clap_remote_controls_page_t* page) -> bool
+    {
+        const auto parameters = getWrapper (plugin)->getRemoteControlParameters();
+        const auto first = static_cast<size_t> (pageIndex) * CLAP_REMOTE_CONTROLS_COUNT;
+        if (page == nullptr || first >= parameters.size())
+            return false;
+
+        *page = {};
+        page->page_id = pageIndex;
+        page->is_for_preset = false;
+        std::snprintf (page->section_name, sizeof (page->section_name), "%s", "Parameters");
+        std::snprintf (page->page_name, sizeof (page->page_name), "Page %u", static_cast<unsigned int> (pageIndex + 1));
+
+        for (size_t slot = 0; slot < CLAP_REMOTE_CONTROLS_COUNT; ++slot)
+        {
+            page->param_ids[slot] = first + slot < parameters.size()
+                                      ? static_cast<clap_id> (parameters[first + slot]->getHostParameterID())
+                                      : CLAP_INVALID_ID;
+        }
+
+        return true;
+    };
+
     // ==== Setup extensions: gui
     extensionGUI.is_api_supported = [] (const clap_plugin_t* plugin, const char* api, bool isFloating) -> bool
     {
         auto wrapper = getWrapper (plugin);
         if (wrapper->audioProcessor == nullptr || ! wrapper->audioProcessor->hasEditor())
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui is_api_supported: false, processor=" << describePointer (wrapper->audioProcessor.get()) << ", hasEditor=" << String (wrapper->audioProcessor != nullptr && wrapper->audioProcessor->hasEditor() ? "true" : "false"));
             return false;
+        }
 
-        return std::string_view (api) == preferredApi && ! isFloating;
+        const bool supported = std::string_view (api) == preferredApi && ! isFloating;
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui is_api_supported: api=" << String (api) << ", floating=" << String (isFloating ? "true" : "false") << ", supported=" << String (supported ? "true" : "false"));
+        return supported;
     };
 
     extensionGUI.get_preferred_api = [] (const clap_plugin_t* plugin, const char** api, bool* isFloating) -> bool
     {
         *api = preferredApi;
         *isFloating = false;
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui get_preferred_api: api=" << String (preferredApi) << ", floating=false");
         return true;
     };
 
     extensionGUI.create = [] (const clap_plugin_t* plugin, const char* api, bool isFloating) -> bool
     {
         if (api == nullptr || std::string_view (api) != preferredApi || isFloating)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui create rejected: api=" << String (api != nullptr ? api : "null") << ", floating=" << String (isFloating ? "true" : "false"));
             return false;
+        }
 
         auto wrapper = getWrapper (plugin);
 
-        ScopedYupInitialiser_Windowing windowingInitialiser;
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui create: api=" << String (api) << ", hadEditor=" << String (wrapper->audioPluginEditor != nullptr ? "true" : "false"));
+
+        wrapper->windowing.ensureInitialised();
 
         auto processorEditor = wrapper->audioProcessor->createEditor();
         if (processorEditor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui create failed: processor returned null editor");
             return false;
+        }
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "created editor: preferredSize=" << processorEditor->getPreferredSize().toString() << ", resizable=" << String (processorEditor->isResizable() ? "true" : "false") << ", editor=" << describePointer (processorEditor));
 
         wrapper->audioPluginEditor = std::make_unique<AudioPluginEditorCLAP> (wrapper, processorEditor);
 
@@ -1396,7 +1626,10 @@ bool AudioPluginProcessorCLAP::initialise()
         {
             auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
             if (audioProcessorEditor == nullptr)
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui create failed: wrapped editor is null");
                 return false;
+            }
 
             ComponentNative::Flags flags = ComponentNative::defaultFlags;
 
@@ -1419,6 +1652,7 @@ bool AudioPluginProcessorCLAP::initialise()
     extensionGUI.destroy = [] (const clap_plugin_t* plugin)
     {
         auto wrapper = getWrapper (plugin);
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui destroy: hasEditor=" << String (wrapper->audioPluginEditor != nullptr ? "true" : "false"));
         endActiveParameterGestures (wrapper->audioProcessor.get());
         wrapper->audioPluginEditor.reset();
     };
@@ -1426,11 +1660,19 @@ bool AudioPluginProcessorCLAP::initialise()
     extensionGUI.set_scale = [] (const clap_plugin_t* plugin, double scale) -> bool
     {
         auto wrapper = getWrapper (plugin);
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui set_scale: scale=" << String (scale) << ", hasEditor=" << String (wrapper->audioPluginEditor != nullptr ? "true" : "false"));
         if (wrapper->audioPluginEditor == nullptr)
             return false;
 
-        wrapper->audioPluginEditor->contentScaleChanged (static_cast<float> (scale));
+#if YUP_MAC
+        // Cocoa sizes are logical and the OS provides the backing scale, the spec asks to ignore the call
+        ignoreUnused (scale);
+        return false;
+#else
+        // Once attached the editor window follows its display scale, sizes are converted with it
+        wrapper->editorViewScale.setHostScale (static_cast<float> (scale));
         return true;
+#endif
     };
 
     extensionGUI.get_size = [] (const clap_plugin_t* plugin, uint32_t* width, uint32_t* height) -> bool
@@ -1441,16 +1683,15 @@ bool AudioPluginProcessorCLAP::initialise()
 
         auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
 
-        if (audioProcessorEditor->isResizable() && audioProcessorEditor->getWidth() != 0)
-        {
-            *width = static_cast<uint32_t> (audioProcessorEditor->getWidth());
-            *height = static_cast<uint32_t> (audioProcessorEditor->getHeight());
-        }
-        else
-        {
-            *width = static_cast<uint32_t> (audioProcessorEditor->getPreferredSize().getWidth());
-            *height = static_cast<uint32_t> (audioProcessorEditor->getPreferredSize().getHeight());
-        }
+        const auto editorSize = audioProcessorEditor->isResizable() && audioProcessorEditor->getWidth() != 0
+                                  ? audioProcessorEditor->getBounds().getSize().to<int>()
+                                  : audioProcessorEditor->getConstrainedSize (audioProcessorEditor->getInitialSize());
+
+        const auto hostSize = wrapper->editorViewScale.toHost (editorSize, *wrapper->audioPluginEditor);
+        *width = static_cast<uint32_t> (hostSize.getWidth());
+        *height = static_cast<uint32_t> (hostSize.getHeight());
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui get_size: " << static_cast<int> (*width) << "x" << static_cast<int> (*height));
 
         return true;
     };
@@ -1459,16 +1700,24 @@ bool AudioPluginProcessorCLAP::initialise()
     {
         auto wrapper = getWrapper (plugin);
         if (wrapper->audioPluginEditor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui can_resize: false, editor is null");
             return false;
+        }
 
-        return wrapper->audioPluginEditor->getAudioProcessorEditor()->isResizable();
+        const bool resizable = wrapper->audioPluginEditor->getAudioProcessorEditor()->isResizable();
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui can_resize: " << String (resizable ? "true" : "false"));
+        return resizable;
     };
 
     extensionGUI.get_resize_hints = [] (const clap_plugin_t* plugin, clap_gui_resize_hints_t* hints) -> bool
     {
         auto wrapper = getWrapper (plugin);
         if (wrapper->audioPluginEditor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui get_resize_hints failed: editor is null");
             return false;
+        }
 
         auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
 
@@ -1477,6 +1726,8 @@ bool AudioPluginProcessorCLAP::initialise()
         hints->preserve_aspect_ratio = audioProcessorEditor->shouldPreserveAspectRatio();
         hints->aspect_ratio_width = static_cast<uint32_t> (audioProcessorEditor->getPreferredAspectRatioSize().getWidth());
         hints->aspect_ratio_height = static_cast<uint32_t> (audioProcessorEditor->getPreferredAspectRatioSize().getHeight());
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui get_resize_hints: resizable=" << String (hints->can_resize_horizontally ? "true" : "false") << ", preserveAspectRatio=" << String (hints->preserve_aspect_ratio ? "true" : "false") << ", aspectRatio=" << String (static_cast<int> (hints->aspect_ratio_width)) << ":" << String (static_cast<int> (hints->aspect_ratio_height)));
 
         return true;
     };
@@ -1489,7 +1740,12 @@ bool AudioPluginProcessorCLAP::initialise()
 
         auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
 
-        const auto size = audioProcessorEditor->getConstrainedSize ({ static_cast<int> (*width), static_cast<int> (*height) });
+        // Resizable editors accept any host size while dragging, they are fitted inside and snapped afterwards
+        const auto size = audioProcessorEditor->isResizable()
+                            ? Size<int> { jmax (1, static_cast<int> (*width)), jmax (1, static_cast<int> (*height)) }
+                            : wrapper->editorViewScale.toHost (audioProcessorEditor->getPreferredSize(), *wrapper->audioPluginEditor);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui adjust_size: " << static_cast<int> (*width) << "x" << static_cast<int> (*height) << " -> " << size.getWidth() << "x" << size.getHeight());
 
         *width = static_cast<uint32_t> (size.getWidth());
         *height = static_cast<uint32_t> (size.getHeight());
@@ -1505,17 +1761,19 @@ bool AudioPluginProcessorCLAP::initialise()
 
         auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
 
-        if (! audioProcessorEditor->isResizable())
-        {
-            const auto preferredSize = audioProcessorEditor->getPreferredSize();
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui set_size: " << static_cast<int> (width) << "x" << static_cast<int> (height) << ", current=" << wrapper->audioPluginEditor->getBounds().toString());
 
-            width = static_cast<uint32_t> (preferredSize.getWidth());
-            height = static_cast<uint32_t> (preferredSize.getHeight());
+        const auto editorSize = audioProcessorEditor->isResizable()
+                                  ? wrapper->editorViewScale.fromHost ({ static_cast<int> (width), static_cast<int> (height) }, *wrapper->audioPluginEditor)
+                                  : audioProcessorEditor->getPreferredSize();
+
+        {
+            const auto scoped = wrapper->scopedHostEditorResizing();
+
+            wrapper->audioPluginEditor->setSize (editorSize.to<float>());
         }
 
-        const auto scoped = wrapper->scopedHostEditorResizing();
-
-        wrapper->audioPluginEditor->setSize ({ static_cast<float> (width), static_cast<float> (height) });
+        wrapper->audioPluginEditor->hostResized();
 
         return true;
     };
@@ -1525,6 +1783,9 @@ bool AudioPluginProcessorCLAP::initialise()
         jassert (std::string_view (window->api) == preferredApi);
 
         auto wrapper = getWrapper (plugin);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui set_parent: api=" << String (window->api) << ", hasEditor=" << String (wrapper->audioPluginEditor != nullptr ? "true" : "false"));
+
         if (wrapper->audioPluginEditor == nullptr)
             return false;
 
@@ -1540,6 +1801,8 @@ bool AudioPluginProcessorCLAP::initialise()
         auto options = ComponentNative::Options()
                            .withFlags (flags)
                            .withResizableWindow (audioProcessorEditor->isResizable());
+
+        const auto scaleBeforeAttach = wrapper->editorViewScale.get (*wrapper->audioPluginEditor);
 
         wrapper->audioPluginEditor->addToDesktop (
             options,
@@ -1557,11 +1820,18 @@ bool AudioPluginProcessorCLAP::initialise()
 
         audioProcessorEditor->attachedToNative();
 
+        // Sizes reported before attaching used an estimated scale, the editor window may use another one
+        if (wrapper->editorViewScale.get (*wrapper->audioPluginEditor) != scaleBeforeAttach)
+            wrapper->editorResized();
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui set_parent attached: onDesktop=" << String (wrapper->audioPluginEditor->isOnDesktop() ? "true" : "false") << ", bounds=" << wrapper->audioPluginEditor->getBounds().toString());
+
         return true;
     };
 
     extensionGUI.set_transient = [] (const clap_plugin_t* plugin, const clap_window_t* window) -> bool
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui set_transient: not supported");
         return false;
     };
 
@@ -1570,6 +1840,7 @@ bool AudioPluginProcessorCLAP::initialise()
     extensionGUI.show = [] (const clap_plugin_t* plugin) -> bool
     {
         auto wrapper = getWrapper (plugin);
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui show: hasEditor=" << String (wrapper->audioPluginEditor != nullptr ? "true" : "false"));
         if (wrapper->audioPluginEditor == nullptr)
             return false;
 
@@ -1580,6 +1851,7 @@ bool AudioPluginProcessorCLAP::initialise()
     extensionGUI.hide = [] (const clap_plugin_t* plugin) -> bool
     {
         auto wrapper = getWrapper (plugin);
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui hide: hasEditor=" << String (wrapper->audioPluginEditor != nullptr ? "true" : "false"));
         if (wrapper->audioPluginEditor == nullptr)
             return false;
 
@@ -1594,13 +1866,22 @@ bool AudioPluginProcessorCLAP::initialise()
     hostLatency = reinterpret_cast<const clap_host_latency_t*> (host->get_extension (host, CLAP_EXT_LATENCY));
     hostTimerSupport = reinterpret_cast<const clap_host_timer_support_t*> (host->get_extension (host, CLAP_EXT_TIMER_SUPPORT));
     hostGUI = reinterpret_cast<const clap_host_gui_t*> (host->get_extension (host, CLAP_EXT_GUI));
+    hostContextMenu = reinterpret_cast<const clap_host_context_menu_t*> (host->get_extension (host, CLAP_EXT_CONTEXT_MENU));
+    if (hostContextMenu == nullptr)
+        hostContextMenu = reinterpret_cast<const clap_host_context_menu_t*> (host->get_extension (host, CLAP_EXT_CONTEXT_MENU_COMPAT));
+
+    hostTrackInfo = reinterpret_cast<const clap_host_track_info_t*> (host->get_extension (host, CLAP_EXT_TRACK_INFO));
+    if (hostTrackInfo == nullptr)
+        hostTrackInfo = reinterpret_cast<const clap_host_track_info_t*> (host->get_extension (host, CLAP_EXT_TRACK_INFO_COMPAT));
+
+    updateHostTrackInfo();
 
     audioProcessor->addListener (this);
     addParameterListeners();
 
 #if YUP_LINUX
     if (instancesCount.fetch_add (1) == 0)
-        registerTimer (16, &guiTimerId);
+        registerTimer (hostMessageTimerIntervalMs, &guiTimerId);
 #endif
 
     return true;
@@ -1610,6 +1891,8 @@ bool AudioPluginProcessorCLAP::initialise()
 
 void AudioPluginProcessorCLAP::destroy()
 {
+    YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "plugin destroy: hasEditor=" << String (audioPluginEditor != nullptr ? "true" : "false"));
+
     removeParameterListeners();
 
     if (audioProcessor != nullptr)
@@ -1638,6 +1921,7 @@ bool AudioPluginProcessorCLAP::activate (float sampleRate, int samplesPerBlock)
     }
 
     midiEvents.ensureSize (4096);
+    noteExpressions.prepare (*audioProcessor);
     paramChangeBuffer.reserve (getDefaultParameterChangeCapacity (*audioProcessor));
 
     const int totalOutputChannels = getTotalAudioOutputChannels (*audioProcessor);
@@ -1657,6 +1941,8 @@ bool AudioPluginProcessorCLAP::activate (float sampleRate, int samplesPerBlock)
 
     isActive.store (true);
 
+    YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "activate completed: sampleRate=" << String (sampleRate) << ", samplesPerBlock=" << String (samplesPerBlock) << ", latency=" << String (audioProcessor->getLatencySamples()) << ", tail=" << String (audioProcessor->getTailSamples()) << ", outputChannels=" << String (totalOutputChannels));
+
     return true;
 }
 
@@ -1664,6 +1950,8 @@ bool AudioPluginProcessorCLAP::activate (float sampleRate, int samplesPerBlock)
 
 void AudioPluginProcessorCLAP::deactivate()
 {
+    YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "deactivate requested");
+
     isActive.store (false);
     audioProcessor->releaseResources();
 }
@@ -1672,6 +1960,8 @@ void AudioPluginProcessorCLAP::deactivate()
 
 bool AudioPluginProcessorCLAP::startProcessing()
 {
+    YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "start_processing requested");
+
     audioProcessor->suspendProcessing (false);
     return true;
 }
@@ -1680,6 +1970,8 @@ bool AudioPluginProcessorCLAP::startProcessing()
 
 void AudioPluginProcessorCLAP::stopProcessing()
 {
+    YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "stop_processing requested");
+
     audioProcessor->suspendProcessing (true);
 }
 
@@ -1687,7 +1979,62 @@ void AudioPluginProcessorCLAP::stopProcessing()
 
 void AudioPluginProcessorCLAP::reset()
 {
+    YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "reset requested");
+
     audioProcessor->flush(); // TODO - should we just call releaseResources()?
+    noteExpressions.reset();
+    umpConverter.reset();
+}
+
+//==============================================================================
+
+void AudioPluginProcessorCLAP::addUniversalMidiPacket (const uint32* words, int numWords, int sampleOffset, MidiBuffer& midiBuffer)
+{
+    const auto messageWords = static_cast<int> (ump::Utils::getNumWordsForMessageType (words[0]));
+    if (messageWords > numWords)
+        return;
+
+    if (const auto expression = umpToNoteExpression (words, messageWords, sampleOffset))
+    {
+        noteExpressions.add (*expression);
+        return;
+    }
+
+    umpConverter.convert (ump::View (words), static_cast<double> (sampleOffset), [&midiBuffer, sampleOffset] (const MidiMessage& message)
+    {
+        midiBuffer.addEvent (message, sampleOffset);
+    });
+}
+
+std::vector<AudioParameter::Ptr> AudioPluginProcessorCLAP::getRemoteControlParameters() const
+{
+    std::vector<AudioParameter::Ptr> result;
+
+    for (const auto& parameter : audioProcessor->getParameters())
+        if (parameter->isAutomatable() && ! parameter->isReadOnly() && ! parameter->isBypass())
+            result.push_back (parameter);
+
+    return result;
+}
+
+bool AudioPluginProcessorCLAP::showHostParameterContextMenu (const AudioParameter::Ptr& parameter, Point<float> editorPosition)
+{
+    if (parameter == nullptr
+        || audioPluginEditor == nullptr
+        || hostContextMenu == nullptr
+        || hostContextMenu->can_popup == nullptr
+        || hostContextMenu->popup == nullptr
+        || ! hostContextMenu->can_popup (host))
+    {
+        return false;
+    }
+
+    clap_context_menu_target_t target {};
+    target.kind = CLAP_CONTEXT_MENU_TARGET_KIND_PARAM;
+    target.id = static_cast<clap_id> (parameter->getHostParameterID());
+
+    const auto position = (editorPosition * editorViewScale.get (*audioPluginEditor)).to<int>();
+    return hostContextMenu->popup (host, &target, 0, position.getX(), position.getY());
 }
 
 //==============================================================================
@@ -1728,8 +2075,42 @@ const void* AudioPluginProcessorCLAP::getExtension (std::string_view id)
         return std::addressof (extensionRender);
     if (id == CLAP_EXT_VOICE_INFO)
         return audioProcessor->getNumVoices() > 0 ? std::addressof (extensionVoiceInfo) : nullptr;
+    if (id == CLAP_EXT_TRACK_INFO || id == CLAP_EXT_TRACK_INFO_COMPAT)
+        return std::addressof (extensionTrackInfo);
+    if (id == CLAP_EXT_STATE_CONTEXT)
+        return std::addressof (extensionStateContext);
+    if (id == CLAP_EXT_REMOTE_CONTROLS || id == CLAP_EXT_REMOTE_CONTROLS_COMPAT)
+        return getRemoteControlParameters().empty() ? nullptr : std::addressof (extensionRemoteControls);
 
     return nullptr;
+}
+
+//==============================================================================
+
+void AudioPluginProcessorCLAP::updateHostTrackInfo()
+{
+    if (audioProcessor == nullptr || hostTrackInfo == nullptr || hostTrackInfo->get == nullptr)
+        return;
+
+    clap_track_info_t trackInfo {};
+    if (! hostTrackInfo->get (host, &trackInfo))
+        return;
+
+    AudioProcessorBase::HostInfo info;
+
+    if ((trackInfo.flags & CLAP_TRACK_INFO_HAS_TRACK_NAME) != 0)
+        info.trackName = String::fromUTF8 (trackInfo.name, static_cast<int> (strnlen (trackInfo.name, CLAP_NAME_SIZE)));
+
+    if ((trackInfo.flags & CLAP_TRACK_INFO_HAS_TRACK_COLOR) != 0)
+    {
+        const auto& color = trackInfo.color;
+        info.trackColor = (static_cast<uint32> (color.alpha) << 24)
+                        | (static_cast<uint32> (color.red) << 16)
+                        | (static_cast<uint32> (color.green) << 8)
+                        | static_cast<uint32> (color.blue);
+    }
+
+    audioProcessor->setHostInfo (info);
 }
 
 //==============================================================================
@@ -1968,21 +2349,42 @@ void AudioPluginProcessorCLAP::handleAudioThreadNotifications() noexcept
 void AudioPluginProcessorCLAP::editorResized()
 {
     if (audioPluginEditor == nullptr || hostTriggeredResizing)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "editorResized skipped: hasEditor=" << String (audioPluginEditor != nullptr ? "true" : "false") << ", hostTriggeredResizing=" << String (hostTriggeredResizing ? "true" : "false"));
         return;
+    }
 
     if (hostGUI != nullptr && hostGUI->request_resize != nullptr)
-        hostGUI->request_resize (host, audioPluginEditor->getWidth(), audioPluginEditor->getHeight());
+    {
+        const auto hostSize = editorViewScale.toHost (audioPluginEditor->getBounds().getSize().to<int>(), *audioPluginEditor);
+        const bool accepted = hostGUI->request_resize (host, static_cast<uint32_t> (hostSize.getWidth()), static_cast<uint32_t> (hostSize.getHeight()));
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "host request_resize: " << hostSize.toString() << ", accepted=" << String (accepted ? "true" : "false"));
+        ignoreUnused (accepted);
+    }
+    else
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "editorResized: host does not support request_resize");
+    }
 }
 
 ScopedValueSetter<bool> AudioPluginProcessorCLAP::scopedHostEditorResizing()
 {
+    YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "host triggered editor resizing begin");
+
     return { hostTriggeredResizing, true };
 }
 
 //==============================================================================
 
+bool AudioPluginEditorCLAP::showParameterContextMenu (const AudioParameter::Ptr& parameter, Point<float> position)
+{
+    return wrapper->showHostParameterContextMenu (parameter, position + processorEditor->getPosition());
+}
+
 void AudioPluginEditorCLAP::contentScaleChanged (float dpiScale)
 {
+    YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "editor contentScaleChanged: scale=" << String (dpiScale) << ", hasProcessorEditor=" << String (processorEditor != nullptr ? "true" : "false"));
+
     if (processorEditor == nullptr)
         return;
 
@@ -1991,12 +2393,32 @@ void AudioPluginEditorCLAP::contentScaleChanged (float dpiScale)
 
 void AudioPluginEditorCLAP::resized()
 {
+    YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "editor resized: bounds=" << getBounds().toString() << ", hasProcessorEditor=" << String (processorEditor != nullptr ? "true" : "false"));
+
     if (processorEditor == nullptr)
         return;
 
-    processorEditor->setBounds (getLocalBounds());
+    {
+        const auto size = processorEditor->getConstrainedSizeToFit (getBounds().getSize().to<int>());
+
+        const auto scoped = ScopedValueSetter<bool> (fittingEditor, true);
+        processorEditor->setBounds ({ 0.0f, 0.0f, size.to<float>() });
+    }
 
     wrapper->editorResized();
+}
+
+void AudioPluginEditorCLAP::snapToConstrainedSize()
+{
+    if (processorEditor == nullptr)
+        return;
+
+    const auto size = processorEditor->getConstrainedSizeToFit (getBounds().getSize().to<int>()).to<float>();
+
+    YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "snapping to constrained size: " << getBounds().getSize().toString() << " -> " << size.toString());
+
+    if (size != getBounds().getSize())
+        setSize (size);
 }
 
 } // namespace yup
@@ -2020,9 +2442,15 @@ static const clap_plugin_factory_t plugin_factory = []
     factory.create_plugin = [] (const clap_plugin_factory* factory, const clap_host_t* host, const char* pluginId) -> const clap_plugin_t*
     {
         if (! clap_version_is_compatible (host->clap_version) || std::string_view (pluginId) != yup::pluginDescriptor.id)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "create_plugin rejected: versionCompatible=" << yup::String (clap_version_is_compatible (host->clap_version) ? "true" : "false") << ", pluginId=" << yup::String (pluginId));
             return nullptr;
+        }
 
         auto wrapper = new yup::AudioPluginProcessorCLAP (host);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "create_plugin: wrapper=" << yup::describePointer (wrapper) << ", host=" << yup::describePointer (host) << ", pluginId=" << yup::String (pluginId));
+
         return wrapper->getPlugin();
     };
 

@@ -75,6 +75,10 @@ public:
     void setResizable (bool shouldBeResizable) override;
 
     //==============================================================================
+    uint64 getSystemWindowId() const override;
+    void setForeignOwner (uint64 ownerWindowId, int ownerProcessId) override;
+
+    //==============================================================================
     void toFront() override;
 
     //==============================================================================
@@ -289,6 +293,8 @@ private:
     bool computeContextLost = false;
 
     void* parentWindow = nullptr;
+    std::unique_ptr<NativeParentAttachment> parentAttachment;
+    std::unique_ptr<ForeignOwnerTracker> foreignOwnerTracker;
     String windowTitle;
     uint32 windowFlags = 0;
 
@@ -375,6 +381,7 @@ private:
     int currentContentHeight = 0;
     std::atomic<uint64> windowPixelSize = 0; // width in the high 32 bits, height in the low 32 bits
     float windowUnitsPerPoint = 1.0f;
+    Rectangle<int> lastSafeAreaInsets; // left, top, right and bottom insets stored as x, y, width and height
     bool internalBoundsChange = false;
     bool firstDisplay = true;
 

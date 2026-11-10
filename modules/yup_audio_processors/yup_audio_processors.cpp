@@ -34,6 +34,8 @@
 #include "processors/yup_AudioParameter.cpp"
 #include "processors/yup_AudioParameterBuilder.cpp"
 #include "processors/yup_AudioProcessorBase.cpp"
+#include "processors/yup_NoteExpressionMidiConverter.cpp"
+#include "processors/yup_PluginHostType.cpp"
 #include "processors/yup_AudioProcessor.cpp"
 #include "processors/yup_StandalonePluginHost.cpp"
 #include "spectral/yup_SpectralProcessor.cpp"

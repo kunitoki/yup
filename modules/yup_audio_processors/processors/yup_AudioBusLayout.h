@@ -109,7 +109,97 @@ public:
         return AudioBus::Role::Main;
     }
 
+    /** Returns the channel count of the audio bus at the given audio-only index, or 0 when out of range. */
+    int getAudioBusNumChannels (int audioBusIndex, bool isInput) const noexcept
+    {
+        const auto* bus = findAudioBus (isInput ? inputBuses : outputBuses, audioBusIndex);
+        return bus != nullptr ? bus->getNumChannels() : 0;
+    }
+
+    /** Returns the speaker layout of the audio bus at the given audio-only index, or a disabled set when out of range. */
+    AudioChannelSet getAudioBusChannelSet (int audioBusIndex, bool isInput) const
+    {
+        const auto* bus = findAudioBus (isInput ? inputBuses : outputBuses, audioBusIndex);
+        return bus != nullptr ? bus->getChannelSet() : AudioChannelSet::disabled();
+    }
+
+    /** Returns the number of audio buses (MIDI buses excluded) in the given direction. */
+    int getNumAudioBuses (bool isInput) const noexcept
+    {
+        int count = 0;
+
+        for (const auto& bus : isInput ? inputBuses : outputBuses)
+            if (bus.getType() == AudioBus::Type::Audio)
+                ++count;
+
+        return count;
+    }
+
+    /** Returns a copy of this layout where the audio bus at the given audio-only index has
+        @p numChannels channels. Returns an unchanged copy when the index is out of range.
+    */
+    AudioBusLayout withAudioBusNumChannels (int audioBusIndex, bool isInput, int numChannels) const
+    {
+        auto copy = *this;
+        auto& buses = isInput ? copy.inputBuses : copy.outputBuses;
+
+        if (auto* bus = findAudioBus (buses, audioBusIndex))
+            *bus = bus->withNumChannels (numChannels);
+
+        return copy;
+    }
+
+    /** Returns a copy of this layout where the audio bus at the given audio-only index uses
+        @p channelSet. Returns an unchanged copy when the index is out of range.
+    */
+    AudioBusLayout withAudioBusChannelSet (int audioBusIndex, bool isInput, const AudioChannelSet& channelSet) const
+    {
+        auto copy = *this;
+        auto& buses = isInput ? copy.inputBuses : copy.outputBuses;
+
+        if (auto* bus = findAudioBus (buses, audioBusIndex))
+            *bus = bus->withChannelSet (channelSet);
+
+        return copy;
+    }
+
+    /** Returns true if both layouts have the same buses in the same order. */
+    bool operator== (const AudioBusLayout& other) const noexcept = default;
+
+    /** Returns true if both layouts have the same buses, types, roles and directions in the same
+        order, ignoring channel counts, speaker layouts and names. A layout negotiation can only change those.
+    */
+    bool hasSameBusStructure (const AudioBusLayout& other) const noexcept
+    {
+        const auto sameStructure = [] (const std::vector<AudioBus>& a, const std::vector<AudioBus>& b)
+        {
+            return std::equal (a.begin(), a.end(), b.begin(), b.end(), [] (const AudioBus& x, const AudioBus& y)
+            {
+                return x.getType() == y.getType() && x.getDirection() == y.getDirection() && x.getRole() == y.getRole();
+            });
+        };
+
+        return sameStructure (inputBuses, other.inputBuses) && sameStructure (outputBuses, other.outputBuses);
+    }
+
 private:
+    template <typename BusVector>
+    static auto findAudioBus (BusVector& buses, int audioBusIndex) noexcept -> decltype (buses.data())
+    {
+        int audioIdx = 0;
+
+        for (auto& bus : buses)
+        {
+            if (bus.getType() != AudioBus::Type::Audio)
+                continue;
+
+            if (audioIdx++ == audioBusIndex)
+                return &bus;
+        }
+
+        return nullptr;
+    }
+
     std::vector<AudioBus> inputBuses;
     std::vector<AudioBus> outputBuses;
 };

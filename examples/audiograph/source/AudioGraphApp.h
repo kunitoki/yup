@@ -45,14 +45,17 @@
 #include "nodes/NodeRegistry.h"
 #include "nodes/SubgraphNode.h"
 #include "ui/AudioGraphEditorPanel.h"
+#include "ui/NodeBrowser.h"
 #include "ui/PluginEditorWindow.h"
-#include "ui/SubgraphEditorWindow.h"
+#include "ui/SettingsPanel.h"
+#include "ui/SubgraphEditorPage.h"
 
 //==============================================================================
 
 class AudioGraphApp final
     : public yup::Component
     , public yup::AudioIODeviceCallback
+    , private yup::ChangeListener
 {
 public:
     AudioGraphApp();
@@ -76,6 +79,15 @@ public:
 private:
     //==============================================================================
     void setupToolbar();
+    void setupWorkspace();
+    void showSettings();
+    void closeSettings();
+
+    //==============================================================================
+    yup::File getSettingsFile() const;
+    std::unique_ptr<yup::XmlElement> loadSettings() const;
+    void saveSettings();
+    void changeListenerCallback (yup::ChangeBroadcaster* source) override;
 
     //==============================================================================
     void resetToEmptyGraph();
@@ -97,7 +109,8 @@ private:
         const yup::AudioGraphProcessor* ownerGraphRaw = nullptr;
         yup::AudioGraphNodeID nodeID;
         std::shared_ptr<yup::AudioGraphProcessor> ownerGraph;
-        std::unique_ptr<SubgraphEditorWindow> window;
+        yup::Identifier tabId;
+        SubgraphEditorPage* page = nullptr;
     };
 
     std::unique_ptr<AudioGraphEditorPanel> createMainPanel();
@@ -114,12 +127,18 @@ private:
     void closeSubgraphEditorForNode (std::shared_ptr<yup::AudioGraphProcessor> ownerGraph, yup::AudioGraphNodeID nodeID);
     void closeSubgraphEditorsForGraph (const yup::AudioGraphProcessor* graphToClose);
     void closeAllSubgraphEditors();
+    void closeSubgraphTab (const yup::Identifier& tabId);
+    void removeSubgraphEditors (std::function<bool (const SubgraphEditorRecord&)> shouldRemove);
+    AudioGraphEditorPanel& getActiveEditorPanel();
     SubgraphEditorRecord* findSubgraphEditorRecord (const yup::AudioGraphProcessor* ownerGraph, yup::AudioGraphNodeID nodeID);
 
     //==============================================================================
 
 #if YUP_DESKTOP
     void startPluginScan();
+    void setOutOfProcessScanning (bool shouldScanOutOfProcess);
+    void refreshPluginLists();
+    yup::ResultValue<std::unique_ptr<yup::AudioPluginInstance>> loadPlugin (const yup::AudioPluginDescription& desc);
     void addPluginNodeToPanel (AudioGraphEditorPanel& editor, const yup::AudioPluginDescription& desc, yup::Point<float> canvasPos);
     yup::AudioPluginHostContext makeHostContext() const;
 #endif
@@ -141,16 +160,18 @@ private:
     std::unique_ptr<PluginEditorWindow> pluginEditorWindow;
     const yup::AudioGraphProcessor* activePluginEditorGraph = nullptr;
     yup::AudioGraphNodeID activePluginEditorNodeID { yup::AudioGraphNodeID::invalid() };
-    std::vector<SubgraphEditorRecord> subgraphEditorWindows;
+    std::vector<SubgraphEditorRecord> subgraphEditors;
 
     yup::TextButton newButton;
     yup::TextButton openButton;
     yup::TextButton saveButton;
-    yup::TextButton scanButton;
     yup::TextButton settingsButton;
     yup::Label statusLabel;
 
-    std::unique_ptr<yup::AudioDeviceManagerWindow> deviceManagerWindow;
+    std::unique_ptr<NodeBrowser> browser;
+    yup::TabComponent workspace;
+    SettingsPanel* settingsPanel = nullptr;
+    int nextSubgraphTabNumber = 0;
 
     bool audioCallbackRegistered = false;
 
@@ -158,6 +179,7 @@ private:
     std::shared_ptr<std::atomic<bool>> scanLifetime { std::make_shared<std::atomic<bool>> (true) };
     std::atomic<bool> scanInProgress { false };
     std::unique_ptr<yup::AudioPluginScanner> scanner;
+    PluginSettingsPage* pluginSettingsPage = nullptr;
 #endif
 
     YUP_DECLARE_WEAK_REFERENCEABLE (AudioGraphApp)

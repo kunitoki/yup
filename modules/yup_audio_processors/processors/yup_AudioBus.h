@@ -80,6 +80,25 @@ public:
     {
     }
 
+    /**
+        Constructs an audio bus with an explicit speaker layout.
+
+        @param name            A user-friendly name for the bus.
+        @param direction       Input or output.
+        @param channelSet      The speaker layout, which also defines the channel count.
+        @param role            The role of the bus in the layout.
+        @param isDefaultActive Whether the bus is active by default.
+    */
+    AudioBus (StringRef name,
+              Direction direction,
+              const AudioChannelSet& channelSet,
+              Role role = Role::Main,
+              bool isDefaultActive = true)
+        : AudioBus (name, Type::Audio, direction, channelSet.size(), role, isDefaultActive)
+    {
+        layout = channelSet;
+    }
+
     /** Returns the name of the bus. */
     const String& getName() const noexcept { return name; }
 
@@ -91,6 +110,21 @@ public:
 
     /** Returns the number of channels on the bus. */
     int getNumChannels() const noexcept { return numChannels; }
+
+    /**
+        Returns the speaker layout of the bus.
+
+        When no explicit layout was given, or the channel count changed since, this
+        returns the canonical layout for the channel count (mono, stereo, LCR, quad,
+        5.0, 5.1, 7.0, 7.1, otherwise discrete channels).
+    */
+    AudioChannelSet getChannelSet() const
+    {
+        if (layout.size() == numChannels)
+            return layout;
+
+        return AudioChannelSet::canonicalChannelSet (numChannels);
+    }
 
     /** Returns the role of the bus within the layout. */
     Role getRole() const noexcept { return role; }
@@ -104,11 +138,45 @@ public:
     /** Returns true if the bus is stereo. */
     bool isStereo() const noexcept { return numChannels == 2; }
 
+    /** Returns a copy of this bus with a different channel count. */
+    AudioBus withNumChannels (int newNumChannels) const
+    {
+        auto copy = *this;
+        copy.numChannels = jmax (0, newNumChannels);
+
+        if (copy.layout.size() != copy.numChannels)
+            copy.layout = {};
+
+        return copy;
+    }
+
+    /** Returns a copy of this bus with a different speaker layout and matching channel count. */
+    AudioBus withChannelSet (const AudioChannelSet& newChannelSet) const
+    {
+        auto copy = *this;
+        copy.numChannels = newChannelSet.size();
+        copy.layout = newChannelSet;
+        return copy;
+    }
+
+    /** Compares every property of two buses, using the effective speaker layout. */
+    bool operator== (const AudioBus& other) const
+    {
+        return name == other.name
+            && type == other.type
+            && direction == other.direction
+            && numChannels == other.numChannels
+            && role == other.role
+            && defaultActive == other.defaultActive
+            && getChannelSet() == other.getChannelSet();
+    }
+
 private:
     String name;
     Type type = Type::Audio;
     Direction direction = Direction::Output;
     int numChannels = 0;
+    AudioChannelSet layout;
     Role role = Role::Main;
     bool defaultActive = true;
 };

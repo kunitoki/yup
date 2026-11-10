@@ -27,7 +27,7 @@ namespace yup
 
     Construct one AudioPluginScanner, register format backends via addFormat(),
     then call scan(), scanDefaults(), scanAsync(), or scanDefaultsAsync().
-    Results are not cached.
+    Results are cached only when a database is set with setDatabase().
 
     Thread safety: formats may be scanned concurrently by the scanner. Do not
     modify the registered formats while a scan is running.
@@ -45,6 +45,24 @@ public:
 
         /** Absolute paths of files that could not be parsed. */
         std::vector<String> failedPaths;
+
+        /** Absolute paths of files skipped because the database blacklisted them. */
+        std::vector<String> blacklistedPaths;
+    };
+
+    //==============================================================================
+
+    /** Configures scanning plugins in separate worker processes. */
+    struct OutOfProcessOptions
+    {
+        /** Executable creating an AudioPluginScannerWorker at startup, usually the host itself. */
+        File executable;
+
+        /** Must match the identifier passed to AudioPluginScannerWorker::initialiseFromCommandLine(). */
+        String commandLineUniqueID = AudioPluginScannerWorker::defaultCommandLineUniqueID;
+
+        /** Maximum time allowed to open the plugins of one file, after which the worker is killed. */
+        int timeoutMs = 60000;
     };
 
     //==============================================================================
@@ -75,6 +93,45 @@ public:
 
     /** Returns the format for the given type, or nullptr if not registered. */
     AudioPluginFormat* getFormatForType (AudioPluginFormatType type) const noexcept;
+
+    //==============================================================================
+
+    /**
+        Sets the database caching scan results, or nullptr to scan everything every time.
+
+        With a database, scans only open files that are new, changed on disk or scanned
+        with an older scan version; unchanged files return their cached descriptions or
+        failures, blacklisted files are skipped and files no longer on disk are pruned.
+        Each scan is recorded with AudioPluginDatabase::beginScan(), so a plugin crashing
+        the process is blacklisted when the database is opened again.
+
+        Registry based formats (e.g. AUv2) are always scanned and never cached.
+    */
+    void setDatabase (std::shared_ptr<AudioPluginDatabase> newDatabase);
+
+    /** Returns the database set with setDatabase(), if any. */
+    std::shared_ptr<AudioPluginDatabase> getDatabase() const noexcept;
+
+    //==============================================================================
+
+    /**
+        Opens plugins in worker processes instead of reading their metadata in-process.
+
+        Each file is fully opened with AudioPluginFormat::scanFileFully() by a worker
+        process launched from @p options, so plugins crashing or hanging while being
+        opened only take down the worker. Crashed files and files exceeding the timeout
+        are reported in ScanResult::failedPaths and blacklisted in the database, if any.
+        When the worker cannot be launched, files are scanned in-process with
+        AudioPluginFormat::scanFile().
+
+        Pass std::nullopt to scan in-process again (the default).
+
+        @see AudioPluginScannerWorker
+    */
+    void setOutOfProcessScanning (std::optional<OutOfProcessOptions> options);
+
+    /** Returns the options set with setOutOfProcessScanning(), if any. */
+    std::optional<OutOfProcessOptions> getOutOfProcessScanning() const;
 
     //==============================================================================
 
@@ -116,6 +173,9 @@ public:
 
 private:
     std::vector<std::unique_ptr<AudioPluginFormat>> formats;
+    std::shared_ptr<AudioPluginDatabase> database;
+    std::optional<OutOfProcessOptions> outOfProcessOptions;
+    CriticalSection inProcessScanLock;
     ThreadPool backgroundScanPool;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginScanner)

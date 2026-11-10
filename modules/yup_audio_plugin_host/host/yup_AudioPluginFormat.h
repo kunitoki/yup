@@ -81,6 +81,12 @@ public:
     /**
         Scans one file or bundle and returns all plugin descriptions it contains.
 
+        This is the safe, in-process scan: implementations must never create
+        plugin instances. They read static metadata only (VST3 moduleinfo.json
+        or factory class info, CLAP descriptors, the AU registry, LV2 manifests),
+        so channel and MIDI port counts may be estimates. Use scanFileFully() from
+        an out-of-process scanner to get exact values.
+
         Returns a failure result if the file is not a supported plugin for this
         format. The scanner calls this only for files whose extension matches
         expectations (e.g. ".vst3", ".clap").
@@ -89,6 +95,23 @@ public:
         @return       All descriptions found, or a failure message.
     */
     virtual ResultValue<std::vector<AudioPluginDescription>> scanFile (const File& file) = 0;
+
+    /**
+        Scans one file or bundle and really opens every plugin it contains.
+
+        Calls scanFile(), then loads each description with loadPlugin() and
+        replaces the estimated channel and MIDI port counts with the ones the
+        live instance reports. Descriptions that fail to load are dropped.
+
+        Plugins run their own code while being opened and may crash or hang, so
+        only call this from a sandboxed scanner process, on its message thread.
+
+        @param file      Absolute path to a file or bundle.
+        @param context   Host context used to instantiate the plugins.
+        @return          The descriptions of all plugins that loaded, or a failure message.
+    */
+    ResultValue<std::vector<AudioPluginDescription>> scanFileFully (const File& file,
+                                                                    const AudioPluginHostContext& context = {});
 
     //==============================================================================
 

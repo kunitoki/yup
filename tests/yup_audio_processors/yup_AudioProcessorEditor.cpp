@@ -87,12 +87,27 @@ TEST_F (AudioProcessorEditorTests, AspectRatioDoesNotDependOnCurrentSize)
     EXPECT_EQ (constrained, editor.getConstrainedSize ({ 840, 400 }));
 }
 
+TEST_F (AudioProcessorEditorTests, FitRequestShrinksExceedingDimension)
+{
+    editor.preserveAspectRatio = true;
+
+    EXPECT_EQ (Size<int> (420, 210), editor.getConstrainedSizeToFit ({ 800, 210 }));
+    EXPECT_EQ (Size<int> (410, 205), editor.getConstrainedSizeToFit ({ 410, 300 }));
+}
+
 TEST_F (AudioProcessorEditorTests, ShowsResizableCornerOnlyWhenResizable)
 {
     EXPECT_TRUE (editor.shouldShowResizableCorner());
 
     editor.resizable = false;
     EXPECT_FALSE (editor.shouldShowResizableCorner());
+}
+
+TEST_F (AudioProcessorEditorTests, DefaultBehaviorsUsePreferredSizeAndNoContinuousRendering)
+{
+    EXPECT_EQ (Size<int> (400, 200), editor.getInitialSize());
+    EXPECT_FALSE (editor.AudioProcessorEditor::shouldPreserveAspectRatio());
+    EXPECT_FALSE (editor.shouldRenderContinuous());
 }
 
 #endif

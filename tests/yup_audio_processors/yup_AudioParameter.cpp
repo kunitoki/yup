@@ -622,7 +622,35 @@ TEST (AudioParameterTests, UnitIsRoundTrippedThroughBuilder)
     EXPECT_EQ (0.0f, parameter->getDefaultValue());
 }
 
-TEST (AudioProcessorTests, DuplicateParameterIDsAreIgnored)
+TEST (AudioParameterTests, MeterCategoryImpliesReadOnlyMeter)
+{
+    auto meter = AudioParameterBuilder()
+                     .withID ("gr")
+                     .withName ("Gain Reduction")
+                     .withCategory (AudioParameter::Category::CompressorLimiterGainReductionMeter)
+                     .build();
+
+    EXPECT_EQ (AudioParameter::Category::CompressorLimiterGainReductionMeter, meter->getCategory());
+    EXPECT_TRUE (meter->isMeter());
+    EXPECT_TRUE (meter->isReadOnly());
+    EXPECT_FALSE (meter->isAutomatable());
+}
+
+TEST (AudioParameterTests, GainCategoryIsNotAMeter)
+{
+    auto trim = AudioParameterBuilder()
+                    .withID ("in")
+                    .withName ("Input Meter Trim")
+                    .withCategory (AudioParameter::Category::InputGain)
+                    .build();
+
+    EXPECT_EQ (AudioParameter::Category::InputGain, trim->getCategory());
+    EXPECT_FALSE (trim->isMeter());
+    EXPECT_FALSE (trim->isReadOnly());
+    EXPECT_TRUE (trim->isAutomatable());
+}
+
+TEST (AudioProcessorBaseTests, DuplicateParameterIDsAreIgnored)
 {
     TestAudioProcessor processor;
     auto first = makeParameter ("gain", "Gain");
@@ -645,7 +673,7 @@ TEST (AudioProcessorTests, DuplicateParameterIDsAreIgnored)
     EXPECT_EQ (-1, processor.getParameterIndexByHostID (11u));
 }
 
-TEST (AudioProcessorTests, CountsOnlyAudioBuses)
+TEST (AudioProcessorBaseTests, CountsOnlyAudioBuses)
 {
     TestAudioProcessor processor (AudioBusLayout (
         { AudioBus ("Audio In", AudioBus::Type::Audio, AudioBus::Direction::Input, 2),
@@ -657,7 +685,7 @@ TEST (AudioProcessorTests, CountsOnlyAudioBuses)
     EXPECT_EQ (1, processor.getNumAudioOutputs());
 }
 
-TEST (AudioProcessorTests, LatencyChangeNotifiesOnlyWhenValueChanges)
+TEST (AudioProcessorBaseTests, LatencyChangeNotifiesOnlyWhenValueChanges)
 {
     TestAudioProcessor processor;
     ProcessorListener listener;
@@ -681,7 +709,7 @@ TEST (AudioProcessorTests, LatencyChangeNotifiesOnlyWhenValueChanges)
     EXPECT_EQ (1, listener.changedCount);
 }
 
-TEST (AudioProcessorTests, ChangeDetailsSetRequestedFlags)
+TEST (AudioProcessorBaseTests, ChangeDetailsSetRequestedFlags)
 {
     const auto details = AudioProcessor::ChangeDetails()
                              .withLatencyChanged (true)
@@ -709,7 +737,7 @@ TEST (AudioProcessorTests, ChangeDetailsSetRequestedFlags)
     EXPECT_FALSE (cleared.nonParameterStateChanged);
 }
 
-TEST (AudioProcessorTests, PlaybackConfigurationReleasesBeforePreparing)
+TEST (AudioProcessorBaseTests, PlaybackConfigurationReleasesBeforePreparing)
 {
     TestAudioProcessor processor;
 
@@ -721,4 +749,28 @@ TEST (AudioProcessorTests, PlaybackConfigurationReleasesBeforePreparing)
     EXPECT_EQ (256, processor.getSamplesPerBlock());
     EXPECT_FLOAT_EQ (48000.0f, processor.preparedSampleRate);
     EXPECT_EQ (256, processor.preparedSamplesPerBlock);
+}
+
+TEST (AudioParameterTests, CustomUnitShortNameUsesUnitName)
+{
+    const String unitName ("LUFS");
+
+    EXPECT_STREQ ("LUFS", AudioParameter::getParameterUnitShortName (AudioParameter::ParameterUnit::Custom, unitName));
+    EXPECT_STREQ ("", AudioParameter::getParameterUnitShortName (AudioParameter::ParameterUnit::Custom));
+}
+
+TEST (AudioParameterTests, UnknownUnitShortNameIsEmpty)
+{
+    EXPECT_STREQ ("", AudioParameter::getParameterUnitShortName (static_cast<AudioParameter::ParameterUnit> (200)));
+}
+
+TEST (AudioParameterTests, WithModulePathIsStored)
+{
+    auto parameter = AudioParameterBuilder()
+                         .withID ("cutoff")
+                         .withName ("Cutoff")
+                         .withModulePath ("Filter/Low Pass")
+                         .build();
+
+    EXPECT_EQ (String ("Filter/Low Pass"), parameter->getModulePath());
 }

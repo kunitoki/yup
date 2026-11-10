@@ -84,7 +84,14 @@ public:
     bool prepared = false;
     int processCallCount = 0;
     int doubleProcessCallCount = 0;
+    int nonRealtimeChangeCount = 0;
+    int bypassChangeCount = 0;
     MemoryBlock lastLoadedState;
+
+protected:
+    void nonRealtimeStateChanged() override { ++nonRealtimeChangeCount; }
+
+    void bypassStateChanged() override { ++bypassChangeCount; }
 
 private:
     bool supportsDoublePrecision = false;
@@ -318,6 +325,26 @@ TEST_F (AudioPluginInstanceTests, RenderModeAndBypassCanBeSetByHost)
 
     EXPECT_TRUE (instance.isNonRealtime());
     EXPECT_TRUE (instance.isBypassed());
+}
+
+TEST_F (AudioPluginInstanceTests, FormatTypeComesFromTheDescription)
+{
+    EXPECT_EQ (AudioPluginFormatType::vst3, instance.getFormatType());
+}
+
+TEST_F (AudioPluginInstanceTests, StateChangeCallbacksFireOnlyOnActualChanges)
+{
+    instance.setNonRealtime (false);
+    instance.setBypassed (false);
+    EXPECT_EQ (0, instance.nonRealtimeChangeCount);
+    EXPECT_EQ (0, instance.bypassChangeCount);
+
+    instance.setNonRealtime (true);
+    instance.setNonRealtime (true);
+    instance.setBypassed (true);
+    instance.setBypassed (true);
+    EXPECT_EQ (1, instance.nonRealtimeChangeCount);
+    EXPECT_EQ (1, instance.bypassChangeCount);
 }
 
 TEST (AudioPluginInstanceBusLayoutTests, AudioInputAndOutputCountsIgnoreMidiBuses)

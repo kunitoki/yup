@@ -339,7 +339,7 @@ function (_yup_audio_plugin_create_lv2)
         XCODE_GENERATE_SCHEME ON)
 
     _yup_audio_plugin_apply_binary_optimizations (${target_name}_lv2_plugin
-        EXPORTED_SYMBOLS lv2_descriptor)
+        EXPORTED_SYMBOLS lv2_descriptor lv2ui_descriptor)
 
     yup_codesign_target (${target_name}_lv2_plugin "$<TARGET_FILE:${target_name}_lv2_plugin>")
 

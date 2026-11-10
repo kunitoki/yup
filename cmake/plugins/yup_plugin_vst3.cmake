@@ -84,6 +84,11 @@ function (_yup_fetch_vst3sdk)
         if (vst3sdk_source_dir AND EXISTS "${vst3sdk_eventlist_source}")
             target_sources (yup_audio_plugin_host_vst3sdk INTERFACE "${vst3sdk_eventlist_source}")
         endif()
+
+        set (vst3sdk_moduleinfoparser_source "${vst3sdk_source_dir}/public.sdk/source/vst/moduleinfo/moduleinfoparser.cpp")
+        if (vst3sdk_source_dir AND EXISTS "${vst3sdk_moduleinfoparser_source}")
+            target_sources (yup_audio_plugin_host_vst3sdk INTERFACE "${vst3sdk_moduleinfoparser_source}")
+        endif()
     endif()
 endfunction()
 

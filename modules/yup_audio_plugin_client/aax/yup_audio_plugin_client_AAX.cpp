@@ -42,6 +42,7 @@ static_assert (AAX_SDK_CURRENT_REVISION >= AAX_SDK_2p6p1_REVISION,
 #include <AAX_IController.h>
 #include <AAX_IViewContainer.h>
 #include <AAX_ITransport.h>
+#include <AAX_TransportTypes.h>
 #include <AAX_IMIDINode.h>
 #include <AAX_CBinaryTaperDelegate.h>
 #include <AAX_CBinaryDisplayDelegate.h>
@@ -58,6 +59,7 @@ static_assert (AAX_SDK_CURRENT_REVISION >= AAX_SDK_2p6p1_REVISION,
 #include <atomic>
 #include <cmath>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -83,13 +85,6 @@ namespace yup
 {
 
 //==============================================================================
-#if YUP_ENABLE_PLUGIN_CLIENT_AAX_LOGGING
-#define YUP_AAX_LOG(x) Logger::writeToLog (x)
-#else
-#define YUP_AAX_LOG(x)
-#endif
-
-//==============================================================================
 // Forward declarations
 //==============================================================================
 
@@ -113,6 +108,7 @@ struct YupAlgorithmContext
     void* pluginInfo = nullptr;
     int32_t* isPrepared = nullptr;
     float* const* meterTapBuffers = nullptr;
+    int32_t* sideChainBuffers = nullptr;
 };
 
 enum YupAlgorithmField
@@ -126,6 +122,7 @@ enum YupAlgorithmField
     fieldPluginInfo = AAX_FIELD_INDEX (YupAlgorithmContext, pluginInfo),
     fieldPreparedFlag = AAX_FIELD_INDEX (YupAlgorithmContext, isPrepared),
     fieldMeterTaps = AAX_FIELD_INDEX (YupAlgorithmContext, meterTapBuffers),
+    fieldSideChain = AAX_FIELD_INDEX (YupAlgorithmContext, sideChainBuffers),
 };
 
 //==============================================================================
@@ -159,8 +156,53 @@ static int32_t getAaxParamHash (const char* paramID) noexcept
 }
 
 //==============================================================================
-// Channel count to AAX stem format conversion
+// AAX stem formats
 //==============================================================================
+
+struct AAXStemLayout
+{
+    AAX_EStemFormat format;
+    Array<AudioChannelSet::ChannelType> channels; // In AAX stream order
+};
+
+static const std::vector<AAXStemLayout>& getAAXStemLayouts()
+{
+    using C = AudioChannelSet;
+
+    // Ordered so that the first entry with a given channel count is the
+    // canonical layout used for discrete channel sets.
+    static const std::vector<AAXStemLayout> layouts {
+        { AAX_eStemFormat_Mono, { C::centre } },
+        { AAX_eStemFormat_Stereo, { C::left, C::right } },
+        { AAX_eStemFormat_LCR, { C::left, C::centre, C::right } },
+        { AAX_eStemFormat_Quad, { C::left, C::right, C::leftSurround, C::rightSurround } },
+        { AAX_eStemFormat_LCRS, { C::left, C::centre, C::right, C::surround } },
+        { AAX_eStemFormat_5_0, { C::left, C::centre, C::right, C::leftSurround, C::rightSurround } },
+        { AAX_eStemFormat_5_1, { C::left, C::centre, C::right, C::leftSurround, C::rightSurround, C::LFE } },
+        { AAX_eStemFormat_6_0, { C::left, C::centre, C::right, C::leftSurround, C::centreSurround, C::rightSurround } },
+        { AAX_eStemFormat_7_0_DTS, { C::left, C::centre, C::right, C::leftSurroundSide, C::rightSurroundSide, C::leftSurroundRear, C::rightSurroundRear } },
+        { AAX_eStemFormat_6_1, { C::left, C::centre, C::right, C::leftSurround, C::centreSurround, C::rightSurround, C::LFE } },
+        { AAX_eStemFormat_7_0_SDDS, { C::left, C::leftCentre, C::centre, C::rightCentre, C::right, C::leftSurround, C::rightSurround } },
+        { AAX_eStemFormat_5_0_2, { C::left, C::centre, C::right, C::leftSurround, C::rightSurround, C::topSideLeft, C::topSideRight } },
+        { AAX_eStemFormat_7_1_DTS, { C::left, C::centre, C::right, C::leftSurroundSide, C::rightSurroundSide, C::leftSurroundRear, C::rightSurroundRear, C::LFE } },
+        { AAX_eStemFormat_7_1_SDDS, { C::left, C::leftCentre, C::centre, C::rightCentre, C::right, C::leftSurround, C::rightSurround, C::LFE } },
+        { AAX_eStemFormat_5_1_2, { C::left, C::centre, C::right, C::leftSurround, C::rightSurround, C::LFE, C::topSideLeft, C::topSideRight } },
+        { AAX_eStemFormat_7_0_2, { C::left, C::centre, C::right, C::leftSurroundSide, C::rightSurroundSide, C::leftSurroundRear, C::rightSurroundRear, C::topSideLeft, C::topSideRight } },
+        { AAX_eStemFormat_5_0_4, { C::left, C::centre, C::right, C::leftSurround, C::rightSurround, C::topFrontLeft, C::topFrontRight, C::topRearLeft, C::topRearRight } },
+        { AAX_eStemFormat_7_1_2, { C::left, C::centre, C::right, C::leftSurroundSide, C::rightSurroundSide, C::leftSurroundRear, C::rightSurroundRear, C::LFE, C::topSideLeft, C::topSideRight } },
+        { AAX_eStemFormat_5_1_4, { C::left, C::centre, C::right, C::leftSurround, C::rightSurround, C::LFE, C::topFrontLeft, C::topFrontRight, C::topRearLeft, C::topRearRight } },
+        { AAX_eStemFormat_7_0_4, { C::left, C::centre, C::right, C::leftSurroundSide, C::rightSurroundSide, C::leftSurroundRear, C::rightSurroundRear, C::topFrontLeft, C::topFrontRight, C::topRearLeft, C::topRearRight } },
+        { AAX_eStemFormat_7_1_4, { C::left, C::centre, C::right, C::leftSurroundSide, C::rightSurroundSide, C::leftSurroundRear, C::rightSurroundRear, C::LFE, C::topFrontLeft, C::topFrontRight, C::topRearLeft, C::topRearRight } },
+        { AAX_eStemFormat_9_0_4, { C::left, C::centre, C::right, C::wideLeft, C::wideRight, C::leftSurroundSide, C::rightSurroundSide, C::leftSurroundRear, C::rightSurroundRear, C::topFrontLeft, C::topFrontRight, C::topRearLeft, C::topRearRight } },
+        { AAX_eStemFormat_7_0_6, { C::left, C::centre, C::right, C::leftSurroundSide, C::rightSurroundSide, C::leftSurroundRear, C::rightSurroundRear, C::topFrontLeft, C::topFrontRight, C::topSideLeft, C::topSideRight, C::topRearLeft, C::topRearRight } },
+        { AAX_eStemFormat_9_1_4, { C::left, C::centre, C::right, C::wideLeft, C::wideRight, C::leftSurroundSide, C::rightSurroundSide, C::leftSurroundRear, C::rightSurroundRear, C::LFE, C::topFrontLeft, C::topFrontRight, C::topRearLeft, C::topRearRight } },
+        { AAX_eStemFormat_7_1_6, { C::left, C::centre, C::right, C::leftSurroundSide, C::rightSurroundSide, C::leftSurroundRear, C::rightSurroundRear, C::LFE, C::topFrontLeft, C::topFrontRight, C::topSideLeft, C::topSideRight, C::topRearLeft, C::topRearRight } },
+        { AAX_eStemFormat_9_0_6, { C::left, C::centre, C::right, C::wideLeft, C::wideRight, C::leftSurroundSide, C::rightSurroundSide, C::leftSurroundRear, C::rightSurroundRear, C::topFrontLeft, C::topFrontRight, C::topSideLeft, C::topSideRight, C::topRearLeft, C::topRearRight } },
+        { AAX_eStemFormat_9_1_6, { C::left, C::centre, C::right, C::wideLeft, C::wideRight, C::leftSurroundSide, C::rightSurroundSide, C::leftSurroundRear, C::rightSurroundRear, C::LFE, C::topFrontLeft, C::topFrontRight, C::topSideLeft, C::topSideRight, C::topRearLeft, C::topRearRight } },
+    };
+
+    return layouts;
+}
 
 static AAX_EStemFormat stemFormatForAmbisonicOrder (int order)
 {
@@ -185,82 +227,241 @@ static AAX_EStemFormat stemFormatForAmbisonicOrder (int order)
     }
 }
 
-// YUP buses carry a plain channel count, so the stem format is chosen by count
-// and channels are passed through to the processor in AAX stream order.
-static AAX_EStemFormat stemFormatForChannelCount (int numChannels)
+// Picks the stem with exactly the speakers of the set. Discrete sets fall back
+// to the first stem with the same channel count and are passed in stream order.
+static AAX_EStemFormat stemFormatForChannelSet (const AudioChannelSet& set)
 {
-    switch (numChannels)
-    {
-        case 0:
-            return AAX_eStemFormat_None;
-        case 1:
-            return AAX_eStemFormat_Mono;
-        case 2:
-            return AAX_eStemFormat_Stereo;
-        case 3:
-            return AAX_eStemFormat_LCR;
-        case 4:
-            return AAX_eStemFormat_Quad;
-        case 5:
-            return AAX_eStemFormat_5_0;
-        case 6:
-            return AAX_eStemFormat_5_1;
-        case 7:
-            return AAX_eStemFormat_7_0_DTS;
-        case 8:
-            return AAX_eStemFormat_7_1_DTS;
-        case 9:
-            return AAX_eStemFormat_7_0_2;
-        case 10:
-            return AAX_eStemFormat_7_1_2;
-        case 11:
-            return AAX_eStemFormat_7_0_4;
-        case 12:
-            return AAX_eStemFormat_7_1_4;
-        case 13:
-            return AAX_eStemFormat_9_0_4;
-        case 14:
-            return AAX_eStemFormat_9_1_4;
-        case 15:
-            return AAX_eStemFormat_9_0_6;
-        case 16:
-            return AAX_eStemFormat_9_1_6;
-        default:
-            break;
-    }
+    if (set.isDisabled())
+        return AAX_eStemFormat_None;
 
-    const auto maybeOrder = AudioChannelSet::getAmbisonicOrderForNumChannels (numChannels);
-    if (maybeOrder != -1)
-        return stemFormatForAmbisonicOrder (maybeOrder);
+    if (const auto order = set.getAmbisonicOrder(); order >= 0)
+        return stemFormatForAmbisonicOrder (order);
+
+    const auto& layouts = getAAXStemLayouts();
+
+    for (const auto& layout : layouts)
+        if (AudioChannelSet::channelSetWithChannels (layout.channels) == set)
+            return layout.format;
+
+    for (const auto& layout : layouts)
+        if (layout.channels.size() == set.size())
+            return layout.format;
+
+    if (const auto order = AudioChannelSet::getAmbisonicOrderForNumChannels (set.size()); order != -1)
+        return stemFormatForAmbisonicOrder (order);
 
     return AAX_eStemFormat_INT32_MAX;
 }
 
+// Returns, for each processor channel, the AAX stream channel it maps to.
+// Formats without a speaker mapping (ambisonics, discrete sets) map one to one.
+static std::vector<int> getStreamChannelOrder (AAX_EStemFormat format, const AudioChannelSet& set)
+{
+    std::vector<int> order (static_cast<size_t> (set.size()));
+    std::iota (order.begin(), order.end(), 0);
+
+    const auto& layouts = getAAXStemLayouts();
+    const auto found = std::find_if (layouts.begin(), layouts.end(), [format] (const auto& l)
+    {
+        return l.format == format;
+    });
+
+    if (found == layouts.end() || found->channels.size() != set.size())
+        return order;
+
+    std::vector<int> mapped (order.size(), -1);
+
+    for (int stream = 0; stream < set.size(); ++stream)
+    {
+        const auto index = set.getChannelIndexForType (found->channels.getUnchecked (stream));
+        if (index < 0 || mapped[static_cast<size_t> (index)] >= 0)
+            return order;
+
+        mapped[static_cast<size_t> (index)] = stream;
+    }
+
+    return mapped;
+}
+
+// The first main audio bus carries the AAX stem, returns a disabled set if missing.
+static AudioChannelSet getMainAudioChannelSet (Span<const AudioBus> buses)
+{
+    for (const auto& bus : buses)
+        if (bus.getType() == AudioBus::Type::Audio && bus.getRole() == AudioBus::Role::Main)
+            return bus.getChannelSet();
+
+    return AudioChannelSet::disabled();
+}
+
 //==============================================================================
-// Meter type detection (name-based since YUP doesn't expose categories)
+// Meter type mapping
 //==============================================================================
 
 static AAX_EMeterType getMeterTypeFromParam (const AudioParameter& param)
 {
-    const auto name = param.getName();
-
-    if (name.containsIgnoreCase ("input"))
-        return AAX_eMeterType_Input;
-
-    if (name.containsIgnoreCase ("output"))
-        return AAX_eMeterType_Output;
-
-    if (name.containsIgnoreCase ("gr") || name.containsIgnoreCase ("gain reduction"))
-        return AAX_eMeterType_CLGain;
-
-    return AAX_eMeterType_Other;
+    switch (param.getCategory())
+    {
+        case AudioParameter::Category::InputMeter:
+            return AAX_eMeterType_Input;
+        case AudioParameter::Category::OutputMeter:
+            return AAX_eMeterType_Output;
+        case AudioParameter::Category::CompressorLimiterGainReductionMeter:
+            return AAX_eMeterType_CLGain;
+        case AudioParameter::Category::ExpanderGateGainReductionMeter:
+            return AAX_eMeterType_EGGain;
+        case AudioParameter::Category::AnalysisMeter:
+            return AAX_eMeterType_Analysis;
+        default:
+            return AAX_eMeterType_Other;
+    }
 }
 
-static bool isMeterParameter (const AudioParameter& param)
+//==============================================================================
+// Transport play head
+//==============================================================================
+
+class YupAAXPlayHead final : public AudioPlayHead
 {
-    const auto name = param.getName();
-    return name.containsIgnoreCase ("meter");
-}
+public:
+    void prepare (const AAX_ITransport* newTransport, double newSampleRate) noexcept
+    {
+        transport = newTransport;
+        sampleRate = newSampleRate;
+    }
+
+    void setRecording (bool shouldBeRecording) noexcept { recording.store (shouldBeRecording); }
+
+    std::optional<PositionInfo> getPosition() const override
+    {
+        if (transport == nullptr)
+            return {};
+
+        PositionInfo info;
+
+        if (double bpm = 0.0; transport->GetCurrentTempo (&bpm) == AAX_SUCCESS)
+            info.setBpm (bpm);
+
+        std::optional<TimeSignature> signature;
+        if (int32_t num = 4, den = 4; transport->GetCurrentMeter (&num, &den) == AAX_SUCCESS)
+            signature = TimeSignature { static_cast<int> (num), static_cast<int> (den) };
+
+        info.setTimeSignature (signature);
+
+        bool isPlaying = false;
+        info.setIsPlaying (transport->IsTransportPlaying (&isPlaying) == AAX_SUCCESS && isPlaying);
+        info.setIsRecording (recording.load());
+
+        std::optional<int64> timeInSamples;
+        if (int64_t samples = 0; (! info.getIsPlaying() && transport->GetTimelineSelectionStartPosition (&samples) == AAX_SUCCESS)
+                                 || transport->GetCurrentNativeSampleLocation (&samples) == AAX_SUCCESS)
+            timeInSamples = static_cast<int64> (samples);
+
+        info.setTimeInSamples (timeInSamples);
+
+        if (timeInSamples.has_value() && sampleRate > 0.0)
+            info.setTimeInSeconds (static_cast<double> (*timeInSamples) / sampleRate);
+
+        std::optional<int64> ticks;
+        if (int64_t t = 0; (info.getIsPlaying() && transport->GetCustomTickPosition (&t, timeInSamples.value_or (0)) == AAX_SUCCESS)
+                           || transport->GetCurrentTickPosition (&t) == AAX_SUCCESS)
+            ticks = static_cast<int64> (t);
+
+        if (ticks.has_value())
+            info.setPpqPosition (static_cast<double> (*ticks) / ticksPerQuarter);
+
+        bool isLooping = false;
+        int64_t loopStart = 0, loopEnd = 0;
+        if (transport->GetCurrentLoopPosition (&isLooping, &loopStart, &loopEnd) == AAX_SUCCESS)
+        {
+            info.setIsLooping (isLooping);
+            info.setLoopPoints (LoopPoints { static_cast<double> (loopStart) / ticksPerQuarter,
+                                             static_cast<double> (loopEnd) / ticksPerQuarter });
+        }
+
+        const auto frameRate = getFrameRate();
+        if (frameRate.has_value())
+        {
+            info.setFrameRate (frameRate->first);
+
+            const auto effectiveRate = frameRate->first.getEffectiveRate();
+            const auto offset = static_cast<double> (frameRate->second);
+            info.setEditOriginTime (effectiveRate != 0.0 ? offset / effectiveRate : offset);
+        }
+
+        int32_t bars = 0, beats = 0;
+        int64_t displayTicks = 0;
+        if (timeInSamples.has_value()
+            && transport->GetBarBeatPosition (&bars, &beats, &displayTicks, *timeInSamples) == AAX_SUCCESS)
+        {
+            info.setBarCount (bars);
+
+            if (signature.has_value() && ticks.has_value() && signature->denominator > 0)
+            {
+                const auto ticksSinceBar = static_cast<int64> (((beats - 1) * 4 * static_cast<int64> (ticksPerQuarter)) / signature->denominator) + displayTicks;
+
+                if (ticksSinceBar <= *ticks)
+                    info.setPpqPositionOfLastBarStart (static_cast<double> (*ticks - ticksSinceBar) / ticksPerQuarter);
+            }
+        }
+
+        return info;
+    }
+
+private:
+    std::optional<std::pair<FrameRate, int64>> getFrameRate() const
+    {
+        AAX_EFrameRate rate {};
+        int64_t offset = 0;
+
+        if (transport->GetHDTimeCodeInfo (&rate, &offset) != AAX_SUCCESS)
+        {
+            int32_t offset32 = 0;
+            if (transport->GetTimeCodeInfo (&rate, &offset32) != AAX_SUCCESS)
+                return {};
+
+            offset = offset32;
+        }
+
+        // Raw values, because not all AAX SDK versions declare every enumerator
+        const auto base = FrameRate();
+        std::optional<FrameRate> result;
+
+        switch (static_cast<int> (rate))
+        {
+            case 1: result = base.withBaseRate (24); break;
+            case 7: result = base.withBaseRate (24).withPullDown(); break;
+            case 2: result = base.withBaseRate (25); break;
+            case 5: result = base.withBaseRate (30); break;
+            case 6: result = base.withBaseRate (30).withDrop(); break;
+            case 3: result = base.withBaseRate (30).withPullDown(); break;
+            case 4: result = base.withBaseRate (30).withPullDown().withDrop(); break;
+            case 9: result = base.withBaseRate (48); break;
+            case 8: result = base.withBaseRate (48).withPullDown(); break;
+            case 10: result = base.withBaseRate (50); break;
+            case 13: result = base.withBaseRate (60); break;
+            case 14: result = base.withBaseRate (60).withDrop(); break;
+            case 11: result = base.withBaseRate (60).withPullDown(); break;
+            case 12: result = base.withBaseRate (60).withPullDown().withDrop(); break;
+            case 15: result = base.withBaseRate (100); break;
+            case 18: result = base.withBaseRate (120); break;
+            case 19: result = base.withBaseRate (120).withDrop(); break;
+            case 16: result = base.withBaseRate (120).withPullDown(); break;
+            case 17: result = base.withBaseRate (120).withPullDown().withDrop(); break;
+            default: break;
+        }
+
+        if (! result.has_value())
+            return {};
+
+        return std::make_pair (*result, static_cast<int64> (offset));
+    }
+
+    static constexpr double ticksPerQuarter = 960000.0;
+
+    const AAX_ITransport* transport = nullptr;
+    double sampleRate = 44100.0;
+    std::atomic<bool> recording { false };
+};
 
 //==============================================================================
 // YupAAX_Processor
@@ -279,14 +480,27 @@ public:
     YupAAX_Processor()
     {
         processor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::aax, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
+
+        if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "createPluginProcessorForWrapper returned null");
+            return;
+        }
+
         processor->addListener (this);
+        bypass.attach (*processor);
 
         AAX_CEffectParameters::GetNumberOfChunks (&yupChunkIndex);
-        YUP_AAX_LOG ("YupAAX_Processor: created");
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "created effect parameters: wrapper=" << describePointer (this) << ", processor=" << describePointer (processor.get()) << ", chunkIndex=" << String (yupChunkIndex));
     }
 
     ~YupAAX_Processor() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "destroying effect parameters: wrapper=" << describePointer (this) << ", processor=" << describePointer (processor.get()));
+
+        if (processor == nullptr)
+            return;
+
         processor->removeListener (this);
         endActiveParameterGestures (processor.get());
     }
@@ -297,6 +511,8 @@ public:
 
     AAX_Result Uninitialize() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "Uninitialize requested: wrapper=" << describePointer (this) << ", isPrepared=" << String (isPrepared ? "true" : "false"));
+
         if (isPrepared && processor != nullptr)
         {
             isPrepared = false;
@@ -308,11 +524,14 @@ public:
 
     AAX_Result EffectInit() override
     {
-        YUP_AAX_LOG ("YupAAX_Processor::EffectInit");
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "EffectInit requested: wrapper=" << describePointer (this));
 
         auto* ctrl = Controller();
         if (ctrl == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "EffectInit failed: controller is null");
             return AAX_ERROR_NULL_OBJECT;
+        }
 
         AAX_CSampleRate sampleRate = 0;
         ctrl->GetSampleRate (&sampleRate);
@@ -322,11 +541,18 @@ public:
         ctrl->GetInputStemFormat (&inputFormat);
         ctrl->GetOutputStemFormat (&outputFormat);
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "EffectInit host config: sampleRate=" << String (static_cast<double> (sampleRate)) << ", inputStemFormat=" << String (static_cast<int> (inputFormat)) << ", outputStemFormat=" << String (static_cast<int> (outputFormat)));
+
         auto err = preparePlugin (static_cast<float> (sampleRate), inputFormat, outputFormat);
         if (err != AAX_SUCCESS)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "EffectInit failed: preparePlugin result=" << String (static_cast<int> (err)));
             return err;
+        }
 
         addAudioProcessorParameters();
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "EffectInit completed");
         return AAX_SUCCESS;
     }
 
@@ -453,6 +679,8 @@ public:
         {
             case fieldPluginInfo:
             {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "ResetFieldData plugin info: wrapper=" << describePointer (this) << ", data=" << describePointer (data) << ", dataSize=" << String (static_cast<int> (dataSize)));
+
                 const auto numObjects = dataSize / sizeof (YupPluginInstanceInfo);
 
                 auto* objects = static_cast<YupPluginInstanceInfo*> (data);
@@ -464,6 +692,8 @@ public:
 
             case fieldPreparedFlag:
             {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "ResetFieldData prepared flag: wrapper=" << describePointer (this) << ", dataSize=" << String (static_cast<int> (dataSize)));
+
                 const_cast<YupAAX_Processor*> (this)->preparePlugin (lastSampleRate, lastInputFormat, lastOutputFormat);
 
                 const auto numObjects = dataSize / sizeof (uint32_t);
@@ -513,19 +743,28 @@ public:
     {
         if (chunkID == YupPlugin_AAX_ChunkID)
         {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunkSize requested");
+
             MemoryBlock processorState;
-            processor->saveStateIntoMemory (processorState);
+            const auto result = processor->saveStateIntoMemory (processorState);
+
+            if (result.failed())
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunkSize saving processor state failed: " << result.getErrorMessage());
+            }
 
             auto& tls = chunkData.get();
             tls.data = writeWrapperBypassState (
                 YupPlugin_AAX_ChunkMagic,
                 YupPlugin_AAX_ChunkVersion,
-                isBypassed.load(),
+                bypass.isBypassed(),
                 processorState,
                 ! processorState.isEmpty());
             tls.isValid = true;
 
             *size = static_cast<uint32_t> (tls.data.getSize());
+
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunkSize completed: bytes=" << String (static_cast<int64> (*size)) << ", processorBytes=" << String (static_cast<int64> (processorState.getSize())) << ", bypassed=" << String (bypass.isBypassed() ? "true" : "false"));
             return AAX_SUCCESS;
         }
 
@@ -536,9 +775,14 @@ public:
     {
         if (chunkID == YupPlugin_AAX_ChunkID)
         {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunk requested: chunk=" << describePointer (chunk));
+
             auto& tls = chunkData.get();
             if (! tls.isValid)
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunk failed: GetChunkSize was not called on this thread");
                 return 20700; // AAX_ERROR_PLUGIN_API_INVALID_THREAD
+            }
 
             // The host allocates the chunk using the size returned by
             // GetChunkSize, fData is a variable length trailing array
@@ -549,6 +793,8 @@ public:
                 tls.data.copyTo (chunk->fData, 0, static_cast<size_t> (size));
 
             tls.isValid = false;
+
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetChunk completed: bytes=" << String (size));
             return AAX_SUCCESS;
         }
 
@@ -559,23 +805,39 @@ public:
     {
         if (chunkID == YupPlugin_AAX_ChunkID)
         {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "SetChunk requested: bytes=" << String (static_cast<int> (chunk->fSize)));
+
             MemoryBlock rawData (chunk->fData, static_cast<size_t> (chunk->fSize));
             auto state = readWrapperBypassState (rawData, YupPlugin_AAX_ChunkMagic, YupPlugin_AAX_ChunkVersion);
 
             if (state.hasWrapperState)
             {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "SetChunk wrapper state: bypassed=" << String (state.isBypassed ? "true" : "false") << ", hasProcessorState=" << String (state.hasProcessorState ? "true" : "false") << ", processorBytes=" << String (static_cast<int64> (state.processorState.getSize())));
+
                 setBypassed (state.isBypassed);
                 SetParameterNormalizedValue (cDefaultMasterBypassID, state.isBypassed ? 1.0 : 0.0);
 
                 if (state.hasProcessorState && ! state.processorState.isEmpty())
-                    processor->loadStateFromMemory (state.processorState);
+                {
+                    const auto result = processor->loadStateFromMemory (state.processorState);
+                    ignoreUnused (result);
+
+                    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "SetChunk processor state " << (result.wasOk() ? String ("loaded") : "failed: " + result.getErrorMessage()));
+                }
             }
             else
             {
-                processor->loadStateFromMemory (rawData);
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "SetChunk without wrapper state, loading raw processor state");
+
+                const auto result = processor->loadStateFromMemory (rawData);
+                ignoreUnused (result);
+
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "SetChunk processor state " << (result.wasOk() ? String ("loaded") : "failed: " + result.getErrorMessage()));
             }
 
             resyncParameterValues();
+
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "SetChunk completed");
             return AAX_SUCCESS;
         }
 
@@ -599,11 +861,19 @@ public:
     {
         if (notificationType == AAX_eNotificationEvent_EnteringOfflineMode)
         {
-            processor->suspendProcessing (true);
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "entering offline mode");
+            processor->setOfflineProcessing (true);
         }
         else if (notificationType == AAX_eNotificationEvent_ExitingOfflineMode)
         {
-            processor->suspendProcessing (false);
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "exiting offline mode");
+            processor->setOfflineProcessing (false);
+        }
+        else if (notificationType == AAX_eNotificationEvent_TransportStateChanged
+                 && notificationData != nullptr
+                 && notificationDataSize >= sizeof (AAX_TransportStateInfo_V1))
+        {
+            playHead.setRecording (static_cast<const AAX_TransportStateInfo_V1*> (notificationData)->mIsRecording);
         }
 
         return AAX_CEffectParameters::NotificationReceived (notificationType, notificationData, notificationDataSize);
@@ -613,65 +883,91 @@ public:
     // Audio processing
     //==========================================================================
 
-    // Builds one AudioBusBufferView per audio input bus from the flat array of
-    // host-provided input channel buffers. Channels are consumed in bus
-    // declaration order; channels beyond the host-provided count (e.g. an
-    // unconnected sidechain) are exposed as null channel pointers so
-    // processors see deterministic silence.
-    void buildInputBusViews (float* const* inputChannelData, int numIn)
+    void buildBusViews (float* const* inputChannelData, float* const* outputChannelData, int sideChainIndex, int bufferSize)
     {
         inputBusViews.clear();
-
-        int chOffset = 0;
-
-        for (const auto& bus : processor->getBusLayout().getInputBuses())
-        {
-            if (bus.getType() != AudioBus::Type::Audio)
-                continue;
-
-            const int numCh = bus.getNumChannels();
-            auto* chPtrs = inputChannelPtrStorage.data() + chOffset;
-
-            for (int ch = 0; ch < numCh; ++ch)
-                chPtrs[ch] = (inputChannelData != nullptr && chOffset + ch < numIn)
-                               ? inputChannelData[chOffset + ch]
-                               : nullptr;
-
-            inputBusViews.emplace_back (chPtrs, numCh, bus.getRole());
-
-            chOffset += numCh;
-        }
-    }
-
-    // Builds one AudioBusBufferView per audio output bus from the flat array of
-    // host-provided output channel buffers.
-    void buildOutputBusViews (float* const* outputChannelData, int numOut)
-    {
         outputBusViews.clear();
 
-        int chOffset = 0;
+        const auto& layout = processor->getBusLayout();
+        const float* const* mainInputs = nullptr;
+        int numMainInputs = 0;
+        bool sideChainAssigned = false;
+        int offset = 0;
 
-        for (const auto& bus : processor->getBusLayout().getOutputBuses())
+        for (const auto& bus : layout.getInputBuses())
         {
             if (bus.getType() != AudioBus::Type::Audio)
                 continue;
 
             const int numCh = bus.getNumChannels();
-            auto* chPtrs = outputChannelPtrStorage.data() + chOffset;
+            auto* chPtrs = inputChannelPtrStorage.data() + offset;
+            const bool isMain = bus.getRole() == AudioBus::Role::Main && mainInputs == nullptr;
+            const bool isSideChain = bus.getRole() == AudioBus::Role::Auxiliary && ! sideChainAssigned;
 
             for (int ch = 0; ch < numCh; ++ch)
-                chPtrs[ch] = (outputChannelData != nullptr && chOffset + ch < numOut)
-                               ? outputChannelData[chOffset + ch]
-                               : nullptr;
+            {
+                const float* channel = nullptr;
 
+                if (inputChannelData != nullptr && isMain)
+                    channel = ch < static_cast<int> (inputStreamOrder.size()) ? inputChannelData[inputStreamOrder[static_cast<size_t> (ch)]] : nullptr;
+                else if (inputChannelData != nullptr && isSideChain && sideChainIndex > 0)
+                    channel = inputChannelData[sideChainIndex];
+
+                chPtrs[ch] = channel;
+            }
+
+            if (isMain)
+            {
+                mainInputs = chPtrs;
+                numMainInputs = numCh;
+            }
+
+            sideChainAssigned = sideChainAssigned || isSideChain;
+            inputBusViews.emplace_back (chPtrs, numCh, bus.getRole());
+            offset += numCh;
+        }
+
+        bool mainOutputAssigned = false;
+        int scratchChannel = 0;
+        offset = 0;
+
+        for (const auto& bus : layout.getOutputBuses())
+        {
+            if (bus.getType() != AudioBus::Type::Audio)
+                continue;
+
+            const int numCh = bus.getNumChannels();
+            auto* chPtrs = outputChannelPtrStorage.data() + offset;
+            const bool isMain = bus.getRole() == AudioBus::Role::Main && ! mainOutputAssigned;
+
+            for (int ch = 0; ch < numCh; ++ch)
+            {
+                float* channel = isMain && ch < static_cast<int> (outputStreamOrder.size())
+                                   ? outputChannelData[outputStreamOrder[static_cast<size_t> (ch)]]
+                                   : scratchOutputs.getWritePointer (scratchChannel++);
+
+                if (isMain && ch < numMainInputs && mainInputs[ch] != nullptr)
+                {
+                    if (channel != mainInputs[ch])
+                        std::memcpy (channel, mainInputs[ch], static_cast<size_t> (bufferSize) * sizeof (float));
+                }
+                else
+                {
+                    std::memset (channel, 0, static_cast<size_t> (bufferSize) * sizeof (float));
+                }
+
+                chPtrs[ch] = channel;
+            }
+
+            mainOutputAssigned = mainOutputAssigned || isMain;
             outputBusViews.emplace_back (chPtrs, numCh, bus.getRole());
-
-            chOffset += numCh;
+            offset += numCh;
         }
     }
 
     void process (float* const* inputChannelData,
                   float* const* outputChannelData,
+                  int sideChainIndex,
                   int bufferSize,
                   int32_t bypassFlag,
                   AAX_IMIDINode* midiNodeIn,
@@ -687,49 +983,20 @@ public:
         if (processor->acceptsMidi() && midiNodeIn != nullptr)
             fillMidiBufferFromAaxNode (*midiNodeIn, midiBuffer);
 
-        // The component is described with stem formats matching the processor
-        // layout, so the host provides exactly these channel counts
-        const auto& layout = processor->getBusLayout();
-        const auto numIn = layout.getNumAudioInputChannels();
-        const auto numOut = layout.getNumAudioOutputChannels();
+        buildBusViews (inputChannelData, outputChannelData, sideChainIndex, bufferSize);
 
-        // Only Main-role input channels are copied into the outputs; auxiliary
-        // (sidechain) channels must never leak into the main signal path. This
-        // assumes the main input buses are declared before auxiliary buses, which
-        // is the YUP layout convention (mirrored by VST3's kMain-before-kAux rule).
-        int numMainIn = 0;
-        for (const auto& bus : layout.getInputBuses())
-            if (bus.getType() == AudioBus::Type::Audio && bus.getRole() == AudioBus::Role::Main)
-                numMainIn += bus.getNumChannels();
-
-        for (int ch = 0; ch < numOut; ++ch)
-        {
-            if (outputChannelData[ch] == nullptr)
-                continue;
-
-            if (inputChannelData != nullptr && ch < numMainIn && inputChannelData[ch] != nullptr)
-            {
-                if (outputChannelData[ch] != inputChannelData[ch])
-                    std::memcpy (outputChannelData[ch], inputChannelData[ch], static_cast<size_t> (bufferSize) * sizeof (float));
-            }
-            else
-            {
-                std::memset (outputChannelData[ch], 0, static_cast<size_t> (bufferSize) * sizeof (float));
-            }
-        }
-
-        AudioBuffer<float> audioBuffer (outputChannelData, numOut, bufferSize);
-
-        buildInputBusViews (inputChannelData, numIn);
-        buildOutputBusViews (outputChannelData, numOut);
+        AudioBuffer<float> audioBuffer (outputChannelPtrStorage.data(),
+                                        static_cast<int> (outputChannelPtrStorage.size()),
+                                        bufferSize);
 
         paramChangeBuffer.clear();
+        playHead.prepare (Transport(), lastSampleRate);
 
         AudioProcessContext<float> context {
             audioBuffer,
             midiBuffer,
             paramChangeBuffer,
-            nullptr,
+            &playHead,
             { inputBusViews.data(), inputBusViews.size() },
             { outputBusViews.data(), outputBusViews.size() }
         };
@@ -744,6 +1011,8 @@ public:
     }
 
     AudioProcessor& getAudioProcessor() noexcept { return *processor; }
+
+    void ensureWindowingInitialised() { windowing.ensureInitialised(); }
 
 private:
     //==========================================================================
@@ -781,6 +1050,8 @@ private:
         lastInputFormat = inputFormat;
         lastOutputFormat = outputFormat;
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "preparing processor: sampleRate=" << String (static_cast<double> (sampleRate)) << ", maxBlockSize=" << String (maxAaxBufferSize) << ", inputStemFormat=" << String (static_cast<int> (inputFormat)) << ", outputStemFormat=" << String (static_cast<int> (outputFormat)) << ", inCh=" << String (processor->getBusLayout().getNumAudioInputChannels()) << ", outCh=" << String (processor->getBusLayout().getNumAudioOutputChannels()));
+
         processor->setPlaybackConfiguration (sampleRate, maxAaxBufferSize);
         isPrepared = true;
 
@@ -792,8 +1063,16 @@ private:
         inputChannelPtrStorage.resize (static_cast<size_t> (processor->getBusLayout().getNumAudioInputChannels()));
         outputChannelPtrStorage.resize (static_cast<size_t> (processor->getBusLayout().getNumAudioOutputChannels()));
 
+        const auto& layout = processor->getBusLayout();
+        const auto mainOutputSet = getMainAudioChannelSet (layout.getOutputBuses());
+        inputStreamOrder = getStreamChannelOrder (inputFormat, getMainAudioChannelSet (layout.getInputBuses()));
+        outputStreamOrder = getStreamChannelOrder (outputFormat, mainOutputSet);
+        scratchOutputs.setSize (jmax (0, layout.getNumAudioOutputChannels() - mainOutputSet.size()), maxAaxBufferSize);
+
         if (auto* ctrl = Controller())
             ctrl->SetSignalLatency (processor->getLatencySamples());
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "processor prepared: latency=" << String (processor->getLatencySamples()));
 
         return AAX_SUCCESS;
     }
@@ -806,6 +1085,7 @@ private:
         addMasterBypassParameter();
 
         const auto parameters = processor->getParameters();
+        const auto bypassParameter = processor->getBypassParameter();
 
         for (size_t i = 0; i < parameters.size(); ++i)
         {
@@ -814,7 +1094,14 @@ private:
             if (param == nullptr)
                 continue;
 
-            if (isMeterParameter (*param))
+            // The processor bypass parameter is driven by the host master bypass
+            if (param == bypassParameter.get())
+            {
+                paramMap[getAaxParamHash (cDefaultMasterBypassID)] = param;
+                continue;
+            }
+
+            if (param->isMeter())
             {
                 aaxMeters.push_back (param);
                 continue;
@@ -826,6 +1113,8 @@ private:
             const auto hash = getAaxParamHash (aaxParamID.toRawUTF8());
             paramMap[hash] = param;
         }
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "registered parameters: processorParameters=" << String (static_cast<int> (parameters.size())) << ", aaxParameters=" << String (static_cast<int> (paramMap.size())) << ", meters=" << String (static_cast<int> (aaxMeters.size())));
     }
 
     void addMasterBypassParameter()
@@ -870,12 +1159,13 @@ private:
     void syncParameterAttributes()
     {
         const auto parameters = processor->getParameters();
+        const auto bypassParameter = processor->getBypassParameter();
 
         for (size_t i = 0; i < parameters.size(); ++i)
         {
             auto* param = parameters[i].get();
 
-            if (param == nullptr || isMeterParameter (*param))
+            if (param == nullptr || param == bypassParameter.get() || param->isMeter())
                 continue;
 
             const auto aaxParamID = getAaxParamIDFromIndex (static_cast<int> (i));
@@ -902,9 +1192,13 @@ private:
     void resyncParameterValues()
     {
         const auto parameters = processor->getParameters();
+        const auto bypassParameter = processor->getBypassParameter();
 
         for (size_t i = 0; i < parameters.size(); ++i)
         {
+            if (parameters[i] == bypassParameter)
+                continue;
+
             const auto aaxParamID = getAaxParamIDFromIndex (static_cast<int> (i));
 
             inParameterChangedCallback = true;
@@ -924,7 +1218,7 @@ private:
 
     void setBypassed (bool shouldBypass)
     {
-        isBypassed.store (shouldBypass);
+        bypass.setBypassed (shouldBypass);
     }
 
     //==========================================================================
@@ -1038,14 +1332,16 @@ private:
     };
 
     ScopedYupInitialiser_GUI scopeInitialiser;
+    WrapperWindowing windowing;
 
     std::unique_ptr<AudioProcessor> processor;
     int32_t yupChunkIndex = 0;
     float lastSampleRate = 44100.0f;
+    YupAAXPlayHead playHead;
     AAX_EStemFormat lastInputFormat = AAX_eStemFormat_None;
     AAX_EStemFormat lastOutputFormat = AAX_eStemFormat_None;
     bool isPrepared = false;
-    std::atomic<bool> isBypassed { false };
+    WrapperBypass bypass;
     mutable std::atomic<int> numSetDirtyCalls { 0 };
 
     MidiBuffer midiBuffer;
@@ -1057,6 +1353,9 @@ private:
     std::vector<AudioBusBufferView<float>> outputBusViews;
     std::vector<const float*> inputChannelPtrStorage;
     std::vector<float*> outputChannelPtrStorage;
+    AudioBuffer<float> scratchOutputs;
+    std::vector<int> inputStreamOrder;
+    std::vector<int> outputStreamOrder;
 
     std::unordered_map<int32_t, AudioParameter*> paramMap;
     std::vector<AudioParameter*> aaxMeters;
@@ -1084,9 +1383,16 @@ public:
         return new YupAAX_GUI();
     }
 
-    YupAAX_GUI() = default;
+    YupAAX_GUI()
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "created effect GUI: gui=" << describePointer (this));
+    }
 
-    ~YupAAX_GUI() override { DeleteViewContainer(); }
+    ~YupAAX_GUI() override
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "destroying effect GUI: gui=" << describePointer (this) << ", editor=" << describePointer (editorComponent.get()));
+        DeleteViewContainer();
+    }
 
     //==========================================================================
     // AAX_CEffectGUI overrides (all return void!)
@@ -1094,41 +1400,78 @@ public:
 
     void CreateViewContents() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContents requested: gui=" << describePointer (this));
+
         auto* params = GetEffectParameters();
         if (params == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContents failed: effect parameters are null");
             return;
+        }
 
         auto* yupParams = dynamic_cast<YupAAX_Processor*> (params);
         if (yupParams == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContents failed: effect parameters are not a YUP processor");
             return;
+        }
 
         if (editorComponent != nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContents skipped: editor already exists");
             return;
+        }
 
+        yupParams->ensureWindowingInitialised();
         auto& audioProcessor = yupParams->getAudioProcessor();
 
         if (audioProcessor.hasEditor())
         {
             editorComponent.reset (audioProcessor.createEditor());
-            YUP_AAX_LOG ("YupAAX_GUI: created editor");
+
+            if (editorComponent == nullptr)
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "processor returned null editor");
+            }
+            else
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "created editor: preferredSize=" << editorComponent->getPreferredSize().toString() << ", editor=" << describePointer (editorComponent.get()));
+            }
+        }
+        else
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "processor has no editor");
         }
     }
 
     void CreateViewContainer() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContainer requested: gui=" << describePointer (this) << ", editor=" << describePointer (editorComponent.get()));
+
         if (editorComponent == nullptr)
             CreateViewContents();
 
         if (editorComponent == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContainer failed: editor is null");
             return;
+        }
 
         auto* viewContainer = GetViewContainer();
         if (viewContainer == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContainer failed: view container is null");
             return;
+        }
 
         auto* nativeView = viewContainer->GetPtr();
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "view container: type=" << String (static_cast<int> (viewContainer->GetType())) << ", nativeView=" << describePointer (nativeView));
+
         if (nativeView == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "CreateViewContainer failed: native view is null");
             return;
+        }
 
         ComponentNative::Flags flags =
             ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow;
@@ -1140,21 +1483,23 @@ public:
                            .withFlags (flags)
                            .withResizableWindow (editorComponent->isResizable());
 
-        const auto preferredSize = editorComponent->getPreferredSize();
-        editorComponent->setSize ({ static_cast<float> (preferredSize.getWidth()),
-                                    static_cast<float> (preferredSize.getHeight()) });
+        const auto initialSize = editorComponent->getConstrainedSize (editorComponent->getInitialSize());
+        editorComponent->setSize ({ static_cast<float> (initialSize.getWidth()),
+                                    static_cast<float> (initialSize.getHeight()) });
 
         editorComponent->addToDesktop (options, nativeView);
         editorComponent->setVisible (true);
         editorComponent->attachedToNative();
 
-        YUP_AAX_LOG ("YupAAX_GUI: attached to native view");
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "editor attached to native view: bounds=" << editorComponent->getBounds().toString() << ", resizable=" << String (editorComponent->isResizable() ? "true" : "false") << ", renderContinuous=" << String (editorComponent->shouldRenderContinuous() ? "true" : "false") << ", isOnDesktop=" << String (editorComponent->isOnDesktop() ? "true" : "false"));
     }
 
     void DeleteViewContainer() override
     {
         if (editorComponent != nullptr)
         {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "DeleteViewContainer destroying editor: editor=" << describePointer (editorComponent.get()));
+
             editorComponent->removeFromDesktop();
             editorComponent.reset();
         }
@@ -1177,9 +1522,9 @@ public:
             }
             else
             {
-                const auto preferredSize = editorComponent->getPreferredSize();
-                size->horz = static_cast<float> (preferredSize.getWidth());
-                size->vert = static_cast<float> (preferredSize.getHeight());
+                const auto initialSize = editorComponent->getConstrainedSize (editorComponent->getInitialSize());
+                size->horz = static_cast<float> (initialSize.getWidth());
+                size->vert = static_cast<float> (initialSize.getHeight());
             }
         }
 
@@ -1226,6 +1571,7 @@ void AAX_CALLBACK yupAAXAlgorithmCallback (void* const instancesBegin[], const v
         info->processor.process (
             ctx->inputChannels,
             ctx->outputChannels,
+            ctx->sideChainBuffers != nullptr ? static_cast<int> (*ctx->sideChainBuffers) : -1,
             bufSize,
             ctx->bypass != nullptr ? *ctx->bypass : 0,
             ctx->midiNodeIn,
@@ -1241,6 +1587,14 @@ void AAX_CALLBACK yupAAXAlgorithmCallback (void* const instancesBegin[], const v
 static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
 {
     std::unique_ptr<AudioProcessor> plugin (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::aax, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
+
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "describing plugin: processor=" << describePointer (plugin.get()) << ", hasEditor=" << String (plugin != nullptr && plugin->hasEditor() ? "true" : "false"));
+
+    if (plugin == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "createPluginProcessorForWrapper returned null");
+        return;
+    }
 
     descriptor.AddName (YupPlugin_Name);
     descriptor.AddName (YupPlugin_Description);
@@ -1262,12 +1616,15 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
     for (const auto& parameter : plugin->getParameters())
     {
         auto* param = parameter.get();
-        if (param == nullptr || ! isMeterParameter (*param))
+        if (param == nullptr || ! param->isMeter())
             continue;
 
         auto* meterProps = descriptor.NewPropertyMap();
         if (meterProps == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "skipping meter: property map is null, name=" << param->getName());
             continue;
+        }
 
         meterProps->AddProperty (AAX_eProperty_Meter_Type, getMeterTypeFromParam (*param));
         meterProps->AddProperty (AAX_eProperty_Meter_Orientation, AAX_eMeterOrientation_TopRight);
@@ -1276,31 +1633,55 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
 
         descriptor.AddMeterDescription (meterID, param->getName().toRawUTF8(), meterProps);
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "registered meter: id=" << String (static_cast<int64> (meterID)) << ", name=" << param->getName());
+
         meterIDs.push_back (meterID);
     }
 
     // YUP processors have a fixed bus layout, so a single component matching
-    // the processor's channel configuration is registered. Instruments with no
-    // audio input still process in place on the track stem.
-    const auto numInCh = plugin->getBusLayout().getNumAudioInputChannels();
-    const auto numOutCh = plugin->getBusLayout().getNumAudioOutputChannels();
+    // the main buses is registered. Instruments with no audio input still
+    // process in place on the track stem. Other auxiliary buses map to the
+    // mono sidechain input, remaining outputs are rendered but not routed.
+    const auto& busLayout = plugin->getBusLayout();
+    const auto mainInputSet = getMainAudioChannelSet (busLayout.getInputBuses());
+    const auto mainOutputSet = getMainAudioChannelSet (busLayout.getOutputBuses());
+    const auto numInCh = mainInputSet.size();
+    const auto numOutCh = mainOutputSet.size();
 
-    const auto outputFormat = stemFormatForChannelCount (numOutCh);
+    const auto outputFormat = stemFormatForChannelSet (mainOutputSet);
     const auto inputFormat = numInCh > 0
-                               ? stemFormatForChannelCount (numInCh)
+                               ? stemFormatForChannelSet (mainInputSet)
                                : outputFormat;
+
+    const auto hasSideChain = std::any_of (busLayout.getInputBuses().begin(), busLayout.getInputBuses().end(), [] (const AudioBus& bus)
+    {
+        return bus.getType() == AudioBus::Type::Audio && bus.getRole() == AudioBus::Role::Auxiliary && bus.getNumChannels() > 0;
+    });
 
     jassert (inputFormat != AAX_eStemFormat_INT32_MAX);
     jassert (outputFormat != AAX_eStemFormat_INT32_MAX);
 
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "stem formats: inCh=" << String (numInCh) << ", outCh=" << String (numOutCh) << ", inputStemFormat=" << String (static_cast<int> (inputFormat)) << ", outputStemFormat=" << String (static_cast<int> (outputFormat)) << ", acceptsMidi=" << String (plugin->acceptsMidi() ? "true" : "false") << ", producesMidi=" << String (plugin->producesMidi() ? "true" : "false"));
+
+    if (inputFormat == AAX_eStemFormat_INT32_MAX || outputFormat == AAX_eStemFormat_INT32_MAX)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "unsupported channel count for AAX stem format");
+    }
+
     auto* compDesc = descriptor.NewComponentDescriptor();
     if (compDesc == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "describing plugin failed: component descriptor is null");
         return;
+    }
 
     aaxCheck (compDesc->AddAudioIn (fieldAudioIn));
     aaxCheck (compDesc->AddAudioOut (fieldAudioOut));
     aaxCheck (compDesc->AddAudioBufferLength (fieldBufferSize));
     aaxCheck (compDesc->AddDataInPort (fieldBypass, sizeof (int32_t)));
+
+    if (hasSideChain)
+        aaxCheck (compDesc->AddSideChainIn (fieldSideChain));
 
     if (plugin->acceptsMidi())
         aaxCheck (compDesc->AddMIDINode (fieldMidiIn, AAX_eMIDINodeType_LocalInput, "MIDI In", 0xFFFF));
@@ -1316,7 +1697,12 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
 
     auto* properties = compDesc->NewPropertyMap();
     if (properties == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "describing plugin failed: component property map is null");
         return;
+    }
+
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "plugin ids: manufacturer=" << String (static_cast<int64> (YupPlugin_AAX_ManufacturerID)) << ", product=" << String (static_cast<int64> (YupPlugin_AAX_ProductID)) << ", native=" << String (static_cast<int64> (YupPlugin_AAX_PlugInID_Native)) << ", audioSuite=" << String (static_cast<int64> (YupPlugin_AAX_PlugInID_AudioSuite)));
 
     aaxCheck (properties->AddProperty (AAX_eProperty_ManufacturerID, static_cast<AAX_CPropertyValue> (YupPlugin_AAX_ManufacturerID)));
     aaxCheck (properties->AddProperty (AAX_eProperty_ProductID, static_cast<AAX_CPropertyValue> (YupPlugin_AAX_ProductID)));
@@ -1333,6 +1719,8 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
     aaxCheck (compDesc->AddProcessProc_Native (reinterpret_cast<AAX_CProcessProc> (yupAAXAlgorithmCallback), properties));
 
     aaxCheck (descriptor.AddComponent (compDesc));
+
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "described plugin: meters=" << String (static_cast<int> (meterIDs.size())) << ", usesClientGUI=" << String (plugin->hasEditor() ? "false" : "true"));
 }
 
 } // namespace yup
@@ -1343,12 +1731,20 @@ static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
 
 AAX_Result GetEffectDescriptions (AAX_ICollection* collection)
 {
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetEffectDescriptions requested: collection=" << yup::describePointer (collection));
+
     if (collection == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetEffectDescriptions failed: collection is null");
         return AAX_ERROR_NULL_OBJECT;
+    }
 
     AAX_IEffectDescriptor* descriptor = collection->NewDescriptor();
     if (descriptor == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetEffectDescriptions failed: descriptor is null");
         return AAX_ERROR_NULL_OBJECT;
+    }
     yup::getPlugInDescription (*descriptor);
 
     collection->AddEffect (YupPlugin_Id, descriptor);
@@ -1362,6 +1758,8 @@ AAX_Result GetEffectDescriptions (AAX_ICollection* collection)
         collection->AddPackageName (pluginName.substring (0, 16).toRawUTF8());
 
     collection->SetPackageVersion (1);
+
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AAX, "GetEffectDescriptions completed: id=" << yup::String (YupPlugin_Id) << ", vendor=" << yup::String (YupPlugin_Vendor) << ", package=" << pluginName);
 
     return AAX_SUCCESS;
 }

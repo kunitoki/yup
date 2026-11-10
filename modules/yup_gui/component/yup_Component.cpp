@@ -441,6 +441,9 @@ void Component::setSize (float width, float height)
 
 void Component::setSize (const Size<float>& newSize)
 {
+    if (boundsInParent.getSize() == newSize)
+        return;
+
     auto areaToRepaint = getPaintBounds();
     boundsInParent = boundsInParent.withSize (newSize);
     areaToRepaint = areaToRepaint.unionWith (getPaintBounds());
@@ -480,6 +483,9 @@ void Component::setBounds (float x, float y, float width, float height)
 
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
+    if (newBounds == boundsInParent)
+        return;
+
     repaint();
 
     boundsInParent = newBounds;
@@ -1398,6 +1404,8 @@ void Component::gestureRotate ([[maybe_unused]] const GestureEvent& event) {}
 void Component::gesturePan ([[maybe_unused]] const GestureEvent& event) {}
 
 void Component::gestureSwipe ([[maybe_unused]] const GestureEvent& event) {}
+
+//==============================================================================
 
 bool Component::keyDown ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) { return false; }
 

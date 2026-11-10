@@ -160,11 +160,37 @@ AudioParameterBuilder& AudioParameterBuilder::withModulePath (const String& modu
     return *this;
 }
 
+AudioParameterBuilder& AudioParameterBuilder::withBypass (bool shouldBeBypass)
+{
+    metadata.setBypass (shouldBeBypass);
+
+    if (shouldBeBypass)
+    {
+        metadata.valueRange = { 0.0f, 1.0f, 1.0f };
+        metadata.setStepped (true);
+    }
+
+    return *this;
+}
+
 AudioParameterBuilder& AudioParameterBuilder::withUnit (AudioParameter::ParameterUnit parameterUnit,
                                                         const String& parameterUnitName)
 {
     metadata.unit = parameterUnit;
     metadata.unitName = parameterUnitName;
+    return *this;
+}
+
+AudioParameterBuilder& AudioParameterBuilder::withCategory (AudioParameter::Category category)
+{
+    metadata.category = category;
+
+    if (AudioParameter::isMeterCategory (category))
+    {
+        metadata.setReadOnly (true);
+        metadata.setAutomatable (false);
+    }
+
     return *this;
 }
 

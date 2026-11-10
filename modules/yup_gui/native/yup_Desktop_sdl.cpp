@@ -134,6 +134,11 @@ Point<float> Desktop::getCurrentMouseLocation() const
     return Point<float> (x, y) / getDisplayUnitsPerPoint (SDL_GetDisplayForPoint (&point));
 }
 
+bool Desktop::isMouseButtonDown() const
+{
+    return SDL_GetGlobalMouseState (nullptr, nullptr) != 0;
+}
+
 void Desktop::setCurrentMouseLocation (const Point<float>& location)
 {
     // Mixed dpi setups are approximated by the primary display scale here

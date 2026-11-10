@@ -19,8 +19,14 @@
   ==============================================================================
 */
 
+#include "yup_AudioPluginBridgeProtocol.cpp"
+#include "yup_AudioPluginBridgeServer.cpp"
+#include "yup_AudioPluginDatabase.cpp"
 #include "yup_AudioPluginDescription.cpp"
+#include "yup_AudioPluginFormat.cpp"
 #include "yup_AudioPluginLV2Format.cpp"
 #include "yup_AudioPluginScanner.cpp"
+#include "yup_AudioPluginScannerWorker.cpp"
+#include "yup_RemoteAudioPluginInstance.cpp"
 #include "yup_AudioPluginInstance.cpp"
 #include "yup_AudioPluginState.cpp"

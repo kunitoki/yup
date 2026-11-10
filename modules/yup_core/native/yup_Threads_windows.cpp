@@ -311,12 +311,9 @@ void YUP_CALLTYPE Process::lowerPrivilege() {}
 
 void YUP_CALLTYPE Process::terminate()
 {
-#if YUP_MSVC && YUP_CHECK_MEMORY_LEAKS
-    _CrtDumpMemoryLeaks();
-#endif
-
-    // bullet in the head in case there's a problem shutting down..
-    ExitProcess (1);
+    // bullet in the head: no CRT leak dump (every live allocation would be reported, which can take
+    // seconds) and no DLL detach routines, which can stall while other threads hold the loader lock
+    TerminateProcess (GetCurrentProcess(), 1);
 }
 
 bool YUP_CALLTYPE Process::isForegroundProcess()

@@ -37,6 +37,7 @@
 
 #import <AppKit/AppKit.h>
 #import <AudioUnit/AUCocoaUIView.h>
+#import <AudioToolbox/AudioUnitUtilities.h>
 #import <AudioUnit/AudioUnit.h>
 #import <CoreMIDI/CoreMIDI.h>
 #import <Foundation/Foundation.h>
@@ -45,12 +46,15 @@
 #import <objc/runtime.h>
 
 #include <yup_core/native/yup_ObjCHelpers_apple.h>
+#include <yup_audio_basics/native/yup_CoreAudioLayouts_apple.h>
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <numeric>
 #include <unordered_map>
 #include <vector>
 
@@ -92,6 +96,7 @@ using AudioPluginAUBase = ausdk::AUEffectBase;
 class AudioPluginProcessorAU final
     : public AudioPluginAUBase
     , private AudioParameter::Listener
+    , private AudioProcessorBase::Listener
 {
 public:
     class AudioPluginPlayHeadAU final : public AudioPlayHead
@@ -136,6 +141,11 @@ public:
 
         if (processor == nullptr)
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "createPluginProcessor returned null");
+        else
+        {
+            bypass.attach (*processor);
+            processor->addListener (this);
+        }
 
         addParameterListeners();
         registerInstance (componentInstance, this);
@@ -148,6 +158,9 @@ public:
         closeEditorViews();
         removeParameterListeners();
         yup::endActiveParameterGestures (processor.get());
+
+        if (processor != nullptr)
+            processor->removeListener (this);
 
         unregisterInstance (componentInstance);
 
@@ -173,6 +186,9 @@ public:
             return kAudioUnitErr_FailedInitialization;
         }
 
+        if (const auto layoutResult = applyHostChannelCounts(); layoutResult != noErr)
+            return layoutResult;
+
 #if ! YupPlugin_IsSynth
         // Expose one input element per audio input bus so hosts can route
         // sidechain signals to auxiliary input elements (element 0 is always
@@ -197,6 +213,8 @@ public:
                               getTotalAudioInputChannels (*processor),
                               getTotalAudioOutputChannels (*processor));
         auxiliaryInputValid.resize (static_cast<size_t> (processor->getNumAudioInputs()), 0);
+        midiOutputPacketStorage.resize (midiOutputPacketStorageSize);
+        updateMainChannelOrders();
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "Initialize completed: sampleRate=" << String (getCurrentSampleRate()) << ", maxFramesPerSlice=" << String (static_cast<int> (GetMaxFramesPerSlice())));
 
@@ -251,17 +269,66 @@ public:
 
         const auto& param = parameters[parameterIndex];
 
-        outParameterInfo.flags = makeAUParameterFlags (*param) | kAudioUnitParameterFlag_HasCFNameString;
+        outParameterInfo.flags = makeAUParameterFlags (*param)
+                               | kAudioUnitParameterFlag_HasCFNameString
+                               | kAudioUnitParameterFlag_ValuesHaveStrings;
 
         outParameterInfo.cfNameString = param->getName().toCFString();
         param->getName().copyToUTF8 (outParameterInfo.name, sizeof (outParameterInfo.name));
 
-        outParameterInfo.unit = makeAUUnit (*param);
+        outParameterInfo.unit = isIndexedParameter (*param) ? kAudioUnitParameterUnit_Indexed : makeAUUnit (*param);
         outParameterInfo.minValue = param->getMinimumValue();
         outParameterInfo.maxValue = param->getMaximumValue();
         outParameterInfo.defaultValue = param->getDefaultValue();
         outParameterInfo.clumpID = 0;
 
+        if (const auto clumpIndex = clumpNames.indexOf (param->getModulePath()); clumpIndex >= 0)
+        {
+            outParameterInfo.flags |= kAudioUnitParameterFlag_HasClump;
+            outParameterInfo.clumpID = static_cast<UInt32> (firstClumpID + clumpIndex);
+        }
+
+        return noErr;
+    }
+
+    OSStatus CopyClumpName (AudioUnitScope inScope,
+                            UInt32 inClumpID,
+                            UInt32 inDesiredNameLength,
+                            CFStringRef* outClumpName) override
+    {
+        ignoreUnused (inDesiredNameLength);
+
+        const auto clumpIndex = static_cast<int> (inClumpID) - static_cast<int> (firstClumpID);
+        if (inScope != kAudioUnitScope_Global || outClumpName == nullptr || ! isPositiveAndBelow (clumpIndex, clumpNames.size()))
+            return kAudioUnitErr_InvalidPropertyValue;
+
+        *outClumpName = clumpNames[clumpIndex].toCFString();
+        return noErr;
+    }
+
+    OSStatus GetParameterValueStrings (AudioUnitScope inScope,
+                                       AudioUnitParameterID inParameterID,
+                                       CFArrayRef* outStrings) override
+    {
+        const auto* param = findParameter (inScope, inParameterID);
+        if (param == nullptr || ! isIndexedParameter (*param))
+            return kAudioUnitErr_InvalidProperty;
+
+        if (outStrings == nullptr)
+            return noErr;
+
+        const auto minIndex = static_cast<int> (param->getMinimumValue());
+        const auto maxIndex = static_cast<int> (param->getMaximumValue());
+        auto* strings = CFArrayCreateMutable (nullptr, maxIndex - minIndex + 1, &kCFTypeArrayCallBacks);
+
+        for (int index = minIndex; index <= maxIndex; ++index)
+        {
+            auto* string = param->convertToString (static_cast<float> (index)).toCFString();
+            CFArrayAppendValue (strings, string);
+            CFRelease (string);
+        }
+
+        *outStrings = strings;
         return noErr;
     }
 
@@ -330,23 +397,30 @@ public:
         channelInfoCache.clear();
 
         const auto& busLayout = processor->getBusLayout();
+        const bool hasInput = busLayout.getNumAudioBuses (true) > 0;
+        const bool hasOutput = busLayout.getNumAudioBuses (false) > 0;
 
-        int inputChannels = 0;
-        for (const auto& bus : busLayout.getInputBuses())
-            if (bus.getType() == AudioBus::Type::Audio)
-                inputChannels = std::max (inputChannels, bus.getNumChannels());
-
-        int outputChannels = 0;
-        for (const auto& bus : busLayout.getOutputBuses())
-            if (bus.getType() == AudioBus::Type::Audio)
-                outputChannels = std::max (outputChannels, bus.getNumChannels());
-
-        if (inputChannels > 0 || outputChannels > 0)
+        const auto addChannelInfo = [this] (int inputChannels, int outputChannels)
         {
-            AUChannelInfo info;
-            info.inChannels = static_cast<SInt16> (inputChannels);
-            info.outChannels = static_cast<SInt16> (outputChannels);
-            channelInfoCache.push_back (info);
+            const auto found = std::find_if (channelInfoCache.begin(), channelInfoCache.end(), [&] (const AUChannelInfo& info)
+            {
+                return info.inChannels == inputChannels && info.outChannels == outputChannels;
+            });
+
+            if (found == channelInfoCache.end())
+                channelInfoCache.push_back ({ static_cast<SInt16> (inputChannels), static_cast<SInt16> (outputChannels) });
+        };
+
+        addChannelInfo (busLayout.getAudioBusNumChannels (0, true), busLayout.getAudioBusNumChannels (0, false));
+
+        for (int inputChannels = hasInput ? 1 : 0; inputChannels <= (hasInput ? maxNegotiatedChannels : 0); ++inputChannels)
+        {
+            for (int outputChannels = hasOutput ? 1 : 0; outputChannels <= (hasOutput ? maxNegotiatedChannels : 0); ++outputChannels)
+            {
+                const auto candidate = withMainChannelCounts (busLayout, inputChannels, outputChannels);
+                if (candidate != busLayout && processor->isBusLayoutSupported (candidate))
+                    addChannelInfo (inputChannels, outputChannels);
+            }
         }
 
         if (outInfo != nullptr)
@@ -480,7 +554,10 @@ public:
 
         audioChannels.clear();
         for (UInt32 ch = 0; ch < outBufList.mNumberBuffers; ++ch)
-            audioChannels.push_back (static_cast<float*> (outBufList.mBuffers[ch].mData));
+        {
+            const auto auChannel = inBusNumber == 0 ? mapChannel (mainOutputOrder, ch) : ch;
+            audioChannels.push_back (static_cast<float*> (outBufList.mBuffers[auChannel].mData));
+        }
 
         AudioSampleBuffer audioBuffer (audioChannels.data(),
                                        static_cast<int> (audioChannels.size()),
@@ -503,7 +580,10 @@ public:
                                                  renderMidiBuffer,
                                                  processParamChangeBuffer,
                                                  &playHead };
-            processAudioBlock (*processor, context, isBypassed);
+            processAudioBlock (*processor, context, bypass.isBypassed());
+
+            if (inBusNumber == 0)
+                sendMidiOutput (renderMidiBuffer, inTimeStamp);
 
             renderMidiBuffer.clear();
             processParamChangeBuffer.clear();
@@ -561,6 +641,8 @@ public:
         if (processor != nullptr)
             pullAuxiliaryInputElements (ioActionFlags, inTimeStamp, inNumberFrames);
 
+        lastRenderTimeStamp = inTimeStamp;
+
         return AudioPluginAUBase::Render (ioActionFlags, inTimeStamp, inNumberFrames);
     }
 
@@ -614,7 +696,7 @@ public:
             {
                 const UInt32 copyCount = std::min (mainInBuffer.mNumberBuffers, static_cast<UInt32> (numCh));
                 for (UInt32 ch = 0; ch < copyCount; ++ch)
-                    chPtrs[ch] = static_cast<const float*> (mainInBuffer.mBuffers[ch].mData);
+                    chPtrs[ch] = static_cast<const float*> (mainInBuffer.mBuffers[mapChannel (mainInputOrder, ch)].mData);
             }
             else if (auxiliaryInputValid[static_cast<size_t> (audioIdx)])
             {
@@ -655,7 +737,10 @@ public:
             const UInt32 copyCount = std::min (available, outBuffer.mNumberBuffers - static_cast<UInt32> (chOffset));
 
             for (UInt32 ch = 0; ch < copyCount; ++ch)
-                chPtrs[ch] = static_cast<float*> (outBuffer.mBuffers[static_cast<UInt32> (chOffset) + ch].mData);
+            {
+                const auto auChannel = chOffset == 0 ? mapChannel (mainOutputOrder, ch) : static_cast<UInt32> (chOffset) + ch;
+                chPtrs[ch] = static_cast<float*> (outBuffer.mBuffers[auChannel].mData);
+            }
 
             renderViews.outputBusViews.emplace_back (chPtrs, numCh, bus.getRole());
 
@@ -674,7 +759,6 @@ public:
 
         const UInt32 numBuffers = std::min (inBuffer.mNumberBuffers, outBuffer.mNumberBuffers);
 
-        audioChannels.clear();
         for (UInt32 ch = 0; ch < numBuffers; ++ch)
         {
             const auto* in = static_cast<const float*> (inBuffer.mBuffers[ch].mData);
@@ -682,9 +766,14 @@ public:
 
             if (in != out)
                 std::memcpy (out, in, inFramesToProcess * sizeof (float));
-
-            audioChannels.push_back (out);
         }
+
+        for (UInt32 ch = numBuffers; ch < outBuffer.mNumberBuffers; ++ch)
+            std::memset (outBuffer.mBuffers[ch].mData, 0, inFramesToProcess * sizeof (float));
+
+        audioChannels.clear();
+        for (UInt32 ch = 0; ch < outBuffer.mNumberBuffers; ++ch)
+            audioChannels.push_back (static_cast<float*> (outBuffer.mBuffers[mapChannel (mainOutputOrder, ch)].mData));
 
         AudioSampleBuffer audioBuffer (audioChannels.data(),
                                        static_cast<int> (audioChannels.size()),
@@ -704,7 +793,8 @@ public:
                                              &playHead,
                                              { renderViews.inputBusViews.data(), renderViews.inputBusViews.size() },
                                              { renderViews.outputBusViews.data(), renderViews.outputBusViews.size() } };
-        processAudioBlock (*processor, context, isBypassed);
+        processAudioBlock (*processor, context, bypass.isBypassed());
+        sendMidiOutput (midiBuffer, lastRenderTimeStamp);
         midiBuffer.clear();
         processParamChangeBuffer.clear();
 
@@ -909,6 +999,31 @@ public:
             return noErr;
         }
 
+        if (inID == kAudioUnitProperty_ParameterStringFromValue || inID == kAudioUnitProperty_ParameterValueFromString)
+        {
+            if (inScope != kAudioUnitScope_Global)
+                return kAudioUnitErr_InvalidScope;
+
+            outDataSize = inID == kAudioUnitProperty_ParameterStringFromValue
+                            ? sizeof (AudioUnitParameterStringFromValue)
+                            : sizeof (AudioUnitParameterValueFromString);
+            outWritable = false;
+            return noErr;
+        }
+
+        if (inID == kAudioUnitProperty_MIDIOutputCallbackInfo || inID == kAudioUnitProperty_MIDIOutputCallback)
+        {
+            if (inScope != kAudioUnitScope_Global)
+                return kAudioUnitErr_InvalidScope;
+
+            if (processor == nullptr || ! processor->producesMidi())
+                return kAudioUnitErr_InvalidProperty;
+
+            outDataSize = inID == kAudioUnitProperty_MIDIOutputCallbackInfo ? sizeof (CFArrayRef) : sizeof (AUMIDIOutputCallbackStruct);
+            outWritable = inID == kAudioUnitProperty_MIDIOutputCallback;
+            return noErr;
+        }
+
         if (inID == kAudioUnitProperty_CocoaUI)
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "GetPropertyInfo CocoaUI requested: " << describeScopeAndElement (inScope, inElement));
@@ -984,7 +1099,23 @@ public:
             if (inData == nullptr || inDataSize < sizeof (UInt32))
                 return kAudioUnitErr_InvalidPropertyValue;
 
-            isBypassed = *static_cast<const UInt32*> (inData) != 0;
+            bypass.setBypassed (*static_cast<const UInt32*> (inData) != 0);
+            return noErr;
+        }
+
+        if (inID == kAudioUnitProperty_MIDIOutputCallback)
+        {
+            if (inScope != kAudioUnitScope_Global)
+                return kAudioUnitErr_InvalidScope;
+
+            if (processor == nullptr || ! processor->producesMidi())
+                return kAudioUnitErr_InvalidProperty;
+
+            if (inData == nullptr || inDataSize < sizeof (AUMIDIOutputCallbackStruct))
+                return kAudioUnitErr_InvalidPropertyValue;
+
+            const CriticalSection::ScopedLockType lock (midiOutputLock);
+            midiOutputCallback = *static_cast<const AUMIDIOutputCallbackStruct*> (inData);
             return noErr;
         }
 
@@ -1000,6 +1131,8 @@ public:
     //==============================================================================
 
     AudioProcessor* getProcessor() const { return processor.get(); }
+
+    void ensureWindowingInitialised() { windowing.ensureInitialised(); }
 
     void registerEditorView (AudioPluginEditorViewAU* view)
     {
@@ -1067,6 +1200,7 @@ private:
     void addParameterListeners()
     {
         removeParameterListeners();
+        rebuildClumps();
 
         if (processor == nullptr)
             return;
@@ -1102,16 +1236,384 @@ private:
                                          0,
                                          static_cast<AudioUnitParameterValue> (parameter->getValue()),
                                          0);
+
+        notifyHostParameterEvent (kAudioUnitEvent_ParameterValueChange, *parameter);
+
+        if (parameter->isBypass())
+            PropertyChanged (kAudioUnitProperty_BypassEffect, kAudioUnitScope_Global, 0);
     }
 
     void parameterGestureBegin (const AudioParameter::Ptr& parameter, int indexInContainer) override
     {
-        ignoreUnused (parameter, indexInContainer);
+        if (isValidProcessorParameterIndex (indexInContainer))
+            notifyHostParameterEvent (kAudioUnitEvent_BeginParameterChangeGesture, *parameter);
     }
 
     void parameterGestureEnd (const AudioParameter::Ptr& parameter, int indexInContainer) override
     {
-        ignoreUnused (parameter, indexInContainer);
+        if (isValidProcessorParameterIndex (indexInContainer))
+            notifyHostParameterEvent (kAudioUnitEvent_EndParameterChangeGesture, *parameter);
+    }
+
+    void notifyHostParameterEvent (AudioUnitEventType type, const AudioParameter& parameter)
+    {
+        AudioUnitEvent event {};
+        event.mEventType = type;
+        event.mArgument.mParameter.mAudioUnit = componentInstance;
+        event.mArgument.mParameter.mParameterID = static_cast<AudioUnitParameterID> (parameter.getHostParameterID());
+        event.mArgument.mParameter.mScope = kAudioUnitScope_Global;
+        event.mArgument.mParameter.mElement = 0;
+
+        AUEventListenerNotify (nullptr, nullptr, &event);
+    }
+
+    //==============================================================================
+
+    enum PendingNotification : uint32
+    {
+        notifyLatency = 1 << 0,
+        notifyTail = 1 << 1,
+        notifyParameterValues = 1 << 2,
+        notifyParameterInfo = 1 << 3,
+        notifyPreset = 1 << 4
+    };
+
+    // May be called from any thread, notifications are delivered on the main thread
+    void audioProcessorChanged (AudioProcessorBase* changedProcessor, const AudioProcessorBase::ChangeDetails& details) override
+    {
+        if (changedProcessor != processor.get())
+            return;
+
+        uint32 flags = 0;
+        flags |= details.latencyChanged ? notifyLatency : 0u;
+        flags |= details.tailChanged ? notifyTail : 0u;
+        flags |= details.parameterValuesChanged ? notifyParameterValues : 0u;
+        flags |= details.parameterInfoChanged ? notifyParameterInfo : 0u;
+        flags |= details.programChanged ? notifyPreset : 0u;
+
+        if (flags == 0 || pendingNotifications.fetch_or (flags) != 0)
+            return;
+
+        if ([NSThread isMainThread])
+        {
+            deliverPendingNotifications();
+            return;
+        }
+
+        // The instance may be disposed before the block runs, look it up again on the main thread
+        AudioUnit component = componentInstance;
+        dispatch_async (dispatch_get_main_queue(), ^{
+          if (auto* instance = findInstance (component))
+              instance->deliverPendingNotifications();
+        });
+    }
+
+    void deliverPendingNotifications()
+    {
+        const auto flags = pendingNotifications.exchange (0);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "delivering property notifications: flags=" << String (static_cast<int> (flags)));
+
+        if ((flags & notifyParameterInfo) != 0)
+        {
+            bypass.attach (*processor);
+            addParameterListeners();
+            PropertyChanged (kAudioUnitProperty_ParameterList, kAudioUnitScope_Global, 0);
+            PropertyChanged (kAudioUnitProperty_ParameterInfo, kAudioUnitScope_Global, 0);
+        }
+
+        if ((flags & (notifyParameterValues | notifyParameterInfo)) != 0)
+        {
+            for (const auto& parameter : processor->getParameters())
+                notifyHostParameterEvent (kAudioUnitEvent_ParameterValueChange, *parameter);
+        }
+
+        if ((flags & notifyLatency) != 0)
+            PropertyChanged (kAudioUnitProperty_Latency, kAudioUnitScope_Global, 0);
+
+        if ((flags & notifyTail) != 0)
+            PropertyChanged (kAudioUnitProperty_TailTime, kAudioUnitScope_Global, 0);
+
+        if ((flags & notifyPreset) != 0)
+            updatePresentPreset();
+    }
+
+    void updatePresentPreset()
+    {
+        const auto presetIndex = processor->getCurrentPreset();
+        if (! isPositiveAndBelow (presetIndex, processor->getNumPresets()))
+            return;
+
+        const auto presetName = processor->getPresetName (presetIndex);
+        const AUPreset preset { static_cast<SInt32> (presetIndex), presetName.toCFString() };
+
+        if (SetAFactoryPresetAsCurrent (preset))
+            PropertyChanged (kAudioUnitProperty_PresentPreset, kAudioUnitScope_Global, 0);
+
+        CFRelease (preset.presetName);
+    }
+
+    //==============================================================================
+
+    const AudioParameter* findParameter (AudioUnitScope scope, AudioUnitParameterID parameterID) const
+    {
+        if (scope != kAudioUnitScope_Global || processor == nullptr)
+            return nullptr;
+
+        const auto parameters = processor->getParameters();
+        const auto index = processor->getParameterIndexByHostID (static_cast<uint32> (parameterID));
+        return isPositiveAndBelow (index, static_cast<int> (parameters.size())) ? parameters[static_cast<size_t> (index)].get() : nullptr;
+    }
+
+    static bool isIndexedParameter (const AudioParameter& param)
+    {
+        const auto minValue = param.getMinimumValue();
+        const auto maxValue = param.getMaximumValue();
+
+        return param.isEnum()
+            && maxValue > minValue
+            && std::floor (minValue) == minValue
+            && std::floor (maxValue) == maxValue
+            && param.getNumSteps() == static_cast<int> (maxValue - minValue);
+    }
+
+    OSStatus getParameterStringProperty (AudioUnitPropertyID inID, void* outData) const
+    {
+        if (outData == nullptr)
+            return kAudioUnitErr_InvalidPropertyValue;
+
+        if (inID == kAudioUnitProperty_ParameterStringFromValue)
+        {
+            auto& request = *static_cast<AudioUnitParameterStringFromValue*> (outData);
+            const auto* param = findParameter (kAudioUnitScope_Global, request.inParamID);
+            if (param == nullptr)
+                return kAudioUnitErr_InvalidParameter;
+
+            const auto value = request.inValue != nullptr ? static_cast<float> (*request.inValue) : param->getValue();
+            request.outString = param->convertToString (value).toCFString();
+            return noErr;
+        }
+
+        auto& request = *static_cast<AudioUnitParameterValueFromString*> (outData);
+        const auto* param = findParameter (kAudioUnitScope_Global, request.inParamID);
+        if (param == nullptr || request.inString == nullptr)
+            return kAudioUnitErr_InvalidParameter;
+
+        request.outValue = static_cast<AudioUnitParameterValue> (param->convertFromString (String::fromCFString (request.inString)));
+        return noErr;
+    }
+
+    //==============================================================================
+
+    void sendMidiOutput (const MidiBuffer& buffer, const AudioTimeStamp& timeStamp)
+    {
+        if (buffer.isEmpty() || midiOutputPacketStorage.empty())
+            return;
+
+        const CriticalSection::ScopedTryLockType lock (midiOutputLock);
+        if (! lock.isLocked() || midiOutputCallback.midiOutputCallback == nullptr)
+            return;
+
+        auto* packetList = reinterpret_cast<MIDIPacketList*> (midiOutputPacketStorage.data());
+        const auto storageSize = static_cast<ByteCount> (midiOutputPacketStorage.size());
+        auto* packet = MIDIPacketListInit (packetList);
+
+        for (const auto metadata : buffer)
+        {
+            const auto sampleTime = static_cast<MIDITimeStamp> (metadata.samplePosition);
+            packet = MIDIPacketListAdd (packetList, storageSize, packet, sampleTime, static_cast<ByteCount> (metadata.numBytes), metadata.data);
+
+            if (packet == nullptr)
+            {
+                midiOutputCallback.midiOutputCallback (midiOutputCallback.userData, &timeStamp, 0, packetList);
+                packet = MIDIPacketListInit (packetList);
+                packet = MIDIPacketListAdd (packetList, storageSize, packet, sampleTime, static_cast<ByteCount> (metadata.numBytes), metadata.data);
+            }
+        }
+
+        if (packetList->numPackets > 0)
+            midiOutputCallback.midiOutputCallback (midiOutputCallback.userData, &timeStamp, 0, packetList);
+    }
+
+    //==============================================================================
+
+    AudioChannelSet getElementChannelSet (AudioUnitScope scope, AudioUnitElement element)
+    {
+        const auto isInput = scope == kAudioUnitScope_Input;
+        const auto& busLayout = processor->getBusLayout();
+        const auto busSet = busLayout.getAudioBusChannelSet (static_cast<int> (element), isInput);
+        const auto numChannels = static_cast<int> (IOElement (scope, element).GetStreamFormat().mChannelsPerFrame);
+
+        return busSet.size() == numChannels ? busSet : AudioChannelSet::canonicalChannelSet (numChannels);
+    }
+
+    bool isAudioBusElement (AudioUnitScope scope, AudioUnitElement element) const
+    {
+        if (processor == nullptr || (scope != kAudioUnitScope_Input && scope != kAudioUnitScope_Output))
+            return false;
+
+        return static_cast<int> (element) < processor->getBusLayout().getNumAudioBuses (scope == kAudioUnitScope_Input);
+    }
+
+    std::vector<AudioChannelLayoutTag> GetChannelLayoutTags (AudioUnitScope scope, AudioUnitElement element) override
+    {
+        if (! isAudioBusElement (scope, element))
+            return AudioPluginAUBase::GetChannelLayoutTags (scope, element);
+
+        const auto isInput = scope == kAudioUnitScope_Input;
+        const auto busIndex = static_cast<int> (element);
+        const auto& busLayout = processor->getBusLayout();
+
+        std::vector<AudioChannelLayoutTag> tags;
+
+        for (const auto tag : CoreAudioLayouts::getKnownCoreAudioTags())
+        {
+            const auto set = CoreAudioLayouts::fromCoreAudio (tag);
+            if (set.isDisabled() || set.size() > maxLayoutChannels)
+                continue;
+
+            const auto candidate = busLayout.withAudioBusChannelSet (busIndex, isInput, set);
+            if (processor->isBusLayoutSupported (candidate))
+                tags.push_back (tag);
+        }
+
+        return tags;
+    }
+
+    UInt32 GetAudioChannelLayout (AudioUnitScope scope, AudioUnitElement element, AudioChannelLayout* outLayoutPtr, bool& outWritable) override
+    {
+        if (const auto size = AudioPluginAUBase::GetAudioChannelLayout (scope, element, outLayoutPtr, outWritable); size > 0 || ! isAudioBusElement (scope, element))
+            return size;
+
+        const auto tag = CoreAudioLayouts::toCoreAudio (getElementChannelSet (scope, element));
+        const auto tags = GetChannelLayoutTags (scope, element);
+        if (std::find (tags.begin(), tags.end(), tag) == tags.end())
+            return 0;
+
+        outWritable = true;
+
+        if (outLayoutPtr != nullptr)
+        {
+            std::memset (outLayoutPtr, 0, sizeof (AudioChannelLayout));
+            outLayoutPtr->mChannelLayoutTag = tag;
+        }
+
+        return sizeof (AudioChannelLayout);
+    }
+
+    AudioChannelSet getHostChannelSet (AudioUnitScope scope, AudioUnitElement element, int numChannels)
+    {
+        const auto& hostLayout = IOElement (scope, element).ChannelLayout();
+        if (hostLayout.IsValid())
+        {
+            const auto set = CoreAudioLayouts::fromCoreAudio (hostLayout.Layout());
+            if (set.size() == numChannels)
+                return set;
+        }
+
+        const auto busSet = processor->getBusLayout().getAudioBusChannelSet (static_cast<int> (element), scope == kAudioUnitScope_Input);
+        return busSet.size() == numChannels ? busSet : AudioChannelSet::canonicalChannelSet (numChannels);
+    }
+
+    std::vector<int> getChannelOrder (AudioUnitScope scope, AudioUnitElement element)
+    {
+        const auto set = processor->getBusLayout().getAudioBusChannelSet (static_cast<int> (element), scope == kAudioUnitScope_Input);
+
+        std::vector<int> order (static_cast<size_t> (set.size()));
+        std::iota (order.begin(), order.end(), 0);
+
+        if (! isAudioBusElement (scope, element) || IOElement (scope, element).GetStreamFormat().mChannelsPerFrame != static_cast<UInt32> (set.size()))
+            return order;
+
+        const auto& hostLayout = IOElement (scope, element).ChannelLayout();
+        if (! hostLayout.IsValid())
+            return order;
+
+        const auto auChannels = CoreAudioLayouts::getCoreAudioLayoutChannels (hostLayout.Layout());
+        if (auChannels.size() != set.size())
+            return order;
+
+        std::vector<int> mapped (order.size());
+
+        for (int ch = 0; ch < set.size(); ++ch)
+        {
+            const auto index = auChannels.indexOf (set.getTypeOfChannel (ch));
+            if (index < 0)
+                return order;
+
+            mapped[static_cast<size_t> (ch)] = index;
+        }
+
+        return mapped;
+    }
+
+    void updateMainChannelOrders()
+    {
+        mainInputOrder.clear();
+        mainOutputOrder.clear();
+
+        if (Inputs().GetNumberOfElements() > 0 && processor->getBusLayout().getNumAudioBuses (true) > 0)
+            mainInputOrder = getChannelOrder (kAudioUnitScope_Input, 0);
+
+        if (processor->getBusLayout().getNumAudioBuses (false) > 0)
+            mainOutputOrder = getChannelOrder (kAudioUnitScope_Output, 0);
+    }
+
+    static UInt32 mapChannel (const std::vector<int>& order, UInt32 channel) noexcept
+    {
+        return channel < order.size() ? static_cast<UInt32> (order[channel]) : channel;
+    }
+
+    //==============================================================================
+
+    static AudioBusLayout withMainChannelCounts (const AudioBusLayout& layout, int inputChannels, int outputChannels)
+    {
+        return layout.withAudioBusNumChannels (0, true, inputChannels)
+            .withAudioBusNumChannels (0, false, outputChannels);
+    }
+
+    // Switches the processor to the channel counts the host configured on the main elements
+    OSStatus applyHostChannelCounts()
+    {
+        const auto& busLayout = processor->getBusLayout();
+
+        const int inputChannels = busLayout.getNumAudioBuses (true) > 0 && Inputs().GetNumberOfElements() > 0
+                                    ? static_cast<int> (Input (0).GetStreamFormat().mChannelsPerFrame)
+                                    : 0;
+        const int outputChannels = busLayout.getNumAudioBuses (false) > 0
+                                     ? static_cast<int> (Output (0).GetStreamFormat().mChannelsPerFrame)
+                                     : 0;
+
+        auto requestedLayout = withMainChannelCounts (busLayout, inputChannels, outputChannels);
+
+        if (inputChannels > 0)
+            requestedLayout = requestedLayout.withAudioBusChannelSet (0, true, getHostChannelSet (kAudioUnitScope_Input, 0, inputChannels));
+
+        if (outputChannels > 0)
+            requestedLayout = requestedLayout.withAudioBusChannelSet (0, false, getHostChannelSet (kAudioUnitScope_Output, 0, outputChannels));
+
+        if (requestedLayout == busLayout)
+            return noErr;
+
+        if (const auto result = processor->setBusLayout (requestedLayout); result.failed())
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "Initialize failed: " << result.getErrorMessage() << ", inputChannels=" << String (inputChannels) << ", outputChannels=" << String (outputChannels));
+            return kAudioUnitErr_FormatNotSupported;
+        }
+
+        return noErr;
+    }
+
+    void rebuildClumps()
+    {
+        clumpNames.clear();
+
+        if (processor == nullptr)
+            return;
+
+        for (const auto& parameter : processor->getParameters())
+            if (const auto modulePath = parameter->getModulePath(); modulePath.isNotEmpty())
+                clumpNames.addIfNotAlreadyThere (modulePath);
     }
 
     Float64 getCurrentSampleRate()
@@ -1120,7 +1622,7 @@ private:
     }
 
     ScopedYupInitialiser_GUI scopeInitialiser;
-    ScopedYupInitialiser_Windowing scopeWindowingInitialiser;
+    WrapperWindowing windowing;
     std::unique_ptr<AudioProcessor> processor;
 
     MidiBuffer midiBuffer;
@@ -1141,7 +1643,23 @@ private:
     std::vector<uint8_t> auxiliaryInputValid; // per-element pull success (effect path)
     AudioUnit componentInstance = nullptr;
     bool renderingOffline = false;
-    bool isBypassed = false;
+    WrapperBypass bypass;
+    StringArray clumpNames;
+    std::atomic<uint32> pendingNotifications { 0 };
+
+    std::vector<int> mainInputOrder;
+    std::vector<int> mainOutputOrder;
+
+    CriticalSection midiOutputLock;
+    AUMIDIOutputCallbackStruct midiOutputCallback {};
+    std::vector<Byte> midiOutputPacketStorage;
+    AudioTimeStamp lastRenderTimeStamp {};
+
+    // Clump 0 means "no clump" for AU hosts
+    static constexpr UInt32 firstClumpID = 1;
+    static constexpr int maxNegotiatedChannels = 8;
+    static constexpr int maxLayoutChannels = 64;
+    static constexpr size_t midiOutputPacketStorageSize = 16384;
 };
 
 } // namespace yup
@@ -1250,6 +1768,8 @@ public:
             return;
         }
 
+        processorWrapper->ensureWindowingInitialised();
+
         std::unique_ptr<AudioProcessorEditor> processorEditor (processor->createEditor());
 
         if (processorEditor == nullptr)
@@ -1258,15 +1778,15 @@ public:
             return;
         }
 
-        const auto preferredSize = processorEditor->getPreferredSize();
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "created editor: preferredWidth=" << String (preferredSize.getWidth()) << ", preferredHeight=" << String (preferredSize.getHeight()) << ", editor=" << describePointer (processorEditor.get()));
+        const auto initialSize = processorEditor->getConstrainedSize (processorEditor->getInitialSize());
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "created editor: initialWidth=" << String (initialSize.getWidth()) << ", initialHeight=" << String (initialSize.getHeight()) << ", editor=" << describePointer (processorEditor.get()));
 
         [view setAutoresizingMask:processorEditor->isResizable() ? (NSViewWidthSizable | NSViewHeightSizable) : NSViewNotSizable];
 
         editorComponent = std::make_unique<AudioPluginEditorAU> (std::move (processorEditor));
         editorComponent->addComponentListener (this);
 
-        [view setFrameSize:NSMakeSize (preferredSize.getWidth(), preferredSize.getHeight())];
+        [view setFrameSize:NSMakeSize (initialSize.getWidth(), initialSize.getHeight())];
         resizeEditorToBounds();
     }
 
@@ -1277,11 +1797,13 @@ public:
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view moved to window: view=" << describePointer ((__bridge void*) view) << ", window=" << describePointer ((__bridge void*) [view window]) << ", contentView=" << describePointer ((__bridge void*) [[view window] contentView]));
 
             attachEditorIfNeeded();
+            observeHostView();
         }
         else
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view removed from window: view=" << describePointer ((__bridge void*) view));
 
+            stopObservingHostView();
             detachEditorIfNeeded();
         }
     }
@@ -1305,10 +1827,8 @@ public:
 
         const ScopedValueSetter<bool> scoped (resizingEditorToBounds, true);
 
-        editorComponent->setBounds ({ 0.0f,
-                                      0.0f,
-                                      jmax (1.0f, static_cast<float> (NSWidth (bounds))),
-                                      jmax (1.0f, static_cast<float> (NSHeight (bounds))) });
+        editorComponent->setSize ({ jmax (1.0f, static_cast<float> (NSWidth (bounds))),
+                                    jmax (1.0f, static_cast<float> (NSHeight (bounds))) });
     }
 
     NSSize getConstrainedFrameSize (NSSize size) const
@@ -1316,7 +1836,7 @@ public:
         if (editorComponent == nullptr)
             return size;
 
-        const auto constrained = editorComponent->getEditor().getConstrainedSize ({ static_cast<int> (size.width), static_cast<int> (size.height) });
+        const auto constrained = editorComponent->getEditor().getConstrainedSizeToFit ({ static_cast<int> (size.width), static_cast<int> (size.height) });
         return NSMakeSize (constrained.getWidth(), constrained.getHeight());
     }
 
@@ -1388,8 +1908,121 @@ private:
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor detached from native view: isOnDesktop=" << String (editorComponent->isOnDesktop() ? "true" : "false"));
     }
 
+    /* Some hosts (Reaper) resize the container view on window edge drags without resizing the plugin
+       view, so the plugin view follows its superview size like VST3 and CLAP editors follow onSize. */
+    void observeHostView()
+    {
+        stopObservingHostView();
+
+        NSView* hostView = [view superview];
+        if (hostView == nil || editorComponent == nullptr || ! editorComponent->getEditor().isResizable())
+            return;
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "observing host view: hostView=" << describePointer ((__bridge void*) hostView) << ", class=" << String ([NSStringFromClass ([hostView class]) UTF8String]) << ", frame=" << String ([NSStringFromRect ([hostView frame]) UTF8String]) << ", viewFrame=" << String ([NSStringFromRect ([view frame]) UTF8String]) << ", flipped=" << String ([hostView isFlipped] ? "true" : "false") << ", autoresizesSubviews=" << String ([hostView autoresizesSubviews] ? "true" : "false"));
+
+        observedHostView = hostView;
+        lastHostViewSize = [hostView bounds].size;
+
+        [hostView setPostsFrameChangedNotifications:YES];
+
+        hostViewObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSViewFrameDidChangeNotification
+                                                                             object:hostView
+                                                                              queue:nil
+                                                                         usingBlock:^(NSNotification*)
+                                                                         {
+                                                                             hostViewResized();
+                                                                         }];
+    }
+
+    void stopObservingHostView()
+    {
+        hostResizeSnapper.cancel();
+
+        if (hostViewObserver != nil)
+            [[NSNotificationCenter defaultCenter] removeObserver:hostViewObserver];
+
+        hostViewObserver = nil;
+        observedHostView = nil;
+    }
+
+    void hostViewResized()
+    {
+        if (observedHostView == nil || editorComponent == nullptr)
+            return;
+
+        const auto hostBounds = [observedHostView bounds];
+        if (NSEqualSizes (hostBounds.size, lastHostViewSize))
+            return;
+
+        lastHostViewSize = hostBounds.size;
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "host view resized: size=" << String ([NSStringFromSize (hostBounds.size) UTF8String]) << ", viewFrame=" << String ([NSStringFromRect ([view frame]) UTF8String]) << ", resizingViewToEditor=" << String (resizingViewToEditor ? "true" : "false"));
+
+        // The host adapting its container to a plugin driven resize, nothing to follow
+        if (resizingViewToEditor)
+            return;
+
+        fitEditorInsideHostView (getAvailableHostViewSize());
+        hostResizeSnapper.hostResized();
+    }
+
+    /* Hosts like Waveform place the plugin view inside their container with a border and a title bar, and
+       size the container to the view plus those margins. Filling the whole container would make the host grow
+       it again by the margins, forever. The view origin gives the leading margins, the trailing ones are
+       assumed to match the side margin. */
+    NSSize getAvailableHostViewSize() const
+    {
+        const auto hostSize = [observedHostView bounds].size;
+        const auto frame = [view frame];
+
+        const auto sideMargin = jmax (0.0, static_cast<double> (NSMinX (frame)));
+        const auto verticalMargins = [observedHostView isFlipped] ? jmax (0.0, static_cast<double> (NSMinY (frame))) + sideMargin : 0.0;
+
+        return NSMakeSize (jmax (1.0, hostSize.width - sideMargin * 2.0),
+                           jmax (1.0, hostSize.height - verticalMargins));
+    }
+
+    /* Hosts echo plugin view frame changes back to their window, so constraining the view while the user
+       drags the window edges makes the window jump between the dragged and the constrained size. The view
+       keeps matching the host view, and only the editor inside it is constrained until the drag ends. */
+    void fitEditorInsideHostView (NSSize availableSize)
+    {
+        if (! NSEqualSizes (availableSize, [view frame].size))
+        {
+            const ScopedValueSetter<bool> scoped (resizingViewToEditor, true);
+            ObjCClass<NSView>::sendSuperclassMessage<void> (view, @selector (setFrameSize:), availableSize);
+            alignToHostViewTop();
+        }
+
+        const auto size = editorComponent->getEditor().getConstrainedSizeToFit ({ static_cast<int> (availableSize.width), static_cast<int> (availableSize.height) });
+
+        const ScopedValueSetter<bool> scoped (resizingEditorToBounds, true);
+        editorComponent->setSize (size.to<float>());
+    }
+
+    void snapToConstrainedSize()
+    {
+        if (observedHostView == nil || editorComponent == nullptr)
+            return;
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "snapping to constrained size: hostSize=" << String ([NSStringFromSize ([observedHostView bounds].size) UTF8String]) << ", availableSize=" << String ([NSStringFromSize (getAvailableHostViewSize()) UTF8String]) << ", viewFrame=" << String ([NSStringFromRect ([view frame]) UTF8String]));
+
+        // Our setFrameSize: override constrains the size, the host then fits its window to the view
+        [view setFrameSize:getAvailableHostViewSize()];
+        alignToHostViewTop();
+    }
+
+    void alignToHostViewTop()
+    {
+        if (observedHostView == nil || [observedHostView isFlipped])
+            return;
+
+        [view setFrameOrigin:NSMakePoint (NSMinX ([view frame]), NSHeight ([observedHostView bounds]) - NSHeight ([view frame]))];
+    }
+
     void closeEditorIfNeeded()
     {
+        stopObservingHostView();
         detachEditorIfNeeded();
 
         endActiveParameterGestures (processor);
@@ -1413,15 +2046,30 @@ private:
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "resizing editor view to editor: width=" << String (static_cast<double> (newSize.width)) << ", height=" << String (static_cast<double> (newSize.height)) << ", editor=" << describePointer (editorComponent.get()));
 
+        const ScopedValueSetter<bool> scoped (resizingViewToEditor, true);
+
         // Skip our own override, which would resize the editor back to the view
         ObjCClass<NSView>::sendSuperclassMessage<void> (view, @selector (setFrameSize:), newSize);
+
+        if (observedHostView != nil)
+            lastHostViewSize = [observedHostView bounds].size;
     }
+
+    friend struct AudioPluginEditorViewAUClass;
 
     __unsafe_unretained NSView* view = nil;
     AudioPluginProcessorAU* processorWrapper = nullptr;
     AudioProcessor* processor = nullptr;
     std::unique_ptr<AudioPluginEditorAU> editorComponent;
+    __weak NSView* observedHostView = nil;
+    id hostViewObserver = nil;
+    NSSize lastHostViewSize = NSZeroSize;
     bool resizingEditorToBounds = false;
+    bool resizingViewToEditor = false;
+    HostResizeSnapper hostResizeSnapper { [this]
+                                          {
+                                              snapToConstrainedSize();
+                                          } };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginEditorViewAU)
 };
@@ -1597,7 +2245,28 @@ OSStatus AudioPluginProcessorAU::GetProperty (AudioUnitPropertyID inID,
         if (outData == nullptr)
             return kAudioUnitErr_InvalidPropertyValue;
 
-        *static_cast<UInt32*> (outData) = isBypassed ? 1u : 0u;
+        *static_cast<UInt32*> (outData) = bypass.isBypassed() ? 1u : 0u;
+        return noErr;
+    }
+
+    if (inID == kAudioUnitProperty_ParameterStringFromValue || inID == kAudioUnitProperty_ParameterValueFromString)
+    {
+        if (inScope != kAudioUnitScope_Global)
+            return kAudioUnitErr_InvalidScope;
+
+        return getParameterStringProperty (inID, outData);
+    }
+
+    if (inID == kAudioUnitProperty_MIDIOutputCallbackInfo)
+    {
+        if (inScope != kAudioUnitScope_Global)
+            return kAudioUnitErr_InvalidScope;
+
+        if (processor == nullptr || ! processor->producesMidi() || outData == nullptr)
+            return kAudioUnitErr_InvalidProperty;
+
+        CFStringRef outputName = CFSTR ("MIDI Out");
+        *static_cast<CFArrayRef*> (outData) = CFArrayCreate (nullptr, reinterpret_cast<const void**> (&outputName), 1, &kCFTypeArrayCallBacks);
         return noErr;
     }
 

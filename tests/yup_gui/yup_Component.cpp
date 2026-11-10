@@ -369,6 +369,11 @@ public:
     {
         comp.internalDetachedFromNative();
     }
+
+    static std::optional<RectangleList<float>> takeEffectDirtyRegion (Component& comp, bool renderContinuous)
+    {
+        return comp.takeEffectDirtyRegion (renderContinuous);
+    }
 };
 
 } // namespace yup
@@ -4303,4 +4308,762 @@ TEST_F (ComponentTest, PaintMarginLeavesBoundsAndHitTestingUnchanged)
     EXPECT_EQ (child->getBounds(), (Rectangle<float> { 25.0f, 25.0f, 100.0f, 75.0f }));
     EXPECT_EQ (parent->findComponentAt ({ 30.0f, 30.0f }), child.get());
     EXPECT_EQ (parent->findComponentAt ({ 20.0f, 20.0f }), parent.get());
+}
+
+TEST_F (ComponentTest, TransformToScreenIncludesTheTransformOfNestedComponents)
+{
+    child->setTransform (AffineTransform::translation (5.0f, 7.0f));
+
+    const auto viaTransform = Point<float> (1.0f, 1.0f).transformed (child->getTransformToScreen());
+    EXPECT_NEAR (81.0f, viaTransform.getX(), 0.001f);
+    EXPECT_NEAR (83.0f, viaTransform.getY(), 0.001f);
+
+    const auto viaPoint = child->localToScreen (Point<float> (1.0f, 1.0f));
+    EXPECT_NEAR (viaPoint.getX(), viaTransform.getX(), 0.001f);
+    EXPECT_NEAR (viaPoint.getY(), viaTransform.getY(), 0.001f);
+}
+
+TEST_F (ComponentTest, ParentPointMappingNeedsAParent)
+{
+    EXPECT_FALSE (root->getLocalPointFromParent ({ 1.0f, 2.0f }).has_value());
+    EXPECT_FALSE (root->getParentPointFromLocal ({ 1.0f, 2.0f }).has_value());
+
+    EXPECT_EQ (Point<float> (5.0f, 6.0f), child->getLocalPointFromParent ({ 30.0f, 31.0f }).value_or (Point<float>()));
+    EXPECT_EQ (Point<float> (30.0f, 31.0f), child->getParentPointFromLocal ({ 5.0f, 6.0f }).value_or (Point<float>()));
+}
+
+TEST_F (ComponentTest, TheBaseDisplayChangedDoesNothing)
+{
+    EXPECT_NO_THROW (root->displayChanged());
+    EXPECT_EQ (root->getBounds(), (Rectangle<float> { 0.0f, 0.0f, 400.0f, 300.0f }));
+}
+
+TEST_F (ComponentTest, NativeWindowsHaveNoSystemIdAndIgnoreForeignOwnersByDefault)
+{
+    ComponentHelper::attachMockNative (*root);
+
+    auto* native = root->getNativeComponent();
+    ASSERT_NE (nullptr, native);
+
+    EXPECT_EQ (uint64 (0), native->getSystemWindowId());
+    EXPECT_NO_THROW (native->setForeignOwner (1234, 42));
+    EXPECT_NO_THROW (native->setForeignOwner (0, 0));
+    EXPECT_EQ (uint64 (0), native->getSystemWindowId());
+}
+
+TEST_F (ComponentTest, ManuallyCompositedFlagIsToggledOnlyOnChange)
+{
+    EXPECT_FALSE (child->isManuallyComposited());
+
+    child->setManuallyComposited (true);
+    EXPECT_TRUE (child->isManuallyComposited());
+
+    child->setManuallyComposited (true);
+    EXPECT_TRUE (child->isManuallyComposited());
+
+    child->setManuallyComposited (false);
+    EXPECT_FALSE (child->isManuallyComposited());
+}
+
+TEST (ComponentDesktopAttachmentTests, APendingAspectRatioIsAppliedWhenTheWindowIsCreated)
+{
+    Component comp;
+    comp.setBounds (0.0f, 0.0f, 40.0f, 20.0f);
+    comp.setWindowAspectRatio (2.0f);
+
+    comp.addToDesktop (ComponentNative::Options {}
+                           .withDecoration (false)
+                           .withFocusable (false)
+                           .withTemporaryWindow (true));
+
+    EXPECT_TRUE (comp.isOnDesktop());
+    EXPECT_EQ (comp.getWindowAspectRatio(), 2.0f);
+
+    if (auto* native = comp.getNativeComponent())
+        EXPECT_EQ (native->getAspectRatio(), 2.0f);
+
+    comp.removeFromDesktop();
+    EXPECT_FALSE (comp.isOnDesktop());
+}
+
+// =============================================================================
+// Components deleted from inside their own notifications
+// =============================================================================
+
+namespace
+{
+
+/** Runs a test supplied action from inside its notifications, so tests can delete components while they are being notified. */
+class NotificationHookComponent : public Component
+{
+public:
+    void parentHierarchyChanged() override { run (onParentHierarchyChanged); }
+
+    void indexInParentChildrenChanged (int, int) override { run (onIndexInParentChildrenChanged); }
+
+    void attachedToNative() override { run (onAttachedToNative); }
+
+    void detachedFromNative() override { run (onDetachedFromNative); }
+
+    void parentSizeChanged() override { run (onParentSizeChanged); }
+
+    void styleChanged() override { run (onStyleChanged); }
+
+    void safeAreaChanged() override { run (onSafeAreaChanged); }
+
+    void focusOfChildComponentChanged (Component*, FocusChangeType) override { run (onFocusOfChildComponentChanged); }
+
+    void mouseEnter (const MouseEvent&) override { run (onMouse); }
+
+    void mouseExit (const MouseEvent&) override { run (onMouse); }
+
+    void mouseDown (const MouseEvent&) override { run (onMouse); }
+
+    void mouseMove (const MouseEvent&) override { run (onMouse); }
+
+    void mouseDrag (const MouseEvent&) override { run (onMouse); }
+
+    void mouseUp (const MouseEvent&) override { run (onMouse); }
+
+    void mouseDoubleClick (const MouseEvent&) override { run (onMouse); }
+
+    bool mouseWheel (const MouseEvent&, const MouseWheelData&) override
+    {
+        run (onMouse);
+        return false;
+    }
+
+    void gestureTap (const GestureEvent&) override { run (onGesture); }
+
+    std::function<void()> onParentHierarchyChanged;
+    std::function<void()> onIndexInParentChildrenChanged;
+    std::function<void()> onAttachedToNative;
+    std::function<void()> onDetachedFromNative;
+    std::function<void()> onParentSizeChanged;
+    std::function<void()> onStyleChanged;
+    std::function<void()> onSafeAreaChanged;
+    std::function<void()> onFocusOfChildComponentChanged;
+    std::function<void()> onMouse;
+    std::function<void()> onGesture;
+
+private:
+    // Taken by value: the action may delete this component, and the member with it
+    static void run (std::function<void()> action)
+    {
+        if (action)
+            action();
+    }
+};
+
+class DeletingComponentListener : public ComponentListener
+{
+public:
+    void componentMoved (Component&) override
+    {
+        ++movedCount;
+
+        if (auto action = onMoved)
+            action();
+    }
+
+    void componentResized (Component&) override
+    {
+        ++resizedCount;
+
+        if (auto action = onResized)
+            action();
+    }
+
+    std::function<void()> onMoved;
+    std::function<void()> onResized;
+    int movedCount = 0;
+    int resizedCount = 0;
+};
+
+class CountingMouseListener : public MouseListener
+{
+public:
+    void mouseEnter (const MouseEvent&) override { ++calls; }
+
+    void mouseExit (const MouseEvent&) override { ++calls; }
+
+    void mouseDown (const MouseEvent&) override { ++calls; }
+
+    void mouseMove (const MouseEvent&) override { ++calls; }
+
+    void mouseDrag (const MouseEvent&) override { ++calls; }
+
+    void mouseUp (const MouseEvent&) override { ++calls; }
+
+    void mouseDoubleClick (const MouseEvent&) override { ++calls; }
+
+    bool mouseWheel (const MouseEvent&, const MouseWheelData&) override
+    {
+        ++calls;
+        return false;
+    }
+
+    int calls = 0;
+};
+
+class CountingGestureListener : public GestureListener
+{
+public:
+    void gestureTap (const GestureEvent&) override { ++calls; }
+
+    void gestureLongPress (const GestureEvent&) override { ++calls; }
+
+    void gesturePinch (const GestureEvent&) override { ++calls; }
+
+    void gestureRotate (const GestureEvent&) override { ++calls; }
+
+    void gesturePan (const GestureEvent&) override { ++calls; }
+
+    void gestureSwipe (const GestureEvent&) override { ++calls; }
+
+    int calls = 0;
+};
+
+class ApplyCountingComponentEffect : public ComponentEffect
+{
+public:
+    void apply (Graphics&, GpuTexture::Ptr, Rectangle<float>) override { ++applyCount; }
+
+    int applyCount = 0;
+};
+
+} // namespace
+
+TEST (ComponentBailOutTests, ReorderingStopsWhenTheMovedChildDeletesTheParent)
+{
+    NotificationHookComponent first;
+    NotificationHookComponent second;
+    auto parent = std::make_unique<Component>();
+    parent->addChildComponent (first);
+    parent->addChildComponent (second);
+
+    first.onIndexInParentChildrenChanged = [&parent] { parent.reset(); };
+    parent->addChildComponent (first, 1);
+
+    EXPECT_EQ (nullptr, parent);
+    EXPECT_EQ (nullptr, first.getParentComponent());
+    EXPECT_EQ (nullptr, second.getParentComponent());
+}
+
+TEST (ComponentBailOutTests, ReorderingStopsWhenTheHierarchyNotificationDeletesTheParent)
+{
+    NotificationHookComponent first;
+    NotificationHookComponent second;
+    auto parent = std::make_unique<Component>();
+    parent->addChildComponent (first);
+    parent->addChildComponent (second);
+
+    first.onParentHierarchyChanged = [&parent] { parent.reset(); };
+    parent->addChildComponent (first, 1);
+
+    EXPECT_EQ (nullptr, parent);
+    EXPECT_EQ (nullptr, first.getParentComponent());
+}
+
+TEST (ComponentBailOutTests, AddingStopsWhenTheAttachNotificationDeletesTheParent)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    NotificationHookComponent child;
+    int hierarchyNotifications = 0;
+    child.onParentHierarchyChanged = [&hierarchyNotifications] { ++hierarchyNotifications; };
+
+    auto parent = std::make_unique<Component>();
+    ComponentHelper::attachMockNative (*parent);
+
+    child.onAttachedToNative = [&parent] { parent.reset(); };
+    parent->addChildComponent (child);
+
+    EXPECT_EQ (nullptr, parent);
+    EXPECT_EQ (nullptr, child.getParentComponent());
+    EXPECT_EQ (0, hierarchyNotifications);
+}
+
+TEST (ComponentBailOutTests, AddingStopsWhenTheHierarchyNotificationDeletesTheParent)
+{
+    NotificationHookComponent child;
+    auto parent = std::make_unique<Component>();
+
+    child.onParentHierarchyChanged = [&parent] { parent.reset(); };
+    parent->addChildComponent (child);
+
+    EXPECT_EQ (nullptr, parent);
+    EXPECT_EQ (nullptr, child.getParentComponent());
+}
+
+TEST (ComponentBailOutTests, RemovingStopsWhenTheDetachNotificationDeletesTheParent)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    NotificationHookComponent child;
+    int hierarchyNotifications = 0;
+
+    auto parent = std::make_unique<Component>();
+    ComponentHelper::attachMockNative (*parent);
+    parent->addChildComponent (child);
+
+    child.onParentHierarchyChanged = [&hierarchyNotifications] { ++hierarchyNotifications; };
+    child.onDetachedFromNative = [&parent] { parent.reset(); };
+    parent->removeChildComponent (&child);
+
+    EXPECT_EQ (nullptr, parent);
+    EXPECT_EQ (nullptr, child.getParentComponent());
+    EXPECT_EQ (0, hierarchyNotifications);
+}
+
+TEST (ComponentBailOutTests, RemovingStopsWhenTheHierarchyNotificationDeletesTheParent)
+{
+    NotificationHookComponent child;
+    auto parent = std::make_unique<Component>();
+    parent->addChildComponent (child);
+
+    child.onParentHierarchyChanged = [&parent] { parent.reset(); };
+    parent->removeChildComponent (&child);
+
+    EXPECT_EQ (nullptr, parent);
+    EXPECT_EQ (nullptr, child.getParentComponent());
+}
+
+TEST (ComponentBailOutTests, SetStyleStopsWhenStyleChangedDeletesTheComponent)
+{
+    class EmptyStyle : public ComponentStyle
+    {
+    public:
+        void paint (Graphics&, const ApplicationTheme&, const Component&) override {}
+    };
+
+    auto doomed = std::make_unique<NotificationHookComponent>();
+    doomed->onStyleChanged = [&doomed] { doomed.reset(); };
+
+    doomed->setStyle (ComponentStyle::Ptr (new EmptyStyle()));
+
+    EXPECT_EQ (nullptr, doomed);
+}
+
+TEST (ComponentBailOutTests, SetBoundsStopsWhenAResizedListenerDeletesTheComponent)
+{
+    DeletingComponentListener listener;
+    auto doomed = std::make_unique<Component>();
+    doomed->addComponentListener (&listener);
+
+    listener.onResized = [&doomed] { doomed.reset(); };
+    doomed->setBounds (0.0f, 0.0f, 10.0f, 10.0f);
+
+    EXPECT_EQ (nullptr, doomed);
+    EXPECT_EQ (1, listener.resizedCount);
+    EXPECT_EQ (0, listener.movedCount);
+}
+
+TEST (ComponentBailOutTests, SetBoundsStopsWhenAMovedListenerDeletesTheComponent)
+{
+    Component parent;
+    DeletingComponentListener listener;
+    auto doomed = std::make_unique<Component>();
+    parent.addChildComponent (*doomed);
+    doomed->addComponentListener (&listener);
+
+    listener.onMoved = [&doomed] { doomed.reset(); };
+    doomed->setBounds (5.0f, 5.0f, 10.0f, 10.0f);
+
+    EXPECT_EQ (nullptr, doomed);
+    EXPECT_EQ (1, listener.resizedCount);
+    EXPECT_EQ (1, listener.movedCount);
+    EXPECT_EQ (0, parent.getNumChildComponents());
+}
+
+TEST (ComponentBailOutTests, SetBoundsStopsWhenAChildDeletesTheParentOnParentSizeChanged)
+{
+    NotificationHookComponent child;
+    DeletingComponentListener listener;
+    auto parent = std::make_unique<Component>();
+    parent->addChildComponent (child);
+    parent->addComponentListener (&listener);
+
+    child.onParentSizeChanged = [&parent] { parent.reset(); };
+    parent->setBounds (0.0f, 0.0f, 50.0f, 50.0f);
+
+    EXPECT_EQ (nullptr, parent);
+    EXPECT_EQ (nullptr, child.getParentComponent());
+    EXPECT_EQ (1, listener.resizedCount);
+    EXPECT_EQ (0, listener.movedCount);
+}
+
+TEST (ComponentBailOutTests, MouseHandlersThatDeleteTheComponentSkipTheListeners)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    CountingMouseListener listener;
+    const MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (1.0f, 1.0f));
+
+    for (const auto trigger : { &ComponentHelper::triggerMouseEnter, &ComponentHelper::triggerMouseExit, &ComponentHelper::triggerMouseDown,
+                                &ComponentHelper::triggerMouseMove, &ComponentHelper::triggerMouseDrag, &ComponentHelper::triggerMouseUp,
+                                &ComponentHelper::triggerMouseDoubleClick })
+    {
+        auto doomed = std::make_unique<NotificationHookComponent>();
+        doomed->setVisible (true);
+        doomed->addMouseListener (&listener);
+        doomed->onMouse = [&doomed] { doomed.reset(); };
+
+        trigger (*doomed, event);
+
+        EXPECT_EQ (nullptr, doomed);
+    }
+
+    auto doomed = std::make_unique<NotificationHookComponent>();
+    doomed->setVisible (true);
+    doomed->addMouseListener (&listener);
+    doomed->onMouse = [&doomed] { doomed.reset(); };
+
+    ComponentHelper::triggerMouseWheel (*doomed, event, MouseWheelData (0.0f, 1.0f));
+
+    EXPECT_EQ (nullptr, doomed);
+    EXPECT_EQ (0, listener.calls);
+}
+
+TEST (ComponentBailOutTests, GestureHandlerThatDeletesTheComponentSkipsTheListeners)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    CountingGestureListener listener;
+    auto doomed = std::make_unique<NotificationHookComponent>();
+    doomed->setVisible (true);
+    doomed->addGestureListener (&listener);
+    doomed->onGesture = [&doomed] { doomed.reset(); };
+
+    ComponentHelper::triggerGesture (*doomed, GestureEvent (GestureType::tap, GestureEvent::Phase::ended));
+
+    EXPECT_EQ (nullptr, doomed);
+    EXPECT_EQ (0, listener.calls);
+}
+
+TEST (ComponentBailOutTests, FocusNotificationStopsWhenAnAncestorDeletesItself)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    NotificationHookComponent grandParent;
+    Component child;
+    int grandParentNotifications = 0;
+    grandParent.onFocusOfChildComponentChanged = [&grandParentNotifications] { ++grandParentNotifications; };
+
+    auto ancestor = std::make_unique<NotificationHookComponent>();
+    grandParent.addChildComponent (*ancestor);
+    ancestor->addChildComponent (child);
+    ancestor->onFocusOfChildComponentChanged = [&ancestor] { ancestor.reset(); };
+
+    ComponentHelper::triggerFocusOfComponentChanged (child, FocusChangeType::focusChangedDirectly);
+
+    EXPECT_EQ (nullptr, ancestor);
+    EXPECT_EQ (nullptr, child.getParentComponent());
+    EXPECT_EQ (0, grandParentNotifications);
+}
+
+TEST (ComponentBailOutTests, SafeAreaNotificationStopsWhenTheComponentIsDeleted)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    NotificationHookComponent child;
+    int childNotifications = 0;
+    child.onSafeAreaChanged = [&childNotifications] { ++childNotifications; };
+
+    auto doomed = std::make_unique<NotificationHookComponent>();
+    doomed->addChildComponent (child);
+    doomed->onSafeAreaChanged = [&doomed] { doomed.reset(); };
+
+    ComponentHelper::triggerSafeAreaChanged (*doomed);
+
+    EXPECT_EQ (nullptr, doomed);
+    EXPECT_EQ (0, childNotifications);
+}
+
+TEST (ComponentBailOutTests, SafeAreaNotificationStopsWhenAChildDeletesTheParent)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    NotificationHookComponent first;
+    NotificationHookComponent second;
+    int secondNotifications = 0;
+    second.onSafeAreaChanged = [&secondNotifications] { ++secondNotifications; };
+
+    auto parent = std::make_unique<Component>();
+    parent->addChildComponent (first);
+    parent->addChildComponent (second);
+    first.onSafeAreaChanged = [&parent] { parent.reset(); };
+
+    ComponentHelper::triggerSafeAreaChanged (*parent);
+
+    EXPECT_EQ (nullptr, parent);
+    EXPECT_EQ (0, secondNotifications);
+}
+
+TEST (ComponentBailOutTests, NativeAttachmentNotificationsStopWhenTheComponentIsDeleted)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    NotificationHookComponent child;
+    int childNotifications = 0;
+    child.onAttachedToNative = [&childNotifications] { ++childNotifications; };
+    child.onDetachedFromNative = [&childNotifications] { ++childNotifications; };
+
+    auto attached = std::make_unique<NotificationHookComponent>();
+    attached->addChildComponent (child);
+    attached->onAttachedToNative = [&attached] { attached.reset(); };
+    ComponentHelper::triggerAttachedToNative (*attached);
+    EXPECT_EQ (nullptr, attached);
+
+    auto detached = std::make_unique<NotificationHookComponent>();
+    detached->addChildComponent (child);
+    detached->onDetachedFromNative = [&detached] { detached.reset(); };
+    ComponentHelper::triggerDetachedFromNative (*detached);
+    EXPECT_EQ (nullptr, detached);
+
+    EXPECT_EQ (0, childNotifications);
+}
+
+TEST (ComponentBailOutTests, NativeAttachmentNotificationsStopWhenAChildDeletesTheParent)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    NotificationHookComponent first;
+    NotificationHookComponent second;
+    int secondNotifications = 0;
+    second.onAttachedToNative = [&secondNotifications] { ++secondNotifications; };
+    second.onDetachedFromNative = [&secondNotifications] { ++secondNotifications; };
+
+    auto attached = std::make_unique<Component>();
+    attached->addChildComponent (first);
+    attached->addChildComponent (second);
+    first.onAttachedToNative = [&attached] { attached.reset(); };
+    ComponentHelper::triggerAttachedToNative (*attached);
+    EXPECT_EQ (nullptr, attached);
+
+    auto detached = std::make_unique<Component>();
+    detached->addChildComponent (first);
+    detached->addChildComponent (second);
+    first.onDetachedFromNative = [&detached] { detached.reset(); };
+    ComponentHelper::triggerDetachedFromNative (*detached);
+    EXPECT_EQ (nullptr, detached);
+
+    EXPECT_EQ (0, secondNotifications);
+}
+
+// =============================================================================
+// Gesture dispatch defaults
+// =============================================================================
+
+TEST (ComponentGestureDefaultsTests, TheBasePinchHandlerStillLetsListenersRun)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    Component comp;
+    CountingGestureListener listener;
+    comp.setVisible (true);
+    comp.addGestureListener (&listener);
+
+    ComponentHelper::triggerGesture (comp, GestureEvent (GestureType::pinch, GestureEvent::Phase::changed).withScale (1.5f, 1.5f));
+    EXPECT_EQ (1, listener.calls);
+
+    ComponentHelper::triggerGesture (comp, GestureEvent (GestureType::none, GestureEvent::Phase::began));
+    EXPECT_EQ (1, listener.calls);
+
+    comp.removeGestureListener (&listener);
+}
+
+// =============================================================================
+// Effect damage tracking
+// =============================================================================
+
+class ComponentEffectDamageTests : public ::testing::Test
+{
+protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    void SetUp() override
+    {
+        comp.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+        comp.setVisible (true);
+        comp.setOpaque (true);
+        comp.setComponentEffect (ComponentEffect::Ptr (new ApplyCountingComponentEffect()));
+
+        ComponentHelper::takeEffectDirtyRegion (comp, false);
+    }
+
+    Component comp;
+};
+
+TEST_F (ComponentEffectDamageTests, DamageIsClippedToTheBoundsAndSnappedToPixels)
+{
+    comp.repaint (Rectangle<float> (90.0f, 90.0f, 20.0f, 20.0f));
+    comp.repaint (Rectangle<float> (10.5f, 10.5f, 2.0f, 2.0f));
+    comp.repaint (Rectangle<float> (150.0f, 150.0f, 5.0f, 5.0f));
+
+    const auto region = ComponentHelper::takeEffectDirtyRegion (comp, false);
+    ASSERT_TRUE (region.has_value());
+    EXPECT_EQ (2, region->getNumRectangles());
+    EXPECT_TRUE (region->contains (Rectangle<float> (90.0f, 90.0f, 10.0f, 10.0f)));
+    EXPECT_TRUE (region->contains (Rectangle<float> (10.0f, 10.0f, 3.0f, 3.0f)));
+
+    const auto drained = ComponentHelper::takeEffectDirtyRegion (comp, false);
+    ASSERT_TRUE (drained.has_value());
+    EXPECT_EQ (0, drained->getNumRectangles());
+}
+
+TEST_F (ComponentEffectDamageTests, TooManyDamagedRectanglesCollapseToTheirBoundingBox)
+{
+    for (int index = 0; index < 9; ++index)
+        comp.repaint (Rectangle<float> (index * 10.0f, 0.0f, 5.0f, 5.0f));
+
+    const auto region = ComponentHelper::takeEffectDirtyRegion (comp, false);
+    ASSERT_TRUE (region.has_value());
+    ASSERT_EQ (1, region->getNumRectangles());
+    EXPECT_EQ (region->getRectangle (0), (Rectangle<float> { 0.0f, 0.0f, 85.0f, 5.0f }));
+}
+
+TEST_F (ComponentEffectDamageTests, ContinuousOrTranslucentRenderingRepaintsEverything)
+{
+    comp.repaint (Rectangle<float> (10.0f, 10.0f, 5.0f, 5.0f));
+    EXPECT_FALSE (ComponentHelper::takeEffectDirtyRegion (comp, true).has_value());
+
+    comp.setOpaque (false);
+    comp.repaint (Rectangle<float> (10.0f, 10.0f, 5.0f, 5.0f));
+    EXPECT_FALSE (ComponentHelper::takeEffectDirtyRegion (comp, false).has_value());
+}
+
+TEST_F (ComponentEffectDamageTests, AManuallyCompositedChildDamagesTheWholeParent)
+{
+    Component child;
+    child.setBounds (10.0f, 10.0f, 20.0f, 20.0f);
+    comp.addAndMakeVisible (child);
+    ComponentHelper::takeEffectDirtyRegion (comp, false);
+
+    child.repaint (Rectangle<float> (0.0f, 0.0f, 5.0f, 5.0f));
+
+    auto region = ComponentHelper::takeEffectDirtyRegion (comp, false);
+    ASSERT_TRUE (region.has_value());
+    ASSERT_EQ (1, region->getNumRectangles());
+    EXPECT_EQ (region->getRectangle (0), (Rectangle<float> { 10.0f, 10.0f, 5.0f, 5.0f }));
+
+    child.setManuallyComposited (true);
+    ComponentHelper::takeEffectDirtyRegion (comp, false);
+
+    child.repaint (Rectangle<float> (0.0f, 0.0f, 5.0f, 5.0f));
+
+    region = ComponentHelper::takeEffectDirtyRegion (comp, false);
+    ASSERT_TRUE (region.has_value());
+    ASSERT_EQ (1, region->getNumRectangles());
+    EXPECT_EQ (region->getRectangle (0), comp.getLocalBounds());
+}
+
+// =============================================================================
+// Painting and offscreen rendering without GPU render targets
+// =============================================================================
+
+class ComponentHeadlessRenderTest : public ::testing::Test
+{
+protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    void SetUp() override
+    {
+        GraphicsContext::Options opts;
+        opts.allowHeadlessRendering = true;
+        context = GraphicsContext::createContext (GpuPlatform::Headless, opts);
+        ASSERT_NE (nullptr, context);
+
+        renderer = context->makeRenderer (100, 100);
+        ASSERT_NE (nullptr, renderer);
+
+        comp.setBounds (0.0f, 0.0f, 50.0f, 50.0f);
+        comp.setVisible (true);
+        comp.setOpaque (true);
+    }
+
+    void paintComponent()
+    {
+        Graphics g (*context, *renderer, 1.0f);
+        ComponentHelper::triggerPaint (comp, g, comp.getLocalBounds(), false);
+    }
+
+    std::unique_ptr<GraphicsContext> context;
+    std::unique_ptr<rive::Renderer> renderer;
+    CountingComponent comp;
+};
+
+TEST_F (ComponentHeadlessRenderTest, AFullyTransparentComponentIsNotPainted)
+{
+    comp.setOpacity (0.0f);
+    paintComponent();
+    EXPECT_EQ (0, comp.paintCount);
+
+    comp.setOpacity (1.0f);
+    paintComponent();
+    EXPECT_EQ (1, comp.paintCount);
+}
+
+TEST_F (ComponentHeadlessRenderTest, AManuallyCompositedComponentIsLeftToItsPresenter)
+{
+    comp.setManuallyComposited (true);
+    paintComponent();
+    EXPECT_EQ (0, comp.paintCount);
+
+    comp.setManuallyComposited (false);
+    paintComponent();
+    EXPECT_EQ (1, comp.paintCount);
+}
+
+TEST_F (ComponentHeadlessRenderTest, AnEffectWithoutAnOffscreenTargetDrawsNothingAndConsumesTheDamage)
+{
+    auto effect = ReferenceCountedObjectPtr<ApplyCountingComponentEffect> (new ApplyCountingComponentEffect());
+    comp.setComponentEffect (effect);
+
+    paintComponent();
+
+    EXPECT_EQ (0, comp.paintCount);
+    EXPECT_EQ (0, effect->applyCount);
+
+    const auto remaining = ComponentHelper::takeEffectDirtyRegion (comp, false);
+    ASSERT_TRUE (remaining.has_value());
+    EXPECT_EQ (0, remaining->getNumRectangles());
+}
+
+TEST_F (ComponentHeadlessRenderTest, ACachedComponentWithoutAnOffscreenTargetPaintsDirectly)
+{
+    CountingComponent child;
+    child.setBounds (10.0f, 10.0f, 10.0f, 10.0f);
+    comp.addAndMakeVisible (child);
+    comp.setCachedToTexture (true);
+
+    paintComponent();
+
+    EXPECT_EQ (1, comp.paintCount);
+    EXPECT_EQ (1, child.paintCount);
+}
+
+TEST_F (ComponentHeadlessRenderTest, OffscreenRenderingWithoutAGpuTargetReturnsNothing)
+{
+    Component empty;
+    EXPECT_EQ (empty.renderToTexture (*context), nullptr);
+    EXPECT_EQ (empty.renderToTexture (*context), nullptr);
+
+    EXPECT_EQ (comp.renderToTexture (*context), nullptr);
+    EXPECT_EQ (comp.renderToTexture (*context, 2.0f), nullptr);
+    EXPECT_EQ (comp.snapshotToTexture (*context), nullptr);
+    EXPECT_EQ (comp.snapshotToTexture (*context, false), nullptr);
+    EXPECT_EQ (0, comp.paintCount);
+}
+
+TEST_F (ComponentHeadlessRenderTest, OffscreenRenderingRunsInsideTheNativeGraphicsContext)
+{
+    ComponentHelper::attachMockNative (comp);
+    comp.setComponentEffect (ComponentEffect::Ptr (new ApplyCountingComponentEffect()));
+
+    EXPECT_FALSE (comp.snapshotToImage (*context).isValid());
+    EXPECT_FALSE (comp.snapshotToImage (*context, false).isValid());
+    EXPECT_EQ (comp.snapshotToTexture (*context), nullptr);
+    EXPECT_EQ (comp.renderToTexture (*context), nullptr);
+    EXPECT_EQ (0, comp.paintCount);
 }

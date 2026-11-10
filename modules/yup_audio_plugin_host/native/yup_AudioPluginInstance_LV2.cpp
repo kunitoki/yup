@@ -19,34 +19,6 @@
   ==============================================================================
 */
 
-#if YUP_AUDIO_PLUGIN_HOST_ENABLE_LV2
-
-#include "../yup_audio_plugin_host.h"
-
-#include <lilv/lilv.h>
-
-#include <lv2/core/lv2.h>
-#include <lv2/atom/atom.h>
-#include <lv2/atom/forge.h>
-#include <lv2/atom/util.h>
-#include <lv2/midi/midi.h>
-#include <lv2/state/state.h>
-#include <lv2/options/options.h>
-#include <lv2/patch/patch.h>
-#include <lv2/time/time.h>
-#include <lv2/buf-size/buf-size.h>
-#include <lv2/worker/worker.h>
-#include <lv2/urid/urid.h>
-#include <lv2/log/log.h>
-
-#include <array>
-#include <cstring>
-#include <map>
-#include <memory>
-#include <mutex>
-#include <set>
-#include <vector>
-
 namespace yup
 {
 
@@ -847,5 +819,3 @@ ResultValue<std::unique_ptr<AudioPluginInstance>> LV2Format::loadPlugin (
 }
 
 } // namespace yup
-
-#endif // YUP_AUDIO_PLUGIN_HOST_ENABLE_LV2

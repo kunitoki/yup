@@ -111,6 +111,18 @@ int main (int argc, char** argv)
 
 #include <yup_gui/yup_gui.h>
 
+namespace yup_tests
+{
+
+/** Lets tests relaunch the runner as a child process: return true to take over the process. */
+std::function<bool (const yup::String&)>& getChildProcessEntryPoint()
+{
+    static std::function<bool (const yup::String&)> entryPoint;
+    return entryPoint;
+}
+
+} // namespace yup_tests
+
 struct TestApplication : yup::YUPApplication
 {
     TestApplication() = default;
@@ -127,6 +139,17 @@ struct TestApplication : yup::YUPApplication
 
     void initialise (const yup::String& commandLineParameters) override
     {
+        if (auto& entryPoint = yup_tests::getChildProcessEntryPoint(); entryPoint && entryPoint (commandLineParameters))
+            return;
+
+        // A worker that failed to connect must never run the tests: they would launch more workers
+        if (yup::ChildProcessWorker::isWorkerProcess())
+        {
+            setApplicationReturnValue (1);
+            quit();
+            return;
+        }
+
         yup::SystemStats::setApplicationCrashHandler ([] (void*)
         {
             auto trace = yup::SystemStats::getStackBacktrace();

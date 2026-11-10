@@ -83,6 +83,34 @@ public:
 
     //==============================================================================
 
+    /**
+        The role of a parameter, used by hosts to treat it specially.
+
+        Meter categories mark read-only values that a host may display in its own
+        metering (AAX gain reduction meters, VST3 read-only flags, CLAP hidden
+        read-only parameters). Gain categories hint at input and output trims.
+    */
+    enum class Category : uint8
+    {
+        Generic,                             /**< A regular parameter. */
+        InputGain,                           /**< An input trim. */
+        OutputGain,                          /**< An output trim. */
+        InputMeter,                          /**< An input level meter. */
+        OutputMeter,                         /**< An output level meter. */
+        CompressorLimiterGainReductionMeter, /**< Gain reduction of a compressor or limiter. */
+        ExpanderGateGainReductionMeter,      /**< Gain reduction of an expander or gate. */
+        AnalysisMeter,                       /**< An analysis meter (spectrum, loudness, ...). */
+        OtherMeter                           /**< Any other kind of meter. */
+    };
+
+    /** Returns true if the category describes a meter. */
+    static constexpr bool isMeterCategory (Category category) noexcept
+    {
+        return category >= Category::InputMeter;
+    }
+
+    //==============================================================================
+
     /** Returns a short display label for a ParameterUnit.
 
         Suitable for plugin format fields that need a compact unit string
@@ -159,7 +187,8 @@ public:
             enumeratedFlag = 1 << 3,
             modulatableFlag = 1 << 4,
             perNoteModulatableFlag = 1 << 5,
-            smoothingEnabledFlag = 1 << 6
+            smoothingEnabledFlag = 1 << 6,
+            bypassFlag = 1 << 7
         };
 
         /** Returns true if the supplied flag is set. */
@@ -217,6 +246,12 @@ public:
         /** Sets whether smoothing is enabled. */
         void setSmoothingEnabled (bool shouldBeEnabled) noexcept { setFlag (smoothingEnabledFlag, shouldBeEnabled); }
 
+        /** Returns true when this parameter is the processor's designated bypass switch. */
+        bool isBypass() const noexcept { return isFlagSet (bypassFlag); }
+
+        /** Sets whether this parameter is the processor's designated bypass switch. */
+        void setBypass (bool shouldBeBypass) noexcept { setFlag (bypassFlag, shouldBeBypass); }
+
         /** The parameter display name. */
         String name;
 
@@ -242,6 +277,9 @@ public:
         /** A custom unit label, used only when `unit` is set to `Custom`.
             Examples: "dBFS", "LUFS", "ms/cm". */
         String unitName;
+
+        /** The role of the parameter. Meter categories imply a read-only parameter. */
+        Category category = Category::Generic;
 
     private:
         uint8 flags = automatableFlag;
@@ -273,6 +311,9 @@ public:
 
     /** Returns the parameter name. */
     const String& getName() const { return metadata.name; }
+
+    /** Returns the display, range and host-facing metadata the parameter was created with. */
+    const Metadata& getMetadata() const noexcept { return metadata; }
 
     /**
         Returns true when this parameter has an explicit host-facing automation ID.
@@ -348,7 +389,19 @@ public:
     /** Returns true when this parameter supports CLAP per-note modulation events. */
     bool isPerNoteModulatable() const noexcept { return metadata.isPerNoteModulatable(); }
 
-    /** Returns the module path of this parameter. */
+    /** Returns true when this parameter is the processor's designated bypass switch.
+
+        Values >= 0.5 mean bypassed. Plugin wrappers expose such a parameter as the
+        host bypass control instead of creating their own.
+    */
+    bool isBypass() const noexcept { return metadata.isBypass(); }
+
+    /** Returns the module path of this parameter.
+
+        The path groups parameters hierarchically using "/" as a separator (for
+        example "Filter/Envelope"). Wrappers map it to VST3 units, CLAP modules
+        and AU clumps.
+    */
     String getModulePath() const { return metadata.modulePath; }
 
     /** Returns the measurement unit of this parameter. */
@@ -356,6 +409,12 @@ public:
 
     /** Returns the custom unit label string (only meaningful when getUnit() == Custom). */
     String getUnitName() const { return metadata.unitName; }
+
+    /** Returns the role of this parameter. */
+    Category getCategory() const noexcept { return metadata.category; }
+
+    /** Returns true when this parameter is a meter. */
+    bool isMeter() const noexcept { return isMeterCategory (metadata.category); }
 
     //==============================================================================
 

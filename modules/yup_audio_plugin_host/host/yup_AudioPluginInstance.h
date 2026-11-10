@@ -60,7 +60,12 @@ public:
     /** Returns true when this instance is rendering in offline/non-realtime mode. */
     bool isNonRealtime() const noexcept;
 
-    /** Sets whether processBlock() should render the hosted plugin bypassed. */
+    /** Sets whether processBlock() should render the hosted plugin bypassed.
+
+        When the hosted plugin exposes its own bypass parameter, the instance drives that
+        parameter instead, so the plugin keeps processing and handles latency and tails.
+        Edits of that parameter from the plugin editor or automation update this state too.
+    */
     void setBypassed (bool shouldBeBypassed) noexcept;
 
     /** Returns true when this instance is currently bypassed. */
@@ -87,7 +92,7 @@ protected:
 
 private:
     bool nonRealtime = false;
-    bool bypassed = false;
+    std::atomic<bool> bypassed { false };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginInstance)
 };

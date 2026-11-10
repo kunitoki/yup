@@ -65,6 +65,8 @@ static String getCommandLinePrefix (const String& commandLineUniqueID)
     return "--" + commandLineUniqueID + ":";
 }
 
+static const char* workerProcessArgument = "--yup-worker-process";
+
 //==============================================================================
 // This thread sends and receives ping messages every second, so that it
 // can find out if the other process has stopped running.
@@ -185,6 +187,7 @@ bool ChildProcessCoordinator::launchWorkerProcess (const File& executable, const
     StringArray args;
     args.add (executable.getFullPathName());
     args.add (getCommandLinePrefix (commandLineUniqueID) + pipeName);
+    args.add (workerProcessArgument);
 
     childProcess = [&]() -> std::shared_ptr<ChildProcess>
     {
@@ -226,6 +229,19 @@ void ChildProcessCoordinator::killWorkerProcess()
     }
 
     childProcess.reset();
+}
+
+void ChildProcessCoordinator::terminateWorkerProcess()
+{
+    if (childProcess != nullptr)
+        childProcess->kill();
+
+    killWorkerProcess();
+}
+
+bool ChildProcessCoordinator::isWorkerProcessRunning() const
+{
+    return childProcess != nullptr && childProcess->isRunning();
 }
 
 //==============================================================================
@@ -282,6 +298,11 @@ private:
 //==============================================================================
 ChildProcessWorker::ChildProcessWorker() = default;
 ChildProcessWorker::~ChildProcessWorker() = default;
+
+bool ChildProcessWorker::isWorkerProcess()
+{
+    return YUPApplicationBase::getCommandLineParameterArray().contains (workerProcessArgument);
+}
 
 void ChildProcessWorker::handleConnectionMade() {}
 

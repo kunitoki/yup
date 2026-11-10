@@ -42,6 +42,9 @@ public:
     }
 
     void (*XReparentWindow) (Display*, Window, Window, int, int) = nullptr;
+    int (*XSetTransientForHint) (Display*, Window, Window) = nullptr;
+    int (*XDeleteProperty) (Display*, Window, Atom) = nullptr;
+    int (*XFlush) (Display*) = nullptr;
 
     YUP_DECLARE_SINGLETON (X11Functions, false)
 
@@ -71,6 +74,9 @@ private:
     void clearFunctions()
     {
         this->XReparentWindow = nullptr;
+        this->XSetTransientForHint = nullptr;
+        this->XDeleteProperty = nullptr;
+        this->XFlush = nullptr;
     }
 
     X11Functions()
@@ -82,7 +88,10 @@ private:
             return;
         }
 
-        if (! lookupFunction ("XReparentWindow", this->XReparentWindow))
+        if (! lookupFunction ("XReparentWindow", this->XReparentWindow)
+            || ! lookupFunction ("XSetTransientForHint", this->XSetTransientForHint)
+            || ! lookupFunction ("XDeleteProperty", this->XDeleteProperty)
+            || ! lookupFunction ("XFlush", this->XFlush))
             return;
     }
 
@@ -92,11 +101,6 @@ private:
 YUP_IMPLEMENT_SINGLETON (X11Functions)
 
 //==============================================================================
-
-Rectangle<int> getNativeWindowPosition (void* nativeWindow)
-{
-    return {};
-}
 
 void focusNativeWindow (void* nativeWindow)
 {

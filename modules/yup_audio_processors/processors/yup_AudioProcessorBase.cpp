@@ -83,6 +83,26 @@ int AudioProcessorBase::getParameterIndexByHostID (uint32 hostParameterID) const
     return -1;
 }
 
+AudioParameter::Ptr AudioProcessorBase::getBypassParameter() const
+{
+    for (const auto& parameter : parameters)
+    {
+        if (parameter->isBypass())
+            return parameter;
+    }
+
+    return nullptr;
+}
+
+void AudioProcessorBase::setHostInfo (const HostInfo& newInfo)
+{
+    if (hostInfo == newInfo)
+        return;
+
+    hostInfo = newInfo;
+    hostInfoChanged (hostInfo);
+}
+
 void AudioProcessorBase::addListener (Listener* listener)
 {
     listeners.add (listener);

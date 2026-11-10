@@ -370,6 +370,54 @@ TEST_F (HostParameterIDTests, BypassIDStartsAtParameterCount)
 }
 
 //==============================================================================
+// WrapperBypass
+//==============================================================================
+
+class WrapperBypassTests : public ::testing::Test
+{
+protected:
+    AudioParameter::Ptr addBypassParameter()
+    {
+        auto parameter = AudioParameterBuilder().withID ("bypass").withName ("Bypass").withBypass (true).build();
+        processor.addParameter (parameter);
+        return parameter;
+    }
+
+    UtilitiesTestProcessor processor;
+    WrapperBypass bypass;
+};
+
+TEST_F (WrapperBypassTests, UsesSyntheticParameterWhenProcessorHasNone)
+{
+    bypass.attach (processor);
+
+    EXPECT_FALSE (bypass.isProcessorOwned());
+    EXPECT_EQ (getBypassHostParameterID (processor), bypass.getHostParameterID());
+    EXPECT_TRUE (bypass.isSyntheticParameter (bypass.getHostParameterID()));
+    EXPECT_FALSE (bypass.isSyntheticParameter (100));
+
+    EXPECT_FALSE (bypass.isBypassed());
+    bypass.setBypassed (true);
+    EXPECT_TRUE (bypass.isBypassed());
+}
+
+TEST_F (WrapperBypassTests, DrivesProcessorBypassParameter)
+{
+    const auto parameter = addBypassParameter();
+    bypass.attach (processor);
+
+    EXPECT_TRUE (bypass.isProcessorOwned());
+    EXPECT_EQ (parameter->getHostParameterID(), bypass.getHostParameterID());
+    EXPECT_FALSE (bypass.isSyntheticParameter (bypass.getHostParameterID()));
+
+    bypass.setBypassed (true);
+    EXPECT_FLOAT_EQ (1.0f, parameter->getNormalizedValue());
+
+    parameter->setNormalizedValue (0.0f);
+    EXPECT_FALSE (bypass.isBypassed());
+}
+
+//==============================================================================
 // getTotalAudioOutputChannels / getTotalAudioInputChannels
 //==============================================================================
 
@@ -694,4 +742,177 @@ TEST_F (WrapperTypeTests, WrapperTypeNamesAreLowercaseFormatNames)
     EXPECT_EQ (String ("clap"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::clap)));
     EXPECT_EQ (String ("auv3"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::auv3)));
     EXPECT_EQ (String ("standalone"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::standalone)));
+}
+
+//==============================================================================
+// WrapperViewScale
+
+class WrapperViewScaleTests : public ::testing::Test
+{
+protected:
+    Component editor;
+    WrapperViewScale viewScale;
+};
+
+TEST_F (WrapperViewScaleTests, SetHostScaleReportsChangesOnly)
+{
+    EXPECT_TRUE (viewScale.setHostScale (2.0f));
+    EXPECT_FALSE (viewScale.setHostScale (2.0f));
+    EXPECT_FALSE (viewScale.setHostScale (0.0f));
+    EXPECT_TRUE (viewScale.setHostScale (1.5f));
+}
+
+TEST_F (WrapperViewScaleTests, DetachedEditorUsesHostScaleOutsideCocoa)
+{
+    viewScale.setHostScale (2.0f);
+
+#if YUP_MAC
+    EXPECT_EQ (Size<int> (300, 200), viewScale.toHost ({ 300, 200 }, editor));
+    EXPECT_EQ (Size<int> (300, 200), viewScale.fromHost ({ 300, 200 }, editor));
+#else
+    EXPECT_EQ (Size<int> (600, 400), viewScale.toHost ({ 300, 200 }, editor));
+    EXPECT_EQ (Size<int> (300, 200), viewScale.fromHost ({ 600, 400 }, editor));
+#endif
+}
+
+TEST_F (WrapperViewScaleTests, DetachedEditorWithoutHostScaleUsesPrimaryScreenScale)
+{
+    auto expectedScale = 1.0f;
+
+#if ! YUP_MAC
+    if (auto screen = Desktop::getInstance()->getPrimaryScreen(); screen != nullptr && screen->contentScaleX > 0.0f)
+        expectedScale = screen->contentScaleX;
+#endif
+
+    EXPECT_FLOAT_EQ (expectedScale, viewScale.get (editor));
+    EXPECT_EQ (Size<int> (roundToInt (300 * expectedScale), roundToInt (200 * expectedScale)), viewScale.toHost ({ 300, 200 }, editor));
+}
+
+TEST_F (WrapperViewScaleTests, ConvertedSizesAreNeverEmpty)
+{
+    viewScale.setHostScale (4.0f);
+
+    EXPECT_EQ (Size<int> (1, 1), viewScale.fromHost ({ 0, 1 }, editor));
+    EXPECT_EQ (Size<int> (1, 1), viewScale.toHost ({ 0, 0 }, editor));
+}
+
+//==============================================================================
+// umpToNoteExpression
+
+class UmpToNoteExpressionTests : public ::testing::Test
+{
+protected:
+    static constexpr uint32 perNotePitchBend (uint32 channel, uint32 key) { return 0x40600000u | (channel << 16) | (key << 8); }
+
+    static constexpr uint32 perNoteController (uint32 channel, uint32 key, uint32 index) { return 0x40000000u | (channel << 16) | (key << 8) | index; }
+};
+
+TEST_F (UmpToNoteExpressionTests, PerNotePitchBendBecomesTuning)
+{
+    const uint32 centered[] = { perNotePitchBend (2, 60), 0x80000000u };
+    const auto expression = umpToNoteExpression (centered, 2, 7);
+
+    ASSERT_TRUE (expression.has_value());
+    EXPECT_EQ (expression->type, NoteExpression::Type::tuning);
+    EXPECT_EQ (expression->sampleOffset, 7);
+    EXPECT_EQ (expression->channel, 3);
+    EXPECT_EQ (expression->key, 60);
+    EXPECT_FLOAT_EQ (expression->value, 0.0f);
+
+    const uint32 lowest[] = { perNotePitchBend (0, 64), 0u };
+    EXPECT_FLOAT_EQ (umpToNoteExpression (lowest, 2, 0)->value, -48.0f);
+}
+
+TEST_F (UmpToNoteExpressionTests, RegisteredPerNoteControllersMapToExpressions)
+{
+    const uint32 brightness[] = { perNoteController (0, 60, 74), 0xffffffffu };
+    const auto expression = umpToNoteExpression (brightness, 2, 0);
+
+    ASSERT_TRUE (expression.has_value());
+    EXPECT_EQ (expression->type, NoteExpression::Type::brightness);
+    EXPECT_FLOAT_EQ (expression->value, 1.0f);
+
+    const uint32 pan[] = { perNoteController (0, 60, 10), 0u };
+    EXPECT_EQ (umpToNoteExpression (pan, 2, 0)->type, NoteExpression::Type::pan);
+}
+
+TEST_F (UmpToNoteExpressionTests, VibratoVolumeAndExpressionControllersAreMapped)
+{
+    const uint32 vibrato[] = { perNoteController (1, 62, 1), 0u };
+    const uint32 volume[] = { perNoteController (1, 62, 7), 0xffffffffu };
+    const uint32 expressionController[] = { perNoteController (1, 62, 11), 0u };
+
+    const auto vibratoExpression = umpToNoteExpression (vibrato, 2, 3);
+    ASSERT_TRUE (vibratoExpression.has_value());
+    EXPECT_EQ (vibratoExpression->type, NoteExpression::Type::vibrato);
+    EXPECT_EQ (vibratoExpression->channel, 2);
+    EXPECT_EQ (vibratoExpression->key, 62);
+    EXPECT_FLOAT_EQ (vibratoExpression->value, 0.0f);
+
+    const auto volumeExpression = umpToNoteExpression (volume, 2, 0);
+    ASSERT_TRUE (volumeExpression.has_value());
+    EXPECT_EQ (volumeExpression->type, NoteExpression::Type::volume);
+    EXPECT_FLOAT_EQ (volumeExpression->value, 1.0f);
+
+    const auto expressionExpression = umpToNoteExpression (expressionController, 2, 0);
+    ASSERT_TRUE (expressionExpression.has_value());
+    EXPECT_EQ (expressionExpression->type, NoteExpression::Type::expression);
+}
+
+TEST_F (UmpToNoteExpressionTests, IgnoresOtherMessages)
+{
+    const uint32 unknownController[] = { perNoteController (0, 60, 3), 0u };
+    const uint32 midi2NoteOn[] = { 0x40903c00u, 0xffff0000u };
+    const uint32 midi1NoteOn[] = { 0x20903c7fu, 0u };
+
+    EXPECT_FALSE (umpToNoteExpression (unknownController, 2, 0).has_value());
+    EXPECT_FALSE (umpToNoteExpression (midi2NoteOn, 2, 0).has_value());
+    EXPECT_FALSE (umpToNoteExpression (midi1NoteOn, 2, 0).has_value());
+    EXPECT_FALSE (umpToNoteExpression (midi2NoteOn, 1, 0).has_value());
+}
+
+//==============================================================================
+
+TEST (HostQuirksTests, UnknownHostHasNoQuirks)
+{
+    const auto quirks = HostQuirks::forHost (PluginHostType());
+
+    EXPECT_FALSE (quirks.processMayOverlapActivation);
+    EXPECT_FALSE (quirks.mayPassForeignStateChunks);
+}
+
+TEST (HostQuirksTests, FLStudioSerialisesProcessWithActivation)
+{
+    EXPECT_TRUE (HostQuirks::forHost (PluginHostType (PluginHostType::Host::flStudio)).processMayOverlapActivation);
+}
+
+TEST (HostQuirksTests, AdobeAuditionStateChunksAreIgnored)
+{
+    const MemoryBlock auditionChunk ("VC2!E-data", 10);
+    const MemoryBlock pluginState ("plugin-state", 12);
+
+    const auto auditionQuirks = HostQuirks::forHost (PluginHostType (PluginHostType::Host::adobeAudition));
+    EXPECT_TRUE (auditionQuirks.isForeignStateChunk (auditionChunk));
+    EXPECT_FALSE (auditionQuirks.isForeignStateChunk (pluginState));
+
+    EXPECT_FALSE (HostQuirks::forHost (PluginHostType()).isForeignStateChunk (auditionChunk));
+}
+
+//==============================================================================
+
+class UpdatePluginHostTypeTests : public ::testing::Test
+{
+protected:
+    void TearDown() override { AudioProcessor::setHostType (previousHostType); }
+
+    const PluginHostType previousHostType = AudioProcessor::getHostType();
+};
+
+TEST_F (UpdatePluginHostTypeTests, DeclaresHostDetectedFromReportedName)
+{
+    updatePluginHostType ("REAPER");
+    EXPECT_TRUE (AudioProcessor::getHostType().isReaper());
+
+    updatePluginHostType ("Bitwig Studio");
+    EXPECT_TRUE (AudioProcessor::getHostType().isBitwigStudio());
 }

@@ -380,11 +380,6 @@ void* getNativeDisplayHandle (SDL_Window* window)
 //==============================================================================
 
 #if ! YUP_WINDOWS && ! YUP_MAC && ! YUP_LINUX
-Rectangle<int> getNativeWindowPosition (void* nativeWindow)
-{
-    return {};
-}
-
 void focusNativeWindow (void* nativeWindow)
 {
     ignoreUnused (nativeWindow);
@@ -393,59 +388,201 @@ void focusNativeWindow (void* nativeWindow)
 
 //==============================================================================
 
-void setNativeParent (void* nativeWindow, SDL_Window* window)
+/** Embeds an SDL window into a host provided native parent (an HWND, NSView or X11 window) and keeps it there.
+
+    On Windows and Linux the window becomes a real child of the parent, sitting at its origin.
+
+    On macOS a host NSView cannot own another window, so the window becomes a child NSWindow glued over an empty
+    placeholder view inserted in the host view. Hosts lay out and resize the placeholder like any embedded plugin view
+    (some, like Reaper, require one), and the window follows its frame on screen.
+*/
+class NativeParentAttachment final : private Timer
 {
-#if YUP_WINDOWS
-    HWND hpar = reinterpret_cast<HWND> (nativeWindow);
-    HWND hwnd = reinterpret_cast<HWND> (getNativeWindowHandle (window));
-    SetParent (hwnd, hpar);
+public:
+    NativeParentAttachment (void* parent, SDL_Window* window)
+    {
+#if YUP_MAC
+        sdlWindow = window;
 
-    long style = GetWindowLong (hwnd, GWL_STYLE);
-    style &= ~WS_POPUP;
-    style |= WS_CHILDWINDOW;
-    SetWindowLong (hwnd, GWL_STYLE, style);
+        NSView* hostView = (__bridge NSView*) parent;
 
-    SetWindowPos (hwnd, nullptr, 0, 0, 0, 0, SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+        int width = 0, height = 0;
+        SDL_GetWindowSize (window, &width, &height);
 
-#elif YUP_MAC
-    NSWindow* parentWindow = [(__bridge NSView*) nativeWindow window];
-    NSWindow* currentWindow = (__bridge NSWindow*) getNativeWindowHandle (window);
-    [parentWindow addChildWindow:currentWindow ordered:NSWindowAbove];
+        width = jmax (1, width);
+        height = jmax (1, height);
+
+        const auto originY = [hostView isFlipped] ? 0.0 : NSHeight ([hostView bounds]) - height;
+        placeholder = [[NSView alloc] initWithFrame:NSMakeRect (0, originY, width, height)];
+        [placeholder setAutoresizingMask:NSViewMaxXMargin | ([hostView isFlipped] ? NSViewMaxYMargin : NSViewMinYMargin)];
+        [hostView addSubview:placeholder];
+
+        auto* center = [NSNotificationCenter defaultCenter];
+
+        for (NSView* view = placeholder; view != nil; view = [view superview])
+        {
+            [view setPostsFrameChangedNotifications:YES];
+
+            [observers addObject:[center addObserverForName:NSViewFrameDidChangeNotification
+                                                     object:view
+                                                      queue:nil
+                                                 usingBlock:^(NSNotification*)
+                                                 {
+                                                     glue();
+                                                 }]];
+        }
+
+        glue();
+
+        // Hosts may embed, move or re-parent the host view without any notification reaching us
+        startTimerHz (10);
 
 #elif YUP_LINUX
-    if (! X11Functions::getInstance()->isX11Available())
-        return;
+        if (! X11Functions::getInstance()->isX11Available())
+            return;
 
-    auto* display = reinterpret_cast<::Display*> (getNativeDisplayHandle (window));
-    if (display == nullptr)
-        return;
-
-    X11Functions::getInstance()->XReparentWindow (
-        display,
-        reinterpret_cast<::Window> (getNativeWindowHandle (window)),
-        reinterpret_cast<::Window> (nativeWindow),
-        0,
-        0);
+        if (auto* display = reinterpret_cast<::Display*> (getNativeDisplayHandle (window)))
+        {
+            X11Functions::getInstance()->XReparentWindow (display,
+                                                          reinterpret_cast<::Window> (getNativeWindowHandle (window)),
+                                                          reinterpret_cast<::Window> (parent),
+                                                          0,
+                                                          0);
+        }
 
 #else
-
+        // Windows creates the window directly as a child of the parent
+        ignoreUnused (parent, window);
 #endif
-}
+    }
 
-/** Detaches a window parented with setNativeParent, so the host window keeps no stale child. */
-void removeNativeParent (SDL_Window* window)
-{
+    ~NativeParentAttachment() override
+    {
 #if YUP_MAC
-    NSWindow* currentWindow = (__bridge NSWindow*) getNativeWindowHandle (window);
-    if (currentWindow == nil)
-        return;
+        stopTimer();
 
-    if (NSWindow* parentWindow = [currentWindow parentWindow])
-        [parentWindow removeChildWindow:currentWindow];
-#else
-    ignoreUnused (window);
+        for (id observer in observers)
+            [[NSNotificationCenter defaultCenter] removeObserver:observer];
+
+        [observers removeAllObjects];
+
+        // Hide before detaching, otherwise the window flashes as a standalone window on the desktop
+        if (NSWindow* nsWindow = getNSWindow())
+        {
+            [nsWindow orderOut:nil];
+
+            if (NSWindow* hostWindow = [nsWindow parentWindow])
+                [hostWindow removeChildWindow:nsWindow];
+        }
+
+        [placeholder removeFromSuperview];
+        placeholder = nil;
 #endif
-}
+    }
+
+    /** Resizes the area the window occupies in the host, keeping its top left corner anchored. */
+    void setSize (Size<int> newSize)
+    {
+#if YUP_MAC
+        NSView* hostView = [placeholder superview];
+        if (hostView == nil)
+            return;
+
+        NSRect frame = [placeholder frame];
+        const auto top = [hostView isFlipped] ? NSMinY (frame) : NSMaxY (frame);
+
+        frame.size = NSMakeSize (jmax (1, newSize.getWidth()), jmax (1, newSize.getHeight()));
+        frame.origin.y = [hostView isFlipped] ? top : top - frame.size.height;
+
+        if (! NSEqualRects (frame, [placeholder frame]))
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: parent placeholder resized to " << newSize.toString());
+            [placeholder setFrame:frame];
+        }
+
+        glue();
+#else
+        ignoreUnused (newSize);
+#endif
+    }
+
+    /** Moves the window back over its area in the host, after anything might have displaced it. */
+    void glue()
+    {
+#if YUP_MAC
+        if (isGluing)
+        {
+            needsGlue = true;
+            return;
+        }
+
+        const ScopedValueSetter<bool> scope (isGluing, true);
+
+        for (int attempt = 0; attempt < 4; ++attempt)
+        {
+            needsGlue = false;
+            glueOnce();
+
+            if (! needsGlue)
+                break;
+        }
+#endif
+    }
+
+private:
+#if YUP_MAC
+    void glueOnce()
+    {
+        NSWindow* nsWindow = getNSWindow();
+        if (nsWindow == nil)
+            return;
+
+        NSWindow* hostWindow = [placeholder window];
+
+        if ([nsWindow parentWindow] != hostWindow)
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: parent host window changed");
+
+            if (NSWindow* oldHostWindow = [nsWindow parentWindow])
+                [oldHostWindow removeChildWindow:nsWindow];
+
+            if (hostWindow != nil)
+                [hostWindow addChildWindow:nsWindow ordered:NSWindowAbove];
+        }
+
+        if (hostWindow == nil)
+            return;
+
+        const auto frame = [hostWindow convertRectToScreen:[placeholder convertRect:[placeholder bounds] toView:nil]];
+
+        if (! NSEqualRects (frame, [nsWindow frame]))
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: glued to parent placeholder: " << static_cast<int> (NSMinX (frame)) << " " << static_cast<int> (NSMinY (frame)) << " " << static_cast<int> (NSWidth (frame)) << "x" << static_cast<int> (NSHeight (frame)));
+            [nsWindow setFrame:frame display:YES];
+        }
+    }
+#endif
+
+    void timerCallback() override
+    {
+        glue();
+    }
+
+#if YUP_MAC
+    NSWindow* getNSWindow() const
+    {
+        return (__bridge NSWindow*) getNativeWindowHandle (sdlWindow);
+    }
+
+    SDL_Window* sdlWindow = nullptr;
+    NSView* placeholder = nil;
+    NSMutableArray* observers = [NSMutableArray array];
+    bool isGluing = false;
+    bool needsGlue = false;
+#endif
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NativeParentAttachment)
+};
 
 /** SDL clears an aspect ratio with setContentAspectRatio:NSZeroSize, which also zeroes the window
     resize increments: AppKit then computes a NaN frame on live resize and traps. */
@@ -755,5 +892,101 @@ static RectangleList<float> makeRepaintRegion (const RectangleList<float>& dirty
     region.addWithoutMerge (dirtyAreas.getBoundingBox().enlarged (0.5f).smallestIntContainer());
     return region;
 }
+
+//==============================================================================
+
+uint64 getSystemWindowId (SDL_Window* window)
+{
+    if (window == nullptr)
+        return 0;
+
+#if YUP_MAC
+    if (NSWindow* nsWindow = (__bridge NSWindow*) getNativeWindowHandle (window))
+        return static_cast<uint64> ([nsWindow windowNumber]);
+
+    return 0;
+#elif YUP_WINDOWS
+    return static_cast<uint64> (reinterpret_cast<pointer_sized_uint> (getNativeWindowHandle (window)));
+#elif YUP_LINUX
+    if (StringRef (SDL_GetCurrentVideoDriver()) != StringRef ("x11"))
+        return 0;
+
+    return static_cast<uint64> (SDL_GetNumberProperty (SDL_GetWindowProperties (window), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+#else
+    return 0;
+#endif
+}
+
+#if YUP_LINUX
+void setTransientForForeignWindow (SDL_Window* window, uint64 ownerWindowId)
+{
+    auto* x11 = X11Functions::getInstance();
+    const auto windowId = getSystemWindowId (window);
+
+    if (! x11->isX11Available() || windowId == 0)
+        return;
+
+    if (auto* display = reinterpret_cast<::Display*> (getNativeDisplayHandle (window)))
+    {
+        if (ownerWindowId != 0)
+            x11->XSetTransientForHint (display, static_cast<::Window> (windowId), static_cast<::Window> (ownerWindowId));
+        else
+            x11->XDeleteProperty (display, static_cast<::Window> (windowId), XA_WM_TRANSIENT_FOR);
+
+        x11->XFlush (display);
+    }
+}
+#endif
+
+//==============================================================================
+
+/** Keeps a window above other windows while the owner process (0 for the current one), or the current one, is in the foreground. */
+class ForeignOwnerTracker final : private Timer
+{
+public:
+    ForeignOwnerTracker (SDL_Window* windowToTrack, int ownerProcessIdToTrack)
+        : window (windowToTrack)
+        , ownerProcessId (ownerProcessIdToTrack)
+    {
+        timerCallback();
+        startTimer (250);
+    }
+
+    ~ForeignOwnerTracker() override
+    {
+        stopTimer();
+    }
+
+private:
+    void timerCallback() override
+    {
+        const auto shouldBeOnTop = isOwnerInForeground() || Process::isForegroundProcess();
+        if (shouldBeOnTop == keptOnTop)
+            return;
+
+        keptOnTop = shouldBeOnTop;
+        SDL_SetWindowAlwaysOnTop (window, shouldBeOnTop);
+    }
+
+    bool isOwnerInForeground() const
+    {
+        if (ownerProcessId <= 0)
+            return false;
+
+#if YUP_MAC
+        return [[[NSWorkspace sharedWorkspace] frontmostApplication] processIdentifier] == ownerProcessId;
+#elif YUP_WINDOWS
+        DWORD foregroundProcessId = 0;
+        GetWindowThreadProcessId (GetForegroundWindow(), &foregroundProcessId);
+        return static_cast<int> (foregroundProcessId) == ownerProcessId;
+#else
+        return false;
+#endif
+    }
+
+    SDL_Window* window = nullptr;
+    int ownerProcessId = 0;
+    bool keptOnTop = false;
+};
 
 } // namespace yup

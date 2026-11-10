@@ -25,17 +25,54 @@
 
 #include "yup_audio_plugin_host.h"
 
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <bitset>
 #include <cstdint>
 #include <cstring>
-#include <deque>
+#include <functional>
+#include <limits>
 #include <map>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <set>
 #include <string>
+#include <thread>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
+#if YUP_WINDOWS
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#elif YUP_MAC || YUP_LINUX
+#include <cerrno>
+#include <signal.h>
+#include <unistd.h>
+#endif
+
 //==============================================================================
+#include "host/yup_AudioPluginParameterMailbox.h"
+#include "host/yup_AudioPluginBridgeProtocol.h"
+#include "host/yup_AudioPluginFormat.cpp"
+#include "host/yup_AudioPluginDatabase.cpp"
+#include "host/yup_AudioPluginScannerWorker.cpp"
 #include "host/yup_AudioPluginScanner.cpp"
 #include "host/yup_AudioPluginInstance.cpp"
+
+#if YUP_LINUX
+#include <poll.h>
+#include "native/yup_PluginFdDispatcher_linux.cpp"
+#endif
+
+#if YUP_DESKTOP
+#include "host/yup_AudioPluginBridgeServer.cpp"
+#include "host/yup_RemoteAudioPluginInstance.cpp"
+#endif
 
 //==============================================================================
 #if YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3
@@ -47,13 +84,19 @@
 #include <pluginterfaces/vst/ivstparameterchanges.h>
 #include <pluginterfaces/vst/ivstevents.h>
 #include <pluginterfaces/vst/ivstmidicontrollers.h>
+#include <pluginterfaces/vst/ivstnoteexpression.h>
+#include <pluginterfaces/vst/ivstchannelcontextinfo.h>
 #include <pluginterfaces/vst/ivsteditcontroller.h>
 #include <pluginterfaces/vst/ivsthostapplication.h>
+#include <pluginterfaces/vst/ivstunits.h>
 #include <pluginterfaces/vst/vstpresetkeys.h>
 #include <pluginterfaces/gui/iplugview.h>
+#include <pluginterfaces/gui/iplugviewcontentscalesupport.h>
 #include <public.sdk/source/common/memorystream.h>
 #include <public.sdk/source/vst/hosting/eventlist.h>
 #include <public.sdk/source/vst/hosting/parameterchanges.h>
+#include <public.sdk/source/vst/moduleinfo/moduleinfoparser.h>
+#include <public.sdk/source/vst/vstpresetfile.h>
 
 #if YUP_MAC
 #import <AppKit/AppKit.h>
@@ -63,6 +106,7 @@
 #include "native/yup_AudioPluginInstance_VST3.cpp"
 #endif
 
+//==============================================================================
 #if YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP
 #include <clap/clap.h>
 
@@ -88,6 +132,7 @@ using CLAPModuleHandle = void*;
 #include "native/yup_AudioPluginInstance_CLAP.cpp"
 #endif
 
+//==============================================================================
 #if YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC
 #import <AppKit/AppKit.h>
 #import <AudioUnit/AudioUnit.h>
@@ -98,4 +143,25 @@ using CLAPModuleHandle = void*;
 #import <CoreMIDI/CoreMIDI.h>
 
 #include "native/yup_AudioPluginInstance_AU.mm"
+#endif
+
+//==============================================================================
+#if YUP_AUDIO_PLUGIN_HOST_ENABLE_LV2
+#include <lilv/lilv.h>
+
+#include <lv2/core/lv2.h>
+#include <lv2/atom/atom.h>
+#include <lv2/atom/forge.h>
+#include <lv2/atom/util.h>
+#include <lv2/midi/midi.h>
+#include <lv2/state/state.h>
+#include <lv2/options/options.h>
+#include <lv2/patch/patch.h>
+#include <lv2/time/time.h>
+#include <lv2/buf-size/buf-size.h>
+#include <lv2/worker/worker.h>
+#include <lv2/urid/urid.h>
+#include <lv2/log/log.h>
+
+#include "native/yup_AudioPluginInstance_LV2.cpp"
 #endif

@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_audio_processors
+    dependencies:       yup_audio_processors sqlite3_library
     searchpaths:        native
 
   END_YUP_MODULE_DECLARATION
@@ -84,11 +84,29 @@
 #include "host/yup_AudioPluginDescription.h"
 #include "host/yup_AudioPluginHostContext.h"
 #include "host/yup_AudioPluginFormat.h"
+#include "host/yup_AudioPluginDatabase.h"
+#include "host/yup_AudioPluginScannerWorker.h"
 #include "host/yup_AudioPluginScanner.h"
 #include "host/yup_AudioPluginInstance.h"
 
+#if YUP_DESKTOP
+#include "host/yup_AudioPluginBridgeServer.h"
+#include "host/yup_RemoteAudioPluginInstance.h"
+#endif
+
 //==============================================================================
+#if YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3
 #include "native/yup_AudioPluginInstance_VST3.h"
+#endif
+
+#if YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP
 #include "native/yup_AudioPluginInstance_CLAP.h"
+#endif
+
+#if YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC
 #include "native/yup_AudioPluginInstance_AU.h"
+#endif
+
+#if YUP_AUDIO_PLUGIN_HOST_ENABLE_LV2
 #include "native/yup_AudioPluginInstance_LV2.h"
+#endif

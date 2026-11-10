@@ -296,6 +296,21 @@ TEST_F (StandaloneStateStoreTests, NullDeviceStateIsHandled)
     EXPECT_EQ (makeProcessorState(), state.processorState);
 }
 
+TEST_F (StandaloneStateStoreTests, RoundTripsWindowBounds)
+{
+    TestPluginProcessor processor (testPluginBusLayoutStereo());
+    StandaloneStateStore store (stateFile);
+
+    ASSERT_TRUE (store.save (nullptr, processor).wasOk());
+    EXPECT_FALSE (store.load().windowBounds.has_value());
+
+    ASSERT_TRUE (store.save (nullptr, processor, Rectangle<int> (-100, 50, 640, 480)).wasOk());
+    const auto state = store.load();
+
+    ASSERT_TRUE (state.windowBounds.has_value());
+    EXPECT_EQ (Rectangle<int> (-100, 50, 640, 480), *state.windowBounds);
+}
+
 TEST_F (StandaloneStateStoreTests, EmptyProcessorStateIsNotRestored)
 {
     TestPluginProcessor processor (testPluginBusLayoutStereo());
@@ -360,9 +375,57 @@ protected:
 
         bool shouldPreserveAspectRatio() const override { return keepsAspect; }
 
+        Size<int> getInitialSize() const override { return initialSize; }
+
+        Size<int> getPreferredAspectRatioSize() const override { return aspectRatioSize; }
+
+        Size<int> initialSize { 400, 200 };
+        Size<int> aspectRatioSize { 400, 200 };
+
     private:
         bool keepsAspect;
     };
+
+    static TextButton* findButton (const Component& parent, const String& text)
+    {
+        for (int i = 0; i < parent.getNumChildComponents(); ++i)
+        {
+            if (auto* button = dynamic_cast<TextButton*> (parent.getChildComponent (i)); button != nullptr && button->getButtonText() == text)
+                return button;
+        }
+
+        return nullptr;
+    }
+
+    static Component* findSettingsOverlay (const Component& content)
+    {
+        for (int i = 0; i < content.getNumChildComponents(); ++i)
+        {
+            if (auto* child = content.getChildComponent (i); child->getComponentID() == "StandaloneSettingsOverlay")
+                return child;
+        }
+
+        return nullptr;
+    }
+
+    static AudioDeviceManagerPanel* findSettingsPanel (const Component& overlay)
+    {
+        for (int i = 0; i < overlay.getNumChildComponents(); ++i)
+        {
+            if (auto* panel = dynamic_cast<AudioDeviceManagerPanel*> (overlay.getChildComponent (i)))
+                return panel;
+        }
+
+        return nullptr;
+    }
+
+    static void expectSettingsHiddenAfterDispatch ([[maybe_unused]] const StandaloneContent& content)
+    {
+#if YUP_MODAL_LOOPS_PERMITTED
+        MessageManager::getInstance()->runDispatchLoopUntil (20);
+        EXPECT_FALSE (content.isShowingSettings());
+#endif
+    }
 
     AudioDeviceManager deviceManager;
     MidiMessageCollector collector;
@@ -499,6 +562,39 @@ TEST_F (StandaloneContentTests, StretchesEditorsThatDoNotKeepTheirAspectRatio)
     EXPECT_EQ (Rectangle<float> (0, 0, 1000, 200), content.getEditor()->getBounds());
 }
 
+TEST_F (StandaloneContentTests, OpensEditorAtItsConstrainedInitialSize)
+{
+    processor.editorFactory = []
+    {
+        auto* editor = new FixedAspectEditor (true);
+        editor->initialSize = { 800, 300 };
+        return editor;
+    };
+
+    StandaloneContent content (processor, deviceManager, collector, false);
+
+    ASSERT_NE (nullptr, content.getEditor());
+    EXPECT_EQ (Size<float> (800, 400), content.getEditor()->getSize());
+    EXPECT_EQ (Size<int> (800, 400 + 28), content.getPreferredSize());
+}
+
+TEST_F (StandaloneContentTests, PreferredSizeKeepsTheEditorSize)
+{
+    processor.editorFactory = [] { return new FixedAspectEditor (false); };
+    StandaloneContent content (processor, deviceManager, collector, true);
+    content.onPreferredSizeChanged = [&]
+    {
+        content.setSize (content.getPreferredSize().to<float>());
+    };
+
+    content.setBounds (0, 0, 900, 300 + 28);
+    content.setKeyboardVisible (true);
+
+    ASSERT_NE (nullptr, content.getEditor());
+    EXPECT_EQ (Size<float> (900, 300), content.getEditor()->getSize());
+    EXPECT_EQ (Size<int> (900, 300 + 28 + 80), content.getPreferredSize());
+}
+
 TEST_F (StandaloneContentTests, KeyboardIsOnlyOfferedToNotePlayers)
 {
     StandaloneContent effect (processor, deviceManager, collector, false);
@@ -513,4 +609,160 @@ TEST_F (StandaloneContentTests, KeyboardIsOnlyOfferedToNotePlayers)
     instrument.setToolbarVisible (false);
     EXPECT_TRUE (instrument.isKeyboardVisible());
     EXPECT_EQ (300 + 80, instrument.getPreferredSize().getHeight());
+}
+
+TEST_F (StandaloneContentTests, ToolbarButtonsShowSettingsAndToggleKeyboard)
+{
+    StandaloneContent content (processor, deviceManager, collector, true);
+    content.setBounds (0, 0, 600, 800);
+
+    auto* settingsButton = findButton (content, "Settings");
+    auto* keyboardButton = findButton (content, "Keyboard");
+    ASSERT_NE (nullptr, settingsButton);
+    ASSERT_NE (nullptr, keyboardButton);
+
+    keyboardButton->onClick();
+    EXPECT_TRUE (content.isKeyboardVisible());
+
+    keyboardButton->onClick();
+    EXPECT_FALSE (content.isKeyboardVisible());
+
+    settingsButton->onClick();
+    EXPECT_TRUE (content.isShowingSettings());
+}
+
+TEST_F (StandaloneContentTests, SettingsOverlayFollowsTheContentBounds)
+{
+    StandaloneContent content (processor, deviceManager, collector, false);
+    content.setBounds (0, 0, 600, 800);
+    content.showSettings();
+
+    auto* overlay = findSettingsOverlay (content);
+    ASSERT_NE (nullptr, overlay);
+
+    content.setBounds (0, 0, 700, 900);
+    EXPECT_EQ (content.getLocalBounds(), overlay->getBounds());
+
+    auto* panel = findSettingsPanel (*overlay);
+    ASSERT_NE (nullptr, panel);
+    ASSERT_TRUE (panel->onPreferredHeightChanged != nullptr);
+
+    panel->onPreferredHeightChanged();
+    EXPECT_LE (panel->getWidth(), overlay->getWidth());
+    EXPECT_LE (panel->getHeight(), overlay->getHeight());
+}
+
+TEST_F (StandaloneContentTests, EscapeKeyDismissesSettingsOverlay)
+{
+    StandaloneContent content (processor, deviceManager, collector, false);
+    content.setBounds (0, 0, 600, 800);
+    content.showSettings();
+
+    auto* overlay = findSettingsOverlay (content);
+    ASSERT_NE (nullptr, overlay);
+
+    EXPECT_FALSE (overlay->keyDown (KeyPress ('a'), {}));
+    EXPECT_TRUE (content.isShowingSettings());
+
+    EXPECT_TRUE (overlay->keyDown (KeyPress (KeyPress::escapeKey), {}));
+    expectSettingsHiddenAfterDispatch (content);
+}
+
+TEST_F (StandaloneContentTests, ClickOutsidePanelDismissesSettingsOverlay)
+{
+    StandaloneContent content (processor, deviceManager, collector, false);
+    content.setBounds (0, 0, 600, 800);
+    content.showSettings();
+
+    auto* overlay = findSettingsOverlay (content);
+    ASSERT_NE (nullptr, overlay);
+
+    auto* panel = findSettingsPanel (*overlay);
+    ASSERT_NE (nullptr, panel);
+
+    overlay->mouseDown (MouseEvent().withPosition (panel->getBounds().getCenter()));
+#if YUP_MODAL_LOOPS_PERMITTED
+    MessageManager::getInstance()->runDispatchLoopUntil (20);
+#endif
+    EXPECT_TRUE (content.isShowingSettings());
+
+    overlay->mouseDown (MouseEvent().withPosition ({ 1.0f, 1.0f }));
+    expectSettingsHiddenAfterDispatch (content);
+}
+
+TEST_F (StandaloneContentTests, PanelCloseDismissesSettingsOverlay)
+{
+    StandaloneContent content (processor, deviceManager, collector, false);
+    content.setBounds (0, 0, 600, 800);
+
+    int closedCount = 0;
+    content.onSettingsClosed = [&]
+    {
+        ++closedCount;
+    };
+
+    content.showSettings();
+
+    auto* overlay = findSettingsOverlay (content);
+    ASSERT_NE (nullptr, overlay);
+
+    auto* panel = findSettingsPanel (*overlay);
+    ASSERT_NE (nullptr, panel);
+    ASSERT_TRUE (panel->onClose != nullptr);
+
+    panel->onClose();
+    expectSettingsHiddenAfterDispatch (content);
+
+#if YUP_MODAL_LOOPS_PERMITTED
+    EXPECT_EQ (1, closedCount);
+#endif
+}
+
+TEST_F (StandaloneContentTests, DismissAfterContentIsDeletedIsSafe)
+{
+    auto content = std::make_unique<StandaloneContent> (processor, deviceManager, collector, false);
+    content->setBounds (0, 0, 600, 800);
+    content->showSettings();
+
+    auto* overlay = findSettingsOverlay (*content);
+    ASSERT_NE (nullptr, overlay);
+
+    overlay->keyDown (KeyPress (KeyPress::escapeKey), {});
+    content.reset();
+
+#if YUP_MODAL_LOOPS_PERMITTED
+    MessageManager::getInstance()->runDispatchLoopUntil (20);
+#endif
+}
+
+TEST_F (StandaloneContentTests, PreferredSizeUsesInitialSizeWhenEditorIsEmpty)
+{
+    processor.editorFactory = []
+    {
+        auto* editor = new FixedAspectEditor (false);
+        editor->initialSize = { 500, 250 };
+        return editor;
+    };
+
+    StandaloneContent content (processor, deviceManager, collector, false);
+    ASSERT_NE (nullptr, content.getEditor());
+
+    content.getEditor()->setSize (0.0f, 0.0f);
+
+    EXPECT_EQ (Size<int> (500, 250 + 28), content.getPreferredSize());
+}
+
+TEST_F (StandaloneContentTests, HasNoAspectRatioForAnEmptyRatioSize)
+{
+    processor.editorFactory = []
+    {
+        auto* editor = new FixedAspectEditor (true);
+        editor->aspectRatioSize = { 0, 200 };
+        return editor;
+    };
+
+    StandaloneContent content (processor, deviceManager, collector, false);
+
+    ASSERT_NE (nullptr, content.getEditor());
+    EXPECT_FALSE (content.getPreferredAspectRatio().has_value());
 }

@@ -30,6 +30,123 @@ building blocks now have their own dedicated
 - **Plugins** - hosting third-party plugins (`yup_audio_plugin_host`) and
   wrapping your own as CLAP / VST3 (`yup_audio_plugin_client`).
 
+## Scanning plugins
+
+`AudioPluginScanner` discovers plugins with the formats you register
+(`VST3Format`, `CLAPFormat`, `AUFormat`, `LV2Format`). The in-process scan only
+reads static metadata (VST3 `moduleinfo.json`, CLAP descriptors, the AU
+registry, LV2 manifests) and never runs plugin code, so channel counts may be
+estimates.
+
+Give the scanner an `AudioPluginDatabase` to cache results in SQLite. Later
+scans only open new or changed files, return cached descriptions and failures
+for the rest, and skip blacklisted files:
+
+```cpp
+auto database = std::make_shared<yup::AudioPluginDatabase>();
+
+if (database->open (appDataDir.getChildFile ("plugins.db")).wasOk())
+    scanner.setDatabase (database);
+
+auto result = scanner.scanDefaults(); // discovered, failedPaths, blacklistedPaths
+```
+
+If the process dies while scanning a file, that file is blacklisted the next
+time the database is opened. It is scanned again once it changes on disk or
+after `clearBlacklist()`. Call `setScanVersion()` with a higher number to
+rescan everything else.
+
+### Out-of-process scanning
+
+To get exact channel and MIDI port counts, plugins must be opened, which can
+crash or hang the host. `setOutOfProcessScanning()` opens them in worker
+processes instead, usually the host application relaunched with a special
+command line. A plugin that crashes or exceeds the timeout only kills its
+worker; the file is reported in `failedPaths` and blacklisted in the database:
+
+```cpp
+// At startup, before creating any window
+void initialise (const yup::String& commandLine) override
+{
+    auto worker = std::make_unique<yup::AudioPluginScannerWorker>();
+    worker->addFormat (std::make_unique<yup::VST3Format>());
+    worker->addFormat (std::make_unique<yup::CLAPFormat>());
+
+    if (worker->initialiseFromCommandLine (commandLine))
+    {
+        scannerWorker = std::move (worker); // this process is now a scanner worker
+        return;
+    }
+
+    // ... normal startup
+}
+
+// Where the scanner is set up
+yup::AudioPluginScanner::OutOfProcessOptions options;
+options.executable = yup::File::getSpecialLocation (yup::File::currentExecutableFile);
+options.timeoutMs = 60000; // per file
+scanner.setOutOfProcessScanning (options);
+```
+
+Files are scanned in-process with the metadata-only scan when the worker
+executable cannot be launched. Registry based formats (AUv2) are always
+scanned in-process.
+
+## Running plugins out of process
+
+`RemoteAudioPluginInstance` runs a plugin in its own `AudioPluginBridgeServer`
+process, so a crash or a hang can't take the host down. It behaves like any
+other `AudioPluginInstance`. Audio, MIDI and parameter changes go through
+shared memory with a synchronous hand-off, so no latency is added. As with
+scanning, the server is usually the host application relaunched with a
+special command line:
+
+```cpp
+// At startup, before creating any window
+auto server = std::make_unique<yup::AudioPluginBridgeServer>();
+server->addFormat (std::make_unique<yup::VST3Format>());
+server->addFormat (std::make_unique<yup::CLAPFormat>());
+
+if (server->initialiseFromCommandLine (commandLine))
+{
+    bridgeServer = std::move (server); // this process now hosts a single plugin
+    return;
+}
+
+// Loading a plugin sandboxed
+yup::RemoteAudioPluginInstance::Options options;
+options.executable = yup::File::getSpecialLocation (yup::File::currentExecutableFile);
+
+auto result = yup::RemoteAudioPluginInstance::load (description, hostContext, options);
+if (result.failed())
+    return; // result.getErrorMessage()
+
+auto instance = std::move (result.getReference());
+instance->onCrashed = [&] { /* tell the user, offer instance->reload() */ };
+```
+
+When the server crashes or misses a block deadline, the instance outputs
+silence and `onCrashed` is called on the message thread. `reload()` starts a
+new server, restores the last saved or loaded state, and prepares the plugin
+again.
+
+Current limitations:
+
+- Only single precision processing is supported.
+- Parameter metadata changes made after loading are not reflected.
+- MIDI controller mappings are not exposed.
+- The plugin editor opens in a separate window owned by the server: call `showEditor()` /
+  `hideEditor()` instead of embedding `createEditor()`, which only returns a placeholder.
+  Pass a component of the host window to `showEditor()` to make the editor behave as its child:
+  on macOS and Windows it stays above the host while the host or the editor is active, on X11 it
+  is transient for the host window (Wayland has no equivalent). `isEditorShowing()` and
+  `onEditorClosed` track the window when the user closes it.
+
+`AudioPluginDatabase::setRunSandboxed()` stores a per-plugin preference, and
+`setDefaultRunSandboxed()` sets the default for plugins without one. Read the
+result with `shouldRunSandboxed()` to choose between the format's
+`createInstance` and `RemoteAudioPluginInstance::load`.
+
 ## Microtuning
 
 `TuningMap` (`yup_audio_basics`) maps MIDI notes to frequencies under any

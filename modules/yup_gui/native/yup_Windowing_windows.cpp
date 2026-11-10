@@ -24,20 +24,6 @@ namespace yup
 
 //==============================================================================
 
-Rectangle<int> getNativeWindowPosition (void* nativeWindow)
-{
-    RECT windowRect;
-
-    GetWindowRect (reinterpret_cast<HWND> (nativeWindow), &windowRect);
-
-    return {
-        windowRect.left,
-        windowRect.top,
-        windowRect.right - windowRect.left,
-        windowRect.bottom - windowRect.top
-    };
-}
-
 void focusNativeWindow (void* nativeWindow)
 {
     auto hwnd = reinterpret_cast<HWND> (nativeWindow);

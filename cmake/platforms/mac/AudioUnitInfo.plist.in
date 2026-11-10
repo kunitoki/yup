@@ -34,13 +34,17 @@
 			<key>manufacturer</key>
 			<string>@PLUGIN_AU_MANUFACTURER@</string>
 			<key>name</key>
-			<string>@PLUGIN_AU_NAME@</string>
+			<string>@PLUGIN_AU_COMPONENT_NAME@</string>
 			<key>version</key>
-			<integer>1</integer>
+			<integer>@PLUGIN_AU_COMPONENT_VERSION@</integer>
 			<key>factoryFunction</key>
 			<string>AudioPluginProcessorAUFactory</string>
 			<key>sandboxSafe</key>
 			@PLUGIN_AU_SANDBOX_SAFE@
+			<key>tags</key>
+			<array>
+				<string>@PLUGIN_AU_TAG@</string>
+			</array>
 		</dict>
 	</array>
 </dict>

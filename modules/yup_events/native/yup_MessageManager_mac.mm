@@ -331,7 +331,8 @@ struct AppDelegate
                                                       suspensionBehavior:NSNotificationSuspensionBehaviorDeliverImmediately];
             YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
-            [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+            [NSApp setActivationPolicy:ChildProcessWorker::isWorkerProcess() ? NSApplicationActivationPolicyAccessory
+                                                                             : NSApplicationActivationPolicyRegular];
             [NSApp finishLaunching];
         }
         else

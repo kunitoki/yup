@@ -74,12 +74,54 @@ public:
     /** Returns the number of audio inputs. */
     int getNumAudioInputs() const;
 
+    /** Returns true if the processor can run with the given layout.
+
+        Hosts and wrappers call this while negotiating channel counts (VST3
+        setBusArrangements, AU stream formats, CLAP configurable audio ports).
+        Candidate layouts always have the same bus structure as getBusLayout(),
+        only channel counts differ. The default accepts only the current layout.
+    */
+    virtual bool isBusLayoutSupported (const AudioBusLayout& layout) const;
+
+    /** Switches to a new bus layout.
+
+        Fails when the layout has a different bus structure or isBusLayoutSupported()
+        rejects it. Must only be called while the processor is released (not between
+        prepareToPlay and releaseResources). On success, listeners receive a
+        ChangeDetails with busLayoutChanged set.
+    */
+    Result setBusLayout (const AudioBusLayout& newLayout);
+
     //==============================================================================
     /** Returns true if the processor accepts MIDI input. */
     virtual bool acceptsMidi() const noexcept;
 
     /** Returns true if the processor produces MIDI output. */
     virtual bool producesMidi() const noexcept;
+
+    /** Returns the index of the parameter a MIDI controller should drive, or -1 for none.
+
+        Hosts like Cubase do not send MIDI CC to VST3 plugins, they ask the plugin which
+        parameter a controller maps to. Override this to expose that mapping.
+
+        @param channel     MIDI channel in [1, 16].
+        @param controller  MIDI controller number in [0, 127], or 128 for channel
+                           pressure and 129 for pitch bend.
+    */
+    virtual int getParameterIndexForMidiController (int channel, int controller) const;
+
+    //==============================================================================
+    /** Returns true if the processor wants per-note expressions as a NoteExpressionBuffer
+        in AudioProcessContext::noteExpressions. When false, wrappers fold expressions into
+        MIDI (see supportsMpe()).
+    */
+    virtual bool supportsNoteExpression() const { return false; }
+
+    /** Returns true if the processor understands MPE. Wrappers then convert per-note
+        expressions to MPE member channels instead of channel-wide MIDI messages.
+        Ignored when supportsNoteExpression() returns true.
+    */
+    virtual bool supportsMpe() const { return false; }
 
     //==============================================================================
     /** Returns the number of simultaneous voices this processor can produce.
@@ -107,6 +149,16 @@ public:
 
     /** @internal Used by plugin wrappers to declare the format of the current binary. */
     static void setWrapperType (AudioPluginWrapperType wrapperType) noexcept;
+
+    /** Returns the host application that loaded this binary.
+
+        Set by plugin wrappers as soon as the host identifies itself (which may happen
+        after the processor was constructed). Returns an unknown host for standalone apps.
+    */
+    static PluginHostType getHostType() noexcept;
+
+    /** @internal Used by plugin wrappers to declare the host application. */
+    static void setHostType (PluginHostType hostType) noexcept;
 
     //==============================================================================
     /** @internal Used by plugin wrappers. */

@@ -55,6 +55,44 @@ endfunction()
 
 #==============================================================================
 
+# AudioUnit types, subtypes and manufacturers are OSType four character codes
+function (_yup_audio_plugin_check_au_codes subtype manufacturer)
+    foreach (code_name subtype manufacturer)
+        string (LENGTH "${${code_name}}" code_length)
+        if (NOT code_length EQUAL 4)
+            string (TOUPPER "${code_name}" arg_name)
+            _yup_message (FATAL_ERROR "PLUGIN_AU_${arg_name} must be exactly 4 characters, got \"${${code_name}}\"")
+        endif()
+    endforeach()
+endfunction()
+
+# Sets the AudioComponents plist values shared by AUv2 and AUv3: hosts listing components through
+# AVAudioUnitComponentManager (FL Studio, Hosting AU) expect a "Vendor: Name" name, a
+# 0xMMMMmmbb encoded version and a category tag
+function (_yup_audio_plugin_set_au_component_values name vendor manufacturer version is_synth)
+    if ("${vendor}" STREQUAL "")
+        set (vendor "${manufacturer}")
+    endif()
+
+    string (REGEX MATCHALL "[0-9]+" version_parts "${version}")
+    list (APPEND version_parts 0 0 0)
+    list (GET version_parts 0 version_major)
+    list (GET version_parts 1 version_minor)
+    list (GET version_parts 2 version_patch)
+    math (EXPR encoded_version "(${version_major} << 16) | ((${version_minor} & 255) << 8) | (${version_patch} & 255)")
+
+    if (is_synth)
+        set (PLUGIN_AU_TAG "Synthesizer" PARENT_SCOPE)
+    else()
+        set (PLUGIN_AU_TAG "Effects" PARENT_SCOPE)
+    endif()
+
+    set (PLUGIN_AU_COMPONENT_NAME "${vendor}: ${name}" PARENT_SCOPE)
+    set (PLUGIN_AU_COMPONENT_VERSION "${encoded_version}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
 function (_yup_apply_binary_optimizations target_name)
     cmake_parse_arguments (YUP_ARG "" "" "EXPORTED_SYMBOLS" ${ARGN})
 

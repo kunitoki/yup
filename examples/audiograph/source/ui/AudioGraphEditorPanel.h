@@ -35,6 +35,7 @@
 class AudioGraphEditorPanel final
     : public yup::Component
     , public yup::AudioGraphComponent::Listener
+    , public yup::DragAndDropTarget
 {
 public:
     struct EndpointViews
@@ -116,6 +117,59 @@ public:
     {
         g.setFillColor (yup::Color (0xff0d1117));
         g.fillAll();
+    }
+
+    bool isInterestedInDragSource (const yup::DragAndDropSourceDetails& details) override
+    {
+        return isBrowserItemKey (details.data.getText());
+    }
+
+    bool itemDropped (const yup::DragAndDropSourceDetails& details) override
+    {
+        return addBrowserItem (details.data.getText(), graphComponent->screenToCanvas (details.localPosition));
+    }
+
+    /** Returns the canvas position at the center of the visible area. */
+    yup::Point<float> getVisibleCanvasCenter() const
+    {
+        return graphComponent->screenToCanvas (graphComponent->getLocalBounds().getCenter());
+    }
+
+    /** Adds the item identified by a NodeBrowser key at a canvas position. */
+    bool addBrowserItem (const yup::String& key, yup::Point<float> canvasPos)
+    {
+        if (key.startsWith ("node:"))
+        {
+            addInternalNode (key.fromFirstOccurrenceOf (":", false, false), canvasPos);
+            return true;
+        }
+
+        if (key.startsWith ("subgraph:"))
+        {
+            const auto preset = key.fromFirstOccurrenceOf (":", false, false).getIntValue();
+            addInternalNode (NodeRegistry::subgraphIdentifier, canvasPos, SubgraphConfig::toCreationData (SubgraphConfig::fromPreset (preset)));
+            return true;
+        }
+
+#if YUP_DESKTOP
+        if (key.startsWith ("plugin:") && onPluginRequested != nullptr)
+        {
+            const auto index = key.fromFirstOccurrenceOf (":", false, false).getIntValue();
+            const auto& plugins = nodeRegistry.getDiscoveredPlugins();
+            if (! yup::isPositiveAndBelow (index, static_cast<int> (plugins.size())))
+                return false;
+
+            onPluginRequested (*this, plugins[static_cast<size_t> (index)], canvasPos);
+            return true;
+        }
+#endif
+
+        return false;
+    }
+
+    static bool isBrowserItemKey (const yup::String& key)
+    {
+        return key.startsWith ("node:") || key.startsWith ("subgraph:") || key.startsWith ("plugin:");
     }
 
     void nodeViewMoved (yup::AudioGraphNodeID nodeID, yup::Point<float> newCanvasPos) override
@@ -208,9 +262,7 @@ public:
     std::function<void (AudioGraphEditorPanel&, yup::AudioGraphNodeID)> onNodeWillBeRemoved;
 
 #if YUP_DESKTOP
-    std::function<void (AudioGraphEditorPanel&, const yup::AudioPluginDescription&, yup::Point<float>)> onPluginSelected;
-    std::function<const std::vector<yup::AudioPluginDescription>&()> getDiscoveredPlugins;
-    std::function<yup::String (const yup::AudioPluginDescription&)> getPluginMenuItemText;
+    std::function<void (AudioGraphEditorPanel&, const yup::AudioPluginDescription&, yup::Point<float>)> onPluginRequested;
 #endif
 
 private:
@@ -506,30 +558,6 @@ private:
         activeMenu->addSubMenu ("Internal Nodes", internalSubMenu);
         activeMenu->addSubMenu ("Subgraphs", subgraphSubMenu);
 
-#if YUP_DESKTOP
-        if (getDiscoveredPlugins != nullptr)
-        {
-            const auto& plugins = getDiscoveredPlugins();
-
-            if (! plugins.empty())
-            {
-                auto pluginSubMenu = yup::PopupMenu::create();
-
-                for (int i = 0; i < static_cast<int> (plugins.size()); ++i)
-                {
-                    const auto& desc = plugins[static_cast<size_t> (i)];
-                    const auto menuText = getPluginMenuItemText != nullptr ? getPluginMenuItemText (desc) : desc.name;
-                    pluginSubMenu->addItem (menuText, 100 + i);
-                }
-
-                activeMenu->addSubMenu ("Plugins", pluginSubMenu);
-            }
-            else
-            {
-                activeMenu->addItem ("No plugins (click Scan)", -1, false);
-            }
-        }
-#endif
 
         activeMenu->show ([this, internalNodes = std::move (internalNodes)] (int selectedID)
         {
@@ -551,16 +579,6 @@ private:
                                  pendingMenuCanvasPos,
                                  SubgraphConfig::toCreationData (config));
             }
-#if YUP_DESKTOP
-            else if (selectedID >= 100 && onPluginSelected != nullptr && getDiscoveredPlugins != nullptr)
-            {
-                const auto& plugins = getDiscoveredPlugins();
-                const auto index = static_cast<size_t> (selectedID - 100);
-
-                if (index < plugins.size())
-                    onPluginSelected (*this, plugins[index], pendingMenuCanvasPos);
-            }
-#endif
         });
     }
 

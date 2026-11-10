@@ -118,17 +118,29 @@ public:
     //==============================================================================
 
     AudioPluginProcessorAUv3 (AUAudioUnit* audioUnit,
-                              AudioComponentDescription,
+                              AudioComponentDescription description,
                               AudioComponentInstantiationOptions,
                               NSError**)
         : au (audioUnit)
     {
+        ignoreUnused (description);
+
         processor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::auv3, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "created processor instance: wrapper=" << describePointer (this) << ", audioUnit=" << describePointer ((__bridge void*) audioUnit) << ", processor=" << describePointer (processor.get()) << ", type=" << String::toHexString (static_cast<int> (description.componentType)) << ", subType=" << String::toHexString (static_cast<int> (description.componentSubType)) << ", manufacturer=" << String::toHexString (static_cast<int> (description.componentManufacturer)));
+
+        if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "createPluginProcessor returned null");
+        }
+
         init();
     }
 
     ~AudioPluginProcessorAUv3() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "destroying processor instance: wrapper=" << describePointer (this) << ", audioUnit=" << describePointer ((__bridge void*) au) << ", processor=" << describePointer (processor.get()));
+
         if (editorObserverToken != nullptr)
         {
             if (paramTree.get() != nil)
@@ -155,7 +167,10 @@ public:
         jassert (au != nil); // The AUAudioUnit must be set before initialization
 
         if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "init skipped: processor is null");
             return;
+        }
 
         inParameterChangedCallback = false;
 
@@ -224,18 +239,7 @@ public:
             addressForIndex[i] = address;
         }
 
-        // Wrapper-owned bypass parameter backing the host's AUv3 bypass property.
-        // It is deliberately not added to the processor or the AU parameter tree:
-        // the host drives it through setShouldBypassEffect:, the render callback
-        // reads it directly, and it is persisted inside the YUPProcessorState blob.
-        auto bypassMetadata = AudioParameter::Metadata {};
-        bypassMetadata.name = "Bypass";
-        bypassMetadata.hostParameterID = getBypassHostParameterID (*processor);
-        bypassMetadata.valueRange = { 0.0f, 1.0f, 1.0f };
-        bypassMetadata.defaultValue = 0.0f;
-        bypassMetadata.setStepped (true);
-
-        bypassHostParam = std::make_unique<AudioParameter> ("bypass", bypassMetadata);
+        bypass.attach (*processor);
 
         installParameterTree (createTopLevelNodes());
     }
@@ -256,6 +260,7 @@ public:
         @catch (NSException* exception)
         {
             ignoreUnused (exception);
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "installParameterTree failed: " << String::fromCFString ((__bridge CFStringRef)[exception reason]));
             return;
         }
 
@@ -425,11 +430,14 @@ public:
 
         std::lock_guard<std::mutex> lock (factoryPresetsMutex);
         factoryPresets.reset (newPresets);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "factory presets built: count=" << String (n));
     }
 
     NSArray<AUAudioUnitPreset*>* getFactoryPresets() const
     {
         std::lock_guard<std::mutex> lock (factoryPresetsMutex);
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "factoryPresets requested: count=" << String (static_cast<int> ([factoryPresets.get() count])));
         return factoryPresets.get();
     }
 
@@ -439,6 +447,10 @@ public:
             return nil;
 
         std::lock_guard<std::mutex> lock (factoryPresetsMutex);
+
+        if (currentUserPreset != nullptr)
+            return currentUserPreset.get();
+
         const auto current = processor->getCurrentPreset();
 
         if (isPositiveAndBelow (current, static_cast<int> ([factoryPresets.get() count])))
@@ -450,11 +462,63 @@ public:
     void setCurrentPreset (AUAudioUnitPreset* preset)
     {
         if (processor == nullptr || preset == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setCurrentPreset failed: processor=" << describePointer (processor.get()) << ", preset=" << describePointer ((__bridge void*) preset));
             return;
+        }
 
         const auto index = static_cast<int> ([preset number]);
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setCurrentPreset requested: preset=" << String (index));
+
+        // User presets have negative numbers, their state is stored by the AUAudioUnit base class
+        if (index < 0)
+        {
+            if (@available (macOS 10.15, iOS 13.0, *))
+            {
+                NSError* error = nil;
+                if (auto* state = [au presetStateFor:preset error:&error])
+                {
+                    setFullState (state);
+
+                    std::lock_guard<std::mutex> lock (factoryPresetsMutex);
+                    currentUserPreset.reset (preset);
+                    return;
+                }
+            }
+
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setCurrentPreset failed: user preset state unavailable");
+            return;
+        }
+
         if (isPositiveAndBelow (index, processor->getNumPresets()))
+        {
+            {
+                std::lock_guard<std::mutex> lock (factoryPresetsMutex);
+                currentUserPreset.reset();
+            }
+
             processor->setCurrentPreset (index);
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setCurrentPreset completed");
+        }
+        else
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setCurrentPreset failed: preset out of range");
+        }
+    }
+
+    //==============================================================================
+    // Host context
+
+    void setContextName (NSString* name)
+    {
+        ObjCMsgSendSuper<AUAudioUnit, void> (au, @selector (setContextName:), name);
+
+        if (processor == nullptr)
+            return;
+
+        auto info = processor->getHostInfo();
+        info.trackName = name != nil ? nsStringToYup (name) : String();
+        processor->setHostInfo (info);
     }
 
     //==============================================================================
@@ -462,6 +526,8 @@ public:
 
     NSDictionary<NSString*, id>* getFullState() const
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "fullState requested");
+
         auto* retval = [[NSMutableDictionary<NSString*, id> alloc] init];
 
         {
@@ -472,7 +538,18 @@ public:
 
         MemoryBlock state;
         if (processor != nullptr)
-            processor->saveStateIntoMemory (state);
+        {
+            const auto result = processor->saveStateIntoMemory (state);
+
+            if (result.failed())
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "fullState processor save failed: " << result.getErrorMessage());
+            }
+        }
+        else
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "fullState without processor state: processor is null");
+        }
 
         // Wrap processor state together with the wrapper-owned bypass state so
         // host bypass survives preset/session restore (see auv3WrapperStateMagic).
@@ -488,22 +565,35 @@ public:
                        forKey:(__bridge NSString*) getAUProcessorStateKey()];
         }
 
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "fullState completed: processorBytes=" << String (static_cast<int64> (state.getSize())) << ", wrapperBytes=" << String (static_cast<int64> (wrapperState.getSize())));
+
         return retval;
     }
 
     void setFullState (NSDictionary<NSString*, id>* state)
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setFullState requested");
+
         if (state == nil || processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setFullState failed: state=" << describePointer ((__bridge void*) state) << ", processor=" << describePointer (processor.get()));
             return;
+        }
 
         id obj = [state objectForKey:(__bridge NSString*) getAUProcessorStateKey()];
         if (obj == nil || ! [obj isKindOfClass:[NSData class]])
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setFullState completed without processor state: key missing or not data");
             return;
+        }
 
         auto* data = static_cast<NSData*> (obj);
         const auto numBytes = static_cast<int> ([data length]);
         if (numBytes <= 0)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setFullState completed without processor state: data is empty");
             return;
+        }
 
         {
             ObjCMsgSendSuper<AUAudioUnit, void> (au, @selector (willChangeValueForKey:), @"allParameterValues");
@@ -519,7 +609,19 @@ public:
 
         const bool shouldLoadProcessorState = ! wrapperState.hasWrapperState || wrapperState.hasProcessorState;
         if (shouldLoadProcessorState && wrapperState.processorState.getSize() > 0)
-            processor->loadStateFromMemory (wrapperState.processorState);
+        {
+            const auto result = processor->loadStateFromMemory (wrapperState.processorState);
+            ignoreUnused (result);
+
+            if (wrapperState.hasWrapperState)
+                setShouldBypassEffect (wrapperState.isBypassed);
+
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setFullState " << String (result.wasOk() ? "completed" : "failed") << ": bytes=" << String (numBytes) << ", processorBytes=" << String (static_cast<int64> (wrapperState.processorState.getSize())) << ", hasWrapperState=" << String (wrapperState.hasWrapperState ? "true" : "false") << (result.wasOk() ? String() : ", error=" + result.getErrorMessage()));
+        }
+        else
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setFullState completed without processor state: bytes=" << String (numBytes) << ", hasWrapperState=" << String (wrapperState.hasWrapperState ? "true" : "false"));
+        }
 
         {
             ObjCMsgSendSuper<AUAudioUnit, void> (au, @selector (didChangeValueForKey:), @"allParameterValues");
@@ -570,7 +672,13 @@ public:
                 auBus.name = yupStringToNS (bus.getName());
                 [array addObject:auBus];
             }
+            else
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "bus creation failed: isInput=" << String (isInput ? "true" : "false") << ", bus=" << String (i) << ", numChannels=" << String (numChannels) << ", error=" << (error != nil ? String::fromCFString ((__bridge CFStringRef)[error localizedDescription]) : String ("unknown")));
+            }
         }
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "busses created: isInput=" << String (isInput ? "true" : "false") << ", count=" << String (static_cast<int> ([array count])));
 
         if (isInput)
             inputBusses.reset ([[AUAudioUnitBusArray alloc] initWithAudioUnit:au
@@ -585,12 +693,21 @@ public:
     AUAudioUnitBusArray* getInputBusses() const  { return inputBusses.get(); }
     AUAudioUnitBusArray* getOutputBusses() const { return outputBusses.get(); }
 
-    NSArray<NSNumber*>* getChannelCapabilities() const { return channelCapabilities.get(); }
+    NSArray<NSNumber*>* getChannelCapabilities() const
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "channelCapabilities returned " << String (static_cast<int> ([channelCapabilities.get() count])) << " entries");
+        return channelCapabilities.get();
+    }
 
     bool shouldChangeToFormat (AVAudioFormat* format, AUAudioUnitBus* auBus)
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "shouldChangeToFormat requested: isInput=" << String ([auBus busType] == AUAudioUnitBusTypeInput ? "true" : "false") << ", bus=" << String (static_cast<int> ([auBus index])) << ", sampleRate=" << String ([format sampleRate]) << ", channels=" << String (static_cast<int> ([format channelCount])) << ", interleaved=" << String ([format isInterleaved] ? "true" : "false"));
+
         if (allocated)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "shouldChangeToFormat rejected: render resources allocated");
             return false;
+        }
 
         // Accept Float32 always, Float64 if the processor supports it.
         // Other sample formats (Int16, Int32, etc.) are rejected — AUv3 hosts
@@ -602,6 +719,7 @@ public:
                 || processor == nullptr
                 || ! processor->supportsDoublePrecisionProcessing())
             {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "shouldChangeToFormat rejected: unsupported sample format " << String (static_cast<int> (commonFormat)));
                 return false;
             }
         }
@@ -618,13 +736,21 @@ public:
         const auto& buses = isInput ? busLayout.getInputBuses() : busLayout.getOutputBuses();
 
         if (! isPositiveAndBelow (busIdx, static_cast<int> (buses.size())))
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "shouldChangeToFormat rejected: bus index out of range");
             return false;
+        }
 
         const auto& bus = buses[busIdx];
         if (bus.getType() != AudioBus::Type::Audio)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "shouldChangeToFormat rejected: bus is not audio");
             return false;
+        }
 
-        return newNumChannels > 0 && newNumChannels == bus.getNumChannels();
+        const auto accepted = newNumChannels > 0 && newNumChannels == bus.getNumChannels();
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "shouldChangeToFormat " << String (accepted ? "accepted" : "rejected") << ": requestedChannels=" << String (newNumChannels) << ", busChannels=" << String (bus.getNumChannels()));
+        return accepted;
     }
 
     //==============================================================================
@@ -637,7 +763,10 @@ public:
         allocated = false;
 
         if (processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "allocateRenderResources failed: processor is null");
             return false;
+        }
 
         if (outError != nullptr)
             *outError = nil;
@@ -671,6 +800,8 @@ public:
                                                            [NSString stringWithFormat:@"Unsupported sample format for bus %@",
                                                                                      [auBus name]]
                                                    }];
+
+                    YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "allocateRenderResources failed: unsupported sample format " << String (static_cast<int> (commonFormat)) << " for bus " << String (static_cast<int> (i)));
                     return false;
                 }
 
@@ -697,6 +828,8 @@ public:
                                                            [NSString stringWithFormat:@"Inconsistent sample rate for bus %@",
                                                                                      [auBus name]]
                                                    }];
+
+                    YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "allocateRenderResources failed: inconsistent sample rate " << String (busSampleRate) << " (expected " << String (sampleRate) << ") for bus " << String (static_cast<int> (i)));
                     return false;
                 }
             }
@@ -715,6 +848,8 @@ public:
 
         midiMessages.ensureSize (2048);
         midiMessages.clear();
+        noteExpressions.prepare (*processor);
+        umpConverter.reset();
 
         // Reserve parameter change buffer capacity for sample-accurate automation.
         // Capacity = number of parameters * maxFrames per block so that per-sample
@@ -766,6 +901,8 @@ public:
     void reset()
     {
         midiMessages.clear();
+        noteExpressions.reset();
+        umpConverter.reset();
         lastTimeStamp.mSampleTime = std::numeric_limits<Float64>::max();
         lastTimeStamp.mFlags = 0;
     }
@@ -1010,10 +1147,9 @@ public:
                     { renderViews.outputBusViews.data(), renderViews.outputBusViews.size() }
                 };
 
-                if (bypassHostParam != nullptr)
-                    processAudioBlock (*processor, context, bypassHostParam->getNormalizedValue() > 0.5f);
-                else
-                    processAudioBlock (*processor, context, false);
+                context.noteExpressions = noteExpressions.apply (midiMessages);
+
+                processAudioBlock (*processor, context, bypass.isBypassed());
             }
 
             sendMidi (static_cast<int64_t> (timestamp->mSampleTime + 0.5), frameCount);
@@ -1132,6 +1268,7 @@ public:
     void processEvents (const AURenderEvent* realtimeEventListHead, AUEventSampleTime startTime, AUAudioFrameCount frameCount)
     {
         paramChangeBuffer.clear();
+        noteExpressions.clear();
 
         for (const AURenderEvent* event = realtimeEventListHead; event != nullptr; event = event->head.next)
         {
@@ -1144,6 +1281,20 @@ public:
                     midiMessages.addEvent (midiEvent.data,
                                            static_cast<int> (midiEvent.length),
                                            static_cast<int> (jlimit<int64> (0, jmax (0, static_cast<int> (frameCount) - 1), midiEvent.eventSampleTime - startTime)));
+                }
+                break;
+
+                case AURenderEventMIDIEventList:
+                {
+                    const AUMIDIEventList& midiEventList = event->MIDIEventsList;
+                    const auto sampleOffset = static_cast<int> (jlimit<int64> (0, jmax (0, static_cast<int> (frameCount) - 1), midiEventList.eventSampleTime - startTime));
+                    const MIDIEventPacket* packet = &midiEventList.eventList.packet[0];
+
+                    for (UInt32 i = 0; i < midiEventList.eventList.numPackets; ++i)
+                    {
+                        processUniversalMidiPacket (packet->words, static_cast<int> (packet->wordCount), sampleOffset);
+                        packet = reinterpret_cast<const MIDIEventPacket*> (packet->words + packet->wordCount);
+                    }
                 }
                 break;
 
@@ -1205,6 +1356,31 @@ public:
         paramChangeBuffer.sort();
     }
 
+    void processUniversalMidiPacket (const uint32* words, int numWords, int sampleOffset)
+    {
+        while (numWords > 0)
+        {
+            const auto messageWords = static_cast<int> (ump::Utils::getNumWordsForMessageType (words[0]));
+            if (messageWords > numWords)
+                return;
+
+            if (const auto expression = umpToNoteExpression (words, messageWords, sampleOffset))
+            {
+                noteExpressions.add (*expression);
+            }
+            else
+            {
+                umpConverter.convert (ump::View (words), static_cast<double> (sampleOffset), [this, sampleOffset] (const MidiMessage& message)
+                {
+                    midiMessages.addEvent (message, sampleOffset);
+                });
+            }
+
+            words += messageWords;
+            numWords -= messageWords;
+        }
+    }
+
     void sendMidi (int64_t baseTimeStamp, AUAudioFrameCount frameCount)
     {
         ignoreUnused (baseTimeStamp);
@@ -1236,16 +1412,14 @@ public:
 
     bool getShouldBypassEffect() const
     {
-        if (bypassHostParam != nullptr)
-            return bypassHostParam->getNormalizedValue() > 0.5f;
-
-        return false;
+        return bypass.isBypassed();
     }
 
     void setShouldBypassEffect (bool shouldBypass)
     {
-        if (bypassHostParam != nullptr)
-            bypassHostParam->setNormalizedValue (shouldBypass ? 1.0f : 0.0f);
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "bypass set to " << String (shouldBypass ? "true" : "false"));
+
+        bypass.setBypassed (shouldBypass);
     }
 
     //==============================================================================
@@ -1274,6 +1448,8 @@ public:
 
     void setRenderingOffline (bool offline)
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "offline rendering set to " << String (offline ? "true" : "false") << ", processor=" << describePointer (processor.get()));
+
         if (processor != nullptr)
             processor->setOfflineProcessing (offline);
     }
@@ -1288,7 +1464,15 @@ public:
 
     bool getSupportsMPE() const
     {
-        return false;
+        return processor != nullptr && processor->supportsMpe();
+    }
+
+    MIDIProtocolID getAudioUnitMIDIProtocol() API_AVAILABLE (macos (12.0), ios (15.0))
+    {
+        if (processor != nullptr && processor->acceptsMidi() && processor->supportsNoteExpression())
+            return kMIDIProtocol_2_0;
+
+        return ObjCMsgSendSuper<AUAudioUnit, MIDIProtocolID> (au, @selector (AudioUnitMIDIProtocol));
     }
 
     NSArray<NSString*>* getMIDIOutputNames() const
@@ -1364,11 +1548,17 @@ public:
         auto* indices = [[NSMutableIndexSet alloc] init];
 
         if (! processor->hasEditor())
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "supportedViewConfigurations: processor has no editor");
             return indices;
+        }
 
         auto* editor = processor->createEditor();
         if (editor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "supportedViewConfigurations: processor returned null editor");
             return indices;
+        }
 
         for (NSUInteger i = 0; i < [configs count]; ++i)
         {
@@ -1377,6 +1567,8 @@ public:
         }
 
         delete editor;
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "supportedViewConfigurations returned " << String (static_cast<int> ([indices count])) << " of " << String (static_cast<int> ([configs count])) << " configurations");
         return indices;
     }
 
@@ -1384,6 +1576,8 @@ public:
     {
         viewConfigWidth = [config width];
         viewConfigHeight = [config height];
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "view configuration selected: width=" << String (viewConfigWidth) << ", height=" << String (viewConfigHeight));
     }
 
     //==============================================================================
@@ -1391,6 +1585,8 @@ public:
 
     void audioProcessorChanged (AudioProcessorBase*, const AudioProcessorBase::ChangeDetails& details) override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "processor changed: program=" << String (details.programChanged ? "true" : "false") << ", latency=" << String (details.latencyChanged ? "true" : "false") << ", parameterInfo=" << String (details.parameterInfoChanged ? "true" : "false"));
+
         if (details.programChanged)
         {
             {
@@ -1427,6 +1623,8 @@ public:
 
     void updateParameterTree()
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "updating parameter tree");
+
         unregisterAllParameterListeners();
 
         {
@@ -1560,12 +1758,15 @@ private:
 
     mutable std::mutex factoryPresetsMutex;
     NSUniquePtr<NSMutableArray<AUAudioUnitPreset*>> factoryPresets;
+    NSUniquePtr<AUAudioUnitPreset> currentUserPreset;
 
     ObjCBlock<AUInternalRenderBlock> internalRenderBlock;
     ObjCBlock<AURenderContextObserver> renderContextObserver;
 
     MidiBuffer midiMessages;
     ParameterChangeBuffer paramChangeBuffer;
+    WrapperNoteExpressions noteExpressions;
+    ump::ToBytestreamConverter umpConverter { 2048 };
     AudioBuffer<float> scratchBuffer;
     AudioBuffer<float> scratchOutputBuffer;
 
@@ -1584,7 +1785,7 @@ private:
 
     AudioTimeStamp lastTimeStamp;
 
-    std::unique_ptr<AudioParameter> bypassHostParam;
+    WrapperBypass bypass;
 
     double viewConfigWidth = 0;
     double viewConfigHeight = 0;
@@ -1615,6 +1816,7 @@ struct AUAudioUnitSubclass final : public ObjCClass<AUAudioUnit>
                                                                                          AudioPluginProcessorAUv3* cpp) {
             self = ObjCMsgSendSuper<AUAudioUnit, AUAudioUnit*, AudioComponentDescription,
                                     AudioComponentInstantiationOptions, NSError * __autoreleasing *> (self, @selector (initWithComponentDescription:options:error:), descr, options, error);
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "AUAudioUnit init with existing wrapper: audioUnit=" << describePointer ((__bridge void*) self) << ", wrapper=" << describePointer (cpp));
             setThis (self, cpp);
             return self;
         });
@@ -1624,6 +1826,13 @@ struct AUAudioUnitSubclass final : public ObjCClass<AUAudioUnit>
             self = ObjCMsgSendSuper<AUAudioUnit, AUAudioUnit*, AudioComponentDescription,
                                     AudioComponentInstantiationOptions, NSError * __autoreleasing *> (self, @selector (initWithComponentDescription:options:error:), descr, options, error);
 
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "AUAudioUnit init: audioUnit=" << describePointer ((__bridge void*) self));
+
+            if (self == nil)
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "AUAudioUnit super init returned nil: error=" << (error != nullptr && *error != nil ? String::fromCFString ((__bridge CFStringRef)[*error localizedDescription]) : String ("none")));
+            }
+
             auto* cpp = new AudioPluginProcessorAUv3 (self, descr, options, error);
             setThis (self, cpp);
             return self;
@@ -1632,6 +1841,7 @@ struct AUAudioUnitSubclass final : public ObjCClass<AUAudioUnit>
         YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wundeclared-selector")
         addMethod (sel_registerName ("dealloc"), [] (__unsafe_unretained id self, SEL) {
             auto* cpp = _this (self);
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "AUAudioUnit dealloc: audioUnit=" << describePointer ((__bridge void*) self) << ", wrapper=" << describePointer (cpp));
             delete cpp;
             setThis (self, nullptr);
         });
@@ -1703,6 +1913,15 @@ struct AUAudioUnitSubclass final : public ObjCClass<AUAudioUnit>
             _this (self)->setCurrentPreset (preset);
         });
 
+        addMethod (@selector (supportsUserPresets), [] (id, SEL) {
+            return YES;
+        });
+
+        // Host context
+        addMethod (@selector (setContextName:), [] (id self, SEL, NSString* name) {
+            _this (self)->setContextName (name);
+        });
+
         // Latency / tail
         addMethod (@selector (latency), [] (id self, SEL) {
             return _this (self)->getLatency();
@@ -1745,6 +1964,13 @@ struct AUAudioUnitSubclass final : public ObjCClass<AUAudioUnit>
             return _this (self)->getSupportsMPE() ? YES : NO;
         });
         YUP_END_IGNORE_WARNINGS_GCC_LIKE
+
+        if (@available (macOS 12.0, iOS 15.0, *))
+        {
+            addMethod (@selector (AudioUnitMIDIProtocol), [] (id self, SEL) {
+                return _this (self)->getAudioUnitMIDIProtocol();
+            });
+        }
 
         if (@available (macOS 10.13, *))
         {
@@ -1795,10 +2021,14 @@ public:
         : myself (vc)
     {
         initialiseYup_GUI();
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "created view controller: controller=" << describePointer (this) << ", viewController=" << describePointer ((__bridge void*) vc));
     }
 
     ~AudioPluginViewControllerv3() override
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "destroying view controller: controller=" << describePointer (this) << ", editor=" << describePointer (editor) << ", processor=" << describePointer (processor));
+
         if (processor != nullptr)
         {
             yup::endActiveParameterGestures (processor);
@@ -1814,6 +2044,7 @@ public:
 
     void loadView()
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "loadView requested: processor=" << describePointer (processor) << ", editor=" << describePointer (editor));
         createEditorIfNeeded();
     }
 
@@ -1824,11 +2055,22 @@ public:
             if (editor != nullptr)
             {
                 const auto bounds = [[myself view] bounds];
+
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "resizing editor to view bounds: width=" << String (static_cast<double> (NSWidth (bounds))) << ", height=" << String (static_cast<double> (NSHeight (bounds))) << ", editor=" << describePointer (editor));
+
                 editor->setBounds ({ 0.0f,
                                      0.0f,
                                      static_cast<float> (NSWidth (bounds)),
                                      static_cast<float> (NSHeight (bounds)) });
             }
+            else
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "viewDidLayoutSubviews skipped: editor is null");
+            }
+        }
+        else
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "viewDidLayoutSubviews skipped: view is nil");
         }
     }
 
@@ -1847,6 +2089,8 @@ public:
 
     AUAudioUnit* createAudioUnit (const AudioComponentDescription& desc, NSError** error)
     {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "createAudioUnit requested: type=" << String::toHexString (static_cast<int> (desc.componentType)) << ", subType=" << String::toHexString (static_cast<int> (desc.componentSubType)) << ", manufacturer=" << String::toHexString (static_cast<int> (desc.componentManufacturer)));
+
         // Let the ObjC init create the C++ wrapper — it correctly passes self (the
         // real AUAudioUnit) to the AudioPluginProcessorAUv3 constructor, so au is
         // valid when init() runs.
@@ -1860,7 +2104,13 @@ public:
             auto* cpp = AUAudioUnitSubclass::_this (au);
             processor = cpp != nullptr ? cpp->getProcessor() : nullptr;
 
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "createAudioUnit completed: audioUnit=" << describePointer ((__bridge void*) au) << ", wrapper=" << describePointer (cpp) << ", processor=" << describePointer (processor));
+
             createEditorIfNeeded();
+        }
+        else
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "createAudioUnit failed: error=" << (error != nullptr && *error != nil ? String::fromCFString ((__bridge CFStringRef)[*error localizedDescription]) : String ("none")));
         }
 
         return au;
@@ -1873,15 +2123,22 @@ private:
     {
         // Already created, or no processor available yet
         if (editor != nullptr || processor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "createEditorIfNeeded skipped: editor=" << describePointer (editor) << ", processor=" << describePointer (processor));
             return;
+        }
 
         if (processor->hasEditor())
         {
+            windowing.ensureInitialised();
             editor = processor->createEditor();
 
             if (editor != nullptr)
             {
+                editor->setSize (editor->getConstrainedSize (editor->getInitialSize()).to<float>());
                 preferredSize = { editor->getWidth(), editor->getHeight() };
+
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "created editor: preferredWidth=" << String (preferredSize.getWidth()) << ", preferredHeight=" << String (preferredSize.getHeight()) << ", editor=" << describePointer (editor));
 
                 NSView* view = [[NSView alloc] initWithFrame:NSMakeRect (0, 0, preferredSize.getWidth(), preferredSize.getHeight())];
                 [myself setView:view];
@@ -1891,12 +2148,25 @@ private:
                 auto options = ComponentNative::Options()
                                    .withFlags (ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow);
 
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "attaching editor to native view: editor=" << describePointer (editor) << ", view=" << describePointer ((__bridge void*) view));
+
                 editor->addToDesktop (options, (__bridge void*) view);
+
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "editor attached to native view: isOnDesktop=" << String (editor->isOnDesktop() ? "true" : "false"));
             }
+            else
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "processor returned null editor");
+            }
+        }
+        else
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "processor has no editor");
         }
     }
 
     AUViewController<AUAudioUnitFactory>* myself = nil;
+    WrapperWindowing windowing;
     AudioProcessor* processor = nullptr;
     AudioProcessorEditor* editor = nullptr;
     Rectangle<float> preferredSize { 1.0f, 1.0f };
