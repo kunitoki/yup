@@ -59,17 +59,6 @@ std::optional<MidiMessage> clapEventToMidiMessage (const clap_event_header_t* ev
         return static_cast<int> (value);
     };
 
-    const auto clampPitchBendValue = [] (double value) noexcept
-    {
-        if (! (value >= 0.0))
-            return 0;
-
-        if (value >= 16383.0)
-            return 16383;
-
-        return static_cast<int> (value);
-    };
-
     switch (event->type)
     {
         case CLAP_EVENT_NOTE_ON:
@@ -120,26 +109,6 @@ std::optional<MidiMessage> clapEventToMidiMessage (const clap_event_header_t* ev
             return MidiMessage (midiEvent->data, messageLength);
         }
 
-        case CLAP_EVENT_NOTE_EXPRESSION:
-        {
-            const auto* ev = reinterpret_cast<const clap_event_note_expression_t*> (event);
-            const int channel = clampMidiChannel (ev->channel);
-
-            if (ev->expression_id == CLAP_NOTE_EXPRESSION_TUNING)
-            {
-                const int pitchBendValue = clampPitchBendValue (ev->value * 8192.0 + 8192.0);
-                return MidiMessage::pitchWheel (channel, pitchBendValue);
-            }
-
-            if (ev->expression_id == CLAP_NOTE_EXPRESSION_PRESSURE)
-                return MidiMessage::channelPressureChange (channel, clampMidiValue (ev->value * 127.0));
-
-            if (ev->expression_id == CLAP_NOTE_EXPRESSION_BRIGHTNESS)
-                return MidiMessage::controllerEvent (channel, 74, clampMidiValue (ev->value * 127.0));
-
-            break;
-        }
-
         case CLAP_EVENT_MIDI_SYSEX:
         {
             const auto* sysexEvent = reinterpret_cast<const clap_event_midi_sysex_t*> (event);
@@ -154,6 +123,47 @@ std::optional<MidiMessage> clapEventToMidiMessage (const clap_event_header_t* ev
     }
 
     return std::nullopt;
+}
+
+//==============================================================================
+
+std::optional<NoteExpression> clapEventToNoteExpression (const clap_event_note_expression_t& event, int sampleOffset)
+{
+    NoteExpression expression;
+    expression.sampleOffset = sampleOffset;
+    expression.noteId = event.note_id;
+    expression.channel = static_cast<int8> (isPositiveAndBelow (event.channel, 16) ? event.channel + 1 : -1);
+    expression.key = static_cast<int8> (isPositiveAndBelow (event.key, 128) ? event.key : -1);
+    expression.value = static_cast<float> (event.value);
+
+    switch (event.expression_id)
+    {
+        case CLAP_NOTE_EXPRESSION_VOLUME:
+            expression.type = NoteExpression::Type::volume;
+            break;
+        case CLAP_NOTE_EXPRESSION_PAN:
+            expression.type = NoteExpression::Type::pan;
+            break;
+        case CLAP_NOTE_EXPRESSION_TUNING:
+            expression.type = NoteExpression::Type::tuning;
+            break;
+        case CLAP_NOTE_EXPRESSION_VIBRATO:
+            expression.type = NoteExpression::Type::vibrato;
+            break;
+        case CLAP_NOTE_EXPRESSION_EXPRESSION:
+            expression.type = NoteExpression::Type::expression;
+            break;
+        case CLAP_NOTE_EXPRESSION_BRIGHTNESS:
+            expression.type = NoteExpression::Type::brightness;
+            break;
+        case CLAP_NOTE_EXPRESSION_PRESSURE:
+            expression.type = NoteExpression::Type::pressure;
+            break;
+        default:
+            return std::nullopt;
+    }
+
+    return expression;
 }
 
 //==============================================================================
@@ -641,6 +651,7 @@ private:
     bool hostTriggeredResizing = false;
 
     MidiBuffer midiEvents;
+    WrapperNoteExpressions noteExpressions;
     ParameterChangeBuffer paramChangeBuffer;
     std::vector<AudioParameter::Ptr> listenedParameters;
     std::vector<float*> outputChannelsFloat;
@@ -752,6 +763,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         // Process incoming parameter and MIDI events (CLAP guarantees time-sorted order)
         midiBuffer.clear();
         wrapper->paramChangeBuffer.clear();
+        wrapper->noteExpressions.clear();
 
         bool bypassed = wrapper->bypass.isBypassed();
         const auto bypassParameterID = wrapper->bypass.getHostParameterID();
@@ -791,11 +803,18 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                 const auto* modEvent = reinterpret_cast<const clap_event_param_mod_t*> (event);
                 addParameterModByCLAPEvent (audioProcessor, wrapper->paramChangeBuffer, modEvent, sampleOffset);
             }
+            else if (event->type == CLAP_EVENT_NOTE_EXPRESSION)
+            {
+                if (const auto expression = clapEventToNoteExpression (*reinterpret_cast<const clap_event_note_expression_t*> (event), sampleOffset))
+                    wrapper->noteExpressions.add (*expression);
+            }
             else if (auto convertedEvent = clapEventToMidiMessage (event))
             {
                 midiBuffer.addEvent (*convertedEvent, sampleOffset);
             }
         }
+
+        const auto* noteExpressionBuffer = wrapper->noteExpressions.apply (midiBuffer);
 
         AudioPluginPlayHeadCLAP playHead (audioProcessor.getSampleRate(), process);
         auto* const playHeadPtr = process->transport != nullptr ? &playHead : nullptr;
@@ -867,6 +886,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                 { wrapper->inputBusViewsDouble.data(), wrapper->inputBusViewsDouble.size() },
                 { wrapper->outputBusViewsDouble.data(), wrapper->outputBusViewsDouble.size() }
             };
+            context.noteExpressions = noteExpressionBuffer;
 
             wrapper->isInsideProcessBlock.store (true);
             processAudioBlock (audioProcessor, context, bypassed);
@@ -935,6 +955,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                 { wrapper->inputBusViewsFloat.data(), wrapper->inputBusViewsFloat.size() },
                 { wrapper->outputBusViewsFloat.data(), wrapper->outputBusViewsFloat.size() }
             };
+            context.noteExpressions = noteExpressionBuffer;
 
             wrapper->isInsideProcessBlock.store (true);
             processAudioBlock (audioProcessor, context, bypassed);
@@ -1813,6 +1834,7 @@ bool AudioPluginProcessorCLAP::activate (float sampleRate, int samplesPerBlock)
     }
 
     midiEvents.ensureSize (4096);
+    noteExpressions.prepare (*audioProcessor);
     paramChangeBuffer.reserve (getDefaultParameterChangeCapacity (*audioProcessor));
 
     const int totalOutputChannels = getTotalAudioOutputChannels (*audioProcessor);
@@ -1873,6 +1895,7 @@ void AudioPluginProcessorCLAP::reset()
     YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "reset requested");
 
     audioProcessor->flush(); // TODO - should we just call releaseResources()?
+    noteExpressions.reset();
 }
 
 //==============================================================================

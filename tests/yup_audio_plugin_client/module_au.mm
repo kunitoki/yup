@@ -627,3 +627,155 @@ TEST_F (AUBypassTests, BypassEffectPropertyRoundTrips)
     setBypass (false);
     EXPECT_EQ (0u, getBypass());
 }
+
+//------------------------------------------------------------------------------
+// Host negotiation and notification tests
+//------------------------------------------------------------------------------
+
+class AUNegotiationTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        audioUnit = instantiateTestAU();
+        ASSERT_NE (nullptr, audioUnit);
+
+        auto* wrapper = yup::AudioPluginProcessorAU::findInstance (audioUnit);
+        ASSERT_NE (nullptr, wrapper);
+        processor = static_cast<TestPluginProcessor*> (wrapper->getProcessor());
+        ASSERT_NE (nullptr, processor);
+    }
+
+    void TearDown() override
+    {
+        if (audioUnit != nullptr)
+        {
+            AudioUnitUninitialize (audioUnit);
+            AudioComponentInstanceDispose (audioUnit);
+        }
+    }
+
+    std::vector<AUChannelInfo> getSupportedNumChannels() const
+    {
+        UInt32 dataSize = 0;
+        Boolean writable = false;
+        if (AudioUnitGetPropertyInfo (audioUnit, kAudioUnitProperty_SupportedNumChannels, kAudioUnitScope_Global, 0, &dataSize, &writable) != noErr)
+            return {};
+
+        std::vector<AUChannelInfo> infos (dataSize / sizeof (AUChannelInfo));
+        EXPECT_EQ (noErr, AudioUnitGetProperty (audioUnit, kAudioUnitProperty_SupportedNumChannels, kAudioUnitScope_Global, 0, infos.data(), &dataSize));
+        return infos;
+    }
+
+    static bool containsChannelInfo (const std::vector<AUChannelInfo>& infos, SInt16 inputs, SInt16 outputs)
+    {
+        return std::any_of (infos.begin(), infos.end(), [&] (const AUChannelInfo& info)
+        {
+            return info.inChannels == inputs && info.outChannels == outputs;
+        });
+    }
+
+    void setChannelCount (AudioUnitScope scope, UInt32 numChannels)
+    {
+        AudioStreamBasicDescription format {};
+        UInt32 dataSize = sizeof (format);
+        ASSERT_EQ (noErr, AudioUnitGetProperty (audioUnit, kAudioUnitProperty_StreamFormat, scope, 0, &format, &dataSize));
+
+        format.mChannelsPerFrame = numChannels;
+        ASSERT_EQ (noErr, AudioUnitSetProperty (audioUnit, kAudioUnitProperty_StreamFormat, scope, 0, &format, sizeof (format)));
+    }
+
+    static void acceptMatchingMonoOrStereo (TestPluginProcessor& p)
+    {
+        p.layoutSupported = [] (const yup::AudioBusLayout& layout)
+        {
+            const auto inputs = layout.getAudioBusNumChannels (0, true);
+            return inputs == layout.getAudioBusNumChannels (0, false) && (inputs == 1 || inputs == 2);
+        };
+    }
+
+    AudioUnit audioUnit = nullptr;
+    TestPluginProcessor* processor = nullptr;
+};
+
+TEST_F (AUNegotiationTests, SupportedNumChannelsDefaultsToCurrentLayout)
+{
+    const auto infos = getSupportedNumChannels();
+
+    ASSERT_EQ (1u, infos.size());
+    EXPECT_EQ (2, infos[0].inChannels);
+    EXPECT_EQ (2, infos[0].outChannels);
+}
+
+TEST_F (AUNegotiationTests, SupportedNumChannelsListsProcessorAcceptedLayouts)
+{
+    acceptMatchingMonoOrStereo (*processor);
+
+    const auto infos = getSupportedNumChannels();
+
+    EXPECT_EQ (2u, infos.size());
+    EXPECT_TRUE (containsChannelInfo (infos, 1, 1));
+    EXPECT_TRUE (containsChannelInfo (infos, 2, 2));
+    EXPECT_FALSE (containsChannelInfo (infos, 1, 2));
+}
+
+TEST_F (AUNegotiationTests, InitializeAppliesHostChannelCounts)
+{
+    acceptMatchingMonoOrStereo (*processor);
+    setChannelCount (kAudioUnitScope_Input, 1);
+    setChannelCount (kAudioUnitScope_Output, 1);
+
+    ASSERT_EQ (noErr, AudioUnitInitialize (audioUnit));
+
+    EXPECT_EQ (1, processor->getBusLayout().getAudioBusNumChannels (0, true));
+    EXPECT_EQ (1, processor->getBusLayout().getAudioBusNumChannels (0, false));
+}
+
+TEST_F (AUNegotiationTests, InitializeRejectsUnsupportedChannelCounts)
+{
+    setChannelCount (kAudioUnitScope_Input, 1);
+    setChannelCount (kAudioUnitScope_Output, 1);
+
+    EXPECT_NE (noErr, AudioUnitInitialize (audioUnit));
+    EXPECT_EQ (2, processor->getBusLayout().getAudioBusNumChannels (0, false));
+}
+
+TEST_F (AUNegotiationTests, ParametersWithModulePathAreClumped)
+{
+    AudioUnitParameterInfo gainInfo {};
+    UInt32 dataSize = sizeof (gainInfo);
+    ASSERT_EQ (noErr, AudioUnitGetProperty (audioUnit, kAudioUnitProperty_ParameterInfo, kAudioUnitScope_Global, 100, &gainInfo, &dataSize));
+    EXPECT_NE (0u, gainInfo.flags & kAudioUnitParameterFlag_HasClump);
+    EXPECT_NE (0u, gainInfo.clumpID);
+
+    AudioUnitParameterNameInfo clumpName {};
+    clumpName.inID = static_cast<SInt32> (gainInfo.clumpID);
+    clumpName.inDesiredLength = kAudioUnitParameterName_Full;
+    dataSize = sizeof (clumpName);
+    ASSERT_EQ (noErr, AudioUnitGetProperty (audioUnit, kAudioUnitProperty_ParameterClumpName, kAudioUnitScope_Global, 0, &clumpName, &dataSize));
+    ASSERT_NE (nullptr, clumpName.outName);
+    EXPECT_EQ (yup::String ("Main"), yup::String::fromCFString (clumpName.outName));
+    CFRelease (clumpName.outName);
+
+    AudioUnitParameterInfo modeInfo {};
+    dataSize = sizeof (modeInfo);
+    ASSERT_EQ (noErr, AudioUnitGetProperty (audioUnit, kAudioUnitProperty_ParameterInfo, kAudioUnitScope_Global, 200, &modeInfo, &dataSize));
+    EXPECT_EQ (0u, modeInfo.flags & kAudioUnitParameterFlag_HasClump);
+    EXPECT_EQ (0u, modeInfo.clumpID);
+}
+
+TEST_F (AUNegotiationTests, LatencyChangeNotifiesPropertyListeners)
+{
+    int notifications = 0;
+    const auto listener = [] (void* userData, AudioUnit, AudioUnitPropertyID, AudioUnitScope, AudioUnitElement)
+    {
+        ++*static_cast<int*> (userData);
+    };
+
+    ASSERT_EQ (noErr, AudioUnitAddPropertyListener (audioUnit, kAudioUnitProperty_Latency, listener, &notifications));
+
+    processor->updateHostDisplay (yup::AudioProcessorBase::ChangeDetails().withLatencyChanged (true));
+
+    EXPECT_EQ (1, notifications);
+    AudioUnitRemovePropertyListenerWithUserData (audioUnit, kAudioUnitProperty_Latency, listener, &notifications);
+}

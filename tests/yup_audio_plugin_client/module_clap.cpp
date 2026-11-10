@@ -558,6 +558,89 @@ TEST_F (CLAPBypassTests, StateRoundTripsBypassState)
 }
 
 //------------------------------------------------------------------------------
+// Note expression tests
+//------------------------------------------------------------------------------
+
+class CLAPNoteExpressionTests : public CLAPBypassTests
+{
+protected:
+    void activate()
+    {
+        ASSERT_TRUE (plugin->activate (plugin, 48000.0, 1, 64));
+        activated = true;
+    }
+
+    void TearDown() override
+    {
+        if (activated)
+            plugin->deactivate (plugin);
+
+        CLAPBypassTests::TearDown();
+    }
+
+    void sendNoteExpression (clap_note_expression expressionId, double value, uint32_t time = 0)
+    {
+        clap_event_note_expression_t event {};
+        event.header.size = sizeof (event);
+        event.header.time = time;
+        event.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+        event.header.type = CLAP_EVENT_NOTE_EXPRESSION;
+        event.expression_id = expressionId;
+        event.note_id = 7;
+        event.port_index = 0;
+        event.channel = 0;
+        event.key = 60;
+        event.value = value;
+
+        runProcess (reinterpret_cast<const clap_event_header_t*> (&event));
+    }
+
+    bool activated = false;
+};
+
+TEST_F (CLAPNoteExpressionTests, OptedInProcessorReceivesNoteExpressions)
+{
+    processor->wantsNoteExpression = true;
+    activate();
+
+    sendNoteExpression (CLAP_NOTE_EXPRESSION_TUNING, 1.5, 3);
+
+    ASSERT_EQ (1u, processor->lastNoteExpressions.size());
+    const auto& expression = processor->lastNoteExpressions.front();
+    EXPECT_EQ (yup::NoteExpression::Type::tuning, expression.type);
+    EXPECT_FLOAT_EQ (1.5f, expression.value);
+    EXPECT_EQ (3, expression.sampleOffset);
+    EXPECT_EQ (7, expression.noteId);
+    EXPECT_EQ (1, expression.channel);
+    EXPECT_EQ (60, expression.key);
+    EXPECT_TRUE (processor->lastMidiMessages.empty());
+}
+
+TEST_F (CLAPNoteExpressionTests, TuningFallsBackToPitchBend)
+{
+    activate();
+
+    sendNoteExpression (CLAP_NOTE_EXPRESSION_TUNING, 1.0);
+
+    EXPECT_TRUE (processor->lastNoteExpressions.empty());
+    ASSERT_EQ (1u, processor->lastMidiMessages.size());
+    const auto& message = processor->lastMidiMessages.front();
+    EXPECT_TRUE (message.isPitchWheel());
+    EXPECT_EQ (1, message.getChannel());
+    EXPECT_EQ (8192 + 4096, message.getPitchWheelValue());
+}
+
+TEST_F (CLAPNoteExpressionTests, ExpressionsWithoutMidiEquivalentAreDroppedInFallback)
+{
+    activate();
+
+    sendNoteExpression (CLAP_NOTE_EXPRESSION_VOLUME, 2.0);
+
+    EXPECT_TRUE (processor->lastNoteExpressions.empty());
+    EXPECT_TRUE (processor->lastMidiMessages.empty());
+}
+
+//------------------------------------------------------------------------------
 // State extension tests
 //------------------------------------------------------------------------------
 

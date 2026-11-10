@@ -37,6 +37,7 @@
 
 #import <AppKit/AppKit.h>
 #import <AudioUnit/AUCocoaUIView.h>
+#import <AudioToolbox/AudioUnitUtilities.h>
 #import <AudioUnit/AudioUnit.h>
 #import <CoreMIDI/CoreMIDI.h>
 #import <Foundation/Foundation.h>
@@ -92,6 +93,7 @@ using AudioPluginAUBase = ausdk::AUEffectBase;
 class AudioPluginProcessorAU final
     : public AudioPluginAUBase
     , private AudioParameter::Listener
+    , private AudioProcessorBase::Listener
 {
 public:
     class AudioPluginPlayHeadAU final : public AudioPlayHead
@@ -137,7 +139,10 @@ public:
         if (processor == nullptr)
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "createPluginProcessor returned null");
         else
+        {
             bypass.attach (*processor);
+            processor->addListener (this);
+        }
 
         addParameterListeners();
         registerInstance (componentInstance, this);
@@ -150,6 +155,9 @@ public:
         closeEditorViews();
         removeParameterListeners();
         yup::endActiveParameterGestures (processor.get());
+
+        if (processor != nullptr)
+            processor->removeListener (this);
 
         unregisterInstance (componentInstance);
 
@@ -174,6 +182,9 @@ public:
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "Initialize failed: processor is null");
             return kAudioUnitErr_FailedInitialization;
         }
+
+        if (const auto layoutResult = applyHostChannelCounts(); layoutResult != noErr)
+            return layoutResult;
 
 #if ! YupPlugin_IsSynth
         // Expose one input element per audio input bus so hosts can route
@@ -264,6 +275,27 @@ public:
         outParameterInfo.defaultValue = param->getDefaultValue();
         outParameterInfo.clumpID = 0;
 
+        if (const auto clumpIndex = clumpNames.indexOf (param->getModulePath()); clumpIndex >= 0)
+        {
+            outParameterInfo.flags |= kAudioUnitParameterFlag_HasClump;
+            outParameterInfo.clumpID = static_cast<UInt32> (firstClumpID + clumpIndex);
+        }
+
+        return noErr;
+    }
+
+    OSStatus CopyClumpName (AudioUnitScope inScope,
+                            UInt32 inClumpID,
+                            UInt32 inDesiredNameLength,
+                            CFStringRef* outClumpName) override
+    {
+        ignoreUnused (inDesiredNameLength);
+
+        const auto clumpIndex = static_cast<int> (inClumpID) - static_cast<int> (firstClumpID);
+        if (inScope != kAudioUnitScope_Global || outClumpName == nullptr || ! isPositiveAndBelow (clumpIndex, clumpNames.size()))
+            return kAudioUnitErr_InvalidPropertyValue;
+
+        *outClumpName = clumpNames[clumpIndex].toCFString();
         return noErr;
     }
 
@@ -332,23 +364,30 @@ public:
         channelInfoCache.clear();
 
         const auto& busLayout = processor->getBusLayout();
+        const bool hasInput = busLayout.getNumAudioBuses (true) > 0;
+        const bool hasOutput = busLayout.getNumAudioBuses (false) > 0;
 
-        int inputChannels = 0;
-        for (const auto& bus : busLayout.getInputBuses())
-            if (bus.getType() == AudioBus::Type::Audio)
-                inputChannels = std::max (inputChannels, bus.getNumChannels());
-
-        int outputChannels = 0;
-        for (const auto& bus : busLayout.getOutputBuses())
-            if (bus.getType() == AudioBus::Type::Audio)
-                outputChannels = std::max (outputChannels, bus.getNumChannels());
-
-        if (inputChannels > 0 || outputChannels > 0)
+        const auto addChannelInfo = [this] (int inputChannels, int outputChannels)
         {
-            AUChannelInfo info;
-            info.inChannels = static_cast<SInt16> (inputChannels);
-            info.outChannels = static_cast<SInt16> (outputChannels);
-            channelInfoCache.push_back (info);
+            const auto found = std::find_if (channelInfoCache.begin(), channelInfoCache.end(), [&] (const AUChannelInfo& info)
+            {
+                return info.inChannels == inputChannels && info.outChannels == outputChannels;
+            });
+
+            if (found == channelInfoCache.end())
+                channelInfoCache.push_back ({ static_cast<SInt16> (inputChannels), static_cast<SInt16> (outputChannels) });
+        };
+
+        addChannelInfo (busLayout.getAudioBusNumChannels (0, true), busLayout.getAudioBusNumChannels (0, false));
+
+        for (int inputChannels = hasInput ? 1 : 0; inputChannels <= (hasInput ? maxNegotiatedChannels : 0); ++inputChannels)
+        {
+            for (int outputChannels = hasOutput ? 1 : 0; outputChannels <= (hasOutput ? maxNegotiatedChannels : 0); ++outputChannels)
+            {
+                const auto candidate = withMainChannelCounts (busLayout, inputChannels, outputChannels);
+                if (candidate != busLayout && processor->isBusLayoutSupported (candidate))
+                    addChannelInfo (inputChannels, outputChannels);
+            }
         }
 
         if (outInfo != nullptr)
@@ -1071,6 +1110,7 @@ private:
     void addParameterListeners()
     {
         removeParameterListeners();
+        rebuildClumps();
 
         if (processor == nullptr)
             return;
@@ -1107,18 +1147,165 @@ private:
                                          static_cast<AudioUnitParameterValue> (parameter->getValue()),
                                          0);
 
+        notifyHostParameterEvent (kAudioUnitEvent_ParameterValueChange, *parameter);
+
         if (parameter->isBypass())
             PropertyChanged (kAudioUnitProperty_BypassEffect, kAudioUnitScope_Global, 0);
     }
 
     void parameterGestureBegin (const AudioParameter::Ptr& parameter, int indexInContainer) override
     {
-        ignoreUnused (parameter, indexInContainer);
+        if (isValidProcessorParameterIndex (indexInContainer))
+            notifyHostParameterEvent (kAudioUnitEvent_BeginParameterChangeGesture, *parameter);
     }
 
     void parameterGestureEnd (const AudioParameter::Ptr& parameter, int indexInContainer) override
     {
-        ignoreUnused (parameter, indexInContainer);
+        if (isValidProcessorParameterIndex (indexInContainer))
+            notifyHostParameterEvent (kAudioUnitEvent_EndParameterChangeGesture, *parameter);
+    }
+
+    void notifyHostParameterEvent (AudioUnitEventType type, const AudioParameter& parameter)
+    {
+        AudioUnitEvent event {};
+        event.mEventType = type;
+        event.mArgument.mParameter.mAudioUnit = componentInstance;
+        event.mArgument.mParameter.mParameterID = static_cast<AudioUnitParameterID> (parameter.getHostParameterID());
+        event.mArgument.mParameter.mScope = kAudioUnitScope_Global;
+        event.mArgument.mParameter.mElement = 0;
+
+        AUEventListenerNotify (nullptr, nullptr, &event);
+    }
+
+    //==============================================================================
+
+    enum PendingNotification : uint32
+    {
+        notifyLatency = 1 << 0,
+        notifyTail = 1 << 1,
+        notifyParameterValues = 1 << 2,
+        notifyParameterInfo = 1 << 3,
+        notifyPreset = 1 << 4
+    };
+
+    // May be called from any thread, notifications are delivered on the main thread
+    void audioProcessorChanged (AudioProcessorBase* changedProcessor, const AudioProcessorBase::ChangeDetails& details) override
+    {
+        if (changedProcessor != processor.get())
+            return;
+
+        uint32 flags = 0;
+        flags |= details.latencyChanged ? notifyLatency : 0u;
+        flags |= details.tailChanged ? notifyTail : 0u;
+        flags |= details.parameterValuesChanged ? notifyParameterValues : 0u;
+        flags |= details.parameterInfoChanged ? notifyParameterInfo : 0u;
+        flags |= details.programChanged ? notifyPreset : 0u;
+
+        if (flags == 0 || pendingNotifications.fetch_or (flags) != 0)
+            return;
+
+        if ([NSThread isMainThread])
+        {
+            deliverPendingNotifications();
+            return;
+        }
+
+        // The instance may be disposed before the block runs, look it up again on the main thread
+        AudioUnit component = componentInstance;
+        dispatch_async (dispatch_get_main_queue(), ^{
+          if (auto* instance = findInstance (component))
+              instance->deliverPendingNotifications();
+        });
+    }
+
+    void deliverPendingNotifications()
+    {
+        const auto flags = pendingNotifications.exchange (0);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "delivering property notifications: flags=" << String (static_cast<int> (flags)));
+
+        if ((flags & notifyParameterInfo) != 0)
+        {
+            bypass.attach (*processor);
+            addParameterListeners();
+            PropertyChanged (kAudioUnitProperty_ParameterList, kAudioUnitScope_Global, 0);
+            PropertyChanged (kAudioUnitProperty_ParameterInfo, kAudioUnitScope_Global, 0);
+        }
+
+        if ((flags & (notifyParameterValues | notifyParameterInfo)) != 0)
+        {
+            for (const auto& parameter : processor->getParameters())
+                notifyHostParameterEvent (kAudioUnitEvent_ParameterValueChange, *parameter);
+        }
+
+        if ((flags & notifyLatency) != 0)
+            PropertyChanged (kAudioUnitProperty_Latency, kAudioUnitScope_Global, 0);
+
+        if ((flags & notifyTail) != 0)
+            PropertyChanged (kAudioUnitProperty_TailTime, kAudioUnitScope_Global, 0);
+
+        if ((flags & notifyPreset) != 0)
+            updatePresentPreset();
+    }
+
+    void updatePresentPreset()
+    {
+        const auto presetIndex = processor->getCurrentPreset();
+        if (! isPositiveAndBelow (presetIndex, processor->getNumPresets()))
+            return;
+
+        const auto presetName = processor->getPresetName (presetIndex);
+        const AUPreset preset { static_cast<SInt32> (presetIndex), presetName.toCFString() };
+
+        if (SetAFactoryPresetAsCurrent (preset))
+            PropertyChanged (kAudioUnitProperty_PresentPreset, kAudioUnitScope_Global, 0);
+
+        CFRelease (preset.presetName);
+    }
+
+    //==============================================================================
+
+    static AudioBusLayout withMainChannelCounts (const AudioBusLayout& layout, int inputChannels, int outputChannels)
+    {
+        return layout.withAudioBusNumChannels (0, true, inputChannels)
+            .withAudioBusNumChannels (0, false, outputChannels);
+    }
+
+    // Switches the processor to the channel counts the host configured on the main elements
+    OSStatus applyHostChannelCounts()
+    {
+        const auto& busLayout = processor->getBusLayout();
+
+        const int inputChannels = busLayout.getNumAudioBuses (true) > 0 && Inputs().GetNumberOfElements() > 0
+                                    ? static_cast<int> (Input (0).GetStreamFormat().mChannelsPerFrame)
+                                    : 0;
+        const int outputChannels = busLayout.getNumAudioBuses (false) > 0
+                                     ? static_cast<int> (Output (0).GetStreamFormat().mChannelsPerFrame)
+                                     : 0;
+
+        const auto requestedLayout = withMainChannelCounts (busLayout, inputChannels, outputChannels);
+        if (requestedLayout == busLayout)
+            return noErr;
+
+        if (const auto result = processor->setBusLayout (requestedLayout); result.failed())
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "Initialize failed: " << result.getErrorMessage() << ", inputChannels=" << String (inputChannels) << ", outputChannels=" << String (outputChannels));
+            return kAudioUnitErr_FormatNotSupported;
+        }
+
+        return noErr;
+    }
+
+    void rebuildClumps()
+    {
+        clumpNames.clear();
+
+        if (processor == nullptr)
+            return;
+
+        for (const auto& parameter : processor->getParameters())
+            if (const auto modulePath = parameter->getModulePath(); modulePath.isNotEmpty())
+                clumpNames.addIfNotAlreadyThere (modulePath);
     }
 
     Float64 getCurrentSampleRate()
@@ -1149,6 +1336,12 @@ private:
     AudioUnit componentInstance = nullptr;
     bool renderingOffline = false;
     WrapperBypass bypass;
+    StringArray clumpNames;
+    std::atomic<uint32> pendingNotifications { 0 };
+
+    // Clump 0 means "no clump" for AU hosts
+    static constexpr UInt32 firstClumpID = 1;
+    static constexpr int maxNegotiatedChannels = 8;
 };
 
 } // namespace yup

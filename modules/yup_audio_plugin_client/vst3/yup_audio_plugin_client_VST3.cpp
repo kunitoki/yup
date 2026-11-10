@@ -41,6 +41,7 @@
 #include <pluginterfaces/vst/ivsteditcontroller.h>
 #include <pluginterfaces/vst/ivstevents.h>
 #include <pluginterfaces/vst/ivstmidicontrollers.h>
+#include <pluginterfaces/vst/ivstnoteexpression.h>
 #include <pluginterfaces/vst/ivstremapparamid.h>
 #include <pluginterfaces/vst/ivstcomponent.h>
 #include <pluginterfaces/vst/ivstmessage.h>
@@ -77,9 +78,9 @@ const Vst::TChar* toTChar (const CharPointer_UTF16& source)
     return reinterpret_cast<const Vst::TChar*> (source.getAddress());
 }
 
-String toString (Vst::TChar* source)
+String toString (const Vst::TChar* source)
 {
-    return CharPointer_UTF16 (reinterpret_cast<CharPointer_UTF16::CharType*> (source));
+    return CharPointer_UTF16 (reinterpret_cast<const CharPointer_UTF16::CharType*> (source));
 }
 
 /** Declares the host application from the name the host context reports. */
@@ -119,6 +120,73 @@ void toString128 (const String& source, Vst::String128 destination)
     std::memcpy (destination, units, length * sizeof (Vst::TChar));
     destination[length] = 0;
 }
+
+//==============================================================================
+
+struct VST3NoteExpressionType
+{
+    Vst::NoteExpressionTypeID typeId;
+    NoteExpression::Type type;
+    const char* title;
+    const char* shortTitle;
+    double defaultValue;
+    int32 flags;
+};
+
+// The first entries have MIDI 1.0 equivalents and are offered to every processor
+constexpr VST3NoteExpressionType vst3NoteExpressionTypes[] = {
+    { Vst::kTuningTypeID, NoteExpression::Type::tuning, "Tuning", "Tune", 0.5, Vst::NoteExpressionTypeInfo::kIsBipolar },
+    { Vst::kBrightnessTypeID, NoteExpression::Type::brightness, "Brightness", "Bright", 0.0, 0 },
+    { Vst::kVolumeTypeID, NoteExpression::Type::volume, "Volume", "Vol", 0.25, 0 },
+    { Vst::kPanTypeID, NoteExpression::Type::pan, "Pan", "Pan", 0.5, Vst::NoteExpressionTypeInfo::kIsBipolar },
+    { Vst::kVibratoTypeID, NoteExpression::Type::vibrato, "Vibrato", "Vib", 0.0, 0 },
+    { Vst::kExpressionTypeID, NoteExpression::Type::expression, "Expression", "Expr", 0.0, 0 }
+};
+
+constexpr int numMidiConvertibleNoteExpressionTypes = 2;
+
+int getNumVST3NoteExpressionTypes (const AudioProcessor& processor)
+{
+    return processor.supportsNoteExpression() ? static_cast<int> (std::size (vst3NoteExpressionTypes)) : numMidiConvertibleNoteExpressionTypes;
+}
+
+const VST3NoteExpressionType* findVST3NoteExpressionType (const AudioProcessor& processor, Vst::NoteExpressionTypeID typeId)
+{
+    for (int index = 0; index < getNumVST3NoteExpressionTypes (processor); ++index)
+        if (vst3NoteExpressionTypes[index].typeId == typeId)
+            return vst3NoteExpressionTypes + index;
+
+    return nullptr;
+}
+
+/** Converts a normalized VST3 note expression value to the plain units of NoteExpression. */
+float vst3NoteExpressionToPlain (NoteExpression::Type type, double normalized)
+{
+    switch (type)
+    {
+        case NoteExpression::Type::volume:
+            return static_cast<float> (normalized * 4.0);
+        case NoteExpression::Type::tuning:
+            return static_cast<float> ((normalized - 0.5) * 240.0);
+        default:
+            return static_cast<float> (normalized);
+    }
+}
+
+double plainToVST3NoteExpression (NoteExpression::Type type, float plain)
+{
+    switch (type)
+    {
+        case NoteExpression::Type::volume:
+            return jlimit (0.0, 1.0, plain / 4.0);
+        case NoteExpression::Type::tuning:
+            return jlimit (0.0, 1.0, plain / 240.0 + 0.5);
+        default:
+            return jlimit (0.0, 1.0, static_cast<double> (plain));
+    }
+}
+
+//==============================================================================
 
 Vst::ParamID getVST3ParameterID (const AudioParameter::Ptr& parameter)
 {
@@ -685,6 +753,7 @@ class AudioPluginControllerVST3
     : public Vst::EditController
     , public Vst::IMidiMapping
     , public Vst::IUnitInfo
+    , public Vst::INoteExpressionController
     , public Vst::IRemapParamID
     , public Vst::ChannelContext::IInfoListener
     , private AudioParameter::Listener
@@ -702,6 +771,7 @@ public:
     DEF_INTERFACE (Vst::IEditController)
     DEF_INTERFACE (Vst::IMidiMapping)
     DEF_INTERFACE (Vst::IUnitInfo)
+    DEF_INTERFACE (Vst::INoteExpressionController)
     DEF_INTERFACE (Vst::IRemapParamID)
     DEF_INTERFACE (Vst::ChannelContext::IInfoListener)
     END_DEFINE_INTERFACES (Vst::EditController)
@@ -1016,17 +1086,74 @@ public:
                                                     Vst::CtrlNumber midiControllerNumber,
                                                     Vst::ParamID& id) override
     {
-        if (processor == nullptr)
+        if (processor == nullptr || busIndex != 0)
             return kResultFalse;
 
+        // VST3 controller numbers use 128 for channel pressure and 129 for pitch bend, like AudioProcessor
+        const auto parameterIndex = processor->getParameterIndexForMidiController (channel + 1, static_cast<int> (midiControllerNumber));
         const auto parameters = processor->getParameters();
-        if (busIndex == 0 && isPositiveAndBelow (static_cast<int> (midiControllerNumber), static_cast<int> (parameters.size())))
-        {
-            id = getVST3ParameterID (parameters[static_cast<int> (midiControllerNumber)]);
-            return kResultOk;
-        }
+        if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
+            return kResultFalse;
 
-        return kResultFalse;
+        id = getVST3ParameterID (parameters[parameterIndex]);
+        return kResultOk;
+    }
+
+    //==============================================================================
+
+    int32 PLUGIN_API getNoteExpressionCount (int32 busIndex, int16 channel) override
+    {
+        ignoreUnused (channel);
+
+        if (processor == nullptr || busIndex != 0 || ! processor->acceptsMidi())
+            return 0;
+
+        return getNumVST3NoteExpressionTypes (*processor);
+    }
+
+    tresult PLUGIN_API getNoteExpressionInfo (int32 busIndex, int16 channel, int32 noteExpressionIndex, Vst::NoteExpressionTypeInfo& info) override
+    {
+        if (! isPositiveAndBelow (noteExpressionIndex, getNoteExpressionCount (busIndex, channel)))
+            return kInvalidArgument;
+
+        const auto& type = vst3NoteExpressionTypes[noteExpressionIndex];
+
+        info = {};
+        info.typeId = type.typeId;
+        toString128 (type.title, info.title);
+        toString128 (type.shortTitle, info.shortTitle);
+        toString128 (type.type == NoteExpression::Type::tuning ? "st" : "", info.units);
+        info.unitId = Vst::kRootUnitId;
+        info.valueDesc.minimum = 0.0;
+        info.valueDesc.maximum = 1.0;
+        info.valueDesc.defaultValue = type.defaultValue;
+        info.associatedParameterId = Vst::kNoParamId;
+        info.flags = type.flags;
+        return kResultOk;
+    }
+
+    tresult PLUGIN_API getNoteExpressionStringByValue (int32 busIndex, int16 channel, Vst::NoteExpressionTypeID id, Vst::NoteExpressionValue valueNormalized, Vst::String128 string) override
+    {
+        ignoreUnused (busIndex, channel);
+
+        const auto* type = processor != nullptr ? findVST3NoteExpressionType (*processor, id) : nullptr;
+        if (type == nullptr)
+            return kInvalidArgument;
+
+        toString128 (String (vst3NoteExpressionToPlain (type->type, valueNormalized), 2), string);
+        return kResultOk;
+    }
+
+    tresult PLUGIN_API getNoteExpressionValueByString (int32 busIndex, int16 channel, Vst::NoteExpressionTypeID id, const Vst::TChar* string, Vst::NoteExpressionValue& valueNormalized) override
+    {
+        ignoreUnused (busIndex, channel);
+
+        const auto* type = processor != nullptr ? findVST3NoteExpressionType (*processor, id) : nullptr;
+        if (type == nullptr || string == nullptr)
+            return kInvalidArgument;
+
+        valueNormalized = plainToVST3NoteExpression (type->type, toString (string).getFloatValue());
+        return kResultOk;
     }
 
     //==============================================================================
@@ -1625,6 +1752,8 @@ public:
         }
 
         isActive = state != 0;
+        activeNoteIds.clear();
+        noteExpressions.reset();
 
         return AudioEffect::setActive (state);
     }
@@ -1792,6 +1921,9 @@ public:
         midiBuffer.ensureSize (4096);
         midiBuffer.clear();
 
+        noteExpressions.prepare (*processor);
+        activeNoteIds.reserve (maxActiveNoteIds);
+
         paramChangeBuffer.reserve (getDefaultParameterChangeCapacity (*processor));
         const auto totalOutputChannels = getTotalAudioOutputChannels (*processor);
         outputChannelsFloat.reserve (static_cast<size_t> (totalOutputChannels));
@@ -1886,6 +2018,7 @@ public:
 
         // --- Process Events ---
         midiBuffer.clear();
+        noteExpressions.clear();
 
         if (data.inputEvents)
         {
@@ -1899,6 +2032,7 @@ public:
                 switch (e.type)
                 {
                     case Vst::Event::kNoteOnEvent:
+                        trackNoteId (e.noteOn.noteId, e.noteOn.channel, e.noteOn.pitch);
                         midiBuffer.addEvent (MidiMessage::noteOn (e.noteOn.channel + 1,
                                                                   e.noteOn.pitch,
                                                                   static_cast<uint8> (e.noteOn.velocity * 127.0f)),
@@ -1906,6 +2040,7 @@ public:
                         break;
 
                     case Vst::Event::kNoteOffEvent:
+                        releaseNoteId (e.noteOff.noteId);
                         midiBuffer.addEvent (MidiMessage::noteOff (e.noteOff.channel + 1,
                                                                    e.noteOff.pitch,
                                                                    static_cast<uint8> (e.noteOff.velocity * 127.0f)),
@@ -1931,11 +2066,17 @@ public:
                             midiBuffer.addEvent (e.data.bytes, static_cast<int> (e.data.size), jlimit (0, lastSampleOffset, e.sampleOffset));
                         break;
 
+                    case Vst::Event::kNoteExpressionValueEvent:
+                        addNoteExpression (e.noteExpressionValue, jlimit (0, lastSampleOffset, e.sampleOffset));
+                        break;
+
                     default:
                         break;
                 }
             }
         }
+
+        const auto* noteExpressionBuffer = noteExpressions.apply (midiBuffer);
 
         // --- Process Audio ---
         if (data.numSamples > 0 && data.outputs != nullptr)
@@ -2010,6 +2151,7 @@ public:
                     { inputBusViewsDouble.data(), static_cast<size_t> (inputBusViewsDouble.size()) },
                     { outputBusViewsDouble.data(), static_cast<size_t> (outputBusViewsDouble.size()) }
                 };
+                doubleCtx.noteExpressions = noteExpressionBuffer;
 
                 processAudioBlock (*processor, doubleCtx, bypassed);
             }
@@ -2044,6 +2186,7 @@ public:
                     { inputBusViewsFloat.data(), static_cast<size_t> (inputBusViewsFloat.size()) },
                     { outputBusViewsFloat.data(), static_cast<size_t> (outputBusViewsFloat.size()) }
                 };
+                context.noteExpressions = noteExpressionBuffer;
 
                 processAudioBlock (*processor, context, bypassed);
             }
@@ -2075,6 +2218,65 @@ private:
 
     WrapperBypass bypass;
     bool isActive = false;
+
+    struct ActiveNoteId
+    {
+        int32 noteId;
+        int16 channel;
+        int16 pitch;
+    };
+
+    static constexpr size_t maxActiveNoteIds = 256;
+    std::vector<ActiveNoteId> activeNoteIds;
+    WrapperNoteExpressions noteExpressions;
+
+    //==============================================================================
+    void trackNoteId (int32 noteId, int16 channel, int16 pitch) noexcept
+    {
+        if (noteId == -1)
+            return;
+
+        releaseNoteId (noteId);
+
+        if (activeNoteIds.size() < activeNoteIds.capacity())
+            activeNoteIds.push_back ({ noteId, channel, pitch });
+    }
+
+    void releaseNoteId (int32 noteId) noexcept
+    {
+        if (noteId == -1)
+            return;
+
+        activeNoteIds.erase (std::remove_if (activeNoteIds.begin(), activeNoteIds.end(), [noteId] (const ActiveNoteId& note)
+        {
+            return note.noteId == noteId;
+        }),
+                             activeNoteIds.end());
+    }
+
+    void addNoteExpression (const Vst::NoteExpressionValueEvent& event, int sampleOffset) noexcept
+    {
+        const auto* type = findVST3NoteExpressionType (*processor, event.typeId);
+        if (type == nullptr)
+            return;
+
+        const auto note = std::find_if (activeNoteIds.begin(), activeNoteIds.end(), [&] (const ActiveNoteId& active)
+        {
+            return active.noteId == event.noteId;
+        });
+
+        if (note == activeNoteIds.end())
+            return;
+
+        NoteExpression expression;
+        expression.sampleOffset = sampleOffset;
+        expression.noteId = event.noteId;
+        expression.channel = static_cast<int8> (note->channel + 1);
+        expression.key = static_cast<int8> (note->pitch);
+        expression.type = type->type;
+        expression.value = vst3NoteExpressionToPlain (type->type, event.value);
+        noteExpressions.add (expression);
+    }
 
     //==============================================================================
     /** Looks up the role of a VST3 audio bus by its audio-bus index.

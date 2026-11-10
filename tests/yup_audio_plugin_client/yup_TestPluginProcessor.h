@@ -51,6 +51,7 @@ public:
         floatMeta.valueRange = { 0.0f, 1.0f };
         floatMeta.defaultValue = 0.5f;
         floatMeta.setModulatable (true);
+        floatMeta.modulePath = "Main";
         addParameter (new yup::AudioParameter ("gain", floatMeta));
 
         // Stepped integer parameter, enumerated — host ID 200
@@ -138,6 +139,14 @@ public:
             midiPositions.push_back (metadata.samplePosition);
         midiSamplePositionsPerBlock.push_back (std::move (midiPositions));
 
+        lastMidiMessages.clear();
+        for (const auto metadata : context.midi)
+            lastMidiMessages.push_back (metadata.getMessage());
+
+        lastNoteExpressions.clear();
+        if (context.noteExpressions != nullptr)
+            lastNoteExpressions.assign (context.noteExpressions->begin(), context.noteExpressions->end());
+
         lastFirstSamplesIn.clear();
         for (int ch = 0; ch < audio.getNumChannels(); ++ch)
         {
@@ -179,11 +188,25 @@ public:
 
     bool supportsDoublePrecisionProcessing() const override { return supportsDouble; }
 
+    bool supportsNoteExpression() const override { return wantsNoteExpression; }
+
+    bool supportsMpe() const override { return wantsMpe; }
+
+    bool isBusLayoutSupported (const yup::AudioBusLayout& layout) const override
+    {
+        return layoutSupported != nullptr ? layoutSupported (layout) : AudioProcessor::isBusLayoutSupported (layout);
+    }
+
     bool prepared = false;
     bool supportsDouble = false;
     int processCallCount = 0;
     int bypassCallCount = 0;
     std::function<yup::AudioProcessorEditor*()> editorFactory;
+    std::function<bool (const yup::AudioBusLayout&)> layoutSupported;
+    bool wantsNoteExpression = false;
+    bool wantsMpe = false;
+    std::vector<yup::MidiMessage> lastMidiMessages;
+    std::vector<yup::NoteExpression> lastNoteExpressions;
     yup::MemoryBlock lastLoadedState;
     yup::MemoryBlock lastSavedState;
 

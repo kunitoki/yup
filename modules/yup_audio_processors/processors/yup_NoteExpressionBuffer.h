@@ -111,13 +111,24 @@ public:
         return true;
     }
 
-    /** Stable-sorts events by sampleOffset, preserving the order of simultaneous events. */
+    /** Stable-sorts events by sampleOffset, preserving the order of simultaneous events.
+
+        Sorts in place without allocating, and is linear for the usual already ordered input.
+    */
     void sort() noexcept
     {
-        std::stable_sort (events.begin(), events.end(), [] (const NoteExpression& a, const NoteExpression& b) noexcept
+        for (auto it = events.begin(); it != events.end(); ++it)
         {
-            return a.sampleOffset < b.sampleOffset;
-        });
+            if (it == events.begin() || std::prev (it)->sampleOffset <= it->sampleOffset)
+                continue;
+
+            const auto insertionPoint = std::upper_bound (events.begin(), it, *it, [] (const NoteExpression& a, const NoteExpression& b) noexcept
+            {
+                return a.sampleOffset < b.sampleOffset;
+            });
+
+            std::rotate (insertionPoint, it, std::next (it));
+        }
     }
 
     //==============================================================================

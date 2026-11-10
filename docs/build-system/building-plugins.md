@@ -117,14 +117,16 @@ Processors can describe themselves to hosts through optional overrides and metad
 - **MIDI CC mapping**: override `getParameterIndexForMidiController (channel, controller)` to map
   controllers to parameter indices (return -1 for none).
 - **Bus layouts**: override `isBusLayoutSupported()` to accept layouts other than the current one,
-  `setBusLayout()` applies a supported layout and notifies listeners.
+  `setBusLayout()` applies a supported layout and notifies listeners. VST3 and AU wrappers offer the
+  accepted main bus channel counts to hosts and switch to the one the host picks.
 - **Host details**: `getHostInfo()` returns the track name and color when the host provides them
   (VST3 and CLAP; AU, AAX and LV2 have no such API),
   `hostInfoChanged()` is called when they change. `AudioProcessor::getHostType()` identifies the host
   (`PluginHostType`) for host-specific workarounds.
 - **Note expression**: return true from `supportsNoteExpression()` to receive per-note expressions in
-  `AudioProcessContext::noteExpressions`. Otherwise they are converted to MIDI, either channel-wide or
-  as MPE when `supportsMpe()` returns true.
+  `AudioProcessContext::noteExpressions` (from CLAP and VST3 hosts). Otherwise they are converted to
+  MIDI, either channel-wide or as MPE when `supportsMpe()` returns true; only tuning (pitch bend),
+  pressure and brightness (CC74) survive the conversion.
 
 ## Building with CMake
 

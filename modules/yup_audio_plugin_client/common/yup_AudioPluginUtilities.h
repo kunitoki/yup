@@ -168,6 +168,54 @@ private:
     std::atomic<bool> bypassed { false };
 };
 
+/** Collects the host's per-note expressions for one process call.
+
+    Processors that opt in (AudioProcessor::supportsNoteExpression) receive the events through
+    AudioProcessContext::noteExpressions. For the others the events are folded into the MIDI
+    buffer, as MPE when AudioProcessor::supportsMpe() is true.
+
+    clear(), add(), reset() and apply() are allocation-free and safe on the audio thread.
+*/
+class WrapperNoteExpressions
+{
+public:
+    /** Configures the delivery mode and pre-allocates storage, call while not processing. */
+    void prepare (const AudioProcessor& processor, int maxEventsPerBlock = 1024)
+    {
+        passThrough = processor.supportsNoteExpression();
+        expressions.reserve (maxEventsPerBlock);
+
+        converter.setMode (processor.supportsMpe() ? NoteExpressionMidiConverter::Mode::mpe : NoteExpressionMidiConverter::Mode::channelWide);
+        converter.prepare (4096 + maxEventsPerBlock * 4);
+    }
+
+    /** Forgets active notes, e.g. when the host resets the plugin. */
+    void reset() noexcept { converter.reset(); }
+
+    /** Removes the events of the previous block. */
+    void clear() noexcept { expressions.clear(); }
+
+    /** Adds an event of the current block. */
+    void add (const NoteExpression& expression) noexcept { expressions.add (expression); }
+
+    /** Delivers the collected events, returns the buffer to pass in AudioProcessContext::noteExpressions. */
+    const NoteExpressionBuffer* apply (MidiBuffer& midi)
+    {
+        expressions.sort();
+
+        if (passThrough)
+            return &expressions;
+
+        converter.process (midi, expressions);
+        return nullptr;
+    }
+
+private:
+    NoteExpressionBuffer expressions;
+    NoteExpressionMidiConverter converter;
+    bool passThrough = false;
+};
+
 /** Returns the total number of output audio channels across all output audio buses. */
 inline int getTotalAudioOutputChannels (const AudioProcessor& processor)
 {
