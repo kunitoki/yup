@@ -200,7 +200,7 @@ At least one format must be enabled, otherwise configuration fails with an error
 |---|---|---|---|
 | `PLUGIN_AU_SUBTYPE` | 4-char | `Dflt` | AudioUnit subtype code. Must be exactly 4 characters. |
 | `PLUGIN_AU_MANUFACTURER` | 4-char | `Yup!` | AudioUnit manufacturer code. Must be exactly 4 characters. |
-| `PLUGIN_AU_SANDBOX_SAFE` | ON\|OFF | ON | Sets `sandboxSafe` in the AU Info.plist. Set OFF if your plugin needs IOKit or other unsandboxed resources. |
+| `PLUGIN_AU_SANDBOX_SAFE` | ON\|OFF | OFF (AUv2), ON (AUv3) | Sets `sandboxSafe` in the AU Info.plist. Sandboxed hosts (App Store hosts, GarageBand, Logic) load sandbox-safe AUv2 plugins in-process, so only turn it ON for AUv2 when the plugin is signed with a real identity and never touches unsandboxed resources; otherwise they load it out-of-process. |
 
 #### AAX-Specific
 

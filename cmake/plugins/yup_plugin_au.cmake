@@ -71,7 +71,7 @@ function (_yup_audio_plugin_create_au)
     cmake_parse_arguments (YUP_ARG "" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     # ==== Set defaults for optional args
-    _yup_set_default (YUP_ARG_PLUGIN_AU_SANDBOX_SAFE ON)
+    _yup_set_default (YUP_ARG_PLUGIN_AU_SANDBOX_SAFE OFF)
     _yup_set_default (YUP_ARG_PLUGIN_COPY_AFTER_BUILD ON)
     _yup_set_default (YUP_ARG_PLUGIN_CODESIGN_IDENTITY "-")
     _yup_set_default (YUP_ARG_PLUGIN_HARDENED_RUNTIME OFF)
@@ -172,6 +172,7 @@ function (_yup_audio_plugin_create_au)
     set (PLUGIN_AU_MANUFACTURER "${YUP_ARG_PLUGIN_AU_MANUFACTURER}")
     set (PLUGIN_AU_NAME "${YUP_ARG_PLUGIN_NAME}")
     set (PLUGIN_AU_VERSION "${YUP_ARG_PLUGIN_VERSION}")
+    _yup_audio_plugin_set_au_component_values ("${YUP_ARG_PLUGIN_NAME}" "${YUP_ARG_PLUGIN_VENDOR}" "${YUP_ARG_PLUGIN_AU_MANUFACTURER}" "${YUP_ARG_PLUGIN_VERSION}" "${YUP_ARG_PLUGIN_IS_SYNTH}")
 
     set (au_bundle_identifier "${target_bundle_id}.au")
     string (REGEX REPLACE "[^A-Za-z0-9.-]" "-" au_bundle_identifier "${au_bundle_identifier}")
