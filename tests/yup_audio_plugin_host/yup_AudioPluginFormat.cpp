@@ -76,6 +76,9 @@ protected:
 
         ResultValue<std::vector<AudioPluginDescription>> scanFile (const File&) override
         {
+            if (failScan)
+                return makeResultValueFail ("unreadable file");
+
             std::vector<AudioPluginDescription> descriptions;
 
             for (const auto& name : names)
@@ -105,6 +108,7 @@ protected:
 
         StringArray names;
         int numLoads = 0;
+        bool failScan = false;
     };
 
     EstimatingFormat format;
@@ -166,5 +170,17 @@ TEST_F (AudioPluginFormatTests, ScanFileFullyFailsWhenScanFindsNothing)
     auto result = format.scanFileFully (File {});
 
     ASSERT_TRUE (result.failed());
+    EXPECT_EQ (0, format.numLoads);
+}
+
+TEST_F (AudioPluginFormatTests, ScanFileFullyForwardsScanFailures)
+{
+    format.names = { "synth" };
+    format.failScan = true;
+
+    auto result = format.scanFileFully (File {});
+
+    ASSERT_TRUE (result.failed());
+    EXPECT_EQ ("unreadable file", result.getErrorMessage());
     EXPECT_EQ (0, format.numLoads);
 }

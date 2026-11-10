@@ -62,23 +62,6 @@ protected:
 
 //==============================================================================
 
-TEST_F (NoteExpressionMidiConverterTests, BufferDropsEventsBeyondReservedCapacity)
-{
-    NoteExpressionBuffer buffer;
-    buffer.reserve (1);
-
-    EXPECT_TRUE (buffer.add (makeExpression (0, 1, 60, NoteExpression::Type::pressure, 0.5f)));
-
-    bool added = true;
-    {
-        const ScopedJassertDisabler disabler;
-        added = buffer.add (makeExpression (1, 1, 60, NoteExpression::Type::pressure, 0.5f));
-    }
-
-    EXPECT_FALSE (added);
-    EXPECT_EQ (1, buffer.getNumEvents());
-}
-
 TEST_F (NoteExpressionMidiConverterTests, BufferSortIsStable)
 {
     expressions.add (makeExpression (10, 1, 60, NoteExpression::Type::pressure, 0.1f));

@@ -141,7 +141,11 @@ public:
 
         window = std::make_unique<StandaloneWindow> (getApplicationName(), std::move (windowContent));
         window->setWindowAspectRatio (content->getPreferredAspectRatio());
-        window->centreWithSize (content->getPreferredSize());
+
+        if (isVisibleOnAnyScreen (state.windowBounds))
+            window->setBounds (state.windowBounds->to<float>());
+        else
+            window->centreWithSize (content->getPreferredSize());
         window->setVisible (true);
         window->toFront (true);
 
@@ -196,8 +200,28 @@ private:
     {
         const auto deviceState = deviceManager.createStateXml();
 
-        if (const auto result = stateStore.save (deviceState.get(), *processor); result.failed())
+        std::optional<Rectangle<int>> windowBounds;
+        if (window != nullptr)
+            windowBounds = window->getScreenBounds().to<int>();
+
+        if (const auto result = stateStore.save (deviceState.get(), *processor, windowBounds); result.failed())
             yup::Logger::outputDebugString ("Unable to save the standalone state: " + result.getErrorMessage());
+    }
+
+    static bool isVisibleOnAnyScreen (const std::optional<Rectangle<int>>& bounds)
+    {
+#if YUP_DESKTOP && ! YUP_WASM
+        if (! bounds.has_value())
+            return false;
+
+        for (const auto* screen : Desktop::getInstance()->getScreens())
+        {
+            if (screen != nullptr && screen->workArea.intersects (*bounds))
+                return true;
+        }
+#endif
+
+        return false;
     }
 
 #if YUP_EMSCRIPTEN

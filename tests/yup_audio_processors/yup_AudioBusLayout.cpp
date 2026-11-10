@@ -89,3 +89,66 @@ TEST (AudioBusLayoutTests, GetAudioBusRoleForOutputBuses)
     EXPECT_EQ (AudioBus::Role::Auxiliary, layout.getAudioBusRole (1, false));
     EXPECT_EQ (AudioBus::Role::Main, layout.getAudioBusRole (0, true));
 }
+
+TEST (AudioBusLayoutTests, CopyAssignmentAndEqualityCompareAllBuses)
+{
+    const AudioBusLayout stereo ({ AudioBus ("In", AudioBus::Type::Audio, AudioBus::Direction::Input, 2) },
+                                 { AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2) });
+
+    AudioBusLayout copy;
+    EXPECT_FALSE (copy == stereo);
+
+    copy = stereo;
+    EXPECT_TRUE (copy == stereo);
+    EXPECT_FALSE (copy.withAudioBusNumChannels (0, false, 1) == stereo);
+}
+
+TEST (AudioBusLayoutTests, HasSameBusStructureIgnoresChannelCountsAndNames)
+{
+    const AudioBusLayout layout ({ AudioBus ("In", AudioBus::Type::Audio, AudioBus::Direction::Input, 2) },
+                                 { AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2) });
+
+    const AudioBusLayout renamed ({ AudioBus ("Main In", AudioBus::Type::Audio, AudioBus::Direction::Input, 1) },
+                                  { AudioBus ("Main Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 6) });
+
+    const AudioBusLayout auxiliaryInput ({ AudioBus ("In", AudioBus::Type::Audio, AudioBus::Direction::Input, 2, AudioBus::Role::Auxiliary) },
+                                         { AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2) });
+
+    const AudioBusLayout midiInput ({ AudioBus ("In", AudioBus::Type::Midi, AudioBus::Direction::Input, 0) },
+                                    { AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2) });
+
+    const AudioBusLayout extraOutput ({ AudioBus ("In", AudioBus::Type::Audio, AudioBus::Direction::Input, 2) },
+                                      { AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2),
+                                        AudioBus ("Aux", AudioBus::Type::Audio, AudioBus::Direction::Output, 2, AudioBus::Role::Auxiliary) });
+
+    EXPECT_TRUE (layout.hasSameBusStructure (renamed));
+    EXPECT_FALSE (layout.hasSameBusStructure (auxiliaryInput));
+    EXPECT_FALSE (layout.hasSameBusStructure (midiInput));
+    EXPECT_FALSE (layout.hasSameBusStructure (extraOutput));
+    EXPECT_FALSE (layout.hasSameBusStructure (AudioBusLayout()));
+}
+
+TEST (AudioBusLayoutTests, WithAudioBusChannelSetReplacesOnlyTheTargetAudioBus)
+{
+    const AudioBusLayout layout ({ AudioBus ("MIDI In", AudioBus::Type::Midi, AudioBus::Direction::Input, 0),
+                                   AudioBus ("In", AudioBus::Type::Audio, AudioBus::Direction::Input, 2) },
+                                 { AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2) });
+
+    const auto surround = layout.withAudioBusChannelSet (0, false, AudioChannelSet::create5point1());
+
+    EXPECT_EQ (6, surround.getAudioBusNumChannels (0, false));
+    EXPECT_EQ (AudioChannelSet::create5point1(), surround.getAudioBusChannelSet (0, false));
+    EXPECT_EQ (2, surround.getAudioBusNumChannels (0, true));
+    EXPECT_TRUE (surround.hasSameBusStructure (layout));
+}
+
+TEST (AudioBusLayoutTests, OutOfRangeAudioBusQueriesAndEditsAreHarmless)
+{
+    const AudioBusLayout layout ({ AudioBus ("In", AudioBus::Type::Audio, AudioBus::Direction::Input, 2) },
+                                 { AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2) });
+
+    EXPECT_TRUE (layout.withAudioBusChannelSet (3, true, AudioChannelSet::mono()) == layout);
+    EXPECT_TRUE (layout.withAudioBusNumChannels (3, false, 1) == layout);
+    EXPECT_EQ (0, layout.getAudioBusNumChannels (5, true));
+    EXPECT_EQ (AudioChannelSet::disabled(), layout.getAudioBusChannelSet (5, true));
+}

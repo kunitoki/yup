@@ -33,7 +33,7 @@ namespace yup
 
     signal() never blocks or allocates, so it can be used from realtime threads.
 
-    Not available on WebAssembly and Android.
+    On WebAssembly and Android create() and open() always fail.
 
     @see SharedMemory
 

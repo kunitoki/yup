@@ -262,7 +262,9 @@ extern char** environ;
 #if ! YUP_WINDOWS
 #include "native/yup_SharedCode_posix.h"
 #include "native/yup_NamedPipe_posix.cpp"
-#if ! (YUP_WASM || YUP_ANDROID)
+#if YUP_WASM || YUP_ANDROID
+#include "native/yup_InterProcess_unsupported.cpp"
+#else
 #include "native/yup_SharedMemory_posix.cpp"
 #include "native/yup_InterProcessSemaphore_posix.cpp"
 #endif

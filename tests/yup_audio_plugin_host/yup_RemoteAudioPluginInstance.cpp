@@ -65,6 +65,20 @@ public:
 
             addParameter (gain);
             setLatencySamples (7);
+
+            if (description.name == "bypassable")
+            {
+                for (const auto* id : { "bypass", "secondBypass" })
+                {
+                    addParameter (AudioParameterBuilder()
+                                      .withID (id)
+                                      .withName (id)
+                                      .withRange (0.0f, 1.0f)
+                                      .withDefault (0.0f)
+                                      .withBypass (true)
+                                      .build());
+                }
+            }
         }
 
         void prepareToPlay (const AudioSpec&) override {}
@@ -77,7 +91,10 @@ public:
                 Process::terminate();
 
             for (const auto& change : context.params)
-                gain->setNormalizedValue (change.normalizedValue);
+            {
+                if (change.parameterIndex == 0)
+                    gain->setNormalizedValue (change.normalizedValue);
+            }
 
             context.audio.applyGain (gain->getValue());
         }
@@ -380,6 +397,73 @@ TEST_F (RemoteAudioPluginInstanceTests, CrashOutputsSilenceAndReloadRestoresStat
     ASSERT_TRUE (instance->reload().wasOk());
     EXPECT_FALSE (instance->hasCrashed());
     EXPECT_FLOAT_EQ (0.125f, process (*instance));
+}
+
+TEST_F (RemoteAudioPluginInstanceTests, ReportsFixedCapabilitiesAndConvertsTextThroughTheServer)
+{
+    auto instance = load ("gain");
+    ASSERT_NE (nullptr, instance);
+
+    EXPECT_FALSE (instance->supportsNoteExpression());
+    EXPECT_FALSE (instance->supportsMpe());
+    EXPECT_EQ (0, instance->getTailSamples());
+    EXPECT_EQ (nullptr, instance->createEditor());
+
+    instance->setPresetName (1, "Renamed");
+    EXPECT_EQ ("Half", instance->getPresetName (1));
+
+    EXPECT_FLOAT_EQ (1.5f, instance->getParameters()[0]->convertFromString ("1.5"));
+}
+
+TEST_F (RemoteAudioPluginInstanceTests, BypassWithoutBypassParameterPassesAudioThrough)
+{
+    auto instance = load ("gain");
+    ASSERT_NE (nullptr, instance);
+    prepare (*instance);
+
+    instance->getParameters()[0]->setValue (2.0f);
+    EXPECT_FLOAT_EQ (0.5f, process (*instance));
+
+    instance->setBypassed (true);
+    EXPECT_FLOAT_EQ (0.25f, process (*instance));
+
+    instance->setBypassed (false);
+    EXPECT_FLOAT_EQ (0.5f, process (*instance));
+}
+
+TEST_F (RemoteAudioPluginInstanceTests, OnlyTheFirstBypassParameterDrivesBypass)
+{
+    auto instance = load ("bypassable");
+    ASSERT_NE (nullptr, instance);
+
+    const auto parameters = instance->getParameters();
+    ASSERT_EQ (3u, parameters.size());
+    EXPECT_TRUE (parameters[1]->isBypass());
+    EXPECT_FALSE (parameters[2]->isBypass());
+
+    instance->setBypassed (true);
+    EXPECT_FLOAT_EQ (1.0f, parameters[1]->getNormalizedValue());
+
+    instance->setBypassed (false);
+    EXPECT_FLOAT_EQ (0.0f, parameters[1]->getNormalizedValue());
+}
+
+TEST_F (RemoteAudioPluginInstanceTests, CrashedInstanceFallsBackToLocalConversionsAndState)
+{
+    auto instance = load ("crashy");
+    ASSERT_NE (nullptr, instance);
+    prepare (*instance);
+
+    EXPECT_FLOAT_EQ (0.0f, process (*instance, true));
+    ASSERT_TRUE (instance->hasCrashed());
+
+    const auto& gain = instance->getParameters()[0];
+    EXPECT_EQ ("0.50", gain->convertToString (0.5f));
+    EXPECT_FLOAT_EQ (0.75f, gain->convertFromString ("0.75"));
+    EXPECT_EQ (nullptr, instance->createEditor());
+
+    MemoryBlock state;
+    EXPECT_TRUE (instance->saveStateIntoMemory (state).failed());
 }
 
 TEST_F (RemoteAudioPluginInstanceTests, PluginFailingToLoadReportsError)

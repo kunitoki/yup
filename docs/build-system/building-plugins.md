@@ -130,7 +130,7 @@ Processors can describe themselves to hosts through optional overrides and metad
   `setBusLayout()` applies a supported layout and notifies listeners. VST3 and AU wrappers offer the
   accepted main bus channel counts to hosts and switch to the one the host picks.
 - **Host details**: `getHostInfo()` returns the track name and color when the host provides them
-  (VST3 and CLAP; AU, AAX and LV2 have no such API),
+  (VST3 and CLAP, and the track name from AUv3 `contextName`; AU v2, AAX and LV2 have no such API),
   `hostInfoChanged()` is called when they change. `AudioProcessor::getHostType()` identifies the host
   (`PluginHostType`) for host-specific workarounds.
 - **Note expression**: return true from `supportsNoteExpression()` to receive per-note expressions in
@@ -138,6 +138,29 @@ Processors can describe themselves to hosts through optional overrides and metad
   per-note pitch bend and controllers, which is requested automatically). Otherwise they are converted to
   MIDI, either channel-wide or as MPE when `supportsMpe()` returns true; only tuning (pitch bend),
   pressure and brightness (CC74) survive the conversion.
+- **Speaker layouts**: give buses an explicit `AudioChannelSet` (`AudioBus (name, direction, channelSet)`),
+  otherwise the canonical layout for the channel count is used. VST3 speaker arrangements, AU channel
+  layouts and AAX stem formats are translated to and from it.
+- **Parameter categories**: `AudioParameterBuilder::withCategory()` marks input and output gains and
+  meters. Meter categories make the parameter read-only; AAX shows them as host meters (gain
+  reduction included), VST3 and CLAP as read-only parameters.
+- **Presets**: processor presets are the VST3 program list (with a program change parameter), the AU and
+  AUv3 factory presets. AUv3 hosts can also save user presets.
+- **Editor and host**: override `AudioProcessorEditor::getParameterAt()` to report the parameter under
+  the mouse (VST3 `IParameterFinder`). `getHostContext()` returns the wrapper services when the host
+  offers them, for example `showParameterContextMenu()` to show the host menu for a parameter on right
+  click (VST3 `IComponentHandler3`, CLAP `context-menu`).
+
+### Format notes
+
+- **CLAP**: supports MIDI 2.0 note ports, SysEx output, `state-context`, `remote-controls` (pages of 8
+  automatable parameters) and the host `context-menu`.
+- **LV2**: plugins with an editor ship an LV2 UI (Cocoa, Windows or X11) using `instance-access`, with host
+  resize and idle support. Plugins require `bufsz:boundedBlockLength` and `bufsz:maxBlockLength`, so no
+  allocation happens in `run()`. Parameter units, integer, toggle and enumeration ranges (with scale
+  points) and non-automatable parameters are written to the TTL.
+- **AU**: MIDI output reaches hosts through the MIDI output callback, and parameter values convert to and
+  from strings.
 
 ## Building with CMake
 
@@ -237,7 +260,8 @@ The window shows a slim toolbar above the editor:
 Enabled MIDI inputs play the plugin, and MIDI the plugin produces goes to the
 selected MIDI output (desktop only). The device setup and the plugin state are
 saved when the settings close and when the application quits, then restored on
-the next launch. On desktop they live in
+the next launch, together with the window position and size (ignored when the
+window would no longer be on any screen). On desktop they live in
 `<user application data>/<PLUGIN_VENDOR>/<PLUGIN_NAME>/standalone.xml`.
 
 When the editor's `shouldPreserveAspectRatio()` returns true, the window keeps

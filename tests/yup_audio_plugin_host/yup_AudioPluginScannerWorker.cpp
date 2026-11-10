@@ -257,4 +257,17 @@ TEST_F (AudioPluginScannerWorkerTests, NonWorkerCommandLineIsIgnored)
     EXPECT_FALSE (worker.initialiseFromCommandLine ("--gtest_filter=*", workerID));
 }
 
+TEST_F (AudioPluginScannerWorkerTests, ReplacingFormatsAndSettingTheContextKeepsTheWorkerIdle)
+{
+    AudioPluginScannerWorker worker;
+    worker.addFormat (std::make_unique<FakeFormat>());
+    worker.addFormat (std::make_unique<FakeFormat>());
+
+    AudioPluginHostContext context;
+    context.sampleRate = 48000.0f;
+    worker.setHostContext (context);
+
+    EXPECT_FALSE (worker.initialiseFromCommandLine ("--gtest_filter=*", workerID));
+}
+
 #endif

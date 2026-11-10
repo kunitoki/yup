@@ -19,6 +19,7 @@
   ==============================================================================
 */
 
+#include "yup_AudioPluginBridgeProtocol.cpp"
 #include "yup_AudioPluginDatabase.cpp"
 #include "yup_AudioPluginDescription.cpp"
 #include "yup_AudioPluginFormat.cpp"

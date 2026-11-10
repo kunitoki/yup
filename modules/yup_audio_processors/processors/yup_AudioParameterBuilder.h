@@ -148,6 +148,14 @@ public:
                                      const String& parameterUnitName = {});
 
     /**
+        Sets the role of this parameter.
+
+        Meter categories also mark the parameter as read-only and not automatable,
+        so hosts display it without letting users change it.
+    */
+    AudioParameterBuilder& withCategory (AudioParameter::Category category);
+
+    /**
         Finalizes the builder and returns a fully constructed AudioProcessorParameter instance.
 
         @returns A shared_ptr to the constructed AudioProcessorParameter.

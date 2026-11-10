@@ -36,6 +36,7 @@
 #include <pluginterfaces/gui/iplugview.h>
 #include <pluginterfaces/gui/iplugviewcontentscalesupport.h>
 #include <pluginterfaces/vst/ivstchannelcontextinfo.h>
+#include <pluginterfaces/vst/ivstcontextmenu.h>
 #include <pluginterfaces/vst/ivstprocesscontext.h>
 #include <pluginterfaces/vst/ivstparameterchanges.h>
 #include <pluginterfaces/vst/ivsteditcontroller.h>
@@ -49,7 +50,9 @@
 #include <pluginterfaces/vst/vstpresetkeys.h>
 
 #include <atomic>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -200,12 +203,41 @@ MemoryBlock readVST3StreamData (IBStream& stream)
 {
     MemoryBlock data;
     char buffer[4096];
-    int32 bytesRead = 0;
 
-    while (stream.read (buffer, sizeof (buffer), &bytesRead) == kResultOk && bytesRead > 0)
-        data.append (buffer, static_cast<size_t> (bytesRead));
+    // Some hosts report failure on the read that reaches the end of the stream, keep its bytes
+    for (;;)
+    {
+        int32 bytesRead = 0;
+        const auto result = stream.read (buffer, sizeof (buffer), &bytesRead);
+
+        if (bytesRead > 0)
+            data.append (buffer, static_cast<size_t> (jmin (bytesRead, static_cast<int32> (sizeof (buffer)))));
+
+        if (result != kResultOk || bytesRead <= 0)
+            break;
+    }
 
     return data;
+}
+
+bool writeVST3StreamData (IBStream& stream, const MemoryBlock& data)
+{
+    // Some host streams accept partial writes, keep writing until everything is stored
+    auto* bytes = static_cast<const char*> (data.getData());
+    auto remaining = static_cast<int64> (data.getSize());
+
+    while (remaining > 0)
+    {
+        int32 written = 0;
+        const auto chunkSize = static_cast<int32> (jmin (remaining, static_cast<int64> (std::numeric_limits<int32>::max())));
+        if (stream.write (const_cast<char*> (bytes), chunkSize, &written) != kResultOk || written <= 0)
+            return false;
+
+        bytes += written;
+        remaining -= written;
+    }
+
+    return true;
 }
 
 class AudioPluginPlayHeadVST3 final : public AudioPlayHead
@@ -268,6 +300,94 @@ static const auto YupPlugin_Controller_UID = toFUID (YupPlugin_Id ".controller")
 
 //==============================================================================
 
+struct VST3SpeakerMapping
+{
+    Vst::Speaker speaker;
+    AudioChannelSet::ChannelType type;
+};
+
+static constexpr VST3SpeakerMapping vst3SpeakerMappings[] = {
+        { Vst::kSpeakerL, AudioChannelSet::left },
+        { Vst::kSpeakerR, AudioChannelSet::right },
+        { Vst::kSpeakerC, AudioChannelSet::centre },
+        { Vst::kSpeakerLfe, AudioChannelSet::LFE },
+        { Vst::kSpeakerLs, AudioChannelSet::leftSurround },
+        { Vst::kSpeakerRs, AudioChannelSet::rightSurround },
+        { Vst::kSpeakerLc, AudioChannelSet::leftCentre },
+        { Vst::kSpeakerRc, AudioChannelSet::rightCentre },
+        { Vst::kSpeakerCs, AudioChannelSet::centreSurround },
+        { Vst::kSpeakerSl, AudioChannelSet::leftSurroundSide },
+        { Vst::kSpeakerSr, AudioChannelSet::rightSurroundSide },
+        { Vst::kSpeakerTc, AudioChannelSet::topMiddle },
+        { Vst::kSpeakerTfl, AudioChannelSet::topFrontLeft },
+        { Vst::kSpeakerTfc, AudioChannelSet::topFrontCentre },
+        { Vst::kSpeakerTfr, AudioChannelSet::topFrontRight },
+        { Vst::kSpeakerTrl, AudioChannelSet::topRearLeft },
+        { Vst::kSpeakerTrc, AudioChannelSet::topRearCentre },
+        { Vst::kSpeakerTrr, AudioChannelSet::topRearRight },
+        { Vst::kSpeakerLfe2, AudioChannelSet::LFE2 },
+        { Vst::kSpeakerM, AudioChannelSet::centre },
+        { Vst::kSpeakerACN0, AudioChannelSet::ambisonicACN0 },
+        { Vst::kSpeakerACN1, AudioChannelSet::ambisonicACN1 },
+        { Vst::kSpeakerACN2, AudioChannelSet::ambisonicACN2 },
+        { Vst::kSpeakerACN3, AudioChannelSet::ambisonicACN3 },
+        { Vst::kSpeakerACN4, AudioChannelSet::ambisonicACN4 },
+        { Vst::kSpeakerACN5, AudioChannelSet::ambisonicACN5 },
+        { Vst::kSpeakerACN6, AudioChannelSet::ambisonicACN6 },
+        { Vst::kSpeakerACN7, AudioChannelSet::ambisonicACN7 },
+        { Vst::kSpeakerACN8, AudioChannelSet::ambisonicACN8 },
+        { Vst::kSpeakerACN9, AudioChannelSet::ambisonicACN9 },
+        { Vst::kSpeakerACN10, AudioChannelSet::ambisonicACN10 },
+        { Vst::kSpeakerACN11, AudioChannelSet::ambisonicACN11 },
+        { Vst::kSpeakerACN12, AudioChannelSet::ambisonicACN12 },
+        { Vst::kSpeakerACN13, AudioChannelSet::ambisonicACN13 },
+        { Vst::kSpeakerACN14, AudioChannelSet::ambisonicACN14 },
+        { Vst::kSpeakerACN15, AudioChannelSet::ambisonicACN15 },
+        { Vst::kSpeakerACN16, AudioChannelSet::ambisonicACN16 },
+        { Vst::kSpeakerACN17, AudioChannelSet::ambisonicACN17 },
+        { Vst::kSpeakerACN18, AudioChannelSet::ambisonicACN18 },
+        { Vst::kSpeakerACN19, AudioChannelSet::ambisonicACN19 },
+        { Vst::kSpeakerACN20, AudioChannelSet::ambisonicACN20 },
+        { Vst::kSpeakerACN21, AudioChannelSet::ambisonicACN21 },
+        { Vst::kSpeakerACN22, AudioChannelSet::ambisonicACN22 },
+        { Vst::kSpeakerACN23, AudioChannelSet::ambisonicACN23 },
+        { Vst::kSpeakerACN24, AudioChannelSet::ambisonicACN24 },
+        { Vst::kSpeakerTsl, AudioChannelSet::topSideLeft },
+        { Vst::kSpeakerTsr, AudioChannelSet::topSideRight },
+        { Vst::kSpeakerLcs, AudioChannelSet::leftSurroundRear },
+        { Vst::kSpeakerRcs, AudioChannelSet::rightSurroundRear },
+        { Vst::kSpeakerBfl, AudioChannelSet::bottomFrontLeft },
+        { Vst::kSpeakerBfc, AudioChannelSet::bottomFrontCentre },
+        { Vst::kSpeakerBfr, AudioChannelSet::bottomFrontRight },
+        { Vst::kSpeakerPl, AudioChannelSet::proximityLeft },
+        { Vst::kSpeakerPr, AudioChannelSet::proximityRight },
+        { Vst::kSpeakerBsl, AudioChannelSet::bottomSideLeft },
+        { Vst::kSpeakerBsr, AudioChannelSet::bottomSideRight },
+        { Vst::kSpeakerBrl, AudioChannelSet::bottomRearLeft },
+        { Vst::kSpeakerBrc, AudioChannelSet::bottomRearCentre },
+        { Vst::kSpeakerBrr, AudioChannelSet::bottomRearRight },
+        { Vst::kSpeakerLw, AudioChannelSet::wideLeft },
+        { Vst::kSpeakerRw, AudioChannelSet::wideRight }
+};
+
+static std::optional<Vst::Speaker> speakerForChannelType (AudioChannelSet::ChannelType type)
+{
+    for (const auto& mapping : vst3SpeakerMappings)
+        if (mapping.type == type)
+            return mapping.speaker;
+
+    return std::nullopt;
+}
+
+static std::optional<AudioChannelSet::ChannelType> channelTypeForSpeaker (Vst::Speaker speaker)
+{
+    for (const auto& mapping : vst3SpeakerMappings)
+        if (mapping.speaker == speaker)
+            return mapping.type;
+
+    return std::nullopt;
+}
+
 static Vst::SpeakerArrangement speakerArrForChannels (int channels)
 {
     switch (channels)
@@ -290,6 +410,75 @@ static Vst::SpeakerArrangement speakerArrForChannels (int channels)
             // Any arrangement with the right number of speakers
             return channels < 64 ? (Vst::SpeakerArrangement (1) << channels) - 1 : Vst::SpeakerArr::kStereo;
     }
+}
+
+/** Converts a channel set to a VST3 speaker arrangement, falling back to one with the same channel count. */
+static Vst::SpeakerArrangement speakerArrForChannelSet (const AudioChannelSet& set)
+{
+    if (set == AudioChannelSet::mono())
+        return Vst::SpeakerArr::kMono;
+
+    Vst::SpeakerArrangement arrangement = 0;
+
+    for (const auto type : set.getChannelTypes())
+    {
+        const auto speaker = speakerForChannelType (type);
+        if (! speaker.has_value())
+            return speakerArrForChannels (set.size());
+
+        arrangement |= *speaker;
+    }
+
+    return arrangement;
+}
+
+/** Converts a VST3 speaker arrangement to a channel set, falling back to the canonical set for its channel count. */
+static AudioChannelSet channelSetForSpeakerArr (Vst::SpeakerArrangement arrangement)
+{
+    const auto numChannels = Vst::SpeakerArr::getChannelCount (arrangement);
+    if (arrangement == Vst::SpeakerArr::kMono)
+        return AudioChannelSet::mono();
+
+    AudioChannelSet set;
+
+    for (int bit = 0; bit < 64; ++bit)
+    {
+        const auto speaker = Vst::Speaker (1) << bit;
+        if ((arrangement & speaker) == 0)
+            continue;
+
+        const auto type = channelTypeForSpeaker (speaker);
+        if (! type.has_value() || set.getChannelIndexForType (*type) >= 0)
+            return AudioChannelSet::canonicalChannelSet (numChannels);
+
+        set.addChannel (*type);
+    }
+
+    return set;
+}
+
+/** Returns, for each channel of the set, its index in the VST3 buffers of the arrangement.
+    VST3 orders channels by speaker bit, AudioChannelSet by channel type. Empty means identity. */
+static std::vector<int> channelOrderForSpeakerArr (const AudioChannelSet& set, Vst::SpeakerArrangement arrangement)
+{
+    if (set.size() != Vst::SpeakerArr::getChannelCount (arrangement) || channelSetForSpeakerArr (arrangement) != set)
+        return {};
+
+    std::vector<int> order;
+    bool isIdentity = true;
+
+    for (int channel = 0; channel < set.size(); ++channel)
+    {
+        const auto speaker = speakerForChannelType (set.getTypeOfChannel (channel));
+        if (! speaker.has_value() || arrangement == Vst::SpeakerArr::kMono)
+            return {};
+
+        const auto index = Vst::SpeakerArr::getSpeakerIndex (*speaker, arrangement);
+        isIdentity = isIdentity && index == channel;
+        order.push_back (index);
+    }
+
+    return isIdentity ? std::vector<int> {} : order;
 }
 
 static void writeMidiBufferToVST3EventList (const MidiBuffer& midiBuffer,
@@ -461,6 +650,8 @@ class AudioPluginEditorViewVST3
     : public Component
     , public Vst::EditorView
     , public IPlugViewContentScaleSupport
+    , public Vst::IParameterFinder
+    , private AudioProcessorEditor::HostContext
     , private ComponentListener
 {
 public:
@@ -469,6 +660,7 @@ public:
 
     DEFINE_INTERFACES
     DEF_INTERFACE (IPlugViewContentScaleSupport)
+    DEF_INTERFACE (Vst::IParameterFinder)
     END_DEFINE_INTERFACES (Vst::EditorView)
 
     AudioPluginEditorViewVST3 (AudioProcessor* processor, Vst::EditController* controller, ViewRect* size = nullptr)
@@ -515,6 +707,7 @@ public:
         }
 
         editor->addComponentListener (this);
+        editor->setHostContext (this);
     }
 
     ~AudioPluginEditorViewVST3()
@@ -532,6 +725,7 @@ public:
             removeFromDesktop();
 
             editor->removeComponentListener (this);
+            editor->setHostContext (nullptr);
             resizableCorner.reset();
             removeChildComponent (editor.get());
             editor.reset();
@@ -727,6 +921,42 @@ public:
             editor->leaveKeyboardFocus();
 
         return kResultTrue;
+    }
+
+    tresult PLUGIN_API findParameter (int32 xPos, int32 yPos, Vst::ParamID& resultTag) override
+    {
+        if (editor == nullptr)
+            return kResultFalse;
+
+        const auto scale = viewScale.get (*this);
+        const auto position = Point<float> (static_cast<float> (xPos), static_cast<float> (yPos)) / scale;
+
+        if (const auto parameter = editor->getParameterAt (position - editor->getPosition()))
+        {
+            resultTag = getVST3ParameterID (parameter);
+            return kResultTrue;
+        }
+
+        return kResultFalse;
+    }
+
+    bool showParameterContextMenu (const AudioParameter::Ptr& parameter, Point<float> position) override
+    {
+        auto* controller = getController();
+        if (parameter == nullptr || controller == nullptr)
+            return false;
+
+        FUnknownPtr<Vst::IComponentHandler3> handler (controller->getComponentHandler());
+        if (handler == nullptr)
+            return false;
+
+        const auto tag = getVST3ParameterID (parameter);
+        IPtr<Vst::IContextMenu> menu (handler->createContextMenu (this, &tag), false);
+        if (menu == nullptr)
+            return false;
+
+        const auto hostPosition = (position + editor->getPosition()) * viewScale.get (*this);
+        return menu->popup (roundToInt (hostPosition.getX()), roundToInt (hostPosition.getY())) == kResultOk;
     }
 
     tresult PLUGIN_API setContentScaleFactor (ScaleFactor factor) override
@@ -1092,6 +1322,9 @@ public:
         if (processor == nullptr)
             return kInternalError;
 
+        if (isProgramParameter (tag))
+            return Vst::EditController::getParamStringByValue (tag, valueNormalized, string);
+
         if (bypass.isSyntheticParameter (tag))
         {
             toString128 (valueNormalized >= 0.5 ? "On" : "Off", string);
@@ -1111,6 +1344,9 @@ public:
     {
         if (processor == nullptr)
             return kInternalError;
+
+        if (isProgramParameter (tag))
+            return Vst::EditController::getParamValueByString (tag, string, valueNormalized);
 
         if (bypass.isSyntheticParameter (tag))
         {
@@ -1133,6 +1369,9 @@ public:
         if (processor == nullptr)
             return valueNormalized;
 
+        if (isProgramParameter (tag))
+            return Vst::EditController::normalizedParamToPlain (tag, valueNormalized);
+
         if (bypass.isSyntheticParameter (tag))
             return valueNormalized;
 
@@ -1146,6 +1385,9 @@ public:
     {
         if (processor == nullptr)
             return plainValue;
+
+        if (isProgramParameter (tag))
+            return Vst::EditController::plainParamToNormalized (tag, plainValue);
 
         if (bypass.isSyntheticParameter (tag))
             return plainValue;
@@ -1161,7 +1403,7 @@ public:
         if (processor == nullptr)
             return 0.0;
 
-        if (bypass.isSyntheticParameter (tag))
+        if (bypass.isSyntheticParameter (tag) || isProgramParameter (tag))
             return Vst::EditController::getParamNormalized (tag);
 
         if (auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag)))
@@ -1177,6 +1419,16 @@ public:
 
         if (bypass.isSyntheticParameter (tag))
             return Vst::EditController::setParamNormalized (tag, value);
+
+        if (isProgramParameter (tag))
+        {
+            const auto result = Vst::EditController::setParamNormalized (tag, value);
+            const auto index = static_cast<int> (Vst::EditController::normalizedParamToPlain (tag, value));
+            if (index != processor->getCurrentPreset())
+                processor->setCurrentPreset (index);
+
+            return result;
+        }
 
         if (auto parameter = processor->getParameterByHostID (static_cast<uint32> (tag)))
         {
@@ -1196,7 +1448,8 @@ public:
             return kInternalError;
 
         if (processor->getParameterByHostID (static_cast<uint32> (oldParamID)) != nullptr
-            || bypass.isSyntheticParameter (oldParamID))
+            || bypass.isSyntheticParameter (oldParamID)
+            || isProgramParameter (oldParamID))
         {
             newParamID = oldParamID;
             return kResultOk;
@@ -1290,7 +1543,7 @@ public:
         {
             info.id = Vst::kRootUnitId;
             info.parentUnitId = Vst::kNoParentUnitId;
-            info.programListId = Vst::kNoProgramListId;
+            info.programListId = hasProgramList() ? programListID : Vst::kNoProgramListId;
             toString128 ("root", info.name);
             return kResultOk;
         }
@@ -1354,10 +1607,10 @@ public:
             return kInternalError;
         }
 
-        if (listIndex == 0)
+        if (listIndex == 0 && hasProgramList())
         {
             toString128 ("Default Programs", info.name);
-            info.id = 0;
+            info.id = programListID;
             info.programCount = static_cast<int32> (processor->getNumPresets());
             YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getProgramListInfo returned " << String (static_cast<int> (info.programCount)) << " programs");
             return kResultOk;
@@ -1369,7 +1622,7 @@ public:
 
     int32 PLUGIN_API getProgramListCount() override
     {
-        return 1;
+        return hasProgramList() ? 1 : 0;
     }
 
     tresult PLUGIN_API getProgramName (Vst::ProgramListID listId,
@@ -1382,7 +1635,7 @@ public:
             return kInternalError;
         }
 
-        if (listId != 0)
+        if (listId != programListID)
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getProgramName failed: unknown listId=" << String (static_cast<int> (listId)));
             return kResultFalse;
@@ -1409,7 +1662,7 @@ public:
             return kInternalError;
         }
 
-        if (listId != 0)
+        if (listId != programListID)
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getProgramInfo failed: unknown listId=" << String (static_cast<int> (listId)));
             return kResultFalse;
@@ -1518,6 +1771,8 @@ private:
             listenedParameters.push_back (parameter);
         }
 
+        addProgramParameter();
+
         if (bypass.isProcessorOwned())
             return;
 
@@ -1531,6 +1786,49 @@ private:
             static_cast<Vst::ParamID> (bypass.getHostParameterID()),
             Vst::kRootUnitId,
             nullptr);
+    }
+
+    // Exposes the processor presets as the VST3 program list, selected by a program change parameter
+    void addProgramParameter()
+    {
+        programParameterID = Vst::kNoParamId;
+
+        if (! hasProgramList())
+            return;
+
+        programParameterID = static_cast<Vst::ParamID> (findFirstUnusedHostParameterID (*processor, bypass.getHostParameterID() + 1));
+
+        auto* programParameter = new Vst::StringListParameter (STR16 ("Program"),
+                                                              programParameterID,
+                                                              nullptr,
+                                                              Vst::ParameterInfo::kCanAutomate | Vst::ParameterInfo::kIsList | Vst::ParameterInfo::kIsProgramChange,
+                                                              Vst::kRootUnitId);
+
+        for (int index = 0; index < processor->getNumPresets(); ++index)
+            programParameter->appendString (toTChar (processor->getPresetName (index).toUTF16()));
+
+        programParameter->setNormalized (programParameter->toNormalized (jmax (0, processor->getCurrentPreset())));
+        parameters.addParameter (programParameter);
+    }
+
+    bool hasProgramList() const
+    {
+        return processor != nullptr && processor->getNumPresets() > 1;
+    }
+
+    bool isProgramParameter (Vst::ParamID tag) const noexcept
+    {
+        return programParameterID != Vst::kNoParamId && tag == programParameterID;
+    }
+
+    void syncProgramParameterToController()
+    {
+        if (! isProgramParameter (programParameterID) || processor == nullptr)
+            return;
+
+        const auto value = Vst::EditController::plainParamToNormalized (programParameterID, jmax (0, processor->getCurrentPreset()));
+        if (value != Vst::EditController::getParamNormalized (programParameterID))
+            Vst::EditController::setParamNormalized (programParameterID, value);
     }
 
     void removeParameterListeners()
@@ -1601,6 +1899,8 @@ private:
                 getVST3ParameterID (parameter),
                 static_cast<Vst::ParamValue> (parameter->getNormalizedValue()));
         }
+
+        syncProgramParameterToController();
     }
 
     void audioProcessorChanged (AudioProcessorBase* processor, const AudioProcessor::ChangeDetails& details) override
@@ -1620,6 +1920,12 @@ private:
                           | Vst::kParamTitlesChanged
                           | Vst::kMidiCCAssignmentChanged;
 
+        if (details.programChanged)
+        {
+            syncProgramParameterToController();
+            restartFlags |= Vst::kParamValuesChanged;
+        }
+
         if (restartFlags != 0)
             if (auto* handler = getComponentHandler())
                 handler->restartComponent (restartFlags);
@@ -1638,6 +1944,8 @@ private:
     AudioProcessor* processor = nullptr;
     WrapperBypass bypass;
     std::vector<AudioParameter::Ptr> listenedParameters;
+    Vst::ParamID programParameterID = Vst::kNoParamId;
+    static constexpr Vst::ProgramListID programListID = 1;
 #if YUP_LINUX
     Linux::IRunLoop* hostRunLoop = nullptr;
 #endif
@@ -1717,7 +2025,7 @@ public:
                                         ? Steinberg::Vst::BusInfo::kDefaultActive
                                         : 0;
 
-                addAudioInput (toTChar (nameUTF16), speakerArrForChannels (inputBus.getNumChannels()), busType, busFlags);
+                addAudioInput (toTChar (nameUTF16), speakerArrForChannelSet (inputBus.getChannelSet()), busType, busFlags);
             }
             else if (inputBus.getType() == AudioBus::Type::Midi)
             {
@@ -1738,7 +2046,7 @@ public:
                                         ? Steinberg::Vst::BusInfo::kDefaultActive
                                         : 0;
 
-                addAudioOutput (toTChar (nameUTF16), speakerArrForChannels (outputBus.getNumChannels()), busType, busFlags);
+                addAudioOutput (toTChar (nameUTF16), speakerArrForChannelSet (outputBus.getChannelSet()), busType, busFlags);
             }
             else if (outputBus.getType() == AudioBus::Type::Midi)
             {
@@ -1751,6 +2059,8 @@ public:
         if (getBusCount (Vst::kEvent, Vst::kInput) == 0)
             addEventInput (STR16 ("Midi In"));
 #endif
+
+        updateChannelOrders();
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component initialize completed: audioInputs=" << String (static_cast<int> (getBusCount (Vst::kAudio, Vst::kInput))) << ", audioOutputs=" << String (static_cast<int> (getBusCount (Vst::kAudio, Vst::kOutput))) << ", eventInputs=" << String (static_cast<int> (getBusCount (Vst::kEvent, Vst::kInput))) << ", eventOutputs=" << String (static_cast<int> (getBusCount (Vst::kEvent, Vst::kOutput))));
 
@@ -1833,10 +2143,10 @@ public:
         auto requestedLayout = busLayout;
 
         for (int32 idx = 0; idx < numIns; ++idx)
-            requestedLayout = requestedLayout.withAudioBusNumChannels (idx, true, Vst::SpeakerArr::getChannelCount (inputs[idx]));
+            requestedLayout = requestedLayout.withAudioBusChannelSet (idx, true, channelSetForSpeakerArr (inputs[idx]));
 
         for (int32 idx = 0; idx < numOuts; ++idx)
-            requestedLayout = requestedLayout.withAudioBusNumChannels (idx, false, Vst::SpeakerArr::getChannelCount (outputs[idx]));
+            requestedLayout = requestedLayout.withAudioBusChannelSet (idx, false, channelSetForSpeakerArr (outputs[idx]));
 
         if (requestedLayout != busLayout)
         {
@@ -1860,6 +2170,8 @@ public:
         for (int32 idx = 0; idx < numOuts; ++idx)
             if (auto* bus = FCast<Vst::AudioBus> (audioOutputs.at (static_cast<size_t> (idx))))
                 bus->setArrangement (outputs[idx]);
+
+        updateChannelOrders();
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements accepted");
 
@@ -1987,11 +2299,9 @@ public:
                                              processorState,
                                              hasProcessorState);
 
-        int32 written = 0;
-        const auto ok = stream->write (data.getData(), static_cast<int32> (data.getSize()), &written) == kResultOk
-                     && written == static_cast<int32> (data.getSize());
+        const auto ok = writeVST3StreamData (*stream, data);
 
-        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component getState " << String (ok ? "completed" : "failed") << ": bytes=" << String (static_cast<int64> (data.getSize())) << ", written=" << String (written) << ", processorBytes=" << String (static_cast<int64> (processorState.getSize())));
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component getState " << String (ok ? "completed" : "failed") << ": bytes=" << String (static_cast<int64> (data.getSize())) << ", processorBytes=" << String (static_cast<int64> (processorState.getSize())));
 
         return ok ? kResultOk : kResultFalse;
     }
@@ -2272,7 +2582,7 @@ public:
                 outputChannelsDouble.clear();
                 for (int32 busIdx = 0; busIdx < data.numOutputs; ++busIdx)
                     for (int32 ch = 0; ch < data.outputs[busIdx].numChannels; ++ch)
-                        outputChannelsDouble.push_back (reinterpret_cast<double*> (data.outputs[busIdx].channelBuffers64[ch]));
+                        outputChannelsDouble.push_back (reinterpret_cast<double*> (data.outputs[busIdx].channelBuffers64[mapOutputChannel (data, busIdx, ch)]));
 
                 AudioBuffer<double> audioBuffer (outputChannelsDouble.data(),
                                                  static_cast<int> (outputChannelsDouble.size()),
@@ -2307,7 +2617,7 @@ public:
                 outputChannelsFloat.clear();
                 for (int32 busIdx = 0; busIdx < data.numOutputs; ++busIdx)
                     for (int32 ch = 0; ch < data.outputs[busIdx].numChannels; ++ch)
-                        outputChannelsFloat.push_back (reinterpret_cast<float*> (data.outputs[busIdx].channelBuffers32[ch]));
+                        outputChannelsFloat.push_back (reinterpret_cast<float*> (data.outputs[busIdx].channelBuffers32[mapOutputChannel (data, busIdx, ch)]));
 
                 AudioSampleBuffer audioBuffer (outputChannelsFloat.data(),
                                                static_cast<int> (outputChannelsFloat.size()),
@@ -2361,6 +2671,16 @@ private:
     std::vector<AudioBusBufferView<float>> outputBusViewsFloat;
     std::vector<AudioBusBufferView<const double>> inputBusViewsDouble;
     std::vector<AudioBusBufferView<double>> outputBusViewsDouble;
+
+    /** The processor-to-VST3 channel order of an audio bus, with scratch storage for remapped pointers. */
+    struct BusChannelOrder
+    {
+        std::vector<int> order;
+        std::vector<void*> pointers;
+    };
+
+    std::vector<BusChannelOrder> inputChannelOrders;
+    std::vector<BusChannelOrder> outputChannelOrders;
 
     WrapperBypass bypass;
     std::atomic<bool> isActive { false };
@@ -2433,15 +2753,66 @@ private:
         return processor->getBusLayout().getAudioBusRole (vst3AudioBusIndex, isInput) == AudioBus::Role::Main;
     }
 
+    void updateChannelOrders()
+    {
+        const auto update = [this] (Vst::BusList& buses, bool isInput, std::vector<BusChannelOrder>& orders)
+        {
+            orders.clear();
+            orders.resize (buses.size());
+
+            for (size_t idx = 0; idx < buses.size(); ++idx)
+            {
+                if (auto* bus = FCast<Vst::AudioBus> (buses.at (idx)))
+                {
+                    const auto set = processor->getBusLayout().getAudioBusChannelSet (static_cast<int> (idx), isInput);
+                    orders[idx].order = channelOrderForSpeakerArr (set, bus->getArrangement());
+                    orders[idx].pointers.resize (orders[idx].order.size());
+                }
+            }
+        };
+
+        update (audioInputs, true, inputChannelOrders);
+        update (audioOutputs, false, outputChannelOrders);
+    }
+
+    /** Returns the channel pointers in processor order, reordering them when the VST3 order differs. */
+    template <typename SampleType>
+    SampleType** remapChannels (SampleType** channels, int32 numChannels, std::vector<BusChannelOrder>& orders, int32 busIdx) noexcept
+    {
+        if (channels == nullptr || ! isPositiveAndBelow (busIdx, static_cast<int32> (orders.size())))
+            return channels;
+
+        auto& bus = orders[static_cast<size_t> (busIdx)];
+        if (bus.order.empty() || static_cast<int32> (bus.order.size()) != numChannels)
+            return channels;
+
+        for (size_t ch = 0; ch < bus.order.size(); ++ch)
+            bus.pointers[ch] = channels[bus.order[ch]];
+
+        return reinterpret_cast<SampleType**> (bus.pointers.data());
+    }
+
+    int32 mapOutputChannel (const Vst::ProcessData& data, int32 busIdx, int32 channel) const noexcept
+    {
+        if (! isPositiveAndBelow (busIdx, static_cast<int32> (outputChannelOrders.size())))
+            return channel;
+
+        const auto& order = outputChannelOrders[static_cast<size_t> (busIdx)].order;
+        if (static_cast<int32> (order.size()) != data.outputs[busIdx].numChannels)
+            return channel;
+
+        return order[static_cast<size_t> (channel)];
+    }
+
     /** Builds an AudioBusBufferView for a VST3 input bus. */
     template <typename FloatType>
-    AudioBusBufferView<const FloatType> buildVST3InputBusView (const Vst::ProcessData& data, int32 busIdx) const
+    AudioBusBufferView<const FloatType> buildVST3InputBusView (const Vst::ProcessData& data, int32 busIdx)
     {
         const auto& inBus = data.inputs[busIdx];
 
         if constexpr (std::is_same_v<FloatType, double>)
         {
-            return { reinterpret_cast<const FloatType* const*> (inBus.channelBuffers64),
+            return { reinterpret_cast<const FloatType* const*> (remapChannels (inBus.channelBuffers64, inBus.numChannels, inputChannelOrders, busIdx)),
                      static_cast<int> (inBus.numChannels),
                      processor->getBusLayout().getAudioBusRole (busIdx, true) };
         }
@@ -2456,7 +2827,7 @@ private:
                 return { nullptr, static_cast<int> (inBus.numChannels), processor->getBusLayout().getAudioBusRole (busIdx, true) };
             }
 
-            return { reinterpret_cast<const FloatType* const*> (inBus.channelBuffers32),
+            return { reinterpret_cast<const FloatType* const*> (remapChannels (inBus.channelBuffers32, inBus.numChannels, inputChannelOrders, busIdx)),
                      static_cast<int> (inBus.numChannels),
                      processor->getBusLayout().getAudioBusRole (busIdx, true) };
         }
@@ -2464,19 +2835,19 @@ private:
 
     /** Builds an AudioBusBufferView for a VST3 output bus. */
     template <typename FloatType>
-    AudioBusBufferView<FloatType> buildVST3OutputBusView (const Vst::ProcessData& data, int32 busIdx) const
+    AudioBusBufferView<FloatType> buildVST3OutputBusView (const Vst::ProcessData& data, int32 busIdx)
     {
         const auto& outBus = data.outputs[busIdx];
 
         if constexpr (std::is_same_v<FloatType, double>)
         {
-            return { reinterpret_cast<FloatType* const*> (outBus.channelBuffers64),
+            return { reinterpret_cast<FloatType* const*> (remapChannels (outBus.channelBuffers64, outBus.numChannels, outputChannelOrders, busIdx)),
                      static_cast<int> (outBus.numChannels),
                      processor->getBusLayout().getAudioBusRole (busIdx, false) };
         }
         else
         {
-            return { reinterpret_cast<FloatType* const*> (outBus.channelBuffers32),
+            return { reinterpret_cast<FloatType* const*> (remapChannels (outBus.channelBuffers32, outBus.numChannels, outputChannelOrders, busIdx)),
                      static_cast<int> (outBus.numChannels),
                      processor->getBusLayout().getAudioBusRole (busIdx, false) };
         }

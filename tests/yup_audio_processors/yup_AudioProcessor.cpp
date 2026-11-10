@@ -83,6 +83,24 @@ protected:
         }
     };
 
+    class EditorProcessor final : public Processor
+    {
+    public:
+        using Processor::Processor;
+
+        bool hasEditor() const override { return true; }
+    };
+
+    class EmptyDataTreeProcessor final : public Processor
+    {
+    public:
+        using Processor::Processor;
+
+        bool supportsDataTreeState() const noexcept override { return true; }
+
+        Result saveStateIntoDataTree (DataTree&) override { return Result::ok(); }
+    };
+
     class ChangeListener final : public AudioProcessorBase::Listener
     {
     public:
@@ -219,4 +237,113 @@ TEST_F (AudioProcessorTests, HostTypeIsStoredGlobally)
     EXPECT_TRUE (AudioProcessor::getHostType().isReaper());
 
     AudioProcessor::setHostType (previous);
+}
+
+TEST_F (AudioProcessorTests, WrapperTypeNamesAreLowercase)
+{
+    EXPECT_EQ (String ("unknown"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::unknown)));
+    EXPECT_EQ (String ("clap"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::clap)));
+    EXPECT_EQ (String ("vst3"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::vst3)));
+    EXPECT_EQ (String ("au"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::au)));
+    EXPECT_EQ (String ("auv3"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::auv3)));
+    EXPECT_EQ (String ("aax"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::aax)));
+    EXPECT_EQ (String ("lv2"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::lv2)));
+    EXPECT_EQ (String ("standalone"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::standalone)));
+}
+
+TEST_F (AudioProcessorTests, MidiBusesDriveAcceptsAndProducesMidi)
+{
+    Processor audioOnly (stereoLayout());
+    EXPECT_FALSE (audioOnly.acceptsMidi());
+    EXPECT_FALSE (audioOnly.producesMidi());
+
+    Processor midiOut (AudioBusLayout ({ AudioBus ("In", AudioBus::Type::Audio, AudioBus::Direction::Input, 2) },
+                                       { AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2),
+                                         AudioBus ("MIDI Out", AudioBus::Type::Midi, AudioBus::Direction::Output, 0) }));
+    EXPECT_FALSE (midiOut.acceptsMidi());
+    EXPECT_TRUE (midiOut.producesMidi());
+
+    Processor midiIn (AudioBusLayout ({ AudioBus ("MIDI In", AudioBus::Type::Midi, AudioBus::Direction::Input, 0) },
+                                      { AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2) }));
+    EXPECT_TRUE (midiIn.acceptsMidi());
+    EXPECT_FALSE (midiIn.producesMidi());
+}
+
+TEST_F (AudioProcessorTests, DefaultCreateEditorReturnsNull)
+{
+    EditorProcessor processor (stereoLayout());
+    EXPECT_TRUE (processor.hasEditor());
+    EXPECT_EQ (nullptr, processor.createEditor());
+}
+
+TEST_F (AudioProcessorTests, DefaultVoicesAndTailAreZero)
+{
+    Processor processor (stereoLayout());
+    EXPECT_EQ (0, processor.getNumVoices());
+    EXPECT_EQ (0, processor.getTailSamples());
+}
+
+TEST_F (AudioProcessorTests, DefaultDataTreeStateIsUnsupported)
+{
+    Processor processor (stereoLayout());
+    DataTree state;
+
+    EXPECT_FALSE (processor.supportsDataTreeState());
+    EXPECT_TRUE (processor.loadStateFromDataTree (state).failed());
+    EXPECT_TRUE (processor.saveStateIntoDataTree (state).failed());
+}
+
+TEST_F (AudioProcessorTests, SavingInvalidDataTreeStateFails)
+{
+    EmptyDataTreeProcessor processor (stereoLayout());
+    MemoryBlock block;
+
+    EXPECT_TRUE (processor.AudioProcessorBase::saveStateIntoMemory (block).failed());
+}
+
+TEST_F (AudioProcessorTests, DefaultHostInfoChangedDoesNotAlterState)
+{
+    Processor processor (stereoLayout());
+
+    AudioProcessorBase::HostInfo info;
+    info.trackName = "Bass";
+    processor.AudioProcessorBase::hostInfoChanged (info);
+
+    EXPECT_EQ (0, processor.hostInfoChangedCount);
+    EXPECT_TRUE (processor.getHostInfo().trackName.isEmpty());
+}
+
+TEST_F (AudioProcessorTests, ChangeDetailsProgramAndBusLayoutFlags)
+{
+    const auto details = AudioProcessorBase::ChangeDetails().withProgramChanged (true).withBusLayoutChanged (true);
+    EXPECT_TRUE (details.programChanged);
+    EXPECT_TRUE (details.busLayoutChanged);
+    EXPECT_FALSE (details.latencyChanged);
+
+    const auto cleared = details.withProgramChanged (false).withBusLayoutChanged (false);
+    EXPECT_FALSE (cleared.programChanged);
+    EXPECT_FALSE (cleared.busLayoutChanged);
+}
+
+TEST_F (AudioProcessorTests, ScopedProcessSuspensionSuspendsOnlyOnce)
+{
+    Processor processor (stereoLayout());
+
+    {
+        AudioProcessorBase::ScopedProcessSuspension suspension (processor);
+        suspension.setSuspended();
+        EXPECT_TRUE (processor.isSuspended());
+    }
+
+    EXPECT_FALSE (processor.isSuspended());
+
+    {
+        AudioProcessorBase::ScopedProcessSuspension suspension (processor, false);
+        EXPECT_FALSE (processor.isSuspended());
+
+        suspension.setSuspended();
+        EXPECT_TRUE (processor.isSuspended());
+    }
+
+    EXPECT_FALSE (processor.isSuspended());
 }

@@ -74,3 +74,17 @@ TEST (PluginHostTypeTests, IgnoresUnrelatedFoldersInExecutablePath)
     EXPECT_TRUE (PluginHostType::detect ("", "/home/carla/.local/opt/SomeDAW/SomeDAW").isUnknown());
     EXPECT_TRUE (PluginHostType::detect ("", "/Users/reason/Applications/Some Host.app/Contents/MacOS/Some Host").isUnknown());
 }
+
+TEST (PluginHostTypeTests, KnownHostsReportDisplayNames)
+{
+    EXPECT_EQ (String ("REAPER"), String (PluginHostType (PluginHostType::Host::reaper).getHostName()));
+    EXPECT_EQ (String ("Cubase"), String (PluginHostType (PluginHostType::Host::steinbergCubase).getHostName()));
+    EXPECT_EQ (String ("YUP Plugin Host"), String (PluginHostType (PluginHostType::Host::yupPluginHost).getHostName()));
+}
+
+TEST (PluginHostTypeTests, DetectsFromParentFolderAndAppBundle)
+{
+    EXPECT_TRUE (PluginHostType::detect ("", "/opt/Renoise/launcher").isRenoise());
+    EXPECT_TRUE (PluginHostType::detect ("", "/Applications/GarageBand.app/Contents/MacOS/Helper").isAppleGarageBand());
+    EXPECT_TRUE (PluginHostType::detect ("", "/usr/local/bin/Live").isAbletonLive());
+}

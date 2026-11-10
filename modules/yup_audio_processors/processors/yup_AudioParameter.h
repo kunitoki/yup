@@ -83,6 +83,34 @@ public:
 
     //==============================================================================
 
+    /**
+        The role of a parameter, used by hosts to treat it specially.
+
+        Meter categories mark read-only values that a host may display in its own
+        metering (AAX gain reduction meters, VST3 read-only flags, CLAP hidden
+        read-only parameters). Gain categories hint at input and output trims.
+    */
+    enum class Category : uint8
+    {
+        Generic,                             /**< A regular parameter. */
+        InputGain,                           /**< An input trim. */
+        OutputGain,                          /**< An output trim. */
+        InputMeter,                          /**< An input level meter. */
+        OutputMeter,                         /**< An output level meter. */
+        CompressorLimiterGainReductionMeter, /**< Gain reduction of a compressor or limiter. */
+        ExpanderGateGainReductionMeter,      /**< Gain reduction of an expander or gate. */
+        AnalysisMeter,                       /**< An analysis meter (spectrum, loudness, ...). */
+        OtherMeter                           /**< Any other kind of meter. */
+    };
+
+    /** Returns true if the category describes a meter. */
+    static constexpr bool isMeterCategory (Category category) noexcept
+    {
+        return category >= Category::InputMeter;
+    }
+
+    //==============================================================================
+
     /** Returns a short display label for a ParameterUnit.
 
         Suitable for plugin format fields that need a compact unit string
@@ -250,6 +278,9 @@ public:
             Examples: "dBFS", "LUFS", "ms/cm". */
         String unitName;
 
+        /** The role of the parameter. Meter categories imply a read-only parameter. */
+        Category category = Category::Generic;
+
     private:
         uint8 flags = automatableFlag;
     };
@@ -378,6 +409,12 @@ public:
 
     /** Returns the custom unit label string (only meaningful when getUnit() == Custom). */
     String getUnitName() const { return metadata.unitName; }
+
+    /** Returns the role of this parameter. */
+    Category getCategory() const noexcept { return metadata.category; }
+
+    /** Returns true when this parameter is a meter. */
+    bool isMeter() const noexcept { return isMeterCategory (metadata.category); }
 
     //==============================================================================
 

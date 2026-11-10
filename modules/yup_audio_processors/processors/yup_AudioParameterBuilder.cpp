@@ -181,6 +181,19 @@ AudioParameterBuilder& AudioParameterBuilder::withUnit (AudioParameter::Paramete
     return *this;
 }
 
+AudioParameterBuilder& AudioParameterBuilder::withCategory (AudioParameter::Category category)
+{
+    metadata.category = category;
+
+    if (AudioParameter::isMeterCategory (category))
+    {
+        metadata.setReadOnly (true);
+        metadata.setAutomatable (false);
+    }
+
+    return *this;
+}
+
 //==============================================================================
 
 AudioParameter::Ptr AudioParameterBuilder::build() const

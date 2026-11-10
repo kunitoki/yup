@@ -474,6 +474,7 @@ private:
 
 class AudioPluginEditorCLAP final
     : public Component
+    , private AudioProcessorEditor::HostContext
     , private ComponentListener
 {
 public:
@@ -495,6 +496,7 @@ public:
         }
 
         processorEditor->addComponentListener (this);
+        processorEditor->setHostContext (this);
     }
 
     ~AudioPluginEditorCLAP() override
@@ -507,6 +509,7 @@ public:
             removeFromDesktop();
 
             processorEditor->removeComponentListener (this);
+            processorEditor->setHostContext (nullptr);
             resizableCorner.reset();
             removeChildComponent (processorEditor.get());
             processorEditor.reset();
@@ -537,6 +540,8 @@ public:
     }
 
 private:
+    bool showParameterContextMenu (const AudioParameter::Ptr& parameter, Point<float> position) override;
+
     void componentResized (Component& component) override
     {
         if (fittingEditor)
@@ -594,6 +599,8 @@ public:
     void editorResized();
     ScopedValueSetter<bool> scopedHostEditorResizing();
 
+    bool showHostParameterContextMenu (const AudioParameter::Ptr& parameter, Point<float> editorPosition);
+
 private:
     void addParameterListeners();
     void removeParameterListeners();
@@ -612,6 +619,8 @@ private:
     void requestMainThreadCallback() const noexcept;
     void handleMainThreadNotifications() noexcept;
     void handleAudioThreadNotifications() noexcept;
+    void addUniversalMidiPacket (const uint32* words, int numWords, int sampleOffset, MidiBuffer& midiBuffer);
+    std::vector<AudioParameter::Ptr> getRemoteControlParameters() const;
 
     bool isCLAPAudioBusMain (uint32_t clapAudioBusIndex, bool isInput) const noexcept
     {
@@ -640,6 +649,8 @@ private:
     clap_plugin_render_t extensionRender;
     clap_plugin_voice_info_t extensionVoiceInfo;
     clap_plugin_track_info_t extensionTrackInfo;
+    clap_plugin_state_context_t extensionStateContext;
+    clap_plugin_remote_controls_t extensionRemoteControls;
 
     const clap_host_params_t* hostParams = nullptr;
     const clap_host_state_t* hostState = nullptr;
@@ -648,12 +659,14 @@ private:
     const clap_host_timer_support_t* hostTimerSupport = nullptr;
     const clap_host_gui_t* hostGUI = nullptr;
     const clap_host_track_info_t* hostTrackInfo = nullptr;
+    const clap_host_context_menu_t* hostContextMenu = nullptr;
 
     clap_id guiTimerId;
     bool hostTriggeredResizing = false;
 
     MidiBuffer midiEvents;
     WrapperNoteExpressions noteExpressions;
+    ump::ToBytestreamConverter umpConverter { 2048 };
     ParameterChangeBuffer paramChangeBuffer;
     std::vector<AudioParameter::Ptr> listenedParameters;
     std::vector<float*> outputChannelsFloat;
@@ -809,6 +822,11 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
             {
                 if (const auto expression = clapEventToNoteExpression (*reinterpret_cast<const clap_event_note_expression_t*> (event), sampleOffset))
                     wrapper->noteExpressions.add (*expression);
+            }
+            else if (event->type == CLAP_EVENT_MIDI2)
+            {
+                const auto* midi2Event = reinterpret_cast<const clap_event_midi2_t*> (event);
+                wrapper->addUniversalMidiPacket (midi2Event->data, 4, sampleOffset, midiBuffer);
             }
             else if (auto convertedEvent = clapEventToMidiMessage (event))
             {
@@ -1000,10 +1018,30 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                     std::memcpy (ev.data, message.getRawData(), static_cast<size_t> (message.getRawDataSize()));
                     process->out_events->try_push (process->out_events, &ev.header);
                 }
+                else if (message.isSysEx())
+                {
+                    clap_event_midi_sysex_t ev = {};
+                    ev.header.size = sizeof (ev);
+                    ev.header.time = static_cast<uint32_t> (metadata.samplePosition);
+                    ev.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+                    ev.header.type = CLAP_EVENT_MIDI_SYSEX;
+                    ev.header.flags = 0;
+                    ev.port_index = 0;
+                    ev.buffer = metadata.data;
+                    ev.size = static_cast<uint32_t> (metadata.numBytes);
+                    process->out_events->try_push (process->out_events, &ev.header);
+                }
             }
         }
 
-        return CLAP_PROCESS_CONTINUE;
+        const auto tailSamples = audioProcessor.getTailSamples();
+        if (tailSamples < 0 || tailSamples == std::numeric_limits<int>::max())
+            return CLAP_PROCESS_CONTINUE;
+
+        if (audioProcessor.getBusLayout().getNumAudioInputChannels() == 0)
+            return CLAP_PROCESS_CONTINUE_IF_NOT_QUIET;
+
+        return CLAP_PROCESS_TAIL;
     };
 
     plugin.get_extension = [] (const clap_plugin* plugin, const char* id) -> const void*
@@ -1238,7 +1276,7 @@ bool AudioPluginProcessorCLAP::initialise()
             if (midiIndex == index)
             {
                 info->id = index;
-                info->supported_dialects = CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI;
+                info->supported_dialects = CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI | (isInput ? CLAP_NOTE_DIALECT_MIDI2 : 0u);
                 info->preferred_dialect = CLAP_NOTE_DIALECT_CLAP;
                 bus.getName().copyToUTF8 (info->name, sizeof (info->name));
                 YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "note port info: index=" << String (static_cast<int> (index)) << ", isInput=" << String (isInput ? "true" : "false") << ", name=" << bus.getName());
@@ -1252,7 +1290,7 @@ bool AudioPluginProcessorCLAP::initialise()
         if (isInput && index == 0 && midiIndex == 0 && YupPlugin_IsSynth)
         {
             info->id = 0;
-            info->supported_dialects = CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI;
+            info->supported_dialects = CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI2;
             info->preferred_dialect = CLAP_NOTE_DIALECT_CLAP;
             std::snprintf (info->name, sizeof (info->name), "%s", "Midi In");
             YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "note port info: index=0, isInput=true, name=Midi In (synth fallback)");
@@ -1491,6 +1529,49 @@ bool AudioPluginProcessorCLAP::initialise()
     extensionTrackInfo.changed = [] (const clap_plugin_t* plugin)
     {
         getWrapper (plugin)->updateHostTrackInfo();
+    };
+
+    // ==== Setup extensions: state context (every context stores the full state)
+    extensionStateContext.save = [] (const clap_plugin_t* plugin, const clap_ostream_t* stream, uint32_t contextType) -> bool
+    {
+        ignoreUnused (contextType);
+        return getWrapper (plugin)->extensionState.save (plugin, stream);
+    };
+
+    extensionStateContext.load = [] (const clap_plugin_t* plugin, const clap_istream_t* stream, uint32_t contextType) -> bool
+    {
+        ignoreUnused (contextType);
+        return getWrapper (plugin)->extensionState.load (plugin, stream);
+    };
+
+    // ==== Setup extensions: remote controls (automatable parameters in pages of eight)
+    extensionRemoteControls.count = [] (const clap_plugin_t* plugin) -> uint32_t
+    {
+        const auto numParameters = getWrapper (plugin)->getRemoteControlParameters().size();
+        return static_cast<uint32_t> ((numParameters + CLAP_REMOTE_CONTROLS_COUNT - 1) / CLAP_REMOTE_CONTROLS_COUNT);
+    };
+
+    extensionRemoteControls.get = [] (const clap_plugin_t* plugin, uint32_t pageIndex, clap_remote_controls_page_t* page) -> bool
+    {
+        const auto parameters = getWrapper (plugin)->getRemoteControlParameters();
+        const auto first = static_cast<size_t> (pageIndex) * CLAP_REMOTE_CONTROLS_COUNT;
+        if (page == nullptr || first >= parameters.size())
+            return false;
+
+        *page = {};
+        page->page_id = pageIndex;
+        page->is_for_preset = false;
+        std::snprintf (page->section_name, sizeof (page->section_name), "%s", "Parameters");
+        std::snprintf (page->page_name, sizeof (page->page_name), "Page %u", static_cast<unsigned int> (pageIndex + 1));
+
+        for (size_t slot = 0; slot < CLAP_REMOTE_CONTROLS_COUNT; ++slot)
+        {
+            page->param_ids[slot] = first + slot < parameters.size()
+                                      ? static_cast<clap_id> (parameters[first + slot]->getHostParameterID())
+                                      : CLAP_INVALID_ID;
+        }
+
+        return true;
     };
 
     // ==== Setup extensions: gui
@@ -1785,6 +1866,10 @@ bool AudioPluginProcessorCLAP::initialise()
     hostLatency = reinterpret_cast<const clap_host_latency_t*> (host->get_extension (host, CLAP_EXT_LATENCY));
     hostTimerSupport = reinterpret_cast<const clap_host_timer_support_t*> (host->get_extension (host, CLAP_EXT_TIMER_SUPPORT));
     hostGUI = reinterpret_cast<const clap_host_gui_t*> (host->get_extension (host, CLAP_EXT_GUI));
+    hostContextMenu = reinterpret_cast<const clap_host_context_menu_t*> (host->get_extension (host, CLAP_EXT_CONTEXT_MENU));
+    if (hostContextMenu == nullptr)
+        hostContextMenu = reinterpret_cast<const clap_host_context_menu_t*> (host->get_extension (host, CLAP_EXT_CONTEXT_MENU_COMPAT));
+
     hostTrackInfo = reinterpret_cast<const clap_host_track_info_t*> (host->get_extension (host, CLAP_EXT_TRACK_INFO));
     if (hostTrackInfo == nullptr)
         hostTrackInfo = reinterpret_cast<const clap_host_track_info_t*> (host->get_extension (host, CLAP_EXT_TRACK_INFO_COMPAT));
@@ -1898,6 +1983,58 @@ void AudioPluginProcessorCLAP::reset()
 
     audioProcessor->flush(); // TODO - should we just call releaseResources()?
     noteExpressions.reset();
+    umpConverter.reset();
+}
+
+//==============================================================================
+
+void AudioPluginProcessorCLAP::addUniversalMidiPacket (const uint32* words, int numWords, int sampleOffset, MidiBuffer& midiBuffer)
+{
+    const auto messageWords = static_cast<int> (ump::Utils::getNumWordsForMessageType (words[0]));
+    if (messageWords > numWords)
+        return;
+
+    if (const auto expression = umpToNoteExpression (words, messageWords, sampleOffset))
+    {
+        noteExpressions.add (*expression);
+        return;
+    }
+
+    umpConverter.convert (ump::View (words), static_cast<double> (sampleOffset), [&midiBuffer, sampleOffset] (const MidiMessage& message)
+    {
+        midiBuffer.addEvent (message, sampleOffset);
+    });
+}
+
+std::vector<AudioParameter::Ptr> AudioPluginProcessorCLAP::getRemoteControlParameters() const
+{
+    std::vector<AudioParameter::Ptr> result;
+
+    for (const auto& parameter : audioProcessor->getParameters())
+        if (parameter->isAutomatable() && ! parameter->isReadOnly() && ! parameter->isBypass())
+            result.push_back (parameter);
+
+    return result;
+}
+
+bool AudioPluginProcessorCLAP::showHostParameterContextMenu (const AudioParameter::Ptr& parameter, Point<float> editorPosition)
+{
+    if (parameter == nullptr
+        || audioPluginEditor == nullptr
+        || hostContextMenu == nullptr
+        || hostContextMenu->can_popup == nullptr
+        || hostContextMenu->popup == nullptr
+        || ! hostContextMenu->can_popup (host))
+    {
+        return false;
+    }
+
+    clap_context_menu_target_t target {};
+    target.kind = CLAP_CONTEXT_MENU_TARGET_KIND_PARAM;
+    target.id = static_cast<clap_id> (parameter->getHostParameterID());
+
+    const auto position = (editorPosition * editorViewScale.get (*audioPluginEditor)).to<int>();
+    return hostContextMenu->popup (host, &target, 0, position.getX(), position.getY());
 }
 
 //==============================================================================
@@ -1940,6 +2077,10 @@ const void* AudioPluginProcessorCLAP::getExtension (std::string_view id)
         return audioProcessor->getNumVoices() > 0 ? std::addressof (extensionVoiceInfo) : nullptr;
     if (id == CLAP_EXT_TRACK_INFO || id == CLAP_EXT_TRACK_INFO_COMPAT)
         return std::addressof (extensionTrackInfo);
+    if (id == CLAP_EXT_STATE_CONTEXT)
+        return std::addressof (extensionStateContext);
+    if (id == CLAP_EXT_REMOTE_CONTROLS || id == CLAP_EXT_REMOTE_CONTROLS_COMPAT)
+        return getRemoteControlParameters().empty() ? nullptr : std::addressof (extensionRemoteControls);
 
     return nullptr;
 }
@@ -2234,6 +2375,11 @@ ScopedValueSetter<bool> AudioPluginProcessorCLAP::scopedHostEditorResizing()
 }
 
 //==============================================================================
+
+bool AudioPluginEditorCLAP::showParameterContextMenu (const AudioParameter::Ptr& parameter, Point<float> position)
+{
+    return wrapper->showHostParameterContextMenu (parameter, position + processorEditor->getPosition());
+}
 
 void AudioPluginEditorCLAP::contentScaleChanged (float dpiScale)
 {

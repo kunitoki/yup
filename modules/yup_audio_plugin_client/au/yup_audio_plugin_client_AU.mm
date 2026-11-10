@@ -46,12 +46,15 @@
 #import <objc/runtime.h>
 
 #include <yup_core/native/yup_ObjCHelpers_apple.h>
+#include <yup_audio_basics/native/yup_CoreAudioLayouts_apple.h>
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <numeric>
 #include <unordered_map>
 #include <vector>
 
@@ -210,6 +213,8 @@ public:
                               getTotalAudioInputChannels (*processor),
                               getTotalAudioOutputChannels (*processor));
         auxiliaryInputValid.resize (static_cast<size_t> (processor->getNumAudioInputs()), 0);
+        midiOutputPacketStorage.resize (midiOutputPacketStorageSize);
+        updateMainChannelOrders();
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "Initialize completed: sampleRate=" << String (getCurrentSampleRate()) << ", maxFramesPerSlice=" << String (static_cast<int> (GetMaxFramesPerSlice())));
 
@@ -264,12 +269,14 @@ public:
 
         const auto& param = parameters[parameterIndex];
 
-        outParameterInfo.flags = makeAUParameterFlags (*param) | kAudioUnitParameterFlag_HasCFNameString;
+        outParameterInfo.flags = makeAUParameterFlags (*param)
+                               | kAudioUnitParameterFlag_HasCFNameString
+                               | kAudioUnitParameterFlag_ValuesHaveStrings;
 
         outParameterInfo.cfNameString = param->getName().toCFString();
         param->getName().copyToUTF8 (outParameterInfo.name, sizeof (outParameterInfo.name));
 
-        outParameterInfo.unit = makeAUUnit (*param);
+        outParameterInfo.unit = isIndexedParameter (*param) ? kAudioUnitParameterUnit_Indexed : makeAUUnit (*param);
         outParameterInfo.minValue = param->getMinimumValue();
         outParameterInfo.maxValue = param->getMaximumValue();
         outParameterInfo.defaultValue = param->getDefaultValue();
@@ -296,6 +303,32 @@ public:
             return kAudioUnitErr_InvalidPropertyValue;
 
         *outClumpName = clumpNames[clumpIndex].toCFString();
+        return noErr;
+    }
+
+    OSStatus GetParameterValueStrings (AudioUnitScope inScope,
+                                       AudioUnitParameterID inParameterID,
+                                       CFArrayRef* outStrings) override
+    {
+        const auto* param = findParameter (inScope, inParameterID);
+        if (param == nullptr || ! isIndexedParameter (*param))
+            return kAudioUnitErr_InvalidProperty;
+
+        if (outStrings == nullptr)
+            return noErr;
+
+        const auto minIndex = static_cast<int> (param->getMinimumValue());
+        const auto maxIndex = static_cast<int> (param->getMaximumValue());
+        auto* strings = CFArrayCreateMutable (nullptr, maxIndex - minIndex + 1, &kCFTypeArrayCallBacks);
+
+        for (int index = minIndex; index <= maxIndex; ++index)
+        {
+            auto* string = param->convertToString (static_cast<float> (index)).toCFString();
+            CFArrayAppendValue (strings, string);
+            CFRelease (string);
+        }
+
+        *outStrings = strings;
         return noErr;
     }
 
@@ -521,7 +554,10 @@ public:
 
         audioChannels.clear();
         for (UInt32 ch = 0; ch < outBufList.mNumberBuffers; ++ch)
-            audioChannels.push_back (static_cast<float*> (outBufList.mBuffers[ch].mData));
+        {
+            const auto auChannel = inBusNumber == 0 ? mapChannel (mainOutputOrder, ch) : ch;
+            audioChannels.push_back (static_cast<float*> (outBufList.mBuffers[auChannel].mData));
+        }
 
         AudioSampleBuffer audioBuffer (audioChannels.data(),
                                        static_cast<int> (audioChannels.size()),
@@ -545,6 +581,9 @@ public:
                                                  processParamChangeBuffer,
                                                  &playHead };
             processAudioBlock (*processor, context, bypass.isBypassed());
+
+            if (inBusNumber == 0)
+                sendMidiOutput (renderMidiBuffer, inTimeStamp);
 
             renderMidiBuffer.clear();
             processParamChangeBuffer.clear();
@@ -602,6 +641,8 @@ public:
         if (processor != nullptr)
             pullAuxiliaryInputElements (ioActionFlags, inTimeStamp, inNumberFrames);
 
+        lastRenderTimeStamp = inTimeStamp;
+
         return AudioPluginAUBase::Render (ioActionFlags, inTimeStamp, inNumberFrames);
     }
 
@@ -655,7 +696,7 @@ public:
             {
                 const UInt32 copyCount = std::min (mainInBuffer.mNumberBuffers, static_cast<UInt32> (numCh));
                 for (UInt32 ch = 0; ch < copyCount; ++ch)
-                    chPtrs[ch] = static_cast<const float*> (mainInBuffer.mBuffers[ch].mData);
+                    chPtrs[ch] = static_cast<const float*> (mainInBuffer.mBuffers[mapChannel (mainInputOrder, ch)].mData);
             }
             else if (auxiliaryInputValid[static_cast<size_t> (audioIdx)])
             {
@@ -696,7 +737,10 @@ public:
             const UInt32 copyCount = std::min (available, outBuffer.mNumberBuffers - static_cast<UInt32> (chOffset));
 
             for (UInt32 ch = 0; ch < copyCount; ++ch)
-                chPtrs[ch] = static_cast<float*> (outBuffer.mBuffers[static_cast<UInt32> (chOffset) + ch].mData);
+            {
+                const auto auChannel = chOffset == 0 ? mapChannel (mainOutputOrder, ch) : static_cast<UInt32> (chOffset) + ch;
+                chPtrs[ch] = static_cast<float*> (outBuffer.mBuffers[auChannel].mData);
+            }
 
             renderViews.outputBusViews.emplace_back (chPtrs, numCh, bus.getRole());
 
@@ -715,7 +759,6 @@ public:
 
         const UInt32 numBuffers = std::min (inBuffer.mNumberBuffers, outBuffer.mNumberBuffers);
 
-        audioChannels.clear();
         for (UInt32 ch = 0; ch < numBuffers; ++ch)
         {
             const auto* in = static_cast<const float*> (inBuffer.mBuffers[ch].mData);
@@ -723,9 +766,14 @@ public:
 
             if (in != out)
                 std::memcpy (out, in, inFramesToProcess * sizeof (float));
-
-            audioChannels.push_back (out);
         }
+
+        for (UInt32 ch = numBuffers; ch < outBuffer.mNumberBuffers; ++ch)
+            std::memset (outBuffer.mBuffers[ch].mData, 0, inFramesToProcess * sizeof (float));
+
+        audioChannels.clear();
+        for (UInt32 ch = 0; ch < outBuffer.mNumberBuffers; ++ch)
+            audioChannels.push_back (static_cast<float*> (outBuffer.mBuffers[mapChannel (mainOutputOrder, ch)].mData));
 
         AudioSampleBuffer audioBuffer (audioChannels.data(),
                                        static_cast<int> (audioChannels.size()),
@@ -746,6 +794,7 @@ public:
                                              { renderViews.inputBusViews.data(), renderViews.inputBusViews.size() },
                                              { renderViews.outputBusViews.data(), renderViews.outputBusViews.size() } };
         processAudioBlock (*processor, context, bypass.isBypassed());
+        sendMidiOutput (midiBuffer, lastRenderTimeStamp);
         midiBuffer.clear();
         processParamChangeBuffer.clear();
 
@@ -950,6 +999,31 @@ public:
             return noErr;
         }
 
+        if (inID == kAudioUnitProperty_ParameterStringFromValue || inID == kAudioUnitProperty_ParameterValueFromString)
+        {
+            if (inScope != kAudioUnitScope_Global)
+                return kAudioUnitErr_InvalidScope;
+
+            outDataSize = inID == kAudioUnitProperty_ParameterStringFromValue
+                            ? sizeof (AudioUnitParameterStringFromValue)
+                            : sizeof (AudioUnitParameterValueFromString);
+            outWritable = false;
+            return noErr;
+        }
+
+        if (inID == kAudioUnitProperty_MIDIOutputCallbackInfo || inID == kAudioUnitProperty_MIDIOutputCallback)
+        {
+            if (inScope != kAudioUnitScope_Global)
+                return kAudioUnitErr_InvalidScope;
+
+            if (processor == nullptr || ! processor->producesMidi())
+                return kAudioUnitErr_InvalidProperty;
+
+            outDataSize = inID == kAudioUnitProperty_MIDIOutputCallbackInfo ? sizeof (CFArrayRef) : sizeof (AUMIDIOutputCallbackStruct);
+            outWritable = inID == kAudioUnitProperty_MIDIOutputCallback;
+            return noErr;
+        }
+
         if (inID == kAudioUnitProperty_CocoaUI)
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "GetPropertyInfo CocoaUI requested: " << describeScopeAndElement (inScope, inElement));
@@ -1026,6 +1100,22 @@ public:
                 return kAudioUnitErr_InvalidPropertyValue;
 
             bypass.setBypassed (*static_cast<const UInt32*> (inData) != 0);
+            return noErr;
+        }
+
+        if (inID == kAudioUnitProperty_MIDIOutputCallback)
+        {
+            if (inScope != kAudioUnitScope_Global)
+                return kAudioUnitErr_InvalidScope;
+
+            if (processor == nullptr || ! processor->producesMidi())
+                return kAudioUnitErr_InvalidProperty;
+
+            if (inData == nullptr || inDataSize < sizeof (AUMIDIOutputCallbackStruct))
+                return kAudioUnitErr_InvalidPropertyValue;
+
+            const CriticalSection::ScopedLockType lock (midiOutputLock);
+            midiOutputCallback = *static_cast<const AUMIDIOutputCallbackStruct*> (inData);
             return noErr;
         }
 
@@ -1265,6 +1355,217 @@ private:
 
     //==============================================================================
 
+    const AudioParameter* findParameter (AudioUnitScope scope, AudioUnitParameterID parameterID) const
+    {
+        if (scope != kAudioUnitScope_Global || processor == nullptr)
+            return nullptr;
+
+        const auto parameters = processor->getParameters();
+        const auto index = processor->getParameterIndexByHostID (static_cast<uint32> (parameterID));
+        return isPositiveAndBelow (index, static_cast<int> (parameters.size())) ? parameters[static_cast<size_t> (index)].get() : nullptr;
+    }
+
+    static bool isIndexedParameter (const AudioParameter& param)
+    {
+        const auto minValue = param.getMinimumValue();
+        const auto maxValue = param.getMaximumValue();
+
+        return param.isEnum()
+            && maxValue > minValue
+            && std::floor (minValue) == minValue
+            && std::floor (maxValue) == maxValue
+            && param.getNumSteps() == static_cast<int> (maxValue - minValue);
+    }
+
+    OSStatus getParameterStringProperty (AudioUnitPropertyID inID, void* outData) const
+    {
+        if (outData == nullptr)
+            return kAudioUnitErr_InvalidPropertyValue;
+
+        if (inID == kAudioUnitProperty_ParameterStringFromValue)
+        {
+            auto& request = *static_cast<AudioUnitParameterStringFromValue*> (outData);
+            const auto* param = findParameter (kAudioUnitScope_Global, request.inParamID);
+            if (param == nullptr)
+                return kAudioUnitErr_InvalidParameter;
+
+            const auto value = request.inValue != nullptr ? static_cast<float> (*request.inValue) : param->getValue();
+            request.outString = param->convertToString (value).toCFString();
+            return noErr;
+        }
+
+        auto& request = *static_cast<AudioUnitParameterValueFromString*> (outData);
+        const auto* param = findParameter (kAudioUnitScope_Global, request.inParamID);
+        if (param == nullptr || request.inString == nullptr)
+            return kAudioUnitErr_InvalidParameter;
+
+        request.outValue = static_cast<AudioUnitParameterValue> (param->convertFromString (String::fromCFString (request.inString)));
+        return noErr;
+    }
+
+    //==============================================================================
+
+    void sendMidiOutput (const MidiBuffer& buffer, const AudioTimeStamp& timeStamp)
+    {
+        if (buffer.isEmpty() || midiOutputPacketStorage.empty())
+            return;
+
+        const CriticalSection::ScopedTryLockType lock (midiOutputLock);
+        if (! lock.isLocked() || midiOutputCallback.midiOutputCallback == nullptr)
+            return;
+
+        auto* packetList = reinterpret_cast<MIDIPacketList*> (midiOutputPacketStorage.data());
+        const auto storageSize = static_cast<ByteCount> (midiOutputPacketStorage.size());
+        auto* packet = MIDIPacketListInit (packetList);
+
+        for (const auto metadata : buffer)
+        {
+            const auto sampleTime = static_cast<MIDITimeStamp> (metadata.samplePosition);
+            packet = MIDIPacketListAdd (packetList, storageSize, packet, sampleTime, static_cast<ByteCount> (metadata.numBytes), metadata.data);
+
+            if (packet == nullptr)
+            {
+                midiOutputCallback.midiOutputCallback (midiOutputCallback.userData, &timeStamp, 0, packetList);
+                packet = MIDIPacketListInit (packetList);
+                packet = MIDIPacketListAdd (packetList, storageSize, packet, sampleTime, static_cast<ByteCount> (metadata.numBytes), metadata.data);
+            }
+        }
+
+        if (packetList->numPackets > 0)
+            midiOutputCallback.midiOutputCallback (midiOutputCallback.userData, &timeStamp, 0, packetList);
+    }
+
+    //==============================================================================
+
+    AudioChannelSet getElementChannelSet (AudioUnitScope scope, AudioUnitElement element)
+    {
+        const auto isInput = scope == kAudioUnitScope_Input;
+        const auto& busLayout = processor->getBusLayout();
+        const auto busSet = busLayout.getAudioBusChannelSet (static_cast<int> (element), isInput);
+        const auto numChannels = static_cast<int> (IOElement (scope, element).GetStreamFormat().mChannelsPerFrame);
+
+        return busSet.size() == numChannels ? busSet : AudioChannelSet::canonicalChannelSet (numChannels);
+    }
+
+    bool isAudioBusElement (AudioUnitScope scope, AudioUnitElement element) const
+    {
+        if (processor == nullptr || (scope != kAudioUnitScope_Input && scope != kAudioUnitScope_Output))
+            return false;
+
+        return static_cast<int> (element) < processor->getBusLayout().getNumAudioBuses (scope == kAudioUnitScope_Input);
+    }
+
+    std::vector<AudioChannelLayoutTag> GetChannelLayoutTags (AudioUnitScope scope, AudioUnitElement element) override
+    {
+        if (! isAudioBusElement (scope, element))
+            return AudioPluginAUBase::GetChannelLayoutTags (scope, element);
+
+        const auto isInput = scope == kAudioUnitScope_Input;
+        const auto busIndex = static_cast<int> (element);
+        const auto& busLayout = processor->getBusLayout();
+
+        std::vector<AudioChannelLayoutTag> tags;
+
+        for (const auto tag : CoreAudioLayouts::getKnownCoreAudioTags())
+        {
+            const auto set = CoreAudioLayouts::fromCoreAudio (tag);
+            if (set.isDisabled() || set.size() > maxLayoutChannels)
+                continue;
+
+            const auto candidate = busLayout.withAudioBusChannelSet (busIndex, isInput, set);
+            if (processor->isBusLayoutSupported (candidate))
+                tags.push_back (tag);
+        }
+
+        return tags;
+    }
+
+    UInt32 GetAudioChannelLayout (AudioUnitScope scope, AudioUnitElement element, AudioChannelLayout* outLayoutPtr, bool& outWritable) override
+    {
+        if (const auto size = AudioPluginAUBase::GetAudioChannelLayout (scope, element, outLayoutPtr, outWritable); size > 0 || ! isAudioBusElement (scope, element))
+            return size;
+
+        const auto tag = CoreAudioLayouts::toCoreAudio (getElementChannelSet (scope, element));
+        const auto tags = GetChannelLayoutTags (scope, element);
+        if (std::find (tags.begin(), tags.end(), tag) == tags.end())
+            return 0;
+
+        outWritable = true;
+
+        if (outLayoutPtr != nullptr)
+        {
+            std::memset (outLayoutPtr, 0, sizeof (AudioChannelLayout));
+            outLayoutPtr->mChannelLayoutTag = tag;
+        }
+
+        return sizeof (AudioChannelLayout);
+    }
+
+    AudioChannelSet getHostChannelSet (AudioUnitScope scope, AudioUnitElement element, int numChannels)
+    {
+        const auto& hostLayout = IOElement (scope, element).ChannelLayout();
+        if (hostLayout.IsValid())
+        {
+            const auto set = CoreAudioLayouts::fromCoreAudio (hostLayout.Layout());
+            if (set.size() == numChannels)
+                return set;
+        }
+
+        const auto busSet = processor->getBusLayout().getAudioBusChannelSet (static_cast<int> (element), scope == kAudioUnitScope_Input);
+        return busSet.size() == numChannels ? busSet : AudioChannelSet::canonicalChannelSet (numChannels);
+    }
+
+    std::vector<int> getChannelOrder (AudioUnitScope scope, AudioUnitElement element)
+    {
+        const auto set = processor->getBusLayout().getAudioBusChannelSet (static_cast<int> (element), scope == kAudioUnitScope_Input);
+
+        std::vector<int> order (static_cast<size_t> (set.size()));
+        std::iota (order.begin(), order.end(), 0);
+
+        if (! isAudioBusElement (scope, element) || IOElement (scope, element).GetStreamFormat().mChannelsPerFrame != static_cast<UInt32> (set.size()))
+            return order;
+
+        const auto& hostLayout = IOElement (scope, element).ChannelLayout();
+        if (! hostLayout.IsValid())
+            return order;
+
+        const auto auChannels = CoreAudioLayouts::getCoreAudioLayoutChannels (hostLayout.Layout());
+        if (auChannels.size() != set.size())
+            return order;
+
+        std::vector<int> mapped (order.size());
+
+        for (int ch = 0; ch < set.size(); ++ch)
+        {
+            const auto index = auChannels.indexOf (set.getTypeOfChannel (ch));
+            if (index < 0)
+                return order;
+
+            mapped[static_cast<size_t> (ch)] = index;
+        }
+
+        return mapped;
+    }
+
+    void updateMainChannelOrders()
+    {
+        mainInputOrder.clear();
+        mainOutputOrder.clear();
+
+        if (Inputs().GetNumberOfElements() > 0 && processor->getBusLayout().getNumAudioBuses (true) > 0)
+            mainInputOrder = getChannelOrder (kAudioUnitScope_Input, 0);
+
+        if (processor->getBusLayout().getNumAudioBuses (false) > 0)
+            mainOutputOrder = getChannelOrder (kAudioUnitScope_Output, 0);
+    }
+
+    static UInt32 mapChannel (const std::vector<int>& order, UInt32 channel) noexcept
+    {
+        return channel < order.size() ? static_cast<UInt32> (order[channel]) : channel;
+    }
+
+    //==============================================================================
+
     static AudioBusLayout withMainChannelCounts (const AudioBusLayout& layout, int inputChannels, int outputChannels)
     {
         return layout.withAudioBusNumChannels (0, true, inputChannels)
@@ -1283,7 +1584,14 @@ private:
                                      ? static_cast<int> (Output (0).GetStreamFormat().mChannelsPerFrame)
                                      : 0;
 
-        const auto requestedLayout = withMainChannelCounts (busLayout, inputChannels, outputChannels);
+        auto requestedLayout = withMainChannelCounts (busLayout, inputChannels, outputChannels);
+
+        if (inputChannels > 0)
+            requestedLayout = requestedLayout.withAudioBusChannelSet (0, true, getHostChannelSet (kAudioUnitScope_Input, 0, inputChannels));
+
+        if (outputChannels > 0)
+            requestedLayout = requestedLayout.withAudioBusChannelSet (0, false, getHostChannelSet (kAudioUnitScope_Output, 0, outputChannels));
+
         if (requestedLayout == busLayout)
             return noErr;
 
@@ -1339,9 +1647,19 @@ private:
     StringArray clumpNames;
     std::atomic<uint32> pendingNotifications { 0 };
 
+    std::vector<int> mainInputOrder;
+    std::vector<int> mainOutputOrder;
+
+    CriticalSection midiOutputLock;
+    AUMIDIOutputCallbackStruct midiOutputCallback {};
+    std::vector<Byte> midiOutputPacketStorage;
+    AudioTimeStamp lastRenderTimeStamp {};
+
     // Clump 0 means "no clump" for AU hosts
     static constexpr UInt32 firstClumpID = 1;
     static constexpr int maxNegotiatedChannels = 8;
+    static constexpr int maxLayoutChannels = 64;
+    static constexpr size_t midiOutputPacketStorageSize = 16384;
 };
 
 } // namespace yup
@@ -1928,6 +2246,27 @@ OSStatus AudioPluginProcessorAU::GetProperty (AudioUnitPropertyID inID,
             return kAudioUnitErr_InvalidPropertyValue;
 
         *static_cast<UInt32*> (outData) = bypass.isBypassed() ? 1u : 0u;
+        return noErr;
+    }
+
+    if (inID == kAudioUnitProperty_ParameterStringFromValue || inID == kAudioUnitProperty_ParameterValueFromString)
+    {
+        if (inScope != kAudioUnitScope_Global)
+            return kAudioUnitErr_InvalidScope;
+
+        return getParameterStringProperty (inID, outData);
+    }
+
+    if (inID == kAudioUnitProperty_MIDIOutputCallbackInfo)
+    {
+        if (inScope != kAudioUnitScope_Global)
+            return kAudioUnitErr_InvalidScope;
+
+        if (processor == nullptr || ! processor->producesMidi() || outData == nullptr)
+            return kAudioUnitErr_InvalidProperty;
+
+        CFStringRef outputName = CFSTR ("MIDI Out");
+        *static_cast<CFArrayRef*> (outData) = CFArrayCreate (nullptr, reinterpret_cast<const void**> (&outputName), 1, &kCFTypeArrayCallBacks);
         return noErr;
     }
 

@@ -28,11 +28,13 @@
 
 #include <yup_audio_plugin_client/yup_audio_plugin_client.h>
 
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 //==============================================================================
 
@@ -85,9 +87,123 @@ static std::string fmtFloat (float v)
     return s;
 }
 
+static const char* lv2UnitForParameter (const yup::AudioParameter& parameter)
+{
+    using Unit = yup::AudioParameter::ParameterUnit;
+
+    switch (parameter.getUnit())
+    {
+        case Unit::Percent:
+            return "units:pc";
+        case Unit::Decibels:
+            return "units:db";
+        case Unit::Hertz:
+            return "units:hz";
+        case Unit::Milliseconds:
+            return "units:ms";
+        case Unit::Seconds:
+            return "units:s";
+        case Unit::Degrees:
+            return "units:degree";
+        case Unit::Cents:
+            return "units:cent";
+        case Unit::Semitones:
+            return "units:semitone12TET";
+        case Unit::Octaves:
+            return "units:oct";
+        case Unit::BPM:
+            return "units:bpm";
+        case Unit::Beats:
+            return "units:beat";
+        case Unit::MIDINoteNumber:
+            return "units:midiNote";
+        default:
+            return nullptr;
+    }
+}
+
+static bool isToggleParameter (const yup::AudioParameter& parameter)
+{
+    return parameter.isStepped()
+        && parameter.getNumSteps() == 1
+        && parameter.getMinimumValue() == 0.0f
+        && parameter.getMaximumValue() == 1.0f;
+}
+
+static bool isIntegerParameter (const yup::AudioParameter& parameter)
+{
+    if (! parameter.isStepped() || parameter.getNumSteps() <= 0)
+        return false;
+
+    const auto stepSize = (parameter.getMaximumValue() - parameter.getMinimumValue()) / static_cast<float> (parameter.getNumSteps());
+    return std::abs (stepSize - std::round (stepSize)) < 1.0e-6f
+        && std::abs (parameter.getMinimumValue() - std::round (parameter.getMinimumValue())) < 1.0e-6f;
+}
+
+static void writeParameterMetadata (std::ostream& f, const yup::AudioParameter& parameter)
+{
+    constexpr int maxScalePoints = 128;
+
+    const bool isToggle = isToggleParameter (parameter);
+    const bool isInteger = ! isToggle && isIntegerParameter (parameter);
+
+    f << "    rdfs:range " << (isToggle ? "atom:Bool" : (isInteger ? "atom:Int" : "atom:Float")) << " ;\n";
+
+    if (isToggle)
+        f << "    lv2:portProperty lv2:toggled ;\n";
+    else if (parameter.isEnum())
+        f << "    lv2:portProperty lv2:integer, lv2:enumeration ;\n";
+    else if (isInteger)
+        f << "    lv2:portProperty lv2:integer ;\n";
+
+    if (! parameter.isAutomatable())
+        f << "    lv2:portProperty pprops:notAutomatic ;\n";
+
+    if (const auto* unit = lv2UnitForParameter (parameter))
+    {
+        f << "    units:unit " << unit << " ;\n";
+    }
+    else if (parameter.getUnit() == yup::AudioParameter::ParameterUnit::Custom && parameter.getUnitName().isNotEmpty())
+    {
+        const std::string unitName = escapeString (parameter.getUnitName().toStdString());
+        f << "    units:unit [ a units:Unit ; rdfs:label \"" << unitName << "\" ; units:symbol \"" << unitName << "\" ; units:render \"%f " << unitName << "\" ] ;\n";
+    }
+
+    if (parameter.isEnum() && parameter.getNumSteps() < maxScalePoints)
+    {
+        const int numSteps = parameter.getNumSteps();
+        const float minVal = parameter.getMinimumValue();
+        const float stepSize = (parameter.getMaximumValue() - minVal) / static_cast<float> (numSteps);
+
+        f << "    lv2:scalePoint ";
+        for (int step = 0; step <= numSteps; ++step)
+        {
+            const float value = minVal + stepSize * static_cast<float> (step);
+            f << "[ rdfs:label \"" << escapeString (parameter.convertToString (value).toStdString()) << "\" ; rdf:value " << fmtFloat (value) << " ]"
+              << (step < numSteps ? " , " : " ;\n");
+        }
+    }
+}
+
+static const char* lv2UIClass()
+{
+#if YUP_MAC
+    return "ui:CocoaUI";
+#elif YUP_WINDOWS
+    return "ui:WindowsUI";
+#else
+    return "ui:X11UI";
+#endif
+}
+
+static std::string uiUri (const Options& opts)
+{
+    return opts.uri + ":ui";
+}
+
 //==============================================================================
 
-static bool writeManifest (const Options& opts)
+static bool writeManifest (const Options& opts, bool hasEditor)
 {
     const std::string path = opts.outputDir + "/manifest.ttl";
     std::ofstream f (path);
@@ -99,11 +215,21 @@ static bool writeManifest (const Options& opts)
 
     f << "@prefix lv2:  <http://lv2plug.in/ns/lv2core#> .\n"
       << "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n"
+      << "@prefix ui:   <http://lv2plug.in/ns/extensions/ui#> .\n"
       << "\n"
       << "<" << opts.uri << ">\n"
       << "    a lv2:Plugin ;\n"
       << "    lv2:binary <" << opts.binaryName << "> ;\n"
       << "    rdfs:seeAlso <" << opts.ttlName << "> .\n";
+
+    if (hasEditor)
+    {
+        f << "\n"
+          << "<" << uiUri (opts) << ">\n"
+          << "    a " << lv2UIClass() << " ;\n"
+          << "    ui:binary <" << opts.binaryName << "> ;\n"
+          << "    rdfs:seeAlso <" << opts.ttlName << "> .\n";
+    }
 
     return true;
 }
@@ -133,11 +259,14 @@ static bool writePluginTTL (const Options& opts, yup::AudioProcessor& processor)
       << "@prefix midi:   <http://lv2plug.in/ns/ext/midi#> .\n"
       << "@prefix opts:   <http://lv2plug.in/ns/ext/options#> .\n"
       << "@prefix patch:  <http://lv2plug.in/ns/ext/patch#> .\n"
+      << "@prefix pprops: <http://lv2plug.in/ns/ext/port-props#> .\n"
+      << "@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n"
       << "@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .\n"
       << "@prefix state:  <http://lv2plug.in/ns/ext/state#> .\n"
       << "@prefix time:   <http://lv2plug.in/ns/ext/time#> .\n"
+      << "@prefix ui:     <http://lv2plug.in/ns/extensions/ui#> .\n"
+      << "@prefix units:  <http://lv2plug.in/ns/extensions/units#> .\n"
       << "@prefix urid:   <http://lv2plug.in/ns/ext/urid#> .\n"
-      << "@prefix worker: <http://lv2plug.in/ns/ext/worker#> .\n"
       << "\n";
 
     f << "<" << opts.uri << ">\n"
@@ -160,26 +289,37 @@ static bool writePluginTTL (const Options& opts, yup::AudioProcessor& processor)
     }
     f << "\n";
 
-    f << "    lv2:requiredFeature urid:map, opts:options ;\n"
+    f << "    lv2:requiredFeature urid:map, opts:options, bufsz:boundedBlockLength ;\n"
       << "    lv2:optionalFeature\n"
       << "        lv2:hardRTCapable,\n"
-      << "        lv2:isLive,\n"
-      << "        worker:schedule ;\n"
+      << "        lv2:isLive ;\n"
+      << "    opts:requiredOption bufsz:maxBlockLength ;\n"
       << "\n"
       << "    lv2:extensionData state:interface ;\n"
       << "\n";
 
-    if (! params.empty())
+    if (processor.hasEditor())
+        f << "    ui:ui <" << uiUri (opts) << "> ;\n\n";
+
+    std::vector<yup::AudioParameter::Ptr> writableParams;
+    for (const auto& param : params)
+        if (! param->isReadOnly())
+            writableParams.push_back (param);
+
+    if (! writableParams.empty())
     {
         f << "    patch:writable\n";
-        for (std::size_t i = 0; i < params.size(); ++i)
+        for (std::size_t i = 0; i < writableParams.size(); ++i)
         {
-            const int hostId = static_cast<int> (params[i]->getHostParameterID());
+            const int hostId = static_cast<int> (writableParams[i]->getHostParameterID());
             f << "        <" << opts.uri << ":param_" << hostId << ">";
-            f << (i + 1 < params.size() ? " ,\n" : " ;\n");
+            f << (i + 1 < writableParams.size() ? " ,\n" : " ;\n");
         }
         f << "\n";
+    }
 
+    if (! params.empty())
+    {
         f << "    patch:readable\n";
         for (std::size_t i = 0; i < params.size(); ++i)
         {
@@ -274,6 +414,15 @@ static bool writePluginTTL (const Options& opts, yup::AudioProcessor& processor)
 
     f << "    ] .\n\n";
 
+    if (processor.hasEditor())
+    {
+        f << "<" << uiUri (opts) << ">\n"
+          << "    a " << lv2UIClass() << " ;\n"
+          << "    lv2:requiredFeature <http://lv2plug.in/ns/ext/instance-access>, ui:parent ;\n"
+          << "    lv2:optionalFeature ui:resize, ui:idleInterface ;\n"
+          << "    lv2:extensionData ui:idleInterface, ui:resize .\n\n";
+    }
+
     for (const auto& param : params)
     {
         const int hostId = static_cast<int> (param->getHostParameterID());
@@ -284,9 +433,11 @@ static bool writePluginTTL (const Options& opts, yup::AudioProcessor& processor)
 
         f << "<" << opts.uri << ":param_" << hostId << ">\n"
           << "    a lv2:Parameter ;\n"
-          << "    rdfs:label \"" << escapeString (label) << "\" ;\n"
-          << "    rdfs:range atom:Float ;\n"
-          << "    lv2:default " << fmtFloat (defVal) << " ;\n"
+          << "    rdfs:label \"" << escapeString (label) << "\" ;\n";
+
+        writeParameterMetadata (f, *param);
+
+        f << "    lv2:default " << fmtFloat (defVal) << " ;\n"
           << "    lv2:minimum " << fmtFloat (minVal) << " ;\n"
           << "    lv2:maximum " << fmtFloat (maxVal) << " .\n\n";
     }
@@ -347,7 +498,7 @@ int main (int argc, char** argv)
         return 1;
     }
 
-    if (! writeManifest (opts))
+    if (! writeManifest (opts, processor->hasEditor()))
         return 1;
 
     if (! writePluginTTL (opts, *processor))

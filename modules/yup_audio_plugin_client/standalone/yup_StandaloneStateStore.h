@@ -79,6 +79,9 @@ public:
 
         /** The plugin state created by AudioProcessor::saveStateIntoMemory(), or empty. */
         MemoryBlock processorState;
+
+        /** The last known window bounds in screen coordinates, if any were stored. */
+        std::optional<Rectangle<int>> windowBounds;
     };
 
     //==============================================================================
@@ -112,13 +115,20 @@ public:
     //==============================================================================
     /** Saves the device setup and the current plugin state.
 
-        @param deviceState  the device setup to store, which can be null
-        @param processor    the processor whose state is stored
+        @param deviceState   the device setup to store, which can be null
+        @param processor     the processor whose state is stored
+        @param windowBounds  the window bounds in screen coordinates to store, if any
     */
-    Result save (const XmlElement* deviceState, AudioProcessor& processor) const
+    Result save (const XmlElement* deviceState, AudioProcessor& processor, std::optional<Rectangle<int>> windowBounds = {}) const
     {
         XmlElement root (rootTag);
         root.setAttribute (versionAttribute, currentVersion);
+
+        if (windowBounds.has_value() && ! windowBounds->isEmpty())
+        {
+            root.setAttribute (windowBoundsAttribute, String (windowBounds->getX()) + " " + String (windowBounds->getY()) + " "
+                                                          + String (windowBounds->getWidth()) + " " + String (windowBounds->getHeight()));
+        }
 
         if (deviceState != nullptr)
             root.addChildElement (new XmlElement (*deviceState));
@@ -147,6 +157,10 @@ public:
         {
             state.processorState.reset();
         }
+
+        const auto bounds = StringArray::fromTokens (root->getStringAttribute (windowBoundsAttribute), false);
+        if (bounds.size() == 4 && bounds[2].getIntValue() > 0 && bounds[3].getIntValue() > 0)
+            state.windowBounds = Rectangle<int> (bounds[0].getIntValue(), bounds[1].getIntValue(), bounds[2].getIntValue(), bounds[3].getIntValue());
 
         return state;
     }
@@ -207,6 +221,7 @@ private:
     static constexpr const char* rootTag = "STANDALONE_STATE";
     static constexpr const char* versionAttribute = "version";
     static constexpr const char* processorAttribute = "processorState";
+    static constexpr const char* windowBoundsAttribute = "windowBounds";
     static constexpr int currentVersion = 1;
 
     File file;

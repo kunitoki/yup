@@ -39,13 +39,14 @@
 #include <lv2/patch/patch.h>
 #include <lv2/time/time.h>
 #include <lv2/buf-size/buf-size.h>
-#include <lv2/worker/worker.h>
 #include <lv2/urid/urid.h>
 #include <lv2/ui/ui.h>
+#include <lv2/instance-access/instance-access.h>
 
 #include <atomic>
 #include <cstring>
 #include <map>
+#include <optional>
 #include <vector>
 
 //==============================================================================
@@ -62,55 +63,76 @@ static constexpr int lv2WrapperStateVersion = 1;
 
 //==============================================================================
 
+/** Maps URIs through the host urid:map feature, so every URID matches the host's.
+
+    A private table is only used when the host does not provide the features.
+*/
 struct UridMap
 {
-    LV2_URID_Map map;
-    LV2_URID_Unmap unmap;
-    std::map<String, LV2_URID> uriToUrid;
-    std::map<LV2_URID, String> uridToUri;
-
-    UridMap()
+    explicit UridMap (const LV2_Feature* const* features)
+        : map (makeMap (features))
+        , unmap (makeUnmap (features))
     {
-        map.handle = this;
-        map.map = [] (LV2_URID_Map_Handle handle, const char* uri) -> LV2_URID
-        {
-            auto* self = static_cast<UridMap*> (handle);
-            return self->mapUri (uri);
-        };
-
-        unmap.handle = this;
-        unmap.unmap = [] (LV2_URID_Unmap_Handle handle, LV2_URID urid) -> const char*
-        {
-            auto* self = static_cast<UridMap*> (handle);
-            return self->unmapUri (urid);
-        };
     }
+
+    UridMap (const UridMap&) = delete;
+    UridMap& operator= (const UridMap&) = delete;
 
     LV2_URID mapUri (const char* uri)
     {
-        if (uri == nullptr)
-            return 0;
-
-        String uriStr (uri);
-
-        auto it = uriToUrid.find (uriStr);
-        if (it != uriToUrid.end())
-            return it->second;
-
-        LV2_URID urid = static_cast<LV2_URID> (uriToUrid.size() + 1);
-        uriToUrid[uriStr] = urid;
-        uridToUri[urid] = uriStr;
-        return urid;
+        return uri != nullptr ? map.map (map.handle, uri) : 0;
     }
 
     const char* unmapUri (LV2_URID urid)
     {
-        auto it = uridToUri.find (urid);
-        if (it != uridToUri.end())
-            return it->second.toRawUTF8();
+        return unmap.unmap (unmap.handle, urid);
+    }
+
+private:
+    template <class Feature>
+    static const Feature* findFeature (const LV2_Feature* const* features, const char* uri)
+    {
+        for (auto* feature = features; feature != nullptr && *feature != nullptr; ++feature)
+            if (std::strcmp ((*feature)->URI, uri) == 0)
+                return static_cast<const Feature*> ((*feature)->data);
 
         return nullptr;
     }
+
+    LV2_URID_Map makeMap (const LV2_Feature* const* features)
+    {
+        if (const auto* hostMap = findFeature<LV2_URID_Map> (features, LV2_URID__map); hostMap != nullptr && hostMap->map != nullptr)
+            return *hostMap;
+
+        return { this, [] (LV2_URID_Map_Handle handle, const char* uri) -> LV2_URID
+                 {
+                     auto& self = *static_cast<UridMap*> (handle);
+                     const auto [it, inserted] = self.uriToUrid.try_emplace (String (uri), static_cast<LV2_URID> (self.uriToUrid.size() + 1));
+                     if (inserted)
+                         self.uridToUri[it->second] = it->first;
+                     return it->second;
+                 } };
+    }
+
+    LV2_URID_Unmap makeUnmap (const LV2_Feature* const* features)
+    {
+        if (const auto* hostUnmap = findFeature<LV2_URID_Unmap> (features, LV2_URID__unmap); hostUnmap != nullptr && hostUnmap->unmap != nullptr)
+            return *hostUnmap;
+
+        return { this, [] (LV2_URID_Unmap_Handle handle, LV2_URID urid) -> const char*
+                 {
+                     auto& self = *static_cast<UridMap*> (handle);
+                     const auto it = self.uridToUri.find (urid);
+                     return it != self.uridToUri.end() ? it->second.toRawUTF8() : nullptr;
+                 } };
+    }
+
+    std::map<String, LV2_URID> uriToUrid;
+    std::map<LV2_URID, String> uridToUri;
+
+public:
+    LV2_URID_Map map;
+    LV2_URID_Unmap unmap;
 
     LV2_URID operator() (const char* uri) { return mapUri (uri); }
 
@@ -118,6 +140,9 @@ struct UridMap
 
     URID (atom_Float, LV2_ATOM__Float);
     URID (atom_Int, LV2_ATOM__Int);
+    URID (atom_Long, LV2_ATOM__Long);
+    URID (atom_Double, LV2_ATOM__Double);
+    URID (atom_Bool, LV2_ATOM__Bool);
     URID (atom_Object, LV2_ATOM__Object);
     URID (atom_Blank, LV2_ATOM__Blank);
     URID (atom_Sequence, LV2_ATOM__Sequence);
@@ -198,7 +223,8 @@ public:
     AudioPluginProcessorLV2 (double sampleRate,
                              const char* bundlePath,
                              const LV2_Feature* const* features)
-        : sampleRate (sampleRate)
+        : urids (features)
+        , sampleRate (sampleRate)
     {
         ignoreUnused (bundlePath);
 
@@ -310,6 +336,7 @@ public:
         }
 
         processor->setPlaybackConfiguration (static_cast<float> (sampleRate), maxBlockSize);
+        audioBuffer.setSize (jmax (numInputChannels, numOutputChannels), maxBlockSize, false, true, false);
     }
 
     void run (uint32_t numSamples)
@@ -321,6 +348,9 @@ public:
         playHead.invalidate();
         parameterChanges.clear();
         parameterChanges.reserve (getDefaultParameterChangeCapacity (*processor));
+
+        // The plugin requires bufsz:boundedBlockLength, so hosts never exceed maxBlockLength
+        jassert (static_cast<int> (numSamples) <= maxBlockSize);
 
         const int numSamplesInt = static_cast<int> (numSamples);
         audioBuffer.setSize (jmax (numInputChannels, numOutputChannels), numSamplesInt, false, true, true);
@@ -469,35 +499,7 @@ public:
 private:
     void processFeatures (const LV2_Feature* const* features)
     {
-        bool hasMap = false;
-        bool hasUnmap = false;
         bool hasOptions = false;
-
-        for (auto* feature = features; feature != nullptr && *feature != nullptr; ++feature)
-        {
-            if (std::strcmp ((*feature)->URI, LV2_URID__map) == 0)
-            {
-                auto* hostMap = static_cast<LV2_URID_Map*> ((*feature)->data);
-                if (hostMap != nullptr)
-                {
-                    urids.map = *hostMap;
-                    hasMap = true;
-                }
-            }
-            else if (std::strcmp ((*feature)->URI, LV2_URID__unmap) == 0)
-            {
-                auto* hostUnmap = static_cast<LV2_URID_Unmap*> ((*feature)->data);
-                if (hostUnmap != nullptr)
-                {
-                    urids.unmap = *hostUnmap;
-                    hasUnmap = true;
-                }
-            }
-            else if (std::strcmp ((*feature)->URI, LV2_WORKER__schedule) == 0)
-            {
-                workerSchedule = static_cast<LV2_Worker_Schedule*> ((*feature)->data);
-            }
-        }
 
         // Process options
         for (auto* feature = features; feature != nullptr && *feature != nullptr; ++feature)
@@ -515,8 +517,8 @@ private:
             }
         }
 
-        YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "host features: urid:map=" << String (hasMap ? "found" : "missing") << ", urid:unmap=" << String (hasUnmap ? "found" : "missing") << ", worker:schedule=" << String (workerSchedule != nullptr ? "found" : "missing") << ", options=" << String (hasOptions ? "found" : "missing") << ", maxBlockSize=" << String (maxBlockSize));
-        ignoreUnused (hasMap, hasUnmap, hasOptions);
+        YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "host features: options=" << String (hasOptions ? "found" : "missing") << ", maxBlockSize=" << String (maxBlockSize));
+        ignoreUnused (hasOptions);
     }
 
     void prepare()
@@ -604,14 +606,27 @@ private:
         if (params[paramIndex]->isReadOnly())
             return;
 
-        float value = 0.0f;
+        if (const auto value = readAtomNumber (valueAtom))
+            params[paramIndex]->setValueNotifyingHost (static_cast<float> (*value));
+    }
 
-        if (valueAtom != nullptr && valueAtom->type == urids.atom_Float)
-        {
-            value = reinterpret_cast<const LV2_Atom_Float*> (valueAtom)->body;
-        }
+    std::optional<double> readAtomNumber (const LV2_Atom* atom) const
+    {
+        if (atom == nullptr)
+            return std::nullopt;
 
-        params[paramIndex]->setValueNotifyingHost (value);
+        if (atom->type == urids.atom_Float)
+            return reinterpret_cast<const LV2_Atom_Float*> (atom)->body;
+        if (atom->type == urids.atom_Double)
+            return reinterpret_cast<const LV2_Atom_Double*> (atom)->body;
+        if (atom->type == urids.atom_Int)
+            return reinterpret_cast<const LV2_Atom_Int*> (atom)->body;
+        if (atom->type == urids.atom_Long)
+            return static_cast<double> (reinterpret_cast<const LV2_Atom_Long*> (atom)->body);
+        if (atom->type == urids.atom_Bool)
+            return reinterpret_cast<const LV2_Atom_Bool*> (atom)->body != 0 ? 1.0 : 0.0;
+
+        return std::nullopt;
     }
 
     void parsePosition (const LV2_Atom_Object* obj, int numSamples)
@@ -633,29 +648,26 @@ private:
 
         AudioPlayHead::PositionInfo info;
 
-        if (beatsPerBar != nullptr && beatsPerBar->type == urids.atom_Float
-            && beatUnit != nullptr && beatUnit->type == urids.atom_Int)
+        const auto numerator = readAtomNumber (beatsPerBar);
+        const auto denominator = readAtomNumber (beatUnit);
+        if (numerator.has_value() && denominator.has_value())
+            info.setTimeSignature (AudioPlayHead::TimeSignature { static_cast<int> (*numerator), static_cast<int> (*denominator) });
+
+        if (const auto bpm = readAtomNumber (beatsPerMinute))
+            info.setBpm (*bpm);
+
+        if (const auto beats = readAtomNumber (beat))
+            info.setPpqPosition (*beats);
+
+        if (const auto transportSpeed = readAtomNumber (speed))
+            info.setIsPlaying (*transportSpeed != 0.0);
+
+        if (const auto bars = readAtomNumber (bar))
+            info.setBarCount (static_cast<int64> (*bars));
+
+        if (const auto frames = readAtomNumber (frame))
         {
-            const auto num = static_cast<int> (reinterpret_cast<const LV2_Atom_Float*> (beatsPerBar)->body);
-            const auto den = static_cast<int> (reinterpret_cast<const LV2_Atom_Int*> (beatUnit)->body);
-            info.setTimeSignature (AudioPlayHead::TimeSignature { num, den });
-        }
-
-        if (beatsPerMinute != nullptr && beatsPerMinute->type == urids.atom_Float)
-            info.setBpm (reinterpret_cast<const LV2_Atom_Float*> (beatsPerMinute)->body);
-
-        if (beat != nullptr && beat->type == urids.atom_Float)
-            info.setPpqPosition (static_cast<double> (reinterpret_cast<const LV2_Atom_Float*> (beat)->body));
-
-        if (speed != nullptr && speed->type == urids.atom_Float)
-            info.setIsPlaying (reinterpret_cast<const LV2_Atom_Float*> (speed)->body != 0.0f);
-
-        if (bar != nullptr && bar->type == urids.atom_Int)
-            info.setBarCount (reinterpret_cast<const LV2_Atom_Int*> (bar)->body);
-
-        if (frame != nullptr && frame->type == urids.atom_Int)
-        {
-            const auto frameVal = reinterpret_cast<const LV2_Atom_Int*> (frame)->body;
+            const auto frameVal = static_cast<int64> (*frames);
             info.setTimeInSamples (frameVal);
             if (sampleRate > 0.0)
                 info.setTimeInSeconds (static_cast<double> (frameVal) / sampleRate);
@@ -753,7 +765,6 @@ public:
     std::vector<const float*> inputChannelPtrStorage;
     std::vector<float*> outputChannelPtrStorage;
 
-    LV2_Worker_Schedule* workerSchedule = nullptr;
 
     std::map<LV2_URID, std::size_t> paramUridToIndex;
     std::map<int, LV2_URID> indexToParamUrid;
@@ -930,6 +941,210 @@ public:
 };
 
 //==============================================================================
+// LV2 UI
+//==============================================================================
+
+/** Hosts the processor editor inside the window handed over through ui:parent.
+
+    The UI reaches the processor through instance-access, parameter changes made in the editor
+    are reported to the host by the plugin through patch:Set messages on its output port.
+*/
+class AudioPluginEditorLV2 final
+    : public Component
+    , private ComponentListener
+{
+public:
+    AudioPluginEditorLV2 (AudioProcessor& processor, AudioProcessorEditor* editor, const LV2UI_Resize* hostResize)
+        : processor (processor)
+        , processorEditor (editor)
+        , hostResize (hostResize)
+    {
+        processorEditor->setSize (processorEditor->getConstrainedSize (processorEditor->getInitialSize()).to<float>());
+        addAndMakeVisible (*processorEditor);
+        setSize (processorEditor->getBounds().getSize());
+        processorEditor->addComponentListener (this);
+    }
+
+    ~AudioPluginEditorLV2() override
+    {
+        endActiveParameterGestures (&processor);
+
+        processorEditor->removeComponentListener (this);
+        setVisible (false);
+        removeFromDesktop();
+        removeChildComponent (processorEditor.get());
+    }
+
+    bool attachToParent (void* parentWindow)
+    {
+        ComponentNative::Flags flags = ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow;
+
+        if (processorEditor->shouldRenderContinuous())
+            flags.set (ComponentNative::renderContinuous);
+
+        const auto options = ComponentNative::Options()
+                                 .withFlags (flags)
+                                 .withResizableWindow (processorEditor->isResizable());
+
+        addToDesktop (options, parentWindow);
+        setVisible (true);
+        processorEditor->attachedToNative();
+
+        notifyHostSize();
+        return isOnDesktop();
+    }
+
+    int resizeFromHost (int width, int height)
+    {
+        if (! processorEditor->isResizable())
+            return 1;
+
+        const auto size = processorEditor->getConstrainedSizeToFit (viewScale.fromHost ({ width, height }, *this));
+
+        const ScopedValueSetter<bool> scope (hostResizing, true);
+        setSize (size.to<float>());
+        return 0;
+    }
+
+    void resized() override
+    {
+        {
+            const ScopedValueSetter<bool> scope (fittingEditor, true);
+            processorEditor->setBounds (getLocalBounds());
+        }
+
+        if (! hostResizing)
+            notifyHostSize();
+    }
+
+    void paint (Graphics& g) override
+    {
+        g.setFillColor (Colors::black);
+        g.fillAll();
+    }
+
+private:
+    void componentResized (Component& component) override
+    {
+        if (! fittingEditor && component.getBounds().getSize() != getBounds().getSize())
+            setSize (component.getBounds().getSize());
+    }
+
+    void notifyHostSize()
+    {
+        if (hostResize == nullptr || hostResize->ui_resize == nullptr || ! isOnDesktop())
+            return;
+
+        const auto size = viewScale.toHost (getBounds().getSize().to<int>(), *this);
+        hostResize->ui_resize (hostResize->handle, size.getWidth(), size.getHeight());
+    }
+
+    AudioProcessor& processor;
+    std::unique_ptr<AudioProcessorEditor> processorEditor;
+    const LV2UI_Resize* hostResize = nullptr;
+    WrapperViewScale viewScale;
+    bool fittingEditor = false;
+    bool hostResizing = false;
+};
+
+struct AudioPluginUILV2
+{
+    WrapperWindowing windowing;
+    std::unique_ptr<AudioPluginEditorLV2> editor;
+};
+
+static LV2UI_Handle lv2uiInstantiate (const LV2UI_Descriptor* descriptor,
+                                      const char* pluginUri,
+                                      const char* bundlePath,
+                                      LV2UI_Write_Function writeFunction,
+                                      LV2UI_Controller controller,
+                                      LV2UI_Widget* widget,
+                                      const LV2_Feature* const* features)
+{
+    ignoreUnused (descriptor, pluginUri, bundlePath, writeFunction, controller);
+
+    AudioPluginProcessorLV2* plugin = nullptr;
+    void* parentWindow = nullptr;
+    const LV2UI_Resize* hostResize = nullptr;
+
+    for (auto* feature = features; feature != nullptr && *feature != nullptr; ++feature)
+    {
+        if (std::strcmp ((*feature)->URI, LV2_INSTANCE_ACCESS_URI) == 0)
+            plugin = static_cast<AudioPluginProcessorLV2*> ((*feature)->data);
+        else if (std::strcmp ((*feature)->URI, LV2_UI__parent) == 0)
+            parentWindow = (*feature)->data;
+        else if (std::strcmp ((*feature)->URI, LV2_UI__resize) == 0)
+            hostResize = static_cast<const LV2UI_Resize*> ((*feature)->data);
+    }
+
+    YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "ui instantiate: plugin=" << describePointer (plugin) << ", parent=" << describePointer (parentWindow) << ", resize=" << describePointer (hostResize));
+
+    if (plugin == nullptr || plugin->processor == nullptr || parentWindow == nullptr || widget == nullptr)
+        return nullptr;
+
+    auto ui = std::make_unique<AudioPluginUILV2>();
+    ui->windowing.ensureInitialised();
+
+    auto* processorEditor = plugin->processor->createEditor();
+    if (processorEditor == nullptr)
+        return nullptr;
+
+    ui->editor = std::make_unique<AudioPluginEditorLV2> (*plugin->processor, processorEditor, hostResize);
+    if (! ui->editor->attachToParent (parentWindow))
+        return nullptr;
+
+    *widget = static_cast<LV2UI_Widget> (ui->editor->getNativeHandle());
+    return ui.release();
+}
+
+static void lv2uiCleanup (LV2UI_Handle handle)
+{
+    YUP_MODULE_DBG (PLUGIN_CLIENT_LV2, "ui cleanup: handle=" << describePointer (handle));
+    delete static_cast<AudioPluginUILV2*> (handle);
+}
+
+static void lv2uiPortEvent (LV2UI_Handle, uint32_t, uint32_t, uint32_t, const void*)
+{
+    // The editor observes the processor directly through instance-access
+}
+
+static int lv2uiIdle (LV2UI_Handle)
+{
+#if YUP_LINUX
+    dispatchPendingMessagesFromHostTimer();
+#endif
+    return 0;
+}
+
+static int lv2uiResize (LV2UI_Feature_Handle handle, int width, int height)
+{
+    auto* ui = static_cast<AudioPluginUILV2*> (handle);
+    return ui != nullptr && ui->editor != nullptr ? ui->editor->resizeFromHost (width, height) : 1;
+}
+
+static const void* lv2uiExtensionData (const char* uri)
+{
+    static const LV2UI_Idle_Interface idleInterface = { lv2uiIdle };
+    static const LV2UI_Resize resizeInterface = { nullptr, lv2uiResize };
+
+    if (std::strcmp (uri, LV2_UI__idleInterface) == 0)
+        return &idleInterface;
+
+    if (std::strcmp (uri, LV2_UI__resize) == 0)
+        return &resizeInterface;
+
+    return nullptr;
+}
+
+static const LV2UI_Descriptor lv2uiDescriptor = {
+    YupPlugin_LV2URI ":ui",
+    lv2uiInstantiate,
+    lv2uiCleanup,
+    lv2uiPortEvent,
+    lv2uiExtensionData
+};
+
+//==============================================================================
 // LV2 Descriptor
 //==============================================================================
 
@@ -1009,4 +1224,9 @@ static const LV2_Descriptor lv2Descriptor = {
 extern "C" YUP_PLUGIN_ENTRY_POINT const LV2_Descriptor* lv2_descriptor (uint32_t index)
 {
     return (index == 0) ? &yup::lv2Descriptor : nullptr;
+}
+
+extern "C" YUP_PLUGIN_ENTRY_POINT const LV2UI_Descriptor* lv2ui_descriptor (uint32_t index)
+{
+    return (index == 0) ? &yup::lv2uiDescriptor : nullptr;
 }

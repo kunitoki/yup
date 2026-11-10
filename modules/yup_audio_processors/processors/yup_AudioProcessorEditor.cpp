@@ -32,6 +32,12 @@ AudioProcessorEditor::~AudioProcessorEditor()
 {
 }
 
+AudioParameter::Ptr AudioProcessorEditor::getParameterAt (Point<float> position) const
+{
+    ignoreUnused (position);
+    return nullptr;
+}
+
 //==============================================================================
 
 Size<int> AudioProcessorEditor::getConstrainedSize (Size<int> requestedSize) const

@@ -315,3 +315,37 @@ TEST (AudioProcessContextTests, GetMainOutputFindsFirstMainOutputBus)
     EXPECT_EQ (2, mainOutput.getNumChannels());
     EXPECT_EQ (AudioBus::Role::Main, mainOutput.getRole());
 }
+
+TEST (AudioProcessContextTests, GetAuxiliaryInputSkipsEarlierAuxBuses)
+{
+    float mainLeft[16];
+    float firstSide[16];
+    float secondLeft[16], secondRight[16];
+    float outLeft[16];
+
+    const float* inputPtrs[] = { mainLeft };
+    const float* firstSidePtrs[] = { firstSide };
+    const float* secondSidePtrs[] = { secondLeft, secondRight };
+    float* outputPtrs[] = { outLeft };
+
+    AudioBusBufferView<const float> inputViewsArr[] = {
+        { inputPtrs, 1, AudioBus::Role::Main },
+        { firstSidePtrs, 1, AudioBus::Role::Auxiliary },
+        { secondSidePtrs, 2, AudioBus::Role::Auxiliary }
+    };
+    AudioBusBufferView<float> outputViewsArr[] = {
+        { outputPtrs, 1, AudioBus::Role::Main }
+    };
+
+    AudioBuffer<float> audio (outputPtrs, 1, 0, 16);
+    MidiBuffer midi;
+    ParameterChangeBuffer params;
+
+    AudioProcessContext<float> context {
+        audio, midi, params, nullptr, { inputViewsArr, 3 }, { outputViewsArr, 1 }
+    };
+
+    EXPECT_EQ (1, context.getAuxiliaryInput (0).getNumChannels());
+    EXPECT_EQ (2, context.getAuxiliaryInput (1).getNumChannels());
+    EXPECT_EQ (0, context.getAuxiliaryInput (2).getNumChannels());
+}

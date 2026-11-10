@@ -104,7 +104,44 @@ public:
     /** Returns whether this editor should render continuously. */
     virtual bool shouldRenderContinuous() const { return false; }
 
+    //==============================================================================
+    /** Services a plugin wrapper offers to its editor. */
+    class YUP_API HostContext
+    {
+    public:
+        virtual ~HostContext() = default;
+
+        /** Asks the host to show its context menu for a parameter.
+
+            @param parameter  The parameter the menu refers to.
+            @param position   The position of the menu, in editor coordinates.
+
+            @returns True when the host showed a menu, false when it offers none.
+        */
+        virtual bool showParameterContextMenu (const AudioParameter::Ptr& parameter, Point<float> position) = 0;
+    };
+
+    /** Returns the parameter controlled at a position, or nullptr when there is none.
+
+        Hosts use this to find the control under the mouse, for example to assign it to a hardware
+        controller (VST3 IParameterFinder). Override it to report the parameter of your controls.
+
+        @param position  The position, in editor coordinates.
+    */
+    virtual AudioParameter::Ptr getParameterAt (Point<float> position) const;
+
+    /** Returns the host context set by the plugin wrapper, or nullptr when the host offers none.
+
+        Use it, for example, to show the host context menu when a control is right clicked.
+    */
+    HostContext* getHostContext() const noexcept { return hostContext; }
+
+    /** Sets the host context, called by plugin wrappers. The context must outlive the editor or be reset. */
+    void setHostContext (HostContext* newHostContext) noexcept { hostContext = newHostContext; }
+
 private:
+    HostContext* hostContext = nullptr;
+
     Size<int> constrainSize (Size<int> size, bool fitInside) const;
 };
 

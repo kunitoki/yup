@@ -99,6 +99,74 @@ TEST_F (SharedMemoryTests, MoveTransfersTheMapping)
     EXPECT_EQ (name, moved.getName());
 }
 
+TEST_F (SharedMemoryTests, MoveAssignmentClosesTargetAndTransfersMapping)
+{
+    const auto otherName = SharedMemory::createUniqueName ("test");
+
+    SharedMemory source, target;
+    ASSERT_TRUE (source.create (name, 64).wasOk());
+    ASSERT_TRUE (target.create (otherName, 64).wasOk());
+
+    auto* data = source.getData();
+    static_cast<uint8*> (data)[0] = 99;
+
+    target = std::move (source);
+
+    EXPECT_FALSE (source.isOpen());
+    EXPECT_EQ (nullptr, source.getData());
+    EXPECT_EQ (0u, source.getSize());
+
+    EXPECT_TRUE (target.isOpen());
+    EXPECT_EQ (data, target.getData());
+    EXPECT_EQ (64u, target.getSize());
+    EXPECT_EQ (name, target.getName());
+    EXPECT_EQ (99, static_cast<uint8*> (target.getData())[0]);
+
+    SharedMemory reopened;
+    EXPECT_TRUE (reopened.open (otherName, 64).failed());
+
+    target.close();
+    EXPECT_TRUE (reopened.open (name, 64).failed());
+}
+
+TEST_F (SharedMemoryTests, OpenFailsWithInvalidArguments)
+{
+    SharedMemory created;
+    ASSERT_TRUE (created.create (name, 64).wasOk());
+
+    SharedMemory memory;
+    EXPECT_TRUE (memory.open ({}, 64).failed());
+    EXPECT_TRUE (memory.open (name, 0).failed());
+    EXPECT_FALSE (memory.isOpen());
+}
+
+TEST_F (SharedMemoryTests, OpenFailsWhenRequestingMoreThanWasCreated)
+{
+    SharedMemory created;
+    ASSERT_TRUE (created.create (name, 64).wasOk());
+
+    SharedMemory opened;
+    EXPECT_TRUE (opened.open (name, 1024 * 1024).failed());
+    EXPECT_FALSE (opened.isOpen());
+}
+
+#if ! YUP_WINDOWS
+TEST_F (SharedMemoryTests, CreateFailsAndReleasesNameForUnmappableSizes)
+{
+    SharedMemory memory;
+
+    // Overflows off_t, so sizing the block fails
+    EXPECT_TRUE (memory.create (name, std::numeric_limits<size_t>::max()).failed());
+    EXPECT_FALSE (memory.isOpen());
+
+    // Larger than any process address space, so mapping (or sizing) fails
+    EXPECT_TRUE (memory.create (name, (size_t) 1 << 62).failed());
+    EXPECT_FALSE (memory.isOpen());
+
+    EXPECT_TRUE (memory.create (name, 64).wasOk());
+}
+#endif
+
 TEST_F (SharedMemoryTests, UniqueNamesAreShortAndDistinct)
 {
     const auto other = SharedMemory::createUniqueName ("test");

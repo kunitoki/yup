@@ -83,3 +83,54 @@ TEST (AudioBusTests, MidiBusRoleIsMainByDefault)
     EXPECT_EQ (AudioBus::Role::Main, bus.getRole());
     EXPECT_TRUE (bus.isDefaultActive());
 }
+
+TEST (AudioBusTests, ChannelSetConstructorKeepsLayout)
+{
+    AudioBus bus ("Surround", AudioBus::Direction::Output, AudioChannelSet::create5point1());
+    EXPECT_EQ (6, bus.getNumChannels());
+    EXPECT_EQ (AudioChannelSet::create5point1(), bus.getChannelSet());
+    EXPECT_NE (AudioChannelSet::canonicalChannelSet (6), AudioChannelSet::create6point0());
+}
+
+TEST (AudioBusTests, ChannelCountWithoutLayoutUsesCanonicalSet)
+{
+    AudioBus bus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2);
+    EXPECT_EQ (AudioChannelSet::stereo(), bus.getChannelSet());
+}
+
+TEST (AudioBusTests, ChangingChannelCountDropsMismatchedLayout)
+{
+    const auto bus = AudioBus ("Out", AudioBus::Direction::Output, AudioChannelSet::create6point0()).withNumChannels (2);
+    EXPECT_EQ (AudioChannelSet::stereo(), bus.getChannelSet());
+}
+
+TEST (AudioBusTests, EqualityComparesEffectiveLayout)
+{
+    const AudioBus counted ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 6);
+    const AudioBus canonical ("Out", AudioBus::Direction::Output, AudioChannelSet::canonicalChannelSet (6));
+    const AudioBus cine ("Out", AudioBus::Direction::Output, AudioChannelSet::create6point0());
+
+    EXPECT_EQ (counted, canonical);
+    EXPECT_FALSE (counted == cine);
+}
+
+TEST (AudioBusTests, EqualityComparesEveryProperty)
+{
+    const AudioBus bus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2);
+
+    EXPECT_TRUE (bus == AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2));
+    EXPECT_FALSE (bus == AudioBus ("Other", AudioBus::Type::Audio, AudioBus::Direction::Output, 2));
+    EXPECT_FALSE (bus == AudioBus ("Out", AudioBus::Type::Midi, AudioBus::Direction::Output, 2));
+    EXPECT_FALSE (bus == AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Input, 2));
+    EXPECT_FALSE (bus == AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 1));
+    EXPECT_FALSE (bus == AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2, AudioBus::Role::Auxiliary));
+    EXPECT_FALSE (bus == AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2, AudioBus::Role::Main, false));
+}
+
+TEST (AudioBusTests, WithChannelSetUpdatesChannelCount)
+{
+    const auto bus = AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 2).withChannelSet (AudioChannelSet::create7point1());
+
+    EXPECT_EQ (8, bus.getNumChannels());
+    EXPECT_EQ (AudioChannelSet::create7point1(), bus.getChannelSet());
+}

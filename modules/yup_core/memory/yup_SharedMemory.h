@@ -36,7 +36,7 @@ namespace yup
     with std::atomic members (lock-free atomics work across processes) or with an
     InterProcessSemaphore.
 
-    Not available on WebAssembly and Android.
+    On WebAssembly and Android create() and open() always fail.
 
     @see InterProcessSemaphore
 

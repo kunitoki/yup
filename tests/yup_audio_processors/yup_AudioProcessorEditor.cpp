@@ -103,4 +103,11 @@ TEST_F (AudioProcessorEditorTests, ShowsResizableCornerOnlyWhenResizable)
     EXPECT_FALSE (editor.shouldShowResizableCorner());
 }
 
+TEST_F (AudioProcessorEditorTests, DefaultBehaviorsUsePreferredSizeAndNoContinuousRendering)
+{
+    EXPECT_EQ (Size<int> (400, 200), editor.getInitialSize());
+    EXPECT_FALSE (editor.AudioProcessorEditor::shouldPreserveAspectRatio());
+    EXPECT_FALSE (editor.shouldRenderContinuous());
+}
+
 #endif

@@ -775,6 +775,19 @@ TEST_F (WrapperViewScaleTests, DetachedEditorUsesHostScaleOutsideCocoa)
 #endif
 }
 
+TEST_F (WrapperViewScaleTests, DetachedEditorWithoutHostScaleUsesPrimaryScreenScale)
+{
+    auto expectedScale = 1.0f;
+
+#if ! YUP_MAC
+    if (auto screen = Desktop::getInstance()->getPrimaryScreen(); screen != nullptr && screen->contentScaleX > 0.0f)
+        expectedScale = screen->contentScaleX;
+#endif
+
+    EXPECT_FLOAT_EQ (expectedScale, viewScale.get (editor));
+    EXPECT_EQ (Size<int> (roundToInt (300 * expectedScale), roundToInt (200 * expectedScale)), viewScale.toHost ({ 300, 200 }, editor));
+}
+
 TEST_F (WrapperViewScaleTests, ConvertedSizesAreNeverEmpty)
 {
     viewScale.setHostScale (4.0f);
@@ -823,6 +836,29 @@ TEST_F (UmpToNoteExpressionTests, RegisteredPerNoteControllersMapToExpressions)
     EXPECT_EQ (umpToNoteExpression (pan, 2, 0)->type, NoteExpression::Type::pan);
 }
 
+TEST_F (UmpToNoteExpressionTests, VibratoVolumeAndExpressionControllersAreMapped)
+{
+    const uint32 vibrato[] = { perNoteController (1, 62, 1), 0u };
+    const uint32 volume[] = { perNoteController (1, 62, 7), 0xffffffffu };
+    const uint32 expressionController[] = { perNoteController (1, 62, 11), 0u };
+
+    const auto vibratoExpression = umpToNoteExpression (vibrato, 2, 3);
+    ASSERT_TRUE (vibratoExpression.has_value());
+    EXPECT_EQ (vibratoExpression->type, NoteExpression::Type::vibrato);
+    EXPECT_EQ (vibratoExpression->channel, 2);
+    EXPECT_EQ (vibratoExpression->key, 62);
+    EXPECT_FLOAT_EQ (vibratoExpression->value, 0.0f);
+
+    const auto volumeExpression = umpToNoteExpression (volume, 2, 0);
+    ASSERT_TRUE (volumeExpression.has_value());
+    EXPECT_EQ (volumeExpression->type, NoteExpression::Type::volume);
+    EXPECT_FLOAT_EQ (volumeExpression->value, 1.0f);
+
+    const auto expressionExpression = umpToNoteExpression (expressionController, 2, 0);
+    ASSERT_TRUE (expressionExpression.has_value());
+    EXPECT_EQ (expressionExpression->type, NoteExpression::Type::expression);
+}
+
 TEST_F (UmpToNoteExpressionTests, IgnoresOtherMessages)
 {
     const uint32 unknownController[] = { perNoteController (0, 60, 3), 0u };
@@ -860,4 +896,23 @@ TEST (HostQuirksTests, AdobeAuditionStateChunksAreIgnored)
     EXPECT_FALSE (auditionQuirks.isForeignStateChunk (pluginState));
 
     EXPECT_FALSE (HostQuirks::forHost (PluginHostType()).isForeignStateChunk (auditionChunk));
+}
+
+//==============================================================================
+
+class UpdatePluginHostTypeTests : public ::testing::Test
+{
+protected:
+    void TearDown() override { AudioProcessor::setHostType (previousHostType); }
+
+    const PluginHostType previousHostType = AudioProcessor::getHostType();
+};
+
+TEST_F (UpdatePluginHostTypeTests, DeclaresHostDetectedFromReportedName)
+{
+    updatePluginHostType ("REAPER");
+    EXPECT_TRUE (AudioProcessor::getHostType().isReaper());
+
+    updatePluginHostType ("Bitwig Studio");
+    EXPECT_TRUE (AudioProcessor::getHostType().isBitwigStudio());
 }

@@ -97,14 +97,16 @@ inline AudioUnitParameterOptions makeAUParameterFlags (const AudioParameter& par
     if (! param.isReadOnly())
         flags |= kAudioUnitParameterFlag_IsWritable;
 
+    if (param.isMeter())
+        flags |= kAudioUnitParameterFlag_MeterReadOnly;
+
     return flags;
 }
 
 /** Returns the AudioUnitParameterOptions used by the AUv3 client.
 
     Extends makeAUParameterFlags with value-string and ramp capabilities.
-    This must not be used by the AUv2 client, which implements no string
-    properties and cannot schedule parameters.
+    This must not be used by the AUv2 client, which cannot schedule parameters.
 */
 inline AudioUnitParameterOptions makeAUv3ParameterFlags (const AudioParameter& param)
 {

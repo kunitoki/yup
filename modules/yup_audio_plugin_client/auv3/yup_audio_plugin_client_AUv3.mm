@@ -447,6 +447,10 @@ public:
             return nil;
 
         std::lock_guard<std::mutex> lock (factoryPresetsMutex);
+
+        if (currentUserPreset != nullptr)
+            return currentUserPreset.get();
+
         const auto current = processor->getCurrentPreset();
 
         if (isPositiveAndBelow (current, static_cast<int> ([factoryPresets.get() count])))
@@ -466,8 +470,33 @@ public:
         const auto index = static_cast<int> ([preset number]);
         YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setCurrentPreset requested: preset=" << String (index));
 
+        // User presets have negative numbers, their state is stored by the AUAudioUnit base class
+        if (index < 0)
+        {
+            if (@available (macOS 10.15, iOS 13.0, *))
+            {
+                NSError* error = nil;
+                if (auto* state = [au presetStateFor:preset error:&error])
+                {
+                    setFullState (state);
+
+                    std::lock_guard<std::mutex> lock (factoryPresetsMutex);
+                    currentUserPreset.reset (preset);
+                    return;
+                }
+            }
+
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setCurrentPreset failed: user preset state unavailable");
+            return;
+        }
+
         if (isPositiveAndBelow (index, processor->getNumPresets()))
         {
+            {
+                std::lock_guard<std::mutex> lock (factoryPresetsMutex);
+                currentUserPreset.reset();
+            }
+
             processor->setCurrentPreset (index);
             YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setCurrentPreset completed");
         }
@@ -475,6 +504,21 @@ public:
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "setCurrentPreset failed: preset out of range");
         }
+    }
+
+    //==============================================================================
+    // Host context
+
+    void setContextName (NSString* name)
+    {
+        ObjCMsgSendSuper<AUAudioUnit, void> (au, @selector (setContextName:), name);
+
+        if (processor == nullptr)
+            return;
+
+        auto info = processor->getHostInfo();
+        info.trackName = name != nil ? nsStringToYup (name) : String();
+        processor->setHostInfo (info);
     }
 
     //==============================================================================
@@ -1714,6 +1758,7 @@ private:
 
     mutable std::mutex factoryPresetsMutex;
     NSUniquePtr<NSMutableArray<AUAudioUnitPreset*>> factoryPresets;
+    NSUniquePtr<AUAudioUnitPreset> currentUserPreset;
 
     ObjCBlock<AUInternalRenderBlock> internalRenderBlock;
     ObjCBlock<AURenderContextObserver> renderContextObserver;
@@ -1866,6 +1911,15 @@ struct AUAudioUnitSubclass final : public ObjCClass<AUAudioUnit>
 
         addMethod (@selector (setCurrentPreset:), [] (id self, SEL, AUAudioUnitPreset* preset) {
             _this (self)->setCurrentPreset (preset);
+        });
+
+        addMethod (@selector (supportsUserPresets), [] (id, SEL) {
+            return YES;
+        });
+
+        // Host context
+        addMethod (@selector (setContextName:), [] (id self, SEL, NSString* name) {
+            _this (self)->setContextName (name);
         });
 
         // Latency / tail
