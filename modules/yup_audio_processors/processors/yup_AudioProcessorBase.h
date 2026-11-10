@@ -188,7 +188,12 @@ public:
     */
     virtual void hostInfoChanged (const HostInfo& newInfo) { ignoreUnused (newInfo); }
 
-    /** @internal Used by plugin wrappers to forward host track information. */
+    /** Provides new host track information and calls hostInfoChanged() when it differs.
+
+        Plugin wrappers call this with the information they receive from their host, and
+        hosts call it on hosted plugin instances to forward their own track information.
+        Call from the message thread.
+    */
     void setHostInfo (const HostInfo& newInfo);
 
     //==============================================================================

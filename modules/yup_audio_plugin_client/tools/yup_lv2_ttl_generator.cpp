@@ -164,8 +164,7 @@ static bool writePluginTTL (const Options& opts, yup::AudioProcessor& processor)
       << "    lv2:optionalFeature\n"
       << "        lv2:hardRTCapable,\n"
       << "        lv2:isLive,\n"
-      << "        worker:schedule,\n"
-      << "        state:threadSafeRestore ;\n"
+      << "        worker:schedule ;\n"
       << "\n"
       << "    lv2:extensionData state:interface ;\n"
       << "\n";

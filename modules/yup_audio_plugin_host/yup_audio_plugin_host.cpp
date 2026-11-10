@@ -28,18 +28,20 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bitset>
 #include <cstdint>
 #include <cstring>
-#include <deque>
 #include <limits>
 #include <map>
 #include <optional>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
 
 //==============================================================================
+#include "host/yup_AudioPluginParameterMailbox.h"
 #include "host/yup_AudioPluginFormat.cpp"
 #include "host/yup_AudioPluginScanner.cpp"
 #include "host/yup_AudioPluginInstance.cpp"
@@ -54,6 +56,8 @@
 #include <pluginterfaces/vst/ivstparameterchanges.h>
 #include <pluginterfaces/vst/ivstevents.h>
 #include <pluginterfaces/vst/ivstmidicontrollers.h>
+#include <pluginterfaces/vst/ivstnoteexpression.h>
+#include <pluginterfaces/vst/ivstchannelcontextinfo.h>
 #include <pluginterfaces/vst/ivsteditcontroller.h>
 #include <pluginterfaces/vst/ivsthostapplication.h>
 #include <pluginterfaces/vst/ivstunits.h>
@@ -94,6 +98,10 @@ using CLAPModuleHandle = void*;
 #define clapLoadModule(p) dlopen (p, RTLD_LAZY | RTLD_LOCAL)
 #define clapGetAddress dlsym
 #define clapUnloadModule dlclose
+#endif
+
+#if YUP_LINUX
+#include <poll.h>
 #endif
 
 #include "native/yup_AudioPluginInstance_CLAP.cpp"

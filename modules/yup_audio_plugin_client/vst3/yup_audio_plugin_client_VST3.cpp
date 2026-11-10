@@ -34,6 +34,7 @@
 #include <pluginterfaces/base/ftypes.h>
 #include <pluginterfaces/base/funknown.h>
 #include <pluginterfaces/gui/iplugview.h>
+#include <pluginterfaces/gui/iplugviewcontentscalesupport.h>
 #include <pluginterfaces/vst/ivstchannelcontextinfo.h>
 #include <pluginterfaces/vst/ivstprocesscontext.h>
 #include <pluginterfaces/vst/ivstparameterchanges.h>
@@ -203,14 +204,23 @@ static Vst::SpeakerArrangement speakerArrForChannels (int channels)
 {
     switch (channels)
     {
+        case 0:
+            return Vst::SpeakerArr::kEmpty;
         case 1:
             return Vst::SpeakerArr::kMono;
+        case 2:
+            return Vst::SpeakerArr::kStereo;
+        case 4:
+            return Vst::SpeakerArr::k40Music;
+        case 5:
+            return Vst::SpeakerArr::k50;
         case 6:
             return Vst::SpeakerArr::k51;
         case 8:
             return Vst::SpeakerArr::k71CineFullFront;
         default:
-            return Vst::SpeakerArr::kStereo;
+            // Any arrangement with the right number of speakers
+            return channels < 64 ? (Vst::SpeakerArrangement (1) << channels) - 1 : Vst::SpeakerArr::kStereo;
     }
 }
 
@@ -309,9 +319,17 @@ static void writeMidiBufferToVST3EventList (const MidiBuffer& midiBuffer,
 class AudioPluginEditorViewVST3
     : public Component
     , public Vst::EditorView
+    , public IPlugViewContentScaleSupport
     , private ComponentListener
 {
 public:
+    OBJ_METHODS (AudioPluginEditorViewVST3, Vst::EditorView)
+    REFCOUNT_METHODS (Vst::EditorView)
+
+    DEFINE_INTERFACES
+    DEF_INTERFACE (IPlugViewContentScaleSupport)
+    END_DEFINE_INTERFACES (Vst::EditorView)
+
     AudioPluginEditorViewVST3 (AudioProcessor* processor, Vst::EditController* controller, ViewRect* size = nullptr)
         : Vst::EditorView (controller, size)
         , processor (processor)
@@ -570,6 +588,23 @@ public:
             editor->leaveKeyboardFocus();
 
         return kResultTrue;
+    }
+
+    tresult PLUGIN_API setContentScaleFactor (ScaleFactor factor) override
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setContentScaleFactor: factor=" << String (factor));
+
+#if YUP_MAC
+        // Cocoa views are sized in points and the OS provides the backing scale
+        ignoreUnused (factor);
+        return kResultFalse;
+#else
+        if (editor != nullptr)
+            editor->contentScaleChanged (static_cast<float> (factor));
+
+        // The native window follows the monitor DPI itself, view sizes are not rescaled yet
+        return kResultFalse;
+#endif
     }
 
     tresult PLUGIN_API isPlatformTypeSupported (FIDString type) override
@@ -1533,48 +1568,42 @@ public:
 
         const auto& busLayout = processor->getBusLayout();
 
-        int32 audioInputCount = 0;
-        int32 audioOutputCount = 0;
-
-        for (const auto& bus : busLayout.getInputBuses())
-            if (bus.getType() == AudioBus::Type::Audio)
-                ++audioInputCount;
-
-        for (const auto& bus : busLayout.getOutputBuses())
-            if (bus.getType() == AudioBus::Type::Audio)
-                ++audioOutputCount;
-
-        if (numIns != audioInputCount || numOuts != audioOutputCount)
+        if (numIns != busLayout.getNumAudioBuses (true) || numOuts != busLayout.getNumAudioBuses (false))
         {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements rejected: bus count mismatch, expectedIns=" << String (audioInputCount) << ", expectedOuts=" << String (audioOutputCount));
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements rejected: bus count mismatch, expectedIns=" << String (busLayout.getNumAudioBuses (true)) << ", expectedOuts=" << String (busLayout.getNumAudioBuses (false)));
             return kResultFalse;
         }
 
-        int32 idx = 0;
-        for (const auto& bus : busLayout.getInputBuses())
+        auto requestedLayout = busLayout;
+
+        for (int32 idx = 0; idx < numIns; ++idx)
+            requestedLayout = requestedLayout.withAudioBusNumChannels (idx, true, Vst::SpeakerArr::getChannelCount (inputs[idx]));
+
+        for (int32 idx = 0; idx < numOuts; ++idx)
+            requestedLayout = requestedLayout.withAudioBusNumChannels (idx, false, Vst::SpeakerArr::getChannelCount (outputs[idx]));
+
+        if (requestedLayout != busLayout)
         {
-            if (bus.getType() != AudioBus::Type::Audio)
-                continue;
-            if (Vst::SpeakerArr::getChannelCount (inputs[idx]) != bus.getNumChannels())
+            if (isActive)
             {
-                YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements rejected: input bus=" << String (idx) << ", requestedChannels=" << String (Vst::SpeakerArr::getChannelCount (inputs[idx])) << ", supportedChannels=" << String (bus.getNumChannels()));
+                YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements rejected: component is active");
                 return kResultFalse;
             }
-            ++idx;
+
+            if (const auto result = processor->setBusLayout (requestedLayout); result.failed())
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements rejected: " << result.getErrorMessage());
+                return kResultFalse;
+            }
         }
 
-        idx = 0;
-        for (const auto& bus : busLayout.getOutputBuses())
-        {
-            if (bus.getType() != AudioBus::Type::Audio)
-                continue;
-            if (Vst::SpeakerArr::getChannelCount (outputs[idx]) != bus.getNumChannels())
-            {
-                YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements rejected: output bus=" << String (idx) << ", requestedChannels=" << String (Vst::SpeakerArr::getChannelCount (outputs[idx])) << ", supportedChannels=" << String (bus.getNumChannels()));
-                return kResultFalse;
-            }
-            ++idx;
-        }
+        for (int32 idx = 0; idx < numIns; ++idx)
+            if (auto* bus = FCast<Vst::AudioBus> (audioInputs.at (static_cast<size_t> (idx))))
+                bus->setArrangement (inputs[idx]);
+
+        for (int32 idx = 0; idx < numOuts; ++idx)
+            if (auto* bus = FCast<Vst::AudioBus> (audioOutputs.at (static_cast<size_t> (idx))))
+                bus->setArrangement (outputs[idx]);
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setBusArrangements accepted");
 
@@ -1594,6 +1623,8 @@ public:
             else
                 processor->releaseResources();
         }
+
+        isActive = state != 0;
 
         return AudioEffect::setActive (state);
     }
@@ -2043,6 +2074,7 @@ private:
     std::vector<AudioBusBufferView<double>> outputBusViewsDouble;
 
     WrapperBypass bypass;
+    bool isActive = false;
 
     //==============================================================================
     /** Looks up the role of a VST3 audio bus by its audio-bus index.

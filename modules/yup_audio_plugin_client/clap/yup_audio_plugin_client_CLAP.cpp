@@ -1560,8 +1560,14 @@ bool AudioPluginProcessorCLAP::initialise()
         if (wrapper->audioPluginEditor == nullptr)
             return false;
 
+#if YUP_MAC
+        // Cocoa sizes are logical and the OS provides the backing scale, the spec asks to ignore the call
+        ignoreUnused (scale);
+        return false;
+#else
         wrapper->audioPluginEditor->contentScaleChanged (static_cast<float> (scale));
         return true;
+#endif
     };
 
     extensionGUI.get_size = [] (const clap_plugin_t* plugin, uint32_t* width, uint32_t* height) -> bool

@@ -72,6 +72,12 @@ void toString128 (const String& source, Vst::String128 destination)
     destination[length] = 0;
 }
 
+// Hosted plugins address notes by id, so derive one from channel and key that note expressions can match.
+int32 noteIdForChannelAndKey (int channel0, int key) noexcept
+{
+    return static_cast<int32> (channel0 * 128 + key);
+}
+
 void addMidiMessageToVST3Events (Vst::EventList& events, const MidiMessageMetadata& metadata)
 {
     const auto message = metadata.getMessage();
@@ -87,7 +93,7 @@ void addMidiMessageToVST3Events (Vst::EventList& events, const MidiMessageMetada
         event.noteOn.pitch = static_cast<int16> (message.getNoteNumber());
         event.noteOn.velocity = message.getFloatVelocity();
         event.noteOn.length = 0;
-        event.noteOn.noteId = -1;
+        event.noteOn.noteId = noteIdForChannelAndKey (event.noteOn.channel, event.noteOn.pitch);
         events.addEvent (event);
         return;
     }
@@ -98,7 +104,7 @@ void addMidiMessageToVST3Events (Vst::EventList& events, const MidiMessageMetada
         event.noteOff.channel = static_cast<int16> (message.getChannel() - 1);
         event.noteOff.pitch = static_cast<int16> (message.getNoteNumber());
         event.noteOff.velocity = message.getFloatVelocity();
-        event.noteOff.noteId = -1;
+        event.noteOff.noteId = noteIdForChannelAndKey (event.noteOff.channel, event.noteOff.pitch);
         events.addEvent (event);
         return;
     }
@@ -109,7 +115,7 @@ void addMidiMessageToVST3Events (Vst::EventList& events, const MidiMessageMetada
         event.polyPressure.channel = static_cast<int16> (message.getChannel() - 1);
         event.polyPressure.pitch = static_cast<int16> (message.getNoteNumber());
         event.polyPressure.pressure = static_cast<float> (message.getAfterTouchValue()) / 127.0f;
-        event.polyPressure.noteId = -1;
+        event.polyPressure.noteId = noteIdForChannelAndKey (event.polyPressure.channel, event.polyPressure.pitch);
         events.addEvent (event);
         return;
     }
@@ -152,6 +158,80 @@ void addMidiMessageToVST3Events (Vst::EventList& events, const MidiMessageMetada
         event.midiCCOut.controlNumber = static_cast<uint8> (Vst::kAfterTouch);
         event.midiCCOut.value = static_cast<int8> (message.getChannelPressureValue());
         events.addEvent (event);
+    }
+}
+
+using ActiveVST3Notes = std::bitset<16 * 128>;
+
+// Converts plain NoteExpression values to VST3 normalized note expression values.
+std::pair<Vst::NoteExpressionTypeID, Vst::NoteExpressionValue> toVST3NoteExpression (NoteExpression::Type type, float value) noexcept
+{
+    switch (type)
+    {
+        case NoteExpression::Type::volume:
+            return { Vst::kVolumeTypeID, value / 4.0 };
+        case NoteExpression::Type::pan:
+            return { Vst::kPanTypeID, value };
+        case NoteExpression::Type::tuning:
+            return { Vst::kTuningTypeID, 0.5 + value / 240.0 };
+        case NoteExpression::Type::vibrato:
+            return { Vst::kVibratoTypeID, value };
+        case NoteExpression::Type::expression:
+            return { Vst::kExpressionTypeID, value };
+        case NoteExpression::Type::brightness:
+        case NoteExpression::Type::pressure:
+            break;
+    }
+
+    return { Vst::kBrightnessTypeID, value };
+}
+
+// Sends a note expression to the addressed note, or to every matching active note when channel or key is -1.
+void addNoteExpressionToVST3Events (Vst::EventList& events, const NoteExpression& expression, const ActiveVST3Notes& activeNotes)
+{
+    const auto addForNote = [&] (int channel0, int key)
+    {
+        Vst::Event event {};
+        event.busIndex = 0;
+        event.sampleOffset = expression.sampleOffset;
+
+        if (expression.type == NoteExpression::Type::pressure)
+        {
+            event.type = Vst::Event::kPolyPressureEvent;
+            event.polyPressure.channel = static_cast<int16> (channel0);
+            event.polyPressure.pitch = static_cast<int16> (key);
+            event.polyPressure.pressure = jlimit (0.0f, 1.0f, expression.value);
+            event.polyPressure.noteId = noteIdForChannelAndKey (channel0, key);
+        }
+        else
+        {
+            const auto [typeId, value] = toVST3NoteExpression (expression.type, expression.value);
+
+            event.type = Vst::Event::kNoteExpressionValueEvent;
+            event.noteExpressionValue.typeId = typeId;
+            event.noteExpressionValue.noteId = noteIdForChannelAndKey (channel0, key);
+            event.noteExpressionValue.value = jlimit (0.0, 1.0, value);
+        }
+
+        events.addEvent (event);
+    };
+
+    if (expression.channel >= 1 && expression.key >= 0)
+    {
+        addForNote (jlimit (0, 15, expression.channel - 1), jlimit (0, 127, static_cast<int> (expression.key)));
+        return;
+    }
+
+    for (int channel0 = 0; channel0 < 16; ++channel0)
+    {
+        if (expression.channel >= 1 && expression.channel - 1 != channel0)
+            continue;
+
+        for (int key = 0; key < 128; ++key)
+        {
+            if (activeNotes[static_cast<std::size_t> (noteIdForChannelAndKey (channel0, key))] && (expression.key < 0 || expression.key == key))
+                addForNote (channel0, key);
+        }
     }
 }
 
@@ -1137,57 +1217,6 @@ Vst::SpeakerArrangement getSpeakerArrangementForChannels (int numChannels)
 }
 
 //==============================================================================
-// Lock-free latest-value mailbox per parameter, used to hand parameter changes
-// between the message thread and the audio thread without losing the newest value.
-class VST3ParameterMailbox
-{
-public:
-    void resize (int newSize)
-    {
-        size = jmax (0, newSize);
-        slots = std::make_unique<Slot[]> (static_cast<std::size_t> (size));
-        anyPending.store (false);
-    }
-
-    void set (int index, Vst::ParamValue value) noexcept
-    {
-        if (! isPositiveAndBelow (index, size))
-            return;
-
-        auto& slot = slots[static_cast<std::size_t> (index)];
-        slot.value.store (value, std::memory_order_relaxed);
-        slot.pending.store (true, std::memory_order_release);
-        anyPending.store (true, std::memory_order_release);
-    }
-
-    template <class Callback>
-    void flush (Callback&& callback) noexcept
-    {
-        if (! anyPending.exchange (false, std::memory_order_acq_rel))
-            return;
-
-        for (int index = 0; index < size; ++index)
-        {
-            auto& slot = slots[static_cast<std::size_t> (index)];
-
-            if (slot.pending.exchange (false, std::memory_order_acq_rel))
-                callback (index, slot.value.load (std::memory_order_relaxed));
-        }
-    }
-
-private:
-    struct Slot
-    {
-        std::atomic<Vst::ParamValue> value { 0.0 };
-        std::atomic<bool> pending { false };
-    };
-
-    std::unique_ptr<Slot[]> slots;
-    int size = 0;
-    std::atomic<bool> anyPending { false };
-};
-
-//==============================================================================
 class VST3Instance
     : public AudioPluginInstance
     , private Timer
@@ -1219,6 +1248,9 @@ public:
         buildParameterList();
         buildProgramList();
         rebuildMidiMapping();
+
+        noteExpressionSupported = vst3Component->getBusCount (Vst::kEvent, Vst::kInput) > 0
+                               && queryVST3Interface<Vst::INoteExpressionController> (vst3Controller.get()) != nullptr;
 
         if (auto* handler = static_cast<HostComponentHandler*> (vst3ComponentHandler.get()))
         {
@@ -1300,6 +1332,10 @@ public:
         vst3Processor->setupProcessing (setup);
 
         prepareAudioBusBuffers (spec.maxBlockSize);
+
+        inputEvents.setMaxSize (maxEventsPerBlock);
+        outputEvents.setMaxSize (maxEventsPerBlock);
+        activeNotes.reset();
 
         for (auto direction : { Vst::kInput, Vst::kOutput })
         {
@@ -1488,6 +1524,9 @@ public:
         if (vst3Component == nullptr)
             return Result::fail ("Plugin not loaded");
 
+        if (memoryBlock.isEmpty())
+            return Result::fail ("Empty VST3 state");
+
         auto* data = const_cast<void*> (memoryBlock.getData());
         const auto size = static_cast<TSize> (memoryBlock.getSize());
 
@@ -1530,6 +1569,32 @@ public:
 
         memoryBlock.replaceAll (stream->getData(), static_cast<std::size_t> (stream->getSize()));
         return Result::ok();
+    }
+
+    //==============================================================================
+
+    bool supportsNoteExpression() const override
+    {
+        return noteExpressionSupported;
+    }
+
+    void hostInfoChanged (const HostInfo& newInfo) override
+    {
+        auto listener = queryVST3Interface<Vst::ChannelContext::IInfoListener> (vst3Controller.get());
+        if (listener == nullptr)
+            return;
+
+        Vst::String128 name {};
+        toString128 (newInfo.trackName, name);
+
+        auto attributes = IPtr<Vst::IAttributeList>::adopt (new HostAttributeList());
+        attributes->setString (Vst::ChannelContext::kChannelNameKey, name);
+        attributes->setInt (Vst::ChannelContext::kChannelNameLengthKey, static_cast<int64> (jmin (static_cast<size_t> (127), newInfo.trackName.toUTF16().length())));
+
+        if (newInfo.trackColor.has_value())
+            attributes->setInt (Vst::ChannelContext::kChannelColorKey, static_cast<int64> (*newInfo.trackColor));
+
+        listener->setChannelContextInfos (attributes.get());
     }
 
     //==============================================================================
@@ -1851,7 +1916,7 @@ private:
 
         Vst::ProcessData data {};
         prepareProcessData (data, numSamples, symbolicSampleSize, context.params, context.playHead);
-        prepareMidiInputEvents (context.midi);
+        prepareInputEvents (context.midi, context.noteExpressions);
 
         data.numInputs = static_cast<int32> (vst3InputBuses.size());
         data.inputs = vst3InputBuses.empty() ? nullptr : vst3InputBuses.data();
@@ -2240,7 +2305,7 @@ private:
         if (const auto flags = pendingRestartFlags.exchange (0); flags != 0)
             handleRestartComponent (flags);
 
-        toController.flush ([this] (int slot, Vst::ParamValue value)
+        toController.flush ([this] (int slot, Vst::ParamValue value, uint8)
         {
             const auto id = allVST3ParameterIds[static_cast<std::size_t> (slot)];
 
@@ -2343,7 +2408,7 @@ private:
         inputParameterChanges.clearQueue();
         outputParameterChanges.clearQueue();
 
-        toProcessor.flush ([this] (int slot, Vst::ParamValue value)
+        toProcessor.flush ([this] (int slot, Vst::ParamValue value, uint8)
         {
             addInputParameterChange (slot, 0, value);
         });
@@ -2464,22 +2529,27 @@ private:
         return std::make_pair (slot, value);
     }
 
-    void prepareMidiInputEvents (const MidiBuffer& midiBuffer)
+    void prepareInputEvents (const MidiBuffer& midiBuffer, const NoteExpressionBuffer* noteExpressions)
     {
-        int count = 0;
-
-        for (const auto& metadata : midiBuffer)
-        {
-            ignoreUnused (metadata);
-            ++count;
-        }
-
-        inputEvents.setMaxSize (jmax (64, count));
         inputEvents.clear();
+        outputEvents.clear();
+
+        const NoteExpression* expression = noteExpressions != nullptr ? noteExpressions->begin() : nullptr;
+        const NoteExpression* const lastExpression = noteExpressions != nullptr ? noteExpressions->end() : nullptr;
+
+        const auto addExpressionsBefore = [&] (int samplePosition)
+        {
+            for (; expression != lastExpression && expression->sampleOffset < samplePosition; ++expression)
+                addNoteExpressionToVST3Events (inputEvents, *expression, activeNotes);
+        };
 
         for (const auto& metadata : midiBuffer)
         {
-            if (const auto mapped = getMidiMappedParameterChange (metadata.getMessage()))
+            addExpressionsBefore (metadata.samplePosition);
+
+            const auto message = metadata.getMessage();
+
+            if (const auto mapped = getMidiMappedParameterChange (message))
             {
                 addInputParameterChange (mapped->first, metadata.samplePosition, mapped->second);
                 toController.set (mapped->first, mapped->second);
@@ -2487,10 +2557,12 @@ private:
             }
 
             addMidiMessageToVST3Events (inputEvents, metadata);
+
+            if (message.isNoteOnOrOff())
+                activeNotes[static_cast<std::size_t> (noteIdForChannelAndKey (message.getChannel() - 1, message.getNoteNumber()))] = message.isNoteOn();
         }
 
-        outputEvents.setMaxSize (jmax (64, count * 2));
-        outputEvents.clear();
+        addExpressionsBefore (std::numeric_limits<int>::max());
     }
 
     void collectOutputParameterChanges()
@@ -2547,8 +2619,12 @@ private:
     Vst::ProcessContext vst3ProcessContext {};
     Vst::ParameterChanges inputParameterChanges;
     Vst::ParameterChanges outputParameterChanges;
+    static constexpr int32 maxEventsPerBlock = 2048;
+
     Vst::EventList inputEvents;
     Vst::EventList outputEvents;
+    ActiveVST3Notes activeNotes;
+    bool noteExpressionSupported = false;
 
     std::vector<Vst::AudioBusBuffers> vst3InputBuses;
     std::vector<Vst::AudioBusBuffers> vst3OutputBuses;
@@ -2562,8 +2638,8 @@ private:
     std::vector<Vst::ParamID> vst3ParameterIds;
     std::vector<Vst::ParamID> allVST3ParameterIds;
     std::unordered_map<Vst::ParamID, int> slotsByVST3Id;
-    VST3ParameterMailbox toProcessor;
-    VST3ParameterMailbox toController;
+    AudioPluginParameterMailbox toProcessor;
+    AudioPluginParameterMailbox toController;
     std::array<std::atomic<Vst::ParamID>, 16 * numMidiMappingControllers> midiControllerMapping;
 
     Vst::ParamID bypassParameterId = Vst::kNoParamId;

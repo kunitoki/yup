@@ -140,7 +140,6 @@ struct UridMap
     URID (bufs_minBlockLength, LV2_BUF_SIZE__minBlockLength);
     URID (bufs_sequenceSize, LV2_BUF_SIZE__sequenceSize);
     URID (state_StateChanged, LV2_STATE__StateChanged);
-    URID (state_threadSafeRestore, LV2_STATE__threadSafeRestore);
 
 #undef URID
 };
