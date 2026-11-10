@@ -43,6 +43,15 @@
 #include <unordered_map>
 #include <vector>
 
+#if YUP_WINDOWS
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#elif YUP_MAC || YUP_LINUX
+#include <unistd.h>
+#endif
+
 //==============================================================================
 #include "host/yup_AudioPluginParameterMailbox.h"
 #include "host/yup_AudioPluginBridgeProtocol.h"

@@ -152,6 +152,12 @@ public:
             refresh();
     }
 
+    void paint (yup::Graphics& g) override
+    {
+        g.setFillColor (yup::Color (0xff0d1117));
+        g.fillAll();
+    }
+
     void resized() override
     {
         auto bounds = getLocalBounds().reduced (16.0f);

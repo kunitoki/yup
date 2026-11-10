@@ -140,27 +140,32 @@ public:
 
     //==============================================================================
 
-    void openEditor()
+    void openEditor (uint64 ownerWindowId, int ownerProcessId)
     {
-        if (editorWindow != nullptr)
+        if (editorWindow == nullptr)
         {
-            editorWindow->toFront (true);
-            return;
+            auto editor = std::unique_ptr<AudioProcessorEditor> (instance->hasEditor() ? instance->createEditor() : nullptr);
+            if (editor == nullptr)
+            {
+                sendEditorClosed();
+                return;
+            }
+
+            const auto preferredSize = editor->getPreferredSize();
+
+            editorWindow = std::make_unique<EditorWindow> (instance->getName(), std::move (editor), [this]
+            {
+                closeEditor();
+                sendEditorClosed();
+            });
+
+            editorWindow->centreWithSize (preferredSize);
+            editorWindow->setVisible (true);
         }
 
-        auto editor = std::unique_ptr<AudioProcessorEditor> (instance->hasEditor() ? instance->createEditor() : nullptr);
-        if (editor == nullptr)
-            return;
+        if (auto* native = editorWindow->getNativeComponent())
+            native->setForeignOwner (ownerWindowId, ownerProcessId);
 
-        const auto preferredSize = editor->getPreferredSize();
-
-        editorWindow = std::make_unique<EditorWindow> (instance->getName(), std::move (editor), [this]
-        {
-            closeEditor();
-        });
-
-        editorWindow->centreWithSize (preferredSize);
-        editorWindow->setVisible (true);
         editorWindow->toFront (true);
     }
 
@@ -362,6 +367,13 @@ private:
 
         if (const auto flags = pendingChanges.exchange (0); flags != 0)
             sendProcessorChanged (flags);
+    }
+
+    void sendEditorClosed()
+    {
+        MemoryOutputStream stream;
+        Protocol::writeHeader (stream, Protocol::MessageType::editorClosed, 0);
+        server.sendToHost (stream.getMemoryBlock());
     }
 
 public:
@@ -596,8 +608,12 @@ void AudioPluginBridgeServer::handleRequest (const MemoryBlock& message)
             }
 
             case MessageType::openEditor:
-                session->openEditor();
+            {
+                const auto ownerWindowId = static_cast<uint64> (input.readInt64());
+                const auto ownerProcessId = input.readInt();
+                session->openEditor (ownerWindowId, ownerProcessId);
                 break;
+            }
 
             case MessageType::closeEditor:
                 session->closeEditor();

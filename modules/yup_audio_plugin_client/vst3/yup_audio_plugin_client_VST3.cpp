@@ -1872,6 +1872,10 @@ public:
     {
         YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "setActive requested: state=" << String (state ? "true" : "false") << ", sampleRate=" << String (processSetup.sampleRate) << ", maxSamplesPerBlock=" << String (static_cast<int> (processSetup.maxSamplesPerBlock)) << ", processor=" << describePointer (processor.get()));
 
+        std::optional<ScopedLock> activationGuard;
+        if (HostQuirks::forCurrentHost().processMayOverlapActivation)
+            activationGuard.emplace (activationLock);
+
         if (processor != nullptr)
         {
             if (state)
@@ -2003,6 +2007,12 @@ public:
         }
 
         const auto data = readVST3StreamData (*stream);
+        if (HostQuirks::forCurrentHost().isForeignStateChunk (data))
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component setState ignored: host state chunk");
+            return kResultFalse;
+        }
+
         if (data.isEmpty())
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "component setState failed: stream is empty");
@@ -2078,6 +2088,13 @@ public:
 
     tresult PLUGIN_API process (Vst::ProcessData& data) override
     {
+        std::optional<ScopedLock> activationGuard;
+        if (HostQuirks::forCurrentHost().processMayOverlapActivation)
+            activationGuard.emplace (activationLock);
+
+        if (! isActive)
+            return kResultFalse;
+
         if (data.processContext != nullptr)
         {
             processContext = *data.processContext;
@@ -2346,7 +2363,8 @@ private:
     std::vector<AudioBusBufferView<double>> outputBusViewsDouble;
 
     WrapperBypass bypass;
-    bool isActive = false;
+    std::atomic<bool> isActive { false };
+    CriticalSection activationLock;
 
     struct ActiveNoteId
     {

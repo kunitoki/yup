@@ -1084,22 +1084,30 @@ private:
         if (nativeComponent == nullptr)
             return;
 
-        void* parentHandle = nativeComponent->getNativeHandle();
+        const auto* platformType = getVST3PlatformType();
+        if (platformType == nullptr)
+            return;
 
 #if YUP_MAC
-        parentHandle = getVST3ParentViewFromNativeHandle (parentHandle);
+        NSView* contentView = (__bridge NSView*) getVST3ParentViewFromNativeHandle (nativeComponent->getNativeHandle());
+        if (contentView == nil)
+            return;
+
+        containerView = [[NSView alloc] initWithFrame:NSZeroRect];
+        [contentView addSubview:containerView positioned:NSWindowAbove relativeTo:nil];
+        updateContainerViewFrame();
+
+        void* parentHandle = (__bridge void*) containerView;
+#else
+        void* parentHandle = nativeComponent->getNativeHandle();
+        if (parentHandle == nullptr)
+            return;
 #endif
 
-        const auto* platformType = getVST3PlatformType();
-        if (parentHandle == nullptr || platformType == nullptr)
-            return;
-
-        if (plugView->setFrame (frame.get()) != kResultTrue)
-            return;
-
-        if (plugView->attached (parentHandle, platformType) != kResultTrue)
+        if (plugView->setFrame (frame.get()) != kResultTrue || plugView->attached (parentHandle, platformType) != kResultTrue)
         {
             plugView->setFrame (nullptr);
+            removeContainerView();
             return;
         }
 
@@ -1133,19 +1141,60 @@ private:
 
         if (attached)
         {
+#if YUP_MAC
+            @autoreleasepool
+            {
+                plugView->removed();
+            }
+#else
             plugView->removed();
+#endif
             attached = false;
         }
 
         plugView->setFrame (nullptr);
+        removeContainerView();
     }
+
+    void removeContainerView()
+    {
+#if YUP_MAC
+        if (containerView == nil)
+            return;
+
+        [containerView removeFromSuperview];
+        containerView = nil;
+#endif
+    }
+
+#if YUP_MAC
+    void updateContainerViewFrame()
+    {
+        NSView* superview = [containerView superview];
+        if (superview == nil)
+            return;
+
+        const auto bounds = getBoundsRelativeToTopLevelComponent();
+        const auto width = static_cast<CGFloat> (jmax (1.0f, bounds.getWidth()));
+        const auto height = static_cast<CGFloat> (jmax (1.0f, bounds.getHeight()));
+        const auto y = [superview isFlipped] ? static_cast<CGFloat> (bounds.getY())
+                                             : NSHeight ([superview bounds]) - static_cast<CGFloat> (bounds.getY()) - height;
+
+        [containerView setFrame:NSMakeRect (static_cast<CGFloat> (bounds.getX()), y, width, height)];
+    }
+#endif
 
     void resizePlugViewToBounds()
     {
         if (plugView == nullptr || ! attached)
             return;
 
+#if YUP_MAC
+        updateContainerViewFrame();
+        const auto bounds = getLocalBounds();
+#else
         const auto bounds = getBoundsRelativeToTopLevelComponent();
+#endif
         ViewRect size;
         size.left = static_cast<int32> (bounds.getX());
         size.top = static_cast<int32> (bounds.getY());
@@ -1164,6 +1213,10 @@ private:
     std::optional<Size<int>> aspectRatioSize;
     std::optional<float> appliedContentScale;
     bool attached = false;
+
+#if YUP_MAC
+    NSView* __strong containerView = nil;
+#endif
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VST3Editor)
 };

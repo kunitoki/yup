@@ -834,3 +834,30 @@ TEST_F (UmpToNoteExpressionTests, IgnoresOtherMessages)
     EXPECT_FALSE (umpToNoteExpression (midi1NoteOn, 2, 0).has_value());
     EXPECT_FALSE (umpToNoteExpression (midi2NoteOn, 1, 0).has_value());
 }
+
+//==============================================================================
+
+TEST (HostQuirksTests, UnknownHostHasNoQuirks)
+{
+    const auto quirks = HostQuirks::forHost (PluginHostType());
+
+    EXPECT_FALSE (quirks.processMayOverlapActivation);
+    EXPECT_FALSE (quirks.mayPassForeignStateChunks);
+}
+
+TEST (HostQuirksTests, FLStudioSerialisesProcessWithActivation)
+{
+    EXPECT_TRUE (HostQuirks::forHost (PluginHostType (PluginHostType::Host::flStudio)).processMayOverlapActivation);
+}
+
+TEST (HostQuirksTests, AdobeAuditionStateChunksAreIgnored)
+{
+    const MemoryBlock auditionChunk ("VC2!E-data", 10);
+    const MemoryBlock pluginState ("plugin-state", 12);
+
+    const auto auditionQuirks = HostQuirks::forHost (PluginHostType (PluginHostType::Host::adobeAudition));
+    EXPECT_TRUE (auditionQuirks.isForeignStateChunk (auditionChunk));
+    EXPECT_FALSE (auditionQuirks.isForeignStateChunk (pluginState));
+
+    EXPECT_FALSE (HostQuirks::forHost (PluginHostType()).isForeignStateChunk (auditionChunk));
+}

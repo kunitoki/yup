@@ -378,6 +378,42 @@ public:
     virtual void setResizable (bool shouldBeResizable) = 0;
 
     //==============================================================================
+    /** Returns an identifier of this top-level window that other processes can use.
+
+        This is the window number on macOS, the HWND on Windows and the X11 window on Linux, or 0
+        when the platform has none (Wayland, mobile, embedded windows).
+
+        @see setForeignOwner
+    */
+    virtual uint64 getSystemWindowId() const { return 0; }
+
+    /** Makes this top-level window behave as a child of a window owned by another process.
+
+        Native windows can't be parented across processes, so on macOS and Windows the window stays
+        above other windows while the owner process or this one is in the foreground, and drops back
+        when another application is activated. On X11 the window becomes transient for the owner.
+        Elsewhere this does nothing.
+
+        @param ownerWindowId   The owner window, from getSystemWindowId() in its process, or 0 to detach.
+        @param ownerProcessId  The process owning that window, or 0 when it belongs to this process.
+
+        @see setOwner
+    */
+    virtual void setForeignOwner (uint64 ownerWindowId, int ownerProcessId) { ignoreUnused (ownerWindowId, ownerProcessId); }
+
+    /** Makes this top-level window behave as a child of another window of this process.
+
+        The window stays in front of the owner while the application is active, and drops back when
+        another application is activated, like setForeignOwner(). Pass nullptr to detach.
+
+        @see setForeignOwner
+    */
+    void setOwner (const ComponentNative* ownerWindow)
+    {
+        setForeignOwner (ownerWindow != nullptr ? ownerWindow->getSystemWindowId() : 0, 0);
+    }
+
+    //==============================================================================
     /** Brings the window to the front.
 
         This will make the window the topmost window and give it focus.

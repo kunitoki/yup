@@ -356,6 +356,7 @@ SDLComponentNative::~SDLComponentNative()
         }
 
         parentAttachment.reset();
+        foreignOwnerTracker.reset();
 
         SDL_DestroyProperties (SDL_GetWindowProperties (window));
         SDL_DestroyWindow (window);
@@ -452,6 +453,40 @@ void SDLComponentNative::setResizable (bool shouldBeResizable)
         return;
 
     SDL_SetWindowResizable (window, shouldBeResizable);
+}
+
+//==============================================================================
+
+uint64 SDLComponentNative::getSystemWindowId() const
+{
+    if (parentWindow != nullptr)
+        return 0;
+
+    return yup::getSystemWindowId (window);
+}
+
+void SDLComponentNative::setForeignOwner (uint64 ownerWindowId, int ownerProcessId)
+{
+    if (window == nullptr || parentWindow != nullptr)
+        return;
+
+    const auto wasTracking = foreignOwnerTracker != nullptr;
+    foreignOwnerTracker.reset();
+
+    if (wasTracking)
+        SDL_SetWindowAlwaysOnTop (window, (windowFlags & SDL_WINDOW_ALWAYS_ON_TOP) != 0);
+
+    if (ownerWindowId == 0)
+        return;
+
+#if YUP_MAC || YUP_WINDOWS
+    foreignOwnerTracker = std::make_unique<ForeignOwnerTracker> (window, ownerProcessId);
+#elif YUP_LINUX
+    ignoreUnused (ownerProcessId);
+    setTransientForForeignWindow (window, ownerWindowId);
+#else
+    ignoreUnused (ownerProcessId);
+#endif
 }
 
 //==============================================================================

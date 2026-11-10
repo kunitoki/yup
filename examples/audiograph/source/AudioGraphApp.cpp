@@ -523,7 +523,7 @@ void AudioGraphApp::openPluginEditor (std::shared_ptr<yup::AudioGraphProcessor> 
     {
         if (! remote->hasCrashed())
         {
-            remote->showEditor();
+            remote->showEditor (this);
             return;
         }
 
@@ -560,6 +560,10 @@ void AudioGraphApp::openPluginEditor (std::shared_ptr<yup::AudioGraphProcessor> 
 
     pluginEditorWindow->centreWithSize (preferredSize);
     pluginEditorWindow->setVisible (true);
+
+    if (auto* native = pluginEditorWindow->getNativeComponent())
+        native->setOwner (getTopLevelComponent()->getNativeComponent());
+
     pluginEditorWindow->toFront (true);
 }
 

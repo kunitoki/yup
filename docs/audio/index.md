@@ -135,8 +135,12 @@ Current limitations:
 - Only single precision processing is supported.
 - Parameter metadata changes made after loading are not reflected.
 - MIDI controller mappings are not exposed.
-- The plugin editor opens in a floating window owned by the server: call `showEditor()` /
+- The plugin editor opens in a separate window owned by the server: call `showEditor()` /
   `hideEditor()` instead of embedding `createEditor()`, which only returns a placeholder.
+  Pass a component of the host window to `showEditor()` to make the editor behave as its child:
+  on macOS and Windows it stays above the host while the host or the editor is active, on X11 it
+  is transient for the host window (Wayland has no equivalent). `isEditorShowing()` and
+  `onEditorClosed` track the window when the user closes it.
 
 `AudioPluginDatabase::setRunSandboxed()` stores a per-plugin preference, and
 `setDefaultRunSandboxed()` sets the default for plugins without one. Read the

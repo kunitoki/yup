@@ -869,4 +869,96 @@ static RectangleList<float> makeRepaintRegion (const RectangleList<float>& dirty
     return region;
 }
 
+//==============================================================================
+
+uint64 getSystemWindowId (SDL_Window* window)
+{
+    if (window == nullptr)
+        return 0;
+
+#if YUP_MAC
+    if (NSWindow* nsWindow = (__bridge NSWindow*) getNativeWindowHandle (window))
+        return static_cast<uint64> ([nsWindow windowNumber]);
+
+    return 0;
+#elif YUP_WINDOWS
+    return static_cast<uint64> (reinterpret_cast<pointer_sized_uint> (getNativeWindowHandle (window)));
+#elif YUP_LINUX
+    if (StringRef (SDL_GetCurrentVideoDriver()) != StringRef ("x11"))
+        return 0;
+
+    return static_cast<uint64> (SDL_GetNumberProperty (SDL_GetWindowProperties (window), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+#else
+    return 0;
+#endif
+}
+
+#if YUP_LINUX
+void setTransientForForeignWindow (SDL_Window* window, uint64 ownerWindowId)
+{
+    auto* x11 = X11Functions::getInstance();
+    const auto windowId = getSystemWindowId (window);
+
+    if (! x11->isX11Available() || windowId == 0)
+        return;
+
+    if (auto* display = reinterpret_cast<::Display*> (getNativeDisplayHandle (window)))
+    {
+        x11->XSetTransientForHint (display, static_cast<::Window> (windowId), static_cast<::Window> (ownerWindowId));
+        x11->XFlush (display);
+    }
+}
+#endif
+
+//==============================================================================
+
+/** Keeps a window above other windows while the owner process (0 for the current one), or the current one, is in the foreground. */
+class ForeignOwnerTracker final : private Timer
+{
+public:
+    ForeignOwnerTracker (SDL_Window* windowToTrack, int ownerProcessIdToTrack)
+        : window (windowToTrack)
+        , ownerProcessId (ownerProcessIdToTrack)
+    {
+        timerCallback();
+        startTimer (250);
+    }
+
+    ~ForeignOwnerTracker() override
+    {
+        stopTimer();
+    }
+
+private:
+    void timerCallback() override
+    {
+        const auto shouldBeOnTop = isOwnerInForeground() || Process::isForegroundProcess();
+        if (shouldBeOnTop == keptOnTop)
+            return;
+
+        keptOnTop = shouldBeOnTop;
+        SDL_SetWindowAlwaysOnTop (window, shouldBeOnTop);
+    }
+
+    bool isOwnerInForeground() const
+    {
+        if (ownerProcessId <= 0)
+            return false;
+
+#if YUP_MAC
+        return [[[NSWorkspace sharedWorkspace] frontmostApplication] processIdentifier] == ownerProcessId;
+#elif YUP_WINDOWS
+        DWORD foregroundProcessId = 0;
+        GetWindowThreadProcessId (GetForegroundWindow(), &foregroundProcessId);
+        return static_cast<int> (foregroundProcessId) == ownerProcessId;
+#else
+        return false;
+#endif
+    }
+
+    SDL_Window* window = nullptr;
+    int ownerProcessId = 0;
+    bool keptOnTop = false;
+};
+
 } // namespace yup

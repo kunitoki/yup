@@ -42,7 +42,8 @@ class AudioPluginParameterMailbox;
 
     Limitations: only single precision processing, parameter metadata changes after loading
     are not reflected, MIDI controller mappings are not exposed, and the editor opens in a
-    floating window of the server process (use showEditor(); createEditor() returns a placeholder).
+    separate window of the server process that the host manages (use showEditor(); createEditor()
+    returns a placeholder).
 
     @see AudioPluginBridgeServer
 */
@@ -112,11 +113,25 @@ public:
         Hosts can call this instead of embedding createEditor() in their own window, which only
         returns a placeholder for the remote editor. Does nothing when the plugin has no editor
         or the server process is lost.
+
+        When an owner window is given, the editor window behaves as its child: it stays above the
+        host windows while the host or the editor is active (macOS, Windows) or is made transient
+        for the owner (X11), and goes away with the host.
+
+        @param ownerWindow  A component in the host window owning the editor, or nullptr.
+
+        @see hideEditor, isEditorShowing, onEditorClosed
     */
-    void showEditor();
+    void showEditor (Component* ownerWindow = nullptr);
 
     /** Closes the plugin editor window opened in the bridge server process. */
     void hideEditor();
+
+    /** Returns true while the editor window opened with showEditor() is open. */
+    bool isEditorShowing() const noexcept;
+
+    /** Called on the message thread when the user closes the editor window, or it fails to open. */
+    std::function<void()> onEditorClosed;
 
     //==============================================================================
 
@@ -182,7 +197,7 @@ private:
     void bypassStateChanged() override;
 
     void writeParameterChanges (const ParameterChangeBuffer& changes);
-    void sendEditorRequest (bool shouldOpen);
+    void sendEditorRequest (bool shouldOpen, Component* ownerWindow = nullptr);
     String convertValueToText (int index, float value);
     float convertTextToValue (int index, const String& text);
 
@@ -194,6 +209,8 @@ private:
     std::optional<AudioSpec> preparedSpec;
     std::atomic<bool> crashed { false };
     std::atomic<bool> crashReported { false };
+    std::atomic<bool> editorShowing { false };
+    std::atomic<bool> editorClosedPending { false };
     uint32 lateSinceMs = 0;
 
     bool editorAvailable = false, midiInput = false, midiOutput = false, noteExpressions = false, mpe = false;

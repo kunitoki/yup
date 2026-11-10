@@ -384,6 +384,40 @@ inline void updatePluginHostType (StringRef hostName = {})
         AudioProcessor::setHostType (hostType);
 }
 
+//==============================================================================
+
+/** Workarounds for hosts that break the plugin format specifications.
+
+    Wrappers query this instead of testing host types inline, so every workaround is listed and
+    documented here. Add an entry only for a reproduced misbehavior, naming the host and format.
+*/
+struct HostQuirks
+{
+    /** VST3: FL Studio's Patcher calls process() before and during setActive(). */
+    bool processMayOverlapActivation = false;
+
+    /** VST3: Adobe Audition CS6 may pass its own corrupted "VC2!E" chunks to setState(). */
+    bool mayPassForeignStateChunks = false;
+
+    /** Returns the workarounds needed by a host. */
+    static HostQuirks forHost (const PluginHostType& hostType) noexcept
+    {
+        HostQuirks quirks;
+        quirks.processMayOverlapActivation = hostType.isFLStudio();
+        quirks.mayPassForeignStateChunks = hostType.getHost() == PluginHostType::Host::adobeAudition;
+        return quirks;
+    }
+
+    /** Returns the workarounds needed by the host declared through AudioProcessor::setHostType(). */
+    static HostQuirks forCurrentHost() noexcept { return forHost (AudioProcessor::getHostType()); }
+
+    /** Returns true when a state chunk must be ignored because the host is known to corrupt it. */
+    bool isForeignStateChunk (const MemoryBlock& data) const noexcept
+    {
+        return mayPassForeignStateChunks && data.getSize() >= 5 && std::memcmp (data.getData(), "VC2!E", 5) == 0;
+    }
+};
+
 /** Declares the wrapper type of the current binary and the host application, then creates the plugin processor.
 
     Wrappers must create processors through this, so processor constructors can query

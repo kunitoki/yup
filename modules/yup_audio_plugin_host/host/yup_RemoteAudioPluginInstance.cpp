@@ -507,7 +507,7 @@ public:
 
     void mouseDown (const MouseEvent&) override
     {
-        owner.sendEditorRequest (true);
+        owner.sendEditorRequest (true, getTopLevelComponent());
     }
 
 private:
@@ -857,10 +857,10 @@ AudioProcessorEditor* RemoteAudioPluginInstance::createEditor()
     return new RemoteEditor (*this);
 }
 
-void RemoteAudioPluginInstance::showEditor()
+void RemoteAudioPluginInstance::showEditor (Component* ownerWindow)
 {
     if (editorAvailable)
-        sendEditorRequest (true);
+        sendEditorRequest (true, ownerWindow);
 }
 
 void RemoteAudioPluginInstance::hideEditor()
@@ -868,10 +868,46 @@ void RemoteAudioPluginInstance::hideEditor()
     sendEditorRequest (false);
 }
 
-void RemoteAudioPluginInstance::sendEditorRequest (bool shouldOpen)
+bool RemoteAudioPluginInstance::isEditorShowing() const noexcept
 {
-    if (! crashed.load())
-        connection->post (shouldOpen ? AudioPluginBridgeProtocol::MessageType::openEditor : AudioPluginBridgeProtocol::MessageType::closeEditor);
+    return editorShowing.load() && ! crashed.load();
+}
+
+void RemoteAudioPluginInstance::sendEditorRequest (bool shouldOpen, Component* ownerWindow)
+{
+    using Protocol = AudioPluginBridgeProtocol;
+
+    if (crashed.load())
+        return;
+
+    editorShowing = shouldOpen;
+
+    if (! shouldOpen)
+    {
+        connection->post (Protocol::MessageType::closeEditor);
+        return;
+    }
+
+    uint64 ownerWindowId = 0;
+
+    if (ownerWindow != nullptr)
+    {
+        if (auto* native = ownerWindow->getTopLevelComponent()->getNativeComponent())
+            ownerWindowId = native->getSystemWindowId();
+    }
+
+#if YUP_WINDOWS
+    const auto processId = static_cast<int> (GetCurrentProcessId());
+#elif YUP_MAC || YUP_LINUX
+    const auto processId = static_cast<int> (getpid());
+#else
+    const auto processId = 0;
+#endif
+
+    MemoryOutputStream stream;
+    stream.writeInt64 (static_cast<int64> (ownerWindowId));
+    stream.writeInt (processId);
+    connection->post (Protocol::MessageType::openEditor, stream.getMemoryBlock());
 }
 
 //==============================================================================
@@ -1071,6 +1107,11 @@ void RemoteAudioPluginInstance::handleNotification (const MemoryBlock& message)
         const ScopedLock sl (presetLock);
         presetNames = std::move (names);
     }
+    else if (type == Protocol::MessageType::editorClosed)
+    {
+        editorShowing = false;
+        editorClosedPending = true;
+    }
     else
     {
         return;
@@ -1093,11 +1134,16 @@ void RemoteAudioPluginInstance::handleAsyncUpdate()
             audioChannel.reset();
         }
 
+        editorShowing = false;
+
         if (onCrashed != nullptr)
             onCrashed();
 
         return;
     }
+
+    if (editorClosedPending.exchange (false) && onEditorClosed != nullptr)
+        onEditorClosed();
 
     const auto parameters = getParameters();
 

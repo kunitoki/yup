@@ -42,6 +42,8 @@ public:
     }
 
     void (*XReparentWindow) (Display*, Window, Window, int, int) = nullptr;
+    int (*XSetTransientForHint) (Display*, Window, Window) = nullptr;
+    int (*XFlush) (Display*) = nullptr;
 
     YUP_DECLARE_SINGLETON (X11Functions, false)
 
@@ -71,6 +73,8 @@ private:
     void clearFunctions()
     {
         this->XReparentWindow = nullptr;
+        this->XSetTransientForHint = nullptr;
+        this->XFlush = nullptr;
     }
 
     X11Functions()
@@ -82,7 +86,9 @@ private:
             return;
         }
 
-        if (! lookupFunction ("XReparentWindow", this->XReparentWindow))
+        if (! lookupFunction ("XReparentWindow", this->XReparentWindow)
+            || ! lookupFunction ("XSetTransientForHint", this->XSetTransientForHint)
+            || ! lookupFunction ("XFlush", this->XFlush))
             return;
     }
 

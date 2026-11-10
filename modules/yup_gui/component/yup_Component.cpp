@@ -1399,6 +1399,8 @@ void Component::gesturePan ([[maybe_unused]] const GestureEvent& event) {}
 
 void Component::gestureSwipe ([[maybe_unused]] const GestureEvent& event) {}
 
+//==============================================================================
+
 bool Component::keyDown ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) { return false; }
 
 bool Component::keyUp ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) { return false; }

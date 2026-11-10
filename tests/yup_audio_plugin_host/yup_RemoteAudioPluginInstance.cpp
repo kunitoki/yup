@@ -39,7 +39,8 @@ public:
     static constexpr const char* serverID = "yupBridgeServerTests";
 
     /** A stereo gain with MIDI echo, 7 samples of latency and a preset setting the gain to 0.5.
-        The "crashy" variant kills its process when it receives MIDI.
+        The "crashy" variant kills its process when it receives MIDI, the "faultyeditor" one
+        reports an editor it fails to create.
     */
     class GainInstance : public AudioPluginInstance
     {
@@ -49,6 +50,7 @@ public:
                                    AudioBusLayout ({ AudioBus ("Input", AudioBus::Type::Audio, AudioBus::Direction::Input, 2) },
                                                    { AudioBus ("Output", AudioBus::Type::Audio, AudioBus::Direction::Output, 2) }))
             , crashOnMidi (description.name == "crashy")
+            , faultyEditor (description.name == "faultyeditor")
         {
             gain = AudioParameterBuilder()
                        .withID ("gain")
@@ -116,11 +118,14 @@ public:
             return Result::ok();
         }
 
-        bool hasEditor() const override { return false; }
+        bool hasEditor() const override { return faultyEditor; }
+
+        AudioProcessorEditor* createEditor() override { return nullptr; }
 
     private:
         AudioParameter::Ptr gain;
         const bool crashOnMidi;
+        const bool faultyEditor;
         int currentPreset = 0;
     };
 
@@ -310,6 +315,37 @@ TEST_F (RemoteAudioPluginInstanceTests, StateAndPresetsReachThePlugin)
     instance->setCurrentPreset (0);
     EXPECT_TRUE (waitUntil ([&] { return instance->getParameters()[0]->getValue() == 1.0f; }));
     EXPECT_EQ (0, instance->getCurrentPreset());
+}
+
+TEST_F (RemoteAudioPluginInstanceTests, ShowEditorWithoutEditorDoesNothing)
+{
+    auto instance = load ("gain");
+    ASSERT_NE (nullptr, instance);
+
+    instance->showEditor();
+    EXPECT_FALSE (instance->isEditorShowing());
+}
+
+TEST_F (RemoteAudioPluginInstanceTests, EditorFailingToOpenReportsClosed)
+{
+    auto instance = load ("faultyeditor");
+    ASSERT_NE (nullptr, instance);
+    ASSERT_TRUE (instance->hasEditor());
+
+    bool closed = false;
+    instance->onEditorClosed = [&]
+    {
+        closed = true;
+    };
+
+    instance->showEditor();
+    EXPECT_TRUE (instance->isEditorShowing());
+
+    EXPECT_TRUE (waitUntil ([&] { return closed; }));
+    EXPECT_FALSE (instance->isEditorShowing());
+
+    instance->hideEditor();
+    EXPECT_FALSE (instance->isEditorShowing());
 }
 
 TEST_F (RemoteAudioPluginInstanceTests, CrashOutputsSilenceAndReloadRestoresState)

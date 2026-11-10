@@ -75,6 +75,10 @@ public:
     void setResizable (bool shouldBeResizable) override;
 
     //==============================================================================
+    uint64 getSystemWindowId() const override;
+    void setForeignOwner (uint64 ownerWindowId, int ownerProcessId) override;
+
+    //==============================================================================
     void toFront() override;
 
     //==============================================================================
@@ -290,6 +294,7 @@ private:
 
     void* parentWindow = nullptr;
     std::unique_ptr<NativeParentAttachment> parentAttachment;
+    std::unique_ptr<ForeignOwnerTracker> foreignOwnerTracker;
     String windowTitle;
     uint32 windowFlags = 0;
 

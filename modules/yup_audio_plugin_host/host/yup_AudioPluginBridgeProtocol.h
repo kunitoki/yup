@@ -57,7 +57,8 @@ struct AudioPluginBridgeProtocol
         reply = 100,
 
         parameterEvents = 200,
-        processorChanged
+        processorChanged,
+        editorClosed
     };
 
     /** Writes a message header, followed by the payload written by the caller. */
