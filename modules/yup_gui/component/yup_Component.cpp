@@ -441,6 +441,9 @@ void Component::setSize (float width, float height)
 
 void Component::setSize (const Size<float>& newSize)
 {
+    if (boundsInParent.getSize() == newSize)
+        return;
+
     auto areaToRepaint = getPaintBounds();
     boundsInParent = boundsInParent.withSize (newSize);
     areaToRepaint = areaToRepaint.unionWith (getPaintBounds());
@@ -480,6 +483,9 @@ void Component::setBounds (float x, float y, float width, float height)
 
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
+    if (newBounds == boundsInParent)
+        return;
+
     repaint();
 
     boundsInParent = newBounds;

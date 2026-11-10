@@ -2698,10 +2698,23 @@ void SDLComponentNative::handleSafeAreaChanged()
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleSafeAreaChanged " << getSafeAreaBounds().toString());
+    const auto safeArea = getSafeAreaBounds();
+    const auto size = getSize();
+    const auto insets = Rectangle<int> (safeArea.getX(),
+                                        safeArea.getY(),
+                                        size.getWidth() - safeArea.getRight(),
+                                        size.getHeight() - safeArea.getBottom());
 
-    component.internalSafeAreaChanged();
+    if (insets != lastSafeAreaInsets)
+    {
+        lastSafeAreaInsets = insets;
 
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleSafeAreaChanged " << safeArea.toString());
+
+        component.internalSafeAreaChanged();
+    }
+
+    // This arrives after SDL refreshed the pixel size, the last chance to lay out and draw at the final size
     component.sendResized();
 
     repaint();

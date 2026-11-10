@@ -510,6 +510,29 @@ public:
     void glue()
     {
 #if YUP_MAC
+        if (isGluing)
+        {
+            needsGlue = true;
+            return;
+        }
+
+        const ScopedValueSetter<bool> scope (isGluing, true);
+
+        for (int attempt = 0; attempt < 4; ++attempt)
+        {
+            needsGlue = false;
+            glueOnce();
+
+            if (! needsGlue)
+                break;
+        }
+#endif
+    }
+
+private:
+#if YUP_MAC
+    void glueOnce()
+    {
         NSWindow* nsWindow = getNSWindow();
         if (nsWindow == nil)
             return;
@@ -537,10 +560,9 @@ public:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL: glued to parent placeholder: " << static_cast<int> (NSMinX (frame)) << " " << static_cast<int> (NSMinY (frame)) << " " << static_cast<int> (NSWidth (frame)) << "x" << static_cast<int> (NSHeight (frame)));
             [nsWindow setFrame:frame display:YES];
         }
-#endif
     }
+#endif
 
-private:
     void timerCallback() override
     {
         glue();
@@ -555,6 +577,8 @@ private:
     SDL_Window* sdlWindow = nullptr;
     NSView* placeholder = nil;
     NSMutableArray* observers = [NSMutableArray array];
+    bool isGluing = false;
+    bool needsGlue = false;
 #endif
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NativeParentAttachment)

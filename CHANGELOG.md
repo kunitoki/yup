@@ -11,9 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Plugins
 
 - Fixed embedded plugin editors on macOS ignoring host window resizes, appearing offset until the first resize, covering host UI in CLAP, and leaving an empty window on the desktop when removed: the editor window now follows a placeholder view the host lays out like any embedded plugin view.
+- Resizing a window no longer calls `safeAreaChanged` on the whole component tree when only the size changed, which made resizing LV2 editors in Reaper unresponsive.
 - Embedded editors on every platform now always sit at the origin of their host area and ignore position requests.
 - Fixed the VST3 editor growing past the host window (covering host UI) when a host resized it freely: `onSize` now fills exactly the size the host provides instead of re-applying the editor's aspect-ratio constraint, which is already negotiated through `checkSizeConstraint`/`getSize`.
-- Fixed aspect-ratio editors refusing or fighting host window resizes in VST3, CLAP and AU: while the host window is dragged the editor is fitted inside it (new `AudioProcessorEditor::getConstrainedSizeToFit`), and once the mouse is released the host window snaps to the constrained editor size.
+- Fixed aspect-ratio editors refusing or fighting host window resizes in VST3, CLAP, AU and LV2: while the host window is dragged the editor is fitted inside it (new `AudioProcessorEditor::getConstrainedSizeToFit`), and once the mouse is released the host window snaps to the constrained editor size.
 - Fixed AU editors ignoring host window resizes in hosts that only resize their container view (Reaper): the editor view now follows its host view size, minus the margins hosts like Waveform put around it (which previously made the editor grow forever).
 - Added `Desktop::isMouseButtonDown` to query the global mouse button state.
 - `AudioProcessorEditor::getInitialSize()` sets the size the CLAP, VST3, AU, AUv3, AAX and standalone wrappers open an editor at (defaults to `getPreferredSize()`), so editors can reopen at a size they remember. The standalone window keeps the editor's current size when the toolbar or keyboard is toggled.

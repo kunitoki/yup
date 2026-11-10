@@ -961,6 +961,17 @@ public:
     {
         processorEditor->setSize (processorEditor->getConstrainedSize (processorEditor->getInitialSize()).to<float>());
         addAndMakeVisible (*processorEditor);
+
+        if (processorEditor->shouldShowResizableCorner())
+        {
+            resizableCorner = std::make_unique<ResizableCorner>();
+            resizableCorner->constrainSize = [this] (Size<float> size)
+            {
+                return processorEditor->getConstrainedSize (size.to<int>()).to<float>();
+            };
+            addAndMakeVisible (*resizableCorner);
+        }
+
         setSize (processorEditor->getBounds().getSize());
         processorEditor->addComponentListener (this);
     }
@@ -972,6 +983,7 @@ public:
         processorEditor->removeComponentListener (this);
         setVisible (false);
         removeFromDesktop();
+        resizableCorner.reset();
         removeChildComponent (processorEditor.get());
     }
 
@@ -999,19 +1011,19 @@ public:
         if (! processorEditor->isResizable())
             return 1;
 
-        const auto size = processorEditor->getConstrainedSizeToFit (viewScale.fromHost ({ width, height }, *this));
+        // Fill exactly the area the host provides, the editor is fitted inside and snapped once the user stops dragging
+        {
+            const ScopedValueSetter<bool> scope (hostResizing, true);
+            setSize (viewScale.fromHost ({ width, height }, *this).to<float>());
+        }
 
-        const ScopedValueSetter<bool> scope (hostResizing, true);
-        setSize (size.to<float>());
+        hostResizeSnapper.hostResized();
         return 0;
     }
 
     void resized() override
     {
-        {
-            const ScopedValueSetter<bool> scope (fittingEditor, true);
-            processorEditor->setBounds (getLocalBounds());
-        }
+        fitEditorInsideBounds();
 
         if (! hostResizing)
             notifyHostSize();
@@ -1019,6 +1031,10 @@ public:
 
     void paint (Graphics& g) override
     {
+        // Only the area left uncovered by a fitted editor needs painting
+        if (processorEditor->getBounds() == getLocalBounds())
+            return;
+
         g.setFillColor (Colors::black);
         g.fillAll();
     }
@@ -1026,8 +1042,28 @@ public:
 private:
     void componentResized (Component& component) override
     {
-        if (! fittingEditor && component.getBounds().getSize() != getBounds().getSize())
-            setSize (component.getBounds().getSize());
+        if (fittingEditor)
+            return;
+
+        const auto editorSize = component.getBounds().getSize();
+        if (editorSize != getBounds().getSize())
+            setSize (editorSize);
+    }
+
+    void fitEditorInsideBounds()
+    {
+        const auto size = processorEditor->getConstrainedSizeToFit (getBounds().getSize().to<int>());
+
+        const ScopedValueSetter<bool> scope (fittingEditor, true);
+        processorEditor->setBounds ({ 0.0f, 0.0f, size.to<float>() });
+    }
+
+    void snapToConstrainedSize()
+    {
+        const auto size = processorEditor->getConstrainedSizeToFit (getBounds().getSize().to<int>()).to<float>();
+
+        if (size != getBounds().getSize())
+            setSize (size);
     }
 
     void notifyHostSize()
@@ -1041,10 +1077,15 @@ private:
 
     AudioProcessor& processor;
     std::unique_ptr<AudioProcessorEditor> processorEditor;
+    std::unique_ptr<ResizableCorner> resizableCorner;
     const LV2UI_Resize* hostResize = nullptr;
     WrapperViewScale viewScale;
     bool fittingEditor = false;
     bool hostResizing = false;
+    HostResizeSnapper hostResizeSnapper { [this]
+                                          {
+                                              snapToConstrainedSize();
+                                          } };
 };
 
 struct AudioPluginUILV2
