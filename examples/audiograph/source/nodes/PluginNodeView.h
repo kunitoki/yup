@@ -25,9 +25,11 @@ class PluginNodeView final : public yup::AudioGraphNodeView
 {
 public:
     PluginNodeView (yup::AudioGraphNodeID nodeID,
-                    const yup::AudioPluginDescription& descIn)
+                    const yup::AudioPluginDescription& descIn,
+                    bool isSandboxed)
         : AudioGraphNodeView (nodeID)
         , desc (descIn)
+        , sandboxed (isSandboxed)
     {
     }
 
@@ -38,7 +40,7 @@ public:
 
     yup::String getNodeSubtitle() const override
     {
-        return desc.vendor;
+        return sandboxed ? desc.vendor + " (sandboxed)" : desc.vendor;
     }
 
     int getNumInputPorts() const override
@@ -93,4 +95,5 @@ public:
 
 private:
     yup::AudioPluginDescription desc;
+    bool sandboxed = false;
 };

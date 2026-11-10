@@ -21,9 +21,11 @@
 
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "AnalyzerNodes.h"
@@ -346,26 +348,32 @@ public:
 
 #if YUP_DESKTOP
     //==============================================================================
+    /** Loads the plugin described by a node, in process or sandboxed as the host decides. */
+    using PluginLoader = std::function<yup::ResultValue<std::unique_ptr<yup::AudioPluginInstance>> (const yup::AudioPluginDescription&)>;
+
     /**
-        Stores the plugin scanner and host context, then registers factory entries
-        for all three plugin format identifiers (VST3, CLAP, AudioUnit).
+        Registers the factory entries of every plugin format identifier.
 
-        All plugin identifiers share the same processor factory (which calls
-        loadPluginFromProperties) and a view factory that wraps the loaded
-        AudioPluginInstance in a PluginNodeView.
-
-        @param scanner  The plugin scanner that provides access to format backends.
-        @param ctx      The host context passed to the format's loadPlugin call.
+        Plugin nodes, including the ones restored from a saved graph, are loaded with
+        @p loader and shown with a PluginNodeView.
     */
-    void registerPluginFormats (yup::AudioPluginScanner* scanner, yup::AudioPluginHostContext ctx)
+    void registerPluginFormats (PluginLoader loader)
     {
-        pluginScanner = scanner;
-        hostContext = ctx;
+        pluginLoader = std::move (loader);
 
         auto processorFactory = [this] (const yup::AudioGraphNodeProperties& props)
             -> yup::ResultValue<std::unique_ptr<yup::AudioProcessor>>
         {
-            return loadPluginFromProperties (props);
+            const auto desc = creationDataToDescription (props.creationData);
+            if (! desc.has_value())
+                return yup::makeResultValueFail ("Invalid plugin description in node: " + props.name);
+
+            auto result = pluginLoader (*desc);
+            if (result.failed())
+                return yup::makeResultValueFail (result.getErrorMessage());
+
+            std::unique_ptr<yup::AudioProcessor> processor = std::move (result.getReference());
+            return yup::makeResultValueOk (std::move (processor));
         };
 
         auto viewFactory = [] (yup::AudioGraphNodeID nodeID, yup::AudioProcessor* proc, yup::AudioGraphProcessor*)
@@ -375,7 +383,8 @@ public:
             if (instance == nullptr)
                 return nullptr;
 
-            return std::make_unique<PluginNodeView> (nodeID, instance->getDescription());
+            const bool sandboxed = dynamic_cast<yup::RemoteAudioPluginInstance*> (proc) != nullptr;
+            return std::make_unique<PluginNodeView> (nodeID, instance->getDescription(), sandboxed);
         };
 
         entries[pluginVst3Identifier] = { processorFactory, viewFactory };
@@ -384,20 +393,50 @@ public:
     }
 
     //==============================================================================
-    /**
-        Replaces the current list of discovered plugins.
-
-        @param plugins  A vector of plugin descriptions, typically obtained from
-                        AudioPluginScanner::scan() or scanDefaults().
-    */
+    /** Replaces the list of discovered plugins, sorted by format, vendor and name. */
     void setDiscoveredPlugins (std::vector<yup::AudioPluginDescription> plugins)
     {
+        std::sort (plugins.begin(), plugins.end(), [] (const auto& a, const auto& b)
+        {
+            if (a.formatType != b.formatType)
+                return formatTypeToDisplayName (a.formatType) < formatTypeToDisplayName (b.formatType);
+
+            if (const auto order = getVendorName (a).compareIgnoreCase (getVendorName (b)); order != 0)
+                return order < 0;
+
+            return a.name.compareIgnoreCase (b.name) < 0;
+        });
+
         discoveredPlugins = std::move (plugins);
     }
 
     const std::vector<yup::AudioPluginDescription>& getDiscoveredPlugins() const noexcept
     {
         return discoveredPlugins;
+    }
+
+    //==============================================================================
+    static yup::String formatTypeToDisplayName (yup::AudioPluginFormatType type)
+    {
+        switch (type)
+        {
+            case yup::AudioPluginFormatType::vst3:
+                return "VST3";
+
+            case yup::AudioPluginFormatType::clap:
+                return "CLAP";
+
+            case yup::AudioPluginFormatType::audioUnit:
+                return "Audio Unit";
+
+            default:
+                return "Other";
+        }
+    }
+
+    static yup::String getVendorName (const yup::AudioPluginDescription& desc)
+    {
+        return desc.vendor.trim().isEmpty() ? yup::String ("Unknown Vendor") : desc.vendor.trim();
     }
 
     //==============================================================================
@@ -426,45 +465,24 @@ public:
     }
 
     //==============================================================================
-    /**
-        Serialises a plugin description into an opaque MemoryBlock for use as
-        AudioGraphNodeProperties::creationData.
-
-        The data is encoded as XML and can be decoded by loadPluginFromProperties().
-
-        @param desc  The plugin description to encode.
-        @returns     A MemoryBlock containing the serialised XML data.
-    */
+    /** Serializes a plugin description for AudioGraphNodeProperties::creationData. */
     static yup::MemoryBlock descriptionToCreationData (const yup::AudioPluginDescription& desc)
     {
         yup::XmlElement xml ("PluginDescription");
         xml.setAttribute ("name", desc.name);
         xml.setAttribute ("vendor", desc.vendor);
         xml.setAttribute ("version", desc.version);
+        xml.setAttribute ("category", desc.category);
         xml.setAttribute ("identifier", desc.identifier);
         xml.setAttribute ("fileOrBundlePath", desc.fileOrBundlePath);
+        xml.setAttribute ("isV3", desc.isV3 ? 1 : 0);
         xml.setAttribute ("isInstrument", desc.isInstrument ? 1 : 0);
         xml.setAttribute ("isEffect", desc.isEffect ? 1 : 0);
         xml.setAttribute ("numInputChannels", desc.numInputChannels);
         xml.setAttribute ("numOutputChannels", desc.numOutputChannels);
-
-        yup::String formatTypeStr;
-        switch (desc.formatType)
-        {
-            case yup::AudioPluginFormatType::vst3:
-                formatTypeStr = "vst3";
-                break;
-            case yup::AudioPluginFormatType::clap:
-                formatTypeStr = "clap";
-                break;
-            case yup::AudioPluginFormatType::audioUnit:
-                formatTypeStr = "au";
-                break;
-            default:
-                formatTypeStr = "unknown";
-                break;
-        }
-        xml.setAttribute ("formatType", formatTypeStr);
+        xml.setAttribute ("numMidiInputPorts", desc.numMidiInputPorts);
+        xml.setAttribute ("numMidiOutputPorts", desc.numMidiOutputPorts);
+        xml.setAttribute ("formatType", formatTypeToKey (desc.formatType));
 
         yup::MemoryBlock block;
         yup::MemoryOutputStream stream (block, false);
@@ -474,20 +492,38 @@ public:
         return block;
     }
 
-    //==============================================================================
-    /**
-        Updates the stored plugin scanner and host context.
-
-        Call this when the audio device becomes available and the real sample rate
-        and block size are known.
-
-        @param s    The plugin scanner to use for loading plugins.
-        @param ctx  The updated host context.
-    */
-    void setPluginScanner (yup::AudioPluginScanner* s, yup::AudioPluginHostContext ctx)
+    /** Decodes a plugin description written by descriptionToCreationData(). */
+    static std::optional<yup::AudioPluginDescription> creationDataToDescription (const yup::MemoryBlock& creationData)
     {
-        pluginScanner = s;
-        hostContext = ctx;
+        auto xml = yup::parseXML (creationData.toString());
+        if (xml == nullptr || ! xml->hasTagName ("PluginDescription"))
+            return std::nullopt;
+
+        yup::AudioPluginDescription desc;
+        desc.name = xml->getStringAttribute ("name");
+        desc.vendor = xml->getStringAttribute ("vendor");
+        desc.version = xml->getStringAttribute ("version");
+        desc.category = xml->getStringAttribute ("category");
+        desc.identifier = xml->getStringAttribute ("identifier");
+        desc.fileOrBundlePath = xml->getStringAttribute ("fileOrBundlePath");
+        desc.isV3 = xml->getBoolAttribute ("isV3", false);
+        desc.isInstrument = xml->getBoolAttribute ("isInstrument", false);
+        desc.isEffect = xml->getBoolAttribute ("isEffect", false);
+        desc.numInputChannels = xml->getIntAttribute ("numInputChannels", 0);
+        desc.numOutputChannels = xml->getIntAttribute ("numOutputChannels", 0);
+        desc.numMidiInputPorts = xml->getIntAttribute ("numMidiInputPorts", desc.isInstrument ? 1 : 0);
+        desc.numMidiOutputPorts = xml->getIntAttribute ("numMidiOutputPorts", 0);
+
+        for (const auto type : { yup::AudioPluginFormatType::vst3, yup::AudioPluginFormatType::clap, yup::AudioPluginFormatType::audioUnit })
+        {
+            if (xml->getStringAttribute ("formatType") == formatTypeToKey (type))
+                desc.formatType = type;
+        }
+
+        if (desc.formatType == yup::AudioPluginFormatType::unknown)
+            return std::nullopt;
+
+        return desc;
     }
 #endif
 
@@ -615,61 +651,25 @@ private:
     std::map<yup::String, Entry> entries;
 
 #if YUP_DESKTOP
-    yup::AudioPluginScanner* pluginScanner = nullptr;
-    yup::AudioPluginHostContext hostContext;
+    PluginLoader pluginLoader;
     std::vector<yup::AudioPluginDescription> discoveredPlugins;
 
-    //==============================================================================
-    /**
-        Decodes AudioGraphNodeProperties::creationData and loads the described plugin.
-
-        @param props  Node properties whose creationData holds serialised XML.
-        @returns      A ResultValue containing the loaded AudioPluginInstance on success,
-                      or an error message on failure.
-    */
-    yup::ResultValue<std::unique_ptr<yup::AudioProcessor>> loadPluginFromProperties (const yup::AudioGraphNodeProperties& props)
+    static yup::String formatTypeToKey (yup::AudioPluginFormatType type)
     {
-        if (pluginScanner == nullptr)
-            return yup::makeResultValueFail ("No plugin scanner available");
+        switch (type)
+        {
+            case yup::AudioPluginFormatType::vst3:
+                return "vst3";
 
-        yup::MemoryInputStream stream (props.creationData, false);
-        const yup::String xmlText = stream.readEntireStreamAsString();
+            case yup::AudioPluginFormatType::clap:
+                return "clap";
 
-        auto xml = yup::parseXML (xmlText);
-        if (xml == nullptr)
-            return yup::makeResultValueFail ("Failed to parse plugin description XML");
+            case yup::AudioPluginFormatType::audioUnit:
+                return "au";
 
-        yup::AudioPluginDescription desc;
-        desc.name = xml->getStringAttribute ("name");
-        desc.vendor = xml->getStringAttribute ("vendor");
-        desc.version = xml->getStringAttribute ("version");
-        desc.identifier = xml->getStringAttribute ("identifier");
-        desc.fileOrBundlePath = xml->getStringAttribute ("fileOrBundlePath");
-        desc.isInstrument = xml->getBoolAttribute ("isInstrument", false);
-        desc.isEffect = xml->getBoolAttribute ("isEffect", false);
-        desc.numInputChannels = xml->getIntAttribute ("numInputChannels", 0);
-        desc.numOutputChannels = xml->getIntAttribute ("numOutputChannels", 0);
-
-        const yup::String formatTypeStr = xml->getStringAttribute ("formatType");
-        if (formatTypeStr == "vst3")
-            desc.formatType = yup::AudioPluginFormatType::vst3;
-        else if (formatTypeStr == "clap")
-            desc.formatType = yup::AudioPluginFormatType::clap;
-        else if (formatTypeStr == "au")
-            desc.formatType = yup::AudioPluginFormatType::audioUnit;
-        else
-            return yup::makeResultValueFail ("Unknown plugin format in creation data: " + formatTypeStr);
-
-        auto* format = pluginScanner->getFormatForType (desc.formatType);
-        if (format == nullptr)
-            return yup::makeResultValueFail ("No format backend registered for type: " + formatTypeStr);
-
-        auto result = format->loadPlugin (desc, hostContext);
-        if (result.failed())
-            return yup::makeResultValueFail (result.getErrorMessage());
-
-        std::unique_ptr<yup::AudioProcessor> processor = std::move (result).getValue();
-        return yup::makeResultValueOk (std::move (processor));
+            default:
+                return "unknown";
+        }
     }
 #endif
 };

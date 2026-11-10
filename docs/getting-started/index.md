@@ -9,7 +9,8 @@ The repository ships with working example apps you can build immediately:
 - [graphics](https://github.com/kunitoki/yup/tree/main/examples/graphics) - 2D
   vector rendering, SVG, Lottie, DSP visualizers, and the RHI spinning-cube demo.
 - [audiograph](https://github.com/kunitoki/yup/tree/main/examples/audiograph) -
-  a node-based audio graph editor.
+  a node-based audio graph editor and plugin host, with a browser of nodes and
+  plugins, tabbed subgraph editing, settings, and sandboxed plugin loading.
 - [plugin](https://github.com/kunitoki/yup/tree/main/examples/plugin) - RETRACE, a
   spectral synthesiser plugin (CLAP, VST3, AU, LV2 and standalone) with host
   automation, a reorderable master effects chain, factory and user presets.

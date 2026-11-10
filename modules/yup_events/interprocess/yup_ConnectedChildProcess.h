@@ -185,6 +185,15 @@ public:
     */
     void killWorkerProcess();
 
+    /** Kills the worker process immediately and disconnects from it.
+        Unlike killWorkerProcess(), this doesn't rely on the worker reacting to the
+        kill message, so it also stops workers that are no longer responding.
+    */
+    void terminateWorkerProcess();
+
+    /** Returns true if the worker process launched with launchWorkerProcess() is still running. */
+    bool isWorkerProcessRunning() const;
+
     /** This will be called to deliver a message from the worker process.
         The call will probably be made on a background thread, so be careful with your thread-safety!
     */

@@ -76,8 +76,28 @@ struct Application final : yup::YUPApplication
         return "1.0";
     }
 
-    void initialise (const yup::String&) override
+    void initialise (const yup::String& commandLine) override
     {
+#if YUP_DESKTOP
+        // Relaunched by the plugin scanner to open plugins out of process
+        auto worker = std::make_unique<yup::AudioPluginScannerWorker>();
+        addPluginFormats (*worker);
+        if (worker->initialiseFromCommandLine (commandLine))
+        {
+            scannerWorker = std::move (worker);
+            return;
+        }
+
+        // Relaunched by a sandboxed plugin node to run the plugin out of process
+        auto server = std::make_unique<yup::AudioPluginBridgeServer>();
+        addPluginFormats (*server);
+        if (server->initialiseFromCommandLine (commandLine))
+        {
+            bridgeServer = std::move (server);
+            return;
+        }
+#endif
+
         yup::MessageManager::callAsync ([this]
         {
             yup::Process::makeForegroundProcess();
@@ -94,7 +114,27 @@ struct Application final : yup::YUPApplication
     }
 
 private:
+#if YUP_DESKTOP
+    template <class Target>
+    static void addPluginFormats (Target& target)
+    {
+#if YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3
+        target.addFormat (std::make_unique<yup::VST3Format>());
+#endif
+#if YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP
+        target.addFormat (std::make_unique<yup::CLAPFormat>());
+#endif
+#if YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC
+        target.addFormat (std::make_unique<yup::AUFormat>());
+#endif
+    }
+#endif
+
     std::unique_ptr<AudioGraphWindow> window;
+#if YUP_DESKTOP
+    std::unique_ptr<yup::AudioPluginScannerWorker> scannerWorker;
+    std::unique_ptr<yup::AudioPluginBridgeServer> bridgeServer;
+#endif
 };
 
 START_YUP_APPLICATION (Application)

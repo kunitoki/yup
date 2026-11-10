@@ -33,7 +33,10 @@
 #include <cstring>
 #include <limits>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <thread>
 #include <type_traits>
@@ -42,9 +45,17 @@
 
 //==============================================================================
 #include "host/yup_AudioPluginParameterMailbox.h"
+#include "host/yup_AudioPluginBridgeProtocol.h"
 #include "host/yup_AudioPluginFormat.cpp"
+#include "host/yup_AudioPluginDatabase.cpp"
+#include "host/yup_AudioPluginScannerWorker.cpp"
 #include "host/yup_AudioPluginScanner.cpp"
 #include "host/yup_AudioPluginInstance.cpp"
+
+#if YUP_DESKTOP
+#include "host/yup_AudioPluginBridgeServer.cpp"
+#include "host/yup_RemoteAudioPluginInstance.cpp"
+#endif
 
 //==============================================================================
 #if YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3
@@ -78,6 +89,7 @@
 #include "native/yup_AudioPluginInstance_VST3.cpp"
 #endif
 
+//==============================================================================
 #if YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP
 #include <clap/clap.h>
 
@@ -107,6 +119,7 @@ using CLAPModuleHandle = void*;
 #include "native/yup_AudioPluginInstance_CLAP.cpp"
 #endif
 
+//==============================================================================
 #if YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC
 #import <AppKit/AppKit.h>
 #import <AudioUnit/AudioUnit.h>
@@ -117,4 +130,25 @@ using CLAPModuleHandle = void*;
 #import <CoreMIDI/CoreMIDI.h>
 
 #include "native/yup_AudioPluginInstance_AU.mm"
+#endif
+
+//==============================================================================
+#if YUP_AUDIO_PLUGIN_HOST_ENABLE_LV2
+#include <lilv/lilv.h>
+
+#include <lv2/core/lv2.h>
+#include <lv2/atom/atom.h>
+#include <lv2/atom/forge.h>
+#include <lv2/atom/util.h>
+#include <lv2/midi/midi.h>
+#include <lv2/state/state.h>
+#include <lv2/options/options.h>
+#include <lv2/patch/patch.h>
+#include <lv2/time/time.h>
+#include <lv2/buf-size/buf-size.h>
+#include <lv2/worker/worker.h>
+#include <lv2/urid/urid.h>
+#include <lv2/log/log.h>
+
+#include "native/yup_AudioPluginInstance_LV2.cpp"
 #endif

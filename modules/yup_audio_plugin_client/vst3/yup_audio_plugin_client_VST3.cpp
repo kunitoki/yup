@@ -384,6 +384,79 @@ static void writeMidiBufferToVST3EventList (const MidiBuffer& midiBuffer,
 
 //==============================================================================
 
+#if YUP_LINUX
+/** Services the YUP message loop from the host run loop, shared by every view and controller of the module. */
+class HostRunLoopVST3 final
+    : public FObject
+    , public Linux::ITimerHandler
+{
+public:
+    OBJ_METHODS (HostRunLoopVST3, FObject)
+    REFCOUNT_METHODS (FObject)
+
+    DEFINE_INTERFACES
+    DEF_INTERFACE (Linux::ITimerHandler)
+    END_DEFINE_INTERFACES (FObject)
+
+    static void attach (Linux::IRunLoop* loop)
+    {
+        if (loop == nullptr)
+            return;
+
+        auto& instance = getInstance();
+        if (instance == nullptr)
+            instance = owned (new HostRunLoopVST3());
+
+        instance->loops.push_back (loop);
+
+        if (instance->loops.size() == 1)
+            loop->registerTimer (instance, hostMessageTimerIntervalMs);
+    }
+
+    static void detach (Linux::IRunLoop* loop)
+    {
+        auto& instance = getInstance();
+        if (instance == nullptr || loop == nullptr)
+            return;
+
+        auto& loops = instance->loops;
+        const auto it = std::find (loops.begin(), loops.end(), loop);
+        if (it == loops.end())
+            return;
+
+        // The timer lives on the first loop, move it if that loop goes away
+        const auto wasTimerLoop = it == loops.begin();
+        if (wasTimerLoop)
+            loop->unregisterTimer (instance);
+
+        loops.erase (it);
+
+        if (loops.empty())
+            instance = nullptr;
+        else if (wasTimerLoop)
+            loops.front()->registerTimer (instance, hostMessageTimerIntervalMs);
+    }
+
+    void PLUGIN_API onTimer() override
+    {
+        dispatchPendingMessagesFromHostTimer();
+    }
+
+private:
+    HostRunLoopVST3() = default;
+
+    static IPtr<HostRunLoopVST3>& getInstance()
+    {
+        static IPtr<HostRunLoopVST3> instance;
+        return instance;
+    }
+
+    std::vector<Linux::IRunLoop*> loops;
+};
+#endif
+
+//==============================================================================
+
 class AudioPluginEditorViewVST3
     : public Component
     , public Vst::EditorView
@@ -423,10 +496,7 @@ public:
         addAndMakeVisible (editor.get());
 
         if (size != nullptr)
-        {
-            setSize ({ static_cast<float> (size->getWidth()),
-                       static_cast<float> (size->getHeight()) });
-        }
+            setSize (viewScale.fromHost ({ size->getWidth(), size->getHeight() }, *this).to<float>());
         else
         {
             const auto preferredSize = editor->getPreferredSize();
@@ -451,6 +521,10 @@ public:
     {
         YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "destroying editor view: onDesktop=" << String (isOnDesktop() ? "true" : "false"));
 
+#if YUP_LINUX
+        detachHostRunLoop();
+#endif
+
         if (editor != nullptr)
         {
             endActiveParameterGestures (processor);
@@ -470,18 +544,8 @@ public:
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "resized: bounds=" << getBounds().toString() << ", hostTriggered=" << String (hostTriggeredResizing ? "true" : "false"));
 
-        if (plugFrame != nullptr && ! hostTriggeredResizing)
-        {
-            ViewRect viewRect;
-            viewRect.left = 0;
-            viewRect.top = 0;
-            viewRect.right = getWidth();
-            viewRect.bottom = getHeight();
-
-            const auto result = plugFrame->resizeView (this, std::addressof (viewRect));
-            YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "requested host resizeView: " << viewRect.getWidth() << "x" << viewRect.getHeight() << ", result=" << static_cast<int> (result));
-            ignoreUnused (result);
-        }
+        if (! hostTriggeredResizing)
+            requestHostResize();
     }
 
     void paint (Graphics& g) override
@@ -518,10 +582,20 @@ public:
                            .withFlags (flags)
                            .withResizableWindow (editor->isResizable());
 
+        const auto scaleBeforeAttach = viewScale.get (*this);
+
         addToDesktop (options, parent);
         setVisible (true);
 
         editor->attachedToNative();
+
+#if YUP_LINUX
+        attachHostRunLoop();
+#endif
+
+        // Sizes reported before attaching used an estimated scale, the editor window may use another one
+        if (viewScale.get (*this) != scaleBeforeAttach)
+            requestHostResize();
 
         return kResultTrue;
     }
@@ -529,6 +603,10 @@ public:
     tresult PLUGIN_API removed() override
     {
         YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "removed: onDesktop=" << String (isOnDesktop() ? "true" : "false"));
+
+#if YUP_LINUX
+        detachHostRunLoop();
+#endif
 
         if (editor != nullptr)
         {
@@ -592,7 +670,7 @@ public:
 
             if (! editor->isResizable())
             {
-                const auto preferredSize = editor->getPreferredSize();
+                const auto preferredSize = viewScale.toHost (editor->getPreferredSize(), *this);
                 newSize->right = newSize->left + preferredSize.getWidth();
                 newSize->bottom = newSize->top + preferredSize.getHeight();
             }
@@ -601,8 +679,7 @@ public:
 
             const auto scoped = ScopedValueSetter<bool> (hostTriggeredResizing, true);
 
-            setSize ({ static_cast<float> (rect.getWidth()),
-                       static_cast<float> (rect.getHeight()) });
+            setSize (viewScale.fromHost ({ rect.getWidth(), rect.getHeight() }, *this).to<float>());
 
             if (editor->isResizable())
                 hostResizeSnapper.hostResized();
@@ -624,21 +701,15 @@ public:
         if (size == nullptr)
             return kInvalidArgument;
 
-        if (editor->isResizable() && editor->getWidth() != 0 && editor->getHeight() != 0)
-        {
-            size->left = 0;
-            size->top = 0;
-            size->right = getWidth();
-            size->bottom = getHeight();
-        }
-        else
-        {
-            const auto preferredSize = editor->getPreferredSize();
-            size->left = 0;
-            size->top = 0;
-            size->right = preferredSize.getWidth();
-            size->bottom = preferredSize.getHeight();
-        }
+        const auto editorSize = editor->isResizable() && editor->getWidth() != 0 && editor->getHeight() != 0
+                                  ? getBounds().getSize().to<int>()
+                                  : editor->getPreferredSize();
+
+        const auto hostSize = viewScale.toHost (editorSize, *this);
+        size->left = 0;
+        size->top = 0;
+        size->right = hostSize.getWidth();
+        size->bottom = hostSize.getHeight();
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "getSize: " << size->getWidth() << "x" << size->getHeight());
 
@@ -667,11 +738,11 @@ public:
         ignoreUnused (factor);
         return kResultFalse;
 #else
-        if (editor != nullptr)
-            editor->contentScaleChanged (static_cast<float> (factor));
+        // Once attached the editor window follows its display scale, view sizes are converted with it
+        if (viewScale.setHostScale (static_cast<float> (factor)) && ! isOnDesktop())
+            requestHostResize();
 
-        // The native window follows the monitor DPI itself, view sizes are not rescaled yet
-        return kResultFalse;
+        return kResultTrue;
 #endif
     }
 
@@ -729,13 +800,51 @@ private:
 
     void constrainViewRect (ViewRect& viewRect) const
     {
-        const auto size = editor->getConstrainedSizeToFit ({ viewRect.getWidth(), viewRect.getHeight() });
+        const auto size = editor->getConstrainedSizeToFit (viewScale.fromHost ({ viewRect.getWidth(), viewRect.getHeight() }, *this));
+        const auto hostSize = viewScale.toHost (size, *this);
 
-        viewRect.right = viewRect.left + size.getWidth();
-        viewRect.bottom = viewRect.top + size.getHeight();
+        viewRect.right = viewRect.left + hostSize.getWidth();
+        viewRect.bottom = viewRect.top + hostSize.getHeight();
     }
 
+    void requestHostResize()
+    {
+        if (plugFrame == nullptr)
+            return;
+
+        const auto hostSize = viewScale.toHost (getBounds().getSize().to<int>(), *this);
+
+        ViewRect viewRect (0, 0, hostSize.getWidth(), hostSize.getHeight());
+        const auto result = plugFrame->resizeView (this, std::addressof (viewRect));
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "requested host resizeView: " << viewRect.getWidth() << "x" << viewRect.getHeight() << ", result=" << static_cast<int> (result));
+        ignoreUnused (result);
+    }
+
+#if YUP_LINUX
+    void attachHostRunLoop()
+    {
+        if (plugFrame != nullptr && plugFrame->queryInterface (Linux::IRunLoop::iid, reinterpret_cast<void**> (&hostRunLoop)) != kResultOk)
+            hostRunLoop = nullptr;
+
+        HostRunLoopVST3::attach (hostRunLoop);
+    }
+
+    void detachHostRunLoop()
+    {
+        HostRunLoopVST3::detach (hostRunLoop);
+
+        if (hostRunLoop != nullptr)
+            hostRunLoop->release();
+
+        hostRunLoop = nullptr;
+    }
+
+    Linux::IRunLoop* hostRunLoop = nullptr;
+#endif
+
     ScopedYupInitialiser_Windowing scopeInitialiser;
+    WrapperViewScale viewScale;
     AudioProcessor* processor = nullptr;
     std::unique_ptr<AudioProcessorEditor> editor;
     std::unique_ptr<ResizableCorner> resizableCorner;
@@ -814,12 +923,29 @@ public:
             return result;
         }
 
+#if YUP_LINUX
+        // Some hosts expose their run loop on the context, it services messages while no editor is open
+        if (context == nullptr || context->queryInterface (Linux::IRunLoop::iid, reinterpret_cast<void**> (&hostRunLoop)) != kResultOk)
+            hostRunLoop = nullptr;
+
+        HostRunLoopVST3::attach (hostRunLoop);
+#endif
+
         return kResultOk;
     }
 
     tresult PLUGIN_API terminate() override
     {
         YUP_MODULE_DBG (PLUGIN_CLIENT_VST3, "controller terminate requested: controller=" << describePointer (this) << ", processor=" << describePointer (processor));
+
+#if YUP_LINUX
+        HostRunLoopVST3::detach (hostRunLoop);
+
+        if (hostRunLoop != nullptr)
+            hostRunLoop->release();
+
+        hostRunLoop = nullptr;
+#endif
 
         removeParameterListeners();
         removeProcessorListener();
@@ -1512,6 +1638,9 @@ private:
     AudioProcessor* processor = nullptr;
     WrapperBypass bypass;
     std::vector<AudioParameter::Ptr> listenedParameters;
+#if YUP_LINUX
+    Linux::IRunLoop* hostRunLoop = nullptr;
+#endif
 };
 
 //==============================================================================

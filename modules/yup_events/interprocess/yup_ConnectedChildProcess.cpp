@@ -228,6 +228,19 @@ void ChildProcessCoordinator::killWorkerProcess()
     childProcess.reset();
 }
 
+void ChildProcessCoordinator::terminateWorkerProcess()
+{
+    if (childProcess != nullptr)
+        childProcess->kill();
+
+    killWorkerProcess();
+}
+
+bool ChildProcessCoordinator::isWorkerProcessRunning() const
+{
+    return childProcess != nullptr && childProcess->isRunning();
+}
+
 //==============================================================================
 struct ChildProcessWorker::Connection final : public InterprocessConnection
     , private ChildProcessPingThread

@@ -281,6 +281,9 @@ public:
     /** Returns the parameter name. */
     const String& getName() const { return metadata.name; }
 
+    /** Returns the display, range and host-facing metadata the parameter was created with. */
+    const Metadata& getMetadata() const noexcept { return metadata; }
+
     /**
         Returns true when this parameter has an explicit host-facing automation ID.
 

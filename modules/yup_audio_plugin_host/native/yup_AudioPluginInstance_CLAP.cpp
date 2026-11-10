@@ -19,8 +19,6 @@
   ==============================================================================
 */
 
-#if YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP
-
 namespace yup
 {
 
@@ -904,12 +902,13 @@ public:
 
     bool isEmpty() const noexcept { return events.empty(); }
 
-    void addParameterValue (int sampleOffset, clap_id id, double value) noexcept
+    void addParameterValue (int sampleOffset, clap_id id, void* cookie, double value) noexcept
     {
         Event event {};
         event.param = {};
         initialiseHeader (event.param.header, sizeof (event.param), CLAP_EVENT_PARAM_VALUE, sampleOffset);
         event.param.param_id = id;
+        event.param.cookie = cookie;
         event.param.note_id = -1;
         event.param.port_index = -1;
         event.param.channel = -1;
@@ -1671,7 +1670,7 @@ private:
             const auto value = params[index]->getValue();
 
             if (value != lastSentValues[index].exchange (value, std::memory_order_relaxed))
-                inputEvents.addParameterValue (0, clapParameterIds[index], static_cast<double> (value));
+                inputEvents.addParameterValue (0, clapParameterIds[index], clapParameterCookies[index], static_cast<double> (value));
         }
     }
 
@@ -1686,7 +1685,7 @@ private:
 
         param->setValue (value);
         lastSentValues[index].store (value, std::memory_order_relaxed);
-        inputEvents.addParameterValue (change.sampleOffset, clapParameterIds[index], static_cast<double> (value));
+        inputEvents.addParameterValue (change.sampleOffset, clapParameterIds[index], clapParameterCookies[index], static_cast<double> (value));
     }
 
     void handlePluginParameterValue (clap_id id, double value)
@@ -1851,7 +1850,10 @@ private:
     void rescanParameters (uint32_t flags)
     {
         if ((flags & CLAP_PARAM_RESCAN_ALL) != 0)
+        {
             YUP_MODULE_DBG (PLUGIN_HOST_CLAP, "plugin changed its parameter list, keeping the previous one: " << getName());
+            refreshParameterCookies();
+        }
 
         ChangeDetails details;
 
@@ -1865,6 +1867,21 @@ private:
             details = details.withParameterInfoChanged (true);
 
         updateHostDisplay (details);
+    }
+
+    // Cookies are only invalidated by CLAP_PARAM_RESCAN_ALL, which is only allowed while deactivated
+    void refreshParameterCookies()
+    {
+        const uint32_t count = paramsExtension->count (clapPlugin);
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            clap_param_info_t info {};
+            if (! paramsExtension->get_info (clapPlugin, i, &info))
+                continue;
+
+            if (const auto it = parameterIndexById.find (info.id); it != parameterIndexById.end())
+                clapParameterCookies[static_cast<std::size_t> (it->second)] = info.cookie;
+        }
     }
 
     void refreshParameterValues()
@@ -2057,6 +2074,7 @@ private:
 
             parameterIndexById[id] = static_cast<int> (clapParameterIds.size());
             clapParameterIds.push_back (id);
+            clapParameterCookies.push_back (info.cookie);
             addParameter (builder.build());
         }
 
@@ -2136,6 +2154,7 @@ private:
     AudioBuffer<double> doublePrecisionBuffer;
 
     std::vector<clap_id> clapParameterIds;
+    std::vector<void*> clapParameterCookies;
     std::unordered_map<clap_id, int> parameterIndexById;
     std::unique_ptr<std::atomic<float>[]> lastSentValues;
     AudioPluginParameterMailbox toHost;
@@ -2295,5 +2314,3 @@ ResultValue<std::unique_ptr<AudioPluginInstance>> CLAPFormat::loadPlugin (
 }
 
 } // namespace yup
-
-#endif // YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP

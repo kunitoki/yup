@@ -27,20 +27,16 @@
 #include "AudioGraphEditorPanel.h"
 
 //==============================================================================
-class SubgraphEditorWindow final : public yup::DocumentWindow
+/** A workspace tab editing the inner graph of a subgraph node, with its I/O preset selector. */
+class SubgraphEditorPage final : public yup::Component
 {
 public:
-    SubgraphEditorWindow (yup::StringRef title,
-                          std::unique_ptr<AudioGraphEditorPanel> panelToOwn,
-                          const SubgraphConfig& config,
-                          std::function<void (int)> onPresetChangedIn,
-                          std::function<void()> onClosedIn)
-        : yup::DocumentWindow (yup::ComponentNative::Options(), yup::Color (0xff0d1117))
-        , panel (std::move (panelToOwn))
+    SubgraphEditorPage (std::unique_ptr<AudioGraphEditorPanel> panelToOwn,
+                        const SubgraphConfig& config,
+                        std::function<void (int)> onPresetChangedIn)
+        : panel (std::move (panelToOwn))
         , onPresetChanged (std::move (onPresetChangedIn))
-        , onClosed (std::move (onClosedIn))
     {
-        setTitle (title);
         configureCombo (config);
         addAndMakeVisible (ioLabel);
         addAndMakeVisible (ioCombo);
@@ -68,19 +64,10 @@ public:
         panel->setBounds (bounds);
     }
 
-    bool keyDown (const yup::KeyPress& keys, const yup::Point<float>&) override
+    void paint (yup::Graphics& g) override
     {
-        if (keys.getKey() != yup::KeyPress::escapeKey)
-            return false;
-
-        userTriedToCloseWindow();
-        return true;
-    }
-
-    void userTriedToCloseWindow() override
-    {
-        if (onClosed != nullptr)
-            onClosed();
+        g.setFillColor (yup::Color (0xff161b22));
+        g.fillAll();
     }
 
 private:
@@ -106,5 +93,4 @@ private:
     yup::Label ioLabel;
     yup::ComboBox ioCombo;
     std::function<void (int)> onPresetChanged;
-    std::function<void()> onClosed;
 };

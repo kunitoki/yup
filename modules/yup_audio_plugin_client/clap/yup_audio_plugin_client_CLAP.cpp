@@ -622,6 +622,7 @@ private:
 
     std::unique_ptr<AudioProcessor> audioProcessor;
     std::unique_ptr<AudioPluginEditorCLAP> audioPluginEditor;
+    WrapperViewScale editorViewScale;
 
     const clap_host_t* host = nullptr;
 
@@ -1455,7 +1456,7 @@ bool AudioPluginProcessorCLAP::initialise()
     {
 #if YUP_LINUX
         if (auto wrapper = getWrapper (plugin); wrapper->guiTimerId == timerId)
-            MessageManager::getInstance()->runDispatchLoopUntil (10);
+            dispatchPendingMessagesFromHostTimer();
 #endif
     };
 
@@ -1586,7 +1587,8 @@ bool AudioPluginProcessorCLAP::initialise()
         ignoreUnused (scale);
         return false;
 #else
-        wrapper->audioPluginEditor->contentScaleChanged (static_cast<float> (scale));
+        // Once attached the editor window follows its display scale, sizes are converted with it
+        wrapper->editorViewScale.setHostScale (static_cast<float> (scale));
         return true;
 #endif
     };
@@ -1599,16 +1601,13 @@ bool AudioPluginProcessorCLAP::initialise()
 
         auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
 
-        if (audioProcessorEditor->isResizable() && audioProcessorEditor->getWidth() != 0)
-        {
-            *width = static_cast<uint32_t> (audioProcessorEditor->getWidth());
-            *height = static_cast<uint32_t> (audioProcessorEditor->getHeight());
-        }
-        else
-        {
-            *width = static_cast<uint32_t> (audioProcessorEditor->getPreferredSize().getWidth());
-            *height = static_cast<uint32_t> (audioProcessorEditor->getPreferredSize().getHeight());
-        }
+        const auto editorSize = audioProcessorEditor->isResizable() && audioProcessorEditor->getWidth() != 0
+                                  ? audioProcessorEditor->getBounds().getSize().to<int>()
+                                  : audioProcessorEditor->getPreferredSize();
+
+        const auto hostSize = wrapper->editorViewScale.toHost (editorSize, *wrapper->audioPluginEditor);
+        *width = static_cast<uint32_t> (hostSize.getWidth());
+        *height = static_cast<uint32_t> (hostSize.getHeight());
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui get_size: " << static_cast<int> (*width) << "x" << static_cast<int> (*height));
 
@@ -1662,7 +1661,7 @@ bool AudioPluginProcessorCLAP::initialise()
         // Resizable editors accept any host size while dragging, they are fitted inside and snapped afterwards
         const auto size = audioProcessorEditor->isResizable()
                             ? Size<int> { jmax (1, static_cast<int> (*width)), jmax (1, static_cast<int> (*height)) }
-                            : audioProcessorEditor->getPreferredSize();
+                            : wrapper->editorViewScale.toHost (audioProcessorEditor->getPreferredSize(), *wrapper->audioPluginEditor);
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui adjust_size: " << static_cast<int> (*width) << "x" << static_cast<int> (*height) << " -> " << size.getWidth() << "x" << size.getHeight());
 
@@ -1682,18 +1681,14 @@ bool AudioPluginProcessorCLAP::initialise()
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui set_size: " << static_cast<int> (width) << "x" << static_cast<int> (height) << ", current=" << wrapper->audioPluginEditor->getBounds().toString());
 
-        if (! audioProcessorEditor->isResizable())
-        {
-            const auto preferredSize = audioProcessorEditor->getPreferredSize();
-
-            width = static_cast<uint32_t> (preferredSize.getWidth());
-            height = static_cast<uint32_t> (preferredSize.getHeight());
-        }
+        const auto editorSize = audioProcessorEditor->isResizable()
+                                  ? wrapper->editorViewScale.fromHost ({ static_cast<int> (width), static_cast<int> (height) }, *wrapper->audioPluginEditor)
+                                  : audioProcessorEditor->getPreferredSize();
 
         {
             const auto scoped = wrapper->scopedHostEditorResizing();
 
-            wrapper->audioPluginEditor->setSize ({ static_cast<float> (width), static_cast<float> (height) });
+            wrapper->audioPluginEditor->setSize (editorSize.to<float>());
         }
 
         wrapper->audioPluginEditor->hostResized();
@@ -1725,6 +1720,8 @@ bool AudioPluginProcessorCLAP::initialise()
                            .withFlags (flags)
                            .withResizableWindow (audioProcessorEditor->isResizable());
 
+        const auto scaleBeforeAttach = wrapper->editorViewScale.get (*wrapper->audioPluginEditor);
+
         wrapper->audioPluginEditor->addToDesktop (
             options,
 #if YUP_MAC
@@ -1740,6 +1737,10 @@ bool AudioPluginProcessorCLAP::initialise()
         wrapper->audioPluginEditor->setVisible (true);
 
         audioProcessorEditor->attachedToNative();
+
+        // Sizes reported before attaching used an estimated scale, the editor window may use another one
+        if (wrapper->editorViewScale.get (*wrapper->audioPluginEditor) != scaleBeforeAttach)
+            wrapper->editorResized();
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "gui set_parent attached: onDesktop=" << String (wrapper->audioPluginEditor->isOnDesktop() ? "true" : "false") << ", bounds=" << wrapper->audioPluginEditor->getBounds().toString());
 
@@ -1794,7 +1795,7 @@ bool AudioPluginProcessorCLAP::initialise()
 
 #if YUP_LINUX
     if (instancesCount.fetch_add (1) == 0)
-        registerTimer (16, &guiTimerId);
+        registerTimer (hostMessageTimerIntervalMs, &guiTimerId);
 #endif
 
     return true;
@@ -2213,8 +2214,9 @@ void AudioPluginProcessorCLAP::editorResized()
 
     if (hostGUI != nullptr && hostGUI->request_resize != nullptr)
     {
-        const bool accepted = hostGUI->request_resize (host, audioPluginEditor->getWidth(), audioPluginEditor->getHeight());
-        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "host request_resize: " << audioPluginEditor->getBounds().getSize().toString() << ", accepted=" << String (accepted ? "true" : "false"));
+        const auto hostSize = editorViewScale.toHost (audioPluginEditor->getBounds().getSize().to<int>(), *audioPluginEditor);
+        const bool accepted = hostGUI->request_resize (host, static_cast<uint32_t> (hostSize.getWidth()), static_cast<uint32_t> (hostSize.getHeight()));
+        YUP_MODULE_DBG (PLUGIN_CLIENT_CLAP, "host request_resize: " << hostSize.toString() << ", accepted=" << String (accepted ? "true" : "false"));
         ignoreUnused (accepted);
     }
     else

@@ -25,25 +25,221 @@ namespace yup
 namespace
 {
 
+struct ScanOutcome
+{
+    std::vector<AudioPluginDescription> descriptions;
+    std::optional<AudioPluginDatabase::FailureReason> failure;
+    String message;
+
+    static ScanOutcome fail (AudioPluginDatabase::FailureReason reason, const String& message)
+    {
+        ScanOutcome outcome;
+        outcome.failure = reason;
+        outcome.message = message;
+        return outcome;
+    }
+};
+
+//==============================================================================
+
+class ScannerProcess final : private ChildProcessCoordinator
+{
+public:
+    explicit ScannerProcess (const AudioPluginScanner::OutOfProcessOptions& processOptions)
+        : options (processOptions)
+    {
+    }
+
+    ~ScannerProcess() override
+    {
+        terminateWorkerProcess();
+    }
+
+    /** Returns std::nullopt when the worker cannot be launched. */
+    std::optional<ScanOutcome> scan (const File& file, AudioPluginFormatType formatType)
+    {
+        using FailureReason = AudioPluginDatabase::FailureReason;
+
+        if (! isRunning || connectionLost || ! isWorkerProcessRunning())
+        {
+            if (! options.executable.existsAsFile())
+                return std::nullopt;
+
+            connectionLost = false;
+            isRunning = launchWorkerProcess (options.executable, options.commandLineUniqueID, 0, 0);
+
+            if (! isRunning)
+                return std::nullopt;
+        }
+
+        {
+            const ScopedLock sl (lock);
+            reply.reset();
+        }
+
+        replyReceived.reset();
+
+        if (! sendMessageToWorker (AudioPluginScanProtocol::writeRequest ({ formatType, file.getFullPathName() })))
+            return stop (FailureReason::crash, "Lost the connection to the scanner worker");
+
+        const auto deadline = Time::getMillisecondCounterHiRes() + options.timeoutMs;
+
+        while (! replyReceived.wait (50))
+        {
+            if (! isWorkerProcessRunning())
+                return stop (FailureReason::crash, "The plugin crashed the scanner worker");
+
+            if (Time::getMillisecondCounterHiRes() >= deadline)
+                return stop (FailureReason::timeout, "Timed out opening the plugin after " + String (options.timeoutMs) + " ms");
+        }
+
+        std::optional<MemoryBlock> received;
+
+        {
+            const ScopedLock sl (lock);
+            received = std::move (reply);
+        }
+
+        if (! received.has_value())
+            return stop (FailureReason::crash, "The plugin crashed the scanner worker");
+
+        auto decoded = AudioPluginScanProtocol::readReply (*received);
+        if (! decoded.has_value())
+            return stop (FailureReason::error, "Malformed reply from the scanner worker");
+
+        if (! decoded->ok)
+            return ScanOutcome::fail (FailureReason::error, decoded->errorMessage);
+
+        ScanOutcome outcome;
+        outcome.descriptions = std::move (decoded->descriptions);
+        return outcome;
+    }
+
+private:
+    ScanOutcome stop (AudioPluginDatabase::FailureReason reason, const String& message)
+    {
+        terminateWorkerProcess();
+        isRunning = false;
+        return ScanOutcome::fail (reason, message);
+    }
+
+    void handleMessageFromWorker (const MemoryBlock& message) override
+    {
+        {
+            const ScopedLock sl (lock);
+            reply = message;
+        }
+
+        replyReceived.signal();
+    }
+
+    void handleConnectionLost() override
+    {
+        connectionLost = true;
+        replyReceived.signal();
+    }
+
+    const AudioPluginScanner::OutOfProcessOptions options;
+    bool isRunning = false;
+    std::atomic<bool> connectionLost { false };
+    CriticalSection lock;
+    std::optional<MemoryBlock> reply;
+    WaitableEvent replyReceived;
+};
+
+//==============================================================================
+
+/** Hands out one worker process per scanning thread, killed when the pool is destroyed. */
+class ScannerProcessPool
+{
+public:
+    explicit ScannerProcessPool (const AudioPluginScanner::OutOfProcessOptions& poolOptions)
+        : options (poolOptions)
+    {
+    }
+
+    std::optional<ScanOutcome> scan (const File& file, AudioPluginFormatType formatType)
+    {
+        std::unique_ptr<ScannerProcess> process;
+
+        {
+            const ScopedLock sl (lock);
+
+            if (! idle.empty())
+            {
+                process = std::move (idle.back());
+                idle.pop_back();
+            }
+        }
+
+        if (process == nullptr)
+            process = std::make_unique<ScannerProcess> (options);
+
+        auto outcome = process->scan (file, formatType);
+
+        const ScopedLock sl (lock);
+        idle.push_back (std::move (process));
+        return outcome;
+    }
+
+private:
+    const AudioPluginScanner::OutOfProcessOptions options;
+    CriticalSection lock;
+    std::vector<std::unique_ptr<ScannerProcess>> idle;
+};
+
+//==============================================================================
+
 struct FileScanTask
 {
     File file;
     AudioPluginFormat* format = nullptr;
+    AudioPluginDatabase* database = nullptr;
+    ScannerProcessPool* processes = nullptr;
     std::vector<AudioPluginDescription> discovered;
     String failedPath;
 };
+
+ScanOutcome scanInProcess (AudioPluginFormat& format, const File& file)
+{
+    auto result = format.scanFile (file);
+    if (result.failed())
+        return ScanOutcome::fail (AudioPluginDatabase::FailureReason::error, result.getErrorMessage());
+
+    ScanOutcome outcome;
+    outcome.descriptions = std::move (result).getValue();
+    return outcome;
+}
 
 void runFileScanTask (FileScanTask& task)
 {
     jassert (task.format != nullptr);
 
-    auto scanResult = task.format->scanFile (task.file);
+    const auto formatType = task.format->getFormatType();
 
-    if (scanResult.wasOk())
+    if (task.database != nullptr)
+        task.database->beginScan (task.file, formatType);
+
+    std::optional<ScanOutcome> outcome;
+
+    if (task.processes != nullptr)
+        outcome = task.processes->scan (task.file, formatType);
+
+    if (! outcome.has_value())
+        outcome = scanInProcess (*task.format, task.file);
+
+    if (! outcome->failure.has_value())
     {
-        task.discovered = std::move (scanResult).getValue();
+        task.discovered = std::move (outcome->descriptions);
+
+        if (task.database != nullptr)
+            task.database->storeScanResult (task.file, formatType, task.discovered);
+
         return;
     }
+
+    if (task.database != nullptr)
+        task.database->storeScanFailure (task.file, formatType, *outcome->failure, outcome->message);
 
     task.failedPath = task.file.getFullPathName();
 }
@@ -104,9 +300,30 @@ AudioPluginFormat* AudioPluginScanner::getFormatForType (AudioPluginFormatType t
     return nullptr;
 }
 
+void AudioPluginScanner::setDatabase (std::shared_ptr<AudioPluginDatabase> newDatabase)
+{
+    database = std::move (newDatabase);
+}
+
+std::shared_ptr<AudioPluginDatabase> AudioPluginScanner::getDatabase() const noexcept
+{
+    return database;
+}
+
+void AudioPluginScanner::setOutOfProcessScanning (std::optional<OutOfProcessOptions> options)
+{
+    outOfProcessOptions = std::move (options);
+}
+
+std::optional<AudioPluginScanner::OutOfProcessOptions> AudioPluginScanner::getOutOfProcessScanning() const
+{
+    return outOfProcessOptions;
+}
+
 AudioPluginScanner::ScanResult AudioPluginScanner::scan (const FileSearchPath& searchPath)
 {
     ScanResult result;
+    const auto scanDatabase = database;
 
     for (const auto& format : formats)
     {
@@ -147,16 +364,56 @@ AudioPluginScanner::ScanResult AudioPluginScanner::scan (const FileSearchPath& s
 
             for (const auto& file : files)
             {
+                if (scanDatabase != nullptr)
+                {
+                    switch (scanDatabase->getFileState (file, format->getFormatType()))
+                    {
+                        case AudioPluginDatabase::FileState::upToDate:
+                        {
+                            const auto cached = scanDatabase->getPlugins (file, format->getFormatType());
+                            result.discovered.insert (result.discovered.end(), cached.begin(), cached.end());
+                            continue;
+                        }
+
+                        case AudioPluginDatabase::FileState::failed:
+                            result.failedPaths.push_back (file.getFullPathName());
+                            continue;
+
+                        case AudioPluginDatabase::FileState::blacklisted:
+                            result.blacklistedPaths.push_back (file.getFullPathName());
+                            continue;
+
+                        case AudioPluginDatabase::FileState::needsScan:
+                            break;
+                    }
+                }
+
                 FileScanTask task;
                 task.file = file;
                 task.format = format.get();
+                task.database = scanDatabase.get();
                 tasks.push_back (std::move (task));
             }
         }
     }
 
+    if (scanDatabase != nullptr)
+        scanDatabase->pruneMissingFiles();
+
     if (tasks.empty())
         return result;
+
+    std::unique_ptr<ScannerProcessPool> processes;
+    if (outOfProcessOptions.has_value())
+    {
+        processes = std::make_unique<ScannerProcessPool> (*outOfProcessOptions);
+
+        for (auto& task : tasks)
+            task.processes = processes.get();
+    }
+
+    // Each out-of-process scanning thread owns a worker process, keep their number reasonable
+    const auto maxThreads = processes != nullptr ? jmin (4, SystemStats::getNumCpus()) : SystemStats::getNumCpus();
 
     if (tasks.size() == 1)
     {
@@ -169,7 +426,7 @@ AudioPluginScanner::ScanResult AudioPluginScanner::scan (const FileSearchPath& s
 
         ThreadPool pool (ThreadPool::Options {}
                              .withThreadName ("YUP Plugin File Scanner")
-                             .withNumberOfThreads (jmax (1, jmin (SystemStats::getNumCpus(), static_cast<int> (tasks.size())))));
+                             .withNumberOfThreads (jmax (1, jmin (maxThreads, static_cast<int> (tasks.size())))));
 
         for (std::size_t i = 0; i < tasks.size(); ++i)
         {

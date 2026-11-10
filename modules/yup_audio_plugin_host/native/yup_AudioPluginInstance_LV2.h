@@ -19,8 +19,6 @@
   ==============================================================================
 */
 
-#if YUP_AUDIO_PLUGIN_HOST_ENABLE_LV2
-
 namespace yup
 {
 
@@ -55,5 +53,3 @@ private:
 };
 
 } // namespace yup
-
-#endif // YUP_AUDIO_PLUGIN_HOST_ENABLE_LV2

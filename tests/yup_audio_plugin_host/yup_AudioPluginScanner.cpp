@@ -46,6 +46,8 @@ public:
 
     ResultValue<std::vector<AudioPluginDescription>> scanFile (const File& file) override
     {
+        ++numScans;
+
         if (file.getFileName() == "bad.vst3")
             return makeResultValueFail ("unsupported");
 
@@ -62,6 +64,8 @@ public:
     {
         return makeResultValueFail ("not implemented");
     }
+
+    std::atomic<int> numScans { 0 };
 
 private:
     AudioPluginFormatType fakeType;
@@ -192,6 +196,47 @@ TEST_F (AudioPluginScannerTests, NonVst3FilesAreIgnored)
     auto result = scanner.scan (path);
     EXPECT_TRUE (result.discovered.empty());
     EXPECT_TRUE (result.failedPaths.empty());
+
+    tmpDir.deleteRecursively();
+}
+
+TEST_F (AudioPluginScannerTests, DatabaseScansOnlyNewOrChangedFiles)
+{
+    File tmpDir = File::getSpecialLocation (File::tempDirectory).getChildFile ("yup_scanner_database");
+    tmpDir.deleteRecursively();
+    tmpDir.createDirectory();
+    tmpDir.getChildFile ("Good.vst3").replaceWithText ("good");
+    tmpDir.getChildFile ("bad.vst3").replaceWithText ("bad");
+    tmpDir.getChildFile ("Crashy.vst3").replaceWithText ("crashy");
+
+    auto format = std::make_unique<FakeFormat> (AudioPluginFormatType::vst3);
+    auto& fakeFormat = *format;
+    scanner.addFormat (std::move (format));
+
+    auto database = std::make_shared<AudioPluginDatabase>();
+    ASSERT_TRUE (database->openInMemory().wasOk());
+    ASSERT_TRUE (database->storeScanFailure (tmpDir.getChildFile ("Crashy.vst3"), AudioPluginFormatType::vst3, AudioPluginDatabase::FailureReason::crash, "crashed").wasOk());
+    scanner.setDatabase (database);
+
+    FileSearchPath path;
+    path.add (tmpDir);
+
+    const auto first = scanner.scan (path);
+    EXPECT_EQ (fakeFormat.numScans.load(), 2);
+    EXPECT_EQ (first.discovered.size(), 1u);
+    EXPECT_EQ (first.failedPaths.size(), 1u);
+    EXPECT_EQ (first.blacklistedPaths.size(), 1u);
+
+    const auto second = scanner.scan (path);
+    EXPECT_EQ (fakeFormat.numScans.load(), 2);
+    ASSERT_EQ (second.discovered.size(), 1u);
+    EXPECT_EQ (second.discovered.front().name, "Good");
+    EXPECT_EQ (second.failedPaths.size(), 1u);
+    EXPECT_EQ (second.blacklistedPaths.size(), 1u);
+
+    tmpDir.getChildFile ("Good.vst3").replaceWithText ("good v2");
+    scanner.scan (path);
+    EXPECT_EQ (fakeFormat.numScans.load(), 3);
 
     tmpDir.deleteRecursively();
 }

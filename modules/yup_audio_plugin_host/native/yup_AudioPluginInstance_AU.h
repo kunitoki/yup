@@ -19,8 +19,6 @@
   ==============================================================================
 */
 
-#if YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC
-
 namespace yup
 {
 
@@ -57,5 +55,3 @@ public:
 };
 
 } // namespace yup
-
-#endif // YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC

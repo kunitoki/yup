@@ -804,6 +804,8 @@ public:
 
         midiMessages.ensureSize (2048);
         midiMessages.clear();
+        noteExpressions.prepare (*processor);
+        umpConverter.reset();
 
         // Reserve parameter change buffer capacity for sample-accurate automation.
         // Capacity = number of parameters * maxFrames per block so that per-sample
@@ -855,6 +857,8 @@ public:
     void reset()
     {
         midiMessages.clear();
+        noteExpressions.reset();
+        umpConverter.reset();
         lastTimeStamp.mSampleTime = std::numeric_limits<Float64>::max();
         lastTimeStamp.mFlags = 0;
     }
@@ -1099,6 +1103,8 @@ public:
                     { renderViews.outputBusViews.data(), renderViews.outputBusViews.size() }
                 };
 
+                context.noteExpressions = noteExpressions.apply (midiMessages);
+
                 processAudioBlock (*processor, context, bypass.isBypassed());
             }
 
@@ -1218,6 +1224,7 @@ public:
     void processEvents (const AURenderEvent* realtimeEventListHead, AUEventSampleTime startTime, AUAudioFrameCount frameCount)
     {
         paramChangeBuffer.clear();
+        noteExpressions.clear();
 
         for (const AURenderEvent* event = realtimeEventListHead; event != nullptr; event = event->head.next)
         {
@@ -1230,6 +1237,20 @@ public:
                     midiMessages.addEvent (midiEvent.data,
                                            static_cast<int> (midiEvent.length),
                                            static_cast<int> (jlimit<int64> (0, jmax (0, static_cast<int> (frameCount) - 1), midiEvent.eventSampleTime - startTime)));
+                }
+                break;
+
+                case AURenderEventMIDIEventList:
+                {
+                    const AUMIDIEventList& midiEventList = event->MIDIEventsList;
+                    const auto sampleOffset = static_cast<int> (jlimit<int64> (0, jmax (0, static_cast<int> (frameCount) - 1), midiEventList.eventSampleTime - startTime));
+                    const MIDIEventPacket* packet = &midiEventList.eventList.packet[0];
+
+                    for (UInt32 i = 0; i < midiEventList.eventList.numPackets; ++i)
+                    {
+                        processUniversalMidiPacket (packet->words, static_cast<int> (packet->wordCount), sampleOffset);
+                        packet = reinterpret_cast<const MIDIEventPacket*> (packet->words + packet->wordCount);
+                    }
                 }
                 break;
 
@@ -1289,6 +1310,31 @@ public:
 
         // Sort changes by sample offset for binary-search lookups during processing
         paramChangeBuffer.sort();
+    }
+
+    void processUniversalMidiPacket (const uint32* words, int numWords, int sampleOffset)
+    {
+        while (numWords > 0)
+        {
+            const auto messageWords = static_cast<int> (ump::Utils::getNumWordsForMessageType (words[0]));
+            if (messageWords > numWords)
+                return;
+
+            if (const auto expression = umpToNoteExpression (words, messageWords, sampleOffset))
+            {
+                noteExpressions.add (*expression);
+            }
+            else
+            {
+                umpConverter.convert (ump::View (words), static_cast<double> (sampleOffset), [this, sampleOffset] (const MidiMessage& message)
+                {
+                    midiMessages.addEvent (message, sampleOffset);
+                });
+            }
+
+            words += messageWords;
+            numWords -= messageWords;
+        }
     }
 
     void sendMidi (int64_t baseTimeStamp, AUAudioFrameCount frameCount)
@@ -1374,7 +1420,15 @@ public:
 
     bool getSupportsMPE() const
     {
-        return false;
+        return processor != nullptr && processor->supportsMpe();
+    }
+
+    MIDIProtocolID getAudioUnitMIDIProtocol() API_AVAILABLE (macos (12.0), ios (15.0))
+    {
+        if (processor != nullptr && processor->acceptsMidi() && processor->supportsNoteExpression())
+            return kMIDIProtocol_2_0;
+
+        return ObjCMsgSendSuper<AUAudioUnit, MIDIProtocolID> (au, @selector (AudioUnitMIDIProtocol));
     }
 
     NSArray<NSString*>* getMIDIOutputNames() const
@@ -1666,6 +1720,8 @@ private:
 
     MidiBuffer midiMessages;
     ParameterChangeBuffer paramChangeBuffer;
+    WrapperNoteExpressions noteExpressions;
+    ump::ToBytestreamConverter umpConverter { 2048 };
     AudioBuffer<float> scratchBuffer;
     AudioBuffer<float> scratchOutputBuffer;
 
@@ -1854,6 +1910,13 @@ struct AUAudioUnitSubclass final : public ObjCClass<AUAudioUnit>
             return _this (self)->getSupportsMPE() ? YES : NO;
         });
         YUP_END_IGNORE_WARNINGS_GCC_LIKE
+
+        if (@available (macOS 12.0, iOS 15.0, *))
+        {
+            addMethod (@selector (AudioUnitMIDIProtocol), [] (id self, SEL) {
+                return _this (self)->getAudioUnitMIDIProtocol();
+            });
+        }
 
         if (@available (macOS 10.13, *))
         {

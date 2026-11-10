@@ -22,6 +22,7 @@
 #pragma once
 
 #include <limits>
+#include <optional>
 
 //==============================================================================
 namespace yup
@@ -68,6 +69,75 @@ private:
 
     std::function<void()> onSnap;
 };
+
+/** Converts editor sizes between YUP points and the units hosts use for plugin views.
+
+    Cocoa hosts size views in points like YUP. Win32 and X11 hosts size them in physical pixels, which the
+    editor window maps to points with its display scale. Until the editor window exists, the scale suggested
+    by the host (VST3 setContentScaleFactor, CLAP set_scale) or the primary screen scale is used.
+*/
+class WrapperViewScale
+{
+public:
+    /** Stores the scale suggested by the host, returns true if it changed. */
+    bool setHostScale (float newScale)
+    {
+        if (newScale <= 0.0f || hostScale == newScale)
+            return false;
+
+        hostScale = newScale;
+        return true;
+    }
+
+    /** Returns the host view units per editor point. */
+    float get ([[maybe_unused]] const Component& editor) const
+    {
+#if YUP_MAC
+        return 1.0f;
+#else
+        if (editor.isOnDesktop())
+            return editor.getScaleDpi();
+
+        if (hostScale.has_value())
+            return *hostScale;
+
+        if (auto screen = Desktop::getInstance()->getPrimaryScreen())
+            return screen->contentScaleX > 0.0f ? screen->contentScaleX : 1.0f;
+
+        return 1.0f;
+#endif
+    }
+
+    /** Converts an editor size to host view units. */
+    Size<int> toHost (Size<int> size, const Component& editor) const
+    {
+        const auto scale = get (editor);
+        return { jmax (1, roundToInt (size.getWidth() * scale)), jmax (1, roundToInt (size.getHeight() * scale)) };
+    }
+
+    /** Converts a host view size to editor points. */
+    Size<int> fromHost (Size<int> size, const Component& editor) const
+    {
+        const auto scale = get (editor);
+        return { jmax (1, roundToInt (size.getWidth() / scale)), jmax (1, roundToInt (size.getHeight() / scale)) };
+    }
+
+private:
+    std::optional<float> hostScale;
+};
+
+#if YUP_LINUX
+/** Interval of the host timer that services YUP messages on Linux, where the host owns the event loop. */
+inline constexpr int hostMessageTimerIntervalMs = 16;
+
+/** Services pending YUP messages from a host GUI thread timer without blocking it. */
+inline void dispatchPendingMessagesFromHostTimer()
+{
+    // Windowing is initialised lazily, there is nothing to service before that
+    if (auto* messageManager = MessageManager::getInstanceWithoutCreating(); messageManager != nullptr && messageManager->isThisTheMessageThread())
+        messageManager->runDispatchLoopUntil (0);
+}
+#endif
 
 /** Returns the first host-facing parameter ID not used by the processor.
 
@@ -215,6 +285,67 @@ private:
     NoteExpressionMidiConverter converter;
     bool passThrough = false;
 };
+
+/** Converts a MIDI 2.0 per-note channel voice message (UMP message type 0x4) to a note expression.
+
+    Per-note pitch bend becomes tuning, using the default per-note bend range of 48 semitones.
+    Registered per-note controllers map to vibrato (1), volume (7, as linear gain up to unity),
+    pan (10), expression (11) and brightness (74). Any other message returns nothing.
+
+    @param words         the message words, at least two for a MIDI 2.0 channel voice message
+    @param numWords      the number of valid words
+    @param sampleOffset  the event position in the current block
+*/
+inline std::optional<NoteExpression> umpToNoteExpression (const uint32* words, int numWords, int sampleOffset) noexcept
+{
+    if (words == nullptr || numWords < 2 || (words[0] >> 28) != 0x4)
+        return std::nullopt;
+
+    constexpr double perNotePitchBendRange = 48.0;
+    constexpr double center = 2147483648.0;
+
+    const auto status = (words[0] >> 20) & 0xf;
+    const auto value = static_cast<double> (words[1]);
+
+    NoteExpression expression;
+    expression.sampleOffset = sampleOffset;
+    expression.channel = static_cast<int8> (((words[0] >> 16) & 0xf) + 1);
+    expression.key = static_cast<int8> ((words[0] >> 8) & 0x7f);
+
+    if (status == 0x6)
+    {
+        expression.type = NoteExpression::Type::tuning;
+        expression.value = static_cast<float> ((value - center) / center * perNotePitchBendRange);
+        return expression;
+    }
+
+    if (status != 0x0)
+        return std::nullopt;
+
+    switch (words[0] & 0xff)
+    {
+        case 1:
+            expression.type = NoteExpression::Type::vibrato;
+            break;
+        case 7:
+            expression.type = NoteExpression::Type::volume;
+            break;
+        case 10:
+            expression.type = NoteExpression::Type::pan;
+            break;
+        case 11:
+            expression.type = NoteExpression::Type::expression;
+            break;
+        case 74:
+            expression.type = NoteExpression::Type::brightness;
+            break;
+        default:
+            return std::nullopt;
+    }
+
+    expression.value = static_cast<float> (value / 4294967295.0);
+    return expression;
+}
 
 /** Returns the total number of output audio channels across all output audio buses. */
 inline int getTotalAudioOutputChannels (const AudioProcessor& processor)

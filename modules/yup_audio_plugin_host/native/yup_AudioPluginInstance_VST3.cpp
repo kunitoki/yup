@@ -19,12 +19,6 @@
   ==============================================================================
 */
 
-#if YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3
-
-#if YUP_MAC
-#include <CoreFoundation/CoreFoundation.h>
-#endif
-
 namespace yup
 {
 
@@ -2893,5 +2887,3 @@ ResultValue<std::unique_ptr<AudioPluginInstance>> VST3Format::loadPlugin (
 }
 
 } // namespace yup
-
-#endif // YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3

@@ -369,6 +369,8 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "threads/yup_CountDownLatch.h"
 #include "threads/yup_DynamicLibrary.h"
 #include "threads/yup_InterProcessLock.h"
+#include "threads/yup_InterProcessSemaphore.h"
+#include "memory/yup_SharedMemory.h"
 #include "threads/yup_Process.h"
 #include "threads/yup_SpinLock.h"
 #include "threads/yup_WaitableEvent.h"

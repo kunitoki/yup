@@ -110,6 +110,10 @@ YUP_END_IGNORE_WARNINGS_MSVC
 
 #if YUP_LINUX || YUP_BSD
 #include <stdio.h>
+#if YUP_LINUX
+#include <linux/futex.h>
+#include <sys/syscall.h>
+#endif
 #include <limits.h>
 #include <langinfo.h>
 #include <ifaddrs.h>
@@ -164,6 +168,10 @@ extern char** environ;
 #if YUP_APPLE
 #include <xlocale.h>
 #include <mach/mach.h>
+#if __has_include(<os/os_sync_wait_on_address.h>)
+#include <os/os_sync_wait_on_address.h>
+#include <os/clock.h>
+#endif
 #endif
 
 #if YUP_ANDROID
@@ -197,6 +205,7 @@ extern char** environ;
 #include "maths/yup_Expression.cpp"
 #include "maths/yup_Random.cpp"
 #include "memory/yup_MemoryBlock.cpp"
+#include "memory/yup_SharedMemory.cpp"
 #include "memory/yup_AllocationHooks.cpp"
 #include "cryptography/yup_SHA1.cpp"
 #include "misc/yup_RuntimePermissions.cpp"
@@ -253,6 +262,10 @@ extern char** environ;
 #if ! YUP_WINDOWS
 #include "native/yup_SharedCode_posix.h"
 #include "native/yup_NamedPipe_posix.cpp"
+#if ! (YUP_WASM || YUP_ANDROID)
+#include "native/yup_SharedMemory_posix.cpp"
+#include "native/yup_InterProcessSemaphore_posix.cpp"
+#endif
 #if ! YUP_ANDROID || __ANDROID_API__ >= 24
 #include "native/yup_IPAddress_posix.h"
 #endif
@@ -281,6 +294,8 @@ extern char** environ;
 #include "native/yup_Registry_windows.cpp"
 #include "native/yup_SystemStats_windows.cpp"
 #include "native/yup_Threads_windows.cpp"
+#include "native/yup_SharedMemory_windows.cpp"
+#include "native/yup_InterProcessSemaphore_windows.cpp"
 #include "native/yup_PlatformTimer_windows.cpp"
 #include "native/yup_Watchdog_windows.h"
 

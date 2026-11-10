@@ -19,8 +19,6 @@
   ==============================================================================
 */
 
-#if YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC
-
 namespace yup
 {
 
@@ -1621,5 +1619,3 @@ ResultValue<std::unique_ptr<AudioPluginInstance>> AUFormat::loadPlugin(
 }
 
 } // namespace yup
-
-#endif // YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC

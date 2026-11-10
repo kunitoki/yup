@@ -106,6 +106,11 @@ by the host or the corner goes through `getConstrainedSize()`, which applies
 `shouldPreserveAspectRatio()` and `getPreferredAspectRatioSize()`. An editor
 calling `setSize()` on itself resizes the host window as well.
 
+Editor sizes are always in YUP points. On Windows and Linux, where VST3 and CLAP
+hosts size plugin views in physical pixels, the wrappers convert them with the
+editor window's display scale (or the host's suggested scale before the window
+exists), so editors keep their layout on high density displays.
+
 ### Host integration
 
 Processors can describe themselves to hosts through optional overrides and metadata:
@@ -124,7 +129,8 @@ Processors can describe themselves to hosts through optional overrides and metad
   `hostInfoChanged()` is called when they change. `AudioProcessor::getHostType()` identifies the host
   (`PluginHostType`) for host-specific workarounds.
 - **Note expression**: return true from `supportsNoteExpression()` to receive per-note expressions in
-  `AudioProcessContext::noteExpressions` (from CLAP and VST3 hosts). Otherwise they are converted to
+  `AudioProcessContext::noteExpressions` (from CLAP and VST3 hosts, and from AUv3 hosts sending MIDI 2.0
+  per-note pitch bend and controllers, which is requested automatically). Otherwise they are converted to
   MIDI, either channel-wide or as MPE when `supportsMpe()` returns true; only tuning (pitch bend),
   pressure and brightness (CC74) survive the conversion.
 
