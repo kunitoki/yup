@@ -139,7 +139,7 @@ public:
 
     float getDesiredFrameRate() const override { return 60.0f; }
 
-    void setDesiredFrameRate (float) override {}
+    void setDesiredFrameRate (std::optional<float>) override {}
 
     bool isVsyncEnabled() const override { return false; }
 

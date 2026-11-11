@@ -22,20 +22,26 @@
 #include "RetraceEditor.h"
 #include "ui/SynthNeonEffect.h"
 #include "ui/SynthTheme.h"
-#include "ui/SynthThemes.h"
 
 RetraceEditor::RetraceEditor (RetraceProcessor& processorToEdit)
     : processor (processorToEdit)
+    , appliedOptions (processor.getViewOptions())
 {
     buildInterface();
     updatePostEffect();
 
-    setSize (getPreferredSize().to<float>());
+    setSize (getConstrainedSize (getInitialSize()).to<float>());
 
     // Fast while the tube powers on, then only polling for a new theme.
     startTimerHz (60);
 
     processor.setEditorComponent (this);
+}
+
+yup::Size<int> RetraceEditor::getInitialSize() const
+{
+    const auto size = processor.getViewOptions().editorSize;
+    return size.isEmpty() ? getPreferredSize() : size;
 }
 
 RetraceEditor::~RetraceEditor()
@@ -50,6 +56,9 @@ void RetraceEditor::resized()
 {
     if (interface == nullptr)
         return;
+
+    if (const auto size = getSize().roundToInt(); ! size.isEmpty())
+        processor.setEditorSize (size);
 
     const auto design = getPreferredSize().to<float>();
     const auto scale = yup::jmin (getWidth() / design.getWidth(), getHeight() / design.getHeight());
@@ -69,28 +78,42 @@ void RetraceEditor::paint (yup::Graphics& g)
 
 void RetraceEditor::buildInterface()
 {
-    builtTheme = getTheme();
-    interface = std::make_unique<SynthInterface> (processor, builtTheme);
-    interface->onThemeChosen = [this] (int index)
-    {
-        processor.setThemeName (SynthThemes::getThemes()[static_cast<std::size_t> (index)].name);
-        SynthThemes::saveSelectedTheme (index);
-    };
-    interface->onPostEffectChanged = [this] { updatePostEffect(); };
+    interface = std::make_unique<SynthInterface> (processor, appliedOptions);
+    interface->onViewOptionsChanged = [this] { syncViewOptions (false); };
 
     addAndMakeVisible (*interface);
     resized();
 }
 
-int RetraceEditor::getTheme() const
+void RetraceEditor::syncViewOptions (bool canRebuild)
 {
-    const auto theme = SynthThemes::findTheme (processor.getThemeName());
-    return theme >= 0 ? theme : SynthThemes::loadSelectedTheme();
+    const auto options = processor.getViewOptions();
+    const auto themeChanged = options.getThemeIndex() != appliedOptions.getThemeIndex();
+
+    if (themeChanged && ! canRebuild)
+        return;
+
+    const auto effectChanged = options.postEffect != appliedOptions.postEffect || options.neon != appliedOptions.neon;
+    const auto interfaceChanged = options.frameRate != appliedOptions.frameRate || options.landscapes != appliedOptions.landscapes;
+    appliedOptions = options;
+
+    if (themeChanged)
+    {
+        interface.reset();
+        buildInterface();
+    }
+    else if (interfaceChanged)
+    {
+        interface->setViewOptions (options);
+    }
+
+    if (effectChanged)
+        updatePostEffect();
 }
 
 void RetraceEditor::updatePostEffect()
 {
-    auto effect = SynthInterface::createPostEffect();
+    auto effect = SynthInterface::createPostEffect (appliedOptions);
 
     if (auto* neon = dynamic_cast<SynthNeonEffect*> (effect.get()))
         neon->setOpening (opening);
@@ -125,9 +148,5 @@ void RetraceEditor::timerCallback()
     if (opening < 1.0f)
         advanceOpening();
 
-    if (getTheme() == builtTheme)
-        return;
-
-    interface.reset();
-    buildInterface();
+    syncViewOptions (true);
 }

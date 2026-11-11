@@ -154,7 +154,6 @@ private:
     static constexpr float overviewGap = 4.0f;
     static constexpr int minimumVisiblePartials = 16;
     static constexpr int defaultVisiblePartials = 64;
-    static constexpr double animationInterval = 1.0 / 30.0;
 
     static_assert (displayResolution == SynthWaveformShader::sampleCount);
 
@@ -171,7 +170,6 @@ private:
     SynthWaveformShader::Target landscapeTarget;
     yup::GpuTexture::Ptr cachedLandscape;
     float animationTime = 0.0f;
-    double sinceLastFrame = 0.0;
     bool landscapeDirty = true;
     bool animating = false;
 

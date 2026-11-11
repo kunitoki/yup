@@ -46,6 +46,7 @@
 #include "SynthVoicingPanel.h"
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -75,27 +76,32 @@ class SynthInterface
     , public UndoHistoryOwner
     , public yup::DragAndDropTarget
     , public SynthModulationPanelHost
-    , private yup::Timer
 {
 public:
-    /** Builds the interface in a theme, see SynthThemes::getThemes(). */
-    SynthInterface (RetraceProcessor& processorToEdit, int themeToWear);
+    /** Builds the interface with view options, wearing their theme (see SynthThemes::getThemes()). */
+    SynthInterface (RetraceProcessor& processorToEdit, const SynthViewOptions& optionsToShow);
     ~SynthInterface() override;
 
     //==============================================================================
-    /** Called with the index of a theme picked in the settings menu. */
-    std::function<void (int)> onThemeChosen;
+    /** Called after the settings menu changed the processor's view options. A new theme
+        needs a new interface, which must not be built from inside the menu's callback.
+    */
+    std::function<void()> onViewOptionsChanged;
 
-    //==============================================================================
-    /** Called when the post effect settings change; createPostEffect() builds the new one. */
-    std::function<void()> onPostEffectChanged;
+    /** Applies new view options to the frame rate and the landscape displays; the theme
+        stays the one the interface was built with.
+    */
+    void setViewOptions (const SynthViewOptions& newOptions);
 
-    /** Returns the post effect the settings ask for, or nullptr when it is off.
+    /** Returns the view options the interface shows. */
+    const SynthViewOptions& getViewOptions() const noexcept { return viewOptions; }
+
+    /** Returns the post effect the view options ask for, or nullptr when it is off.
 
         The effect belongs on the component the interface fills, not on the interface, so
         it renders at the size the interface is shown at whatever its scale.
     */
-    static yup::ComponentEffect::Ptr createPostEffect();
+    static yup::ComponentEffect::Ptr createPostEffect (const SynthViewOptions& options);
 
     //==============================================================================
     /** Shows the preset browser over the instrument's panels, or hides it again. The
@@ -129,9 +135,10 @@ public:
     void showModulationPanel (SynthModulationTarget& target) override;
 
 private:
-    void timerCallback() override;
+    void refreshDisplay (double lastFrameTimeSeconds) override;
 
     void showSettingsMenu (yup::Point<float> position);
+    void changeViewOptions (const std::function<void (SynthViewOptions&)>& change);
     void applyFrameRate();
     void applyUndoSetting();
     void undoStep (bool redo);
@@ -162,6 +169,7 @@ private:
     //==============================================================================
     RetraceProcessor& processor;
     const int theme;
+    SynthViewOptions viewOptions;
 
     std::unique_ptr<SynthHeader> header;
 

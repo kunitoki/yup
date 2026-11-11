@@ -543,7 +543,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getScaleDpi", &ComponentNative::getScaleDpi)
         .def ("getCurrentFrameRate", &ComponentNative::getCurrentFrameRate)
         .def ("getDesiredFrameRate", &ComponentNative::getDesiredFrameRate)
-        .def ("setDesiredFrameRate", &ComponentNative::setDesiredFrameRate, "newFrameRate"_a)
+        .def ("setDesiredFrameRate", [] (ComponentNative& self, std::optional<float> newFrameRate) { self.setDesiredFrameRate (newFrameRate); }, "newFrameRate"_a = std::nullopt)
         .def ("getNativeHandle", &ComponentNative::getNativeHandle, py::return_value_policy::reference_internal)
         .def_static ("createFor", &ComponentNative::createFor, "component"_a, "options"_a, "parent"_a = nullptr)
     ;

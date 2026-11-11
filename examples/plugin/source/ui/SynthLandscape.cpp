@@ -20,7 +20,7 @@
 */
 
 #include "SynthLandscape.h"
-#include "SynthSettings.h"
+#include "SynthInterface.h"
 #include "SynthTheme.h"
 
 SynthLandscape::SynthLandscape (std::shared_ptr<SynthWaveformShader> sharedShader)
@@ -30,9 +30,15 @@ SynthLandscape::SynthLandscape (std::shared_ptr<SynthWaveformShader> sharedShade
     look.scrolls = false;
 }
 
-bool SynthLandscape::isEnabled()
+bool SynthLandscape::isEnabled (const yup::Component& scope)
 {
-    return SynthSettings::get().landscapes;
+    for (const auto* component = &scope; component != nullptr; component = component->getParentComponent())
+    {
+        if (const auto* interface = dynamic_cast<const SynthInterface*> (component))
+            return interface->getViewOptions().landscapes;
+    }
+
+    return true;
 }
 
 void SynthLandscape::setProfile (float newWidth, float height, const std::function<float (float)>& yAtX)
@@ -61,28 +67,19 @@ void SynthLandscape::setPlayhead (float x, float trailWidth)
     look.trail = trail;
 }
 
-bool SynthLandscape::advance (double lastFrameTimeSeconds)
+bool SynthLandscape::advance (double lastFrameTimeSeconds, const yup::Component& scope)
 {
-    if (! animating || ! isEnabled())
-    {
-        sinceLastFrame = 0.0;
-        return false;
-    }
-
-    sinceLastFrame += lastFrameTimeSeconds;
-
-    if (sinceLastFrame < animationInterval)
+    if (! animating || ! isEnabled (scope))
         return false;
 
-    time += static_cast<float> (sinceLastFrame);
-    sinceLastFrame = 0.0;
+    time += static_cast<float> (lastFrameTimeSeconds);
     dirty = true;
     return true;
 }
 
 bool SynthLandscape::paint (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, yup::Color accent)
 {
-    if (shader == nullptr || ! isEnabled())
+    if (shader == nullptr || ! isEnabled (scope))
         return false;
 
     const auto ground = SynthTheme::wellColor (scope);

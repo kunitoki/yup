@@ -997,7 +997,7 @@ float SDLComponentNative::getDesiredFrameRate() const
     return desiredFrameRate.load (std::memory_order_relaxed);
 }
 
-void SDLComponentNative::setDesiredFrameRate (float newFrameRate)
+void SDLComponentNative::setDesiredFrameRate (std::optional<float> newFrameRate)
 {
     YUP_ASSERT_MESSAGE_THREAD
 
@@ -1693,7 +1693,7 @@ extern "C"
     void EMSCRIPTEN_KEEPALIVE yupSetDesiredFrameRate (float newFrameRate)
     {
         if (auto* native = SDLComponentNative::getPrimaryNativeComponent())
-            native->setDesiredFrameRate (newFrameRate);
+            native->setDesiredFrameRate (newFrameRate > 0.0f ? std::optional<float> (newFrameRate) : std::nullopt);
     }
 
     float EMSCRIPTEN_KEEPALIVE yupGetCurrentFrameRate()

@@ -28,6 +28,7 @@
 #include "../dsp/SynthEffectsParameters.h"
 #include "../dsp/SynthTypes.h"
 #include "../ui/SynthPresetLibrary.h"
+#include "../ui/SynthThemes.h"
 
 #include <yup_gui/yup_gui.h>
 #include <yup_audio_formats/yup_audio_formats.h>
@@ -623,7 +624,7 @@ void RetraceMCPServer::registerInfoTools()
             set (info, "factoryPresetIndex", processor.getCurrentPreset());
             set (info, "presetKey", processor.getCurrentPresetKey());
             set (info, "preset", describeInfo (processor.getPresetInfo()));
-            set (info, "theme", processor.getThemeName());
+            set (info, "theme", SynthThemes::getThemes()[static_cast<std::size_t> (processor.getViewOptions().getThemeIndex())].name);
             set (info, "editorOpen", processor.getEditorComponent() != nullptr);
             set (info, "capturing", processor.getAudioCapture().isCapturing());
             return yup::MCPToolResult::fromJson (info);

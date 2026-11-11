@@ -681,11 +681,16 @@ public:
         it to throttle a window that has nothing to show, for example one that is obscured by
         another window, or to raise the rate again when it becomes interesting.
 
-        @param newFrameRate The desired framerate in frames per second.
+        Pass std::nullopt to drop the fixed rate and follow the display refresh while vsync is
+        enabled (and 60 otherwise), matching Options::withFramerateRedraw(). A plain float
+        converts implicitly, so setDesiredFrameRate (60.0f) still fixes the rate to 60.
+
+        @param newFrameRate The desired framerate in frames per second, or std::nullopt to follow
+                            the display refresh under vsync.
 
         @see getDesiredFrameRate, Options::withUnfocusedFramerateRedraw
     */
-    virtual void setDesiredFrameRate (float newFrameRate) = 0;
+    virtual void setDesiredFrameRate (std::optional<float> newFrameRate) = 0;
 
     //==============================================================================
     /** Checks if Vsync is enabled.

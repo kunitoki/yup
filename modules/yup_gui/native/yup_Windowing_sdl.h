@@ -126,7 +126,7 @@ public:
     float getScaleDpi() const override;
     float getCurrentFrameRate() const override;
     float getDesiredFrameRate() const override;
-    void setDesiredFrameRate (float newFrameRate) override;
+    void setDesiredFrameRate (std::optional<float> newFrameRate) override;
 
     //==============================================================================
     bool isVsyncEnabled() const override;

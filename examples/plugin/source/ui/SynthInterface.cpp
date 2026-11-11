@@ -59,12 +59,30 @@ bool isRouteBipolar (SynthModulationSource source, const SynthParameters& parame
     return isBipolarSource (source);
 }
 
+/** The post effect switches of the settings menu, by their menu names. */
+std::array<std::pair<const char*, bool*>, 10> getViewSwitches (SynthViewOptions& options)
+{
+    auto& neon = options.neon;
+
+    return { { { "Post Effect", &options.postEffect },
+               { "Neon Glow", &neon.glow },
+               { "Chromatic Aberration", &neon.aberration },
+               { "Color Grade", &neon.grade },
+               { "Scanlines", &neon.scanlines },
+               { "Vignette", &neon.vignette },
+               { "Grain", &neon.grain },
+               { "Tube Curvature", &neon.curvature },
+               { "Phosphor Mask", &neon.phosphor },
+               { "Glass Reflection", &neon.reflection } } };
+}
+
 } // namespace
 
 //==============================================================================
-SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWear)
+SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, const SynthViewOptions& optionsToShow)
     : processor (processorToEdit)
-    , theme (themeToWear)
+    , theme (optionsToShow.getThemeIndex())
+    , viewOptions (optionsToShow)
     , keyboardComponent (processor.getKeyboardState(), yup::MidiKeyboardComponent::horizontalKeyboard)
     , pitchWheelComponent (processor.getKeyboardState(), "PitchWheel")
     , modWheelComponent (processor.getKeyboardState(), "ModWheel")
@@ -238,15 +256,10 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
     // Menus and combo box lists open inside the interface, so the post effect draws them too.
     setPopupContainer (true);
     syncFromProcessor();
-
-    // Every repaint redraws the whole interface under the post effect, so the displays
-    // follow the processor at 30 Hz; dragging a control still repaints it at once.
-    startTimerHz (30);
 }
 
 SynthInterface::~SynthInterface()
 {
-    stopTimer();
 }
 
 //==============================================================================
@@ -612,11 +625,8 @@ void SynthInterface::showModulationPanel (SynthModulationTarget& target)
 //==============================================================================
 void SynthInterface::showSettingsMenu (yup::Point<float> position)
 {
-    auto& settings = SynthSettings::get();
-    auto& neon = settings.neon;
-
-    // Switch IDs are 1 based, a switch reached through its index in this table; theme IDs
-    // start at themeBase, a theme reached through its index in SynthThemes; frame rate IDs
+    // Switch IDs are 1 based, a switch reached through its index in getViewSwitches(); theme
+    // IDs start at themeBase, a theme reached through its index in SynthThemes; frame rate IDs
     // are frameRateBase plus the rate, 0 standing for vsync.
     constexpr int themeBase = 1000;
     constexpr int frameRateBase = 2000;
@@ -624,17 +634,11 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
     constexpr int landscapesId = 3001;
     constexpr int mcpServerId = 3002;
     constexpr int mcpCopyUrlId = 3003;
+    constexpr int saveDefaultsId = 3004;
 
-    const std::pair<const char*, bool*> switches[] { { "Post Effect", &settings.postEffect },
-                                                     { "Neon Glow", &neon.glow },
-                                                     { "Chromatic Aberration", &neon.aberration },
-                                                     { "Color Grade", &neon.grade },
-                                                     { "Scanlines", &neon.scanlines },
-                                                     { "Vignette", &neon.vignette },
-                                                     { "Grain", &neon.grain },
-                                                     { "Tube Curvature", &neon.curvature },
-                                                     { "Phosphor Mask", &neon.phosphor },
-                                                     { "Glass Reflection", &neon.reflection } };
+    const auto& settings = SynthSettings::get();
+    auto shown = processor.getViewOptions();
+    const auto switches = getViewSwitches (shown);
 
     auto menu = yup::PopupMenu::create (yup::PopupMenu::Options {}
                                             .withParentComponent (this)
@@ -644,18 +648,18 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
     const auto& themes = SynthThemes::getThemes();
 
     for (int index = 0; index < static_cast<int> (themes.size()); ++index)
-        themeMenu->addItem (themes[static_cast<std::size_t> (index)].name, themeBase + index, true, index == theme);
+        themeMenu->addItem (themes[static_cast<std::size_t> (index)].name, themeBase + index, true, index == shown.getThemeIndex());
 
     menu->addSubMenu ("Theme", themeMenu);
 
     auto frameRateMenu = yup::PopupMenu::create();
 
     for (const auto& [name, rate] : { std::pair<const char*, int> { "30 FPS", 30 }, { "60 FPS", 60 }, { "VSync", 0 } })
-        frameRateMenu->addItem (name, frameRateBase + rate, true, settings.frameRate == rate);
+        frameRateMenu->addItem (name, frameRateBase + rate, true, shown.frameRate == rate);
 
     menu->addSubMenu ("Frame Rate", frameRateMenu);
+    menu->addItem ("Landscape Displays", landscapesId, true, shown.landscapes);
     menu->addItem ("Undo History", undoId, true, settings.undo);
-    menu->addItem ("Landscape Displays", landscapesId, true, settings.landscapes);
     menu->addSeparator();
 
     auto* mcpServer = processor.getMCPServer();
@@ -664,21 +668,19 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
     menu->addItem (mcpUrl.isNotEmpty() ? "Copy " + mcpUrl : yup::String ("Copy MCP Server URL"), mcpCopyUrlId, mcpUrl.isNotEmpty(), false);
     menu->addSeparator();
 
-    for (int index = 0; index < static_cast<int> (std::size (switches)); ++index)
+    for (int index = 0; index < static_cast<int> (switches.size()); ++index)
     {
-        const auto& [name, value] = switches[index];
-        menu->addItem (name, index + 1, index == 0 || settings.postEffect, *value);
+        const auto& [name, value] = switches[static_cast<std::size_t> (index)];
+        menu->addItem (name, index + 1, index == 0 || shown.postEffect, *value);
 
         if (index == 0)
             menu->addSeparator();
     }
 
-    std::vector<bool*> values;
+    menu->addSeparator();
+    menu->addItem ("Save as Default", saveDefaultsId);
 
-    for (const auto& entry : switches)
-        values.push_back (entry.second);
-
-    menu->show ([safeThis = yup::WeakReference<yup::Component> (this), values] (int selectedId)
+    menu->show ([safeThis = yup::WeakReference<yup::Component> (this)] (int selectedId)
     {
         auto* interface = dynamic_cast<SynthInterface*> (safeThis.get());
 
@@ -691,15 +693,6 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
             undo = ! undo;
             SynthSettings::save();
             interface->applyUndoSetting();
-            return;
-        }
-
-        if (selectedId == landscapesId)
-        {
-            auto& landscapes = SynthSettings::get().landscapes;
-            landscapes = ! landscapes;
-            SynthSettings::save();
-            interface->repaint();
             return;
         }
 
@@ -720,38 +713,47 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
             return;
         }
 
-        if (selectedId >= frameRateBase)
+        if (selectedId == saveDefaultsId)
         {
-            SynthSettings::get().frameRate = selectedId - frameRateBase;
+            SynthSettings::get().defaults = interface->processor.getViewOptions();
             SynthSettings::save();
-            interface->applyFrameRate();
             return;
         }
 
-        if (selectedId >= themeBase)
+        interface->changeViewOptions ([selectedId] (SynthViewOptions& options)
         {
-            if (interface->onThemeChosen != nullptr)
-                interface->onThemeChosen (selectedId - themeBase);
-
-            return;
-        }
-
-        if (! yup::isPositiveAndBelow (selectedId - 1, static_cast<int> (values.size())))
-            return;
-
-        auto* value = values[static_cast<std::size_t> (selectedId - 1)];
-        *value = ! *value;
-        SynthSettings::save();
-
-        if (interface->onPostEffectChanged != nullptr)
-            interface->onPostEffectChanged();
+            if (selectedId == landscapesId)
+                options.landscapes = ! options.landscapes;
+            else if (selectedId >= frameRateBase)
+                options.frameRate = selectedId - frameRateBase;
+            else if (selectedId >= themeBase)
+                options.theme = SynthThemes::getThemes()[static_cast<std::size_t> (selectedId - themeBase)].name;
+            else if (const auto switches = getViewSwitches (options); yup::isPositiveAndBelow (selectedId - 1, static_cast<int> (switches.size())))
+                *switches[static_cast<std::size_t> (selectedId - 1)].second = ! *switches[static_cast<std::size_t> (selectedId - 1)].second;
+        });
     });
 }
 
-yup::ComponentEffect::Ptr SynthInterface::createPostEffect()
+void SynthInterface::changeViewOptions (const std::function<void (SynthViewOptions&)>& change)
 {
-    const auto& settings = SynthSettings::get();
-    return settings.postEffect ? yup::ComponentEffect::Ptr (new SynthNeonEffect (settings.neon)) : nullptr;
+    auto options = processor.getViewOptions();
+    change (options);
+    processor.setViewOptions (options);
+
+    if (onViewOptionsChanged != nullptr)
+        onViewOptionsChanged();
+}
+
+void SynthInterface::setViewOptions (const SynthViewOptions& newOptions)
+{
+    viewOptions = newOptions;
+    applyFrameRate();
+    repaint();
+}
+
+yup::ComponentEffect::Ptr SynthInterface::createPostEffect (const SynthViewOptions& options)
+{
+    return options.postEffect ? yup::ComponentEffect::Ptr (new SynthNeonEffect (options.neon)) : nullptr;
 }
 
 /** Keys come up from the focused control when it does not use them: the undo shortcuts are
@@ -831,19 +833,19 @@ void SynthInterface::applyFrameRate()
     if (native == nullptr)
         return;
 
-    const auto rate = SynthSettings::get().frameRate;
+    const auto rate = viewOptions.frameRate;
     native->setVsyncEnabled (rate == 0);
 
-    if (rate > 0)
-        native->setDesiredFrameRate (static_cast<float> (rate));
+    // VSync (rate 0) drops the fixed rate so pacing follows the display refresh; 30/60 fix it.
+    native->setDesiredFrameRate (rate > 0 ? std::optional<float> (static_cast<float> (rate)) : std::nullopt);
 
     appliedFrameRate = rate;
 }
 
-void SynthInterface::timerCallback()
+void SynthInterface::refreshDisplay (double)
 {
     // The window may only exist once the interface is on screen, as in a plugin host.
-    if (appliedFrameRate != SynthSettings::get().frameRate)
+    if (appliedFrameRate != viewOptions.frameRate)
         applyFrameRate();
 
     updateModulation();

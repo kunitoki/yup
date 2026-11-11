@@ -56,6 +56,8 @@ public:
         bool curvature = true;
         bool phosphor = true;
         bool reflection = true;
+
+        bool operator== (const Options&) const = default;
     };
 
     explicit SynthNeonEffect (Options optionsToUse);
