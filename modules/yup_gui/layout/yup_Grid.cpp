@@ -806,10 +806,10 @@ void Grid::performLayout (Rectangle<float> targetArea)
 
         // Margins eat into the cell, and can legitimately exceed it - a
         // negative cell size would then invert the rectangle.
-        cellX += item.marginLeft;
-        cellY += item.marginTop;
-        cellW = std::max (0.0f, cellW - item.marginLeft - item.marginRight);
-        cellH = std::max (0.0f, cellH - item.marginTop - item.marginBottom);
+        cellX += item.margin.getLeft();
+        cellY += item.margin.getTop();
+        cellW = std::max (0.0f, cellW - item.margin.getHorizontal());
+        cellH = std::max (0.0f, cellH - item.margin.getVertical());
 
         const auto horizontalAlign = resolveAlign (item.justifySelf, justifyItems);
         const auto verticalAlign = resolveAlign (item.alignSelf, alignItems);

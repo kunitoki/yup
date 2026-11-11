@@ -73,6 +73,30 @@ auto sidebar = area.removeFromLeft (120.0f);
 Non-mutating variants (`withTrimmedTop`, `reducedLeft`, …) return a new
 rectangle without changing the original.
 
+## EdgeSpacing
+
+`EdgeSpacing<ValueType>` holds independent `left`, `top`, `right` and `bottom`
+amounts: the value type for margins, paddings, insets and borders. Subtract it
+from a rectangle to get the content area inside it, or add it to grow one.
+
+```cpp
+EdgeSpacing<float> padding { 8.0f, 4.0f }; // 8px left/right, 4px top/bottom
+
+auto content = padding.subtractedFrom (getLocalBounds()); // inside the padding
+auto outer   = padding.addedTo (content);                 // back to the original
+
+// Rectangle offers matching overloads:
+auto same = getLocalBounds().reduced (padding);
+auto grown = content.enlarged (padding);
+```
+
+Construct it uniformly (`EdgeSpacing<float> (6.0f)`), per axis
+(`{ horizontal, vertical }`) or per edge (`{ left, top, right, bottom }`).
+It supports `getHorizontal()`/`getVertical()` totals, `isZero()`/`isUniform()`,
+arithmetic (`+`, `-`, unary `-`, scalar `*` and `/`), `to<T>()` conversion and
+`toString()`. YUP layouts use it directly: `FlexItem::margin`,
+`GridItem::margin`, `FlexBox::padding` and `Component::setPaintMargin`.
+
 ## Color
 
 `Color` is a packed 32-bit ARGB value. It is `constexpr` and cheap to copy.

@@ -165,10 +165,10 @@ TEST (FlexBoxParityTests, MatchesTheBrowserForEveryCorpusCase)
         {
             if (padding->size() == 4)
             {
-                box.paddingLeft = static_cast<float> (static_cast<double> (padding->getUnchecked (0)));
-                box.paddingRight = static_cast<float> (static_cast<double> (padding->getUnchecked (1)));
-                box.paddingTop = static_cast<float> (static_cast<double> (padding->getUnchecked (2)));
-                box.paddingBottom = static_cast<float> (static_cast<double> (padding->getUnchecked (3)));
+                box.padding.setLeft (static_cast<float> (static_cast<double> (padding->getUnchecked (0))));
+                box.padding.setRight (static_cast<float> (static_cast<double> (padding->getUnchecked (1))));
+                box.padding.setTop (static_cast<float> (static_cast<double> (padding->getUnchecked (2))));
+                box.padding.setBottom (static_cast<float> (static_cast<double> (padding->getUnchecked (3))));
             }
         }
 
@@ -224,10 +224,10 @@ TEST (FlexBoxParityTests, MatchesTheBrowserForEveryCorpusCase)
                             values[m] = static_cast<float> (static_cast<double> (entry));
                     }
 
-                    item.marginLeft = values[0];
-                    item.marginRight = values[1];
-                    item.marginTop = values[2];
-                    item.marginBottom = values[3];
+                    item.margin.setLeft (values[0]);
+                    item.margin.setRight (values[1]);
+                    item.margin.setTop (values[2]);
+                    item.margin.setBottom (values[3]);
 
                     item.marginLeftAuto = autoFlags[0];
                     item.marginRightAuto = autoFlags[1];

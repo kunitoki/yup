@@ -230,10 +230,10 @@ def test_set_padding_with_two_arguments():
     box = yup.FlexBox()
     box.setPadding(10.0, 20.0)
 
-    assert isclose(box.paddingLeft, 10.0)
-    assert isclose(box.paddingRight, 10.0)
-    assert isclose(box.paddingTop, 20.0)
-    assert isclose(box.paddingBottom, 20.0)
+    assert isclose(box.padding.getLeft(), 10.0)
+    assert isclose(box.padding.getRight(), 10.0)
+    assert isclose(box.padding.getTop(), 20.0)
+    assert isclose(box.padding.getBottom(), 20.0)
 
 #==================================================================================================
 

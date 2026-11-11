@@ -156,11 +156,8 @@ public:
     float baseline = -1.0f;
 
     //==============================================================================
-    /** Margin values for the item (in pixels). */
-    float marginLeft = 0.0f;
-    float marginRight = 0.0f;
-    float marginTop = 0.0f;
-    float marginBottom = 0.0f;
+    /** Margin values around the item (in pixels). */
+    EdgeSpacing<float> margin;
 
     /** Whether the corresponding margin behaves as CSS `margin: auto`.
 
@@ -222,6 +219,9 @@ public:
 
     /** Returns a copy of this FlexItem with different margins. */
     FlexItem withMargin (float newMargin) const;
+
+    /** Returns a copy of this FlexItem with different margins. */
+    FlexItem withMargin (const EdgeSpacing<float>& newMargin) const;
 
     /** Returns a copy of this FlexItem with the given margins marked as auto.
 

@@ -748,12 +748,19 @@ void Component::setPaintMargin (float margin)
     setPaintMargin (margin, margin, margin, margin);
 }
 
+void Component::setPaintMargin (const EdgeSpacing<float>& margin)
+{
+    setPaintMargin (margin.getLeft(), margin.getTop(), margin.getRight(), margin.getBottom());
+}
+
+EdgeSpacing<float> Component::getPaintMargin() const
+{
+    return paintMargin;
+}
+
 Rectangle<float> Component::getPaintBounds() const
 {
-    return { -paintMargin.left,
-             -paintMargin.top,
-             getWidth() + paintMargin.left + paintMargin.right,
-             getHeight() + paintMargin.top + paintMargin.bottom };
+    return getLocalBounds().enlarged (paintMargin);
 }
 
 void Component::setPaintProfilingDisabled (bool shouldBeDisabled)

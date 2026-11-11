@@ -344,8 +344,8 @@ TEST (FlexBoxTests, StretchHonorsCrossAxisMargins)
     box.items.add (FlexItem (c1).withWidth (100));
 
     auto& item = box.items.getReference (0);
-    item.marginTop = 10.0f;
-    item.marginBottom = 10.0f;
+    item.margin.setTop (10.0f);
+    item.margin.setBottom (10.0f);
 
     box.performLayout (Rectangle<float> (0, 0, 200, 100));
 
@@ -895,8 +895,8 @@ TEST (FlexBoxTests, BaselineDoesNotDoubleCountTheLeadingCrossMargin)
     box.items.add (FlexItem (c2, 60, 70));
     box.items.add (FlexItem (c3, 60, 20));
 
-    box.items.getReference (0).marginTop = 15.0f;
-    box.items.getReference (2).marginTop = 5.0f;
+    box.items.getReference (0).margin.setTop (15.0f);
+    box.items.getReference (2).margin.setTop (5.0f);
 
     box.performLayout (Rectangle<float> (0, 0, 300, 120));
 
@@ -950,13 +950,13 @@ TEST (FlexBoxTests, RowReverseKeepsPhysicalMarginSides)
     box.items.add (FlexItem (c2, 60, 40));
 
     auto& first = box.items.getReference (0);
-    first.marginLeft = 10.0f;
-    first.marginRight = 5.0f;
-    first.marginTop = 8.0f;
+    first.margin.setLeft (10.0f);
+    first.margin.setRight (5.0f);
+    first.margin.setTop (8.0f);
 
     auto& second = box.items.getReference (1);
-    second.marginRight = 12.0f;
-    second.marginTop = 4.0f;
+    second.margin.setRight (12.0f);
+    second.margin.setTop (4.0f);
 
     box.performLayout (Rectangle<float> (0, 0, 300, 100));
 
@@ -977,13 +977,13 @@ TEST (FlexBoxTests, ColumnReverseKeepsPhysicalMarginSides)
     box.items.add (FlexItem (c2, 40, 60));
 
     auto& first = box.items.getReference (0);
-    first.marginLeft = 10.0f;
-    first.marginRight = 5.0f;
-    first.marginTop = 8.0f;
+    first.margin.setLeft (10.0f);
+    first.margin.setRight (5.0f);
+    first.margin.setTop (8.0f);
 
     auto& second = box.items.getReference (1);
-    second.marginRight = 12.0f;
-    second.marginTop = 4.0f;
+    second.margin.setRight (12.0f);
+    second.margin.setTop (4.0f);
 
     box.performLayout (Rectangle<float> (0, 0, 100, 300));
 
@@ -1771,10 +1771,10 @@ TEST (FlexBoxTests, PaddingShrinksTheContentBox)
     Component c1, c2;
 
     FlexBox box;
-    box.paddingLeft = 20.0f;
-    box.paddingRight = 10.0f;
-    box.paddingTop = 5.0f;
-    box.paddingBottom = 15.0f;
+    box.padding.setLeft (20.0f);
+    box.padding.setRight (10.0f);
+    box.padding.setTop (5.0f);
+    box.padding.setBottom (15.0f);
     box.alignItems = FlexBox::AlignItems::flexStart;
     box.items.add (FlexItem (c1, 60, 40));
     box.items.add (FlexItem (c2, 60, 40));
@@ -1790,8 +1790,8 @@ TEST (FlexBoxTests, PaddingIsHonouredByStretch)
 
     FlexBox box;
     box.setPadding (20.0f, 5.0f);
-    box.paddingRight = 10.0f;
-    box.paddingBottom = 15.0f;
+    box.padding.setRight (10.0f);
+    box.padding.setBottom (15.0f);
     box.alignItems = FlexBox::AlignItems::stretch;
     box.items.add (FlexItem (c1).withWidth (60));
     box.items.add (FlexItem (c2).withWidth (60));
@@ -1808,10 +1808,10 @@ TEST (FlexBoxTests, PaddingIsHonouredByReverseDirections)
 
     FlexBox box;
     box.flexDirection = FlexBox::Direction::rowReverse;
-    box.paddingLeft = 20.0f;
-    box.paddingRight = 10.0f;
-    box.paddingTop = 5.0f;
-    box.paddingBottom = 15.0f;
+    box.padding.setLeft (20.0f);
+    box.padding.setRight (10.0f);
+    box.padding.setTop (5.0f);
+    box.padding.setBottom (15.0f);
     box.alignItems = FlexBox::AlignItems::flexStart;
     box.items.add (FlexItem (c1, 60, 40));
     box.items.add (FlexItem (c2, 60, 40));
@@ -1841,17 +1841,17 @@ TEST (FlexBoxTests, SetPaddingAssignsAllSides)
     FlexBox box;
     box.setPadding (7.0f);
 
-    EXPECT_FLOAT_EQ (7.0f, box.paddingLeft);
-    EXPECT_FLOAT_EQ (7.0f, box.paddingRight);
-    EXPECT_FLOAT_EQ (7.0f, box.paddingTop);
-    EXPECT_FLOAT_EQ (7.0f, box.paddingBottom);
+    EXPECT_FLOAT_EQ (7.0f, box.padding.getLeft());
+    EXPECT_FLOAT_EQ (7.0f, box.padding.getRight());
+    EXPECT_FLOAT_EQ (7.0f, box.padding.getTop());
+    EXPECT_FLOAT_EQ (7.0f, box.padding.getBottom());
 
     box.setPadding (3.0f, 9.0f);
 
-    EXPECT_FLOAT_EQ (3.0f, box.paddingLeft);
-    EXPECT_FLOAT_EQ (3.0f, box.paddingRight);
-    EXPECT_FLOAT_EQ (9.0f, box.paddingTop);
-    EXPECT_FLOAT_EQ (9.0f, box.paddingBottom);
+    EXPECT_FLOAT_EQ (3.0f, box.padding.getLeft());
+    EXPECT_FLOAT_EQ (3.0f, box.padding.getRight());
+    EXPECT_FLOAT_EQ (9.0f, box.padding.getTop());
+    EXPECT_FLOAT_EQ (9.0f, box.padding.getBottom());
 }
 
 // =============================================================================

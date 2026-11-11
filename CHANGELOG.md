@@ -37,6 +37,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Plugin wrappers: speaker layouts (`AudioBus` with an `AudioChannelSet`, VST3 arrangements, AU channel layouts, AAX stem formats including Atmos), parameter categories (`AudioParameterBuilder::withCategory`, shown as host meters in AAX and as read-only parameters elsewhere), AAX transport, sidechain and multiple stems. VST3 exposes presets as a program list and gains `IParameterFinder` and host context menus through `AudioProcessorEditor::getParameterAt` and `AudioProcessorEditor::HostContext`; host streams that read or write partially are handled. AU v2 sends MIDI output, converts parameter values to and from strings and clears unused output channels. CLAP adds MIDI 2.0 note ports, SysEx output, `state-context`, `remote-controls` and the host `context-menu`. AUv3 supports user presets and passes the host `contextName` as track name. The standalone application restores its window position and size.
 - LV2: plugins with an editor now ship an LV2 UI, the TTL describes parameter units, integer, toggle and enumeration ranges and non-automatable parameters, and plugins require bounded block lengths so `run()` never allocates. Fixed URIDs not being mapped through the host `urid:map` (which made hosts misread state and events) and `time:Position` fields sent as `atom:Long` being ignored.
 
+### Graphics
+
+- Added `EdgeSpacing<ValueType>`, a value type holding per-edge `left`, `top`, `right` and `bottom` amounts for margins, paddings, insets and borders. It applies to a rectangle through `subtractedFrom` / `addedTo`, and `Rectangle::reduced` / `enlarged` gained overloads taking it.
+
+### UI
+
+- `FlexItem::margin`, `GridItem::margin` and `FlexBox::padding` are now a single `EdgeSpacing<float>` instead of four separate `margin*` / `padding*` floats, and `Component::setPaintMargin` accepts an `EdgeSpacing<float>` (with `getPaintMargin`). `CartesianPlane::getMargins` returns an `EdgeSpacing<int>`.
+
 ---
 
 ## [2.0.1] - 2026-11-09

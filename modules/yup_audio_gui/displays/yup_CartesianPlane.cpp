@@ -78,10 +78,16 @@ void CartesianPlane::setYScaleType (AxisScaleType scaleType)
 
 void CartesianPlane::setMargins (int top, int left, int bottom, int right)
 {
-    marginTop = jmax (0, top);
-    marginLeft = jmax (0, left);
-    marginBottom = jmax (0, bottom);
-    marginRight = jmax (0, right);
+    margins = { jmax (0, left), jmax (0, top), jmax (0, right), jmax (0, bottom) };
+    repaint();
+}
+
+void CartesianPlane::setMargins (const EdgeSpacing<int>& newMargins)
+{
+    margins = { jmax (0, newMargins.getLeft()),
+                jmax (0, newMargins.getTop()),
+                jmax (0, newMargins.getRight()),
+                jmax (0, newMargins.getBottom()) };
     repaint();
 }
 
@@ -390,10 +396,10 @@ Rectangle<float> CartesianPlane::getPlotBounds() const
 {
     auto bounds = getLocalBounds();
     return Rectangle<float> (
-        static_cast<float> (marginLeft),
-        static_cast<float> (marginTop),
-        static_cast<float> (bounds.getWidth() - marginLeft - marginRight),
-        static_cast<float> (bounds.getHeight() - marginTop - marginBottom));
+        static_cast<float> (margins.getLeft()),
+        static_cast<float> (margins.getTop()),
+        static_cast<float> (bounds.getWidth() - margins.getHorizontal()),
+        static_cast<float> (bounds.getHeight() - margins.getVertical()));
 }
 
 //==============================================================================
@@ -540,7 +546,7 @@ void CartesianPlane::drawAxisLabels (Graphics& g, const Rectangle<float>& bounds
                 static_cast<int> (x - 30),
                 static_cast<int> (bounds.getBottom() + 2),
                 60,
-                marginBottom - 2);
+                margins.getBottom() - 2);
 
             g.fillFittedText (label.text, font, labelBounds, Justification::center);
         }
@@ -558,7 +564,7 @@ void CartesianPlane::drawAxisLabels (Graphics& g, const Rectangle<float>& bounds
             Rectangle<int> labelBounds (
                 2,
                 static_cast<int> (y - 8),
-                marginLeft - 4,
+                margins.getLeft() - 4,
                 16);
 
             g.fillFittedText (label.text, font, labelBounds, Justification::right);
@@ -574,10 +580,10 @@ void CartesianPlane::drawTitle (Graphics& g)
     g.setFillColor (titleColor);
 
     Rectangle<int> titleBounds (
-        marginLeft,
+        margins.getLeft(),
         2,
-        getWidth() - marginLeft - marginRight,
-        marginTop - 4);
+        getWidth() - margins.getHorizontal(),
+        margins.getTop() - 4);
 
     g.fillFittedText (titleText, titleFont, titleBounds, titleJustification);
 }

@@ -63,10 +63,14 @@ GridItem GridItem::withRowSpan (int newSpan) const
 GridItem GridItem::withMargin (float newMargin) const
 {
     auto copy = *this;
-    copy.marginLeft = newMargin;
-    copy.marginRight = newMargin;
-    copy.marginTop = newMargin;
-    copy.marginBottom = newMargin;
+    copy.margin = EdgeSpacing<float> (newMargin);
+    return copy;
+}
+
+GridItem GridItem::withMargin (const EdgeSpacing<float>& newMargin) const
+{
+    auto copy = *this;
+    copy.margin = newMargin;
     return copy;
 }
 
