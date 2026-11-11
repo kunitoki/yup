@@ -261,6 +261,8 @@ private:
     void updateDesiredFrameRate();
     void updateEffectiveFrameRate (bool hasFocus);
 
+    void clampSizeToUsableFrame (int& widthInWindowUnits, int& heightInWindowUnits) const;
+
 #if YUP_EMSCRIPTEN
     struct AnimationFrameLoop;
 

@@ -51,6 +51,7 @@ public:
     /** Returns the preferred size of this editor. */
     virtual Size<int> getPreferredSize() const = 0;
 
+    //==============================================================================
     /** Returns the size plugin wrappers and the standalone open this editor at.
 
         By default it returns getPreferredSize(). Resizable editors which remember the size the user left
@@ -83,6 +84,7 @@ public:
     */
     Size<int> getConstrainedSizeToFit (Size<int> availableSize) const;
 
+    //==============================================================================
     /** Returns whether this editor should preserve its aspect ratio when resized. */
     virtual bool shouldPreserveAspectRatio() const { return false; }
 
@@ -93,6 +95,7 @@ public:
     */
     virtual Size<int> getPreferredAspectRatioSize() const { return getPreferredSize(); }
 
+    //==============================================================================
     /** Returns whether plugin wrappers should overlay a ResizableCorner on the editor.
 
         Hosts don't always let users resize plugin windows, so by default resizable editors get a corner
@@ -121,15 +124,6 @@ public:
         virtual bool showParameterContextMenu (const AudioParameter::Ptr& parameter, Point<float> position) = 0;
     };
 
-    /** Returns the parameter controlled at a position, or nullptr when there is none.
-
-        Hosts use this to find the control under the mouse, for example to assign it to a hardware
-        controller (VST3 IParameterFinder). Override it to report the parameter of your controls.
-
-        @param position  The position, in editor coordinates.
-    */
-    virtual AudioParameter::Ptr getParameterAt (Point<float> position) const;
-
     /** Returns the host context set by the plugin wrapper, or nullptr when the host offers none.
 
         Use it, for example, to show the host context menu when a control is right clicked.
@@ -138,6 +132,15 @@ public:
 
     /** Sets the host context, called by plugin wrappers. The context must outlive the editor or be reset. */
     void setHostContext (HostContext* newHostContext) noexcept { hostContext = newHostContext; }
+
+    /** Returns the parameter controlled at a position, or nullptr when there is none.
+
+        Hosts use this to find the control under the mouse, for example to assign it to a hardware
+        controller (VST3 IParameterFinder). Override it to report the parameter of your controls.
+
+        @param position  The position, in editor coordinates.
+    */
+    virtual AudioParameter::Ptr getParameterAt (Point<float> position) const;
 
 private:
     HostContext* hostContext = nullptr;

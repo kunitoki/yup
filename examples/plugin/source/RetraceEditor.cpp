@@ -36,6 +36,9 @@ RetraceEditor::RetraceEditor (RetraceProcessor& processorToEdit)
     startTimerHz (60);
 
     processor.setEditorComponent (this);
+
+    if (auto* host = yup::StandalonePluginHost::getInstance())
+        host->setToolbarVisible (false);
 }
 
 yup::Size<int> RetraceEditor::getInitialSize() const
@@ -80,9 +83,28 @@ void RetraceEditor::buildInterface()
 {
     interface = std::make_unique<SynthInterface> (processor, appliedOptions);
     interface->onViewOptionsChanged = [this] { syncViewOptions (false); };
+    interface->onScalePercentRequested = [this] (int percent) { applyScale (percent); };
+    interface->getScalePercent = [this] { return scalePercent(); };
 
     addAndMakeVisible (*interface);
     resized();
+}
+
+void RetraceEditor::applyScale (int percent)
+{
+    const auto target = (getPreferredSize().to<float>() * (static_cast<float> (percent) / 100.0f)).roundToInt();
+    setSize (getConstrainedSize (target).to<float>());
+}
+
+int RetraceEditor::scalePercent() const
+{
+    const auto design = getPreferredSize();
+    const auto current = getSize().roundToInt();
+
+    if (design.getWidth() <= 0 || current.getWidth() <= 0)
+        return 100;
+
+    return yup::roundToInt (static_cast<float> (current.getWidth()) * 100.0f / static_cast<float> (design.getWidth()));
 }
 
 void RetraceEditor::syncViewOptions (bool canRebuild)

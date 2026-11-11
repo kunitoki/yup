@@ -88,6 +88,12 @@ public:
     */
     std::function<void()> onViewOptionsChanged;
 
+    /** Asks the editor to resize to a percentage of its design size, scaling the whole instrument. */
+    std::function<void (int)> onScalePercentRequested;
+
+    /** Returns the editor's current size as a percentage of its design size, 100 when unknown. */
+    std::function<int()> getScalePercent;
+
     /** Applies new view options to the frame rate and the landscape displays; the theme
         stays the one the interface was built with.
     */
@@ -143,7 +149,6 @@ private:
     void applyUndoSetting();
     void undoStep (bool redo);
 
-    void layoutMainPage();
     void syncFromProcessor();
     void updateModulation();
 

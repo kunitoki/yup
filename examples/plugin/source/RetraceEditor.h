@@ -72,6 +72,9 @@ private:
     void updatePostEffect();
     void advanceOpening();
 
+    void applyScale (int percent);
+    int scalePercent() const;
+
     static constexpr double openingSeconds = 0.42;
 
     RetraceProcessor& processor;

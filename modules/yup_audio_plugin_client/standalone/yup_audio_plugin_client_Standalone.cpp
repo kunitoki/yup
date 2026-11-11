@@ -71,6 +71,18 @@ public:
         YUPApplication::getInstance()->systemRequestedQuit();
     }
 
+    /** Resizes the window to follow the content's preferred size, so an editor that
+        rescales itself grows or shrinks the window to fit it.
+    */
+    void resizeToFitContent()
+    {
+        if (content == nullptr)
+            return;
+
+        setWindowAspectRatio (content->getPreferredAspectRatio());
+        setSize (content->getPreferredSize().to<float>());
+    }
+
 private:
     std::unique_ptr<StandaloneContent> content;
 };
@@ -124,19 +136,18 @@ public:
                                                                   deviceManager,
                                                                   player.getMidiMessageCollector(),
                                                                   processor->acceptsMidi() || YupPlugin_IsSynth);
+
         content = windowContent.get();
         content->setToolbarVisible (toolbarVisible);
         content->onSettingsClosed = [this]
         {
             saveState();
         };
+
         content->onPreferredSizeChanged = [this]
         {
-            if (window == nullptr)
-                return;
-
-            window->setWindowAspectRatio (content->getPreferredAspectRatio());
-            window->setSize (content->getPreferredSize().to<float>());
+            if (window != nullptr)
+                window->resizeToFitContent();
         };
 
         window = std::make_unique<StandaloneWindow> (getApplicationName(), std::move (windowContent));
@@ -146,16 +157,22 @@ public:
             window->setBounds (state.windowBounds->to<float>());
         else
             window->centreWithSize (content->getPreferredSize());
-        window->setVisible (true);
-        window->toFront (true);
 
-        if (settingsRequested)
-            content->showSettings();
+        yup::MessageManager::callAsync ([this, mainWindow = window.get()]
+        {
+            yup::Process::makeForegroundProcess();
+
+            mainWindow->setVisible (true);
+            mainWindow->toFront (true);
+
+            if (settingsRequested)
+                content->showSettings();
 
 #if YUP_EMSCRIPTEN
-        // Closing a browser tab never reaches shutdown(), so the state is also saved whenever the page is hidden.
-        emscripten_set_visibilitychange_callback (this, false, visibilityChangeCallback);
+            // Closing a browser tab never reaches shutdown(), so the state is also saved whenever the page is hidden.
+            emscripten_set_visibilitychange_callback (this, false, visibilityChangeCallback);
 #endif
+        });
     }
 
     void shutdown() override

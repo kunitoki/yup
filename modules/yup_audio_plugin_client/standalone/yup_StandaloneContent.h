@@ -242,12 +242,25 @@ public:
             keyboard.setBounds (bounds.removeFromBottom (static_cast<float> (keyboardHeight)));
 
         if (editor != nullptr)
+        {
+            // The editor is laid out into the content area; its own resizes drive the window, not the reverse.
+            const ScopedValueSetter<bool> layingOutEditor (fittingEditor, true);
             editor->setBounds (bounds);
+        }
         else
+        {
             placeholder.setBounds (bounds.withSizeKeepingCenter (220.0f, 24.0f));
+        }
 
         if (overlay != nullptr)
             overlay->setBounds (getLocalBounds());
+    }
+
+    /** @internal */
+    void childBoundsChanged (Component* child) override
+    {
+        if (child == editor.get() && ! fittingEditor)
+            preferredSizeChanged();
     }
 
 private:
@@ -370,6 +383,7 @@ private:
     std::unique_ptr<SettingsOverlay> overlay;
 
     bool toolbarVisible = true;
+    bool fittingEditor = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StandaloneContent)
 };

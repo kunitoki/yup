@@ -33,6 +33,8 @@
 
 namespace
 {
+
+//==============================================================================
 /** Collects every control under a component that shows the modulation of its parameter. */
 void collectModulationTargets (yup::Component& component, std::vector<SynthModulationTarget*>& targets)
 {
@@ -100,19 +102,16 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, const SynthVi
     SynthTheme::applySection (keyboardComponent, SynthTheme::Section::keys);
     mainPage.addAndMakeVisible (keyboardComponent);
 
-    // The interface takes the focus in place of the keyboard, which plays the keys that reach
-    // the interface, so a click on the keys gives the focus to the interface.
     keyboardComponent.setWantsKeyboardFocus (false);
     setWantsKeyboardFocus (true);
 
     applyUndoSetting();
 
-    // The wheels follow the processor's keyboard state, host MIDI included; the keyboard state
-    // only plays notes, so their own moves go to the processor through its MIDI queue.
     pitchWheelComponent.onValueChanged = [this] (double value)
     {
         processor.sendMidiFromEditor (yup::MidiMessage::pitchWheel (1, 8192 + static_cast<int> (value * 8191.0)));
     };
+
     modWheelComponent.onValueChanged = [this] (double value)
     {
         processor.sendMidiFromEditor (yup::MidiMessage::controllerEvent (1, 1, static_cast<int> (value * 127.0)));
@@ -148,19 +147,13 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, const SynthVi
     }
 
     for (int index = 0; index < SynthExample::filterCount; ++index)
-    {
         filterPanels[static_cast<std::size_t> (index)] = std::make_unique<SynthFilterPanel> (parameters.filters[static_cast<std::size_t> (index)], waveformShader);
-    }
 
     for (int index = 0; index < SynthExample::envelopeCount; ++index)
-    {
         envelopePanels[static_cast<std::size_t> (index)] = std::make_unique<SynthEnvelopePanel> (parameters.envelopes[static_cast<std::size_t> (index)], processor.getCurves(), index, waveformShader);
-    }
 
     for (int index = 0; index < SynthExample::lfoCount; ++index)
-    {
         lfoPanels[static_cast<std::size_t> (index)] = std::make_unique<SynthLFOPanel> (parameters.lfos[static_cast<std::size_t> (index)], processor.getCurves(), index, waveformShader);
-    }
 
     const auto makeCaption = [] (const yup::String& text)
     {
@@ -265,21 +258,13 @@ SynthInterface::~SynthInterface()
 //==============================================================================
 void SynthInterface::resized()
 {
-    auto bounds = getLocalBounds().reduced (SynthTheme::frameGap);
-    header->setRightGroupWidth (std::round (bounds.getWidth() * SynthTheme::rightColumnShare));
-    header->setBounds (bounds.removeFromTop (SynthTheme::headerHeight));
+    auto frameBounds = getLocalBounds().reduced (SynthTheme::frameGap);
+    header->setRightGroupWidth (std::round (frameBounds.getWidth() * SynthTheme::rightColumnShare));
+    header->setBounds (frameBounds.removeFromTop (SynthTheme::headerHeight));
 
-    bounds.removeFromTop (SynthTheme::frameGap);
-    mainPage.setBounds (bounds);
+    frameBounds.removeFromTop (SynthTheme::frameGap);
+    mainPage.setBounds (frameBounds);
 
-    layoutMainPage();
-    modulationPanel->setBounds (getLocalBounds());
-}
-
-/** Lays the instrument out as rows of panels with a right column of one width, so the
-    header, FM, LFO and voicing edges line up. */
-void SynthInterface::layoutMainPage()
-{
     const auto gap = SynthTheme::frameGap;
     auto bounds = mainPage.getLocalBounds();
     const auto rightWidth = std::round (bounds.getWidth() * SynthTheme::rightColumnShare);
@@ -328,27 +313,8 @@ void SynthInterface::layoutMainPage()
     filterSection->setBounds (bounds.removeFromLeft (std::round ((bounds.getWidth() + gap) * filterShare - gap)));
     bounds.removeFromLeft (gap);
     envelopeSection->setBounds (bounds);
-}
 
-/** The browser takes the place of the six sections, which are hidden rather than covered
-    so the waveform displays stop drawing. */
-void SynthInterface::setBrowserOpen (bool shouldBeOpen)
-{
-    if (shouldBeOpen == isBrowserOpen())
-        return;
-
-    modulationPanel->close();
-
-    for (auto* section : { oscillatorSection.get(), macroSection.get(), matrixSection.get(), filterSection.get(), envelopeSection.get(), lfoSection.get() })
-        section->setVisible (! shouldBeOpen);
-
-    presetBrowser->setVisible (shouldBeOpen);
-    header->setBrowserOpen (shouldBeOpen);
-
-    if (shouldBeOpen)
-        presetBrowser->focusList();
-    else
-        takeKeyboardFocus();
+    modulationPanel->setBounds (getLocalBounds());
 }
 
 void SynthInterface::paint (yup::Graphics& g)
@@ -567,7 +533,7 @@ bool SynthInterface::itemDropped (const yup::DragAndDropSourceDetails& details)
     return true;
 }
 
-/** Swaps the two filters, settings and the routes reaching them, as one undoable step. */
+//==============================================================================
 void SynthInterface::swapFilters()
 {
     static_assert (SynthExample::filterCount == 2);
@@ -612,6 +578,27 @@ void SynthInterface::swapFilters()
         SynthRouteEdits::write (control, routes, slot, state, true);
 }
 
+//==============================================================================
+void SynthInterface::setBrowserOpen (bool shouldBeOpen)
+{
+    if (shouldBeOpen == isBrowserOpen())
+        return;
+
+    modulationPanel->close();
+
+    for (auto* section : { oscillatorSection.get(), macroSection.get(), matrixSection.get(), filterSection.get(), envelopeSection.get(), lfoSection.get() })
+        section->setVisible (! shouldBeOpen);
+
+    presetBrowser->setVisible (shouldBeOpen);
+    header->setBrowserOpen (shouldBeOpen);
+
+    if (shouldBeOpen)
+        presetBrowser->focusList();
+    else
+        takeKeyboardFocus();
+}
+
+//==============================================================================
 void SynthInterface::showModulationPanel (SynthModulationTarget& target)
 {
     const auto parameter = target.getModulationParameter();
@@ -625,9 +612,6 @@ void SynthInterface::showModulationPanel (SynthModulationTarget& target)
 //==============================================================================
 void SynthInterface::showSettingsMenu (yup::Point<float> position)
 {
-    // Switch IDs are 1 based, a switch reached through its index in getViewSwitches(); theme
-    // IDs start at themeBase, a theme reached through its index in SynthThemes; frame rate IDs
-    // are frameRateBase plus the rate, 0 standing for vsync.
     constexpr int themeBase = 1000;
     constexpr int frameRateBase = 2000;
     constexpr int undoId = 3000;
@@ -635,6 +619,10 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
     constexpr int mcpServerId = 3002;
     constexpr int mcpCopyUrlId = 3003;
     constexpr int saveDefaultsId = 3004;
+    constexpr int audioSettingsId = 3005;
+    constexpr int scaleBase = 4000;
+
+    auto* standaloneHost = yup::StandalonePluginHost::getInstance();
 
     const auto& settings = SynthSettings::get();
     auto shown = processor.getViewOptions();
@@ -644,6 +632,21 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
                                             .withParentComponent (this)
                                             .withPosition (position));
 
+    auto scaleMenu = yup::PopupMenu::create();
+    const auto currentScale = getScalePercent != nullptr ? getScalePercent() : 100;
+
+    for (const auto percent : { 70, 80, 90, 100, 110, 120, 130 })
+        scaleMenu->addItem (yup::String (percent) + "%", scaleBase + percent, true, percent == currentScale);
+
+    menu->addSubMenu ("Scale", scaleMenu);
+
+    auto frameRateMenu = yup::PopupMenu::create();
+
+    for (const auto& [name, rate] : { std::pair<const char*, int> { "30 FPS", 30 }, { "60 FPS", 60 }, { "VSync", 0 } })
+        frameRateMenu->addItem (name, frameRateBase + rate, true, shown.frameRate == rate);
+
+    menu->addSubMenu ("Framerate", frameRateMenu);
+
     auto themeMenu = yup::PopupMenu::create();
     const auto& themes = SynthThemes::getThemes();
 
@@ -652,32 +655,39 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
 
     menu->addSubMenu ("Theme", themeMenu);
 
-    auto frameRateMenu = yup::PopupMenu::create();
+    // Effects: the landscape displays, the post processing switch and every individual post effect under it.
+    auto effectsMenu = yup::PopupMenu::create();
+    effectsMenu->addItem ("Landscape Displays", landscapesId, true, shown.landscapes);
+    effectsMenu->addItem ("Post Processing", 1, true, shown.postEffect);
 
-    for (const auto& [name, rate] : { std::pair<const char*, int> { "30 FPS", 30 }, { "60 FPS", 60 }, { "VSync", 0 } })
-        frameRateMenu->addItem (name, frameRateBase + rate, true, shown.frameRate == rate);
+    auto individualMenu = yup::PopupMenu::create();
 
-    menu->addSubMenu ("Frame Rate", frameRateMenu);
-    menu->addItem ("Landscape Displays", landscapesId, true, shown.landscapes);
-    menu->addItem ("Undo History", undoId, true, settings.undo);
+    for (int index = 1; index < static_cast<int> (switches.size()); ++index)
+    {
+        const auto& [name, value] = switches[static_cast<std::size_t> (index)];
+        individualMenu->addItem (name, index + 1, shown.postEffect, *value);
+    }
+
+    effectsMenu->addSubMenu ("Individual Effects", individualMenu, shown.postEffect);
+    menu->addSubMenu ("Effects", effectsMenu);
+
+    if (standaloneHost != nullptr)
+    {
+        menu->addSeparator();
+        menu->addItem ("Audio Settings...", audioSettingsId);
+    }
+
     menu->addSeparator();
 
     auto* mcpServer = processor.getMCPServer();
     const auto mcpUrl = mcpServer != nullptr ? mcpServer->getUrl() : yup::String();
-    menu->addItem ("MCP Server", mcpServerId, mcpServer != nullptr, settings.mcpServer);
-    menu->addItem (mcpUrl.isNotEmpty() ? "Copy " + mcpUrl : yup::String ("Copy MCP Server URL"), mcpCopyUrlId, mcpUrl.isNotEmpty(), false);
-    menu->addSeparator();
-
-    for (int index = 0; index < static_cast<int> (switches.size()); ++index)
-    {
-        const auto& [name, value] = switches[static_cast<std::size_t> (index)];
-        menu->addItem (name, index + 1, index == 0 || shown.postEffect, *value);
-
-        if (index == 0)
-            menu->addSeparator();
-    }
+    auto mcpMenu = yup::PopupMenu::create();
+    mcpMenu->addItem ("MCP Server", mcpServerId, mcpServer != nullptr, settings.mcpServer);
+    mcpMenu->addItem (mcpUrl.isNotEmpty() ? "Copy " + mcpUrl : yup::String ("Copy MCP Server URL"), mcpCopyUrlId, mcpUrl.isNotEmpty(), false);
+    menu->addSubMenu ("MCP", mcpMenu);
 
     menu->addSeparator();
+    menu->addItem ("Undo History", undoId, true, settings.undo);
     menu->addItem ("Save as Default", saveDefaultsId);
 
     menu->show ([safeThis = yup::WeakReference<yup::Component> (this)] (int selectedId)
@@ -686,6 +696,14 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
 
         if (interface == nullptr)
             return;
+
+        if (selectedId >= scaleBase)
+        {
+            if (interface->onScalePercentRequested != nullptr)
+                interface->onScalePercentRequested (selectedId - scaleBase);
+
+            return;
+        }
 
         if (selectedId == undoId)
         {
@@ -717,6 +735,14 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
         {
             SynthSettings::get().defaults = interface->processor.getViewOptions();
             SynthSettings::save();
+            return;
+        }
+
+        if (selectedId == audioSettingsId)
+        {
+            if (auto* host = yup::StandalonePluginHost::getInstance())
+                host->showAudioSettings();
+
             return;
         }
 
@@ -793,8 +819,13 @@ void SynthInterface::attachedToNative()
 {
     yup::MessageManager::callAsync ([safeThis = yup::WeakReference<yup::Component> (this)]
     {
-        if (auto* interface = safeThis.get())
+        if (auto* interface = dynamic_cast<SynthInterface*> (safeThis.get()))
+        {
+            // The frame rate reaches message-thread only window APIs, so it is applied here
+            // once the native window exists rather than from the render thread's refreshDisplay().
+            interface->applyFrameRate();
             interface->takeKeyboardFocus();
+        }
     });
 }
 
@@ -834,6 +865,10 @@ void SynthInterface::applyFrameRate()
         return;
 
     const auto rate = viewOptions.frameRate;
+
+    if (rate == appliedFrameRate)
+        return;
+
     native->setVsyncEnabled (rate == 0);
 
     // VSync (rate 0) drops the fixed rate so pacing follows the display refresh; 30/60 fix it.
@@ -844,10 +879,6 @@ void SynthInterface::applyFrameRate()
 
 void SynthInterface::refreshDisplay (double)
 {
-    // The window may only exist once the interface is on screen, as in a plugin host.
-    if (appliedFrameRate != viewOptions.frameRate)
-        applyFrameRate();
-
     updateModulation();
     syncFromProcessor();
     modulationPanel->syncFromRoutes();
