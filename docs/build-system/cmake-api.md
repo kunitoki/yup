@@ -501,6 +501,41 @@ and embeds it through this function. See
 
 ---
 
+### `yup_add_test_runner`
+
+Adds YUP's shared GoogleTest runner to a test executable, so each test target
+reuses the same entry point instead of inlining the bootstrapping logic.
+
+```cmake
+yup_add_test_runner(<target_name>)
+```
+
+The runner is shipped as source (under `cmake/tools/test_runner`) and compiled
+into each test executable rather than linked as a prebuilt module. The helper
+compiles the runner into `<target_name>`, exposes the `<yup_test_runner.h>`
+header on its include path, and links the GoogleTest / GoogleMock targets when
+they are available.
+
+The target must already link the YUP modules the runner needs (`yup_gui` on
+desktop, `yup_events` on Emscripten). Define the entry point in one of the
+target's translation units with the `YUP_IMPLEMENT_GTEST_MAIN()` macro, or call
+`yup::runGoogleTests()` from a custom `main`:
+
+```cpp
+#include <yup_test_runner.h>
+
+YUP_IMPLEMENT_GTEST_MAIN()
+```
+
+On desktop the tests run on the message thread (so GUI and audio features
+initialise), one suite at a time, with a compact report and optional JUnit XML
+output. On Emscripten they run synchronously with sharding support. The
+`yup::getGoogleTestChildProcessEntryPoint()` hook lets tests take over the
+process when it is relaunched as a child (for example to host out-of-process
+plug-in scanners).
+
+---
+
 ## Plugin Format-Specific Notes
 
 ### CLAP Features

@@ -273,6 +273,8 @@ foreach (module ${target_test_modules})
     source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources} ${imported_sources})
     set_source_files_properties (${imported_sources} PROPERTIES HEADER_FILE_ONLY TRUE)
 
+    yup_add_test_runner (${module_target_name})
+
     set_target_properties (${module_target_name} PROPERTIES
         XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"
         VS_DEBUGGER_COMMAND_ARGUMENTS "--gtest_filter=*")
