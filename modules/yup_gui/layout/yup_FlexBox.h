@@ -153,16 +153,16 @@ public:
     //==============================================================================
     /** Padding inside the container, which shrinks the area the items are laid
         out in. Must be >= 0; negative values are asserted and treated as 0. */
-    float paddingLeft = 0.0f;
-    float paddingRight = 0.0f;
-    float paddingTop = 0.0f;
-    float paddingBottom = 0.0f;
+    EdgeSpacing<float> padding;
 
     /** Sets all four padding values at once. */
     void setPadding (float newPadding) noexcept;
 
     /** Sets the horizontal and vertical padding. */
     void setPadding (float horizontal, float vertical) noexcept;
+
+    /** Sets the padding from an edge spacing. */
+    void setPadding (const EdgeSpacing<float>& newPadding) noexcept;
 
     //==============================================================================
     /** The items to be laid out. */

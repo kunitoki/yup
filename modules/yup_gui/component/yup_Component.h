@@ -835,6 +835,22 @@ public:
     void setPaintMargin (float margin);
 
     /**
+        Lets the component paint outside its bounds by the given edge spacing.
+
+        @param margin  How far the component may paint outside its bounds on each edge
+
+        @see setPaintMargin
+     */
+    void setPaintMargin (const EdgeSpacing<float>& margin);
+
+    /**
+        Returns the paint margin: how far the component may paint outside its bounds on each edge.
+
+        @see setPaintMargin
+     */
+    EdgeSpacing<float> getPaintMargin() const;
+
+    /**
         Returns the area the component paints, in its local coordinates: its local bounds
         enlarged by its paint margin.
 
@@ -1990,10 +2006,7 @@ private:
     Array<Component*> children;
     Rectangle<float> boundsInParent;
     AffineTransform transform;
-    struct
-    {
-        float left = 0.0f, top = 0.0f, right = 0.0f, bottom = 0.0f;
-    } paintMargin;
+    EdgeSpacing<float> paintMargin;
     ComponentNative::Ptr native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;

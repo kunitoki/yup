@@ -143,8 +143,11 @@ public:
     /** Set margins around the plot area */
     void setMargins (int top, int left, int bottom, int right);
 
+    /** Set margins around the plot area from an edge spacing. */
+    void setMargins (const EdgeSpacing<int>& newMargins);
+
     /** Get current margins */
-    Rectangle<int> getMargins() const { return { marginLeft, marginTop, marginRight - marginLeft, marginBottom - marginTop }; }
+    EdgeSpacing<int> getMargins() const { return margins; }
 
     //==============================================================================
     // Title configuration
@@ -319,7 +322,7 @@ private:
     AxisScaleType yScaleType { AxisScaleType::linear };
 
     // Margins
-    int marginTop { 30 }, marginLeft { 60 }, marginBottom { 25 }, marginRight { 20 };
+    EdgeSpacing<int> margins { 60, 30, 20, 25 };
 
     // Title
     String titleText;

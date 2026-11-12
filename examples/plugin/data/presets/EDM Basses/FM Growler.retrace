@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="FM Growler" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="FM Growler" bank="Factory" author="kunitoki"
               tags="edm, growl, fm"
               category="Bass" description="Snarling FM growl: feedback operators chewed by a sixteenth-note LFO."
               notes="Mod wheel adds feedback snarl." presetId="66088230-6153-4a78-a5bc-aa7051361ddc"
               macro1Name="Wobble" macro2Name="Grit" global.volume="0.0" global.mode="1.0"
-              global.glide="0.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.glide="0.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="0.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

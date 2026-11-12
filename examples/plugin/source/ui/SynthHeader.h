@@ -42,7 +42,7 @@ class SynthHeader : public yup::Component
 public:
     explicit SynthHeader (RetraceProcessor& processorToControl);
 
-    /** Called with the click position, in the header, when the logo is right clicked, to show the global settings. */
+    /** Called with the click position, in the header, when the logo is left or right clicked, to show the global settings. */
     std::function<void (yup::Point<float>)> onSettingsRequested;
 
     /** Called when the preset bar asks to open or close the preset browser. */
@@ -63,6 +63,7 @@ public:
     void resized() override;
     void paint (yup::Graphics& g) override;
     void mouseDown (const yup::MouseEvent& event) override;
+    void mouseMove (const yup::MouseEvent& event) override;
     void styleChanged() override;
 
 private:

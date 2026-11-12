@@ -147,11 +147,8 @@ public:
     AlignSelf alignSelf = AlignSelf::autoAlign;
 
     //==============================================================================
-    /** Margin values for the item (in pixels). */
-    float marginLeft = 0.0f;
-    float marginRight = 0.0f;
-    float marginTop = 0.0f;
-    float marginBottom = 0.0f;
+    /** Margin values around the item (in pixels). */
+    EdgeSpacing<float> margin;
 
     //==============================================================================
     /** Returns a copy of this GridItem with the given column/row. */
@@ -160,6 +157,7 @@ public:
     GridItem withColumnSpan (int newSpan) const;
     GridItem withRowSpan (int newSpan) const;
     GridItem withMargin (float newMargin) const;
+    GridItem withMargin (const EdgeSpacing<float>& newMargin) const;
     GridItem withWidth (float newWidth) const;
     GridItem withHeight (float newHeight) const;
     GridItem withWidthPercent (float newWidthPercent) const;

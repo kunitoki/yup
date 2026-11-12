@@ -154,7 +154,7 @@ void LFODisplay::paint (yup::Graphics& g)
     const auto shown = (static_cast<float> (periods - 1) + phase) / static_cast<float> (periods);
     const auto marker = yup::Point<float> (area.getX() + area.getWidth() * shown, toY (valueAt (shown)));
 
-    if (hasArea && SynthLandscape::isEnabled())
+    if (hasArea && SynthLandscape::isEnabled (*this))
     {
         landscape.setProfile (bounds.getWidth(), bounds.getHeight(), [&] (float x)
         {
@@ -226,6 +226,6 @@ void LFODisplay::mouseExit (const yup::MouseEvent&)
 
 void LFODisplay::refreshDisplay (double lastFrameTimeSeconds)
 {
-    if (isShowing() && landscape.advance (lastFrameTimeSeconds))
+    if (isShowing() && landscape.advance (lastFrameTimeSeconds, *this))
         repaint();
 }

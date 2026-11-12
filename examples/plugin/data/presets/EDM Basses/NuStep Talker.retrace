@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="NuStep Talker" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="NuStep Talker" bank="Factory" author="kunitoki"
               tags="edm, nustep, talking"
               category="Bass" description="NuStep talking bass: looping tempo-synced envelopes sweep vowels and formants."
               notes="Mod wheel adds resonance and shaper grit." presetId="9e3c23ca-4762-4054-b35c-5d09d434a1a8"
               macro1Name="Talk" macro2Name="Grit" global.volume="-0.800000011920929"
-              global.mode="1.0" global.glide="0.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.mode="1.0" global.glide="0.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="2.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

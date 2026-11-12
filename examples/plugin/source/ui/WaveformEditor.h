@@ -77,6 +77,9 @@ public:
     /** Publishes a pending drag to the audio thread, coalescing a frame's worth of edits. */
     void commitPendingEdits();
 
+    /** True while a drag wrote partials that commitPendingEdits() has not published yet. */
+    bool hasPendingEdits() const noexcept { return pendingEdit; }
+
     /** Drops the edited partials and returns to the selected waveform preset.
 
         @param joinsLastStep True to undo it together with the step recorded just before,
@@ -154,7 +157,6 @@ private:
     static constexpr float overviewGap = 4.0f;
     static constexpr int minimumVisiblePartials = 16;
     static constexpr int defaultVisiblePartials = 64;
-    static constexpr double animationInterval = 1.0 / 30.0;
 
     static_assert (displayResolution == SynthWaveformShader::sampleCount);
 
@@ -171,7 +173,6 @@ private:
     SynthWaveformShader::Target landscapeTarget;
     yup::GpuTexture::Ptr cachedLandscape;
     float animationTime = 0.0f;
-    double sinceLastFrame = 0.0;
     bool landscapeDirty = true;
     bool animating = false;
 

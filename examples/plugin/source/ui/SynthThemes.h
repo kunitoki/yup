@@ -29,14 +29,12 @@
 #include <vector>
 
 //==============================================================================
-/** The palettes the instrument can wear, and the one the user picked last.
+/** The palettes the instrument can wear.
 
     Each theme is a set of coolors palettes parsed with yup::ThemePalette::fromString, in
     dark or light mode: a base, and one for every section that has its own. Each plugin
-    instance keeps its own theme with its session (see RetraceProcessor::getThemeName()),
-    and the palettes are set on its interface, so editors in one process can wear
-    different themes. The theme picked last is kept in a small settings file in the
-    user's application data folder, as the one new instances start with.
+    instance keeps its own theme with its view options (see SynthViewOptions), and the
+    palettes are set on its interface, so editors in one process can wear different themes.
 */
 namespace SynthThemes
 {
@@ -52,12 +50,6 @@ struct Theme
 
 /** Returns every theme, the default first. */
 const std::vector<Theme>& getThemes();
-
-/** Returns the theme the user picked last, or the default. */
-int loadSelectedTheme();
-
-/** Remembers a theme as the one new instances start with. */
-void saveSelectedTheme (int index);
 
 /** Returns the index of the theme with a name, or -1. */
 int findTheme (const yup::String& name);

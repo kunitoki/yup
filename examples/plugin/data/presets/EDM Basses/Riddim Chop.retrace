@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Riddim Chop" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Riddim Chop" bank="Factory" author="kunitoki"
               tags="edm, riddim, dubstep"
               category="Bass" description="Riddim bass chopped in sixteenth triplets with a hollow square and hard clipping."
               notes="Mod wheel smooths the chops into a wub." presetId="5a012944-a0fb-4566-b5b8-7daeba77be3e"
               macro1Name="Wobble" macro2Name="Grit" global.volume="-2.900000095367432"
-              global.mode="1.0" global.glide="0.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.mode="1.0" global.glide="0.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="3.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

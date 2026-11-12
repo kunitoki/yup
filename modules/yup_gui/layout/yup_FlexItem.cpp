@@ -140,10 +140,14 @@ FlexItem FlexItem::withMaxHeight (float newMaxHeight) const
 FlexItem FlexItem::withMargin (float newMargin) const
 {
     auto copy = *this;
-    copy.marginLeft = newMargin;
-    copy.marginRight = newMargin;
-    copy.marginTop = newMargin;
-    copy.marginBottom = newMargin;
+    copy.margin = EdgeSpacing<float> (newMargin);
+    return copy;
+}
+
+FlexItem FlexItem::withMargin (const EdgeSpacing<float>& newMargin) const
+{
+    auto copy = *this;
+    copy.margin = newMargin;
     return copy;
 }
 

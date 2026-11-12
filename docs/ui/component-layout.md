@@ -63,7 +63,7 @@ value that will actually be used.
 
 The container properties mirror CSS one for one: `flexDirection`, `flexWrap`,
 `justifyContent`, `alignItems`, `alignContent`, `gap` / `rowGap` /
-`columnGap`, and the four `padding` fields.
+`columnGap`, and a `padding` edge spacing.
 
 ```cpp
 yup::FlexBox box;
@@ -71,9 +71,14 @@ box.flexDirection = yup::FlexBox::Direction::column;
 box.flexWrap = yup::FlexBox::Wrap::wrap;
 box.justifyContent = yup::FlexBox::JustifyContent::spaceBetween;
 box.alignItems = yup::FlexBox::AlignItems::center;
-box.setPadding (12.0f);
+box.setPadding (12.0f); // or box.padding = yup::EdgeSpacing<float> (12.0f, 6.0f);
 box.gap = 8.0f;
 ```
+
+`padding` is an [`EdgeSpacing<float>`](../graphics/primitives.md#edgespacing);
+`FlexItem::margin` and `GridItem::margin` use the same type, so a per-edge
+margin is `item.margin = yup::EdgeSpacing<float> (left, top, right, bottom)` or
+`yup::FlexItem (c).withMargin (spacing)`.
 
 ### Flexible sizing
 

@@ -22,6 +22,8 @@
 namespace yup
 {
 
+class AudioParameterAttachment;
+
 //==============================================================================
 /** Base class for audio processor editors.
 
@@ -51,6 +53,7 @@ public:
     /** Returns the preferred size of this editor. */
     virtual Size<int> getPreferredSize() const = 0;
 
+    //==============================================================================
     /** Returns the size plugin wrappers and the standalone open this editor at.
 
         By default it returns getPreferredSize(). Resizable editors which remember the size the user left
@@ -83,6 +86,7 @@ public:
     */
     Size<int> getConstrainedSizeToFit (Size<int> availableSize) const;
 
+    //==============================================================================
     /** Returns whether this editor should preserve its aspect ratio when resized. */
     virtual bool shouldPreserveAspectRatio() const { return false; }
 
@@ -93,6 +97,7 @@ public:
     */
     virtual Size<int> getPreferredAspectRatioSize() const { return getPreferredSize(); }
 
+    //==============================================================================
     /** Returns whether plugin wrappers should overlay a ResizableCorner on the editor.
 
         Hosts don't always let users resize plugin windows, so by default resizable editors get a corner
@@ -121,15 +126,6 @@ public:
         virtual bool showParameterContextMenu (const AudioParameter::Ptr& parameter, Point<float> position) = 0;
     };
 
-    /** Returns the parameter controlled at a position, or nullptr when there is none.
-
-        Hosts use this to find the control under the mouse, for example to assign it to a hardware
-        controller (VST3 IParameterFinder). Override it to report the parameter of your controls.
-
-        @param position  The position, in editor coordinates.
-    */
-    virtual AudioParameter::Ptr getParameterAt (Point<float> position) const;
-
     /** Returns the host context set by the plugin wrapper, or nullptr when the host offers none.
 
         Use it, for example, to show the host context menu when a control is right clicked.
@@ -139,10 +135,68 @@ public:
     /** Sets the host context, called by plugin wrappers. The context must outlive the editor or be reset. */
     void setHostContext (HostContext* newHostContext) noexcept { hostContext = newHostContext; }
 
+    /** Returns the parameter controlled at a position, or nullptr when there is none.
+
+        Hosts use this to find the control under the mouse, for example to assign it to a hardware
+        controller (VST3 IParameterFinder). Override it to report the parameter of your controls.
+
+        @param position  The position, in editor coordinates.
+    */
+    virtual AudioParameter::Ptr getParameterAt (Point<float> position) const;
+
+    //==============================================================================
+    /** Starts draining a processor's parameter-change queue to refresh controls reactively.
+
+        Call this once, typically from the editor constructor, passing the processor the editor
+        belongs to. A message-thread timer then drains the processor's ParameterChangeQueue at the
+        given rate and notifies the AudioParameterAttachment objects bound to the changed parameters,
+        so only the controls that moved are refreshed instead of polling every parameter every frame.
+        Multiple editors share the drain, and every listening editor receives each change.
+        The processor must outlive the editor. Call this and stopParameterListening() on
+        the message thread.
+
+        @param processor      The processor whose parameter changes drive this editor.
+        @param refreshRateHz  How often, in Hz, to drain the queue on the message thread. A value of
+                              zero or less binds the processor but starts no timer, leaving the caller
+                              to drive dispatchPendingParameterChanges().
+
+        @see stopParameterListening, AudioParameterAttachment, AudioProcessorBase::getParameterChangeQueue
+    */
+    void startParameterListening (AudioProcessorBase& processor, int refreshRateHz = 60);
+
+    /** Stops the parameter-change timer started by startParameterListening. */
+    void stopParameterListening();
+
+    /** Drains the listened processor's parameter-change queue once and notifies attachments.
+
+        The timer calls this on the message thread, and it is exposed so tests can drive the
+        dispatch deterministically without waiting for the timer. Call on the message
+        thread only. Reentrant dispatch is deferred until a later call.
+    */
+    void dispatchPendingParameterChanges();
+
+    //==============================================================================
+    /** @internal Registers an attachment so it is notified when its parameter changes.
+
+        Called by AudioParameterAttachment; not intended for direct use.
+    */
+    void registerParameterAttachment (AudioParameter* parameter, AudioParameterAttachment* attachment);
+
+    /** @internal Unregisters an attachment previously registered for a parameter. */
+    void unregisterParameterAttachment (AudioParameter* parameter, AudioParameterAttachment* attachment);
+
 private:
+    friend class AudioProcessorBase;
+
+    void parameterChanged (AudioParameter* parameter);
+
     HostContext* hostContext = nullptr;
 
     Size<int> constrainSize (Size<int> size, bool fitInside) const;
+
+    AudioProcessorBase* listenedProcessor = nullptr;
+    std::unique_ptr<TimedCallback> parameterDispatchTimer;
+    std::unordered_map<AudioParameter*, ListenerList<AudioParameterAttachment>> parameterAttachments;
 };
 
 } // namespace yup

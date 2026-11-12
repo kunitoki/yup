@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Hoover Rave" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Hoover Rave" bank="Factory" author="kunitoki"
               tags="edm, hoover, rave" category="Bass"
               description="Old-school rave hoover: detuned pulses with a pitch dip and chorus."
               notes="Mod wheel squeezes the pulses into a dirtier hoover."
               presetId="7ecdcad4-80e3-4b44-b8ac-cf54dd24ef36" macro1Name="Width"
               macro2Name="Grit" global.volume="0.300000011920929" global.mode="2.0"
-              global.glide="150.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.glide="150.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="5.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

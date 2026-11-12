@@ -134,6 +134,30 @@ TEST_F (SpectralBridgeTests, SetSpectralProcessorRegistersParameters)
     EXPECT_EQ (proc, bridge->getSpectralProcessor());
 }
 
+TEST_F (SpectralBridgeTests, SharedParametersKeepNotifyingTheSpectralProcessorAfterBridgeDestruction)
+{
+    auto proc = std::make_shared<PassthroughSpectralProcessor>();
+    auto parameter = AudioParameterBuilder().withID ("shared").withRange (0.0f, 1.0f).build();
+    proc->addParameter (parameter);
+    bridge->addParameter (AudioParameterBuilder().withID ("bridgeOnly").build());
+    bridge->setSpectralProcessor (proc);
+
+    parameter->setValue (0.5f);
+    std::vector<int> spectralChanges, bridgeChanges;
+    proc->getParameterChangeQueue().readChanges ([&spectralChanges] (int index) { spectralChanges.push_back (index); });
+    bridge->getParameterChangeQueue().readChanges ([&bridgeChanges] (int index) { bridgeChanges.push_back (index); });
+
+    EXPECT_EQ ((std::vector<int> { 0 }), spectralChanges);
+    EXPECT_EQ ((std::vector<int> { 1 }), bridgeChanges);
+
+    bridge.reset();
+    parameter->setValue (0.75f);
+    spectralChanges.clear();
+    proc->getParameterChangeQueue().readChanges ([&spectralChanges] (int index) { spectralChanges.push_back (index); });
+
+    EXPECT_EQ ((std::vector<int> { 0 }), spectralChanges);
+}
+
 TEST_F (SpectralBridgeTests, SetNullSpectralProcessor)
 {
     auto proc = std::make_shared<PassthroughSpectralProcessor>();

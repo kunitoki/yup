@@ -46,8 +46,8 @@ class SynthLandscape
 public:
     explicit SynthLandscape (std::shared_ptr<SynthWaveformShader> sharedShader);
 
-    /** True while the landscape displays setting is on. */
-    static bool isEnabled();
+    /** True while the landscape displays option of the interface holding a component is on. */
+    static bool isEnabled (const yup::Component& scope);
 
     /** Samples the curve across the display.
 
@@ -66,9 +66,15 @@ public:
 
     /** Moves the animation on; call it from the display's refreshDisplay().
 
+        The caller's refreshDisplay runs once per rendered frame, so the animation advances at
+        the window's frame rate (the Frame Rate menu's 30/60/VSync) rather than a fixed rate.
+
+        @param lastFrameTimeSeconds   The time since the last frame.
+        @param scope                  The display, which finds the interface's options, see isEnabled().
+
         @returns true when the display should repaint.
     */
-    bool advance (double lastFrameTimeSeconds);
+    bool advance (double lastFrameTimeSeconds, const yup::Component& scope);
 
     /** Paints the landscape over the display's bounds, clipped and bordered like the waveform's.
 
@@ -81,8 +87,6 @@ public:
     bool paint (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, yup::Color accent);
 
 private:
-    static constexpr double animationInterval = 1.0 / 30.0;
-
     std::shared_ptr<SynthWaveformShader> shader;
     SynthWaveformShader::Target target;
     yup::GpuTexture::Ptr cached;
@@ -90,7 +94,6 @@ private:
     SynthWaveformShader::Look look;
     float width = 0.0f;
     float time = 0.0f;
-    double sinceLastFrame = 0.0;
     bool animating = false;
     bool dirty = true;
 };

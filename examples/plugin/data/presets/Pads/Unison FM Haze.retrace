@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Unison FM Haze" bank="Factory"
+<RetraceState version="4" preset="-1" name="Unison FM Haze" bank="Factory"
               author="kunitoki" tags="fm, unison, glassy" category="Pad" description="A chain of glassy FM operators spread over four detuned unison voices, slowly fading in."
               notes="Mod wheel adds glassy upper partials." presetId="9d53331f-f30a-4f90-942a-0659fa41c5db"
               global.volume="-9.800000190734863" global.mode="0.0" global.glide="120.0"
-              global.quality="0.0" global.unisonVoices="4.0" global.unisonDetune="0.25"
+              global.quality="1.0" global.unisonVoices="4.0" global.unisonDetune="0.25"
               global.unisonSpread="1.0" global.filterRouting="0.0" osc1.waveform="0.0"
               osc1.syncMode="0.0" osc1.syncRatio="1.5" osc1.frequencyMode="0.0"
               osc1.ratio="1.0" osc1.fine="0.0" osc1.fixedHz="440.0" osc1.level="0.699999988079071"

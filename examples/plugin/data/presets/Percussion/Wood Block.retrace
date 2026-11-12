@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Wood Block" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Wood Block" bank="Factory" author="kunitoki"
               tags="wood, block, click" category="Percussion"
               description="Dry hollow wood block click." notes="Mod wheel makes the block ring."
               presetId="e7d922b9-1a84-453a-8ddf-10597c6d9163" global.volume="5.699999809265137"
-              global.mode="0.0" global.glide="120.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.mode="0.0" global.glide="120.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="0.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="2.0"

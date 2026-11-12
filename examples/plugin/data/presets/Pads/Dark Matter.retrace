@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Dark Matter" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Dark Matter" bank="Factory" author="kunitoki"
               tags="dark, cinematic, low" category="Pad" description="Brooding low pad of triangles and a filtered saw, breathing slowly."
               notes="Mod wheel lets light in through a resonant filter." presetId="28647faf-1e95-4e31-bdb2-f7b6e1cafb10"
               macro1Name="Light" global.volume="-10.10000038146973" global.mode="0.0"
-              global.glide="120.0" global.quality="0.0" global.unisonVoices="3.0"
+              global.glide="120.0" global.quality="1.0" global.unisonVoices="3.0"
               global.unisonDetune="0.1800000071525574" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="4.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

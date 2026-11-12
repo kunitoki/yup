@@ -74,10 +74,15 @@ SynthOscillatorParameters::SynthOscillatorParameters (int oscillatorIndex, const
 
 void SynthOscillatorParameters::addTo (yup::AudioProcessor& processor) const
 {
-    for (const auto& parameter : { waveform, syncMode, syncRatio, frequencyMode, ratio, fine, fixedHz, level, pan, phase, freeRunning,
-                                   toFilter1, toFilter2, direct, ridgeSpacing, color, dispersion, squeeze, squash, tilt, oddEven,
-                                   formant, formantPosition, scatter, enabled })
+    for (const auto& parameter : getParameters())
         processor.addParameter (parameter);
+}
+
+std::vector<yup::AudioParameter::Ptr> SynthOscillatorParameters::getParameters() const
+{
+    return { waveform, syncMode, syncRatio, frequencyMode, ratio, fine, fixedHz, level, pan, phase, freeRunning,
+             toFilter1, toFilter2, direct, ridgeSpacing, color, dispersion, squeeze, squash, tilt, oddEven,
+             formant, formantPosition, scatter, enabled };
 }
 
 SynthOscillatorValues SynthOscillatorParameters::read (SynthParameterReader reader) const noexcept

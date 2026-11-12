@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Horn Section" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Horn Section" bank="Factory" author="kunitoki"
               tags="fm, horns, swell" category="Brass" description="Swelling FM horn section with a soft vibrato."
               notes="Mod wheel makes the horns rasp and growl." presetId="f0cc82c1-5a97-47cb-8a0b-a0913e2ddcfb"
               global.volume="-9.699999809265137" global.mode="0.0" global.glide="120.0"
-              global.quality="0.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
+              global.quality="1.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
               global.unisonSpread="0.6000000238418579" global.filterRouting="0.0"
               osc1.waveform="0.0" osc1.syncMode="0.0" osc1.syncRatio="1.5"
               osc1.frequencyMode="0.0" osc1.ratio="1.0" osc1.fine="0.0" osc1.fixedHz="440.0"

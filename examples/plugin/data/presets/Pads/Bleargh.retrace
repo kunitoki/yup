@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Bleargh" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Bleargh" bank="Factory" author="kunitoki"
               tags="evolving, dark" category="Pad" description="" notes="Mod wheel opens the filter."
               presetId="be8b2ee3-8ead-4248-8210-3878937c2b6c" global.volume="-6.900000095367432"
-              global.mode="0.0" global.glide="120.0" global.quality="0.0" global.unisonVoices="3.0"
+              global.mode="0.0" global.glide="120.0" global.quality="1.0" global.unisonVoices="3.0"
               global.unisonDetune="0.2867264747619629" global.unisonSpread="0.7466367483139038"
               global.filterRouting="1.0" osc1.waveform="2.0" osc1.syncMode="0.0"
               osc1.syncRatio="2.838085174560547" osc1.frequencyMode="0.0" osc1.ratio="5.0"

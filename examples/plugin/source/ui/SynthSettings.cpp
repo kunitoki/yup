@@ -38,14 +38,10 @@ yup::File getFile()
         .getChildFile ("settings.xml");
 }
 
-/** The switches by name, so the file stays readable and survives new switches. */
+/** The global switches by name, so the file stays readable and survives new switches. */
 std::vector<std::pair<const char*, bool*>> getSwitches (Values& values)
 {
-    auto& neon = values.neon;
-
-    return { { "undo", &values.undo }, { "postEffect", &values.postEffect }, { "landscapes", &values.landscapes }, { "mcpServer", &values.mcpServer }, { "glow", &neon.glow }, { "aberration", &neon.aberration },
-             { "grade", &neon.grade }, { "scanlines", &neon.scanlines }, { "vignette", &neon.vignette },
-             { "grain", &neon.grain }, { "curvature", &neon.curvature }, { "phosphor", &neon.phosphor }, { "reflection", &neon.reflection } };
+    return { { "undo", &values.undo }, { "mcpServer", &values.mcpServer } };
 }
 
 std::unique_ptr<yup::XmlElement> readFile()
@@ -82,8 +78,9 @@ Values load()
     if (xml == nullptr)
         return values;
 
-    values.theme = xml->getStringAttribute ("theme", values.theme);
-    values.frameRate = yup::jlimit (0, 240, xml->getIntAttribute ("frameRate", values.frameRate));
+    // Files written before the view options were per instance hold them on the root.
+    const auto* view = xml->getChildByName (SynthViewOptions::treeType.toString());
+    values.defaults = SynthViewOptions::fromDataTree (yup::DataTree::fromXml (view != nullptr ? *view : *xml), values.defaults);
 
     for (const auto& [name, flag] : getSwitches (values))
         *flag = xml->getBoolAttribute (name, *flag);
@@ -103,11 +100,11 @@ void save()
 {
     auto& values = get();
     yup::XmlElement xml (rootTag);
-    xml.setAttribute ("theme", values.theme);
-    xml.setAttribute ("frameRate", values.frameRate);
-
     for (const auto& [name, flag] : getSwitches (values))
         xml.setAttribute (name, *flag ? 1 : 0);
+
+    if (auto view = values.defaults.toDataTree().createXml())
+        xml.addChildElement (view.release());
 
     for (const auto& key : values.favorites)
         xml.createNewChildElement (favoriteTag)->setAttribute ("key", key);

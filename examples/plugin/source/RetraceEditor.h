@@ -35,10 +35,13 @@
     its aspect ratio, so resizing zooms the whole instrument. The post effect sits on the
     editor rather than on the interface, so it renders at the size shown.
 
-    The interface wears the theme of the processor it edits, so editors of different
-    instances can wear different themes. A new theme, picked in the interface or loaded
-    with a session, builds a new interface; the editor's timer notices it, which also
-    keeps the interface from being replaced from inside its own settings menu.
+    The interface shows the view options of the processor it edits (see SynthViewOptions),
+    so editors of different instances can wear different themes, sizes and post effects.
+    The editor opens at the size its instance was last left at, and remembers every new
+    size in the processor. A new theme, picked in the interface or loaded with a session,
+    builds a new interface; the editor's timer notices it, which also keeps the interface
+    from being replaced from inside its own settings menu. A session loaded while the
+    editor is open does not resize it; its size applies the next time the editor opens.
 
     When the editor first shows, the post effect plays the tube powering on.
 
@@ -55,6 +58,7 @@ public:
     //==============================================================================
     bool isResizable() const override { return true; }
     yup::Size<int> getPreferredSize() const override { return { 1280, 900 }; }
+    yup::Size<int> getInitialSize() const override;
     bool shouldPreserveAspectRatio() const override { return true; }
 
     //==============================================================================
@@ -63,16 +67,19 @@ public:
 
 private:
     void timerCallback() override;
-    int getTheme() const;
     void buildInterface();
+    void syncViewOptions (bool canRebuild);
     void updatePostEffect();
     void advanceOpening();
+
+    void applyScale (int percent);
+    int scalePercent() const;
 
     static constexpr double openingSeconds = 0.42;
 
     RetraceProcessor& processor;
     std::unique_ptr<SynthInterface> interface;
-    int builtTheme = -1;
+    SynthViewOptions appliedOptions;
     double openingStart = 0.0;
     float opening = 0.0f;
 };

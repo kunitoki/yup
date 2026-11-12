@@ -44,6 +44,8 @@
 #define YUP_AUDIO_PROCESSORS_H_INCLUDED
 
 #include <atomic>
+#include <bit>
+#include <vector>
 
 #include <yup_audio_basics/yup_audio_basics.h>
 #include <yup_data_model/yup_data_model.h>
@@ -57,6 +59,7 @@
 #include "processors/yup_AudioBus.h"
 #include "processors/yup_AudioBusBufferView.h"
 #include "processors/yup_AudioBusLayout.h"
+#include "processors/yup_ParameterChangeQueue.h"
 #include "processors/yup_AudioParameter.h"
 #include "processors/yup_AudioParameterBuilder.h"
 #include "processors/yup_ParameterChangeBuffer.h"
@@ -77,4 +80,5 @@
 
 #if YUP_MODULE_AVAILABLE_yup_gui
 #include "processors/yup_AudioProcessorEditor.h"
+#include "processors/yup_AudioParameterAttachment.h"
 #endif

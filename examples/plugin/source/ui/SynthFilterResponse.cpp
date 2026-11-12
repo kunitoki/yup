@@ -217,7 +217,7 @@ void SynthFilterResponse::paint (yup::Graphics& g)
     const auto bounds = getLocalBounds();
     const auto vertices = shownValues.enabled ? getCurveVertices() : std::vector<yup::Point<float>>();
 
-    if (! vertices.empty() && SynthLandscape::isEnabled())
+    if (! vertices.empty() && SynthLandscape::isEnabled (*this))
     {
         landscape.setProfile (bounds.getWidth(), bounds.getHeight(), [&vertices] (float x)
         {
@@ -305,7 +305,7 @@ void SynthFilterResponse::paint (yup::Graphics& g)
 
 void SynthFilterResponse::refreshDisplay (double lastFrameTimeSeconds)
 {
-    if (isShowing() && landscape.advance (lastFrameTimeSeconds))
+    if (isShowing() && landscape.advance (lastFrameTimeSeconds, *this))
         repaint();
 }
 

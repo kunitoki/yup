@@ -164,6 +164,11 @@ private:
 
     /** Per parameter index, the oscillator whose spectrum it shapes, or -1. */
     std::vector<int> spectralOwner;
+
+    /** The parameter values and route generation the context was last read from. */
+    std::vector<float> readValues;
+    int readRoutesGeneration = -1;
+
     int latency = 0;
     int samplesSinceSpectra = SynthExample::spectralChunk;
 

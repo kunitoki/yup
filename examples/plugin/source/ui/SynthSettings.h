@@ -21,35 +21,31 @@
 
 #pragma once
 
-#include "SynthNeonEffect.h"
+#include "SynthViewOptions.h"
 
 #include <functional>
 #include <map>
 #include <set>
 
 //==============================================================================
-/** The user's settings: the theme, the frame rate, the post effect switches, landscape
-    displays, undo, and
-    the preset browser's favorites, ratings and folders.
+/** The user's settings: the view options new instances start with, undo, the MCP server,
+    and the preset browser's favorites, ratings and folders.
 
     They belong to the user rather than to a patch, so they are kept in a small XML file in
     the user's preferences folder, next to the standalone's state, read once per process
-    and written on every change. The preset browser's data is read again before each of
-    its changes, so instances in other processes (a standalone and a host) keep each
-    other's favorites, ratings and folders.
+    and written on every change. Each instance keeps its own view options with its
+    session; the defaults here only change through "Save as Default". The preset browser's
+    data is read again before each of its changes, so instances in other processes (a
+    standalone and a host) keep each other's favorites, ratings and folders.
 */
 namespace SynthSettings
 {
 /** Every setting. */
 struct Values
 {
-    yup::String theme; /**< The theme picked last, which new instances start with. */
-    int frameRate = 60; /**< Frames per second, or 0 to follow the display refresh. */
-    bool postEffect = true;
-    bool landscapes = true; /**< Draws the filter, envelope and LFO curves as shader landscapes. */
+    SynthViewOptions defaults; /**< The view options new instances start with. */
     bool undo = true; /**< Keeps an undo history of edits; off forgets it. */
     bool mcpServer = false; /**< Serves MCP on the loopback address, see RetraceMCPServer. */
-    SynthNeonEffect::Options neon;
     std::set<yup::String> favorites; /**< The browser keys of the favorite presets. */
     std::map<yup::String, int> ratings; /**< 1 to 5 stars by browser key; unrated presets are absent. */
     yup::StringArray presetFolders; /**< The full paths of the preset folders added to the browser. */

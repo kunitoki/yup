@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Music Box" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Music Box" bank="Factory" author="kunitoki"
               tags="music box, cute, lullaby" category="Bell"
               description="Tiny music box tines with a soft room." notes="Mod wheel adds worn tape wow and space."
               presetId="ae94456e-f6c7-4580-9351-5ca14ddb9122" global.volume="-13.10000038146973"
-              global.mode="0.0" global.glide="120.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.mode="0.0" global.glide="120.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="0.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="2.0"

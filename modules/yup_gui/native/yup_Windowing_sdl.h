@@ -126,7 +126,7 @@ public:
     float getScaleDpi() const override;
     float getCurrentFrameRate() const override;
     float getDesiredFrameRate() const override;
-    void setDesiredFrameRate (float newFrameRate) override;
+    void setDesiredFrameRate (std::optional<float> newFrameRate) override;
 
     //==============================================================================
     bool isVsyncEnabled() const override;
@@ -260,6 +260,8 @@ private:
 
     void updateDesiredFrameRate();
     void updateEffectiveFrameRate (bool hasFocus);
+
+    void clampSizeToUsableFrame (int& widthInWindowUnits, int& heightInWindowUnits) const;
 
 #if YUP_EMSCRIPTEN
     struct AnimationFrameLoop;

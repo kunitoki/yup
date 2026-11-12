@@ -387,7 +387,7 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
     const auto hasCurve = area.getWidth() > 0.0f && area.getHeight() > 0.0f && shown.getNumPoints() >= 2;
     const auto playheadPosition = hasCurve ? getPlayheadPosition() : std::nullopt;
 
-    if (hasCurve && SynthLandscape::isEnabled())
+    if (hasCurve && SynthLandscape::isEnabled (*this))
     {
         landscape.setProfile (bounds.getWidth(), bounds.getHeight(), [this] (float x)
         {
@@ -529,6 +529,6 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
 
 void EnvelopeDisplay::refreshDisplay (double lastFrameTimeSeconds)
 {
-    if (isShowing() && landscape.advance (lastFrameTimeSeconds))
+    if (isShowing() && landscape.advance (lastFrameTimeSeconds, *this))
         repaint();
 }

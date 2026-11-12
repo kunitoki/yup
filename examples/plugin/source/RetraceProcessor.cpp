@@ -22,7 +22,6 @@
 #include "RetraceProcessor.h"
 #include "RetraceEditor.h"
 #include "PluginLogger.h"
-#include "ui/SynthThemes.h"
 #include "ui/SynthPresetLibrary.h"
 #include "browser/PresetBank.h"
 #include "browser/PresetBrowseState.h"
@@ -31,8 +30,8 @@
 
 namespace
 {
-const yup::Identifier themeProperty ("theme");
 const yup::Identifier presetFileProperty ("presetFile");
+const yup::Identifier legacyThemeProperty ("theme");
 } // namespace
 
 RetraceProcessor::RetraceProcessor (Role role)
@@ -56,7 +55,7 @@ RetraceProcessor::RetraceProcessor (Role role)
     for (int index = 0; index < SynthPatch::getNumFactoryPresets(); ++index)
         presetNames.push_back (SynthPatch::getFactoryPresetName (index));
 
-    themeName = SynthThemes::getThemes()[static_cast<std::size_t> (SynthThemes::loadSelectedTheme())].name;
+    viewOptions = SynthSettings::get().defaults;
 
     if (role == Role::plugin)
     {
@@ -96,6 +95,9 @@ void RetraceProcessor::prepareToPlay (const yup::AudioSpec& spec)
     const auto parameters = getParameters();
     for (std::size_t index = 0; index < parameters.size(); ++index)
         parameterValues[index] = playedValues[index] = parameters[index]->getValue();
+
+    effectsReadValues = playedValues;
+    effectsValues = synthParameters.effects.read ({ effectsReadValues });
 
     outputGain.reset (spec.sampleRate, 0.02);
     outputGain.setCurrentAndTargetValue (SynthParameters::volumeToGain (playedValues[static_cast<std::size_t> (volumeIndex)]));
@@ -187,9 +189,16 @@ void RetraceProcessor::processBlock (yup::AudioProcessContext<float>& context)
 
         if (audio.getNumChannels() >= 2)
         {
-            const auto values = synthParameters.effects.read ({ engine.getGlobalValues (globalValues) });
+            // The effect values only change with the values they are read from.
+            if (const auto globals = engine.getGlobalValues (globalValues);
+                ! std::equal (globals.begin(), globals.end(), effectsReadValues.begin(), effectsReadValues.end()))
+            {
+                effectsValues = synthParameters.effects.read ({ globals });
+                effectsReadValues.assign (globals.begin(), globals.end());
+            }
+
             effects.updateCurves (curves);
-            effects.process (audio.getWritePointer (0, start), audio.getWritePointer (1, start), count, effectChain.getOrder(), values, bpm);
+            effects.process (audio.getWritePointer (0, start), audio.getWritePointer (1, start), count, effectChain.getOrder(), effectsValues, bpm);
         }
 
         outputGain.setTargetValue (SynthParameters::volumeToGain (playedValues[static_cast<std::size_t> (volumeIndex)]));
@@ -340,10 +349,15 @@ yup::Result RetraceProcessor::loadStateFromDataTree (const yup::DataTree& state)
     if (auto result = applyState (state, {}); result.failed())
         return result;
 
-    if (const auto name = state.getProperty (themeProperty, {}).toString(); name.isNotEmpty())
+    // Sessions saved before the view options only held the theme, on the root.
+    auto defaults = SynthSettings::get().defaults;
+
+    if (const auto theme = state.getProperty (legacyThemeProperty, {}).toString(); theme.isNotEmpty())
+        defaults.theme = theme;
+
     {
-        const yup::SpinLock::ScopedLockType lock (themeNameLock);
-        themeName = name;
+        const yup::SpinLock::ScopedLockType lock (viewOptionsLock);
+        viewOptions = SynthViewOptions::fromDataTree (state.getChildWithName (SynthViewOptions::treeType), defaults);
     }
 
     // Only remembered, never read: a file that is gone simply is not listed by the browser.
@@ -370,7 +384,7 @@ yup::Result RetraceProcessor::saveStateIntoDataTree (yup::DataTree& state)
 {
     state = SynthPatch::createState (getParameters(), getPatchState(), currentPreset.load(), getPresetInfo());
     auto transaction = state.beginTransaction();
-    transaction.setProperty (themeProperty, getThemeName());
+    transaction.addChild (getViewOptions().toDataTree());
 
     if (const auto file = getCurrentPresetFile(); file != yup::File())
         transaction.setProperty (presetFileProperty, file.getFullPathName());
@@ -552,24 +566,30 @@ void RetraceProcessor::presetFileChanged (const yup::File& previousFile, const P
     presetInfo.id = entry.id;
 }
 
-yup::String RetraceProcessor::getThemeName() const
+SynthViewOptions RetraceProcessor::getViewOptions() const
 {
-    const yup::SpinLock::ScopedLockType lock (themeNameLock);
-    return themeName;
+    const yup::SpinLock::ScopedLockType lock (viewOptionsLock);
+    return viewOptions;
 }
 
-void RetraceProcessor::setThemeName (const yup::String& newName)
+void RetraceProcessor::setViewOptions (const SynthViewOptions& newOptions)
 {
     {
-        const yup::SpinLock::ScopedLockType lock (themeNameLock);
+        const yup::SpinLock::ScopedLockType lock (viewOptionsLock);
 
-        if (themeName == newName)
+        if (viewOptions == newOptions)
             return;
 
-        themeName = newName;
+        viewOptions = newOptions;
     }
 
     updateHostDisplay (ChangeDetails {}.withNonParameterStateChanged (true));
+}
+
+void RetraceProcessor::setEditorSize (yup::Size<int> newSize)
+{
+    const yup::SpinLock::ScopedLockType lock (viewOptionsLock);
+    viewOptions.editorSize = newSize;
 }
 
 SynthPatch::PresetInfo RetraceProcessor::getPresetInfo() const

@@ -37,6 +37,8 @@ void SynthEqualizer::prepare (double newSampleRate)
         for (auto& filter : band->filters)
             filter.prepare (sampleRate, 1);
 
+        band->applied.fill (std::numeric_limits<float>::quiet_NaN());
+
         for (auto* value : { &band->gain, &band->frequency, &band->q })
             value->reset (sampleRate, SynthEffectTools::smoothingSeconds);
     }
@@ -88,8 +90,13 @@ void SynthEqualizer::process (float* left, float* right, int numSamples, const S
             continue;
         }
 
-        for (auto& filter : band->filters)
-            filter.setParameters (mode, frequency, q, gainDb, sampleRate);
+        if (const std::array<float, 3> settings { gainDb, frequency, q }; settings != band->applied)
+        {
+            for (auto& filter : band->filters)
+                filter.setParameters (mode, frequency, q, gainDb, sampleRate);
+
+            band->applied = settings;
+        }
 
         band->filters[0].processInPlace (left, numSamples);
         band->filters[1].processInPlace (right, numSamples);

@@ -77,10 +77,19 @@ void SynthOperatorNetwork::prepare (double newSampleRate,
         latency = set[0].getGenerationLatencyInSamples();
     };
 
-    if (factor == 2)
+    if (factor == 1)
+    {
+        decimators.emplace<std::monostate>();
+        latency = 0;
+    }
+    else if (factor == 2)
+    {
         prepareDecimators (decimators.emplace<Decimators<2>>());
+    }
     else
+    {
         prepareDecimators (decimators.emplace<Decimators<4>>());
+    }
 
     const auto chunk = static_cast<std::size_t> (SynthExample::controlChunk);
     const auto delayLength = static_cast<std::size_t> (latency) + chunk;
@@ -140,12 +149,7 @@ void SynthOperatorNetwork::startNote (const SynthNetworkControls& controls) noex
         renderTables (numLayers);
     }
 
-    std::visit ([] (auto& set)
-                {
-                    for (auto& decimator : set)
-                        decimator.reset();
-                },
-                decimators);
+    resetDecimators();
 
     busActive.fill (false);
     busHold.fill (0);
@@ -279,13 +283,7 @@ void SynthOperatorNetwork::beginPath (Path path) noexcept
         for (int layer = 0; layer < SynthExample::maxUnisonVoices; ++layer)
             matrices[static_cast<std::size_t> (layer)].reset (directPhases[static_cast<std::size_t> (layer)]);
 
-        std::visit ([] (auto& set)
-                    {
-                        for (auto& decimator : set)
-                            decimator.reset();
-                    },
-                    decimators);
-
+        resetDecimators();
         return;
     }
 
@@ -309,12 +307,26 @@ void SynthOperatorNetwork::renderPath (Path path, const Outputs& outputs, int nu
         renderDirect (outputs, numSamples, controls);
 }
 
+void SynthOperatorNetwork::resetDecimators() noexcept
+{
+    std::visit ([] (auto& set)
+                {
+                    if constexpr (hasDecimators<decltype (set)>)
+                        for (auto& decimator : set)
+                            decimator.reset();
+                },
+                decimators);
+}
+
 void SynthOperatorNetwork::renderOversampled (const Outputs& outputs, int numSamples) noexcept
 {
     const auto internalSamples = numSamples * factor;
 
     std::visit ([&] (auto& set)
                 {
+                    // Without decimators the matrices write the host rate buses directly.
+                    constexpr auto hostRate = ! hasDecimators<decltype (set)>;
+
                     std::array<std::array<float*, 2>, numBuses> internal {};
                     std::array<bool, numBuses> generating {};
 
@@ -322,14 +334,27 @@ void SynthOperatorNetwork::renderOversampled (const Outputs& outputs, int numSam
                     {
                         const auto index = static_cast<std::size_t> (bus);
 
-                        if (! busActive[index] || ! set[index].beginGeneration (2, numSamples))
+                        if (! busActive[index])
                             continue;
+
+                        if constexpr (! hostRate)
+                        {
+                            if (! set[index].beginGeneration (2, numSamples))
+                                continue;
+                        }
 
                         generating[index] = true;
 
                         for (int channel = 0; channel < 2; ++channel)
                         {
-                            auto* data = set[index].getOversampledChannelData (channel);
+                            auto* data = [&]
+                            {
+                                if constexpr (hostRate)
+                                    return outputs[index][static_cast<std::size_t> (channel)];
+                                else
+                                    return set[index].getOversampledChannelData (channel);
+                            }();
+
                             yup::FloatVectorOperations::clear (data, internalSamples);
                             internal[index][static_cast<std::size_t> (channel)] = data;
                         }
@@ -386,15 +411,15 @@ void SynthOperatorNetwork::renderOversampled (const Outputs& outputs, int numSam
 
                     for (std::size_t bus = 0; bus < static_cast<std::size_t> (numBuses); ++bus)
                     {
-                        if (generating[bus])
-                        {
-                            float* channels[] = { outputs[bus][0], outputs[bus][1] };
-                            set[bus].downsample (channels, 2, numSamples);
-                        }
-                        else
+                        if (! generating[bus])
                         {
                             yup::FloatVectorOperations::clear (outputs[bus][0], numSamples);
                             yup::FloatVectorOperations::clear (outputs[bus][1], numSamples);
+                        }
+                        else if constexpr (! hostRate)
+                        {
+                            float* channels[] = { outputs[bus][0], outputs[bus][1] };
+                            set[bus].downsample (channels, 2, numSamples);
                         }
                     }
                 },
@@ -638,7 +663,14 @@ void SynthOperatorNetwork::updateBusActivity (const SynthNetworkControls& contro
         if (sending[bus])
         {
             if (! busActive[bus])
-                std::visit ([bus] (auto& set) { set[bus].reset(); }, decimators);
+            {
+                std::visit ([bus] (auto& set)
+                {
+                    if constexpr (hasDecimators<decltype (set)>)
+                        set[bus].reset();
+                },
+                decimators);
+            }
 
             busActive[bus] = true;
             busHold[bus] = 2 * latency + SynthExample::controlChunk;

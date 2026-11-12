@@ -324,10 +324,10 @@ TEST (GridParityTests, MatchesTheBrowserForEveryCorpusCase)
             {
                 if (margin->size() == 4)
                 {
-                    item.marginLeft = static_cast<float> (static_cast<double> (margin->getUnchecked (0)));
-                    item.marginRight = static_cast<float> (static_cast<double> (margin->getUnchecked (1)));
-                    item.marginTop = static_cast<float> (static_cast<double> (margin->getUnchecked (2)));
-                    item.marginBottom = static_cast<float> (static_cast<double> (margin->getUnchecked (3)));
+                    item.margin.setLeft (static_cast<float> (static_cast<double> (margin->getUnchecked (0))));
+                    item.margin.setRight (static_cast<float> (static_cast<double> (margin->getUnchecked (1))));
+                    item.margin.setTop (static_cast<float> (static_cast<double> (margin->getUnchecked (2))));
+                    item.margin.setBottom (static_cast<float> (static_cast<double> (margin->getUnchecked (3))));
                 }
             }
 

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Storm Wind" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Storm Wind" bank="Factory" author="kunitoki"
               tags="wind, noise, weather" category="FX" description="Howling wind gusts from scattered noise and a roaming band-pass."
               notes="Mod wheel whips up faster gusts in a wider space." presetId="202e1f62-7348-4b59-a6f2-ca9e39240d5e"
-              global.volume="6.0" global.mode="0.0" global.glide="120.0" global.quality="0.0"
+              global.volume="6.0" global.mode="0.0" global.glide="120.0" global.quality="1.0"
               global.unisonVoices="6.0" global.unisonDetune="1.0" global.unisonSpread="1.0"
               global.filterRouting="0.0" osc1.waveform="2.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="4.0"

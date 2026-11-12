@@ -35,6 +35,7 @@
 #include "yup_ColorGradient.cpp"
 #include "yup_CubicBezier.cpp"
 #include "yup_Drawable.cpp"
+#include "yup_EdgeSpacing.cpp"
 #include "yup_Font.cpp"
 #include "yup_Graphics.cpp"
 #include "yup_GraphicsContext.cpp"

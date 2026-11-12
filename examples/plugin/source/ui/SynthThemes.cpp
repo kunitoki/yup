@@ -20,7 +20,6 @@
 */
 
 #include "SynthThemes.h"
-#include "SynthSettings.h"
 
 namespace SynthThemes
 {
@@ -106,22 +105,6 @@ const std::vector<Theme>& getThemes()
     };
 
     return themes;
-}
-
-int loadSelectedTheme()
-{
-    return yup::jmax (0, findTheme (SynthSettings::get().theme));
-}
-
-void saveSelectedTheme (int index)
-{
-    const auto& themes = getThemes();
-
-    if (! yup::isPositiveAndBelow (index, static_cast<int> (themes.size())))
-        return;
-
-    SynthSettings::get().theme = themes[static_cast<std::size_t> (index)].name;
-    SynthSettings::save();
 }
 
 int findTheme (const yup::String& name)

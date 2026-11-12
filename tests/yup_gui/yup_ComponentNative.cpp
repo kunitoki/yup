@@ -138,9 +138,12 @@ public:
 
     float getCurrentFrameRate() const override { return 60.0f; }
 
-    float getDesiredFrameRate() const override { return desiredFrameRate; }
+    float getDesiredFrameRate() const override
+    {
+        return requestedFrameRate.value_or (vsyncEnabled ? displayRefreshRate : 60.0f);
+    }
 
-    void setDesiredFrameRate (float newFrameRate) override { desiredFrameRate = newFrameRate; }
+    void setDesiredFrameRate (std::optional<float> newFrameRate) override { requestedFrameRate = newFrameRate; }
 
     bool isVsyncEnabled() const override { return vsyncEnabled; }
 
@@ -161,7 +164,8 @@ public:
     Flags getFlags() const { return flags; }
 
     RectangleList<float> repaintAreas;
-    float desiredFrameRate = 60.0f;
+    std::optional<float> requestedFrameRate;
+    float displayRefreshRate = 120.0f;
     bool vsyncEnabled = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StubComponentNative)
@@ -525,6 +529,60 @@ TEST_F (ComponentNativeRepaintTests, MovingAComponentMarksTheOldAreaAndTheNewOne
     auto areas = native->getRepaintAreas();
     EXPECT_TRUE (areas.contains (oldArea));
     EXPECT_TRUE (areas.contains (newArea));
+}
+
+// ==============================================================================
+// ComponentNative — desired frame rate selection and its interplay with vsync.
+// setDesiredFrameRate(std::nullopt) drops the fixed rate so pacing follows the
+// display refresh while vsync is enabled, and 60 otherwise.
+// ==============================================================================
+
+class ComponentNativeFrameRateTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        comp.setBounds (0, 0, 100, 100);
+    }
+
+    Component comp;
+};
+
+TEST_F (ComponentNativeFrameRateTests, FixedRateIsReportedAsDesired)
+{
+    StubComponentNative native (comp, ComponentNative::defaultFlags);
+
+    native.setDesiredFrameRate (30.0f);
+    EXPECT_FLOAT_EQ (30.0f, native.getDesiredFrameRate());
+
+    native.setDesiredFrameRate (60.0f);
+    EXPECT_FLOAT_EQ (60.0f, native.getDesiredFrameRate());
+}
+
+TEST_F (ComponentNativeFrameRateTests, NulloptWithoutVsyncFallsBackToSixty)
+{
+    StubComponentNative native (comp, ComponentNative::defaultFlags);
+
+    native.setDesiredFrameRate (30.0f);
+    native.setDesiredFrameRate (std::nullopt);
+
+    EXPECT_FALSE (native.isVsyncEnabled());
+    EXPECT_FLOAT_EQ (60.0f, native.getDesiredFrameRate());
+}
+
+TEST_F (ComponentNativeFrameRateTests, NulloptWithVsyncFollowsDisplayRefresh)
+{
+    StubComponentNative native (comp, ComponentNative::defaultFlags);
+    native.displayRefreshRate = 144.0f;
+
+    // A fixed rate was picked first, as the 30/60 menu entries do.
+    native.setDesiredFrameRate (60.0f);
+    native.setVsyncEnabled (true);
+    EXPECT_FLOAT_EQ (60.0f, native.getDesiredFrameRate());
+
+    // Clearing the fixed rate lets vsync follow the display, instead of staying clamped.
+    native.setDesiredFrameRate (std::nullopt);
+    EXPECT_FLOAT_EQ (144.0f, native.getDesiredFrameRate());
 }
 
 // ==============================================================================

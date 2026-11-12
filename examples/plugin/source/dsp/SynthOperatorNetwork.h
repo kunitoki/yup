@@ -25,6 +25,7 @@
 #include "SynthOscillator.h"
 #include "SynthParameters.h"
 
+#include <type_traits>
 #include <variant>
 
 //==============================================================================
@@ -71,7 +72,8 @@ struct SynthNetworkControls
     to three stereo buses, the two filter inputs and the direct output, and the layers
     are summed before decimation, so the decimators cost the same whatever the unison.
     Only buses something sends to are decimated, with the linear-phase FIR halfband
-    cascade whose stopband starts at the host Nyquist.
+    cascade whose stopband starts at the host Nyquist. At 1x the matrices play at the
+    host rate straight into the buses, with no decimators and no latency.
 
     Without phase modulation nothing needs the oversampled rate: the matrices hold every
     table to the host Nyquist, so the same tables are read directly at the host rate,
@@ -128,7 +130,7 @@ public:
     void setForceOversampled (bool shouldForce) noexcept { forceOversampled = shouldForce; }
 
     /** True while the oversampled path is the one being heard. */
-    bool isOversampling() const noexcept { return activePath == Path::oversampled; }
+    bool isOversampling() const noexcept { return factor > 1 && activePath == Path::oversampled; }
 
 private:
     //==============================================================================
@@ -136,6 +138,10 @@ private:
     // falls back to a scalar loop that costs several percent per voice.
     template <int Factor>
     using Decimators = std::array<yup::HalfbandOversampler<float, Factor, float>, numBuses>;
+
+    // False for the std::monostate the decimators hold at 1x.
+    template <typename Set>
+    static constexpr bool hasDecimators = ! std::is_same_v<std::decay_t<Set>, std::monostate>;
 
     struct LayerShape
     {
@@ -167,6 +173,7 @@ private:
     void beginPath (Path path) noexcept;
     void renderPath (Path path, const Outputs& outputs, int numSamples, const SynthNetworkControls& controls) noexcept;
     void renderOversampled (const Outputs& outputs, int numSamples) noexcept;
+    void resetDecimators() noexcept;
     void renderDirect (const Outputs& outputs, int numSamples, const SynthNetworkControls& controls) noexcept;
     double getPlayedFrequency (const SynthNetworkControls& controls, int op, const LayerShape& shape) const noexcept;
     static std::array<float, 2> getPanGains (float pan, float gain) noexcept;
@@ -175,7 +182,7 @@ private:
     std::array<SynthOscillator, SynthExample::oscillatorCount> oscillators;
     std::array<yup::PhaseModulationMatrix<float>, SynthExample::maxUnisonVoices> matrices;
     std::array<std::array<std::vector<float>, SynthExample::oscillatorCount>, SynthExample::maxUnisonVoices> operatorBuffers;
-    std::variant<Decimators<2>, Decimators<4>> decimators;
+    std::variant<std::monostate, Decimators<2>, Decimators<4>> decimators; // monostate at 1x, where the matrices play at the host rate
 
     std::array<bool, numBuses> busActive {};
     std::array<int, numBuses> busHold {};

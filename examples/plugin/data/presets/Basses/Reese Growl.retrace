@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Reese Growl" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Reese Growl" bank="Factory" author="kunitoki"
               tags="reese, dnb, detuned" category="Bass"
               description="Thick detuned saw reese with slow filter movement and grit."
               notes="Mod wheel twists faster and detunes wider." presetId="d73ceec5-3c1f-4141-874a-89999439b7a0"
               macro1Name="Grit" global.volume="0.6000000238418579" global.mode="1.0"
-              global.glide="120.0" global.quality="0.0" global.unisonVoices="2.0"
+              global.glide="120.0" global.quality="1.0" global.unisonVoices="2.0"
               global.unisonDetune="0.1500000059604645" global.unisonSpread="0.300000011920929"
               global.filterRouting="0.0" osc1.waveform="2.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

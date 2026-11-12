@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Tearout Screech" bank="Factory"
+<RetraceState version="4" preset="-1" name="Tearout Screech" bank="Factory"
               author="kunitoki" tags="edm, tearout, screech"
               category="Bass" description="Tearout screech: a hard-synced saw tearing up and down with the LFO."
               notes="Mod wheel pushes the screech higher." presetId="8522946e-ac04-40d1-b6ce-ac8780d80963"
               macro1Name="Wobble" macro2Name="Grit" global.volume="4.300000190734863"
-              global.mode="1.0" global.glide="0.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.mode="1.0" global.glide="0.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="2.0" osc1.syncMode="1.0"
               osc1.syncRatio="2.0" osc1.frequencyMode="0.0" osc1.ratio="1.0"

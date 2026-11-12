@@ -192,8 +192,16 @@ void SynthHeader::resized()
 
 void SynthHeader::mouseDown (const yup::MouseEvent& event)
 {
-    if (event.isRightButtonDown() && logoTile.contains (event.getPosition()) && onSettingsRequested != nullptr)
+    const auto onLogo = logoTile.contains (event.getPosition());
+
+    if ((event.isLeftButtonDown() || event.isRightButtonDown()) && onLogo && onSettingsRequested != nullptr)
         onSettingsRequested (event.getPosition());
+}
+
+void SynthHeader::mouseMove (const yup::MouseEvent& event)
+{
+    // The logo is clickable, so it wears the pointing hand over its tile and the default cursor elsewhere.
+    setMouseCursor (logoTile.contains (event.getPosition()) ? yup::MouseCursor::Hand : yup::MouseCursor::Default);
 }
 
 void SynthHeader::styleChanged()

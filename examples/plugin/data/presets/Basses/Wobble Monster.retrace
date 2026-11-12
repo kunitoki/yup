@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Wobble Monster" bank="Factory"
+<RetraceState version="4" preset="-1" name="Wobble Monster" bank="Factory"
               author="kunitoki" tags="wobble, dubstep, synced"
               category="Bass" description="Tempo synced wobble bass: the filter pulses in eighth notes."
               notes="Macro 1 deepens the wobble. Mod wheel adds resonance and grit to the wobble."
               presetId="1d8fb928-7a10-4e3c-9efc-8fd336b357ca" macro1Name="Wobble Depth"
               global.volume="2.299999952316284" global.mode="1.0" global.glide="120.0"
-              global.quality="0.0" global.unisonVoices="2.0" global.unisonDetune="0.1000000014901161"
+              global.quality="1.0" global.unisonVoices="2.0" global.unisonDetune="0.1000000014901161"
               global.unisonSpread="0.6000000238418579" global.filterRouting="0.0"
               osc1.waveform="2.0" osc1.syncMode="0.0" osc1.syncRatio="1.5"
               osc1.frequencyMode="0.0" osc1.ratio="1.0" osc1.fine="0.0" osc1.fixedHz="440.0"

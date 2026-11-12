@@ -106,19 +106,23 @@ SynthEnvelopeParameters::SynthEnvelopeParameters (int envelopeIndex, const Synth
 
 void SynthEnvelopeParameters::addTo (yup::AudioProcessor& processor) const
 {
-    for (const auto& parameter : { timeScale, velocity, depth })
+    for (const auto& parameter : getParameters())
         processor.addParameter (parameter);
+}
+
+std::vector<yup::AudioParameter::Ptr> SynthEnvelopeParameters::getParameters() const
+{
+    std::vector<yup::AudioParameter::Ptr> parameters { timeScale, velocity, depth };
 
     if (enabled != nullptr)
-        processor.addParameter (enabled);
+        parameters.push_back (enabled);
 
-    processor.addParameter (tempoSync);
-
-    for (const auto& parameter : { attack, decay, sustain, release })
-        processor.addParameter (parameter);
+    parameters.insert (parameters.end(), { tempoSync, attack, decay, sustain, release });
 
     if (polarity != nullptr)
-        processor.addParameter (polarity);
+        parameters.push_back (polarity);
+
+    return parameters;
 }
 
 SynthEnvelopeValues SynthEnvelopeParameters::read (SynthParameterReader reader) const noexcept

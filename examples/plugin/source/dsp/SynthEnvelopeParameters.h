@@ -24,6 +24,8 @@
 #include "SynthCurveState.h"
 #include "SynthParameterFactory.h"
 
+#include <vector>
+
 //==============================================================================
 /** Reshapes an envelope's drawn curve as an attack, decay, sustain and release.
 
@@ -105,6 +107,9 @@ public:
 
     /** Registers every parameter with the processor. */
     void addTo (yup::AudioProcessor& processor) const;
+
+    /** Returns every parameter, in registration order. */
+    std::vector<yup::AudioParameter::Ptr> getParameters() const;
 
     /** Takes a snapshot. */
     SynthEnvelopeValues read (SynthParameterReader reader = {}) const noexcept;

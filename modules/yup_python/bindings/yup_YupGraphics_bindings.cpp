@@ -554,6 +554,8 @@ void registerRectangle (py::module_& m)
             .def ("reduced", py::overload_cast<ValueType> (&T::reduced, py::const_))
             .def ("reduced", py::overload_cast<ValueType, ValueType> (&T::reduced, py::const_))
             .def ("reduced", py::overload_cast<ValueType, ValueType, ValueType, ValueType> (&T::reduced, py::const_))
+            .def ("reduce", py::overload_cast<const EdgeSpacing<ValueType>&> (&T::reduce))
+            .def ("reduced", py::overload_cast<const EdgeSpacing<ValueType>&> (&T::reduced, py::const_))
             .def ("reducedLeft", &T::reducedLeft)
             .def ("reducedTop", &T::reducedTop)
             .def ("reducedRight", &T::reducedRight)
@@ -563,6 +565,8 @@ void registerRectangle (py::module_& m)
             .def ("enlarge", py::overload_cast<ValueType, ValueType, ValueType, ValueType> (&T::enlarge))
             .def ("enlarged", py::overload_cast<ValueType> (&T::enlarged, py::const_))
             .def ("enlarged", py::overload_cast<ValueType, ValueType> (&T::enlarged, py::const_))
+            .def ("enlarge", py::overload_cast<const EdgeSpacing<ValueType>&> (&T::enlarge))
+            .def ("enlarged", py::overload_cast<const EdgeSpacing<ValueType>&> (&T::enlarged, py::const_))
             .def ("enlargedLeft", &T::enlargedLeft)
             .def ("enlargedTop", &T::enlargedTop)
             .def ("enlargedRight", &T::enlargedRight)
@@ -729,6 +733,98 @@ void registerRectangleList (py::module_& m)
     }() && ...);
 
     m.add_object ("RectangleList", type);
+}
+
+// ============================================================================================
+
+template <template <class> class Class, class... Types>
+void registerEdgeSpacing (py::module_& m)
+{
+    py::dict type;
+
+    ([&]
+    {
+        using ValueType = Types;
+        using T = Class<ValueType>;
+
+        const auto className = Helpers::pythonizeCompoundClassName ("EdgeSpacing", typeid (Types).name());
+
+        auto class_ = py::class_<T> (m, className.toRawUTF8())
+            // Constructors
+            .def (py::init<>())
+            .def (py::init<ValueType>())
+            .def (py::init<ValueType, ValueType>())
+            .def (py::init<ValueType, ValueType, ValueType, ValueType>())
+            .def (py::init<const T&>())
+
+            // Edge accessors
+            .def ("getLeft", &T::getLeft)
+            .def ("setLeft", &T::setLeft)
+            .def ("withLeft", &T::withLeft)
+            .def ("getTop", &T::getTop)
+            .def ("setTop", &T::setTop)
+            .def ("withTop", &T::withTop)
+            .def ("getRight", &T::getRight)
+            .def ("setRight", &T::setRight)
+            .def ("withRight", &T::withRight)
+            .def ("getBottom", &T::getBottom)
+            .def ("setBottom", &T::setBottom)
+            .def ("withBottom", &T::withBottom)
+
+            // Totals and state
+            .def ("getHorizontal", &T::getHorizontal)
+            .def ("getVertical", &T::getVertical)
+            .def ("isZero", &T::isZero)
+            .def ("isUniform", &T::isUniform)
+
+            // Rectangle application
+            .def ("subtractedFrom", &T::subtractedFrom)
+            .def ("addedTo", &T::addedTo)
+
+            // Conversion methods
+            .def ("toInt", [](const T& self) { return self.template to<int>(); })
+            .def ("toFloat", [](const T& self) { return self.template to<float>(); })
+            .def ("toDouble", [](const T& self) { return self.template to<double>(); })
+
+            // String conversion
+            .def ("toString", &T::toString)
+
+            // Comparison
+            .def (py::self == py::self)
+            .def (py::self != py::self)
+            .def ("approximatelyEqualTo", &T::approximatelyEqualTo)
+
+            // Operators
+            .def (py::self + py::self)
+            .def (py::self += py::self)
+            .def (py::self - py::self)
+            .def (py::self -= py::self)
+            .def (-py::self)
+            .def (py::self * ValueType())
+            .def (py::self *= ValueType())
+            .def (py::self / ValueType())
+            .def (py::self /= ValueType())
+
+            .def ("__repr__", [](const T& self)
+            {
+                String result;
+                result
+                    << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                    << "(" << self.getLeft() << ", " << self.getTop() << ", " << self.getRight() << ", " << self.getBottom() << ")";
+                return result;
+            })
+            .def ("__str__", [](const T& self) { return self.toString(); })
+        ;
+
+        if constexpr (std::is_floating_point_v<ValueType>)
+            class_.def ("roundToInt", [](const T& self) { return self.template roundToInt<ValueType>(); });
+
+        type[py::type::of (py::cast (Types {}))] = class_;
+
+        return true;
+    }() && ...);
+
+    m.add_object ("EdgeSpacing", type);
 }
 
 // ============================================================================================
@@ -910,6 +1006,10 @@ void registerYupGraphicsBindings (py::module_& m)
     // ============================================================================================ yup::RectangleList<>
 
     registerRectangleList<RectangleList, int, float> (m);
+
+    // ============================================================================================ yup::EdgeSpacing<>
+
+    registerEdgeSpacing<EdgeSpacing, int, float> (m);
 
 
     // ============================================================================================ yup::StrokeCap

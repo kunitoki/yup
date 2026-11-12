@@ -196,6 +196,7 @@ class Context;
 #include "primitives/yup_Point.h"
 #include "primitives/yup_Line.h"
 #include "primitives/yup_Rectangle.h"
+#include "primitives/yup_EdgeSpacing.h"
 #include "primitives/yup_RectangleList.h"
 #include "primitives/yup_Ray.h"
 #include "graphics/yup_StrokeJoin.h"

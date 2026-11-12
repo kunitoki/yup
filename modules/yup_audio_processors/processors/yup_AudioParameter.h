@@ -449,7 +449,10 @@ public:
     /**
         Sets the real (un-normalized) parameter value.
 
-        Non-finite values (NaN or infinity) are ignored and the current value is kept.
+        Non-finite values (NaN or infinity) are ignored and the current value is kept. A value
+        that differs from the current one is reported to each processor containing this
+        parameter. Registration and destruction of those processors must not overlap
+        calls to this method, including writes through another owner of a shared parameter.
 
         @param newValue The new real value.
     */
@@ -458,7 +461,12 @@ public:
         if (! std::isfinite (newValue))
             return;
 
-        currentValue.store (metadata.valueRange.snapToLegalValue (newValue));
+        const auto legalValue = metadata.valueRange.snapToLegalValue (newValue);
+        if (currentValue.exchange (legalValue, std::memory_order_relaxed) == legalValue)
+            return;
+
+        for (const auto& destination : changeQueues)
+            destination.queue->markChanged (destination.index);
     }
 
     /** Gets the real (un-normalized) parameter value. */
@@ -549,11 +557,24 @@ public:
     void removeListener (Listener* listener);
 
 private:
+    friend class AudioProcessorBase;
+
+    struct ChangeQueueRegistration
+    {
+        ParameterChangeQueue* queue;
+        int index;
+    };
+
+    void addChangeQueue (ParameterChangeQueue& queue, int index);
+    void removeChangeQueue (ParameterChangeQueue& queue);
+
     using ListenersType = ListenerList<Listener, Array<Listener*, CriticalSection>>;
+    static_assert (std::atomic<float>::is_always_lock_free);
 
     String paramID;
     int paramIndex = -1;
     std::atomic<float> currentValue = 0.0f;
+    std::vector<ChangeQueueRegistration> changeQueues;
     Metadata metadata;
     ListenersType listeners;
     ValueToString valueToString = nullptr;

@@ -26,7 +26,8 @@ building blocks now have their own dedicated
   analysis, documented in the dedicated [DSP](../dsp/index.md) area
   (`yup_dsp`).
 - **Audio graph** - node-based audio processing and editing (`yup_audio_graph`).
-- **Processors** - the `AudioProcessor` model (`yup_audio_processors`).
+- **Processors** - the `AudioProcessor` model (`yup_audio_processors`), including
+  [reactive parameter updates](#reactive-parameter-updates) for editors.
 - **Plugins** - hosting third-party plugins (`yup_audio_plugin_host`) and
   wrapping your own as CLAP / VST3 (`yup_audio_plugin_client`).
 
@@ -255,6 +256,58 @@ contention, so it shows up as an occasional crash. In the audio callback:
 - Size every buffer in `audioDeviceAboutToStart`, never in the callback.
 - Don't post messages (`triggerAsyncUpdate`, `callAsync`, change broadcasts),
   as queuing them locks and allocates. Set a flag and poll it from the UI.
+
+## Reactive parameter updates
+
+An editor that refreshes its controls by reading every parameter each frame does
+O(all parameters) work even when nothing moved. `yup_audio_processors` offers a
+reactive path instead: parameters report their own changes, and the editor
+refreshes just the controls bound to them.
+
+The pieces are:
+
+- **`ParameterChangeQueue`** - a lock-free set of changed parameter indices,
+  owned by every `AudioProcessorBase`. Each parameter added with `addParameter()`
+  marks itself from `setValue()` whenever its value actually changes, from any
+  thread, so host automation, UI edits and preset loads are all reported, whether
+  or not audio is running. Shared parameters mark each owning processor's queue
+  using that processor's index. Marking uses one lock-free atomic OR per owner
+  and coalesces: a parameter changed many times between two refreshes is reported
+  once. Draining scans one word per 32 parameters, then visits the changed indices.
+- **`AudioProcessorEditor::startParameterListening()`** - starts a message-thread
+  timer that drains the queue and notifies the attachments bound to the changed
+  parameters in every listening editor. Editors share one message-thread
+  dispatcher, so draining from one does not consume another editor's notifications.
+  Pass a rate of zero to drive `dispatchPendingParameterChanges()` yourself,
+  for example from a test.
+- **`AudioParameterAttachment`** - binds one control's parameter to a callback
+  (typically the control's existing refresh-from-parameter). The editor fires the
+  callback, on the message thread, when that parameter changes. This is the
+  parameter-to-control direction; the reverse stays with gestures. Callbacks may
+  remove or rebind attachments, including themselves.
+
+Create, rebind and destroy attachments, and start, stop and dispatch editor
+listening, on the message thread. The processor must outlive its editors, and
+the editor must outlive its attachments. Parameter registration and processor
+destruction must not overlap parameter writes, including writes through other
+owners of shared parameters. Register parameters before starting those writers.
+Queue growth preserves pending changes; explicit `resize()` clears them.
+
+The queue has a single consumer. While editors are listening, leave draining to
+their shared dispatcher rather than calling `readChanges()` directly.
+
+The processor needs no code at all. In the editor:
+
+```cpp
+MyEditor::MyEditor (MyProcessor& p) : processor (p)
+{
+    startParameterListening (processor); // 60 Hz by default
+
+    gainAttachment = std::make_unique<yup::AudioParameterAttachment> (
+        *this, processor.getParameters()[gainIndex],
+        [this] { gainKnob.syncFromParameter(); });
+}
+```
 
 ## Related
 

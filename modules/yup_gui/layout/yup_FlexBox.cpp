@@ -408,13 +408,17 @@ void resolveFlexibleLengths (ResolvedItem* lineItems, int numItems, float contai
 //==============================================================================
 void FlexBox::setPadding (float newPadding) noexcept
 {
-    paddingLeft = paddingRight = paddingTop = paddingBottom = newPadding;
+    padding = EdgeSpacing<float> (newPadding);
 }
 
 void FlexBox::setPadding (float horizontal, float vertical) noexcept
 {
-    paddingLeft = paddingRight = horizontal;
-    paddingTop = paddingBottom = vertical;
+    padding = EdgeSpacing<float> (horizontal, vertical);
+}
+
+void FlexBox::setPadding (const EdgeSpacing<float>& newPadding) noexcept
+{
+    padding = newPadding;
 }
 
 //==============================================================================
@@ -429,16 +433,16 @@ void FlexBox::performLayout (Rectangle<float> targetArea)
     const bool isSingleLine = (flexWrap == Wrap::noWrap);
 
     jassert (gap >= 0.0f); // a negative gap is meaningless and is clamped away
-    jassert (paddingLeft >= 0.0f && paddingRight >= 0.0f);
-    jassert (paddingTop >= 0.0f && paddingBottom >= 0.0f);
+    jassert (padding.getLeft() >= 0.0f && padding.getRight() >= 0.0f);
+    jassert (padding.getTop() >= 0.0f && padding.getBottom() >= 0.0f);
 
     // Padding shrinks the content box the items are laid out in, so every
     // pass below works in content-box coordinates and only the final mapping
     // adds the origin back.
-    const auto paddedArea = targetArea.reduced (std::max (0.0f, paddingLeft),
-                                                std::max (0.0f, paddingTop),
-                                                std::max (0.0f, paddingRight),
-                                                std::max (0.0f, paddingBottom));
+    const auto paddedArea = targetArea.reduced (std::max (0.0f, padding.getLeft()),
+                                                std::max (0.0f, padding.getTop()),
+                                                std::max (0.0f, padding.getRight()),
+                                                std::max (0.0f, padding.getBottom()));
 
     // Padding larger than the area would otherwise invert the rectangle.
     const Rectangle<float> contentArea (paddedArea.getX(),
@@ -486,10 +490,10 @@ void FlexBox::performLayout (Rectangle<float> targetArea)
         // makes marginLeft behave as a right margin in row-reverse.
         if (isRow)
         {
-            r.mainMarginStart = isReverseMain ? item.marginRight : item.marginLeft;
-            r.mainMarginEnd = isReverseMain ? item.marginLeft : item.marginRight;
-            r.crossMarginStart = isReverseCross ? item.marginBottom : item.marginTop;
-            r.crossMarginEnd = isReverseCross ? item.marginTop : item.marginBottom;
+            r.mainMarginStart = isReverseMain ? item.margin.getRight() : item.margin.getLeft();
+            r.mainMarginEnd = isReverseMain ? item.margin.getLeft() : item.margin.getRight();
+            r.crossMarginStart = isReverseCross ? item.margin.getBottom() : item.margin.getTop();
+            r.crossMarginEnd = isReverseCross ? item.margin.getTop() : item.margin.getBottom();
 
             r.mainMarginStartIsAuto = isReverseMain ? item.marginRightAuto : item.marginLeftAuto;
             r.mainMarginEndIsAuto = isReverseMain ? item.marginLeftAuto : item.marginRightAuto;
@@ -503,10 +507,10 @@ void FlexBox::performLayout (Rectangle<float> targetArea)
         }
         else
         {
-            r.mainMarginStart = isReverseMain ? item.marginBottom : item.marginTop;
-            r.mainMarginEnd = isReverseMain ? item.marginTop : item.marginBottom;
-            r.crossMarginStart = isReverseCross ? item.marginRight : item.marginLeft;
-            r.crossMarginEnd = isReverseCross ? item.marginLeft : item.marginRight;
+            r.mainMarginStart = isReverseMain ? item.margin.getBottom() : item.margin.getTop();
+            r.mainMarginEnd = isReverseMain ? item.margin.getTop() : item.margin.getBottom();
+            r.crossMarginStart = isReverseCross ? item.margin.getRight() : item.margin.getLeft();
+            r.crossMarginEnd = isReverseCross ? item.margin.getLeft() : item.margin.getRight();
 
             r.mainMarginStartIsAuto = isReverseMain ? item.marginBottomAuto : item.marginTopAuto;
             r.mainMarginEndIsAuto = isReverseMain ? item.marginTopAuto : item.marginBottomAuto;

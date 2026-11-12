@@ -210,18 +210,9 @@ void WaveformEditor::paint (yup::Graphics& g)
 void WaveformEditor::refreshDisplay (double lastFrameTimeSeconds)
 {
     if (editingPartials || ! isShowing() || ! animating || isDrawing())
-    {
-        sinceLastFrame = 0.0;
-        return;
-    }
-
-    sinceLastFrame += lastFrameTimeSeconds;
-
-    if (sinceLastFrame < animationInterval)
         return;
 
-    animationTime += static_cast<float> (sinceLastFrame);
-    sinceLastFrame = 0.0;
+    animationTime += static_cast<float> (lastFrameTimeSeconds);
     landscapeDirty = true;
     repaint();
 }

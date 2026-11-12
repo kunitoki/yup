@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="FM Chain Bass" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="FM Chain Bass" bank="Factory" author="kunitoki"
               tags="fm, operator chain, punchy" category="Bass" description="Four operators in one chain: a deep sine body that barks on the attack and growls with feedback."
               notes="Mod wheel adds feedback growl." presetId="3f1091d9-1d44-45b4-84c9-cd365eceb072"
               global.volume="2.599999904632568" global.mode="1.0" global.glide="0.0"
-              global.quality="0.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
+              global.quality="1.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
               global.unisonSpread="0.6000000238418579" global.filterRouting="0.0"
               osc1.waveform="0.0" osc1.syncMode="0.0" osc1.syncRatio="1.5"
               osc1.frequencyMode="0.0" osc1.ratio="0.5" osc1.fine="0.0" osc1.fixedHz="440.0"

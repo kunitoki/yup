@@ -22,6 +22,8 @@
 namespace yup
 {
 
+class AudioProcessorEditor;
+
 //==============================================================================
 /**
     Base class for all audio domains processors.
@@ -133,7 +135,11 @@ public:
     /** Constructs an AudioProcessorBase. */
     AudioProcessorBase (StringRef name);
 
-    /** Destructs an AudioProcessorBase. */
+    /** Destructs an AudioProcessorBase.
+
+        Editors must be destroyed first. Parameter writers must have stopped, including
+        writers in other processors sharing any of this processor's parameters.
+    */
     virtual ~AudioProcessorBase();
 
     //==============================================================================
@@ -153,7 +159,12 @@ public:
     /** Returns a parameter index by host-facing automation ID, or -1 when no such parameter exists. */
     int getParameterIndexByHostID (uint32 hostParameterID) const;
 
-    /** Adds a parameter. */
+    /** Adds a parameter.
+
+        Call while constructing the processor, with no concurrent parameter writers or
+        change-queue consumers. Shared parameters notify each registered processor using
+        that processor's own parameter index.
+    */
     void addParameter (AudioParameter::Ptr parameter);
 
     /** Returns the first parameter flagged as the designated bypass switch, or nullptr.
@@ -161,6 +172,18 @@ public:
         @see AudioParameterBuilder::withBypass
     */
     AudioParameter::Ptr getBypassParameter() const;
+
+    //==============================================================================
+    /** Returns the queue of changed parameter indices an editor drains to refresh its controls.
+
+        Every parameter added with addParameter() marks itself here from setValue(), on any
+        thread, so host automation, editor edits and preset loads are all reported whether or
+        not audio is running. This queue has a single consumer. While editors are listening,
+        only their shared message-thread dispatcher may drain it.
+
+        @see AudioProcessorEditor::startParameterListening, AudioParameterAttachment
+    */
+    ParameterChangeQueue& getParameterChangeQueue() noexcept { return parameterChangeQueue; }
 
     //==============================================================================
     /** Information about the host track or channel this processor is placed on.
@@ -371,6 +394,14 @@ public:
     virtual void setPlaybackConfiguration (float sampleRate, int samplesPerBlock);
 
 private:
+    friend class AudioProcessorEditor;
+
+#if YUP_MODULE_AVAILABLE_yup_gui
+    void dispatchParameterChanges();
+    ListenerList<AudioProcessorEditor> parameterEditors;
+    bool dispatchingParameterChanges = false;
+#endif
+
     String processorName;
 
     std::vector<AudioParameter::Ptr> parameters;
@@ -386,6 +417,8 @@ private:
     CriticalSection processLock;
     std::atomic<int> processIsSuspended { 0 };
     std::atomic<bool> offlineProcessing { false };
+
+    ParameterChangeQueue parameterChangeQueue;
 };
 
 } // namespace yup

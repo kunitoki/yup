@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Glitch Stutter" bank="Factory"
+<RetraceState version="4" preset="-1" name="Glitch Stutter" bank="Factory"
               author="kunitoki" tags="glitch, stutter, bitcrush"
               category="Rhythmic" description="Crushed stuttering glitches with random filter steps."
               notes="Mod wheel crushes harder." presetId="786fc47c-9c63-420a-98ea-f9cc0807458c"
-              global.volume="-0.5" global.mode="0.0" global.glide="120.0" global.quality="0.0"
+              global.volume="-0.5" global.mode="0.0" global.glide="120.0" global.quality="1.0"
               global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
               global.unisonSpread="0.6000000238418579" global.filterRouting="0.0"
               osc1.waveform="3.0" osc1.syncMode="0.0" osc1.syncRatio="1.5"

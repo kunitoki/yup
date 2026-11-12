@@ -22,6 +22,12 @@
 namespace yup
 {
 
+template <class ValueType>
+class YUP_API Rectangle;
+
+template <class ValueType>
+class YUP_API EdgeSpacing;
+
 //==============================================================================
 /** Represents a rectangle in 2D space.
 
@@ -1456,6 +1462,34 @@ public:
         return result;
     }
 
+    /** Reduces the size of the rectangle by the given edge spacing.
+
+        This method shrinks the rectangle by the spacing's left, top, right and bottom amounts, clamping the width and height to zero.
+
+        @param spacing The edge spacing to reduce by.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& reduce (const EdgeSpacing<ValueType>& spacing) noexcept
+    {
+        return reduce (spacing.getLeft(), spacing.getTop(), spacing.getRight(), spacing.getBottom());
+    }
+
+    /** Returns a new rectangle shrunk by the given edge spacing.
+
+        This method creates a new rectangle with the same position but its size shrunk by the spacing's left, top, right and bottom amounts.
+
+        @param spacing The edge spacing to reduce by.
+
+        @return A new rectangle with the reduced size.
+    */
+    [[nodiscard]] constexpr Rectangle reduced (const EdgeSpacing<ValueType>& spacing) const noexcept
+    {
+        Rectangle result = *this;
+        result.reduce (spacing);
+        return result;
+    }
+
     /** Returns a new rectangle with its width reduced by a specified amount on the left side.
 
         This method creates a new rectangle with the same position but its width shrunk by the specified delta, reducing the size from the left edge.
@@ -1570,6 +1604,34 @@ public:
                  jmax (ValueType (0), size.getHeight() + (top + bottom)) };
 
         return *this;
+    }
+
+    /** Enlarges the size of the rectangle by the given edge spacing.
+
+        This method expands the rectangle by the spacing's left, top, right and bottom amounts.
+
+        @param spacing The edge spacing to enlarge by.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& enlarge (const EdgeSpacing<ValueType>& spacing) noexcept
+    {
+        return enlarge (spacing.getLeft(), spacing.getTop(), spacing.getRight(), spacing.getBottom());
+    }
+
+    /** Returns a new rectangle enlarged by the given edge spacing.
+
+        This method creates a new rectangle with the same position but its size expanded by the spacing's left, top, right and bottom amounts.
+
+        @param spacing The edge spacing to enlarge by.
+
+        @return A new rectangle with the enlarged size.
+    */
+    [[nodiscard]] constexpr Rectangle enlarged (const EdgeSpacing<ValueType>& spacing) const noexcept
+    {
+        Rectangle result = *this;
+        result.enlarge (spacing);
+        return result;
     }
 
     /** Returns a new rectangle with its size reduced by a uniform amount on all sides.

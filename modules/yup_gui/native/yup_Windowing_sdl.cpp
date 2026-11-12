@@ -549,10 +549,58 @@ void SDLComponentNative::setSize (const Size<int>& newSize)
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setSize " << currentSize.toString() << " -> " << newSize.toString());
 
         const auto scale = windowUnitsPerPoint;
-        SDL_SetWindowSize (window,
-                           jmax (1, roundToInt (newSize.getWidth() * scale)),
-                           jmax (1, roundToInt (newSize.getHeight() * scale)));
+        int width = jmax (1, roundToInt (newSize.getWidth() * scale));
+        int height = jmax (1, roundToInt (newSize.getHeight() * scale));
+
+        clampSizeToUsableFrame (width, height);
+
+        SDL_SetWindowSize (window, width, height);
     }
+}
+
+void SDLComponentNative::clampSizeToUsableFrame (int& widthInWindowUnits, int& heightInWindowUnits) const
+{
+#if YUP_DESKTOP && ! YUP_EMSCRIPTEN
+    if (window == nullptr || parentAttachment != nullptr || isFullScreen() || ! isDecorated())
+        return;
+
+    const auto displayID = SDL_GetDisplayForWindow (window);
+    SDL_Rect usable {};
+    if (displayID == 0 || ! SDL_GetDisplayUsableBounds (displayID, &usable))
+        return;
+
+    int top = 0, left = 0, bottom = 0, right = 0;
+    SDL_GetWindowBordersSize (window, &top, &left, &bottom, &right);
+
+    constexpr int margin = 2;
+    const int maxWidth = jmax (1, usable.w - left - right - margin);
+    const int maxHeight = jmax (1, usable.h - top - bottom - margin);
+
+    if (widthInWindowUnits <= maxWidth && heightInWindowUnits <= maxHeight)
+        return;
+
+    if (aspectRatio.has_value() && *aspectRatio > 0.0f)
+    {
+        auto width = static_cast<float> (jmin (widthInWindowUnits, maxWidth));
+        auto height = width / *aspectRatio;
+
+        if (height > static_cast<float> (maxHeight))
+        {
+            height = static_cast<float> (maxHeight);
+            width = height * *aspectRatio;
+        }
+
+        widthInWindowUnits = jmax (1, roundToInt (width));
+        heightInWindowUnits = jmax (1, roundToInt (height));
+    }
+    else
+    {
+        widthInWindowUnits = jmin (widthInWindowUnits, maxWidth);
+        heightInWindowUnits = jmin (heightInWindowUnits, maxHeight);
+    }
+#else
+    ignoreUnused (widthInWindowUnits, heightInWindowUnits);
+#endif
 }
 
 Size<int> SDLComponentNative::getSize() const
@@ -997,7 +1045,7 @@ float SDLComponentNative::getDesiredFrameRate() const
     return desiredFrameRate.load (std::memory_order_relaxed);
 }
 
-void SDLComponentNative::setDesiredFrameRate (float newFrameRate)
+void SDLComponentNative::setDesiredFrameRate (std::optional<float> newFrameRate)
 {
     YUP_ASSERT_MESSAGE_THREAD
 
@@ -1693,7 +1741,7 @@ extern "C"
     void EMSCRIPTEN_KEEPALIVE yupSetDesiredFrameRate (float newFrameRate)
     {
         if (auto* native = SDLComponentNative::getPrimaryNativeComponent())
-            native->setDesiredFrameRate (newFrameRate);
+            native->setDesiredFrameRate (newFrameRate > 0.0f ? std::optional<float> (newFrameRate) : std::nullopt);
     }
 
     float EMSCRIPTEN_KEEPALIVE yupGetCurrentFrameRate()

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Neuro Comb Hiss" bank="Factory"
+<RetraceState version="4" preset="-1" name="Neuro Comb Hiss" bank="Factory"
               author="kunitoki" tags="edm, neurofunk, comb"
               category="Bass" description="Neurofunk mid bass hissing through a swept comb filter and bitcrusher."
               notes="Mod wheel adds comb ring and crush." presetId="2b761791-8001-4537-b862-2cf5a9678630"
               macro1Name="Wobble" macro2Name="Grit" global.volume="1.0" global.mode="1.0"
-              global.glide="0.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.glide="0.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="2.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

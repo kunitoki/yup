@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Computer Bleeps" bank="Factory"
+<RetraceState version="4" preset="-1" name="Computer Bleeps" bank="Factory"
               author="kunitoki" tags="computer, bleeps, sci-fi"
               category="FX" description="Retro mainframe bleeps hopping at random in sixteenths."
               notes="Mod wheel turns bleeps into chirps with echoes." presetId="4404dc48-8b90-4b2d-969b-de4702c90058"
-              global.volume="-6.0" global.mode="0.0" global.glide="120.0" global.quality="0.0"
+              global.volume="-6.0" global.mode="0.0" global.glide="120.0" global.quality="1.0"
               global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
               global.unisonSpread="0.6000000238418579" global.filterRouting="0.0"
               osc1.waveform="3.0" osc1.syncMode="0.0" osc1.syncRatio="1.5"

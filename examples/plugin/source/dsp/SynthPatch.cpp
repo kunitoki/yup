@@ -21,6 +21,7 @@
 
 #include "SynthPatch.h"
 #include "SynthConstants.h"
+#include "SynthPatchMigration.h"
 #include "../browser/PresetBank.h"
 
 #include <FactoryBank/FactoryBank.h>
@@ -34,7 +35,6 @@ namespace SynthPatch
 namespace
 {
 const yup::Identifier stateType ("RetraceState");
-const yup::Identifier versionProperty ("version");
 const yup::Identifier presetProperty ("preset");
 const yup::Identifier nameProperty ("name");
 const yup::Identifier bankProperty ("bank");
@@ -44,7 +44,6 @@ const yup::Identifier categoryProperty ("category");
 const yup::Identifier descriptionProperty ("description");
 const yup::Identifier notesProperty ("notes");
 const yup::Identifier presetIdProperty ("presetId");
-constexpr int stateVersion = 3;
 
 yup::Identifier getMacroNameProperty (std::size_t macro)
 {
@@ -62,7 +61,7 @@ yup::DataTree createEmptyState (int presetIndex, const SynthPatch::PresetInfo& i
 
     {
         auto transaction = state.beginTransaction();
-        transaction.setProperty (versionProperty, stateVersion);
+        transaction.setProperty (SynthPatchMigration::getVersionProperty(), SynthPatchMigration::currentVersion);
         transaction.setProperty (presetProperty, presetIndex);
     }
 
@@ -362,18 +361,16 @@ yup::DataTree createState (yup::Span<const yup::AudioParameter::Ptr> parameters,
     return tree;
 }
 
-yup::Result loadState (const yup::DataTree& tree, yup::Span<const yup::AudioParameter::Ptr> parameters, const State& state)
+yup::Result loadState (const yup::DataTree& patch, yup::Span<const yup::AudioParameter::Ptr> parameters, const State& state)
 {
-    if (! tree.isValid() || tree.getType() != stateType)
+    if (! patch.isValid() || patch.getType() != stateType)
         return yup::Result::fail ("Not a Retrace patch");
 
-    const auto version = static_cast<int> (tree.getProperty (versionProperty, 0));
+    // An older patch is migrated on a copy, so the caller's tree keeps what was saved.
+    auto tree = SynthPatchMigration::getVersion (patch) == SynthPatchMigration::currentVersion ? patch : patch.clone();
 
-    if (version > stateVersion)
-        return yup::Result::fail ("The patch was saved by a newer version of Retrace");
-
-    if (version < stateVersion)
-        return yup::Result::fail ("The patch was saved by an older version of Retrace, which this version cannot load");
+    if (const auto result = SynthPatchMigration::migrate (tree); result.failed())
+        return result;
 
     for (const auto& parameter : parameters)
     {

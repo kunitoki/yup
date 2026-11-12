@@ -29,6 +29,7 @@
 #include "dsp/SynthPatch.h"
 #include "browser/PresetEntry.h"
 #include "ui/SynthPresetLibrary.h"
+#include "ui/SynthViewOptions.h"
 #include "mcp/RetraceAudioCapture.h"
 
 #include <array>
@@ -47,9 +48,10 @@ class RetraceMCPServer;
     saved alongside them. Session state, factory presets and user preset files share
     one DataTree format and one apply path, SynthPatch.
 
-    The operator network runs oversampled, which delays the output by a constant that
-    depends on the quality setting and is reported to the host. Changing the quality
-    re-prepares the engine with processing suspended and reports the new latency.
+    The operator network runs oversampled at 2x and 4x, which delays the output by a
+    constant that depends on the quality setting and is reported to the host; 1x adds no
+    latency. Changing the quality re-prepares the engine with processing suspended and
+    reports the new latency.
 
     Host modulation (CLAP parameter modulation) never reaches the parameters'
     own values, so the processor keeps a table of the values it actually plays. The
@@ -165,15 +167,23 @@ public:
     /** Replaces the description of the current patch, saved with it from now on. Message thread. */
     void setPresetInfo (SynthPatch::PresetInfo newInfo);
 
-    /** Returns the name of the theme the editors of this instance wear (see SynthThemes).
+    /** Returns how the editors of this instance show themselves: theme, size, frame rate,
+        landscapes and post effect.
 
         Each instance keeps its own, saved with the session but not with presets; a new
-        instance starts with the theme picked last.
+        instance starts with the defaults in SynthSettings.
     */
-    yup::String getThemeName() const;
+    SynthViewOptions getViewOptions() const;
 
-    /** Chooses the theme the editors of this instance wear. Message thread. */
-    void setThemeName (const yup::String& newName);
+    /** Replaces the view options, telling the host the session changed. Editors pick them up
+        on their next timer tick. Message thread.
+    */
+    void setViewOptions (const SynthViewOptions& newOptions);
+
+    /** Remembers the size the editor was resized to, for the next editor this instance opens.
+        Unlike setViewOptions(), the host is not told. Message thread.
+    */
+    void setEditorSize (yup::Size<int> newSize);
 
     /** Returns the history of the edits made in the editor, kept here so it outlives the
         editor. Replacing the patch clears it. Message thread.
@@ -282,6 +292,8 @@ private:
     std::vector<float> playedValues;     // what the engine plays, host modulation included
     std::vector<float> parameterValues;  // the parameter values playedValues last followed
     std::vector<float> globalValues;     // playedValues with the routes into global parameters applied
+    std::vector<float> effectsReadValues; // the global values effectsValues was last read from
+    SynthEffectsValues effectsValues;
     std::vector<char> changedByEvents;
     int volumeIndex = 0;
     yup::SmoothedValue<float> outputGain;
@@ -301,8 +313,8 @@ private:
     yup::File currentPresetFile;
     yup::String currentBankEntryKey;
     mutable yup::SpinLock presetInfoLock;
-    yup::String themeName;
-    mutable yup::SpinLock themeNameLock;
+    SynthViewOptions viewOptions;
+    mutable yup::SpinLock viewOptionsLock;
 
     // Grouped by gesture rather than by time: every edit is its own step.
     yup::UndoManager undoManager { yup::RelativeTime() };

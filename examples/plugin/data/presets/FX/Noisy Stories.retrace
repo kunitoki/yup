@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Noisy Stories" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Noisy Stories" bank="Factory" author="kunitoki"
               tags="noise, texture" category="FX" description="" notes="Mod wheel adds FM noise."
               presetId="b198e936-63df-439a-accc-5ac48d6c8657" global.volume="-7.400000095367432"
-              global.mode="0.0" global.glide="120.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.mode="0.0" global.glide="120.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.4495378136634827" global.unisonSpread="0.7830669283866882"
               global.filterRouting="0.0" osc1.waveform="0.0" osc1.syncMode="2.0"
               osc1.syncRatio="1.723814129829407" osc1.frequencyMode="0.0" osc1.ratio="1.0"
