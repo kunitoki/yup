@@ -1710,7 +1710,7 @@ public:
         if (list->getString (Vst::ChannelContext::kChannelNameKey, name, sizeof (name)) == kResultTrue)
             info.trackName = toString (name);
 
-        int64 color = 0;
+        Steinberg::int64 color = 0;
         if (list->getInt (Vst::ChannelContext::kChannelColorKey, color) == kResultTrue)
             info.trackColor = static_cast<uint32> (color);
 

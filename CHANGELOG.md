@@ -46,6 +46,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `FlexItem::margin`, `GridItem::margin` and `FlexBox::padding` are now a single `EdgeSpacing<float>` instead of four separate `margin*` / `padding*` floats, and `Component::setPaintMargin` accepts an `EdgeSpacing<float>` (with `getPaintMargin`). `CartesianPlane::getMargins` returns an `EdgeSpacing<int>`.
 
+### Build System
+
+- Added the `yup_add_test_runner()` CMake helper and a reusable GoogleTest runner (`yup::runGoogleTests`, the `YUP_IMPLEMENT_GTEST_MAIN()` macro and the `yup::getGoogleTestChildProcessEntryPoint()` hook) shipped as source under `cmake/tools/test_runner`, so test executables share the entry point instead of inlining it. The tests' `main.cpp` now reduces to `YUP_IMPLEMENT_GTEST_MAIN()`.
+
 ---
 
 ## [2.0.1] - 2026-11-09

@@ -28,10 +28,10 @@
 
 using namespace yup;
 
-namespace yup_tests
+namespace yup
 {
-std::function<bool (const String&)>& getChildProcessEntryPoint();
-} // namespace yup_tests
+std::function<bool (const String&)>& getGoogleTestChildProcessEntryPoint();
+} // namespace yup
 
 class AudioPluginScannerWorkerTests : public ::testing::Test
 {
@@ -173,7 +173,7 @@ namespace
 {
 const bool scannerWorkerEntryPointRegistered = []
 {
-    auto& entryPoint = yup_tests::getChildProcessEntryPoint();
+    auto& entryPoint = yup::getGoogleTestChildProcessEntryPoint();
 
     entryPoint = [previous = entryPoint] (const String& commandLine)
     {

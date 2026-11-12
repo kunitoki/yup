@@ -192,16 +192,16 @@ protected:
 };
 
 #if YUP_MAC || YUP_WINDOWS || YUP_LINUX
-namespace yup_tests
+namespace yup
 {
-std::function<bool (const String&)>& getChildProcessEntryPoint();
-} // namespace yup_tests
+std::function<bool (const String&)>& getGoogleTestChildProcessEntryPoint();
+} // namespace yup
 
 namespace
 {
 const bool flagReportingWorkerEntryPointRegistered = []
 {
-    auto& entryPoint = yup_tests::getChildProcessEntryPoint();
+    auto& entryPoint = yup::getGoogleTestChildProcessEntryPoint();
 
     entryPoint = [previous = entryPoint] (const String& commandLine)
     {

@@ -157,9 +157,28 @@ function (_yup_audio_plugin_create_vst3)
         OBJC_VISIBILITY_PRESET hidden
         OBJCXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN ON
-        SUFFIX ".vst3"
         FOLDER "${target_ide_group}"
         XCODE_GENERATE_SCHEME ON)
+
+    if (YUP_PLATFORM_LINUX)
+        smtg_get_linux_architecture_name()
+        get_target_property (vst3_binary_dir ${target_name}_vst3_plugin SMTG_PLUGIN_BINARY_DIR)
+        get_target_property (vst3_package_name ${target_name}_vst3_plugin SMTG_PLUGIN_PACKAGE_NAME)
+        get_target_property (vst3_package_contents ${target_name}_vst3_plugin SMTG_PLUGIN_PACKAGE_CONTENTS)
+
+        set_target_properties (${target_name}_vst3_plugin PROPERTIES
+            PREFIX ""
+            SUFFIX ".so"
+            SMTG_PLUGIN_PACKAGE_PATH "${vst3_binary_dir}/$<CONFIG>/${vst3_package_name}")
+
+        foreach (config ${CMAKE_CONFIGURATION_TYPES})
+            string (TOUPPER ${config} config_upper)
+            set_target_properties (${target_name}_vst3_plugin PROPERTIES
+                LIBRARY_OUTPUT_DIRECTORY_${config_upper} "${vst3_binary_dir}/${config}/${vst3_package_name}/${vst3_package_contents}/${LINUX_ARCHITECTURE_NAME}")
+        endforeach()
+    else()
+        set_target_properties (${target_name}_vst3_plugin PROPERTIES SUFFIX ".vst3")
+    endif()
 
     _yup_audio_plugin_apply_binary_optimizations (${target_name}_vst3_plugin)
 
