@@ -649,17 +649,25 @@ private:
     };
 };
 
+} // namespace
+
 YUPApplicationBase* createGoogleTestRunnerApplication()
 {
     return new GoogleTestRunnerApplication();
 }
 
-} // namespace
-
 int runGoogleTests (int argc, char** argv)
 {
     YUPApplicationBase::createInstance = &createGoogleTestRunnerApplication;
+
+#if YUP_WINDOWS
+    // On Windows the argv-less entry reads the command line itself, and the
+    // argc/argv overload of YUPApplicationBase::main is not available there.
+    ignoreUnused (argc, argv);
+    return YUPApplicationBase::main();
+#else
     return YUPApplicationBase::main (argc, const_cast<const char**> (argv));
+#endif
 }
 
 } // namespace yup

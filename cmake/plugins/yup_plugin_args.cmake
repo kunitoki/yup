@@ -96,6 +96,17 @@ endfunction()
 function (_yup_apply_binary_optimizations target_name)
     cmake_parse_arguments (YUP_ARG "" "" "EXPORTED_SYMBOLS" ${ARGN})
 
+    # Some platforms (e.g. the Android gradle standalone) expose the plugin as a
+    # custom/utility target that is not compiled by CMake; skip those.
+    if (NOT TARGET ${target_name})
+        return()
+    endif()
+
+    get_target_property (target_type ${target_name} TYPE)
+    if (target_type STREQUAL "UTILITY" OR target_type STREQUAL "INTERFACE_LIBRARY")
+        return()
+    endif()
+
     set (release_config "$<CONFIG:Release,MinSizeRel>")
 
     if (MSVC)

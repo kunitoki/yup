@@ -25,6 +25,10 @@
 
 #include <yup_core/yup_core.h>
 
+#if ! YUP_EMSCRIPTEN
+#include <yup_events/yup_events.h>
+#endif
+
 namespace yup
 {
 
@@ -70,16 +74,56 @@ int runGoogleTests (int argc, char** argv);
 */
 std::function<bool (const String&)>& getGoogleTestChildProcessEntryPoint();
 
+#if ! YUP_EMSCRIPTEN
+//==============================================================================
+/** Creates the YUP application that drives the GoogleTest runner on native
+    platforms. Used by @ref YUP_IMPLEMENT_GTEST_MAIN; most projects never call it
+    directly.
+*/
+YUPApplicationBase* createGoogleTestRunnerApplication();
+#endif
+
 } // namespace yup
 
 //==============================================================================
 /** Defines the program entry point for a GoogleTest runner built on YUP.
 
-    Place this once in a translation unit of your test executable. It expands to a
-    @c main that forwards to yup::runGoogleTests().
+    Place this once in a translation unit of your test executable. On native
+    platforms it expands through YUP's standard entry-point machinery (the same
+    one @ref START_YUP_APPLICATION uses), so it produces the correct entry per
+    platform - @c WinMain on Windows, @c SDL_main on Android, the iOS app delegate
+    bootstrap and @c main elsewhere - and runs the tests inside a YUP application
+    context. On Emscripten it expands to a @c main that forwards to
+    yup::runGoogleTests().
 */
-#define YUP_IMPLEMENT_GTEST_MAIN()                   \
-    int main (int argc, char** argv)                 \
-    {                                                \
-        return ::yup::runGoogleTests (argc, argv);   \
+#if YUP_EMSCRIPTEN
+
+#define YUP_IMPLEMENT_GTEST_MAIN()                 \
+    int main (int argc, char** argv)               \
+    {                                              \
+        return ::yup::runGoogleTests (argc, argv); \
     }
+
+#else
+
+#if YUP_IOS
+#define YUP_IMPLEMENT_GTEST_IOS_DELEGATE() \
+    void* yup_GetIOSCustomDelegateClass(); \
+    void* yup_GetIOSCustomDelegateClass()  \
+    {                                      \
+        return nullptr;                    \
+    }
+#else
+#define YUP_IMPLEMENT_GTEST_IOS_DELEGATE()
+#endif
+
+#define YUP_IMPLEMENT_GTEST_MAIN()                               \
+    yup::YUPApplicationBase* yup_CreateApplication();            \
+    yup::YUPApplicationBase* yup_CreateApplication()             \
+    {                                                            \
+        return ::yup::createGoogleTestRunnerApplication();       \
+    }                                                            \
+    YUP_IMPLEMENT_GTEST_IOS_DELEGATE()                           \
+    YUP_MAIN_FUNCTION_DEFINITION
+
+#endif
