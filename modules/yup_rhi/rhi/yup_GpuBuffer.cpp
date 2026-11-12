@@ -22,140 +22,133 @@
 namespace yup
 {
 
-namespace
-{
-
-//==============================================================================
-
-#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
-struct GlStorageBuffer
-{
-    GlStorageBuffer() = default;
-
-    GlStorageBuffer (GLuint id, ReferenceCountedObjectPtr<GpuDevice> device)
-        : id (id)
-        , device (std::move (device))
-    {
-    }
-
-    GlStorageBuffer (GlStorageBuffer&& other) noexcept
-        : id (std::exchange (other.id, 0))
-        , device (std::move (other.device))
-    {
-    }
-
-    GlStorageBuffer& operator= (GlStorageBuffer&& other) noexcept
-    {
-        if (this != &other)
-        {
-            release();
-
-            id = std::exchange (other.id, 0);
-            device = std::move (other.device);
-        }
-
-        return *this;
-    }
-
-    ~GlStorageBuffer()
-    {
-        release();
-    }
-
-    GLuint id = 0;
-    ReferenceCountedObjectPtr<GpuDevice> device;
-
-    GlStorageBuffer (const GlStorageBuffer&) = delete;
-    GlStorageBuffer& operator= (const GlStorageBuffer&) = delete;
-
-private:
-    void release() noexcept
-    {
-        if (id == 0)
-            return;
-
-        if (device != nullptr)
-        {
-            device->runOnComputeContext ([id = id]
-            {
-                GLuint bufferToDelete = id;
-                glDeleteBuffers (1, &bufferToDelete);
-            });
-        }
-        else
-        {
-            glDeleteBuffers (1, &id);
-        }
-    }
-};
-#endif
-
-#if YUP_RIVE_USE_VULKAN
-/** A Vulkan storage buffer, dropped through the device so its release serializes
-    with the render thread: Rive's resource manager and VMA are not thread safe. */
-struct VulkanStorageBuffer
-{
-    VulkanStorageBuffer() = default;
-
-    VulkanStorageBuffer (rive::rcp<rive::gpu::vkutil::Buffer> buffer, ReferenceCountedObjectPtr<GpuDevice> device)
-        : buffer (std::move (buffer))
-        , device (std::move (device))
-    {
-    }
-
-    VulkanStorageBuffer (VulkanStorageBuffer&& other) noexcept = default;
-
-    VulkanStorageBuffer& operator= (VulkanStorageBuffer&& other) noexcept
-    {
-        if (this != &other)
-        {
-            release();
-
-            buffer = std::move (other.buffer);
-            device = std::move (other.device);
-            lastUseCommands = std::exchange (other.lastUseCommands, VK_NULL_HANDLE);
-            lastUseGeneration = std::exchange (other.lastUseGeneration, 0);
-        }
-
-        return *this;
-    }
-
-    ~VulkanStorageBuffer()
-    {
-        release();
-    }
-
-    rive::rcp<rive::gpu::vkutil::Buffer> buffer;
-    ReferenceCountedObjectPtr<GpuDevice> device;
-
-    /** The command buffer and generation of the last work that bound the buffer, which
-        reads and updates wait for instead of the whole queue. */
-    VkCommandBuffer lastUseCommands = VK_NULL_HANDLE;
-    uint64_t lastUseGeneration = 0;
-
-    VulkanStorageBuffer (const VulkanStorageBuffer&) = delete;
-    VulkanStorageBuffer& operator= (const VulkanStorageBuffer&) = delete;
-
-private:
-    void release() noexcept
-    {
-        if (buffer == nullptr || device == nullptr)
-            return;
-
-        device->runOnGraphicsContext ([this]
-        {
-            buffer = nullptr;
-        });
-    }
-};
-#endif
-
-} // namespace
-
 //==============================================================================
 
 struct GpuBuffer::Impl
 {
+#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
+    struct GlStorageBuffer
+    {
+        GlStorageBuffer() = default;
+
+        GlStorageBuffer (GLuint id, ReferenceCountedObjectPtr<GpuDevice> device)
+            : id (id)
+            , device (std::move (device))
+        {
+        }
+
+        GlStorageBuffer (GlStorageBuffer&& other) noexcept
+            : id (std::exchange (other.id, 0))
+            , device (std::move (other.device))
+        {
+        }
+
+        GlStorageBuffer& operator= (GlStorageBuffer&& other) noexcept
+        {
+            if (this != &other)
+            {
+                release();
+
+                id = std::exchange (other.id, 0);
+                device = std::move (other.device);
+            }
+
+            return *this;
+        }
+
+        ~GlStorageBuffer()
+        {
+            release();
+        }
+
+        GLuint id = 0;
+        ReferenceCountedObjectPtr<GpuDevice> device;
+
+        GlStorageBuffer (const GlStorageBuffer&) = delete;
+        GlStorageBuffer& operator= (const GlStorageBuffer&) = delete;
+
+    private:
+        void release() noexcept
+        {
+            if (id == 0)
+                return;
+
+            if (device != nullptr)
+            {
+                device->runOnComputeContext ([id = id]
+                {
+                    GLuint bufferToDelete = id;
+                    glDeleteBuffers (1, &bufferToDelete);
+                });
+            }
+            else
+            {
+                glDeleteBuffers (1, &id);
+            }
+        }
+    };
+#endif
+
+#if YUP_RIVE_USE_VULKAN
+    /** A Vulkan storage buffer, dropped through the device so its release serializes
+        with the render thread: Rive's resource manager and VMA are not thread safe. */
+    struct VulkanStorageBuffer
+    {
+        VulkanStorageBuffer() = default;
+
+        VulkanStorageBuffer (rive::rcp<rive::gpu::vkutil::Buffer> buffer, ReferenceCountedObjectPtr<GpuDevice> device)
+            : buffer (std::move (buffer))
+            , device (std::move (device))
+        {
+        }
+
+        VulkanStorageBuffer (VulkanStorageBuffer&& other) noexcept = default;
+
+        VulkanStorageBuffer& operator= (VulkanStorageBuffer&& other) noexcept
+        {
+            if (this != &other)
+            {
+                release();
+
+                buffer = std::move (other.buffer);
+                device = std::move (other.device);
+                lastUseCommands = std::exchange (other.lastUseCommands, VK_NULL_HANDLE);
+                lastUseGeneration = std::exchange (other.lastUseGeneration, 0);
+            }
+
+            return *this;
+        }
+
+        ~VulkanStorageBuffer()
+        {
+            release();
+        }
+
+        rive::rcp<rive::gpu::vkutil::Buffer> buffer;
+        ReferenceCountedObjectPtr<GpuDevice> device;
+
+        /** The command buffer and generation of the last work that bound the buffer, which
+            reads and updates wait for instead of the whole queue. */
+        VkCommandBuffer lastUseCommands = VK_NULL_HANDLE;
+        uint64_t lastUseGeneration = 0;
+
+        VulkanStorageBuffer (const VulkanStorageBuffer&) = delete;
+        VulkanStorageBuffer& operator= (const VulkanStorageBuffer&) = delete;
+
+    private:
+        void release() noexcept
+        {
+            if (buffer == nullptr || device == nullptr)
+                return;
+
+            device->runOnGraphicsContext ([this]
+            {
+                buffer = nullptr;
+            });
+        }
+    };
+#endif
+
     GpuBufferType type = GpuBufferType::vertex;
     size_t byteSize = 0;
     rive::rcp<rive::ore::Buffer> oreBuffer;
