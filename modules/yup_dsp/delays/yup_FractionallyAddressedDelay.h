@@ -151,12 +151,16 @@ public:
     */
     forcedinline SampleType processSample (SampleType inputSample) noexcept
     {
-        const int fph = static_cast<int> (phase) & bufferMask;
-        const CoeffType frac = phase - std::floor (phase);
+        SampleType* const buffer = delayBuffer.data();
+
+        // The phase stays in [0, bufferSize), so truncation is its floor.
+        const int phaseInt = static_cast<int> (phase);
+        const int fph = phaseInt & bufferMask;
+        const CoeffType frac = phase - static_cast<CoeffType> (phaseInt);
 
         // Linear read: samples following the phase pointer
-        const CoeffType y0 = static_cast<CoeffType> (delayBuffer[static_cast<std::size_t> (fph)]);
-        const CoeffType y1 = static_cast<CoeffType> (delayBuffer[static_cast<std::size_t> ((fph + 1) & bufferMask)]);
+        const CoeffType y0 = static_cast<CoeffType> (buffer[fph]);
+        const CoeffType y1 = static_cast<CoeffType> (buffer[(fph + 1) & bufferMask]);
         const SampleType output = static_cast<SampleType> (y0 + frac * (y1 - y0));
 
         // Fill buffer cells between the previous and current phase floor
@@ -171,9 +175,7 @@ public:
             for (int i = 0; i < numWrites; ++i)
             {
                 const CoeffType writeFrac = static_cast<CoeffType> (i + 1) * invWrites;
-                const int writeIdx = (phaseOldInt + 1 + i) & bufferMask;
-                delayBuffer[static_cast<std::size_t> (writeIdx)] =
-                    static_cast<SampleType> (prevIn + writeFrac * (currIn - prevIn));
+                buffer[(phaseOldInt + 1 + i) & bufferMask] = static_cast<SampleType> (prevIn + writeFrac * (currIn - prevIn));
             }
         }
 

@@ -46,6 +46,7 @@ private:
     {
         std::array<yup::RbjFilter<float>, 2> filters;
         yup::SmoothedValue<float> gain, frequency, q;
+        std::array<float, 3> applied {};
     };
 
     double sampleRate = 44100.0;

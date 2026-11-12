@@ -57,6 +57,8 @@ void HarmonicSynthEngine::prepare (double sampleRate, int maxBlockSize, SynthQua
     latency = ownedVoices.isEmpty() ? 0 : ownedVoices[0]->getLatencyInSamples();
 
     spectralOwner.assign (newProcessorParameters.size(), -1);
+    readValues.assign (newProcessorParameters.size(), 0.0f);
+    readRoutesGeneration = -1;
 
     for (std::size_t oscillator = 0; oscillator < parameters.oscillators.size(); ++oscillator)
         for (const auto& parameter : parameters.oscillators[oscillator].getSpectralParameters())
@@ -121,31 +123,47 @@ void HarmonicSynthEngine::updateContext (yup::Span<const float> parameterValues,
     context.played = parameterValues;
     context.bpm = bpm;
 
-    for (std::size_t index = 0; index < context.macros.size(); ++index)
-        context.macros[index] = reader (parameters.macros[index]);
+    // Most control chunks see the same values and routes as the last one, so the
+    // parameters are only read again once either of them moved.
+    const auto routesGeneration = routes.getGeneration();
+    const auto cacheable = ! parameterValues.empty() && parameterValues.size() == readValues.size();
+    const auto unchanged = cacheable
+                        && routesGeneration == readRoutesGeneration
+                        && std::equal (parameterValues.begin(), parameterValues.end(), readValues.begin());
 
-    context.network.globals = parameters.readGlobals (reader);
-    portamentoSeconds = static_cast<double> (context.network.globals.glideSeconds);
-
-    for (std::size_t slot = 0; slot < oscillatorSlots.size(); ++slot)
+    if (! unchanged)
     {
-        auto& values = context.network.oscillators[slot];
-        values = parameters.oscillators[slot].read (reader);
-        partials[slot].fillValues (values);
+        if (cacheable)
+        {
+            std::copy (parameterValues.begin(), parameterValues.end(), readValues.begin());
+            readRoutesGeneration = routesGeneration;
+        }
+
+        for (std::size_t index = 0; index < context.macros.size(); ++index)
+            context.macros[index] = reader (parameters.macros[index]);
+
+        context.network.globals = parameters.readGlobals (reader);
+        portamentoSeconds = static_cast<double> (context.network.globals.glideSeconds);
+
+        for (std::size_t slot = 0; slot < oscillatorSlots.size(); ++slot)
+            context.network.oscillators[slot] = parameters.oscillators[slot].read (reader);
+
+        context.network.fm = parameters.fm.read (reader);
+
+        for (std::size_t index = 0; index < context.filters.size(); ++index)
+            context.filters[index] = parameters.filters[index].read (reader);
+
+        for (std::size_t index = 0; index < context.envelopes.size(); ++index)
+            context.envelopes[index] = parameters.envelopes[index].read (reader);
+
+        for (std::size_t index = 0; index < context.lfos.size(); ++index)
+            context.lfos[index] = parameters.lfos[index].read (reader);
+
+        updateRoutes (reader);
     }
 
-    context.network.fm = parameters.fm.read (reader);
-
-    for (std::size_t index = 0; index < context.filters.size(); ++index)
-        context.filters[index] = parameters.filters[index].read (reader);
-
-    for (std::size_t index = 0; index < context.envelopes.size(); ++index)
-        context.envelopes[index] = parameters.envelopes[index].read (reader);
-
-    for (std::size_t index = 0; index < context.lfos.size(); ++index)
-        context.lfos[index] = parameters.lfos[index].read (reader);
-
-    updateRoutes (reader);
+    for (std::size_t slot = 0; slot < oscillatorSlots.size(); ++slot)
+        partials[slot].fillValues (context.network.oscillators[slot]);
 
     curves.copyIfChanged (context.envelopeCurves, context.lfoCurves, context.curveGeneration);
     tuning.copyIfChanged (context.tuning, context.tuningGeneration);
