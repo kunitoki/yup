@@ -61,8 +61,15 @@ function (yup_audio_plugin)
             set (YUP_ARG_PLUGIN_CREATE_${plugin_format} OFF)
         endforeach()
     elseif (NOT YUP_PLATFORM_DESKTOP)
-        _yup_message (FATAL_ERROR "Audio plugins are not supported on mobile (yet).")
-        return()
+        if (NOT YUP_ARG_PLUGIN_CREATE_STANDALONE)
+            _yup_message (FATAL_ERROR "Only the standalone plugin format is supported on mobile.")
+            return()
+        endif()
+
+        _yup_message (STATUS "Building only the standalone plugin format on mobile")
+        foreach (plugin_format CLAP VST3 AU AUv3 AAX LV2)
+            set (YUP_ARG_PLUGIN_CREATE_${plugin_format} OFF)
+        endforeach()
     endif()
 
     if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT YUP_ARG_PLUGIN_CREATE_VST3 AND NOT YUP_ARG_PLUGIN_CREATE_STANDALONE AND NOT YUP_ARG_PLUGIN_CREATE_AU AND NOT YUP_ARG_PLUGIN_CREATE_AUv3 AND NOT YUP_ARG_PLUGIN_CREATE_AAX AND NOT YUP_ARG_PLUGIN_CREATE_LV2)
@@ -110,6 +117,9 @@ function (yup_audio_plugin)
     if (YUP_PLATFORM_EMSCRIPTEN)
         # Only the standalone format exists on emscripten, so the core is part of a standalone app
         _yup_emscripten_get_compile_settings (ON core_definitions core_options)
+        list (APPEND core_definitions YUP_STANDALONE_APPLICATION=1)
+    elseif (NOT YUP_PLATFORM_DESKTOP)
+        # Only the standalone format exists on mobile, so the core is part of a standalone app
         list (APPEND core_definitions YUP_STANDALONE_APPLICATION=1)
     endif()
 
