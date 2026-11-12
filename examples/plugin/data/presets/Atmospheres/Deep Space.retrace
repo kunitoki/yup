@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Deep Space" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Deep Space" bank="Factory" author="kunitoki"
               tags="drone, space, ambient" category="Atmosphere"
               description="Vast slow-moving drone of fifths drifting through deep space."
               notes="Mod wheel speeds up the drift and brightens the fifths."
               presetId="ab2af0db-e312-48fd-b717-d3818a7c9294" global.volume="-4.5"
-              global.mode="0.0" global.glide="120.0" global.quality="0.0" global.unisonVoices="4.0"
+              global.mode="0.0" global.glide="120.0" global.quality="1.0" global.unisonVoices="4.0"
               global.unisonDetune="0.1500000059604645" global.unisonSpread="1.0"
               global.filterRouting="0.0" osc1.waveform="2.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

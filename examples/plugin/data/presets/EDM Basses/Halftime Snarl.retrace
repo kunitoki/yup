@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Halftime Snarl" bank="Factory"
+<RetraceState version="4" preset="-1" name="Halftime Snarl" bank="Factory"
               author="kunitoki" tags="edm, halftime, wobble"
               category="Bass" description="Halftime bass snarling in dotted eighths through a driven Korg-style filter."
               notes="Mod wheel crushes and resonates." presetId="5d19ab94-ef3f-4782-a7ad-0e6699bc31c5"
               macro1Name="Wobble" macro2Name="Grit" global.volume="1.600000023841858"
-              global.mode="1.0" global.glide="0.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.mode="1.0" global.glide="0.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="2.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

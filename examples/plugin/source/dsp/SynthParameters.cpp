@@ -80,7 +80,7 @@ SynthParameters::SynthParameters()
                   .withName ("Quality")
                   .withHostID (4)
                   .withModulePath ("Global")
-                  .withRange (yup::NormalisableRange<float> (0.0f, 1.0f, 1.0f))
+                  .withRange (yup::NormalisableRange<float> (0.0f, static_cast<float> (SynthQuality::x4), 1.0f))
                   .withDefault (static_cast<float> (SynthQuality::x2))
                   .withStepped (true)
                   .withEnum (true)
@@ -152,5 +152,5 @@ SynthGlobalValues SynthParameters::readGlobals (SynthParameterReader reader) con
 
 SynthQuality SynthParameters::getQuality() const noexcept
 {
-    return static_cast<SynthQuality> (yup::jlimit (0, 1, yup::roundToInt (quality->getValue())));
+    return static_cast<SynthQuality> (yup::jlimit (0, static_cast<int> (SynthQuality::x4), yup::roundToInt (quality->getValue())));
 }

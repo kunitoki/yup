@@ -40,7 +40,8 @@
 
     A property that is missing from the tree loads the parameter's default, and missing
     curves, routes, chain order or tuning load theirs, which lets a factory preset list only what it changes.
-    Patches from before the four operator engine (version 1) are rejected.
+    Patches saved by earlier versions are migrated first (see SynthPatchMigration);
+    patches from before the four operator engine (version 1) are rejected.
 */
 namespace SynthPatch
 {

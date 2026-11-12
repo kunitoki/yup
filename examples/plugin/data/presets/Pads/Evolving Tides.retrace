@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Evolving Tides" bank="Factory"
+<RetraceState version="4" preset="-1" name="Evolving Tides" bank="Factory"
               author="kunitoki" tags="motion, flanger, evolving"
               category="Pad" description="Pulse and saw pad swept by a slow flanger and a wandering filter."
               notes="Mod wheel speeds up the tide and the flanger feedback."
               presetId="cbbf4efa-bd85-45da-afed-bf96525e27b4" global.volume="-1.200000047683716"
-              global.mode="0.0" global.glide="120.0" global.quality="0.0" global.unisonVoices="4.0"
+              global.mode="0.0" global.glide="120.0" global.quality="1.0" global.unisonVoices="4.0"
               global.unisonDetune="0.2199999988079071" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="5.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

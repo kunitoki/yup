@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Spectral Drift" bank="Factory"
+<RetraceState version="4" preset="-1" name="Spectral Drift" bank="Factory"
               author="kunitoki" tags="spectral, evolving, ambient"
               category="Pad" description="Prism-colored saw whose ridges and formant wander slowly over time."
               notes="Mod wheel adds spectral ridges and phaser resonance."
               presetId="2d5810c1-fbd9-42a9-85d7-d5f9406ca66a" macro1Name="Ridges"
               macro2Name="Formant" global.volume="-0.699999988079071" global.mode="0.0"
-              global.glide="120.0" global.quality="0.0" global.unisonVoices="3.0"
+              global.glide="120.0" global.quality="1.0" global.unisonVoices="3.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="1.0"
               global.filterRouting="0.0" osc1.waveform="2.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

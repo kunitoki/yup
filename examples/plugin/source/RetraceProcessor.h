@@ -48,9 +48,10 @@ class RetraceMCPServer;
     saved alongside them. Session state, factory presets and user preset files share
     one DataTree format and one apply path, SynthPatch.
 
-    The operator network runs oversampled, which delays the output by a constant that
-    depends on the quality setting and is reported to the host. Changing the quality
-    re-prepares the engine with processing suspended and reports the new latency.
+    The operator network runs oversampled at 2x and 4x, which delays the output by a
+    constant that depends on the quality setting and is reported to the host; 1x adds no
+    latency. Changing the quality re-prepares the engine with processing suspended and
+    reports the new latency.
 
     Host modulation (CLAP parameter modulation) never reaches the parameters'
     own values, so the processor keeps a table of the values it actually plays. The

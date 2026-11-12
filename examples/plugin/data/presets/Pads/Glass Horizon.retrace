@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Glass Horizon" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Glass Horizon" bank="Factory" author="kunitoki"
               tags="wide, lush, analog" category="Pad" description="Wide detuned saw pad that opens slowly, with drifting spectral color."
               notes="Macro 1 brightens, Macro 2 adds motion. Mod wheel opens the filter and spreads the unison wider."
               presetId="ba8da079-b426-44f1-b8a4-48eee9d3b1aa" macro1Name="Brightness"
               macro2Name="Motion" global.volume="-9.600000381469727" global.mode="0.0"
-              global.glide="120.0" global.quality="0.0" global.unisonVoices="5.0"
+              global.glide="120.0" global.quality="1.0" global.unisonVoices="5.0"
               global.unisonDetune="0.300000011920929" global.unisonSpread="0.8999999761581421"
               global.filterRouting="0.0" osc1.waveform="2.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

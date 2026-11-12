@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Ladder Punch" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Ladder Punch" bank="Factory" author="kunitoki"
               tags="moog, analog, punchy" category="Bass" description="Classic ladder-filter bass: saw and square with a punchy filter envelope."
               notes="Mod wheel opens a squelchy resonant ladder." presetId="e0cbe01b-4165-41a4-aee8-a1cf438a4ea6"
-              global.volume="1.0" global.mode="1.0" global.glide="0.0" global.quality="0.0"
+              global.volume="1.0" global.mode="1.0" global.glide="0.0" global.quality="1.0"
               global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
               global.unisonSpread="0.6000000238418579" global.filterRouting="0.0"
               osc1.waveform="2.0" osc1.syncMode="0.0" osc1.syncRatio="1.5"

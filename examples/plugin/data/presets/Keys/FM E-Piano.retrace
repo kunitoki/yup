@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="FM E-Piano" bank="Factory" author="kunitoki" tags="fm, electric piano"
+<RetraceState version="4" preset="-1" name="FM E-Piano" bank="Factory" author="kunitoki" tags="fm, electric piano"
               category="Keys" description="Two-operator tine piano with a soft bark."
               notes="Velocity opens the FM." presetId="bdb6e52d-e0a0-4613-aaaa-edc2d2df62b6"
               global.volume="-12.0" global.mode="0.0" global.glide="120.0"
-              global.quality="0.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
+              global.quality="1.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
               global.unisonSpread="0.6000000238418579" global.filterRouting="0.0"
               osc1.waveform="0.0" osc1.syncMode="0.0" osc1.syncRatio="1.5"
               osc1.frequencyMode="0.0" osc1.ratio="1.0" osc1.fine="0.0" osc1.fixedHz="440.0"

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Synth Tom" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Synth Tom" bank="Factory" author="kunitoki"
               tags="tom, drum, electronic" category="Percussion"
               description="Electronic tom that tunes with the keyboard, pitch dropping on every hit."
               notes="Mod wheel adds harmonics and space." presetId="8fa7505a-ddd2-467e-86fb-b59579ea4605"
               global.volume="0.800000011920929" global.mode="0.0" global.glide="120.0"
-              global.quality="0.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
+              global.quality="1.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
               global.unisonSpread="0.6000000238418579" global.filterRouting="0.0"
               osc1.waveform="4.0" osc1.syncMode="0.0" osc1.syncRatio="1.5"
               osc1.frequencyMode="0.0" osc1.ratio="1.0" osc1.fine="0.0" osc1.fixedHz="440.0"

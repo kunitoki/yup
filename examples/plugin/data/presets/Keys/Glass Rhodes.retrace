@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Glass Rhodes" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Glass Rhodes" bank="Factory" author="kunitoki"
               tags="fm, electric piano, bright" category="Keys"
               description="Bright 1:3 FM electric piano with a stereo chorus shimmer."
               notes="Mod wheel adds bell and chorus depth." presetId="77ee82dd-60d8-4b40-80d0-56f9b1689067"
               global.volume="-14.19999980926514" global.mode="0.0" global.glide="120.0"
-              global.quality="0.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
+              global.quality="1.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
               global.unisonSpread="0.6000000238418579" global.filterRouting="0.0"
               osc1.waveform="0.0" osc1.syncMode="0.0" osc1.syncRatio="1.5"
               osc1.frequencyMode="0.0" osc1.ratio="1.0" osc1.fine="0.0" osc1.fixedHz="440.0"

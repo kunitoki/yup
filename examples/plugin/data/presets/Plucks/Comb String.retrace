@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Comb String" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Comb String" bank="Factory" author="kunitoki"
               tags="string, comb, koto" category="Pluck" description="Plucked string from a short bright burst ringing through a tuned comb filter."
               notes="Mod wheel lets the string ring longer into echoes." presetId="837a18c9-fea9-4898-b817-5062c149c64f"
               global.volume="-14.39999961853027" global.mode="0.0" global.glide="120.0"
-              global.quality="0.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
+              global.quality="1.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
               global.unisonSpread="0.6000000238418579" global.filterRouting="0.0"
               osc1.waveform="2.0" osc1.syncMode="0.0" osc1.syncRatio="1.5"
               osc1.frequencyMode="0.0" osc1.ratio="1.0" osc1.fine="0.0" osc1.fixedHz="440.0"

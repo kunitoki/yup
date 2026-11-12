@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Cinematic Strings" bank="Factory"
+<RetraceState version="4" preset="-1" name="Cinematic Strings" bank="Factory"
               author="kunitoki" tags="cinematic, lush, orchestral"
               category="Strings" description="Lush layered strings with an expressive mod wheel swell."
               notes="Mod wheel brightens, swells and adds vibrato." presetId="405e5a32-ad63-4257-a15d-eebc8938d85e"
               global.volume="-6.599999904632568" global.mode="0.0" global.glide="120.0"
-              global.quality="0.0" global.unisonVoices="5.0" global.unisonDetune="0.2199999988079071"
+              global.quality="1.0" global.unisonVoices="5.0" global.unisonDetune="0.2199999988079071"
               global.unisonSpread="1.0" global.filterRouting="0.0" osc1.waveform="2.0"
               osc1.syncMode="0.0" osc1.syncRatio="1.5" osc1.frequencyMode="0.0"
               osc1.ratio="1.0" osc1.fine="0.0" osc1.fixedHz="440.0" osc1.level="0.6000000238418579"

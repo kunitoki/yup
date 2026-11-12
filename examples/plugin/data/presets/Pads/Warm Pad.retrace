@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Warm Pad" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Warm Pad" bank="Factory" author="kunitoki"
               tags="warm, fm" category="Pad" description="" notes="Mod wheel adds FM grit."
               presetId="c4cfaf48-038a-4502-8713-fd51c9c109d2" global.volume="-7.300000190734863"
-              global.mode="0.0" global.glide="120.0" global.quality="0.0" global.unisonVoices="3.0"
+              global.mode="0.0" global.glide="120.0" global.quality="1.0" global.unisonVoices="3.0"
               global.unisonDetune="0.2080739289522171" global.unisonSpread="0.5008870363235474"
               global.filterRouting="0.0" osc1.waveform="0.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

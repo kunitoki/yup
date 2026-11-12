@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Alien Transmission" bank="Factory"
+<RetraceState version="4" preset="-1" name="Alien Transmission" bank="Factory"
               author="kunitoki" tags="alien, sci-fi, random" category="FX"
               description="Garbled FM transmission from another world." notes="Mod wheel speeds up and garbles the signal."
               presetId="1a1661f9-73c4-4f84-bcd2-58c4f30b8067" global.volume="-2.5"
-              global.mode="0.0" global.glide="120.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.mode="0.0" global.glide="120.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="0.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

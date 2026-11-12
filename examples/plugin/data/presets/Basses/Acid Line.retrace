@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Acid Line" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Acid Line" bank="Factory" author="kunitoki"
               tags="acid, 303, squelch" category="Bass" description="Squelchy diode-filter acid bass with glide and accent."
               notes="Velocity is accent. Macro 1 cutoff, Macro 2 resonance. Mod wheel screams the resonance and the distortion."
               presetId="59b4c500-b1eb-40b6-80c3-66b8e1843a40" macro1Name="Cutoff"
               macro2Name="Resonance" global.volume="0.300000011920929" global.mode="2.0"
-              global.glide="70.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.glide="70.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="2.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

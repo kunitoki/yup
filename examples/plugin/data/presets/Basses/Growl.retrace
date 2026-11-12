@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Growl" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Growl" bank="Factory" author="kunitoki"
               tags="fm, growl" category="Bass" description="" notes="Mod wheel deepens the growl."
               presetId="e439c43d-50e5-4d56-ac60-13d9e0a001a4" global.volume="-4.599999904632568"
-              global.mode="2.0" global.glide="120.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.mode="2.0" global.glide="120.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.469867080450058" global.unisonSpread="0.7305772304534912"
               global.filterRouting="1.0" osc1.waveform="0.0" osc1.syncMode="1.0"
               osc1.syncRatio="2.487851858139038" osc1.frequencyMode="0.0" osc1.ratio="0.5"

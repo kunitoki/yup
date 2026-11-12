@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Saw Stack Lead" bank="Factory"
+<RetraceState version="4" preset="-1" name="Saw Stack Lead" bank="Factory"
               author="kunitoki" tags="saw, detuned, wide" category="Lead" description="Four saws stacked across three octaves and detuned against each other, with a filter that blooms on every note."
               notes="Mod wheel adds vibrato and opens the filter." presetId="0fef9e10-dfc6-43cb-aaab-117cdc6d9b6e"
               macro1Name="Brightness" global.volume="-10.19999980926514" global.mode="0.0"
-              global.glide="120.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.glide="120.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="2.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

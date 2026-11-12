@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Formant Breath" bank="Factory"
+<RetraceState version="4" preset="-1" name="Formant Breath" bank="Factory"
               author="kunitoki" tags="vocal, breathy, formant"
               category="Vox" description="Breathy whispered formants with scattered spectral noise."
               notes="Mod wheel moves the formant and sharpens the whisper."
               presetId="79140a62-68c0-4be7-945d-5bd56707f841" global.volume="-1.799999952316284"
-              global.mode="0.0" global.glide="120.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.mode="0.0" global.glide="120.0" global.quality="1.0" global.unisonVoices="1.0"
               global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
               global.filterRouting="0.0" osc1.waveform="2.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Solo Cello" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Solo Cello" bank="Factory" author="kunitoki"
               tags="cello, solo, expressive" category="Strings"
               description="Expressive legato solo string with bow attack and delayed vibrato."
               notes="Mod wheel adds vibrato and bow pressure." presetId="8500f717-2e26-4720-ac56-c5d033340fca"
               global.volume="4.599999904632568" global.mode="2.0" global.glide="80.0"
-              global.quality="0.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
+              global.quality="1.0" global.unisonVoices="1.0" global.unisonDetune="0.2000000029802322"
               global.unisonSpread="0.6000000238418579" global.filterRouting="0.0"
               osc1.waveform="2.0" osc1.syncMode="0.0" osc1.syncRatio="1.5"
               osc1.frequencyMode="0.0" osc1.ratio="1.0" osc1.fine="0.0" osc1.fixedHz="440.0"

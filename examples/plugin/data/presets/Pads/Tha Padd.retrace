@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Tha Padd" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Tha Padd" bank="Factory" author="kunitoki"
               tags="stereo, detuned" category="Pad" description="" notes="Mod wheel adds feedback."
               presetId="b01e48ad-ef9e-476c-8dec-19046f84588f" global.volume="-4.199999809265137"
-              global.mode="0.0" global.glide="120.0" global.quality="0.0" global.unisonVoices="3.0"
+              global.mode="0.0" global.glide="120.0" global.quality="1.0" global.unisonVoices="3.0"
               global.unisonDetune="0.1977968961000443" global.unisonSpread="0.4974936544895172"
               global.filterRouting="0.0" osc1.waveform="0.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

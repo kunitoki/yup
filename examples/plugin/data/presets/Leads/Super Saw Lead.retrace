@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Super Saw Lead" bank="Factory"
+<RetraceState version="4" preset="-1" name="Super Saw Lead" bank="Factory"
               author="kunitoki" tags="supersaw, trance, wide" category="Lead"
               description="Seven-voice supersaw lead with gliding legato, delay and hall."
               notes="Mod wheel adds vibrato." presetId="72c1d94f-19d1-4f93-815d-927089a161bf"
               macro1Name="Brightness" global.volume="0.5" global.mode="2.0"
-              global.glide="60.0" global.quality="0.0" global.unisonVoices="7.0"
+              global.glide="60.0" global.quality="1.0" global.unisonVoices="7.0"
               global.unisonDetune="0.3499999940395355" global.unisonSpread="1.0"
               global.filterRouting="0.0" osc1.waveform="2.0" osc1.syncMode="0.0"
               osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"

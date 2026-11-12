@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RetraceState version="3" preset="-1" name="Ahh Choir" bank="Factory" author="kunitoki"
+<RetraceState version="4" preset="-1" name="Ahh Choir" bank="Factory" author="kunitoki"
               tags="choir, vocal, ahh" category="Vox" description="Airy ensemble choir singing a soft ahh."
               notes="Mod wheel adds vibrato and opens the vowel." presetId="be9f7daa-8121-4ff5-bc27-48eae798d75c"
               global.volume="-9.199999809265137" global.mode="0.0" global.glide="120.0"
-              global.quality="0.0" global.unisonVoices="5.0" global.unisonDetune="0.1800000071525574"
+              global.quality="1.0" global.unisonVoices="5.0" global.unisonDetune="0.1800000071525574"
               global.unisonSpread="0.8999999761581421" global.filterRouting="0.0"
               osc1.waveform="2.0" osc1.syncMode="0.0" osc1.syncRatio="1.5"
               osc1.frequencyMode="0.0" osc1.ratio="1.0" osc1.fine="0.0" osc1.fixedHz="440.0"

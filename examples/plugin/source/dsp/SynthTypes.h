@@ -59,6 +59,7 @@ inline yup::StringArray getSynthFrequencyModeNames()
 /** The internal rate of the operator network, as a multiple of the host rate. */
 enum class SynthQuality
 {
+    x1, /**< No oversampling: the cheapest, with no latency, but phase modulation may alias. */
     x2,
     x4
 };
@@ -66,13 +67,20 @@ enum class SynthQuality
 /** @internal Item names for SynthQuality, index aligned with the enumeration. */
 inline yup::StringArray getSynthQualityNames()
 {
-    return { "2x", "4x" };
+    return { "1x", "2x", "4x" };
 }
 
 /** Returns the oversampling factor of a quality setting. */
 constexpr int getOversamplingFactor (SynthQuality quality) noexcept
 {
-    return quality == SynthQuality::x2 ? 2 : 4;
+    switch (quality)
+    {
+        case SynthQuality::x1: return 1;
+        case SynthQuality::x2: return 2;
+        case SynthQuality::x4: return 4;
+    }
+
+    return 2;
 }
 
 //==============================================================================
