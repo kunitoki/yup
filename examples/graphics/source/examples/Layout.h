@@ -699,7 +699,7 @@ static DemoPage* makeMarginsGapPage()
         for (int i = 0; i < 3; ++i)
         {
             auto& item = panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)), 56.0f, 28.0f);
-            item.margin = EdgeSpacing<float> (8.0f);
+            item.margin = yup::EdgeSpacing<float> (8.0f);
         }
 
         page->addPanel (panel);
@@ -724,7 +724,7 @@ static DemoPage* makeMarginsGapPage()
         for (int i = 0; i < 3; ++i)
         {
             auto& item = panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)), 56.0f, 28.0f);
-            item.margin = EdgeSpacing<float> (6.0f);
+            item.margin = yup::EdgeSpacing<float> (6.0f);
         }
 
         page->addPanel (panel);
@@ -988,7 +988,7 @@ static DemoPage* makeGridGapsMarginsPage()
         for (int i = 0; i < 2; ++i)
         {
             auto& item = panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)), i, 0);
-            item.margin = EdgeSpacing<float> (8.0f);
+            item.margin = yup::EdgeSpacing<float> (8.0f);
         }
 
         page->addPanel (panel);

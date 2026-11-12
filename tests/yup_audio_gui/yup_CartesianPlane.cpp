@@ -174,8 +174,8 @@ TEST_F (CartesianPlaneTests, SetMarginsUpdatesMargins)
     plane->setMargins (40, 80, 30, 20);
 
     auto margins = plane->getMargins();
-    EXPECT_EQ (80, margins.getX());
-    EXPECT_EQ (40, margins.getY());
+    EXPECT_EQ (80, margins.getLeft());
+    EXPECT_EQ (40, margins.getTop());
 }
 
 TEST_F (CartesianPlaneTests, SetMarginsWithZeroValues)
@@ -183,8 +183,8 @@ TEST_F (CartesianPlaneTests, SetMarginsWithZeroValues)
     plane->setMargins (0, 0, 0, 0);
 
     auto margins = plane->getMargins();
-    EXPECT_EQ (0, margins.getX());
-    EXPECT_EQ (0, margins.getY());
+    EXPECT_EQ (0, margins.getLeft());
+    EXPECT_EQ (0, margins.getTop());
 }
 
 TEST_F (CartesianPlaneTests, SetMarginsWithLargeValues)
