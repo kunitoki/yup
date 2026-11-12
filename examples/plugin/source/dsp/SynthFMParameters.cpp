@@ -56,9 +56,18 @@ SynthFMParameters::SynthFMParameters()
 
 void SynthFMParameters::addTo (yup::AudioProcessor& processor) const
 {
+    for (const auto& parameter : getParameters())
+        processor.addParameter (parameter);
+}
+
+std::vector<yup::AudioParameter::Ptr> SynthFMParameters::getParameters() const
+{
+    std::vector<yup::AudioParameter::Ptr> parameters;
+
     for (const auto& row : amounts)
-        for (const auto& parameter : row)
-            processor.addParameter (parameter);
+        parameters.insert (parameters.end(), row.begin(), row.end());
+
+    return parameters;
 }
 
 SynthFMValues SynthFMParameters::read (SynthParameterReader reader) const noexcept

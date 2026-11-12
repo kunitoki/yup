@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Plugins
 
+- Added reactive editor updates with `ParameterChangeQueue` and `AudioParameterAttachment`, including shared parameters and multiple editors. The RETRACE example now refreshes parameter-driven panels only when dirty instead of polling them every frame.
 - Fixed embedded plugin editors on macOS ignoring host window resizes, appearing offset until the first resize, covering host UI in CLAP, and leaving an empty window on the desktop when removed: the editor window now follows a placeholder view the host lays out like any embedded plugin view.
 - Resizing a window no longer calls `safeAreaChanged` on the whole component tree when only the size changed, which made resizing LV2 editors in Reaper unresponsive.
 - Embedded editors on every platform now always sit at the origin of their host area and ignore position requests.

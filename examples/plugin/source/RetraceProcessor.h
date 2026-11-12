@@ -291,6 +291,8 @@ private:
     std::vector<float> playedValues;     // what the engine plays, host modulation included
     std::vector<float> parameterValues;  // the parameter values playedValues last followed
     std::vector<float> globalValues;     // playedValues with the routes into global parameters applied
+    std::vector<float> effectsReadValues; // the global values effectsValues was last read from
+    SynthEffectsValues effectsValues;
     std::vector<char> changedByEvents;
     int volumeIndex = 0;
     yup::SmoothedValue<float> outputGain;

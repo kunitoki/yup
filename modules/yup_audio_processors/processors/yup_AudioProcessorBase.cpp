@@ -31,7 +31,15 @@ AudioProcessorBase::AudioProcessorBase (StringRef name)
 
 //==============================================================================
 
-AudioProcessorBase::~AudioProcessorBase() = default;
+AudioProcessorBase::~AudioProcessorBase()
+{
+#if YUP_MODULE_AVAILABLE_yup_gui
+    jassert (parameterEditors.isEmpty());
+#endif
+
+    for (auto& parameter : parameters)
+        parameter->removeChangeQueue (parameterChangeQueue);
+}
 
 //==============================================================================
 
@@ -57,6 +65,8 @@ void AudioProcessorBase::addParameter (AudioParameter::Ptr parameter)
     }
 
     parameter->setIndexInContainer (static_cast<int> (parameters.size()));
+    parameterChangeQueue.ensureSize (static_cast<int> (parameters.size()) + 1);
+    parameter->addChangeQueue (parameterChangeQueue, static_cast<int> (parameters.size()));
 
     parameterMap.emplace (parameter->getID(), parameter);
     parameterHostIDMap.emplace (hostParameterID, parameter);

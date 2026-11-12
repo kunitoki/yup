@@ -60,6 +60,19 @@ AudioParameter::~AudioParameter()
     jassert (isInsideGesture == 0); // Unbalanced calls to begin and end change gesture found!
 }
 
+void AudioParameter::addChangeQueue (ParameterChangeQueue& queue, int index)
+{
+    changeQueues.push_back ({ &queue, index });
+}
+
+void AudioParameter::removeChangeQueue (ParameterChangeQueue& queue)
+{
+    std::erase_if (changeQueues, [&queue] (const auto& registration)
+    {
+        return registration.queue == &queue;
+    });
+}
+
 //==============================================================================
 
 void AudioParameter::beginChangeGesture()

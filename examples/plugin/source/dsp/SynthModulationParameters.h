@@ -24,6 +24,8 @@
 #include "SynthParameterFactory.h"
 #include "SynthTypes.h"
 
+#include <vector>
+
 //==============================================================================
 /** The depth of every modulation route, IDs "route.1.depth" to "route.32.depth".
 
@@ -40,6 +42,9 @@ public:
 
     /** Registers every parameter with the processor. */
     void addTo (yup::AudioProcessor& processor) const;
+
+    /** Returns every parameter, in registration order. */
+    std::vector<yup::AudioParameter::Ptr> getParameters() const;
 
     std::array<yup::AudioParameter::Ptr, SynthExample::modulationSlots> depths;
 };

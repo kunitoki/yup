@@ -59,6 +59,9 @@ public:
     */
     void syncFromParameters (SynthParameterReader modulated = {});
 
+    /** True while partials drawn by hand wait for syncFromParameters() to publish them. */
+    bool hasPendingEdits() const noexcept { return editor.hasPendingEdits(); }
+
     /** Lets the waveform display move, while something plays. */
     void setAnimating (bool shouldAnimate) noexcept { editor.setAnimating (shouldAnimate); }
 

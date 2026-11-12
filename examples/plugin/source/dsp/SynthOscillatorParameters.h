@@ -109,6 +109,9 @@ public:
     /** Registers every parameter with the processor. */
     void addTo (yup::AudioProcessor& processor) const;
 
+    /** Returns every parameter, in registration order. */
+    std::vector<yup::AudioParameter::Ptr> getParameters() const;
+
     /** Takes a snapshot; the partial fields keep their defaults, SynthPartials fills them. */
     SynthOscillatorValues read (SynthParameterReader reader = {}) const noexcept;
 

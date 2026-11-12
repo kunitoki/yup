@@ -22,6 +22,8 @@
 namespace yup
 {
 
+class AudioParameterAttachment;
+
 //==============================================================================
 /** Base class for audio processor editors.
 
@@ -142,10 +144,59 @@ public:
     */
     virtual AudioParameter::Ptr getParameterAt (Point<float> position) const;
 
+    //==============================================================================
+    /** Starts draining a processor's parameter-change queue to refresh controls reactively.
+
+        Call this once, typically from the editor constructor, passing the processor the editor
+        belongs to. A message-thread timer then drains the processor's ParameterChangeQueue at the
+        given rate and notifies the AudioParameterAttachment objects bound to the changed parameters,
+        so only the controls that moved are refreshed instead of polling every parameter every frame.
+        Multiple editors share the drain, and every listening editor receives each change.
+        The processor must outlive the editor. Call this and stopParameterListening() on
+        the message thread.
+
+        @param processor      The processor whose parameter changes drive this editor.
+        @param refreshRateHz  How often, in Hz, to drain the queue on the message thread. A value of
+                              zero or less binds the processor but starts no timer, leaving the caller
+                              to drive dispatchPendingParameterChanges().
+
+        @see stopParameterListening, AudioParameterAttachment, AudioProcessorBase::getParameterChangeQueue
+    */
+    void startParameterListening (AudioProcessorBase& processor, int refreshRateHz = 60);
+
+    /** Stops the parameter-change timer started by startParameterListening. */
+    void stopParameterListening();
+
+    /** Drains the listened processor's parameter-change queue once and notifies attachments.
+
+        The timer calls this on the message thread, and it is exposed so tests can drive the
+        dispatch deterministically without waiting for the timer. Call on the message
+        thread only. Reentrant dispatch is deferred until a later call.
+    */
+    void dispatchPendingParameterChanges();
+
+    //==============================================================================
+    /** @internal Registers an attachment so it is notified when its parameter changes.
+
+        Called by AudioParameterAttachment; not intended for direct use.
+    */
+    void registerParameterAttachment (AudioParameter* parameter, AudioParameterAttachment* attachment);
+
+    /** @internal Unregisters an attachment previously registered for a parameter. */
+    void unregisterParameterAttachment (AudioParameter* parameter, AudioParameterAttachment* attachment);
+
 private:
+    friend class AudioProcessorBase;
+
+    void parameterChanged (AudioParameter* parameter);
+
     HostContext* hostContext = nullptr;
 
     Size<int> constrainSize (Size<int> size, bool fitInside) const;
+
+    AudioProcessorBase* listenedProcessor = nullptr;
+    std::unique_ptr<TimedCallback> parameterDispatchTimer;
+    std::unordered_map<AudioParameter*, ListenerList<AudioParameterAttachment>> parameterAttachments;
 };
 
 } // namespace yup

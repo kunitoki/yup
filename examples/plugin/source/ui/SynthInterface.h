@@ -79,7 +79,7 @@ class SynthInterface
 {
 public:
     /** Builds the interface with view options, wearing their theme (see SynthThemes::getThemes()). */
-    SynthInterface (RetraceProcessor& processorToEdit, const SynthViewOptions& optionsToShow);
+    SynthInterface (RetraceProcessor& processorToEdit, yup::AudioProcessorEditor& ownerEditor, const SynthViewOptions& optionsToShow);
     ~SynthInterface() override;
 
     //==============================================================================
@@ -149,8 +149,16 @@ private:
     void applyUndoSetting();
     void undoStep (bool redo);
 
-    void syncFromProcessor();
+    void addPanelSync (yup::Component& component,
+                       yup::Span<const yup::AudioParameter::Ptr> parameters,
+                       std::function<void()> sync,
+                       std::function<bool()> poll = {},
+                       bool followsModulation = false);
+    void syncPanels (bool modulationMoved);
+    void syncControls();
+    void syncMacroNames();
     void updateModulation();
+    SynthParameterReader getModulatedReader() const;
 
     std::optional<SynthModulationSource> getDraggedSource() const;
     bool canRoute (SynthModulationSource source, const SynthModulationTarget& target) const;
@@ -172,7 +180,21 @@ private:
     static constexpr float initialDepth = 0.25f;
 
     //==============================================================================
+    /** A panel synced only when a parameter it shows changed, when poll() reports other state
+        it shows moved, or every frame modulation plays when it follows modulation; a hidden
+        panel waits until it shows again. */
+    struct PanelSync
+    {
+        yup::Component* component = nullptr;
+        std::function<void()> sync;
+        std::function<bool()> poll;
+        bool followsModulation = false;
+        bool dirty = true;
+    };
+
+    //==============================================================================
     RetraceProcessor& processor;
+    yup::AudioProcessorEditor& editor;
     const int theme;
     SynthViewOptions viewOptions;
 
@@ -212,6 +234,14 @@ private:
     std::unique_ptr<SynthModulationPanel> modulationPanel;
 
     std::vector<SynthModulationTarget*> modulationTargets;
+    std::vector<std::unique_ptr<yup::AudioParameterAttachment>> parameterAttachments;
+    std::vector<PanelSync> panelSyncs;
+    std::vector<std::vector<std::size_t>> panelsByParameter;
+    bool parametersChanged = true;
+    bool modulationShown = false;
+    bool modulationWasLive = false;
+    bool wasPlaying = false;
+    int shownRouteGeneration = -1;
     std::optional<SynthModulationSource> dragSource;
     SynthModulationTarget* dropTarget = nullptr;
     std::vector<std::vector<SynthKnob::ModulationArc>> arcsByParameter;

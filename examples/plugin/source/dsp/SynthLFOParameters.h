@@ -24,6 +24,8 @@
 #include "SynthParameterFactory.h"
 #include "SynthTypes.h"
 
+#include <vector>
+
 //==============================================================================
 /** A plain snapshot of one LFO's controls. The custom shape's curve is patch state. */
 struct SynthLFOValues
@@ -76,6 +78,9 @@ public:
 
     /** Registers every parameter with the processor. */
     void addTo (yup::AudioProcessor& processor) const;
+
+    /** Returns every parameter, in registration order. */
+    std::vector<yup::AudioParameter::Ptr> getParameters() const;
 
     /** Takes a snapshot. */
     SynthLFOValues read (SynthParameterReader reader = {}) const noexcept;

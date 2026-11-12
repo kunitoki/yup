@@ -38,6 +38,11 @@ SynthModulationParameters::SynthModulationParameters()
 
 void SynthModulationParameters::addTo (yup::AudioProcessor& processor) const
 {
-    for (const auto& parameter : depths)
+    for (const auto& parameter : getParameters())
         processor.addParameter (parameter);
+}
+
+std::vector<yup::AudioParameter::Ptr> SynthModulationParameters::getParameters() const
+{
+    return std::vector<yup::AudioParameter::Ptr> (depths.begin(), depths.end());
 }

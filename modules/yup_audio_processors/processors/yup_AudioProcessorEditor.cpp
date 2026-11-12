@@ -30,6 +30,80 @@ AudioProcessorEditor::AudioProcessorEditor()
 
 AudioProcessorEditor::~AudioProcessorEditor()
 {
+    stopParameterListening();
+}
+
+//==============================================================================
+
+void AudioProcessorEditor::startParameterListening (AudioProcessorBase& processor, int refreshRateHz)
+{
+    stopParameterListening();
+    listenedProcessor = &processor;
+    processor.parameterEditors.add (this);
+
+    if (refreshRateHz <= 0)
+        return;
+
+    parameterDispatchTimer = std::make_unique<TimedCallback> ([this]
+    {
+        dispatchPendingParameterChanges();
+    });
+
+    parameterDispatchTimer->startTimerHz (refreshRateHz);
+}
+
+void AudioProcessorEditor::stopParameterListening()
+{
+    parameterDispatchTimer.reset();
+
+    if (listenedProcessor != nullptr)
+        listenedProcessor->parameterEditors.remove (this);
+
+    listenedProcessor = nullptr;
+}
+
+void AudioProcessorEditor::dispatchPendingParameterChanges()
+{
+    if (listenedProcessor != nullptr)
+        listenedProcessor->dispatchParameterChanges();
+}
+
+void AudioProcessorBase::dispatchParameterChanges()
+{
+    if (dispatchingParameterChanges)
+        return;
+
+    const ScopedValueSetter<bool> dispatching (dispatchingParameterChanges, true);
+
+    parameterChangeQueue.readChanges ([this] (int index)
+    {
+        const auto parameter = parameters[static_cast<std::size_t> (index)];
+        parameterEditors.call (&AudioProcessorEditor::parameterChanged, parameter.get());
+    });
+}
+
+void AudioProcessorEditor::parameterChanged (AudioParameter* parameter)
+{
+    if (auto it = parameterAttachments.find (parameter); it != parameterAttachments.end())
+        it->second.call (&AudioParameterAttachment::parameterChanged);
+}
+
+void AudioProcessorEditor::registerParameterAttachment (AudioParameter* parameter, AudioParameterAttachment* attachment)
+{
+    jassert (parameter != nullptr && attachment != nullptr);
+    if (parameter != nullptr && attachment != nullptr)
+        parameterAttachments[parameter].add (attachment);
+}
+
+void AudioProcessorEditor::unregisterParameterAttachment (AudioParameter* parameter, AudioParameterAttachment* attachment)
+{
+    if (auto it = parameterAttachments.find (parameter); it != parameterAttachments.end())
+    {
+        it->second.remove (attachment);
+
+        if (it->second.isEmpty())
+            parameterAttachments.erase (it);
+    }
 }
 
 AudioParameter::Ptr AudioProcessorEditor::getParameterAt (Point<float> position) const

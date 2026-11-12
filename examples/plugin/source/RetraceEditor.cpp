@@ -35,6 +35,10 @@ RetraceEditor::RetraceEditor (RetraceProcessor& processorToEdit)
     // Fast while the tube powers on, then only polling for a new theme.
     startTimerHz (60);
 
+    // Drains the processor's parameter-change queue to the interface's attachments on the message
+    // thread, so controls refresh reactively instead of polling every parameter every frame.
+    startParameterListening (processor);
+
     processor.setEditorComponent (this);
 
     if (auto* host = yup::StandalonePluginHost::getInstance())
@@ -81,7 +85,7 @@ void RetraceEditor::paint (yup::Graphics& g)
 
 void RetraceEditor::buildInterface()
 {
-    interface = std::make_unique<SynthInterface> (processor, appliedOptions);
+    interface = std::make_unique<SynthInterface> (processor, *this, appliedOptions);
     interface->onViewOptionsChanged = [this] { syncViewOptions (false); };
     interface->onScalePercentRequested = [this] (int percent) { applyScale (percent); };
     interface->getScalePercent = [this] { return scalePercent(); };

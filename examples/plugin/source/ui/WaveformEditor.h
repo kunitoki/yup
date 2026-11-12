@@ -77,6 +77,9 @@ public:
     /** Publishes a pending drag to the audio thread, coalescing a frame's worth of edits. */
     void commitPendingEdits();
 
+    /** True while a drag wrote partials that commitPendingEdits() has not published yet. */
+    bool hasPendingEdits() const noexcept { return pendingEdit; }
+
     /** Drops the edited partials and returns to the selected waveform preset.
 
         @param joinsLastStep True to undo it together with the step recorded just before,

@@ -50,6 +50,9 @@ public:
     /** Shows changes made by the host, a preset, a state load or an undo. */
     void syncFromParameters();
 
+    /** Returns true when the displayed order needs updating and no reorder drag is active. */
+    bool hasPendingOrderChange() const noexcept { return draggedRow < 0 && chain.getOrder() != shownOrder; }
+
     void resized() override;
     void paint (yup::Graphics& g) override;
     void mouseDown (const yup::MouseEvent& event) override;

@@ -24,6 +24,8 @@
 #include "SynthParameterFactory.h"
 #include "SynthTypes.h"
 
+#include <vector>
+
 //==============================================================================
 /** A plain snapshot of the phase modulation matrix.
 
@@ -69,6 +71,9 @@ public:
 
     /** Registers every parameter with the processor. */
     void addTo (yup::AudioProcessor& processor) const;
+
+    /** Returns every parameter, in registration order. */
+    std::vector<yup::AudioParameter::Ptr> getParameters() const;
 
     /** Takes a snapshot. */
     SynthFMValues read (SynthParameterReader reader = {}) const noexcept;

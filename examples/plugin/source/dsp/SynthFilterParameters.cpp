@@ -44,8 +44,13 @@ SynthFilterParameters::SynthFilterParameters (int filterIndex, const SynthFilter
 
 void SynthFilterParameters::addTo (yup::AudioProcessor& processor) const
 {
-    for (const auto& parameter : { type, cutoff, resonance, drive, keytrack, mix, enabled })
+    for (const auto& parameter : getParameters())
         processor.addParameter (parameter);
+}
+
+std::vector<yup::AudioParameter::Ptr> SynthFilterParameters::getParameters() const
+{
+    return { type, cutoff, resonance, drive, keytrack, mix, enabled };
 }
 
 SynthFilterValues SynthFilterParameters::read (SynthParameterReader reader) const noexcept

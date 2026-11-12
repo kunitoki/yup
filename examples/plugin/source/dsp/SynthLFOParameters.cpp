@@ -51,8 +51,13 @@ SynthLFOParameters::SynthLFOParameters (int lfoIndex)
 
 void SynthLFOParameters::addTo (yup::AudioProcessor& processor) const
 {
-    for (const auto& parameter : { shape, rate, tempoSync, division, phase, smoothing, retrigger, depth, enabled, inverted })
+    for (const auto& parameter : getParameters())
         processor.addParameter (parameter);
+}
+
+std::vector<yup::AudioParameter::Ptr> SynthLFOParameters::getParameters() const
+{
+    return { shape, rate, tempoSync, division, phase, smoothing, retrigger, depth, enabled, inverted };
 }
 
 SynthLFOValues SynthLFOParameters::read (SynthParameterReader reader) const noexcept
