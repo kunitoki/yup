@@ -601,7 +601,8 @@ endfunction()
 # Creates the per-format wrapper target, compiled only into the plugin binary of that format.
 # Common plugin metadata and the modules come from the shared plugin core instead.
 function (_yup_module_setup_plugin_client target_name plugin_client_target folder_name plugin_type)
-    if (NOT YUP_PLATFORM_DESKTOP AND NOT (YUP_PLATFORM_EMSCRIPTEN AND plugin_type STREQUAL "standalone"))
+    # On non-desktop platforms (mobile, emscripten) only the standalone client is supported.
+    if (NOT YUP_PLATFORM_DESKTOP AND NOT plugin_type STREQUAL "standalone")
         return()
     endif()
 
