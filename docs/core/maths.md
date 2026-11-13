@@ -2,7 +2,7 @@
 
 `yup_core` bundles numeric utilities used across graphics, audio, and general
 code: ranges, parameter mapping, random numbers, arbitrary-precision integers,
-and an expression evaluator.
+and statistics helpers.
 
 ## Range
 
@@ -71,14 +71,8 @@ String hex = n.toString (16);   // base-16 string
 
 ## Expression
 
-`Expression` parses and evaluates arithmetic expressions with named symbols -
-useful for user-entered formulas and computed layouts.
-
-```cpp
-Expression e ("2 + 3 * x");
-Expression::Scope scope;         // supply symbol values via a subclass
-double result = e.evaluate (scope);
-```
+Typed expressions for formulas and data-driven values have their own page:
+[Expressions](expressions.md).
 
 ## Statistics & functions
 

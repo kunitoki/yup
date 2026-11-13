@@ -1019,23 +1019,6 @@ struct PyLogger : Logger
 
 //==============================================================================
 
-struct PyExpressionScope : Expression::Scope
-{
-    using Expression::Scope::Scope;
-
-    String getScopeUID() const override
-    {
-        PYBIND11_OVERRIDE (String, Expression::Scope, getScopeUID);
-    }
-
-    Expression getSymbolValue (const String& symbol) const override
-    {
-        PYBIND11_OVERRIDE (Expression, Expression::Scope, getSymbolValue, symbol);
-    }
-};
-
-//==============================================================================
-
 struct PyWebInputStreamListener : WebInputStream::Listener
 {
     bool postDataSendProgress (WebInputStream& request, int bytesSent, int totalBytes) override
