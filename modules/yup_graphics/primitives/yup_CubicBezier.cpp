@@ -24,18 +24,6 @@ namespace yup
 
 //==============================================================================
 
-CubicBezier::CubicBezier (Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3)
-{
-    x1 = p0.getX();
-    y1 = p0.getY();
-    x2 = p1.getX();
-    y2 = p1.getY();
-    x3 = p2.getX();
-    y3 = p2.getY();
-    x4 = p3.getX();
-    y4 = p3.getY();
-}
-
 CubicBezier CubicBezier::fromPoints (Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3)
 {
     return CubicBezier (p0, p1, p2, p3);

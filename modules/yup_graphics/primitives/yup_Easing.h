@@ -23,18 +23,20 @@ namespace yup
 {
 
 //==============================================================================
-/** A cubic bezier easing curve used to interpolate between animation keyframes.
+/** A cubic bezier easing curve, used to interpolate between keyframes.
 
-    Stores two control points (x1, y1) and (x2, y2) in [0,1]^2 space matching
-    the CSS cubic-bezier() convention. Evaluation uses Newton-Raphson iteration
-    with an 11-sample precomputed lookup table, matching VInterpolator from rlottie.
+    Follows the CSS cubic-bezier() convention: the curve is a CubicBezier running
+    from (0,0) to (1,1) with the two control points (x1, y1) and (x2, y2).
+    Evaluating at a progress x solves the curve for the parameter whose x is the
+    given progress and returns the matching y. Evaluation is stateless, so a
+    shared easing can be evaluated from several threads.
 */
-class YUP_API AnimationEasing
+class YUP_API Easing
 {
 public:
     //==============================================================================
     /** Constructs a linear easing (equivalent to cubic-bezier(0,0,1,1)). */
-    constexpr AnimationEasing() noexcept = default;
+    constexpr Easing() noexcept = default;
 
     /** Constructs a cubic bezier easing from two control points.
 
@@ -43,12 +45,7 @@ public:
         @param x2 Second control point x (must be in [0,1]).
         @param y2 Second control point y.
     */
-    AnimationEasing (float x1, float y1, float x2, float y2) noexcept;
-
-    AnimationEasing (const AnimationEasing&) noexcept = default;
-    AnimationEasing (AnimationEasing&&) noexcept = default;
-    AnimationEasing& operator= (const AnimationEasing&) noexcept = default;
-    AnimationEasing& operator= (AnimationEasing&&) noexcept = default;
+    Easing (float x1, float y1, float x2, float y2) noexcept;
 
     //==============================================================================
     /** Returns the eased output progress for normalized input t in [0,1]. */
@@ -58,59 +55,54 @@ public:
     [[nodiscard]] bool isLinear() const noexcept;
 
     /** Returns true if this is a hold (step) easing with no interpolation. */
-    [[nodiscard]] bool isHold() const noexcept { return holdFrame;}
+    [[nodiscard]] bool isHold() const noexcept { return holdFrame; }
 
     //==============================================================================
+    /** Returns the curve from (0,0) to (1,1) whose inner points are the control points. */
+    [[nodiscard]] const CubicBezier& getCurve() const noexcept { return curve; }
+
     /** Returns the first control point x. */
-    [[nodiscard]] float getX1() const noexcept { return cx1; }
+    [[nodiscard]] float getX1() const noexcept { return curve.p1().getX(); }
 
     /** Returns the first control point y. */
-    [[nodiscard]] float getY1() const noexcept { return cy1; }
+    [[nodiscard]] float getY1() const noexcept { return curve.p1().getY(); }
 
     /** Returns the second control point x. */
-    [[nodiscard]] float getX2() const noexcept { return cx2; }
+    [[nodiscard]] float getX2() const noexcept { return curve.p2().getX(); }
 
     /** Returns the second control point y. */
-    [[nodiscard]] float getY2() const noexcept { return cy2; }
+    [[nodiscard]] float getY2() const noexcept { return curve.p2().getY(); }
 
-    /** Returns true if this is a hold easing. */
-    bool operator== (const AnimationEasing& other) const noexcept;
+    /** Returns true if both easings hold, or have the same control points. */
+    bool operator== (const Easing& other) const noexcept;
+
     /** Returns true if this is not equal to another easing. */
-    bool operator!= (const AnimationEasing& other) const noexcept;
+    bool operator!= (const Easing& other) const noexcept;
 
     //==============================================================================
     /** A linear easing (equivalent to cubic-bezier(0,0,1,1)). */
-    [[nodiscard]] static AnimationEasing linear() noexcept;
+    [[nodiscard]] static Easing linear() noexcept;
 
     /** An ease-in easing (equivalent to cubic-bezier(0.42,0,1,1)). */
-    [[nodiscard]] static AnimationEasing easeIn() noexcept;
+    [[nodiscard]] static Easing easeIn() noexcept;
 
     /** An ease-out easing (equivalent to cubic-bezier(0,0,0.58,1)). */
-    [[nodiscard]] static AnimationEasing easeOut() noexcept;
+    [[nodiscard]] static Easing easeOut() noexcept;
 
     /** An ease-in-out easing (equivalent to cubic-bezier(0.42,0,0.58,1)). */
-    [[nodiscard]] static AnimationEasing easeInOut() noexcept;
+    [[nodiscard]] static Easing easeInOut() noexcept;
 
     /** A hold easing that keeps the start value until the next keyframe. */
-    [[nodiscard]] static AnimationEasing hold() noexcept;
+    [[nodiscard]] static Easing hold() noexcept;
 
     /** Creates an easing from two keyframe tangent points (o/i in Lottie JSON). */
-    [[nodiscard]] static AnimationEasing fromTangents (Point<float> outTangent, Point<float> inTangent) noexcept;
+    [[nodiscard]] static Easing fromTangents (Point<float> outTangent, Point<float> inTangent) noexcept;
 
 private:
-    void buildTable() const noexcept;
-    float getTForX (float x) const noexcept;
-    static float calcBezier (float t, float a1, float a2) noexcept;
-    static float getSlope (float t, float a1, float a2) noexcept;
+    float solveCurveX (float x) const noexcept;
 
-    float cx1 = 0.0f, cy1 = 0.0f;
-    float cx2 = 1.0f, cy2 = 1.0f;
+    CubicBezier curve { { 0.0f, 0.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f }, { 1.0f, 1.0f } };
     bool holdFrame = false;
-    bool linearCached = true;
-
-    static constexpr int kTableSize = 11;
-    mutable float sampleTable[kTableSize] = {};
-    mutable bool tableDirty = true;
 };
 
 } // namespace yup

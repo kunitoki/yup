@@ -207,7 +207,7 @@ class Context;
 #include "graphics/yup_LayerMaskMode.h"
 #include "primitives/yup_Path.h"
 #include "primitives/yup_CubicBezier.h"
-#include "primitives/yup_AnimationEasing.h"
+#include "primitives/yup_Easing.h"
 #include "meshes/yup_MeshSurfaceMapper.h"
 #include "fonts/yup_Font.h"
 #include "imaging/yup_ImagePixelData.h"

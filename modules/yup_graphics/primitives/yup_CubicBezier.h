@@ -43,10 +43,20 @@ class YUP_API CubicBezier
 public:
     //==============================================================================
     /** Constructs an empty bezier (all points at origin). */
-    CubicBezier() = default;
+    constexpr CubicBezier() noexcept = default;
 
     /** Constructs from four explicit control points. */
-    CubicBezier (Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3);
+    constexpr CubicBezier (Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3) noexcept
+        : x1 (p0.getX())
+        , y1 (p0.getY())
+        , x2 (p1.getX())
+        , y2 (p1.getY())
+        , x3 (p2.getX())
+        , y3 (p2.getY())
+        , x4 (p3.getX())
+        , y4 (p3.getY())
+    {
+    }
 
     /** Factory: creates a bezier from four control points (equivalent to constructor). */
     [[nodiscard]] static CubicBezier fromPoints (Point<float> p0, Point<float> p1, Point<float> p2, Point<float> p3);

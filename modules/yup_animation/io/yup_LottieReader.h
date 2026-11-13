@@ -116,7 +116,7 @@ private:
     void parseMasks (const var& masksArray, AnimationLayer& layer);
     void parseEffects (const var& effectsArray, AnimationLayer& layer);
     void parseAssets (const var& assetsArray, AnimationComposition& comp);
-    AnimationEasing parseEasing (const var& kfObj);
+    Easing parseEasing (const var& kfObj);
 
     template <typename T>
     AnimationProperty<T> parseProperty (const var& propObj, std::function<T (const var&)> extractor);
@@ -131,7 +131,7 @@ private:
                                            AnimationTransform& transform);
 
     //==============================================================================
-    AnimationEasing lookupInterpolator (const String& name, float ox, float oy, float ix, float iy);
+    Easing lookupInterpolator (const String& name, float ox, float oy, float ix, float iy);
 
     //==============================================================================
     [[nodiscard]] static Color extractColor (const var& v);
@@ -142,7 +142,7 @@ private:
 
     LottieLoadOptions options;
     String errorMessage;
-    HashMap<String, AnimationEasing> interpolatorCache;
+    HashMap<String, Easing> interpolatorCache;
     float frameRate_ = 60.0f;
 };
 

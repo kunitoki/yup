@@ -50,7 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ColorGradient` and `ColorGradient::ColorStop` support `==` and `!=`.
 - Added a `VariantConverter<Color>` specialisation, converting a `Color` to and from the ARGB `int64` a `var` stores it as, so `getPropertyAs<Color>` and expression bindings can read color properties.
 - **Breaking:** `Font` equality also compares the height, so fonts differing only in height compare different.
-- Moved `AnimationEasing` (the cubic-bezier easing curve) from `yup_animation` to `yup_graphics`, so graphics-level animation and styling can interpolate with it without depending on `yup_animation`. The class and its namespace (`yup::AnimationEasing`) are unchanged.
+- **Breaking:** `AnimationEasing` is renamed to `Easing` and moved from `yup_animation` to `yup_graphics`, so graphics-level animation and styling can interpolate with it without depending on `yup_animation`. It is now built on `CubicBezier` (exposed through `getCurve()`) and no longer caches a lookup table, so a shared easing can be evaluated from several threads. `Easing` is also available in the Python bindings.
 
 ### UI
 
