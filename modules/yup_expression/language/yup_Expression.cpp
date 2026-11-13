@@ -242,22 +242,19 @@ private:
         return make (Kind::ternary, ExpressionOperator::none, {}, {}, { condition, whenTrue, whenFalse }, start);
     }
 
-    Expression parseBinary (int precedence)
+    Expression parseBinary (int minPrecedence)
     {
-        if (precedence > precedenceMultiplicative)
-            return parseUnary();
-
-        auto lhs = parseBinary (precedence + 1);
+        auto lhs = parseUnary();
 
         for (;;)
         {
             const auto start = getPosition();
-            const auto op = matchBinaryOperator (precedence);
+            const auto op = matchBinaryOperator (minPrecedence);
 
             if (op == ExpressionOperator::none)
                 return lhs;
 
-            auto rhs = parseBinary (precedence + 1);
+            auto rhs = parseBinary (getBinaryPrecedence (op) + 1);
             lhs = make (Kind::binary, op, {}, {}, { lhs, rhs }, start);
         }
     }
@@ -607,7 +604,7 @@ private:
     }
 
     //==============================================================================
-    ExpressionOperator matchBinaryOperator (int precedence)
+    ExpressionOperator matchBinaryOperator (int minPrecedence)
     {
         static const std::pair<const char*, ExpressionOperator> operators[] = {
             { "||", ExpressionOperator::logicalOr },
@@ -626,7 +623,7 @@ private:
         };
 
         for (const auto& [symbol, op] : operators)
-            if (getBinaryPrecedence (op) == precedence && match (symbol))
+            if (getBinaryPrecedence (op) >= minPrecedence && match (symbol))
                 return op;
 
         return ExpressionOperator::none;
