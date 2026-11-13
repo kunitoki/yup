@@ -34,6 +34,73 @@ const Identifier Slider::Style::textColorId { "Slider_textColorId" };
 
 //==============================================================================
 
+const ComponentTypeInfo& Slider::getClassTypeInfo()
+{
+    static const ComponentTypeInfo info = []
+    {
+        std::vector<ComponentProperty> props;
+
+        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
+        props.push_back (makeColorProperty (Identifier ("trackColor"), Style::trackColorId));
+        props.push_back (makeColorProperty (Identifier ("thumbColor"), Style::thumbColorId));
+        props.push_back (makeColorProperty (Identifier ("thumbOverColor"), Style::thumbOverColorId));
+        props.push_back (makeColorProperty (Identifier ("thumbDownColor"), Style::thumbDownColorId));
+        props.push_back (makeColorProperty (Identifier ("textColor"), Style::textColorId));
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("value"),
+            .type = ComponentProperty::Type::number,
+            .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getValue()); },
+            .setter = [] (Component& c, const var& v) { static_cast<Slider&> (c).setValue (static_cast<double> (v)); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("normalized"),
+            .type = ComponentProperty::Type::number,
+            .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getValueNormalised()); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("minValue"),
+            .type = ComponentProperty::Type::number,
+            .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getMinValue()); },
+            .setter = [] (Component& c, const var& v) { static_cast<Slider&> (c).setMinValue (static_cast<double> (v)); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("maxValue"),
+            .type = ComponentProperty::Type::number,
+            .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getMaxValue()); },
+            .setter = [] (Component& c, const var& v) { static_cast<Slider&> (c).setMaxValue (static_cast<double> (v)); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("interval"),
+            .type = ComponentProperty::Type::number,
+            .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getInterval()); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("dragging"),
+            .type = ComponentProperty::Type::boolean,
+            .defaultValue = false,
+            .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).isCurrentlyBeingDragged()); },
+            .isState = true,
+            .isStyleable = false });
+
+        return ComponentTypeInfo { Identifier ("Slider"), &Component::getClassTypeInfo(), std::move (props), { "onValueChanged" } };
+    }();
+
+    return info;
+}
+
+const ComponentTypeInfo& Slider::getTypeInfo() const
+{
+    return getClassTypeInfo();
+}
+
+//==============================================================================
+
 Slider::Slider (SliderType sliderType, StringRef componentID)
     : Component (componentID)
     , sliderType (sliderType)
@@ -515,6 +582,8 @@ void Slider::sendValueChanged (NotificationType notification)
 
         if (onValueChanged)
             onValueChanged (getValue());
+
+        notifyPropertyChanged (Identifier ("value"));
     });
 }
 

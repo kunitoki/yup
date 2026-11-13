@@ -62,6 +62,13 @@ public:
     };
 
     //==============================================================================
+    /** Returns the static type info describing the TextButton type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getTypeInfo() const override;
+
+    //==============================================================================
     /** Returns the bounds of the text within the button. */
     Rectangle<float> getTextBounds() const;
 

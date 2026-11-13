@@ -300,6 +300,13 @@ public:
     };
 
     //==============================================================================
+    /** Returns the static type info describing the TextEditor type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getTypeInfo() const override;
+
+    //==============================================================================
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
@@ -340,6 +347,7 @@ private:
     void updateStyledTextIfNeeded();
     Font getEffectiveFont() const;
     void updateCaretPosition();
+    void sendTextChanged (NotificationType notification);
     void ensureCaretVisible();
     void blinkCaret();
     int getGlyphIndexAtPosition (const Point<float>& position) const;

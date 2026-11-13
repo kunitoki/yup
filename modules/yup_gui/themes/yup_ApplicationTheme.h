@@ -209,42 +209,40 @@ public:
     void setPaletteColor (const Identifier& colorId, const Color& color);
 
     //==============================================================================
-    /** Returns a named float metric from the global theme.
-    
-        This method looks for the metric in the component's properties first, then in the global theme. If no metric
-        is found, it returns std::nullopt.
+    /** Returns a named property value from the global theme, used as a default fallback.
 
-        @param component     The component for which to find the metric.
-        @param metricId      The identifier for the metric to retrieve.
+        This is consulted by Component::findProperty() after the component and its parents have
+        been checked, and before the descriptor default. Themes register defaults here with
+        setProperty().
 
-        @return The metric associated with the given identifier, or std::nullopt if not found.
+        @param component     The component for which to find the property.
+        @param id            The storage id for the property to retrieve.
+
+        @return The property value, or std::nullopt if not found.
     */
-    static std::optional<float> findComponentMetric (const Component& component, const Identifier& metricId);
+    static std::optional<var> findComponentProperty (const Component& component, const Identifier& id);
 
-    /** Returns a named float metric from this theme.
-    
-        This method looks for the metric in the component's properties first, then in this theme. If no metric
-        is found, it returns std::nullopt.
+    /** Returns a named property value from this theme.
 
-        @param component     The component for which to find the metric.
-        @param metricId      The identifier for the metric to retrieve.
+        @param component     The component for which to find the property.
+        @param id            The storage id for the property to retrieve.
 
-        @return The metric associated with the given identifier, or std::nullopt if not found.
+        @return The property value, or std::nullopt if not found.
     */
-    std::optional<float> findMetric (const Component& component, const Identifier& metricId) const;
+    std::optional<var> findProperty (const Component& component, const Identifier& id) const;
 
-    /** Registers a named float metric in this theme. 
-    
-        @param metricId      The identifier for the metric to set.
-        @param value         The value to set for the metric.
+    /** Registers a named theme-default property value.
+
+        @param id            The storage id for the property to set.
+        @param value         The value to set for the property.
     */
-    void setMetric (const Identifier& metricId, float value);
+    void setProperty (const Identifier& id, const var& value);
 
-    /** Sets multiple metrics in the global theme.
+    /** Sets multiple theme-default property values.
 
-        @param metrics        An initializer list of metric identifier and value pairs.
+        @param properties    An initializer list of property id and value pairs.
     */
-    void setMetrics (std::initializer_list<std::pair<const Identifier&, float>> metrics);
+    void setProperties (std::initializer_list<std::pair<const Identifier&, var>> properties);
 
     //==============================================================================
     /**
@@ -303,7 +301,7 @@ private:
     PaletteMapping paletteMapping;
     mutable std::vector<std::pair<ThemePalette, std::unordered_map<Identifier, Color>>> componentPaletteColors;
     mutable SpinLock componentPaletteColorsLock;
-    std::unordered_map<Identifier, float> defaultMetrics;
+    std::unordered_map<Identifier, var> defaultProperties;
     Font defaultFont;
     Font defaultIconFont;
     Font defaultMonospaceFont;

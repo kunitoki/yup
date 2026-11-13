@@ -215,6 +215,13 @@ public:
     };
 
     //==============================================================================
+    /** Returns the static type info describing the ScrollBar type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getTypeInfo() const override;
+
+    //==============================================================================
     /** Returns whether the thumb is currently being dragged.
 
         This is used by the theme for rendering.

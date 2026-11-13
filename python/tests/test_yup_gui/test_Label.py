@@ -10,7 +10,7 @@ def test_label_style_ids_are_exposed():
     assert yup.Label.Style.textStrokeColorId == yup.Identifier("Label_textStrokeColorId")
     assert yup.Label.Style.backgroundColorId == yup.Identifier("Label_backgroundColorId")
     assert yup.Label.Style.outlineColorId == yup.Identifier("Label_outlineColorId")
-    assert yup.Label.Style.textHeightProportionMetricId == yup.Identifier("Label_textHeightProportionMetricId")
+    assert yup.Label.Style.textHeightProportionId == yup.Identifier("Label_textHeightProportionId")
 
 
 def test_label_style_ids_are_valid_identifiers():

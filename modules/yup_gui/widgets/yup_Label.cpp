@@ -28,7 +28,52 @@ const Identifier Label::Style::textFillColorId { "Label_textFillColorId" };
 const Identifier Label::Style::textStrokeColorId { "Label_textStrokeColorId" };
 const Identifier Label::Style::backgroundColorId { "Label_backgroundColorId" };
 const Identifier Label::Style::outlineColorId { "Label_outlineColorId" };
-const Identifier Label::Style::textHeightProportionMetricId { "Label_textHeightProportionMetricId" };
+const Identifier Label::Style::textHeightProportionId { "Label_textHeightProportionId" };
+
+//==============================================================================
+
+const ComponentTypeInfo& Label::getClassTypeInfo()
+{
+    static const ComponentTypeInfo info = []
+    {
+        std::vector<ComponentProperty> props;
+
+        props.push_back (makeColorProperty (Identifier ("textFillColor"), Style::textFillColorId));
+        props.push_back (makeColorProperty (Identifier ("textStrokeColor"), Style::textStrokeColorId));
+        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
+        props.push_back (makeColorProperty (Identifier ("outlineColor"), Style::outlineColorId));
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("textHeightProportion"),
+            .storageId = Style::textHeightProportionId,
+            .type = ComponentProperty::Type::number,
+            .defaultValue = 0.75,
+            .description = "The proportion of the label height used for the text." });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("text"),
+            .type = ComponentProperty::Type::string,
+            .getter = [] (const Component& c) { return var (static_cast<const Label&> (c).getText()); },
+            .setter = [] (Component& c, const var& v) { static_cast<Label&> (c).setText (v.toString()); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("strokeWidth"),
+            .type = ComponentProperty::Type::number,
+            .getter = [] (const Component& c) { return var (static_cast<double> (static_cast<const Label&> (c).getStrokeWidth())); },
+            .setter = [] (Component& c, const var& v) { static_cast<Label&> (c).setStrokeWidth (static_cast<float> (static_cast<double> (v))); },
+            .isStyleable = false });
+
+        return ComponentTypeInfo { Identifier ("Label"), &Component::getClassTypeInfo(), std::move (props), { "onTextChanged" }, [] { return std::make_unique<Label>(); } };
+    }();
+
+    return info;
+}
+
+const ComponentTypeInfo& Label::getTypeInfo() const
+{
+    return getClassTypeInfo();
+}
 
 //==============================================================================
 

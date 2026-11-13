@@ -147,33 +147,32 @@ void ApplicationTheme::setPaletteColor (const Identifier& colorId, const Color& 
 
 //==============================================================================
 
-std::optional<float> ApplicationTheme::findComponentMetric (const Component& component, const Identifier& metricId)
+std::optional<var> ApplicationTheme::findComponentProperty (const Component& component, const Identifier& id)
 {
     jassert (getGlobalThemeInstance() != nullptr);
 
-    return getGlobalThemeInstance()->findMetric (component, metricId);
+    return getGlobalThemeInstance()->findProperty (component, id);
 }
 
-std::optional<float> ApplicationTheme::findMetric (const Component& component, const Identifier& metricId) const
+std::optional<var> ApplicationTheme::findProperty (const Component& component, const Identifier& id) const
 {
-    if (auto metric = component.findMetric (metricId))
-        return metric;
+    ignoreUnused (component);
 
-    if (auto it = defaultMetrics.find (metricId); it != defaultMetrics.end())
+    if (auto it = defaultProperties.find (id); it != defaultProperties.end())
         return it->second;
 
     return std::nullopt;
 }
 
-void ApplicationTheme::setMetric (const Identifier& metricId, float value)
+void ApplicationTheme::setProperty (const Identifier& id, const var& value)
 {
-    defaultMetrics.insert_or_assign (metricId, value);
+    defaultProperties.insert_or_assign (id, value);
 }
 
-void ApplicationTheme::setMetrics (std::initializer_list<std::pair<const Identifier&, float>> metrics)
+void ApplicationTheme::setProperties (std::initializer_list<std::pair<const Identifier&, var>> properties)
 {
-    for (const auto& entry : metrics)
-        defaultMetrics.insert_or_assign (entry.first, entry.second);
+    for (const auto& entry : properties)
+        defaultProperties.insert_or_assign (entry.first, entry.second);
 }
 
 //==============================================================================

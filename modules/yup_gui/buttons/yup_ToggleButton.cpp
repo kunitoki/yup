@@ -33,6 +33,47 @@ const Identifier ToggleButton::Style::borderToggledColorId = "toggleButtonBorder
 
 //==============================================================================
 
+const ComponentTypeInfo& ToggleButton::getClassTypeInfo()
+{
+    static const ComponentTypeInfo info = []
+    {
+        std::vector<ComponentProperty> props;
+
+        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
+        props.push_back (makeColorProperty (Identifier ("backgroundToggledColor"), Style::backgroundToggledColorId));
+        props.push_back (makeColorProperty (Identifier ("textColor"), Style::textColorId));
+        props.push_back (makeColorProperty (Identifier ("textToggledColor"), Style::textToggledColorId));
+        props.push_back (makeColorProperty (Identifier ("borderColor"), Style::borderColorId));
+        props.push_back (makeColorProperty (Identifier ("borderToggledColor"), Style::borderToggledColorId));
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("checked"),
+            .type = ComponentProperty::Type::boolean,
+            .getter = [] (const Component& c) { return var (static_cast<const ToggleButton&> (c).getToggleState()); },
+            .setter = [] (Component& c, const var& v) { static_cast<ToggleButton&> (c).setToggleState (static_cast<bool> (v)); },
+            .isState = true,
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("text"),
+            .type = ComponentProperty::Type::string,
+            .getter = [] (const Component& c) { return var (static_cast<const ToggleButton&> (c).getButtonText()); },
+            .setter = [] (Component& c, const var& v) { static_cast<ToggleButton&> (c).setButtonText (v.toString()); },
+            .isStyleable = false });
+
+        return ComponentTypeInfo { Identifier ("ToggleButton"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<ToggleButton>(); } };
+    }();
+
+    return info;
+}
+
+const ComponentTypeInfo& ToggleButton::getTypeInfo() const
+{
+    return getClassTypeInfo();
+}
+
+//==============================================================================
+
 ToggleButton::ToggleButton (StringRef componentID)
     : Button (componentID)
 {

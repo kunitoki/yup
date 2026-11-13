@@ -2418,32 +2418,28 @@ TEST_F (ComponentMockTest, CoordinateTransformationMethods)
     EXPECT_TRUE (true); // Methods completed without crashing
 }
 
-TEST_F (ComponentMockTest, MetricMethods)
+TEST_F (ComponentMockTest, PropertyMethods)
 {
-    Identifier metricId ("cornerRadius");
+    Identifier propertyId ("cornerRadius");
 
-    // Test setting metric
-    mockComponent->setMetric (metricId, 8.0f);
+    // Test setting a property
+    mockComponent->setProperty (propertyId, 8.0);
 
-    // Test getting metric
-    auto retrievedMetric = mockComponent->getMetric (metricId);
-    ASSERT_TRUE (retrievedMetric.has_value());
-    EXPECT_FLOAT_EQ (retrievedMetric.value(), 8.0f);
+    // Test getting a property
+    EXPECT_TRUE (mockComponent->hasProperty (propertyId));
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->getProperty (propertyId)), 8.0f);
 
-    // Test finding metric
-    auto foundMetric = mockComponent->findMetric (metricId);
-    ASSERT_TRUE (foundMetric.has_value());
-    EXPECT_FLOAT_EQ (foundMetric.value(), 8.0f);
+    // Test finding a property
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->findProperty (propertyId)), 8.0f);
 
-    // Test setting null metric (removing override)
-    mockComponent->setMetric (metricId, std::nullopt);
-    auto nullMetric = mockComponent->getMetric (metricId);
-    EXPECT_FALSE (nullMetric.has_value());
+    // Test removing the property
+    mockComponent->removeProperty (propertyId);
+    EXPECT_FALSE (mockComponent->hasProperty (propertyId));
+    EXPECT_TRUE (mockComponent->getProperty (propertyId).isVoid());
 
-    // Test finding non-existent metric (not in theme either)
-    Identifier nonExistentId ("nonExistentMetric");
-    auto notFoundMetric = mockComponent->findMetric (nonExistentId);
-    EXPECT_FALSE (notFoundMetric.has_value());
+    // Test finding a non-existent property (not in theme either)
+    Identifier nonExistentId ("nonExistentProperty");
+    EXPECT_TRUE (mockComponent->findProperty (nonExistentId).isVoid());
 }
 
 TEST_F (ComponentMockTest, SafeAreaChangedPropagatesToChildren)
@@ -2456,83 +2452,66 @@ TEST_F (ComponentMockTest, SafeAreaChangedPropagatesToChildren)
     ComponentHelper::triggerSafeAreaChanged (*mockComponent);
 }
 
-TEST_F (ComponentMockTest, MetricParentFallback)
+TEST_F (ComponentMockTest, PropertyParentFallback)
 {
     auto parent = std::make_unique<ComponentMock> ("parent");
     auto child = std::make_unique<ComponentMock> ("child");
 
     parent->addAndMakeVisible (*child);
 
-    Identifier metricId ("padding");
+    Identifier propertyId ("padding");
 
-    // Set metric on parent
-    parent->setMetric (metricId, 12.0f);
+    // Set property on parent
+    parent->setProperty (propertyId, 12.0);
 
-    // Child should find parent's metric via parent chain fallback
-    auto childMetric = child->findMetric (metricId);
-    ASSERT_TRUE (childMetric.has_value());
-    EXPECT_FLOAT_EQ (childMetric.value(), 12.0f);
+    // Child should find parent's property via parent chain fallback
+    EXPECT_FLOAT_EQ (static_cast<float> (child->findProperty (propertyId)), 12.0f);
 
     // Child override should take precedence
-    child->setMetric (metricId, 16.0f);
-    auto overriddenMetric = child->findMetric (metricId);
-    ASSERT_TRUE (overriddenMetric.has_value());
-    EXPECT_FLOAT_EQ (overriddenMetric.value(), 16.0f);
+    child->setProperty (propertyId, 16.0);
+    EXPECT_FLOAT_EQ (static_cast<float> (child->findProperty (propertyId)), 16.0f);
 
-    // Parent's metric should be unchanged
-    auto parentMetric = parent->getMetric (metricId);
-    ASSERT_TRUE (parentMetric.has_value());
-    EXPECT_FLOAT_EQ (parentMetric.value(), 12.0f);
+    // Parent's property should be unchanged
+    EXPECT_FLOAT_EQ (static_cast<float> (parent->getProperty (propertyId)), 12.0f);
 
     // Clearing child override falls back to parent
-    child->setMetric (metricId, std::nullopt);
-    auto fallbackMetric = child->findMetric (metricId);
-    ASSERT_TRUE (fallbackMetric.has_value());
-    EXPECT_FLOAT_EQ (fallbackMetric.value(), 12.0f);
+    child->removeProperty (propertyId);
+    EXPECT_FLOAT_EQ (static_cast<float> (child->findProperty (propertyId)), 12.0f);
 }
 
-TEST_F (ComponentMockTest, DISABLED_MetricThemeFallback)
+TEST_F (ComponentMockTest, DISABLED_PropertyThemeFallback)
 {
     // TODO - rewrite this with the new structure in mind, Component should not access to the global theme directly
-    Identifier metricId ("globalSpacing");
+    Identifier propertyId ("globalSpacing");
 
-    // Set a metric in the global theme
-    theme->setMetric (metricId, 20.0f);
+    // Set a property default in the global theme
+    theme->setProperty (propertyId, 20.0);
 
-    // Component should find it via findMetric -> theme fallback
-    auto metric = mockComponent->findMetric (metricId);
-    ASSERT_TRUE (metric.has_value());
-    EXPECT_FLOAT_EQ (metric.value(), 20.0f);
+    // Component should find it via findProperty -> theme fallback
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->findProperty (propertyId)), 20.0f);
 
     // Component override should take precedence over theme
-    mockComponent->setMetric (metricId, 24.0f);
-    auto overriddenMetric = mockComponent->findMetric (metricId);
-    ASSERT_TRUE (overriddenMetric.has_value());
-    EXPECT_FLOAT_EQ (overriddenMetric.value(), 24.0f);
+    mockComponent->setProperty (propertyId, 24.0);
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->findProperty (propertyId)), 24.0f);
 
     // Clearing override falls back to theme
-    mockComponent->setMetric (metricId, std::nullopt);
-    auto themeFallback = mockComponent->findMetric (metricId);
-    ASSERT_TRUE (themeFallback.has_value());
-    EXPECT_FLOAT_EQ (themeFallback.value(), 20.0f);
+    mockComponent->removeProperty (propertyId);
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->findProperty (propertyId)), 20.0f);
 }
 
-TEST_F (ComponentMockTest, MetricAcceptsZeroAndNegative)
+TEST_F (ComponentMockTest, PropertyAcceptsZeroAndNegative)
 {
-    Identifier zeroId ("zeroMetric");
-    Identifier negativeId ("negativeMetric");
+    Identifier zeroId ("zeroProperty");
+    Identifier negativeId ("negativeProperty");
 
-    mockComponent->setMetric (zeroId, 0.0f);
-    mockComponent->setMetric (negativeId, -2.5f);
+    mockComponent->setProperty (zeroId, 0.0);
+    mockComponent->setProperty (negativeId, -2.5);
 
-    auto zero = mockComponent->getMetric (zeroId);
-    auto negative = mockComponent->getMetric (negativeId);
+    EXPECT_TRUE (mockComponent->hasProperty (zeroId));
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->getProperty (zeroId)), 0.0f);
 
-    ASSERT_TRUE (zero.has_value());
-    EXPECT_FLOAT_EQ (zero.value(), 0.0f);
-
-    ASSERT_TRUE (negative.has_value());
-    EXPECT_FLOAT_EQ (negative.value(), -2.5f);
+    EXPECT_TRUE (mockComponent->hasProperty (negativeId));
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->getProperty (negativeId)), -2.5f);
 }
 
 

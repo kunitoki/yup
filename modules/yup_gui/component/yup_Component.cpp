@@ -1317,11 +1317,6 @@ void Component::handleKeyboardFocusFromClick()
 
 //==============================================================================
 
-NamedValueSet& Component::getProperties()
-{
-    return properties;
-}
-
 const NamedValueSet& Component::getProperties() const
 {
     return properties;
@@ -1494,16 +1489,214 @@ ComponentStyle::Ptr Component::getStyle() const
 
 void Component::styleChanged() {}
 
+void Component::notifyPropertyChanged (const Identifier& name)
+{
+    componentListeners.call (&ComponentListener::componentPropertyChanged, *this, name);
+}
+
+//==============================================================================
+
+const ComponentTypeInfo& Component::getTypeInfo() const
+{
+    return getClassTypeInfo();
+}
+
+const ComponentTypeInfo& Component::getClassTypeInfo()
+{
+    static const ComponentTypeInfo info = []
+    {
+        std::vector<ComponentProperty> props;
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("id"),
+            .type = ComponentProperty::Type::string,
+            .getter = [] (const Component& c) { return var (c.getComponentID()); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("title"),
+            .type = ComponentProperty::Type::string,
+            .getter = [] (const Component& c) { return var (c.getTitle()); },
+            .setter = [] (Component& c, const var& v) { c.setTitle (v.toString()); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("visible"),
+            .type = ComponentProperty::Type::boolean,
+            .defaultValue = true,
+            .getter = [] (const Component& c) { return var (c.isVisible()); },
+            .setter = [] (Component& c, const var& v) { c.setVisible (static_cast<bool> (v)); } });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("enabled"),
+            .type = ComponentProperty::Type::boolean,
+            .defaultValue = true,
+            .getter = [] (const Component& c) { return var (c.isEnabled()); },
+            .setter = [] (Component& c, const var& v) { c.setEnabled (static_cast<bool> (v)); } });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("opacity"),
+            .type = ComponentProperty::Type::number,
+            .defaultValue = 1.0,
+            .getter = [] (const Component& c) { return var (static_cast<double> (c.getOpacity())); },
+            .setter = [] (Component& c, const var& v) { c.setOpacity (static_cast<float> (static_cast<double> (v))); } });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("x"),
+            .type = ComponentProperty::Type::number,
+            .getter = [] (const Component& c) { return var (static_cast<double> (c.getX())); },
+            .setter = [] (Component& c, const var& v) { c.setBounds (static_cast<float> (static_cast<double> (v)), c.getY(), c.getWidth(), c.getHeight()); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("y"),
+            .type = ComponentProperty::Type::number,
+            .getter = [] (const Component& c) { return var (static_cast<double> (c.getY())); },
+            .setter = [] (Component& c, const var& v) { c.setBounds (c.getX(), static_cast<float> (static_cast<double> (v)), c.getWidth(), c.getHeight()); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("width"),
+            .type = ComponentProperty::Type::number,
+            .getter = [] (const Component& c) { return var (static_cast<double> (c.getWidth())); },
+            .setter = [] (Component& c, const var& v) { c.setBounds (c.getX(), c.getY(), static_cast<float> (static_cast<double> (v)), c.getHeight()); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("height"),
+            .type = ComponentProperty::Type::number,
+            .getter = [] (const Component& c) { return var (static_cast<double> (c.getHeight())); },
+            .setter = [] (Component& c, const var& v) { c.setBounds (c.getX(), c.getY(), c.getWidth(), static_cast<float> (static_cast<double> (v))); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("focused"),
+            .type = ComponentProperty::Type::boolean,
+            .defaultValue = false,
+            .getter = [] (const Component& c) { return var (c.hasKeyboardFocus()); },
+            .isState = true,
+            .isStyleable = false });
+
+        return ComponentTypeInfo { Identifier ("Component"), nullptr, std::move (props), {}, [] { return std::make_unique<Component>(); } };
+    }();
+
+    return info;
+}
+
+//==============================================================================
+
+void Component::setProperty (const Identifier& name, const var& value)
+{
+    if (const auto* descriptor = getTypeInfo().findProperty (name); descriptor != nullptr && descriptor->isStateBacked())
+    {
+        if (descriptor->setter != nullptr)
+            descriptor->setter (*this, value);
+        else
+            jassertfalse; // Trying to write a read-only property.
+
+        return;
+    }
+
+    const auto storageKey = resolvePropertyStorageKey (name);
+
+    if (! properties.set (storageKey, value))
+        return;
+
+    styleChanged();
+    notifyPropertyChanged (name);
+    repaint();
+}
+
+void Component::removeProperty (const Identifier& name)
+{
+    if (const auto* descriptor = getTypeInfo().findProperty (name); descriptor != nullptr && descriptor->isStateBacked())
+        return; // State-backed properties cannot be removed.
+
+    const auto storageKey = resolvePropertyStorageKey (name);
+
+    if (! properties.remove (storageKey))
+        return;
+
+    styleChanged();
+    notifyPropertyChanged (name);
+    repaint();
+}
+
+var Component::getProperty (const Identifier& name) const
+{
+    if (const auto* descriptor = getTypeInfo().findProperty (name))
+    {
+        if (descriptor->isStateBacked())
+            return descriptor->getter (*this);
+
+        if (auto* value = properties.getVarPointer (descriptor->getStorageKey()))
+            return *value;
+
+        return {};
+    }
+
+    if (auto* value = properties.getVarPointer (name))
+        return *value;
+
+    return {};
+}
+
+var Component::findProperty (const Identifier& name) const
+{
+    const auto* descriptor = getTypeInfo().findProperty (name);
+
+    if (descriptor != nullptr && descriptor->isStateBacked())
+        return descriptor->getter (*this);
+
+    const auto storageKey = descriptor != nullptr ? descriptor->getStorageKey() : name;
+
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+        if (auto* value = component->properties.getVarPointer (storageKey))
+            return *value;
+
+    if (auto theme = ApplicationTheme::getGlobalTheme())
+        if (auto themed = theme->findProperty (*this, storageKey))
+            return *themed;
+
+    if (descriptor != nullptr)
+        return descriptor->defaultValue;
+
+    return {};
+}
+
+bool Component::hasProperty (const Identifier& name) const
+{
+    if (const auto* descriptor = getTypeInfo().findProperty (name))
+    {
+        if (descriptor->isStateBacked())
+            return true;
+
+        return properties.contains (descriptor->getStorageKey());
+    }
+
+    return properties.contains (name);
+}
+
+Identifier Component::resolvePropertyStorageKey (const Identifier& name) const
+{
+    if (const auto* descriptor = getTypeInfo().findProperty (name))
+        return descriptor->getStorageKey();
+
+    return name;
+}
+
 //==============================================================================
 
 void Component::setColor (const Identifier& colorId, const std::optional<Color>& color)
 {
-    if (color)
-        properties.set (colorId, static_cast<int64> (color->getARGB()));
-    else
-        properties.remove (colorId);
+    const bool changed = color ? properties.set (colorId, static_cast<int64> (color->getARGB()))
+                               : properties.remove (colorId);
+
+    if (! changed)
+        return;
 
     styleChanged();
+    notifyPropertyChanged (colorId);
 }
 
 std::optional<Color> Component::getColor (const Identifier& colorId) const
@@ -1547,37 +1740,6 @@ const ThemePalette* Component::findPalette() const
             return component->palette.get();
 
     return nullptr;
-}
-
-//==============================================================================
-
-void Component::setMetric (const Identifier& metricId, const std::optional<float>& metric)
-{
-    if (metric)
-        properties.set (metricId, static_cast<double> (*metric));
-    else
-        properties.remove (metricId);
-
-    styleChanged();
-}
-
-std::optional<float> Component::getMetric (const Identifier& metricId) const
-{
-    if (auto value = properties.getVarPointer (metricId); value != nullptr && value->isDouble())
-        return static_cast<float> (static_cast<double> (*value));
-
-    return std::nullopt;
-}
-
-std::optional<float> Component::findMetric (const Identifier& metricId) const
-{
-    if (auto metric = getMetric (metricId))
-        return metric;
-
-    if (parentComponent != nullptr)
-        return parentComponent->findMetric (metricId);
-
-    return std::nullopt;
 }
 
 //==============================================================================

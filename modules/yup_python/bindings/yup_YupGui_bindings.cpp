@@ -841,7 +841,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getPopupParentComponent", &Component::getPopupParentComponent, py::return_value_policy::reference_internal)
 
         // Properties
-        .def ("getProperties", py::overload_cast<>(&Component::getProperties), py::return_value_policy::reference_internal)
+        .def ("getProperties", &Component::getProperties, py::return_value_policy::reference_internal)
 
         // Mouse events. The listener list only holds weak references, so the component keeps the
         // Python listener alive for as long as it is registered.
@@ -871,11 +871,27 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getColor", &Component::getColor)
         .def ("findColor", &Component::findColor)
 
-        // Style metrics
-        .def ("setMetric", &Component::setMetric, "metricId"_a, "metric"_a,
-              "Overrides a themed metric on this component; pass None to remove the override.")
-        .def ("getMetric", &Component::getMetric, "metricId"_a)
-        .def ("findMetric", &Component::findMetric, "metricId"_a)
+        // Reflected properties
+        .def ("setProperty", &Component::setProperty, "name"_a, "value"_a,
+              "Sets a reflected property by name, routing through its descriptor when declared.")
+        .def ("removeProperty", &Component::removeProperty, "name"_a,
+              "Removes an explicit store-backed property value; state-backed properties are ignored.")
+        .def ("getProperty", &Component::getProperty, "name"_a,
+              "Reads a property value from this component only (no cascade).")
+        .def ("findProperty", &Component::findProperty, "name"_a,
+              "Finds a property value, cascading to parents, the theme and the descriptor default.")
+        .def ("hasProperty", &Component::hasProperty, "name"_a,
+              "Returns true when getProperty() would return a defined value for this component.")
+        .def ("getTypeName", [] (const Component& c) { return c.getTypeInfo().getTypeName().toString(); },
+              "Returns the reflected type name of this component (for example \"Slider\").")
+        .def ("getPropertyNames", [] (const Component& c)
+              {
+                  StringArray names;
+                  for (const auto* prop : c.getTypeInfo().getAllProperties())
+                      names.add (prop->name.toString());
+                  return names;
+              },
+              "Returns the names of every reflected property visible on this component's type.")
 
         // Cached to texture
         .def ("setCachedToTexture", &Component::setCachedToTexture, "shouldCache"_a)
@@ -1430,7 +1446,7 @@ void registerYupGuiBindings (py::module_& m)
     labelStyle.attr ("textStrokeColorId") = Label::Style::textStrokeColorId;
     labelStyle.attr ("backgroundColorId") = Label::Style::backgroundColorId;
     labelStyle.attr ("outlineColorId") = Label::Style::outlineColorId;
-    labelStyle.attr ("textHeightProportionMetricId") = Label::Style::textHeightProportionMetricId;
+    labelStyle.attr ("textHeightProportionId") = Label::Style::textHeightProportionId;
 
     // =================================================================================================
 

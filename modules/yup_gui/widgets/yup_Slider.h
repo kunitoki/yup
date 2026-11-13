@@ -274,6 +274,13 @@ public:
     };
 
     //==============================================================================
+    /** Returns the static type info describing the Slider type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getTypeInfo() const override;
+
+    //==============================================================================
     /** Callback function objects for value changes. */
     std::function<void (double)> onValueChanged;
     std::function<void (double)> onMinValueChanged;

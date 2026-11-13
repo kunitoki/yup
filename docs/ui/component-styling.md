@@ -1,6 +1,6 @@
 # Component Styling
 
-YUP separates appearance from logic via `ComponentStyle`, colors, and metrics.
+YUP separates appearance from logic via `ComponentStyle`, colors, and properties.
 These cascade: a component inherits values from its parent and from the global
 `ApplicationTheme`.
 
@@ -16,9 +16,9 @@ The styling system has three layers:
 
 | Layer | Scope | How to set |
 |---|---|---|
-| **Per-component** | This component only | `comp.setColor()`, `comp.setMetric()`, `comp.setStyle()` |
+| **Per-component** | This component only | `comp.setColor()`, `comp.setProperty()`, `comp.setStyle()` |
 | **Type-wide** | All instances of a widget type | `theme->setComponentStyle<T>(style)` |
-| **Theme defaults** | Fallback for all components | `theme->setColor()`, `theme->setMetric()` |
+| **Theme defaults** | Fallback for all components | `theme->setColor()`, `theme->setProperty()` |
 | **Palette** | Colors derived from a handful of source colors | `theme->setPalette()` |
 
 Color resolution walks: component overrides → parent chain → theme defaults → palette.
@@ -83,7 +83,7 @@ Every themable widget exposes color IDs:
 | `ComboBox::Style` | `backgroundColorId`, `textColorId`, `borderColorId`, `arrowColorId`, `focusedBorderColorId` |
 | `ScrollBar::Style` | `trackColorId`, `thumbColorId`, `thumbHoverColorId`, `thumbDraggingColorId` |
 | `ProgressBar::Style` | `backgroundColorId`, `foregroundColorId` |
-| `ListBox::Style` | `backgroundColorId`, `outlineColorId`, `rowBackgroundColorId`, `selectedRowBackgroundColorId`, `hoveredRowBackgroundColorId`, `refreshIndicatorColorId` (metric: `refreshIndicatorSizeId`) |
+| `ListBox::Style` | `backgroundColorId`, `outlineColorId`, `rowBackgroundColorId`, `selectedRowBackgroundColorId`, `hoveredRowBackgroundColorId`, `refreshIndicatorColorId` (curated geometry: `refreshIndicatorSizeId`) |
 | `ListBoxItem::Style` | `textColorId`, `textColorSelectedId`, `backgroundColorId`, `backgroundColorSelectedId`, `backgroundColorHoveredId` |
 | `TreeView::Style` | `indentGuideColorId`, `disclosureColorId`, `itemTextColorId`, `itemTextSelectedColorId`, `dropIndicatorColorId`, `itemHoveredColorId` (the rows also use the `ListBox::Style` colors) |
 | `TabBar::Style` | `trackColorId`, `indicatorColorId`, `underlineColorId`, `focusOutlineColorId` |
@@ -100,34 +100,99 @@ Every themable widget exposes color IDs:
 
 ---
 
-## Component metrics
+## Component properties
 
-Metrics are numeric values (corner radius, padding, spacing) following the same
-cascading pattern as colors.
+Properties are named values describing a component: themeable colors and curated
+geometry (corner radius, spacing) plus reflected state such as a slider's `value`
+or a label's `text`. Store-backed properties (colors, geometry) cascade like
+colors; state-backed properties read and write the widget's own accessors and
+resolve only on the owning component. Values are `var`; use the typed
+`getPropertyAs<T>()` / `findPropertyAs<T>()` helpers when you need a concrete type.
 
-### Setting per-component metrics
-
-```cpp
-comp.setMetric ("corner-radius", 8.0f);
-comp.setMetric ("padding", std::nullopt); // remove override
-```
-
-### Reading metrics
+### Setting per-component properties
 
 ```cpp
-// Local only
-std::optional<float> r = comp.getMetric ("corner-radius");
-
-// Walk the parent chain only, use ApplicationTheme::findComponentMetric for the theme fallback
-std::optional<float> r = comp.findMetric ("corner-radius");
+comp.setProperty ("corner-radius", 8.0);
+comp.removeProperty ("corner-radius"); // remove a store-backed override
 ```
 
-### Setting theme-level metric defaults
+### Reading properties
+
+```cpp
+// Local only (descriptor getter for state-backed, stored value otherwise)
+var r = comp.getProperty ("corner-radius");
+float rf = comp.getPropertyAs<float> ("corner-radius");
+
+// Cascade: this component, the parent chain, the theme default, then the descriptor default
+var r = comp.findProperty ("corner-radius");
+
+bool present = comp.hasProperty ("corner-radius");
+```
+
+### Setting theme-level property defaults
 
 ```cpp
 auto theme = ApplicationTheme::getGlobalTheme();
-theme->setMetric ("corner-radius", 4.0f);
+theme->setProperty ("corner-radius", 4.0);
 ```
+
+### Binding a reflected property to a model
+
+State-backed properties (`value`, `text`, ...) reflect the widget's own model.
+`ComponentPropertyAttachment` two-way binds one of them to a `DataTree` property
+through a `CachedValue`, so the widget mirrors the document and writes edits back:
+
+```cpp
+DataTree model ("Filter");
+
+Slider cutoff (Slider::LinearHorizontal);
+ComponentPropertyAttachment cutoffBinding (cutoff, "value", model, "cutoff");
+```
+
+On construction the model wins when the `DataTree` already holds the property,
+otherwise it is seeded from the component's current value. Dragging the slider
+updates `model["cutoff"]`; a transaction that changes `model["cutoff"]` updates
+the slider. The attachment holds a weak reference to the component, so either side
+may outlive it. Create, use and destroy attachments on the message thread.
+
+Pass an `UndoManager::Ptr` to make widget edits undoable, joining the same undo
+history as the rest of the document (the initial seed is never undoable):
+
+```cpp
+UndoManager::Ptr undo = new UndoManager();
+ComponentPropertyAttachment cutoffBinding (cutoff, "value", model, "cutoff", undo);
+```
+
+### Expressions over component properties
+
+`DrawingScope` exposes a component's reflected properties as symbols in a
+`yup_expression` program, so an expression can read the live widget by name. A
+bare name or `self.` refers to the bound component, `parent.` to its parent:
+
+```cpp
+ExpressionContext context;
+addGraphicsExpressionTypes (context); // registers the point, color, ... types
+
+Slider slider (Slider::LinearHorizontal);
+slider.setValue (0.5);
+
+DrawingScope scope (slider, context);
+scope.install(); // resolve property names while compiling
+
+auto compiled = CompiledExpression::compile ("out = value * 100", context);
+
+const auto& program = compiled.getReference();
+ExpressionState state (program);
+scope.updateInputs (program, state); // push the slider's live values
+state.evaluate();
+// state.getVar (program.findOutput ("out")) is 50 when value is 0.5
+```
+
+Number, integer, boolean, string and color properties are bridged; colors need
+the graphics expression types registered on the context. Install the scope before
+compiling, then call `updateInputs` on each evaluation. The scope holds a weak
+reference to the component, so a destroyed component simply feeds nothing. This is
+the foundation data-driven drawing and styling build on.
 
 ---
 
@@ -185,7 +250,7 @@ comp.setStyle (nullptr); // revert to type-wide or default
 
 ### `styleChanged()` callback
 
-When a component's style changes (via `setStyle`, or when a color or metric
+When a component's style changes (via `setStyle`, or when a color or property
 override is set), the virtual `styleChanged()` method is called. Override it to
 repaint:
 
@@ -200,7 +265,7 @@ void MyButton::styleChanged() override
 
 ## `ApplicationTheme`
 
-The global theme singleton holds fonts, default colors/metrics, and
+The global theme singleton holds fonts, default colors and properties, and
 type→style mappings.
 
 ### Creating and setting the global theme
@@ -230,7 +295,7 @@ The built-in theme uses a 14 px default font. Buttons, combo boxes, labels, text
 editors, list rows and menus all draw their text at that height (smaller only
 when the widget is too short to fit it).
 
-### Batch color/metric registration
+### Batch color/property registration
 
 ```cpp
 theme->setColors ({
@@ -238,25 +303,28 @@ theme->setColors ({
     { Slider::Style::thumbColorId, Colors::orange },
 });
 
-theme->setMetrics ({
-    { "corner-radius", 8.0f },
-    { "padding", 4.0f },
+theme->setProperties ({
+    { "corner-radius", 8.0 },
+    { "padding", 4.0 },
 });
 ```
 
 ### Finding values through the theme
 
-Theme `findColor` and `findMetric` check the component's parent chain first,
-then fall back to theme defaults:
+Theme `findColor` checks the component's parent chain first, then falls back to
+theme defaults. Theme `findProperty` only holds the theme-wide property defaults;
+the component/parent cascade lives on `Component::findProperty`:
 
 ```cpp
-// These first call component.findColor/findMetric, then check theme defaults
+// findColor first calls component.findColor, then checks theme defaults
 auto c = theme->findColor (comp, "background");
-auto m = theme->findMetric (comp, "corner-radius");
+
+// findProperty returns the theme default for the id (component cascade is comp.findProperty)
+auto m = theme->findProperty (comp, "corner-radius");
 
 // Static convenience wrappers on the global theme:
 auto c = ApplicationTheme::findComponentColor (comp, "background");
-auto m = ApplicationTheme::findComponentMetric (comp, "corner-radius");
+auto m = ApplicationTheme::findComponentProperty (comp, "corner-radius");
 ```
 
 ---
@@ -408,5 +476,5 @@ ApplicationTheme::setGlobalTheme (std::move (theme));
 
 ## Related
 
-- [Component basics](component-basics.md) — `setColor`, `setMetric`, `setStyle` APIs
+- [Component basics](component-basics.md) — `setColor`, `setProperty`, `setStyle` APIs
 - [Component effects (shaders)](component-effects.md)

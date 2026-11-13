@@ -162,6 +162,13 @@ public:
         static const Identifier focusedBorderColorId;
     };
 
+    //==============================================================================
+    /** Returns the static type info describing the ComboBox type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getTypeInfo() const override;
+
     /** */
     bool isPopupShown() const;
 

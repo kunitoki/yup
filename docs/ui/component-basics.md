@@ -792,7 +792,7 @@ is ignored when the object is registered as a listener.
 ---
 
 ```{seealso}
-- [Component styling](component-styling.md) — colors, metrics, and `ComponentStyle`
+- [Component styling](component-styling.md) — colors, properties, and `ComponentStyle`
 ```
 
 ---
@@ -997,7 +997,7 @@ private:
 ## Related
 
 - [Drag and drop](component-drag-and-drop.md) — receiving external file/text drops
-- [Component styling](component-styling.md) — colors, metrics, and `ComponentStyle`
+- [Component styling](component-styling.md) — colors, properties, and `ComponentStyle`
 - [Component effects (shaders)](component-effects.md) — GPU post-processing
 - [Component caching](component-caching.md) — `setCachedToTexture` and `isCachedToTexture`
 - [Component snapshots](component-snapshots.md) — `snapshotToImage` and `snapshotToTexture`

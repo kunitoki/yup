@@ -30,6 +30,44 @@ const Identifier SwitchButton::Style::switchOnBackgroundColorId = "switchButtonO
 
 //==============================================================================
 
+const ComponentTypeInfo& SwitchButton::getClassTypeInfo()
+{
+    static const ComponentTypeInfo info = []
+    {
+        std::vector<ComponentProperty> props;
+
+        props.push_back (makeColorProperty (Identifier ("switchColor"), Style::switchColorId));
+        props.push_back (makeColorProperty (Identifier ("switchOffBackgroundColor"), Style::switchOffBackgroundColorId));
+        props.push_back (makeColorProperty (Identifier ("switchOnBackgroundColor"), Style::switchOnBackgroundColorId));
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("checked"),
+            .type = ComponentProperty::Type::boolean,
+            .getter = [] (const Component& c) { return var (static_cast<const SwitchButton&> (c).getToggleState()); },
+            .setter = [] (Component& c, const var& v) { static_cast<SwitchButton&> (c).setToggleState (static_cast<bool> (v)); },
+            .isState = true,
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("vertical"),
+            .type = ComponentProperty::Type::boolean,
+            .getter = [] (const Component& c) { return var (static_cast<const SwitchButton&> (c).isVertical()); },
+            .setter = [] (Component& c, const var& v) { static_cast<SwitchButton&> (c).setVertical (static_cast<bool> (v)); },
+            .isStyleable = false });
+
+        return ComponentTypeInfo { Identifier ("SwitchButton"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<SwitchButton>(); } };
+    }();
+
+    return info;
+}
+
+const ComponentTypeInfo& SwitchButton::getTypeInfo() const
+{
+    return getClassTypeInfo();
+}
+
+//==============================================================================
+
 SwitchButton::SwitchButton (StringRef componentID, bool isVertical)
     : Button (componentID)
     , isVerticalValue (isVertical)

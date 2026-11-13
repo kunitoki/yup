@@ -207,4 +207,5 @@ frame times.
 
 The theme paints the list through `ListBox::Style` colors (see
 [component styling](component-styling.md)), and the pull-to-refresh indicator
-size is the `ListBox::Style::refreshIndicatorSizeId` metric.
+size is the `ListBox::Style::refreshIndicatorSizeId` property (reflected as
+`refreshIndicatorSize`).

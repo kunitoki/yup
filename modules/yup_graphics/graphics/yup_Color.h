@@ -1198,4 +1198,17 @@ inline Color toColor (Vec4f color) noexcept
     };
 }
 
+#ifndef DOXYGEN
+
+/** Converts a Color to and from a var, using the ARGB int64 representation components are stored with. */
+template <>
+struct VariantConverter<Color>
+{
+    static Color fromVar (const var& v) { return Color (static_cast<uint32> (static_cast<int64> (v))); }
+
+    static var toVar (const Color& color) { return static_cast<int64> (color.getARGB()); }
+};
+
+#endif
+
 } // namespace yup

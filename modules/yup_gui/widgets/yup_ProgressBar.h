@@ -53,6 +53,13 @@ public:
     };
 
     //==============================================================================
+    /** Returns the static type info describing the ProgressBar type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getTypeInfo() const override;
+
+    //==============================================================================
     /** Creates a ProgressBar.
 
         @param componentID  An optional identifier for this component

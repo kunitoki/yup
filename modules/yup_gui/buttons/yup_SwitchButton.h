@@ -94,6 +94,13 @@ public:
     };
 
     //==============================================================================
+    /** Returns the static type info describing the SwitchButton type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getTypeInfo() const override;
+
+    //==============================================================================
     /** @internal */
     Rectangle<float> getSwitchCircleBounds() const { return switchCircleBounds; }
 

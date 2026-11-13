@@ -53,6 +53,16 @@ public:
         ignoreUnused (component);
     }
 
+    /** Called when a component property changes, by name.
+
+        This fires for store-backed property writes (setProperty, setColor, removeProperty) and
+        for state-backed changes a widget reports through Component::notifyPropertyChanged().
+    */
+    virtual void componentPropertyChanged (Component& component, const Identifier& name)
+    {
+        ignoreUnused (component, name);
+    }
+
     /** Called after a component paint pass completes with measured paint data.
 
         Timing fields in measurement contain raw high-resolution tick counts. Listeners

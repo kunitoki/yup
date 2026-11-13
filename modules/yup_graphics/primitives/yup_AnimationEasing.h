@@ -58,33 +58,44 @@ public:
     [[nodiscard]] bool isLinear() const noexcept;
 
     /** Returns true if this is a hold (step) easing with no interpolation. */
-    [[nodiscard]] bool isHold() const noexcept;
+    [[nodiscard]] bool isHold() const noexcept { return holdFrame;}
 
     //==============================================================================
-    /** @{ Named easing presets. */
-    [[nodiscard]] static AnimationEasing linear() noexcept;
-    [[nodiscard]] static AnimationEasing easeIn() noexcept;
-    [[nodiscard]] static AnimationEasing easeOut() noexcept;
-    [[nodiscard]] static AnimationEasing easeInOut() noexcept;
-    /** A hold easing that keeps the start value until the next keyframe. */
-    [[nodiscard]] static AnimationEasing hold() noexcept;
-    /** @} */
-
-    /** Creates an easing from two Lottie keyframe tangent points (o/i in JSON). */
-    [[nodiscard]] static AnimationEasing fromLottieTangents (Point<float> outTangent,
-                                                             Point<float> inTangent) noexcept;
-
-    //==============================================================================
+    /** Returns the first control point x. */
     [[nodiscard]] float getX1() const noexcept { return cx1; }
 
+    /** Returns the first control point y. */
     [[nodiscard]] float getY1() const noexcept { return cy1; }
 
+    /** Returns the second control point x. */
     [[nodiscard]] float getX2() const noexcept { return cx2; }
 
+    /** Returns the second control point y. */
     [[nodiscard]] float getY2() const noexcept { return cy2; }
 
+    /** Returns true if this is a hold easing. */
     bool operator== (const AnimationEasing& other) const noexcept;
+    /** Returns true if this is not equal to another easing. */
     bool operator!= (const AnimationEasing& other) const noexcept;
+
+    //==============================================================================
+    /** A linear easing (equivalent to cubic-bezier(0,0,1,1)). */
+    [[nodiscard]] static AnimationEasing linear() noexcept;
+
+    /** An ease-in easing (equivalent to cubic-bezier(0.42,0,1,1)). */
+    [[nodiscard]] static AnimationEasing easeIn() noexcept;
+
+    /** An ease-out easing (equivalent to cubic-bezier(0,0,0.58,1)). */
+    [[nodiscard]] static AnimationEasing easeOut() noexcept;
+
+    /** An ease-in-out easing (equivalent to cubic-bezier(0.42,0,0.58,1)). */
+    [[nodiscard]] static AnimationEasing easeInOut() noexcept;
+
+    /** A hold easing that keeps the start value until the next keyframe. */
+    [[nodiscard]] static AnimationEasing hold() noexcept;
+
+    /** Creates an easing from two keyframe tangent points (o/i in Lottie JSON). */
+    [[nodiscard]] static AnimationEasing fromTangents (Point<float> outTangent, Point<float> inTangent) noexcept;
 
 private:
     void buildTable() const noexcept;

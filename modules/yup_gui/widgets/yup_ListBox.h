@@ -776,9 +776,16 @@ public:
         static inline const Identifier hoveredRowBackgroundColorId { "hoveredRowBackground" };
         static inline const Identifier refreshIndicatorColorId { "listBoxRefreshIndicator" };
 
-        /** Metric: the size of the pull-to-refresh indicator along the scroll axis. */
+        /** Curated geometry: the size of the pull-to-refresh indicator along the scroll axis. */
         static inline const Identifier refreshIndicatorSizeId { "listBoxRefreshIndicatorSize" };
     };
+
+    //==============================================================================
+    /** Returns the static type info describing the ListBox type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getTypeInfo() const override;
 
     //==============================================================================
     /** @internal */

@@ -81,9 +81,9 @@ void applySectionColors (yup::Component& component)
 
 void applySectionPalettes (yup::Component& component, const SectionPalettes& sections)
 {
-    if (const auto section = component.getProperties().getVarPointer (sectionProperty); section != nullptr)
+    if (const auto section = component.getProperty (sectionProperty); ! section.isVoid())
     {
-        component.setPalette (sections[static_cast<std::size_t> (static_cast<int> (*section))]);
+        component.setPalette (sections[static_cast<std::size_t> (static_cast<int> (section))]);
         applySectionColors (component);
     }
 
@@ -112,7 +112,7 @@ void applyTheme (yup::Component& root, const yup::ThemePalette& base, const Sect
 
 void applySection (yup::Component& component, Section section)
 {
-    component.getProperties().set (sectionProperty, static_cast<int> (section));
+    component.setProperty (sectionProperty, static_cast<int> (section));
 }
 
 yup::Color role (const yup::Component& scope, yup::ThemePalette::Role paletteRole)

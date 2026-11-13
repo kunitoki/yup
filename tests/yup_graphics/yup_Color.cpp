@@ -1322,3 +1322,24 @@ TEST (ColorTests, MixWith_RgbEndpointsReturnEitherColor)
     EXPECT_EQ (base.mixedWith (other, 1.0f, ColorSpace::RGB), other);
     EXPECT_EQ (base.mixedWith (other, 2.0f, ColorSpace::RGB), other);
 }
+
+TEST (ColorTests, VariantConverterRoundTrips)
+{
+    const Color colors[] = {
+        Color (0xff123456),
+        Color (0x00000000),
+        Color (0xffffffff),
+        Color (128, 64, 32)
+    };
+
+    for (const auto color : colors)
+    {
+        const var asVar = VariantConverter<Color>::toVar (color);
+
+        // Matches how Component stores colors: an ARGB int64.
+        EXPECT_TRUE (asVar.isInt64());
+        EXPECT_EQ (static_cast<int64> (asVar), static_cast<int64> (color.getARGB()));
+
+        EXPECT_EQ (VariantConverter<Color>::fromVar (asVar), color);
+    }
+}

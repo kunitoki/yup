@@ -152,6 +152,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "primitives/yup_Quaternion.cpp"
 #include "primitives/yup_Ray.cpp"
 #include "primitives/yup_CubicBezier.cpp"
+#include "primitives/yup_AnimationEasing.cpp"
 #include "meshes/yup_MeshSurfaceMapper.cpp"
 #include "fonts/yup_Font.cpp"
 #include "fonts/yup_StyledText.cpp"

@@ -23,6 +23,36 @@ namespace yup
 {
 
 //==============================================================================
+const ComponentTypeInfo& ScrollBar::getClassTypeInfo()
+{
+    static const ComponentTypeInfo info = []
+    {
+        std::vector<ComponentProperty> props;
+
+        props.push_back (makeColorProperty (Identifier ("trackColor"), Style::trackColorId));
+        props.push_back (makeColorProperty (Identifier ("thumbColor"), Style::thumbColorId));
+        props.push_back (makeColorProperty (Identifier ("thumbHoverColor"), Style::thumbHoverColorId));
+        props.push_back (makeColorProperty (Identifier ("thumbDraggingColor"), Style::thumbDraggingColorId));
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("dragging"),
+            .type = ComponentProperty::Type::boolean,
+            .getter = [] (const Component& c) { return var (static_cast<const ScrollBar&> (c).isDragging()); },
+            .isState = true,
+            .isStyleable = false });
+
+        return ComponentTypeInfo { Identifier ("ScrollBar"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<ScrollBar>(); } };
+    }();
+
+    return info;
+}
+
+const ComponentTypeInfo& ScrollBar::getTypeInfo() const
+{
+    return getClassTypeInfo();
+}
+
+//==============================================================================
 ScrollBar::ScrollBar (Orientation orientation)
     : orientation (orientation)
 {

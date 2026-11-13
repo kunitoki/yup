@@ -59,11 +59,6 @@ bool AnimationEasing::isLinear() const noexcept
         && std::abs (cx2 - cy2) < 1e-5f;
 }
 
-bool AnimationEasing::isHold() const noexcept
-{
-    return holdFrame;
-}
-
 //==============================================================================
 AnimationEasing AnimationEasing::linear() noexcept { return AnimationEasing (0.0f, 0.0f, 1.0f, 1.0f); }
 
@@ -81,8 +76,7 @@ AnimationEasing AnimationEasing::hold() noexcept
     return e;
 }
 
-AnimationEasing AnimationEasing::fromLottieTangents (Point<float> outTangent,
-                                                     Point<float> inTangent) noexcept
+AnimationEasing AnimationEasing::fromTangents (Point<float> outTangent, Point<float> inTangent) noexcept
 {
     return AnimationEasing (outTangent.getX(), outTangent.getY(), inTangent.getX(), inTangent.getY());
 }
@@ -103,13 +97,9 @@ bool AnimationEasing::operator!= (const AnimationEasing& o) const noexcept
 }
 
 //==============================================================================
-// Private helpers - cubic bezier evaluation matching CSS/rlottie VInterpolator
-
 float AnimationEasing::calcBezier (float t, float a1, float a2) noexcept
 {
-    // B(t) = 3*t*(1-t)^2*a1 + 3*t^2*(1-t)*a2 + t^3
-    return ((1.0f - 3.0f * a2 + 3.0f * a1) * t + (3.0f * a2 - 6.0f * a1)) * t * t
-         + 3.0f * a1 * t;
+    return ((1.0f - 3.0f * a2 + 3.0f * a1) * t + (3.0f * a2 - 6.0f * a1)) * t * t + 3.0f * a1 * t;
 }
 
 float AnimationEasing::getSlope (float t, float a1, float a2) noexcept
@@ -129,8 +119,8 @@ void AnimationEasing::buildTable() const noexcept
 
 float AnimationEasing::getTForX (float x) const noexcept
 {
-    // Direct index lookup instead of linear scan
     const float step = 1.0f / static_cast<float> (kTableSize - 1);
+
     int guess = static_cast<int> (x * static_cast<float> (kTableSize - 1));
     guess = jlimit (0, kTableSize - 2, guess);
     while (guess > 0 && sampleTable[guess] > x)

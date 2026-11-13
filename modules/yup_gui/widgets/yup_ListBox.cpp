@@ -99,6 +99,41 @@ constexpr double listBoxMaxFrameGapSeconds = 1.0 / 15.0;
 } // namespace
 
 //==============================================================================
+
+const ComponentTypeInfo& ListBox::getClassTypeInfo()
+{
+    static const ComponentTypeInfo info = []
+    {
+        std::vector<ComponentProperty> props;
+
+        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
+        props.push_back (makeColorProperty (Identifier ("outlineColor"), Style::outlineColorId));
+        props.push_back (makeColorProperty (Identifier ("rowBackgroundColor"), Style::rowBackgroundColorId));
+        props.push_back (makeColorProperty (Identifier ("selectedRowBackgroundColor"), Style::selectedRowBackgroundColorId));
+        props.push_back (makeColorProperty (Identifier ("hoveredRowBackgroundColor"), Style::hoveredRowBackgroundColorId));
+        props.push_back (makeColorProperty (Identifier ("refreshIndicatorColor"), Style::refreshIndicatorColorId));
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("refreshIndicatorSize"),
+            .storageId = Style::refreshIndicatorSizeId,
+            .type = ComponentProperty::Type::number,
+            .defaultValue = static_cast<double> (listBoxDefaultRefreshIndicatorSize),
+            .description = "The size of the pull-to-refresh indicator along the scroll axis." });
+
+        return ComponentTypeInfo { Identifier ("ListBox"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<ListBox>(); } };
+    }();
+
+    return info;
+}
+
+const ComponentTypeInfo& ListBox::getTypeInfo() const
+{
+    return getClassTypeInfo();
+}
+
+//==============================================================================
+
+//==============================================================================
 float ListBoxModel::getRowSize (int rowIndex)
 {
     ignoreUnused (rowIndex);
@@ -849,13 +884,7 @@ float ListBox::getPullToRefreshProgress() const noexcept
 
 float ListBox::getRefreshIndicatorSize() const
 {
-    if (auto theme = ApplicationTheme::getGlobalTheme())
-    {
-        if (auto size = theme->findMetric (*this, Style::refreshIndicatorSizeId))
-            return jmax (1.0f, *size);
-    }
-
-    return listBoxDefaultRefreshIndicatorSize;
+    return jmax (1.0f, findPropertyAs<float> (Identifier ("refreshIndicatorSize")));
 }
 
 void ListBox::setEndReachedThreshold (float viewportFraction)

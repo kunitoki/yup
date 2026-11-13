@@ -87,6 +87,13 @@ public:
     };
 
     //==============================================================================
+    /** Returns the static type info describing the ToggleButton type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getTypeInfo() const override;
+
+    //==============================================================================
     /** @internal */
     StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 

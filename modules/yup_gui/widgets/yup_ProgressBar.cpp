@@ -27,6 +27,40 @@ const Identifier ProgressBar::Style::backgroundColorId { "progressBarBackground"
 const Identifier ProgressBar::Style::foregroundColorId { "progressBarForeground" };
 
 //==============================================================================
+const ComponentTypeInfo& ProgressBar::getClassTypeInfo()
+{
+    static const ComponentTypeInfo info = []
+    {
+        std::vector<ComponentProperty> props;
+
+        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
+        props.push_back (makeColorProperty (Identifier ("foregroundColor"), Style::foregroundColorId));
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("progress"),
+            .type = ComponentProperty::Type::number,
+            .getter = [] (const Component& c) { return var (static_cast<const ProgressBar&> (c).getProgress()); },
+            .setter = [] (Component& c, const var& v) { static_cast<ProgressBar&> (c).setProgress (static_cast<double> (v)); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("indeterminate"),
+            .type = ComponentProperty::Type::boolean,
+            .getter = [] (const Component& c) { return var (static_cast<const ProgressBar&> (c).isIndeterminate()); },
+            .isStyleable = false });
+
+        return ComponentTypeInfo { Identifier ("ProgressBar"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<ProgressBar>(); } };
+    }();
+
+    return info;
+}
+
+const ComponentTypeInfo& ProgressBar::getTypeInfo() const
+{
+    return getClassTypeInfo();
+}
+
+//==============================================================================
 ProgressBar::ProgressBar (StringRef componentID)
     : Component (componentID)
 {

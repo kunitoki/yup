@@ -99,9 +99,16 @@ public:
         static const Identifier backgroundColorId;
         static const Identifier outlineColorId;
 
-        //! Metrics
-        static const Identifier textHeightProportionMetricId;
+        //! Curated geometry
+        static const Identifier textHeightProportionId;
     };
+
+    //==============================================================================
+    /** Returns the static type info describing the Label type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getTypeInfo() const override;
 
     //==============================================================================
 

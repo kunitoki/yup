@@ -33,6 +33,53 @@ const Identifier TextEditor::Style::focusedOutlineColorId = "textEditorFocusedOu
 
 //==============================================================================
 
+const ComponentTypeInfo& TextEditor::getClassTypeInfo()
+{
+    static const ComponentTypeInfo info = []
+    {
+        std::vector<ComponentProperty> props;
+
+        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
+        props.push_back (makeColorProperty (Identifier ("textColor"), Style::textColorId));
+        props.push_back (makeColorProperty (Identifier ("caretColor"), Style::caretColorId));
+        props.push_back (makeColorProperty (Identifier ("selectionColor"), Style::selectionColorId));
+        props.push_back (makeColorProperty (Identifier ("outlineColor"), Style::outlineColorId));
+        props.push_back (makeColorProperty (Identifier ("focusedOutlineColor"), Style::focusedOutlineColorId));
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("text"),
+            .type = ComponentProperty::Type::string,
+            .getter = [] (const Component& c) { return var (static_cast<const TextEditor&> (c).getText()); },
+            .setter = [] (Component& c, const var& v) { static_cast<TextEditor&> (c).setText (v.toString()); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("readOnly"),
+            .type = ComponentProperty::Type::boolean,
+            .getter = [] (const Component& c) { return var (static_cast<const TextEditor&> (c).isReadOnly()); },
+            .setter = [] (Component& c, const var& v) { static_cast<TextEditor&> (c).setReadOnly (static_cast<bool> (v)); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("multiLine"),
+            .type = ComponentProperty::Type::boolean,
+            .getter = [] (const Component& c) { return var (static_cast<const TextEditor&> (c).isMultiLine()); },
+            .setter = [] (Component& c, const var& v) { static_cast<TextEditor&> (c).setMultiLine (static_cast<bool> (v)); },
+            .isStyleable = false });
+
+        return ComponentTypeInfo { Identifier ("TextEditor"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<TextEditor>(); } };
+    }();
+
+    return info;
+}
+
+const ComponentTypeInfo& TextEditor::getTypeInfo() const
+{
+    return getClassTypeInfo();
+}
+
+//==============================================================================
+
 TextEditor::TextEditor (StringRef componentID)
     : Component (componentID)
     , caretTimer (bindFront (&TextEditor::blinkCaret, this))
@@ -62,15 +109,22 @@ void TextEditor::setText (String newText, NotificationType notification)
         selectionStart = selectionEnd = 0;
         needsUpdate = true;
 
-        sendChangeNotification (notification, [this]
-        {
-            if (onTextChange)
-                onTextChange();
-        });
+        sendTextChanged (notification);
 
         updateCaretPosition();
         repaint();
     }
+}
+
+void TextEditor::sendTextChanged (NotificationType notification)
+{
+    sendChangeNotification (notification, [this]
+    {
+        if (onTextChange)
+            onTextChange();
+
+        notifyPropertyChanged (Identifier ("text"));
+    });
 }
 
 //==============================================================================
@@ -91,11 +145,7 @@ void TextEditor::insertText (const String& textToInsert, NotificationType notifi
     selectionStart = selectionEnd = caretPosition;
     needsUpdate = true;
 
-    sendChangeNotification (notification, [this]
-    {
-        if (onTextChange)
-            onTextChange();
-    });
+    sendTextChanged (notification);
 
     updateCaretPosition();
     repaint();
@@ -212,11 +262,7 @@ void TextEditor::deleteSelectedText (NotificationType notification)
     caretPosition = selectionStart = selectionEnd = start;
     needsUpdate = true;
 
-    sendChangeNotification (notification, [this]
-    {
-        if (onTextChange)
-            onTextChange();
-    });
+    sendTextChanged (notification);
 
     updateCaretPosition();
     repaint();
@@ -855,11 +901,7 @@ void TextEditor::handleBackspace()
         selectionStart = selectionEnd = caretPosition;
         needsUpdate = true;
 
-        sendChangeNotification (sendNotification, [this]
-        {
-            if (onTextChange)
-                onTextChange();
-        });
+        sendTextChanged (sendNotification);
 
         updateCaretPosition();
         repaint();
@@ -880,11 +922,7 @@ void TextEditor::handleDelete()
         text = text.substring (0, caretPosition) + text.substring (caretPosition + 1);
         needsUpdate = true;
 
-        sendChangeNotification (sendNotification, [this]
-        {
-            if (onTextChange)
-                onTextChange();
-        });
+        sendTextChanged (sendNotification);
 
         updateCaretPosition();
         repaint();
@@ -1144,11 +1182,7 @@ void TextEditor::deleteWordBackward()
             caretPosition = selectionStart = selectionEnd = wordStart;
             needsUpdate = true;
 
-            sendChangeNotification (sendNotification, [this]
-            {
-                if (onTextChange)
-                    onTextChange();
-            });
+            sendTextChanged (sendNotification);
 
             updateCaretPosition();
             repaint();
@@ -1176,11 +1210,7 @@ void TextEditor::deleteWordForward()
             text = text.substring (0, caretPosition) + text.substring (wordEnd);
             needsUpdate = true;
 
-            sendChangeNotification (sendNotification, [this]
-            {
-                if (onTextChange)
-                    onTextChange();
-            });
+            sendTextChanged (sendNotification);
 
             updateCaretPosition();
             repaint();

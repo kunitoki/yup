@@ -31,7 +31,6 @@
 #include "yup_animation.h"
 
 //==============================================================================
-#include "core/yup_AnimationEasing.cpp"
 #include "core/yup_AnimationTransform.cpp"
 #include "model/yup_AnimationPathData.cpp"
 #include "model/yup_AnimationShape.cpp"

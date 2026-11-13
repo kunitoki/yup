@@ -2536,7 +2536,6 @@ ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
     theme->setComponentStyle<ResizableCorner> (ComponentStyle::createStyle<ResizableCorner> (paintResizableCorner));
 
     theme->setComponentStyle<ListBox> (ComponentStyle::createStyle<ListBox> (paintListBox));
-    theme->setMetric (ListBox::Style::refreshIndicatorSizeId, 56.0f);
 
     theme->setComponentStyle<ListBoxItem> (ComponentStyle::createStyle<ListBoxItem> (paintListBoxItem));
 

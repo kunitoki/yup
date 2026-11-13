@@ -21,7 +21,7 @@
 
 #include <gtest/gtest.h>
 
-#include <yup_animation/yup_animation.h>
+#include <yup_graphics/yup_graphics.h>
 
 using namespace yup;
 
@@ -80,11 +80,11 @@ TEST_F (AnimationEasingTests, EvaluateBoundaries)
     }
 }
 
-TEST_F (AnimationEasingTests, FromLottieTangentsRoundtrips)
+TEST_F (AnimationEasingTests, FromTangentsRoundtrips)
 {
     const Point<float> outTangent { 0.42f, 0.0f };
     const Point<float> inTangent { 0.58f, 1.0f };
-    auto easing = AnimationEasing::fromLottieTangents (outTangent, inTangent);
+    auto easing = AnimationEasing::fromTangents (outTangent, inTangent);
 
     EXPECT_FALSE (easing.isLinear());
     EXPECT_FALSE (easing.isHold());
@@ -124,7 +124,7 @@ TEST_F (AnimationEasingTests, CustomTangentsProduceValuesBetween0And1)
 {
     const Point<float> outT { 0.25f, 0.1f };
     const Point<float> inT { 0.75f, 0.9f };
-    auto easing = AnimationEasing::fromLottieTangents (outT, inT);
+    auto easing = AnimationEasing::fromTangents (outT, inT);
 
     for (int i = 0; i <= 10; ++i)
     {
@@ -223,15 +223,15 @@ TEST_F (AnimationEasingTests, SameTangentsProduceEqualEasing)
 {
     const Point<float> outT { 0.25f, 0.1f };
     const Point<float> inT { 0.75f, 0.9f };
-    auto a = AnimationEasing::fromLottieTangents (outT, inT);
-    auto b = AnimationEasing::fromLottieTangents (outT, inT);
+    auto a = AnimationEasing::fromTangents (outT, inT);
+    auto b = AnimationEasing::fromTangents (outT, inT);
     EXPECT_EQ (a, b);
 }
 
 TEST_F (AnimationEasingTests, DifferentTangentsProduceNotEqualEasing)
 {
-    auto a = AnimationEasing::fromLottieTangents ({ 0.25f, 0.1f }, { 0.75f, 0.9f });
-    auto b = AnimationEasing::fromLottieTangents ({ 0.5f, 0.0f }, { 0.5f, 1.0f });
+    auto a = AnimationEasing::fromTangents ({ 0.25f, 0.1f }, { 0.75f, 0.9f });
+    auto b = AnimationEasing::fromTangents ({ 0.5f, 0.0f }, { 0.5f, 1.0f });
     EXPECT_NE (a, b);
 }
 

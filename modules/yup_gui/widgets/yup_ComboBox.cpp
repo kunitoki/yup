@@ -32,6 +32,58 @@ const Identifier ComboBox::Style::focusedBorderColorId = "comboBoxFocusedBorder"
 
 //==============================================================================
 
+const ComponentTypeInfo& ComboBox::getClassTypeInfo()
+{
+    static const ComponentTypeInfo info = []
+    {
+        std::vector<ComponentProperty> props;
+
+        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
+        props.push_back (makeColorProperty (Identifier ("textColor"), Style::textColorId));
+        props.push_back (makeColorProperty (Identifier ("borderColor"), Style::borderColorId));
+        props.push_back (makeColorProperty (Identifier ("arrowColor"), Style::arrowColorId));
+        props.push_back (makeColorProperty (Identifier ("focusedBorderColor"), Style::focusedBorderColorId));
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("selectedId"),
+            .type = ComponentProperty::Type::integer,
+            .getter = [] (const Component& c) { return var (static_cast<const ComboBox&> (c).getSelectedId()); },
+            .setter = [] (Component& c, const var& v) { static_cast<ComboBox&> (c).setSelectedId (static_cast<int> (v)); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("selectedIndex"),
+            .type = ComponentProperty::Type::integer,
+            .getter = [] (const Component& c) { return var (static_cast<const ComboBox&> (c).getSelectedItemIndex()); },
+            .setter = [] (Component& c, const var& v) { static_cast<ComboBox&> (c).setSelectedItemIndex (static_cast<int> (v)); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("text"),
+            .type = ComponentProperty::Type::string,
+            .getter = [] (const Component& c) { return var (static_cast<const ComboBox&> (c).getText()); },
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("open"),
+            .type = ComponentProperty::Type::boolean,
+            .getter = [] (const Component& c) { return var (static_cast<const ComboBox&> (c).isPopupShown()); },
+            .isState = true,
+            .isStyleable = false });
+
+        return ComponentTypeInfo { Identifier ("ComboBox"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<ComboBox>(); } };
+    }();
+
+    return info;
+}
+
+const ComponentTypeInfo& ComboBox::getTypeInfo() const
+{
+    return getClassTypeInfo();
+}
+
+//==============================================================================
+
 ComboBox::ComboBox (StringRef componentID)
     : Component (componentID)
 {

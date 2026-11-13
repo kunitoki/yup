@@ -63,6 +63,21 @@ public:
 
     //==============================================================================
     /**
+        Returns the reflected type info for this component.
+
+        Widgets override this to return their own static type info, which describes the
+        properties, signals and factory used by the stylesheet, `.yui` files and tooling.
+        Unregistered subclasses inherit the type info of their nearest registered base.
+
+        @see ComponentTypeInfo, getClassTypeInfo
+    */
+    virtual const ComponentTypeInfo& getTypeInfo() const;
+
+    /** Returns the static type info describing the Component base type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    //==============================================================================
+    /**
         Get the ID of the component.
 
         @return The ID of the component.
@@ -1312,18 +1327,80 @@ public:
 
     //==============================================================================
     /**
-        Get the properties of the component.
+        Returns the explicit property store of the component, for enumeration only.
 
-        @return The properties of the component.
-     */
-    NamedValueSet& getProperties();
+        The store holds the explicit, store-backed values set on this component (colors,
+        curated geometry and custom properties), keyed by storage id. All writes go through
+        setProperty() / setColor() so that change notifications always fire; the returned set
+        is therefore const.
 
-    /**
-        Get the properties of the component.
-
-        @return The properties of the component.
+        @return The explicit properties of the component.
      */
     const NamedValueSet& getProperties() const;
+
+    //==============================================================================
+    /**
+        Sets a property on this component.
+
+        If the component's type declares a descriptor for @p name, the value is routed through
+        its setter (state-backed) or stored under its storage id (store-backed). Otherwise the
+        value is stored as a custom property keyed by @p name. On an actual change, listeners are
+        notified, the style is refreshed and the component repainted.
+
+        @param name  The property name (descriptor name or a custom name).
+        @param value The value to set.
+    */
+    void setProperty (const Identifier& name, const var& value);
+
+    /**
+        Removes an explicit, store-backed property value from this component.
+
+        State-backed descriptor properties cannot be removed and are ignored.
+
+        @param name The property name to remove.
+    */
+    void removeProperty (const Identifier& name);
+
+    /**
+        Reads a property value from this component only (no cascade).
+
+        Returns the descriptor getter result for state-backed properties, the explicit stored
+        value for store-backed properties, or an undefined var when unset.
+
+        @param name The property name to read.
+    */
+    var getProperty (const Identifier& name) const;
+
+    /**
+        Finds a property value, cascading up the parent chain and falling back to the theme and
+        the descriptor default for store-backed properties.
+
+        State-backed properties resolve only on the owning component.
+
+        @param name The property name to find.
+    */
+    var findProperty (const Identifier& name) const;
+
+    /**
+        Returns true when getProperty() would return a defined value for this component.
+
+        @param name The property name to test.
+    */
+    bool hasProperty (const Identifier& name) const;
+
+    /** Reads a property from this component only, converted to @p T. */
+    template <class T>
+    T getPropertyAs (const Identifier& name) const
+    {
+        return VariantConverter<T>::fromVar (getProperty (name));
+    }
+
+    /** Finds a property with cascade, converted to @p T. */
+    template <class T>
+    T findPropertyAs (const Identifier& name) const
+    {
+        return VariantConverter<T>::fromVar (findProperty (name));
+    }
 
     //==============================================================================
     /**
@@ -1640,6 +1717,16 @@ public:
     */
     virtual void styleChanged();
 
+    /** Notifies listeners that a state-backed property changed internally.
+
+        Widgets call this from their own setters (Slider drag, toggle, text edit) so that the
+        single change path feeds bindings, pseudo-state selectors and attribute selectors. It
+        notifies ComponentListener::componentPropertyChanged() without touching the property store.
+
+        @param name The name of the property that changed.
+    */
+    void notifyPropertyChanged (const Identifier& name);
+
     //==============================================================================
     /** Set a color for the component.
 
@@ -1685,38 +1772,6 @@ public:
 
     /** Returns the closest palette set with setPalette() on this component or a parent, or nullptr. */
     const ThemePalette* findPalette() const;
-
-    //==============================================================================
-
-    /** Set a metric value for the component.
-
-        Metrics are numeric values like corner radius, padding, or spacing that
-        can be themed globally and overridden per-component, following the same
-        pattern as component colors.
-
-        @param metricId The identifier of the metric to set.
-        @param metric The metric value to set. Pass std::nullopt to remove the override.
-    */
-    void setMetric (const Identifier& metricId, const std::optional<float>& metric);
-
-    /** Get the metric override for this component (does not walk parents).
-
-        @param metricId The identifier of the metric to get.
-
-        @return The metric value, or std::nullopt if not set on this specific component.
-    */
-    std::optional<float> getMetric (const Identifier& metricId) const;
-
-    /** Find the metric value, walking up the parent hierarchy.
-
-        Checks this component first, then walks up the parent chain. If no override
-        is found, falls back to the value registered in the global ApplicationTheme.
-
-        @param metricId The identifier of the metric to find.
-
-        @return The metric value, or std::nullopt if not found anywhere.
-    */
-    std::optional<float> findMetric (const Identifier& metricId) const;
 
     //==============================================================================
     /** Sets a component effect that is applied after the component and its children are rendered.
@@ -1882,6 +1937,7 @@ protected:
     }
 
 private:
+    Identifier resolvePropertyStorageKey (const Identifier& name) const;
     void internalRefreshDisplay (double lastFrameTimeSeconds);
     void internalRepaint();
     void internalRepaint (const Rectangle<float>& rect);

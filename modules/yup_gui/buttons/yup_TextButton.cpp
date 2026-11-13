@@ -33,6 +33,39 @@ const Identifier TextButton::Style::outlineFocusedColorId = "textButtonOutlineFo
 
 //==============================================================================
 
+const ComponentTypeInfo& TextButton::getClassTypeInfo()
+{
+    static const ComponentTypeInfo info = []
+    {
+        std::vector<ComponentProperty> props;
+
+        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
+        props.push_back (makeColorProperty (Identifier ("backgroundPressedColor"), Style::backgroundPressedColorId));
+        props.push_back (makeColorProperty (Identifier ("textColor"), Style::textColorId));
+        props.push_back (makeColorProperty (Identifier ("textPressedColor"), Style::textPressedColorId));
+        props.push_back (makeColorProperty (Identifier ("outlineColor"), Style::outlineColorId));
+        props.push_back (makeColorProperty (Identifier ("outlineFocusedColor"), Style::outlineFocusedColorId));
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("text"),
+            .type = ComponentProperty::Type::string,
+            .getter = [] (const Component& c) { return var (static_cast<const TextButton&> (c).getButtonText()); },
+            .setter = [] (Component& c, const var& v) { static_cast<TextButton&> (c).setButtonText (v.toString()); },
+            .isStyleable = false });
+
+        return ComponentTypeInfo { Identifier ("TextButton"), &Component::getClassTypeInfo(), std::move (props), { "onClick" }, [] { return std::make_unique<TextButton>(); } };
+    }();
+
+    return info;
+}
+
+const ComponentTypeInfo& TextButton::getTypeInfo() const
+{
+    return getClassTypeInfo();
+}
+
+//==============================================================================
+
 TextButton::TextButton (StringRef componentID)
     : Button (componentID)
     , buttonText (componentID)
