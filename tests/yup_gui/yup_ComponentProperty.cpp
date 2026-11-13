@@ -25,37 +25,31 @@
 
 using namespace yup;
 
-namespace
-{
-
-class RecordingListener : public ComponentListener
-{
-public:
-    void componentPropertyChanged (Component& component, const Identifier& name) override
-    {
-        ignoreUnused (component);
-        ++callCount;
-        lastName = name;
-    }
-
-    int callCount = 0;
-    Identifier lastName;
-};
-
-const ComponentProperty* findByName (const std::vector<const ComponentProperty*>& properties, const Identifier& name)
-{
-    for (const auto* property : properties)
-        if (property->name == name)
-            return property;
-
-    return nullptr;
-}
-
-} // namespace
-
 class ComponentPropertyTest : public ::testing::Test
 {
 protected:
+    struct RecordingListener : public ComponentListener
+    {
+        void componentPropertyChanged (Component& component, const Identifier& name) override
+        {
+            ignoreUnused (component);
+            ++callCount;
+            lastName = name;
+        }
+
+        int callCount = 0;
+        Identifier lastName;
+    };
+
+    static const ComponentProperty* findByName (const std::vector<const ComponentProperty*>& properties, const Identifier& name)
+    {
+        for (const auto* property : properties)
+            if (property->name == name)
+                return property;
+
+        return nullptr;
+    }
+
     void SetUp() override
     {
         oldTheme = ApplicationTheme::getGlobalTheme();

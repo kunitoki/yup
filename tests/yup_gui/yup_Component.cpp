@@ -1532,8 +1532,8 @@ TEST_F (ComponentMockTest, ComponentProperties)
     auto& properties = mockComponent->getProperties();
     EXPECT_TRUE (properties.isEmpty());
 
-    // Test setting properties
-    properties.set ("testKey", "testValue");
+    // Test setting properties through the reflected property API
+    mockComponent->setProperty ("testKey", "testValue");
     EXPECT_EQ (properties["testKey"].toString(), "testValue");
 
     // Test const access
