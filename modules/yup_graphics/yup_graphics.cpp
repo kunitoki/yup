@@ -43,6 +43,7 @@ YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 #include <rive/renderer/ore/ore_bind_group_layout.hpp>
 #include <rive/renderer/ore/ore_pipeline.hpp>
 #include <rive/renderer/ore/ore_bind_group.hpp>
+#include <rive/offscreen_raster.hpp>
 YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
@@ -166,6 +167,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "graphics/yup_Colors.cpp"
 #include "graphics/yup_ImageMesh.cpp"
 #include "graphics/yup_Graphics.cpp"
+#include "graphics/yup_PaintSource.cpp"
 #include "expression/yup_GraphicsExpressionTypes.cpp"
 #include "expression/yup_ExpressionDrawing.cpp"
 #include "svg/yup_SVGDocument.cpp"

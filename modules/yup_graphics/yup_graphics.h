@@ -225,6 +225,7 @@ class Context;
 #include "graphics/yup_ImageMesh.h"
 #include "graphics/yup_Graphics.h"
 #include "rhi/yup_GpuCanvas.h"
+#include "graphics/yup_PaintSource.h"
 #include "expression/yup_GraphicsExpressionTypes.h"
 #include "expression/yup_ExpressionDrawing.h"
 #include "svg/yup_SVGElement.h"

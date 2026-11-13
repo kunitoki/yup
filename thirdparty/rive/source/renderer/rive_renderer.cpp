@@ -638,7 +638,10 @@ void RiveRenderer::clipPathImpl(
 {
   RIVE_PROF_SCOPE_L(3)
   auto& renderState = m_renderStateStack.back();
-  if (path->getBounds().isEmptyOrNaN())
+  const float boundsOutset =
+      RiveRenderPath::calculateBoundsOutset(stroke, feather);
+  if (path->getRawPath().empty() ||
+      path->getBounds().outset(boundsOutset, boundsOutset).isEmptyOrNaN())
   {
     if (boundsOut != nullptr)
     {

@@ -102,7 +102,7 @@ public:
 
     ~PathsExample() override
     {
-        // The cached paint images hold GPU textures, which must go before the graphics context does
+        // The cached paint images and animated sources hold GPU resources, which must go before the graphics context does
         PathEditor::clearPaintImageCache();
     }
 

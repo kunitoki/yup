@@ -79,6 +79,60 @@ g.fillRoundedRect (area, 8.0f);
 The image's GPU texture is made when the paint is set and kept by the image, so
 reuse the same `Image` from frame to frame instead of a fresh copy.
 
+### Animated and texture paints
+
+`setFillTexture` / `setStrokeTexture` paint with a `GpuTexture` directly (for
+example `GpuCanvas::asTexture()`), with no CPU-side copy. The transform maps
+texture pixels like an image's.
+
+For animated content, subclass `PaintSource`: it draws its content into an
+offscreen canvas that is then sampled like an image. The content box spans
+`(0, 0)` to `getContentSize()`, and the paint transform maps it like image
+pixels.
+
+```cpp
+struct Waves : PaintSource
+{
+    Size<float> getContentSize() const override { return { 128.0f, 128.0f }; }
+
+    void paintContent (Graphics& g) override
+    {
+        g.setFillColor (Colors::navy);
+        g.fillAll();
+        // ... draw the waves at phase
+    }
+
+    float phase = 0.0f;
+};
+
+void refreshDisplay (double dt) override
+{
+    waves.phase += (float) dt;
+    waves.markDirty();
+    repaint();
+}
+
+void paint (Graphics& g) override
+{
+    g.setFillSource (waves, AffineTransform::scaling (0.5f), { ImageWrap::Repeat, ImageWrap::Repeat });
+    g.fillRoundedRect (getLocalBounds().to<float>(), 12.0f);
+}
+```
+
+- **Timing is up to you.** The content is drawn again only after `markDirty()`,
+  and at most once per frame however many shapes use it. Call `markDirty()`
+  between frames (in `refreshDisplay`, a timer or an event), not inside `paint`.
+- **Resolution is automatic.** It follows the on-screen size when the paint is
+  set: it grows at once and shrinks only after the source has been drawn smaller
+  for a while. Changing the transform after setting the paint only affects
+  sharpness.
+- Inside `paintContent`, compose with `addTransform` rather than `setTransform`,
+  which would drop the content scaling.
+- A source used as a paint inside its own `paintContent` draws nothing.
+- Call `releaseResources()` to free the offscreen canvas, and always before the
+  `GraphicsContext` goes away. Without a GPU, or with an empty content size,
+  the paint draws nothing.
+
 See [Primitives](primitives.md#stroke-types) for the stroke types and
 [gradients](primitives.md#colorgradient).
 

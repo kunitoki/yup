@@ -187,3 +187,29 @@ def test_draw_rounded_rect(update_rendering):
 
     assert is_image_equal_reference(update_rendering, image, threshold=1e-09)
 """
+
+#==================================================================================================
+
+class _SolidPaintSource(yup.PaintSource):
+    def __init__(self):
+        super().__init__()
+        self.painted = 0
+
+    def getContentSize(self):
+        return yup.Size[float](64.0, 32.0)
+
+    def paintContent(self, g):
+        self.painted += 1
+
+def test_paint_source_subclass():
+    source = _SolidPaintSource()
+
+    assert source.getContentSize() == yup.Size[float](64.0, 32.0)
+
+    source.markDirty()
+    source.releaseResources()
+    assert source.painted == 0
+
+def test_graphics_animated_paint_bindings():
+    for name in ("setFillSource", "setStrokeSource", "setFillTexture", "setStrokeTexture"):
+        assert hasattr(yup.Graphics, name)

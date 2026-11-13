@@ -880,6 +880,46 @@ protected:
         return image;
     }
 
+    /** Draws red on the left half and blue on the right half of a Graphics spanning width x 1. */
+    static void drawRedBlueHalves (Graphics& g, float width)
+    {
+        g.setFillColor (Colors::red);
+        g.fillRect (0.0f, 0.0f, width * 0.5f, 1.0f);
+        g.setFillColor (Colors::blue);
+        g.fillRect (width * 0.5f, 0.0f, width * 0.5f, 1.0f);
+    }
+
+    /** An opaque 2 x 1 canvas: red on the left, blue on the right. */
+    static GpuCanvas::Ptr createRedBlueCanvas()
+    {
+        auto canvas = GpuCanvas::create (*gpuContext, 2, 1);
+        if (canvas != nullptr)
+            drawRedBlueHalves (canvas->beginDraw(), 2.0f);
+
+        return canvas;
+    }
+
+    /** A 2 x 1 content box: red on the left, blue on the right. */
+    struct RedBlueSource : PaintSource
+    {
+        Size<float> getContentSize() const override { return { 2.0f, 1.0f }; }
+
+        void paintContent (Graphics& g) override { drawRedBlueHalves (g, 2.0f); }
+    };
+
+    /** Expects red at x = 16 and blue at x = 48 on the given row. */
+    static void expectRedThenBlue (const std::vector<uint8>& pixels, int y)
+    {
+        ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+        EXPECT_GT (alphaAt (pixels, 16, y), 200);
+        EXPECT_GT (channelAt (pixels, 16, y, 0), 200);
+        EXPECT_LT (channelAt (pixels, 16, y, 2), 50);
+        EXPECT_GT (alphaAt (pixels, 48, y), 200);
+        EXPECT_LT (channelAt (pixels, 48, y, 0), 50);
+        EXPECT_GT (channelAt (pixels, 48, y, 2), 200);
+    }
+
     /** Shapes text in the COLR test font, where "A" is red on the left half and blue on the right,
         "B" is one layer in the text color, "C" a radial gradient from red at the center to blue,
         and "D" a red square with a blue left half layered on top.
@@ -1228,6 +1268,21 @@ TEST_F (GraphicsGpuPixelTests, InsideClipStrokeKeepsOnlyTheInnerBand)
     EXPECT_LT (alphaAt (pixels, 32, 32), 50);
 }
 
+TEST_F (GraphicsGpuPixelTests, ClipStrokeAlongAStraightLineKeepsTheBand)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        // The line has no area of its own, only its stroke does
+        g.setClipStroke (Path().addLine ({ 0.0f, 32.0f }, { static_cast<float> (size), 32.0f }), StrokeType (16.0f));
+        g.setFillColor (Colors::red);
+        g.fillAll();
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 32, 32), 200);
+    EXPECT_LT (alphaAt (pixels, 32, 8), 50);
+}
+
 TEST_F (GraphicsGpuPixelTests, DrawingAfterClipStrokeIsNotShifted)
 {
     const auto pixels = render ([] (Graphics& g)
@@ -1545,6 +1600,101 @@ TEST_F (GraphicsGpuPixelTests, FillImageCoversTheShapeWithTheImage)
     EXPECT_GT (alphaAt (pixels, 48, 32), 200);
     EXPECT_LT (channelAt (pixels, 48, 32, 0), 50);
     EXPECT_GT (channelAt (pixels, 48, 32, 2), 200);
+}
+
+TEST_F (GraphicsGpuPixelTests, FillTextureCoversTheShapeWithTheTexture)
+{
+    const auto canvas = createRedBlueCanvas();
+    ASSERT_NE (canvas, nullptr);
+    const auto texture = canvas->asTexture();
+
+    const auto pixels = render ([&texture] (Graphics& g)
+    {
+        g.setFillTexture (texture, AffineTransform::scaling (static_cast<float> (size) * 0.5f, static_cast<float> (size)), { ImageWrap::Clamp, ImageWrap::Clamp, ImageFilter::Nearest });
+        g.fillRect (0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size));
+    });
+
+    expectRedThenBlue (pixels, 32);
+}
+
+TEST_F (GraphicsGpuPixelTests, StrokeTextureStrokesWithTheTexture)
+{
+    const auto canvas = createRedBlueCanvas();
+    ASSERT_NE (canvas, nullptr);
+    const auto texture = canvas->asTexture();
+
+    const auto pixels = render ([&texture] (Graphics& g)
+    {
+        g.setStrokeTexture (texture, AffineTransform::scaling (static_cast<float> (size) * 0.5f, static_cast<float> (size)), { ImageWrap::Clamp, ImageWrap::Clamp, ImageFilter::Nearest });
+        g.setStrokeWidth (16.0f);
+        g.strokeLine (0.0f, 32.0f, static_cast<float> (size), 32.0f);
+    });
+
+    expectRedThenBlue (pixels, 32);
+    EXPECT_LT (alphaAt (pixels, 32, 4), 50);
+}
+
+TEST_F (GraphicsGpuPixelTests, NullTexturePaintsDrawNothing)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        g.setFillTexture (nullptr);
+        g.fillRect (0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size));
+        g.setStrokeTexture (nullptr);
+        g.setStrokeWidth (16.0f);
+        g.strokeLine (0.0f, 32.0f, static_cast<float> (size), 32.0f);
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_LT (alphaAt (pixels, 16, 32), 50);
+    EXPECT_LT (alphaAt (pixels, 48, 16), 50);
+}
+
+TEST_F (GraphicsGpuPixelTests, FillSourceCoversTheShapeWithItsContent)
+{
+    RedBlueSource source;
+
+    const auto pixels = render ([&source] (Graphics& g)
+    {
+        // The 2 x 1 content box stretched over the whole canvas
+        g.setFillSource (source, AffineTransform::scaling (static_cast<float> (size) * 0.5f, static_cast<float> (size)), { ImageWrap::Clamp, ImageWrap::Clamp, ImageFilter::Nearest });
+        g.fillRect (0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size));
+    });
+
+    expectRedThenBlue (pixels, 32);
+}
+
+TEST_F (GraphicsGpuPixelTests, FillSourceRepeatsItsContent)
+{
+    RedBlueSource source;
+
+    const auto pixels = render ([&source] (Graphics& g)
+    {
+        // Two content boxes across the canvas: red, blue, red, blue
+        g.setFillSource (source, AffineTransform::scaling (static_cast<float> (size) * 0.25f, static_cast<float> (size)), { ImageWrap::Repeat, ImageWrap::Repeat, ImageFilter::Nearest });
+        g.fillRect (0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size));
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (channelAt (pixels, 8, 32, 0), 200);
+    EXPECT_GT (channelAt (pixels, 24, 32, 2), 200);
+    EXPECT_GT (channelAt (pixels, 40, 32, 0), 200);
+    EXPECT_GT (channelAt (pixels, 56, 32, 2), 200);
+}
+
+TEST_F (GraphicsGpuPixelTests, StrokeSourceStrokesWithItsContent)
+{
+    RedBlueSource source;
+
+    const auto pixels = render ([&source] (Graphics& g)
+    {
+        g.setStrokeSource (source, AffineTransform::scaling (static_cast<float> (size) * 0.5f, static_cast<float> (size)), { ImageWrap::Clamp, ImageWrap::Clamp, ImageFilter::Nearest });
+        g.setStrokeWidth (16.0f);
+        g.strokeLine (0.0f, 32.0f, static_cast<float> (size), 32.0f);
+    });
+
+    expectRedThenBlue (pixels, 32);
+    EXPECT_LT (alphaAt (pixels, 32, 4), 50);
 }
 
 TEST_F (GraphicsGpuPixelTests, InvalidMeshesAndEmptyInstanceListsDrawNothing)

@@ -757,6 +757,16 @@ void Graphics::setFillImage (const Image& image, const AffineTransform& imageTra
     currentRenderOptions().fillImage = makeImagePaint (image, imageTransform, sampling);
 }
 
+void Graphics::setFillSource (PaintSource& source, const AffineTransform& sourceTransform, ImageSampling sampling)
+{
+    currentRenderOptions().fillImage = makeSourcePaint (source, sourceTransform, sampling);
+}
+
+void Graphics::setFillTexture (const GpuTexture::Ptr& texture, const AffineTransform& textureTransform, ImageSampling sampling)
+{
+    currentRenderOptions().fillImage = makeTexturePaint (texture, textureTransform, sampling);
+}
+
 //==============================================================================
 void Graphics::setStrokeColorGradient (ColorGradient gradient)
 {
@@ -775,12 +785,38 @@ void Graphics::setStrokeImage (const Image& image, const AffineTransform& imageT
     currentRenderOptions().strokeImage = makeImagePaint (image, imageTransform, sampling);
 }
 
+void Graphics::setStrokeSource (PaintSource& source, const AffineTransform& sourceTransform, ImageSampling sampling)
+{
+    currentRenderOptions().strokeImage = makeSourcePaint (source, sourceTransform, sampling);
+}
+
+void Graphics::setStrokeTexture (const GpuTexture::Ptr& texture, const AffineTransform& textureTransform, ImageSampling sampling)
+{
+    currentRenderOptions().strokeImage = makeTexturePaint (texture, textureTransform, sampling);
+}
+
 Graphics::ImagePaint Graphics::makeImagePaint (const Image& image, const AffineTransform& imageTransform, ImageSampling sampling)
 {
     // Made on the caller's Image, so its texture is kept and reused by later frames.
     image.createTextureIfNotPresent (context);
 
-    return { image.getTexture(), image.getWidth(), image.getHeight(), imageTransform, sampling };
+    return { image.getTexture(), { static_cast<float> (image.getWidth()), static_cast<float> (image.getHeight()) }, imageTransform, sampling };
+}
+
+Graphics::ImagePaint Graphics::makeSourcePaint (PaintSource& source, const AffineTransform& sourceTransform, ImageSampling sampling)
+{
+    const auto texture = source.rasterize (context, sourceTransform.followedBy (currentRenderOptions().getTransform()));
+
+    return { texture != nullptr ? texture->getOrAdoptGpuTexture() : nullptr, source.getContentSize(), sourceTransform, sampling };
+}
+
+Graphics::ImagePaint Graphics::makeTexturePaint (const GpuTexture::Ptr& texture, const AffineTransform& textureTransform, ImageSampling sampling)
+{
+    if (texture == nullptr || ! texture->isValid())
+        return { nullptr, {}, textureTransform, sampling };
+
+    // Graphics is a friend of GpuTexture - may access private getOrAdoptGpuTexture()
+    return { texture->getOrAdoptGpuTexture(), { static_cast<float> (texture->getWidth()), static_cast<float> (texture->getHeight()) }, textureTransform, sampling };
 }
 
 //==============================================================================
@@ -1253,8 +1289,8 @@ bool Graphics::setupImagePaint (rive::RiveRenderPaint& paint, const ImagePaint& 
     // The image modulates the paint color, so white shows it unchanged.
     paint.color (0xffffffff);
 
-    // Rive maps the unit square onto the path, so scale it to the image's pixels first.
-    const auto imageTransform = AffineTransform::scaling (static_cast<float> (imagePaint.width), static_cast<float> (imagePaint.height))
+    // Rive maps the unit square onto the path, so scale it to the paint's size first.
+    const auto imageTransform = AffineTransform::scaling (imagePaint.size.getWidth(), imagePaint.size.getHeight())
                                     .followedBy (imagePaint.transform)
                                     .translated (-imageOffset.getX(), -imageOffset.getY());
 
