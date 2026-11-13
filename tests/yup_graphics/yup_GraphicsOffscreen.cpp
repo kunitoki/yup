@@ -1268,6 +1268,21 @@ TEST_F (GraphicsGpuPixelTests, InsideClipStrokeKeepsOnlyTheInnerBand)
     EXPECT_LT (alphaAt (pixels, 32, 32), 50);
 }
 
+TEST_F (GraphicsGpuPixelTests, ClipStrokeAlongAStraightLineKeepsTheBand)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        // The line has no area of its own, only its stroke does
+        g.setClipStroke (Path().addLine ({ 0.0f, 32.0f }, { static_cast<float> (size), 32.0f }), StrokeType (16.0f));
+        g.setFillColor (Colors::red);
+        g.fillAll();
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 32, 32), 200);
+    EXPECT_LT (alphaAt (pixels, 32, 8), 50);
+}
+
 TEST_F (GraphicsGpuPixelTests, DrawingAfterClipStrokeIsNotShifted)
 {
     const auto pixels = render ([] (Graphics& g)
