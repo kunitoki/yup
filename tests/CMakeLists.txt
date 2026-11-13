@@ -60,6 +60,7 @@ set (target_console OFF)
 set (target_gtest_modules "")
 set (target_modules
     yup_core
+    yup_expression
     yup_simd
     yup_audio_basics
     yup_audio_devices

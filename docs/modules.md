@@ -78,6 +78,19 @@ flowchart LR
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
+### yup_expression
+
+A statically typed expression language compiled once and evaluated per row or
+in batches without allocating, with registered custom types, used for formulas
+and data-driven drawing. See [Expressions](core/expressions.md).
+
+```mermaid
+flowchart LR
+    yup_expression:::self --> yup_core
+    classDef self fill:#005aff,color:#fff,stroke:#003db3;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
 ## Events & multithreading
 
 The event loop and messaging layer. See the [Multithreading](multithreading/index.md)
@@ -167,6 +180,7 @@ drawing API), primitives, paths, fonts, SVG, imaging, and `GpuCanvas` (offscreen
 ```mermaid
 flowchart LR
     yup_graphics:::self --> yup_core
+    yup_graphics --> yup_expression
     yup_graphics --> yup_simd
     yup_graphics --> yup_rhi
     yup_graphics --> yup_shading
@@ -434,7 +448,7 @@ Bindings for driving YUP from scripts. See the [Scripting](scripting/index.md) a
 
 Python bindings for creating and driving YUP applications from scripts. Its only
 hard dependency is `yup_core`; it additionally generates bindings for
-`yup_events`, `yup_data_model`, `yup_graphics`, `yup_gui`, `yup_ai`,
+`yup_events`, `yup_expression`, `yup_data_model`, `yup_graphics`, `yup_gui`, `yup_ai`,
 `yup_audio_basics`, `yup_audio_devices`, and `yup_audio_processors` when those modules are present in
 the build.
 
@@ -448,6 +462,7 @@ flowchart LR
     yup_python -. optional .-> yup_audio_processors:::opt
     yup_python -. optional .-> yup_data_model:::opt
     yup_python -. optional .-> yup_events:::opt
+    yup_python -. optional .-> yup_expression:::opt
     yup_python -. optional .-> yup_graphics:::opt
     yup_python -. optional .-> yup_gui:::opt
     classDef self fill:#005aff,color:#fff,stroke:#003db3;
@@ -464,6 +479,7 @@ The full `yup_*` module graph of **required** dependencies in one view
 flowchart TD
     simd[yup_simd] --> core[yup_core]
     events[yup_events] --> core
+    expression[yup_expression] --> core
     shading[yup_shading] --> core
     rhi[yup_rhi] --> core
     rhi --> shading
@@ -472,6 +488,7 @@ flowchart TD
     ai --> events
 
     graphics[yup_graphics] --> core
+    graphics --> expression
     graphics --> simd
     graphics --> rhi
     graphics --> shading

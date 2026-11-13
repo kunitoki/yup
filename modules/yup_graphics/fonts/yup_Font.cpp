@@ -615,12 +615,12 @@ Font Font::withFeatures (std::initializer_list<Feature> features) const
 
 bool Font::operator== (const Font& other) const
 {
-    return font == other.font;
+    return font == other.font && exactlyEqual (height, other.height);
 }
 
 bool Font::operator!= (const Font& other) const
 {
-    return font != other.font;
+    return ! (*this == other);
 }
 
 //==============================================================================

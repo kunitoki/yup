@@ -47,6 +47,16 @@ TEST (ColorGradientTests, Default_Constructor)
     EXPECT_FLOAT_EQ (gradient.getFinishDelta(), 1.0f);
 }
 
+TEST (ColorGradientTests, Equality)
+{
+    const ColorGradient gradient (Color (0xffff0000), 0.0f, 0.0f, Color (0xff0000ff), 10.0f, 0.0f, ColorGradient::Radial);
+
+    EXPECT_TRUE (gradient == ColorGradient (gradient));
+    EXPECT_FALSE (gradient == gradient.withAlpha (0.5f));
+    EXPECT_FALSE (gradient == gradient.withSpread (ColorGradient::Spread::Repeat));
+    EXPECT_FALSE (gradient == ColorGradient (Color (0xffff0000), 0.0f, 0.0f, Color (0xff0000ff), 10.0f, 0.0f, ColorGradient::Linear));
+}
+
 TEST (ColorGradientTests, Two_Color_Linear_Constructor)
 {
     Color red (0xffff0000);

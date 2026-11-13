@@ -3096,50 +3096,6 @@ void registerYupCoreBindings (py::module_& m)
 
     registerStatisticsAccumulator<StatisticsAccumulator, float> (m);
 
-    // ============================================================================================ yup::Expression
-
-    py::class_<Expression> classExpression (m, "Expression");
-    py::class_<Expression::Scope, PyExpressionScope> classExpressionScope (classExpression, "Scope");
-
-    classExpressionScope
-        .def (py::init<>())
-        .def ("getScopeUID", &Expression::Scope::getScopeUID)
-        .def ("getSymbolValue", &Expression::Scope::getSymbolValue, "symbol"_a);
-
-    classExpression
-        .def (py::init<>())
-        .def (py::init<double>(), "constant"_a)
-        .def (py::init ([] (const String& stringToParse)
-        {
-            String parseError;
-            auto result = Expression (stringToParse, parseError);
-
-            if (parseError.isNotEmpty())
-                throw py::value_error (parseError.toStdString());
-
-            return result;
-        }), "stringToParse"_a)
-        .def ("toString", &Expression::toString)
-        .def (py::self + py::self)
-        .def (py::self - py::self)
-        .def (py::self * py::self)
-        .def (py::self / py::self)
-        .def (- py::self)
-        .def_static ("symbol", &Expression::symbol, "symbol"_a)
-        .def_static ("function", [] (const String& functionName, py::list parameters)
-        {
-            Array<Expression> parameterList;
-
-            for (auto item : parameters)
-                parameterList.add (item.cast<Expression>());
-
-            return Expression::function (functionName, parameterList);
-        }, "functionName"_a, "parameters"_a)
-        .def ("evaluate", py::overload_cast<> (&Expression::evaluate, py::const_))
-        .def ("evaluate", py::overload_cast<const Expression::Scope&> (&Expression::evaluate, py::const_), "scope"_a)
-        .def ("adjustedToGiveNewResult", &Expression::adjustedToGiveNewResult, "targetValue"_a, "scope"_a)
-        .def ("usesAnySymbols", &Expression::usesAnySymbols);
-
     // ============================================================================================ yup::LocalisedStrings
 
     py::class_<LocalisedStrings> classLocalisedStrings (m, "LocalisedStrings");

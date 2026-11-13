@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core yup_simd yup_rhi yup_shading rive libclipper2
+    dependencies:       yup_core yup_expression yup_simd yup_rhi yup_shading rive libclipper2
     optionalDeps:       libpng libjpeg libwebp libgif libtiff
     appleFrameworks:    Metal
     searchpaths:        native
@@ -46,6 +46,7 @@
 #define YUP_GRAPHICS_H_INCLUDED
 
 #include <yup_core/yup_core.h>
+#include <yup_expression/yup_expression.h>
 #include <yup_simd/yup_simd.h>
 #include <yup_rhi/yup_rhi.h>
 #include <yup_shading/yup_shading.h>
@@ -224,6 +225,8 @@ class Context;
 #include "graphics/yup_ImageMesh.h"
 #include "graphics/yup_Graphics.h"
 #include "rhi/yup_GpuCanvas.h"
+#include "expression/yup_GraphicsExpressionTypes.h"
+#include "expression/yup_ExpressionDrawing.h"
 #include "svg/yup_SVGElement.h"
 #include "svg/yup_SVGGradient.h"
 #include "svg/yup_SVGClipPath.h"

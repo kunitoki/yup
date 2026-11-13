@@ -295,6 +295,9 @@ private:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Emoji
 #include "examples/Emoji.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ExpressionChart
+#include "examples/ExpressionChart.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
 #include "examples/FileChooser.h"
 #endif
@@ -568,6 +571,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Emoji
         addDemo ("Emoji", "Emoji", [] { return std::make_unique<EmojiDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ExpressionChart
+        addDemo ("ExpressionChart", "Expression Chart", [] { return std::make_unique<ExpressionChartDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
         addDemo ("FileChooser", "File Chooser", [] { return std::make_unique<FileChooserDemo>(); });
