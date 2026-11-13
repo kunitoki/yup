@@ -105,6 +105,14 @@ public:
     std::function<void()> onSelectionChanged;
 
     //==============================================================================
+    /** Moves the animated paints drawn in the last frame; idle documents are not repainted. */
+    void refreshDisplay (double lastFrameTimeSeconds) override
+    {
+        if (advanceAnimatedPaints (lastFrameTimeSeconds))
+            repaint();
+    }
+
+    //==============================================================================
     void paint (yup::Graphics& g) override
     {
         g.setFillColor (getPaletteColor (yup::ThemePalette::Role::surface));
@@ -652,6 +660,13 @@ private:
             const auto transform = getPaintImageTransform (paint);
             const auto sampling = getImageSampling (paint);
             asStroke ? g.setStrokeImage (image, transform, sampling) : g.setFillImage (image, transform, sampling);
+        }
+        else if (kind == "animated")
+        {
+            auto& source = getAnimatedPaintSource (paint);
+            const auto transform = getPaintImageTransform (paint);
+            const auto sampling = getImageSampling (paint);
+            asStroke ? g.setStrokeSource (source, transform, sampling) : g.setFillSource (source, transform, sampling);
         }
         else
         {

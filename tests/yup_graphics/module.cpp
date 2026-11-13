@@ -55,6 +55,7 @@
 #include "yup_Line.cpp"
 #include "yup_Matrix4.cpp"
 #include "yup_MeshSurfaceMapper.cpp"
+#include "yup_PaintSource.cpp"
 #include "yup_Path.cpp"
 #include "yup_Point.cpp"
 #include "yup_Quaternion.cpp"

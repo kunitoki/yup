@@ -41,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Graphics
 
 - Added `EdgeSpacing<ValueType>`, a value type holding per-edge `left`, `top`, `right` and `bottom` amounts for margins, paddings, insets and borders. It applies to a rectangle through `subtractedFrom` / `addedTo`, and `Rectangle::reduced` / `enlarged` gained overloads taking it.
+- Animated paints: `Graphics::setFillSource` / `setStrokeSource` fill and stroke with a `PaintSource`, content drawn live into an offscreen canvas sized from its on-screen size and redrawn only after `markDirty()`, and `setFillTexture` / `setStrokeTexture` paint with a `GpuTexture` without a CPU copy. Bound in Python. The Paths demo gains an animated paint kind.
 
 ### UI
 
