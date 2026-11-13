@@ -458,12 +458,18 @@ void WaveformEditor::paintDrawnCycle (yup::Graphics& g, yup::Rectangle<float> bo
 /** Strokes a curve in the accent color over a soft glow of itself. */
 void WaveformEditor::strokeGlowing (yup::Graphics& g, const yup::Path& pathToStroke)
 {
-    g.setStrokeColor (SynthTheme::accent (*this).withAlpha (0.35f));
-    g.setStrokeWidth (4.0f);
-    g.setFeather (6.0f);
-    g.strokePath (pathToStroke);
+    {
+        const auto state = g.saveState();
 
-    g.setFeather (0.0f);
+        if (SynthTheme::isDark (*this))
+            g.setBlendMode (yup::BlendMode::Screen);
+
+        g.setStrokeColor (SynthTheme::accent (*this).withAlpha (0.35f));
+        g.setStrokeWidth (4.0f);
+        g.setFeather (6.0f);
+        g.strokePath (pathToStroke);
+    }
+
     g.setStrokeColor (SynthTheme::accent (*this));
     g.setStrokeWidth (1.5f);
     g.strokePath (pathToStroke);

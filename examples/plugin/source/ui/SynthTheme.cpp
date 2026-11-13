@@ -41,6 +41,12 @@ yup::ColorGradient makeVerticalGradient (yup::Rectangle<float> bounds, std::init
 
     return yup::ColorGradient (yup::ColorGradient::Linear, std::move (colorStops));
 }
+
+/** A dark shade in the hue of a surface: multiplied over it, it deepens the color instead of graying it. */
+yup::Color shadeOf (yup::Color surface)
+{
+    return mix (surface, yup::Colors::black, 0.6f);
+}
 } // namespace
 
 //==============================================================================
@@ -174,12 +180,19 @@ yup::Color wellColor (const yup::Component& scope)
 //==============================================================================
 void paintBevel (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, float corner)
 {
-    const auto highlight = yup::Colors::white.withAlpha (isDark (scope) ? 0.08f : 0.6f);
-    const auto shade = yup::Colors::black.withAlpha (isDark (scope) ? 0.45f : 0.15f);
+    const auto highlight = yup::Colors::white.withAlpha (isDark (scope) ? 0.25f : 1.0f);
+    const auto shade = shadeOf (panelColor (scope)).withAlpha (isDark (scope) ? 0.45f : 0.25f);
     const auto edge = bounds.reduced (0.5f);
 
-    g.setStrokeColorGradient (makeVerticalGradient (edge, { { 0.0f, highlight }, { 0.35f, highlight.withAlpha (0.0f) }, { 0.65f, shade.withAlpha (0.0f) }, { 1.0f, shade } }));
+    const auto state = g.saveState();
     g.setStrokeWidth (1.0f);
+
+    g.setBlendMode (yup::BlendMode::SoftLight);
+    g.setStrokeColorGradient (makeVerticalGradient (edge, { { 0.0f, highlight }, { 0.35f, highlight.withAlpha (0.0f) } }));
+    g.strokeRoundedRect (edge, corner);
+
+    g.setBlendMode (yup::BlendMode::Multiply);
+    g.setStrokeColorGradient (makeVerticalGradient (edge, { { 0.65f, shade.withAlpha (0.0f) }, { 1.0f, shade } }));
     g.strokeRoundedRect (edge, corner);
 }
 
@@ -211,17 +224,23 @@ void paintTile (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<fl
 
 void paintWell (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, float corner)
 {
-    g.setFillColor (wellColor (scope));
+    const auto well = wellColor (scope);
+
+    g.setFillColor (well);
     g.fillRoundedRect (bounds, corner);
 
     const auto edge = bounds.reduced (0.5f);
-    const auto shade = yup::Colors::black.withAlpha (isDark (scope) ? 0.7f : 0.25f);
+    const auto shade = mix (well, yup::Colors::black, 0.8f).withAlpha (isDark (scope) ? 0.7f : 0.9f);
 
-    g.setStrokeColorGradient (makeVerticalGradient (edge, { { 0.0f, shade }, { 0.4f, shade.withAlpha (0.0f) } }));
+    const auto state = g.saveState();
     g.setStrokeWidth (1.0f);
+
+    g.setBlendMode (yup::BlendMode::ColorBurn);
+    g.setStrokeColorGradient (makeVerticalGradient (edge, { { 0.0f, shade }, { 0.4f, shade.withAlpha (0.0f) } }));
     g.strokeRoundedRect (edge, corner);
 
-    g.setStrokeColor (yup::Colors::white.withAlpha (isDark (scope) ? 0.06f : 0.5f));
+    g.setBlendMode (yup::BlendMode::SoftLight);
+    g.setStrokeColor (yup::Colors::white.withAlpha (isDark (scope) ? 0.4f : 1.0f));
     g.strokeLine (bounds.getX() + corner, bounds.getBottom() + 0.5f, bounds.getRight() - corner, bounds.getBottom() + 0.5f);
 }
 
@@ -234,15 +253,19 @@ void paintDisplayBorder (yup::Graphics& g, const yup::Component& scope, yup::Rec
 
 void paintRaised (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, float corner)
 {
-    g.setFillColor (yup::Colors::black.withAlpha (isDark (scope) ? 0.6f : 0.25f));
-    g.fillRoundedRect (bounds.withY (bounds.getY() + 1.0f), corner);
+    {
+        const auto state = g.saveState();
+        g.setBlendMode (yup::BlendMode::Multiply);
+        g.setFillColor (shadeOf (raisedColor (scope)).withAlpha (isDark (scope) ? 0.6f : 0.35f));
+        g.fillRoundedRect (bounds.withY (bounds.getY() + 1.0f), corner);
+    }
 
     g.setFillColor (raisedColor (scope));
     g.fillRoundedRect (bounds, corner);
     paintBevel (g, scope, bounds, corner);
 }
 
-void paintTrail (yup::Graphics& g, const yup::Path& area, float x, float width, yup::Color color)
+void paintTrail (yup::Graphics& g, const yup::Component& scope, const yup::Path& area, float x, float width, yup::Color color)
 {
     const auto start = x - width;
 
@@ -250,6 +273,12 @@ void paintTrail (yup::Graphics& g, const yup::Path& area, float x, float width, 
     gradient.addColorStop (color.withAlpha (0.0f), start, 0.0f, 0.0f);
     gradient.addColorStop (color.withAlpha (0.5f), x, 0.0f, width / (width + 1.0f));
     gradient.addColorStop (color.withAlpha (0.0f), x + 1.0f, 0.0f, 1.0f);
+
+    const auto state = g.saveState();
+
+    // Light adds up on dark themes; screening over a light ground would wash it out.
+    if (isDark (scope))
+        g.setBlendMode (yup::BlendMode::Screen);
 
     g.setFillColorGradient (gradient);
     g.fillPath (area);
@@ -260,10 +289,15 @@ void paintSeam (yup::Graphics& g, const yup::Component& scope, yup::Point<float>
     const auto vertical = std::abs (to.getX() - from.getX()) < std::abs (to.getY() - from.getY());
     const auto offset = vertical ? yup::Point<float> (1.0f, 0.0f) : yup::Point<float> (0.0f, 1.0f);
 
+    const auto state = g.saveState();
     g.setStrokeWidth (1.0f);
-    g.setStrokeColor (yup::Colors::black.withAlpha (isDark (scope) ? 0.5f : 0.15f));
+
+    g.setBlendMode (yup::BlendMode::Multiply);
+    g.setStrokeColor (shadeOf (panelColor (scope)).withAlpha (isDark (scope) ? 0.5f : 0.25f));
     g.strokeLine (from, to);
-    g.setStrokeColor (yup::Colors::white.withAlpha (isDark (scope) ? 0.05f : 0.6f));
+
+    g.setBlendMode (yup::BlendMode::SoftLight);
+    g.setStrokeColor (yup::Colors::white.withAlpha (isDark (scope) ? 0.18f : 1.0f));
     g.strokeLine (from + offset, to + offset);
 }
 

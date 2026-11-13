@@ -168,14 +168,37 @@ void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme&, const
         g.strokePath (arc);
     };
 
-    // The well, then the track and the value around it.
-    g.setFillColor (SynthTheme::wellColor (slider));
-    g.fillEllipse (yup::Rectangle<float> (center.getX() - wellRadius, center.getY() - wellRadius, wellRadius * 2.0f, wellRadius * 2.0f));
+    // The well, sunk under a burned top rim, then the track and the value around it.
+    const auto well = yup::Rectangle<float> (center.getX() - wellRadius, center.getY() - wellRadius, wellRadius * 2.0f, wellRadius * 2.0f);
+    const auto wellColor = SynthTheme::wellColor (slider);
+    g.setFillColor (wellColor);
+    g.fillEllipse (well);
+
+    {
+        const auto state = g.saveState();
+        const auto shade = wellColor.mixedWith (yup::Colors::black, 0.8f, yup::ColorSpace::SRGB).withAlpha (SynthTheme::isDark (slider) ? 0.7f : 0.9f);
+        const auto edge = well.reduced (0.5f);
+        g.setBlendMode (yup::BlendMode::ColorBurn);
+        g.setStrokeColorGradient (yup::ColorGradient (shade, edge.getX(), edge.getY(), shade.withAlpha (0.0f), edge.getX(), edge.getY() + edge.getHeight() * 0.4f));
+        g.setStrokeWidth (1.0f);
+        g.strokeEllipse (edge);
+    }
 
     strokeArc (ringRadius, startAngle, startAngle + sweepAngle, ringWidth, SynthTheme::panelBorder (slider));
 
     if (value > 0.0f)
+    {
+        // A soft halo of light under the value, screened so it brightens what it falls on.
+        if (enabled && SynthTheme::isDark (slider))
+        {
+            const auto state = g.saveState();
+            g.setBlendMode (yup::BlendMode::Screen);
+            g.setFeather (ringWidth);
+            strokeArc (ringRadius, startAngle, valueAngle, ringWidth * 1.4f, accent.withAlpha (0.35f));
+        }
+
         strokeArc (ringRadius, startAngle, valueAngle, ringWidth, accent);
+    }
 
     // Modulation arcs run from the value, inside the ring, one lane each.
     if (knob != nullptr)

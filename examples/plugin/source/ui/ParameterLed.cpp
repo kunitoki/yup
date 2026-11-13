@@ -69,7 +69,19 @@ void ParameterLed::paint (yup::Graphics& g)
     }
 
     g.setFillColor (lit.withAlpha (0.35f));
-    g.fillRoundedRect (led.reduced (-2.0f), 4.0f);
+
+    {
+        const auto state = g.saveState();
+
+        if (isEnabled() && SynthTheme::isDark (*this))
+        {
+            g.setBlendMode (yup::BlendMode::Screen);
+            g.setFeather (2.0f);
+        }
+
+        g.fillRoundedRect (led.reduced (-2.0f), 4.0f);
+    }
+
     g.setFillColor (isEnabled() ? lit : SynthTheme::textSecondary (*this));
     g.fillRoundedRect (led, 2.0f);
 }

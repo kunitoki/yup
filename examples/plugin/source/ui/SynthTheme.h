@@ -140,8 +140,9 @@ void paintDisplayBorder (yup::Graphics& g, const yup::Component& scope, yup::Rec
 void paintRaised (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, float corner);
 
 /** Fills a path with a band of light that ends at x and fades out over width to its left,
-    the trail of a playhead moving to the right. */
-void paintTrail (yup::Graphics& g, const yup::Path& area, float x, float width, yup::Color color);
+    the trail of a playhead moving to the right. On dark themes the light is screened over
+    what is under it. */
+void paintTrail (yup::Graphics& g, const yup::Component& scope, const yup::Path& area, float x, float width, yup::Color color);
 
 /** Paints an engraved line between two areas of a panel. */
 void paintSeam (yup::Graphics& g, const yup::Component& scope, yup::Point<float> from, yup::Point<float> to);

@@ -457,7 +457,7 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
         g.fillPath (fill);
 
         if (playheadPosition.has_value())
-            SynthTheme::paintTrail (g, fill, playheadPosition->getX(), trailWidth, color);
+            SynthTheme::paintTrail (g, *this, fill, playheadPosition->getX(), trailWidth, color);
     }
 
     // Keep the grid above the fill and trail.

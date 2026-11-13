@@ -108,6 +108,13 @@ bool SynthLandscape::paint (yup::Graphics& g, const yup::Component& scope, yup::
         clip.addRoundedRectangle (bounds.reduced (0.5f), SynthTheme::displayCorner);
         g.setClipPath (clip);
         g.drawTexture (cached, bounds);
+
+        // An inner shadow burned into the picture, deepening its colors toward the rim.
+        g.setBlendMode (yup::BlendMode::ColorBurn);
+        g.setStrokeColor (ground.mixedWith (yup::Colors::black, 0.5f, yup::ColorSpace::SRGB).withAlpha (0.5f));
+        g.setStrokeWidth (4.0f);
+        g.setFeather (4.0f);
+        g.strokeRoundedRect (bounds.reduced (0.5f), SynthTheme::displayCorner);
     }
 
     SynthTheme::paintDisplayBorder (g, scope, bounds);
