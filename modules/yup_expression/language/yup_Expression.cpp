@@ -139,7 +139,7 @@ struct Expression::Parser
         , position (text)
         , lineStart (text)
     {
-        for (const auto* end = text + jlimit (0, (int) std::strlen (text), startOffset); position < end; ++position)
+        for (const auto* end = text + std::max (0, startOffset); position < end && *position != 0; ++position)
         {
             if (*position == '\n')
             {
