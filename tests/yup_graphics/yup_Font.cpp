@@ -964,7 +964,7 @@ TEST (FontTests, SameFontsAreEqual)
     EXPECT_FALSE (font1 != font2);
 }
 
-TEST (FontTests, HeightDoesNotAffectEquality)
+TEST (FontTests, HeightAffectsEquality)
 {
     Font font1;
     font1.setHeight (12.0f);
@@ -972,7 +972,10 @@ TEST (FontTests, HeightDoesNotAffectEquality)
     Font font2;
     font2.setHeight (24.0f);
 
-    // Fonts are equal if they wrap the same underlying rive::Font
+    EXPECT_FALSE (font1 == font2);
+    EXPECT_TRUE (font1 != font2);
+
+    font2.setHeight (12.0f);
     EXPECT_TRUE (font1 == font2);
 }
 

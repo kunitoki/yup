@@ -38,7 +38,6 @@
 #include "yup_ElementComparator.cpp"
 #include "yup_Enumerate.cpp"
 #include "yup_EnumHelpers.cpp"
-#include "yup_Expression.cpp"
 #include "yup_File.cpp"
 #include "yup_FileInputStream.cpp"
 #include "yup_FileSearchPath.cpp"

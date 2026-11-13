@@ -1136,6 +1136,20 @@ Path::Path (rive::rcp<rive::RiveRenderPath> newPath)
 
 //==============================================================================
 
+namespace
+{
+
+void reservePathShapeSpace (const rive::RiveRenderPath& path, int numVerbs, int numPoints)
+{
+    auto& rawPath = const_cast<rive::RawPath&> (path.getRawPath());
+
+    // Exact reservations on a non empty path would defeat the geometric growth when appending many shapes
+    if (rawPath.empty())
+        rawPath.reserve (static_cast<std::size_t> (numVerbs), static_cast<std::size_t> (numPoints));
+}
+
+} // namespace
+
 void Path::reserveSpace (int numSegments)
 {
     auto& rawPath = const_cast<rive::RawPath&> (path->getRawPath());
@@ -1260,7 +1274,7 @@ Path& Path::addRectangle (float x, float y, float width, float height)
     width = jmax (0.0f, width);
     height = jmax (0.0f, height);
 
-    reserveSpace (size() + 5);
+    reservePathShapeSpace (*path, 5, 5);
 
     moveTo (x, y);
     lineTo (x + width, y);
@@ -1280,7 +1294,7 @@ Path& Path::addRectangle (const Rectangle<float>& rect)
 
 Path& Path::addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
-    reserveSpace (size() + 9);
+    reservePathShapeSpace (*path, 9, 17);
 
     width = jmax (0.0f, width);
     height = jmax (0.0f, height);
@@ -1339,7 +1353,7 @@ Path& Path::addRoundedRectangle (const Rectangle<float>& rect, float radius)
 
 Path& Path::addEllipse (float x, float y, float width, float height)
 {
-    reserveSpace (size() + 6);
+    reservePathShapeSpace (*path, 6, 13);
 
     width = jmax (0.0f, width);
     height = jmax (0.0f, height);
@@ -1370,7 +1384,7 @@ Path& Path::addEllipse (const Rectangle<float>& r)
 
 Path& Path::addCenteredEllipse (float centerX, float centerY, float radiusX, float radiusY)
 {
-    reserveSpace (size() + 6);
+    reservePathShapeSpace (*path, 6, 13);
 
     radiusX = jmax (0.0f, radiusX);
     radiusY = jmax (0.0f, radiusY);
@@ -1485,7 +1499,7 @@ void Path::addTriangle (float x1, float y1, float x2, float y2, float x3, float 
 
 void Path::addTriangle (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3)
 {
-    reserveSpace (size() + 4);
+    reservePathShapeSpace (*path, 4, 3);
 
     moveTo (p1);
     lineTo (p2);
@@ -1502,7 +1516,7 @@ void Path::addQuadrilateral (float x1, float y1, float x2, float y2, float x3, f
 
 void Path::addQuadrilateral (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3, const Point<float>& p4)
 {
-    reserveSpace (size() + 5);
+    reservePathShapeSpace (*path, 5, 4);
 
     moveTo (p1);
     lineTo (p2);
@@ -1518,7 +1532,7 @@ Path& Path::addPolygon (const Point<float>& centre, int numberOfSides, float rad
     if (numberOfSides < 3)
         return *this;
 
-    reserveSpace (size() + numberOfSides + 1);
+    reservePathShapeSpace (*path, numberOfSides + 1, numberOfSides);
 
     const float angleIncrement = MathConstants<float>::twoPi / numberOfSides;
     radius = jmax (0.0f, radius);
@@ -1551,7 +1565,7 @@ Path& Path::addStar (const Point<float>& centre, int numberOfPoints, float inner
     if (numberOfPoints < 3)
         return *this;
 
-    reserveSpace (size() + numberOfPoints * 2 + 1);
+    reservePathShapeSpace (*path, numberOfPoints * 2 + 1, numberOfPoints * 2);
 
     const float angleIncrement = MathConstants<float>::twoPi / (numberOfPoints * 2);
     innerRadius = jmax (0.0f, innerRadius);
@@ -1905,6 +1919,7 @@ Path Path::createCopy() const
 {
     auto newPath = rive::make_rcp<rive::RiveRenderPath>();
     newPath->addRenderPath (path.get(), {});
+    newPath->fillRule (path->getFillRule());
     return Path { std::move (newPath) };
 }
 

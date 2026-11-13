@@ -85,6 +85,9 @@ public:
         constexpr ColorStop& operator= (const ColorStop& other) noexcept = default;
         constexpr ColorStop& operator= (ColorStop&& other) noexcept = default;
 
+        /** Returns true if both stops have the same color, position and delta. */
+        constexpr bool operator== (const ColorStop& other) const noexcept = default;
+
         Color color;
         float x = 0.0f;
         float y = 0.0f;
@@ -171,6 +174,9 @@ public:
     ColorGradient (ColorGradient&& other) = default;
     ColorGradient& operator= (const ColorGradient& other) = default;
     ColorGradient& operator= (ColorGradient&& other) = default;
+
+    /** Returns true if both gradients have the same type, spread, stops, transform and radius. */
+    bool operator== (const ColorGradient& other) const = default;
 
     //==============================================================================
     /** Gets the type of the gradient.

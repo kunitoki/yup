@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [3.0.0] - Unreleases
 
+### New modules
+
+- New `yup_expression` module, depending only on `yup_core` (`yup_graphics` depends on it). **Breaking:** `Expression` moved there from `yup_core` and is now a statically typed expression language (`bool`, `int`, `float`, `double`, `string` and registered custom types, ternary, locals, multiple outputs, arrays and swizzles). Programs are compiled once with `CompiledExpression` and evaluated without allocating through `ExpressionState`, per row or in batches over bound columns. Literals accept units (`90deg`, `250ms`, `50%`) and `#rrggbb` colors, `format` formats numbers, enumerations are registered with `ExpressionContext::addEnum`, `Expression::parseExpression` reads expressions embedded in text and `ExpressionContext::setSymbolResolver` declares inputs lazily while compiling. `ExpressionState` skips work for unchanged inputs and reports changed outputs with `hasChanged`, and `ExpressionCache` compiles each distinct text once. `Expression::Scope` and the old symbol evaluation API are removed; the Python bindings follow the new API.
+
 ### Plugins
 
 - Added reactive editor updates with `ParameterChangeQueue` and `AudioParameterAttachment`, including shared parameters and multiple editors. The RETRACE example now refreshes parameter-driven panels only when dirty instead of polling them every frame.
@@ -42,6 +46,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Added `EdgeSpacing<ValueType>`, a value type holding per-edge `left`, `top`, `right` and `bottom` amounts for margins, paddings, insets and borders. It applies to a rectangle through `subtractedFrom` / `addedTo`, and `Rectangle::reduced` / `enlarged` gained overloads taking it.
 - Animated paints: `Graphics::setFillSource` / `setStrokeSource` fill and stroke with a `PaintSource`, content drawn live into an offscreen canvas sized from its on-screen size and redrawn only after `markDirty()`, and `setFillTexture` / `setStrokeTexture` paint with a `GpuTexture` without a CPU copy. Bound in Python. The Paths demo gains an animated paint kind.
+- Added `addGraphicsExpressionTypes` (`point`, `size`, `rect`, `line`, `color`, `transform`, `path`, `font`, `gradient`, stroke, blend and justification enumerations, `polar` and `mix` in expressions) and `ExpressionDrawing`, which draws data-driven shapes, paths, polyline series and labels from compiled expressions, with gradients, stroke styles, opacity, tint, feather, blend modes, per-row transforms and clips, merging consecutive rows into single draws when the result can't change, and reusing the shapes of the previous draw through `ExpressionDrawing::Cache` while the outputs don't change. See the `ExpressionChart` example.
+- `Path::createCopy` keeps the fill rule, and appending many shapes to one `Path` no longer reallocates its storage for every shape.
+- `ColorGradient` and `ColorGradient::ColorStop` support `==` and `!=`.
+- **Breaking:** `Font` equality also compares the height, so fonts differing only in height compare different.
 
 ### UI
 

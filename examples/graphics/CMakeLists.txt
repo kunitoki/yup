@@ -61,6 +61,7 @@ graphics_demo (Crossover MODULES ${audio_modules} dr_libs RESOURCES audio)
 graphics_demo (CodeEditor)
 graphics_demo (DragAndDrop)
 graphics_demo (Emoji RESOURCES fonts)
+graphics_demo (ExpressionChart)
 graphics_demo (FileChooser)
 graphics_demo (Filter MODULES ${audio_modules})
 graphics_demo (FluidSimulation SHADERS

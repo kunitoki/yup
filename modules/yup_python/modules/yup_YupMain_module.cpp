@@ -24,6 +24,10 @@
 
 #include "../bindings/yup_YupCore_bindings.h"
 
+#if YUP_MODULE_AVAILABLE_yup_expression
+#include "../bindings/yup_YupExpression_bindings.h"
+#endif
+
 #if YUP_MODULE_AVAILABLE_yup_events
 #include "../bindings/yup_YupEvents_bindings.h"
 #endif
@@ -87,6 +91,10 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
 
     // ---- Register bindings
     yup::Bindings::registerYupCoreBindings (m);
+
+#if YUP_MODULE_AVAILABLE_yup_expression
+    yup::Bindings::registerYupExpressionBindings (m);
+#endif
 
 #if YUP_MODULE_AVAILABLE_yup_events
     yup::Bindings::registerYupEventsBindings (m);

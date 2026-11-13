@@ -858,6 +858,15 @@ TEST (PathTests, CreateCopyEmpty)
     EXPECT_TRUE (p2.getBounds().isEmpty());
 }
 
+TEST (PathTests, CreateCopyKeepsFillRule)
+{
+    Path p1;
+    p1.addRectangle (0, 0, 10, 10);
+    p1.setUsingNonZeroWinding (false);
+
+    EXPECT_FALSE (p1.createCopy().isUsingNonZeroWinding());
+}
+
 TEST (PathTests, IteratorPostfixIncrement)
 {
     Path p;

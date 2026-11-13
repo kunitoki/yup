@@ -376,14 +376,14 @@ public:
     Font withFeatures (std::initializer_list<Feature> features) const;
 
     //==============================================================================
-    /** Returns true if both fonts share the same loaded font variation.
+    /** Returns true if both fonts share the same loaded font variation and height.
 
         Setting axis values or features makes a new variation, so fonts set up separately
-        compare different even with the same settings. The height is not compared.
+        compare different even with the same settings.
     */
     bool operator== (const Font& other) const;
 
-    /** Returns true if the fonts do not share the same loaded font variation. */
+    /** Returns true if the fonts differ in their loaded font variation or height. */
     bool operator!= (const Font& other) const;
 
     //==============================================================================

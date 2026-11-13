@@ -202,7 +202,6 @@ extern char** environ;
 #include "logging/yup_FileLogger.cpp"
 #include "logging/yup_Logger.cpp"
 #include "maths/yup_BigInteger.cpp"
-#include "maths/yup_Expression.cpp"
 #include "maths/yup_Random.cpp"
 #include "memory/yup_MemoryBlock.cpp"
 #include "memory/yup_SharedMemory.cpp"

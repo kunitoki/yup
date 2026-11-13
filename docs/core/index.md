@@ -5,7 +5,7 @@ strings and text, containers, memory management, files and streams, math,
 error handling, time, data interchange (`var`/JSON/XML), system information, and
 networking - the portable C++ backbone of the framework.
 
-**Modules covered:** `yup_core`, `yup_simd`.
+**Modules covered:** `yup_core`, `yup_simd`, `yup_expression`.
 
 ```{note}
 Threading lives in `yup_core` too (`Thread`, `CriticalSection`, `ThreadPool`,
@@ -27,7 +27,9 @@ guidance together.
 - [Results & error handling](results-and-errors.md) - `Result` and
   `ResultValue<T>` for fallible operations.
 - [Maths](maths.md) - `Range`, `NormalisableRange`, `Random`, `BigInteger`,
-  `Expression`, and statistics helpers.
+  and statistics helpers.
+- [Expressions](expressions.md) - a typed expression language compiled once
+  and evaluated per row or in batches, with custom types.
 - [Time](time.md) - `Time`, `RelativeTime`, and `PerformanceCounter`.
 - [Data interchange](data-interchange.md) - `var`, `DynamicObject`, and JSON.
 - [XML](xml.md) - the `XmlElement` / `XmlDocument` DOM and parser.

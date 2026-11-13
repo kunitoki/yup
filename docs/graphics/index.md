@@ -21,6 +21,8 @@ It is built on the open source [Rive](https://rive.app/) renderer.
   OpenType features, `StyledText`, and themed font access.
 - [Drawables & SVG](svg.md) - parsing and painting SVG with `Drawable`, fitting
   modes, and custom image/font resolvers.
+- [Graphics expressions](expressions.md) - graphics types for the expression
+  language and `ExpressionDrawing` for data-driven shapes.
 - [RHI - GPU Rendering Hardware Interface](rhi/index.md) - the backend-agnostic
   low-level GPU layer: frames, render passes, pipelines, buffers, textures, and
   offscreen targets.
