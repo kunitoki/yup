@@ -181,6 +181,21 @@ TEST_F (ComponentPropertyTest, DescriptorDefaultResolvesWhenUnset)
     EXPECT_DOUBLE_EQ (static_cast<double> (label.findProperty (Identifier ("textHeightProportion"))), 0.75);
 }
 
+TEST_F (ComponentPropertyTest, ColorPropertiesFallBackToThemeColors)
+{
+    Slider slider (Slider::RotaryVerticalDrag);
+    const Identifier thumbColor ("thumbColor");
+
+    theme->setPaletteColor (Slider::Style::thumbColorId, Color (0xff102030));
+    EXPECT_EQ (slider.findPropertyAs<Color> (thumbColor).getARGB(), 0xff102030u);
+
+    theme->setColor (Slider::Style::thumbColorId, Color (0xff405060));
+    EXPECT_EQ (slider.findPropertyAs<Color> (thumbColor).getARGB(), 0xff405060u);
+
+    slider.setColor (Slider::Style::thumbColorId, Color (0xff708090));
+    EXPECT_EQ (slider.findPropertyAs<Color> (thumbColor).getARGB(), 0xff708090u);
+}
+
 // =============================================================================
 // State-backed properties route through accessors
 // =============================================================================

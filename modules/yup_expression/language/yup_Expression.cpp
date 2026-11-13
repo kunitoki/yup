@@ -318,7 +318,7 @@ private:
                 expect ("]");
                 result = make (Kind::index, ExpressionOperator::none, {}, {}, { result, index }, start);
             }
-            else if (match ("."))
+            else if (! isAtRange() && match ("."))
             {
                 const auto name = parseIdentifier ("Expected a member name after '.'");
 
@@ -677,6 +677,13 @@ private:
     {
         if (! match (token))
             fail ("Expected '" + String (token) + "'");
+    }
+
+    // A `..` range belongs to the enclosing text, as in `repeat i in 0 .. 11`
+    bool isAtRange()
+    {
+        skipWhitespace();
+        return position[0] == '.' && position[1] == '.';
     }
 
     bool isAtEnd()

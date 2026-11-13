@@ -34,6 +34,8 @@ windowing, widgets, and theming are still to come.
   sources, payloads, and the drag session.
 - [Component styling](component-styling.md) — colors, properties,
   `ComponentStyle`, and `ApplicationTheme`.
+- [Data-driven drawing](yui-drawing.md) - paint components from a tree of
+  shapes whose values are expressions over the component's properties.
 - [Component effects (shaders)](component-effects.md) — apply GPU shader
   effects to `Component` subtrees.
 - [Component caching](component-caching.md) — `setCachedToTexture`
@@ -79,6 +81,7 @@ layout
 component-drag-and-drop
 gestures
 component-styling
+yui-drawing
 component-effects
 component-3d
 component-caching

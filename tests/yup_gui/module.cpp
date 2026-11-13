@@ -48,6 +48,8 @@
 #include "yup_DragAndDropTarget.cpp"
 #include "yup_DragImageComponent.cpp"
 #include "yup_DrawingScope.cpp"
+#include "yup_DrawingProgram.cpp"
+#include "yup_DrawingStyle.cpp"
 #include "yup_FileChooser.cpp"
 #include "yup_FlexBox.cpp"
 #include "yup_FlexBoxParity.cpp"
@@ -85,3 +87,4 @@
 #include "yup_ToggleButton.cpp"
 #include "yup_TreeView.cpp"
 #include "yup_TreeViewItem.cpp"
+#include "yup_YuiParser.cpp"

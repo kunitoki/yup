@@ -1375,7 +1375,9 @@ public:
         Finds a property value, cascading up the parent chain and falling back to the theme and
         the descriptor default for store-backed properties.
 
-        State-backed properties resolve only on the owning component.
+        Color properties fall back to the theme colors, including those derived from the closest
+        palette, as ApplicationTheme::findColor() does. State-backed properties resolve only on
+        the owning component.
 
         @param name The property name to find.
     */

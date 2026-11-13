@@ -315,6 +315,26 @@ ResultValue<ThemePalette> ThemePalette::fromString (const String& text, Mode mod
     return makeResultValueOk (ThemePalette (colors, mode));
 }
 
+std::optional<ThemePalette::Role> ThemePalette::getRoleFromName (const String& name)
+{
+    static constexpr std::pair<const char*, Role> roleNames[] = {
+        { "background", Role::background },
+        { "surface", Role::surface },
+        { "surfaceRaised", Role::surfaceRaised },
+        { "outline", Role::outline },
+        { "text", Role::text },
+        { "textMuted", Role::textMuted },
+        { "accent", Role::accent },
+        { "onAccent", Role::onAccent }
+    };
+
+    for (const auto& [roleName, role] : roleNames)
+        if (name == roleName)
+            return role;
+
+    return std::nullopt;
+}
+
 //==============================================================================
 
 Color ThemePalette::getColor (Role role) const

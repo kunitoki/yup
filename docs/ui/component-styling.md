@@ -126,6 +126,9 @@ float rf = comp.getPropertyAs<float> ("corner-radius");
 // Cascade: this component, the parent chain, the theme default, then the descriptor default
 var r = comp.findProperty ("corner-radius");
 
+// Color properties also fall back to the theme colors and the closest palette
+auto thumb = slider.findPropertyAs<yup::Color> ("thumbColor");
+
 bool present = comp.hasProperty ("corner-radius");
 ```
 
@@ -193,6 +196,30 @@ the graphics expression types registered on the context. Install the scope befor
 compiling, then call `updateInputs` on each evaluation. The scope holds a weak
 reference to the component, so a destroyed component simply feeds nothing. This is
 the foundation data-driven drawing and styling build on.
+
+### Painting a component from a drawing
+
+A *drawing* paints a component from a tree of independent shapes (`rect`,
+`circle`, `arc`, `line`, `text`, ...), each with its own style and with values
+written as expressions over the component's properties. `DrawingStyle` installs
+a drawing on a component like any other style:
+
+```yui
+drawing Knob {
+    circle { center: bounds.center; radius: bounds.width / 2 - 2; fill: backgroundColor; }
+    arc { center: bounds.center; radius: bounds.width / 2 - 6; from: 135deg;
+          to: lerp (135deg, 405deg, normalized); stroke: trackColor; strokeWidth: 3; }
+}
+```
+
+```cpp
+auto style = DrawingStyle::create (slider, drawing); // the parsed `drawing` tree
+if (style.wasOk())
+    slider.setStyle (style.getReference());
+```
+
+See [Data-driven drawing](yui-drawing.md) for the elements, the `let`, `layer`,
+`group` and `repeat` scopes, and error reporting.
 
 ---
 

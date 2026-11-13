@@ -32,6 +32,9 @@ void DrawingScope::install()
 {
     context.setSymbolResolver ([this] (const String& name) -> const ExpressionType*
     {
+        if (name.startsWith ("palette."))
+            return typeForPaletteRole (name.substring (8));
+
         String propertyName;
 
         if (auto* target = resolveTarget (name, propertyName))
@@ -48,9 +51,19 @@ void DrawingScope::updateInputs (const CompiledExpression& program, ExpressionSt
 {
     for (int i = 0; i < program.getNumInputs(); ++i)
     {
+        const auto& name = program.getInputName (i);
+
+        if (name.startsWith ("palette."))
+        {
+            if (const auto* self = component.get())
+                updatePaletteInput (*self, name.substring (8), i, state);
+
+            continue;
+        }
+
         String propertyName;
 
-        auto* target = resolveTarget (program.getInputName (i), propertyName);
+        auto* target = resolveTarget (name, propertyName);
         if (target == nullptr)
             continue;
 
@@ -60,7 +73,7 @@ void DrawingScope::updateInputs (const CompiledExpression& program, ExpressionSt
         if (property == nullptr)
             continue;
 
-        const auto value = target->getProperty (propertyId);
+        const auto value = target->findProperty (propertyId);
 
         if (property->type == ComponentProperty::Type::color)
             state.set (ExpressionInput<Color> { i }, VariantConverter<Color>::fromVar (value));
@@ -103,6 +116,30 @@ const ExpressionType* DrawingScope::typeForProperty (ComponentProperty::Type typ
 
         default:                               return nullptr;
     }
+}
+
+const ExpressionType* DrawingScope::typeForPaletteRole (const String& roleName) const
+{
+    if (roleName == "dark")
+        return context.getType<bool>();
+
+    return ThemePalette::getRoleFromName (roleName).has_value() ? context.getType<Color>() : nullptr;
+}
+
+void DrawingScope::updatePaletteInput (const Component& target, const String& roleName, int index, ExpressionState& state)
+{
+    static const ThemePalette defaultPalette;
+
+    const auto theme = ApplicationTheme::getGlobalTheme();
+    const auto* palette = theme != nullptr ? &theme->getPalette (target) : target.findPalette();
+
+    if (palette == nullptr)
+        palette = &defaultPalette;
+
+    if (roleName == "dark")
+        state.set (ExpressionInput<bool> { index }, palette->getMode() == ThemePalette::Mode::dark);
+    else if (const auto role = ThemePalette::getRoleFromName (roleName))
+        state.set (ExpressionInput<Color> { index }, palette->getColor (*role));
 }
 
 } // namespace yup

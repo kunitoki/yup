@@ -1655,8 +1655,15 @@ var Component::findProperty (const Identifier& name) const
             return *value;
 
     if (auto theme = ApplicationTheme::getGlobalTheme())
+    {
+        // Theme colors are kept apart from the other defaults, together with the palette ones
+        if (descriptor != nullptr && descriptor->type == ComponentProperty::Type::color)
+            if (auto color = theme->findColor (*this, storageKey))
+                return VariantConverter<Color>::toVar (*color);
+
         if (auto themed = theme->findProperty (*this, storageKey))
             return *themed;
+    }
 
     if (descriptor != nullptr)
         return descriptor->defaultValue;

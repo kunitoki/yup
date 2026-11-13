@@ -124,6 +124,18 @@ constexpr auto ydspDefinitionJson = R"json({
     "operators": ["<<=", ">>=", "<<", ">>", "<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "*=", "&=", "|=", "^=", "->", "<:", ":>", "..", "[[", "]]", "?", ":", ";", ",", ".", "(", ")", "[", "]", "{", "}", "+", "-", "*", "/", "%", "=", "<", ">", "!", "&", "|", "^", "~", "@", "'"]
 })json";
 
+constexpr auto yuiDefinitionJson = R"json({
+    "name": "YUI",
+    "extensions": ["yui"],
+    "lineComment": "//",
+    "blockComment": { "start": "/*", "end": "*/" },
+    "strings": { "delimiters": ["\""], "escape": "\\", "multiLine": false },
+    "numbers": { "hex": false, "binary": false, "float": true, "exponent": true, "suffix": false },
+    "keywords": ["import", "tokens", "drawing", "style", "component", "property", "alias", "signal", "let", "repeat", "in", "true", "false", "circle", "ellipse", "arc", "group", "text"],
+    "types": ["number", "color", "string", "bool", "int", "float", "double", "rect"],
+    "operators": ["<=>", "..", "&&", "||", "==", "!=", "<=", ">=", "?", ":", ";", ",", ".", "(", ")", "[", "]", "{", "}", "+", "-", "*", "/", "%", "<", ">", "!", "#", "@"]
+})json";
+
 constexpr auto xmlDefinitionJson = R"json({
     "name": "XML",
     "extensions": ["xml", "xaml", "svg", "html", "htm", "xhtml", "xsd", "xsl", "xslt", "plist", "resx", "csproj", "vcxproj"],
@@ -356,6 +368,7 @@ const SyntaxDefinition& SyntaxDefinition::getBuiltIn (StringRef languageName)
     static const SyntaxDefinition python = parseBuiltIn (pythonDefinitionJson);
     static const SyntaxDefinition xml = parseBuiltIn (xmlDefinitionJson);
     static const SyntaxDefinition ydsp = parseBuiltIn (ydspDefinitionJson);
+    static const SyntaxDefinition yui = parseBuiltIn (yuiDefinitionJson);
     static const SyntaxDefinition inert;
 
     const String language (languageName);
@@ -375,6 +388,9 @@ const SyntaxDefinition& SyntaxDefinition::getBuiltIn (StringRef languageName)
     if (language == "ydsp")
         return ydsp;
 
+    if (language == "yui")
+        return yui;
+
     return inert;
 }
 
@@ -389,8 +405,9 @@ const SyntaxDefinition* SyntaxDefinition::getBuiltInForExtension (StringRef file
         const auto& python = getBuiltIn ("python");
         const auto& xml = getBuiltIn ("xml");
         const auto& ydsp = getBuiltIn ("ydsp");
+        const auto& yui = getBuiltIn ("yui");
 
-        for (const auto& candidate : { &cpp, &glsl, &python, &xml, &ydsp })
+        for (const auto& candidate : { &cpp, &glsl, &python, &xml, &ydsp, &yui })
         {
             for (const auto& candidateExtension : candidate->getFileExtensions())
             {

@@ -111,6 +111,7 @@ TEST (SyntaxDefinitionTests, BuiltInForExtension)
     EXPECT_EQ (String ("XML"), SyntaxDefinition::getBuiltInForExtension ("xml")->getName());
     EXPECT_EQ (String ("XML"), SyntaxDefinition::getBuiltInForExtension ("svg")->getName());
     EXPECT_EQ (String ("YDSP"), SyntaxDefinition::getBuiltInForExtension ("ydsp")->getName());
+    EXPECT_EQ (String ("YUI"), SyntaxDefinition::getBuiltInForExtension ("yui")->getName());
     EXPECT_EQ (nullptr, SyntaxDefinition::getBuiltInForExtension ("xyz"));
 }
 
@@ -178,6 +179,32 @@ TEST (SyntaxDefinitionTests, BuiltInYdspLoads)
     EXPECT_TRUE (definition.isOperator ("[["));
     EXPECT_TRUE (definition.isOperator ("]]"));
     EXPECT_FALSE (definition.isOperator ("word"));
+}
+
+// ==============================================================================
+// Built-in YUI
+// ==============================================================================
+
+TEST (SyntaxDefinitionTests, BuiltInYuiLoads)
+{
+    const auto& definition = SyntaxDefinition::getBuiltIn ("yui");
+
+    EXPECT_EQ (String ("YUI"), definition.getName());
+    EXPECT_TRUE (definition.isKeyword ("drawing"));
+    EXPECT_TRUE (definition.isKeyword ("let"));
+    EXPECT_TRUE (definition.isKeyword ("repeat"));
+    EXPECT_FALSE (definition.isKeyword ("circle"));
+
+    EXPECT_TRUE (definition.isType ("color"));
+    EXPECT_FALSE (definition.isType ("drawing"));
+
+    EXPECT_EQ (String ("//"), definition.getLineCommentPrefix());
+    ASSERT_TRUE (definition.getBlockComment().has_value());
+    EXPECT_TRUE (definition.getPreprocessorPrefix().isEmpty());
+
+    EXPECT_TRUE (definition.isOperator (".."));
+    EXPECT_TRUE (definition.isOperator ("<=>"));
+    EXPECT_TRUE (definition.isOperator ("#"));
 }
 
 TEST (SyntaxDefinitionTests, UnknownBuiltInIsInert)

@@ -109,6 +109,16 @@ public:
     */
     static ResultValue<ThemePalette> fromString (const String& text, Mode mode = Mode::dark);
 
+    /** Returns the role with the given name, as spelled in the Role enum (for example `surfaceRaised`).
+
+        This is how data such as `.yui` drawings and styles refer to roles, for example `palette.accent`.
+
+        @param name  The role name, case sensitive.
+
+        @return The role, or std::nullopt if no role has that name.
+    */
+    static std::optional<Role> getRoleFromName (const String& name);
+
     //==============================================================================
     /** Returns the color assigned to a role. */
     Color getColor (Role role) const;

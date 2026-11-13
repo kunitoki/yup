@@ -138,6 +138,40 @@ TEST_F (DrawingScopeTest, UnknownSymbolFailsToCompile)
     EXPECT_TRUE (compiled.failed());
 }
 
+TEST_F (DrawingScopeTest, ResolvesRolesOfTheEffectivePalette)
+{
+    ThemePalette themePalette;
+    themePalette.setColor (ThemePalette::Role::accent, Color (0xff336699));
+    theme->setPalette (themePalette);
+
+    Component parent;
+    Slider slider (Slider::LinearHorizontal);
+    parent.addChildComponent (slider);
+
+    DrawingScope scope (slider, context);
+
+    EXPECT_NEAR (static_cast<double> (evaluate (scope, "out = palette.accent.b")), 0x99 / 255.0, 1.0e-4);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = palette.dark ? 1 : 0")), 1.0);
+
+    ThemePalette parentPalette (std::vector<Color> { Color (0xff101010), Color (0xffeeeeee) }, ThemePalette::Mode::light);
+    parentPalette.setColor (ThemePalette::Role::accent, Color (0xff996633));
+    parent.setPalette (parentPalette);
+
+    EXPECT_NEAR (static_cast<double> (evaluate (scope, "out = palette.accent.b")), 0x33 / 255.0, 1.0e-4);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = palette.dark ? 1 : 0")), 0.0);
+}
+
+TEST_F (DrawingScopeTest, UnknownPaletteRoleFailsToCompile)
+{
+    Slider slider (Slider::LinearHorizontal);
+
+    DrawingScope scope (slider, context);
+    scope.install();
+
+    auto compiled = CompiledExpression::compile ("out = palette.notARole", context);
+    EXPECT_TRUE (compiled.failed());
+}
+
 TEST_F (DrawingScopeTest, DestroyedComponentFeedsNothing)
 {
     auto slider = std::make_unique<Slider> (Slider::LinearHorizontal);

@@ -43,7 +43,13 @@ namespace yup
     registered on the context (see addGraphicsExpressionTypes); other property types are
     left unresolved, so referencing them is a compile error.
 
-    @see ExpressionContext, CompiledExpression, ExpressionState, ComponentProperty
+    The roles of the palette the component is drawn with resolve as `palette.<role>` colors
+    (for example `palette.accent` or `palette.textMuted`, see ThemePalette::Role), and
+    `palette.dark` is true for a dark palette. The palette is the closest one set on the
+    component or a parent, or else the global theme's (see ApplicationTheme::getPalette), so
+    drawings follow palette switches and component palettes.
+
+    @see ExpressionContext, CompiledExpression, ExpressionState, ComponentProperty, ThemePalette
 
     @tags{UI}
 */
@@ -69,9 +75,11 @@ public:
     /** Writes the component's live property values into a state before evaluation.
 
         For every input of the program that names a reflected property of the bound
-        component (directly, or through `self.` or `parent.`), the current value is
-        written to the state. Inputs that match no property are left untouched, and a
-        destroyed component is a no-op.
+        component (directly, or through `self.` or `parent.`), its effective value is
+        written to the state. The effective value cascades like Component::findProperty:
+        an instance override wins, otherwise the themed or default value is used. Inputs
+        naming a palette role are written from the component's current palette. Inputs
+        that match no property are left untouched, and a destroyed component is a no-op.
 
         @param program   A program compiled against this scope's context.
         @param state     A state created from the same program.
@@ -82,6 +90,8 @@ private:
     //==============================================================================
     Component* resolveTarget (const String& symbol, String& propertyName) const;
     const ExpressionType* typeForProperty (ComponentProperty::Type type) const;
+    const ExpressionType* typeForPaletteRole (const String& roleName) const;
+    static void updatePaletteInput (const Component& target, const String& roleName, int index, ExpressionState& state);
 
     WeakReference<Component> component;
     ExpressionContext& context;
