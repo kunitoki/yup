@@ -44,14 +44,6 @@ class YUP_API ResizableCorner : public Component
 {
 public:
     //==============================================================================
-    /** Style identifiers for theme customization. */
-    struct Style
-    {
-        /** The color of the grip lines. */
-        static const Identifier lineColorId;
-    };
-
-    //==============================================================================
     /** Creates a ResizableCorner.
 
         @param componentID  An optional identifier for this component
@@ -74,6 +66,13 @@ public:
         When unset the requested size is applied unchanged.
     */
     std::function<Size<float> (Size<float>)> constrainSize;
+
+    //==============================================================================
+    /** Style identifiers for theme customization. */
+    struct Style
+    {
+        static const Identifier lineColorId; /**< The color of the grip lines. */
+    };
 
     //==============================================================================
     /** @internal */

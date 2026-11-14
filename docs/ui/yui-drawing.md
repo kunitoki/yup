@@ -158,6 +158,49 @@ overridden per component.
   and `let`s only, it can't contain `layer`, `group` or another `repeat`.
 - Every element accepts an optional `id`, used in error messages.
 
+## Properties
+
+A drawing can declare properties: inputs its users set to tune it without
+editing it. They go at the top of the drawing and are visible to every element,
+like a `let` of the root scope:
+
+```yui
+drawing Knob {
+    property bezelSize: number = 0.8;
+    property ring: color = palette.accent;
+    property ticks: integer = 11;
+    property showTicks: boolean = true;
+
+    let r: min (bounds.width, bounds.height) * 0.5;
+    circle { center: bounds.center; radius: r * bezelSize; fill: ring; }
+}
+```
+
+- The type is `number`, `integer`, `boolean`, `string` or `color`.
+- The default is optional and is an expression, so it can read the component,
+  the palette, `bounds` and the properties declared before it. It must have the
+  property's type; a `number` accepts any number. Without a default a property
+  is `0`, `false`, empty or transparent.
+- Every paint reads the property by name from the component the drawing is
+  installed on, like `Component::findProperty`: a value set on the component, a
+  value a stylesheet computed for it, or one of these on a parent. The default
+  is used when none is found.
+
+So a stylesheet sets them like any other property, typed by the drawing, and
+can vary them per class, id or state:
+
+```yui
+style {
+    .knob { drawing: Knob; }
+    .knob:pressed { bezelSize: 0.84; }
+    #drive .knob { ring: palette.text; }
+}
+```
+
+From C++, set them on the component with `setProperty ("bezelSize", 0.7)`, and
+list them with `DrawingProgram::getProperties()` or
+`DrawingStyle::getProperties()`.
+
 ## Errors
 
 `DrawingProgram::create` and `DrawingStyle::create` fail with a message that
@@ -207,72 +250,46 @@ example) share one compilation, and only keep their own evaluation state.
 
 ## Drawings in a stylesheet
 
-A `.yui` document can also hold `palette` and `style` blocks, `import` other
-files, and declare one root component. The stylesheet picks a drawing with
-`drawing: Name;`, scopes a palette with `palette: Name;` and sets the component
-properties the drawing reads, so the same drawing follows any palette:
+A `.yui` document usually holds its drawings next to `palette` and `style`
+blocks, and a stylesheet rule picks a drawing with `drawing: Name;`. The rule
+also sets the properties the drawing reads, so the same drawing follows any
+palette, state or class:
 
 ```yui
-// ui.yui
 import "knob.yui";      // drawing VolumeKnob { ... }, reading trackColor and thumbColor
 
-palette Porcelain { mode: light; colors: "#ece9e1 #9aa3c0 #3a3a3e"; accent: #9aa3c0; }
-
 style {
-    .panel { palette: Porcelain; }
     .knob { drawing: VolumeKnob; trackColor: palette.accent; thumbColor: palette.text; }
     .knob:hover { trackColor: palette.accent.darker (0.08); }
 }
 
 Component {
-    class: panel; width: 360; height: 380;
     Slider { id: volume; class: knob; sliderType: rotaryVerticalDrag; width: parent.width; height: parent.height; }
 }
 ```
 
-Imports are resolved by a callback, so they can come from files, resources or
-editors. `YuiDocument` creates the components and attaches the stylesheet built
-from the same document to the root:
-
-```cpp
-YuiDocument document;
-
-const auto result = document.loadFromString (text, [&] (const String& path) -> std::optional<String>
-{
-    return folder.getChildFile (path).loadFileAsString();
-});
-
-if (result.wasOk())
-    addAndMakeVisible (*document.getRoot());
-```
-
-Instance property values are expressions kept up to date as what they read
-changes, see [Reactive bindings](yui-reactivity.md). The `YuiDrawing` graphics
-example edits such a UI split across `ui.yui`, `knob.yui`, `palette.yui` and
-`style.yui`.
-
-Tokens, composite components, handlers and models are described in [Complete
-UIs in `.yui`](yui-documents.md).
-
-## Saving documents
-
-A style rule can also declare a property, which sets its default on the
-components the rule matches:
-
-```yui
-style { .knob { property glow: number = 0; } }
-```
-
-`YuiWriter::write()` turns a parsed document, or any element of it, back into
-text that parses to the same tree, so tools can load, edit and save `.yui`
-files. Comments and the original layout are not preserved.
+See [Stylesheets](yui-styles.md) for selectors, palettes, transitions and
+shadows, and [Complete UIs in `.yui`](yui-documents.md) for loading such a
+document with `YuiDocument`.
 
 ## Limitations
 
 - A semi-transparent `layer` is rendered offscreen at the logical size of the
   component, so it can look soft on high-density displays.
 - `repeat` takes a fixed range; collections of dynamic length (such as per-voice
-  modulation arcs) and nested repeats are planned.
+  modulation arcs) and nested repeats are planned. This is why the synth plugin
+  knob, ported to `synthknob.yui` in the `YuiDrawing` example, draws a single
+  modulation lane.
 - Image and SVG shapes, layer blending and masking are planned.
 - Compile errors are reported against the drawing tree, not mapped back to
   source lines.
+
+## See also
+
+- [The `.yui` language](yui-language.md) - the syntax of every block.
+- [Stylesheets](yui-styles.md) - selecting drawings and setting their
+  properties from rules.
+- [How YUI fits together](yui-architecture.md) - how drawings share their
+  compilation and where their values come from.
+- [Reactive bindings](yui-reactivity.md) - the same expressions keeping
+  properties up to date.

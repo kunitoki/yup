@@ -49,6 +49,23 @@ protected:
         return result.document;
     }
 
+    // Builds a document, returning its diagnostics with the line and column they were written at
+    static StringArray buildAndLocate (const String& text, bool shouldBuild)
+    {
+        const auto parsed = YuiParser::parse (text);
+        EXPECT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+
+        YuiBuilder builder;
+        EXPECT_EQ (builder.build (parsed.document).wasOk(), shouldBuild) << text;
+
+        StringArray located;
+
+        for (const auto& diagnostic : builder.getDiagnostics())
+            located.add (parsed.sourceMap.locate (diagnostic).toString());
+
+        return located;
+    }
+
     struct RecordingProvider : BindingProvider
     {
         std::vector<Property> getProperties() const override { return { { Identifier ("gain"), ComponentProperty::Type::number } }; }
@@ -85,7 +102,7 @@ TEST_F (YuiBuilderTests, BuildsTheComponentTree)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().isEmpty()) << builder.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
 
     auto* root = builder.getRoot();
     ASSERT_NE (root, nullptr);
@@ -126,7 +143,94 @@ TEST_F (YuiBuilderTests, ReportsPropertiesThatCantBeSet)
         Slider { normalized: 0.5; sliderType: sideways; width: unknownSymbol; })yui"));
 
     ASSERT_TRUE (result.wasOk());
-    EXPECT_EQ (builder.getDiagnostics().size(), 3);
+    EXPECT_EQ (builder.getDiagnostics().size(), 3u);
+}
+
+TEST_F (YuiBuilderTests, ReportsWhereEachProblemIsWritten)
+{
+    const auto located = buildAndLocate (R"yui(component Slider : Component { }
+component Card : Column {
+    property spot: point;
+    property level: number = unknownSymbol;
+    property alias lost <=> missing.value;
+    property alias none <=> knob.nothing;
+    Slider { id: knob; }
+}
+tokens { property accent: number = 1; property broken: number = unknownSymbol; }
+tokens { property accent: number = 2; }
+Column {
+    Card { spot: 1; }
+    Slider { id: twin; hovered: true; }
+    Slider { id: twin; sliderType: sideways; }
+    Slider { width: unknownSymbol; }
+    Slider { value <=> knob; }
+    Slider { value <=> nowhere.value; }
+    Slider { value <=> twin.nothing; }
+    Slider { hovered <=> twin.value; }
+    TextButton { onClick: 3; }
+    TextButton { onClick: action (missingName); }
+    TextButton { onClick: nowhere.onClick(); }
+    TextButton { onClick: twin.onValueChanged(); }
+    TextButton { onClick: action ("go", unknownSymbol); }
+    let x: 1;
+})yui",
+                                         true);
+
+    const StringArray expected {
+        "1:1: component Slider: the type is already declared",
+        "5:14: component Card.lost: unknown element in 'missing.value'",
+        "6:14: component Card.none: Slider has no property 'nothing'",
+        "25:5: 'let' is not a component type",
+        "14:14: The id 'twin' is used more than once",
+        "10:19: tokens: 'accent' is declared more than once",
+        "4:14: Card.level: ",
+        "9:48: Column.broken: ",
+        "12:12: Card.spot: properties of this type can't be set from .yui yet",
+        "13:24: Slider.hovered: the property is read-only",
+        "14:24: Slider.sliderType: expected one of ",
+        "15:14: Slider.width: ",
+        "16:14: Slider.value: expected element.property after '<=>'",
+        "17:14: Slider.value: unknown element 'nowhere'",
+        "18:14: Slider.value: Slider has no property 'nothing'",
+        "19:14: Slider.hovered: the property is read-only",
+        "20:18: TextButton.onClick: expected a call, like action (\"name\") or root.signal()",
+        "21:18: TextButton.onClick: action expects the name of the action as a string",
+        "22:18: TextButton.onClick: unknown function 'nowhere.onClick'",
+        "23:18: TextButton.onClick: 'twin.onValueChanged' is not a signal declared by a component",
+        "24:18: TextButton.onClick: "
+    };
+
+    EXPECT_EQ (located.size(), expected.size()) << located.joinIntoString ("\n");
+
+    for (const auto& prefix : expected)
+    {
+        EXPECT_TRUE (std::any_of (located.begin(), located.end(), [&] (const String& line)
+        {
+            return line.startsWith (prefix);
+        })) << "No diagnostic starting with '" << prefix << "' in:\n"
+            << located.joinIntoString ("\n");
+    }
+}
+
+TEST_F (YuiBuilderTests, ReportsWhereTheErrorFailingTheBuildIsWritten)
+{
+    const std::pair<const char*, const char*> cases[] = {
+        { "component A : B { }\ncomponent B : A { }\nA { }", "1:15: The component 'A' is based on itself" },
+        { "component Broken : Missing { }\nBroken { }", "1:20: Unknown component type 'Missing'" },
+        { "component Loop : Column { Loop { } }\nLoop { }", "1:27: The component 'Loop' contains itself" },
+        { "Column { Unknown { } }", "1:10: Unknown component type 'Unknown'" },
+        { "Layout { }", "1:1: The component type 'Layout' can't be created from .yui" },
+        { "style { }", "The document has no root component" }
+    };
+
+    // The layout base type has no factory, applications may register such types
+    auto& registry = ComponentTypeRegistry::getInstance();
+    registry.registerType (LayoutComponent::getClassTypeInfo());
+
+    for (const auto& [text, expected] : cases)
+        EXPECT_EQ (buildAndLocate (text, false).joinIntoString ("\n"), String (expected)) << text;
+
+    registry.unregisterType (LayoutComponent::getClassTypeInfo().getTypeName());
 }
 
 TEST_F (YuiBuilderTests, LinksTwoPropertiesBothWays)
@@ -139,7 +243,7 @@ TEST_F (YuiBuilderTests, LinksTwoPropertiesBothWays)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().isEmpty()) << builder.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
 
     auto* follower = builder.findById<Slider> ("follower");
     auto* knob = builder.findById<Slider> ("knob");
@@ -154,13 +258,42 @@ TEST_F (YuiBuilderTests, LinksTwoPropertiesBothWays)
     EXPECT_FLOAT_EQ (static_cast<float> (follower->getValue()), 0.1f);
 }
 
+TEST_F (YuiBuilderTests, AppliesValuesInTheOrderTheTypeDeclaresThem)
+{
+    RecordingProvider provider;
+    provider.gain = 1000.0;
+
+    YuiBuilder builder;
+    builder.setModel ("synth", provider);
+
+    const auto result = builder.build (parse (R"yui(
+        Component {
+            Slider { id: constant; value: 1000; defaultValue: 500; maximum: 20000; minimum: 20; interval: 1; }
+            Slider { id: linked; value <=> synth.gain; maximum: 20000; minimum: 20; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* constant = builder.findById<Slider> ("constant");
+    ASSERT_NE (constant, nullptr);
+    EXPECT_DOUBLE_EQ (constant->getValue(), 1000.0);
+    EXPECT_DOUBLE_EQ (constant->getDefaultValue(), 500.0);
+    EXPECT_DOUBLE_EQ (constant->getInterval(), 1.0);
+
+    auto* linked = builder.findById<Slider> ("linked");
+    ASSERT_NE (linked, nullptr);
+    EXPECT_DOUBLE_EQ (linked->getValue(), 1000.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> (provider.gain), 1000.0);
+}
+
 TEST_F (YuiBuilderTests, ReportsLinksToUnknownTargets)
 {
     YuiBuilder builder;
     ASSERT_TRUE (builder.build (parse ("Slider { id: gain; value <=> model.gain; }")).wasOk());
 
-    ASSERT_EQ (builder.getDiagnostics().size(), 1);
-    EXPECT_EQ (builder.getDiagnostics()[0], "Slider.value: unknown element 'model'");
+    ASSERT_EQ (builder.getDiagnostics().size(), 1u);
+    EXPECT_EQ (builder.getDiagnostics()[0].message, "Slider.value: unknown element 'model'");
 }
 
 TEST_F (YuiBuilderTests, RebuildingReplacesTheTree)
@@ -171,6 +304,86 @@ TEST_F (YuiBuilderTests, RebuildingReplacesTheTree)
 
     EXPECT_EQ (builder.getRoot()->getComponentID(), "second");
     EXPECT_EQ (builder.findById ("first"), nullptr);
+}
+
+TEST_F (YuiBuilderTests, RebuildingAPatchedTreeKeepsTheComponentsAndWhatTheUserChanged)
+{
+    auto document = parse (R"yui(
+        Component {
+            Slider { id: knob; value: 0.25; }
+            Label { id: caption; text: "a"; }
+        }
+    )yui");
+
+    YuiBuilder builder;
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    auto* root = builder.getRoot();
+    auto* knob = builder.findById<Slider> ("knob");
+    auto* caption = builder.findById<Label> ("caption");
+    ASSERT_NE (knob, nullptr);
+    knob->setValue (0.75);
+
+    YuiTreeDiff::apply (document, parse (R"yui(
+        Component {
+            TextButton { id: first; }
+            Slider { id: knob; value: 0.25; }
+            Label { id: caption; text: "b"; }
+        }
+    )yui"));
+
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    EXPECT_EQ (builder.getRoot(), root);
+    EXPECT_EQ (builder.findById ("knob"), knob);
+    EXPECT_EQ (builder.findById ("caption"), caption);
+    EXPECT_DOUBLE_EQ (knob->getValue(), 0.75);
+    EXPECT_EQ (caption->getText(), "b");
+
+    ASSERT_EQ (root->getNumChildComponents(), 3);
+    EXPECT_EQ (root->getChildComponent (0), builder.findById ("first"));
+    EXPECT_EQ (root->getChildComponent (1), knob);
+}
+
+TEST_F (YuiBuilderTests, RebuildingResetsWhatTheDocumentNoLongerWrites)
+{
+    auto document = parse (R"yui(
+        Component {
+            Label { id: caption; class: "big"; text: "a"; flexGrow: 2; }
+            TextButton { id: button; onClick: action ("press"); }
+        }
+    )yui");
+
+    YuiBuilder builder;
+    int presses = 0;
+    builder.setAction ("press", [&] (const Array<var>&) { ++presses; });
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    YuiTreeDiff::apply (document, parse ("Component { Label { id: caption; } TextButton { id: button; } }"));
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    auto* caption = builder.findById<Label> ("caption");
+    ASSERT_NE (caption, nullptr);
+    EXPECT_EQ (caption->getText(), String());
+    EXPECT_FALSE (caption->hasProperty ("flexGrow"));
+    EXPECT_TRUE (caption->getStyleClasses().isEmpty());
+
+    auto* button = builder.findById<TextButton> ("button");
+    ASSERT_NE (button, nullptr);
+    button->onClick();
+    EXPECT_EQ (presses, 0);
+}
+
+TEST_F (YuiBuilderTests, KeepsWhatWasBuiltWhenTheNewDocumentCantBeBuilt)
+{
+    YuiBuilder builder;
+    ASSERT_TRUE (builder.build (parse ("Component { Slider { id: knob; } }")).wasOk());
+    auto* root = builder.getRoot();
+
+    EXPECT_TRUE (builder.build (parse ("Component { Missing { } }")).failed());
+
+    EXPECT_EQ (builder.getRoot(), root);
+    EXPECT_NE (builder.findById ("knob"), nullptr);
 }
 
 TEST_F (YuiBuilderTests, BuildsALayoutContainerThatPositionsItsChildren)
@@ -184,7 +397,7 @@ TEST_F (YuiBuilderTests, BuildsALayoutContainerThatPositionsItsChildren)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().isEmpty()) << builder.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
 
     auto* left = builder.findById ("left");
     auto* right = builder.findById ("right");
@@ -206,7 +419,7 @@ TEST_F (YuiBuilderTests, KeepsPropertiesUpToDateWithBindings)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().isEmpty()) << builder.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
 
     auto* knob = builder.findById<Slider> ("knob");
     auto* follower = builder.findById<Slider> ("follower");
@@ -230,7 +443,7 @@ TEST_F (YuiBuilderTests, ResolvesAnElementDeclaredLater)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().isEmpty()) << builder.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
 
     auto* follower = builder.findById<Slider> ("follower");
     ASSERT_NE (follower, nullptr);
@@ -248,7 +461,7 @@ TEST_F (YuiBuilderTests, FollowsTheInteractionStatesOfAnotherElement)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().isEmpty()) << builder.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
 
     auto* volume = builder.findById<Slider> ("volume");
     auto* readout = builder.findById<Label> ("readout");
@@ -282,7 +495,7 @@ TEST_F (YuiBuilderTests, RunsAnActionWhenASignalIsEmitted)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().isEmpty()) << builder.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
 
     auto* go = builder.findById<TextButton> ("go");
     auto* knob = builder.findById<Slider> ("knob");
@@ -316,7 +529,7 @@ TEST_F (YuiBuilderTests, ReportsHandlersThatArentCalls)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_EQ (builder.getDiagnostics().size(), 3) << builder.getDiagnostics().joinIntoString ("\n");
+    EXPECT_EQ (builder.getDiagnostics().size(), 3u) << YuiDiagnostic::join (builder.getDiagnostics());
 }
 
 TEST_F (YuiBuilderTests, InstantiatesADeclaredComponent)
@@ -348,7 +561,7 @@ TEST_F (YuiBuilderTests, InstantiatesADeclaredComponent)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().isEmpty()) << builder.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
 
     auto* cutoff = builder.findById ("cutoff");
     ASSERT_NE (dynamic_cast<ColumnComponent*> (cutoff), nullptr);
@@ -410,7 +623,7 @@ TEST_F (YuiBuilderTests, NestsDeclaredComponents)
         Card { id: card; title: "Filter"; })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().isEmpty()) << builder.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
 
     auto* card = builder.getRoot();
     ASSERT_NE (card, nullptr);
@@ -446,7 +659,7 @@ TEST_F (YuiBuilderTests, ResolvesTokensFromAnyDescendant)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().isEmpty()) << builder.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
 
     auto* root = builder.getRoot();
     auto* caption = builder.findById ("caption");
@@ -479,7 +692,7 @@ TEST_F (YuiBuilderTests, LinksPropertiesToAModel)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().isEmpty()) << builder.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
 
     auto* knob = builder.findById<Slider> ("knob");
     auto* readout = builder.findById<Label> ("readout");
@@ -508,7 +721,7 @@ TEST_F (YuiBuilderTests, FollowsTheGesturesOfTheComponentsLinkedToAModel)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().isEmpty()) << builder.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
 
     auto* knob = builder.findById<Slider> ("knob");
     ASSERT_NE (knob, nullptr);
@@ -519,5 +732,39 @@ TEST_F (YuiBuilderTests, FollowsTheGesturesOfTheComponentsLinkedToAModel)
     ComponentTestHelper<Slider>::triggerMouseUp (*knob, MouseEvent {});
 
     EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.9f);
+    EXPECT_EQ (provider.gestures.joinIntoString (", "), "begin gain, end gain");
+}
+
+TEST_F (YuiBuilderTests, MakesEachChangeOutsideAGestureAGestureOfItsOwn)
+{
+    RecordingProvider provider;
+
+    YuiBuilder builder;
+    builder.setModel ("synth", provider);
+
+    const auto result = builder.build (parse (R"yui(
+        Component {
+            Slider { id: knob; value <=> synth.gain; }
+            Slider { id: other; value <=> synth.gain; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    auto* knob = builder.findById<Slider> ("knob");
+    auto* other = builder.findById<Slider> ("other");
+    ASSERT_NE (knob, nullptr);
+    ASSERT_NE (other, nullptr);
+
+    knob->setValue (0.8);
+    EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.8f);
+    EXPECT_FLOAT_EQ (static_cast<float> (other->getValue()), 0.8f);
+    EXPECT_EQ (provider.gestures.joinIntoString (", "), "begin gain, end gain");
+
+    provider.gestures.clear();
+    ComponentTestHelper<Slider>::triggerMouseDown (*knob, MouseEvent {});
+    other->setValue (0.3);
+    ComponentTestHelper<Slider>::triggerMouseUp (*knob, MouseEvent {});
+
+    EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.3f);
     EXPECT_EQ (provider.gestures.joinIntoString (", "), "begin gain, end gain");
 }

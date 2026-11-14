@@ -59,7 +59,7 @@ TEST_F (YuiDocumentTests, LoadsTheInterfaceAndAttachesItsStyleSheet)
         })yui");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().isEmpty()) << document.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
     EXPECT_TRUE (document.getTree().isValid());
 
     auto* root = document.getRoot();
@@ -106,22 +106,112 @@ TEST_F (YuiDocumentTests, KeepsTheInterfaceWhenTheTextHasErrors)
     EXPECT_TRUE (result.failed());
     EXPECT_EQ (document.getRoot(), root);
     EXPECT_NE (document.findById ("knob"), nullptr);
-    ASSERT_TRUE (document.getParseError().has_value());
-    EXPECT_EQ (document.getParseError()->line, 2);
-    EXPECT_EQ (document.getDiagnostics().size(), 1);
+    ASSERT_EQ (document.getDiagnostics().size(), 1u);
+    EXPECT_EQ (document.getDiagnostics().front().line, 2);
+    EXPECT_EQ (result.getErrorMessage(), document.getDiagnostics().front().toString());
 }
 
-TEST_F (YuiDocumentTests, LeavesNothingLoadedWhenTheComponentsCantBeCreated)
+TEST_F (YuiDocumentTests, KeepsTheInterfaceWhenTheComponentsCantBeCreated)
 {
     YuiDocument document;
     ASSERT_TRUE (document.loadFromString ("Component { Slider { id: knob; } }").wasOk());
 
-    const auto result = document.loadFromString ("Component { Missing { } }");
+    auto* knob = document.findById ("knob");
+    const auto* styleSheet = document.getStyleSheet().get();
+
+    const auto result = document.loadFromString ("Component { Slidr { id: knob; } }");
 
     EXPECT_TRUE (result.failed());
+    EXPECT_EQ (document.findById ("knob"), knob);
+    EXPECT_EQ (document.getStyleSheet().get(), styleSheet);
+    ASSERT_EQ (document.getDiagnostics().size(), 1u);
+    EXPECT_EQ (result.getErrorMessage(), "1:13: Unknown component type 'Slidr'");
+
+    // The tree goes back to the loaded one, so fixing the text keeps the components
+    ASSERT_TRUE (document.loadFromString ("Component { Slider { id: knob; } }").wasOk());
+    EXPECT_EQ (document.findById ("knob"), knob);
+}
+
+TEST_F (YuiDocumentTests, TellsListenersAboutEveryLoad)
+{
+    struct Recorder final : YuiDocument::Listener
+    {
+        void documentLoaded (YuiDocument& document, const Result& result) override
+        {
+            loads.add (result.wasOk());
+            roots.add (document.getRoot());
+        }
+
+        Array<bool> loads;
+        Array<Component*> roots;
+    };
+
+    YuiDocument document;
+    Recorder recorder;
+    document.addListener (&recorder);
+
+    ASSERT_TRUE (document.loadFromString ("Component { Slider { id: knob; } }").wasOk());
+    auto* root = document.getRoot();
+
+    EXPECT_TRUE (document.loadFromString ("Component { Slider { id: ; } }").failed());
+    EXPECT_TRUE (document.loadFromString ("Component { Slidr { id: knob; } }").failed());
+
+    UndoManager undoManager;
+    document.setUndoManager (&undoManager);
+    ASSERT_TRUE (document.loadFromString ("Column { Slider { id: knob; } }").wasOk());
+    auto* column = document.getRoot();
+
+    ASSERT_TRUE (undoManager.undo());
+    document.setUndoManager (nullptr);
+
+    EXPECT_EQ (recorder.loads, Array<bool> ({ true, false, false, true, true }));
+    EXPECT_EQ (recorder.roots, Array<Component*> ({ root, root, root, column, document.getRoot() }));
+
+    document.removeListener (&recorder);
+    ASSERT_TRUE (document.loadFromString ("Component {}").wasOk());
+    EXPECT_EQ (recorder.loads.size(), 5);
+}
+
+TEST_F (YuiDocumentTests, ReloadingUpdatesTheInterfaceInPlace)
+{
+    YuiDocument document;
+    ASSERT_TRUE (document.loadFromString ("Component { Slider { id: knob; value: 0.25; } Label { id: caption; text: \"a\"; } }").wasOk());
+
+    auto* root = document.getRoot();
+    auto* knob = document.findById<Slider> ("knob");
+    ASSERT_NE (knob, nullptr);
+    knob->setValue (0.75);
+
+    ASSERT_TRUE (document.loadFromString ("Component { Slider { id: knob; value: 0.25; } Label { id: caption; text: \"b\"; } }").wasOk());
+
+    EXPECT_EQ (document.getRoot(), root);
+    EXPECT_EQ (document.findById ("knob"), knob);
+    EXPECT_DOUBLE_EQ (knob->getValue(), 0.75);
+    EXPECT_EQ (document.findById<Label> ("caption")->getText(), "b");
+}
+
+TEST_F (YuiDocumentTests, ReloadsAreUndoable)
+{
+    UndoManager undoManager;
+    YuiDocument document;
+    document.setUndoManager (&undoManager);
+
+    ASSERT_TRUE (document.loadFromString ("Component { Label { id: caption; text: \"a\"; } }").wasOk());
+    auto* caption = document.findById<Label> ("caption");
+
+    ASSERT_TRUE (document.loadFromString ("Component { Label { id: caption; text: \"b\"; } }").wasOk());
+    EXPECT_FALSE (document.loadFromString ("Component { Missing { } }").wasOk());
+
+    EXPECT_TRUE (undoManager.undo());
+    EXPECT_EQ (document.findById ("caption"), caption);
+    EXPECT_EQ (caption->getText(), "a");
+
+    EXPECT_TRUE (undoManager.redo());
+    EXPECT_EQ (caption->getText(), "b");
+
+    EXPECT_TRUE (undoManager.undo());
+    EXPECT_TRUE (undoManager.undo());
     EXPECT_EQ (document.getRoot(), nullptr);
-    EXPECT_EQ (document.getStyleSheet(), nullptr);
-    EXPECT_FALSE (document.getParseError().has_value());
 }
 
 TEST_F (YuiDocumentTests, ReportsTheValuesThatCantBeApplied)
@@ -131,7 +221,127 @@ TEST_F (YuiDocumentTests, ReportsTheValuesThatCantBeApplied)
 
     EXPECT_TRUE (result.wasOk());
     EXPECT_NE (document.findById ("knob"), nullptr);
-    EXPECT_EQ (document.getDiagnostics().size(), 1);
+    EXPECT_EQ (document.getDiagnostics().size(), 1u);
+}
+
+TEST_F (YuiDocumentTests, ReportsWhereTheProblemsOfALoadAreWritten)
+{
+    struct Recorder final : YuiDocument::Listener
+    {
+        void documentLoaded (YuiDocument& document, const Result& result) override {}
+
+        void documentDiagnosed (YuiDocument& document, const YuiDiagnostic& diagnostic) override
+        {
+            diagnosed.add (diagnostic.toString());
+        }
+
+        StringArray diagnosed;
+    };
+
+    YuiDocument document;
+    Recorder recorder;
+    document.addListener (&recorder);
+
+    const auto result = document.loadFromString ("style {\n"
+                                                 "    .knob { cursor: finger; }\n"
+                                                 "}\n"
+                                                 "Component {\n"
+                                                 "    Slider { class: \"knob\"; value: missing * 2; }\n"
+                                                 "}");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    ASSERT_EQ (document.getDiagnostics().size(), 2u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics()[0].toString().startsWith ("5:29: Slider.value: "));
+    EXPECT_EQ (document.getDiagnostics()[1].toString(), "2:13: Unknown cursor 'finger'");
+
+    // The problems of a load come with the load itself
+    EXPECT_TRUE (recorder.diagnosed.isEmpty());
+
+    document.removeListener (&recorder);
+}
+
+TEST_F (YuiDocumentTests, ReportsWhereTheErrorFailingALoadIsWritten)
+{
+    YuiDocument document;
+    ASSERT_TRUE (document.loadFromString ("Component { }").wasOk());
+
+    const auto result = document.loadFromString ("style {\n    Slider::before { opacity: 1; }\n}\nComponent { }");
+
+    EXPECT_EQ (result.getErrorMessage(), "2:5: Pseudo-elements are not supported in selector 'Slider::before'");
+    ASSERT_EQ (document.getDiagnostics().size(), 1u);
+    EXPECT_EQ (document.getDiagnostics().front().line, 2);
+}
+
+TEST_F (YuiDocumentTests, TellsListenersAboutStyleProblemsMetLater)
+{
+    struct Recorder final : YuiDocument::Listener
+    {
+        void documentLoaded (YuiDocument& document, const Result& result) override {}
+
+        void documentDiagnosed (YuiDocument& document, const YuiDiagnostic& diagnostic) override
+        {
+            diagnosed.add (diagnostic.toString());
+            counts.add (static_cast<int> (document.getDiagnostics().size()));
+        }
+
+        StringArray diagnosed;
+        Array<int> counts;
+    };
+
+    YuiDocument document;
+    Recorder recorder;
+    document.addListener (&recorder);
+
+    ASSERT_TRUE (document.loadFromString ("style {\n    .late { cursor: finger; }\n}\nComponent { Slider { id: knob; } }").wasOk());
+    EXPECT_TRUE (document.getDiagnostics().empty());
+
+    auto* knob = document.findById ("knob");
+    ASSERT_NE (knob, nullptr);
+    auto& context = *document.getRoot()->getStyleContext();
+
+    knob->addStyleClass ("late");
+    context.restyleNow();
+
+    EXPECT_EQ (recorder.diagnosed, StringArray ("2:13: Unknown cursor 'finger'"));
+    EXPECT_EQ (recorder.counts, Array<int> ({ 1 }));
+
+    // Restyling meets the same problem again, it is reported once
+    knob->removeStyleClass ("late");
+    context.restyleNow();
+    knob->addStyleClass ("late");
+    context.restyleNow();
+
+    EXPECT_EQ (recorder.diagnosed.size(), 1);
+    EXPECT_EQ (document.getDiagnostics().size(), 1u);
+
+    document.removeListener (&recorder);
+}
+
+TEST_F (YuiDocumentTests, UndoingALoadReportsWhereTheRestoredTextWasWritten)
+{
+    UndoManager undoManager;
+    YuiDocument document;
+    document.setUndoManager (&undoManager);
+
+    const auto firstLocation = [&]
+    {
+        return document.getDiagnostics().empty() ? String() : document.getDiagnostics().front().toString().upToFirstOccurrenceOf (" ", false, false);
+    };
+
+    ASSERT_TRUE (document.loadFromString ("Component {\n\n    Slider { value: missing; }\n}").wasOk());
+    EXPECT_EQ (firstLocation(), "3:14:");
+
+    ASSERT_TRUE (document.loadFromString ("Component { Slider { value: missing; } }").wasOk());
+    EXPECT_EQ (firstLocation(), "1:22:");
+
+    ASSERT_TRUE (undoManager.undo());
+    EXPECT_EQ (firstLocation(), "3:14:");
+
+    ASSERT_TRUE (undoManager.redo());
+    EXPECT_EQ (firstLocation(), "1:22:");
+
+    document.clear();
+    EXPECT_TRUE (document.getDiagnostics().empty());
 }
 
 TEST_F (YuiDocumentTests, BindingsFollowTheEnabledStateOfAnAncestor)
@@ -178,7 +388,7 @@ TEST_F (YuiDocumentTests, UndoesTheGesturesMadeOnACompositeLinkedToAModel)
         Row { LabeledKnob { id: cutoff; value <=> params.cutoff; } })yui");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().isEmpty()) << document.getDiagnostics().joinIntoString ("\n");
+    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
 
     auto* cutoff = document.findById ("cutoff");
     ASSERT_NE (cutoff, nullptr);

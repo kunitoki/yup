@@ -91,6 +91,9 @@ public:
         static const Identifier switchColorId;
         static const Identifier switchOffBackgroundColorId;
         static const Identifier switchOnBackgroundColorId;
+
+        static const Identifier cornerRadiusId; /**< Corner radius, unset for a pill */
+        static const Identifier thumbInsetId;   /**< Inset of the handle inside its slot, 4 by default */
     };
 
     //==============================================================================

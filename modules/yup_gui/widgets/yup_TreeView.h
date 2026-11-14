@@ -263,12 +263,12 @@ public:
     */
     struct Style
     {
-        static inline const Identifier indentGuideColorId { "treeViewIndentGuide" };
-        static inline const Identifier disclosureColorId { "treeViewDisclosure" };
-        static inline const Identifier itemTextColorId { "treeViewItemText" };
-        static inline const Identifier itemTextSelectedColorId { "treeViewItemTextSelected" };
-        static inline const Identifier dropIndicatorColorId { "treeViewDropIndicator" };
-        static inline const Identifier itemHoveredColorId { "treeViewItemHovered" };
+        static const Identifier indentGuideColorId;
+        static const Identifier disclosureColorId;
+        static const Identifier itemTextColorId;
+        static const Identifier itemTextSelectedColorId;
+        static const Identifier dropIndicatorColorId;
+        static const Identifier itemHoveredColorId;
     };
 
     //==============================================================================

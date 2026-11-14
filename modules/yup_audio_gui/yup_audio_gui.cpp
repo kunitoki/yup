@@ -58,3 +58,4 @@
 #include "device_manager/yup_MidiSection.cpp"
 #include "device_manager/yup_AudioDeviceManagerPanel.cpp"
 #include "device_manager/yup_AudioDeviceManagerWindow.cpp"
+#include "binding/yup_AudioParameterBindingProvider.cpp"

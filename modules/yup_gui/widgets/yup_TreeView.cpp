@@ -228,6 +228,14 @@ private:
 };
 
 //==============================================================================
+const Identifier TreeView::Style::indentGuideColorId { "treeViewIndentGuide" };
+const Identifier TreeView::Style::disclosureColorId { "treeViewDisclosure" };
+const Identifier TreeView::Style::itemTextColorId { "treeViewItemText" };
+const Identifier TreeView::Style::itemTextSelectedColorId { "treeViewItemTextSelected" };
+const Identifier TreeView::Style::dropIndicatorColorId { "treeViewDropIndicator" };
+const Identifier TreeView::Style::itemHoveredColorId { "treeViewItemHovered" };
+
+//==============================================================================
 TreeView::TreeView (StringRef componentID)
     : Component (componentID)
 {

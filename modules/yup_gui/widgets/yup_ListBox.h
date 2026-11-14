@@ -769,15 +769,14 @@ public:
     /** Style identifiers for theming. */
     struct Style
     {
-        static inline const Identifier backgroundColorId { "listBoxBackground" };
-        static inline const Identifier outlineColorId { "listBoxOutline" };
-        static inline const Identifier rowBackgroundColorId { "rowBackground" };
-        static inline const Identifier selectedRowBackgroundColorId { "selectedRowBackground" };
-        static inline const Identifier hoveredRowBackgroundColorId { "hoveredRowBackground" };
-        static inline const Identifier refreshIndicatorColorId { "listBoxRefreshIndicator" };
+        static const Identifier backgroundColorId;            /**< The background color of the list box */
+        static const Identifier outlineColorId;               /**< The outline color of the list box */
+        static const Identifier rowBackgroundColorId;         /**< The background color of a row */
+        static const Identifier selectedRowBackgroundColorId; /**< The background color of a selected row */
+        static const Identifier hoveredRowBackgroundColorId;  /**< The background color of a hovered row */
+        static const Identifier refreshIndicatorColorId;      /**< The color of the refresh indicator */
 
-        /** Curated geometry: the size of the pull-to-refresh indicator along the scroll axis. */
-        static inline const Identifier refreshIndicatorSizeId { "listBoxRefreshIndicatorSize" };
+        static const Identifier refreshIndicatorSizeId;       /**< The size of the refresh indicator */
     };
 
     //==============================================================================

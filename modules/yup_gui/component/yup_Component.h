@@ -866,8 +866,9 @@ public:
         component clears what it drew there.
 
         A component still paints inside its parent's area only. The margin is not painted
-        for components on the desktop, nor by components with a ComponentEffect or cached to
-        a texture, which render their bounds only.
+        for components on the desktop. Components with a ComponentEffect or cached to a
+        texture keep their content in their bounds, only their stylesheet `shadow:` layers
+        paint in the margin.
 
         @param left    How far the component may paint left of its bounds
         @param top     How far the component may paint above its bounds
@@ -2182,6 +2183,7 @@ private:
     Point<float> getTopLevelScreenOrigin() const;
     void applyPaintState (Graphics& g, const RectangleList<float>& clipRegion) const;
     void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous);
+    void paintStyleShadows (Graphics& g) const;
     void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous);
     GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt);
     std::optional<RectangleList<float>> takeEffectDirtyRegion (bool renderContinuous);

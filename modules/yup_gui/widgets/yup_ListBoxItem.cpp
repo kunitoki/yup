@@ -23,6 +23,13 @@ namespace yup
 {
 
 //==============================================================================
+const Identifier ListBoxItem::Style::textColorId { "listBoxItemText" };
+const Identifier ListBoxItem::Style::textColorSelectedId { "listBoxItemTextSelected" };
+const Identifier ListBoxItem::Style::backgroundColorId { "listBoxItemBackground" };
+const Identifier ListBoxItem::Style::backgroundColorSelectedId { "listBoxItemBackgroundSelected" };
+const Identifier ListBoxItem::Style::backgroundColorHoveredId { "listBoxItemBackgroundHovered" };
+
+//==============================================================================
 ListBoxItem::ListBoxItem()
 {
     setOpaque (false);

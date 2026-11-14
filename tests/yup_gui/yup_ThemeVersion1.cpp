@@ -252,3 +252,79 @@ TEST (ThemeVersion1Tests, PaintsCoreComponents)
 
     EXPECT_TRUE (true);
 }
+
+class ThemeVersion1GeometryTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        oldTheme = ApplicationTheme::getGlobalTheme();
+        theme = createThemeVersion1();
+        ApplicationTheme::setGlobalTheme (theme);
+    }
+
+    void TearDown() override
+    {
+        ApplicationTheme::setGlobalTheme (oldTheme.get());
+    }
+
+    ApplicationTheme::Ptr theme;
+    ApplicationTheme::Ptr oldTheme;
+};
+
+TEST_F (ThemeVersion1GeometryTests, ThemeSetsGeometryPerWidgetType)
+{
+    theme->setProperty (TextButton::Style::cornerRadiusId, 9.0);
+
+    TextButton button;
+    ComboBox comboBox;
+    EXPECT_FLOAT_EQ (9.0f, button.findPropertyAs<float> (Identifier ("cornerRadius")));
+    EXPECT_FLOAT_EQ (4.0f, comboBox.findPropertyAs<float> (Identifier ("cornerRadius")));
+}
+
+TEST_F (ThemeVersion1GeometryTests, ContainerSetsGeometryOfTheWidgetsInside)
+{
+    Component panel;
+    Slider slider (Slider::LinearHorizontal);
+    ScrollBar scrollBar (ScrollBar::Orientation::vertical);
+    panel.addChildComponent (slider);
+    panel.addChildComponent (scrollBar);
+
+    panel.setProperty (Slider::Style::thumbSizeId, 20.0);
+    panel.setProperty (ScrollBar::Style::thumbInsetId, 1.0);
+
+    EXPECT_FLOAT_EQ (20.0f, slider.findPropertyAs<float> (Identifier ("thumbSize")));
+    EXPECT_FLOAT_EQ (1.0f, scrollBar.findPropertyAs<float> (Identifier ("thumbInset")));
+}
+
+TEST_F (ThemeVersion1GeometryTests, PlainCornerRadiusDoesNotLeakIntoWidgets)
+{
+    Component card;
+    TextEditor editor;
+    ToggleButton toggle;
+    card.addChildComponent (editor);
+    card.addChildComponent (toggle);
+
+    card.setProperty (Identifier ("cornerRadius"), 12.0);
+
+    EXPECT_FLOAT_EQ (4.0f, editor.findPropertyAs<float> (Identifier ("cornerRadius")));
+    EXPECT_FLOAT_EQ (4.0f, toggle.findPropertyAs<float> (Identifier ("cornerRadius")));
+}
+
+TEST_F (ThemeVersion1GeometryTests, StylesheetSetsGeometryThroughQualifiedNames)
+{
+    Component root;
+    SwitchButton switchButton;
+    ProgressBar progressBar;
+    root.addChildComponent (switchButton);
+    root.addChildComponent (progressBar);
+
+    auto sheet = StyleSheet::parse ("style { :root { SwitchButton.thumbInset: 2; ProgressBar.cornerRadius: 3; } }");
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+    root.setStyleSheet (sheet.getReference());
+    root.getStyleContext()->restyleNow();
+
+    EXPECT_FLOAT_EQ (2.0f, switchButton.findPropertyAs<float> (Identifier ("thumbInset")));
+    EXPECT_FLOAT_EQ (3.0f, progressBar.findPropertyAs<float> (Identifier ("cornerRadius")));
+    EXPECT_TRUE (switchButton.findProperty (Identifier ("cornerRadius")).isVoid());
+}

@@ -156,3 +156,39 @@ TEST_F (StyleSheetTests, FailsForInvalidInput)
 
     EXPECT_TRUE (StyleSheet::fromTree (DataTree ("style", { DataTree ("palette", { { "name", "Bad" }, { "colors", "#100b00-#85cb33-#efffc8-#a5cbc3-#3b341f" }, { "notARole", "#ff0000" } }) })).failed());
 }
+
+TEST_F (StyleSheetTests, ReportsTheElementOfTheFirstProblem)
+{
+    const auto locate = [] (const String& text)
+    {
+        const auto parsed = YuiParser::parse (text);
+        EXPECT_TRUE (parsed.wasOk());
+
+        YuiDiagnostic failure;
+        EXPECT_TRUE (StyleSheet::fromTree (parsed.document, &failure).failed());
+        return parsed.sourceMap.locate (failure).toString();
+    };
+
+    EXPECT_EQ (locate ("palette P {\n  colors: \"#100b00-#85cb33\";\n  notARole: #ff0000;\n}"), "3:3: The palette 'P' sets the unknown role 'notARole'");
+    EXPECT_EQ (locate ("palette P {\n  colors: \"nope\";\n}"), "2:3: The palette 'P' is invalid: No valid colors found");
+    EXPECT_EQ (locate ("palette P { colors: \"\"; }"), "1:1: The palette 'P' needs colors");
+    EXPECT_EQ (locate ("style {\n  Slider::before { opacity: 1; }\n}"), "2:3: Pseudo-elements are not supported in selector 'Slider::before'");
+
+    YuiDiagnostic failure;
+    EXPECT_TRUE (StyleSheet::fromTree (DataTree ("style", { DataTree ("keyframes") }), &failure).failed());
+    EXPECT_EQ (failure.element.getType(), Identifier ("keyframes"));
+
+    EXPECT_TRUE (StyleSheet::fromTree (DataTree ("other"), &failure).failed());
+    EXPECT_EQ (failure.toString(), "Expected a 'yui' document or a 'style' element");
+    EXPECT_FALSE (failure.element.isValid());
+}
+
+TEST_F (StyleSheetTests, KeepsTheElementsOfDeclarationsInTheirDocument)
+{
+    auto sheet = StyleSheet::parse ("style {\n  Slider { opacity: 0.5; }\n}");
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+
+    const auto& element = sheet.getReference()->getRules().front().declarations.front().element;
+    EXPECT_EQ (element.getType(), Identifier ("declaration"));
+    EXPECT_EQ (element.getRoot().getType(), Identifier ("yui"));
+}

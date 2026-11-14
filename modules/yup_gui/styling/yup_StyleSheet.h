@@ -77,6 +77,9 @@ public:
 
         /** The expression text of the value. */
         String value;
+
+        /** The element of the document the declaration comes from, to locate its diagnostics. */
+        DataTree element;
     };
 
     /** A selector and the declarations it applies. */
@@ -115,11 +118,16 @@ public:
     //==============================================================================
     /** Builds a sheet from a parsed document.
 
-        @param tree A `yui` document (see YuiParser), or a single `style` element.
+        The sheet keeps the tree, so the elements of its declarations and drawings stay in
+        their document and the diagnostics about them can be located with a YuiSourceMap.
+
+        @param tree     A `yui` document (see YuiParser), or a single `style` element.
+        @param failure  When not null, receives the first problem along with its element and
+                        property, ready to be located.
 
         @returns The sheet, or a failure describing the first offending element.
     */
-    static ResultValue<Ptr> fromTree (const DataTree& tree);
+    static ResultValue<Ptr> fromTree (const DataTree& tree, YuiDiagnostic* failure = nullptr);
 
     /** Parses `.yui` text and builds a sheet from it.
 
@@ -128,6 +136,18 @@ public:
         @returns The sheet, or a failure with the first diagnostic.
     */
     static ResultValue<Ptr> parse (const String& text);
+
+    /** Splits a declaration value into its comma separated entries, and each entry into its
+        whitespace separated tokens.
+
+        Parenthesized arguments stay with the word before them, so `0 4 rgb (0, 0, 0)` is the
+        single entry `0`, `4`, `rgb(0, 0, 0)`.
+
+        @param value The raw declaration value.
+
+        @returns The entries, each with its tokens; an empty entry for each empty one.
+    */
+    static std::vector<StringArray> tokenizeValue (const String& value);
 
     //==============================================================================
     /** Returns the rules of the sheet, in source order. */
@@ -165,8 +185,9 @@ private:
     //==============================================================================
     StyleSheet() = default;
 
-    Result addElements (const DataTree& parent);
+    std::optional<YuiDiagnostic> addElements (const DataTree& parent);
 
+    DataTree tree;
     std::vector<Rule> rules;
     std::vector<KeyframeSequence> keyframes;
     std::map<String, ThemePalette> palettes;

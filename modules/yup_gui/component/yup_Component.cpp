@@ -2009,8 +2009,8 @@ var Component::findProperty (const Identifier& name) const
             return *value;
 
         if (component->styleState != nullptr)
-            if (auto* computed = component->styleState->getComputedValue (storageKey))
-                return *computed;
+            if (auto* styled = component->styleState->getStyleValue (storageKey))
+                return *styled;
 
         if (descriptor != nullptr && ! descriptor->isInherited)
             break;
@@ -2085,8 +2085,8 @@ std::optional<Color> Component::findColor (const Identifier& colorId) const
 
         if (component->styleState != nullptr)
         {
-            if (auto* computed = component->styleState->getComputedValue (colorId); computed != nullptr && computed->isInt64())
-                return Color (static_cast<uint32> (static_cast<int64> (*computed)));
+            if (auto* styled = component->styleState->getStyleValue (colorId); styled != nullptr && styled->isInt64())
+                return Color (static_cast<uint32> (static_cast<int64> (*styled)));
         }
     }
 
@@ -2483,6 +2483,15 @@ void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRe
         g.setClipPath (getPaintBounds());
 }
 
+void Component::paintStyleShadows (Graphics& g) const
+{
+    if (styleState == nullptr || styleState->getShadows().empty())
+        return;
+
+    static const Identifier cornerRadiusId ("cornerRadius");
+    styleState->paintShadows (g, getLocalBounds(), findPropertyAs<float> (cornerRadiusId));
+}
+
 void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous)
 {
     isRepainting.store (true, std::memory_order_relaxed);
@@ -2522,6 +2531,8 @@ void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegio
         if (! canSkipPaint)
         {
             const auto paintState = g.saveState();
+
+            paintStyleShadows (g);
 
             if (shouldMeasurePaint)
             {
@@ -2609,6 +2620,7 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
             g.setOpacity (opacity);
             applyPaintState (g, boundsToRedraw);
 
+            paintStyleShadows (g);
             componentEffect->apply (g, texture, getLocalBounds());
         }
 
@@ -2656,6 +2668,7 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
             const auto saved = g.saveState();
             g.setOpacity (opacity);
             applyPaintState (g, boundsToRedraw);
+            paintStyleShadows (g);
 
             if (cachedTextureCanvas != nullptr)
                 g.drawTexture (cachedTextureCanvas->asTexture(), getLocalBounds());

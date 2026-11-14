@@ -59,6 +59,10 @@ public:
         static const Identifier textPressedColorId;
         static const Identifier outlineColorId;
         static const Identifier outlineFocusedColorId;
+
+        static const Identifier cornerRadiusId;        /**< Corner radius, 4 by default */
+        static const Identifier outlineWidthId;        /**< Outline width, 1 by default */
+        static const Identifier focusedOutlineWidthId; /**< Outline width with keyboard focus, 2 by default */
     };
 
     //==============================================================================

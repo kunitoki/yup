@@ -43,7 +43,16 @@ class DrawingStyle;
     palette scoped by a `palette:` declaration, restyles the components whose values read
     palette roles.
 
-    @see StyleSheet, StyleState, StyleSelector, Component::setStyleSheet
+    The context also runs the `transition:` and `animation:` declarations through its
+    StyleAnimator: a restyle changing a transitioned value starts a transition from the value
+    shown before, and the animated values are written into the animated layer of the
+    StyleState on every frame while something runs.
+
+    The `cursor:`, `effect:` and `shadow:` declarations set the mouse cursor, a ComponentEffect
+    from the ComponentEffectRegistry and feathered shadow layers painted behind the component,
+    restoring what the component had before when no rule sets them anymore.
+
+    @see StyleSheet, StyleState, StyleSelector, StyleAnimator, Component::setStyleSheet
 
     @tags{UI}
 */
@@ -89,11 +98,12 @@ public:
     void propertyChanged (Component& component, const Identifier& name);
 
     //==============================================================================
-    /** Restyles whatever is dirty and follows palette changes, called once per frame.
+    /** Restyles whatever is dirty, follows palette changes and advances the transitions and
+        animations, called once per frame.
 
-        @param lastFrameTimeSeconds The time of the frame being prepared, in seconds.
+        @param elapsedSeconds The time elapsed since the previous frame, in seconds.
     */
-    void refresh (double lastFrameTimeSeconds);
+    void refresh (double elapsedSeconds);
 
     /** Restyles whatever is dirty immediately, without waiting for the next frame. */
     void restyleNow();
@@ -103,14 +113,27 @@ public:
     void detach();
 
     //==============================================================================
-    /** Returns the diagnostics the last restyle produced, one per declaration that failed. */
-    const StringArray& getDiagnostics() const noexcept { return diagnostics; }
+    /** Returns the diagnostics the last restyle produced, one per declaration that failed.
+
+        The element of each diagnostic is the declaration of the stylesheet it is about, when
+        known, so a YuiSourceMap of the parsed document can locate it.
+    */
+    const std::vector<YuiDiagnostic>& getDiagnostics() const noexcept { return diagnostics; }
+
+    /** Called with each diagnostic as soon as it is produced.
+
+        Unlike @ref getDiagnostics, which only holds the last restyle, this also receives the
+        problems of the declarations applied later, such as a `:hover` rule matching when the
+        mouse enters a component. A value that failed is reported again only once it changes.
+    */
+    std::function<void (const YuiDiagnostic&)> onDiagnostic;
 
 private:
     //==============================================================================
     struct CompiledValue;
     struct ComponentCache;
     struct ResolvedDeclaration;
+    struct PendingTransition;
 
     using DeclarationMap = std::map<Identifier, ResolvedDeclaration>;
 
@@ -118,21 +141,37 @@ private:
     void applyToComponent (Component& component, const DeclarationMap& inherited, DeclarationMap& inheritedForChildren);
     DeclarationMap collectInherited (Component& component) const;
     void collectDeclarations (Component& component, DeclarationMap& direct, DeclarationMap& qualified) const;
-    bool evaluate (Component& component, const Identifier& storageId, const ComponentProperty* descriptor, const String& valueText, var& result, bool& paletteDependent);
+    bool evaluate (Component& component, const Identifier& declarationName, const Identifier& storageId, std::optional<ComponentProperty::Type> type, const String& valueText, var& result, bool& paletteDependent);
     ComponentCache& getCache (Component& component);
+    void syncStateBacked (Component& component, const Identifier& storageId);
     void restoreStateBacked (Component& component, const Identifier& storageId);
     void restoreAllStateBacked (Component& component);
     const DrawingStyle* installDrawing (Component& component, const String& name);
     void restoreDrawing (Component& component);
-    static const ComponentProperty* findDrawingProperty (const DrawingStyle& drawing, const Identifier& name);
+    bool applyEffects (Component& component, bool* paletteDependent = nullptr);
+    void applyCursor (Component& component, const String& name);
+    void applyEffect (Component& component, const String& name);
+    bool applyShadows (Component& component, const String& text, bool& paletteDependent);
+    static const ComponentProperty* findDescriptor (const ComponentTypeInfo& typeInfo, const DrawingStyle* drawing, const Identifier& name);
+    static const ComponentProperty* findStoredProperty (const ComponentTypeInfo& typeInfo, const Identifier& storageId);
+    var getBaseValue (Component& component, const ComponentProperty* descriptor, const Identifier& storageId);
+    bool updateTransitions (Component& component, const std::vector<PendingTransition>& pending, Array<Identifier>& touched);
+    bool updateAnimations (Component& component, const DeclarationMap& direct, const NamedValueSet& previous, const DrawingStyle* drawing, Array<Identifier>& touched);
+    std::vector<StyleAnimator::Track> compileTracks (Component& component, const StyleSheet::KeyframeSequence& keyframes, const DrawingStyle* drawing);
+    void showAnimatedValue (Component& component, const Identifier& storageId, const var* value);
     void clearSubtree (Component& component);
     void markPaletteDependentDirty (Component& component);
+    void report (const Identifier& declarationName, const String& message);
+    void report (const YuiDiagnostic& diagnostic);
 
     Component& root;
     StyleSheet::Ptr styleSheet;
     Array<WeakReference<Component>> dirtyComponents;
     std::map<Component*, std::unique_ptr<ComponentCache>> caches;
-    StringArray diagnostics;
+    StyleAnimator animator;
+    std::vector<YuiDiagnostic> diagnostics;
+    const DeclarationMap* currentDeclarations = nullptr;
+    double clock = 0.0;
     uint32 lastPaletteGeneration = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StyleContext)

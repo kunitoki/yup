@@ -153,13 +153,22 @@ public:
     std::function<void()> onSelectedItemChanged;
 
     //==============================================================================
+    /** Returns true if the popup menu is currently shown. */
+    bool isPopupShown() const;
+
+    //==============================================================================
+    /** Style identifiers for customizing the appearance of the ComboBox. */
     struct Style
     {
-        static const Identifier backgroundColorId;
-        static const Identifier textColorId;
-        static const Identifier borderColorId;
-        static const Identifier arrowColorId;
-        static const Identifier focusedBorderColorId;
+        static const Identifier backgroundColorId;     /**< Background color */
+        static const Identifier textColorId;           /**< Text color */
+        static const Identifier borderColorId;         /**< Border color */
+        static const Identifier arrowColorId;          /**< Arrow color */
+        static const Identifier focusedBorderColorId;  /**< Border color when focused */
+
+        static const Identifier cornerRadiusId;        /**< Corner radius, 4 by default */
+        static const Identifier outlineWidthId;        /**< Border width, 1 by default */
+        static const Identifier focusedOutlineWidthId; /**< Border width with focus or the popup open, 2 by default */
     };
 
     //==============================================================================
@@ -168,9 +177,6 @@ public:
 
     /** @internal */
     const ComponentTypeInfo& getDefaultTypeInfo() const override;
-
-    /** */
-    bool isPopupShown() const;
 
     //==============================================================================
     /** @internal */

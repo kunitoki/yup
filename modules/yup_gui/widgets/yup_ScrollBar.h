@@ -197,29 +197,11 @@ public:
     */
     float getScrollBarWidth() const noexcept;
 
-    //==============================================================================
     /** Callback invoked when the scroll position changes.
 
         @param newPosition  The new scroll position
     */
     std::function<void (double newPosition)> onScrollPositionChanged;
-
-    //==============================================================================
-    /** Style identifiers for theming. */
-    struct Style
-    {
-        static inline const Identifier trackColorId { "scrollBarTrack" };
-        static inline const Identifier thumbColorId { "scrollBarThumb" };
-        static inline const Identifier thumbHoverColorId { "scrollBarThumbHover" };
-        static inline const Identifier thumbDraggingColorId { "scrollBarThumbDragging" };
-    };
-
-    //==============================================================================
-    /** Returns the static type info describing the ScrollBar type. */
-    static const ComponentTypeInfo& getClassTypeInfo();
-
-    /** @internal */
-    const ComponentTypeInfo& getDefaultTypeInfo() const override;
 
     //==============================================================================
     /** Returns whether the thumb is currently being dragged.
@@ -238,23 +220,32 @@ public:
     */
     bool isThumbHovered() const noexcept { return isThumbHover; }
 
-    /** Returns the bounds of the thumb for rendering.
+    //==============================================================================
+    /** Style identifiers for theming. */
+    struct Style
+    {
+        static const Identifier trackColorId;         /**< Track color */
+        static const Identifier thumbColorId;         /**< Thumb color */
+        static const Identifier thumbHoverColorId;    /**< Thumb hover color */
+        static const Identifier thumbDraggingColorId; /**< Thumb dragging color */
 
-        This is used by the theme for rendering.
-
-        @return The thumb bounds
-    */
-    Rectangle<float> getThumbBoundsForRendering() const { return thumbBounds; }
-
-    /** Returns the bounds of the track for rendering.
-
-        This is used by the theme for rendering.
-
-        @return The track bounds
-    */
-    Rectangle<float> getTrackBoundsForRendering() const { return getTrackBounds(); }
+        static const Identifier thumbInsetId;         /**< Inset of the thumb inside the bar, 3 by default */
+        static const Identifier cornerRadiusId;       /**< Thumb corner radius, unset for a pill */
+    };
 
     //==============================================================================
+    /** Returns the static type info describing the ScrollBar type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override;
+
+    //==============================================================================
+    /** @internal */
+    Rectangle<float> getThumbBoundsForRendering() const { return thumbBounds; }
+    /** @internal */
+    Rectangle<float> getTrackBoundsForRendering() const { return getTrackBounds(); }
+
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */

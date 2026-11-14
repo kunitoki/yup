@@ -42,24 +42,6 @@ class YUP_API ProgressBar : public Component
 {
 public:
     //==============================================================================
-    /** Style identifiers for theme customization. */
-    struct Style
-    {
-        /** The background color of the progress bar track. */
-        static const Identifier backgroundColorId;
-
-        /** The foreground color of the filled progress indicator. */
-        static const Identifier foregroundColorId;
-    };
-
-    //==============================================================================
-    /** Returns the static type info describing the ProgressBar type. */
-    static const ComponentTypeInfo& getClassTypeInfo();
-
-    /** @internal */
-    const ComponentTypeInfo& getDefaultTypeInfo() const override;
-
-    //==============================================================================
     /** Creates a ProgressBar.
 
         @param componentID  An optional identifier for this component
@@ -113,6 +95,23 @@ public:
         @endcode
     */
     std::function<void (double)> onProgressChanged;
+
+    //==============================================================================
+    /** Style identifiers for theme customization. */
+    struct Style
+    {
+        static const Identifier backgroundColorId; /**< The background color of the progress bar track. */
+        static const Identifier foregroundColorId; /**< The foreground color of the filled progress indicator. */
+
+        static const Identifier cornerRadiusId;    /**< The corner radius of the track and the indicator, unset for a pill. */
+    };
+
+    //==============================================================================
+    /** Returns the static type info describing the ProgressBar type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override;
 
     //==============================================================================
     /** @internal */

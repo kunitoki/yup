@@ -501,6 +501,62 @@ and embeds it through this function. See
 
 ---
 
+### `yup_add_yui_resources`
+
+```cmake
+yup_add_yui_resources(<library_name>
+    [BASE_DIR  <dir>]
+    [NAMESPACE <namespace>]
+    FILES      <path>...)
+```
+
+Embeds `.yui` files through `yup_add_embedded_binary_resources`, for
+`YuiLoader::loadResource`. Besides the byte arrays, it generates a
+`<library_name>.h` header declaring a function that finds a file by the path
+an `import` uses, its path relative to `BASE_DIR`:
+
+```cpp
+namespace <namespace>
+{
+const uint8_t* <library_name>_find (const char* path, std::size_t& size);
+}
+```
+
+It returns `nullptr` for an unknown path. Editing an embedded file configures
+the project again on the next build.
+
+#### Arguments
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `<library_name>` | string | *(required)* | Name of the generated `OBJECT` library target, also used for the header and function names. |
+| `BASE_DIR` | path | current source dir | Folder the lookup paths are relative to. |
+| `NAMESPACE` | string | `yup` | C++ namespace wrapping the function. |
+| `FILES` | list | *(required)* | The `.yui` files, relative to the current source dir or absolute. |
+
+#### Example
+
+```cmake
+yup_add_yui_resources (MyAppUi
+    BASE_DIR "${CMAKE_CURRENT_LIST_DIR}/ui"
+    FILES ui/ui.yui ui/parts/style.yui)
+
+yup_standalone_app (
+    # ...
+    MODULES yup::yup_gui MyAppUi)
+```
+
+```cpp
+#include <MyAppUi.h>
+
+yup::YuiLoader loader (document);
+loader.loadResource ("ui.yui", yup::MyAppUi_find); // imports "parts/style.yui"
+```
+
+See [Hot reloading `.yui` files](../ui/yui-hot-reload.md).
+
+---
+
 ### `yup_add_test_runner`
 
 Adds YUP's shared GoogleTest runner to a test executable, so each test target

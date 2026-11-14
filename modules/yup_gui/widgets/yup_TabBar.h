@@ -77,40 +77,11 @@ public:
         shrink  /**< The tabs shrink down to a minimum length, and their text is shortened. */
     };
 
-    //==============================================================================
-    /** Receives changes to the tabs of a bar.
-
-        Listeners are always told about changes, synchronously, whatever NotificationType was used
-        to make them: the notification type only applies to the std::function callbacks.
+    /** The shortest a tab gets with the fill layout or the shrink overflow, unless its content is shorter.
+    
+        TODO: Consider making this configurable if needed.
     */
-    class YUP_API Listener
-    {
-    public:
-        virtual ~Listener() = default;
-
-        /** Called when the selected tab changes.
-
-            @param bar    The bar.
-            @param tabId  The newly selected tab, or a null Identifier when there is no selection.
-        */
-        virtual void tabSelectionChanged (TabBar& bar, const Identifier& tabId) { ignoreUnused (bar, tabId); }
-
-        /** Called after a tab has been removed.
-
-            @param bar    The bar.
-            @param tabId  The removed tab.
-        */
-        virtual void tabRemoved (TabBar& bar, const Identifier& tabId) { ignoreUnused (bar, tabId); }
-
-        /** Called after a tab has moved.
-
-            @param bar       The bar.
-            @param tabId     The moved tab.
-            @param oldIndex  Where the tab was.
-            @param newIndex  Where the tab is now.
-        */
-        virtual void tabMoved (TabBar& bar, const Identifier& tabId, int oldIndex, int newIndex) { ignoreUnused (bar, tabId, oldIndex, newIndex); }
-    };
+    static constexpr float minimumTabLength = 48.0f;
 
     //==============================================================================
     /** Creates an empty bar. */
@@ -266,10 +237,41 @@ public:
     /** Returns true if the bar has the keyboard focus and was last used from the keyboard. */
     bool isFocusIndicatorVisible() const;
 
-    /** The shortest a tab gets with the fill layout or the shrink overflow, unless its content is shorter. */
-    static constexpr float minimumTabLength = 48.0f;
-
     //==============================================================================
+    /** Receives changes to the tabs of a bar.
+
+        Listeners are always told about changes, synchronously, whatever NotificationType was used
+        to make them: the notification type only applies to the std::function callbacks.
+    */
+    class YUP_API Listener
+    {
+    public:
+        virtual ~Listener() = default;
+
+        /** Called when the selected tab changes.
+
+            @param bar    The bar.
+            @param tabId  The newly selected tab, or a null Identifier when there is no selection.
+        */
+        virtual void tabSelectionChanged (TabBar& bar, const Identifier& tabId) { ignoreUnused (bar, tabId); }
+
+        /** Called after a tab has been removed.
+
+            @param bar    The bar.
+            @param tabId  The removed tab.
+        */
+        virtual void tabRemoved (TabBar& bar, const Identifier& tabId) { ignoreUnused (bar, tabId); }
+
+        /** Called after a tab has moved.
+
+            @param bar       The bar.
+            @param tabId     The moved tab.
+            @param oldIndex  Where the tab was.
+            @param newIndex  Where the tab is now.
+        */
+        virtual void tabMoved (TabBar& bar, const Identifier& tabId, int oldIndex, int newIndex) { ignoreUnused (bar, tabId, oldIndex, newIndex); }
+    };
+
     /** Adds a listener. */
     void addListener (Listener* listener);
 

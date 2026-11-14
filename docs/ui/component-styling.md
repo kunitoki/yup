@@ -20,8 +20,11 @@ The styling system has three layers:
 | **Type-wide** | All instances of a widget type | `theme->setComponentStyle<T>(style)` |
 | **Theme defaults** | Fallback for all components | `theme->setColor()`, `theme->setProperty()` |
 | **Palette** | Colors derived from a handful of source colors | `theme->setPalette()` |
+| **Stylesheet** | Components matching selectors in a subtree | `comp.setStyleSheet()` |
 
 Color resolution walks: component overrides → parent chain → theme defaults → palette.
+A [stylesheet](yui-styles.md) value sits right after the explicit value of each
+component on the way, so values set in C++ always win over it.
 If nothing is found, the paint function falls back to the palette roles.
 
 ---
@@ -74,15 +77,15 @@ Every themable widget exposes color IDs:
 
 | Widget | IDs (partial list) |
 |---|---|
-| `TextButton::Style` | `backgroundColorId`, `backgroundPressedColorId`, `textColorId`, `textPressedColorId`, `outlineColorId`, `outlineFocusedColorId` |
-| `ToggleButton::Style` | `backgroundColorId`, `backgroundToggledColorId`, `textColorId`, `textToggledColorId`, `borderColorId`, `borderToggledColorId` |
-| `SwitchButton::Style` | `switchColorId`, `switchOffBackgroundColorId`, `switchOnBackgroundColorId` |
-| `Slider::Style` | `backgroundColorId`, `trackColorId`, `thumbColorId`, `thumbOverColorId`, `thumbDownColorId`, `textColorId` |
-| `Label::Style` | `textFillColorId`, `textStrokeColorId`, `backgroundColorId`, `outlineColorId` |
-| `TextEditor::Style` | `backgroundColorId`, `textColorId`, `caretColorId`, `selectionColorId`, `outlineColorId`, `focusedOutlineColorId` |
-| `ComboBox::Style` | `backgroundColorId`, `textColorId`, `borderColorId`, `arrowColorId`, `focusedBorderColorId` |
-| `ScrollBar::Style` | `trackColorId`, `thumbColorId`, `thumbHoverColorId`, `thumbDraggingColorId` |
-| `ProgressBar::Style` | `backgroundColorId`, `foregroundColorId` |
+| `TextButton::Style` | `backgroundColorId`, `backgroundPressedColorId`, `textColorId`, `textPressedColorId`, `outlineColorId`, `outlineFocusedColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
+| `ToggleButton::Style` | `backgroundColorId`, `backgroundToggledColorId`, `textColorId`, `textToggledColorId`, `borderColorId`, `borderToggledColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
+| `SwitchButton::Style` | `switchColorId`, `switchOffBackgroundColorId`, `switchOnBackgroundColorId` (curated geometry: `cornerRadiusId`, `thumbInsetId`) |
+| `Slider::Style` | `backgroundColorId`, `trackColorId`, `thumbColorId`, `thumbOverColorId`, `thumbDownColorId`, `textColorId` (curated geometry: `trackWidthId`, `thumbSizeId`, `rotaryInsetId`) |
+| `Label::Style` | `textFillColorId`, `textStrokeColorId`, `backgroundColorId`, `outlineColorId` (curated geometry: `textHeightProportionId`) |
+| `TextEditor::Style` | `backgroundColorId`, `textColorId`, `caretColorId`, `selectionColorId`, `outlineColorId`, `focusedOutlineColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
+| `ComboBox::Style` | `backgroundColorId`, `textColorId`, `borderColorId`, `arrowColorId`, `focusedBorderColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
+| `ScrollBar::Style` | `trackColorId`, `thumbColorId`, `thumbHoverColorId`, `thumbDraggingColorId` (curated geometry: `thumbInsetId`, `cornerRadiusId`) |
+| `ProgressBar::Style` | `backgroundColorId`, `foregroundColorId` (curated geometry: `cornerRadiusId`) |
 | `ListBox::Style` | `backgroundColorId`, `outlineColorId`, `rowBackgroundColorId`, `selectedRowBackgroundColorId`, `hoveredRowBackgroundColorId`, `refreshIndicatorColorId` (curated geometry: `refreshIndicatorSizeId`) |
 | `ListBoxItem::Style` | `textColorId`, `textColorSelectedId`, `backgroundColorId`, `backgroundColorSelectedId`, `backgroundColorHoveredId` |
 | `TreeView::Style` | `indentGuideColorId`, `disclosureColorId`, `itemTextColorId`, `itemTextSelectedColorId`, `dropIndicatorColorId`, `itemHoveredColorId` (the rows also use the `ListBox::Style` colors) |
@@ -137,6 +140,21 @@ bool present = comp.hasProperty ("corner-radius");
 ```cpp
 auto theme = ApplicationTheme::getGlobalTheme();
 theme->setProperty ("corner-radius", 4.0);
+```
+
+### Curated widget geometry
+
+The default theme paints the corner radii, outline widths, slider tracks and
+thumbs and similar values from the curated geometry properties listed in the
+[widget style IDs](#widget-style-ids) (names and defaults in
+[Stylesheets](yui-styles.md#widget-geometry)). The descriptor default is the
+only place each value lives. Like colors they are keyed per widget type, so set
+them on the theme, on a container for the widgets inside it, or on one widget:
+
+```cpp
+theme->setProperty (TextButton::Style::cornerRadiusId, 8.0); // every text button
+panel.setProperty (Slider::Style::thumbSizeId, 12.0);        // the sliders in the panel
+button.setProperty ("cornerRadius", 0.0);                    // this button
 ```
 
 ### Binding a reflected property to a model
@@ -503,5 +521,9 @@ ApplicationTheme::setGlobalTheme (std::move (theme));
 
 ## Related
 
+- [How YUI fits together](yui-architecture.md) - how properties, stylesheets,
+  drawings and bindings relate
+- [Stylesheets](yui-styles.md) - CSS-like rules setting properties on any
+  component tree
 - [Component basics](component-basics.md) — `setColor`, `setProperty`, `setStyle` APIs
 - [Component effects (shaders)](component-effects.md)

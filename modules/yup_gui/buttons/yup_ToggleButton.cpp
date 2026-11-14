@@ -30,6 +30,9 @@ const Identifier ToggleButton::Style::textColorId = "toggleButtonText";
 const Identifier ToggleButton::Style::textToggledColorId = "toggleButtonTextToggled";
 const Identifier ToggleButton::Style::borderColorId = "toggleButtonBorder";
 const Identifier ToggleButton::Style::borderToggledColorId = "toggleButtonBorderToggled";
+const Identifier ToggleButton::Style::cornerRadiusId = "toggleButtonCornerRadius";
+const Identifier ToggleButton::Style::outlineWidthId = "toggleButtonOutlineWidth";
+const Identifier ToggleButton::Style::focusedOutlineWidthId = "toggleButtonFocusedOutlineWidth";
 
 //==============================================================================
 
@@ -45,6 +48,10 @@ const ComponentTypeInfo& ToggleButton::getClassTypeInfo()
         props.push_back (makeColorProperty (Identifier ("textToggledColor"), Style::textToggledColorId));
         props.push_back (makeColorProperty (Identifier ("borderColor"), Style::borderColorId));
         props.push_back (makeColorProperty (Identifier ("borderToggledColor"), Style::borderToggledColorId));
+
+        props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, 4.0, "The corner radius."));
+        props.push_back (makeNumberProperty (Identifier ("outlineWidth"), Style::outlineWidthId, 1.0, "The outline width."));
+        props.push_back (makeNumberProperty (Identifier ("focusedOutlineWidth"), Style::focusedOutlineWidthId, 2.0, "The outline width when focused."));
 
         props.push_back (ComponentProperty {
             .name = Identifier ("checked"),

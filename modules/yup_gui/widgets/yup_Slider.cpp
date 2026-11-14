@@ -23,7 +23,38 @@ namespace yup
 {
 
 //==============================================================================
-// Style identifier definitions
+
+namespace
+{
+
+void setSliderRangeBound (Component& component, const var& value, bool isMinimum)
+{
+    const auto bound = static_cast<double> (value);
+
+    if (! std::isfinite (bound))
+        return;
+
+    auto& slider = static_cast<Slider&> (component);
+    auto range = slider.getRange();
+    const auto length = range.end - range.start;
+
+    if (isMinimum)
+    {
+        range.start = bound;
+        range.end = range.end > bound ? range.end : bound + length;
+    }
+    else
+    {
+        range.end = bound;
+        range.start = range.start < bound ? range.start : bound - length;
+    }
+
+    slider.setRange (range);
+}
+
+} // namespace
+
+//==============================================================================
 
 const Identifier Slider::Style::backgroundColorId { "Slider_backgroundColorId" };
 const Identifier Slider::Style::trackColorId { "Slider_trackColorId" };
@@ -31,6 +62,9 @@ const Identifier Slider::Style::thumbColorId { "Slider_thumbColorId" };
 const Identifier Slider::Style::thumbOverColorId { "Slider_thumbOverColorId" };
 const Identifier Slider::Style::thumbDownColorId { "Slider_thumbDownColorId" };
 const Identifier Slider::Style::textColorId { "Slider_textColorId" };
+const Identifier Slider::Style::trackWidthId { "Slider_trackWidthId" };
+const Identifier Slider::Style::thumbSizeId { "Slider_thumbSizeId" };
+const Identifier Slider::Style::rotaryInsetId { "Slider_rotaryInsetId" };
 
 //==============================================================================
 
@@ -47,7 +81,13 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
         props.push_back (makeColorProperty (Identifier ("thumbDownColor"), Style::thumbDownColorId));
         props.push_back (makeColorProperty (Identifier ("textColor"), Style::textColorId));
 
-        static const StringArray sliderTypes { "linearHorizontal", "linearVertical", "linearBarHorizontal", "linearBarVertical", "rotary", "rotaryHorizontalDrag", "rotaryVerticalDrag", "incDecButtons", "twoValueHorizontal", "twoValueVertical", "threeValueHorizontal", "threeValueVertical" };
+        props.push_back (makeNumberProperty (Identifier ("trackWidth"), Style::trackWidthId, 4.0, "The thickness of the linear track."));
+        props.push_back (makeNumberProperty (Identifier ("thumbSize"), Style::thumbSizeId, 16.0, "The diameter of the linear thumbs."));
+        props.push_back (makeNumberProperty (Identifier ("rotaryInset"), Style::rotaryInsetId, 0.1, "The inset of the rotary dial, as a proportion of the width."));
+
+        static const StringArray sliderTypes {
+            "linearHorizontal", "linearVertical", "linearBarHorizontal", "linearBarVertical", "rotary", "rotaryHorizontalDrag",
+            "rotaryVerticalDrag", "incDecButtons", "twoValueHorizontal", "twoValueVertical", "threeValueHorizontal", "threeValueVertical" };
 
         props.push_back (ComponentProperty {
             .name = Identifier ("sliderType"),
@@ -61,6 +101,64 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
             },
             .isStyleable = false,
             .enumValues = sliderTypes });
+
+        // The range comes before the values it constrains, the builder applies values in declaration order
+        props.push_back (ComponentProperty {
+            .name = Identifier ("minimum"),
+            .type = ComponentProperty::Type::number,
+            .defaultValue = 0.0,
+            .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getRange().start); },
+            .setter = [] (Component& c, const var& v) { setSliderRangeBound (c, v, true); },
+            .isStyleable = false,
+            .description = "The lowest value of the range." });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("maximum"),
+            .type = ComponentProperty::Type::number,
+            .defaultValue = 1.0,
+            .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getRange().end); },
+            .setter = [] (Component& c, const var& v) { setSliderRangeBound (c, v, false); },
+            .isStyleable = false,
+            .description = "The highest value of the range." });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("interval"),
+            .type = ComponentProperty::Type::number,
+            .defaultValue = 0.0,
+            .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getInterval()); },
+            .setter = [] (Component& c, const var& v)
+            {
+                auto& slider = static_cast<Slider&> (c);
+                auto range = slider.getRange();
+                range.interval = static_cast<double> (v);
+
+                if (range.interval >= 0.0)
+                    slider.setRange (range);
+            },
+            .isStyleable = false,
+            .description = "The step between values, 0 for continuous." });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("skew"),
+            .type = ComponentProperty::Type::number,
+            .defaultValue = 1.0,
+            .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getSkewFactor()); },
+            .setter = [] (Component& c, const var& v)
+            {
+                if (const auto skew = static_cast<double> (v); skew > 0.0)
+                    static_cast<Slider&> (c).setSkewFactor (skew);
+            },
+            .isStyleable = false,
+            .description = "The skew factor of the range, 1 for linear, below 1 to give the lower values more space." });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("defaultValue"),
+            .type = ComponentProperty::Type::number,
+            .defaultValue = 0.0,
+            .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getDefaultValue()); },
+            .setter = [] (Component& c, const var& v) { static_cast<Slider&> (c).setDefaultValue (static_cast<double> (v)); },
+            .isStyleable = false,
+            .description = "The value a double-click resets to." });
 
         props.push_back (ComponentProperty {
             .name = Identifier ("value"),
@@ -87,12 +185,6 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
             .type = ComponentProperty::Type::number,
             .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getMaxValue()); },
             .setter = [] (Component& c, const var& v) { static_cast<Slider&> (c).setMaxValue (static_cast<double> (v)); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = Identifier ("interval"),
-            .type = ComponentProperty::Type::number,
-            .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getInterval()); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
@@ -239,7 +331,13 @@ void Slider::maxValueChanged() {}
 
 void Slider::setDefaultValue (double newDefaultValue)
 {
-    defaultValue = constrainValue (newDefaultValue);
+    newDefaultValue = constrainValue (newDefaultValue);
+
+    if (! approximatelyEqual (defaultValue, newDefaultValue))
+    {
+        defaultValue = newDefaultValue;
+        notifyPropertyChanged (Identifier ("defaultValue"));
+    }
 }
 
 double Slider::getDefaultValue() const
@@ -251,11 +349,15 @@ double Slider::getDefaultValue() const
 
 void Slider::setRange (const NormalisableRange<double>& newRange)
 {
+    const auto previousRange = range;
+
     range = newRange;
     setDefaultValue (constrainValue (defaultValue));
     setValue (constrainValue (currentValue), dontSendNotification);
     setMinValue (constrainValue (minValue), dontSendNotification);
     setMaxValue (constrainValue (maxValue), dontSendNotification);
+
+    sendRangeChanged (previousRange);
 }
 
 void Slider::setRange (double minValue, double maxValue, double stepSize)
@@ -285,6 +387,7 @@ void Slider::setSkewFactor (double skewFactor)
 
     if (! approximatelyEqual (range.skew, skewFactor))
     {
+        const auto previousRange = range;
         range.skew = skewFactor;
 
         // Reapply constraints to current values with new skew
@@ -293,6 +396,7 @@ void Slider::setSkewFactor (double skewFactor)
         setMinValue (constrainValue (minValue), dontSendNotification);
         setMaxValue (constrainValue (maxValue), dontSendNotification);
 
+        sendRangeChanged (previousRange);
         repaint();
     }
 }
@@ -301,6 +405,7 @@ void Slider::setSkewFactorFromMidpoint (double midpointValue)
 {
     midpointValue = jlimit (range.getRange().getStart(), range.getRange().getEnd(), midpointValue);
 
+    const auto previousRange = range;
     range.setSkewForCentre (midpointValue);
 
     // Reapply constraints to current values with new skew
@@ -309,6 +414,7 @@ void Slider::setSkewFactorFromMidpoint (double midpointValue)
     setMinValue (constrainValue (minValue), dontSendNotification);
     setMaxValue (constrainValue (maxValue), dontSendNotification);
 
+    sendRangeChanged (previousRange);
     repaint();
 }
 
@@ -632,6 +738,21 @@ void Slider::sendMaxValueChanged (NotificationType notification)
         if (onMaxValueChanged)
             onMaxValueChanged (getMaxValue());
     });
+}
+
+void Slider::sendRangeChanged (const NormalisableRange<double>& previousRange)
+{
+    if (! approximatelyEqual (previousRange.start, range.start))
+        notifyPropertyChanged (Identifier ("minimum"));
+
+    if (! approximatelyEqual (previousRange.end, range.end))
+        notifyPropertyChanged (Identifier ("maximum"));
+
+    if (! approximatelyEqual (previousRange.interval, range.interval))
+        notifyPropertyChanged (Identifier ("interval"));
+
+    if (! approximatelyEqual (previousRange.skew, range.skew))
+        notifyPropertyChanged (Identifier ("skew"));
 }
 
 //==============================================================================

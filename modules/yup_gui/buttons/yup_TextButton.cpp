@@ -30,6 +30,9 @@ const Identifier TextButton::Style::textColorId = "textButtonText";
 const Identifier TextButton::Style::textPressedColorId = "textButtonTextPressed";
 const Identifier TextButton::Style::outlineColorId = "textButtonOutline";
 const Identifier TextButton::Style::outlineFocusedColorId = "textButtonOutlineFocused";
+const Identifier TextButton::Style::cornerRadiusId = "textButtonCornerRadius";
+const Identifier TextButton::Style::outlineWidthId = "textButtonOutlineWidth";
+const Identifier TextButton::Style::focusedOutlineWidthId = "textButtonFocusedOutlineWidth";
 
 //==============================================================================
 
@@ -45,6 +48,10 @@ const ComponentTypeInfo& TextButton::getClassTypeInfo()
         props.push_back (makeColorProperty (Identifier ("textPressedColor"), Style::textPressedColorId));
         props.push_back (makeColorProperty (Identifier ("outlineColor"), Style::outlineColorId));
         props.push_back (makeColorProperty (Identifier ("outlineFocusedColor"), Style::outlineFocusedColorId));
+
+        props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, 4.0, "The corner radius."));
+        props.push_back (makeNumberProperty (Identifier ("outlineWidth"), Style::outlineWidthId, 1.0, "The outline width."));
+        props.push_back (makeNumberProperty (Identifier ("focusedOutlineWidth"), Style::focusedOutlineWidthId, 2.0, "The outline width when focused."));
 
         props.push_back (ComponentProperty {
             .name = Identifier ("text"),

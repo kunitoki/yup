@@ -76,3 +76,4 @@
 #include "device_manager/yup_MidiSection.h"
 #include "device_manager/yup_AudioDeviceManagerPanel.h"
 #include "device_manager/yup_AudioDeviceManagerWindow.h"
+#include "binding/yup_AudioParameterBindingProvider.h"

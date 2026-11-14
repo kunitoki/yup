@@ -163,4 +163,18 @@ inline ComponentProperty makeColorProperty (Identifier name, Identifier storageI
     };
 }
 
+/** Builds a store-backed number property descriptor mapping a `.yui` name to a Style id, such as the
+    curated geometry read by the theme. An undefined default leaves the choice to the paint code.
+*/
+inline ComponentProperty makeNumberProperty (Identifier name, Identifier storageId, var defaultValue, String description = {})
+{
+    return ComponentProperty {
+        .name = std::move (name),
+        .storageId = std::move (storageId),
+        .type = ComponentProperty::Type::number,
+        .defaultValue = std::move (defaultValue),
+        .description = std::move (description)
+    };
+}
+
 } // namespace yup

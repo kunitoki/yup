@@ -204,6 +204,18 @@ if (YUP_PLATFORM_MAC AND "yup_python" IN_LIST target_modules)
     list (APPEND target_modules "${target_name}_python_stdlib_binary")
 endif()
 
+if ("yup_gui" IN_LIST target_modules)
+    set (yui_resources_dir "${CMAKE_CURRENT_LIST_DIR}/data/yui")
+
+    yup_add_yui_resources (YuiTestResources
+        BASE_DIR "${yui_resources_dir}"
+        FILES
+            "${yui_resources_dir}/ui.yui"
+            "${yui_resources_dir}/parts/style.yui")
+
+    list (APPEND target_modules YuiTestResources)
+endif()
+
 # ==== Shared runtime: the linked modules are compiled once into a static library,
 #      so every test runner only links the objects its tests actually reference.
 set (runtime_target_name ${target_name}_runtime)

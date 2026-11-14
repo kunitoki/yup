@@ -50,6 +50,30 @@ using PaletteRole = ThemePalette::Role;
 constexpr float widgetCornerRadius = 4.0f;
 constexpr float defaultTextHeight = 14.0f;
 
+// The curated geometry: the defaults live in the widget descriptors
+struct CuratedGeometry
+{
+    static inline const Identifier cornerRadius { "cornerRadius" };
+    static inline const Identifier outlineWidth { "outlineWidth" };
+    static inline const Identifier focusedOutlineWidth { "focusedOutlineWidth" };
+    static inline const Identifier trackWidth { "trackWidth" };
+    static inline const Identifier thumbSize { "thumbSize" };
+    static inline const Identifier thumbInset { "thumbInset" };
+    static inline const Identifier rotaryInset { "rotaryInset" };
+
+    static float getOutlineWidth (const Component& component, bool focused)
+    {
+        return component.findPropertyAs<float> (focused ? focusedOutlineWidth : outlineWidth);
+    }
+
+    // Unset, the corner radius makes a pill of the given size
+    static float getCornerRadius (const Component& component, float pillSize)
+    {
+        const auto radius = component.findProperty (cornerRadius);
+        return radius.isVoid() ? pillSize * 0.5f : VariantConverter<float>::fromVar (radius);
+    }
+};
+
 //==============================================================================
 
 struct SliderColors
@@ -80,7 +104,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 {
     const auto colors = getSliderColors (theme, slider);
 
-    auto bounds = sliderBounds.reduced (slider.proportionOfWidth (0.1f));
+    auto bounds = sliderBounds.reduced (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryInset)));
     const auto center = bounds.getCenter();
 
     const auto fromRadians = rotaryStartAngle;
@@ -159,13 +183,15 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, Rectangle<float> thumbBounds, bool isHorizontal, float sliderValue, bool isMouseOver, bool isMouseDown)
 {
     const auto colors = getSliderColors (theme, slider);
+    const auto trackWidth = slider.findPropertyAs<float> (CuratedGeometry::trackWidth);
+    const auto trackRadius = trackWidth * 0.5f;
 
     // Draw track background
     g.setFillColor (colors.track);
     if (isHorizontal)
-        g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - 2.0f, sliderBounds.getWidth(), 4.0f, 2.0f);
+        g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - trackRadius, sliderBounds.getWidth(), trackWidth, trackRadius);
     else
-        g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f, sliderBounds.getY(), 4.0f, sliderBounds.getHeight(), 2.0f);
+        g.fillRoundedRect (sliderBounds.getCenterX() - trackRadius, sliderBounds.getY(), trackWidth, sliderBounds.getHeight(), trackRadius);
 
     // Draw value track
     g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOver ? colors.thumbOver : colors.thumb));
@@ -174,13 +200,13 @@ void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider
     if (sliderType == Slider::LinearBarHorizontal || sliderType == Slider::LinearBarVertical)
     {
         if (isHorizontal)
-            g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - 2.0f, sliderValue * sliderBounds.getWidth(), 4.0f, 2.0f);
+            g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - trackRadius, sliderValue * sliderBounds.getWidth(), trackWidth, trackRadius);
         else
-            g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f,
+            g.fillRoundedRect (sliderBounds.getCenterX() - trackRadius,
                                sliderBounds.getBottom() - (sliderValue * sliderBounds.getHeight()),
-                               4.0f,
+                               trackWidth,
                                sliderValue * sliderBounds.getHeight(),
-                               2.0f);
+                               trackRadius);
     }
     else
     {
@@ -201,13 +227,15 @@ void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider
 void paintTwoValueSlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, Rectangle<float> minThumbBounds, Rectangle<float> maxThumbBounds, bool isHorizontal, float minValue, float maxValue, bool isMouseOverMinThumb, bool isMouseOverMaxThumb, bool isMouseDown)
 {
     const auto colors = getSliderColors (theme, slider);
+    const auto trackWidth = slider.findPropertyAs<float> (CuratedGeometry::trackWidth);
+    const auto trackRadius = trackWidth * 0.5f;
 
     // Draw track background
     g.setFillColor (colors.background);
     if (isHorizontal)
-        g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - 2.0f, sliderBounds.getWidth(), 4.0f, 2.0f);
+        g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - trackRadius, sliderBounds.getWidth(), trackWidth, trackRadius);
     else
-        g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f, sliderBounds.getY(), 4.0f, sliderBounds.getHeight(), 2.0f);
+        g.fillRoundedRect (sliderBounds.getCenterX() - trackRadius, sliderBounds.getY(), trackWidth, sliderBounds.getHeight(), trackRadius);
 
     // Draw selected range
     g.setFillColor (colors.track);
@@ -215,13 +243,13 @@ void paintTwoValueSlider (Graphics& g, const ApplicationTheme& theme, const Slid
     {
         const float startX = sliderBounds.getX() + (minValue * sliderBounds.getWidth());
         const float endX = sliderBounds.getX() + (maxValue * sliderBounds.getWidth());
-        g.fillRoundedRect (startX, sliderBounds.getCenterY() - 2.0f, endX - startX, 4.0f, 2.0f);
+        g.fillRoundedRect (startX, sliderBounds.getCenterY() - trackRadius, endX - startX, trackWidth, trackRadius);
     }
     else
     {
         const float startY = sliderBounds.getBottom() - (minValue * sliderBounds.getHeight());
         const float endY = sliderBounds.getBottom() - (maxValue * sliderBounds.getHeight());
-        g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f, endY, 4.0f, startY - endY, 2.0f);
+        g.fillRoundedRect (sliderBounds.getCenterX() - trackRadius, endY, trackWidth, startY - endY, trackRadius);
     }
 
     // Draw min thumb
@@ -249,6 +277,8 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
     const auto sliderType = s.getSliderType();
     const bool isMouseOver = s.isMouseOver();
     const bool isMouseDown = false; // s.isMouseButtonDown();
+    const auto thumbSize = s.findPropertyAs<float> (CuratedGeometry::thumbSize);
+    const auto thumbRadius = thumbSize * 0.5f;
 
     switch (sliderType)
     {
@@ -274,13 +304,13 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 
             if (isHorizontal)
             {
-                const float thumbX = sliderBounds.getX() + (sliderValue * sliderBounds.getWidth()) - 8.0f;
-                thumbBounds = Rectangle<float> (thumbX, sliderBounds.getCenterY() - 8.0f, 16.0f, 16.0f);
+                const float thumbX = sliderBounds.getX() + (sliderValue * sliderBounds.getWidth()) - thumbRadius;
+                thumbBounds = Rectangle<float> (thumbX, sliderBounds.getCenterY() - thumbRadius, thumbSize, thumbSize);
             }
             else
             {
-                const float thumbY = sliderBounds.getBottom() - (sliderValue * sliderBounds.getHeight()) - 8.0f;
-                thumbBounds = Rectangle<float> (sliderBounds.getCenterX() - 8.0f, thumbY, 16.0f, 16.0f);
+                const float thumbY = sliderBounds.getBottom() - (sliderValue * sliderBounds.getHeight()) - thumbRadius;
+                thumbBounds = Rectangle<float> (sliderBounds.getCenterX() - thumbRadius, thumbY, thumbSize, thumbSize);
             }
 
             paintLinearSlider (g, theme, s, sliderBounds, thumbBounds, isHorizontal, sliderValue, isMouseOver, isMouseDown);
@@ -297,17 +327,17 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 
             if (isHorizontal)
             {
-                const float minThumbX = sliderBounds.getX() + (minNorm * sliderBounds.getWidth()) - 8.0f;
-                const float maxThumbX = sliderBounds.getX() + (maxNorm * sliderBounds.getWidth()) - 8.0f;
-                minThumbBounds = Rectangle<float> (minThumbX, sliderBounds.getCenterY() - 8.0f, 16.0f, 16.0f);
-                maxThumbBounds = Rectangle<float> (maxThumbX, sliderBounds.getCenterY() - 8.0f, 16.0f, 16.0f);
+                const float minThumbX = sliderBounds.getX() + (minNorm * sliderBounds.getWidth()) - thumbRadius;
+                const float maxThumbX = sliderBounds.getX() + (maxNorm * sliderBounds.getWidth()) - thumbRadius;
+                minThumbBounds = Rectangle<float> (minThumbX, sliderBounds.getCenterY() - thumbRadius, thumbSize, thumbSize);
+                maxThumbBounds = Rectangle<float> (maxThumbX, sliderBounds.getCenterY() - thumbRadius, thumbSize, thumbSize);
             }
             else
             {
-                const float minThumbY = sliderBounds.getBottom() - (minNorm * sliderBounds.getHeight()) - 8.0f;
-                const float maxThumbY = sliderBounds.getBottom() - (maxNorm * sliderBounds.getHeight()) - 8.0f;
-                minThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - 8.0f, minThumbY, 16.0f, 16.0f);
-                maxThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - 8.0f, maxThumbY, 16.0f, 16.0f);
+                const float minThumbY = sliderBounds.getBottom() - (minNorm * sliderBounds.getHeight()) - thumbRadius;
+                const float maxThumbY = sliderBounds.getBottom() - (maxNorm * sliderBounds.getHeight()) - thumbRadius;
+                minThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - thumbRadius, minThumbY, thumbSize, thumbSize);
+                maxThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - thumbRadius, maxThumbY, thumbSize, thumbSize);
             }
 
             // For two-value sliders, check which thumb the mouse is over
@@ -334,7 +364,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     auto bounds = t.getLocalBounds();
     auto textBounds = t.getTextBounds();
     auto scrollOffset = t.getScrollOffset();
-    constexpr auto cornerRadius = widgetCornerRadius;
+    const auto cornerRadius = t.findPropertyAs<float> (CuratedGeometry::cornerRadius);
     const auto& palette = theme.getPalette (t);
 
     // Draw background
@@ -348,8 +378,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
                           : theme.findColor (t, TextEditor::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
     g.setStrokeColor (outlineColor);
 
-    float strokeWidth = t.hasKeyboardFocus() ? 2.0f : 1.0f;
-    g.setStrokeWidth (strokeWidth);
+    g.setStrokeWidth (CuratedGeometry::getOutlineWidth (t, t.hasKeyboardFocus()));
 
     g.strokeRoundedRect (bounds.reduced (1.0f), cornerRadius);
 
@@ -504,7 +533,7 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
 void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButton& b)
 {
     auto bounds = b.getLocalBounds();
-    constexpr auto cornerRadius = widgetCornerRadius;
+    const auto cornerRadius = b.findPropertyAs<float> (CuratedGeometry::cornerRadius);
     const auto& palette = theme.getPalette (b);
 
     Color backgroundColor, textColor;
@@ -533,8 +562,7 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
                            : theme.findColor (b, TextButton::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
     g.setStrokeColor (outlineColor);
 
-    float strokeWidth = b.hasKeyboardFocus() ? 2.0f : 1.0f;
-    g.setStrokeWidth (strokeWidth);
+    g.setStrokeWidth (CuratedGeometry::getOutlineWidth (b, b.hasKeyboardFocus()));
 
     g.strokeRoundedRect (bounds.reduced (1.0f), cornerRadius);
 
@@ -548,7 +576,7 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
 void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const ToggleButton& b)
 {
     auto bounds = b.getLocalBounds();
-    constexpr auto cornerRadius = widgetCornerRadius;
+    const auto cornerRadius = b.findPropertyAs<float> (CuratedGeometry::cornerRadius);
     const auto& palette = theme.getPalette (b);
 
     // Get colors based on toggle state
@@ -581,7 +609,7 @@ void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const Toggle
 
     // Draw border
     g.setStrokeColor (borderColor);
-    g.setStrokeWidth (b.hasKeyboardFocus() ? 2.0f : 1.0f);
+    g.setStrokeWidth (CuratedGeometry::getOutlineWidth (b, b.hasKeyboardFocus()));
     g.strokeRoundedRect (bounds.reduced (0.5f), cornerRadius);
 
     // Draw text
@@ -597,7 +625,7 @@ void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const Toggle
 void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const SwitchButton& s)
 {
     auto bounds = s.getLocalBounds().reduced (4);
-    auto cornerSize = (s.isVertical() ? bounds.getWidth() : bounds.getHeight()) * 0.5f;
+    auto cornerSize = CuratedGeometry::getCornerRadius (s, s.isVertical() ? bounds.getWidth() : bounds.getHeight());
 
     // Draw shadow/outline
     g.setStrokeColor (Colors::black.withAlpha (0.1f));
@@ -614,7 +642,7 @@ void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const Switch
     g.fillRoundedRect (bounds, cornerSize);
 
     // Draw handle
-    auto circleBounds = s.getSwitchCircleBounds().reduced (4);
+    auto circleBounds = s.getSwitchCircleBounds().reduced (s.findPropertyAs<float> (CuratedGeometry::thumbInset));
     auto circleColor = theme.findColor (s, SwitchButton::Style::switchColorId).value_or (palette.getColor (PaletteRole::text));
 
     g.setFillColor (circleColor);
@@ -633,11 +661,12 @@ void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& 
     auto& styledText = c.getStyledText();
     const auto bounds = c.getLocalBounds();
     const auto& palette = theme.getPalette (c);
+    const auto cornerRadius = c.findPropertyAs<float> (CuratedGeometry::cornerRadius);
 
     // Draw background
     auto bgColor = theme.findColor (c, ComboBox::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surface));
     g.setFillColor (bgColor);
-    g.fillRoundedRect (bounds, widgetCornerRadius);
+    g.fillRoundedRect (bounds, cornerRadius);
 
     // Draw border
     const bool hasFocus = c.hasKeyboardFocus() || c.isPopupShown();
@@ -646,8 +675,8 @@ void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& 
                           : theme.findColor (c, ComboBox::Style::borderColorId).value_or (palette.getColor (PaletteRole::outline));
 
     g.setStrokeColor (outlineColor);
-    g.setStrokeWidth (hasFocus ? 2.0f : 1.0f);
-    g.strokeRoundedRect (bounds.reduced (0.5f), widgetCornerRadius);
+    g.setStrokeWidth (CuratedGeometry::getOutlineWidth (c, hasFocus));
+    g.strokeRoundedRect (bounds.reduced (0.5f), cornerRadius);
 
     // Calculate text and arrow areas
     auto arrowWidth = 20.0f;
@@ -945,8 +974,8 @@ void paintScrollBar (Graphics& g, const ApplicationTheme& theme, const ScrollBar
         return;
 
     auto trackBounds = scrollBar.getTrackBoundsForRendering();
-    auto thumbBounds = scrollBar.getThumbBoundsForRendering().reduced (3);
-    auto cornerSize = scrollBar.getScrollBarWidth() * 0.5f;
+    auto thumbBounds = scrollBar.getThumbBoundsForRendering().reduced (scrollBar.findPropertyAs<float> (CuratedGeometry::thumbInset));
+    auto cornerSize = CuratedGeometry::getCornerRadius (scrollBar, scrollBar.getScrollBarWidth());
 
     // Draw track (optional, usually invisible on macOS)
     if (const auto trackColor = theme.findColor (scrollBar, ScrollBar::Style::trackColorId); trackColor && ! trackColor->isTransparent())
@@ -994,7 +1023,7 @@ void paintResizableCorner (Graphics& g, const ApplicationTheme& theme, const Res
 void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const ProgressBar& progressBar)
 {
     const auto bounds = progressBar.getLocalBounds();
-    const auto cornerSize = bounds.getHeight() * 0.5f;
+    const auto cornerSize = CuratedGeometry::getCornerRadius (progressBar, bounds.getHeight());
 
     // Get colors
     const auto backgroundColor = theme.findColor (progressBar, ProgressBar::Style::backgroundColorId)

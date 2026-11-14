@@ -1778,6 +1778,8 @@ void registerYupGuiBindings (py::module_& m)
     scrollBarStyle.attr ("thumbColorId") = ScrollBar::Style::thumbColorId;
     scrollBarStyle.attr ("thumbHoverColorId") = ScrollBar::Style::thumbHoverColorId;
     scrollBarStyle.attr ("thumbDraggingColorId") = ScrollBar::Style::thumbDraggingColorId;
+    scrollBarStyle.attr ("thumbInsetId") = ScrollBar::Style::thumbInsetId;
+    scrollBarStyle.attr ("cornerRadiusId") = ScrollBar::Style::cornerRadiusId;
 
     // ============================================================================================ yup::ListBoxModel
 
@@ -2336,6 +2338,9 @@ void registerYupGuiBindings (py::module_& m)
     comboBoxStyle.attr ("borderColorId") = ComboBox::Style::borderColorId;
     comboBoxStyle.attr ("arrowColorId") = ComboBox::Style::arrowColorId;
     comboBoxStyle.attr ("focusedBorderColorId") = ComboBox::Style::focusedBorderColorId;
+    comboBoxStyle.attr ("cornerRadiusId") = ComboBox::Style::cornerRadiusId;
+    comboBoxStyle.attr ("outlineWidthId") = ComboBox::Style::outlineWidthId;
+    comboBoxStyle.attr ("focusedOutlineWidthId") = ComboBox::Style::focusedOutlineWidthId;
 
     // ============================================================================================ yup::TextEditor
 
@@ -2414,6 +2419,9 @@ void registerYupGuiBindings (py::module_& m)
     textEditorStyle.attr ("selectionColorId") = TextEditor::Style::selectionColorId;
     textEditorStyle.attr ("outlineColorId") = TextEditor::Style::outlineColorId;
     textEditorStyle.attr ("focusedOutlineColorId") = TextEditor::Style::focusedOutlineColorId;
+    textEditorStyle.attr ("cornerRadiusId") = TextEditor::Style::cornerRadiusId;
+    textEditorStyle.attr ("outlineWidthId") = TextEditor::Style::outlineWidthId;
+    textEditorStyle.attr ("focusedOutlineWidthId") = TextEditor::Style::focusedOutlineWidthId;
 }
 
 } // namespace Bindings

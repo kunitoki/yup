@@ -33,7 +33,8 @@ namespace yup
     expression, while style and palette values are kept verbatim up to their `;`, since some
     of them (such as `transition:` or `drawing:`) are not expressions. Element types, property
     names and the meaning of values are checked by the code consuming the tree, such as
-    DrawingProgram and StyleSheet. Line and block comments can go anywhere whitespace can.
+    DrawingProgram and StyleSheet, whose diagnostics can be located in the text with the
+    source map of the result. Line and block comments can go anywhere whitespace can.
 
     @code
     const auto result = YuiParser::parse (text);
@@ -51,28 +52,17 @@ class YUP_API YuiParser
 {
 public:
     //==============================================================================
-    /** A problem found in the text, at a 1-based line and column. */
-    struct Diagnostic
-    {
-        int line = 0;
-        int column = 0;
-        String message;
-
-        /** The imported file the problem is in, empty for the text passed to the parser. */
-        String source;
-
-        /** Returns the diagnostic as `line:column: message`, prefixed by the source if any. */
-        String toString() const;
-    };
-
     /** The outcome of parsing a text. */
     struct ParseResult
     {
         /** The document, invalid when the text has errors. */
         DataTree document;
 
-        /** The problems found, empty when the text was parsed. */
-        std::vector<Diagnostic> diagnostics;
+        /** The problems found, at their line and column, empty when the text was parsed. */
+        std::vector<YuiDiagnostic> diagnostics;
+
+        /** Where each element of the document, and each of their properties, was written. */
+        YuiSourceMap sourceMap;
 
         /** Returns true if the text was parsed without errors. */
         bool wasOk() const noexcept { return diagnostics.empty(); }
@@ -101,7 +91,8 @@ public:
         @param resolveImport  Returns the text of an imported path.
 
         @returns The merged document, or the diagnostic of the first error, whose source is
-                 the import path when the error is in an imported file.
+                 the import path when the error is in an imported file. The positions of
+                 the source map carry the import path of the elements coming from imports.
     */
     static ParseResult parse (const String& text, const ImportResolver& resolveImport);
 

@@ -108,9 +108,13 @@ public:
     ScrollBar& getHorizontalScrollBar() noexcept { return horizontalScrollBar; }
 
     //==============================================================================
+    /** @internal */
     void resized() override;
+    /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds) override;
+    /** @internal */
     bool mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
+    /** @internal */
     void gesturePan (const GestureEvent& event) override;
 
 private:

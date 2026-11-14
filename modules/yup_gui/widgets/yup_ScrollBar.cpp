@@ -23,6 +23,14 @@ namespace yup
 {
 
 //==============================================================================
+const Identifier ScrollBar::Style::trackColorId { "scrollBarTrack" };
+const Identifier ScrollBar::Style::thumbColorId { "scrollBarThumb" };
+const Identifier ScrollBar::Style::thumbHoverColorId { "scrollBarThumbHover" };
+const Identifier ScrollBar::Style::thumbDraggingColorId { "scrollBarThumbDragging" };
+const Identifier ScrollBar::Style::thumbInsetId { "scrollBarThumbInset" };
+const Identifier ScrollBar::Style::cornerRadiusId { "scrollBarCornerRadius" };
+
+//==============================================================================
 const ComponentTypeInfo& ScrollBar::getClassTypeInfo()
 {
     static const ComponentTypeInfo info = []
@@ -33,6 +41,9 @@ const ComponentTypeInfo& ScrollBar::getClassTypeInfo()
         props.push_back (makeColorProperty (Identifier ("thumbColor"), Style::thumbColorId));
         props.push_back (makeColorProperty (Identifier ("thumbHoverColor"), Style::thumbHoverColorId));
         props.push_back (makeColorProperty (Identifier ("thumbDraggingColor"), Style::thumbDraggingColorId));
+
+        props.push_back (makeNumberProperty (Identifier ("thumbInset"), Style::thumbInsetId, 3.0, "The inset of the thumb inside the bar."));
+        props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, {}, "The thumb corner radius, unset for a pill."));
 
         props.push_back (ComponentProperty {
             .name = Identifier ("dragging"),

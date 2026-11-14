@@ -24,11 +24,11 @@ namespace yup
 
 //==============================================================================
 
-const Identifier Label::Style::textFillColorId { "Label_textFillColorId" };
-const Identifier Label::Style::textStrokeColorId { "Label_textStrokeColorId" };
-const Identifier Label::Style::backgroundColorId { "Label_backgroundColorId" };
-const Identifier Label::Style::outlineColorId { "Label_outlineColorId" };
-const Identifier Label::Style::textHeightProportionId { "Label_textHeightProportionId" };
+const Identifier Label::Style::textFillColorId { "labelTextFillColorId" };
+const Identifier Label::Style::textStrokeColorId { "labelTextStrokeColorId" };
+const Identifier Label::Style::backgroundColorId { "labelBackgroundColorId" };
+const Identifier Label::Style::outlineColorId { "labelOutlineColorId" };
+const Identifier Label::Style::textHeightProportionId { "labelTextHeightProportionId" };
 
 //==============================================================================
 

@@ -30,6 +30,9 @@ const Identifier TextEditor::Style::caretColorId = "textEditorCaret";
 const Identifier TextEditor::Style::selectionColorId = "textEditorSelection";
 const Identifier TextEditor::Style::outlineColorId = "textEditorOutline";
 const Identifier TextEditor::Style::focusedOutlineColorId = "textEditorFocusedOutline";
+const Identifier TextEditor::Style::cornerRadiusId = "textEditorCornerRadius";
+const Identifier TextEditor::Style::outlineWidthId = "textEditorOutlineWidth";
+const Identifier TextEditor::Style::focusedOutlineWidthId = "textEditorFocusedOutlineWidth";
 
 //==============================================================================
 
@@ -45,6 +48,10 @@ const ComponentTypeInfo& TextEditor::getClassTypeInfo()
         props.push_back (makeColorProperty (Identifier ("selectionColor"), Style::selectionColorId));
         props.push_back (makeColorProperty (Identifier ("outlineColor"), Style::outlineColorId));
         props.push_back (makeColorProperty (Identifier ("focusedOutlineColor"), Style::focusedOutlineColorId));
+
+        props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, 4.0, "The corner radius."));
+        props.push_back (makeNumberProperty (Identifier ("outlineWidth"), Style::outlineWidthId, 1.0, "The outline width."));
+        props.push_back (makeNumberProperty (Identifier ("focusedOutlineWidth"), Style::focusedOutlineWidthId, 2.0, "The outline width when focused."));
 
         props.push_back (ComponentProperty {
             .name = Identifier ("text"),

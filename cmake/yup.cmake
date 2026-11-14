@@ -123,6 +123,7 @@ include (${CMAKE_CURRENT_LIST_DIR}/yup_embed_binary.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_bundle_resources.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_shader_bundler.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_dsp_compiler.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_yui_resources.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_python.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_test_runner.cmake)
 

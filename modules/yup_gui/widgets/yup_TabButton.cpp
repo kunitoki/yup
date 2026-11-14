@@ -39,6 +39,12 @@ constexpr float tabButtonSelectedWeight = 600.0f;
 } // namespace
 
 //==============================================================================
+const Identifier TabButton::Style::textColorId { "tabButtonText" };
+const Identifier TabButton::Style::textSelectedColorId { "tabButtonTextSelected" };
+const Identifier TabButton::Style::hoveredBackgroundColorId { "tabButtonHoveredBackground" };
+const Identifier TabButton::Style::closeButtonColorId { "tabButtonCloseButton" };
+
+//==============================================================================
 TabButton::TabButton (TabBar& owner, const Identifier& tabId)
     : Button (tabId.toString())
     , owner (owner)

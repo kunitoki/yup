@@ -260,6 +260,16 @@ public:
                                     double offsetThreshold = 0.0);
 
     //==============================================================================
+    /** Callback function objects for value changes. */
+    std::function<void (double)> onValueChanged;
+    std::function<void (double)> onMinValueChanged;
+    std::function<void (double)> onMaxValueChanged;
+
+    /** Callback function objects for drag events. */
+    std::function<void (const MouseEvent&)> onDragStart;
+    std::function<void (const MouseEvent&)> onDragEnd;
+
+    //==============================================================================
     /**
         Style color IDs for customizing Slider appearance.
     */
@@ -271,6 +281,10 @@ public:
         static const Identifier thumbOverColorId;  /**< Color for thumb/knob or value indicator when mouse is over */
         static const Identifier thumbDownColorId;  /**< Color for thumb/knob or value indicator when pressed */
         static const Identifier textColorId;       /**< Color for text labels */
+
+        static const Identifier trackWidthId;      /**< Thickness of the linear track, 4 by default */
+        static const Identifier thumbSizeId;       /**< Diameter of the linear thumbs, 16 by default */
+        static const Identifier rotaryInsetId;     /**< Rotary dial inset as a proportion of the width, 0.1 by default */
     };
 
     //==============================================================================
@@ -279,16 +293,6 @@ public:
 
     /** @internal */
     const ComponentTypeInfo& getDefaultTypeInfo() const override;
-
-    //==============================================================================
-    /** Callback function objects for value changes. */
-    std::function<void (double)> onValueChanged;
-    std::function<void (double)> onMinValueChanged;
-    std::function<void (double)> onMaxValueChanged;
-
-    /** Callback function objects for drag events. */
-    std::function<void (const MouseEvent&)> onDragStart;
-    std::function<void (const MouseEvent&)> onDragEnd;
 
     //==============================================================================
     /** @internal */
@@ -331,6 +335,7 @@ private:
     void sendValueChanged (NotificationType notification);
     void sendMinValueChanged (NotificationType notification);
     void sendMaxValueChanged (NotificationType notification);
+    void sendRangeChanged (const NormalisableRange<double>& previousRange);
 
     void updateValueFromMousePosition (Point<float> mousePos, DragMode dragMode);
     bool updateValueFromKeypress (const KeyPress& key);

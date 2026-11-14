@@ -29,6 +29,9 @@ const Identifier ComboBox::Style::textColorId = "comboBoxText";
 const Identifier ComboBox::Style::borderColorId = "comboBoxBorder";
 const Identifier ComboBox::Style::arrowColorId = "comboBoxArrow";
 const Identifier ComboBox::Style::focusedBorderColorId = "comboBoxFocusedBorder";
+const Identifier ComboBox::Style::cornerRadiusId = "comboBoxCornerRadius";
+const Identifier ComboBox::Style::outlineWidthId = "comboBoxOutlineWidth";
+const Identifier ComboBox::Style::focusedOutlineWidthId = "comboBoxFocusedOutlineWidth";
 
 //==============================================================================
 
@@ -43,6 +46,10 @@ const ComponentTypeInfo& ComboBox::getClassTypeInfo()
         props.push_back (makeColorProperty (Identifier ("borderColor"), Style::borderColorId));
         props.push_back (makeColorProperty (Identifier ("arrowColor"), Style::arrowColorId));
         props.push_back (makeColorProperty (Identifier ("focusedBorderColor"), Style::focusedBorderColorId));
+
+        props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, 4.0, "The corner radius."));
+        props.push_back (makeNumberProperty (Identifier ("outlineWidth"), Style::outlineWidthId, 1.0, "The outline width."));
+        props.push_back (makeNumberProperty (Identifier ("focusedOutlineWidth"), Style::focusedOutlineWidthId, 2.0, "The outline width when focused."));
 
         props.push_back (ComponentProperty {
             .name = Identifier ("selectedId"),

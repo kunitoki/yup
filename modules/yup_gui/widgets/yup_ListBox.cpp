@@ -100,6 +100,16 @@ constexpr double listBoxMaxFrameGapSeconds = 1.0 / 15.0;
 
 //==============================================================================
 
+const Identifier ListBox::Style::backgroundColorId { "listBoxBackground" };
+const Identifier ListBox::Style::outlineColorId { "listBoxOutline" };
+const Identifier ListBox::Style::rowBackgroundColorId { "rowBackground" };
+const Identifier ListBox::Style::selectedRowBackgroundColorId { "selectedRowBackground" };
+const Identifier ListBox::Style::hoveredRowBackgroundColorId { "hoveredRowBackground" };
+const Identifier ListBox::Style::refreshIndicatorColorId { "listBoxRefreshIndicator" };
+const Identifier ListBox::Style::refreshIndicatorSizeId { "listBoxRefreshIndicatorSize" };
+
+//==============================================================================
+
 const ComponentTypeInfo& ListBox::getClassTypeInfo()
 {
     static const ComponentTypeInfo info = []

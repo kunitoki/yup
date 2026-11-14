@@ -53,7 +53,6 @@ public:
     void setText (String newText, NotificationType notification = sendNotification);
 
     //==============================================================================
-
     /** Returns the current font.
 
         @returns The font used to display the text
@@ -70,7 +69,6 @@ public:
     void resetFont();
 
     //==============================================================================
-
     /** Returns the stroke width used for the text outline.
 
         @returns The width of the text outline
@@ -84,23 +82,28 @@ public:
     void setStrokeWidth (float newWidth);
 
     //==============================================================================
+    /** Returns the justification used for the text.
 
+        @returns The current text justification
+    */
     Justification getJustification() const { return justification; }
 
+    /** Sets the justification for the text.
+
+        @param newJustification    The new justification to use
+    */
     void setJustification (Justification newJustification);
 
     //==============================================================================
-
+    /** Style identifiers for customizing the appearance of the Label. */
     struct Style
     {
-        //! Colors
-        static const Identifier textFillColorId;
-        static const Identifier textStrokeColorId;
-        static const Identifier backgroundColorId;
-        static const Identifier outlineColorId;
+        static const Identifier textFillColorId;       /**< Text fill color */
+        static const Identifier textStrokeColorId;     /**< Text stroke color */
+        static const Identifier backgroundColorId;     /**< Background color */
+        static const Identifier outlineColorId;        /**< Outline color */
 
-        //! Curated geometry
-        static const Identifier textHeightProportionId;
+        static const Identifier textHeightProportionId; /**< Text height proportion */
     };
 
     //==============================================================================
@@ -111,6 +114,8 @@ public:
     const ComponentTypeInfo& getDefaultTypeInfo() const override;
 
     //==============================================================================
+    /** @internal */
+    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 
     /** @internal */
     void paint (Graphics& g) override;
@@ -118,9 +123,6 @@ public:
     void resized() override;
     /** @internal */
     void styleChanged() override;
-
-    /** @internal */
-    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 
 private:
     void prepareText();

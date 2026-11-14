@@ -1,0 +1,204 @@
+# The `.yui` language
+
+A `.yui` file describes an interface as text: how components paint
+(`drawing`), how they look in each state (`palette` and `style`), and what the
+interface is made of (`tokens`, `component` and the root instance). This page
+is the reference of the syntax; the guides linked from each section describe
+what the blocks do.
+
+```yui
+import "knob.yui";
+
+palette Ember { colors: "#1b1b1e #ff8800 #f2efe9"; }
+
+style {
+    :root { palette: Ember; }
+    .knob { drawing: Knob; }
+}
+
+tokens { property spacing: number = 8; }
+
+component LabeledKnob : Column {
+    property label: string = "VALUE";
+    property alias value <=> knob.value;
+
+    Slider { id: knob; class: knob; flexGrow: 1; }
+    Label  { text: root.label; preferredHeight: 20; }
+}
+
+Row {
+    gap: spacing;
+    LabeledKnob { id: cutoff; label: "CUTOFF"; value <=> params.cutoff; }
+}
+```
+
+## Files
+
+A file is a sequence of blocks, in any order:
+
+| Block | Holds | Guide |
+|---|---|---|
+| `import "path";` | The blocks of another file | [below](#imports) |
+| `drawing Name { ... }` | Shapes painting a component | [Data-driven drawing](yui-drawing.md) |
+| `palette Name { ... }` | A palette derived from source colors | [Stylesheets](yui-styles.md#palettes) |
+| `style { ... }` | Rules and `@keyframes` | [Stylesheets](yui-styles.md) |
+| `tokens { ... }` | Typed values shared by the document | [Tokens](yui-documents.md#tokens) |
+| `component Name : Base { ... }` | A new component type | [Composite components](yui-documents.md#composite-components) |
+| `Type { ... }` | The root component instance, at most one per document | [Complete UIs](yui-documents.md) |
+
+Line comments (`// ...`) and block comments (`/* ... */`) can go anywhere
+whitespace can. Names are case sensitive: component types start with an
+uppercase letter (`Slider`, `LabeledKnob`), everything else is `camelCase`.
+
+## Elements and properties
+
+Every block other than `import` is an element with a body in braces. A body
+holds properties, written `name: value;`, and child elements, written
+`type { ... }`, in any order:
+
+```yui
+Column {
+    gap: 4;                                  // a property
+    Slider { id: knob; value: 0.5; }         // a child element
+    Label  { text: format ("%.2f", knob.value); }
+}
+```
+
+A property can be set once per element. Inside a `drawing` the children are
+shapes and scopes (`circle`, `layer`, ...); in the instance tree and in
+`component` blocks they are components, named by their registered type
+(`Slider`, `Row`, ...) or by a `component` declared in the document.
+
+Two properties are special in the instance tree: `id` names an element so
+expressions and C++ (`findById`) can reach it, and `class` gives it style
+classes, separated by spaces or commas (`class: "knob large";`).
+
+An element's values apply in the order its type declares the properties, base
+types first, and `<=>` links after them, whatever the order in the document. A
+property that constrains another therefore applies first:
+`Slider { value: 1000; minimum: 20; maximum: 20000; }` sets the range before the
+value.
+
+## Values
+
+A value is an expression of the [expression language](../core/expressions.md),
+with the [graphics types](../graphics/expressions.md) available:
+
+| Kind | Examples |
+|---|---|
+| Numbers, with units | `4`, `0.5`, `135deg`, `250ms`, `50%` |
+| Booleans and strings | `true`, `false`, `"CUTOFF"` |
+| Colors | `#ff8800`, `#ff880080`, `rgb (255, 136, 0)`, `palette.accent.darker (0.1)` |
+| Enumerations | `round`, `rotaryVerticalDrag`, `center` (a bare name the property knows) |
+| Graphics values | `bounds.center`, `rect (0, 0, 20, 20)`, `polar (bounds.center, r, a)` |
+| Operators and calls | `enabled ? 1 : 0.4`, `lerp (a0, a1, normalized)`, `min (width, height) / 2` |
+
+An expression reads the names around it: the properties of the component it
+is written on (bare or prefixed by `self.`), `parent.`, the elements with an
+`id`, `root` inside a `component` block, the document models and tokens, and
+`palette.` roles. In the instance tree, a value that reads anything is a
+[binding](yui-reactivity.md), kept up to date while what it reads changes.
+
+The values of `style` and `palette` blocks are kept as written up to their `;`,
+because some aren't expressions (`transition: bezelSize 150ms easeOut;`,
+`drawing: Knob;`). They are compiled when the stylesheet applies them.
+
+## Declarations
+
+`property` declares a typed value with an optional default expression. The
+types are `number`, `integer`, `boolean`, `string` and `color`:
+
+```yui
+property bezelSize: number = 0.8;
+```
+
+| Where | Declares |
+|---|---|
+| At the top of a `drawing` | An input the component, its parents or a stylesheet set ([Properties](yui-drawing.md#properties)) |
+| In `tokens` | A value of the document root, read by bare name everywhere |
+| In a `component` | A property of the new type, read inside as `root.name` |
+| In a style rule | A default for the components the rule matches |
+
+A `component` block also declares:
+
+- `property alias name <=> id.property;`, exposing a property of a part;
+- `signal name (argument: type, ...);`, a signal its parts emit with
+  `root.name (...)`.
+
+## Scopes in drawings
+
+`let name: value;` names a value for the elements after it, and
+`repeat i in from .. to { ... }` draws its shapes once per integer from `from`
+to `to - 1`. Both only exist inside drawings, see
+[Scopes](yui-drawing.md#scopes).
+
+## Bindings and handlers
+
+`name <=> id.property;` links a property both ways to another, or to a model
+property (`value <=> params.cutoff;`), see [Two-way
+bindings](yui-documents.md#two-way-bindings).
+
+A property named after a signal is a handler holding one call, either an
+action registered by the application or a signal of the enclosing component:
+
+```yui
+TextButton { text: "Reset"; onClick: action ("reset"); }
+Slider     { onValueChanged: root.onChanged (value); }
+```
+
+See [Handlers and actions](yui-documents.md#handlers-and-actions).
+
+## Imports
+
+`import "path";` inserts the blocks of another file where it is written. Each
+path is imported once, the first time it is met, so shared files can be
+imported from several places and cycles are harmless. What a path is relative
+to is up to the loader: `YuiLoader` resolves every path from the folder of the
+main file, or by name among embedded resources (see [Hot
+reloading](yui-hot-reload.md)), while `YuiDocument::loadFromString` asks a
+callback.
+
+## Errors
+
+Syntax errors stop parsing at the first one, reported with its line and column,
+prefixed by the import path when it is in an imported file:
+
+```text
+parts/style.yui:12:18: Expected ';'
+```
+
+Everything else is checked when the document is used: unknown component types
+make loading fail, unknown properties and values that don't compile are
+listed by `YuiDocument::getDiagnostics()`, and drawing errors name the path of
+the element, as in `Knob/layer[0]/arc#value.to: Unknown symbol 'avv'`. The parser
+records where each element and property is written (`ParseResult::sourceMap`),
+so these problems carry a line and column too, the one of the value, the
+declaration or the element they are about:
+
+```text
+style.yui:7:9: Unknown cursor 'finger'
+```
+
+## The document tree
+
+`YuiParser::parse` turns the text into a `DataTree` of type `yui`, with one
+child per block, the element types and property names as written, and the
+values as their expression text. This tree is what the rest of YUI consumes,
+so tools can create or edit interfaces without writing text.
+
+`YuiWriter::write()` turns a parsed document, or any element of it, back into
+text that parses to the same tree, so tools can load, edit and save `.yui`
+files. Comments and the original layout are not preserved.
+
+## See also
+
+- [Complete UIs in `.yui`](yui-documents.md) - loading documents, tokens,
+  composite components, handlers and models.
+- [Stylesheets](yui-styles.md) - selectors, the cascade, palettes and
+  transitions.
+- [Data-driven drawing](yui-drawing.md) - shapes, scopes and drawing
+  properties.
+- [Layout components](component-layout.md#layout-components) - `Row`,
+  `Column`, `Grid`, `Stack` and the item properties.
+- [Hot reloading `.yui` files](yui-hot-reload.md) - loading files and
+  resources, and watching them while developing.

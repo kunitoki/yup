@@ -37,50 +37,175 @@ Result YuiDocument::loadFromString (const String& text, YuiParser::ImportResolve
 
     if (! parsed.wasOk())
     {
-        parseError = parsed.diagnostics.front();
-        diagnostics = StringArray (parseError->toString());
-        return Result::fail (parseError->toString());
+        diagnostics = parsed.diagnostics;
+        return notifyLoaded (Result::fail (diagnostics.front().toString()));
     }
 
-    return load (parsed.document);
+    return load (parsed.document, parsed.sourceMap);
 }
 
-Result YuiDocument::load (const DataTree& document)
+//==============================================================================
+/** Loads one of two documents, the one before a load when undone and the loaded one when redone. */
+class YuiDocument::LoadAction final : public UndoableAction
 {
-    parseError.reset();
+public:
+    LoadAction (YuiDocument& documentToLoad, DataTree before, YuiSourceMap beforeMap, DataTree after, YuiSourceMap afterMap)
+        : document (&documentToLoad)
+        , previousTree (std::move (before))
+        , previousMap (std::move (beforeMap))
+        , loadedTree (std::move (after))
+        , loadedMap (std::move (afterMap))
+    {
+    }
+
+    bool isValid() const override
+    {
+        return document != nullptr;
+    }
+
+    bool perform (UndoableActionState state) override
+    {
+        if (document == nullptr)
+            return false;
+
+        const auto isRedo = state == UndoableActionState::Redo;
+        const auto& toLoad = isRedo ? loadedTree : previousTree;
+
+        if (! toLoad.isValid())
+        {
+            document->clear();
+            return true;
+        }
+
+        result = document->loadTree (toLoad, isRedo ? loadedMap : previousMap);
+        return result.wasOk();
+    }
+
+    Result result = Result::ok();
+
+private:
+    WeakReference<YuiDocument> document;
+    DataTree previousTree;
+    YuiSourceMap previousMap;
+    DataTree loadedTree;
+    YuiSourceMap loadedMap;
+};
+
+//==============================================================================
+
+Result YuiDocument::load (const DataTree& document, const YuiSourceMap& map)
+{
+    if (undoManager == nullptr || ! undoManager->isEnabled())
+        return loadTree (document, map);
+
+    // The undo manager performs the load, and keeps it only when it succeeds
+    ReferenceCountedObjectPtr<LoadAction> action (new LoadAction (*this, tree.isValid() ? tree.clone() : DataTree(), sourceMap, document.clone(), map));
+
+    undoManager->beginNewTransaction();
+    undoManager->perform (action.get());
+
+    return action->result;
+}
+
+Result YuiDocument::loadTree (const DataTree& document, const YuiSourceMap& map)
+{
+    return notifyLoaded (buildTree (document, map));
+}
+
+Result YuiDocument::notifyLoaded (Result result)
+{
+    listeners.call ([&] (Listener& listener)
+    {
+        listener.documentLoaded (*this, result);
+    });
+
+    return result;
+}
+
+void YuiDocument::report (const YuiSourceMap& map, const YuiDiagnostic& diagnostic)
+{
+    const auto located = map.locate (diagnostic);
+    const auto text = located.toString();
+
+    // Styling reports the same problem again each time a component is restyled
+    const auto isKnown = std::any_of (diagnostics.begin(), diagnostics.end(), [&text] (const YuiDiagnostic& known)
+    {
+        return known.toString() == text;
+    });
+
+    if (isKnown)
+        return;
+
+    diagnostics.push_back (located);
+
+    if (! isLoading)
+    {
+        listeners.call ([&] (Listener& listener)
+        {
+            listener.documentDiagnosed (*this, located);
+        });
+    }
+}
+
+Result YuiDocument::buildTree (const DataTree& document, const YuiSourceMap& map)
+{
+    const ScopedValueSetter<bool> loading (isLoading, true);
     diagnostics.clear();
 
-    auto sheet = StyleSheet::fromTree (document);
+    YuiDiagnostic failure;
+    auto sheet = StyleSheet::fromTree (document, &failure);
 
     if (sheet.failed())
     {
-        diagnostics.add (sheet.getErrorMessage());
-        return Result::fail (sheet.getErrorMessage());
+        report (map, failure);
+        return Result::fail (diagnostics.back().toString());
     }
 
-    tree = document;
-    styleSheet = nullptr;
+    // The builder keeps the components of the elements still in the patched tree
+    const auto previousTree = tree;
+    const auto isPatched = tree.isValid() && tree.getType() == document.getType();
+    UndoManager rollback (RelativeTime {});
 
-    if (auto result = builder.build (document); result.failed())
+    if (isPatched)
+        YuiTreeDiff::apply (tree, document, &rollback);
+    else
+        tree = document.clone();
+
+    if (auto result = builder.build (tree); result.failed())
     {
-        diagnostics.add (result.getErrorMessage());
-        diagnostics.addArray (builder.getDiagnostics());
-        return result;
+        // Located before the rollback, which detaches the elements the patch added
+        for (const auto& diagnostic : builder.getDiagnostics())
+            report (map, diagnostic);
+
+        // The error that made the build fail is the last one reported
+        const auto failure = map.locate (builder.getDiagnostics().back()).toString();
+
+        // Restoring the same elements lets the next load keep the components still shown
+        if (isPatched)
+            rollback.undo();
+        else
+            tree = previousTree;
+
+        return Result::fail (failure);
     }
 
     styleSheet = sheet.getReference();
+    sourceMap = map;
 
     auto& root = *builder.getRoot();
     root.setStyleSheet (styleSheet);
 
-    diagnostics.addArray (builder.getDiagnostics());
+    for (const auto& diagnostic : builder.getDiagnostics())
+        report (map, diagnostic);
 
-    if (auto* context = root.getStyleContext())
+    // The style problems met later, when a rule starts matching, are reported too
+    auto& context = *root.getStyleContext();
+    context.onDiagnostic = [this] (const YuiDiagnostic& diagnostic)
     {
-        context->restyleNow();
-        diagnostics.addArray (context->getDiagnostics());
-    }
+        report (sourceMap, diagnostic);
+    };
 
+    context.restyleNow();
     return Result::ok();
 }
 
@@ -88,8 +213,8 @@ void YuiDocument::clear()
 {
     builder.clear();
     tree = {};
+    sourceMap = {};
     styleSheet = nullptr;
-    parseError.reset();
     diagnostics.clear();
 }
 

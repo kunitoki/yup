@@ -25,6 +25,7 @@ namespace yup
 //==============================================================================
 const Identifier ProgressBar::Style::backgroundColorId { "progressBarBackground" };
 const Identifier ProgressBar::Style::foregroundColorId { "progressBarForeground" };
+const Identifier ProgressBar::Style::cornerRadiusId { "progressBarCornerRadius" };
 
 //==============================================================================
 const ComponentTypeInfo& ProgressBar::getClassTypeInfo()
@@ -35,6 +36,7 @@ const ComponentTypeInfo& ProgressBar::getClassTypeInfo()
 
         props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
         props.push_back (makeColorProperty (Identifier ("foregroundColor"), Style::foregroundColorId));
+        props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, {}, "The corner radius, unset for a pill."));
 
         props.push_back (ComponentProperty {
             .name = Identifier ("progress"),

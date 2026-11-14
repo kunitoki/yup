@@ -25,7 +25,7 @@ namespace yup
 namespace
 {
 
-Result readDeclarations (const DataTree& parent, std::vector<StyleSheet::Declaration>& target)
+std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent, std::vector<StyleSheet::Declaration>& target)
 {
     for (const auto& element : parent)
     {
@@ -37,9 +37,10 @@ Result readDeclarations (const DataTree& parent, std::vector<StyleSheet::Declara
         const auto name = element.getProperty ("name").toString().trim();
 
         if (name.isEmpty())
-            return Result::fail ("A declaration needs a name");
+            return YuiDiagnostic { .message = "A declaration needs a name", .element = element };
 
         StyleSheet::Declaration declaration;
+        declaration.element = element;
 
         if (const auto dot = name.indexOfChar ('.'); dot > 0)
         {
@@ -54,21 +55,21 @@ Result readDeclarations (const DataTree& parent, std::vector<StyleSheet::Declara
         declaration.value = element.getProperty ("value").toString().trim();
 
         if (declaration.value.isEmpty())
-            return Result::fail ("The declaration '" + name + "' needs a value");
+            return YuiDiagnostic { .message = "The declaration '" + name + "' needs a value", .element = element };
 
         target.push_back (std::move (declaration));
     }
 
-    return Result::ok();
+    return std::nullopt;
 }
 
-ResultValue<ThemePalette> readPalette (const DataTree& element)
+std::optional<YuiDiagnostic> readPalette (const DataTree& element, std::map<String, ThemePalette>& palettes)
 {
     const auto name = element.getProperty ("name").toString().trim();
     const auto colors = element.getProperty ("colors").toString().trim();
 
     if (colors.isEmpty())
-        return makeResultValueFail ("The palette '" + name + "' needs colors");
+        return YuiDiagnostic { .message = "The palette '" + name + "' needs colors", .element = element };
 
     const auto mode = element.getProperty ("mode").toString().trim() == "light"
                         ? ThemePalette::Mode::light
@@ -77,7 +78,7 @@ ResultValue<ThemePalette> readPalette (const DataTree& element)
     auto palette = ThemePalette::fromString (colors, mode);
 
     if (palette.failed())
-        return makeResultValueFail ("The palette '" + name + "' is invalid: " + palette.getErrorMessage());
+        return YuiDiagnostic { .message = "The palette '" + name + "' is invalid: " + palette.getErrorMessage(), .element = element, .property = "colors" };
 
     auto result = palette.getReference();
 
@@ -92,35 +93,41 @@ ResultValue<ThemePalette> readPalette (const DataTree& element)
         const auto role = ThemePalette::getRoleFromName (propertyText);
 
         if (! role.has_value())
-            return makeResultValueFail ("The palette '" + name + "' sets the unknown role '" + propertyText + "'");
+            return YuiDiagnostic { .message = "The palette '" + name + "' sets the unknown role '" + propertyText + "'", .element = element, .property = propertyName };
 
         const auto color = Color::fromString (element.getProperty (propertyName).toString());
         result.setColor (*role, color);
     }
 
-    return makeResultValueOk (std::move (result));
+    palettes.insert_or_assign (name, std::move (result));
+    return std::nullopt;
 }
 
 } // namespace
 
 //==============================================================================
 
-ResultValue<StyleSheet::Ptr> StyleSheet::fromTree (const DataTree& tree)
+ResultValue<StyleSheet::Ptr> StyleSheet::fromTree (const DataTree& tree, YuiDiagnostic* failure)
 {
     const auto rootType = tree.getType().toString();
 
-    if (! tree.isValid() || (rootType != "yui" && rootType != "style"))
-        return makeResultValueFail ("Expected a 'yui' document or a 'style' element");
-
     Ptr sheet (new StyleSheet());
+    sheet->tree = tree;
 
-    if (const auto result = sheet->addElements (tree); result.failed())
-        return makeResultValueFail (result.getErrorMessage());
+    auto problem = tree.isValid() && (rootType == "yui" || rootType == "style")
+                     ? sheet->addElements (tree)
+                     : YuiDiagnostic { .message = "Expected a 'yui' document or a 'style' element" };
 
-    return makeResultValueOk (std::move (sheet));
+    if (! problem.has_value())
+        return makeResultValueOk (std::move (sheet));
+
+    if (failure != nullptr)
+        *failure = *problem;
+
+    return makeResultValueFail (problem->message);
 }
 
-Result StyleSheet::addElements (const DataTree& parent)
+std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
 {
     for (const auto& element : parent)
     {
@@ -128,22 +135,22 @@ Result StyleSheet::addElements (const DataTree& parent)
 
         if (type == "style")
         {
-            if (const auto result = addElements (element); result.failed())
-                return result;
+            if (auto problem = addElements (element))
+                return problem;
         }
         else if (type == "rule")
         {
             auto selector = StyleSelector::parse (element.getProperty ("selector").toString());
 
             if (selector.failed())
-                return Result::fail (selector.getErrorMessage());
+                return YuiDiagnostic { .message = selector.getErrorMessage(), .element = element, .property = "selector" };
 
             Rule rule;
             rule.selector = selector.getReference();
             rule.order = static_cast<int> (rules.size());
 
-            if (const auto result = readDeclarations (element, rule.declarations); result.failed())
-                return result;
+            if (auto problem = readDeclarations (element, rule.declarations))
+                return problem;
 
             for (const auto& property : rule.selector.getReferencedProperties())
                 watchedProperties.addIfNotAlreadyThere (property);
@@ -152,12 +159,8 @@ Result StyleSheet::addElements (const DataTree& parent)
         }
         else if (type == "palette")
         {
-            auto palette = readPalette (element);
-
-            if (palette.failed())
-                return Result::fail (palette.getErrorMessage());
-
-            palettes.insert_or_assign (element.getProperty ("name").toString().trim(), palette.getReference());
+            if (auto problem = readPalette (element, palettes))
+                return problem;
         }
         else if (type == "drawing")
         {
@@ -172,7 +175,7 @@ Result StyleSheet::addElements (const DataTree& parent)
             sequence.name = Identifier (element.getProperty ("name").toString().trim());
 
             if (! sequence.name.isValid())
-                return Result::fail ("A keyframes block needs a name");
+                return YuiDiagnostic { .message = "A keyframes block needs a name", .element = element };
 
             for (const auto& frameElement : element)
             {
@@ -182,8 +185,8 @@ Result StyleSheet::addElements (const DataTree& parent)
                 Keyframe frame;
                 frame.position = jlimit (0.0, 1.0, static_cast<double> (frameElement.getProperty ("at")));
 
-                if (const auto result = readDeclarations (frameElement, frame.declarations); result.failed())
-                    return result;
+                if (auto problem = readDeclarations (frameElement, frame.declarations))
+                    return problem;
 
                 sequence.frames.push_back (std::move (frame));
             }
@@ -197,7 +200,7 @@ Result StyleSheet::addElements (const DataTree& parent)
         }
     }
 
-    return Result::ok();
+    return std::nullopt;
 }
 
 ResultValue<StyleSheet::Ptr> StyleSheet::parse (const String& text)
@@ -208,6 +211,53 @@ ResultValue<StyleSheet::Ptr> StyleSheet::parse (const String& text)
         return makeResultValueFail (parsed.diagnostics.front().toString());
 
     return fromTree (parsed.document);
+}
+
+std::vector<StringArray> StyleSheet::tokenizeValue (const String& value)
+{
+    std::vector<StringArray> entries (1);
+    String token;
+    int depth = 0;
+
+    const auto flush = [&]
+    {
+        if (token.isEmpty())
+            return;
+
+        auto& tokens = entries.back();
+
+        if (token.startsWithChar ('(') && ! tokens.isEmpty())
+            tokens.set (tokens.size() - 1, tokens[tokens.size() - 1] + token);
+        else
+            tokens.add (token);
+
+        token.clear();
+    };
+
+    for (auto p = value.getCharPointer(); ! p.isEmpty(); ++p)
+    {
+        const auto c = *p;
+
+        if (depth == 0 && (c == ',' || CharacterFunctions::isWhitespace (c)))
+        {
+            flush();
+
+            if (c == ',')
+                entries.emplace_back();
+
+            continue;
+        }
+
+        if (c == '(')
+            ++depth;
+        else if (c == ')')
+            depth = jmax (0, depth - 1);
+
+        token += c;
+    }
+
+    flush();
+    return entries;
 }
 
 //==============================================================================

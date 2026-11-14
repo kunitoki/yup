@@ -180,10 +180,10 @@ public:
     /** Color identifiers used by the tab. */
     struct Style
     {
-        static inline const Identifier textColorId { "tabButtonText" };
-        static inline const Identifier textSelectedColorId { "tabButtonTextSelected" };
-        static inline const Identifier hoveredBackgroundColorId { "tabButtonHoveredBackground" };
-        static inline const Identifier closeButtonColorId { "tabButtonCloseButton" };
+        static const Identifier textColorId;              /**< The color of the tab text. */
+        static const Identifier textSelectedColorId;      /**< The color of the selected tab text. */
+        static const Identifier hoveredBackgroundColorId; /**< The background color when the tab is hovered. */
+        static const Identifier closeButtonColorId;       /**< The color of the close button. */
     };
 
     //==============================================================================

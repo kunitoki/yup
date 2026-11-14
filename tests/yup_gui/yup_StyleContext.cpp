@@ -66,6 +66,41 @@ protected:
         context->restyleNow();
     }
 
+    static void attach (Component& root, const String& text)
+    {
+        auto sheet = StyleSheet::parse (text);
+        ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+        root.setStyleSheet (sheet.getReference());
+        restyle (root);
+    }
+
+    static void advance (Component& root, double elapsedSeconds)
+    {
+        root.getStyleContext()->refresh (elapsedSeconds);
+    }
+
+    static double glow (const Component& component)
+    {
+        return static_cast<double> (component.findProperty (Identifier ("glow")));
+    }
+
+    static void expectDiagnostic (const Component& root, const String& prefix)
+    {
+        const auto& diagnostics = root.getStyleContext()->getDiagnostics();
+
+        for (const auto& diagnostic : diagnostics)
+            if (diagnostic.message.startsWith (prefix))
+                return;
+
+        ADD_FAILURE() << "No diagnostic starting with '" << prefix << "' in: " << YuiDiagnostic::join (diagnostics);
+    }
+
+    class StyleTestEffect : public ComponentEffect
+    {
+    public:
+        void apply (Graphics&, GpuTexture::Ptr, Rectangle<float>) override {}
+    };
+
     ApplicationTheme::Ptr theme;
     ApplicationTheme::Ptr oldTheme;
 };
@@ -234,7 +269,7 @@ TEST_F (StyleContextTests, ReportsDiagnosticsForBadValues)
     root.setStyleSheet (build (DataTree ("style", { rule ("#root", { declaration ("trackWidth", "notAKnownSymbol * 2") }) })));
     restyle (root);
 
-    EXPECT_FALSE (root.getStyleContext()->getDiagnostics().isEmpty());
+    EXPECT_FALSE (root.getStyleContext()->getDiagnostics().empty());
 }
 
 TEST_F (StyleContextTests, InstallsAndRestoresDrawings)
@@ -273,7 +308,7 @@ TEST_F (StyleContextTests, ReportsUnknownDrawings)
     root.setStyleSheet (build (DataTree ("style", { rule ("#root", { declaration ("drawing", "Missing") }) })));
     restyle (root);
 
-    EXPECT_TRUE (root.getStyleContext()->getDiagnostics().contains ("Unknown drawing 'Missing'"));
+    expectDiagnostic (root, "Unknown drawing 'Missing'");
 }
 
 TEST_F (StyleContextTests, TypesTheDeclarationsOfDrawingProperties)
@@ -304,5 +339,417 @@ TEST_F (StyleContextTests, TypesTheDeclarationsOfDrawingProperties)
 
     const auto diagnostics = root.getStyleContext()->getDiagnostics();
     ASSERT_EQ (diagnostics.size(), 1);
-    EXPECT_TRUE (diagnostics[0].startsWith ("dotRadius: ")) << diagnostics[0];
+    EXPECT_TRUE (diagnostics[0].message.startsWith ("dotRadius: ")) << diagnostics[0].message;
+}
+
+TEST_F (StyleContextTests, TransitionsFollowStyleChanges)
+{
+    Component root ("root");
+    root.addStyleClass (Identifier ("knob"));
+
+    attach (root, "style { .knob { glow: 0; transition: glow 1s; } .lit { glow: 10; } }");
+    EXPECT_DOUBLE_EQ (glow (root), 0.0);
+
+    root.addStyleClass (Identifier ("lit"));
+    advance (root, 0.0);
+    EXPECT_DOUBLE_EQ (glow (root), 0.0);
+
+    advance (root, 0.5);
+    EXPECT_DOUBLE_EQ (glow (root), 5.0);
+
+    advance (root, 0.6);
+    EXPECT_DOUBLE_EQ (glow (root), 10.0);
+    EXPECT_EQ (root.getStyleState()->getAnimatedValue (Identifier ("glow")), nullptr);
+}
+
+TEST_F (StyleContextTests, TheFirstStyleIsNotTransitioned)
+{
+    Component root ("root");
+    attach (root, "style { #root { glow: 10; transition: glow 1s; } }");
+
+    EXPECT_DOUBLE_EQ (glow (root), 10.0);
+    EXPECT_EQ (root.getStyleState()->getAnimatedValue (Identifier ("glow")), nullptr);
+}
+
+TEST_F (StyleContextTests, TransitionsStateBackedPropertiesBothWays)
+{
+    Component root ("root");
+    root.setOpacity (1.0f);
+    root.addStyleClass (Identifier ("fade"));
+
+    attach (root, "style { .fade { transition: opacity 1s; } .faded { opacity: 0.5; } }");
+
+    root.addStyleClass (Identifier ("faded"));
+    advance (root, 0.0);
+    EXPECT_NEAR (root.getOpacity(), 1.0f, 0.01f);
+
+    advance (root, 0.5);
+    EXPECT_NEAR (root.getOpacity(), 0.75f, 0.01f);
+
+    advance (root, 0.6);
+    EXPECT_NEAR (root.getOpacity(), 0.5f, 0.01f);
+
+    root.removeStyleClass (Identifier ("faded"));
+    advance (root, 0.0);
+    EXPECT_NEAR (root.getOpacity(), 0.5f, 0.01f);
+
+    advance (root, 0.5);
+    EXPECT_NEAR (root.getOpacity(), 0.75f, 0.01f);
+
+    advance (root, 0.6);
+    EXPECT_NEAR (root.getOpacity(), 1.0f, 0.01f);
+
+    root.removeStyleClass (Identifier ("fade"));
+    advance (root, 0.0);
+    EXPECT_NEAR (root.getOpacity(), 1.0f, 0.01f);
+}
+
+TEST_F (StyleContextTests, RetargetsARunningTransitionFromWhereItIs)
+{
+    Component root ("root");
+    root.addStyleClass (Identifier ("knob"));
+
+    attach (root, "style { .knob { glow: 0; transition: glow 1s; } .lit { glow: 10; } }");
+
+    root.addStyleClass (Identifier ("lit"));
+    advance (root, 0.0);
+    advance (root, 0.5);
+    EXPECT_DOUBLE_EQ (glow (root), 5.0);
+
+    root.removeStyleClass (Identifier ("lit"));
+    advance (root, 0.0);
+    EXPECT_DOUBLE_EQ (glow (root), 5.0);
+
+    advance (root, 0.5);
+    EXPECT_DOUBLE_EQ (glow (root), 2.5);
+
+    advance (root, 0.6);
+    EXPECT_DOUBLE_EQ (glow (root), 0.0);
+}
+
+TEST_F (StyleContextTests, TransitionsTheNewStyleDoesNotDeclareStop)
+{
+    Component root ("root");
+    root.addStyleClass (Identifier ("knob"));
+
+    attach (root, "style { .knob { glow: 0; transition: glow 1s; } .lit { glow: 10; } .instant { transition: none; } }");
+
+    root.addStyleClass (Identifier ("lit"));
+    advance (root, 0.0);
+    advance (root, 0.5);
+    EXPECT_DOUBLE_EQ (glow (root), 5.0);
+
+    root.addStyleClass (Identifier ("instant"));
+    advance (root, 0.0);
+    EXPECT_DOUBLE_EQ (glow (root), 10.0);
+    EXPECT_EQ (root.getStyleState()->getAnimatedValue (Identifier ("glow")), nullptr);
+}
+
+TEST_F (StyleContextTests, ExplicitValuesWinOverAnimatedOnes)
+{
+    Component root ("root");
+    root.addStyleClass (Identifier ("knob"));
+
+    attach (root, "style { .knob { glow: 0; transition: glow 1s; } .lit { glow: 10; } }");
+    root.setProperty (Identifier ("glow"), 3.0);
+
+    root.addStyleClass (Identifier ("lit"));
+    advance (root, 0.0);
+    advance (root, 0.5);
+    EXPECT_DOUBLE_EQ (glow (root), 3.0);
+}
+
+TEST_F (StyleContextTests, PlaysKeyframeAnimations)
+{
+    Component root ("root");
+    attach (root, "style { .pulsing { animation: pulse 1s cubicBezier (0, 0, 1, 1); } @keyframes pulse { from { glow: 0; } to { glow: 10; } } }");
+
+    root.addStyleClass (Identifier ("pulsing"));
+    advance (root, 0.0);
+    EXPECT_DOUBLE_EQ (glow (root), 0.0);
+
+    advance (root, 0.25);
+    EXPECT_NEAR (glow (root), 2.5, 1.0e-4);
+
+    advance (root, 1.0);
+    EXPECT_TRUE (root.findProperty (Identifier ("glow")).isVoid());
+}
+
+TEST_F (StyleContextTests, AnimationsFillingForwardsHoldUntilRemoved)
+{
+    Component root ("root");
+    attach (root, "style { .pulsing { animation: pulse 1s forwards; } @keyframes pulse { from { glow: 0; } to { glow: 10; } } }");
+
+    root.addStyleClass (Identifier ("pulsing"));
+    advance (root, 0.0);
+    advance (root, 1.5);
+    EXPECT_DOUBLE_EQ (glow (root), 10.0);
+
+    root.removeStyleClass (Identifier ("pulsing"));
+    advance (root, 0.0);
+    EXPECT_TRUE (root.findProperty (Identifier ("glow")).isVoid());
+}
+
+TEST_F (StyleContextTests, MissingKeyframeEndsUseTheStyledValue)
+{
+    Component root ("root");
+    attach (root, "style { .flashing { glow: 4; animation: flash 1s; } @keyframes flash { 50% { glow: 10; } } }");
+
+    root.addStyleClass (Identifier ("flashing"));
+    advance (root, 0.0);
+    EXPECT_DOUBLE_EQ (glow (root), 4.0);
+
+    advance (root, 0.25);
+    EXPECT_DOUBLE_EQ (glow (root), 7.0);
+
+    advance (root, 0.5);
+    EXPECT_DOUBLE_EQ (glow (root), 7.0);
+
+    advance (root, 0.5);
+    EXPECT_DOUBLE_EQ (glow (root), 4.0);
+}
+
+TEST_F (StyleContextTests, ReportsAnimationDiagnostics)
+{
+    Component root ("root");
+    attach (root, "style { #root { transition: glow 1; animation: missing 1s; } }");
+
+    expectDiagnostic (root, "transition: Unexpected '1'");
+    expectDiagnostic (root, "Unknown keyframes 'missing'");
+}
+
+TEST_F (StyleContextTests, ReportsTheDeclarationOfEachDiagnostic)
+{
+    const auto parsed = YuiParser::parse (R"yui(drawing Broken { circle { radius: missingSymbol; } }
+style {
+    #root {
+        palette: Missing;
+        transition: glow 1;
+        text: "x";
+        glow: notAKnownSymbol * 2;
+        cursor: finger;
+        effect: missingEffect;
+        shadow: 1 red;
+        animation: missing 1s;
+    }
+    #a { drawing: Missing; shadow: 0 0 2 notAColor; animation: 1s; }
+    #b { drawing: Broken; animation: bad 1s; }
+    @keyframes bad { from { text: "y"; } to { glow: notAKnownSymbol; } }
+})yui");
+
+    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+
+    TextButton root ("root");
+    Component a ("a");
+    TextButton b ("b");
+    root.addChildComponent (a);
+    root.addChildComponent (b);
+    root.setStyleSheet (build (parsed.document));
+
+    StringArray reported;
+    root.getStyleContext()->onDiagnostic = [&] (const YuiDiagnostic& diagnostic)
+    {
+        reported.add (parsed.sourceMap.locate (diagnostic).toString());
+    };
+
+    restyle (root);
+
+    EXPECT_EQ (reported.size(), static_cast<int> (root.getStyleContext()->getDiagnostics().size()));
+
+    for (const auto* expected : { "4:9: Unknown palette 'Missing'",
+                                  "5:9: transition: ",
+                                  "6:9: The property 'text' can't be styled",
+                                  "7:9: glow: ",
+                                  "8:9: Unknown cursor 'finger'",
+                                  "9:9: Unknown effect 'missingEffect'",
+                                  "10:9: shadow: Expected",
+                                  "11:9: Unknown keyframes 'missing'",
+                                  "13:10: Unknown drawing 'Missing'",
+                                  "13:28: shadow[0]: ",
+                                  "13:53: animation: ",
+                                  "1:1: drawing Broken: ",
+                                  "15:29: The property 'text' can't be animated",
+                                  "15:47: bad glow: " })
+    {
+        EXPECT_TRUE (std::any_of (reported.begin(), reported.end(), [&] (const String& line)
+        {
+            return line.startsWith (expected);
+        })) << "No diagnostic starting with '" << expected << "' in:\n"
+            << reported.joinIntoString ("\n");
+    }
+}
+
+TEST_F (StyleContextTests, ReportsDiagnosticsOfRulesMatchingLater)
+{
+    Component root ("root");
+    attach (root, "style { #root.late { glow: notAKnownSymbol; } }");
+
+    std::vector<YuiDiagnostic> reported;
+    root.getStyleContext()->onDiagnostic = [&] (const YuiDiagnostic& diagnostic)
+    {
+        reported.push_back (diagnostic);
+    };
+
+    root.addStyleClass (Identifier ("late"));
+    restyle (root);
+
+    ASSERT_EQ (reported.size(), 1u);
+    EXPECT_TRUE (reported[0].message.startsWith ("glow: ")) << reported[0].message;
+    EXPECT_EQ (reported[0].element.getProperty ("name").toString(), "glow");
+
+    root.removeStyleClass (Identifier ("late"));
+    restyle (root);
+
+    EXPECT_TRUE (root.getStyleContext()->getDiagnostics().empty());
+    EXPECT_EQ (reported.size(), 1u);
+}
+
+TEST_F (StyleContextTests, StylesAndRestoresTheMouseCursor)
+{
+    Component root ("root");
+    root.setMouseCursor (MouseCursor::Crosshair);
+
+    attach (root, "style { .link { cursor: hand; } }");
+    EXPECT_EQ (root.getMouseCursor().getType(), MouseCursor::Crosshair);
+
+    root.addStyleClass (Identifier ("link"));
+    restyle (root);
+    EXPECT_EQ (root.getMouseCursor().getType(), MouseCursor::Hand);
+
+    root.removeStyleClass (Identifier ("link"));
+    restyle (root);
+    EXPECT_EQ (root.getMouseCursor().getType(), MouseCursor::Crosshair);
+}
+
+TEST_F (StyleContextTests, ReportsUnknownCursors)
+{
+    Component root ("root");
+    attach (root, "style { #root { cursor: finger; } }");
+
+    expectDiagnostic (root, "Unknown cursor 'finger'");
+    EXPECT_EQ (root.getMouseCursor().getType(), MouseCursor::Default);
+}
+
+TEST_F (StyleContextTests, InstallsRegisteredEffectsAndRestoresTheOriginal)
+{
+    const Identifier effectName ("styleTestEffect");
+    ComponentEffectRegistry::getInstance().registerEffect (effectName, []
+    {
+        return ComponentEffect::Ptr (new StyleTestEffect());
+    });
+
+    Component root ("root");
+    const ComponentEffect::Ptr explicitEffect (new StyleTestEffect());
+    root.setComponentEffect (explicitEffect);
+
+    attach (root, "style { .neon { effect: styleTestEffect; } .flat { effect: none; } }");
+    EXPECT_EQ (root.getComponentEffect(), explicitEffect);
+
+    root.addStyleClass (Identifier ("neon"));
+    restyle (root);
+
+    const auto installed = root.getComponentEffect();
+    EXPECT_NE (installed, explicitEffect);
+    EXPECT_NE (dynamic_cast<StyleTestEffect*> (installed.get()), nullptr);
+
+    root.getStyleContext()->markDirty (root);
+    restyle (root);
+    EXPECT_EQ (root.getComponentEffect(), installed);
+
+    root.addStyleClass (Identifier ("flat"));
+    restyle (root);
+    EXPECT_EQ (root.getComponentEffect(), nullptr);
+
+    root.removeStyleClass (Identifier ("neon"));
+    root.removeStyleClass (Identifier ("flat"));
+    restyle (root);
+    EXPECT_EQ (root.getComponentEffect(), explicitEffect);
+
+    ComponentEffectRegistry::getInstance().unregisterEffect (effectName);
+}
+
+TEST_F (StyleContextTests, ReportsUnknownEffects)
+{
+    Component root ("root");
+    attach (root, "style { #root { effect: missingEffect; } }");
+
+    expectDiagnostic (root, "Unknown effect 'missingEffect'");
+    EXPECT_EQ (root.getComponentEffect(), nullptr);
+}
+
+TEST_F (StyleContextTests, ParsesShadowLayersAndWidensThePaintMargin)
+{
+    Component root ("root");
+    attach (root, "style { #root { shadow: 0 4 12 #00000080, -2 0 3 1 #ff0000; } }");
+
+    ASSERT_NE (root.getStyleState(), nullptr);
+    const auto& shadows = root.getStyleState()->getShadows();
+    ASSERT_EQ (shadows.size(), 2u);
+
+    EXPECT_EQ (shadows[0].offset, Point<float> (0.0f, 4.0f));
+    EXPECT_FLOAT_EQ (shadows[0].blur, 12.0f);
+    EXPECT_FLOAT_EQ (shadows[0].spread, 0.0f);
+    EXPECT_EQ (shadows[0].color, Color (0x80000000));
+
+    EXPECT_EQ (shadows[1].offset, Point<float> (-2.0f, 0.0f));
+    EXPECT_FLOAT_EQ (shadows[1].blur, 3.0f);
+    EXPECT_FLOAT_EQ (shadows[1].spread, 1.0f);
+    EXPECT_EQ (shadows[1].color, Color (0xffff0000));
+
+    const auto margin = root.getPaintMargin();
+    EXPECT_FLOAT_EQ (margin.getLeft(), 12.0f);
+    EXPECT_FLOAT_EQ (margin.getTop(), 8.0f);
+    EXPECT_FLOAT_EQ (margin.getRight(), 12.0f);
+    EXPECT_FLOAT_EQ (margin.getBottom(), 16.0f);
+}
+
+TEST_F (StyleContextTests, ShadowColorsReadThePalette)
+{
+    Component root ("root");
+    attach (root, R"yui(
+        palette Ember { colors: "#100b00-#85cb33-#efffc8-#a5cbc3-#3b341f"; accent: #ff9a1f; }
+        style { #root { palette: Ember; shadow: 0 0 8 palette.accent.withAlpha (0.5); } })yui");
+
+    ASSERT_NE (root.getStyleState(), nullptr);
+    const auto& shadows = root.getStyleState()->getShadows();
+    ASSERT_EQ (shadows.size(), 1u);
+
+    EXPECT_EQ (shadows[0].color, Color (0xffff9a1f).withAlpha (0.5f));
+    EXPECT_TRUE (root.getStyleState()->isPaletteDependent());
+}
+
+TEST_F (StyleContextTests, RemovingShadowsRestoresThePaintMargin)
+{
+    Component root ("root");
+    root.setPaintMargin (2.0f);
+
+    attach (root, "style { .card { shadow: 0 0 6 #000000; } .flat { shadow: none; } }");
+
+    root.addStyleClass (Identifier ("card"));
+    restyle (root);
+    EXPECT_FLOAT_EQ (root.getPaintMargin().getLeft(), 6.0f);
+
+    root.addStyleClass (Identifier ("flat"));
+    restyle (root);
+    EXPECT_TRUE (root.getStyleState()->getShadows().empty());
+    EXPECT_FLOAT_EQ (root.getPaintMargin().getLeft(), 2.0f);
+
+    root.removeStyleClass (Identifier ("flat"));
+    restyle (root);
+    EXPECT_FLOAT_EQ (root.getPaintMargin().getLeft(), 6.0f);
+
+    root.removeStyleClass (Identifier ("card"));
+    restyle (root);
+    EXPECT_TRUE (root.getStyleState()->getShadows().empty());
+    EXPECT_FLOAT_EQ (root.getPaintMargin().getLeft(), 2.0f);
+}
+
+TEST_F (StyleContextTests, ReportsMalformedShadows)
+{
+    Component root ("root");
+    attach (root, "style { #root { shadow: 0 0 4 #000000, 4 #000000; } }");
+
+    expectDiagnostic (root, "shadow: Expected 'x y [blur [spread]] color'");
+    EXPECT_TRUE (root.getStyleState()->getShadows().empty());
+    EXPECT_FLOAT_EQ (root.getPaintMargin().getLeft(), 0.0f);
 }

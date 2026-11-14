@@ -33,6 +33,11 @@ protected:
         const auto result = YuiParser::parse (text);
         return result.wasOk() ? String() : result.diagnostics.front().toString();
     }
+
+    static String locate (const YuiParser::ParseResult& result, const DataTree& element, const Identifier& property = {})
+    {
+        return result.sourceMap.locate ({ .message = "here", .element = element, .property = property }).toString();
+    }
 };
 
 TEST_F (YuiParserTest, ParsesDrawingBlocksIntoTrees)
@@ -376,9 +381,18 @@ TEST_F (YuiParserTest, ResolvesImports)
     EXPECT_EQ (document.getChild (1).getType().toString(), "style");
     EXPECT_EQ (document.getChild (2).getType().toString(), "Component");
 
+    EXPECT_EQ (locate (result, document.getChild (0), "colors"), "palette.yui:1:13: here");
+    EXPECT_EQ (locate (result, document.getChild (1).getChild (0)), "style.yui:1:31: here");
+    EXPECT_EQ (locate (result, document.getChild (2)), "1:43: here");
+
     const auto missing = YuiParser::parse ("import \"missing.yui\";", resolver);
     ASSERT_FALSE (missing.wasOk());
-    EXPECT_EQ (missing.diagnostics.front().toString(), "0:0: Can't import 'missing.yui'");
+    EXPECT_EQ (missing.diagnostics.front().toString(), "1:1: Can't import 'missing.yui'");
+
+    files["nested.yui"] = "\n  import \"missing.yui\";";
+    const auto nested = YuiParser::parse ("import \"nested.yui\";", resolver);
+    ASSERT_FALSE (nested.wasOk());
+    EXPECT_EQ (nested.diagnostics.front().toString(), "nested.yui:2:3: Can't import 'missing.yui'");
 
     const auto broken = YuiParser::parse ("import \"broken.yui\";", resolver);
     ASSERT_FALSE (broken.wasOk());
@@ -388,6 +402,67 @@ TEST_F (YuiParserTest, ResolvesImports)
 TEST_F (YuiParserTest, CountsColumnsInCharacters)
 {
     EXPECT_EQ (parseError (String::fromUTF8 ("drawing { text { text: \"\xc3\xa9\"; fill: ; } }")), "1:35: Unexpected character ';'");
+
+    const auto result = YuiParser::parse (String::fromUTF8 ("drawing { text { text: \"\xc3\xa9\"; fill: red; } }"));
+    EXPECT_EQ (locate (result, result.document.getChild (0).getChild (0), "fill"), "1:29: here");
+}
+
+TEST_F (YuiParserTest, RecordsWhereElementsAndPropertiesWereWritten)
+{
+    const auto result = YuiParser::parse (R"yui(palette P { colors: "#100b00-#85cb33"; primary: #ff0000; }
+style {
+  .a { opacity: 1; property glow: number = 0; }
+  @keyframes f { from { glow: 0; } }
+}
+component K : Column {
+  property alias v <=> s.value;
+  signal changed;
+  Slider { id: s; }
+}
+Column {
+  gap: 4;
+  value <=> m.x;
+  Slider { }
+}
+drawing D { let r: 1; repeat i in 0 .. 2 { circle { radius: r; } } })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.diagnostics.front().toString();
+
+    const auto& document = result.document;
+    const auto palette = document.getChild (0);
+    EXPECT_EQ (locate (result, palette), "1:1: here");
+    EXPECT_EQ (locate (result, palette, "primary"), "1:40: here");
+
+    const auto rule = document.getChild (1).getChild (0);
+    EXPECT_EQ (locate (result, document.getChild (1)), "2:1: here");
+    EXPECT_EQ (locate (result, rule), "3:3: here");
+    EXPECT_EQ (locate (result, rule.getChild (0)), "3:8: here");
+    EXPECT_EQ (locate (result, rule.getChild (1)), "3:29: here");
+
+    const auto keyframes = document.getChild (1).getChild (1);
+    EXPECT_EQ (locate (result, keyframes), "4:4: here");
+    EXPECT_EQ (locate (result, keyframes.getChild (0)), "4:18: here");
+    EXPECT_EQ (locate (result, keyframes.getChild (0).getChild (0)), "4:25: here");
+
+    const auto component = document.getChild (2);
+    EXPECT_EQ (locate (result, component), "6:1: here");
+    EXPECT_EQ (locate (result, component.getChild (0)), "7:12: here");
+    EXPECT_EQ (locate (result, component.getChild (1)), "8:10: here");
+    EXPECT_EQ (locate (result, component.getChild (2)), "6:15: here");
+    EXPECT_EQ (locate (result, component.getChild (2).getChild (0), "id"), "9:12: here");
+
+    const auto root = document.getChild (3);
+    EXPECT_EQ (locate (result, root), "11:1: here");
+    EXPECT_EQ (locate (result, root, "gap"), "12:3: here");
+    EXPECT_EQ (locate (result, root.getChild (0)), "13:3: here");
+    EXPECT_EQ (locate (result, root.getChild (1)), "14:3: here");
+
+    const auto drawing = document.getChild (4);
+    EXPECT_EQ (locate (result, drawing), "16:1: here");
+    EXPECT_EQ (locate (result, drawing.getChild (0)), "16:13: here");
+    EXPECT_EQ (locate (result, drawing.getChild (1)), "16:23: here");
+    EXPECT_EQ (locate (result, drawing.getChild (1).getChild (0)), "16:44: here");
+    EXPECT_EQ (locate (result, drawing.getChild (1).getChild (0), "radius"), "16:53: here");
 }
 
 TEST_F (YuiParserTest, ReturnsNoDocumentOnErrors)

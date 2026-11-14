@@ -33,10 +33,15 @@ namespace yup
     YuiBuilder) and attaches the stylesheet to the root, which is then ready to be added to
     a parent or a window.
 
-    Loading again replaces the interface. When the text has an error, or its stylesheet is
-    invalid, the interface already loaded is kept, so that a live editor keeps showing the
-    last good version; when the components can't be created, nothing is left loaded. Values
-    which can't be applied don't make loading fail: they are reported by @ref getDiagnostics.
+    Loading again updates the interface in place: the loaded tree is patched with YuiTreeDiff
+    and rebuilt, so the components whose elements are still there are kept, with their
+    pointers and their state (see YuiBuilder::build). When the text has an error, its
+    stylesheet is invalid or its components can't be created, the interface already loaded
+    is kept unchanged, so that a live editor keeps showing the last good version. Values
+    which can't be applied don't make loading fail: they are reported by @ref getDiagnostics,
+    with the line and column they were written at, and so are the style problems met later,
+    such as a `:hover` rule with an invalid value (see Listener::documentDiagnosed). With an
+    UndoManager set, each successful load is an undoable transaction.
 
     @code
     YuiDocument document;
@@ -75,14 +80,24 @@ public:
 
     /** Loads the interface of an already parsed document.
 
-        @param document A `yui` document, as returned by YuiParser.
+        @param document   A `yui` document, as returned by YuiParser.
+        @param sourceMap  Where the elements of the document were written, as returned by
+                          YuiParser, which gives the diagnostics their line and column.
 
         @returns A failure when the stylesheet or the components are invalid.
     */
-    Result load (const DataTree& document);
+    Result load (const DataTree& document, const YuiSourceMap& sourceMap = {});
 
     /** Destroys the interface. Actions and models are kept. */
     void clear();
+
+    /** Records each successful load as a transaction of an undo manager, or stops when null.
+
+        Undoing a load loads the previous document again, in place. The undo manager must
+        outlive the document or be removed first; the transactions of a destroyed document do
+        nothing.
+    */
+    void setUndoManager (UndoManager* undoManagerToUse) noexcept { undoManager = undoManagerToUse; }
 
     //==============================================================================
     /** Returns the parsed document of the interface loaded last. */
@@ -121,23 +136,63 @@ public:
     void removeModel (const String& name);
 
     //==============================================================================
-    /** Returns the problems met by the last load, the parse error first if any. */
-    const StringArray& getDiagnostics() const noexcept { return diagnostics; }
+    /** Returns the problems met by the last load and by the styling of its interface since.
 
-    /** Returns the parse error of the last load, with its line, column and source, if any. */
-    const std::optional<YuiParser::Diagnostic>& getParseError() const noexcept { return parseError; }
+        A failed parse leaves its error as the only entry. Each problem is listed once, with
+        the line and column it was written at when known.
+    */
+    const std::vector<YuiDiagnostic>& getDiagnostics() const noexcept { return diagnostics; }
 
     /** Returns the builder creating the components, to inspect its bindings. */
     YuiBuilder& getBuilder() noexcept { return builder; }
 
+    //==============================================================================
+    /** Receives the loads of a document. */
+    class YUP_API Listener
+    {
+    public:
+        virtual ~Listener() = default;
+
+        /** Called after each load, successful or not, including the loads of undo and redo.
+
+            A failed load keeps the interface loaded before, so the root may be unchanged, or
+            null when nothing was loaded yet.
+        */
+        virtual void documentLoaded (YuiDocument& document, const Result& result) = 0;
+
+        /** Called when a problem is met after a load, and added to the diagnostics.
+
+            This happens when a rule starts matching later, such as a `:hover` rule with an
+            invalid value. The problems met while loading are reported by documentLoaded.
+        */
+        virtual void documentDiagnosed (YuiDocument& document, const YuiDiagnostic& diagnostic) {}
+    };
+
+    /** Adds a listener, which must be removed before it is destroyed. */
+    void addListener (Listener* listener) { listeners.add (listener); }
+
+    /** Removes a listener. */
+    void removeListener (Listener* listener) { listeners.remove (listener); }
+
 private:
     //==============================================================================
+    class LoadAction;
+
+    Result loadTree (const DataTree& document, const YuiSourceMap& map);
+    Result buildTree (const DataTree& document, const YuiSourceMap& map);
+    Result notifyLoaded (Result result);
+    void report (const YuiSourceMap& map, const YuiDiagnostic& diagnostic);
+
     YuiBuilder builder;
     DataTree tree;
+    YuiSourceMap sourceMap;
     StyleSheet::Ptr styleSheet;
-    std::optional<YuiParser::Diagnostic> parseError;
-    StringArray diagnostics;
+    std::vector<YuiDiagnostic> diagnostics;
+    UndoManager* undoManager = nullptr;
+    bool isLoading = false;
+    ListenerList<Listener> listeners;
 
+    YUP_DECLARE_WEAK_REFERENCEABLE (YuiDocument)
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YuiDocument)
 };
 

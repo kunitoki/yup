@@ -65,6 +65,51 @@ DataTree findElementById (const DataTree& element, const String& id)
     return {};
 }
 
+// Like C++ members, values apply in the order the type declares them (bases first), so a property constraining
+// another one, a Slider range, applies before it wherever the document writes it; undeclared names come last
+template <class Value>
+std::vector<const Value*> inDeclarationOrder (const ComponentTypeInfo& type, const std::vector<Value>& values)
+{
+    std::vector<const ComponentTypeInfo*> chain;
+
+    for (const auto* info = &type; info != nullptr; info = info->getBaseTypeInfo())
+        chain.insert (chain.begin(), info);
+
+    const auto rankOf = [&chain] (const Identifier& name)
+    {
+        std::size_t rank = 0;
+
+        for (const auto* info : chain)
+        {
+            for (const auto& property : info->getOwnProperties())
+            {
+                if (property.name == name)
+                    return rank;
+
+                ++rank;
+            }
+        }
+
+        return std::numeric_limits<std::size_t>::max();
+    };
+
+    std::vector<std::pair<std::size_t, const Value*>> ranked;
+    ranked.reserve (values.size());
+
+    for (const auto& value : values)
+        ranked.emplace_back (rankOf (value.name), &value);
+
+    std::stable_sort (ranked.begin(), ranked.end(), [] (const auto& a, const auto& b) { return a.first < b.first; });
+
+    std::vector<const Value*> result;
+    result.reserve (ranked.size());
+
+    for (const auto& [rank, value] : ranked)
+        result.push_back (value);
+
+    return result;
+}
+
 ComponentProperty makeDeclaredProperty (const DataTree& declaration, bool isInherited)
 {
     const auto type = ComponentProperty::getTypeFromName (declaration.getProperty ("type").toString());
@@ -220,7 +265,7 @@ private:
                 },
                 .setter = [name = property.name] (Component& component, const var& value)
                 {
-                    static_cast<Model&> (component).provider.setValue (name, value);
+                    static_cast<Model&> (component).write (name, value);
                 },
                 .isStyleable = false,
                 .isInherited = false });
@@ -235,6 +280,25 @@ private:
         {
             return entry.component == &component;
         });
+    }
+
+    void write (const Identifier& name, const var& value)
+    {
+        if (provider.getValue (name) == value)
+            return;
+
+        const auto isInGesture = std::any_of (tracked.begin(), tracked.end(), [&] (const auto& entry)
+        {
+            return entry.property == name && entry.isInGesture;
+        });
+
+        if (! isInGesture)
+            provider.beginGesture (name);
+
+        provider.setValue (name, value);
+
+        if (! isInGesture)
+            provider.endGesture (name);
     }
 
     void stopTracking (Component& component)
@@ -306,7 +370,11 @@ YuiBuilder::~YuiBuilder()
 
 Result YuiBuilder::build (const DataTree& document)
 {
-    clear();
+    // The previous declarations stay alive until the reused components have their new types
+    auto previousComposites = std::exchange (composites, {});
+    auto previousTokens = std::exchange (tokens, {});
+    auto previousTokensInfo = std::move (tokensInfo);
+    diagnostics.clear();
 
     auto root = document;
 
@@ -326,35 +394,54 @@ Result YuiBuilder::build (const DataTree& document)
         }
     }
 
-    if (! root.isValid() || ! isComponentElement (root))
+    const auto checked = root.isValid() && isComponentElement (root)
+                           ? checkTypes (root)
+                           : report ("The document has no root component", document);
+
+    if (checked.failed())
     {
-        clear();
-        return Result::fail ("The document has no root component");
+        composites = std::move (previousComposites);
+        tokens = std::move (previousTokens);
+        tokensInfo = std::move (previousTokensInfo);
+        return checked;
     }
+
+    resetBindings();
+
+    const auto previousScopes = std::exchange (scopes, {});
+    previousComponents = std::exchange (components, {});
 
     auto& scope = *scopes.emplace_back (std::make_unique<Scope>());
-    auto created = createComponent (root, nullptr, scope);
-
-    if (created.failed())
-    {
-        clear();
-        return Result::fail (created.getErrorMessage());
-    }
-
-    scope.root = created.getValue();
+    scope.root = &createComponent (root, nullptr, scope, {});
     applyTokens (*scope.root, scope);
 
     // The tree exists before any value is applied, so expressions can reference any element
-    for (const auto& entry : pending)
-        applyPending (entry);
-
-    pending.clear();
+    applyValues (std::exchange (applied, {}));
     bindings.setComponentResolver (resolverFor (scope));
+
+    // Children go first, so that no parent is destroyed while still holding them
+    while (! previousComponents.empty())
+        previousComponents.pop_back();
 
     return Result::ok();
 }
 
 void YuiBuilder::clear()
+{
+    resetBindings();
+
+    while (! components.empty())
+        components.pop_back();
+
+    applied.clear();
+    scopes.clear();
+    composites.clear();
+    tokens.clear();
+    tokensInfo.reset();
+    diagnostics.clear();
+}
+
+void YuiBuilder::resetBindings()
 {
     bindings.clear();
     bindings.clearDiagnostics();
@@ -364,23 +451,13 @@ void YuiBuilder::clear()
 
     for (auto& [name, model] : models)
         model->stopTrackingGestures();
-
-    // Children go first, so that no parent is destroyed while still holding them
-    while (! components.empty())
-        components.pop_back();
-
-    scopes.clear();
-    composites.clear();
-    tokens.clear();
-    tokensInfo.reset();
-    diagnostics.clear();
 }
 
 //==============================================================================
 
 Component* YuiBuilder::getRoot() const noexcept
 {
-    return components.empty() ? nullptr : components.front().get();
+    return components.empty() ? nullptr : components.front().component.get();
 }
 
 Component* YuiBuilder::findById (const String& id) const
@@ -442,7 +519,7 @@ void YuiBuilder::collectDeclarations (const DataTree& document)
 
         if (composites.count (name) > 0 || ComponentTypeRegistry::getInstance().findType (name) != nullptr)
         {
-            diagnostics.add ("component " + name.toString() + ": the type is already declared");
+            report ("component " + name.toString() + ": the type is already declared", element);
             continue;
         }
 
@@ -526,7 +603,7 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
 
             if (! element.isValid())
             {
-                diagnostics.add (where + "." + name.toString() + ": unknown element in '" + target + "'");
+                report (where + "." + name.toString() + ": unknown element in '" + target + "'", declaration);
                 continue;
             }
 
@@ -539,7 +616,7 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
 
             if (aliased == nullptr)
             {
-                diagnostics.add (where + "." + name.toString() + ": " + element.getType().toString() + " has no property '" + target.substring (dot + 1) + "'");
+                report (where + "." + name.toString() + ": " + element.getType().toString() + " has no property '" + target.substring (dot + 1) + "'", declaration);
                 continue;
             }
 
@@ -561,35 +638,62 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
 
 //==============================================================================
 
-ResultValue<Component*> YuiBuilder::createComponent (const DataTree& element, Component* parent, Scope& scope)
+Result YuiBuilder::checkTypes (const DataTree& element)
 {
     const auto typeName = element.getType();
+
+    if (const auto found = composites.find (typeName); found != composites.end())
+    {
+        auto& composite = found->second;
+
+        // A composite that can't be resolved is reported where its base type is written
+        if (auto result = resolveComposite (typeName, composite); result.failed())
+            return report (result.getErrorMessage(), composite.body);
+
+        if (composite.isInstantiating)
+            return report ("The component '" + typeName.toString() + "' contains itself", element);
+
+        const ScopedValueSetter<bool> instantiating (composite.isInstantiating, true);
+
+        if (auto result = checkTypes (composite.body); result.failed())
+            return result;
+    }
+    else if (const auto* typeInfo = ComponentTypeRegistry::getInstance().findType (typeName); typeInfo == nullptr)
+    {
+        return report ("Unknown component type '" + typeName.toString() + "'", element);
+    }
+    else if (! typeInfo->hasFactory())
+    {
+        return report ("The component type '" + typeName.toString() + "' can't be created from .yui", element);
+    }
+
+    for (const auto& child : element)
+    {
+        if (! isComponentElement (child))
+            continue;
+
+        if (auto result = checkTypes (child); result.failed())
+            return result;
+    }
+
+    return Result::ok();
+}
+
+Component& YuiBuilder::createComponent (const DataTree& element, Component* parent, Scope& scope, const DataTree& recordElement)
+{
+    const auto typeName = element.getType();
+    const auto& key = recordElement.isValid() ? recordElement : element;
     Component* component = nullptr;
 
     if (const auto found = composites.find (typeName); found != composites.end())
     {
         auto& composite = found->second;
 
-        if (auto result = resolveComposite (typeName, composite); result.failed())
-            return makeResultValueFail (result.getErrorMessage());
-
-        if (composite.isInstantiating)
-            return makeResultValueFail ("The component '" + typeName.toString() + "' contains itself");
-
         // The body is created in a scope of its own, where `root` is the instance
         auto& bodyScope = *scopes.emplace_back (std::make_unique<Scope>());
         const auto declarationsIndex = static_cast<std::ptrdiff_t> (pending.size());
 
-        auto body = [&]
-        {
-            const ScopedValueSetter<bool> instantiating (composite.isInstantiating, true);
-            return createComponent (composite.body, parent, bodyScope);
-        }();
-
-        if (body.failed())
-            return body;
-
-        component = body.getValue();
+        component = &createComponent (composite.body, parent, bodyScope, key);
         bodyScope.root = component;
         component->setTypeInfo (composite.info.get());
 
@@ -605,9 +709,9 @@ ResultValue<Component*> YuiBuilder::createComponent (const DataTree& element, Co
             const Identifier name (declaration.getProperty ("name").toString());
 
             if (kind == "property" && declaration.hasProperty ("value"))
-                declarations.values.emplace_back (name, declaration.getProperty ("value").toString());
+                declarations.values.push_back ({ name, declaration.getProperty ("value").toString(), declaration });
             else if (kind == "alias" && composite.info->findProperty (name) != nullptr)
-                declarations.links.emplace_back (name, declaration.getProperty ("target").toString());
+                declarations.links.push_back ({ name, declaration.getProperty ("target").toString(), declaration });
         }
 
         pending.insert (pending.begin() + declarationsIndex, std::move (declarations));
@@ -615,22 +719,21 @@ ResultValue<Component*> YuiBuilder::createComponent (const DataTree& element, Co
     }
     else
     {
-        const auto* typeInfo = ComponentTypeRegistry::getInstance().findType (typeName);
+        // checkTypes made sure the type exists and can be created
+        const auto& type = *ComponentTypeRegistry::getInstance().findType (typeName);
 
-        if (typeInfo == nullptr)
-            return makeResultValueFail ("Unknown component type '" + typeName.toString() + "'");
+        auto created = reuseComponent (key, parent, type);
+        const auto isReused = created != nullptr;
 
-        auto created = typeInfo->createInstance();
-
-        if (created == nullptr)
-            return makeResultValueFail ("The component type '" + typeName.toString() + "' can't be created from .yui");
+        if (! isReused)
+            created = type.createInstance();
 
         component = created.get();
-        components.push_back (std::move (created));
 
         if (parent != nullptr)
-            parent->addAndMakeVisible (*component);
+            placeChild (*parent, *component, isReused);
 
+        components.push_back ({ key, parent, &type, std::move (created) });
         applyIdentity (*component, element, scope, false);
     }
 
@@ -643,13 +746,13 @@ ResultValue<Component*> YuiBuilder::createComponent (const DataTree& element, Co
         const auto name = element.getPropertyName (i);
 
         if (name != idProperty() && name != classProperty())
-            values.values.emplace_back (name, element.getProperty (name).toString());
+            values.values.push_back ({ name, element.getProperty (name).toString(), element, name });
     }
 
     for (const auto& child : element)
     {
         if (child.getType() == bindType)
-            values.links.emplace_back (Identifier (child.getProperty ("property").toString()), child.getProperty ("target").toString());
+            values.links.push_back ({ Identifier (child.getProperty ("property").toString()), child.getProperty ("target").toString(), child });
     }
 
     pending.push_back (std::move (values));
@@ -661,42 +764,79 @@ ResultValue<Component*> YuiBuilder::createComponent (const DataTree& element, Co
 
         if (! isComponentElement (child))
         {
-            diagnostics.add ("'" + child.getType().toString() + "' is not a component type");
+            report ("'" + child.getType().toString() + "' is not a component type", child);
             continue;
         }
 
-        if (auto created = createComponent (child, component, scope); created.failed())
-            return created;
+        createComponent (child, component, scope, {});
     }
 
-    return makeResultValueOk (component);
+    return *component;
 }
 
-void YuiBuilder::applyIdentity (Component& component, const DataTree& element, Scope& scope, bool addClasses)
+std::unique_ptr<Component> YuiBuilder::reuseComponent (const DataTree& element, Component* parent, const ComponentTypeInfo& type)
 {
+    for (auto& record : previousComponents)
+    {
+        if (record.component == nullptr || record.element != element || record.parent != parent || record.type != &type)
+            continue;
+
+        // A composite type info of the previous build is about to go away
+        record.component->setTypeInfo (nullptr);
+        return std::move (record.component);
+    }
+
+    return nullptr;
+}
+
+void YuiBuilder::placeChild (Component& parent, Component& child, bool isReused)
+{
+    if (! isReused)
+    {
+        parent.addAndMakeVisible (child);
+        return;
+    }
+
+    // A kept child only moves when it isn't after its previous sibling, so its subtree isn't notified for nothing
+    for (auto it = components.rbegin(); it != components.rend(); ++it)
+    {
+        if (it->parent != &parent)
+            continue;
+
+        if (parent.getIndexOfChildComponent (&child) < parent.getIndexOfChildComponent (it->component.get()))
+            parent.addChildComponent (child);
+
+        break;
+    }
+}
+
+void YuiBuilder::applyIdentity (Component& component, const DataTree& element, Scope& scope, bool isUseSite)
+{
+    // A kept component loses the identity it had, unless it's a composite instance keeping the one of its body
     if (element.hasProperty (idProperty()))
     {
         const auto id = getElementId (element);
         component.setComponentID (id);
 
         if (! scope.ids.emplace (id, &component).second)
-            diagnostics.add ("The id '" + id + "' is used more than once");
+            report ("The id '" + id + "' is used more than once", element, idProperty());
     }
-
-    if (element.hasProperty (classProperty()))
+    else if (! isUseSite)
     {
-        Array<Identifier> classes;
-
-        for (const auto& styleClass : StringArray::fromTokens (element.getProperty (classProperty()).toString().unquoted(), " ,", ""))
-            if (styleClass.isNotEmpty())
-                classes.add (Identifier (styleClass));
-
-        if (! addClasses)
-            component.setStyleClasses (classes);
-        else
-            for (const auto& styleClass : classes)
-                component.addStyleClass (styleClass);
+        component.setComponentID ({});
     }
+
+    Array<Identifier> classes;
+
+    for (const auto& styleClass : StringArray::fromTokens (element.getProperty (classProperty()).toString().unquoted(), " ,", ""))
+        if (styleClass.isNotEmpty())
+            classes.add (Identifier (styleClass));
+
+    if (! isUseSite)
+        component.setStyleClasses (classes);
+    else
+        for (const auto& styleClass : classes)
+            component.addStyleClass (styleClass);
 }
 
 void YuiBuilder::applyTokens (Component& root, Scope& scope)
@@ -718,12 +858,12 @@ void YuiBuilder::applyTokens (Component& root, Scope& scope)
 
         if (isDeclared)
         {
-            diagnostics.add ("tokens: '" + property.name.toString() + "' is declared more than once");
+            report ("tokens: '" + property.name.toString() + "' is declared more than once", token);
             continue;
         }
 
         if (token.hasProperty ("value"))
-            values.values.emplace_back (property.name, token.getProperty ("value").toString());
+            values.values.push_back ({ property.name, token.getProperty ("value").toString(), token });
 
         properties.push_back (std::move (property));
     }
@@ -737,24 +877,115 @@ void YuiBuilder::applyTokens (Component& root, Scope& scope)
 
 //==============================================================================
 
-void YuiBuilder::applyPending (const Pending& entry)
+void YuiBuilder::applyValues (const AppliedValues& previous)
 {
-    bindings.setComponentResolver (resolverFor (*entry.scope));
+    const auto linkText = [] (const String& path)
+    {
+        return "<=> " + path;
+    };
 
-    for (const auto& [name, text] : entry.values)
-        applyProperty (*entry.component, name, text, *entry.scope);
+    // Later values of a property override earlier ones, so the last text is the one applied
+    for (const auto& entry : pending)
+    {
+        for (const auto& value : entry.values)
+            applied[entry.component][value.name.toString()] = { value.text };
 
-    for (const auto& [name, path] : entry.links)
-        applyLink (*entry.component, name, path, *entry.scope);
+        for (const auto& link : entry.links)
+            applied[entry.component][link.name.toString()] = { linkText (link.text) };
+    }
+
+    for (const auto& record : components)
+    {
+        auto* component = record.component.get();
+        const auto found = previous.find (component);
+
+        if (found == previous.end())
+            continue;
+
+        auto& values = applied[component];
+
+        for (const auto& [name, before] : found->second)
+        {
+            if (const auto now = values.find (name); now == values.end())
+                resetValue (*component, *record.type, Identifier (name));
+            else
+                now->second.isKept = before.isConstant && before.text == now->second.text;
+        }
+    }
+
+    for (const auto& entry : pending)
+        applyPending (entry);
+
+    pending.clear();
+
+    // Constants applied again with the same text are skipped next time, keeping what the user changed since
+    for (auto& [component, values] : applied)
+    {
+        for (auto& [name, value] : values)
+        {
+            const Identifier property (name);
+
+            value.isConstant = value.isKept
+                            || (! value.hasFailed
+                                && ! value.text.startsWith ("<=>")
+                                && component->getTypeInfo().findSignal (property) == nullptr
+                                && bindings.findBinding (*component, property) == nullptr);
+        }
+    }
 }
 
-void YuiBuilder::applyProperty (Component& component, const Identifier& name, const String& valueText, Scope& scope)
+void YuiBuilder::resetValue (Component& component, const ComponentTypeInfo& type, const Identifier& name)
 {
     const auto& typeInfo = component.getTypeInfo();
 
     if (const auto* signal = typeInfo.findSignal (name))
     {
-        connectHandler (component, *signal, valueText, scope);
+        signal->connect (component, [] (const Array<var>&) {});
+        return;
+    }
+
+    const auto* descriptor = typeInfo.findProperty (name);
+
+    if (descriptor == nullptr || ! descriptor->isStateBacked())
+    {
+        component.removeProperty (name);
+        return;
+    }
+
+    // A state-backed value goes back to the one a new component has
+    if (! descriptor->isReadOnly())
+        component.setProperty (name, type.createInstance()->getProperty (name));
+}
+
+void YuiBuilder::applyPending (const Pending& entry)
+{
+    bindings.setComponentResolver (resolverFor (*entry.scope));
+    auto& values = applied[entry.component];
+
+    for (const auto* entryValue : inDeclarationOrder (entry.component->getTypeInfo(), entry.values))
+    {
+        auto& value = values[entryValue->name.toString()];
+
+        if (value.isKept)
+            continue;
+
+        const auto numDiagnostics = diagnostics.size();
+        applyProperty (*entry.component, *entryValue, *entry.scope);
+        value.hasFailed = value.hasFailed || diagnostics.size() > numDiagnostics;
+    }
+
+    for (const auto& link : entry.links)
+        applyLink (*entry.component, link, *entry.scope);
+}
+
+void YuiBuilder::applyProperty (Component& component, const Value& value, Scope& scope)
+{
+    const auto& typeInfo = component.getTypeInfo();
+    const auto& name = value.name;
+
+    if (const auto* signal = typeInfo.findSignal (name))
+    {
+        connectHandler (component, *signal, value, scope);
         return;
     }
 
@@ -763,18 +994,18 @@ void YuiBuilder::applyProperty (Component& component, const Identifier& name, co
 
     if (descriptor != nullptr && descriptor->isReadOnly())
     {
-        diagnostics.add (where + ": the property is read-only");
+        report (where + ": the property is read-only", value.element, value.property);
         return;
     }
 
     if (descriptor != nullptr && descriptor->type == ComponentProperty::Type::enumeration)
     {
-        const auto value = valueText.unquoted().trim();
+        const auto enumValue = value.text.unquoted().trim();
 
-        if (! descriptor->enumValues.contains (value))
-            diagnostics.add (where + ": expected one of " + descriptor->enumValues.joinIntoString (", "));
+        if (! descriptor->enumValues.contains (enumValue))
+            report (where + ": expected one of " + descriptor->enumValues.joinIntoString (", "), value.element, value.property);
         else
-            component.setProperty (name, value);
+            component.setProperty (name, enumValue);
 
         return;
     }
@@ -793,23 +1024,25 @@ void YuiBuilder::applyProperty (Component& component, const Identifier& name, co
             case ComponentProperty::Type::any:     break;
 
             default:
-                diagnostics.add (where + ": properties of this type can't be set from .yui yet");
+                report (where + ": properties of this type can't be set from .yui yet", value.element, value.property);
                 return;
         }
     }
 
-    if (auto result = bindings.bind (component, name, valueText, type); result.failed())
-        diagnostics.add (where + ": " + result.getErrorMessage());
+    if (auto result = bindings.bind (component, name, value.text, type); result.failed())
+        report (where + ": " + result.getErrorMessage(), value.element, value.property);
 }
 
-void YuiBuilder::applyLink (Component& component, const Identifier& name, const String& path, Scope& scope)
+void YuiBuilder::applyLink (Component& component, const Value& link, Scope& scope)
 {
+    const auto& name = link.name;
+    const auto& path = link.text;
     const auto where = component.getTypeInfo().getTypeName().toString() + "." + name.toString();
     const auto dot = path.indexOfChar ('.');
 
     if (dot <= 0)
     {
-        diagnostics.add (where + ": expected element.property after '<=>'");
+        report (where + ": expected element.property after '<=>'", link.element, link.property);
         return;
     }
 
@@ -818,7 +1051,7 @@ void YuiBuilder::applyLink (Component& component, const Identifier& name, const 
 
     if (source == nullptr)
     {
-        diagnostics.add (where + ": unknown element '" + elementName + "'");
+        report (where + ": unknown element '" + elementName + "'", link.element, link.property);
         return;
     }
 
@@ -826,13 +1059,13 @@ void YuiBuilder::applyLink (Component& component, const Identifier& name, const 
 
     if (source->getTypeInfo().findProperty (sourceProperty) == nullptr)
     {
-        diagnostics.add (where + ": " + source->getTypeInfo().getTypeName().toString() + " has no property '" + sourceProperty.toString() + "'");
+        report (where + ": " + source->getTypeInfo().getTypeName().toString() + " has no property '" + sourceProperty.toString() + "'", link.element, link.property);
         return;
     }
 
     if (const auto* descriptor = component.getTypeInfo().findProperty (name); descriptor != nullptr && descriptor->isReadOnly())
     {
-        diagnostics.add (where + ": the property is read-only");
+        report (where + ": the property is read-only", link.element, link.property);
         return;
     }
 
@@ -844,14 +1077,14 @@ void YuiBuilder::applyLink (Component& component, const Identifier& name, const 
 
 //==============================================================================
 
-void YuiBuilder::connectHandler (Component& component, const ComponentSignal& signal, const String& text, Scope& scope)
+void YuiBuilder::connectHandler (Component& component, const ComponentSignal& signal, const Value& value, Scope& scope)
 {
     const auto where = component.getTypeInfo().getTypeName().toString() + "." + signal.name.toString();
-    const auto call = parseCall (text);
+    const auto call = parseCall (value.text);
 
     if (! call.has_value())
     {
-        diagnostics.add (where + ": expected a call, like action (\"name\") or root.signal()");
+        report (where + ": expected a call, like action (\"name\") or root.signal()", value.element, value.property);
         return;
     }
 
@@ -864,7 +1097,7 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
     {
         if (arguments.isEmpty() || ! arguments[0].isQuotedString())
         {
-            diagnostics.add (where + ": action expects the name of the action as a string");
+            report (where + ": action expects the name of the action as a string", value.element, value.property);
             return;
         }
 
@@ -878,7 +1111,7 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
 
         if (target == nullptr)
         {
-            diagnostics.add (where + ": unknown function '" + call->callee + "'");
+            report (where + ": unknown function '" + call->callee + "'", value.element, value.property);
             return;
         }
 
@@ -886,7 +1119,7 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
 
         if (! isDeclaredSignal (*target, emitted))
         {
-            diagnostics.add (where + ": '" + call->callee + "' is not a signal declared by a component");
+            report (where + ": '" + call->callee + "' is not a signal declared by a component", value.element, value.property);
             return;
         }
 
@@ -902,7 +1135,7 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
 
         if (compiled.failed())
         {
-            diagnostics.add (where + ": " + compiled.getErrorMessage());
+            report (where + ": " + compiled.getErrorMessage(), value.element, value.property);
             return;
         }
 
@@ -917,8 +1150,8 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
         {
             callArguments.clearQuick();
 
-            for (const auto& value : values)
-                callArguments.add (value->evaluate());
+            for (const auto& argument : values)
+                callArguments.add (argument->evaluate());
         }
 
         if (actionName.isEmpty())
@@ -964,6 +1197,12 @@ bool YuiBuilder::isDeclaredSignal (const Component& component, const Identifier&
     }
 
     return false;
+}
+
+Result YuiBuilder::report (const String& message, const DataTree& element, const Identifier& property)
+{
+    diagnostics.push_back ({ .message = message, .element = element, .property = property });
+    return Result::fail (message);
 }
 
 //==============================================================================

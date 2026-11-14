@@ -35,10 +35,18 @@ public:
         String message;
     };
 
-    explicit YuiTextParser (const String& textToParse)
+    YuiTextParser (const String& textToParse, const String& sourceToReport)
         : source (textToParse)
+        , sourceName (sourceToReport)
         , text (source.toRawUTF8())
     {
+        lineStarts.push_back (0);
+
+        for (int i = 0; text[i] != 0; ++i)
+        {
+            if (text[i] == '\n')
+                lineStarts.push_back (i + 1);
+        }
     }
 
     DataTree parseDocument()
@@ -52,30 +60,31 @@ public:
         {
             const auto start = position;
             const auto keyword = parseIdentifier ("Expected a block or a component");
+            DataTree block;
 
             if (keyword == "import")
             {
-                transaction.addChild (parseImport());
+                block = parseImport();
             }
             else if (keyword == "drawing")
             {
-                transaction.addChild (parseDrawing());
+                block = parseDrawing();
             }
             else if (keyword == "palette")
             {
-                transaction.addChild (parsePalette());
+                block = parsePalette();
             }
             else if (keyword == "style")
             {
-                transaction.addChild (parseStyle());
+                block = parseStyle();
             }
             else if (keyword == "tokens")
             {
-                transaction.addChild (parseTokens());
+                block = parseTokens();
             }
             else if (keyword == "component")
             {
-                transaction.addChild (parseComponent());
+                block = parseComponent();
             }
             else if (isTypeName (keyword))
             {
@@ -84,38 +93,46 @@ public:
 
                 hasInstance = true;
 
-                DataTree instance { Identifier (keyword) };
-                parseBody (instance);
-                transaction.addChild (instance);
+                block = DataTree { Identifier (keyword) };
+                parseBody (block);
             }
             else
             {
                 throw Error { start, "Unknown block '" + keyword + "', expected 'import', 'drawing', 'palette', 'style', 'tokens', 'component' or a component instance" };
             }
+
+            transaction.addChild (mark (block, start));
         }
 
         transaction.commit();
         return document;
     }
 
-    YuiParser::Diagnostic locate (const Error& error) const
+    YuiDiagnostic locate (const Error& error) const
     {
-        int line = 1;
-        int lineStart = 0;
+        const auto nextLine = std::upper_bound (lineStarts.begin(), lineStarts.end(), error.offset);
+        int column = 1;
 
-        for (int i = 0; i < error.offset; ++i)
-        {
-            if (text[i] == '\n')
-            {
-                ++line;
-                lineStart = i + 1;
-            }
-        }
+        // Columns count characters, so the continuation bytes of UTF-8 sequences are skipped
+        for (auto i = *(nextLine - 1); i < error.offset; ++i)
+            column += (static_cast<uint8> (text[i]) & 0xc0) != 0x80 ? 1 : 0;
 
-        return { line, String::fromUTF8 (text + lineStart, error.offset - lineStart).length() + 1, error.message };
+        return { .message = error.message, .source = sourceName, .line = static_cast<int> (nextLine - lineStarts.begin()), .column = column };
     }
 
+    /** Returns where each element and property was written, as diagnostics without a message. */
+    const std::vector<YuiDiagnostic>& getPositions() const noexcept { return positions; }
+
 private:
+    DataTree mark (const DataTree& element, int offset, const Identifier& property = {})
+    {
+        auto located = locate ({ offset, {} });
+        located.element = element;
+        located.property = property;
+        positions.push_back (std::move (located));
+        return element;
+    }
+
     DataTree parseImport()
     {
         skipWhitespace();
@@ -168,6 +185,7 @@ private:
             expect (":");
             properties.add (name);
             transaction.setProperty (name, parseRawValue().unquoted());
+            mark (palette, start, name);
             expect (";");
         }
 
@@ -197,7 +215,7 @@ private:
                 if (parseIdentifier ("Expected 'keyframes'") != "keyframes")
                     throw Error { start, "Expected 'keyframes'" };
 
-                transaction.addChild (parseKeyframes());
+                transaction.addChild (mark (parseKeyframes(), start));
                 continue;
             }
 
@@ -210,7 +228,7 @@ private:
             DataTree rule ("rule");
             rule.beginTransaction().setProperty ("selector", selector);
             parseDeclarations (rule, true);
-            transaction.addChild (rule);
+            transaction.addChild (mark (rule, start));
         }
 
         transaction.commit();
@@ -245,14 +263,16 @@ private:
 
         transaction.setProperty ("name", parseTypeName ("Expected the name of the component"));
         expect (":");
+        skipWhitespace();
 
+        const auto baseStart = position;
         const auto base = parseTypeName ("Expected the base type of the component");
         transaction.setProperty ("base", base);
 
         // The body configures an instance of the base type, the declarations belong to the component
         DataTree instance { Identifier (base) };
         parseBody (instance, &transaction);
-        transaction.addChild (instance);
+        transaction.addChild (mark (instance, baseStart));
 
         transaction.commit();
         return component;
@@ -276,7 +296,7 @@ private:
             expect (";");
 
             transaction.commit();
-            return alias;
+            return mark (alias, start);
         }
 
         position = start;
@@ -286,7 +306,9 @@ private:
     // After `property`: `name: type = value;`, the value being optional
     DataTree parsePropertyDeclaration (StringArray& declared, bool verbatimValue)
     {
-        DataTree property ("property");
+        skipWhitespace();
+
+        DataTree property = mark (DataTree ("property"), position);
         auto transaction = property.beginTransaction();
 
         transaction.setProperty ("name", parseDeclaredName (declared, "Expected the name of the property"));
@@ -315,7 +337,9 @@ private:
     // After `signal`: `name;` or `name (argument: type, ...);`
     DataTree parseSignal (StringArray& declared)
     {
-        DataTree signal ("signal");
+        skipWhitespace();
+
+        DataTree signal = mark (DataTree ("signal"), position);
         auto transaction = signal.beginTransaction();
 
         transaction.setProperty ("name", parseDeclaredName (declared, "Expected the name of the signal"));
@@ -445,7 +469,7 @@ private:
             DataTree frame ("keyframe");
             frame.beginTransaction().setProperty ("at", at);
             parseDeclarations (frame, false);
-            transaction.addChild (frame);
+            transaction.addChild (mark (frame, start));
         }
 
         transaction.commit();
@@ -492,7 +516,7 @@ private:
             declarationTransaction.setProperty ("value", value);
             declarationTransaction.commit();
 
-            transaction.addChild (declaration);
+            transaction.addChild (mark (declaration, start));
         }
     }
 
@@ -578,17 +602,17 @@ private:
             }
             else if (name == "let")
             {
-                transaction.addChild (parseLet());
+                transaction.addChild (mark (parseLet(), start));
             }
             else if (name == "repeat")
             {
-                transaction.addChild (parseRepeat());
+                transaction.addChild (mark (parseRepeat(), start));
             }
             else if (lookingAt ("{"))
             {
                 DataTree child { Identifier (name) };
                 parseBody (child);
-                transaction.addChild (child);
+                transaction.addChild (mark (child, start));
             }
             else
             {
@@ -598,13 +622,14 @@ private:
                 if (match ("<=>"))
                 {
                     properties.add (name);
-                    transaction.addChild (parseTwoWayBinding (name));
+                    transaction.addChild (mark (parseTwoWayBinding (name), start));
                     continue;
                 }
 
                 expect (":");
                 properties.add (name);
                 transaction.setProperty (name, parseExpressionText());
+                mark (element, start, name);
                 expect (";");
             }
         }
@@ -754,50 +779,77 @@ private:
     }
 
     const String source;
+    const String sourceName;
     const char* text;
+    std::vector<int> lineStarts;
+    std::vector<YuiDiagnostic> positions;
     int position = 0;
 };
+
+//==============================================================================
+struct ParsedText
+{
+    YuiParser::ParseResult result;
+    std::vector<YuiDiagnostic> positions;
+};
+
+ParsedText parseText (const String& text, const String& sourceName)
+{
+    YuiTextParser parser (text, sourceName);
+
+    try
+    {
+        auto document = parser.parseDocument();
+        return { { .document = document }, parser.getPositions() };
+    }
+    catch (const YuiTextParser::Error& error)
+    {
+        return { { .diagnostics = { parser.locate (error) } }, {} };
+    }
+}
+
+// Only the positions of elements still in the document are kept, the imports are dropped by the merge
+YuiSourceMap makeSourceMap (const std::vector<YuiDiagnostic>& positions, const DataTree& document)
+{
+    YuiSourceMap sourceMap;
+
+    for (const auto& position : positions)
+    {
+        if (position.element.getRoot() == document)
+            sourceMap.add (position.element, position.property, position.line, position.column, position.source);
+    }
+
+    return sourceMap;
+}
 
 } // namespace
 
 //==============================================================================
-String YuiParser::Diagnostic::toString() const
-{
-    const auto position = String (line) + ":" + String (column) + ": " + message;
-    return source.isEmpty() ? position : source + ":" + position;
-}
-
 YuiParser::ParseResult YuiParser::parse (const String& text)
 {
-    YuiTextParser parser (text);
-
-    try
-    {
-        return { parser.parseDocument(), {} };
-    }
-    catch (const YuiTextParser::Error& error)
-    {
-        return { {}, { parser.locate (error) } };
-    }
+    auto parsed = parseText (text, {});
+    parsed.result.sourceMap = makeSourceMap (parsed.positions, parsed.result.document);
+    return std::move (parsed.result);
 }
 
 YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolver& resolveImport)
 {
-    auto result = parse (text);
+    auto parsed = parseText (text, {});
 
-    if (! result.wasOk())
-        return result;
+    if (! parsed.result.wasOk())
+        return std::move (parsed.result);
 
     StringArray imported;
     std::vector<DataTree> elements;
+    auto positions = std::move (parsed.positions);
 
-    std::function<std::optional<Diagnostic> (const DataTree&)> collect = [&] (const DataTree& document) -> std::optional<Diagnostic>
+    std::function<std::optional<YuiDiagnostic> (const DataTree&)> collect = [&] (const DataTree& document) -> std::optional<YuiDiagnostic>
     {
         for (const auto& element : document)
         {
             if (element.getType().toString() != "import")
             {
-                elements.push_back (element.clone());
+                elements.push_back (element);
                 continue;
             }
 
@@ -812,27 +864,35 @@ YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolve
             const auto importedText = resolveImport != nullptr ? resolveImport (path) : std::nullopt;
 
             if (! importedText.has_value())
-                return Diagnostic { 0, 0, "Can't import '" + path + "'" };
-
-            const auto importedResult = parse (*importedText);
-
-            if (! importedResult.wasOk())
             {
-                auto diagnostic = importedResult.diagnostics.front();
-                diagnostic.source = path;
-                return diagnostic;
+                // Every block is marked, so the import has a position
+                const auto importPosition = std::find_if (positions.begin(), positions.end(), [&] (const auto& position)
+                {
+                    return position.element == element;
+                });
+
+                jassert (importPosition != positions.end());
+                return YuiDiagnostic { .message = "Can't import '" + path + "'", .source = importPosition->source, .line = importPosition->line, .column = importPosition->column };
             }
 
-            if (auto diagnostic = collect (importedResult.document))
+            auto importedResult = parseText (*importedText, path);
+
+            if (! importedResult.result.wasOk())
+                return importedResult.result.diagnostics.front();
+
+            positions.insert (positions.end(), importedResult.positions.begin(), importedResult.positions.end());
+
+            if (auto diagnostic = collect (importedResult.result.document))
                 return diagnostic;
         }
 
         return std::nullopt;
     };
 
-    if (auto diagnostic = collect (result.document))
-        return { {}, { *diagnostic } };
+    if (auto diagnostic = collect (parsed.result.document))
+        return { .diagnostics = { *diagnostic } };
 
+    // The elements move to the merged document, keeping the identities their positions refer to
     DataTree merged ("yui");
     auto transaction = merged.beginTransaction();
 
@@ -840,7 +900,7 @@ YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolve
         transaction.addChild (element);
 
     transaction.commit();
-    return { merged, {} };
+    return { .document = merged, .sourceMap = makeSourceMap (positions, merged) };
 }
 
 } // namespace yup
