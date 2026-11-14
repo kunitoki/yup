@@ -68,13 +68,32 @@ public:
     /**
         Returns the reflected type info for this component.
 
-        Widgets override this to return their own static type info, which describes the
-        properties, signals and factory used by the stylesheet, `.yui` files and tooling.
-        Unregistered subclasses inherit the type info of their nearest registered base.
+        This is the type info given with @ref setTypeInfo, or the one of the component's class
+        returned by @ref getDefaultTypeInfo. It describes the properties, signals and factory
+        used by the stylesheet, `.yui` files and tooling.
 
-        @see ComponentTypeInfo, getClassTypeInfo
+        @see ComponentTypeInfo, getClassTypeInfo, setTypeInfo
     */
-    virtual const ComponentTypeInfo& getTypeInfo() const;
+    const ComponentTypeInfo& getTypeInfo() const;
+
+    /**
+        Gives this component its own type info, extending the one of its class.
+
+        A `.yui` composite such as `component LabeledKnob : Column` is a Column carrying the
+        extra properties and signals its declaration adds, described by such a type info.
+
+        @param newTypeInfo The type info to use, which must derive from @ref getDefaultTypeInfo
+                           and stay alive while it is set, or nullptr to use the default again.
+    */
+    void setTypeInfo (const ComponentTypeInfo* newTypeInfo);
+
+    /**
+        Returns the type info of the component's class, ignoring @ref setTypeInfo.
+
+        Widgets override this to return their own static type info. Unregistered subclasses
+        inherit the type info of their nearest registered base.
+    */
+    virtual const ComponentTypeInfo& getDefaultTypeInfo() const;
 
     /** Returns the static type info describing the Component base type. */
     static const ComponentTypeInfo& getClassTypeInfo();
@@ -112,12 +131,19 @@ public:
         mouse ups and exits, so an interaction started before it got disabled can finish,
         and shows the default mouse cursor rather than its own.
 
+        Changing the state repaints the component and, for the component and every descendant
+        whose isEnabled() changes as a result, reports the `enabled` property to the component
+        listeners and calls enablementChanged(). Nothing is reported inside a disabled parent.
+
         @param shouldBeEnabled True if the component should be enabled, false otherwise.
      */
     void setEnabled (bool shouldBeEnabled);
 
     /**
         Called when the enabled state of the component changes.
+
+        Called on the component and on every descendant whose isEnabled() changes as a result,
+        but not when the component sits inside a disabled parent, since nothing changes then.
      */
     virtual void enablementChanged();
 
@@ -1362,7 +1388,6 @@ public:
      */
     const NamedValueSet& getProperties() const;
 
-    //==============================================================================
     /**
         Returns true when getProperty() would return a defined value for this component.
 
@@ -2057,6 +2082,7 @@ private:
     void setPressedChain (bool isNowPressed);
     void clearHoveredInSubtree();
     void clearPressedInSubtree();
+    void sendEnablementChanged();
     void internalRefreshDisplay (double lastFrameTimeSeconds);
     void internalRepaint();
     void internalRepaint (const Rectangle<float>& rect);
@@ -2194,6 +2220,7 @@ private:
     std::unique_ptr<StyleState> styleState;
     std::unique_ptr<StyleContext> styleContext;
     Array<Identifier> styleClasses;
+    const ComponentTypeInfo* instanceTypeInfo = nullptr;
     NamedValueSet properties;
     MouseCursor mouseCursor;
     GestureType wantedGestures = GestureType::none;

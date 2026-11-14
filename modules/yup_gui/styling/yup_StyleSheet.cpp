@@ -29,7 +29,9 @@ Result readDeclarations (const DataTree& parent, std::vector<StyleSheet::Declara
 {
     for (const auto& element : parent)
     {
-        if (element.getType().toString() != "declaration")
+        // A property declared in a rule (`property glow: number = 0;`) also sets its default
+        const auto type = element.getType().toString();
+        if (type != "declaration" && ! (type == "property" && element.hasProperty ("value")))
             continue;
 
         const auto name = element.getProperty ("name").toString().trim();

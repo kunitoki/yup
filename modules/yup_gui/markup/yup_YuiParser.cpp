@@ -69,9 +69,16 @@ public:
             {
                 transaction.addChild (parseStyle());
             }
-            else if (CharacterFunctions::isUpperCase (static_cast<yup_wchar> (keyword[0])))
+            else if (keyword == "tokens")
             {
-                // Block keywords are lower case, component types are capitalized like `Column`
+                transaction.addChild (parseTokens());
+            }
+            else if (keyword == "component")
+            {
+                transaction.addChild (parseComponent());
+            }
+            else if (isTypeName (keyword))
+            {
                 if (hasInstance)
                     throw Error { start, "A document can only have one root component" };
 
@@ -83,7 +90,7 @@ public:
             }
             else
             {
-                throw Error { start, "Unknown block '" + keyword + "', expected 'import', 'drawing', 'palette', 'style' or a component" };
+                throw Error { start, "Unknown block '" + keyword + "', expected 'import', 'drawing', 'palette', 'style', 'tokens', 'component' or a component instance" };
             }
         }
 
@@ -202,12 +209,208 @@ private:
 
             DataTree rule ("rule");
             rule.beginTransaction().setProperty ("selector", selector);
-            parseDeclarations (rule);
+            parseDeclarations (rule, true);
             transaction.addChild (rule);
         }
 
         transaction.commit();
         return style;
+    }
+
+    DataTree parseTokens()
+    {
+        DataTree tokens ("tokens");
+        auto transaction = tokens.beginTransaction();
+        StringArray declared;
+
+        expect ("{");
+
+        while (! match ("}"))
+        {
+            if (isAtEnd())
+                throw Error { position, "Expected '}'" };
+
+            expectKeyword ("property");
+            transaction.addChild (parsePropertyDeclaration (declared, false));
+        }
+
+        transaction.commit();
+        return tokens;
+    }
+
+    DataTree parseComponent()
+    {
+        DataTree component ("component");
+        auto transaction = component.beginTransaction();
+
+        transaction.setProperty ("name", parseTypeName ("Expected the name of the component"));
+        expect (":");
+
+        const auto base = parseTypeName ("Expected the base type of the component");
+        transaction.setProperty ("base", base);
+
+        // The body configures an instance of the base type, the declarations belong to the component
+        DataTree instance { Identifier (base) };
+        parseBody (instance, &transaction);
+        transaction.addChild (instance);
+
+        transaction.commit();
+        return component;
+    }
+
+    // After `property`: either `alias name <=> target;` or a property declaration
+    DataTree parseMemberDeclaration (StringArray& declared)
+    {
+        skipWhitespace();
+
+        const auto start = position;
+
+        if (parseIdentifier ("Expected the name of the property") == "alias" && ! lookingAt (":"))
+        {
+            DataTree alias ("alias");
+            auto transaction = alias.beginTransaction();
+
+            transaction.setProperty ("name", parseDeclaredName (declared, "Expected the name of the alias"));
+            expect ("<=>");
+            transaction.setProperty ("target", parsePath ("Expected the property the alias stands for"));
+            expect (";");
+
+            transaction.commit();
+            return alias;
+        }
+
+        position = start;
+        return parsePropertyDeclaration (declared, false);
+    }
+
+    // After `property`: `name: type = value;`, the value being optional
+    DataTree parsePropertyDeclaration (StringArray& declared, bool verbatimValue)
+    {
+        DataTree property ("property");
+        auto transaction = property.beginTransaction();
+
+        transaction.setProperty ("name", parseDeclaredName (declared, "Expected the name of the property"));
+        expect (":");
+        transaction.setProperty ("type", parseType());
+
+        if (match ("="))
+        {
+            skipWhitespace();
+
+            const auto start = position;
+            const auto value = verbatimValue ? parseRawValue() : parseExpressionText();
+
+            if (value.isEmpty())
+                throw Error { start, "Expected the default value of the property" };
+
+            transaction.setProperty ("value", value);
+        }
+
+        expect (";");
+
+        transaction.commit();
+        return property;
+    }
+
+    // After `signal`: `name;` or `name (argument: type, ...);`
+    DataTree parseSignal (StringArray& declared)
+    {
+        DataTree signal ("signal");
+        auto transaction = signal.beginTransaction();
+
+        transaction.setProperty ("name", parseDeclaredName (declared, "Expected the name of the signal"));
+
+        if (match ("(") && ! match (")"))
+        {
+            StringArray arguments;
+
+            do
+            {
+                DataTree argument ("argument");
+                auto argumentTransaction = argument.beginTransaction();
+
+                argumentTransaction.setProperty ("name", parseDeclaredName (arguments, "Expected the name of the argument"));
+                expect (":");
+                argumentTransaction.setProperty ("type", parseType());
+                argumentTransaction.commit();
+
+                transaction.addChild (argument);
+            } while (match (","));
+
+            expect (")");
+        }
+
+        expect (";");
+
+        transaction.commit();
+        return signal;
+    }
+
+    // After `name <=>`: the target of a two-way binding
+    DataTree parseTwoWayBinding (const String& name)
+    {
+        DataTree binding ("bind");
+        auto transaction = binding.beginTransaction();
+
+        transaction.setProperty ("property", name);
+        transaction.setProperty ("target", parsePath ("Expected the property to bind to"));
+        expect (";");
+
+        transaction.commit();
+        return binding;
+    }
+
+    String parseDeclaredName (StringArray& declared, const String& error)
+    {
+        skipWhitespace();
+
+        const auto start = position;
+        const auto name = parseIdentifier (error);
+
+        if (declared.contains (name))
+            throw Error { start, "'" + name + "' is already declared" };
+
+        declared.add (name);
+        return name;
+    }
+
+    String parseType()
+    {
+        static const StringArray types { "number", "integer", "boolean", "string", "color", "point", "rectangle", "font", "drawing", "any" };
+
+        skipWhitespace();
+
+        const auto start = position;
+        const auto type = parseIdentifier ("Expected a type");
+
+        if (! types.contains (type))
+            throw Error { start, "Unknown type '" + type + "', expected one of " + types.joinIntoString (", ") };
+
+        return type;
+    }
+
+    String parseTypeName (const String& error)
+    {
+        skipWhitespace();
+
+        const auto start = position;
+        const auto name = parseIdentifier (error);
+
+        if (! isTypeName (name))
+            throw Error { start, "Type names start with an upper case letter" };
+
+        return name;
+    }
+
+    // A dotted property path such as `knob.value`
+    String parsePath (const String& error)
+    {
+        auto path = parseIdentifier (error);
+
+        while (match ("."))
+            path << "." << parseIdentifier ("Expected a name after '.'");
+
+        return path;
     }
 
     DataTree parseKeyframes()
@@ -241,7 +444,7 @@ private:
 
             DataTree frame ("keyframe");
             frame.beginTransaction().setProperty ("at", at);
-            parseDeclarations (frame);
+            parseDeclarations (frame, false);
             transaction.addChild (frame);
         }
 
@@ -249,11 +452,12 @@ private:
         return keyframes;
     }
 
-    void parseDeclarations (DataTree& element)
+    void parseDeclarations (DataTree& element, bool allowPropertyDeclarations)
     {
         expect ("{");
 
         auto transaction = element.beginTransaction();
+        StringArray declared;
 
         while (! match ("}"))
         {
@@ -262,6 +466,12 @@ private:
 
             const auto start = position;
             auto name = parseIdentifier ("Expected a declaration");
+
+            if (allowPropertyDeclarations && name == "property" && ! lookingAt (":"))
+            {
+                transaction.addChild (parsePropertyDeclaration (declared, true));
+                continue;
+            }
 
             // Qualified names like `Slider.thumbColor` cascade to the descendants of that type
             if (match ("."))
@@ -337,12 +547,14 @@ private:
         return String::fromUTF8 (text + start, position - start).trim();
     }
 
-    void parseBody (DataTree& element)
+    // The declarations of a component (properties, aliases and signals) go to its own transaction
+    void parseBody (DataTree& element, DataTree::Transaction* declarations = nullptr)
     {
         expect ("{");
 
         auto transaction = element.beginTransaction();
         StringArray properties;
+        StringArray declared;
 
         while (! match ("}"))
         {
@@ -352,7 +564,19 @@ private:
             const auto start = position;
             const auto name = parseIdentifier ("Expected a property or an element");
 
-            if (name == "let")
+            if (declarations != nullptr && name == "property" && ! lookingAt (":"))
+            {
+                declarations->addChild (parseMemberDeclaration (declared));
+            }
+            else if (declarations == nullptr && element.getType() == Identifier ("drawing") && name == "property" && ! lookingAt (":"))
+            {
+                transaction.addChild (parsePropertyDeclaration (declared, false));
+            }
+            else if (declarations != nullptr && name == "signal" && ! lookingAt (":"))
+            {
+                declarations->addChild (parseSignal (declared));
+            }
+            else if (name == "let")
             {
                 transaction.addChild (parseLet());
             }
@@ -370,6 +594,13 @@ private:
             {
                 if (properties.contains (name))
                     throw Error { start, "The property '" + name + "' is already set" };
+
+                if (match ("<=>"))
+                {
+                    properties.add (name);
+                    transaction.addChild (parseTwoWayBinding (name));
+                    continue;
+                }
 
                 expect (":");
                 properties.add (name);
@@ -514,6 +745,12 @@ private:
     static bool isIdentifierStart (char c) noexcept
     {
         return CharacterFunctions::isLetter (c) || c == '_';
+    }
+
+    // Block keywords are lower case, component types are capitalized like `Column`
+    static bool isTypeName (const String& name)
+    {
+        return CharacterFunctions::isUpperCase (static_cast<yup_wchar> (*name.getCharPointer()));
     }
 
     const String source;

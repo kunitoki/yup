@@ -35,21 +35,26 @@ void DrawingScope::setComponentResolver (ComponentResolver resolver)
 
 void DrawingScope::install()
 {
-    context.setSymbolResolver ([this] (const String& name) -> const ExpressionType*
+    context.setSymbolResolver ([this] (const String& name)
     {
-        if (name.startsWith ("palette."))
-            return typeForPaletteRole (name.substring (8));
-
-        String propertyName;
-
-        if (auto* target = resolveTarget (name, propertyName))
-        {
-            if (const auto* property = target->getTypeInfo().findProperty (Identifier (propertyName)))
-                return typeForProperty (property->type);
-        }
-
-        return nullptr;
+        return resolveSymbol (name);
     });
+}
+
+const ExpressionType* DrawingScope::resolveSymbol (const String& symbol) const
+{
+    if (symbol.startsWith ("palette."))
+        return typeForPaletteRole (symbol.substring (8));
+
+    String propertyName;
+
+    if (auto* target = resolveTarget (symbol, propertyName))
+    {
+        if (const auto* property = target->getTypeInfo().findProperty (Identifier (propertyName)))
+            return getExpressionType (property->type);
+    }
+
+    return nullptr;
 }
 
 void DrawingScope::updateInputs (const CompiledExpression& program, ExpressionState& state) const
@@ -122,6 +127,21 @@ Component* DrawingScope::resolveTarget (const String& symbol, String& propertyNa
     }
 
     propertyName = symbol;
+
+    // A bare name the component doesn't declare reads the closest ancestor declaring it as inherited, like a token
+    const Identifier propertyId (symbol);
+
+    if (self->getTypeInfo().findProperty (propertyId) != nullptr)
+        return self;
+
+    for (auto* ancestor = self->getParentComponent(); ancestor != nullptr; ancestor = ancestor->getParentComponent())
+    {
+        const auto* property = ancestor->getTypeInfo().findProperty (propertyId);
+
+        if (property != nullptr && property->isStoreBacked() && property->isInherited)
+            return ancestor;
+    }
+
     return self;
 }
 
@@ -159,7 +179,7 @@ std::vector<DrawingScope::Dependency> DrawingScope::getDependencies (const Compi
     return dependencies;
 }
 
-const ExpressionType* DrawingScope::typeForProperty (ComponentProperty::Type type) const
+const ExpressionType* DrawingScope::getExpressionType (ComponentProperty::Type type) const
 {
     switch (type)
     {

@@ -63,13 +63,34 @@ const ComponentTypeInfo& Label::getClassTypeInfo()
             .setter = [] (Component& c, const var& v) { static_cast<Label&> (c).setStrokeWidth (static_cast<float> (static_cast<double> (v))); },
             .isStyleable = false });
 
-        return ComponentTypeInfo { Identifier ("Label"), &Component::getClassTypeInfo(), std::move (props), { "onTextChanged" }, [] { return std::make_unique<Label>(); } };
+        static const StringArray justificationNames { "left", "right", "topLeft", "centerTop", "topRight", "centerLeft", "center", "centerRight", "bottomLeft", "centerBottom", "bottomRight" };
+        static const Justification::Flags justifications[] = { Justification::left, Justification::right, Justification::topLeft, Justification::centerTop, Justification::topRight, Justification::centerLeft, Justification::center, Justification::centerRight, Justification::bottomLeft, Justification::centerBottom, Justification::bottomRight };
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("justification"),
+            .type = ComponentProperty::Type::enumeration,
+            .defaultValue = justificationNames[0],
+            .getter = [] (const Component& c)
+            {
+                const auto flags = static_cast<const Label&> (c).getJustification().getFlags();
+                const auto found = std::find (std::begin (justifications), std::end (justifications), flags);
+                return var (found != std::end (justifications) ? justificationNames[static_cast<int> (found - std::begin (justifications))] : String());
+            },
+            .setter = [] (Component& c, const var& v)
+            {
+                if (const auto index = justificationNames.indexOf (v.toString()); index >= 0)
+                    static_cast<Label&> (c).setJustification (justifications[index]);
+            },
+            .isStyleable = false,
+            .enumValues = justificationNames });
+
+        return ComponentTypeInfo { Identifier ("Label"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<Label>(); } };
     }();
 
     return info;
 }
 
-const ComponentTypeInfo& Label::getTypeInfo() const
+const ComponentTypeInfo& Label::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }
@@ -97,9 +118,10 @@ void Label::setText (String newText, NotificationType notification)
     text = std::move (newText);
     invalidateCache();
 
-    if (notification != dontSendNotification)
-        // TODO: Send notification
-        ;
+    sendChangeNotification (notification, [this]
+    {
+        notifyPropertyChanged (Identifier ("text"));
+    });
 }
 
 //==============================================================================

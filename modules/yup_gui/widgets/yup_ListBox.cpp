@@ -126,7 +126,7 @@ const ComponentTypeInfo& ListBox::getClassTypeInfo()
     return info;
 }
 
-const ComponentTypeInfo& ListBox::getTypeInfo() const
+const ComponentTypeInfo& ListBox::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }

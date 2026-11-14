@@ -24,6 +24,8 @@
 namespace yup
 {
 
+class DrawingStyle;
+
 //==============================================================================
 /**
     Applies a stylesheet to a component tree.
@@ -120,8 +122,9 @@ private:
     ComponentCache& getCache (Component& component);
     void restoreStateBacked (Component& component, const Identifier& storageId);
     void restoreAllStateBacked (Component& component);
-    void installDrawing (Component& component, const String& name);
+    const DrawingStyle* installDrawing (Component& component, const String& name);
     void restoreDrawing (Component& component);
+    static const ComponentProperty* findDrawingProperty (const DrawingStyle& drawing, const Identifier& name);
     void clearSubtree (Component& component);
     void markPaletteDependentDirty (Component& component);
 

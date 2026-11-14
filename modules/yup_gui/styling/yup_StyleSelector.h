@@ -28,17 +28,6 @@ namespace yup
 /**
     A compiled stylesheet selector, matched against live components.
 
-    The syntax follows CSS, over the reflected component model:
-
-    - `Slider`, matching the type and every type derived from it (`Button` matches `TextButton`);
-    - `*`, matching any component, and `:root`, matching the component the sheet is attached to;
-    - `.knob`, matching a style class added with Component::addStyleClass();
-    - `#cutoff`, matching the component id (Component::getComponentID());
-    - `:hover`, `:pressed` (or `:active`), `:focus`, `:focus-within`, `:disabled` and `:enabled`,
-      plus any boolean state property a type declares (`:checked`, `:dragging`, `:open`, ...);
-    - `[section]`, `[section="filter"]` and `[section!="filter"]`, matching properties;
-    - descendant (a space) and child (`>`) combinators.
-
     Specificity follows CSS too: ids count 10000, classes, attributes and pseudo-classes 100,
     and types 1, so more specific rules win inside a StyleSheet.
 

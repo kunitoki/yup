@@ -85,7 +85,7 @@ const ComponentTypeInfo& StackComponent::getClassTypeInfo()
     return info;
 }
 
-const ComponentTypeInfo& StackComponent::getTypeInfo() const
+const ComponentTypeInfo& StackComponent::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }

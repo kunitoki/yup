@@ -67,13 +67,23 @@ const ComponentTypeInfo& TextEditor::getClassTypeInfo()
             .setter = [] (Component& c, const var& v) { static_cast<TextEditor&> (c).setMultiLine (static_cast<bool> (v)); },
             .isStyleable = false });
 
-        return ComponentTypeInfo { Identifier ("TextEditor"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<TextEditor>(); } };
+        ComponentSignal textChange {
+            .name = Identifier ("onTextChange"),
+            .connect = [] (Component& component, ComponentSignal::Handler handler)
+            {
+                if (auto* editor = dynamic_cast<TextEditor*> (&component))
+                    editor->onTextChange = [handler = std::move (handler)] { handler ({}); };
+            },
+            .description = "Emitted when the text is edited"
+        };
+
+        return ComponentTypeInfo { Identifier ("TextEditor"), &Component::getClassTypeInfo(), std::move (props), { std::move (textChange) }, [] { return std::make_unique<TextEditor>(); } };
     }();
 
     return info;
 }
 
-const ComponentTypeInfo& TextEditor::getTypeInfo() const
+const ComponentTypeInfo& TextEditor::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }

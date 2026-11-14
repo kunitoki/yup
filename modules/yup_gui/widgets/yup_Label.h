@@ -48,7 +48,7 @@ public:
     /** Changes the label's text.
 
         @param newText          The new text to display
-        @param notification     Whether to trigger a change notification
+        @param notification     Whether property listeners are told that `text` changed
     */
     void setText (String newText, NotificationType notification = sendNotification);
 
@@ -108,7 +108,7 @@ public:
     static const ComponentTypeInfo& getClassTypeInfo();
 
     /** @internal */
-    const ComponentTypeInfo& getTypeInfo() const override;
+    const ComponentTypeInfo& getDefaultTypeInfo() const override;
 
     //==============================================================================
 

@@ -201,7 +201,9 @@ if (program.wasOk())
 ```
 
 A drawing is bound to the component it was created for, so install it on that
-component only.
+component only. Creating it for many components is cheap: components that give
+the names the drawing reads the same types (several sliders drawn as knobs, for
+example) share one compilation, and only keep their own evaluation state.
 
 ## Drawings in a stylesheet
 
@@ -229,29 +231,41 @@ Component {
 ```
 
 Imports are resolved by a callback, so they can come from files, resources or
-editors. `YuiBuilder` creates the components, and the stylesheet built from the
-same document is attached to the root:
+editors. `YuiDocument` creates the components and attaches the stylesheet built
+from the same document to the root:
 
 ```cpp
-const auto parsed = YuiParser::parse (text, [&] (const String& path) -> std::optional<String>
+YuiDocument document;
+
+const auto result = document.loadFromString (text, [&] (const String& path) -> std::optional<String>
 {
     return folder.getChildFile (path).loadFileAsString();
 });
 
-auto sheet = StyleSheet::fromTree (parsed.document);
-
-YuiBuilder builder;
-if (parsed.wasOk() && sheet.wasOk() && builder.build (parsed.document).wasOk())
-{
-    builder.getRoot()->setStyleSheet (sheet.getReference());
-    addAndMakeVisible (builder.getRoot());
-}
+if (result.wasOk())
+    addAndMakeVisible (*document.getRoot());
 ```
 
-Instance property values are expressions evaluated once when the component is
-built, and may read `parent.` properties. The `YuiDrawing` graphics example
-edits such a UI split across `ui.yui`, `knob.yui`, `palette.yui` and
+Instance property values are expressions kept up to date as what they read
+changes, see [Reactive bindings](yui-reactivity.md). The `YuiDrawing` graphics
+example edits such a UI split across `ui.yui`, `knob.yui`, `palette.yui` and
 `style.yui`.
+
+Tokens, composite components, handlers and models are described in [Complete
+UIs in `.yui`](yui-documents.md).
+
+## Saving documents
+
+A style rule can also declare a property, which sets its default on the
+components the rule matches:
+
+```yui
+style { .knob { property glow: number = 0; } }
+```
+
+`YuiWriter::write()` turns a parsed document, or any element of it, back into
+text that parses to the same tree, so tools can load, edit and save `.yui`
+files. Comments and the original layout are not preserved.
 
 ## Limitations
 
@@ -260,7 +274,5 @@ edits such a UI split across `ui.yui`, `knob.yui`, `palette.yui` and
 - `repeat` takes a fixed range; collections of dynamic length (such as per-voice
   modulation arcs) and nested repeats are planned.
 - Image and SVG shapes, layer blending and masking are planned.
-- The `.yui` parser doesn't read `tokens` and `component` blocks yet, and compile
-  errors are reported against the drawing tree, not mapped back to source lines.
-- Built instance properties are not bound: they don't follow later changes of
-  what they read, and layout containers are planned.
+- Compile errors are reported against the drawing tree, not mapped back to
+  source lines.

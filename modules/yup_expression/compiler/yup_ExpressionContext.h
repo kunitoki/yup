@@ -142,6 +142,10 @@ private:
 
     A context is only needed while compiling: compiled programs keep what they use alive.
 
+    Copies are cheap: they share the registered types, and the constants, functions and other
+    declarations until one of the copies declares more. Register a library of types once in a
+    prototype and copy it for each program needing its own outputs or symbol resolver.
+
     @code
     ExpressionContext context;
     auto width = context.addInput<float> ("width");
@@ -392,6 +396,17 @@ private:
 
     using FunctionMap = std::unordered_map<String, std::vector<ExpressionFunction>>;
 
+    /* Registering a library of types declares many symbols and functions, and contexts are often
+       copied from such a prototype, so copies share them until one of the copies declares more. */
+    struct Declarations
+    {
+        std::vector<Constant> constants;
+        std::vector<std::pair<String, Expression>> expressions;
+        std::unordered_map<String, Symbol> symbols;
+        std::unordered_map<String, std::vector<int>> enumValues;
+        FunctionMap functions;
+    };
+
     template <class T>
     struct ArrayElement
     {
@@ -437,14 +452,13 @@ private:
 
     static const FunctionMap& getBuiltinFunctions();
 
+    const Declarations& getDeclarations() const;
+    Declarations& editDeclarations();
+
     std::vector<std::shared_ptr<ExpressionType>> types;
     std::vector<Variable> inputs;
     std::vector<Variable> outputs;
-    std::vector<Constant> constants;
-    std::vector<std::pair<String, Expression>> expressions;
-    std::unordered_map<String, Symbol> symbols;
-    std::unordered_map<String, std::vector<int>> enumValues;
-    FunctionMap functions;
+    std::shared_ptr<Declarations> declarations;
     SymbolResolver symbolResolver;
 };
 

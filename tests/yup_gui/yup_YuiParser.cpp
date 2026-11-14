@@ -124,7 +124,7 @@ TEST_F (YuiParserTest, ReportsErrorsWithLineAndColumn)
     EXPECT_EQ (parseError ("drawing Knob {\n    circle { radius: 4 }\n}"), "2:24: Expected ';'");
     EXPECT_EQ (parseError ("drawing {"), "1:10: Expected '}'");
     EXPECT_EQ (parseError ("drawing { rect { bounds: 1 +* 2; } }"), "1:29: Unexpected character '*'");
-    EXPECT_EQ (parseError ("widget { }"), "1:1: Unknown block 'widget', expected 'import', 'drawing', 'palette', 'style' or a component");
+    EXPECT_EQ (parseError ("widget { }"), "1:1: Unknown block 'widget', expected 'import', 'drawing', 'palette', 'style', 'tokens', 'component' or a component instance");
     EXPECT_EQ (parseError ("drawing { rect { fill: a; fill: b; } }"), "1:27: The property 'fill' is already set");
     EXPECT_EQ (parseError ("drawing { repeat i 0 .. 3 { } }"), "1:20: Expected 'in'");
     EXPECT_EQ (parseError ("drawing { let r 4; }"), "1:17: Expected ':'");
@@ -210,6 +210,145 @@ TEST_F (YuiParserTest, ParsesTheRootComponent)
     EXPECT_EQ (knob.getProperty ("x").toString(), "parent.width / 4");
 
     EXPECT_EQ (parseError ("Component { } Component { }"), "1:15: A document can only have one root component");
+}
+
+TEST_F (YuiParserTest, ParsesTokens)
+{
+    const auto result = YuiParser::parse (R"yui(
+        tokens {
+            property glowColor: color = palette.accent.withAlpha (0.4);
+            property knobTrack: number = 0.075;
+            property label: string;
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.diagnostics.front().toString();
+
+    const auto tokens = result.document.getChildWithName ("tokens");
+    ASSERT_EQ (tokens.getNumChildren(), 3);
+
+    const auto glow = tokens.getChild (0);
+    EXPECT_EQ (glow.getType().toString(), "property");
+    EXPECT_EQ (glow.getProperty ("name").toString(), "glowColor");
+    EXPECT_EQ (glow.getProperty ("type").toString(), "color");
+    EXPECT_EQ (glow.getProperty ("value").toString(), "palette.accent.withAlpha (0.4)");
+
+    EXPECT_EQ (tokens.getChild (1).getProperty ("value").toString(), "0.075");
+    EXPECT_FALSE (tokens.getChild (2).hasProperty ("value"));
+}
+
+TEST_F (YuiParserTest, ParsesDrawingProperties)
+{
+    const auto result = YuiParser::parse (R"yui(
+        drawing Knob {
+            property bezel: number = 0.8;
+            property ring: color;
+            circle { radius: bezel; }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.diagnostics.front().toString();
+
+    const auto drawing = result.document.getChildWithName ("drawing");
+    ASSERT_EQ (drawing.getNumChildren(), 3);
+
+    const auto bezel = drawing.getChild (0);
+    EXPECT_EQ (bezel.getType().toString(), "property");
+    EXPECT_EQ (bezel.getProperty ("name").toString(), "bezel");
+    EXPECT_EQ (bezel.getProperty ("type").toString(), "number");
+    EXPECT_EQ (bezel.getProperty ("value").toString(), "0.8");
+    EXPECT_FALSE (drawing.getChild (1).hasProperty ("value"));
+
+    EXPECT_EQ (parseError ("drawing { property a: number; property a: color; }"), "1:40: 'a' is already declared");
+    EXPECT_EQ (parseError ("drawing { layer { property a: number; } }"), "1:28: Expected ':'");
+}
+
+TEST_F (YuiParserTest, ParsesComponents)
+{
+    const auto result = YuiParser::parse (R"yui(
+        component LabeledKnob : Column {
+            property label: string = "";
+            property alias value <=> knob.value;
+            signal changed (value: number, final: boolean);
+            signal reset;
+
+            gap: 4;
+            Slider { id: knob; flexGrow: 1; onValueChanged: root.changed (self.value, false); }
+            Label { text: root.label; }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.diagnostics.front().toString();
+
+    const auto component = result.document.getChildWithName ("component");
+    EXPECT_EQ (component.getProperty ("name").toString(), "LabeledKnob");
+    EXPECT_EQ (component.getProperty ("base").toString(), "Column");
+    ASSERT_EQ (component.getNumChildren(), 5);
+
+    const auto label = component.getChild (0);
+    EXPECT_EQ (label.getType().toString(), "property");
+    EXPECT_EQ (label.getProperty ("value").toString(), "\"\"");
+
+    const auto alias = component.getChild (1);
+    EXPECT_EQ (alias.getType().toString(), "alias");
+    EXPECT_EQ (alias.getProperty ("name").toString(), "value");
+    EXPECT_EQ (alias.getProperty ("target").toString(), "knob.value");
+
+    const auto changed = component.getChild (2);
+    EXPECT_EQ (changed.getType().toString(), "signal");
+    EXPECT_EQ (changed.getProperty ("name").toString(), "changed");
+    ASSERT_EQ (changed.getNumChildren(), 2);
+    EXPECT_EQ (changed.getChild (1).getProperty ("name").toString(), "final");
+    EXPECT_EQ (changed.getChild (1).getProperty ("type").toString(), "boolean");
+
+    EXPECT_EQ (component.getChild (3).getNumChildren(), 0);
+
+    const auto body = component.getChild (4);
+    EXPECT_EQ (body.getType().toString(), "Column");
+    EXPECT_EQ (body.getProperty ("gap").toString(), "4");
+    ASSERT_EQ (body.getNumChildren(), 2);
+    EXPECT_EQ (body.getChild (0).getProperty ("onValueChanged").toString(), "root.changed (self.value, false)");
+}
+
+TEST_F (YuiParserTest, ParsesTwoWayBindings)
+{
+    const auto result = YuiParser::parse ("Column { LabeledKnob { label: \"Cutoff\"; value <=> params.cutoff; } }");
+
+    ASSERT_TRUE (result.wasOk()) << result.diagnostics.front().toString();
+
+    const auto knob = result.document.getChildWithName ("Column").getChild (0);
+    ASSERT_EQ (knob.getNumChildren(), 1);
+
+    const auto binding = knob.getChild (0);
+    EXPECT_EQ (binding.getType().toString(), "bind");
+    EXPECT_EQ (binding.getProperty ("property").toString(), "value");
+    EXPECT_EQ (binding.getProperty ("target").toString(), "params.cutoff");
+
+    EXPECT_EQ (parseError ("Column { value: 1; value <=> a.b; }"), "1:20: The property 'value' is already set");
+}
+
+TEST_F (YuiParserTest, ParsesPropertyDeclarationsInStyleRules)
+{
+    const auto result = YuiParser::parse ("style { Slider.knob { property glow: number = 0; transition: glow 150ms; } }");
+
+    ASSERT_TRUE (result.wasOk()) << result.diagnostics.front().toString();
+
+    const auto rule = result.document.getChildWithName ("style").getChild (0);
+    ASSERT_EQ (rule.getNumChildren(), 2);
+    EXPECT_EQ (rule.getChild (0).getType().toString(), "property");
+    EXPECT_EQ (rule.getChild (0).getProperty ("value").toString(), "0");
+    EXPECT_EQ (rule.getChild (1).getType().toString(), "declaration");
+
+    EXPECT_EQ (parseError ("style { @keyframes f { from { property glow: number = 0; } } }"), "1:40: Expected ':'");
+}
+
+TEST_F (YuiParserTest, ReportsDeclarationErrors)
+{
+    EXPECT_EQ (parseError ("tokens { glow: 1; }"), "1:10: Expected 'property'");
+    EXPECT_EQ (parseError ("tokens { property glow: size = 1; }"), "1:25: Unknown type 'size', expected one of number, integer, boolean, string, color, point, rectangle, font, drawing, any");
+    EXPECT_EQ (parseError ("tokens { property a: number; property a: color; }"), "1:39: 'a' is already declared");
+    EXPECT_EQ (parseError ("component knob : Column { }"), "1:11: Type names start with an upper case letter");
+    EXPECT_EQ (parseError ("component Knob { }"), "1:16: Expected ':'");
+    EXPECT_EQ (parseError ("component K : Column { signal s (v: number; }"), "1:43: Expected ')'");
+    EXPECT_EQ (parseError ("component K : Column { property alias v <=> ; }"), "1:45: Expected the property the alias stands for");
+    EXPECT_EQ (parseError ("Component { value <=> ; }"), "1:23: Expected the property to bind to");
 }
 
 TEST_F (YuiParserTest, ResolvesImports)

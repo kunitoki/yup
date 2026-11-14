@@ -68,6 +68,20 @@ TEST_F (StyleSheetTests, SplitsQualifiedDeclarationNames)
     EXPECT_EQ (first.name, Identifier ("thumbColor"));
 }
 
+TEST_F (StyleSheetTests, AppliesTheDefaultsOfDeclaredProperties)
+{
+    auto sheet = build (DataTree ("style",
+                                  { DataTree ("rule", { { "selector", "Slider" } }, { DataTree ("property", { { "name", "glow" }, { "type", "number" }, { "value", "2" } }),
+                                                                                     DataTree ("property", { { "name", "spin" }, { "type", "number" } }) }) }));
+
+    ASSERT_NE (sheet, nullptr);
+    const auto& declarations = sheet->getRules().front().declarations;
+
+    ASSERT_EQ (declarations.size(), 1u);
+    EXPECT_EQ (declarations.front().name, Identifier ("glow"));
+    EXPECT_EQ (declarations.front().value, "2");
+}
+
 TEST_F (StyleSheetTests, ReadsPalettesWithRoleOverrides)
 {
     auto sheet = build (DataTree ("style",

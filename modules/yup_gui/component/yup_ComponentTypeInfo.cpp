@@ -25,7 +25,7 @@ namespace yup
 ComponentTypeInfo::ComponentTypeInfo (Identifier typeNameToUse,
                                       const ComponentTypeInfo* baseTypeInfoToUse,
                                       std::vector<ComponentProperty> propertiesToUse,
-                                      StringArray signalsToUse,
+                                      std::vector<ComponentSignal> signalsToUse,
                                       Factory factoryToUse)
     : typeName (std::move (typeNameToUse))
     , baseTypeInfo (baseTypeInfoToUse)
@@ -94,13 +94,14 @@ bool ComponentTypeInfo::isSubtypeOf (const ComponentTypeInfo& other) const
     return isSubtypeOf (other.typeName);
 }
 
-bool ComponentTypeInfo::hasSignal (const Identifier& signalName) const
+const ComponentSignal* ComponentTypeInfo::findSignal (const Identifier& signalName) const
 {
     for (const auto* info = this; info != nullptr; info = info->baseTypeInfo)
-        if (info->signals.contains (signalName.toString()))
-            return true;
+        for (const auto& signal : info->signals)
+            if (signal.name == signalName)
+                return &signal;
 
-    return false;
+    return nullptr;
 }
 
 std::unique_ptr<Component> ComponentTypeInfo::createInstance() const

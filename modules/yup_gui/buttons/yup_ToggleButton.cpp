@@ -61,13 +61,13 @@ const ComponentTypeInfo& ToggleButton::getClassTypeInfo()
             .setter = [] (Component& c, const var& v) { static_cast<ToggleButton&> (c).setButtonText (v.toString()); },
             .isStyleable = false });
 
-        return ComponentTypeInfo { Identifier ("ToggleButton"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<ToggleButton>(); } };
+        return ComponentTypeInfo { Identifier ("ToggleButton"), &Component::getClassTypeInfo(), std::move (props), { Button::getClickSignal() }, [] { return std::make_unique<ToggleButton>(); } };
     }();
 
     return info;
 }
 
-const ComponentTypeInfo& ToggleButton::getTypeInfo() const
+const ComponentTypeInfo& ToggleButton::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }

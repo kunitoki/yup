@@ -62,7 +62,7 @@ public:
     static const ComponentTypeInfo& getClassTypeInfo();
 
     /** @internal */
-    const ComponentTypeInfo& getTypeInfo() const override;
+    const ComponentTypeInfo& getDefaultTypeInfo() const override;
 
 protected:
     /** @internal */
@@ -93,7 +93,7 @@ public:
     static const ComponentTypeInfo& getClassTypeInfo();
 
     /** @internal */
-    const ComponentTypeInfo& getTypeInfo() const override;
+    const ComponentTypeInfo& getDefaultTypeInfo() const override;
 
 private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RowComponent)
@@ -120,7 +120,7 @@ public:
     static const ComponentTypeInfo& getClassTypeInfo();
 
     /** @internal */
-    const ComponentTypeInfo& getTypeInfo() const override;
+    const ComponentTypeInfo& getDefaultTypeInfo() const override;
 
 private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ColumnComponent)

@@ -2626,6 +2626,60 @@ TEST_F (ComponentTest, EnablingAParentUpdatesTheCursorOfTheChildUnderPointer)
     Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
 }
 
+TEST_F (ComponentTest, SetEnabledNotifiesTheDescendantsWhoseStateChanges)
+{
+    struct Recorder : ComponentListener
+    {
+        void componentPropertyChanged (Component& component, const Identifier& name) override
+        {
+            if (name == Identifier ("enabled"))
+                notified.add (component.getComponentID());
+        }
+
+        StringArray notified;
+    };
+
+    struct Counting : Component
+    {
+        Counting() : Component ("grandchild") {}
+
+        void enablementChanged() override { ++count; }
+
+        int count = 0;
+    };
+
+    Counting grandchild;
+    child->addChildComponent (grandchild);
+
+    Component disabledChild ("disabledChild");
+    parent->addChildComponent (disabledChild);
+    disabledChild.setEnabled (false);
+
+    Recorder recorder;
+    const std::vector<Component*> components { root.get(), parent.get(), child.get(), &grandchild, &disabledChild };
+
+    for (auto* component : components)
+        component->addComponentListener (&recorder);
+
+    root->setEnabled (false);
+    EXPECT_EQ (4, recorder.notified.size());
+    EXPECT_FALSE (recorder.notified.contains ("disabledChild"));
+    EXPECT_EQ (1, grandchild.count);
+
+    // Inside a disabled parent, the effective state of the subtree doesn't change
+    recorder.notified.clear();
+    child->setEnabled (false);
+    EXPECT_TRUE (recorder.notified.isEmpty());
+    EXPECT_EQ (1, grandchild.count);
+
+    root->setEnabled (true);
+    EXPECT_EQ (StringArray ({ "root", "parent" }), recorder.notified);
+    EXPECT_EQ (1, grandchild.count);
+
+    for (auto* component : components)
+        component->removeComponentListener (&recorder);
+}
+
 TEST_F (ComponentTest, CursorOfFocusedComponentAwayFromPointerLeavesTheDesktopAlone)
 {
     auto* native = new TestComponentNative (*root);

@@ -275,3 +275,34 @@ TEST_F (StyleContextTests, ReportsUnknownDrawings)
 
     EXPECT_TRUE (root.getStyleContext()->getDiagnostics().contains ("Unknown drawing 'Missing'"));
 }
+
+TEST_F (StyleContextTests, TypesTheDeclarationsOfDrawingProperties)
+{
+    Component root ("root");
+    Component first ("first");
+    Component second ("second");
+    root.addChildComponent (first);
+    root.addChildComponent (second);
+
+    auto sheet = StyleSheet::parse (R"yui(
+        drawing Dot {
+            property dotRadius: number = 2;
+            circle { center: bounds.center; radius: dotRadius; fill: #ff0000; }
+        }
+        style {
+            #first { drawing: Dot; dotRadius: 1; }
+            #second { drawing: Dot; dotRadius: #ff0000; }
+        })yui");
+
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+    root.setStyleSheet (sheet.getReference());
+    restyle (root);
+
+    const auto radius = first.findProperty (Identifier ("dotRadius"));
+    EXPECT_TRUE (radius.isDouble());
+    EXPECT_DOUBLE_EQ (static_cast<double> (radius), 1.0);
+
+    const auto diagnostics = root.getStyleContext()->getDiagnostics();
+    ASSERT_EQ (diagnostics.size(), 1);
+    EXPECT_TRUE (diagnostics[0].startsWith ("dotRadius: ")) << diagnostics[0];
+}

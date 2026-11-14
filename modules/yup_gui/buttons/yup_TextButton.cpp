@@ -53,13 +53,13 @@ const ComponentTypeInfo& TextButton::getClassTypeInfo()
             .setter = [] (Component& c, const var& v) { static_cast<TextButton&> (c).setButtonText (v.toString()); },
             .isStyleable = false });
 
-        return ComponentTypeInfo { Identifier ("TextButton"), &Component::getClassTypeInfo(), std::move (props), { "onClick" }, [] { return std::make_unique<TextButton>(); } };
+        return ComponentTypeInfo { Identifier ("TextButton"), &Component::getClassTypeInfo(), std::move (props), { Button::getClickSignal() }, [] { return std::make_unique<TextButton>(); } };
     }();
 
     return info;
 }
 
-const ComponentTypeInfo& TextButton::getTypeInfo() const
+const ComponentTypeInfo& TextButton::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }

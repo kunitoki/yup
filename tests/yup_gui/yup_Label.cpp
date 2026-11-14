@@ -377,3 +377,39 @@ TEST_F (LabelTest, SetJustificationDoesNotAffectOtherProperties)
     EXPECT_EQ (text, label->getText());
     EXPECT_EQ (stroke, label->getStrokeWidth());
 }
+
+TEST_F (LabelTest, NotifiesPropertyListenersWhenTheTextChanges)
+{
+    struct TextListener : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override
+        {
+            if (name == Identifier ("text"))
+                ++changes;
+        }
+
+        int changes = 0;
+    };
+
+    TextListener listener;
+    label->addComponentListener (&listener);
+
+    label->setText (kTestText, sendNotification);
+    label->setText (kTestText, sendNotification);
+    label->setText (kLongText, dontSendNotification);
+    EXPECT_EQ (listener.changes, 1);
+
+    label->removeComponentListener (&listener);
+}
+
+TEST_F (LabelTest, SetsTheJustificationByName)
+{
+    EXPECT_EQ (label->getProperty (Identifier ("justification")).toString(), "left");
+
+    label->setProperty (Identifier ("justification"), "centerRight");
+    EXPECT_EQ (label->getJustification(), Justification::centerRight);
+    EXPECT_EQ (label->getProperty (Identifier ("justification")).toString(), "centerRight");
+
+    label->setProperty (Identifier ("justification"), "sideways");
+    EXPECT_EQ (label->getJustification(), Justification::centerRight);
+}

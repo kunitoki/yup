@@ -32,10 +32,11 @@ class Component;
 
     A ComponentTypeInfo carries the type name (for example "Slider"), a pointer to
     its base type's info, the property descriptors declared on the type, the signals
-    it emits (event names such as "onValueChanged"), and an optional factory used to
+    it emits (events such as "onValueChanged"), and an optional factory used to
     create instances from `.yui`.
 
-    Each widget returns a single shared instance from Component::getTypeInfo(). Type
+    Each widget returns a single shared instance from Component::getDefaultTypeInfo(),
+    and a single component can be given its own with Component::setTypeInfo(). Type
     infos form a chain through @ref getBaseTypeInfo, so property and signal lookups
     walk up to the base. Unregistered user subclasses simply inherit the info of the
     nearest registered base.
@@ -57,13 +58,13 @@ public:
         @param typeName        The type name, for example "Slider".
         @param baseTypeInfo    The base type's info, or nullptr for the root type.
         @param properties      The property descriptors declared on this type.
-        @param signals         The signal (event) names this type emits.
+        @param signals         The signals (events) this type emits.
         @param factory         An optional factory used to instantiate this type.
     */
     ComponentTypeInfo (Identifier typeName,
                        const ComponentTypeInfo* baseTypeInfo,
                        std::vector<ComponentProperty> properties,
-                       StringArray signals = {},
+                       std::vector<ComponentSignal> signals = {},
                        Factory factory = {});
 
     //==============================================================================
@@ -109,11 +110,19 @@ public:
     bool isSubtypeOf (const ComponentTypeInfo& other) const;
 
     //==============================================================================
-    /** Returns the signal (event) names this type and its bases emit. */
-    const StringArray& getSignals() const noexcept { return signals; }
+    /** Returns the signals (events) declared directly on this type (not inherited). */
+    const std::vector<ComponentSignal>& getOwnSignals() const noexcept { return signals; }
+
+    /** Finds a signal by name, walking up the base chain.
+
+        @param signalName    The signal name to find.
+
+        @return The matching descriptor, or nullptr if the type does not emit it.
+    */
+    const ComponentSignal* findSignal (const Identifier& signalName) const;
 
     /** Returns true when this type or a base emits the given signal. */
-    bool hasSignal (const Identifier& signalName) const;
+    bool hasSignal (const Identifier& signalName) const { return findSignal (signalName) != nullptr; }
 
     //==============================================================================
     /** Returns true when a factory is available to instantiate this type. */
@@ -128,7 +137,7 @@ private:
     const ComponentTypeInfo* baseTypeInfo = nullptr;
     std::vector<ComponentProperty> properties;
     std::unordered_map<Identifier, int> propertyIndex;
-    StringArray signals;
+    std::vector<ComponentSignal> signals;
     Factory factory;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentTypeInfo)

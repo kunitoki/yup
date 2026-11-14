@@ -27,6 +27,20 @@ namespace
 
 constexpr const char* outputName = "_value";
 
+// Registering the graphics types is far slower than compiling a typical value, so every expression
+// starts from a copy of this context, which shares its types and declarations
+const ExpressionContext& getPropertyExpressionBaseContext()
+{
+    static const ExpressionContext context = []
+    {
+        ExpressionContext result;
+        addGraphicsExpressionTypes (result);
+        return result;
+    }();
+
+    return context;
+}
+
 template <class T>
 var readOutput (const CompiledExpression& program, ExpressionState& state)
 {
@@ -71,9 +85,7 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Co
         std::unique_ptr<PropertyExpression> expression (new PropertyExpression());
         expression->source = text;
         expression->type = candidate;
-        expression->context = std::make_unique<ExpressionContext>();
-
-        addGraphicsExpressionTypes (*expression->context);
+        expression->context = std::make_unique<ExpressionContext> (getPropertyExpressionBaseContext());
 
         switch (candidate)
         {

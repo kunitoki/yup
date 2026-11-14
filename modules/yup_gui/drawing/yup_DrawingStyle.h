@@ -65,6 +65,10 @@ public:
     static ResultValue<DrawingStyle::Ptr> create (Component& target, const DataTree& drawing);
 
     //==============================================================================
+    /** Returns the properties the drawing declares (see DrawingProgram::getProperties). */
+    const std::vector<ComponentProperty>& getProperties() const noexcept;
+
+    //==============================================================================
     /** @internal */
     void paint (Graphics& g, const ApplicationTheme& theme, const Component& component) override;
 

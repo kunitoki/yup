@@ -71,13 +71,23 @@ const ComponentTypeInfo& ComboBox::getClassTypeInfo()
             .isState = true,
             .isStyleable = false });
 
-        return ComponentTypeInfo { Identifier ("ComboBox"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<ComboBox>(); } };
+        ComponentSignal selectedItemChanged {
+            .name = Identifier ("onSelectedItemChanged"),
+            .connect = [] (Component& component, ComponentSignal::Handler handler)
+            {
+                if (auto* comboBox = dynamic_cast<ComboBox*> (&component))
+                    comboBox->onSelectedItemChanged = [handler = std::move (handler)] { handler ({}); };
+            },
+            .description = "Emitted when another item is selected"
+        };
+
+        return ComponentTypeInfo { Identifier ("ComboBox"), &Component::getClassTypeInfo(), std::move (props), { std::move (selectedItemChanged) }, [] { return std::make_unique<ComboBox>(); } };
     }();
 
     return info;
 }
 
-const ComponentTypeInfo& ComboBox::getTypeInfo() const
+const ComponentTypeInfo& ComboBox::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }

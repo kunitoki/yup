@@ -33,7 +33,9 @@ namespace yup
     `value * width` resolves against the live component. A bare name or the `self.`
     prefix refers to the bound component, while `parent.` refers to its parent. Any other
     prefix is passed to the resolver set with @ref setComponentResolver, which is how
-    `knob.value` reads a property of another named element.
+    `knob.value` reads a property of another named element. A bare name the component
+    doesn't declare reads the closest parent declaring it as an inherited store-backed
+    property, which is how the tokens of a `.yui` document reach every component.
 
     Use it in two steps. Call @ref install before compiling to register the symbol
     resolver on an ExpressionContext, so property names resolve to their types. Then,
@@ -101,6 +103,16 @@ public:
     */
     void install();
 
+    /** Returns the type a symbol resolves to, or nullptr when it names nothing in this scope.
+
+        This is the answer the resolver registered by @ref install gives the compiler, so a
+        program compiled for one scope compiles the same for any scope answering alike for
+        every symbol it asked about.
+
+        @param symbol   A symbol such as `value`, `parent.width` or `palette.accent`.
+    */
+    const ExpressionType* resolveSymbol (const String& symbol) const;
+
     /** Writes the component's live property values into a state before evaluation.
 
         For every input of the program that names a reflected property of the bound
@@ -124,10 +136,18 @@ public:
     */
     std::vector<Dependency> getDependencies (const CompiledExpression& program) const;
 
+    /** Returns the expression type a property type is bridged as, or nullptr when it isn't bridged.
+
+        Number, integer, boolean, string and color properties are bridged, as `float`, `int`,
+        `bool`, `string` and `color`.
+
+        @param type   The type of a reflected property.
+    */
+    const ExpressionType* getExpressionType (ComponentProperty::Type type) const;
+
 private:
     //==============================================================================
     Component* resolveTarget (const String& symbol, String& propertyName) const;
-    const ExpressionType* typeForProperty (ComponentProperty::Type type) const;
     const ExpressionType* typeForPaletteRole (const String& roleName) const;
     static void updatePaletteInput (const Component& target, const String& roleName, int index, ExpressionState& state);
 

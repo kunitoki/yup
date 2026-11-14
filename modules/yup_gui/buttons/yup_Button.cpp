@@ -31,6 +31,19 @@ Button::Button (StringRef componentID)
     setWantsKeyboardFocus (true);
 }
 
+ComponentSignal Button::getClickSignal()
+{
+    return ComponentSignal {
+        .name = Identifier ("onClick"),
+        .connect = [] (Component& component, ComponentSignal::Handler handler)
+        {
+            if (auto* button = dynamic_cast<Button*> (&component))
+                button->onClick = [handler = std::move (handler)] { handler ({}); };
+        },
+        .description = "Emitted when the button is clicked"
+    };
+}
+
 //==============================================================================
 
 void Button::paint (Graphics& g)

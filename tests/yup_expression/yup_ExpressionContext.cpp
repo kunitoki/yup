@@ -230,6 +230,37 @@ TEST_F (ExpressionContextTests, ProgramsOutliveTheirContext)
     EXPECT_EQ (15, (int) state.getVar (0));
 }
 
+TEST_F (ExpressionContextTests, CopiesDeclareIndependently)
+{
+    context.addConstant ("base", 1);
+    context.addFunction ("scale", [] (int x) { return x * 2; });
+
+    ExpressionContext copy (context);
+    copy.addConstant ("extra", 10);
+    copy.addFunction ("scale", [] (int x) { return x * 3; });
+    copy.addInput<int> ("v");
+    context.addConstant ("other", 100);
+
+    const auto evaluateIn = [] (const ExpressionContext& source, StringRef text)
+    {
+        auto program = CompiledExpression::compile (text, source);
+        EXPECT_TRUE (program.wasOk());
+
+        ExpressionState state (program.wasOk() ? program.getValue() : CompiledExpression());
+        state.evaluate();
+        return (int) state.getVar (0);
+    };
+
+    EXPECT_EQ (2, (int) evaluate ("scale (base)"));
+    EXPECT_EQ (102, (int) evaluate ("scale (base) + other"));
+    EXPECT_EQ (-1, context.findInput ("v"));
+    EXPECT_TRUE (compileError ("extra").contains ("Unknown symbol 'extra'"));
+
+    EXPECT_EQ (13, evaluateIn (copy, "scale (base) + extra"));
+    EXPECT_EQ (0, copy.findInput ("v"));
+    EXPECT_TRUE (CompiledExpression::compile ("other", copy).failed());
+}
+
 //==============================================================================
 class ExpressionTypeBuilderTests : public ::testing::Test
 {

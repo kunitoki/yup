@@ -70,7 +70,7 @@ public:
     static const ComponentTypeInfo& getClassTypeInfo();
 
     /** @internal */
-    const ComponentTypeInfo& getTypeInfo() const override;
+    const ComponentTypeInfo& getDefaultTypeInfo() const override;
 
 protected:
     /** @internal */

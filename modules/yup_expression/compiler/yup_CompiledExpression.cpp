@@ -383,7 +383,7 @@ struct ExpressionCompiler
 
                 case ExpressionContext::SymbolKind::constant:
                 {
-                    const auto& constant = context.constants[(size_t) symbol->index];
+                    const auto& constant = context.getDeclarations().constants[(size_t) symbol->index];
                     return Value { addRegister (constant.type, constant.value), constant.type };
                 }
 
@@ -406,13 +406,15 @@ struct ExpressionCompiler
 
     std::optional<Value> findEnumValue (const String& name, const Expression& e)
     {
-        if (const auto it = context.enumValues.find (name); it != context.enumValues.end())
+        const auto& enumValues = context.getDeclarations().enumValues;
+
+        if (const auto it = enumValues.find (name); it != enumValues.end())
         {
             const auto& indices = it->second;
 
             const auto expected = std::find_if (indices.begin(), indices.end(), [this] (int index)
             {
-                return context.constants[(size_t) index].type == expectedType;
+                return context.getDeclarations().constants[(size_t) index].type == expectedType;
             });
 
             if (indices.size() > 1 && expected == indices.end())
@@ -420,12 +422,12 @@ struct ExpressionCompiler
                 StringArray candidates;
 
                 for (const auto index : indices)
-                    candidates.add (context.constants[(size_t) index].type->getName() + "." + name);
+                    candidates.add (context.getDeclarations().constants[(size_t) index].type->getName() + "." + name);
 
                 fail (e, "'" + name + "' is ambiguous, use one of " + candidates.joinIntoString (", "));
             }
 
-            const auto& constant = context.constants[(size_t) (expected != indices.end() ? *expected : indices.front())];
+            const auto& constant = context.getDeclarations().constants[(size_t) (expected != indices.end() ? *expected : indices.front())];
             return Value { addRegister (constant.type, constant.value), constant.type };
         }
 
@@ -446,7 +448,7 @@ struct ExpressionCompiler
         if (const auto it = namedExpressionValues.find (index); it != namedExpressionValues.end())
             return it->second;
 
-        const auto& [name, body] = context.expressions[(size_t) index];
+        const auto& [name, body] = context.getDeclarations().expressions[(size_t) index];
 
         if (std::find (namedExpressionStack.begin(), namedExpressionStack.end(), index) != namedExpressionStack.end())
             fail (e, "The sub-expression '" + name + "' references itself");
@@ -627,8 +629,9 @@ struct ExpressionCompiler
     std::vector<const ExpressionFunction*> findFunctions (const String& name) const
     {
         std::vector<const ExpressionFunction*> result;
+        const auto& functions = context.getDeclarations().functions;
 
-        if (const auto it = context.functions.find (name); it != context.functions.end())
+        if (const auto it = functions.find (name); it != functions.end())
             for (const auto& function : it->second)
                 result.push_back (&function);
 

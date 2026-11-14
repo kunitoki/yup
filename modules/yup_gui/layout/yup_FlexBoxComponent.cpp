@@ -107,7 +107,7 @@ const ComponentTypeInfo& FlexBoxComponent::getClassTypeInfo()
     return info;
 }
 
-const ComponentTypeInfo& FlexBoxComponent::getTypeInfo() const
+const ComponentTypeInfo& FlexBoxComponent::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }
@@ -170,7 +170,7 @@ const ComponentTypeInfo& RowComponent::getClassTypeInfo()
     return info;
 }
 
-const ComponentTypeInfo& RowComponent::getTypeInfo() const
+const ComponentTypeInfo& RowComponent::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }
@@ -198,7 +198,7 @@ const ComponentTypeInfo& ColumnComponent::getClassTypeInfo()
     return info;
 }
 
-const ComponentTypeInfo& ColumnComponent::getTypeInfo() const
+const ComponentTypeInfo& ColumnComponent::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }

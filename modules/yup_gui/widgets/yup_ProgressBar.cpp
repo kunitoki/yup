@@ -55,7 +55,7 @@ const ComponentTypeInfo& ProgressBar::getClassTypeInfo()
     return info;
 }
 
-const ComponentTypeInfo& ProgressBar::getTypeInfo() const
+const ComponentTypeInfo& ProgressBar::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }

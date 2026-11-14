@@ -72,6 +72,7 @@ struct StyleContext::ResolvedDeclaration
 struct StyleContext::CompiledValue
 {
     String source;
+    std::optional<ComponentProperty::Type> type;
     std::unique_ptr<PropertyExpression> expression;
 };
 
@@ -83,7 +84,7 @@ struct StyleContext::ComponentCache
     NamedValueSet savedState;
 
     String drawingName;
-    ComponentStyle::Ptr drawingStyle;
+    DrawingStyle::Ptr drawingStyle;
     ComponentStyle::Ptr savedStyle;
 };
 
@@ -362,12 +363,23 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
         changed |= state.setStylePalette (std::nullopt);
     }
 
+    // The drawing comes next, the properties it declares type the declarations setting them
+    const DrawingStyle* drawing = nullptr;
+
+    if (const auto it = direct.find (drawingDeclaration); it != direct.end())
+        drawing = installDrawing (component, it->second.value.unquoted().trim());
+    else
+        restoreDrawing (component);
+
     for (const auto& [name, declaration] : direct)
     {
         if (name == paletteDeclaration)
             continue;
 
         const auto* descriptor = typeInfo.findProperty (name);
+
+        if (descriptor == nullptr && drawing != nullptr)
+            descriptor = findDrawingProperty (*drawing, name);
         const auto storageId = descriptor != nullptr ? descriptor->getStorageKey() : name;
 
         if (descriptor != nullptr && ! descriptor->isStyleable)
@@ -432,11 +444,6 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
 
     state.setPaletteDependent (paletteDependent);
 
-    if (const auto it = direct.find (drawingDeclaration); it != direct.end())
-        installDrawing (component, it->second.value.unquoted().trim());
-    else
-        restoreDrawing (component);
-
     if (changed)
     {
         component.styleChanged();
@@ -458,16 +465,17 @@ bool StyleContext::evaluate (Component& component,
 {
     auto& entry = getCache (component).values[storageId];
 
+    std::optional<ComponentProperty::Type> type;
+
+    if (descriptor != nullptr)
+        type = descriptor->type;
+
     // A value that failed to compile is kept, so that it isn't compiled and reported again until it changes
-    if (entry == nullptr || entry->source != valueText)
+    if (entry == nullptr || entry->source != valueText || entry->type != type)
     {
         entry = std::make_unique<CompiledValue>();
         entry->source = valueText;
-
-        std::optional<ComponentProperty::Type> type;
-
-        if (descriptor != nullptr)
-            type = descriptor->type;
+        entry->type = type;
 
         auto compiled = PropertyExpression::compile (component, valueText, type);
 
@@ -525,12 +533,12 @@ void StyleContext::restoreAllStateBacked (Component& component)
         restoreStateBacked (component, saved.getName (i));
 }
 
-void StyleContext::installDrawing (Component& component, const String& name)
+const DrawingStyle* StyleContext::installDrawing (Component& component, const String& name)
 {
     auto& cache = getCache (component);
 
-    if (cache.drawingName == name && component.getStyle() == cache.drawingStyle)
-        return;
+    if (cache.drawingName == name && component.getStyle().get() == cache.drawingStyle.get())
+        return cache.drawingStyle.get();
 
     const auto drawing = styleSheet != nullptr ? styleSheet->findDrawing (name) : DataTree();
 
@@ -538,7 +546,7 @@ void StyleContext::installDrawing (Component& component, const String& name)
     {
         diagnostics.add ("Unknown drawing '" + name + "'");
         restoreDrawing (component);
-        return;
+        return nullptr;
     }
 
     auto created = DrawingStyle::create (component, drawing);
@@ -547,16 +555,26 @@ void StyleContext::installDrawing (Component& component, const String& name)
     {
         diagnostics.add ("drawing " + name + ": " + created.getErrorMessage());
         restoreDrawing (component);
-        return;
+        return nullptr;
     }
 
     // Only the style the component had before the first drawing is remembered, for restoring it
-    if (cache.drawingStyle == nullptr || component.getStyle() != cache.drawingStyle)
+    if (cache.drawingStyle == nullptr || component.getStyle().get() != cache.drawingStyle.get())
         cache.savedStyle = component.getStyle();
 
     cache.drawingName = name;
     cache.drawingStyle = created.getReference();
     component.setStyle (cache.drawingStyle);
+    return cache.drawingStyle.get();
+}
+
+const ComponentProperty* StyleContext::findDrawingProperty (const DrawingStyle& drawing, const Identifier& name)
+{
+    for (const auto& property : drawing.getProperties())
+        if (property.name == name)
+            return &property;
+
+    return nullptr;
 }
 
 void StyleContext::restoreDrawing (Component& component)
@@ -569,7 +587,7 @@ void StyleContext::restoreDrawing (Component& component)
     auto& cache = *it->second;
 
     // The application may have replaced the drawing in the meantime, and its choice wins
-    if (component.getStyle() == cache.drawingStyle)
+    if (component.getStyle().get() == cache.drawingStyle.get())
         component.setStyle (std::move (cache.savedStyle));
 
     cache.drawingName = {};

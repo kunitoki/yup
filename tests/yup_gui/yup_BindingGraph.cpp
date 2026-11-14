@@ -260,3 +260,70 @@ TEST_F (BindingGraphTests, BreaksACycleAndReportsIt)
     EXPECT_LT (graph.getNumBindings(), 2);
     EXPECT_FALSE (graph.getDiagnostics().isEmpty());
 }
+
+TEST_F (BindingGraphTests, LinkKeepsBothPropertiesEqual)
+{
+    Slider target { Slider::LinearHorizontal }, source { Slider::LinearHorizontal };
+    target.setRange (0.0, 10.0);
+    source.setRange (0.0, 10.0);
+    source.setValue (3.0);
+
+    graph.link (target, Identifier (valueId), source, Identifier (valueId));
+
+    EXPECT_EQ (graph.getNumLinks(), 1);
+    EXPECT_FLOAT_EQ (static_cast<float> (target.getValue()), 3.0f);
+
+    target.setValue (7.0);
+    EXPECT_FLOAT_EQ (static_cast<float> (source.getValue()), 7.0f);
+
+    source.setValue (1.0);
+    EXPECT_FLOAT_EQ (static_cast<float> (target.getValue()), 1.0f);
+    EXPECT_EQ (graph.getNumLinks(), 1);
+}
+
+TEST_F (BindingGraphTests, LinksAStoreBackedPropertyThroughAChain)
+{
+    Component holder;
+    Slider first { Slider::LinearHorizontal }, second { Slider::LinearHorizontal };
+    first.setRange (0.0, 10.0);
+    second.setRange (0.0, 10.0);
+
+    graph.link (holder, Identifier (valueId), first, Identifier (valueId));
+    graph.link (second, Identifier (valueId), holder, Identifier (valueId));
+
+    first.setValue (4.0);
+
+    EXPECT_FLOAT_EQ (static_cast<float> (holder.getProperty (Identifier (valueId))), 4.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (second.getValue()), 4.0f);
+
+    second.setValue (2.0);
+
+    EXPECT_FLOAT_EQ (static_cast<float> (first.getValue()), 2.0f);
+}
+
+TEST_F (BindingGraphTests, RemovesTheLinksOfADeletedComponent)
+{
+    Slider target { Slider::LinearHorizontal };
+    auto source = std::make_unique<Slider> (Slider::LinearHorizontal);
+
+    graph.link (target, Identifier (valueId), *source, Identifier (valueId));
+    source.reset();
+
+    EXPECT_EQ (graph.getNumLinks(), 0);
+}
+
+TEST_F (BindingGraphTests, UnlinksLeavingTheValuesInPlace)
+{
+    Slider target { Slider::LinearHorizontal }, source { Slider::LinearHorizontal };
+    target.setRange (0.0, 10.0);
+    source.setRange (0.0, 10.0);
+
+    graph.link (target, Identifier (valueId), source, Identifier (valueId));
+    source.setValue (5.0);
+
+    EXPECT_TRUE (graph.unlink (source, Identifier (valueId)));
+    EXPECT_FALSE (graph.unlink (source, Identifier (valueId)));
+
+    source.setValue (1.0);
+    EXPECT_FLOAT_EQ (static_cast<float> (target.getValue()), 5.0f);
+}

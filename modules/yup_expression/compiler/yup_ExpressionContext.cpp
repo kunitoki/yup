@@ -332,6 +332,22 @@ const ExpressionContext::FunctionMap& ExpressionContext::getBuiltinFunctions()
     return builtins.functions;
 }
 
+const ExpressionContext::Declarations& ExpressionContext::getDeclarations() const
+{
+    static const Declarations empty;
+    return declarations != nullptr ? *declarations : empty;
+}
+
+ExpressionContext::Declarations& ExpressionContext::editDeclarations()
+{
+    if (declarations == nullptr)
+        declarations = std::make_shared<Declarations>();
+    else if (declarations.use_count() > 1)
+        declarations = std::make_shared<Declarations> (*declarations);
+
+    return *declarations;
+}
+
 //==============================================================================
 const ExpressionType* ExpressionContext::findTypeIndex (std::type_index type) const
 {
@@ -357,18 +373,19 @@ const ExpressionType* ExpressionContext::findType (StringRef name) const
 //==============================================================================
 bool ExpressionContext::addSymbol (const String& name, SymbolKind kind, int index)
 {
-    if (name.isEmpty() || symbols.find (name) != symbols.end())
+    if (name.isEmpty() || findSymbol (name) != nullptr)
     {
         jassertfalse; // Every input, constant and sub-expression needs a unique name
         return false;
     }
 
-    symbols.emplace (name, Symbol { kind, index });
+    editDeclarations().symbols.emplace (name, Symbol { kind, index });
     return true;
 }
 
 const ExpressionContext::Symbol* ExpressionContext::findSymbol (const String& name) const
 {
+    const auto& symbols = getDeclarations().symbols;
     const auto it = symbols.find (name);
     return it != symbols.end() ? &it->second : nullptr;
 }
@@ -401,8 +418,8 @@ int ExpressionContext::findInput (StringRef name) const
 
 void ExpressionContext::addConstant (const String& name, const ExpressionType& type, std::shared_ptr<void> value)
 {
-    if (addSymbol (name, SymbolKind::constant, (int) constants.size()))
-        constants.push_back ({ &type, std::move (value) });
+    if (addSymbol (name, SymbolKind::constant, (int) getDeclarations().constants.size()))
+        editDeclarations().constants.push_back ({ &type, std::move (value) });
 }
 
 void ExpressionContext::addEnumValue (const String& typeName, const String& valueName, const ExpressionType& type, std::shared_ptr<void> value)
@@ -410,17 +427,17 @@ void ExpressionContext::addEnumValue (const String& typeName, const String& valu
     if (findSymbol (typeName + "." + valueName) != nullptr)
         return;
 
-    const auto index = (int) constants.size();
+    const auto index = (int) getDeclarations().constants.size();
     addConstant (typeName + "." + valueName, type, std::move (value));
 
-    if ((int) constants.size() > index)
-        enumValues[valueName].push_back (index);
+    if ((int) getDeclarations().constants.size() > index)
+        editDeclarations().enumValues[valueName].push_back (index);
 }
 
 void ExpressionContext::addExpression (const String& name, const Expression& expression)
 {
-    if (addSymbol (name, SymbolKind::expression, (int) expressions.size()))
-        expressions.emplace_back (name, expression);
+    if (addSymbol (name, SymbolKind::expression, (int) getDeclarations().expressions.size()))
+        editDeclarations().expressions.emplace_back (name, expression);
 }
 
 Result ExpressionContext::addExpression (const String& name, StringRef text)
@@ -445,7 +462,7 @@ void ExpressionContext::addFunction (ExpressionFunction function)
     if (! hasValidTypes || function.thunk == nullptr)
         return;
 
-    auto& overloads = functions[function.name];
+    auto& overloads = editDeclarations().functions[function.name];
 
     for (auto& existing : overloads)
     {

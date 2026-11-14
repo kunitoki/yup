@@ -55,13 +55,13 @@ const ComponentTypeInfo& SwitchButton::getClassTypeInfo()
             .setter = [] (Component& c, const var& v) { static_cast<SwitchButton&> (c).setVertical (static_cast<bool> (v)); },
             .isStyleable = false });
 
-        return ComponentTypeInfo { Identifier ("SwitchButton"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<SwitchButton>(); } };
+        return ComponentTypeInfo { Identifier ("SwitchButton"), &Component::getClassTypeInfo(), std::move (props), { Button::getClickSignal() }, [] { return std::make_unique<SwitchButton>(); } };
     }();
 
     return info;
 }
 
-const ComponentTypeInfo& SwitchButton::getTypeInfo() const
+const ComponentTypeInfo& SwitchButton::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }

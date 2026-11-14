@@ -125,6 +125,30 @@ struct ComponentProperty
 
     /** Returns the key used to store a store-backed value: @ref storageId, or @ref name when unset. */
     const Identifier& getStorageKey() const noexcept { return storageId.isValid() ? storageId : name; }
+
+    /** Returns the type a `.yui` declaration names: `number`, `integer`, `boolean`, `string`, `color`,
+        `point`, `rectangle`, `font` or `drawing`, and Type::any for any other name.
+    */
+    static Type getTypeFromName (const String& typeName)
+    {
+        static const std::pair<const char*, Type> types[] = {
+            { "number", Type::number },
+            { "integer", Type::integer },
+            { "boolean", Type::boolean },
+            { "string", Type::string },
+            { "color", Type::color },
+            { "point", Type::point },
+            { "rectangle", Type::rectangle },
+            { "font", Type::font },
+            { "drawing", Type::drawing }
+        };
+
+        for (const auto& [candidate, type] : types)
+            if (typeName == candidate)
+                return type;
+
+        return Type::any;
+    }
 };
 
 //==============================================================================

@@ -47,7 +47,7 @@ const ComponentTypeInfo& ScrollBar::getClassTypeInfo()
     return info;
 }
 
-const ComponentTypeInfo& ScrollBar::getTypeInfo() const
+const ComponentTypeInfo& ScrollBar::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }

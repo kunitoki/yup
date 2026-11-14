@@ -102,10 +102,52 @@ void BindingGraph::clear()
     for (int index = static_cast<int> (bindings.size()) - 1; index >= 0; --index)
         removeBinding (index);
 
+    for (int index = static_cast<int> (links.size()) - 1; index >= 0; --index)
+        removeLink (index);
+
     jassert (observed.empty());
 
     dirty.clear();
     evaluations.clear();
+}
+
+//==============================================================================
+
+void BindingGraph::link (Component& target, const Identifier& property, Component& source, const Identifier& sourceProperty)
+{
+    auto newLink = std::make_shared<Link>();
+    newLink->first = &target;
+    newLink->firstProperty = property;
+    newLink->second = &source;
+    newLink->secondProperty = sourceProperty;
+
+    observe (target);
+    observe (source);
+    links.push_back (newLink);
+
+    const auto value = source.findProperty (sourceProperty);
+
+    if (! value.isVoid() && target.findProperty (property) != value)
+    {
+        const ScopedValueSetter<bool> syncing (newLink->isSyncing, true);
+        target.setProperty (property, value);
+    }
+}
+
+bool BindingGraph::unlink (Component& component, const Identifier& property)
+{
+    bool removed = false;
+
+    for (int index = static_cast<int> (links.size()) - 1; index >= 0; --index)
+    {
+        if (links[static_cast<size_t> (index)]->touches (component, property))
+        {
+            removeLink (index);
+            removed = true;
+        }
+    }
+
+    return removed;
 }
 
 //==============================================================================
@@ -151,6 +193,7 @@ void BindingGraph::componentPropertyChanged (Component& component, const Identif
     }
 
     invalidate (component, property);
+    syncLinks (component, property);
 }
 
 void BindingGraph::componentMoved (Component& component)
@@ -173,6 +216,14 @@ void BindingGraph::componentResized (Component& component)
 
 void BindingGraph::componentBeingDeleted (Component& component)
 {
+    for (int index = static_cast<int> (links.size()) - 1; index >= 0; --index)
+    {
+        const auto& candidate = *links[static_cast<size_t> (index)];
+
+        if (candidate.first == &component || candidate.second == &component)
+            removeLink (index);
+    }
+
     for (int index = static_cast<int> (bindings.size()) - 1; index >= 0; --index)
     {
         auto* binding = bindings[index].get();
@@ -253,6 +304,40 @@ void BindingGraph::removeBinding (int index)
         writingBinding = nullptr;
 
     bindings.erase (bindings.begin() + index);
+}
+
+void BindingGraph::removeLink (int index)
+{
+    const auto removed = links[static_cast<size_t> (index)];
+
+    links.erase (links.begin() + index);
+
+    unobserve (*removed->first);
+    unobserve (*removed->second);
+}
+
+void BindingGraph::syncLinks (Component& component, const Identifier& property)
+{
+    for (size_t index = 0; index < links.size(); ++index)
+    {
+        // Held, so that a link removed while its value is written stays valid until it is done
+        const auto current = links[index];
+
+        if (current->isSyncing || ! current->touches (component, property))
+            continue;
+
+        const auto isFirst = current->first == &component && current->firstProperty == property;
+        auto& other = isFirst ? *current->second : *current->first;
+        const auto& otherProperty = isFirst ? current->secondProperty : current->firstProperty;
+
+        const auto value = component.findProperty (property);
+
+        if (value.isVoid() || other.findProperty (otherProperty) == value)
+            continue;
+
+        const ScopedValueSetter<bool> syncing (current->isSyncing, true);
+        other.setProperty (otherProperty, value);
+    }
 }
 
 void BindingGraph::invalidate (const Component& component, const Identifier& property)

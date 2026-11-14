@@ -162,7 +162,7 @@ const ComponentTypeInfo& GridComponent::getClassTypeInfo()
     return info;
 }
 
-const ComponentTypeInfo& GridComponent::getTypeInfo() const
+const ComponentTypeInfo& GridComponent::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }

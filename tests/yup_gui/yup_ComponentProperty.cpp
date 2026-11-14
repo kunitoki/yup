@@ -318,6 +318,41 @@ TEST_F (ComponentPropertyTest, TypeInfoSignals)
     EXPECT_FALSE (Slider::getClassTypeInfo().hasSignal (Identifier ("onNothing")));
 }
 
+TEST_F (ComponentPropertyTest, ConnectedSignalReceivesItsArguments)
+{
+    Slider slider (Slider::LinearHorizontal);
+    Array<var> received;
+
+    const auto* signal = slider.getTypeInfo().findSignal (Identifier ("onValueChanged"));
+    ASSERT_NE (signal, nullptr);
+
+    signal->connect (slider, [&] (const Array<var>& arguments) { received = arguments; });
+    slider.setValue (0.25);
+
+    ASSERT_EQ (received.size(), 1);
+    EXPECT_DOUBLE_EQ (static_cast<double> (received[0]), 0.25);
+}
+
+TEST_F (ComponentPropertyTest, InstanceTypeInfoExtendsTheClassTypeInfo)
+{
+    const ComponentTypeInfo extended (Identifier ("Knob"),
+                                      &Slider::getClassTypeInfo(),
+                                      { ComponentProperty { .name = Identifier ("label"), .type = ComponentProperty::Type::string } });
+
+    Slider slider (Slider::LinearHorizontal);
+    slider.setTypeInfo (&extended);
+
+    EXPECT_EQ (slider.getTypeInfo().getTypeName(), Identifier ("Knob"));
+    EXPECT_TRUE (slider.getTypeInfo().isSubtypeOf (Identifier ("Slider")));
+    EXPECT_NE (slider.getTypeInfo().findProperty (Identifier ("label")), nullptr);
+    EXPECT_NE (slider.getTypeInfo().findProperty (Identifier ("value")), nullptr);
+    EXPECT_EQ (&slider.getDefaultTypeInfo(), &Slider::getClassTypeInfo());
+
+    slider.setTypeInfo (nullptr);
+
+    EXPECT_EQ (&slider.getTypeInfo(), &Slider::getClassTypeInfo());
+}
+
 TEST_F (ComponentPropertyTest, TypeInfoFactory)
 {
     // Label is default-constructible, so it has a factory.

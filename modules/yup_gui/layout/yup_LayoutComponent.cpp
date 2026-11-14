@@ -121,7 +121,7 @@ const ComponentTypeInfo& LayoutComponent::getClassTypeInfo()
     return info;
 }
 
-const ComponentTypeInfo& LayoutComponent::getTypeInfo() const
+const ComponentTypeInfo& LayoutComponent::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }

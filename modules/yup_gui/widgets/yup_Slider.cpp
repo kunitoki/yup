@@ -103,13 +103,23 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
             .isState = true,
             .isStyleable = false });
 
-        return ComponentTypeInfo { Identifier ("Slider"), &Component::getClassTypeInfo(), std::move (props), { "onValueChanged" }, [] { return std::make_unique<Slider> (LinearHorizontal); } };
+        ComponentSignal valueChanged {
+            .name = Identifier ("onValueChanged"),
+            .connect = [] (Component& component, ComponentSignal::Handler handler)
+            {
+                if (auto* slider = dynamic_cast<Slider*> (&component))
+                    slider->onValueChanged = [handler = std::move (handler)] (double value) { handler ({ value }); };
+            },
+            .description = "Emitted with the new value when the value changes"
+        };
+
+        return ComponentTypeInfo { Identifier ("Slider"), &Component::getClassTypeInfo(), std::move (props), { std::move (valueChanged) }, [] { return std::make_unique<Slider> (LinearHorizontal); } };
     }();
 
     return info;
 }
 
-const ComponentTypeInfo& Slider::getTypeInfo() const
+const ComponentTypeInfo& Slider::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }

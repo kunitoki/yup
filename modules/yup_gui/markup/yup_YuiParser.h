@@ -29,31 +29,11 @@ namespace yup
     Parses `.yui` text into a document tree.
 
     The document is a DataTree of type `yui` holding one element per top-level block.
-    The text maps onto the tree like this:
-
-    - `drawing Knob { ... }` becomes a `drawing` element whose `name` is `Knob`;
-    - `circle { ... }` becomes a `circle` child element;
-    - `radius: r - 2;` becomes the property `radius` holding the expression text `r - 2`;
-    - `let r: bounds.width / 2;` becomes a `let` element with `name` and `value`;
-    - `repeat i in 0 .. 11 { ... }` becomes a `repeat` element with `name`, `from` and `to`;
-    - `import "knob.yui";` becomes an `import` element with a `path`;
-    - `palette Ember { colors: "..."; accent: #ff9a1f; }` becomes a `palette` element whose
-      properties are the values as written, with quotes removed;
-    - `style { ... }` becomes a `style` element, where `Slider:hover { thumbColor: c; }`
-      becomes a `rule` with a `selector` and one `declaration` (`name`, `value`) per entry,
-      and `@keyframes flash { from { ... } 50% { ... } to { ... } }` becomes a `keyframes`
-      element holding one `keyframe` per step, its `at` position going from 0 to 1;
-    - the root component, a capitalized type such as `Component { Slider { id: knob; } }`,
-      becomes an element of that type, its properties being expression texts and its
-      children nested elements, as YuiBuilder expects them. A document has one at most.
-
-    The parser checks the syntax only. Every drawing and component value must be a single expression, while
-    style and palette values are kept verbatim up to their `;`, since some of them (such as
-    `transition:` or `drawing:`) are not expressions. Element types, property names and the
-    meaning of values are checked by the code consuming the tree, such as DrawingProgram and
-    StyleSheet. Line and block comments can go anywhere whitespace can.
-
-    The `tokens` and `component` blocks of the language are not supported yet.
+    The parser checks the syntax only. Every drawing and component value must be a single
+    expression, while style and palette values are kept verbatim up to their `;`, since some
+    of them (such as `transition:` or `drawing:`) are not expressions. Element types, property
+    names and the meaning of values are checked by the code consuming the tree, such as
+    DrawingProgram and StyleSheet. Line and block comments can go anywhere whitespace can.
 
     @code
     const auto result = YuiParser::parse (text);
@@ -63,7 +43,7 @@ namespace yup
         DBG (result.diagnostics.front().toString());
     @endcode
 
-    @see DrawingProgram, StyleSheet
+    @see DrawingProgram, StyleSheet, YuiWriter
 
     @tags{UI}
 */

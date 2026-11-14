@@ -37,7 +37,9 @@ namespace yup
     - `layer` (`opacity`, `visible`): draws its children into a transparency layer;
     - `group` (`transform`, `visible`): draws its children under a transform;
     - `repeat` (`name`, `from`, `to`): draws its shapes once for every int from `from` up to,
-      but not including, `to`, exposed to them under `name`.
+      but not including, `to`, exposed to them under `name`;
+    - `property` (`name`, `type`, `value`), only at the top of the drawing: an input of the
+      drawing, visible to every element, see below.
 
     Every property value is an expression. It resolves the component's reflected properties
     by name (see DrawingScope), the component's local bounds as `bounds`, the theme's default
@@ -61,6 +63,12 @@ namespace yup
     a paint method. A DrawingProgram is bound to the component it was created for and must
     not outlive it.
 
+    Programs created from the same drawing share one compilation while any of them exists,
+    as long as their components resolve every name the drawing reads to the same type, so
+    a drawing used by many components (several knobs, say) is compiled once. Only the
+    evaluation state is per component. Sharing follows the content of the drawing tree, so
+    editing the tree and creating a program again compiles the edited drawing.
+
     @see DrawingStyle, DrawingScope, ExpressionDrawing
 
     @tags{UI}
@@ -69,7 +77,7 @@ class YUP_API DrawingProgram
 {
 public:
     //==============================================================================
-    /** Compiles a drawing tree for a component.
+    /** Compiles a drawing tree for a component, or reuses the compilation of another program.
 
         @param target     The component whose properties and bounds the drawing reads.
         @param drawing    The drawing tree, with a root of type `drawing`.
@@ -95,23 +103,34 @@ public:
     */
     void draw (Graphics& g, const ApplicationTheme& theme, const Component& component);
 
+    //==============================================================================
+    /** Returns the properties the drawing declares, in declaration order.
+
+        Each descriptor carries the name and type of a `property` element. Defaults are
+        expressions evaluated while drawing, so the descriptors have no default value.
+    */
+    const std::vector<ComponentProperty>& getProperties() const noexcept;
+
 private:
     //==============================================================================
     struct Node;
+    struct Compiled;
+    struct Slot;
     class Compiler;
+    class CompiledCache;
 
     explicit DrawingProgram (Component& target);
 
-    bool prepare (Node& node, Rectangle<float> bounds, const Font& font);
-    void drawNodes (Graphics& g, std::vector<std::unique_ptr<Node>>& children, Rectangle<float> bounds, const Font& font, int numRows);
-    void drawNode (Graphics& g, Node& node, Rectangle<float> bounds, const Font& font, int numRows);
+    void instantiate (std::shared_ptr<const Compiled> compiledToUse);
+    Slot* prepare (const Node& node, Rectangle<float> bounds, const Font& font);
+    void drawNodes (Graphics& g, const std::vector<std::unique_ptr<Node>>& children, Rectangle<float> bounds, const Font& font, int numRows);
+    void drawNode (Graphics& g, const Node& node, Rectangle<float> bounds, const Font& font, int numRows);
 
     ExpressionContext context;
-    ExpressionInput<Rectangle<float>> boundsInput;
-    ExpressionInput<Font> fontInput;
-    ExpressionInput<int> indexInput;
     DrawingScope scope;
-    std::vector<std::unique_ptr<Node>> nodes;
+    std::shared_ptr<const Compiled> compiled;
+    std::unique_ptr<Slot[]> slots;
+    std::vector<var> propertyValues;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrawingProgram)
 };

@@ -136,6 +136,39 @@ TEST_F (DrawingProgramTest, TextSizesTheDefaultFont)
     EXPECT_NO_THROW (drawHeadless (*program.getReference(), slider));
 }
 
+TEST_F (DrawingProgramTest, ComponentsResolvingNamesDifferentlyDontShareACompilation)
+{
+    Label label ("label");
+    Slider slider (Slider::RotaryVerticalDrag);
+    configure (slider);
+
+    const auto drawing = parseDrawing ("<drawing><text bounds=\"bounds\" text=\"text\"/></drawing>");
+
+    auto forLabel = DrawingProgram::create (label, drawing);
+    ASSERT_TRUE (forLabel.wasOk()) << forLabel.getErrorMessage();
+
+    EXPECT_TRUE (DrawingProgram::create (slider, drawing).failed());
+}
+
+TEST_F (DrawingProgramTest, EditedDrawingTreesAreCompiledAgain)
+{
+    Slider first (Slider::RotaryVerticalDrag);
+    Slider second (Slider::RotaryVerticalDrag);
+    configure (first);
+    configure (second);
+
+    auto drawing = parseDrawing ("<drawing><rect bounds=\"bounds\" fill=\"trackColor\"/></drawing>");
+
+    auto program = DrawingProgram::create (first, drawing);
+    ASSERT_TRUE (program.wasOk()) << program.getErrorMessage();
+
+    drawing.getChild (0).beginTransaction().setProperty ("fill", "missingColor");
+
+    const auto edited = DrawingProgram::create (second, drawing);
+    ASSERT_TRUE (edited.failed());
+    EXPECT_TRUE (edited.getErrorMessage().contains ("missingColor"));
+}
+
 TEST_F (DrawingProgramTest, FailsForNonDrawingRoot)
 {
     EXPECT_TRUE (createError ("<layer/>").contains ("must be a 'drawing'"));
@@ -169,6 +202,14 @@ TEST_F (DrawingProgramTest, ReportsExpressionErrorsAtTheProperty)
     EXPECT_TRUE (createError ("<drawing><let name=\"r\" value=\"nope\"/></drawing>").startsWith ("drawing/let[0].value: "));
 }
 
+TEST_F (DrawingProgramTest, ReportsLetErrorsBeforeTheErrorsOfLaterElements)
+{
+    EXPECT_TRUE (createError ("<drawing><let name=\"r\" value=\"nope\"/><circle center=\"bounds.center\" radius=\"r\"/></drawing>").startsWith ("drawing/let[0].value: "));
+    EXPECT_TRUE (createError ("<drawing><let name=\"r\" value=\"nope\"/><circle center=\"bounds.center\" radius=\"4\" bogus=\"1\"/></drawing>").startsWith ("drawing/let[0].value: "));
+    EXPECT_TRUE (createError ("<drawing><let name=\"r\" value=\"nope\"/><group><circle center=\"bounds.center\" radius=\"4\" fill=\"bounds\"/></group></drawing>").startsWith ("drawing/let[0].value: "));
+    EXPECT_TRUE (createError ("<drawing><let name=\"a\" value=\"2\"/><let name=\"b\" value=\"a * 2\"/><circle center=\"bounds.center\" radius=\"b\" fill=\"bounds\"/></drawing>").startsWith ("drawing/circle[0].fill: "));
+}
+
 TEST_F (DrawingProgramTest, RejectsTrailingTextInValues)
 {
     EXPECT_EQ (createError ("<drawing><circle center=\"bounds.center\" radius=\"4; rect = bounds\"/></drawing>"), "drawing/circle[0].radius: unexpected text after the expression");
@@ -197,4 +238,150 @@ TEST_F (DrawingProgramTest, LetsCanShadowOutputsAndOuterLets)
 TEST_F (DrawingProgramTest, RejectsContainersInsideRepeat)
 {
     EXPECT_EQ (createError ("<drawing><repeat name=\"i\" from=\"0\" to=\"3\"><layer/></repeat></drawing>"), "drawing/repeat[0]/layer[0]: a 'layer' can't be nested inside a repeat");
+}
+
+TEST_F (DrawingProgramTest, DeclaresItsProperties)
+{
+    Slider slider (Slider::RotaryVerticalDrag);
+    configure (slider);
+
+    const auto parsed = YuiParser::parse (R"yui(
+        drawing {
+            let r: bounds.width * bezel;
+            property bezel: number = 0.8;
+            property ring: color = palette.accent;
+            property ticks: integer;
+            circle { center: bounds.center; radius: r; stroke: ring; }
+            repeat i in 0 .. ticks { line { from: bounds.center; to: polar (bounds.center, r, i); } }
+        })yui");
+
+    ASSERT_TRUE (parsed.wasOk()) << parsed.diagnostics.front().toString();
+
+    auto program = DrawingProgram::create (slider, parsed.document.getChildWithName ("drawing"));
+    ASSERT_TRUE (program.wasOk()) << program.getErrorMessage();
+
+    const auto& properties = program.getReference()->getProperties();
+    ASSERT_EQ (properties.size(), 3u);
+    EXPECT_EQ (properties[0].name, Identifier ("bezel"));
+    EXPECT_EQ (properties[0].type, ComponentProperty::Type::number);
+    EXPECT_EQ (properties[1].type, ComponentProperty::Type::color);
+    EXPECT_EQ (properties[2].type, ComponentProperty::Type::integer);
+
+    EXPECT_NO_THROW (drawHeadless (*program.getReference(), slider));
+
+    slider.setProperty (Identifier ("ticks"), 4);
+    slider.setProperty (Identifier ("ring"), VariantConverter<Color>::toVar (Colors::red));
+    EXPECT_NO_THROW (drawHeadless (*program.getReference(), slider));
+}
+
+TEST_F (DrawingProgramTest, ReportsPropertyErrors)
+{
+    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"point\"/></drawing>"), "drawing/property[0].type: 'point' can't be used in a drawing, use number, integer, boolean, string or color");
+    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"color\" value=\"true\"/></drawing>"), "drawing/property[0].value: the type 'bool' doesn't match the property type 'color'");
+    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"integer\" value=\"0.5f\"/></drawing>"), "drawing/property[0].value: the type 'float' doesn't match the property type 'integer'");
+    EXPECT_TRUE (createError ("<drawing><property name=\"a\" type=\"number\" value=\"nope\"/></drawing>").startsWith ("drawing/property[0].value: "));
+    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"number\" bogus=\"1\"/></drawing>"), "drawing/property[0]: unknown property 'bogus'");
+    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"number\"/><let name=\"a\" value=\"1\"/></drawing>"), "drawing/let[0].name: 'a' is already defined");
+    EXPECT_EQ (createError ("<drawing><layer><property name=\"a\" type=\"number\"/></layer></drawing>"), "drawing/layer[0]/property[0]: a 'property' can only be declared at the top of a drawing");
+    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"number\" value=\"1\"/><circle center=\"bounds.center\" radius=\"a\"/></drawing>"), String());
+}
+
+//==============================================================================
+class DrawingProgramGpuTest : public DrawingProgramTest
+{
+protected:
+    // Paints itself with a drawing program, so the pixels show what the drawing evaluated
+    struct DrawnComponent : Component
+    {
+        explicit DrawnComponent (const DataTree& drawing)
+        {
+            setOpaque (false);
+            setBounds (0.0f, 0.0f, 16.0f, 16.0f);
+
+            auto created = DrawingProgram::create (*this, drawing);
+            EXPECT_TRUE (created.wasOk()) << created.getErrorMessage();
+
+            if (created.wasOk())
+                program = std::move (created.getReference());
+        }
+
+        void paint (Graphics& g) override
+        {
+            if (program != nullptr)
+                program->draw (g, *ApplicationTheme::getGlobalTheme(), *this);
+        }
+
+        std::unique_ptr<DrawingProgram> program;
+    };
+
+    static void SetUpTestSuite()
+    {
+        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
+        if (gpuContext == nullptr)
+            return;
+
+        if (GpuCanvas::create (*gpuContext, 64, 64) == nullptr)
+            gpuContext.reset();
+    }
+
+    static void TearDownTestSuite()
+    {
+        gpuContext.reset();
+    }
+
+    void SetUp() override
+    {
+        DrawingProgramTest::SetUp();
+
+        if (gpuContext == nullptr)
+            GTEST_SKIP() << "No Metal GPU context available";
+    }
+
+    static DataTree parseYui (const String& text)
+    {
+        const auto parsed = YuiParser::parse (text);
+        EXPECT_TRUE (parsed.wasOk()) << parsed.diagnostics.front().toString();
+        return parsed.document.getChildWithName ("drawing");
+    }
+
+    static Color centerColor (Component& component)
+    {
+        const auto image = component.snapshotToImage (*gpuContext);
+        return image.isValid() ? image.getPixelColor (8, 8) : Color();
+    }
+
+    static std::unique_ptr<GraphicsContext> gpuContext;
+};
+
+std::unique_ptr<GraphicsContext> DrawingProgramGpuTest::gpuContext;
+
+TEST_F (DrawingProgramGpuTest, PropertiesReadTheComponentAndItsParentsOrTheirDefault)
+{
+    const auto drawing = parseYui (R"yui(
+        drawing {
+            property shade: color = #ff0000;
+            property alpha: number = 1;
+            property shown: boolean = true;
+            rect { bounds: bounds; fill: shade.withAlpha (alpha); visible: shown; }
+        })yui");
+
+    Component parent;
+    DrawnComponent first (drawing);
+    DrawnComponent second (drawing);
+    parent.addChildComponent (first);
+
+    EXPECT_EQ (centerColor (first), Color (0xffff0000));
+
+    parent.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xff00ff00)));
+    EXPECT_EQ (centerColor (first), Color (0xff00ff00));
+
+    first.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xff0000ff)));
+    EXPECT_EQ (centerColor (first), Color (0xff0000ff));
+    EXPECT_EQ (centerColor (second), Color (0xffff0000));
+
+    first.setProperty (Identifier ("alpha"), 0.0);
+    EXPECT_EQ (centerColor (first).getAlpha(), 0);
+
+    second.setProperty (Identifier ("shown"), false);
+    EXPECT_EQ (centerColor (second).getAlpha(), 0);
 }

@@ -61,6 +61,9 @@ public:
     /** A callback that is called when the button is clicked. */
     std::function<void()> onClick;
 
+    /** Returns the `onClick` signal, which the type info of every registered button declares. */
+    static ComponentSignal getClickSignal();
+
     //==============================================================================
     /** @internal */
     void paint (Graphics& g) override;

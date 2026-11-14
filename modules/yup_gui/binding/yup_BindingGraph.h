@@ -36,7 +36,7 @@ namespace yup
     @code
     BindingGraph graph;
     graph.setComponentResolver ([&] (const String& id) { return document.findById (id); });
-    graph.bind (label, "text", "\"gain \" + knob.value");
+    graph.bind (label, "text", "format (\"gain %.2f\", knob.value)");
     @endcode
 
     Updates are synchronous: changing a property re-evaluates everything that depends on it
@@ -48,6 +48,9 @@ namespace yup
     from the user interacting with the widget: an explicit value always wins over a binding.
     Bindings are also dropped when the component they write to, or any component they read
     from, is deleted.
+
+    Two properties can also be linked with @ref link, which keeps them equal in both
+    directions, as `.yui` does for `value <=> model.cutoff`.
 
     Expressions must be free of side effects, since the graph decides when and how often they
     run. Symbols resolve through DrawingScope: bare names and `self.` on the target, `parent.`
@@ -101,8 +104,32 @@ public:
     /** Removes every binding of a component, leaving the current values in place. */
     void unbindAll (Component& target);
 
-    /** Removes every binding. */
+    /** Removes every binding and every link. */
     void clear();
+
+    //==============================================================================
+    /** Keeps two properties equal, whichever of them changes.
+
+        The target property takes the value of the source property immediately, then a change
+        of either is copied to the other. This is the `property <=> other.property` of `.yui`.
+        Unlike a binding, a link is not dropped when one of its properties is written, only
+        when one of the two components is deleted or by @ref unlink.
+
+        @param target          The component whose property takes the value first.
+        @param property        The property of the target.
+        @param source          The component the initial value comes from.
+        @param sourceProperty  The property of the source.
+    */
+    void link (Component& target, const Identifier& property, Component& source, const Identifier& sourceProperty);
+
+    /** Removes every link of a property, leaving the current values in place.
+
+        @returns True if there was a link to remove.
+    */
+    bool unlink (Component& component, const Identifier& property);
+
+    /** Returns how many links the graph holds. */
+    int getNumLinks() const noexcept { return static_cast<int> (links.size()); }
 
     //==============================================================================
     /** Returns how many live bindings the graph holds. */
@@ -123,6 +150,20 @@ public:
 
 private:
     //==============================================================================
+    struct Link
+    {
+        Component* first = nullptr;
+        Identifier firstProperty;
+        Component* second = nullptr;
+        Identifier secondProperty;
+        bool isSyncing = false;
+
+        bool touches (const Component& component, const Identifier& property) const noexcept
+        {
+            return (first == &component && firstProperty == property) || (second == &component && secondProperty == property);
+        }
+    };
+
     void componentPropertyChanged (Component& component, const Identifier& property) override;
     void componentMoved (Component& component) override;
     void componentResized (Component& component) override;
@@ -133,12 +174,15 @@ private:
     void addObservedOf (const PropertyBinding& binding);
     void removeObservedOf (const PropertyBinding& binding);
     void removeBinding (int index);
+    void removeLink (int index);
+    void syncLinks (Component& component, const Identifier& property);
     void invalidate (const Component& component, const Identifier& property);
     void markDirty (PropertyBinding& binding);
     void flush();
 
     //==============================================================================
     std::vector<std::unique_ptr<PropertyBinding>> bindings;
+    std::vector<std::shared_ptr<Link>> links;
     std::vector<PropertyBinding*> dirty;
     std::map<Component*, int> observed;
     std::map<PropertyBinding*, int> evaluations;

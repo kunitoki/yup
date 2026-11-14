@@ -36,6 +36,11 @@ ResultValue<DrawingStyle::Ptr> DrawingStyle::create (Component& target, const Da
     return makeResultValueOk (DrawingStyle::Ptr { new DrawingStyle (std::move (compiled.getReference())) });
 }
 
+const std::vector<ComponentProperty>& DrawingStyle::getProperties() const noexcept
+{
+    return program->getProperties();
+}
+
 void DrawingStyle::paint (Graphics& g, const ApplicationTheme& theme, const Component& component)
 {
     program->draw (g, theme, component);

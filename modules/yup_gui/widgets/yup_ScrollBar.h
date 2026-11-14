@@ -219,7 +219,7 @@ public:
     static const ComponentTypeInfo& getClassTypeInfo();
 
     /** @internal */
-    const ComponentTypeInfo& getTypeInfo() const override;
+    const ComponentTypeInfo& getDefaultTypeInfo() const override;
 
     //==============================================================================
     /** Returns whether the thumb is currently being dragged.

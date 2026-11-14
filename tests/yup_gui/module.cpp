@@ -96,5 +96,8 @@
 #include "yup_TreeView.cpp"
 #include "yup_TreeViewItem.cpp"
 #include "yup_BindingGraph.cpp"
+#include "yup_DataTreeBindingProvider.cpp"
 #include "yup_YuiBuilder.cpp"
+#include "yup_YuiDocument.cpp"
 #include "yup_YuiParser.cpp"
+#include "yup_YuiWriter.cpp"

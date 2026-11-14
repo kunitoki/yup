@@ -38,6 +38,12 @@ const Identifier& componentPressedPropertyId()
     return identifier;
 }
 
+const Identifier& componentEnabledPropertyId()
+{
+    static const Identifier identifier ("enabled");
+    return identifier;
+}
+
 /** Returns the axis-aligned bounding box of the corners of a rectangle mapped through @a mapPoint. */
 template <class MapPoint>
 Rectangle<float> getMappedBounds (const Rectangle<float>& bounds, MapPoint&& mapPoint)
@@ -199,7 +205,12 @@ void Component::setEnabled (bool shouldBeEnabled)
 
     flags.isDisabled = ! shouldBeEnabled;
 
+    // Inside a disabled parent the effective state of the subtree doesn't change
+    if (parentComponent != nullptr && ! parentComponent->isEnabled())
+        return;
+
     markStyleDirty();
+    repaint();
 
     //if (flags.onDesktop && native != nullptr)
     //    native->setEnabled (shouldBeEnabled);
@@ -218,7 +229,30 @@ void Component::setEnabled (bool shouldBeEnabled)
         }
     }
 
+    sendEnablementChanged();
+}
+
+void Component::sendEnablementChanged()
+{
+    const WeakReference<Component> self (this);
+
+    componentListeners.call (&ComponentListener::componentPropertyChanged, *this, componentEnabledPropertyId());
+    if (self == nullptr)
+        return;
+
     enablementChanged();
+    if (self == nullptr)
+        return;
+
+    // The descendants disabled on their own stay disabled, so they and their subtrees see no change
+    for (int i = 0; i < getNumChildComponents(); ++i)
+    {
+        if (auto* child = getChildComponent (i); child != nullptr && ! child->flags.isDisabled)
+            child->sendEnablementChanged();
+
+        if (self == nullptr)
+            return;
+    }
 }
 
 void Component::enablementChanged() {}
@@ -1732,6 +1766,23 @@ void Component::markStyleDirty()
 //==============================================================================
 
 const ComponentTypeInfo& Component::getTypeInfo() const
+{
+    return instanceTypeInfo != nullptr ? *instanceTypeInfo : getDefaultTypeInfo();
+}
+
+void Component::setTypeInfo (const ComponentTypeInfo* newTypeInfo)
+{
+    jassert (newTypeInfo == nullptr || newTypeInfo->isSubtypeOf (getDefaultTypeInfo()));
+
+    if (instanceTypeInfo == newTypeInfo)
+        return;
+
+    instanceTypeInfo = newTypeInfo;
+
+    markStyleDirty();
+}
+
+const ComponentTypeInfo& Component::getDefaultTypeInfo() const
 {
     return getClassTypeInfo();
 }
