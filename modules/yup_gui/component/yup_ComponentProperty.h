@@ -97,6 +97,16 @@ struct ComponentProperty
     /** True when a stylesheet may set this property (false for value, text, ...). */
     bool isStyleable = true;
 
+    /** True when a store-backed value set on a component also applies to its descendants.
+
+        Colors and curated geometry are inherited. Layout item properties such as `flexGrow` describe
+        one component only, so @ref Component::findProperty doesn't look them up in the parents.
+    */
+    bool isInherited = true;
+
+    /** True when a change of this property on a child changes how its parent lays it out. */
+    bool affectsParentLayout = false;
+
     /** The allowed values for an @ref Type::enumeration property. */
     StringArray enumValues;
 

@@ -31,7 +31,9 @@ namespace yup
     A DrawingScope bridges the reflected component model and the expression compiler:
     it lets an expression reference a component's properties by name, so text such as
     `value * width` resolves against the live component. A bare name or the `self.`
-    prefix refers to the bound component, while `parent.` refers to its parent.
+    prefix refers to the bound component, while `parent.` refers to its parent. Any other
+    prefix is passed to the resolver set with @ref setComponentResolver, which is how
+    `knob.value` reads a property of another named element.
 
     Use it in two steps. Call @ref install before compiling to register the symbol
     resolver on an ExpressionContext, so property names resolve to their types. Then,
@@ -57,6 +59,24 @@ class YUP_API DrawingScope
 {
 public:
     //==============================================================================
+    /** Turns the prefix of a symbol such as `knob` in `knob.value` into a component.
+
+        Return nullptr when the name is not known, so the symbol stays unresolved.
+    */
+    using ComponentResolver = std::function<Component*(const String& name)>;
+
+    //==============================================================================
+    /** One property of one component that an expression reads. */
+    struct Dependency
+    {
+        /** The component the property is read from, never null. */
+        Component* component = nullptr;
+
+        /** The name of the property that is read. */
+        Identifier property;
+    };
+
+    //==============================================================================
     /** Creates a scope over a component, resolved against a context.
 
         @param component   The component whose reflected properties become symbols.
@@ -64,6 +84,15 @@ public:
                            graphics expression types on it first for colors to resolve.
     */
     DrawingScope (Component& component, ExpressionContext& context);
+
+    //==============================================================================
+    /** Sets the resolver used for symbols prefixed with a name other than `self` or `parent`.
+
+        With a resolver installed, `knob.value` reads the `value` property of the component
+        the resolver returns for `knob`, which is how a drawing or a binding references another
+        element of the same document. Call this before @ref install.
+    */
+    void setComponentResolver (ComponentResolver resolver);
 
     //==============================================================================
     /** Registers the symbol resolver on the context, replacing any previous one.
@@ -86,6 +115,15 @@ public:
     */
     void updateInputs (const CompiledExpression& program, ExpressionState& state) const;
 
+    /** Returns the component properties the program reads, so changes to them can be tracked.
+
+        Inputs that resolve to no component or to no reflected property are skipped, and so are
+        palette inputs: use PropertyExpression::readsPalette for those.
+
+        @param program   A program compiled against this scope's context.
+    */
+    std::vector<Dependency> getDependencies (const CompiledExpression& program) const;
+
 private:
     //==============================================================================
     Component* resolveTarget (const String& symbol, String& propertyName) const;
@@ -95,6 +133,7 @@ private:
 
     WeakReference<Component> component;
     ExpressionContext& context;
+    ComponentResolver componentResolver;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrawingScope)
 };

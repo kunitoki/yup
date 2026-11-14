@@ -3,9 +3,10 @@
 A *drawing* describes how a component paints itself as a tree of independent
 shapes. Every property value is a `yup_expression` expression over the
 component's reflected properties (`value`, `normalized`, `trackColor`, ...),
-`bounds`, the component's local bounds, and `defaultFont`, the theme's default
-font. Because the drawing reads the live component, it follows the component's
-state without any paint code.
+`bounds`, the component's local bounds, `defaultFont`, the theme's default
+font, and the roles of the component's palette (`palette.accent`, ...). Because
+the drawing reads the live component, it follows the component's state without
+any paint code.
 
 ```cpp
 #include <yup_gui/yup_gui.h>
@@ -115,6 +116,26 @@ uses the theme's default font. Text is fitted in `bounds` at the font height, so
 size it from the geometry with `font: defaultFont.withHeight (bounds.height * 0.3)`.
 Bare enumeration values like `round` resolve to the property they are assigned to.
 
+## Palette colors
+
+`palette.<role>` reads a role of the palette the component is drawn with: the
+closest one set with `Component::setPalette()` on the component or a parent,
+or else the theme palette (see [Palettes](component-styling.md#palettes)).
+The roles are `background`, `surface`, `surfaceRaised`, `outline`, `text`,
+`textMuted`, `accent` and `onAccent`, and `palette.dark` is true for a dark
+palette.
+
+```yui
+let muted: palette.textMuted;
+circle { center: bounds.center; radius: 4; fill: enabled ? palette.accent : muted; }
+rect { bounds: bounds; stroke: palette.outline.withAlpha (palette.dark ? 0.6 : 0.3); }
+```
+
+Palette colors follow palette switches and component palettes on the next
+paint. Prefer the component's own color properties (`thumbColor`, ...) where
+one exists: they come from the same palette through the theme, but can still be
+overridden per component.
+
 ## Scopes
 
 | Element  | Properties                         | Children | Effect                                                   |
@@ -182,6 +203,56 @@ if (program.wasOk())
 A drawing is bound to the component it was created for, so install it on that
 component only.
 
+## Drawings in a stylesheet
+
+A `.yui` document can also hold `palette` and `style` blocks, `import` other
+files, and declare one root component. The stylesheet picks a drawing with
+`drawing: Name;`, scopes a palette with `palette: Name;` and sets the component
+properties the drawing reads, so the same drawing follows any palette:
+
+```yui
+// ui.yui
+import "knob.yui";      // drawing VolumeKnob { ... }, reading trackColor and thumbColor
+
+palette Porcelain { mode: light; colors: "#ece9e1 #9aa3c0 #3a3a3e"; accent: #9aa3c0; }
+
+style {
+    .panel { palette: Porcelain; }
+    .knob { drawing: VolumeKnob; trackColor: palette.accent; thumbColor: palette.text; }
+    .knob:hover { trackColor: palette.accent.darker (0.08); }
+}
+
+Component {
+    class: panel; width: 360; height: 380;
+    Slider { id: volume; class: knob; sliderType: rotaryVerticalDrag; width: parent.width; height: parent.height; }
+}
+```
+
+Imports are resolved by a callback, so they can come from files, resources or
+editors. `YuiBuilder` creates the components, and the stylesheet built from the
+same document is attached to the root:
+
+```cpp
+const auto parsed = YuiParser::parse (text, [&] (const String& path) -> std::optional<String>
+{
+    return folder.getChildFile (path).loadFileAsString();
+});
+
+auto sheet = StyleSheet::fromTree (parsed.document);
+
+YuiBuilder builder;
+if (parsed.wasOk() && sheet.wasOk() && builder.build (parsed.document).wasOk())
+{
+    builder.getRoot()->setStyleSheet (sheet.getReference());
+    addAndMakeVisible (builder.getRoot());
+}
+```
+
+Instance property values are expressions evaluated once when the component is
+built, and may read `parent.` properties. The `YuiDrawing` graphics example
+edits such a UI split across `ui.yui`, `knob.yui`, `palette.yui` and
+`style.yui`.
+
 ## Limitations
 
 - A semi-transparent `layer` is rendered offscreen at the logical size of the
@@ -189,7 +260,7 @@ component only.
 - `repeat` takes a fixed range; collections of dynamic length (such as per-voice
   modulation arcs) and nested repeats are planned.
 - Image and SVG shapes, layer blending and masking are planned.
-- The `.yui` parser currently reads `drawing` blocks only. The other top-level
-  blocks of the language (`import`, `tokens`, `style`, `component` and the
-  instance tree) are not parsed yet, and compile errors are reported against the
-  drawing tree, not mapped back to source lines.
+- The `.yui` parser doesn't read `tokens` and `component` blocks yet, and compile
+  errors are reported against the drawing tree, not mapped back to source lines.
+- Built instance properties are not bound: they don't follow later changes of
+  what they read, and layout containers are planned.

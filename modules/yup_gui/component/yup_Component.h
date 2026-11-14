@@ -30,6 +30,9 @@ template <class T>
 class ComponentTestHelper;
 #endif
 
+class StyleContext;
+class StyleSheet;
+
 //==============================================================================
 
 /**
@@ -83,6 +86,15 @@ public:
         @return The ID of the component.
      */
     String getComponentID() const;
+
+    /**
+        Set the ID of the component.
+
+        The ID is matched by `#id` style selectors, so changing it restyles the component.
+
+        @param newComponentID The new ID of the component.
+     */
+    void setComponentID (StringRef newComponentID);
 
     //==============================================================================
     /**
@@ -1231,6 +1243,18 @@ public:
     */
     virtual void childBoundsChanged (Component* child);
 
+    /** Called on the parent when something changing how a direct child is laid out changes.
+
+        This happens when the child's visibility changes, or when one of its layout item properties
+        (`flexGrow`, `margin`, `gridArea`, ...) is set, removed or computed differently by a
+        stylesheet. Layout containers override it to lay their children out again.
+
+        @param child The direct child whose layout changed.
+
+        @see childrenChanged, ComponentProperty::affectsParentLayout
+    */
+    virtual void childLayoutChanged (Component& child);
+
     /** Called on a child when its index amongst its parent's children changes.
 
         This is the z-order position reported by getIndexOfChildComponent(), so it changes
@@ -1340,6 +1364,13 @@ public:
 
     //==============================================================================
     /**
+        Returns true when getProperty() would return a defined value for this component.
+
+        @param name The property name to test.
+    */
+    bool hasProperty (const Identifier& name) const;
+
+    /**
         Sets a property on this component.
 
         If the component's type declares a descriptor for @p name, the value is routed through
@@ -1371,6 +1402,13 @@ public:
     */
     var getProperty (const Identifier& name) const;
 
+    /** Reads a property from this component only, converted to @p T. */
+    template <class T>
+    T getPropertyAs (const Identifier& name) const
+    {
+        return VariantConverter<T>::fromVar (getProperty (name));
+    }
+
     /**
         Finds a property value, cascading up the parent chain and falling back to the theme and
         the descriptor default for store-backed properties.
@@ -1383,26 +1421,22 @@ public:
     */
     var findProperty (const Identifier& name) const;
 
-    /**
-        Returns true when getProperty() would return a defined value for this component.
-
-        @param name The property name to test.
-    */
-    bool hasProperty (const Identifier& name) const;
-
-    /** Reads a property from this component only, converted to @p T. */
-    template <class T>
-    T getPropertyAs (const Identifier& name) const
-    {
-        return VariantConverter<T>::fromVar (getProperty (name));
-    }
-
     /** Finds a property with cascade, converted to @p T. */
     template <class T>
     T findPropertyAs (const Identifier& name) const
     {
         return VariantConverter<T>::fromVar (findProperty (name));
     }
+
+    /** Notifies listeners that a state-backed property changed internally.
+
+        Widgets call this from their own setters (Slider drag, toggle, text edit) so that the
+        single change path feeds bindings, pseudo-state selectors and attribute selectors. It
+        notifies ComponentListener::componentPropertyChanged() without touching the property store.
+
+        @param name The name of the property that changed.
+    */
+    void notifyPropertyChanged (const Identifier& name);
 
     //==============================================================================
     /**
@@ -1719,15 +1753,91 @@ public:
     */
     virtual void styleChanged();
 
-    /** Notifies listeners that a state-backed property changed internally.
+    //==============================================================================
+    /** Adds a style class to this component.
 
-        Widgets call this from their own setters (Slider drag, toggle, text edit) so that the
-        single change path feeds bindings, pseudo-state selectors and attribute selectors. It
-        notifies ComponentListener::componentPropertyChanged() without touching the property store.
+        Style classes are the `.class` selectors of a stylesheet, the `class:` property of a
+        `.yui` instance, and are free to be set from C++ on hand-written UIs too.
 
-        @param name The name of the property that changed.
+        @param styleClass The class to add.
+
+        @see removeStyleClass, hasStyleClass, setStyleClasses, StyleSheet
     */
-    void notifyPropertyChanged (const Identifier& name);
+    void addStyleClass (const Identifier& styleClass);
+
+    /** Removes a style class from this component.
+
+        @param styleClass The class to remove.
+    */
+    void removeStyleClass (const Identifier& styleClass);
+
+    /** Returns true if this component carries a style class.
+
+        @param styleClass The class to look for.
+    */
+    bool hasStyleClass (const Identifier& styleClass) const;
+
+    /** Replaces every style class of this component.
+
+        @param newStyleClasses The classes the component should carry.
+    */
+    void setStyleClasses (const Array<Identifier>& newStyleClasses);
+
+    /** Returns the style classes of this component, in the order they were added. */
+    const Array<Identifier>& getStyleClasses() const noexcept;
+
+    //==============================================================================
+    /** Returns true while the pointer is over this component or one of its children.
+
+        This follows the CSS semantics of `:hover`, so a container hovers while the pointer is
+        over anything inside it.
+    */
+    bool isHovered() const noexcept;
+
+    /** Returns true while a mouse button is held down on this component or one of its children.
+
+        This is what the `:pressed` and `:active` pseudo-classes match.
+    */
+    bool isPressed() const noexcept;
+
+    /** Returns true when this component or one of its children holds the keyboard focus.
+
+        This is what the `:focus-within` pseudo-class matches, while `:focus` matches
+        hasKeyboardFocus().
+    */
+    bool hasFocusWithin() const;
+
+    //==============================================================================
+    /** Attaches a stylesheet to this component and everything inside it.
+
+        The component becomes the root of a StyleContext that matches the sheet's rules against
+        the subtree, computes the values of the matched properties and keeps them up to date as
+        classes, states and properties change. It works for hand-written C++ trees as well as
+        for the ones built from a `.yui` file. Passing nullptr detaches the sheet and drops
+        everything it computed.
+
+        Nesting is allowed: the closest attached context up the parent chain styles a component.
+
+        @param newStyleSheet The sheet to attach, or nullptr to detach.
+
+        @see getStyleSheet, getStyleContext, StyleSheet, StyleContext
+    */
+    void setStyleSheet (ReferenceCountedObjectPtr<StyleSheet> newStyleSheet);
+
+    /** Returns the stylesheet attached to this component with setStyleSheet(), or nullptr. */
+    ReferenceCountedObjectPtr<StyleSheet> getStyleSheet() const;
+
+    /** Returns the style context rooted at this component, or nullptr when none is attached. */
+    StyleContext* getStyleContext() const noexcept;
+
+    /** Returns the closest style context attached to this component or one of its parents. */
+    StyleContext* findStyleContext() const noexcept;
+
+    /** Returns the values a stylesheet or an animation computed for this component, or nullptr.
+
+        @see StyleState
+    */
+    const StyleState* getStyleState() const noexcept;
 
     //==============================================================================
     /** Set a color for the component.
@@ -1940,6 +2050,13 @@ protected:
 
 private:
     Identifier resolvePropertyStorageKey (const Identifier& name) const;
+    StyleState& getOrCreateStyleState();
+    void markStyleDirty();
+    void styleStateFlagChanged (const Identifier& name);
+    void setHoveredChain (bool isNowHovered);
+    void setPressedChain (bool isNowPressed);
+    void clearHoveredInSubtree();
+    void clearPressedInSubtree();
     void internalRefreshDisplay (double lastFrameTimeSeconds);
     void internalRepaint();
     void internalRepaint (const Rectangle<float>& rect);
@@ -2050,6 +2167,7 @@ private:
 
     friend class ComponentNative;
     friend class SDLComponentNative;
+    friend class StyleContext;
     friend class WeakReference<Component>;
 
     template <class T>
@@ -2073,6 +2191,9 @@ private:
     ComponentListenerList componentListeners;
     ComponentStyle::Ptr style;
     std::unique_ptr<ThemePalette> palette;
+    std::unique_ptr<StyleState> styleState;
+    std::unique_ptr<StyleContext> styleContext;
+    Array<Identifier> styleClasses;
     NamedValueSet properties;
     MouseCursor mouseCursor;
     GestureType wantedGestures = GestureType::none;
@@ -2108,6 +2229,8 @@ private:
         bool paintAsOffscreenRoot : 1;
         bool manuallyComposited : 1;
         bool popupContainer : 1;
+        bool isHovered : 1;
+        bool isPressed : 1;
     };
 
     union

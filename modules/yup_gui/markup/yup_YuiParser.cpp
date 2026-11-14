@@ -37,7 +37,7 @@ public:
 
     explicit YuiTextParser (const String& textToParse)
         : source (textToParse)
-        , text (textToParse.toRawUTF8())
+        , text (source.toRawUTF8())
     {
     }
 
@@ -46,15 +46,45 @@ public:
         DataTree document ("yui");
         auto transaction = document.beginTransaction();
 
+        bool hasInstance = false;
+
         while (! isAtEnd())
         {
             const auto start = position;
-            const auto keyword = parseIdentifier ("Expected a 'drawing' block");
+            const auto keyword = parseIdentifier ("Expected a block or a component");
 
-            if (keyword != "drawing")
-                throw Error { start, "Unknown block '" + keyword + "', expected 'drawing'" };
+            if (keyword == "import")
+            {
+                transaction.addChild (parseImport());
+            }
+            else if (keyword == "drawing")
+            {
+                transaction.addChild (parseDrawing());
+            }
+            else if (keyword == "palette")
+            {
+                transaction.addChild (parsePalette());
+            }
+            else if (keyword == "style")
+            {
+                transaction.addChild (parseStyle());
+            }
+            else if (CharacterFunctions::isUpperCase (static_cast<yup_wchar> (keyword[0])))
+            {
+                // Block keywords are lower case, component types are capitalized like `Column`
+                if (hasInstance)
+                    throw Error { start, "A document can only have one root component" };
 
-            transaction.addChild (parseDrawing());
+                hasInstance = true;
+
+                DataTree instance { Identifier (keyword) };
+                parseBody (instance);
+                transaction.addChild (instance);
+            }
+            else
+            {
+                throw Error { start, "Unknown block '" + keyword + "', expected 'import', 'drawing', 'palette', 'style' or a component" };
+            }
         }
 
         transaction.commit();
@@ -79,6 +109,23 @@ public:
     }
 
 private:
+    DataTree parseImport()
+    {
+        skipWhitespace();
+
+        const auto start = position;
+        const auto path = parseRawValue().unquoted().trim();
+
+        if (path.isEmpty())
+            throw Error { start, "Expected the path of the import" };
+
+        expect (";");
+
+        DataTree import ("import");
+        import.beginTransaction().setProperty ("path", path);
+        return import;
+    }
+
     DataTree parseDrawing()
     {
         DataTree drawing ("drawing");
@@ -88,6 +135,206 @@ private:
 
         parseBody (drawing);
         return drawing;
+    }
+
+    DataTree parsePalette()
+    {
+        DataTree palette ("palette");
+        auto transaction = palette.beginTransaction();
+
+        transaction.setProperty ("name", parseIdentifier ("Expected the name of the palette"));
+        expect ("{");
+
+        StringArray properties;
+
+        while (! match ("}"))
+        {
+            if (isAtEnd())
+                throw Error { position, "Expected '}'" };
+
+            const auto start = position;
+            const auto name = parseIdentifier ("Expected a palette property");
+
+            if (properties.contains (name))
+                throw Error { start, "The property '" + name + "' is already set" };
+
+            expect (":");
+            properties.add (name);
+            transaction.setProperty (name, parseRawValue().unquoted());
+            expect (";");
+        }
+
+        if (! properties.contains ("colors"))
+            throw Error { position - 1, "The palette needs 'colors'" };
+
+        transaction.commit();
+        return palette;
+    }
+
+    DataTree parseStyle()
+    {
+        DataTree style ("style");
+        auto transaction = style.beginTransaction();
+
+        expect ("{");
+
+        while (! match ("}"))
+        {
+            if (isAtEnd())
+                throw Error { position, "Expected '}'" };
+
+            if (match ("@"))
+            {
+                const auto start = position;
+
+                if (parseIdentifier ("Expected 'keyframes'") != "keyframes")
+                    throw Error { start, "Expected 'keyframes'" };
+
+                transaction.addChild (parseKeyframes());
+                continue;
+            }
+
+            const auto start = position;
+            const auto selector = parseRawUntil ('{');
+
+            if (selector.isEmpty())
+                throw Error { start, "Expected a selector" };
+
+            DataTree rule ("rule");
+            rule.beginTransaction().setProperty ("selector", selector);
+            parseDeclarations (rule);
+            transaction.addChild (rule);
+        }
+
+        transaction.commit();
+        return style;
+    }
+
+    DataTree parseKeyframes()
+    {
+        DataTree keyframes ("keyframes");
+        auto transaction = keyframes.beginTransaction();
+
+        transaction.setProperty ("name", parseIdentifier ("Expected the name of the keyframes"));
+        expect ("{");
+
+        while (! match ("}"))
+        {
+            if (isAtEnd())
+                throw Error { position, "Expected '}'" };
+
+            const auto start = position;
+            const auto label = parseRawUntil ('{');
+            double at = 0.0;
+
+            if (label == "from")
+                at = 0.0;
+            else if (label == "to")
+                at = 1.0;
+            else if (label.endsWithChar ('%') && label.dropLastCharacters (1).trim().containsOnly ("0123456789."))
+                at = label.dropLastCharacters (1).getDoubleValue() / 100.0;
+            else
+                throw Error { start, "Expected 'from', 'to' or a percentage" };
+
+            if (at < 0.0 || at > 1.0)
+                throw Error { start, "The keyframe position must be between 0% and 100%" };
+
+            DataTree frame ("keyframe");
+            frame.beginTransaction().setProperty ("at", at);
+            parseDeclarations (frame);
+            transaction.addChild (frame);
+        }
+
+        transaction.commit();
+        return keyframes;
+    }
+
+    void parseDeclarations (DataTree& element)
+    {
+        expect ("{");
+
+        auto transaction = element.beginTransaction();
+
+        while (! match ("}"))
+        {
+            if (isAtEnd())
+                throw Error { position, "Expected '}'" };
+
+            const auto start = position;
+            auto name = parseIdentifier ("Expected a declaration");
+
+            // Qualified names like `Slider.thumbColor` cascade to the descendants of that type
+            if (match ("."))
+                name << "." << parseIdentifier ("Expected a property name after '.'");
+
+            expect (":");
+
+            const auto value = parseRawValue();
+
+            if (value.isEmpty())
+                throw Error { start, "The declaration '" + name + "' needs a value" };
+
+            expect (";");
+
+            DataTree declaration ("declaration");
+            auto declarationTransaction = declaration.beginTransaction();
+            declarationTransaction.setProperty ("name", name);
+            declarationTransaction.setProperty ("value", value);
+            declarationTransaction.commit();
+
+            transaction.addChild (declaration);
+        }
+    }
+
+    // Style values are kept verbatim up to the closing ';', since `transition:` or `drawing:` aren't expressions
+    String parseRawValue()
+    {
+        return parseRawUntil (';');
+    }
+
+    String parseRawUntil (char terminator)
+    {
+        skipWhitespace();
+
+        const auto start = position;
+        int depth = 0;
+
+        for (;;)
+        {
+            const auto c = text[position];
+
+            if (c == 0)
+                throw Error { position, "Expected '" + String::charToString (terminator) + "'" };
+
+            if (c == '"' || c == '\'')
+            {
+                for (++position; text[position] != c; ++position)
+                {
+                    if (text[position] == 0 || text[position] == '\n')
+                        throw Error { start, "Unterminated string" };
+
+                    if (text[position] == '\\' && text[position + 1] != 0)
+                        ++position;
+                }
+
+                ++position;
+                continue;
+            }
+
+            if (depth == 0 && c == terminator)
+                break;
+
+            if (c == '(' || c == '[')
+                ++depth;
+            else if ((c == ')' || c == ']') && depth > 0)
+                --depth;
+            else if (depth == 0 && (c == '{' || c == '}' || c == ';'))
+                throw Error { position, "Expected '" + String::charToString (terminator) + "'" };
+
+            ++position;
+        }
+
+        return String::fromUTF8 (text + start, position - start).trim();
     }
 
     void parseBody (DataTree& element)
@@ -169,15 +416,16 @@ private:
     {
         skipWhitespace();
 
+        // The expression parser counts lines from the start of what it gets, so it only gets the rest of the text
         const auto start = position;
-        auto end = position;
-        const auto parsed = Expression::parseExpression (source, end);
+        int length = 0;
+        const auto parsed = Expression::parseExpression (StringRef (CharPointer_UTF8 (text + start)), length);
 
         if (parsed.failed())
-            throw Error { end, parsed.getErrorMessage().fromFirstOccurrenceOf (": ", false, false) };
+            throw Error { start + length, parsed.getErrorMessage().fromFirstOccurrenceOf (": ", false, false) };
 
-        position = end;
-        return String::fromUTF8 (text + start, end - start).trimEnd();
+        position = start + length;
+        return String::fromUTF8 (text + start, length).trimEnd();
     }
 
     //==============================================================================
@@ -268,7 +516,7 @@ private:
         return CharacterFunctions::isLetter (c) || c == '_';
     }
 
-    const String& source;
+    const String source;
     const char* text;
     int position = 0;
 };
@@ -278,7 +526,8 @@ private:
 //==============================================================================
 String YuiParser::Diagnostic::toString() const
 {
-    return String (line) + ":" + String (column) + ": " + message;
+    const auto position = String (line) + ":" + String (column) + ": " + message;
+    return source.isEmpty() ? position : source + ":" + position;
 }
 
 YuiParser::ParseResult YuiParser::parse (const String& text)
@@ -293,6 +542,68 @@ YuiParser::ParseResult YuiParser::parse (const String& text)
     {
         return { {}, { parser.locate (error) } };
     }
+}
+
+YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolver& resolveImport)
+{
+    auto result = parse (text);
+
+    if (! result.wasOk())
+        return result;
+
+    StringArray imported;
+    std::vector<DataTree> elements;
+
+    std::function<std::optional<Diagnostic> (const DataTree&)> collect = [&] (const DataTree& document) -> std::optional<Diagnostic>
+    {
+        for (const auto& element : document)
+        {
+            if (element.getType().toString() != "import")
+            {
+                elements.push_back (element.clone());
+                continue;
+            }
+
+            const auto path = element.getProperty ("path").toString();
+
+            // Each file is imported once, which also breaks import cycles
+            if (imported.contains (path))
+                continue;
+
+            imported.add (path);
+
+            const auto importedText = resolveImport != nullptr ? resolveImport (path) : std::nullopt;
+
+            if (! importedText.has_value())
+                return Diagnostic { 0, 0, "Can't import '" + path + "'" };
+
+            const auto importedResult = parse (*importedText);
+
+            if (! importedResult.wasOk())
+            {
+                auto diagnostic = importedResult.diagnostics.front();
+                diagnostic.source = path;
+                return diagnostic;
+            }
+
+            if (auto diagnostic = collect (importedResult.document))
+                return diagnostic;
+        }
+
+        return std::nullopt;
+    };
+
+    if (auto diagnostic = collect (result.document))
+        return { {}, { *diagnostic } };
+
+    DataTree merged ("yui");
+    auto transaction = merged.beginTransaction();
+
+    for (const auto& element : elements)
+        transaction.addChild (element);
+
+    transaction.commit();
+    return { merged, {} };
 }
 
 } // namespace yup

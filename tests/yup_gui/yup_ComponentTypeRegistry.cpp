@@ -97,8 +97,9 @@ TEST_F (ComponentTypeRegistryTest, CreateInstanceUsesFactory)
     ASSERT_NE (label, nullptr);
     EXPECT_EQ (label->getTypeInfo().getTypeName(), Identifier ("Label"));
 
-    // Slider has no factory (it requires a SliderType), so creation yields nullptr.
-    EXPECT_EQ (registry.createInstance (Identifier ("Slider")), nullptr);
+    auto slider = registry.createInstance (Identifier ("Slider"));
+    ASSERT_NE (slider, nullptr);
+    EXPECT_EQ (slider->getProperty (Identifier ("sliderType")), var ("linearHorizontal"));
 
     // Unknown types also yield nullptr.
     EXPECT_EQ (registry.createInstance (Identifier ("DoesNotExist")), nullptr);

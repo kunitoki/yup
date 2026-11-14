@@ -193,7 +193,8 @@ TEST (SyntaxDefinitionTests, BuiltInYuiLoads)
     EXPECT_TRUE (definition.isKeyword ("drawing"));
     EXPECT_TRUE (definition.isKeyword ("let"));
     EXPECT_TRUE (definition.isKeyword ("repeat"));
-    EXPECT_FALSE (definition.isKeyword ("circle"));
+    EXPECT_TRUE (definition.isKeyword ("circle"));
+    EXPECT_FALSE (definition.isKeyword ("knob"));
 
     EXPECT_TRUE (definition.isType ("color"));
     EXPECT_FALSE (definition.isType ("drawing"));

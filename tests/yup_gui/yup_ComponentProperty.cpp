@@ -174,11 +174,11 @@ TEST_F (ComponentPropertyTest, FindPropertyFallsBackToThemeThenDefault)
 
 TEST_F (ComponentPropertyTest, DescriptorDefaultResolvesWhenUnset)
 {
-    Label label;
+    ListBox listBox;
 
-    // Label declares textHeightProportion with a curated default of 0.75.
-    EXPECT_TRUE (label.getProperty (Identifier ("textHeightProportion")).isVoid());
-    EXPECT_DOUBLE_EQ (static_cast<double> (label.findProperty (Identifier ("textHeightProportion"))), 0.75);
+    // ListBox declares refreshIndicatorSize with a curated default of 56.
+    EXPECT_TRUE (listBox.getProperty (Identifier ("refreshIndicatorSize")).isVoid());
+    EXPECT_DOUBLE_EQ (static_cast<double> (listBox.findProperty (Identifier ("refreshIndicatorSize"))), 56.0);
 }
 
 TEST_F (ComponentPropertyTest, ColorPropertiesFallBackToThemeColors)
@@ -325,9 +325,9 @@ TEST_F (ComponentPropertyTest, TypeInfoFactory)
     auto label = Label::getClassTypeInfo().createInstance();
     EXPECT_NE (label, nullptr);
 
-    // Slider requires a SliderType, so it intentionally has no factory.
-    EXPECT_FALSE (Slider::getClassTypeInfo().hasFactory());
-    EXPECT_EQ (Slider::getClassTypeInfo().createInstance(), nullptr);
+    // Slider defaults to a horizontal linear slider, its type is a property.
+    EXPECT_TRUE (Slider::getClassTypeInfo().hasFactory());
+    EXPECT_NE (Slider::getClassTypeInfo().createInstance(), nullptr);
 }
 
 TEST_F (ComponentPropertyTest, OverriddenTypeInfoReportsDerivedType)

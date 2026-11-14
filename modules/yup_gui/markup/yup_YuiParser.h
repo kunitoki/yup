@@ -35,14 +35,25 @@ namespace yup
     - `circle { ... }` becomes a `circle` child element;
     - `radius: r - 2;` becomes the property `radius` holding the expression text `r - 2`;
     - `let r: bounds.width / 2;` becomes a `let` element with `name` and `value`;
-    - `repeat i in 0 .. 11 { ... }` becomes a `repeat` element with `name`, `from` and `to`.
+    - `repeat i in 0 .. 11 { ... }` becomes a `repeat` element with `name`, `from` and `to`;
+    - `import "knob.yui";` becomes an `import` element with a `path`;
+    - `palette Ember { colors: "..."; accent: #ff9a1f; }` becomes a `palette` element whose
+      properties are the values as written, with quotes removed;
+    - `style { ... }` becomes a `style` element, where `Slider:hover { thumbColor: c; }`
+      becomes a `rule` with a `selector` and one `declaration` (`name`, `value`) per entry,
+      and `@keyframes flash { from { ... } 50% { ... } to { ... } }` becomes a `keyframes`
+      element holding one `keyframe` per step, its `at` position going from 0 to 1;
+    - the root component, a capitalized type such as `Component { Slider { id: knob; } }`,
+      becomes an element of that type, its properties being expression texts and its
+      children nested elements, as YuiBuilder expects them. A document has one at most.
 
-    The parser checks the syntax only. Every value must be a single expression, but element
-    types, property names and the meaning of expressions are checked by the code consuming
-    the tree, such as DrawingProgram. Line and block comments can go anywhere whitespace can.
+    The parser checks the syntax only. Every drawing and component value must be a single expression, while
+    style and palette values are kept verbatim up to their `;`, since some of them (such as
+    `transition:` or `drawing:`) are not expressions. Element types, property names and the
+    meaning of values are checked by the code consuming the tree, such as DrawingProgram and
+    StyleSheet. Line and block comments can go anywhere whitespace can.
 
-    This version reads `drawing` blocks only; the other top-level blocks of the language
-    (`import`, `tokens`, `style`, `component` and the instance tree) are not supported yet.
+    The `tokens` and `component` blocks of the language are not supported yet.
 
     @code
     const auto result = YuiParser::parse (text);
@@ -52,7 +63,7 @@ namespace yup
         DBG (result.diagnostics.front().toString());
     @endcode
 
-    @see DrawingProgram
+    @see DrawingProgram, StyleSheet
 
     @tags{UI}
 */
@@ -67,7 +78,10 @@ public:
         int column = 0;
         String message;
 
-        /** Returns the diagnostic as `line:column: message`. */
+        /** The imported file the problem is in, empty for the text passed to the parser. */
+        String source;
+
+        /** Returns the diagnostic as `line:column: message`, prefixed by the source if any. */
         String toString() const;
     };
 
@@ -92,6 +106,24 @@ public:
         @returns The document, or the diagnostic of the first error.
     */
     static ParseResult parse (const String& text);
+
+    /** Loads the text of an imported file, or returns nothing if it can't be found. */
+    using ImportResolver = std::function<std::optional<String> (const String& path)>;
+
+    /** Parses a `.yui` text along with the files it imports.
+
+        Every `import "path";` is replaced by the blocks of the imported text, recursively, so
+        the document holds everything in import order and no `import` element. Each path is
+        imported once, the first time it is met, which also makes import cycles harmless.
+        Paths are passed to the resolver as written, so it decides what they are relative to.
+
+        @param text           The text to parse.
+        @param resolveImport  Returns the text of an imported path.
+
+        @returns The merged document, or the diagnostic of the first error, whose source is
+                 the import path when the error is in an imported file.
+    */
+    static ParseResult parse (const String& text, const ImportResolver& resolveImport);
 
     YuiParser() = delete;
 };

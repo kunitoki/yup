@@ -47,6 +47,21 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
         props.push_back (makeColorProperty (Identifier ("thumbDownColor"), Style::thumbDownColorId));
         props.push_back (makeColorProperty (Identifier ("textColor"), Style::textColorId));
 
+        static const StringArray sliderTypes { "linearHorizontal", "linearVertical", "linearBarHorizontal", "linearBarVertical", "rotary", "rotaryHorizontalDrag", "rotaryVerticalDrag", "incDecButtons", "twoValueHorizontal", "twoValueVertical", "threeValueHorizontal", "threeValueVertical" };
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("sliderType"),
+            .type = ComponentProperty::Type::enumeration,
+            .defaultValue = sliderTypes[LinearHorizontal],
+            .getter = [] (const Component& c) { return var (sliderTypes[static_cast<const Slider&> (c).getSliderType()]); },
+            .setter = [] (Component& c, const var& v)
+            {
+                if (const auto index = sliderTypes.indexOf (v.toString()); index >= 0)
+                    static_cast<Slider&> (c).setSliderType (static_cast<SliderType> (index));
+            },
+            .isStyleable = false,
+            .enumValues = sliderTypes });
+
         props.push_back (ComponentProperty {
             .name = Identifier ("value"),
             .type = ComponentProperty::Type::number,
@@ -88,7 +103,7 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
             .isState = true,
             .isStyleable = false });
 
-        return ComponentTypeInfo { Identifier ("Slider"), &Component::getClassTypeInfo(), std::move (props), { "onValueChanged" } };
+        return ComponentTypeInfo { Identifier ("Slider"), &Component::getClassTypeInfo(), std::move (props), { "onValueChanged" }, [] { return std::make_unique<Slider> (LinearHorizontal); } };
     }();
 
     return info;

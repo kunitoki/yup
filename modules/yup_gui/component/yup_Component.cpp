@@ -26,6 +26,18 @@ namespace yup
 namespace
 {
 
+const Identifier& componentHoveredPropertyId()
+{
+    static const Identifier identifier ("hovered");
+    return identifier;
+}
+
+const Identifier& componentPressedPropertyId()
+{
+    static const Identifier identifier ("pressed");
+    return identifier;
+}
+
 /** Returns the axis-aligned bounding box of the corners of a rectangle mapped through @a mapPoint. */
 template <class MapPoint>
 Rectangle<float> getMappedBounds (const Rectangle<float>& bounds, MapPoint&& mapPoint)
@@ -131,6 +143,17 @@ Component::~Component()
 {
     componentListeners.call (&ComponentListener::componentBeingDeleted, *this);
 
+    if (parentComponent != nullptr)
+    {
+        if (flags.isHovered)
+            parentComponent->setHoveredChain (false);
+
+        if (flags.isPressed)
+            parentComponent->setPressedChain (false);
+    }
+
+    styleContext.reset();
+
     if (flags.onDesktop)
         removeFromDesktop();
 
@@ -152,6 +175,16 @@ String Component::getComponentID() const
     return componentID;
 }
 
+void Component::setComponentID (StringRef newComponentID)
+{
+    if (componentID == newComponentID)
+        return;
+
+    componentID = newComponentID;
+
+    markStyleDirty();
+}
+
 //==============================================================================
 
 bool Component::isEnabled() const
@@ -165,6 +198,8 @@ void Component::setEnabled (bool shouldBeEnabled)
         return;
 
     flags.isDisabled = ! shouldBeEnabled;
+
+    markStyleDirty();
 
     //if (flags.onDesktop && native != nullptr)
     //    native->setEnabled (shouldBeEnabled);
@@ -214,6 +249,12 @@ void Component::setVisible (bool shouldBeVisible)
 
     if (wasShowing != isShowing())
         internalVisibilityChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    if (parentComponent != nullptr)
+        parentComponent->childLayoutChanged (*this);
 
     if (bailOutChecker.shouldBailOut())
         return;
@@ -697,6 +738,8 @@ void Component::setOpacity (float newOpacity)
 
     if (flags.onDesktop && native != nullptr)
         native->setOpacity (newOpacity);
+    else
+        repaint();
 
     opacityChanged();
 }
@@ -1097,6 +1140,11 @@ void Component::removeAllChildren()
 
 void Component::internalHierarchyChanged()
 {
+    if (auto* context = findStyleContext())
+        context->markDirty (*this);
+    else if (styleState != nullptr)
+        styleState->clearComputedValues();
+
     parentHierarchyChanged();
 
     auto bailOutChecker = BailOutChecker (this);
@@ -1120,6 +1168,8 @@ void Component::internalHierarchyChanged()
 void Component::parentHierarchyChanged() {}
 
 void Component::childrenChanged() {}
+
+void Component::childLayoutChanged ([[maybe_unused]] Component& child) {}
 
 void Component::indexInParentChildrenChanged ([[maybe_unused]] int oldIndex, [[maybe_unused]] int newIndex) {}
 
@@ -1492,6 +1542,191 @@ void Component::styleChanged() {}
 void Component::notifyPropertyChanged (const Identifier& name)
 {
     componentListeners.call (&ComponentListener::componentPropertyChanged, *this, name);
+
+    if (auto* context = findStyleContext())
+        context->propertyChanged (*this, name);
+}
+
+//==============================================================================
+
+void Component::addStyleClass (const Identifier& styleClass)
+{
+    if (styleClasses.contains (styleClass))
+        return;
+
+    styleClasses.add (styleClass);
+
+    markStyleDirty();
+}
+
+void Component::removeStyleClass (const Identifier& styleClass)
+{
+    if (! styleClasses.contains (styleClass))
+        return;
+
+    styleClasses.removeAllInstancesOf (styleClass);
+
+    markStyleDirty();
+}
+
+bool Component::hasStyleClass (const Identifier& styleClass) const
+{
+    return styleClasses.contains (styleClass);
+}
+
+void Component::setStyleClasses (const Array<Identifier>& newStyleClasses)
+{
+    if (styleClasses == newStyleClasses)
+        return;
+
+    styleClasses = newStyleClasses;
+
+    markStyleDirty();
+}
+
+const Array<Identifier>& Component::getStyleClasses() const noexcept
+{
+    return styleClasses;
+}
+
+//==============================================================================
+
+bool Component::isHovered() const noexcept
+{
+    return flags.isHovered;
+}
+
+bool Component::isPressed() const noexcept
+{
+    return flags.isPressed;
+}
+
+bool Component::hasFocusWithin() const
+{
+    auto nativeComponent = getNativeComponent();
+    if (nativeComponent == nullptr)
+        return false;
+
+    for (auto* focused = nativeComponent->getFocusedComponent(); focused != nullptr; focused = focused->parentComponent)
+    {
+        if (focused == this)
+            return true;
+    }
+
+    return false;
+}
+
+void Component::styleStateFlagChanged (const Identifier& name)
+{
+    markStyleDirty();
+
+    componentListeners.call (&ComponentListener::componentPropertyChanged, *this, name);
+}
+
+void Component::setHoveredChain (bool isNowHovered)
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (component->flags.isHovered == isNowHovered)
+            break;
+
+        component->flags.isHovered = isNowHovered;
+        component->styleStateFlagChanged (componentHoveredPropertyId());
+    }
+}
+
+void Component::setPressedChain (bool isNowPressed)
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (component->flags.isPressed == isNowPressed)
+            break;
+
+        component->flags.isPressed = isNowPressed;
+        component->styleStateFlagChanged (componentPressedPropertyId());
+    }
+}
+
+void Component::clearHoveredInSubtree()
+{
+    if (! flags.isHovered)
+        return;
+
+    flags.isHovered = false;
+    styleStateFlagChanged (componentHoveredPropertyId());
+
+    for (auto* child : children)
+        child->clearHoveredInSubtree();
+}
+
+void Component::clearPressedInSubtree()
+{
+    if (! flags.isPressed)
+        return;
+
+    flags.isPressed = false;
+    styleStateFlagChanged (componentPressedPropertyId());
+
+    for (auto* child : children)
+        child->clearPressedInSubtree();
+}
+
+//==============================================================================
+
+void Component::setStyleSheet (ReferenceCountedObjectPtr<StyleSheet> newStyleSheet)
+{
+    if (newStyleSheet == nullptr)
+    {
+        if (styleContext == nullptr)
+            return;
+
+        styleContext->detach();
+        styleContext.reset();
+        return;
+    }
+
+    if (styleContext == nullptr)
+        styleContext = std::make_unique<StyleContext> (*this, std::move (newStyleSheet));
+    else
+        styleContext->setStyleSheet (std::move (newStyleSheet));
+}
+
+ReferenceCountedObjectPtr<StyleSheet> Component::getStyleSheet() const
+{
+    return styleContext != nullptr ? styleContext->getStyleSheet() : nullptr;
+}
+
+StyleContext* Component::getStyleContext() const noexcept
+{
+    return styleContext.get();
+}
+
+StyleContext* Component::findStyleContext() const noexcept
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+        if (component->styleContext != nullptr)
+            return component->styleContext.get();
+
+    return nullptr;
+}
+
+const StyleState* Component::getStyleState() const noexcept
+{
+    return styleState.get();
+}
+
+StyleState& Component::getOrCreateStyleState()
+{
+    if (styleState == nullptr)
+        styleState = std::make_unique<StyleState>();
+
+    return *styleState;
+}
+
+void Component::markStyleDirty()
+{
+    if (auto* context = findStyleContext())
+        context->markDirty (*this);
 }
 
 //==============================================================================
@@ -1577,7 +1812,64 @@ const ComponentTypeInfo& Component::getClassTypeInfo()
             .isState = true,
             .isStyleable = false });
 
-        return ComponentTypeInfo { Identifier ("Component"), nullptr, std::move (props), {}, [] { return std::make_unique<Component>(); } };
+        props.push_back (ComponentProperty {
+            .name = componentHoveredPropertyId(),
+            .type = ComponentProperty::Type::boolean,
+            .defaultValue = false,
+            .getter = [] (const Component& c) { return var (c.isHovered()); },
+            .isState = true,
+            .isStyleable = false });
+
+        props.push_back (ComponentProperty {
+            .name = componentPressedPropertyId(),
+            .type = ComponentProperty::Type::boolean,
+            .defaultValue = false,
+            .getter = [] (const Component& c) { return var (c.isPressed()); },
+            .isState = true,
+            .isStyleable = false });
+
+        // Layout item properties, read by the parent layout container
+        const auto addLayoutItem = [&props] (const char* name, ComponentProperty::Type type, var defaultValue, StringArray enumValues, const char* description)
+        {
+            props.push_back (ComponentProperty {
+                .name = Identifier (name),
+                .type = type,
+                .defaultValue = std::move (defaultValue),
+                .isInherited = false,
+                .affectsParentLayout = true,
+                .enumValues = std::move (enumValues),
+                .description = description });
+        };
+
+        using Type = ComponentProperty::Type;
+        const StringArray selfAlignments { "auto", "start", "end", "center", "stretch", "baseline" };
+
+        addLayoutItem ("flexGrow", Type::number, 0.0, {}, "How much of the free space along the main axis the item takes.");
+        addLayoutItem ("flexShrink", Type::number, 1.0, {}, "How much the item shrinks when the main axis overflows.");
+        addLayoutItem ("flexBasis", Type::number, -1.0, {}, "The initial main size of the item, negative for automatic.");
+        addLayoutItem ("order", Type::integer, 0, {}, "The order of the item in a flex container.");
+        addLayoutItem ("alignSelf", Type::enumeration, "auto", selfAlignments, "The cross axis alignment of the item, overriding the container one.");
+        addLayoutItem ("justifySelf", Type::enumeration, "auto", selfAlignments, "The horizontal alignment of the item in a grid or stack cell.");
+        addLayoutItem ("margin", Type::any, 0.0, {}, "The outer spacing of the item: a number, or 1, 2 or 4 values (top right bottom left).");
+        addLayoutItem ("preferredWidth", Type::number, -1.0, {}, "The width the layout gives the item, negative for automatic.");
+        addLayoutItem ("preferredHeight", Type::number, -1.0, {}, "The height the layout gives the item, negative for automatic.");
+        addLayoutItem ("minWidth", Type::number, -1.0, {}, "The minimum width of the item, negative for none.");
+        addLayoutItem ("maxWidth", Type::number, -1.0, {}, "The maximum width of the item, negative for none.");
+        addLayoutItem ("minHeight", Type::number, -1.0, {}, "The minimum height of the item, negative for none.");
+        addLayoutItem ("maxHeight", Type::number, -1.0, {}, "The maximum height of the item, negative for none.");
+        addLayoutItem ("gridArea", Type::string, String(), {}, "The named grid area the item occupies.");
+        addLayoutItem ("gridColumn", Type::integer, -1, {}, "The zero based grid column of the item, negative for automatic placement.");
+        addLayoutItem ("gridRow", Type::integer, -1, {}, "The zero based grid row of the item, negative for automatic placement.");
+        addLayoutItem ("gridColumnSpan", Type::integer, 1, {}, "The number of grid columns the item spans.");
+        addLayoutItem ("gridRowSpan", Type::integer, 1, {}, "The number of grid rows the item spans.");
+
+        return ComponentTypeInfo { Identifier ("Component"), nullptr, std::move (props), {}, []
+        {
+            // A plain component paints nothing, so a created one must not claim to be opaque
+            auto component = std::make_unique<Component>();
+            component->setOpaque (false);
+            return component;
+        } };
     }();
 
     return info;
@@ -1587,7 +1879,9 @@ const ComponentTypeInfo& Component::getClassTypeInfo()
 
 void Component::setProperty (const Identifier& name, const var& value)
 {
-    if (const auto* descriptor = getTypeInfo().findProperty (name); descriptor != nullptr && descriptor->isStateBacked())
+    const auto* descriptor = getTypeInfo().findProperty (name);
+
+    if (descriptor != nullptr && descriptor->isStateBacked())
     {
         if (descriptor->setter != nullptr)
             descriptor->setter (*this, value);
@@ -1602,6 +1896,9 @@ void Component::setProperty (const Identifier& name, const var& value)
     if (! properties.set (storageKey, value))
         return;
 
+    if (descriptor != nullptr && descriptor->affectsParentLayout && parentComponent != nullptr)
+        parentComponent->childLayoutChanged (*this);
+
     styleChanged();
     notifyPropertyChanged (name);
     repaint();
@@ -1609,13 +1906,18 @@ void Component::setProperty (const Identifier& name, const var& value)
 
 void Component::removeProperty (const Identifier& name)
 {
-    if (const auto* descriptor = getTypeInfo().findProperty (name); descriptor != nullptr && descriptor->isStateBacked())
+    const auto* descriptor = getTypeInfo().findProperty (name);
+
+    if (descriptor != nullptr && descriptor->isStateBacked())
         return; // State-backed properties cannot be removed.
 
     const auto storageKey = resolvePropertyStorageKey (name);
 
     if (! properties.remove (storageKey))
         return;
+
+    if (descriptor != nullptr && descriptor->affectsParentLayout && parentComponent != nullptr)
+        parentComponent->childLayoutChanged (*this);
 
     styleChanged();
     notifyPropertyChanged (name);
@@ -1651,8 +1953,17 @@ var Component::findProperty (const Identifier& name) const
     const auto storageKey = descriptor != nullptr ? descriptor->getStorageKey() : name;
 
     for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
         if (auto* value = component->properties.getVarPointer (storageKey))
             return *value;
+
+        if (component->styleState != nullptr)
+            if (auto* computed = component->styleState->getComputedValue (storageKey))
+                return *computed;
+
+        if (descriptor != nullptr && ! descriptor->isInherited)
+            break;
+    }
 
     if (auto theme = ApplicationTheme::getGlobalTheme())
     {
@@ -1716,11 +2027,17 @@ std::optional<Color> Component::getColor (const Identifier& colorId) const
 
 std::optional<Color> Component::findColor (const Identifier& colorId) const
 {
-    if (auto color = getColor (colorId))
-        return color;
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (auto color = component->getColor (colorId))
+            return color;
 
-    if (parentComponent != nullptr)
-        return parentComponent->findColor (colorId);
+        if (component->styleState != nullptr)
+        {
+            if (auto* computed = component->styleState->getComputedValue (colorId); computed != nullptr && computed->isInt64())
+                return Color (static_cast<uint32> (static_cast<int64> (*computed)));
+        }
+    }
 
     return std::nullopt;
 }
@@ -1743,8 +2060,14 @@ const ThemePalette* Component::getPalette() const
 const ThemePalette* Component::findPalette() const
 {
     for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
         if (component->palette != nullptr)
             return component->palette.get();
+
+        if (component->styleState != nullptr)
+            if (auto* stylePalette = component->styleState->getStylePalette())
+                return stylePalette;
+    }
 
     return nullptr;
 }
@@ -1937,6 +2260,9 @@ bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
 
 void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
 {
+    if (styleContext != nullptr)
+        styleContext->refresh (lastFrameTimeSeconds);
+
     refreshDisplay (lastFrameTimeSeconds);
 
     for (auto child : children)
@@ -2323,6 +2649,8 @@ void Component::internalMouseEnter (const MouseEvent& event)
     if (! isVisible())
         return;
 
+    setHoveredChain (true);
+
     updateMouseCursor();
 
     if (! isEnabled())
@@ -2344,6 +2672,11 @@ void Component::internalMouseExit (const MouseEvent& event)
 {
     if (! isVisible())
         return;
+
+    clearHoveredInSubtree();
+
+    if (parentComponent != nullptr)
+        parentComponent->setHoveredChain (false);
 
     updateMouseCursor();
 
@@ -2368,6 +2701,8 @@ void Component::internalMouseDown (const MouseEvent& event)
 
     if (! isEnabled())
         return;
+
+    setPressedChain (true);
 
     auto bailOutChecker = BailOutChecker (this);
 
@@ -2434,6 +2769,8 @@ void Component::internalMouseUp (const MouseEvent& event)
 {
     if (! isVisible())
         return;
+
+    getTopLevelComponent()->clearPressedInSubtree();
 
     updateMouseCursor();
 
@@ -2621,6 +2958,9 @@ void Component::internalMoved (int xpos, int ypos)
 
 void Component::internalFocusChanged (bool gotFocus)
 {
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+        component->markStyleDirty();
+
     if (gotFocus)
         focusGained();
     else

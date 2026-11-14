@@ -47,8 +47,7 @@ const ComponentTypeInfo& Label::getClassTypeInfo()
             .name = Identifier ("textHeightProportion"),
             .storageId = Style::textHeightProportionId,
             .type = ComponentProperty::Type::number,
-            .defaultValue = 0.75,
-            .description = "The proportion of the label height used for the text." });
+            .description = "The height of the text as a proportion of the label height. Unset, the font keeps its own height." });
 
         props.push_back (ComponentProperty {
             .name = Identifier ("text"),
@@ -164,6 +163,11 @@ void Label::resized()
     invalidateCache();
 }
 
+void Label::styleChanged()
+{
+    invalidateCache();
+}
+
 //==============================================================================
 
 void Label::prepareText()
@@ -172,6 +176,10 @@ void Label::prepareText()
         return;
 
     auto fontToUse = font.value_or (ApplicationTheme::getGlobalTheme()->getDefaultFont());
+
+    static const Identifier textHeightProportion ("textHeightProportion");
+    if (const auto proportion = findProperty (textHeightProportion); ! proportion.isVoid())
+        fontToUse = fontToUse.withHeight (static_cast<float> (getHeight()) * static_cast<float> (static_cast<double> (proportion)));
 
     auto setup = [&] (const Font& f)
     {

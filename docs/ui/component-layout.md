@@ -207,6 +207,84 @@ Lines can also be named individually with `setColumnLineName` /
 `withRowStart`. An unknown name is ignored and the item falls back to its
 numeric placement.
 
+## Layout components
+
+`FlexBox`, `Grid` and `StackLayout` are algorithms you run yourself, usually
+from `resized()`. The layout *components* wrap them, so a container positions
+its children on its own and markup can describe a layout without any C++:
+
+| Component | Markup name | Algorithm |
+|---|---|---|
+| `FlexBoxComponent` | `FlexBox` | `FlexBox` |
+| `RowComponent` | `Row` | `FlexBox`, direction `row` |
+| `ColumnComponent` | `Column` | `FlexBox`, direction `column` |
+| `GridComponent` | `Grid` | `Grid` |
+| `StackComponent` | `Stack` | `StackLayout` |
+
+```cpp
+auto row = std::make_unique<RowComponent>();
+row->setGap (8.0f);
+row->setPadding (EdgeSpacing<float> (12.0f));
+
+row->addAndMakeVisible (sidebar);
+row->addAndMakeVisible (editor);
+
+sidebar.setProperty (Identifier ("preferredWidth"), 180.0);
+editor.setProperty (Identifier ("flexGrow"), 1.0);
+```
+
+A layout component lays its children out again when it is resized, when a child
+is added, removed, shown or hidden, and when a stylesheet restyles it, so the
+same layout can be written in `.yui` or in a stylesheet:
+
+```
+Row {
+    gap: 8;
+    padding: 12;
+
+    Component { id: sidebar; preferredWidth: 180; }
+    Component { id: editor; flexGrow: 1; }
+}
+```
+
+Invisible children are skipped entirely, rather than laid out and hidden.
+
+### Container properties
+
+`padding` and `gap` come from `LayoutComponent`. `padding` takes a number, or a
+string of 1, 2 or 4 values in CSS order (`"8"`, `"8 16"`, `"4 8 4 8"`).
+
+- `FlexBox`, `Row` and `Column`: `direction` (`row`, `rowReverse`, `column`,
+  `columnReverse`), `wrap` (`noWrap`, `wrap`, `wrapReverse`), `justify`
+  (`start`, `end`, `center`, `spaceBetween`, `spaceAround`, `spaceEvenly`) and
+  `align` (`start`, `end`, `center`, `stretch`, `baseline`).
+- `Grid`: `columns` and `rows`, either a track count (`3` means three `1fr`
+  tracks) or a track list (`"1fr 80px 25% auto"`), `areas`, one row of area
+  names per comma separated group (`"head head, side main"`), and `justify` /
+  `align`.
+- `Stack`: `justify` and `align` (`stretch`, `start`, `center`, `end`).
+
+### Item properties
+
+Every `Component` carries the layout item properties, so any widget can be
+placed in any container. They are never inherited from a parent, and setting
+one asks the parent to lay out again.
+
+| Property | Used by | Meaning |
+|---|---|---|
+| `flexGrow`, `flexShrink`, `flexBasis` | FlexBox | Flexible sizing, `flexBasis` negative for auto |
+| `order` | FlexBox | Layout order within the container |
+| `alignSelf`, `justifySelf` | all | `auto`, `start`, `end`, `center`, `stretch`, `baseline` |
+| `margin` | all | A number, or 1, 2 or 4 values as for `padding` |
+| `preferredWidth`, `preferredHeight` | all | The size the container gives the item, negative for auto |
+| `minWidth`, `maxWidth`, `minHeight`, `maxHeight` | FlexBox, Grid | Size clamps, negative for none |
+| `gridArea` | Grid | The named area the item occupies |
+| `gridColumn`, `gridRow` | Grid | 0-based placement, negative to auto-place |
+| `gridColumnSpan`, `gridRowSpan` | Grid | How many tracks the item spans |
+
+`preferredWidth` and `preferredHeight` are separate from `width` and `height`,
+which report the component's live bounds and are overwritten by the layout.
+
 ## What is not CSS
 
 These are the deliberate divergences. They exist because CSS defines them in

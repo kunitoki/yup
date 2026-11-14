@@ -186,6 +186,15 @@ public:
     */
     const ThemePalette& getPalette (const Component& component) const;
 
+    /** Returns a counter incremented every time the palette or its mapping changes.
+
+        Stylesheets compare it between frames to restyle the components whose computed values read
+        palette roles, without listening to the theme.
+
+        @see setPalette, setPaletteMapping
+    */
+    uint32 getPaletteGeneration() const noexcept { return paletteGeneration; }
+
     /** A function that assigns theme colors from the roles of a palette, by calling setPaletteColor(). */
     using PaletteMapping = std::function<void (const ThemePalette&, ApplicationTheme&)>;
 
@@ -299,6 +308,7 @@ private:
     std::unordered_map<Identifier, Color> paletteColors;
     ThemePalette palette;
     PaletteMapping paletteMapping;
+    uint32 paletteGeneration = 0;
     mutable std::vector<std::pair<ThemePalette, std::unordered_map<Identifier, Color>>> componentPaletteColors;
     mutable SpinLock componentPaletteColorsLock;
     std::unordered_map<Identifier, var> defaultProperties;

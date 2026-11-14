@@ -28,6 +28,11 @@ DrawingScope::DrawingScope (Component& componentToUse, ExpressionContext& contex
 {
 }
 
+void DrawingScope::setComponentResolver (ComponentResolver resolver)
+{
+    componentResolver = std::move (resolver);
+}
+
 void DrawingScope::install()
 {
     context.setSymbolResolver ([this] (const String& name) -> const ExpressionType*
@@ -100,8 +105,58 @@ Component* DrawingScope::resolveTarget (const String& symbol, String& propertyNa
         return self;
     }
 
+    if (componentResolver != nullptr)
+    {
+        const auto dot = symbol.indexOfChar ('.');
+
+        if (dot > 0)
+        {
+            if (auto* resolved = componentResolver (symbol.substring (0, dot)))
+            {
+                propertyName = symbol.substring (dot + 1);
+                return resolved;
+            }
+
+            return nullptr;
+        }
+    }
+
     propertyName = symbol;
     return self;
+}
+
+std::vector<DrawingScope::Dependency> DrawingScope::getDependencies (const CompiledExpression& program) const
+{
+    std::vector<Dependency> dependencies;
+
+    for (int i = 0; i < program.getNumInputs(); ++i)
+    {
+        const auto& name = program.getInputName (i);
+
+        if (name.startsWith ("palette."))
+            continue;
+
+        String propertyName;
+
+        auto* target = resolveTarget (name, propertyName);
+        if (target == nullptr)
+            continue;
+
+        const Identifier propertyId (propertyName);
+
+        if (target->getTypeInfo().findProperty (propertyId) == nullptr)
+            continue;
+
+        const auto isKnown = std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
+        {
+            return dependency.component == target && dependency.property == propertyId;
+        });
+
+        if (! isKnown)
+            dependencies.push_back ({ target, propertyId });
+    }
+
+    return dependencies;
 }
 
 const ExpressionType* DrawingScope::typeForProperty (ComponentProperty::Type type) const

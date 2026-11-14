@@ -113,6 +113,7 @@ void ApplicationTheme::setPalette (const ThemePalette& newPalette)
 {
     palette = newPalette;
     paletteColors.clear();
+    ++paletteGeneration;
 
     if (paletteMapping)
         paletteMapping (palette, *this);

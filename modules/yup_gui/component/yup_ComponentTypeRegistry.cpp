@@ -99,6 +99,11 @@ void registerBuiltInComponentTypes()
     registry.registerType (ProgressBar::getClassTypeInfo());
     registry.registerType (ScrollBar::getClassTypeInfo());
     registry.registerType (ListBox::getClassTypeInfo());
+    registry.registerType (FlexBoxComponent::getClassTypeInfo());
+    registry.registerType (RowComponent::getClassTypeInfo());
+    registry.registerType (ColumnComponent::getClassTypeInfo());
+    registry.registerType (GridComponent::getClassTypeInfo());
+    registry.registerType (StackComponent::getClassTypeInfo());
 }
 
 } // namespace yup
