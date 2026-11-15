@@ -69,13 +69,38 @@ public:
     /** One `name: value;` of a rule. */
     struct Declaration
     {
+        /** The semantic kind of declaration, classified once when building the sheet. */
+        enum class Kind
+        {
+            property,
+            palette,
+            drawing,
+            transition,
+            animation,
+            cursor,
+            effect,
+            shadow
+        };
+
+        /** One pre-parsed geometry layer of a `shadow:` declaration. */
+        struct ShadowLayer
+        {
+            Point<float> offset;
+            float blur = 0.0f;
+            float spread = 0.0f;
+            String colorExpression;
+        };
+
+        /** The declaration kind. */
+        Kind kind = Kind::property;
+
         /** The property name, without the qualifier. */
         Identifier name;
 
         /** The type a qualified name like `Slider.thumbColor` targets, or invalid when unqualified. */
         Identifier qualifier;
 
-        /** The expression text of the value. */
+        /** The expression or raw text of the value. */
         String value;
 
         /** The element of the document the declaration comes from, to locate its diagnostics. */
@@ -83,6 +108,24 @@ public:
 
         /** Precomputed cascade map key (`Type.property` when qualified, `property` otherwise). */
         Identifier cascadeKey;
+
+        /** Unquoted and trimmed name/text for non-expression declarations. */
+        String parsedName;
+
+        /** Pre-parsed cursor type for `cursor:` declarations, when valid. */
+        std::optional<MouseCursor::Type> cursor;
+
+        /** Pre-parsed transition list for `transition:` declarations. */
+        std::vector<StyleAnimator::Transition> transitions;
+
+        /** Pre-parsed animation list for `animation:` declarations. */
+        std::vector<StyleAnimator::Animation> animations;
+
+        /** Pre-parsed shadow geometry layers for `shadow:` declarations. */
+        std::vector<ShadowLayer> shadows;
+
+        /** Pre-computed diagnostic message when a non-expression declaration fails to parse. */
+        String parseError;
     };
 
     /** A selector and the declarations it applies. */

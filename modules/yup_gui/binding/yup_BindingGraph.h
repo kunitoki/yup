@@ -35,8 +35,8 @@ namespace yup
 
     @code
     BindingGraph graph;
-    graph.setComponentResolver ([&] (const String& id) { return document.findById (id); });
-    graph.bind (label, "text", "format (\"gain %.2f\", knob.value)");
+    auto resolve = [&] (const String& id) { return document.findById (id); };
+    graph.bind (label, "text", "format (\"gain %.2f\", knob.value)", ComponentProperty::Type::string, resolve);
     @endcode
 
     Updates are synchronous: changing a property re-evaluates everything that depends on it
@@ -61,8 +61,6 @@ namespace yup
     @tags{UI}
 */
 class YUP_API BindingGraph
-    : private ComponentListener
-    , private BindingProvider::Listener
 {
 public:
     //==============================================================================
@@ -70,20 +68,7 @@ public:
     BindingGraph();
 
     /** Destructor, removing every binding. */
-    ~BindingGraph() override;
-
-    //==============================================================================
-    /** Sets the resolver turning a name into a component, for expressions referencing other elements.
-
-        It applies to the bindings created after it is set.
-    */
-    void setComponentResolver (DrawingScope::ComponentResolver resolver);
-
-    /** Sets the resolver turning a name into a BindingProvider, for expressions referencing models.
-
-        It applies to the bindings created after it is set.
-    */
-    void setModelResolver (DrawingScope::ModelResolver resolver);
+    ~BindingGraph();
 
     //==============================================================================
     /** Gives a property of a component its value from an expression.
@@ -95,6 +80,7 @@ public:
         @param property  The name of the property that is written.
         @param text      The expression text.
         @param type      The type of the value, or nothing to probe it from the text.
+        @param resolver  Optional resolver turning prefixes into named components or models.
         @param isLive    Optional flag set to true when the expression reads dynamic inputs, false when constant.
 
         @returns A failure if the expression does not compile, otherwise ok.
@@ -103,6 +89,7 @@ public:
                  const Identifier& property,
                  const String& text,
                  std::optional<ComponentProperty::Type> type = std::nullopt,
+                 DrawingScope::ComponentResolver resolver = nullptr,
                  bool* isLive = nullptr);
 
     /** Removes the binding on a property, leaving its current value in place.
@@ -110,9 +97,6 @@ public:
         @returns True if there was a binding to remove.
     */
     bool unbind (Component& target, const Identifier& property);
-
-    /** Removes every binding reading from a provider, leaving the current values in place. */
-    void forgetProvider (BindingProvider& provider);
 
     /** Removes every binding and every link. */
     void clear();
@@ -182,22 +166,15 @@ private:
         }
     };
 
-    void componentPropertyChanged (Component& component, const Identifier& property) override;
-    void componentBeingDeleted (Component& component) override;
-    void bindingValueChanged (BindingProvider& provider, const Identifier& name) override;
-    void bindingProviderBeingDeleted (BindingProvider& provider) override;
+    void handlePropertyChanged (Component& component, const Identifier& property);
+    void handleComponentDeleted (Component& component);
 
-    void observe (Component& component);
-    void unobserve (Component& component);
-    void observe (BindingProvider& provider);
-    void unobserve (BindingProvider& provider);
     void addObservedOf (const Binding& binding);
     void removeObservedOf (const Binding& binding);
     void removeBinding (int index);
     void removeLink (int index);
     void syncLinks (Component& component, const Identifier& property);
     void invalidate (const Component& component, const Identifier& property);
-    void invalidate (const BindingProvider& provider, const Identifier& property);
     void markDirty (Binding& binding);
     void flush();
 
@@ -205,10 +182,7 @@ private:
     std::vector<std::unique_ptr<Binding>> bindings;
     std::vector<std::shared_ptr<Link>> links;
     std::vector<Binding*> dirty;
-    std::map<Component*, int> observed;
-    std::map<BindingProvider*, int> observedProviders;
-    DrawingScope::ComponentResolver componentResolver;
-    DrawingScope::ModelResolver modelResolver;
+    DependencyObserver observer;
     Binding* writingBinding = nullptr;
     StringArray diagnostics;
     uint64 currentFlushEpoch = 0;

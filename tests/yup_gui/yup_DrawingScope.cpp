@@ -61,7 +61,8 @@ protected:
         EXPECT_GE (outputIndex, 0);
 
         ExpressionState state (program);
-        scope.updateInputs (program, state);
+        auto inputs = scope.bindInputs (program);
+        scope.updateInputs (inputs, state);
         state.evaluate();
 
         return state.getVar (outputIndex);
@@ -240,10 +241,12 @@ TEST_F (DrawingScopeTest, DestroyedComponentFeedsNothing)
     const auto& program = compiled.getReference();
     const int outputIndex = program.findOutput ("out");
 
+    ExpressionState state (program);
+    auto inputs = scope.bindInputs (program);
+
     slider.reset();
 
-    ExpressionState state (program);
-    scope.updateInputs (program, state); // must not touch the destroyed component
+    scope.updateInputs (inputs, state); // must not touch the destroyed component
     state.evaluate();
 
     // value defaults to 0 when the component is gone, so the result is just the constant.
@@ -262,24 +265,64 @@ TEST_F (DrawingScopeTest, ResolvesBindingProviderModelsDirectly)
     }
 
     DataTreeBindingProvider provider (params);
+    BindingModel model (provider);
     Slider slider (Slider::LinearHorizontal);
 
     DrawingScope scope (slider, context);
-    scope.setModelResolver ([&] (const String& name) -> BindingProvider*
+    scope.setComponentResolver ([&] (const String& name) -> Component*
     {
-        return name == "params" ? &provider : nullptr;
+        return name == "params" ? &model : nullptr;
     });
 
     EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = params.cutoff * 4")), 1.0);
     EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = params.bypass ? params.curve[1] : 0")), 6.0);
     EXPECT_EQ (evaluate (scope, "out = params.label").toString(), "Warm");
 
+    // Properties added to a dynamic DataTree provider after the model was created refresh automatically
+    params.beginTransaction().setProperty ("resonance", 0.75);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = params.resonance * 2")), 1.5);
+
     auto compiled = CompiledExpression::compile ("out = params.cutoff + params.curve[0]", context);
     ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
     const auto deps = scope.getDependencies (compiled.getReference());
     ASSERT_EQ (deps.size(), 2u);
-    EXPECT_EQ (deps[0].provider, &provider);
-    EXPECT_EQ (deps[1].provider, &provider);
+    EXPECT_EQ (deps[0].component, &model);
+    EXPECT_EQ (deps[1].component, &model);
+}
+
+TEST_F (DrawingScopeTest, SkipsContextDeclaredInputsOverSameNamedProperties)
+{
+    ExpressionContext drawingContext;
+    addGraphicsExpressionTypes (drawingContext);
+    const auto contextBounds = drawingContext.addInput<Rectangle<float>> ("bounds");
+
+    const ComponentTypeInfo withCustomBounds (Identifier ("WithBounds"),
+                                              &Slider::getClassTypeInfo(),
+                                              { ComponentProperty { .name = Identifier ("bounds"),
+                                                                    .type = ComponentProperty::Type::rectangle } });
+
+    Slider slider (Slider::LinearHorizontal);
+    slider.setTypeInfo (&withCustomBounds);
+    slider.setProperty (Identifier ("bounds"), VariantConverter<Rectangle<float>>::toVar ({ 0.0f, 0.0f, 999.0f, 999.0f }));
+
+    DrawingScope scope (slider, drawingContext);
+    scope.install();
+
+    auto compiled = CompiledExpression::compile ("out = bounds.width", drawingContext);
+    ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+
+    const auto& program = compiled.getReference();
+    EXPECT_TRUE (scope.getDependencies (program).empty());
+
+    ExpressionState state (program);
+    auto inputs = scope.bindInputs (program);
+    EXPECT_TRUE (inputs.isEmpty());
+
+    state.set (contextBounds, Rectangle<float> (0.0f, 0.0f, 42.0f, 10.0f));
+    scope.updateInputs (inputs, state);
+    state.evaluate();
+
+    EXPECT_DOUBLE_EQ (static_cast<double> (state.getVar (program.findOutput ("out"))), 42.0);
 }
 
 TEST_F (DrawingScopeTest, CachedProgramFollowsReparentingTypeChangesAndReplacedTargets)
@@ -325,10 +368,11 @@ TEST_F (DrawingScopeTest, CachedProgramFollowsReparentingTypeChangesAndReplacedT
     const auto& program = compiled.getReference();
     const int outputIndex = program.findOutput ("out");
     ExpressionState state (program);
+    auto inputs = scope.bindInputs (program);
 
     const auto evalOnce = [&]
     {
-        scope.updateInputs (program, state);
+        scope.updateInputs (inputs, state);
         state.evaluate();
         return static_cast<double> (state.getVar (outputIndex));
     };
@@ -356,16 +400,14 @@ TEST_F (DrawingScopeTest, CachedProgramFollowsReparentingTypeChangesAndReplacedT
     });
     EXPECT_DOUBLE_EQ (evalOnce(), 4.0 + 4.0 + 20.0 + 15.0 + 30.0);
 
-    // Replacing a ComponentTypeInfo in place via move-assignment refreshes descriptors without dangling pointers.
-    rootTokens = ComponentTypeInfo {
-        Identifier ("RootTokensRebuilt"),
-        &Slider::getClassTypeInfo(),
-        { ComponentProperty {
-            .name = Identifier ("token"),
-            .type = ComponentProperty::Type::number,
-            .defaultValue = 99.0,
-            .isInherited = true } }
-    };
+    // Replacing a ComponentTypeInfo refreshes descriptors without dangling pointers.
+    const ComponentTypeInfo rebuiltTokens (Identifier ("RootTokensRebuilt"),
+                                           &Slider::getClassTypeInfo(),
+                                           { ComponentProperty { .name = Identifier ("token"),
+                                                                 .type = ComponentProperty::Type::number,
+                                                                 .defaultValue = 99.0,
+                                                                 .isInherited = true } });
+    parentB.setTypeInfo (&rebuiltTokens);
     parentB.removeProperty (Identifier ("token"));
     EXPECT_DOUBLE_EQ (evalOnce(), 4.0 + 4.0 + 20.0 + 99.0 + 30.0);
 }

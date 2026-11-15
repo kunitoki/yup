@@ -397,7 +397,7 @@ TEST_F (LabelTest, NotifiesPropertyListenersWhenTheTextChanges)
     label->setText (kTestText, sendNotification);
     label->setText (kTestText, sendNotification);
     label->setText (kLongText, dontSendNotification);
-    EXPECT_EQ (listener.changes, 1);
+    EXPECT_EQ (listener.changes, 2);
 
     label->removeComponentListener (&listener);
 }

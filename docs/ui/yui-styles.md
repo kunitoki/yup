@@ -110,9 +110,10 @@ the user edits or the component reports (`value`, `text`, `checked`,
 `dragging`, the bounds, ...) can't be styled, and a rule setting it is
 reported as a diagnostic.
 
-Values are evaluated when a component is restyled, not each time something
-they read changes. A value that must follow another property continuously
-belongs in a drawing, or in a `.yui` instance as a [binding](yui-reactivity.md).
+Values are compiled once per component and track the properties, ancestors,
+named siblings, models, and palette roles they read: when any of those
+dependencies changes, the component is marked dirty and re-evaluated on the
+next restyle pass.
 
 ### Qualified names
 

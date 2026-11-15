@@ -260,7 +260,6 @@ Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<c
     // The style problems met later, when a rule starts matching, are reported too
     auto& context = *root.getStyleContext();
     context.setComponentResolver (builder.getComponentResolver());
-    context.setModelResolver (builder.getModelResolver());
     context.onPaletteChanged = [this]
     {
         builder.getBindings().refreshPaletteBindings();
@@ -301,19 +300,11 @@ void YuiDocument::setAction (const String& name, YuiBuilder::Action action)
 void YuiDocument::setModel (const String& name, BindingProvider& provider)
 {
     builder.setModel (name, provider);
-
-    if (auto* root = builder.getRoot())
-        if (auto* context = root->getStyleContext())
-            context->setModelResolver (builder.getModelResolver());
 }
 
 void YuiDocument::removeModel (const String& name)
 {
     builder.removeModel (name);
-
-    if (auto* root = builder.getRoot())
-        if (auto* context = root->getStyleContext())
-            context->setModelResolver (builder.getModelResolver());
 }
 
 } // namespace yup

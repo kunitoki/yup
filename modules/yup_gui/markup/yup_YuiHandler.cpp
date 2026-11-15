@@ -180,17 +180,28 @@ ResultValue<YuiHandler> YuiHandler::parse (const String& text)
 
 YuiHandlerArguments::YuiHandlerArguments (const StringArray& names, const std::vector<ComponentSignal::Argument>& arguments)
 {
+    std::vector<ComponentProperty> properties;
+    properties.reserve (static_cast<size_t> (names.size()));
+
     for (int i = 0; i < names.size(); ++i)
     {
         const auto& argument = arguments[static_cast<size_t> (i)];
-        properties.push_back ({ Identifier (names[i]), argument.type, argument.elementType });
-    }
-}
 
-var YuiHandlerArguments::getValue (const Identifier& name) const
-{
-    const auto found = std::find_if (properties.begin(), properties.end(), [&] (const auto& property) { return property.name == name; });
-    return found != properties.end() ? values[static_cast<int> (found - properties.begin())] : var();
+        properties.push_back ({
+            .name = Identifier (names[i]),
+            .type = argument.type,
+            .elementType = argument.elementType,
+            .getter = [i] (const Component& component)
+            {
+                const auto& currentValues = static_cast<const YuiHandlerArguments&> (component).values;
+                return isPositiveAndBelow (i, currentValues.size()) ? currentValues.getReference (i) : var();
+            },
+            .isStyleable = false,
+            .isInherited = false
+        });
+    }
+
+    info = std::make_unique<ComponentTypeInfo> (Identifier ("Arguments"), nullptr, std::move (properties));
 }
 
 //==============================================================================

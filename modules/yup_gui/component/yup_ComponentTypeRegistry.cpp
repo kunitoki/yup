@@ -44,32 +44,4 @@ const ComponentTypeInfo* ComponentTypeRegistry::findType (const Identifier& type
     return nullptr;
 }
 
-//==============================================================================
-
-void registerBuiltInComponentTypes()
-{
-    auto& registry = ComponentTypeRegistry::getInstance();
-
-    registry.registerType (Component::getClassTypeInfo());
-    registry.registerType (Button::getClassTypeInfo());
-    registry.registerType (Label::getClassTypeInfo());
-    registry.registerType (Slider::getClassTypeInfo());
-    registry.registerType (TextButton::getClassTypeInfo());
-    registry.registerType (ToggleButton::getClassTypeInfo());
-    registry.registerType (SwitchButton::getClassTypeInfo());
-    registry.registerType (ComboBox::getClassTypeInfo());
-    registry.registerType (TextEditor::getClassTypeInfo());
-    registry.registerType (ProgressBar::getClassTypeInfo());
-    registry.registerType (ScrollBar::getClassTypeInfo());
-    registry.registerType (ListBox::getClassTypeInfo());
-    registry.registerType (Viewport::getClassTypeInfo());
-    registry.registerType (TabComponent::getClassTypeInfo());
-    registry.registerType (LayoutComponent::getClassTypeInfo());
-    registry.registerType (FlexBoxComponent::getClassTypeInfo());
-    registry.registerType (RowComponent::getClassTypeInfo());
-    registry.registerType (ColumnComponent::getClassTypeInfo());
-    registry.registerType (GridComponent::getClassTypeInfo());
-    registry.registerType (StackComponent::getClassTypeInfo());
-}
-
 } // namespace yup

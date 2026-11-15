@@ -25,14 +25,60 @@ namespace yup
 namespace
 {
 
-/* Declarations the style layer stores verbatim, because they are not expressions: the
-   animator and the effects layer parse them from the computed values. */
-bool isRawDeclaration (const Identifier& name)
+/* Tracks one component state property (style, cursor, effect, paint margin) owned by a
+   stylesheet while leaving later explicit application overrides untouched. */
+template <class T>
+struct StyledOverride
 {
-    static const Array<Identifier> rawNames { Identifier ("transition"), Identifier ("animation"), Identifier ("cursor"), Identifier ("effect"), Identifier ("shadow"), Identifier ("drawing") };
+    std::optional<T> applied;
+    T saved {};
 
-    return rawNames.contains (name);
-}
+    template <class Getter>
+    bool isActive (const Component& component, Getter&& get) const
+    {
+        return applied.has_value() && get (component) == *applied;
+    }
+
+    template <class Getter>
+    T base (const Component& component, Getter&& get) const
+    {
+        return isActive (component, std::forward<Getter> (get)) ? saved : get (component);
+    }
+
+    template <class Getter, class Setter>
+    bool apply (Component& component, T next, Getter&& get, Setter&& set)
+    {
+        const auto current = get (component);
+
+        if (! (applied.has_value() && current == *applied))
+            saved = current;
+
+        applied = std::move (next);
+
+        if (current == *applied)
+            return false;
+
+        set (component, *applied);
+        return true;
+    }
+
+    template <class Getter, class Setter>
+    bool restore (Component& component, Getter&& get, Setter&& set)
+    {
+        if (! applied.has_value())
+            return false;
+
+        const auto current = get (component);
+        const bool shouldRestore = current == *applied && current != saved;
+
+        if (current == *applied)
+            set (component, saved);
+
+        applied.reset();
+        saved = T {};
+        return shouldRestore;
+    }
+};
 
 bool isManagedByRoot (const Component& component, const Component& root)
 {
@@ -83,6 +129,12 @@ ComponentProperty::Type inferAnimatedType (const ComponentProperty* descriptor, 
     return ComponentProperty::Type::number;
 }
 
+const StyleSheet::Declaration* findWinningDeclaration (const auto& declarations, const Identifier& name)
+{
+    const auto it = declarations.find (name);
+    return it != declarations.end() ? it->second.declaration : nullptr;
+}
+
 } // namespace
 
 //==============================================================================
@@ -118,13 +170,6 @@ struct StyleContext::ResolvedDeclaration
     }
 };
 
-struct StyleContext::BoundDependency
-{
-    Component* component = nullptr;
-    BindingProvider* provider = nullptr;
-    Identifier property;
-};
-
 struct StyleContext::ValueKey
 {
     const StyleSheet::Declaration* declaration = nullptr;
@@ -147,7 +192,7 @@ struct StyleContext::CompiledValue
     std::optional<ComponentProperty::Type> type;
     std::unique_ptr<PropertyExpression> expression;
     var constantValue;
-    std::vector<BoundDependency> dependencies;
+    std::vector<DrawingScope::Dependency> dependencies;
     bool paletteDependent = false;
     bool failed = false;
 };
@@ -159,11 +204,17 @@ struct StyleContext::ComponentCache
     std::unordered_map<ValueKey, CompiledValue, ValueKeyHash> values;
     NamedValueSet savedState;
 
+    String animationValue;
+    bool paletteDependent = false;
+
     String drawingName;
     DrawingStyle::Ptr drawingStyle;
-    ComponentStyle::Ptr savedStyle;
+    StyledOverride<ComponentStyle::Ptr> drawingOverride;
 
-    StyleEffects effects;
+    String effectName;
+    StyledOverride<ComponentEffect::Ptr> effectOverride;
+    StyledOverride<MouseCursor> cursorOverride;
+    StyledOverride<EdgeSpacing<float>> paintMarginOverride;
 };
 
 struct StyleContext::CacheMap : std::map<Component*, ComponentCache>
@@ -195,6 +246,19 @@ StyleContext::StyleContext (Component& rootToUse, StyleSheet::Ptr sheetToUse)
     , styleSheet (std::move (sheetToUse))
     , caches (std::make_unique<CacheMap>())
 {
+    observer.onChanged = [this] (Component& component, const Identifier& property)
+    {
+        invalidateDependencies (component, property);
+    };
+    observer.onDeleted = [this] (Component& component)
+    {
+        for (auto& [ptr, cache] : *caches)
+            for (auto& [key, compiled] : cache.values)
+                for (auto& dependency : compiled.dependencies)
+                    if (dependency.component == &component)
+                        dependency.component = nullptr;
+    };
+
     if (auto theme = ApplicationTheme::getGlobalTheme())
         lastPaletteGeneration = theme->getPaletteGeneration();
 
@@ -237,12 +301,6 @@ void StyleContext::setComponentResolver (ComponentResolver resolver)
     resetCompiledValues();
 }
 
-void StyleContext::setModelResolver (ModelResolver resolver)
-{
-    modelResolver = std::move (resolver);
-    resetCompiledValues();
-}
-
 void StyleContext::resetCompiledValues()
 {
     for (auto& [ptr, cache] : *caches)
@@ -250,14 +308,19 @@ void StyleContext::resetCompiledValues()
         clearCacheValues (cache);
 
         if (auto* comp = cache.component.get())
+        {
             restoreDrawing (*comp, cache);
+        }
         else
         {
             cache.drawingName = {};
             cache.drawingStyle = nullptr;
-            cache.savedStyle = nullptr;
+            cache.drawingOverride = {};
         }
     }
+
+    if (observerDirty)
+        rebuildObserver();
 
     markDirty (root);
 }
@@ -277,9 +340,14 @@ void StyleContext::propertyChanged (Component& component, const Identifier& name
     static const Identifier paletteProperty ("palette");
 
     if (styleSheet != nullptr && styleSheet->watchesProperty (name))
+    {
         markDirty (component);
-    else if (! isRestyling && name == paletteProperty && component.styleState != nullptr && component.styleState->isPaletteDependent())
-        markDirty (component);
+    }
+    else if (! isRestyling && name == paletteProperty)
+    {
+        if (const auto* cache = findCache (component); cache != nullptr && cache->paletteDependent)
+            markDirty (component);
+    }
 }
 
 //==============================================================================
@@ -346,6 +414,9 @@ void StyleContext::restyleNow()
             restyleSubtree (*component, collectInherited (*component));
         }
     }
+
+    if (observerDirty)
+        rebuildObserver();
 
 #if YUP_DEBUG
     for (const auto& [ptr, cache] : *caches)
@@ -422,8 +493,6 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     DeclarationMap direct, qualified;
     collectDeclarations (component, direct, qualified);
 
-    const ScopedValueSetter<const DeclarationMap*> reportedDeclarations (currentDeclarations, &direct);
-
     // The qualified declarations of the ancestors keep flowing down, the closer ones winning
     inheritedForChildren = inherited;
 
@@ -480,20 +549,16 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
 
     if (direct.empty())
     {
-        auto* styleState = component.styleState.get();
-        if (styleState == nullptr)
+        if (const auto* styleState = component.styleState.get())
         {
-            clearCacheValues (cache);
-            return;
+            const auto& computed = styleState->getComputedValues();
+            for (int i = 0; i < computed.size(); ++i)
+                recordStoredLayoutEffect (computed.getName (i));
+
+            const auto& animated = styleState->getAnimatedValues();
+            for (int i = 0; i < animated.size(); ++i)
+                recordStoredLayoutEffect (animated.getName (i));
         }
-
-        const auto& computed = styleState->getComputedValues();
-        for (int i = 0; i < computed.size(); ++i)
-            recordStoredLayoutEffect (computed.getName (i));
-
-        const auto& animated = styleState->getAnimatedValues();
-        for (int i = 0; i < animated.size(); ++i)
-            recordStoredLayoutEffect (animated.getName (i));
 
         animator.removeComponent (component);
 
@@ -507,7 +572,6 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
             component.repaint();
 
         notifyLayoutEffects();
-
         return;
     }
 
@@ -516,11 +580,17 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     static const Identifier drawingDeclaration ("drawing");
     static const Identifier transitionDeclaration ("transition");
     static const Identifier animationDeclaration ("animation");
+    static const Identifier cursorDeclaration ("cursor");
+    static const Identifier effectDeclaration ("effect");
     static const Identifier shadowDeclaration ("shadow");
 
-    const String previousAnimation = state.getComputedValue (animationDeclaration) != nullptr
-                                       ? state.getComputedValue (animationDeclaration)->toString()
-                                       : String();
+    const auto* paletteDecl = findWinningDeclaration (direct, paletteDeclaration);
+    const auto* drawingDecl = findWinningDeclaration (direct, drawingDeclaration);
+    const auto* transitionDecl = findWinningDeclaration (direct, transitionDeclaration);
+    const auto* animationDecl = findWinningDeclaration (direct, animationDeclaration);
+    const auto* cursorDecl = findWinningDeclaration (direct, cursorDeclaration);
+    const auto* effectDecl = findWinningDeclaration (direct, effectDeclaration);
+    const auto* shadowDecl = findWinningDeclaration (direct, shadowDeclaration);
 
     bool changed = false;
     bool paletteChanged = false;
@@ -528,13 +598,12 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     Array<Identifier> written;
 
     // The palette is resolved first, so that the values of this component read the right roles
-    if (const auto it = direct.find (paletteDeclaration); it != direct.end())
+    if (paletteDecl != nullptr)
     {
-        const auto name = it->second.declaration->value.unquoted().trim();
-        const auto* palette = styleSheet != nullptr ? styleSheet->findPalette (name) : nullptr;
+        const auto* palette = styleSheet != nullptr ? styleSheet->findPalette (paletteDecl->parsedName) : nullptr;
 
         if (palette == nullptr)
-            report (paletteDeclaration, "Unknown palette '" + name + "'");
+            report ({ .message = "Unknown palette '" + paletteDecl->parsedName + "'", .element = paletteDecl->element });
         else
             paletteChanged = state.setStylePalette (*palette);
     }
@@ -548,23 +617,23 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     // The drawing comes next, the properties it declares type the declarations setting them
     const DrawingStyle* drawing = nullptr;
 
-    if (const auto it = direct.find (drawingDeclaration); it != direct.end())
-        drawing = installDrawing (component, cache, it->second.declaration->value.unquoted().trim());
+    if (drawingDecl != nullptr)
+        drawing = installDrawing (component, cache, *drawingDecl);
     else
         restoreDrawing (component, cache);
 
     // The transitions of the new style apply, starting from the values shown before any is written
     std::vector<PendingTransition> pendingTransitions;
 
-    if (const auto it = direct.find (transitionDeclaration); it != direct.end())
+    if (transitionDecl != nullptr)
     {
-        auto parsed = StyleAnimator::parseTransitions (it->second.declaration->value.unquoted());
-
-        if (parsed.failed())
-            report (transitionDeclaration, "transition: " + parsed.getErrorMessage());
+        if (transitionDecl->parseError.isNotEmpty())
+        {
+            report ({ .message = transitionDecl->parseError, .element = transitionDecl->element });
+        }
         else
         {
-            for (const auto& transition : parsed.getReference())
+            for (const auto& transition : transitionDecl->transitions)
             {
                 const auto* descriptor = findDescriptor (typeInfo, drawing, transition.property);
                 const auto storageId = descriptor != nullptr ? descriptor->getStorageKey() : transition.property;
@@ -582,35 +651,37 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
 
     for (const auto& [name, resolved] : orderedDeclarations)
     {
-        if (name == paletteDeclaration)
+        const auto& declaration = *resolved.declaration;
+        if (declaration.kind != StyleSheet::Declaration::Kind::property)
             continue;
 
-        const auto& declaration = *resolved.declaration;
         const auto* descriptor = findDescriptor (typeInfo, drawing, name);
         const auto storageId = descriptor != nullptr ? descriptor->getStorageKey() : name;
 
         if (descriptor != nullptr && ! descriptor->isStyleable)
         {
-            report (name, "The property '" + name.toString() + "' can't be styled");
+            report ({ .message = "The property '" + name.toString() + "' can't be styled", .element = declaration.element });
             continue;
         }
 
         var value;
+        bool valuePaletteDependent = false;
 
-        if (isRawDeclaration (name))
+        if (! evaluate (component,
+                        cache,
+                        { &declaration, -1 },
+                        declaration.element,
+                        storageId,
+                        descriptor != nullptr ? std::optional (descriptor->type) : std::nullopt,
+                        declaration.value,
+                        value,
+                        valuePaletteDependent,
+                        descriptor))
         {
-            value = declaration.value.unquoted();
-        }
-        else
-        {
-            bool valuePaletteDependent = false;
-
-            if (! evaluate (component, cache, { &declaration, -1 }, name, storageId, descriptor != nullptr ? std::optional (descriptor->type) : std::nullopt, declaration.value, value, valuePaletteDependent))
-                continue;
-
-            paletteDependent |= valuePaletteDependent;
+            continue;
         }
 
+        paletteDependent |= valuePaletteDependent;
         written.add (storageId);
 
         if (state.setComputedValue (storageId, value))
@@ -641,7 +712,7 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     }
 
     bool animatedChanged = updateTransitions (component, cache, pendingTransitions, touched);
-    animatedChanged |= updateAnimations (component, cache, direct, previousAnimation, drawing, touched);
+    animatedChanged |= updateAnimations (component, cache, animationDecl, drawing, touched);
 
     if (animatedChanged)
     {
@@ -655,9 +726,8 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     for (const auto& storageId : touched)
         syncStateBacked (component, cache, storageId);
 
-    const auto shadowIt = direct.find (shadowDeclaration);
-    changed |= applyEffects (component, cache, shadowIt != direct.end() ? shadowIt->second.declaration : nullptr, &paletteDependent);
-    state.setPaletteDependent (paletteDependent);
+    changed |= applyEffects (component, cache, cursorDecl, effectDecl, shadowDecl, &paletteDependent);
+    cache.paletteDependent = paletteDependent;
 
     if (paletteChanged && component.palette == nullptr)
     {
@@ -677,12 +747,13 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
 bool StyleContext::evaluate (Component& component,
                              ComponentCache& cache,
                              ValueKey key,
-                             const Identifier& declarationName,
+                             const DataTree& element,
                              const Identifier& storageId,
                              std::optional<ComponentProperty::Type> type,
                              const String& valueText,
                              var& result,
-                             bool& paletteDependent)
+                             bool& paletteDependent,
+                             const ComponentProperty* descriptor)
 {
     auto [it, inserted] = cache.values.try_emplace (key);
     auto& entry = it->second;
@@ -690,19 +761,36 @@ bool StyleContext::evaluate (Component& component,
     // A value that failed to compile is kept, so that it isn't compiled and reported again until its type or declaration changes
     if (inserted || entry.type != type)
     {
-        if (! inserted)
-            removeDependencies (entry.dependencies);
+        if (! inserted && ! entry.dependencies.empty())
+            observerDirty = true;
 
         entry = {};
         entry.type = type;
 
-        auto compiled = PropertyExpression::compile (component, valueText, type, componentResolver, modelResolver);
+        const auto isEnum = type == ComponentProperty::Type::enumeration && descriptor != nullptr;
+
+        if (isEnum)
+        {
+            const auto enumValue = valueText.unquoted().trim();
+
+            if (descriptor->enumValues.contains (enumValue))
+            {
+                entry.constantValue = enumValue;
+                paletteDependent = false;
+                result = entry.constantValue;
+                return true;
+            }
+        }
+
+        const auto compileType = isEnum ? std::optional (ComponentProperty::Type::string) : type;
+        auto compiled = PropertyExpression::compile (component, valueText, compileType, componentResolver);
 
         if (compiled.failed())
         {
             entry.failed = true;
             const auto label = key.layer >= 0 ? "shadow[" + String (key.layer) + "]" : storageId.toString();
-            report (declarationName, label + ": " + compiled.getErrorMessage());
+            const auto detail = isEnum ? ("expected one of " + descriptor->enumValues.joinIntoString (", ")) : compiled.getErrorMessage();
+            report ({ .message = label + ": " + detail, .element = element });
             return false;
         }
 
@@ -712,16 +800,18 @@ bool StyleContext::evaluate (Component& component,
         if (! expr->hasInputs())
         {
             entry.constantValue = expr->evaluate();
+
+            if (isEnum && ! descriptor->enumValues.contains (entry.constantValue.toString()))
+            {
+                entry.failed = true;
+                report ({ .message = storageId.toString() + ": expected one of " + descriptor->enumValues.joinIntoString (", "), .element = element });
+                return false;
+            }
         }
         else
         {
-            static const Identifier paletteProperty ("palette");
-
-            for (const auto& dep : expr->getDependencies())
-                if (dep.component != &component || dep.property != paletteProperty)
-                    entry.dependencies.push_back ({ dep.component, dep.provider, dep.property });
-
-            addDependencies (entry.dependencies);
+            entry.dependencies = expr->getDependencies();
+            observer.observe (entry.dependencies);
             entry.expression = std::move (expr);
         }
     }
@@ -731,6 +821,10 @@ bool StyleContext::evaluate (Component& component,
 
     paletteDependent = entry.paletteDependent;
     result = entry.expression != nullptr ? entry.expression->evaluate() : entry.constantValue;
+
+    if (type == ComponentProperty::Type::enumeration && descriptor != nullptr && ! descriptor->enumValues.contains (result.toString()))
+        return false;
+
     return ! result.isVoid();
 }
 
@@ -781,21 +875,26 @@ void StyleContext::restoreAllStateBacked (Component& component, ComponentCache& 
         restoreStateBacked (component, cache, saved.getName (i));
 }
 
-const DrawingStyle* StyleContext::installDrawing (Component& component, ComponentCache& cache, const String& name)
+const DrawingStyle* StyleContext::installDrawing (Component& component, ComponentCache& cache, const StyleSheet::Declaration& declaration)
 {
-    if (cache.drawingName == name && component.getStyle().get() == cache.drawingStyle.get())
+    static constexpr auto getStyle = [] (const Component& c) { return c.getStyle(); };
+    static constexpr auto setStyle = [] (Component& c, ComponentStyle::Ptr style) { c.setStyle (std::move (style)); };
+
+    const auto& name = declaration.parsedName;
+
+    if (cache.drawingName == name && cache.drawingStyle != nullptr && cache.drawingOverride.isActive (component, getStyle))
         return cache.drawingStyle.get();
 
     const auto drawing = styleSheet != nullptr ? styleSheet->findDrawing (name) : DataTree();
 
     if (! drawing.isValid())
     {
-        report ("drawing", "Unknown drawing '" + name + "'");
+        report ({ .message = "Unknown drawing '" + name + "'", .element = declaration.element });
         restoreDrawing (component, cache);
         return nullptr;
     }
 
-    auto created = DrawingStyle::create (component, drawing, componentResolver, modelResolver);
+    auto created = DrawingStyle::create (component, drawing, componentResolver);
 
     if (created.failed())
     {
@@ -806,13 +905,9 @@ const DrawingStyle* StyleContext::installDrawing (Component& component, Componen
 
     clearCacheValues (cache);
 
-    // Only the style the component had before the first drawing is remembered, for restoring it
-    if (cache.drawingStyle == nullptr || component.getStyle().get() != cache.drawingStyle.get())
-        cache.savedStyle = component.getStyle();
-
     cache.drawingName = name;
     cache.drawingStyle = created.getReference();
-    component.setStyle (cache.drawingStyle);
+    cache.drawingOverride.apply (component, ComponentStyle::Ptr (cache.drawingStyle.get()), getStyle, setStyle);
     return cache.drawingStyle.get();
 }
 
@@ -839,62 +934,152 @@ const ComponentProperty* StyleContext::findStoredProperty (const ComponentTypeIn
 
 void StyleContext::restoreDrawing (Component& component, ComponentCache& cache)
 {
-    if (cache.drawingStyle == nullptr)
+    if (cache.drawingStyle == nullptr && ! cache.drawingOverride.applied.has_value())
         return;
 
     clearCacheValues (cache);
 
-    // The application may have replaced the drawing in the meantime, and its choice wins
-    if (component.getStyle().get() == cache.drawingStyle.get())
-        component.setStyle (std::move (cache.savedStyle));
-
+    cache.drawingOverride.restore (component,
+                                   [] (const Component& c) { return c.getStyle(); },
+                                   [] (Component& c, ComponentStyle::Ptr style) { c.setStyle (std::move (style)); });
     cache.drawingName = {};
     cache.drawingStyle = nullptr;
-    cache.savedStyle = nullptr;
 }
 
-bool StyleContext::applyEffects (Component& component, ComponentCache& cache, const StyleSheet::Declaration* shadowDecl, bool* paletteDependent)
+bool StyleContext::applyEffects (Component& component,
+                                 ComponentCache& cache,
+                                 const StyleSheet::Declaration* cursorDecl,
+                                 const StyleSheet::Declaration* effectDecl,
+                                 const StyleSheet::Declaration* shadowDecl,
+                                 bool* paletteDependent)
 {
-    static const Identifier cursorDeclaration ("cursor");
-    static const Identifier effectDeclaration ("effect");
-    static const Identifier shadowDeclaration ("shadow");
+    static constexpr auto getCursor = [] (const Component& c) { return c.getMouseCursor(); };
+    static constexpr auto setCursor = [] (Component& c, const MouseCursor& cursor) { c.setMouseCursor (cursor); };
+    static constexpr auto getEffect = [] (const Component& c) { return c.getComponentEffect(); };
+    static constexpr auto setEffect = [] (Component& c, ComponentEffect::Ptr effect) { c.setComponentEffect (std::move (effect)); };
+    static constexpr auto getMargin = [] (const Component& c) { return c.getPaintMargin(); };
+    static constexpr auto setMargin = [] (Component& c, const EdgeSpacing<float>& margin) { c.setPaintMargin (margin); };
 
-    const auto* state = component.styleState.get();
+    bool changed = false;
 
-    const auto valueOf = [state] (const Identifier& name)
+    if (cursorDecl != nullptr)
     {
-        const auto* value = state != nullptr ? state->getComputedValue (name) : nullptr;
-        return value != nullptr ? value->toString().trim() : String();
-    };
+        if (cursorDecl->parseError.isNotEmpty())
+            report ({ .message = cursorDecl->parseError, .element = cursorDecl->element });
 
-    const auto reporter = [this] (const Identifier& declaration, const String& message)
+        if (cursorDecl->cursor.has_value())
+            changed |= cache.cursorOverride.apply (component, MouseCursor (*cursorDecl->cursor), getCursor, setCursor);
+        else
+            changed |= cache.cursorOverride.restore (component, getCursor, setCursor);
+    }
+    else
     {
-        report (declaration, message);
-    };
+        changed |= cache.cursorOverride.restore (component, getCursor, setCursor);
+    }
 
-    const auto evaluateColor = [&] (int layer, const String& source) -> std::optional<Color>
+    if (effectDecl != nullptr && effectDecl->parsedName.isNotEmpty())
     {
-        var color;
-        bool readsPalette = false;
+        const auto& name = effectDecl->parsedName;
 
-        if (! evaluate (component, cache, { shadowDecl, layer }, shadowDeclaration, {}, ComponentProperty::Type::color, source, color, readsPalette))
-            return std::nullopt;
+        if (! (cache.effectName == name && cache.effectOverride.isActive (component, getEffect)))
+        {
+            if (name == "none")
+            {
+                cache.effectName = name;
+                changed |= cache.effectOverride.apply (component, ComponentEffect::Ptr {}, getEffect, setEffect);
+            }
+            else if (auto created = ComponentEffectRegistry::getInstance().createEffect (name); created != nullptr)
+            {
+                cache.effectName = name;
+                changed |= cache.effectOverride.apply (component, std::move (created), getEffect, setEffect);
+            }
+            else
+            {
+                report ({ .message = "Unknown effect '" + name + "'", .element = effectDecl->element });
+                cache.effectName = {};
+                changed |= cache.effectOverride.restore (component, getEffect, setEffect);
+            }
+        }
+    }
+    else
+    {
+        cache.effectName = {};
+        changed |= cache.effectOverride.restore (component, getEffect, setEffect);
+    }
 
-        if (paletteDependent != nullptr)
-            *paletteDependent |= readsPalette;
+    std::vector<StyleState::Shadow> shadows;
 
-        return Color (static_cast<uint32> (static_cast<int64> (color)));
-    };
+    if (shadowDecl != nullptr)
+    {
+        if (shadowDecl->parseError.isNotEmpty())
+        {
+            report ({ .message = shadowDecl->parseError, .element = shadowDecl->element });
+        }
+        else
+        {
+            shadows.reserve (shadowDecl->shadows.size());
 
-    cache.effects.applyCursor (component, valueOf (cursorDeclaration), reporter);
-    cache.effects.applyEffect (component, valueOf (effectDeclaration), reporter);
+            for (int layerIndex = 0; layerIndex < static_cast<int> (shadowDecl->shadows.size()); ++layerIndex)
+            {
+                const auto& layer = shadowDecl->shadows[static_cast<size_t> (layerIndex)];
+                var colorVar;
+                bool readsPalette = false;
 
-    auto shadows = cache.effects.applyShadows (component, valueOf (shadowDeclaration), evaluateColor, reporter);
+                if (! evaluate (component,
+                                cache,
+                                { shadowDecl, layerIndex },
+                                shadowDecl->element,
+                                {},
+                                ComponentProperty::Type::color,
+                                layer.colorExpression,
+                                colorVar,
+                                readsPalette))
+                {
+                    shadows.clear();
+                    break;
+                }
 
-    if (component.styleState == nullptr && shadows.empty())
-        return false;
+                if (paletteDependent != nullptr)
+                    *paletteDependent |= readsPalette;
 
-    return component.getOrCreateStyleState().setShadows (std::move (shadows));
+                shadows.push_back ({
+                    .offset = layer.offset,
+                    .blur = layer.blur,
+                    .spread = layer.spread,
+                    .color = Color (static_cast<uint32> (static_cast<int64> (colorVar)))
+                });
+            }
+        }
+    }
+
+    if (shadows.empty())
+    {
+        changed |= cache.paintMarginOverride.restore (component, getMargin, setMargin);
+    }
+    else
+    {
+        const auto base = cache.paintMarginOverride.base (component, getMargin);
+        auto left = base.getLeft();
+        auto top = base.getTop();
+        auto right = base.getRight();
+        auto bottom = base.getBottom();
+
+        for (const auto& shadow : shadows)
+        {
+            const auto reach = shadow.blur + jmax (0.0f, shadow.spread);
+            left = jmax (left, reach - shadow.offset.getX());
+            top = jmax (top, reach - shadow.offset.getY());
+            right = jmax (right, reach + shadow.offset.getX());
+            bottom = jmax (bottom, reach + shadow.offset.getY());
+        }
+
+        changed |= cache.paintMarginOverride.apply (component, EdgeSpacing<float> (left, top, right, bottom), getMargin, setMargin);
+    }
+
+    if (component.styleState != nullptr || ! shadows.empty())
+        changed |= component.getOrCreateStyleState().setShadows (std::move (shadows));
+
+    return changed;
 }
 
 StyleContext::ComponentCache* StyleContext::findCache (const Component& component)
@@ -916,22 +1101,22 @@ StyleContext::ComponentCache& StyleContext::getCache (Component& component, bool
 
 void StyleContext::clearCacheValues (ComponentCache& cache)
 {
-    for (auto& [key, val] : cache.values)
-        removeDependencies (val.dependencies);
+    for (const auto& [key, val] : cache.values)
+    {
+        if (! val.dependencies.empty())
+        {
+            observerDirty = true;
+            break;
+        }
+    }
 
     cache.values.clear();
 }
 
 void StyleContext::clearAllCaches()
 {
-    for (auto& [component, count] : observedComponents)
-        component->removeComponentListener (this);
-
-    for (auto& [provider, count] : observedProviders)
-        provider->removeListener (this);
-
-    observedComponents.clear();
-    observedProviders.clear();
+    observer.clear();
+    observerDirty = false;
     caches->clear();
 }
 
@@ -1010,20 +1195,18 @@ bool StyleContext::updateTransitions (Component& component, const ComponentCache
 }
 
 bool StyleContext::updateAnimations (Component& component,
-                                     const ComponentCache& cache,
-                                     const DeclarationMap& direct,
-                                     const String& previousAnimation,
+                                     ComponentCache& cache,
+                                     const StyleSheet::Declaration* animationDecl,
                                      const DrawingStyle* drawing,
                                      Array<Identifier>& touched)
 {
-    static const Identifier animationDeclaration ("animation");
-
-    const auto it = direct.find (animationDeclaration);
-    const auto text = it != direct.end() ? it->second.declaration->value.unquoted() : String();
+    const String nextAnimation = animationDecl != nullptr ? animationDecl->parsedName : String();
 
     // The animations keep running until the declaration changes, which restarts them
-    if (text == previousAnimation)
+    if (nextAnimation == cache.animationValue)
         return false;
+
+    cache.animationValue = nextAnimation;
 
     auto& state = component.getOrCreateStyleState();
     bool changed = false;
@@ -1036,24 +1219,22 @@ bool StyleContext::updateAnimations (Component& component,
         touched.addIfNotAlreadyThere (storageId);
     }
 
-    if (text.trim().isEmpty())
+    if (animationDecl == nullptr || nextAnimation.trim().isEmpty())
         return changed;
 
-    auto parsed = StyleAnimator::parseAnimations (text);
-
-    if (parsed.failed())
+    if (animationDecl->parseError.isNotEmpty())
     {
-        report ("animation", "animation: " + parsed.getErrorMessage());
+        report ({ .message = animationDecl->parseError, .element = animationDecl->element });
         return changed;
     }
 
-    for (const auto& animation : parsed.getReference())
+    for (const auto& animation : animationDecl->animations)
     {
         const auto* keyframes = styleSheet != nullptr ? styleSheet->findKeyframes (animation.name) : nullptr;
 
         if (keyframes == nullptr)
         {
-            report ("animation", "Unknown keyframes '" + animation.name.toString() + "'");
+            report ({ .message = "Unknown keyframes '" + animation.name.toString() + "'", .element = animationDecl->element });
             continue;
         }
 
@@ -1102,7 +1283,7 @@ std::vector<StyleAnimator::Track> StyleContext::compileTracks (Component& compon
             else if (existing != compiled.end())
                 type = existing->track.type;
 
-            auto expression = PropertyExpression::compile (component, declaration.value, type, componentResolver, modelResolver);
+            auto expression = PropertyExpression::compile (component, declaration.value, type, componentResolver);
 
             if (expression.failed())
             {
@@ -1180,30 +1361,30 @@ void StyleContext::showAnimatedValue (Component& component, const Identifier& st
 
 bool StyleContext::resetStyle (Component& component, ComponentCache* cache, bool keepAnimatedValues, bool* paletteCleared)
 {
-    auto* state = component.styleState.get();
-    if (state == nullptr)
-        return false;
-
-    const auto shown = keepAnimatedValues ? state->getAnimatedValues() : NamedValueSet {};
+    bool changed = false;
 
     if (cache != nullptr)
     {
+        cache->animationValue = {};
+        cache->paletteDependent = false;
         restoreAllStateBacked (component, *cache);
         restoreDrawing (component, *cache);
+        changed |= applyEffects (component, *cache, nullptr, nullptr, nullptr, nullptr);
     }
 
-    bool changed = state->clearComputedValues();
+    auto* state = component.styleState.get();
+    if (state == nullptr)
+        return changed;
+
+    const auto shown = keepAnimatedValues ? state->getAnimatedValues() : NamedValueSet {};
+
+    changed |= state->clearComputedValues();
     changed |= state->clearAnimatedValues();
     const bool clearedPalette = state->setStylePalette (std::nullopt);
     changed |= clearedPalette;
 
     if (paletteCleared != nullptr)
         *paletteCleared = clearedPalette;
-
-    if (cache != nullptr)
-        changed |= applyEffects (component, *cache);
-
-    state->setPaletteDependent (false);
 
     for (int i = 0; i < shown.size(); ++i)
         changed |= state->setComputedValue (shown.getName (i), *shown.getVarPointerAt (i));
@@ -1233,6 +1414,9 @@ void StyleContext::release (Component& subtreeRoot, ReleaseMode mode)
             caches->erase (it);
         }
     });
+
+    if (observerDirty)
+        rebuildObserver();
 }
 
 void StyleContext::detach()
@@ -1268,54 +1452,28 @@ void StyleContext::markPaletteDependentDirty (Component& component)
 {
     forEachManaged (component, [this] (Component& current)
     {
-        if (auto* state = current.styleState.get(); state != nullptr && state->isPaletteDependent())
+        if (const auto* cache = findCache (current); cache != nullptr && cache->paletteDependent)
             markDirty (current);
     });
 }
 
-void StyleContext::addDependencies (const std::vector<BoundDependency>& dependencies)
+void StyleContext::rebuildObserver()
 {
-    for (const auto& dependency : dependencies)
+    observerDirty = false;
+    observer.clear();
+
+    for (const auto& [ptr, cache] : *caches)
     {
-        if (dependency.component != nullptr)
-        {
-            if (++observedComponents[dependency.component] == 1)
-                dependency.component->addComponentListener (this);
-        }
-        else if (dependency.provider != nullptr)
-        {
-            if (++observedProviders[dependency.provider] == 1)
-                dependency.provider->addListener (this);
-        }
+        if (cache.component.get() != ptr)
+            continue;
+
+        for (const auto& [key, compiled] : cache.values)
+            if (! compiled.dependencies.empty())
+                observer.observe (compiled.dependencies);
     }
 }
 
-void StyleContext::removeDependencies (const std::vector<BoundDependency>& dependencies)
-{
-    for (const auto& dependency : dependencies)
-    {
-        if (dependency.component != nullptr)
-        {
-            if (const auto it = observedComponents.find (dependency.component); it != observedComponents.end() && --it->second <= 0)
-            {
-                auto* component = it->first;
-                observedComponents.erase (it);
-                component->removeComponentListener (this);
-            }
-        }
-        else if (dependency.provider != nullptr)
-        {
-            if (const auto it = observedProviders.find (dependency.provider); it != observedProviders.end() && --it->second <= 0)
-            {
-                auto* provider = it->first;
-                observedProviders.erase (it);
-                provider->removeListener (this);
-            }
-        }
-    }
-}
-
-void StyleContext::invalidateDependencies (const Component* sourceComponent, const BindingProvider* sourceProvider, const Identifier& property)
+void StyleContext::invalidateDependencies (const Component& sourceComponent, const Identifier& property)
 {
     for (const auto& [ptr, cache] : *caches)
     {
@@ -1323,67 +1481,18 @@ void StyleContext::invalidateDependencies (const Component* sourceComponent, con
         if (styled == nullptr || styled != ptr)
             continue;
 
-        bool matched = false;
-
-        for (const auto& [key, compiled] : cache.values)
+        const bool matched = std::any_of (cache.values.begin(), cache.values.end(), [&] (const auto& entry)
         {
-            for (const auto& dependency : compiled.dependencies)
+            const auto& dependencies = entry.second.dependencies;
+            return std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
             {
-                if ((sourceComponent != nullptr && dependency.component == sourceComponent && dependency.property == property)
-                    || (sourceProvider != nullptr && dependency.provider == sourceProvider && dependency.property == property))
-                {
-                    matched = true;
-                    break;
-                }
-            }
-
-            if (matched)
-                break;
-        }
+                return dependency.component == &sourceComponent && dependency.property == property;
+            });
+        });
 
         if (matched)
             markDirty (*styled);
     }
-}
-
-void StyleContext::componentPropertyChanged (Component& component, const Identifier& property)
-{
-    invalidateDependencies (&component, nullptr, property);
-}
-
-void StyleContext::componentBeingDeleted (Component& component)
-{
-    observedComponents.erase (&component);
-
-    for (auto& [ptr, cache] : *caches)
-        for (auto& [key, compiled] : cache.values)
-            for (auto& dependency : compiled.dependencies)
-                if (dependency.component == &component)
-                    dependency.component = nullptr;
-}
-
-void StyleContext::bindingValueChanged (BindingProvider& provider, const Identifier& name)
-{
-    invalidateDependencies (nullptr, &provider, name);
-}
-
-void StyleContext::bindingProviderBeingDeleted (BindingProvider& provider)
-{
-    observedProviders.erase (&provider);
-
-    for (auto& [ptr, cache] : *caches)
-        for (auto& [key, compiled] : cache.values)
-            for (auto& dependency : compiled.dependencies)
-                if (dependency.provider == &provider)
-                    dependency.provider = nullptr;
-}
-
-void StyleContext::report (const Identifier& declarationName, const String& message)
-{
-    // Reports by name only happen while a component is styled, about one of its declarations
-    jassert (currentDeclarations != nullptr && currentDeclarations->count (declarationName) == 1);
-
-    report ({ .message = message, .element = currentDeclarations->at (declarationName).declaration->element });
 }
 
 void StyleContext::report (const YuiDiagnostic& diagnostic)

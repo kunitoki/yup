@@ -535,8 +535,8 @@ TEST_F (YuiDocumentTests, ReportsBindingCyclesDuringLoadAndAtRuntimeWithSourceLo
     {
         YuiDocument document;
         const auto result = document.loadFromString ("Component {\n"
-                                                     "    Slider { id: a; minValue: 0; maxValue: 100; value: b.value + 1; }\n"
-                                                     "    Slider { id: b; minValue: 0; maxValue: 100; value: a.value + 1; }\n"
+                                                     "    Slider { id: a; minimum: 0; maximum: 100; value: b.value + 1; }\n"
+                                                     "    Slider { id: b; minimum: 0; maximum: 100; value: a.value + 1; }\n"
                                                      "}");
 
         ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
@@ -563,8 +563,8 @@ TEST_F (YuiDocumentTests, ReportsBindingCyclesDuringLoadAndAtRuntimeWithSourceLo
 
     const auto result = document.loadFromString ("Component {\n"
                                                  "    ToggleButton { id: gate; checked: false; }\n"
-                                                 "    Slider { id: a; minValue: 0; maxValue: 100; value: gate.checked ? b.value + 1 : 0; }\n"
-                                                 "    Slider { id: b; minValue: 0; maxValue: 100; value: a.value + 1; }\n"
+                                                 "    Slider { id: a; minimum: 0; maximum: 100; value: gate.checked ? b.value + 1 : 0; }\n"
+                                                 "    Slider { id: b; minimum: 0; maximum: 100; value: a.value + 1; }\n"
                                                  "}");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();

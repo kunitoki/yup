@@ -139,11 +139,10 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Co
                                                                               const String& text,
                                                                               std::optional<ComponentProperty::Type> type,
                                                                               DrawingScope::ComponentResolver resolver,
-                                                                              DrawingScope::ModelResolver modelResolver,
-                                                                              BindingProvider* locals)
+                                                                              Component* locals)
 {
     if (text.trimStart().startsWithChar ('['))
-        return compileArrayLiteral (component, text, type, std::move (resolver), std::move (modelResolver), locals);
+        return compileArrayLiteral (component, text, type, std::move (resolver), locals);
 
     std::unique_ptr<PropertyExpression> expression (new PropertyExpression (getPropertyExpressionBaseContext()));
     expression->source = text;
@@ -160,7 +159,6 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Co
 
     expression->scope.emplace (component, expression->context);
     expression->scope->setComponentResolver (std::move (resolver));
-    expression->scope->setModelResolver (std::move (modelResolver));
     expression->scope->setLocals (locals);
     expression->scope->install();
 
@@ -206,10 +204,8 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Co
     }
 
     expression->state.emplace (expression->program, 1);
-
-    for (int i = 0; i < expression->program.getNumInputs(); ++i)
-        if (expression->program.getInputName (i).startsWith ("palette."))
-            expression->paletteDependent = true;
+    expression->inputs = expression->scope->bindInputs (expression->program);
+    expression->paletteDependent = expression->inputs.readsPalette();
 
     return makeResultValueOk (std::move (expression));
 }
@@ -218,8 +214,7 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compileArra
                                                                                           const String& text,
                                                                                           std::optional<ComponentProperty::Type> type,
                                                                                           DrawingScope::ComponentResolver resolver,
-                                                                                          DrawingScope::ModelResolver modelResolver,
-                                                                                          BindingProvider* locals)
+                                                                                          Component* locals)
 {
     if (type.has_value() && *type != ComponentProperty::Type::array && *type != ComponentProperty::Type::any)
         return makeResultValueFail ("An array can't be the value of this property");
@@ -239,7 +234,7 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compileArra
 
     for (const auto& elementText : elementTexts)
     {
-        auto element = compile (component, elementText, std::nullopt, resolver, modelResolver, locals);
+        auto element = compile (component, elementText, std::nullopt, resolver, locals);
 
         if (element.failed())
             return makeResultValueFail (element.getErrorMessage());
@@ -339,7 +334,7 @@ var PropertyExpression::evaluate()
         return var (std::move (values));
     }
 
-    scope->updateInputs (program, *state);
+    scope->updateInputs (inputs, *state);
     state->evaluate();
 
     return readValueOutput (program, *state, type, elementType);
@@ -353,7 +348,7 @@ bool PropertyExpression::hasInputs() const noexcept
             return element->hasInputs();
         });
 
-    return program.getNumInputs() > 0;
+    return ! inputs.isEmpty();
 }
 
 std::vector<DrawingScope::Dependency> PropertyExpression::getDependencies() const

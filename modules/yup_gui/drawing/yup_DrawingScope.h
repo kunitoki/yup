@@ -37,10 +37,11 @@ namespace yup
     doesn't declare reads the closest parent declaring it as an inherited store-backed
     property, which is how the tokens of a `.yui` document reach every component.
 
-    Use it in two steps. Call @ref install before compiling to register the symbol
-    resolver on an ExpressionContext, so property names resolve to their types. Then,
-    on each evaluation, call @ref updateInputs to push the component's current property
-    values into an ExpressionState.
+    Use it in three steps. Call @ref install before compiling to register the symbol
+    resolver on an ExpressionContext, so property names resolve to their types. Once
+    compiled, call @ref bindInputs to record the program's resolved inputs alongside its
+    ExpressionState, and on each evaluation call @ref updateInputs to push the component's
+    current property values into the state.
 
     Only the property types an expression input can carry are bridged: number, integer,
     boolean, string, color, point, rectangle, and arrays of those (read with `x[i]` and
@@ -60,6 +61,8 @@ namespace yup
 */
 class YUP_API DrawingScope
 {
+    struct ParsedInput;
+
 public:
     //==============================================================================
     /** Turns the prefix of a symbol such as `knob` in `knob.value` into a component.
@@ -68,24 +71,59 @@ public:
     */
     using ComponentResolver = std::function<Component*(const String& name)>;
 
-    /** Turns the prefix of a symbol such as `params` in `params.cutoff` into a binding provider.
-
-        Return nullptr when the name is not known, so the symbol stays unresolved.
-    */
-    using ModelResolver = std::function<BindingProvider*(const String& name)>;
-
     //==============================================================================
-    /** One property of one component or binding provider that an expression reads. */
+    /** One property of one component that an expression reads. */
     struct Dependency
     {
-        /** The component the property is read from, or nullptr when read from @ref provider. */
+        /** The component the property is read from. */
         Component* component = nullptr;
-
-        /** The binding provider the property is read from, or nullptr when read from @ref component. */
-        BindingProvider* provider = nullptr;
 
         /** The name of the property that is read. */
         Identifier property;
+    };
+
+    //==============================================================================
+    /** The typed values an array property feeds an expression input, kept alive until the next update.
+
+        An expression reads an array input as a view of the values it is bound to, so they have to
+        outlive the evaluation. This holds one converted copy of them for one input.
+    */
+    class YUP_API ArrayInput
+    {
+    public:
+        /** Converts a var holding an array and binds it to an input of a state.
+
+            A value that holds no array binds an empty array, so an unset property reads as empty.
+
+            @param state         The state the values are bound to.
+            @param input         The index of the array input.
+            @param elementType   The type of the elements, which must be bridged.
+            @param value         The value of the property, normally an array var.
+        */
+        void bind (ExpressionState& state, int input, ComponentProperty::Type elementType, const var& value);
+
+    private:
+        std::variant<Array<float>, Array<int>, Array<bool>, Array<String>, Array<Color>, Array<Point<float>>, Array<Rectangle<float>>> values;
+    };
+
+    //==============================================================================
+    /** Pre-parsed inputs for one compiled program, stored next to its ExpressionState. */
+    class YUP_API BoundInputs
+    {
+    public:
+        BoundInputs() = default;
+
+        /** Returns true when the program reads no scope symbols. */
+        bool isEmpty() const noexcept { return inputs.empty(); }
+
+        /** Returns true when the program reads a palette role or `palette.dark`. */
+        bool readsPalette() const noexcept { return paletteDependent; }
+
+    private:
+        friend class DrawingScope;
+
+        std::vector<ParsedInput> inputs;
+        bool paletteDependent = false;
     };
 
     //==============================================================================
@@ -102,24 +140,17 @@ public:
 
         With a resolver installed, `knob.value` reads the `value` property of the component
         the resolver returns for `knob`, which is how a drawing or a binding references another
-        element of the same document. Call this before @ref install.
+        element or a BindingModel of the same document. Call this before @ref install.
     */
     void setComponentResolver (ComponentResolver resolver);
-
-    /** Sets the resolver used to look up BindingProvider models by prefix (such as `params` in `params.cutoff`).
-
-        Component prefixes resolved via @ref setComponentResolver take precedence when both are set.
-        Call this before @ref install.
-    */
-    void setModelResolver (ModelResolver resolver);
 
     /** Sets values read by their bare name before the properties of the component.
 
         The named arguments of a `.yui` handler are read this way: in `(width) => action ("w", width)`,
-        `width` is the argument, not the property of the component. The provider is not owned.
+        `width` is the argument, not the property of the component. The component is not owned.
         Call this before @ref install.
     */
-    void setLocals (BindingProvider* locals);
+    void setLocals (Component* locals);
 
     //==============================================================================
     /** Registers the symbol resolver on the context, replacing any previous one.
@@ -138,22 +169,19 @@ public:
     */
     const ExpressionType* resolveSymbol (const String& symbol) const;
 
-    /** Writes the component's live property values into a state before evaluation.
+    /** Pre-parses the scope inputs referenced by @p program, skipping context-declared inputs.
 
-        For every input of the program that names a reflected property of the bound
-        component (directly, or through `self.` or `parent.`), its effective value is
-        written to the state. The effective value cascades like Component::findProperty:
-        an instance override wins, otherwise the themed or default value is used. Inputs
-        naming a palette role are written from the component's current palette. Inputs
-        that match no property are left untouched, and a destroyed component is a no-op.
+        Store the returned value alongside the program's ExpressionState so array input
+        views remain valid across evaluations without per-paint cache lookups.
+    */
+    BoundInputs bindInputs (const CompiledExpression& program) const;
 
-        The values of array inputs are kept in the scope until the same input is written
-        again, since the expression reads them as a view.
+    /** Writes the component's live property values into @p state before evaluation.
 
-        @param program   A program compiled against this scope's context.
+        @param inputs    Bound inputs previously created with @ref bindInputs.
         @param state     A state created from the same program.
     */
-    void updateInputs (const CompiledExpression& program, ExpressionState& state) const;
+    void updateInputs (BoundInputs& inputs, ExpressionState& state) const;
 
     /** Returns the component properties the program reads, so changes to them can be tracked.
 
@@ -214,30 +242,6 @@ public:
     */
     static void addExpressionArrayTypes (ExpressionContext& context);
 
-    //==============================================================================
-    /** The typed values an array property feeds an expression input, kept alive until the next update.
-
-        An expression reads an array input as a view of the values it is bound to, so they have to
-        outlive the evaluation. This holds one converted copy of them for one input.
-    */
-    class YUP_API ArrayInput
-    {
-    public:
-        /** Converts a var holding an array and binds it to an input of a state.
-
-            A value that holds no array binds an empty array, so an unset property reads as empty.
-
-            @param state         The state the values are bound to.
-            @param input         The index of the array input.
-            @param elementType   The type of the elements, which must be bridged.
-            @param value         The value of the property, normally an array var.
-        */
-        void bind (ExpressionState& state, int input, ComponentProperty::Type elementType, const var& value);
-
-    private:
-        std::variant<Array<float>, Array<int>, Array<bool>, Array<String>, Array<Color>, Array<Point<float>>, Array<Rectangle<float>>> values;
-    };
-
     /** Writes one reflected property value into an expression input, using @p arrayInput for arrays. */
     static void setInputValue (ExpressionState& state,
                                int input,
@@ -248,17 +252,11 @@ public:
 
 private:
     //==============================================================================
-    struct ResolvedTarget
-    {
-        Component* component = nullptr;
-        BindingProvider* provider = nullptr;
-        Identifier property;
-    };
-
     struct ParsedInput
     {
         enum class Kind
         {
+            invalid,
             paletteDark,
             paletteRole,
             selfProperty,
@@ -268,33 +266,29 @@ private:
         };
 
         int index = 0;
-        Kind kind = Kind::bareProperty;
+        Kind kind = Kind::invalid;
         ThemePalette::Role paletteRole = ThemePalette::Role::surface;
         String prefix;
         Identifier property;
-        mutable ArrayInput arrayInput;
+        ArrayInput arrayInput;
         mutable WeakReference<Component> cachedComponent;
-        mutable WeakReference<BindingProvider> cachedProvider;
+        mutable uint32 cachedResolverGeneration = 0;
     };
 
-    struct CachedProgram
+    struct ResolvedProperty
     {
-        CompiledExpression program;
-        std::vector<ParsedInput> inputs;
-        bool usesPalette = false;
+        Component* component = nullptr;
+        const ComponentProperty* descriptor = nullptr;
     };
 
-    const CachedProgram& getCachedProgram (const CompiledExpression& program) const;
-    ResolvedTarget resolveTarget (const String& symbol) const;
-    static std::optional<BindingProvider::Property> findProviderProperty (const BindingProvider& provider, const Identifier& name);
-    const ExpressionType* typeForPaletteRole (const String& roleName) const;
+    static ParsedInput parse (const String& symbol, int index = 0);
+    ResolvedProperty resolve (const ParsedInput& input) const;
 
     WeakReference<Component> component;
     ExpressionContext& context;
     ComponentResolver componentResolver;
-    ModelResolver modelResolver;
-    WeakReference<BindingProvider> locals;
-    mutable std::vector<std::unique_ptr<CachedProgram>> cachedPrograms;
+    WeakReference<Component> locals;
+    uint32 resolverGeneration = 1;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrawingScope)
 };

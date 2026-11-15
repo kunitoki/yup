@@ -33,7 +33,7 @@ namespace yup
     expression, while style and palette values are kept verbatim up to their `;`, since some
     of them (such as `transition:` or `drawing:`) are not expressions. Element types, property
     names and the meaning of values are checked by the code consuming the tree, such as
-    DrawingProgram and StyleSheet, whose diagnostics can be located in the text with the
+    DrawingStyle and StyleSheet, whose diagnostics can be located in the text with the
     source map of the result. Line and block comments can go anywhere whitespace can.
 
     @code
@@ -44,7 +44,7 @@ namespace yup
         DBG (result.diagnostics.front().toString());
     @endcode
 
-    @see DrawingProgram, StyleSheet, YuiWriter
+    @see DrawingStyle, StyleSheet, YuiWriter
 
     @tags{UI}
 */

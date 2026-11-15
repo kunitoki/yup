@@ -31,19 +31,12 @@ DrawingScope::DrawingScope (Component& componentToUse, ExpressionContext& contex
 void DrawingScope::setComponentResolver (ComponentResolver resolver)
 {
     componentResolver = std::move (resolver);
-    cachedPrograms.clear();
+    ++resolverGeneration;
 }
 
-void DrawingScope::setModelResolver (ModelResolver resolver)
-{
-    modelResolver = std::move (resolver);
-    cachedPrograms.clear();
-}
-
-void DrawingScope::setLocals (BindingProvider* newLocals)
+void DrawingScope::setLocals (Component* newLocals)
 {
     locals = newLocals;
-    cachedPrograms.clear();
 }
 
 void DrawingScope::install()
@@ -54,110 +47,178 @@ void DrawingScope::install()
     });
 }
 
-std::optional<BindingProvider::Property> DrawingScope::findProviderProperty (const BindingProvider& provider, const Identifier& name)
+DrawingScope::ParsedInput DrawingScope::parse (const String& symbol, int index)
 {
-    return provider.findProperty (name);
+    if (symbol.startsWith ("_property_") || symbol.startsWith ("_hasProperty_"))
+        return { .index = index, .kind = ParsedInput::Kind::invalid };
+
+    if (symbol.startsWith ("palette."))
+    {
+        const auto roleName = symbol.substring (8);
+
+        if (roleName == "dark")
+            return { .index = index, .kind = ParsedInput::Kind::paletteDark };
+
+        if (const auto role = ThemePalette::getRoleFromName (roleName))
+            return { .index = index, .kind = ParsedInput::Kind::paletteRole, .paletteRole = *role };
+
+        return { .index = index, .kind = ParsedInput::Kind::invalid };
+    }
+
+    if (symbol.isEmpty())
+        return { .index = index, .kind = ParsedInput::Kind::invalid };
+
+    if (symbol.startsWith ("parent."))
+    {
+        const auto rest = symbol.substring (7);
+        return rest.isNotEmpty()
+                 ? ParsedInput { .index = index, .kind = ParsedInput::Kind::parentProperty, .property = Identifier (rest) }
+                 : ParsedInput { .index = index, .kind = ParsedInput::Kind::invalid };
+    }
+
+    if (symbol.startsWith ("self."))
+    {
+        const auto rest = symbol.substring (5);
+        return rest.isNotEmpty()
+                 ? ParsedInput { .index = index, .kind = ParsedInput::Kind::selfProperty, .property = Identifier (rest) }
+                 : ParsedInput { .index = index, .kind = ParsedInput::Kind::invalid };
+    }
+
+    if (const auto dot = symbol.indexOfChar ('.'); dot >= 0)
+    {
+        if (dot == 0 || dot + 1 >= symbol.length())
+            return { .index = index, .kind = ParsedInput::Kind::invalid };
+
+        return {
+            .index = index,
+            .kind = ParsedInput::Kind::prefixed,
+            .prefix = symbol.substring (0, dot),
+            .property = Identifier (symbol.substring (dot + 1))
+        };
+    }
+
+    return { .index = index, .kind = ParsedInput::Kind::bareProperty, .property = Identifier (symbol) };
+}
+
+DrawingScope::ResolvedProperty DrawingScope::resolve (const ParsedInput& input) const
+{
+    auto* self = component.get();
+    if (self == nullptr)
+        return {};
+
+    switch (input.kind)
+    {
+        case ParsedInput::Kind::selfProperty:
+        {
+            const auto* descriptor = self->getTypeInfo().findProperty (input.property);
+            return descriptor != nullptr ? ResolvedProperty { self, descriptor } : ResolvedProperty {};
+        }
+
+        case ParsedInput::Kind::parentProperty:
+        {
+            auto* parent = self->getParentComponent();
+            const auto* descriptor = parent != nullptr ? parent->getTypeInfo().findProperty (input.property) : nullptr;
+            return descriptor != nullptr ? ResolvedProperty { parent, descriptor } : ResolvedProperty {};
+        }
+
+        case ParsedInput::Kind::bareProperty:
+        {
+            if (auto* local = locals.get())
+                if (const auto* descriptor = local->getTypeInfo().findProperty (input.property))
+                    return { local, descriptor };
+
+            if (const auto* own = self->getTypeInfo().findProperty (input.property))
+                return { self, own };
+
+            for (auto* ancestor = self->getParentComponent(); ancestor != nullptr; ancestor = ancestor->getParentComponent())
+            {
+                const auto* candidate = ancestor->getTypeInfo().findProperty (input.property);
+
+                if (candidate != nullptr && candidate->isStoreBacked() && candidate->isInherited)
+                    return { ancestor, candidate };
+            }
+
+            return {};
+        }
+
+        case ParsedInput::Kind::prefixed:
+        {
+            auto* target = input.cachedResolverGeneration == resolverGeneration
+                             ? input.cachedComponent.get()
+                             : nullptr;
+
+            if (target == nullptr)
+            {
+                if (componentResolver != nullptr)
+                    target = componentResolver (input.prefix);
+
+                input.cachedComponent = target;
+                input.cachedResolverGeneration = resolverGeneration;
+            }
+
+            if (target == nullptr)
+                return {};
+
+            const auto* descriptor = target->getTypeInfo().findProperty (input.property);
+            return descriptor != nullptr ? ResolvedProperty { target, descriptor } : ResolvedProperty {};
+        }
+
+        case ParsedInput::Kind::invalid:
+        case ParsedInput::Kind::paletteDark:
+        case ParsedInput::Kind::paletteRole:
+            return {};
+    }
+
+    return {};
 }
 
 const ExpressionType* DrawingScope::resolveSymbol (const String& symbol) const
 {
-    if (symbol.startsWith ("palette."))
-        return typeForPaletteRole (symbol.substring (8));
+    const auto input = parse (symbol);
 
-    const auto target = resolveTarget (symbol);
+    if (input.kind == ParsedInput::Kind::paletteDark)
+        return context.getType<bool>();
 
-    if (target.component != nullptr)
-    {
-        if (const auto* property = target.component->getTypeInfo().findProperty (target.property))
-            return getExpressionType (property->type, property->elementType);
-    }
-    else if (target.provider != nullptr)
-    {
-        if (const auto property = findProviderProperty (*target.provider, target.property))
-            return getExpressionType (property->type, property->elementType);
-    }
+    if (input.kind == ParsedInput::Kind::paletteRole)
+        return context.getType<Color>();
 
-    return nullptr;
+    const auto resolved = resolve (input);
+    return resolved.descriptor != nullptr
+             ? getExpressionType (resolved.descriptor->type, resolved.descriptor->elementType)
+             : nullptr;
 }
 
-const DrawingScope::CachedProgram& DrawingScope::getCachedProgram (const CompiledExpression& program) const
+DrawingScope::BoundInputs DrawingScope::bindInputs (const CompiledExpression& program) const
 {
-    for (const auto& entry : cachedPrograms)
-        if (entry->program == program)
-            return *entry;
+    BoundInputs bound;
 
-    auto cached = std::make_unique<CachedProgram>();
-    cached->program = program;
-
-    for (int i = 0; i < program.getNumInputs(); ++i)
+    for (int i = context.getNumInputs(); i < program.getNumInputs(); ++i)
     {
         if (! program.usesInput (i))
             continue;
 
-        const auto& name = program.getInputName (i);
-
-        if (name.startsWith ("palette."))
-        {
-            const auto roleName = name.substring (8);
-
-            if (roleName == "dark")
-            {
-                cached->inputs.push_back ({ .index = i, .kind = ParsedInput::Kind::paletteDark });
-                cached->usesPalette = true;
-            }
-            else if (const auto role = ThemePalette::getRoleFromName (roleName))
-            {
-                cached->inputs.push_back ({ .index = i, .kind = ParsedInput::Kind::paletteRole, .paletteRole = *role });
-                cached->usesPalette = true;
-            }
-
+        auto input = parse (program.getInputName (i), i);
+        if (input.kind == ParsedInput::Kind::invalid)
             continue;
-        }
 
-        if (name.startsWith ("parent."))
-        {
-            cached->inputs.push_back ({ .index = i, .kind = ParsedInput::Kind::parentProperty, .property = Identifier (name.substring (7)) });
-            continue;
-        }
+        if (input.kind == ParsedInput::Kind::paletteDark || input.kind == ParsedInput::Kind::paletteRole)
+            bound.paletteDependent = true;
 
-        if (name.startsWith ("self."))
-        {
-            cached->inputs.push_back ({ .index = i, .kind = ParsedInput::Kind::selfProperty, .property = Identifier (name.substring (5)) });
-            continue;
-        }
-
-        const auto dot = name.indexOfChar ('.');
-
-        if (dot > 0)
-        {
-            cached->inputs.push_back ({ .index = i,
-                                        .kind = ParsedInput::Kind::prefixed,
-                                        .prefix = name.substring (0, dot),
-                                        .property = Identifier (name.substring (dot + 1)) });
-            continue;
-        }
-
-        cached->inputs.push_back ({ .index = i, .kind = ParsedInput::Kind::bareProperty, .property = Identifier (name) });
+        bound.inputs.push_back (std::move (input));
     }
 
-    auto& result = *cached;
-    cachedPrograms.push_back (std::move (cached));
-    return result;
+    return bound;
 }
 
-void DrawingScope::updateInputs (const CompiledExpression& program, ExpressionState& state) const
+void DrawingScope::updateInputs (BoundInputs& bound, ExpressionState& state) const
 {
     auto* self = component.get();
-    if (self == nullptr)
-        return;
-
-    const auto& cached = getCachedProgram (program);
-    if (cached.inputs.empty())
+    if (self == nullptr || bound.inputs.empty())
         return;
 
     const ThemePalette* palette = nullptr;
 
-    if (cached.usesPalette)
+    if (bound.paletteDependent)
     {
         static const ThemePalette defaultPalette;
 
@@ -168,7 +229,7 @@ void DrawingScope::updateInputs (const CompiledExpression& program, ExpressionSt
             palette = &defaultPalette;
     }
 
-    for (const auto& input : cached.inputs)
+    for (auto& input : bound.inputs)
     {
         if (input.kind == ParsedInput::Kind::paletteDark)
         {
@@ -182,99 +243,16 @@ void DrawingScope::updateInputs (const CompiledExpression& program, ExpressionSt
             continue;
         }
 
-        Component* targetComponent = nullptr;
-        const ComponentProperty* descriptor = nullptr;
-        BindingProvider* targetProvider = nullptr;
-
-        if (input.kind == ParsedInput::Kind::selfProperty)
-        {
-            targetComponent = self;
-            descriptor = self->getTypeInfo().findProperty (input.property);
-        }
-        else if (input.kind == ParsedInput::Kind::parentProperty)
-        {
-            if (auto* parent = self->getParentComponent())
-            {
-                targetComponent = parent;
-                descriptor = parent->getTypeInfo().findProperty (input.property);
-            }
-        }
-        else if (input.kind == ParsedInput::Kind::bareProperty)
-        {
-            if (auto* local = locals.get(); local != nullptr && findProviderProperty (*local, input.property).has_value())
-            {
-                targetProvider = local;
-            }
-            else if (const auto* own = self->getTypeInfo().findProperty (input.property))
-            {
-                targetComponent = self;
-                descriptor = own;
-            }
-            else
-            {
-                for (auto* ancestor = self->getParentComponent(); ancestor != nullptr; ancestor = ancestor->getParentComponent())
-                {
-                    const auto* candidate = ancestor->getTypeInfo().findProperty (input.property);
-
-                    if (candidate != nullptr && candidate->isStoreBacked() && candidate->isInherited)
-                    {
-                        targetComponent = ancestor;
-                        descriptor = candidate;
-                        break;
-                    }
-                }
-            }
-        }
-        else if (input.kind == ParsedInput::Kind::prefixed)
-        {
-            targetComponent = input.cachedComponent.get();
-            targetProvider = input.cachedProvider.get();
-
-            if (targetComponent == nullptr && targetProvider == nullptr)
-            {
-                if (componentResolver != nullptr)
-                    targetComponent = componentResolver (input.prefix);
-
-                if (targetComponent == nullptr && modelResolver != nullptr)
-                    targetProvider = modelResolver (input.prefix);
-
-                input.cachedComponent = targetComponent;
-                input.cachedProvider = targetProvider;
-            }
-
-            if (targetComponent != nullptr)
-                descriptor = targetComponent->getTypeInfo().findProperty (input.property);
-        }
-
-        ComponentProperty::Type type = ComponentProperty::Type::any;
-        ComponentProperty::Type elementType = ComponentProperty::Type::any;
-        var value;
-
-        if (targetComponent != nullptr)
-        {
-            if (descriptor == nullptr)
-                continue;
-
-            type = descriptor->type;
-            elementType = descriptor->elementType;
-            value = targetComponent->findProperty (input.property);
-        }
-        else if (targetProvider != nullptr)
-        {
-            const auto property = findProviderProperty (*targetProvider, input.property);
-            if (! property.has_value())
-                continue;
-
-            type = property->type;
-            elementType = property->elementType;
-            value = targetProvider->getValue (input.property);
-        }
-        else
-        {
+        const auto resolved = resolve (input);
+        if (resolved.descriptor == nullptr)
             continue;
-        }
 
-        setInputValue (state, input.index, type, elementType, value, input.arrayInput);
+        setInputValue (state,
+                       input.index,
+                       resolved.descriptor->type,
+                       resolved.descriptor->elementType,
+                       resolved.component->findProperty (input.property),
+                       input.arrayInput);
     }
 }
 
@@ -296,103 +274,31 @@ void DrawingScope::setInputValue (ExpressionState& state,
         });
 }
 
-DrawingScope::ResolvedTarget DrawingScope::resolveTarget (const String& symbol) const
-{
-    auto* self = component.get();
-    if (self == nullptr)
-        return {};
-
-    if (symbol.startsWith ("parent."))
-        return { self->getParentComponent(), nullptr, Identifier (symbol.substring (7)) };
-
-    if (symbol.startsWith ("self."))
-        return { self, nullptr, Identifier (symbol.substring (5)) };
-
-    const auto dot = symbol.indexOfChar ('.');
-
-    if (dot > 0)
-    {
-        const auto prefix = symbol.substring (0, dot);
-        const Identifier propertyId (symbol.substring (dot + 1));
-
-        if (componentResolver != nullptr)
-            if (auto* resolved = componentResolver (prefix))
-                return { resolved, nullptr, propertyId };
-
-        if (modelResolver != nullptr)
-            if (auto* provider = modelResolver (prefix))
-                return { nullptr, provider, propertyId };
-
-        return {};
-    }
-
-    // A bare name the component doesn't declare reads the closest ancestor declaring it as inherited, like a token
-    const Identifier propertyId (symbol);
-
-    if (auto* local = locals.get(); local != nullptr && findProviderProperty (*local, propertyId).has_value())
-        return { nullptr, local, propertyId };
-
-    if (self->getTypeInfo().findProperty (propertyId) != nullptr)
-        return { self, nullptr, propertyId };
-
-    for (auto* ancestor = self->getParentComponent(); ancestor != nullptr; ancestor = ancestor->getParentComponent())
-    {
-        const auto* property = ancestor->getTypeInfo().findProperty (propertyId);
-
-        if (property != nullptr && property->isStoreBacked() && property->isInherited)
-            return { ancestor, nullptr, propertyId };
-    }
-
-    return { self, nullptr, propertyId };
-}
-
 std::vector<DrawingScope::Dependency> DrawingScope::getDependencies (const CompiledExpression& program) const
 {
     std::vector<Dependency> dependencies;
-    bool addedPaletteDependency = false;
 
-    for (int i = 0; i < program.getNumInputs(); ++i)
+    for (int i = context.getNumInputs(); i < program.getNumInputs(); ++i)
     {
-        const auto& name = program.getInputName (i);
-
-        if (name.startsWith ("palette."))
-        {
-            if (auto* self = component.get(); self != nullptr && ! addedPaletteDependency)
-            {
-                static const Identifier paletteId ("palette");
-                dependencies.push_back ({ self, nullptr, paletteId });
-                addedPaletteDependency = true;
-            }
-
+        if (! program.usesInput (i))
             continue;
-        }
 
-        const auto target = resolveTarget (name);
+        const auto input = parse (program.getInputName (i), i);
 
-        if (target.component != nullptr)
-        {
-            if (target.component->getTypeInfo().findProperty (target.property) == nullptr)
-                continue;
-        }
-        else if (target.provider != nullptr)
-        {
-            if (! findProviderProperty (*target.provider, target.property).has_value())
-                continue;
-        }
-        else
-        {
+        if (input.kind == ParsedInput::Kind::paletteDark || input.kind == ParsedInput::Kind::paletteRole)
             continue;
-        }
+
+        const auto resolved = resolve (input);
+        if (resolved.component == nullptr)
+            continue;
 
         const auto isKnown = std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
         {
-            return dependency.component == target.component
-                && dependency.provider == target.provider
-                && dependency.property == target.property;
+            return dependency.component == resolved.component && dependency.property == input.property;
         });
 
         if (! isKnown)
-            dependencies.push_back ({ target.component, target.provider, target.property });
+            dependencies.push_back ({ resolved.component, input.property });
     }
 
     return dependencies;
@@ -449,14 +355,6 @@ void DrawingScope::ArrayInput::bind (ExpressionState& state, int input, Componen
 
         state.bindArray (ExpressionArray<Type> { input }, elements.data(), elements.size());
     });
-}
-
-const ExpressionType* DrawingScope::typeForPaletteRole (const String& roleName) const
-{
-    if (roleName == "dark")
-        return context.getType<bool>();
-
-    return ThemePalette::getRoleFromName (roleName).has_value() ? context.getType<Color>() : nullptr;
 }
 
 } // namespace yup

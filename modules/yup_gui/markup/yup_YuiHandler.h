@@ -55,21 +55,19 @@ struct YuiHandler
 };
 
 //==============================================================================
-/** The named arguments of a handler, which its expressions read by their bare names. */
-class YuiHandlerArguments final : public BindingProvider
+/** The named arguments of a handler, exposed as a standalone component so expressions read them by bare name. */
+class YuiHandlerArguments final : public Component
 {
 public:
     YuiHandlerArguments (const StringArray& names, const std::vector<ComponentSignal::Argument>& arguments);
 
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return *info; }
+
     /** Sets the values of the arguments the signal was emitted with. */
     void setValues (const Array<var>& newValues) { values = newValues; }
 
-    std::vector<Property> getProperties() const override { return properties; }
-    var getValue (const Identifier& name) const override;
-    void setValue (const Identifier&, const var&) override {}
-
 private:
-    std::vector<Property> properties;
+    std::unique_ptr<ComponentTypeInfo> info;
     Array<var> values;
 };
 

@@ -86,8 +86,8 @@ UI can use it directly:
 
 ```cpp
 BindingGraph graph;
-graph.setComponentResolver ([&] (const String& id) { return findChildWithID (id); });
-graph.bind (meter, "value", "gain.value * 2", ComponentProperty::Type::number);
+auto resolve = [&] (const String& id) { return findChildWithID (id); };
+graph.bind (meter, "value", "gain.value * 2", ComponentProperty::Type::number, resolve);
 ```
 
 `YuiBuilder` owns one graph for everything it builds, reachable with

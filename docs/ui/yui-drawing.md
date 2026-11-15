@@ -14,8 +14,8 @@ any paint code.
 
 Drawings are written in `.yui` files as `drawing` blocks. The `.yui` parser
 turns each block into a `DataTree` with a `drawing` root, the same document the
-editor tools and hot reload work on. `DrawingProgram` compiles that tree, and
-`DrawingStyle` installs it on a component as a regular `ComponentStyle`.
+editor tools and hot reload work on. `DrawingStyle` compiles that tree and
+installs it on a component as a regular `ComponentStyle`.
 
 ## A first drawing
 
@@ -218,13 +218,12 @@ style {
 ```
 
 From C++, set them on the component with `setProperty ("bezelSize", 0.7)`, and
-list them with `DrawingProgram::getProperties()` or
-`DrawingStyle::getProperties()`.
+list them with `DrawingStyle::getProperties()`.
 
 ## Errors
 
-`DrawingProgram::create` and `DrawingStyle::create` fail with a message that
-starts with the path of the offending element and property:
+`DrawingStyle::create` fails with a message that starts with the path of the
+offending element and property:
 
 ```text
 Knob/layer[0]/arc#value.to: Unknown symbol 'avv'
@@ -237,8 +236,8 @@ root is named by its `name` property, or `drawing`.
 
 ## Using a drawing from C++
 
-`YuiParser::parse` turns `.yui` text into the drawing document, and both
-`DrawingStyle` and `DrawingProgram` take the `drawing` tree inside it:
+`YuiParser::parse` turns `.yui` text into the drawing document, and
+`DrawingStyle::create` takes the `drawing` tree inside it:
 
 ```cpp
 const auto result = YuiParser::parse (text);
@@ -254,13 +253,12 @@ else
     DBG (style.getErrorMessage());
 ```
 
-`DrawingProgram` compiles the same tree when a drawing is painted by hand, for
-example from a component's `paint`:
+Because `DrawingStyle` is a `ComponentStyle`, you can also invoke `paint`
+directly when painting by hand:
 
 ```cpp
-auto program = DrawingProgram::create (slider, drawing);
-if (program.wasOk())
-    program.getReference()->draw (g, theme, slider);
+if (style.wasOk())
+    style.getReference()->paint (g, theme, slider);
 ```
 
 A drawing is bound to the component it was created for, so install it on that

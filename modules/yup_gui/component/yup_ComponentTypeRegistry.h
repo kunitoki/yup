@@ -71,6 +71,6 @@ private:
 
 //==============================================================================
 /** Registers the type infos of the built-in yup_gui components into the registry. */
-void registerBuiltInComponentTypes();
+YUP_API void registerBuiltInComponentTypes();
 
 } // namespace yup

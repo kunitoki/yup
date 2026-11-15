@@ -24,14 +24,28 @@
 namespace yup
 {
 
+class DependencyObserver;
+
 //==============================================================================
 /**
-    A component style that paints a component from a drawing tree.
+    A component style that paints a component from a compiled `.yui` drawing tree.
 
-    A DrawingStyle wraps a DrawingProgram as a ComponentStyle, so a data-driven drawing
-    can be installed on a component with Component::setStyle and used like any other
-    style. Every paint feeds the component's live bounds and reflected properties into
-    the drawing, so it reflects the component's current state.
+    A drawing is a tree of elements, the DataTree form of a `drawing` block in a `.yui`
+    file. Its root has the type `drawing` and its children are drawn in order:
+
+    - shapes: `rect`, `ellipse`, `circle`, `arc`, `line`, `path`, `polygon`, `star` and `text`,
+      each with its own geometry and paint properties;
+    - `let` (`name`, `value`): a local visible to the following siblings and their children;
+    - `layer` (`opacity`, `visible`): draws its children into a transparency layer;
+    - `group` (`transform`, `visible`): draws its children under a transform;
+    - `repeat` (`name`, `from`, `to`): draws its shapes once for every int from `from` up to,
+      but not including, `to`, exposed to them under `name`;
+    - `property` (`name`, `type`, `value`), only at the top of the drawing: an input of the
+      drawing, visible to every element.
+
+    Every property value is an expression. It resolves the component's reflected properties
+    by name (see DrawingScope), the component's local bounds as `bounds`, the theme's default
+    font as `defaultFont`, and the lets in scope. Names starting with `_` are reserved.
 
     @code
     auto style = DrawingStyle::create (slider, drawing);
@@ -39,11 +53,11 @@ namespace yup
         slider.setStyle (style.getReference());
     @endcode
 
-    The style is bound to the component it was created for: install it on that component
-    only. The drawing resolves and feeds that component's properties, so painting a
-    different component through the same style is not supported.
+    Styles created from the same drawing share one compilation while any of them exists,
+    as long as their components resolve every name the drawing reads to the same type.
+    The style is bound to the component it was created for: install it on that component only.
 
-    @see DrawingProgram, DrawingScope, ComponentStyle
+    @see DrawingScope, ComponentStyle, ExpressionDrawing
 
     @tags{UI}
 */
@@ -55,31 +69,55 @@ public:
     using Ptr = ReferenceCountedObjectPtr<DrawingStyle>;
 
     //==============================================================================
-    /** Creates a style that paints a component from a drawing tree.
+    /** Compiles a drawing tree for a component (or reuses an equivalent compilation).
 
-        @param target     The component the style is created for and installed on.
-        @param drawing    The drawing tree (see DrawingProgram::create).
+        @param target             The component the style is created for and installed on.
+        @param drawing            The drawing tree, with a root of type `drawing`.
+        @param componentResolver  Optional resolver for named components and models referenced by expressions.
 
-        @return A style on success, or a failure carrying the compiler message.
+        @return A style on success, or a failure whose message starts with the path of the offending element.
     */
     static ResultValue<DrawingStyle::Ptr> create (Component& target,
                                                   const DataTree& drawing,
-                                                  DrawingScope::ComponentResolver componentResolver = nullptr,
-                                                  DrawingScope::ModelResolver modelResolver = nullptr);
+                                                  DrawingScope::ComponentResolver componentResolver = nullptr);
+
+    /** Destructor. */
+    ~DrawingStyle() override;
 
     //==============================================================================
-    /** Returns the properties the drawing declares (see DrawingProgram::getProperties). */
+    /** Returns the properties the drawing declares, in declaration order. */
     const std::vector<ComponentProperty>& getProperties() const noexcept;
 
     //==============================================================================
-    /** @internal */
+    /** Feeds the component's live state and paints the drawing elements in order. */
     void paint (Graphics& g, const ApplicationTheme& theme, const Component& component) override;
 
 private:
     //==============================================================================
-    explicit DrawingStyle (std::unique_ptr<DrawingProgram> programToUse);
+    struct Node;
+    struct Compiled;
+    struct Slot;
+    class Compiler;
+    class CompiledCache;
 
-    std::unique_ptr<DrawingProgram> program;
+    static constexpr int maxRepeatCount = 4096;
+
+    DrawingStyle (Component& target, DrawingScope::ComponentResolver componentResolver);
+
+    void instantiate (std::shared_ptr<const Compiled> compiledToUse);
+    Slot* prepare (const Node& node, Rectangle<float> bounds, const Font& font);
+    void drawNodes (Graphics& g, const std::vector<std::unique_ptr<Node>>& children, Rectangle<float> bounds, const Font& font, int numRows);
+    void drawNode (Graphics& g, const Node& node, Rectangle<float> bounds, const Font& font, int numRows);
+
+    WeakReference<Component> targetComponent;
+    ExpressionContext context;
+    DrawingScope scope;
+    std::shared_ptr<const Compiled> compiled;
+    std::unique_ptr<Slot[]> slots;
+    std::vector<var> propertyValues;
+    std::vector<DrawingScope::ArrayInput> propertyArrays;
+    std::vector<DrawingScope::Dependency> dependencies;
+    std::unique_ptr<DependencyObserver> observer;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrawingStyle)
 };

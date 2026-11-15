@@ -22,6 +22,36 @@
 namespace yup
 {
 
+void registerBuiltInComponentTypes()
+{
+    static std::once_flag once;
+    std::call_once (once, []
+    {
+        auto& registry = ComponentTypeRegistry::getInstance();
+
+        registry.registerType (Component::getClassTypeInfo());
+        registry.registerType (Button::getClassTypeInfo());
+        registry.registerType (Label::getClassTypeInfo());
+        registry.registerType (Slider::getClassTypeInfo());
+        registry.registerType (TextButton::getClassTypeInfo());
+        registry.registerType (ToggleButton::getClassTypeInfo());
+        registry.registerType (SwitchButton::getClassTypeInfo());
+        registry.registerType (ComboBox::getClassTypeInfo());
+        registry.registerType (TextEditor::getClassTypeInfo());
+        registry.registerType (ProgressBar::getClassTypeInfo());
+        registry.registerType (ScrollBar::getClassTypeInfo());
+        registry.registerType (ListBox::getClassTypeInfo());
+        registry.registerType (Viewport::getClassTypeInfo());
+        registry.registerType (TabComponent::getClassTypeInfo());
+        registry.registerType (LayoutComponent::getClassTypeInfo());
+        registry.registerType (FlexBoxComponent::getClassTypeInfo());
+        registry.registerType (RowComponent::getClassTypeInfo());
+        registry.registerType (ColumnComponent::getClassTypeInfo());
+        registry.registerType (GridComponent::getClassTypeInfo());
+        registry.registerType (StackComponent::getClassTypeInfo());
+    });
+}
+
 namespace
 {
 
@@ -35,6 +65,12 @@ const Identifier& classProperty()
 {
     static const Identifier identifier ("class");
     return identifier;
+}
+
+Identifier makeOptionalIdentifier (const var& value)
+{
+    const auto text = value.toString();
+    return text.isNotEmpty() ? Identifier (text) : Identifier();
 }
 
 DataTree findElementById (const DataTree& element, const String& id)
@@ -115,7 +151,7 @@ ComponentProperty makeDeclaredProperty (const DataTree& declaration, bool isInhe
         });
 
     return ComponentProperty {
-        .name = Identifier (declaration.getProperty ("name").toString()),
+        .name = makeOptionalIdentifier (declaration.getProperty ("name")),
         .type = type,
         .elementType = ComponentProperty::getElementTypeFromName (typeName),
         .defaultValue = defaultValue,
@@ -223,8 +259,6 @@ Result YuiBuilder::build (const DataTree& document)
 
     // The tree exists before any value is applied, so expressions can reference any element
     applyValues (std::exchange (applied, {}));
-    bindings.setComponentResolver (resolverFor (scope));
-    bindings.setModelResolver (getModelResolver());
 
     // Children go first, so that no parent is destroyed while still holding them
     while (! previousComponents.empty())
@@ -252,8 +286,6 @@ void YuiBuilder::resetBindings()
 {
     bindings.clear();
     bindings.clearDiagnostics();
-    bindings.setComponentResolver (nullptr);
-    bindings.setModelResolver (nullptr);
     pending.clear();
     connections.clear();
     watchers.clear();
@@ -297,24 +329,12 @@ void YuiBuilder::setAction (const String& name, Action action)
 
 void YuiBuilder::setModel (const String& name, BindingProvider& provider)
 {
-    if (const auto found = models.find (name); found != models.end())
-    {
-        if (auto* existing = found->second->getProvider())
-            bindings.forgetProvider (*existing);
-    }
-
-    models[name] = std::make_unique<Model> (provider);
+    models[name] = std::make_unique<BindingModel> (provider);
 }
 
 void YuiBuilder::removeModel (const String& name)
 {
-    if (const auto found = models.find (name); found != models.end())
-    {
-        if (auto* existing = found->second->getProvider())
-            bindings.forgetProvider (*existing);
-
-        models.erase (found);
-    }
+    models.erase (name);
 }
 
 //==============================================================================
@@ -336,7 +356,9 @@ void YuiBuilder::collectDeclarations (const DataTree& document)
         if (kind != "component")
             continue;
 
-        const Identifier name (element.getProperty ("name").toString());
+        const auto name = makeOptionalIdentifier (element.getProperty ("name"));
+        if (! name.isValid())
+            continue;
 
         if (composites.count (name) > 0 || ComponentTypeRegistry::getInstance().findType (name) != nullptr)
         {
@@ -402,7 +424,9 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
             continue;
 
         const auto kind = declaration.getType().toString();
-        const Identifier name (declaration.getProperty ("name").toString());
+        const auto name = makeOptionalIdentifier (declaration.getProperty ("name"));
+        if (! name.isValid())
+            continue;
 
         if (kind == "property")
         {
@@ -417,9 +441,13 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
 
             for (const auto& argument : declaration)
             {
+                const auto argumentName = makeOptionalIdentifier (argument.getProperty ("name"));
+                if (! argumentName.isValid())
+                    continue;
+
                 const auto argumentType = argument.getProperty ("type").toString();
 
-                arguments.push_back ({ Identifier (argument.getProperty ("name").toString()),
+                arguments.push_back ({ argumentName,
                                        ComponentProperty::getTypeFromName (argumentType),
                                        ComponentProperty::getElementTypeFromName (argumentType) });
             }
@@ -576,9 +604,15 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
     for (const auto& child : element)
     {
         if (child.getType() == bindType)
-            values.links.push_back ({ Identifier (child.getProperty ("property").toString()), child.getProperty ("target").toString(), child });
+        {
+            if (const auto prop = makeOptionalIdentifier (child.getProperty ("property")); prop.isValid())
+                values.links.push_back ({ prop, child.getProperty ("target").toString(), child });
+        }
         else if (child.getType() == changedType)
-            values.changes.push_back ({ Identifier (child.getProperty ("property").toString()), child.getProperty ("handler").toString(), child, Identifier ("handler") });
+        {
+            if (const auto prop = makeOptionalIdentifier (child.getProperty ("property")); prop.isValid())
+                values.changes.push_back ({ prop, child.getProperty ("handler").toString(), child, Identifier ("handler") });
+        }
     }
 
     pending.push_back (std::move (values));
@@ -682,6 +716,8 @@ void YuiBuilder::applyTokens (Component& root, Scope& scope)
     for (const auto& token : tokens)
     {
         auto property = makeDeclaredProperty (token, true);
+        if (! property.name.isValid())
+            continue;
 
         const auto isDeclared = std::any_of (properties.begin(), properties.end(), [&] (const auto& declared)
         {
@@ -787,8 +823,6 @@ void YuiBuilder::resetValue (Component& component, const ComponentTypeInfo& type
 
 void YuiBuilder::applyPending (const Pending& entry)
 {
-    bindings.setComponentResolver (resolverFor (*entry.scope));
-    bindings.setModelResolver (getModelResolver());
     auto& values = applied[entry.component];
 
     for (const auto* entryValue : inDeclarationOrder (entry.component->getTypeInfo(), entry.values))
@@ -800,7 +834,9 @@ void YuiBuilder::applyPending (const Pending& entry)
 
         value.element = entryValue->element;
         value.property = entryValue->property;
-        value.isConstant = ! value.isLink && applyProperty (*entry.component, *entryValue, *entry.scope) == ApplyOutcome::constant;
+
+        const auto outcome = applyProperty (*entry.component, *entryValue, *entry.scope);
+        value.isConstant = ! value.isLink && outcome == ApplyOutcome::constant;
     }
 
     for (const auto& link : entry.links)
@@ -867,7 +903,7 @@ YuiBuilder::ApplyOutcome YuiBuilder::applyProperty (Component& component, const 
 
     bool isLive = false;
 
-    if (auto result = bindings.bind (component, name, value.text, type, &isLive); result.failed())
+    if (auto result = bindings.bind (component, name, value.text, type, resolverFor (scope), &isLive); result.failed())
     {
         report (component, name, result.getErrorMessage(), value);
         return ApplyOutcome::failed;
@@ -897,7 +933,7 @@ void YuiBuilder::applyLink (Component& component, const Value& link, Scope& scop
 
     const auto& sourceProperty = split->second;
 
-    auto* model = dynamic_cast<Model*> (source);
+    auto* model = dynamic_cast<BindingModel*> (source);
     if (model != nullptr && source->getTypeInfo().findProperty (sourceProperty) == nullptr)
         model->refreshProperties();
 
@@ -1017,7 +1053,7 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
                 if (const auto declared = emitted->arguments[argIndex].type; ComponentProperty::isExpressionType (declared))
                     type = declared;
 
-            auto compiled = PropertyExpression::compile (component, call.arguments[i].toString(), type, resolverFor (scope), getModelResolver(), locals.get());
+            auto compiled = PropertyExpression::compile (component, call.arguments[i].toString(), type, resolverFor (scope), locals.get());
 
             if (compiled.failed())
                 return fail (compiled.getErrorMessage());
@@ -1136,7 +1172,7 @@ DrawingScope::ComponentResolver YuiBuilder::resolverFor (const Scope& scope) con
 {
     return [this, scopeToUse = &scope] (const String& name)
     {
-        return resolveComponent (*scopeToUse, name);
+        return resolve (*scopeToUse, name);
     };
 }
 
@@ -1144,19 +1180,12 @@ DrawingScope::ComponentResolver YuiBuilder::getComponentResolver() const
 {
     return [this] (const String& name) -> Component*
     {
-        if (scopes.empty())
-            return nullptr;
+        if (! scopes.empty())
+            if (auto* component = resolveComponent (*scopes.front(), name))
+                return component;
 
-        return resolveComponent (*scopes.front(), name);
-    };
-}
-
-DrawingScope::ModelResolver YuiBuilder::getModelResolver() const
-{
-    return [this] (const String& name) -> BindingProvider*
-    {
         if (const auto found = models.find (name); found != models.end())
-            return found->second->getProvider();
+            return found->second.get();
 
         return nullptr;
     };

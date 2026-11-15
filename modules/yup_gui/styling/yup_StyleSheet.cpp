@@ -25,7 +25,126 @@ namespace yup
 namespace
 {
 
-std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent, std::vector<StyleSheet::Declaration>& target)
+std::optional<MouseCursor::Type> findStyleCursor (const String& name)
+{
+    static const std::pair<const char*, MouseCursor::Type> cursors[] = {
+        { "none", MouseCursor::None },
+        { "default", MouseCursor::Default },
+        { "arrow", MouseCursor::Arrow },
+        { "text", MouseCursor::Text },
+        { "wait", MouseCursor::Wait },
+        { "waitArrow", MouseCursor::WaitArrow },
+        { "hand", MouseCursor::Hand },
+        { "crosshair", MouseCursor::Crosshair },
+        { "crossbones", MouseCursor::Crossbones },
+        { "resizeLeftRight", MouseCursor::ResizeLeftRight },
+        { "resizeUpDown", MouseCursor::ResizeUpDown },
+        { "resizeTopLeftRightBottom", MouseCursor::ResizeTopLeftRightBottom },
+        { "resizeBottomLeftRightTop", MouseCursor::ResizeBottomLeftRightTop },
+        { "resizeAll", MouseCursor::ResizeAll }
+    };
+
+    return detail::findNamed (cursors, name);
+}
+
+void parseRuleDeclarationValue (StyleSheet::Declaration& declaration)
+{
+    using Kind = StyleSheet::Declaration::Kind;
+    static const Identifier paletteId ("palette");
+    static const Identifier drawingId ("drawing");
+    static const Identifier transitionId ("transition");
+    static const Identifier animationId ("animation");
+    static const Identifier cursorId ("cursor");
+    static const Identifier effectId ("effect");
+    static const Identifier shadowId ("shadow");
+
+    if (declaration.name == paletteId)
+    {
+        declaration.kind = Kind::palette;
+        declaration.parsedName = declaration.value.unquoted().trim();
+    }
+    else if (declaration.name == drawingId)
+    {
+        declaration.kind = Kind::drawing;
+        declaration.parsedName = declaration.value.unquoted().trim();
+    }
+    else if (declaration.name == effectId)
+    {
+        declaration.kind = Kind::effect;
+        declaration.parsedName = declaration.value.unquoted().trim();
+    }
+    else if (declaration.name == cursorId)
+    {
+        declaration.kind = Kind::cursor;
+        declaration.parsedName = declaration.value.unquoted().trim();
+        declaration.cursor = findStyleCursor (declaration.parsedName);
+
+        if (declaration.parsedName.isNotEmpty() && ! declaration.cursor.has_value())
+            declaration.parseError = "Unknown cursor '" + declaration.parsedName + "'";
+    }
+    else if (declaration.name == transitionId)
+    {
+        declaration.kind = Kind::transition;
+        declaration.parsedName = declaration.value.unquoted();
+
+        if (auto parsed = StyleAnimator::parseTransitions (declaration.parsedName); parsed.wasOk())
+            declaration.transitions = std::move (parsed.getReference());
+        else
+            declaration.parseError = "transition: " + parsed.getErrorMessage();
+    }
+    else if (declaration.name == animationId)
+    {
+        declaration.kind = Kind::animation;
+        declaration.parsedName = declaration.value.unquoted();
+
+        if (declaration.parsedName.trim().isNotEmpty())
+        {
+            if (auto parsed = StyleAnimator::parseAnimations (declaration.parsedName); parsed.wasOk())
+                declaration.animations = std::move (parsed.getReference());
+            else
+                declaration.parseError = "animation: " + parsed.getErrorMessage();
+        }
+    }
+    else if (declaration.name == shadowId)
+    {
+        declaration.kind = Kind::shadow;
+        declaration.parsedName = declaration.value.unquoted().trim();
+
+        if (declaration.parsedName.isEmpty() || declaration.parsedName == "none")
+            return;
+
+        for (const auto& tokens : detail::tokenizeStyleValue (declaration.parsedName))
+        {
+            float parsedLengths[4] {};
+            int lengths = 0;
+
+            while (lengths < jmin (4, tokens.size() - 1))
+            {
+                const auto length = detail::parseStrictFloat (tokens[lengths]);
+                if (! length.has_value())
+                    break;
+
+                parsedLengths[lengths++] = *length;
+            }
+
+            if (lengths < 2)
+            {
+                declaration.shadows.clear();
+                declaration.parseError = "shadow: Expected 'x y [blur [spread]] color', got '" + tokens.joinIntoString (" ") + "'";
+                return;
+            }
+
+            declaration.shadows.push_back ({
+                .offset = { parsedLengths[0], parsedLengths[1] },
+                .blur = lengths > 2 ? jmax (0.0f, parsedLengths[2]) : 0.0f,
+                .spread = lengths > 3 ? parsedLengths[3] : 0.0f,
+                .colorExpression = tokens.joinIntoString (" ", lengths)
+            });
+        }
+    }
+}
+
+std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent, std::vector<StyleSheet::Declaration>& target, bool isKeyframe)
 {
     for (const auto& element : parent)
     {
@@ -42,8 +161,11 @@ std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent, std::vect
         StyleSheet::Declaration declaration;
         declaration.element = element;
 
-        if (const auto dot = name.indexOfChar ('.'); dot > 0)
+        if (const auto dot = name.indexOfChar ('.'); dot >= 0)
         {
+            if (dot == 0 || dot + 1 >= name.length())
+                return YuiDiagnostic { .message = "A declaration needs a name", .element = element };
+
             declaration.qualifier = Identifier (name.substring (0, dot));
             declaration.name = Identifier (name.substring (dot + 1));
             declaration.cascadeKey = Identifier (name);
@@ -58,6 +180,9 @@ std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent, std::vect
 
         if (declaration.value.isEmpty())
             return YuiDiagnostic { .message = "The declaration '" + name + "' needs a value", .element = element };
+
+        if (! isKeyframe)
+            parseRuleDeclarationValue (declaration);
 
         target.push_back (std::move (declaration));
     }
@@ -151,7 +276,7 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
             rule.selector = selector.getReference();
             rule.order = static_cast<int> (rules.size());
 
-            if (auto problem = readDeclarations (element, rule.declarations))
+            if (auto problem = readDeclarations (element, rule.declarations, false))
                 return problem;
 
             for (const auto& property : rule.selector.getReferencedProperties())
@@ -173,11 +298,13 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
         }
         else if (type == "keyframes")
         {
-            KeyframeSequence sequence;
-            sequence.name = Identifier (element.getProperty ("name").toString().trim());
+            const auto sequenceName = element.getProperty ("name").toString().trim();
 
-            if (! sequence.name.isValid())
+            if (sequenceName.isEmpty())
                 return YuiDiagnostic { .message = "A keyframes block needs a name", .element = element };
+
+            KeyframeSequence sequence;
+            sequence.name = Identifier (sequenceName);
 
             for (const auto& frameElement : element)
             {
@@ -187,7 +314,7 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
                 Keyframe frame;
                 frame.position = jlimit (0.0, 1.0, static_cast<double> (frameElement.getProperty ("at")));
 
-                if (auto problem = readDeclarations (frameElement, frame.declarations))
+                if (auto problem = readDeclarations (frameElement, frame.declarations, true))
                     return problem;
 
                 sequence.frames.push_back (std::move (frame));

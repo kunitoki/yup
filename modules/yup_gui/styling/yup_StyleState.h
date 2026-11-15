@@ -135,16 +135,6 @@ public:
     const ThemePalette* getStylePalette() const noexcept { return stylePalette.get(); }
 
     //==============================================================================
-    /** Marks this component as reading palette roles, so palette switches restyle it.
-
-        @param isDependent True when a computed value reads `palette.*`.
-    */
-    void setPaletteDependent (bool isDependent) noexcept { paletteDependent = isDependent; }
-
-    /** Returns true when a computed value of this component reads a palette role. */
-    bool isPaletteDependent() const noexcept { return paletteDependent; }
-
-    //==============================================================================
     /** One layer of a `shadow:` declaration, painted behind the component. */
     struct Shadow
     {
@@ -190,7 +180,6 @@ private:
     mutable std::vector<Path> cachedShadowPaths;
     mutable Rectangle<float> cachedShadowBounds;
     mutable float cachedShadowCornerRadius = -1.0f;
-    bool paletteDependent = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StyleState)
 };

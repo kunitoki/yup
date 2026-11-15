@@ -160,26 +160,29 @@ button.setProperty ("cornerRadius", 0.0);                    // this button
 ### Binding a reflected property to a model
 
 State-backed properties (`value`, `text`, ...) reflect the widget's own model.
-`DataTreeBindingProvider` and `BindingGraph` two-way link one of them to a
-`DataTree` property, so the widget mirrors the document and writes edits back:
+`DataTreeBindingProvider`, `BindingModel` and `BindingGraph` two-way link one of
+them to a `DataTree` property, so the widget mirrors the document and writes
+edits back:
 
 ```cpp
-DataTree model ("Filter");
-DataTreeBindingProvider provider (model);
+DataTree state ("Filter");
+DataTreeBindingProvider provider (state);
+BindingModel model (provider);
 BindingGraph bindings;
 
 Slider cutoff (Slider::LinearHorizontal);
-bindings.link (cutoff, "value", provider, "cutoff");
+bindings.link (cutoff, "value", model, "cutoff");
+model.trackGestures (cutoff, "cutoff");
 ```
 
-On link establishment the provider seeds the component when the property holds a
-value. Dragging the slider updates `model["cutoff"]`; a transaction that changes
-`model["cutoff"]` updates the slider. Pass an `UndoManager::Ptr` to
+On link establishment the model seeds the component when the property holds a
+value. Dragging the slider updates `state["cutoff"]`; a transaction that changes
+`state["cutoff"]` updates the slider. Pass an `UndoManager::Ptr` to
 `DataTreeBindingProvider` to make widget edits join the document's undo history:
 
 ```cpp
 UndoManager::Ptr undo = new UndoManager();
-DataTreeBindingProvider provider (model, undo);
+DataTreeBindingProvider provider (state, undo);
 ```
 
 ### Expressions over component properties
@@ -190,28 +193,30 @@ bare name or `self.` refers to the bound component, `parent.` to its parent:
 
 ```cpp
 ExpressionContext context;
-addGraphicsExpressionTypes (context); // registers the point, color, ... types
+addGraphicsExpressionTypes (context);        // registers the point, color, ... types
+DrawingScope::addExpressionArrayTypes (context); // registers typed array views
 
 Slider slider (Slider::LinearHorizontal);
 slider.setValue (0.5);
 
 DrawingScope scope (slider, context);
-scope.install(); // resolve property names while compiling
-
-auto compiled = CompiledExpression::compile ("out = value * 100", context);
+auto parsed = scope.parse ("out = value * 100");
+auto compiled = CompiledExpression::compile (parsed.getReference(), context);
 
 const auto& program = compiled.getReference();
+const auto inputs = scope.bindInputs (program);
 ExpressionState state (program);
-scope.updateInputs (program, state); // push the slider's live values
+scope.updateInputs (inputs, state); // push the slider's live values
 state.evaluate();
 // state.getVar (program.findOutput ("out")) is 50 when value is 0.5
 ```
 
-Number, integer, boolean, string and color properties are bridged; colors need
-the graphics expression types registered on the context. Install the scope before
-compiling, then call `updateInputs` on each evaluation. The scope holds a weak
-reference to the component, so a destroyed component simply feeds nothing. This is
-the foundation data-driven drawing and styling build on.
+Number, integer, boolean, string, color, point, rectangle and typed array
+properties are bridged. Parse through the scope to declare the symbols it reads,
+bind the resulting program's input indices once with `bindInputs`, and call
+`updateInputs` before each evaluation. The scope holds weak references to the
+resolved components, so a destroyed component simply feeds nothing. This is the
+foundation data-driven drawing, styling and bindings build on.
 
 ### Painting a component from a drawing
 

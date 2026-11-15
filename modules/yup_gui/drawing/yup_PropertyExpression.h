@@ -58,8 +58,7 @@ public:
         @param component  The component the expression reads its symbols from.
         @param text       The expression text.
         @param type       The type of the value, or nothing to probe it from the text.
-        @param resolver   The resolver for references to other named components, or nothing.
-        @param modelResolver  The resolver for references to binding providers, or nothing.
+        @param resolver   The resolver for references to other named components or models, or nothing.
         @param locals     Values read by their bare name before the properties of the component, or
                           nullptr. Not owned, it must outlive the expression (see DrawingScope::setLocals).
 
@@ -69,8 +68,7 @@ public:
                                                                      const String& text,
                                                                      std::optional<ComponentProperty::Type> type,
                                                                      DrawingScope::ComponentResolver resolver = nullptr,
-                                                                     DrawingScope::ModelResolver modelResolver = nullptr,
-                                                                     BindingProvider* locals = nullptr);
+                                                                     Component* locals = nullptr);
 
     /** Splits an array literal such as `[1, gain.value, [2, 3]]` into the texts of its elements.
 
@@ -118,8 +116,7 @@ private:
                                                                                  const String& text,
                                                                                  std::optional<ComponentProperty::Type> type,
                                                                                  DrawingScope::ComponentResolver resolver,
-                                                                                 DrawingScope::ModelResolver modelResolver,
-                                                                                 BindingProvider* locals);
+                                                                                 Component* locals);
 
     String source;
     ComponentProperty::Type type = ComponentProperty::Type::number;
@@ -129,6 +126,7 @@ private:
     std::optional<DrawingScope> scope;
     CompiledExpression program;
     std::optional<ExpressionState> state;
+    DrawingScope::BoundInputs inputs;
     bool paletteDependent = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PropertyExpression)

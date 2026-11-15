@@ -154,16 +154,11 @@ public:
     /** Returns the bindings keeping the built properties up to date. */
     BindingGraph& getBindings() noexcept { return bindings; }
 
-    /** Returns a resolver looking up components in the top-level document scope. */
+    /** Returns a resolver looking up components and models in the top-level document scope. */
     DrawingScope::ComponentResolver getComponentResolver() const;
-
-    /** Returns a resolver looking up registered BindingProvider models by name. */
-    DrawingScope::ModelResolver getModelResolver() const;
 
 private:
     //==============================================================================
-    class Model;
-
     struct Scope
     {
         Component* root = nullptr;
@@ -273,7 +268,7 @@ private:
     std::vector<Connection> connections;
     std::vector<std::unique_ptr<YuiPropertyWatcher>> watchers;
     std::map<String, Action> actions;
-    std::map<String, std::unique_ptr<Model>> models;
+    std::map<String, std::unique_ptr<BindingModel>> models;
     BindingGraph bindings;
     std::vector<YuiDiagnostic> diagnostics;
 

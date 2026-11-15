@@ -468,7 +468,7 @@ TEST_F (ComponentPropertyTest, ButtonSubtypesDeriveFromButtonTypeInfo)
 
     for (const auto* typeInfo : { &TextButton::getClassTypeInfo(), &ToggleButton::getClassTypeInfo(), &SwitchButton::getClassTypeInfo() })
     {
-        EXPECT_TRUE (typeInfo->isDerivedFrom (buttonType)) << typeInfo->getTypeName().toString();
+        EXPECT_TRUE (typeInfo->isSubtypeOf (buttonType)) << typeInfo->getTypeName().toString();
         EXPECT_NE (typeInfo->findSignal (Identifier ("onClick")), nullptr) << typeInfo->getTypeName().toString();
     }
 }
@@ -496,24 +496,30 @@ TEST_F (ComponentPropertyTest, AllWritableStateBackedPropertiesNotifyListeners)
 
     for (const auto* typeInfo : types)
     {
-        auto instance = typeInfo->createInstance();
-        ASSERT_NE (instance, nullptr) << typeInfo->getTypeName().toString();
-
-        Component pageOne;
-        Component pageTwo;
-        if (auto* tabs = dynamic_cast<TabComponent*> (instance.get()))
-        {
-            tabs->addTab (Identifier ("one"), "One", pageOne);
-            tabs->addTab (Identifier ("two"), "Two", pageTwo);
-        }
-
-        RecordingListener listener;
-        instance->addComponentListener (&listener);
-
         for (const auto& property : typeInfo->getOwnProperties())
         {
             if (! property.isStateBacked() || property.isReadOnly())
                 continue;
+
+            auto instance = typeInfo->createInstance();
+            ASSERT_NE (instance, nullptr) << typeInfo->getTypeName().toString();
+
+            Component pageOne;
+            Component pageTwo;
+            if (auto* tabs = dynamic_cast<TabComponent*> (instance.get()))
+            {
+                tabs->addTab (Identifier ("one"), "One", pageOne);
+                tabs->addTab (Identifier ("two"), "Two", pageTwo);
+            }
+            else if (auto* combo = dynamic_cast<ComboBox*> (instance.get()))
+            {
+                combo->addItem ("One", 1);
+                combo->addItem ("Two", 2);
+            }
+            else if (auto* list = dynamic_cast<ListBox*> (instance.get()))
+            {
+                list->setItems ({ "One", "Two" });
+            }
 
             const auto current = property.getter (*instance);
             var nextValue;
@@ -554,14 +560,15 @@ TEST_F (ComponentPropertyTest, AllWritableStateBackedPropertiesNotifyListeners)
                     FAIL() << "Unhandled writable state-backed property type on " << typeInfo->getTypeName().toString() << "." << property.name.toString();
             }
 
-            listener.reset();
+            RecordingListener listener;
+            instance->addComponentListener (&listener);
             instance->setProperty (property.name, nextValue);
 
             EXPECT_TRUE (listener.names.contains (property.name))
                 << typeInfo->getTypeName().toString() << "." << property.name.toString() << " did not notify on change";
-        }
 
-        instance->removeComponentListener (&listener);
+            instance->removeComponentListener (&listener);
+        }
     }
 }
 

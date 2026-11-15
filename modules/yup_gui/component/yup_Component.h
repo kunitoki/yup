@@ -33,6 +33,7 @@ class ComponentTestHelper;
 class ComponentTypeInfo;
 class StyleContext;
 class StyleSheet;
+class StyleState;
 
 //==============================================================================
 

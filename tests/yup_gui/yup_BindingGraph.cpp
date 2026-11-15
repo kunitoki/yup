@@ -59,12 +59,6 @@ protected:
         oldTheme = ApplicationTheme::getGlobalTheme();
         theme = new ApplicationTheme();
         ApplicationTheme::setGlobalTheme (theme);
-
-        graph.setComponentResolver ([this] (const String& id) -> Component*
-                                    {
-            const auto it = named.find (id);
-            return it != named.end() ? it->second : nullptr;
-        });
     }
 
     void TearDown() override
@@ -80,6 +74,20 @@ protected:
     void nameIt (const String& id, Component& component)
     {
         named[id] = &component;
+    }
+
+    DrawingScope::ComponentResolver resolver()
+    {
+        return [this] (const String& id) -> Component*
+        {
+            const auto it = named.find (id);
+            return it != named.end() ? it->second : nullptr;
+        };
+    }
+
+    Result bind (Component& target, const char* property, const String& text, ComponentProperty::Type type)
+    {
+        return graph.bind (target, Identifier (property), text, type, resolver());
     }
 
     static constexpr auto valueId = "value";
@@ -119,7 +127,7 @@ TEST_F (BindingGraphTests, UpdatesTheTargetWhenTheSourceChanges)
     target.setRange (0.0, 10.0);
     nameIt ("source", source);
 
-    ASSERT_TRUE (graph.bind (target, Identifier (valueId), "source.value * 2", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (target, valueId, "source.value * 2", ComponentProperty::Type::number).wasOk());
     EXPECT_EQ (graph.getNumBindings(), 1);
     EXPECT_FLOAT_EQ (static_cast<float> (target.getValue()), 0.0f);
 
@@ -137,8 +145,8 @@ TEST_F (BindingGraphTests, PropagatesThroughAChainOfBindings)
     nameIt ("first", first);
     nameIt ("second", second);
 
-    ASSERT_TRUE (graph.bind (second, Identifier (valueId), "first.value + 1", ComponentProperty::Type::number).wasOk());
-    ASSERT_TRUE (graph.bind (third, Identifier (valueId), "second.value + 1", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (second, valueId, "first.value + 1", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (third, valueId, "second.value + 1", ComponentProperty::Type::number).wasOk());
 
     first.setValue (2.0);
 
@@ -170,7 +178,7 @@ TEST_F (BindingGraphTests, FollowsTheStyleStateOfAnotherComponent)
     target.setRange (0.0, 10.0);
     nameIt ("source", source);
 
-    ASSERT_TRUE (graph.bind (target, Identifier (valueId), "source.hovered ? 4 : 1", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (target, valueId, "source.hovered ? 4 : 1", ComponentProperty::Type::number).wasOk());
     EXPECT_FLOAT_EQ (static_cast<float> (target.getValue()), 1.0f);
 
     ComponentTestHelper<Slider>::triggerMouseEnter (source, MouseEvent {});
@@ -185,7 +193,7 @@ TEST_F (BindingGraphTests, BreaksTheBindingWhenTheTargetIsSetExplicitly)
     target.setRange (0.0, 10.0);
     nameIt ("source", source);
 
-    ASSERT_TRUE (graph.bind (target, Identifier (valueId), "source.value", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (target, valueId, "source.value", ComponentProperty::Type::number).wasOk());
 
     target.setValue (7.0);
     EXPECT_EQ (graph.getNumBindings(), 0);
@@ -203,7 +211,7 @@ TEST_F (BindingGraphTests, RemovesTheBindingsOfADeletedComponent)
     source->setRange (0.0, 10.0);
     nameIt ("source", *source);
 
-    ASSERT_TRUE (graph.bind (target, Identifier (valueId), "source.value", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (target, valueId, "source.value", ComponentProperty::Type::number).wasOk());
     EXPECT_EQ (graph.getNumBindings(), 1);
 
     named.clear();
@@ -219,7 +227,7 @@ TEST_F (BindingGraphTests, UnbindsLeavingTheValueInPlace)
     target.setRange (0.0, 10.0);
     nameIt ("source", source);
 
-    ASSERT_TRUE (graph.bind (target, Identifier (valueId), "source.value", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (target, valueId, "source.value", ComponentProperty::Type::number).wasOk());
     EXPECT_TRUE (graph.hasBinding (target, Identifier (valueId)));
     source.setValue (5.0);
 
@@ -238,8 +246,8 @@ TEST_F (BindingGraphTests, ReplacesAnExistingBindingOnTheSameProperty)
     target.setRange (0.0, 10.0);
     nameIt ("source", source);
 
-    ASSERT_TRUE (graph.bind (target, Identifier (valueId), "source.value", ComponentProperty::Type::number).wasOk());
-    ASSERT_TRUE (graph.bind (target, Identifier (valueId), "source.value + 1", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (target, valueId, "source.value", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (target, valueId, "source.value + 1", ComponentProperty::Type::number).wasOk());
 
     EXPECT_EQ (graph.getNumBindings(), 1);
 
@@ -255,8 +263,8 @@ TEST_F (BindingGraphTests, BreaksACycleAndReportsIt)
     nameIt ("first", first);
     nameIt ("second", second);
 
-    ASSERT_TRUE (graph.bind (first, Identifier (widthId), "second.width + 1", ComponentProperty::Type::number).wasOk());
-    ASSERT_TRUE (graph.bind (second, Identifier (widthId), "first.width + 1", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (first, widthId, "second.width + 1", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (second, widthId, "first.width + 1", ComponentProperty::Type::number).wasOk());
 
     EXPECT_LT (graph.getNumBindings(), 2);
     EXPECT_FALSE (graph.getDiagnostics().isEmpty());

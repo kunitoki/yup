@@ -228,6 +228,7 @@ classDiagram
   `DrawingStyle` with `setStyle`.
 - Declaration values that are expressions are compiled with
   `PropertyExpression`, like bindings.
+- Stylesheet declarations that read expressions over tokens, ancestors, siblings or `BindingModel`s track their dependencies through `DependencyObserver` and mark affected components dirty when any source changes.
 - `transition:` and `animation:` declarations are run by the context's
   `StyleAnimator`. While something runs, every frame writes the values to show
   into the animated layer of the `StyleState`.
@@ -261,26 +262,26 @@ sequenceDiagram
 
 ## Drawings
 
-A `DrawingStyle` is a `ComponentStyle` that runs a `DrawingProgram`. Components
-painted by the same drawing share one immutable compilation and keep their own
-evaluation state, so ten knobs compile the drawing once.
+A `DrawingStyle` is a `ComponentStyle` that compiles and paints a drawing tree.
+Components painted by the same drawing share one immutable compilation and keep
+their own evaluation state, so ten knobs compile the drawing once.
 
 ```mermaid
 flowchart LR
     source[("drawing knob")]:::ext
 
     subgraph knobA [Knob A]
-        styleA[DrawingStyle] --> programA["DrawingProgram<br/>own slots and properties"]
+        styleA["DrawingStyle<br/>own slots and properties"]
     end
 
     subgraph knobB [Knob B]
-        styleB[DrawingStyle] --> programB["DrawingProgram<br/>own slots and properties"]
+        styleB["DrawingStyle<br/>own slots and properties"]
     end
 
     source --> styleA
     source --> styleB
-    programA --> compiled["Compiled<br/>immutable, shared"]:::self
-    programB --> compiled
+    styleA --> compiled["Compiled<br/>immutable, shared"]:::self
+    styleB --> compiled
     cache[CompiledCache] -. "weak, keyed by content<br/>and symbol types" .-> compiled
 
     classDef self fill:#005aff,color:#fff,stroke:#003db3;
@@ -307,28 +308,33 @@ classDiagram
         bind()
         link()
         unbind()
-        setComponentResolver()
     }
-    class PropertyBinding {
-        target
-        property
-        dependencies
+    class DependencyObserver {
+        observe()
+        unobserve()
     }
     class PropertyExpression {
         compile()
         evaluate()
         getDependencies()
     }
-    BindingGraph *-- PropertyBinding
-    BindingGraph ..> Component : listens to
-    PropertyBinding *-- PropertyExpression
+    class BindingModel {
+        refreshProperties()
+        trackGestures()
+    }
+    BindingGraph *-- DependencyObserver
+    BindingGraph *-- PropertyExpression
+    DependencyObserver ..> Component : listens to
     PropertyExpression *-- DrawingScope
-    PropertyBinding --> Component : writes
+    BindingGraph --> Component : writes
+    Component <|-- BindingModel
+    BindingModel --> BindingProvider
 ```
 
-Each `PropertyBinding` keeps one property up to date from an expression and
-remembers the properties it read. The graph listens to every component involved
-and re-evaluates only the bindings that read what changed:
+Each live binding in `BindingGraph` keeps one property up to date from a
+`PropertyExpression` and remembers the properties it read. `BindingGraph`,
+`DrawingStyle` and `StyleContext` share `DependencyObserver` to listen to every
+component involved and re-evaluate only what depends on the changed property:
 
 ```mermaid
 sequenceDiagram
@@ -364,7 +370,7 @@ flowchart LR
     subgraph builderSide [YuiBuilder]
         tokens["Root type info<br/>tokens as inherited properties"]
         composite["Type info per<br/>component block"]
-        model["Hidden model component<br/>state-backed properties"]
+        model["BindingModel<br/>provider as Component"]
         handler["Signal handler<br/>action (...) or root.sig (...)"]
     end
 
@@ -390,10 +396,11 @@ flowchart LR
   selectors, drawings and bindings see its extra properties like built-in ones.
 - Tokens become inherited properties of the document root, so any expression
   below it can read them by name.
-- A model wraps a `BindingProvider` in a hidden component whose state-backed
+- A `BindingModel` wraps a `BindingProvider` as a component whose state-backed
   properties forward to the provider. `model.cutoff` then reads like any other
-  property, and `<=>` reuses the graph's links. Drags on linked components open
-  and close the provider's gestures, and any other change is a gesture of its own.
+  property in bindings, drawings and stylesheets, and `<=>` reuses the graph's
+  links. Drags on linked components open and close the provider's gestures, and
+  any other change is a gesture of its own.
 - A property named after a signal connects a handler. When the signal fires, the
   handler runs document actions or emits signals declared by composites, reading
   the signal's arguments through the names it gives them. `changed property:`

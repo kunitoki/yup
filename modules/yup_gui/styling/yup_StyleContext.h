@@ -24,8 +24,6 @@
 namespace yup
 {
 
-class DrawingStyle;
-
 //==============================================================================
 /**
     Applies a stylesheet to a component tree.
@@ -57,27 +55,22 @@ class DrawingStyle;
     @tags{UI}
 */
 class YUP_API StyleContext
-    : private ComponentListener
-    , private BindingProvider::Listener
 {
 public:
     //==============================================================================
-    /** Turns the prefix of a symbol such as `knob` in `knob.value` into a component. */
-    using ComponentResolver = std::function<Component*(const String& name)>;
-
-    /** Turns the prefix of a symbol such as `params` in `params.cutoff` into a binding provider. */
-    using ModelResolver = std::function<BindingProvider*(const String& name)>;
+    /** Turns the prefix of a symbol such as `knob` in `knob.value` into a component or model. */
+    using ComponentResolver = DrawingScope::ComponentResolver;
 
     //==============================================================================
     /** Creates a context over a subtree.
 
-        @param root      The component the sheet is attached to, which becomes the style root.
+        @param root       The component the sheet is attached to, which becomes the style root.
         @param styleSheet The sheet to apply, which may be nullptr.
     */
     StyleContext (Component& root, StyleSheet::Ptr styleSheet);
 
     /** Destructor. */
-    ~StyleContext() override;
+    ~StyleContext();
 
     //==============================================================================
     /** Replaces the stylesheet and restyles the whole subtree.
@@ -89,11 +82,8 @@ public:
     /** Returns the stylesheet the context applies, which may be nullptr. */
     StyleSheet::Ptr getStyleSheet() const noexcept { return styleSheet; }
 
-    /** Sets the resolver used by style and drawing expressions referencing other named components. */
+    /** Sets the resolver used by style and drawing expressions referencing named components or models. */
     void setComponentResolver (ComponentResolver resolver);
-
-    /** Sets the resolver used by style and drawing expressions referencing BindingProvider models. */
-    void setModelResolver (ModelResolver resolver);
 
     //==============================================================================
     /** Marks a component and its descendants as needing a restyle.
@@ -157,7 +147,6 @@ public:
 
 private:
     //==============================================================================
-    struct BoundDependency;
     struct ValueKey;
     struct ValueKeyHash;
     struct CompiledValue;
@@ -186,12 +175,13 @@ private:
     bool evaluate (Component& component,
                    ComponentCache& cache,
                    ValueKey key,
-                   const Identifier& declarationName,
+                   const DataTree& element,
                    const Identifier& storageId,
                    std::optional<ComponentProperty::Type> type,
                    const String& valueText,
                    var& result,
-                   bool& paletteDependent);
+                   bool& paletteDependent,
+                   const ComponentProperty* descriptor = nullptr);
     ComponentCache* findCache (const Component& component);
     ComponentCache& getCache (Component& component, bool& created);
     void clearCacheValues (ComponentCache& cache);
@@ -202,43 +192,38 @@ private:
     void syncStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId);
     void restoreStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId);
     void restoreAllStateBacked (Component& component, ComponentCache& cache);
-    const DrawingStyle* installDrawing (Component& component, ComponentCache& cache, const String& name);
+    const DrawingStyle* installDrawing (Component& component, ComponentCache& cache, const StyleSheet::Declaration& declaration);
     void restoreDrawing (Component& component, ComponentCache& cache);
-    bool applyEffects (Component& component, ComponentCache& cache, const StyleSheet::Declaration* shadowDeclaration = nullptr, bool* paletteDependent = nullptr);
+    bool applyEffects (Component& component,
+                       ComponentCache& cache,
+                       const StyleSheet::Declaration* cursorDeclaration,
+                       const StyleSheet::Declaration* effectDeclaration,
+                       const StyleSheet::Declaration* shadowDeclaration,
+                       bool* paletteDependent);
     static const ComponentProperty* findDescriptor (const ComponentTypeInfo& typeInfo, const DrawingStyle* drawing, const Identifier& name);
     static const ComponentProperty* findStoredProperty (const ComponentTypeInfo& typeInfo, const Identifier& storageId);
     var getBaseValue (Component& component, const ComponentCache& cache, const ComponentProperty* descriptor, const Identifier& storageId);
     bool updateTransitions (Component& component, const ComponentCache& cache, const std::vector<PendingTransition>& pending, Array<Identifier>& touched);
-    bool updateAnimations (Component& component, const ComponentCache& cache, const DeclarationMap& direct, const String& previousAnimation, const DrawingStyle* drawing, Array<Identifier>& touched);
+    bool updateAnimations (Component& component, ComponentCache& cache, const StyleSheet::Declaration* animationDeclaration, const DrawingStyle* drawing, Array<Identifier>& touched);
     std::vector<StyleAnimator::Track> compileTracks (Component& component, const ComponentCache& cache, const StyleSheet::KeyframeSequence& keyframes, const DrawingStyle* drawing);
     void showAnimatedValue (Component& component, const Identifier& storageId, const var* value);
     void markPaletteDependentDirty (Component& component);
-    void report (const Identifier& declarationName, const String& message);
     void report (const YuiDiagnostic& diagnostic);
-
-    void addDependencies (const std::vector<BoundDependency>& dependencies);
-    void removeDependencies (const std::vector<BoundDependency>& dependencies);
-    void invalidateDependencies (const Component* sourceComponent, const BindingProvider* sourceProvider, const Identifier& property);
-
-    void componentPropertyChanged (Component& component, const Identifier& property) override;
-    void componentBeingDeleted (Component& component) override;
-    void bindingValueChanged (BindingProvider& provider, const Identifier& name) override;
-    void bindingProviderBeingDeleted (BindingProvider& provider) override;
+    void rebuildObserver();
+    void invalidateDependencies (const Component& sourceComponent, const Identifier& property);
 
     Component& root;
     StyleSheet::Ptr styleSheet;
     ComponentResolver componentResolver;
-    ModelResolver modelResolver;
     Array<WeakReference<Component>> dirtyComponents;
     std::unique_ptr<CacheMap> caches;
-    std::map<Component*, int> observedComponents;
-    std::map<BindingProvider*, int> observedProviders;
+    DependencyObserver observer;
     StyleAnimator animator;
     std::vector<YuiDiagnostic> diagnostics;
-    const DeclarationMap* currentDeclarations = nullptr;
     double clock = 0.0;
     uint32 lastPaletteGeneration = 0;
     bool isRestyling = false;
+    bool observerDirty = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StyleContext)
 };

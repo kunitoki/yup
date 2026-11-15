@@ -123,9 +123,10 @@ TEST_F (FlexBoxComponentTests, ColumnDirectionCanBeOverriddenByStyleSheet)
     EXPECT_EQ (column.getDirection(), FlexBox::Direction::column);
     EXPECT_EQ (second.getBounds(), Rectangle<float> (0.0f, 20.0f, 100.0f, 20.0f));
 
-    auto parsed = StyleSheet::parse ("Column { direction: row; }");
-    ASSERT_TRUE (parsed.wasOk());
-    column.getStyleContext().addStyleSheet (*parsed);
+    auto parsed = StyleSheet::parse ("style { Column { direction: row; } }");
+    ASSERT_TRUE (parsed.wasOk()) << parsed.getErrorMessage();
+    column.setStyleSheet (parsed.getReference());
+    column.getStyleContext()->restyleNow();
 
     EXPECT_EQ (column.getDirection(), FlexBox::Direction::row);
     EXPECT_EQ (first.getBounds(), Rectangle<float> (0.0f, 0.0f, 50.0f, 40.0f));

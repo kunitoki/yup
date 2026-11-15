@@ -708,14 +708,18 @@ TEST_F (StyleContextTests, ShadowColorsReadThePalette)
     Component root ("root");
     attach (root, R"yui(
         palette Ember { colors: "#100b00-#85cb33-#efffc8-#a5cbc3-#3b341f"; accent: #ff9a1f; }
-        style { #root { palette: Ember; shadow: 0 0 8 palette.accent.withAlpha (0.5); } })yui");
+        palette Ice   { colors: "#100b00-#85cb33-#efffc8-#a5cbc3-#3b341f"; accent: #22aaff; }
+        style {
+            #root { palette: Ember; shadow: 0 0 8 palette.accent.withAlpha (0.5); }
+            #root.cool { palette: Ice; }
+        })yui");
 
     ASSERT_NE (root.getStyleState(), nullptr);
-    const auto& shadows = root.getStyleState()->getShadows();
-    ASSERT_EQ (shadows.size(), 1u);
+    EXPECT_EQ (root.getStyleState()->getShadows().at (0).color, Color (0xffff9a1f).withAlpha (0.5f));
 
-    EXPECT_EQ (shadows[0].color, Color (0xffff9a1f).withAlpha (0.5f));
-    EXPECT_TRUE (root.getStyleState()->isPaletteDependent());
+    root.addStyleClass (Identifier ("cool"));
+    restyle (root);
+    EXPECT_EQ (root.getStyleState()->getShadows().at (0).color, Color (0xff22aaff).withAlpha (0.5f));
 }
 
 TEST_F (StyleContextTests, RemovingShadowsRestoresThePaintMargin)
@@ -883,7 +887,8 @@ TEST_F (StyleContextTests, FocusWithinAndActiveRestyleAncestorsAndSiblings)
 
     ComponentTestHelper<StyleContext>::triggerMouseUp (input, MouseEvent {});
     restyle (root);
-    EXPECT_TRUE (input.findProperty (Identifier ("glow")).isVoid());
+    EXPECT_TRUE (input.getProperty (Identifier ("glow")).isVoid());
+    EXPECT_DOUBLE_EQ (glow (input), 1.0);
 }
 
 TEST_F (StyleContextTests, DetachingAChildStopsItsAnimationsAndClearsCachedState)
@@ -954,19 +959,19 @@ TEST_F (StyleContextTests, NestedStylesheetReleasesOuterComputedValuesAndRestore
     inner.addAndMakeVisible (slider);
     root.addAndMakeVisible (inner);
 
-    attach (root, "style { Slider { trackWidth: 14; minValue: 10; } }");
+    attach (root, "style { Slider { trackWidth: 14; opacity: 0.5; } }");
     EXPECT_DOUBLE_EQ (static_cast<double> (slider.findProperty (Identifier ("trackWidth"))), 14.0);
-    EXPECT_DOUBLE_EQ (slider.getMinimum(), 10.0);
+    EXPECT_NEAR (slider.getOpacity(), 0.5f, 1.0f / 255.0f);
 
     attach (inner, "style { Slider { thumbColor: #ff0000; } }");
     EXPECT_EQ (VariantConverter<Color>::fromVar (slider.findProperty (Identifier ("thumbColor"))), Color (0xffff0000));
     EXPECT_NE (static_cast<double> (slider.findProperty (Identifier ("trackWidth"))), 14.0);
-    EXPECT_DOUBLE_EQ (slider.getMinimum(), 0.0);
+    EXPECT_FLOAT_EQ (slider.getOpacity(), 1.0f);
 
     inner.setStyleSheet (nullptr);
     restyle (root);
     EXPECT_DOUBLE_EQ (static_cast<double> (slider.findProperty (Identifier ("trackWidth"))), 14.0);
-    EXPECT_DOUBLE_EQ (slider.getMinimum(), 10.0);
+    EXPECT_NEAR (slider.getOpacity(), 0.5f, 1.0f / 255.0f);
 }
 
 TEST_F (StyleContextTests, UnwatchedStateChangesDoNotTriggerRestyle)
@@ -1000,6 +1005,71 @@ TEST_F (StyleContextTests, UnwatchedStateChangesDoNotTriggerRestyle)
 
     EXPECT_EQ (button.styleChanges, 0);
     EXPECT_DOUBLE_EQ (glow (button), 4.0);
+}
+
+TEST_F (StyleContextTests, DeclarationValuesFollowTokensParentsSiblingsAndModels)
+{
+    DataTree modelState ("state");
+    modelState.beginTransaction().setProperty ("scale", 2.0);
+    DataTreeBindingProvider provider (modelState);
+    BindingModel model (provider);
+
+    const ComponentTypeInfo rootTokens (Identifier ("RootTokens"),
+                                        &Component::getClassTypeInfo(),
+                                        { ComponentProperty { .name = Identifier ("unit"),
+                                                              .type = ComponentProperty::Type::number,
+                                                              .defaultValue = 1.0,
+                                                              .isInherited = true } });
+
+    Component root ("root");
+    root.setTypeInfo (&rootTokens);
+    root.setProperty (Identifier ("unit"), 4.0);
+
+    Component panel ("panel");
+    panel.setBounds (10.0f, 0.0f, 100.0f, 50.0f);
+
+    Slider source (Slider::LinearHorizontal);
+    source.setComponentID ("source");
+    source.setRange (0.0, 10.0, 0.0);
+    source.setValue (3.0, dontSendNotification);
+
+    Component target ("target");
+
+    panel.addAndMakeVisible (source);
+    panel.addAndMakeVisible (target);
+    root.addAndMakeVisible (panel);
+
+    auto sheet = StyleSheet::parse ("style { #target { glow: unit + parent.x + source.value * params.scale; } }");
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+    root.setStyleSheet (sheet.getReference());
+    root.getStyleContext()->setComponentResolver ([&] (const String& name) -> Component*
+    {
+        if (name == "source")
+            return &source;
+        if (name == "params")
+            return &model;
+
+        return nullptr;
+    });
+    restyle (root);
+
+    EXPECT_DOUBLE_EQ (glow (target), 4.0 + 10.0 + 3.0 * 2.0);
+
+    root.setProperty (Identifier ("unit"), 8.0);
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (target), 8.0 + 10.0 + 3.0 * 2.0);
+
+    panel.setPosition ({ 25.0f, 0.0f });
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (target), 8.0 + 25.0 + 3.0 * 2.0);
+
+    source.setValue (5.0, dontSendNotification);
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (target), 8.0 + 25.0 + 5.0 * 2.0);
+
+    modelState.beginTransaction().setProperty ("scale", 3.0);
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (target), 8.0 + 25.0 + 5.0 * 3.0);
 }
 
 
