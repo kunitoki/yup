@@ -332,4 +332,30 @@ private:
 
 // =================================================================================================
 
+/*
+    Trampoline that lets Python subclasses implement yup::PaintSource.
+
+    Graphics only borrows a PaintSource while setting a paint, so the Python object
+    keeps owning it and no ownership crosses into C++.
+*/
+struct PyPaintSource : yup::PaintSource, pybind11::trampoline_self_life_support
+{
+    PyPaintSource() = default;
+
+    yup::Size<float> getContentSize() const override
+    {
+        PYBIND11_OVERRIDE_PURE (yup::Size<float>, yup::PaintSource, getContentSize);
+    }
+
+    void paintContent (yup::Graphics& g) override
+    {
+        pybind11::gil_scoped_acquire gil;
+
+        if (pybind11::function override_ = pybind11::get_override (static_cast<const yup::PaintSource*> (this), "paintContent"); override_)
+            override_ (std::addressof (g));
+    }
+};
+
+// =================================================================================================
+
 } // namespace yup::Bindings

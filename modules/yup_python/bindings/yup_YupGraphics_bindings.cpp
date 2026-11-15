@@ -2171,6 +2171,10 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("setFillColorGradient", &Graphics::setFillColorGradient)
         .def ("setFillImage", &Graphics::setFillImage, "image"_a, "imageTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
         .def ("setStrokeImage", &Graphics::setStrokeImage, "image"_a, "imageTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
+        .def ("setFillSource", &Graphics::setFillSource, "source"_a, "sourceTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
+        .def ("setStrokeSource", &Graphics::setStrokeSource, "source"_a, "sourceTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
+        .def ("setFillTexture", &Graphics::setFillTexture, "texture"_a, "textureTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
+        .def ("setStrokeTexture", &Graphics::setStrokeTexture, "texture"_a, "textureTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
         .def ("getFillColorGradient", &Graphics::getFillColorGradient)
         .def ("setStrokeColorGradient", &Graphics::setStrokeColorGradient)
         .def ("getStrokeColorGradient", &Graphics::getStrokeColorGradient)
@@ -2297,6 +2301,15 @@ void registerYupGraphicsBindings (py::module_& m)
                 << " " << self.getWidth() << "x" << self.getHeight() << ">";
             return result;
         });
+
+    // ============================================================================================ yup::PaintSource
+
+    py::class_<PaintSource, PyPaintSource, py::smart_holder> (m, "PaintSource")
+        .def (py::init<>())
+        .def ("getContentSize", &PaintSource::getContentSize)
+        .def ("paintContent", &PaintSource::paintContent, "g"_a)
+        .def ("markDirty", &PaintSource::markDirty)
+        .def ("releaseResources", &PaintSource::releaseResources);
 
     // ============================================================================================ yup::Colors
 

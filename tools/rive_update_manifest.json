@@ -121,6 +121,7 @@
         "tools/rive_patches/rive-vulkan-common-layouts-guard.patch",
         "tools/rive_patches/rive-layer-mask-depth-stencil.patch",
         "tools/rive_patches/rive-image-mesh-instancing.patch",
+        "tools/rive_patches/rive-clip-stroke-outset-bounds.patch",
         "tools/rive_patches/rive-ore-binding-map-tools.patch",
         "tools/rive_patches/rive-ore-gl-scissor.patch",
         "tools/rive_patches/rive-ore-gl-float-attachments.patch",
