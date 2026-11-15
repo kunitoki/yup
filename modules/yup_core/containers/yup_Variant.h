@@ -312,28 +312,61 @@ public:
 
 private:
     //==============================================================================
-    struct VariantType;
-    struct Instance;
+    // The order matters: every type from string onwards owns a payload, every type from object
+    // onwards holds a ReferenceCountedObject, and every type up to string (except undefined)
+    // can be compared with the relational operators.
+    enum class Type : uint8
+    {
+        void_,
+        undefined,
+        int_,
+        int64_,
+        boolean,
+        double_,
+        string,
+        binary,
+        object,
+        array,
+        method
+    };
+
+    static constexpr uint8 dynamicObjectFlag = 1;
+
+    struct RefCountedArray;
+    struct MethodHolder;
 
     union ValueUnion
     {
-        int intValue;
         int64 int64Value;
+        int intValue;
         bool boolValue;
         double doubleValue;
         char stringValue[sizeof (String)];
         ReferenceCountedObject* objectValue;
         MemoryBlock* binaryValue;
-        NativeFunction* methodValue;
     };
 
     friend bool canCompare (const var&, const var&);
 
-    const VariantType* type;
-    ValueUnion value;
+    Type type = Type::void_;
+    uint8 flags = 0;
+    ValueUnion value {};
 
+    bool isComparable() const noexcept { return type <= Type::string && type != Type::undefined; }
+
+    const String* getString() const noexcept;
+
+    // dest must hold a bitwise copy of source: this turns it into an owning copy
+    static void acquirePayload (Type, ValueUnion& dest, const ValueUnion& source);
+    static void releasePayload (Type, ValueUnion&) noexcept;
+    static MemoryBlock* copyBinary (const MemoryBlock&);
+    static void deleteBinary (MemoryBlock*) noexcept;
+
+    int convertToInt() const noexcept;
+    int64 convertToInt64() const noexcept;
+    double convertToDouble() const noexcept;
+    bool convertToBool() const noexcept;
     Array<var>* convertToArray();
-    var (const VariantType&) noexcept;
 
     // This is needed to prevent the wrong constructor/operator being called
     var (const ReferenceCountedObject*) = delete;
@@ -341,6 +374,215 @@ private:
     var (const void*) = delete;
     var& operator= (const void*) = delete;
 };
+
+//==============================================================================
+struct var::RefCountedArray final : public ReferenceCountedObject
+{
+    explicit RefCountedArray (const Array<var>& a)
+        : array (a)
+    {
+        incReferenceCount();
+    }
+
+    explicit RefCountedArray (Array<var>&& a) noexcept
+        : array (std::move (a))
+    {
+        incReferenceCount();
+    }
+
+    Array<var> array;
+};
+
+//==============================================================================
+inline void var::acquirePayload (const Type t, ValueUnion& dest, const ValueUnion& source)
+{
+    if (t < Type::string)
+        return;
+
+    if (t >= Type::object)
+    {
+        if (dest.objectValue != nullptr)
+            dest.objectValue->incReferenceCount();
+    }
+    else if (t == Type::string)
+    {
+        new (dest.stringValue) String (*unalignedPointerCast<const String*> (source.stringValue));
+    }
+    else
+    {
+        dest.binaryValue = copyBinary (*source.binaryValue);
+    }
+}
+
+inline void var::releasePayload (const Type t, ValueUnion& v) noexcept
+{
+    if (t < Type::string)
+        return;
+
+    if (t >= Type::object)
+    {
+        if (v.objectValue != nullptr)
+            v.objectValue->decReferenceCount();
+    }
+    else if (t == Type::string)
+    {
+        unalignedPointerCast<String*> (v.stringValue)->~String();
+    }
+    else
+    {
+        deleteBinary (v.binaryValue);
+    }
+}
+
+//==============================================================================
+inline var::var() noexcept {}
+
+inline var::~var() noexcept
+{
+    releasePayload (type, value);
+}
+
+inline var::var (const var& valueToCopy)
+    : type (valueToCopy.type)
+    , flags (valueToCopy.flags)
+    , value (valueToCopy.value)
+{
+    acquirePayload (type, value, valueToCopy.value);
+}
+
+inline var::var (var&& other) noexcept
+    : type (other.type)
+    , flags (other.flags)
+    , value (other.value)
+{
+    other.type = Type::void_;
+    other.flags = 0;
+}
+
+inline var::var (const int v) noexcept
+    : type (Type::int_)
+{
+    value.intValue = v;
+}
+
+inline var::var (const int64 v) noexcept
+    : type (Type::int64_)
+{
+    value.int64Value = v;
+}
+
+inline var::var (const bool v) noexcept
+    : type (Type::boolean)
+{
+    value.boolValue = v;
+}
+
+inline var::var (const double v) noexcept
+    : type (Type::double_)
+{
+    value.doubleValue = v;
+}
+
+inline var var::undefined() noexcept
+{
+    var v;
+    v.type = Type::undefined;
+    return v;
+}
+
+inline var& var::operator= (const var& valueToCopy)
+{
+    // Acquire the new payload before releasing ours, which may own the source (v = v or v = v[0])
+    const auto newType = valueToCopy.type;
+    const auto newFlags = valueToCopy.flags;
+    auto newValue = valueToCopy.value;
+    acquirePayload (newType, newValue, valueToCopy.value);
+
+    releasePayload (type, value);
+
+    type = newType;
+    flags = newFlags;
+    value = newValue;
+    return *this;
+}
+
+inline var& var::operator= (var&& other) noexcept
+{
+    // Detach the source before releasing our payload, which may own the source (v = std::move (v[0]))
+    const auto newType = other.type;
+    const auto newFlags = other.flags;
+    const auto newValue = other.value;
+    other.type = Type::void_;
+    other.flags = 0;
+
+    releasePayload (type, value);
+
+    type = newType;
+    flags = newFlags;
+    value = newValue;
+    return *this;
+}
+
+inline var& var::operator= (const int v) { return *this = var (v); }
+
+inline var& var::operator= (const int64 v) { return *this = var (v); }
+
+inline var& var::operator= (const bool v) { return *this = var (v); }
+
+inline var& var::operator= (const double v) { return *this = var (v); }
+
+inline void var::swapWith (var& other) noexcept
+{
+    std::swap (type, other.type);
+    std::swap (flags, other.flags);
+    std::swap (value, other.value);
+}
+
+//==============================================================================
+inline bool var::isVoid() const noexcept { return type == Type::void_; }
+
+inline bool var::isUndefined() const noexcept { return type == Type::undefined; }
+
+inline bool var::isInt() const noexcept { return type == Type::int_; }
+
+inline bool var::isInt64() const noexcept { return type == Type::int64_; }
+
+inline bool var::isBool() const noexcept { return type == Type::boolean; }
+
+inline bool var::isDouble() const noexcept { return type == Type::double_; }
+
+inline bool var::isString() const noexcept { return type == Type::string; }
+
+inline bool var::isObject() const noexcept { return type == Type::object || type == Type::array; }
+
+inline bool var::isArray() const noexcept { return type == Type::array; }
+
+inline bool var::isBinaryData() const noexcept { return type == Type::binary; }
+
+inline bool var::isMethod() const noexcept { return type == Type::method; }
+
+inline bool var::hasSameTypeAs (const var& other) const noexcept { return type == other.type; }
+
+inline bool var::equalsWithSameType (const var& other) const noexcept { return hasSameTypeAs (other) && equals (other); }
+
+inline ReferenceCountedObject* var::getObject() const noexcept { return type == Type::object ? value.objectValue : nullptr; }
+
+inline Array<var>* var::getArray() const noexcept { return type == Type::array ? &static_cast<RefCountedArray*> (value.objectValue)->array : nullptr; }
+
+inline MemoryBlock* var::getBinaryData() const noexcept { return type == Type::binary ? value.binaryValue : nullptr; }
+
+//==============================================================================
+inline var::operator int() const noexcept { return type == Type::int_ ? value.intValue : convertToInt(); }
+
+inline var::operator int64() const noexcept { return type == Type::int64_ ? value.int64Value : convertToInt64(); }
+
+inline var::operator bool() const noexcept { return type == Type::boolean ? value.boolValue : convertToBool(); }
+
+inline var::operator float() const noexcept { return (float) operator double(); }
+
+inline var::operator double() const noexcept { return type == Type::double_ ? value.doubleValue : convertToDouble(); }
+
+inline var::operator String() const { return toString(); }
 
 /** Compares the values of two var objects, using the var::equals() comparison. */
 YUP_API bool operator== (const var&, const var&);

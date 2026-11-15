@@ -37,6 +37,12 @@ var name = object["name"];        // "YUP"
 Type predicates: `isVoid`, `isBool`, `isInt`, `isInt64`, `isDouble`, `isString`,
 `isArray`, `isObject`, `isMethod`.
 
+Copying a `var` is cheap: strings copy the `String`, and objects, arrays and
+methods share their payload by reference count. A copied array is the same
+array, so `append` through one copy is visible in the other - use `clone()` for
+an independent deep copy. Binary data is always copied. Copies of a method
+compare equal, while a `clone()` of it does not.
+
 ## DynamicObject
 
 `DynamicObject` is a reference-counted object with named `var` properties and

@@ -1836,3 +1836,1022 @@ TEST_F (VariantStreamTests, ModeratelyNestedArraysRoundTrip)
 
     EXPECT_EQ ((int) restored, 42);
 }
+
+//==============================================================================
+class VariantCoverageTests : public ::testing::Test
+{
+protected:
+    struct TrackedObject : public ReferenceCountedObject
+    {
+        explicit TrackedObject (bool& deletedFlag)
+            : deleted (deletedFlag)
+        {
+        }
+
+        ~TrackedObject() override { deleted = true; }
+
+        bool& deleted;
+    };
+
+    struct CustomDynamicObject : public DynamicObject
+    {
+    };
+
+    static MemoryBlock makeBlock (const char* text)
+    {
+        return MemoryBlock (text, std::strlen (text));
+    }
+
+    static var makeMethod (int result)
+    {
+        return var (var::NativeFunction ([result] (const var::NativeFunctionArgs&)
+        {
+            return var (result);
+        }));
+    }
+
+    // One value of every type, in the same order as the type predicates
+    static std::vector<var> makeSamples()
+    {
+        auto object = std::make_unique<DynamicObject>();
+        object->setProperty ("name", "yup");
+
+        return {
+            var(),
+            var::undefined(),
+            var (42),
+            var ((int64) 1234567890123),
+            var (true),
+            var (3.25),
+            var ("a string long enough to live on the heap"),
+            var (std::move (object)),
+            var (Array<var> { 1, "two", 3.0 }),
+            var (makeBlock ("binary")),
+            makeMethod (7)
+        };
+    }
+
+    static void expectConversions (const var& v, int expectedInt, int64 expectedInt64, double expectedDouble, bool expectedBool)
+    {
+        SCOPED_TRACE (v.toString().toStdString());
+
+        EXPECT_EQ ((int) v, expectedInt);
+        EXPECT_EQ ((int64) v, expectedInt64);
+        EXPECT_DOUBLE_EQ ((double) v, expectedDouble);
+        EXPECT_FLOAT_EQ ((float) v, (float) expectedDouble);
+        EXPECT_EQ ((bool) v, expectedBool);
+    }
+
+    static MemoryBlock writeVar (const var& v)
+    {
+        MemoryOutputStream out;
+        v.writeToStream (out);
+        return out.getMemoryBlock();
+    }
+
+    static var readVar (const MemoryBlock& data)
+    {
+        MemoryInputStream in (data, false);
+        return var::readFromStream (in);
+    }
+};
+
+TEST_F (VariantCoverageTests, SizeIsCompact)
+{
+    EXPECT_LE (sizeof (var), (size_t) 16);
+}
+
+TEST_F (VariantCoverageTests, EveryTypeHasExactlyOneIdentity)
+{
+    const auto samples = makeSamples();
+
+    for (size_t i = 0; i < samples.size(); ++i)
+    {
+        SCOPED_TRACE (i);
+        const auto& s = samples[i];
+
+        const int matches = (int) s.isVoid() + (int) s.isUndefined() + (int) s.isInt() + (int) s.isInt64()
+                          + (int) s.isBool() + (int) s.isDouble() + (int) s.isString() + (int) s.isObject()
+                          + (int) s.isArray() + (int) s.isBinaryData() + (int) s.isMethod();
+
+        // Arrays also report isObject()
+        EXPECT_EQ (matches, s.isArray() ? 2 : 1);
+
+        for (size_t j = 0; j < samples.size(); ++j)
+            EXPECT_EQ (s.hasSameTypeAs (samples[j]), i == j);
+
+        EXPECT_EQ (s.getArray() != nullptr, s.isArray());
+        EXPECT_EQ (s.getBinaryData() != nullptr, s.isBinaryData());
+        EXPECT_EQ (s.getObject() != nullptr, s.isObject() && ! s.isArray());
+        EXPECT_EQ (s.getDynamicObject() != nullptr, s.isObject() && ! s.isArray());
+    }
+}
+
+TEST_F (VariantCoverageTests, VoidAndUndefinedAreEqualButDifferentTypes)
+{
+    const var voidValue;
+    const var undefinedValue = var::undefined();
+
+    EXPECT_FALSE (voidValue.hasSameTypeAs (undefinedValue));
+    EXPECT_TRUE (voidValue.equals (undefinedValue));
+    EXPECT_TRUE (undefinedValue.equals (voidValue));
+    EXPECT_TRUE (voidValue == undefinedValue);
+    EXPECT_FALSE (voidValue.equalsWithSameType (undefinedValue));
+    EXPECT_TRUE (undefinedValue.equalsWithSameType (var::undefined()));
+}
+
+TEST_F (VariantCoverageTests, HasSameTypeAsIgnoresTheKindOfObject)
+{
+    bool deleted = false;
+    const var plain (new TrackedObject (deleted));
+    const var dynamic (new DynamicObject());
+
+    EXPECT_TRUE (plain.hasSameTypeAs (dynamic));
+    EXPECT_FALSE (dynamic.hasSameTypeAs (var (Array<var>())));
+    EXPECT_FALSE (var (1).hasSameTypeAs (var ((int64) 1)));
+}
+
+//==============================================================================
+TEST_F (VariantCoverageTests, CopyAndMoveConstructEveryType)
+{
+    for (const auto& sample : makeSamples())
+    {
+        var copy (sample);
+        EXPECT_TRUE (copy.equalsWithSameType (sample));
+
+        var moved (std::move (copy));
+        EXPECT_TRUE (moved.equalsWithSameType (sample));
+        EXPECT_TRUE (copy.isVoid());
+    }
+}
+
+TEST_F (VariantCoverageTests, CopyAssignBetweenEveryTypePair)
+{
+    const auto samples = makeSamples();
+
+    for (size_t s = 0; s < samples.size(); ++s)
+    {
+        for (size_t i = 0; i < samples.size(); ++i)
+        {
+            SCOPED_TRACE (testing::Message() << "source " << s << " over " << i);
+
+            var target (samples[i]);
+            target = samples[s];
+
+            EXPECT_TRUE (target.equalsWithSameType (samples[s]));
+        }
+    }
+}
+
+TEST_F (VariantCoverageTests, MoveAssignBetweenEveryTypePair)
+{
+    const auto samples = makeSamples();
+
+    for (size_t s = 0; s < samples.size(); ++s)
+    {
+        for (size_t i = 0; i < samples.size(); ++i)
+        {
+            SCOPED_TRACE (testing::Message() << "source " << s << " over " << i);
+
+            var target (samples[i]);
+            var source (samples[s]);
+            target = std::move (source);
+
+            EXPECT_TRUE (target.equalsWithSameType (samples[s]));
+            EXPECT_TRUE (source.isVoid());
+        }
+    }
+}
+
+TEST_F (VariantCoverageTests, SwapWithExchangesEveryTypePair)
+{
+    const auto samples = makeSamples();
+
+    for (const auto& first : samples)
+    {
+        for (const auto& second : samples)
+        {
+            var a (first);
+            var b (second);
+            a.swapWith (b);
+
+            EXPECT_TRUE (a.equalsWithSameType (second));
+            EXPECT_TRUE (b.equalsWithSameType (first));
+        }
+    }
+}
+
+TEST_F (VariantCoverageTests, SelfAssignmentKeepsEveryType)
+{
+    for (const auto& sample : makeSamples())
+    {
+        var v (sample);
+
+        const var& alias = v;
+        v = alias;
+        EXPECT_TRUE (v.equalsWithSameType (sample));
+
+        var& movingAlias = v;
+        v = std::move (movingAlias);
+        EXPECT_TRUE (v.equalsWithSameType (sample));
+    }
+}
+
+TEST_F (VariantCoverageTests, AssignFromValueOwnedByTarget)
+{
+    var fromElement (Array<var> { var ("a string owned by the array"), 2 });
+    fromElement = fromElement[0];
+    ASSERT_TRUE (fromElement.isString());
+    EXPECT_EQ (fromElement.toString(), "a string owned by the array");
+
+    var fromNestedArray (Array<var> { var (Array<var> { 1, 2 }) });
+    fromNestedArray = fromNestedArray[0];
+    ASSERT_TRUE (fromNestedArray.isArray());
+    EXPECT_EQ (fromNestedArray.size(), 2);
+
+    var fromMovedElement (Array<var> { var ("moved out of the array") });
+    fromMovedElement = std::move (fromMovedElement[0]);
+    ASSERT_TRUE (fromMovedElement.isString());
+    EXPECT_EQ (fromMovedElement.toString(), "moved out of the array");
+
+    var fromOwnBinary (makeBlock ("binary"));
+    fromOwnBinary = *fromOwnBinary.getBinaryData();
+    ASSERT_TRUE (fromOwnBinary.isBinaryData());
+    EXPECT_EQ (*fromOwnBinary.getBinaryData(), makeBlock ("binary"));
+
+    var fromOwnArray (Array<var> { 1, 2, 3 });
+    fromOwnArray = *fromOwnArray.getArray();
+    ASSERT_EQ (fromOwnArray.size(), 3);
+    EXPECT_EQ ((int) fromOwnArray[2], 3);
+
+    var fromOwnObject (new DynamicObject());
+    fromOwnObject.getDynamicObject()->setProperty ("key", 1);
+    fromOwnObject = fromOwnObject.getObject();
+    ASSERT_NE (fromOwnObject.getDynamicObject(), nullptr);
+    EXPECT_EQ ((int) fromOwnObject["key"], 1);
+}
+
+TEST_F (VariantCoverageTests, AssignmentOperatorsReleaseThePreviousPayload)
+{
+    bool firstDeleted = false;
+    bool secondDeleted = false;
+
+    var v (new TrackedObject (firstDeleted));
+
+    v = L"wide";
+    EXPECT_TRUE (firstDeleted);
+    EXPECT_EQ (v.toString(), "wide");
+
+    v = StringRef ("reference");
+    EXPECT_EQ (v.toString(), "reference");
+
+    String moving ("moved");
+    v = std::move (moving);
+    EXPECT_EQ (v.toString(), "moved");
+
+    v = makeBlock ("block");
+    ASSERT_TRUE (v.isBinaryData());
+    EXPECT_EQ (*v.getBinaryData(), makeBlock ("block"));
+
+    v = Array<var> { 1, 2 };
+    ASSERT_TRUE (v.isArray());
+    EXPECT_EQ (v.size(), 2);
+
+    v = std::make_unique<DynamicObject>();
+    EXPECT_NE (v.getDynamicObject(), nullptr);
+
+    v = var::NativeFunction ([] (const var::NativeFunctionArgs&)
+    {
+        return var (1);
+    });
+    EXPECT_TRUE (v.isMethod());
+
+    v = new TrackedObject (secondDeleted);
+    EXPECT_TRUE (v.isObject());
+    EXPECT_EQ (v.getDynamicObject(), nullptr);
+
+    v = (int64) 5;
+    EXPECT_TRUE (secondDeleted);
+    EXPECT_TRUE (v.isInt64());
+
+    v = 2.5;
+    EXPECT_TRUE (v.isDouble());
+
+    v = false;
+    EXPECT_TRUE (v.isBool());
+
+    v = "text";
+    EXPECT_TRUE (v.isString());
+
+    v = 3;
+    EXPECT_TRUE (v.isInt());
+}
+
+TEST_F (VariantCoverageTests, ConstructorsFromContainers)
+{
+    const var strings (StringArray { "a", "b" });
+    ASSERT_TRUE (strings.isArray());
+    ASSERT_EQ (strings.size(), 2);
+    EXPECT_TRUE (strings[1].isString());
+    EXPECT_EQ (strings[1].toString(), "b");
+
+    const char raw[] = { 1, 2, 3 };
+    const var fromPointer (raw, sizeof (raw));
+    ASSERT_TRUE (fromPointer.isBinaryData());
+    EXPECT_EQ (*fromPointer.getBinaryData(), MemoryBlock (raw, sizeof (raw)));
+
+    MemoryBlock block = makeBlock ("moved");
+    const var fromMovedBlock (std::move (block));
+    ASSERT_TRUE (fromMovedBlock.isBinaryData());
+    EXPECT_EQ (*fromMovedBlock.getBinaryData(), makeBlock ("moved"));
+
+    String text ("moved string");
+    const var fromMovedString (std::move (text));
+    EXPECT_EQ (fromMovedString.toString(), "moved string");
+
+    const var fromWide (L"wide");
+    EXPECT_TRUE (fromWide.isString());
+    EXPECT_EQ (fromWide.toString(), "wide");
+}
+
+//==============================================================================
+TEST_F (VariantCoverageTests, ObjectLifetimeFollowsCopiesAndAssignments)
+{
+    bool deleted = false;
+    auto* object = new TrackedObject (deleted);
+
+    {
+        var a (object);
+        EXPECT_EQ (object->getReferenceCount(), 1);
+
+        var b (a);
+        EXPECT_EQ (object->getReferenceCount(), 2);
+
+        var c;
+        c = b;
+        EXPECT_EQ (object->getReferenceCount(), 3);
+
+        var d (std::move (c));
+        EXPECT_EQ (object->getReferenceCount(), 3);
+
+        c = std::move (d);
+        EXPECT_EQ (object->getReferenceCount(), 3);
+
+        b = 1;
+        EXPECT_EQ (object->getReferenceCount(), 2);
+
+        a.swapWith (b);
+        EXPECT_EQ (object->getReferenceCount(), 2);
+        EXPECT_EQ (b.getObject(), object);
+        EXPECT_TRUE (a.isInt());
+
+        c = var();
+        EXPECT_EQ (object->getReferenceCount(), 1);
+        EXPECT_FALSE (deleted);
+    }
+
+    EXPECT_TRUE (deleted);
+}
+
+TEST_F (VariantCoverageTests, ArrayIsSharedBetweenCopies)
+{
+    bool deleted = false;
+    var original (Array<var> { var (new TrackedObject (deleted)) });
+
+    var copy (original);
+    EXPECT_EQ (copy.getArray(), original.getArray());
+
+    copy.append (2);
+    EXPECT_EQ (original.size(), 2);
+
+    original = var();
+    EXPECT_FALSE (deleted);
+
+    copy = var();
+    EXPECT_TRUE (deleted);
+}
+
+TEST_F (VariantCoverageTests, BinaryCopiesAreIndependent)
+{
+    const var original (makeBlock ("abc"));
+
+    var copy (original);
+    EXPECT_NE (copy.getBinaryData(), original.getBinaryData());
+
+    var assigned;
+    assigned = original;
+    EXPECT_NE (assigned.getBinaryData(), original.getBinaryData());
+
+    copy.getBinaryData()->append ("d", 1);
+    EXPECT_EQ (original.getBinaryData()->getSize(), (size_t) 3);
+    EXPECT_FALSE (copy.equals (original));
+    EXPECT_TRUE (assigned.equals (original));
+}
+
+TEST_F (VariantCoverageTests, MethodCopiesShareTheFunction)
+{
+    auto token = std::make_shared<int> (5);
+
+    {
+        var method (var::NativeFunction ([token] (const var::NativeFunctionArgs&)
+        {
+            return var (*token);
+        }));
+
+        const auto owners = token.use_count();
+
+        var copy (method);
+        var assigned;
+        assigned = copy;
+
+        EXPECT_EQ (token.use_count(), owners);
+        EXPECT_TRUE (copy.equals (method));
+        EXPECT_TRUE (assigned.equalsWithSameType (method));
+        EXPECT_FALSE (method.clone().equals (method));
+
+        method = var();
+        copy = var();
+
+        const var self;
+        EXPECT_EQ ((int) assigned.getNativeFunction() (var::NativeFunctionArgs (self)), 5);
+    }
+
+    EXPECT_EQ (token.use_count(), 1);
+}
+
+TEST_F (VariantCoverageTests, NativeFunctionAccess)
+{
+    EXPECT_FALSE ((bool) var (1).getNativeFunction());
+    EXPECT_FALSE ((bool) var (new DynamicObject()).getNativeFunction());
+
+    const var self;
+    EXPECT_EQ ((int) makeMethod (3).getNativeFunction() (var::NativeFunctionArgs (self)), 3);
+
+    const var empty (var::NativeFunction {});
+    EXPECT_TRUE (empty.isMethod());
+    EXPECT_FALSE ((bool) empty.getNativeFunction());
+}
+
+TEST_F (VariantCoverageTests, NativeFunctionArgsWithoutArguments)
+{
+    const var self (5);
+    const var::NativeFunctionArgs args (self);
+
+    EXPECT_EQ (&args.thisObject, &self);
+    EXPECT_EQ (args.arguments, nullptr);
+    EXPECT_EQ (args.numArguments, 0);
+}
+
+//==============================================================================
+TEST_F (VariantCoverageTests, GetDynamicObjectFollowsTheStoredObject)
+{
+    bool deleted = false;
+    var plain (new TrackedObject (deleted));
+    var dynamic (new DynamicObject());
+    const var fromBase (static_cast<ReferenceCountedObject*> (new CustomDynamicObject()));
+    const var fromUnique (std::make_unique<DynamicObject>());
+    const var nullUnique { std::unique_ptr<DynamicObject> {} };
+
+    EXPECT_NE (plain.getObject(), nullptr);
+    EXPECT_EQ (plain.getDynamicObject(), nullptr);
+    EXPECT_NE (dynamic.getDynamicObject(), nullptr);
+    EXPECT_NE (fromBase.getDynamicObject(), nullptr);
+    EXPECT_NE (fromUnique.getDynamicObject(), nullptr);
+    EXPECT_TRUE (nullUnique.isObject());
+    EXPECT_EQ (nullUnique.getDynamicObject(), nullptr);
+    EXPECT_EQ (var (Array<var> { 1 }).getDynamicObject(), nullptr);
+
+    var copy (dynamic);
+    EXPECT_NE (copy.getDynamicObject(), nullptr);
+
+    var moved (std::move (copy));
+    EXPECT_NE (moved.getDynamicObject(), nullptr);
+
+    var assigned (1);
+    assigned = moved;
+    EXPECT_NE (assigned.getDynamicObject(), nullptr);
+
+    assigned = plain;
+    EXPECT_EQ (assigned.getDynamicObject(), nullptr);
+
+    assigned = std::move (moved);
+    EXPECT_NE (assigned.getDynamicObject(), nullptr);
+
+    dynamic.swapWith (plain);
+    EXPECT_EQ (dynamic.getDynamicObject(), nullptr);
+    EXPECT_NE (plain.getDynamicObject(), nullptr);
+}
+
+TEST_F (VariantCoverageTests, NullObjectBehavesAsAnEmptyObject)
+{
+    var nullObject (static_cast<ReferenceCountedObject*> (nullptr));
+
+    EXPECT_TRUE (nullObject.isObject());
+    EXPECT_EQ (nullObject.getObject(), nullptr);
+    EXPECT_EQ (nullObject.getDynamicObject(), nullptr);
+    EXPECT_FALSE ((bool) nullObject);
+    EXPECT_EQ (nullObject.toString(), "Object 0x0");
+
+    var copy (nullObject);
+    EXPECT_TRUE (copy.isObject());
+
+    copy = nullObject;
+    EXPECT_TRUE (copy.isObject());
+
+    nullObject = 5;
+    EXPECT_TRUE (nullObject.isInt());
+}
+
+TEST_F (VariantCoverageTests, PropertyAccessOnNonDynamicObjects)
+{
+    bool deleted = false;
+    const var plain (new TrackedObject (deleted));
+    const var nullObject (static_cast<ReferenceCountedObject*> (nullptr));
+    const var values[] = { var(), var (1), var ("text"), var (Array<var> { 1 }), plain, nullObject, makeMethod (1) };
+    const Identifier name ("name");
+
+    for (const auto& v : values)
+    {
+        SCOPED_TRACE (v.toString().toStdString());
+
+        EXPECT_EQ (v.getDynamicObject(), nullptr);
+        EXPECT_TRUE (v[name].isVoid());
+        EXPECT_TRUE (v["name"].isVoid());
+        EXPECT_TRUE (v[StringRef ("name")].isVoid());
+        EXPECT_EQ ((int) v.getProperty (name, 7), 7);
+        EXPECT_FALSE (v.hasProperty (name));
+        EXPECT_FALSE (v.hasMethod (name));
+        EXPECT_EQ ((int) v.getMethod (name, 3), 3);
+        EXPECT_TRUE (v.invoke (name, nullptr, 0).isVoid());
+        EXPECT_TRUE (v.call (name).isVoid());
+    }
+}
+
+TEST_F (VariantCoverageTests, GetMethodReturnsOnlyMethods)
+{
+    auto object = std::make_unique<DynamicObject>();
+    object->setProperty ("number", 5);
+    object->setMethod ("method", [] (const var::NativeFunctionArgs&)
+    {
+        return var (9);
+    });
+
+    const var o (std::move (object));
+
+    EXPECT_TRUE (o.hasProperty ("number"));
+    EXPECT_FALSE (o.hasMethod ("number"));
+    EXPECT_TRUE (o.getMethod ("number", var()).isVoid());
+    EXPECT_TRUE (o.hasMethod ("method"));
+    EXPECT_TRUE (o.getMethod ("method", var()).isMethod());
+    EXPECT_EQ ((int) o.getProperty ("number", 4), 5);
+    EXPECT_EQ ((int) o.getProperty ("missing", 4), 4);
+}
+
+TEST_F (VariantCoverageTests, CallPassesEveryArgumentCount)
+{
+    auto object = std::make_unique<DynamicObject>();
+    object->setProperty ("tag", 77);
+    object->setMethod ("encode", [] (const var::NativeFunctionArgs& args)
+    {
+        int result = args.numArguments * 100;
+
+        for (int i = 0; i < args.numArguments; ++i)
+            result += (int) args.arguments[i];
+
+        return var (result);
+    });
+    object->setMethod ("self", [] (const var::NativeFunctionArgs& args)
+    {
+        return args.thisObject["tag"];
+    });
+
+    var o (std::move (object));
+
+    EXPECT_EQ ((int) o.call ("encode"), 0);
+    EXPECT_EQ ((int) o.call ("encode", 1), 101);
+    EXPECT_EQ ((int) o.call ("encode", 1, 2), 203);
+    EXPECT_EQ ((int) o.call ("encode", 1, 2, 3), 306);
+    EXPECT_EQ ((int) o.call ("encode", 1, 2, 3, 4), 410);
+    EXPECT_EQ ((int) o.call ("encode", 1, 2, 3, 4, 5), 515);
+
+    const var args[] = { 10, 20 };
+    EXPECT_EQ ((int) o.invoke ("encode", args, 2), 230);
+    EXPECT_EQ ((int) o.call ("self"), 77);
+}
+
+TEST_F (VariantCoverageTests, ArrayHelpersOnNonArrays)
+{
+    const var values[] = { var(), var (1), var ("text"), makeMethod (1), var (makeBlock ("x")), var (new DynamicObject()) };
+
+    for (const auto& v : values)
+    {
+        EXPECT_EQ (v.size(), 0);
+        EXPECT_EQ (v.indexOf (1), -1);
+        EXPECT_EQ (v.getArray(), nullptr);
+    }
+
+    var appended;
+    appended.append ("first");
+    ASSERT_EQ (appended.size(), 1);
+    EXPECT_EQ (appended[0].toString(), "first");
+
+    var inserted;
+    inserted.insert (0, 1);
+    ASSERT_EQ (inserted.size(), 1);
+    EXPECT_EQ ((int) inserted[0], 1);
+
+    var resized;
+    resized.resize (3);
+    ASSERT_EQ (resized.size(), 3);
+    EXPECT_TRUE (resized[0].isVoid());
+
+    var array (Array<var> { 1, 2, 3 });
+    EXPECT_EQ (array.indexOf (2), 1);
+    EXPECT_EQ (array.indexOf (9), -1);
+
+    array.remove (0);
+    ASSERT_EQ (array.size(), 2);
+    EXPECT_EQ ((int) array[0], 2);
+}
+
+//==============================================================================
+TEST_F (VariantCoverageTests, NumericConversionsFromEveryType)
+{
+    bool deleted = false;
+
+    expectConversions (var(), 0, 0, 0.0, false);
+    expectConversions (var::undefined(), 0, 0, 0.0, false);
+    expectConversions (var (-7), -7, -7, -7.0, true);
+    expectConversions (var (0), 0, 0, 0.0, false);
+    expectConversions (var ((int64) 1099511627781), 5, (int64) 1099511627781, 1099511627781.0, true);
+    expectConversions (var ((int64) 0), 0, 0, 0.0, false);
+    expectConversions (var (true), 1, 1, 1.0, true);
+    expectConversions (var (false), 0, 0, 0.0, false);
+    expectConversions (var (3.75), 3, 3, 3.75, true);
+    expectConversions (var (-2.5), -2, -2, -2.5, true);
+    expectConversions (var (0.0), 0, 0, 0.0, false);
+    expectConversions (var ("-17"), -17, -17, -17.0, true);
+    expectConversions (var ("2.5"), 2, 2, 2.5, true);
+    expectConversions (var ("0.5"), 0, 0, 0.5, false);
+    expectConversions (var ("abc"), 0, 0, 0.0, false);
+    expectConversions (var (new TrackedObject (deleted)), 0, 0, 0.0, true);
+    expectConversions (var (static_cast<ReferenceCountedObject*> (nullptr)), 0, 0, 0.0, false);
+    expectConversions (var (Array<var>()), 0, 0, 0.0, true);
+    expectConversions (var (makeBlock ("1")), 0, 0, 0.0, false);
+    expectConversions (makeMethod (1), 0, 0, 0.0, true);
+    expectConversions (var (var::NativeFunction {}), 0, 0, 0.0, true);
+
+    EXPECT_EQ ((int64) var ("9999999999"), (int64) 9999999999);
+    EXPECT_TRUE ((bool) var ("yes"));
+    EXPECT_TRUE ((bool) var (" TRUE "));
+    EXPECT_FALSE ((bool) var ("no"));
+    EXPECT_FALSE ((bool) var (""));
+}
+
+TEST_F (VariantCoverageTests, ToStringFromEveryType)
+{
+    bool deleted = false;
+    const auto block = makeBlock ("bytes");
+
+    EXPECT_EQ (var().toString(), String());
+    EXPECT_EQ (var::undefined().toString(), "undefined");
+    EXPECT_EQ (var (-42).toString(), "-42");
+    EXPECT_EQ (var ((int64) 1099511627781).toString(), "1099511627781");
+    EXPECT_EQ (var (true).toString(), "1");
+    EXPECT_EQ (var (false).toString(), "0");
+    EXPECT_EQ (var (42.0).toString(), "42.0");
+    EXPECT_DOUBLE_EQ ((double) var (var (3.75).toString()), 3.75);
+    EXPECT_EQ (var ("text").toString(), "text");
+    EXPECT_TRUE (var (new TrackedObject (deleted)).toString().startsWith ("Object 0x"));
+    EXPECT_EQ (var (Array<var> { 1 }).toString(), "[Array]");
+    EXPECT_EQ (var (block).toString(), block.toBase64Encoding());
+    EXPECT_EQ (makeMethod (1).toString(), "Method");
+
+    const String converted = var (12);
+    EXPECT_EQ (converted, "12");
+}
+
+//==============================================================================
+TEST_F (VariantCoverageTests, EqualsSameTypeValues)
+{
+    EXPECT_TRUE (var (5).equals (var (5)));
+    EXPECT_FALSE (var (5).equals (var (6)));
+    EXPECT_TRUE (var ((int64) 1 << 40).equals (var ((int64) 1 << 40)));
+    EXPECT_FALSE (var ((int64) 1 << 40).equals (var (((int64) 1 << 40) + 1)));
+    EXPECT_TRUE (var (true).equals (var (true)));
+    EXPECT_FALSE (var (true).equals (var (false)));
+    EXPECT_TRUE (var (0.1 + 0.2).equals (var (0.3)));
+    EXPECT_FALSE (var (1.0).equals (var (1.0 + 1.0e-9)));
+    EXPECT_TRUE (var ("text").equals (var ("text")));
+    EXPECT_FALSE (var ("text").equals (var ("Text")));
+
+    const var nan (std::numeric_limits<double>::quiet_NaN());
+    EXPECT_FALSE (nan.equals (nan));
+}
+
+TEST_F (VariantCoverageTests, EqualsAcrossTypesKeepsHistoricSemantics)
+{
+    // Integers defer to the wider type
+    EXPECT_TRUE (var (1).equals (var ((int64) 1)));
+    EXPECT_TRUE (var ((int64) 1).equals (var (1)));
+    EXPECT_FALSE (var (1).equals (var (((int64) 1 << 32) + 1)));
+    EXPECT_FALSE (var (((int64) 1 << 32) + 1).equals (var (1)));
+    EXPECT_TRUE (var (1).equals (var (1.0)));
+    EXPECT_FALSE (var (1).equals (var (1.5)));
+    EXPECT_TRUE (var ((int64) 7).equals (var (7.0)));
+    EXPECT_TRUE (var (42).equals (var ("42")));
+    EXPECT_TRUE (var ("42").equals (var (42)));
+    EXPECT_FALSE (var (42).equals (var ("042")));
+    EXPECT_TRUE (var ((int64) 7).equals (var ("7")));
+    EXPECT_TRUE (var (2.5).equals (var ("2.5")));
+
+    // The left-hand type drives the conversion, so some pairs are not symmetric
+    EXPECT_TRUE (var (0).equals (var()));
+    EXPECT_FALSE (var().equals (var (0)));
+    EXPECT_TRUE (var (0.0).equals (var::undefined()));
+    EXPECT_FALSE (var::undefined().equals (var (0.0)));
+    EXPECT_TRUE (var (true).equals (var (2)));
+    EXPECT_FALSE (var (2).equals (var (true)));
+    EXPECT_TRUE (var (1).equals (var (true)));
+    EXPECT_TRUE (var (true).equals (var ("yes")));
+    EXPECT_FALSE (var ("yes").equals (var (true)));
+    EXPECT_TRUE (var ("").equals (var()));
+    EXPECT_FALSE (var().equals (var ("")));
+    EXPECT_TRUE (var (0).equals (var (Array<var>())));
+    EXPECT_FALSE (var (Array<var>()).equals (var (0)));
+}
+
+TEST_F (VariantCoverageTests, EqualsForReferenceTypes)
+{
+    const var object (new DynamicObject());
+    const var otherObject (new DynamicObject());
+    const var nullObject (static_cast<ReferenceCountedObject*> (nullptr));
+
+    EXPECT_TRUE (object.equals (var (object)));
+    EXPECT_FALSE (object.equals (otherObject));
+    EXPECT_FALSE (object.equals (var()));
+    EXPECT_TRUE (nullObject.equals (var()));
+    EXPECT_FALSE (var().equals (nullObject));
+    EXPECT_FALSE (object.equals (var (Array<var>())));
+
+    const var array (Array<var> { 1, "two" });
+    EXPECT_TRUE (array.equals (var (array)));
+    EXPECT_TRUE (array.equals (var (Array<var> { 1, "two" })));
+    EXPECT_FALSE (array.equals (var (Array<var> { 1, "three" })));
+    EXPECT_FALSE (array.equals (var (Array<var> { 1 })));
+    EXPECT_FALSE (array.equals (var (1)));
+
+    const var binary (makeBlock ("abc"));
+    EXPECT_TRUE (binary.equals (var (makeBlock ("abc"))));
+    EXPECT_FALSE (binary.equals (var (makeBlock ("abd"))));
+    EXPECT_FALSE (binary.equals (var ("abc")));
+    EXPECT_FALSE (var ("abc").equals (binary));
+
+    const var method = makeMethod (1);
+    EXPECT_TRUE (method.equals (var (method)));
+    EXPECT_FALSE (method.equals (makeMethod (1)));
+    EXPECT_FALSE (method.equals (var()));
+    EXPECT_FALSE (var().equals (method));
+}
+
+TEST_F (VariantCoverageTests, RelationalOperatorsCompareNumbersAndStrings)
+{
+    EXPECT_TRUE (var ("apple") < var ("banana"));
+    EXPECT_TRUE (var ("banana") > var ("apple"));
+    EXPECT_TRUE (var ("10") < var ("9"));
+    EXPECT_FALSE (var ("10") < var (9));
+    EXPECT_TRUE (var ("10") > var (9));
+    EXPECT_TRUE (var ("a") <= var ("a"));
+    EXPECT_TRUE (var ("a") >= var ("a"));
+    EXPECT_FALSE (var ("a") < var ("a"));
+
+    EXPECT_TRUE (var (1) < var (1.5));
+    EXPECT_TRUE (var ((int64) 5) > var (4));
+    EXPECT_TRUE (var (true) > var (false));
+    EXPECT_TRUE (var (false) < var (0.5));
+    EXPECT_TRUE (var (2) <= var (2.0));
+    EXPECT_TRUE (var (2) >= var ((int64) 2));
+
+    EXPECT_TRUE (var() < var (1));
+    EXPECT_TRUE (var() <= var (0));
+    EXPECT_FALSE (var() < var (0));
+}
+
+TEST_F (VariantCoverageTests, RelationalOperatorsRejectNonComparableTypes)
+{
+    const var one (1);
+    const var values[] = { var::undefined(), var (new DynamicObject()), var (Array<var> { 1 }), var (makeBlock ("x")), makeMethod (1) };
+
+    for (const auto& v : values)
+    {
+        SCOPED_TRACE (v.toString().toStdString());
+
+        EXPECT_FALSE (v < one);
+        EXPECT_FALSE (v <= one);
+        EXPECT_FALSE (v > one);
+        EXPECT_FALSE (v >= one);
+        EXPECT_FALSE (one < v);
+        EXPECT_FALSE (one <= v);
+        EXPECT_FALSE (one > v);
+        EXPECT_FALSE (one >= v);
+        EXPECT_FALSE (v <= v);
+        EXPECT_FALSE (v >= v);
+    }
+}
+
+//==============================================================================
+TEST_F (VariantCoverageTests, CloneMakesDeepCopies)
+{
+    auto object = std::make_unique<DynamicObject>();
+    object->setProperty ("value", 1);
+
+    const var original (Array<var> { var (Array<var> { 1, 2 }), var (std::move (object)), var (makeBlock ("data")), "text", 5 });
+
+    auto copy = original.clone();
+    ASSERT_TRUE (copy.isArray());
+    ASSERT_EQ (copy.size(), 5);
+    EXPECT_NE (copy.getArray(), original.getArray());
+
+    EXPECT_NE (copy[0].getArray(), original[0].getArray());
+    EXPECT_TRUE (copy[0] == original[0]);
+    copy[0].append (3);
+    EXPECT_EQ (original[0].size(), 2);
+
+    ASSERT_NE (copy[1].getDynamicObject(), nullptr);
+    EXPECT_NE (copy[1].getObject(), original[1].getObject());
+    copy[1].getDynamicObject()->setProperty ("value", 2);
+    EXPECT_EQ ((int) original[1]["value"], 1);
+
+    EXPECT_NE (copy[2].getBinaryData(), original[2].getBinaryData());
+    EXPECT_EQ (*copy[2].getBinaryData(), *original[2].getBinaryData());
+
+    EXPECT_TRUE (copy[3].equalsWithSameType (original[3]));
+    EXPECT_TRUE (copy[4].equalsWithSameType (original[4]));
+}
+
+TEST_F (VariantCoverageTests, CloneCopiesValuesAndMethods)
+{
+    const var values[] = { var(), var::undefined(), var (1), var ((int64) 2), var (true), var (2.5), var ("text"), var (makeBlock ("data")) };
+
+    for (const auto& v : values)
+        EXPECT_TRUE (v.clone().equalsWithSameType (v));
+
+    const var binary (makeBlock ("data"));
+    EXPECT_NE (binary.clone().getBinaryData(), binary.getBinaryData());
+
+    const var method = makeMethod (8);
+    const auto cloned = method.clone();
+    ASSERT_TRUE (cloned.isMethod());
+    EXPECT_FALSE (cloned.equals (method));
+
+    const var self;
+    EXPECT_EQ ((int) cloned.getNativeFunction() (var::NativeFunctionArgs (self)), 8);
+}
+
+TEST_F (VariantCoverageTests, CloneOfNonDynamicObjectIsVoid)
+{
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "Cloning an object that is not a DynamicObject asserts";
+#else
+    bool deleted = false;
+    EXPECT_TRUE (var (new TrackedObject (deleted)).clone().isVoid());
+    EXPECT_TRUE (var (static_cast<ReferenceCountedObject*> (nullptr)).clone().isVoid());
+#endif
+}
+
+//==============================================================================
+TEST_F (VariantCoverageTests, WriteToStreamFormatIsStable)
+{
+    const auto expectWritten = [] (const var& v, auto&& writeExpected)
+    {
+        MemoryOutputStream expected;
+        writeExpected (expected);
+        EXPECT_EQ (writeVar (v), expected.getMemoryBlock()) << v.toString().toStdString();
+    };
+
+    expectWritten (var(), [] (OutputStream& o)
+    {
+        o.writeCompressedInt (0);
+    });
+
+    expectWritten (var::undefined(), [] (OutputStream& o)
+    {
+        o.writeCompressedInt (1);
+        o.writeByte (9);
+    });
+
+    expectWritten (var (0x01020304), [] (OutputStream& o)
+    {
+        o.writeCompressedInt (5);
+        o.writeByte (1);
+        o.writeInt (0x01020304);
+    });
+
+    expectWritten (var ((int64) 0x0102030405060708), [] (OutputStream& o)
+    {
+        o.writeCompressedInt (9);
+        o.writeByte (6);
+        o.writeInt64 ((int64) 0x0102030405060708);
+    });
+
+    expectWritten (var (true), [] (OutputStream& o)
+    {
+        o.writeCompressedInt (1);
+        o.writeByte (2);
+    });
+
+    expectWritten (var (false), [] (OutputStream& o)
+    {
+        o.writeCompressedInt (1);
+        o.writeByte (3);
+    });
+
+    expectWritten (var (2.5), [] (OutputStream& o)
+    {
+        o.writeCompressedInt (9);
+        o.writeByte (4);
+        o.writeDouble (2.5);
+    });
+
+    expectWritten (var (String::fromUTF8 ("h\xc3\xa9llo")), [] (OutputStream& o)
+    {
+        o.writeCompressedInt (8);
+        o.writeByte (5);
+        o.write ("h\xc3\xa9llo", 7);
+    });
+
+    expectWritten (var (makeBlock ("bin")), [] (OutputStream& o)
+    {
+        o.writeCompressedInt (4);
+        o.writeByte (8);
+        o.write ("bin", 3);
+    });
+
+    expectWritten (var (Array<var> { 7, "a" }), [] (OutputStream& o)
+    {
+        MemoryOutputStream body;
+        body.writeCompressedInt (2);
+        body.writeCompressedInt (5);
+        body.writeByte (1);
+        body.writeInt (7);
+        body.writeCompressedInt (3);
+        body.writeByte (5);
+        body.write ("a", 2);
+
+        o.writeCompressedInt (1 + (int) body.getDataSize());
+        o.writeByte (7);
+        o.write (body.getData(), body.getDataSize());
+    });
+}
+
+TEST_F (VariantCoverageTests, StreamRoundTripsEverySerialisableType)
+{
+    const var nested (Array<var> { 1, var (Array<var> { var ("inner"), var ((int64) 5) }), var(), 2.5, false });
+    const var values[] = { var(), var (-42), var ((int64) -1234567890123), var (true), var (false), var (-0.125), var (String::fromUTF8 ("h\xc3\xa9llo")), var (""), var (makeBlock ("payload")), var (Array<var>()), nested };
+
+    for (const auto& v : values)
+    {
+        const auto restored = readVar (writeVar (v));
+        EXPECT_TRUE (restored.equalsWithSameType (v)) << v.toString().toStdString();
+    }
+
+    const auto restoredNested = readVar (writeVar (nested));
+    ASSERT_EQ (restoredNested.size(), 5);
+    EXPECT_TRUE (restoredNested[1][1].isInt64());
+    EXPECT_TRUE (restoredNested[2].isVoid());
+    EXPECT_TRUE (restoredNested[4].isBool());
+
+    // Undefined has a marker but is read back as void
+    EXPECT_TRUE (readVar (writeVar (var::undefined())).isVoid());
+}
+
+TEST_F (VariantCoverageTests, ReadFromStreamSkipsUnknownMarkers)
+{
+    MemoryOutputStream out;
+    out.writeCompressedInt (4);
+    out.writeByte (42);
+    out.writeByte (1);
+    out.writeByte (2);
+    out.writeByte (3);
+    var (99).writeToStream (out);
+    out.writeCompressedInt (0);
+
+    MemoryInputStream in (out.getData(), out.getDataSize(), false);
+    EXPECT_TRUE (var::readFromStream (in).isVoid());
+    EXPECT_EQ ((int) var::readFromStream (in), 99);
+    EXPECT_TRUE (var::readFromStream (in).isVoid());
+    EXPECT_TRUE (in.isExhausted());
+}
+
+TEST_F (VariantCoverageTests, UnserialisableTypesWriteVoid)
+{
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "Writing an object or a method to a stream asserts";
+#else
+    MemoryOutputStream expected;
+    expected.writeCompressedInt (0);
+
+    EXPECT_EQ (writeVar (var (new DynamicObject())), expected.getMemoryBlock());
+    EXPECT_EQ (writeVar (makeMethod (1)), expected.getMemoryBlock());
+#endif
+}
