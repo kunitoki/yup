@@ -62,7 +62,7 @@ public:
 
         @param shouldBeVertical whether the switch should be vertical
     */
-    void setVertical (bool shouldBeVertical) noexcept;
+    void setVertical (bool shouldBeVertical);
 
     /** Returns whether the switch is oriented vertically.
 

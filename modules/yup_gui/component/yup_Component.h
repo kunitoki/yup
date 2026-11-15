@@ -2090,6 +2090,8 @@ protected:
 private:
     Identifier resolvePropertyStorageKey (const Identifier& name) const;
     StyleState& getOrCreateStyleState();
+    void applyPositionChange (const Rectangle<float>& oldBounds, Point<int> nativePosition);
+    void notifyBoundsPropertiesChanged (const Rectangle<float>& oldBounds);
     void styleStateFlagChanged (const Identifier& name);
     void setHoveredChain (bool isNowHovered);
     void setPressedChain (bool isNowPressed);

@@ -23,6 +23,8 @@
 
 #include <gtest/gtest.h>
 
+#include <clocale>
+
 using namespace yup;
 
 class GridComponentTests : public ::testing::Test
@@ -120,6 +122,11 @@ TEST_F (GridComponentTests, RejectsInvalidTracksInsteadOfProducingZeroPixelTrack
     EXPECT_TRUE (GridComponent::parseTracks ("bogus").isEmpty());
     EXPECT_TRUE (GridComponent::parseTracks ("1fr bogus").isEmpty());
     EXPECT_TRUE (GridComponent::parseTracks ("-10px").isEmpty());
+    EXPECT_TRUE (GridComponent::parseTracks ("-0px").isEmpty());
+    EXPECT_TRUE (GridComponent::parseTracks ("px").isEmpty());
+    EXPECT_TRUE (GridComponent::parseTracks ("0x10px").isEmpty());
+    EXPECT_TRUE (GridComponent::parseTracks ("nanpx").isEmpty());
+    EXPECT_TRUE (GridComponent::parseTracks ("infpx").isEmpty());
     EXPECT_TRUE (GridComponent::parseTracks ("minmax(1fr, 2fr)").isEmpty());
     EXPECT_TRUE (GridComponent::parseTracks ("minmax(80px)").isEmpty());
     EXPECT_TRUE (GridComponent::parseTracks ("minmax(80px, 1fr").isEmpty());
@@ -127,3 +134,27 @@ TEST_F (GridComponentTests, RejectsInvalidTracksInsteadOfProducingZeroPixelTrack
     EXPECT_TRUE (GridComponent::parseTracks ("repeat(5000, 1fr)").isEmpty());
     EXPECT_TRUE (GridComponent::parseTracks (0).isEmpty());
 }
+
+TEST_F (GridComponentTests, ParsesDecimalTracksRegardlessOfCLocale)
+{
+    const char* current = std::setlocale (LC_NUMERIC, nullptr);
+    const String savedLocale = current != nullptr ? String (current) : String ("C");
+    const ScopeGuard restoreLocale { [&savedLocale]
+    {
+        std::setlocale (LC_NUMERIC, savedLocale.toRawUTF8());
+    } };
+
+    for (const char* candidate : { "de_DE.UTF-8", "fr_FR.UTF-8", "de_DE", "French_France.1252" })
+    {
+        if (std::setlocale (LC_NUMERIC, candidate) != nullptr)
+            break;
+    }
+
+    const auto tracks = GridComponent::parseTracks ("1.5fr 12.5px 33.5% fit-content(42.5px)");
+    ASSERT_EQ (tracks.size(), 4);
+    EXPECT_FLOAT_EQ (tracks.getReference (0).maximum.value, 1.5f);
+    EXPECT_FLOAT_EQ (tracks.getReference (1).maximum.value, 12.5f);
+    EXPECT_FLOAT_EQ (tracks.getReference (2).maximum.value, 33.5f);
+    EXPECT_FLOAT_EQ (tracks.getReference (3).maximum.value, 42.5f);
+}
+

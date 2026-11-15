@@ -224,24 +224,6 @@ void BindingGraph::componentPropertyChanged (Component& component, const Identif
     syncLinks (component, property);
 }
 
-void BindingGraph::componentMoved (Component& component)
-{
-    static const Identifier xId ("x");
-    static const Identifier yId ("y");
-
-    invalidate (component, xId);
-    invalidate (component, yId);
-}
-
-void BindingGraph::componentResized (Component& component)
-{
-    static const Identifier widthId ("width");
-    static const Identifier heightId ("height");
-
-    invalidate (component, widthId);
-    invalidate (component, heightId);
-}
-
 void BindingGraph::componentBeingDeleted (Component& component)
 {
     for (int index = static_cast<int> (links.size()) - 1; index >= 0; --index)

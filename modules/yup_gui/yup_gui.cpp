@@ -203,6 +203,7 @@
 #include "mouse/yup_MouseCursor.cpp"
 #include "mouse/yup_KineticScroller.cpp"
 #include "clipboard/yup_SystemClipboard.cpp"
+#include "component/yup_GuiParsingHelpers.h"
 #include "component/yup_ComponentNative.cpp"
 #include "component/yup_ComponentTypeInfo.cpp"
 #include "styling/yup_StyleState.cpp"

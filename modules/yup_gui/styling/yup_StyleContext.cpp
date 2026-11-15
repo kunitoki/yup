@@ -1342,24 +1342,6 @@ void StyleContext::componentPropertyChanged (Component& component, const Identif
     invalidateDependencies (&component, nullptr, property);
 }
 
-void StyleContext::componentMoved (Component& component)
-{
-    static const Identifier xId ("x");
-    static const Identifier yId ("y");
-
-    invalidateDependencies (&component, nullptr, xId);
-    invalidateDependencies (&component, nullptr, yId);
-}
-
-void StyleContext::componentResized (Component& component)
-{
-    static const Identifier widthId ("width");
-    static const Identifier heightId ("height");
-
-    invalidateDependencies (&component, nullptr, widthId);
-    invalidateDependencies (&component, nullptr, heightId);
-}
-
 void StyleContext::componentBeingDeleted (Component& component)
 {
     observedComponents.erase (&component);

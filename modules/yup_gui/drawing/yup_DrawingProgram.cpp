@@ -955,24 +955,6 @@ void DrawingProgram::componentPropertyChanged (Component& component, const Ident
         target->repaint();
 }
 
-void DrawingProgram::componentMoved (Component& component)
-{
-    static const Identifier xId ("x");
-    static const Identifier yId ("y");
-
-    componentPropertyChanged (component, xId);
-    componentPropertyChanged (component, yId);
-}
-
-void DrawingProgram::componentResized (Component& component)
-{
-    static const Identifier widthId ("width");
-    static const Identifier heightId ("height");
-
-    componentPropertyChanged (component, widthId);
-    componentPropertyChanged (component, heightId);
-}
-
 void DrawingProgram::componentBeingDeleted (Component& component)
 {
     observedComponents.erase (&component);

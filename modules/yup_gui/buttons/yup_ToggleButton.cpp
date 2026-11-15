@@ -24,6 +24,19 @@ namespace yup
 
 //==============================================================================
 
+namespace
+{
+
+struct ToggleButtonIds
+{
+    static inline const Identifier checked { "checked" };
+    static inline const Identifier text { "text" };
+};
+
+} // namespace
+
+//==============================================================================
+
 const Identifier ToggleButton::Style::backgroundColorId = "toggleButtonBackground";
 const Identifier ToggleButton::Style::backgroundToggledColorId = "toggleButtonBackgroundToggled";
 const Identifier ToggleButton::Style::textColorId = "toggleButtonText";
@@ -54,7 +67,7 @@ const ComponentTypeInfo& ToggleButton::getClassTypeInfo()
         props.push_back (makeNumberProperty (Identifier ("focusedOutlineWidth"), Style::focusedOutlineWidthId, 2.0, "The outline width when focused."));
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("checked"),
+            .name = ToggleButtonIds::checked,
             .type = ComponentProperty::Type::boolean,
             .getter = [] (const Component& c) { return var (static_cast<const ToggleButton&> (c).getToggleState()); },
             .setter = [] (Component& c, const var& v) { static_cast<ToggleButton&> (c).setToggleState (static_cast<bool> (v)); },
@@ -62,7 +75,7 @@ const ComponentTypeInfo& ToggleButton::getClassTypeInfo()
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("text"),
+            .name = ToggleButtonIds::text,
             .type = ComponentProperty::Type::string,
             .getter = [] (const Component& c) { return var (static_cast<const ToggleButton&> (c).getButtonText()); },
             .setter = [] (Component& c, const var& v) { static_cast<ToggleButton&> (c).setButtonText (v.toString()); },
@@ -99,7 +112,7 @@ void ToggleButton::setToggleState (bool shouldBeToggled, NotificationType notifi
 
         auto bailOutChecker = BailOutChecker (this);
 
-        notifyPropertyChanged (Identifier ("checked"));
+        notifyPropertyChanged (ToggleButtonIds::checked);
         if (bailOutChecker.shouldBailOut())
             return;
 
@@ -125,7 +138,7 @@ void ToggleButton::setButtonText (String newText)
     if (buttonText != newText)
     {
         buttonText = newText;
-        notifyPropertyChanged (Identifier ("text"));
+        notifyPropertyChanged (ToggleButtonIds::text);
         resized();
     }
 }

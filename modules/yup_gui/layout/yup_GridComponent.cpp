@@ -42,22 +42,6 @@ GridItem::AlignSelf toGridAlignSelf (const String& name)
 
 constexpr int maxGridTrackRepeatCount = 4096;
 
-std::optional<float> tryParseGridNonNegativeFloat (const String& raw)
-{
-    const auto trimmed = raw.trim();
-    if (trimmed.isEmpty())
-        return std::nullopt;
-
-    const auto utf8 = trimmed.toStdString();
-    char* end = nullptr;
-    const float parsed = std::strtof (utf8.c_str(), &end);
-
-    if (end == utf8.c_str() || *end != '\0' || ! std::isfinite (parsed) || parsed < 0.0f)
-        return std::nullopt;
-
-    return parsed;
-}
-
 std::optional<int> tryParseGridRepeatCount (const String& raw)
 {
     const auto trimmed = raw.trim();
@@ -154,7 +138,7 @@ std::optional<Grid::TrackInfo> tryParseSimpleGridTrack (const String& rawToken)
 
     if (token.endsWithIgnoreCase ("fr"))
     {
-        if (const auto value = tryParseGridNonNegativeFloat (token.dropLastCharacters (2)))
+        if (const auto value = detail::parseStrictFloat (token.dropLastCharacters (2), false))
             return Grid::TrackInfo::fr (*value);
 
         return std::nullopt;
@@ -162,21 +146,13 @@ std::optional<Grid::TrackInfo> tryParseSimpleGridTrack (const String& rawToken)
 
     if (token.endsWith ("%"))
     {
-        if (const auto value = tryParseGridNonNegativeFloat (token.dropLastCharacters (1)))
+        if (const auto value = detail::parseStrictFloat (token.dropLastCharacters (1), false))
             return Grid::TrackInfo::percent (*value);
 
         return std::nullopt;
     }
 
-    if (token.endsWithIgnoreCase ("px"))
-    {
-        if (const auto value = tryParseGridNonNegativeFloat (token.dropLastCharacters (2)))
-            return Grid::TrackInfo::px (*value);
-
-        return std::nullopt;
-    }
-
-    if (const auto value = tryParseGridNonNegativeFloat (token))
+    if (const auto value = detail::parseStrictFloat (token, false, true))
         return Grid::TrackInfo::px (*value);
 
     return std::nullopt;
@@ -209,10 +185,7 @@ std::optional<Grid::TrackInfo> tryParseSingleGridTrack (const String& rawToken)
         if (! splitGridTopLevel (*argsText, true, args) || args.size() != 1)
             return std::nullopt;
 
-        const auto arg = args[0].trim();
-        const auto numberText = arg.endsWithIgnoreCase ("px") ? arg.dropLastCharacters (2) : arg;
-
-        if (const auto maximumPx = tryParseGridNonNegativeFloat (numberText))
+        if (const auto maximumPx = detail::parseStrictFloat (args[0], false, true))
             return Grid::TrackInfo::fitContent (*maximumPx);
 
         return std::nullopt;

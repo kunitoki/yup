@@ -24,6 +24,20 @@ namespace yup
 
 //==============================================================================
 
+namespace
+{
+
+struct LabelIds
+{
+    static inline const Identifier text { "text" };
+    static inline const Identifier strokeWidth { "strokeWidth" };
+    static inline const Identifier justification { "justification" };
+};
+
+} // namespace
+
+//==============================================================================
+
 const Identifier Label::Style::textFillColorId { "labelTextFillColorId" };
 const Identifier Label::Style::textStrokeColorId { "labelTextStrokeColorId" };
 const Identifier Label::Style::backgroundColorId { "labelBackgroundColorId" };
@@ -50,14 +64,14 @@ const ComponentTypeInfo& Label::getClassTypeInfo()
             .description = "The height of the text as a proportion of the label height. Unset, the font keeps its own height." });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("text"),
+            .name = LabelIds::text,
             .type = ComponentProperty::Type::string,
             .getter = [] (const Component& c) { return var (static_cast<const Label&> (c).getText()); },
             .setter = [] (Component& c, const var& v) { static_cast<Label&> (c).setText (v.toString()); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("strokeWidth"),
+            .name = LabelIds::strokeWidth,
             .type = ComponentProperty::Type::number,
             .getter = [] (const Component& c) { return var (static_cast<double> (static_cast<const Label&> (c).getStrokeWidth())); },
             .setter = [] (Component& c, const var& v) { static_cast<Label&> (c).setStrokeWidth (static_cast<float> (static_cast<double> (v))); },
@@ -67,7 +81,7 @@ const ComponentTypeInfo& Label::getClassTypeInfo()
         static const Justification::Flags justifications[] = { Justification::left, Justification::right, Justification::topLeft, Justification::centerTop, Justification::topRight, Justification::centerLeft, Justification::center, Justification::centerRight, Justification::bottomLeft, Justification::centerBottom, Justification::bottomRight };
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("justification"),
+            .name = LabelIds::justification,
             .type = ComponentProperty::Type::enumeration,
             .defaultValue = justificationNames[0],
             .getter = [] (const Component& c)
@@ -112,6 +126,8 @@ String Label::getText() const
 
 void Label::setText (String newText, NotificationType notification)
 {
+    ignoreUnused (notification);
+
     if (text == newText)
         return;
 
@@ -119,10 +135,7 @@ void Label::setText (String newText, NotificationType notification)
     textDirty = true;
     invalidateCache();
 
-    sendChangeNotification (notification, [this]
-    {
-        notifyPropertyChanged (Identifier ("text"));
-    });
+    notifyPropertyChanged (LabelIds::text);
 }
 
 //==============================================================================
@@ -158,6 +171,7 @@ void Label::setStrokeWidth (float newWidth)
         return;
 
     strokeWidth = newWidth;
+    notifyPropertyChanged (LabelIds::strokeWidth);
     repaint();
 }
 
@@ -168,6 +182,7 @@ void Label::setJustification (Justification newJustification)
 
     justification = newJustification;
     invalidateCache();
+    notifyPropertyChanged (LabelIds::justification);
 }
 
 //==============================================================================

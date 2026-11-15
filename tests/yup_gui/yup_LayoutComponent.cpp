@@ -23,6 +23,8 @@
 
 #include <gtest/gtest.h>
 
+#include <clocale>
+
 using namespace yup;
 
 class LayoutComponentTests : public ::testing::Test
@@ -97,6 +99,28 @@ TEST_F (LayoutComponentTests, RejectsSpacingWithExtraOrMalformedTokens)
     EXPECT_EQ (TestLayout::parseSpacing ("1 2 3 4 5"), EdgeSpacing<float>());
     EXPECT_EQ (TestLayout::parseSpacing ("8 bogus"), EdgeSpacing<float>());
     EXPECT_EQ (TestLayout::parseSpacing ("abc"), EdgeSpacing<float>());
+    EXPECT_EQ (TestLayout::parseSpacing ("px"), EdgeSpacing<float>());
+    EXPECT_EQ (TestLayout::parseSpacing ("0x10px"), EdgeSpacing<float>());
+    EXPECT_EQ (TestLayout::parseSpacing ("nan"), EdgeSpacing<float>());
+    EXPECT_EQ (TestLayout::parseSpacing ("inf"), EdgeSpacing<float>());
+}
+
+TEST_F (LayoutComponentTests, ParsesDecimalSpacingRegardlessOfCLocale)
+{
+    const char* current = std::setlocale (LC_NUMERIC, nullptr);
+    const String savedLocale = current != nullptr ? String (current) : String ("C");
+    const ScopeGuard restoreLocale { [&savedLocale]
+    {
+        std::setlocale (LC_NUMERIC, savedLocale.toRawUTF8());
+    } };
+
+    for (const char* candidate : { "de_DE.UTF-8", "fr_FR.UTF-8", "de_DE", "French_France.1252" })
+    {
+        if (std::setlocale (LC_NUMERIC, candidate) != nullptr)
+            break;
+    }
+
+    EXPECT_EQ (TestLayout::parseSpacing ("1.5px 2.25"), EdgeSpacing<float> (2.25f, 1.5f));
 }
 
 TEST_F (LayoutComponentTests, StandardContainersSkipRelayoutOnUnrelatedStyleChanges)

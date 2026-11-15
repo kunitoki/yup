@@ -24,6 +24,18 @@ namespace yup
 
 //==============================================================================
 
+namespace
+{
+
+struct TextButtonIds
+{
+    static inline const Identifier text { "text" };
+};
+
+} // namespace
+
+//==============================================================================
+
 const Identifier TextButton::Style::backgroundColorId = "textButtonBackground";
 const Identifier TextButton::Style::backgroundPressedColorId = "textButtonBackgroundPressed";
 const Identifier TextButton::Style::textColorId = "textButtonText";
@@ -54,7 +66,7 @@ const ComponentTypeInfo& TextButton::getClassTypeInfo()
         props.push_back (makeNumberProperty (Identifier ("focusedOutlineWidth"), Style::focusedOutlineWidthId, 2.0, "The outline width when focused."));
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("text"),
+            .name = TextButtonIds::text,
             .type = ComponentProperty::Type::string,
             .getter = [] (const Component& c) { return var (static_cast<const TextButton&> (c).getButtonText()); },
             .setter = [] (Component& c, const var& v) { static_cast<TextButton&> (c).setButtonText (v.toString()); },
@@ -89,6 +101,7 @@ void TextButton::setButtonText (StringRef newButtonText)
         buttonText = newButtonText;
 
         updateTextLayout();
+        notifyPropertyChanged (TextButtonIds::text);
     }
 }
 

@@ -194,8 +194,6 @@ private:
     void invalidateDependencies (const Component* sourceComponent, const BindingProvider* sourceProvider, const Identifier& property);
 
     void componentPropertyChanged (Component& component, const Identifier& property) override;
-    void componentMoved (Component& component) override;
-    void componentResized (Component& component) override;
     void componentBeingDeleted (Component& component) override;
     void bindingValueChanged (BindingProvider& provider, const Identifier& name) override;
     void bindingProviderBeingDeleted (BindingProvider& provider) override;

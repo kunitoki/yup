@@ -26,29 +26,22 @@ namespace yup
 namespace
 {
 
-const Identifier& componentHoveredPropertyId()
+struct ComponentIds
 {
-    static const Identifier identifier ("hovered");
-    return identifier;
-}
-
-const Identifier& componentPressedPropertyId()
-{
-    static const Identifier identifier ("pressed");
-    return identifier;
-}
-
-const Identifier& componentEnabledPropertyId()
-{
-    static const Identifier identifier ("enabled");
-    return identifier;
-}
-
-const Identifier& componentFocusedPropertyId()
-{
-    static const Identifier identifier ("focused");
-    return identifier;
-}
+    static inline const Identifier id { "id" };
+    static inline const Identifier title { "title" };
+    static inline const Identifier visible { "visible" };
+    static inline const Identifier enabled { "enabled" };
+    static inline const Identifier opacity { "opacity" };
+    static inline const Identifier x { "x" };
+    static inline const Identifier y { "y" };
+    static inline const Identifier width { "width" };
+    static inline const Identifier height { "height" };
+    static inline const Identifier focused { "focused" };
+    static inline const Identifier focusWithin { "focus-within" };
+    static inline const Identifier hovered { "hovered" };
+    static inline const Identifier pressed { "pressed" };
+};
 
 /** Returns the axis-aligned bounding box of the corners of a rectangle mapped through @a mapPoint. */
 template <class MapPoint>
@@ -199,7 +192,7 @@ void Component::setComponentID (StringRef newComponentID)
 
     componentID = newComponentID;
 
-    markStyleDirty();
+    styleStateFlagChanged (ComponentIds::id);
 }
 
 //==============================================================================
@@ -247,12 +240,7 @@ void Component::sendEnablementChanged()
 {
     const WeakReference<Component> self (this);
 
-    markStyleDirty();
-
-    if (auto* context = findStyleContext())
-        context->propertyChanged (*this, componentEnabledPropertyId());
-
-    componentListeners.call (&ComponentListener::componentPropertyChanged, *this, componentEnabledPropertyId());
+    styleStateFlagChanged (ComponentIds::enabled);
     if (self == nullptr)
         return;
 
@@ -309,6 +297,11 @@ void Component::setVisible (bool shouldBeVisible)
     if (bailOutChecker.shouldBailOut())
         return;
 
+    notifyPropertyChanged (ComponentIds::visible);
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
     internalRepaint();
 }
 
@@ -348,10 +341,52 @@ void Component::setTitle (const String& title)
     if (flags.onDesktop && native != nullptr)
         native->setTitle (title);
 
-    notifyPropertyChanged (Identifier ("title"));
+    notifyPropertyChanged (ComponentIds::title);
 }
 
 //==============================================================================
+
+void Component::applyPositionChange (const Rectangle<float>& oldBounds, Point<int> nativePosition)
+{
+    if (flags.onDesktop && native != nullptr)
+        native->setPosition (nativePosition);
+
+    const BailOutChecker bailOutChecker (this);
+
+    sendMoved();
+
+    if (! bailOutChecker.shouldBailOut())
+        notifyBoundsPropertiesChanged (oldBounds);
+}
+
+void Component::notifyBoundsPropertiesChanged (const Rectangle<float>& oldBounds)
+{
+    const BailOutChecker bailOutChecker (this);
+
+    if (oldBounds.getX() != boundsInParent.getX())
+    {
+        notifyPropertyChanged (ComponentIds::x);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    if (oldBounds.getY() != boundsInParent.getY())
+    {
+        notifyPropertyChanged (ComponentIds::y);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    if (oldBounds.getWidth() != boundsInParent.getWidth())
+    {
+        notifyPropertyChanged (ComponentIds::width);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    if (oldBounds.getHeight() != boundsInParent.getHeight())
+        notifyPropertyChanged (ComponentIds::height);
+}
 
 Point<float> Component::getPosition() const
 {
@@ -360,12 +395,9 @@ Point<float> Component::getPosition() const
 
 void Component::setPosition (const Point<float>& newPosition)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setTopLeft (newPosition);
-
-    if (flags.onDesktop && native != nullptr)
-        native->setPosition (newPosition.to<int>());
-
-    sendMoved();
+    applyPositionChange (oldBounds, newPosition.to<int>());
 }
 
 float Component::getX() const
@@ -405,12 +437,9 @@ Point<float> Component::getTopLeft() const
 
 void Component::setTopLeft (const Point<float>& newTopLeft)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setTopLeft (newTopLeft);
-
-    if (flags.onDesktop && native != nullptr)
-        native->setPosition (newTopLeft.to<int>());
-
-    sendMoved();
+    applyPositionChange (oldBounds, newTopLeft.to<int>());
 }
 
 Point<float> Component::getBottomLeft() const
@@ -420,12 +449,9 @@ Point<float> Component::getBottomLeft() const
 
 void Component::setBottomLeft (const Point<float>& newBottomLeft)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setBottomLeft (newBottomLeft);
-
-    if (flags.onDesktop && native != nullptr)
-        native->setPosition (newBottomLeft.translated (0.0f, -getHeight()).to<int>());
-
-    sendMoved();
+    applyPositionChange (oldBounds, newBottomLeft.translated (0.0f, -getHeight()).to<int>());
 }
 
 Point<float> Component::getTopRight() const
@@ -435,12 +461,9 @@ Point<float> Component::getTopRight() const
 
 void Component::setTopRight (const Point<float>& newTopRight)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setTopRight (newTopRight);
-
-    if (flags.onDesktop && native != nullptr)
-        native->setPosition (newTopRight.translated (-getWidth(), 0.0f).to<int>());
-
-    sendMoved();
+    applyPositionChange (oldBounds, newTopRight.translated (-getWidth(), 0.0f).to<int>());
 }
 
 Point<float> Component::getBottomRight() const
@@ -450,12 +473,9 @@ Point<float> Component::getBottomRight() const
 
 void Component::setBottomRight (const Point<float>& newBottomRight)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setBottomRight (newBottomRight);
-
-    if (flags.onDesktop && native != nullptr)
-        native->setPosition (newBottomRight.translated (-getWidth(), -getHeight()).to<int>());
-
-    sendMoved();
+    applyPositionChange (oldBounds, newBottomRight.translated (-getWidth(), -getHeight()).to<int>());
 }
 
 Point<float> Component::getCenter() const
@@ -465,12 +485,9 @@ Point<float> Component::getCenter() const
 
 void Component::setCenter (const Point<float>& newCenter)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setCenter (newCenter);
-
-    if (flags.onDesktop && native != nullptr)
-        native->setPosition (newCenter.translated (-getWidth() / 2.0f, -getHeight() / 2.0f).to<int>());
-
-    sendMoved();
+    applyPositionChange (oldBounds, newCenter.translated (-getWidth() / 2.0f, -getHeight() / 2.0f).to<int>());
 }
 
 float Component::getCenterX() const
@@ -480,15 +497,9 @@ float Component::getCenterX() const
 
 void Component::setCenterX (float newCenterX)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setCenterX (newCenterX);
-
-    if (flags.onDesktop && native != nullptr)
-    {
-        auto newCenter = boundsInParent.getCenter();
-        native->setPosition (newCenter.translated (-getWidth() / 2.0f, 0.0f).to<int>());
-    }
-
-    sendMoved();
+    applyPositionChange (oldBounds, boundsInParent.getCenter().translated (-getWidth() / 2.0f, 0.0f).to<int>());
 }
 
 float Component::getCenterY() const
@@ -498,15 +509,9 @@ float Component::getCenterY() const
 
 void Component::setCenterY (float newCenterY)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setCenterY (newCenterY);
-
-    if (flags.onDesktop && native != nullptr)
-    {
-        auto newCenter = boundsInParent.getCenter();
-        native->setPosition (newCenter.translated (0.0f, -getHeight() / 2.0f).to<int>());
-    }
-
-    sendMoved();
+    applyPositionChange (oldBounds, boundsInParent.getCenter().translated (0.0f, -getHeight() / 2.0f).to<int>());
 }
 
 void Component::moved() {}
@@ -540,6 +545,7 @@ void Component::setSize (const Size<float>& newSize)
     if (boundsInParent.getSize() == newSize)
         return;
 
+    const auto oldBounds = boundsInParent;
     auto areaToRepaint = getPaintBounds();
     boundsInParent = boundsInParent.withSize (newSize);
     areaToRepaint = areaToRepaint.unionWith (getPaintBounds());
@@ -547,7 +553,17 @@ void Component::setSize (const Size<float>& newSize)
     if (flags.onDesktop && native != nullptr)
         native->setSize (newSize.to<int>());
 
+    const BailOutChecker bailOutChecker (this);
+
     sendResized();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    notifyBoundsPropertiesChanged (oldBounds);
+
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     repaint (areaToRepaint);
 }
@@ -582,6 +598,8 @@ void Component::setBounds (const Rectangle<float>& newBounds)
     if (newBounds == boundsInParent)
         return;
 
+    const auto oldBounds = boundsInParent;
+
     repaint();
 
     boundsInParent = newBounds;
@@ -608,6 +626,11 @@ void Component::setBounds (const Rectangle<float>& newBounds)
     suppressChildBoundsChanged = false;
 
     sendChildBoundsChangedToParent();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    notifyBoundsPropertiesChanged (oldBounds);
 }
 
 Rectangle<float> Component::getBounds() const
@@ -796,7 +819,12 @@ void Component::setOpacity (float newOpacity)
     else
         repaint();
 
+    const BailOutChecker bailOutChecker (this);
+
     opacityChanged();
+
+    if (! bailOutChecker.shouldBailOut())
+        notifyPropertyChanged (ComponentIds::opacity);
 }
 
 float Component::getOpacity() const
@@ -1608,7 +1636,12 @@ void Component::styleChanged() {}
 
 void Component::notifyPropertyChanged (const Identifier& name)
 {
-    componentListeners.call (&ComponentListener::componentPropertyChanged, *this, name);
+    const BailOutChecker bailOutChecker (this);
+
+    componentListeners.callChecked (bailOutChecker, &ComponentListener::componentPropertyChanged, *this, name);
+
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     if (auto* context = findStyleContext())
         context->propertyChanged (*this, name);
@@ -1675,15 +1708,25 @@ bool Component::isFocused() const noexcept
 
 bool Component::hasFocusWithin() const
 {
-    auto nativeComponent = getNativeComponent();
-    if (nativeComponent == nullptr)
-        return false;
+    if (flags.isFocused)
+        return true;
 
-    for (auto* focused = nativeComponent->getFocusedComponent(); focused != nullptr; focused = focused->parentComponent)
+    if (auto* nativeComponent = getNativeComponent())
     {
-        if (focused == this)
-            return true;
+        auto* focused = nativeComponent->getFocusedComponent();
+        if (focused == nullptr || ! focused->isFocused())
+            return false;
+
+        for (auto* ancestor = focused->parentComponent; ancestor != nullptr; ancestor = ancestor->parentComponent)
+            if (ancestor == this)
+                return true;
+
+        return false;
     }
+
+    for (const auto* child : children)
+        if (child->hasFocusWithin())
+            return true;
 
     return false;
 }
@@ -1691,11 +1734,7 @@ bool Component::hasFocusWithin() const
 void Component::styleStateFlagChanged (const Identifier& name)
 {
     markStyleDirty();
-
-    if (auto* context = findStyleContext())
-        context->propertyChanged (*this, name);
-
-    componentListeners.call (&ComponentListener::componentPropertyChanged, *this, name);
+    notifyPropertyChanged (name);
 }
 
 void Component::setHoveredChain (bool isNowHovered)
@@ -1706,7 +1745,7 @@ void Component::setHoveredChain (bool isNowHovered)
             break;
 
         component->flags.isHovered = isNowHovered;
-        component->styleStateFlagChanged (componentHoveredPropertyId());
+        component->styleStateFlagChanged (ComponentIds::hovered);
     }
 }
 
@@ -1718,7 +1757,7 @@ void Component::setPressedChain (bool isNowPressed)
             break;
 
         component->flags.isPressed = isNowPressed;
-        component->styleStateFlagChanged (componentPressedPropertyId());
+        component->styleStateFlagChanged (ComponentIds::pressed);
     }
 }
 
@@ -1728,7 +1767,7 @@ void Component::clearHoveredInSubtree()
         return;
 
     flags.isHovered = false;
-    styleStateFlagChanged (componentHoveredPropertyId());
+    styleStateFlagChanged (ComponentIds::hovered);
 
     for (auto* child : children)
         child->clearHoveredInSubtree();
@@ -1740,7 +1779,7 @@ void Component::clearPressedInSubtree()
         return;
 
     flags.isPressed = false;
-    styleStateFlagChanged (componentPressedPropertyId());
+    styleStateFlagChanged (ComponentIds::pressed);
 
     for (auto* child : children)
         child->clearPressedInSubtree();
@@ -1835,69 +1874,69 @@ const ComponentTypeInfo& Component::getClassTypeInfo()
         std::vector<ComponentProperty> props;
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("id"),
+            .name = ComponentIds::id,
             .type = ComponentProperty::Type::string,
             .getter = [] (const Component& c) { return var (c.getComponentID()); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("title"),
+            .name = ComponentIds::title,
             .type = ComponentProperty::Type::string,
             .getter = [] (const Component& c) { return var (c.getTitle()); },
             .setter = [] (Component& c, const var& v) { c.setTitle (v.toString()); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("visible"),
+            .name = ComponentIds::visible,
             .type = ComponentProperty::Type::boolean,
             .defaultValue = true,
             .getter = [] (const Component& c) { return var (c.isVisible()); },
             .setter = [] (Component& c, const var& v) { c.setVisible (static_cast<bool> (v)); } });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("enabled"),
+            .name = ComponentIds::enabled,
             .type = ComponentProperty::Type::boolean,
             .defaultValue = true,
             .getter = [] (const Component& c) { return var (c.isEnabled()); },
             .setter = [] (Component& c, const var& v) { c.setEnabled (static_cast<bool> (v)); } });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("opacity"),
+            .name = ComponentIds::opacity,
             .type = ComponentProperty::Type::number,
             .defaultValue = 1.0,
             .getter = [] (const Component& c) { return var (static_cast<double> (c.getOpacity())); },
             .setter = [] (Component& c, const var& v) { c.setOpacity (static_cast<float> (static_cast<double> (v))); } });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("x"),
+            .name = ComponentIds::x,
             .type = ComponentProperty::Type::number,
             .getter = [] (const Component& c) { return var (static_cast<double> (c.getX())); },
             .setter = [] (Component& c, const var& v) { c.setBounds (static_cast<float> (static_cast<double> (v)), c.getY(), c.getWidth(), c.getHeight()); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("y"),
+            .name = ComponentIds::y,
             .type = ComponentProperty::Type::number,
             .getter = [] (const Component& c) { return var (static_cast<double> (c.getY())); },
             .setter = [] (Component& c, const var& v) { c.setBounds (c.getX(), static_cast<float> (static_cast<double> (v)), c.getWidth(), c.getHeight()); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("width"),
+            .name = ComponentIds::width,
             .type = ComponentProperty::Type::number,
             .getter = [] (const Component& c) { return var (static_cast<double> (c.getWidth())); },
             .setter = [] (Component& c, const var& v) { c.setBounds (c.getX(), c.getY(), static_cast<float> (static_cast<double> (v)), c.getHeight()); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("height"),
+            .name = ComponentIds::height,
             .type = ComponentProperty::Type::number,
             .getter = [] (const Component& c) { return var (static_cast<double> (c.getHeight())); },
             .setter = [] (Component& c, const var& v) { c.setBounds (c.getX(), c.getY(), c.getWidth(), static_cast<float> (static_cast<double> (v))); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("focused"),
+            .name = ComponentIds::focused,
             .type = ComponentProperty::Type::boolean,
             .defaultValue = false,
             .getter = [] (const Component& c) { return var (c.isFocused()); },
@@ -1905,7 +1944,7 @@ const ComponentTypeInfo& Component::getClassTypeInfo()
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = componentHoveredPropertyId(),
+            .name = ComponentIds::hovered,
             .type = ComponentProperty::Type::boolean,
             .defaultValue = false,
             .getter = [] (const Component& c) { return var (c.isHovered()); },
@@ -1913,7 +1952,7 @@ const ComponentTypeInfo& Component::getClassTypeInfo()
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = componentPressedPropertyId(),
+            .name = ComponentIds::pressed,
             .type = ComponentProperty::Type::boolean,
             .defaultValue = false,
             .getter = [] (const Component& c) { return var (c.isPressed()); },
@@ -3051,9 +3090,15 @@ void Component::internalResized (int width, int height)
 
     if (newBounds != boundsInParent)
     {
+        const auto oldBounds = boundsInParent;
         boundsInParent = newBounds;
 
+        const BailOutChecker bailOutChecker (this);
+
         sendResized();
+
+        if (! bailOutChecker.shouldBailOut())
+            notifyBoundsPropertiesChanged (oldBounds);
     }
 }
 
@@ -3065,9 +3110,15 @@ void Component::internalMoved (int xpos, int ypos)
 
     if (newBounds != boundsInParent)
     {
+        const auto oldBounds = boundsInParent;
         boundsInParent = newBounds;
 
+        const BailOutChecker bailOutChecker (this);
+
         sendMoved();
+
+        if (! bailOutChecker.shouldBailOut())
+            notifyBoundsPropertiesChanged (oldBounds);
     }
 }
 
@@ -3079,13 +3130,17 @@ void Component::internalFocusChanged (bool gotFocus)
 
     flags.isFocused = gotFocus;
 
-    for (auto* component = this; component != nullptr; component = component->parentComponent)
-        component->markStyleDirty();
+    styleStateFlagChanged (ComponentIds::focused);
+    if (self == nullptr)
+        return;
 
-    if (auto* context = findStyleContext())
-        context->propertyChanged (*this, componentFocusedPropertyId());
+    for (WeakReference<Component> component (this); component != nullptr;)
+    {
+        const WeakReference<Component> next (component->parentComponent);
+        component->styleStateFlagChanged (ComponentIds::focusWithin);
+        component = next;
+    }
 
-    componentListeners.call (&ComponentListener::componentPropertyChanged, *this, componentFocusedPropertyId());
     if (self == nullptr)
         return;
 

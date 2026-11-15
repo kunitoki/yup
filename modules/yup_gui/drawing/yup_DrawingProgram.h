@@ -136,8 +136,6 @@ private:
     void drawNode (Graphics& g, const Node& node, Rectangle<float> bounds, const Font& font, int numRows);
 
     void componentPropertyChanged (Component& component, const Identifier& property) override;
-    void componentMoved (Component& component) override;
-    void componentResized (Component& component) override;
     void componentBeingDeleted (Component& component) override;
     void bindingValueChanged (BindingProvider& provider, const Identifier& name) override;
     void bindingProviderBeingDeleted (BindingProvider& provider) override;

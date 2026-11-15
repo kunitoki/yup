@@ -242,31 +242,6 @@ EdgeSpacing<float> LayoutComponent::getItemMargin (const Component& child)
     return parseSpacing (child.findProperty (Properties::marginId));
 }
 
-namespace
-{
-
-std::optional<float> parseLayoutSpacingScalar (const String& rawToken)
-{
-    const auto token = rawToken.trim();
-    if (token.isEmpty())
-        return std::nullopt;
-
-    const auto numberText = token.endsWithIgnoreCase ("px") ? token.dropLastCharacters (2).trim() : token;
-    if (numberText.isEmpty())
-        return std::nullopt;
-
-    const auto utf8 = numberText.toStdString();
-    char* end = nullptr;
-    const float parsed = std::strtof (utf8.c_str(), &end);
-
-    if (end == utf8.c_str() || *end != '\0' || ! std::isfinite (parsed))
-        return std::nullopt;
-
-    return parsed;
-}
-
-} // namespace
-
 EdgeSpacing<float> LayoutComponent::parseSpacing (const var& value)
 {
     if (value.isVoid() || value.isUndefined() || value.isBool())
@@ -285,7 +260,7 @@ EdgeSpacing<float> LayoutComponent::parseSpacing (const var& value)
     float values[4] = {};
     for (int i = 0; i < tokens.size(); ++i)
     {
-        const auto parsed = parseLayoutSpacingScalar (tokens[i]);
+        const auto parsed = detail::parseStrictFloat (tokens[i], true, true);
         if (! parsed.has_value())
             return {};
 
