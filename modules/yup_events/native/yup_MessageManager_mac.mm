@@ -104,6 +104,18 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
 
         addMethod(@selector(applicationDidBecomeActive:), [](id /*self*/, SEL, NSNotification*)
         {
+            if ([NSApp activationPolicy] == NSApplicationActivationPolicyRegular && [NSApp keyWindow] == nil)
+            {
+                for (NSWindow* window in [NSApp orderedWindows])
+                {
+                    if ([window isVisible] && ! [window isMiniaturized] && [window parentWindow] == nil && [window canBecomeKeyWindow])
+                    {
+                        [window makeKeyAndOrderFront:nil];
+                        break;
+                    }
+                }
+            }
+
             focusChanged();
         });
 
@@ -119,16 +131,44 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
 
         addMethod(@selector(applicationShouldHandleReopen:hasVisibleWindows:), [](id /*self*/, SEL, NSApplication*, BOOL) -> BOOL
         {
-            if (@available (macOS 14.0, *))
-                [NSApp activate];
-            else
-                [NSApp activateIgnoringOtherApps:YES];
+            YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
+            [NSApp activateIgnoringOtherApps:YES];
+            YUP_END_IGNORE_DEPRECATION_WARNINGS
+
+            if ([NSApp isHidden])
+                [NSApp unhide:nil];
 
             for (NSWindow* window in [NSApp windows])
                 if ([window isMiniaturized])
                     [window deminiaturize:nil];
 
-            [NSApp arrangeInFront:nil];
+            NSWindow* keyCandidate = nil;
+
+            for (NSWindow* window in [[NSApp orderedWindows] reverseObjectEnumerator])
+            {
+                if (! [window isVisible] || [window isMiniaturized] || [window parentWindow] != nil)
+                    continue;
+
+                [window orderFrontRegardless];
+
+                if ([window canBecomeKeyWindow])
+                    keyCandidate = window;
+            }
+
+            if (keyCandidate == nil)
+            {
+                for (NSWindow* window in [NSApp windows])
+                {
+                    if ([window isVisible] && ! [window isMiniaturized] && [window parentWindow] == nil && [window canBecomeKeyWindow])
+                    {
+                        keyCandidate = window;
+                        break;
+                    }
+                }
+            }
+
+            if (keyCandidate != nil)
+                [keyCandidate makeKeyAndOrderFront:nil];
 
             return YES;
         });
