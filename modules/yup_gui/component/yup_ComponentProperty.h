@@ -134,32 +134,29 @@ struct ComponentProperty
     /** Returns the key used to store a store-backed value: @ref storageId, or @ref name when unset. */
     const Identifier& getStorageKey() const noexcept { return storageId.isValid() ? storageId : name; }
 
+    /** Returns the scalar and special type names recognized in `.yui` property declarations. */
+    static const StringArray& getDeclaredTypeNames()
+    {
+        static const StringArray names { "number", "integer", "boolean", "string", "color", "point", "rectangle", "font", "drawing", "any" };
+        return names;
+    }
+
     /** Returns the type a `.yui` declaration names: `number`, `integer`, `boolean`, `string`, `color`,
         `point`, `rectangle`, `font` or `drawing`, Type::array for an array of a scalar type such as
         `string[]`, and Type::any for any other name.
     */
     static Type getTypeFromName (const String& typeName)
     {
-        static const std::pair<const char*, Type> types[] = {
-            { "number", Type::number },
-            { "integer", Type::integer },
-            { "boolean", Type::boolean },
-            { "string", Type::string },
-            { "color", Type::color },
-            { "point", Type::point },
-            { "rectangle", Type::rectangle },
-            { "font", Type::font },
-            { "drawing", Type::drawing }
+        static constexpr Type scalarTypes[] = {
+            Type::number, Type::integer, Type::boolean, Type::string, Type::color,
+            Type::point, Type::rectangle, Type::font, Type::drawing, Type::any
         };
 
         if (typeName.endsWith ("[]"))
             return getElementTypeFromName (typeName) != Type::any ? Type::array : Type::any;
 
-        for (const auto& [candidate, type] : types)
-            if (typeName == candidate)
-                return type;
-
-        return Type::any;
+        const auto index = getDeclaredTypeNames().indexOf (typeName);
+        return index >= 0 ? scalarTypes[index] : Type::any;
     }
 
     /** Returns the element type a `.yui` array declaration such as `string[]` names, Type::any otherwise.

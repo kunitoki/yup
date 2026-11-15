@@ -80,6 +80,9 @@ public:
 
         /** The element of the document the declaration comes from, to locate its diagnostics. */
         DataTree element;
+
+        /** Precomputed cascade map key (`Type.property` when qualified, `property` otherwise). */
+        Identifier cascadeKey;
     };
 
     /** A selector and the declarations it applies. */
@@ -137,17 +140,8 @@ public:
     */
     static ResultValue<Ptr> parse (const String& text);
 
-    /** Splits a declaration value into its comma separated entries, and each entry into its
-        whitespace separated tokens.
-
-        Parenthesized arguments stay with the word before them, so `0 4 rgb (0, 0, 0)` is the
-        single entry `0`, `4`, `rgb(0, 0, 0)`.
-
-        @param value The raw declaration value.
-
-        @returns The entries, each with its tokens; an empty entry for each empty one.
-    */
-    static std::vector<StringArray> tokenizeValue (const String& value);
+    /** Returns true when the element is a style, rule, palette, drawing or keyframes block. */
+    static bool isStyleElement (const DataTree& element) noexcept;
 
     //==============================================================================
     /** Returns the rules of the sheet, in source order. */

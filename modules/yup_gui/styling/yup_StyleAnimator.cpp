@@ -25,18 +25,6 @@ namespace yup
 namespace
 {
 
-bool isAnimationNumber (const String& text)
-{
-    return text.containsAnyOf ("0123456789")
-        && text.containsOnly ("0123456789.")
-        && text.indexOfChar ('.') == text.lastIndexOfChar ('.');
-}
-
-bool isSignedAnimationNumber (const String& text)
-{
-    return isAnimationNumber (text.startsWithChar ('-') ? text.substring (1) : text);
-}
-
 bool isAnimationName (const String& token)
 {
     if (token.isEmpty() || ! (CharacterFunctions::isLetter (token[0]) || token[0] == '_'))
@@ -51,13 +39,15 @@ bool isAnimationName (const String& token)
 
 std::optional<double> parseAnimationTime (const String& token)
 {
-    const bool milliseconds = token.endsWith ("ms");
-    const auto number = token.dropLastCharacters (milliseconds ? 2 : 1);
-
-    if (! token.endsWithChar ('s') || ! isAnimationNumber (number))
+    if (! token.endsWithChar ('s'))
         return std::nullopt;
 
-    return number.getDoubleValue() / (milliseconds ? 1000.0 : 1.0);
+    const bool milliseconds = token.endsWith ("ms");
+    const auto parsed = detail::parseStrictDouble (token.dropLastCharacters (milliseconds ? 2 : 1), false);
+    if (! parsed.has_value())
+        return std::nullopt;
+
+    return *parsed / (milliseconds ? 1000.0 : 1.0);
 }
 
 /* Returns true when the token is an easing, leaving an error when it is a malformed one. */
@@ -70,13 +60,10 @@ bool parseAnimationEasing (const String& token, Easing& easing, String& error)
         { "easeInOut", Easing::easeInOut() }
     };
 
-    for (const auto& [name, preset] : presets)
+    if (const auto preset = detail::findNamed (presets, token))
     {
-        if (token == name)
-        {
-            easing = preset;
-            return true;
-        }
+        easing = *preset;
+        return true;
     }
 
     if (! token.startsWith ("cubicBezier("))
@@ -86,82 +73,141 @@ bool parseAnimationEasing (const String& token, Easing& easing, String& error)
     arguments.addTokens (token.fromFirstOccurrenceOf ("(", false, false).upToLastOccurrenceOf (")", false, false), ",", "");
     arguments.trim();
 
-    if (! token.endsWithChar (')') || arguments.size() != 4 || ! std::all_of (arguments.begin(), arguments.end(), isSignedAnimationNumber))
+    if (! token.endsWithChar (')') || arguments.size() != 4)
     {
         error = "cubicBezier takes four numbers";
         return true;
     }
 
-    const auto x1 = arguments[0].getFloatValue();
-    const auto x2 = arguments[2].getFloatValue();
+    float coords[4] {};
+    for (int i = 0; i < 4; ++i)
+    {
+        const auto parsed = detail::parseStrictFloat (arguments[i]);
+        if (! parsed.has_value())
+        {
+            error = "cubicBezier takes four numbers";
+            return true;
+        }
 
-    if (! isPositiveAndNotGreaterThan (x1, 1.0f) || ! isPositiveAndNotGreaterThan (x2, 1.0f))
+        coords[i] = *parsed;
+    }
+
+    if (! isPositiveAndNotGreaterThan (coords[0], 1.0f) || ! isPositiveAndNotGreaterThan (coords[2], 1.0f))
     {
         error = "The x coordinates of cubicBezier must be between 0 and 1";
         return true;
     }
 
-    easing = Easing (x1, arguments[1].getFloatValue(), x2, arguments[3].getFloatValue());
+    easing = Easing (coords[0], coords[1], coords[2], coords[3]);
     return true;
 }
 
-/* Parses what transitions and animations share: the times, the easing and the name. The
-   other tokens go to parseKeyword, which names the kind of value it parsed or returns false. */
-template <class Entry, class ParseKeyword>
-ResultValue<std::vector<Entry>> parseAnimationEntries (const String& text, Identifier Entry::*name, const String& nameKind, ParseKeyword parseKeyword)
+bool parseAnimationKeyword (StyleAnimator::Direction& direction,
+                            StyleAnimator::FillMode& fillMode,
+                            double& iterations,
+                            const String& token,
+                            String& kind)
 {
-    std::vector<Entry> entries;
+    static const std::pair<const char*, StyleAnimator::Direction> directions[] = {
+        { "normal", StyleAnimator::Direction::normal },
+        { "reverse", StyleAnimator::Direction::reverse },
+        { "alternate", StyleAnimator::Direction::alternate },
+        { "alternateReverse", StyleAnimator::Direction::alternateReverse }
+    };
 
-    if (text.trim() == "none")
-        return makeResultValueOk (std::move (entries));
+    static const std::pair<const char*, StyleAnimator::FillMode> fillModes[] = {
+        { "none", StyleAnimator::FillMode::none },
+        { "forwards", StyleAnimator::FillMode::forwards },
+        { "backwards", StyleAnimator::FillMode::backwards },
+        { "both", StyleAnimator::FillMode::both }
+    };
 
-    for (const auto& tokens : StyleSheet::tokenizeValue (text))
+    if (token == "infinite")
     {
-        if (tokens.isEmpty())
-            return makeResultValueFail ("Expected a " + nameKind + " between the commas");
-
-        Entry entry;
-        StringArray kinds;
-        int times = 0;
-
-        for (const auto& token : tokens)
-        {
-            String kind, error;
-
-            if (const auto time = parseAnimationTime (token))
-            {
-                kind = times == 0 ? "duration" : "delay";
-                (times++ == 0 ? entry.duration : entry.delay) = *time;
-            }
-            else if (parseAnimationEasing (token, entry.easing, error))
-            {
-                kind = "easing";
-            }
-            else if (! parseKeyword (entry, token, kind) && isAnimationName (token))
-            {
-                kind = nameKind;
-                entry.*name = Identifier (token);
-            }
-
-            if (error.isNotEmpty())
-                return makeResultValueFail (error);
-
-            if (kind.isEmpty())
-                return makeResultValueFail ("Unexpected '" + token + "'");
-
-            if (kinds.contains (kind))
-                return makeResultValueFail ("Unexpected '" + token + "', the " + kind + " is already set");
-
-            kinds.add (kind);
-        }
-
-        if (! (entry.*name).isValid())
-            return makeResultValueFail ("Expected a " + nameKind + " in '" + tokens.joinIntoString (" ") + "'");
-
-        entries.push_back (std::move (entry));
+        iterations = std::numeric_limits<double>::infinity();
+        kind = "iteration count";
+        return true;
     }
 
-    return makeResultValueOk (std::move (entries));
+    if (const auto parsedIterations = detail::parseStrictDouble (token, false))
+    {
+        iterations = *parsedIterations;
+        kind = "iteration count";
+        return true;
+    }
+
+    if (const auto parsedDirection = detail::findNamed (directions, token))
+    {
+        direction = *parsedDirection;
+        kind = "direction";
+        return true;
+    }
+
+    if (const auto parsedFillMode = detail::findNamed (fillModes, token))
+    {
+        fillMode = *parsedFillMode;
+        kind = "fill mode";
+        return true;
+    }
+
+    return false;
+}
+
+Result parseTimingTokens (const StringArray& tokens,
+                          Identifier& targetName,
+                          double& duration,
+                          double& delay,
+                          Easing& easing,
+                          double& iterations,
+                          StyleAnimator::Direction& direction,
+                          StyleAnimator::FillMode& fillMode,
+                          const char* nameKind,
+                          bool allowAnimationKeywords)
+{
+    if (tokens.isEmpty())
+        return Result::fail ("Expected a " + String (nameKind) + " between the commas");
+
+    StringArray kinds;
+    int times = 0;
+
+    for (const auto& token : tokens)
+    {
+        String kind, error;
+
+        if (const auto time = parseAnimationTime (token))
+        {
+            kind = times == 0 ? "duration" : "delay";
+            (times++ == 0 ? duration : delay) = *time;
+        }
+        else if (parseAnimationEasing (token, easing, error))
+        {
+            kind = "easing";
+        }
+        else if (allowAnimationKeywords && parseAnimationKeyword (direction, fillMode, iterations, token, kind))
+        {
+        }
+        else if (isAnimationName (token))
+        {
+            kind = nameKind;
+            targetName = Identifier (token);
+        }
+
+        if (error.isNotEmpty())
+            return Result::fail (error);
+
+        if (kind.isEmpty())
+            return Result::fail ("Unexpected '" + token + "'");
+
+        if (kinds.contains (kind))
+            return Result::fail ("Unexpected '" + token + "', the " + kind + " is already set");
+
+        kinds.add (kind);
+    }
+
+    if (! targetName.isValid())
+        return Result::fail ("Expected a " + String (nameKind) + " in '" + tokens.joinIntoString (" ") + "'");
+
+    return Result::ok();
 }
 
 double directedAnimationProgress (StyleAnimator::Direction direction, double iteration, double fraction)
@@ -180,59 +226,45 @@ double directedAnimationProgress (StyleAnimator::Direction direction, double ite
 
 ResultValue<std::vector<StyleAnimator::Transition>> StyleAnimator::parseTransitions (const String& text)
 {
-    return parseAnimationEntries (text, &Transition::property, "property", [] (Transition&, const String&, String&)
+    std::vector<Transition> parsed;
+
+    if (text.trim() == "none")
+        return makeResultValueOk (std::move (parsed));
+
+    for (const auto& tokens : detail::tokenizeStyleValue (text))
     {
-        return false;
-    });
+        Transition entry;
+        double iterations = 1.0;
+        auto direction = Direction::normal;
+        auto fillMode = FillMode::none;
+
+        if (auto res = parseTimingTokens (tokens, entry.property, entry.duration, entry.delay, entry.easing, iterations, direction, fillMode, "property", false); res.failed())
+            return makeResultValueFail (res.getErrorMessage());
+
+        parsed.push_back (std::move (entry));
+    }
+
+    return makeResultValueOk (std::move (parsed));
 }
 
 ResultValue<std::vector<StyleAnimator::Animation>> StyleAnimator::parseAnimations (const String& text)
 {
-    return parseAnimationEntries (text, &Animation::name, "keyframes name", [] (Animation& animation, const String& token, String& kind)
+    std::vector<Animation> parsed;
+
+    if (text.trim() == "none")
+        return makeResultValueOk (std::move (parsed));
+
+    for (const auto& tokens : detail::tokenizeStyleValue (text))
     {
-        static const std::pair<const char*, Direction> directions[] = {
-            { "normal", Direction::normal },
-            { "reverse", Direction::reverse },
-            { "alternate", Direction::alternate },
-            { "alternateReverse", Direction::alternateReverse }
-        };
+        Animation entry;
 
-        static const std::pair<const char*, FillMode> fillModes[] = {
-            { "none", FillMode::none },
-            { "forwards", FillMode::forwards },
-            { "backwards", FillMode::backwards },
-            { "both", FillMode::both }
-        };
+        if (auto res = parseTimingTokens (tokens, entry.name, entry.duration, entry.delay, entry.easing, entry.iterations, entry.direction, entry.fillMode, "keyframes name", true); res.failed())
+            return makeResultValueFail (res.getErrorMessage());
 
-        if (token == "infinite" || isAnimationNumber (token))
-        {
-            animation.iterations = token == "infinite" ? std::numeric_limits<double>::infinity() : token.getDoubleValue();
-            kind = "iteration count";
-            return true;
-        }
+        parsed.push_back (std::move (entry));
+    }
 
-        for (const auto& [keyword, direction] : directions)
-        {
-            if (token == keyword)
-            {
-                animation.direction = direction;
-                kind = "direction";
-                return true;
-            }
-        }
-
-        for (const auto& [keyword, fillMode] : fillModes)
-        {
-            if (token == keyword)
-            {
-                animation.fillMode = fillMode;
-                kind = "fill mode";
-                return true;
-            }
-        }
-
-        return false;
-    });
+    return makeResultValueOk (std::move (parsed));
 }
 
 //==============================================================================
@@ -326,14 +358,23 @@ void StyleAnimator::startTransition (Component& component,
                                      double now)
 {
     cancelTransition (component, storageId);
-    transitions.push_back ({ WeakReference<Component> (&component), storageId, type, from, to, transition, now });
+
+    const auto insertPos = std::find_if (entries.begin(), entries.end(), [] (const auto& entry)
+    {
+        return ! entry.isTransition;
+    });
+
+    Timing timing { transition.duration, transition.delay, transition.easing, 1.0, Direction::normal, FillMode::backwards };
+    std::vector<Track> tracks { { storageId, type, { { 0.0, from }, { 1.0, to } } } };
+
+    entries.insert (insertPos, { WeakReference<Component> (&component), std::move (timing), std::move (tracks), now, true, false });
 }
 
 const var* StyleAnimator::findTransitionTarget (const Component& component, const Identifier& storageId) const
 {
-    for (const auto& running : transitions)
-        if (running.component.get() == &component && running.storageId == storageId)
-            return &running.to;
+    for (const auto& running : entries)
+        if (running.isTransition && running.component.get() == &component && running.tracks.front().storageId == storageId)
+            return &running.tracks.front().frames.back().value;
 
     return nullptr;
 }
@@ -342,18 +383,18 @@ Array<Identifier> StyleAnimator::getTransitions (const Component& component) con
 {
     Array<Identifier> result;
 
-    for (const auto& running : transitions)
-        if (running.component.get() == &component)
-            result.add (running.storageId);
+    for (const auto& running : entries)
+        if (running.isTransition && running.component.get() == &component)
+            result.add (running.tracks.front().storageId);
 
     return result;
 }
 
 bool StyleAnimator::cancelTransition (const Component& component, const Identifier& storageId)
 {
-    return std::erase_if (transitions, [&] (const auto& running)
+    return std::erase_if (entries, [&] (const auto& running)
     {
-        return running.component.get() == &component && running.storageId == storageId;
+        return running.isTransition && running.component.get() == &component && running.tracks.front().storageId == storageId;
     }) > 0;
 }
 
@@ -366,16 +407,17 @@ void StyleAnimator::startAnimation (Component& component, const Animation& anima
         return track.frames.empty();
     });
 
-    animations.push_back ({ WeakReference<Component> (&component), animation, std::move (tracks), now });
+    Timing timing { animation.duration, animation.delay, animation.easing, animation.iterations, animation.direction, animation.fillMode };
+    entries.push_back ({ WeakReference<Component> (&component), std::move (timing), std::move (tracks), now, false, false });
 }
 
 Array<Identifier> StyleAnimator::stopAnimations (const Component& component)
 {
     Array<Identifier> stopped;
 
-    std::erase_if (animations, [&] (const auto& running)
+    std::erase_if (entries, [&] (const auto& running)
     {
-        if (running.component.get() != &component)
+        if (running.isTransition || running.component.get() != &component)
             return false;
 
         for (const auto& track : running.tracks)
@@ -391,12 +433,7 @@ Array<Identifier> StyleAnimator::stopAnimations (const Component& component)
 
 void StyleAnimator::removeComponent (const Component& component)
 {
-    std::erase_if (transitions, [&] (const auto& running)
-    {
-        return running.component.get() == &component;
-    });
-
-    std::erase_if (animations, [&] (const auto& running)
+    std::erase_if (entries, [&] (const auto& running)
     {
         return running.component.get() == &component;
     });
@@ -404,13 +441,12 @@ void StyleAnimator::removeComponent (const Component& component)
 
 void StyleAnimator::clear()
 {
-    transitions.clear();
-    animations.clear();
+    entries.clear();
 }
 
 bool StyleAnimator::isAnimating() const noexcept
 {
-    return ! transitions.empty() || std::any_of (animations.begin(), animations.end(), [] (const auto& running)
+    return std::any_of (entries.begin(), entries.end(), [] (const auto& running)
     {
         return ! running.holding;
     });
@@ -418,45 +454,14 @@ bool StyleAnimator::isAnimating() const noexcept
 
 void StyleAnimator::advance (double now, const Callback& callback)
 {
-    struct Update
-    {
-        WeakReference<Component> component;
-        Identifier storageId;
-        std::optional<var> value;
-    };
-
     // The callback may restyle or relayout, so the values are collected before any is reported
-    std::vector<Update> updates;
+    updates.clear();
 
-    for (auto it = transitions.begin(); it != transitions.end();)
+    for (auto it = entries.begin(); it != entries.end();)
     {
         if (it->component.get() == nullptr)
         {
-            it = transitions.erase (it);
-            continue;
-        }
-
-        const auto& timing = it->transition;
-        const auto elapsed = now - it->start - timing.delay;
-
-        if (elapsed >= timing.duration)
-        {
-            updates.push_back ({ it->component, it->storageId, std::nullopt });
-            it = transitions.erase (it);
-            continue;
-        }
-
-        const auto progress = elapsed > 0.0 ? elapsed / timing.duration : 0.0;
-        updates.push_back ({ it->component, it->storageId, interpolate (it->from, it->to, timing.easing.evaluate (static_cast<float> (progress)), it->type) });
-        ++it;
-    }
-
-    // Animations come after the transitions, so they win on the properties both animate
-    for (auto it = animations.begin(); it != animations.end();)
-    {
-        if (it->component.get() == nullptr)
-        {
-            it = animations.erase (it);
+            it = entries.erase (it);
             continue;
         }
 
@@ -466,25 +471,25 @@ void StyleAnimator::advance (double now, const Callback& callback)
             continue;
         }
 
-        const auto& animation = it->animation;
-        const auto elapsed = now - it->start - animation.delay;
-        const bool fillsBackwards = animation.fillMode == FillMode::backwards || animation.fillMode == FillMode::both;
-        const bool fillsForwards = animation.fillMode == FillMode::forwards || animation.fillMode == FillMode::both;
-        const bool finished = elapsed >= 0.0 && (animation.duration <= 0.0 || elapsed >= animation.duration * animation.iterations);
+        const auto& timing = it->timing;
+        const auto elapsed = now - it->start - timing.delay;
+        const bool fillsBackwards = timing.fillMode == FillMode::backwards || timing.fillMode == FillMode::both;
+        const bool fillsForwards = timing.fillMode == FillMode::forwards || timing.fillMode == FillMode::both;
+        const bool finished = elapsed >= 0.0 && (timing.duration <= 0.0 || elapsed >= timing.duration * timing.iterations);
 
         std::optional<double> progress;
 
         if (elapsed < 0.0)
         {
             if (fillsBackwards)
-                progress = directedAnimationProgress (animation.direction, 0.0, 0.0);
+                progress = directedAnimationProgress (timing.direction, 0.0, 0.0);
         }
         else if (finished)
         {
             if (fillsForwards)
             {
                 // The end of the last iteration, or the point a fractional count stops at
-                const auto end = std::isfinite (animation.iterations) ? animation.iterations : 1.0;
+                const auto end = std::isfinite (timing.iterations) ? timing.iterations : 1.0;
                 auto iteration = std::floor (end);
                 auto fraction = end - iteration;
 
@@ -494,14 +499,14 @@ void StyleAnimator::advance (double now, const Callback& callback)
                     fraction = 1.0;
                 }
 
-                progress = directedAnimationProgress (animation.direction, iteration, fraction);
+                progress = directedAnimationProgress (timing.direction, iteration, fraction);
             }
         }
         else
         {
-            const auto position = elapsed / animation.duration;
+            const auto position = elapsed / timing.duration;
             const auto iteration = std::floor (position);
-            progress = directedAnimationProgress (animation.direction, iteration, position - iteration);
+            progress = directedAnimationProgress (timing.direction, iteration, position - iteration);
         }
 
         for (const auto& track : it->tracks)
@@ -509,14 +514,14 @@ void StyleAnimator::advance (double now, const Callback& callback)
             std::optional<var> value;
 
             if (progress.has_value())
-                value = sample (track, *progress, animation.easing);
+                value = sample (track, *progress, timing.easing);
 
             updates.push_back ({ it->component, track.storageId, std::move (value) });
         }
 
         if (finished && ! fillsForwards)
         {
-            it = animations.erase (it);
+            it = entries.erase (it);
             continue;
         }
 

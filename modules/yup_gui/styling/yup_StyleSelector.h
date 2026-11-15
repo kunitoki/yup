@@ -105,12 +105,29 @@ private:
         child
     };
 
+    enum class PseudoKind
+    {
+        hovered,
+        pressed,
+        focused,
+        focusWithin,
+        disabled,
+        enabled,
+        stateProperty
+    };
+
+    struct PseudoClass
+    {
+        PseudoKind kind = PseudoKind::stateProperty;
+        Identifier property;
+    };
+
     struct Compound
     {
         Identifier type;
         String id;
         Array<Identifier> classes;
-        Array<Identifier> pseudoClasses;
+        std::vector<PseudoClass> pseudoClasses;
         std::vector<Attribute> attributes;
         Combinator combinatorToPrevious = Combinator::descendant;
         bool isRoot = false;

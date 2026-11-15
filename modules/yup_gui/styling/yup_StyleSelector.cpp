@@ -149,9 +149,50 @@ ResultValue<StyleSelector> StyleSelector::parse (const String& text)
                     return makeResultValueFail ("Expected a pseudo-class in selector '" + selector.source + "'");
 
                 if (name == "root")
+                {
                     compound.isRoot = true;
+                }
                 else
-                    compound.pseudoClasses.add (Identifier (name));
+                {
+                    struct PseudoEntry
+                    {
+                        const char* name;
+                        PseudoKind kind;
+                        const char* watchedProperty;
+                    };
+
+                    static constexpr PseudoEntry builtinPseudos[] = {
+                        { "hover", PseudoKind::hovered, "hovered" },
+                        { "hovered", PseudoKind::hovered, "hovered" },
+                        { "pressed", PseudoKind::pressed, "pressed" },
+                        { "active", PseudoKind::pressed, "pressed" },
+                        { "focus", PseudoKind::focused, "focused" },
+                        { "focused", PseudoKind::focused, "focused" },
+                        { "focus-within", PseudoKind::focusWithin, "focus-within" },
+                        { "disabled", PseudoKind::disabled, "enabled" },
+                        { "enabled", PseudoKind::enabled, "enabled" }
+                    };
+
+                    bool matchedBuiltin = false;
+
+                    for (const auto& entry : builtinPseudos)
+                    {
+                        if (name == entry.name)
+                        {
+                            compound.pseudoClasses.push_back ({ entry.kind, {} });
+                            selector.referencedProperties.addIfNotAlreadyThere (Identifier (entry.watchedProperty));
+                            matchedBuiltin = true;
+                            break;
+                        }
+                    }
+
+                    if (! matchedBuiltin)
+                    {
+                        const Identifier prop (name);
+                        compound.pseudoClasses.push_back ({ PseudoKind::stateProperty, prop });
+                        selector.referencedProperties.addIfNotAlreadyThere (prop);
+                    }
+                }
 
                 selector.specificity += specificityOfClass;
                 compoundIsEmpty = false;
@@ -233,23 +274,11 @@ ResultValue<StyleSelector> StyleSelector::parse (const String& text)
         if (compoundIsEmpty)
             return makeResultValueFail ("Unexpected character in selector '" + selector.source + "'");
 
+        if (compound.id.isNotEmpty())
+            selector.referencedProperties.addIfNotAlreadyThere (Identifier ("id"));
+
         for (const auto& attribute : compound.attributes)
             selector.referencedProperties.addIfNotAlreadyThere (attribute.name);
-
-        for (const auto& pseudoClass : compound.pseudoClasses)
-        {
-            selector.referencedProperties.addIfNotAlreadyThere (pseudoClass);
-
-            const auto name = pseudoClass.toString();
-            if (name == "hover")
-                selector.referencedProperties.addIfNotAlreadyThere (Identifier ("hovered"));
-            else if (name == "active")
-                selector.referencedProperties.addIfNotAlreadyThere (Identifier ("pressed"));
-            else if (name == "focus")
-                selector.referencedProperties.addIfNotAlreadyThere (Identifier ("focused"));
-            else if (name == "disabled")
-                selector.referencedProperties.addIfNotAlreadyThere (Identifier ("enabled"));
-        }
 
         selector.compounds.push_back (std::move (compound));
 
@@ -279,25 +308,21 @@ bool StyleSelector::Compound::matches (const Component& component, const Compone
 
     for (const auto& pseudoClass : pseudoClasses)
     {
-        const auto name = pseudoClass.toString();
         bool state = false;
 
-        if (name == "hover" || name == "hovered")
-            state = component.isHovered();
-        else if (name == "pressed" || name == "active")
-            state = component.isPressed();
-        else if (name == "focus" || name == "focused")
-            state = component.isFocused();
-        else if (name == "focus-within")
-            state = component.hasFocusWithin();
-        else if (name == "disabled")
-            state = ! component.isEnabled();
-        else if (name == "enabled")
-            state = component.isEnabled();
-        else if (isStateProperty (component, pseudoClass))
-            state = static_cast<bool> (component.getProperty (pseudoClass));
-        else
-            return false;
+        switch (pseudoClass.kind)
+        {
+            case PseudoKind::hovered:       state = component.isHovered(); break;
+            case PseudoKind::pressed:       state = component.isPressed(); break;
+            case PseudoKind::focused:       state = component.isFocused(); break;
+            case PseudoKind::focusWithin:   state = component.hasFocusWithin(); break;
+            case PseudoKind::disabled:      state = ! component.isEnabled(); break;
+            case PseudoKind::enabled:       state = component.isEnabled(); break;
+            case PseudoKind::stateProperty:
+                state = isStateProperty (component, pseudoClass.property)
+                     && static_cast<bool> (component.getProperty (pseudoClass.property));
+                break;
+        }
 
         if (! state)
             return false;

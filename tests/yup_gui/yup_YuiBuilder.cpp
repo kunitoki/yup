@@ -668,6 +668,29 @@ TEST_F (YuiBuilderTests, ReportsWhereHandlerProblemsAreWritten)
                                                   .joinIntoString ("\n"));
 }
 
+TEST_F (YuiBuilderTests, UnescapesActionNamesThroughExpressionAst)
+{
+    YuiBuilder builder;
+    bool invoked = false;
+    builder.setAction ("say \"hi\"\nnow", [&] (const Array<var>&)
+    {
+        invoked = true;
+    });
+
+    const auto result = builder.build (parse (R"yui(
+        Component {
+            TextButton { id: button; onClick: action ("say \"hi\"\nnow"); }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* button = builder.findById<TextButton> ("button");
+    ASSERT_NE (button, nullptr);
+    button->onClick();
+    EXPECT_TRUE (invoked);
+}
+
 TEST_F (YuiBuilderTests, InstantiatesADeclaredComponent)
 {
     YuiBuilder builder;

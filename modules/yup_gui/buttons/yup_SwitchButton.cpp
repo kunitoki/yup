@@ -101,7 +101,6 @@ void SwitchButton::setToggleState (bool shouldBeToggled, NotificationType notifi
     {
         toggleState = shouldBeToggled;
 
-        markStyleDirty();
         updateSwitchCirclePosition();
 
         auto bailOutChecker = BailOutChecker (this);

@@ -339,13 +339,23 @@ DrawingScope::ResolvedTarget DrawingScope::resolveTarget (const String& symbol) 
 std::vector<DrawingScope::Dependency> DrawingScope::getDependencies (const CompiledExpression& program) const
 {
     std::vector<Dependency> dependencies;
+    bool addedPaletteDependency = false;
 
     for (int i = 0; i < program.getNumInputs(); ++i)
     {
         const auto& name = program.getInputName (i);
 
         if (name.startsWith ("palette."))
+        {
+            if (auto* self = component.get(); self != nullptr && ! addedPaletteDependency)
+            {
+                static const Identifier paletteId ("palette");
+                dependencies.push_back ({ self, nullptr, paletteId });
+                addedPaletteDependency = true;
+            }
+
             continue;
+        }
 
         const auto target = resolveTarget (name);
 

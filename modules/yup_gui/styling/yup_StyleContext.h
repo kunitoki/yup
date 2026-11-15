@@ -136,6 +136,12 @@ public:
     /** Drops animator tracks, dirty entries and caches for a component subtree being destroyed. */
     void forgetComponent (Component& component);
 
+    /** Clears all computed values, animations and caches for a child subtree gaining its own stylesheet. */
+    void releaseSubtree (Component& component);
+
+    /** Optional callback fired when a global theme palette generation change is observed during refresh(). */
+    std::function<void()> onPaletteChanged;
+
     //==============================================================================
     /** Returns the diagnostics the last restyle produced, one per declaration that failed.
 

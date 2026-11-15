@@ -882,7 +882,7 @@ private:
     void handleRowSelection (int rowIndex, bool shouldToggle, bool shouldExtend);
     void selectRange (int fromRow, int toRow);
     void navigateTo (int rowIndex, const KeyModifiers& modifiers);
-    void notifySelectionChanged();
+    void notifySelectionChanged (NotificationType notification = sendNotification);
     void updateHoveredRow (Point<float> position);
     void setHoveredRow (int newHoveredRow);
 

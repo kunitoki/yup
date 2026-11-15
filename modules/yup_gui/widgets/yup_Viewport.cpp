@@ -21,6 +21,16 @@
 namespace yup
 {
 
+namespace
+{
+
+struct ViewportIds
+{
+    static inline const Identifier scrollStep { "scrollStep" };
+};
+
+} // namespace
+
 Viewport::Viewport()
 {
     setOpaque (false);
@@ -60,7 +70,7 @@ const ComponentTypeInfo& Viewport::getClassTypeInfo()
         std::vector<ComponentProperty> props;
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("scrollStep"),
+            .name = ViewportIds::scrollStep,
             .type = ComponentProperty::Type::number,
             .defaultValue = 40.0,
             .getter = [] (const Component& c) { return var (static_cast<double> (static_cast<const Viewport&> (c).getScrollStep())); },
@@ -158,7 +168,12 @@ void Viewport::scrollToShow (Rectangle<float> area)
 
 void Viewport::setScrollStep (float pixels)
 {
-    scrollStep = jmax (0.0f, pixels);
+    const auto clamped = jmax (0.0f, pixels);
+    if (approximatelyEqual (scrollStep, clamped))
+        return;
+
+    scrollStep = clamped;
+    notifyPropertyChanged (ViewportIds::scrollStep);
 }
 
 void Viewport::setScrollBarsShown (bool showVertical, bool showHorizontal)

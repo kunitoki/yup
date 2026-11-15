@@ -73,46 +73,6 @@ String unquoteYuiText (const String& raw)
     return raw;
 }
 
-String normalizeYuiImportPath (const String& rawPath)
-{
-    const auto normalizedSeparators = rawPath.trim().replaceCharacter ('\\', '/');
-    if (normalizedSeparators.isEmpty())
-        return {};
-
-    StringArray segments;
-
-    for (const auto& token : StringArray::fromTokens (normalizedSeparators, "/", ""))
-    {
-        if (token.isEmpty() || token == ".")
-            continue;
-
-        if (token == ".." && ! segments.isEmpty() && segments[segments.size() - 1] != "..")
-        {
-            segments.remove (segments.size() - 1);
-            continue;
-        }
-
-        segments.add (token);
-    }
-
-    return segments.joinIntoString ("/");
-}
-
-String resolveRelativeYuiImportPath (const String& importerPath, const String& importedPath)
-{
-    const auto cleanedImport = importedPath.trim().replaceCharacter ('\\', '/');
-    if (cleanedImport.startsWithChar ('/'))
-        return normalizeYuiImportPath (cleanedImport.substring (1));
-
-    const auto normalizedImporter = normalizeYuiImportPath (importerPath);
-    const auto slash = normalizedImporter.lastIndexOfChar ('/');
-
-    if (slash < 0)
-        return normalizeYuiImportPath (cleanedImport);
-
-    return normalizeYuiImportPath (normalizedImporter.substring (0, slash + 1) + cleanedImport);
-}
-
 //==============================================================================
 class YuiTextParser
 {
@@ -139,6 +99,21 @@ public:
 
     DataTree parseDocument()
     {
+        struct BlockParser
+        {
+            const char* keyword;
+            DataTree (YuiTextParser::*parse)();
+        };
+
+        static constexpr BlockParser blocks[] = {
+            { "import", &YuiTextParser::parseImport },
+            { "drawing", &YuiTextParser::parseDrawing },
+            { "palette", &YuiTextParser::parsePalette },
+            { "style", &YuiTextParser::parseStyle },
+            { "tokens", &YuiTextParser::parseTokens },
+            { "component", &YuiTextParser::parseComponent }
+        };
+
         DataTree document ("yui");
         auto transaction = document.beginTransaction();
 
@@ -150,43 +125,32 @@ public:
             const auto keyword = parseIdentifier ("Expected a block or a component");
             DataTree block;
 
-            if (keyword == "import")
+            for (const auto& entry : blocks)
             {
-                block = parseImport();
+                if (keyword == entry.keyword)
+                {
+                    block = (this->*entry.parse)();
+                    break;
+                }
             }
-            else if (keyword == "drawing")
+
+            if (! block.isValid())
             {
-                block = parseDrawing();
-            }
-            else if (keyword == "palette")
-            {
-                block = parsePalette();
-            }
-            else if (keyword == "style")
-            {
-                block = parseStyle();
-            }
-            else if (keyword == "tokens")
-            {
-                block = parseTokens();
-            }
-            else if (keyword == "component")
-            {
-                block = parseComponent();
-            }
-            else if (isTypeName (keyword))
-            {
+                if (! detail::isYuiTypeName (keyword))
+                {
+                    StringArray expected;
+                    for (const auto& entry : blocks)
+                        expected.add ("'" + String (entry.keyword) + "'");
+
+                    throw Error { start, "Unknown block '" + keyword + "', expected " + expected.joinIntoString (", ") + " or a component instance" };
+                }
+
                 if (hasInstance)
                     throw Error { start, "A document can only have one root component" };
 
                 hasInstance = true;
-
                 block = DataTree { Identifier (keyword) };
                 parseBody (block);
-            }
-            else
-            {
-                throw Error { start, "Unknown block '" + keyword + "', expected 'import', 'drawing', 'palette', 'style', 'tokens', 'component' or a component instance" };
             }
 
             transaction.addChild (mark (block, start));
@@ -221,6 +185,17 @@ private:
         return element;
     }
 
+    bool nextMember()
+    {
+        if (match ("}"))
+            return false;
+
+        if (isAtEnd())
+            throw Error { position, "Expected '}'" };
+
+        return true;
+    }
+
     DataTree parseImport()
     {
         skipWhitespace();
@@ -232,18 +207,14 @@ private:
             throw Error { start, "Expected the path of the import" };
 
         expect (";");
-
-        DataTree import ("import");
-        import.beginTransaction().setProperty ("path", path);
-        return import;
+        return DataTree ("import", { { "path", path } });
     }
 
     DataTree parseDrawing()
     {
-        DataTree drawing ("drawing");
-
-        if (! lookingAt ("{"))
-            drawing.beginTransaction().setProperty ("name", parseIdentifier ("Expected the name of the drawing"));
+        DataTree drawing = lookingAt ("{")
+                             ? DataTree ("drawing")
+                             : DataTree ("drawing", { { "name", parseIdentifier ("Expected the name of the drawing") } });
 
         parseBody (drawing);
         return drawing;
@@ -259,11 +230,8 @@ private:
 
         StringArray properties;
 
-        while (! match ("}"))
+        while (nextMember())
         {
-            if (isAtEnd())
-                throw Error { position, "Expected '}'" };
-
             const auto start = position;
             const auto name = parseIdentifier ("Expected a palette property");
 
@@ -291,11 +259,8 @@ private:
 
         expect ("{");
 
-        while (! match ("}"))
+        while (nextMember())
         {
-            if (isAtEnd())
-                throw Error { position, "Expected '}'" };
-
             if (match ("@"))
             {
                 const auto start = position;
@@ -313,8 +278,7 @@ private:
             if (selector.isEmpty())
                 throw Error { start, "Expected a selector" };
 
-            DataTree rule ("rule");
-            rule.beginTransaction().setProperty ("selector", selector);
+            DataTree rule ("rule", { { "selector", selector } });
             parseDeclarations (rule, true);
             transaction.addChild (mark (rule, start));
         }
@@ -331,11 +295,8 @@ private:
 
         expect ("{");
 
-        while (! match ("}"))
+        while (nextMember())
         {
-            if (isAtEnd())
-                throw Error { position, "Expected '}'" };
-
             expectKeyword ("property");
             transaction.addChild (parsePropertyDeclaration (declared, false));
         }
@@ -375,16 +336,11 @@ private:
 
         if (parseIdentifier ("Expected the name of the property") == "alias" && ! lookingAt (":"))
         {
-            DataTree alias ("alias");
-            auto transaction = alias.beginTransaction();
-
-            transaction.setProperty ("name", parseDeclaredName (declared, "Expected the name of the alias"));
+            const auto name = parseDeclaredName (declared, "Expected the name of the alias");
             expect ("<=>");
-            transaction.setProperty ("target", parsePath ("Expected the property the alias stands for"));
+            const auto target = parsePath ("Expected the property the alias stands for");
             expect (";");
-
-            transaction.commit();
-            return mark (alias, start);
+            return mark (DataTree ("alias", { { "name", name }, { "target", target } }), start);
         }
 
         position = start;
@@ -438,15 +394,9 @@ private:
 
             do
             {
-                DataTree argument ("argument");
-                auto argumentTransaction = argument.beginTransaction();
-
-                argumentTransaction.setProperty ("name", parseDeclaredName (arguments, "Expected the name of the argument"));
+                const auto argName = parseDeclaredName (arguments, "Expected the name of the argument");
                 expect (":");
-                argumentTransaction.setProperty ("type", parseType());
-                argumentTransaction.commit();
-
-                transaction.addChild (argument);
+                transaction.addChild (DataTree ("argument", { { "name", argName }, { "type", parseType() } }));
             } while (match (","));
 
             expect (")");
@@ -461,15 +411,9 @@ private:
     // After `name <=>`: the target of a two-way binding
     DataTree parseTwoWayBinding (const String& name)
     {
-        DataTree binding ("bind");
-        auto transaction = binding.beginTransaction();
-
-        transaction.setProperty ("property", name);
-        transaction.setProperty ("target", parsePath ("Expected the property to bind to"));
+        const auto target = parsePath ("Expected the property to bind to");
         expect (";");
-
-        transaction.commit();
-        return binding;
+        return DataTree ("bind", { { "property", name }, { "target", target } });
     }
 
     String parseDeclaredName (StringArray& declared, const String& error)
@@ -488,7 +432,7 @@ private:
 
     String parseType()
     {
-        static const StringArray types { "number", "integer", "boolean", "string", "color", "point", "rectangle", "font", "drawing", "any" };
+        const auto& types = ComponentProperty::getDeclaredTypeNames();
 
         skipWhitespace();
 
@@ -516,7 +460,7 @@ private:
         const auto start = position;
         const auto name = parseIdentifier (error);
 
-        if (! isTypeName (name))
+        if (! detail::isYuiTypeName (name))
             throw Error { start, "Type names start with an upper case letter" };
 
         return name;
@@ -541,11 +485,8 @@ private:
         transaction.setProperty ("name", parseIdentifier ("Expected the name of the keyframes"));
         expect ("{");
 
-        while (! match ("}"))
+        while (nextMember())
         {
-            if (isAtEnd())
-                throw Error { position, "Expected '}'" };
-
             const auto start = position;
             const auto label = parseRawUntil ('{');
             double at = 0.0;
@@ -562,8 +503,7 @@ private:
             if (at < 0.0 || at > 1.0)
                 throw Error { start, "The keyframe position must be between 0% and 100%" };
 
-            DataTree frame ("keyframe");
-            frame.beginTransaction().setProperty ("at", at);
+            DataTree frame ("keyframe", { { "at", at } });
             parseDeclarations (frame, false);
             transaction.addChild (mark (frame, start));
         }
@@ -579,11 +519,8 @@ private:
         auto transaction = element.beginTransaction();
         StringArray declared;
 
-        while (! match ("}"))
+        while (nextMember())
         {
-            if (isAtEnd())
-                throw Error { position, "Expected '}'" };
-
             const auto start = position;
             auto name = parseIdentifier ("Expected a declaration");
 
@@ -605,14 +542,7 @@ private:
                 throw Error { start, "The declaration '" + name + "' needs a value" };
 
             expect (";");
-
-            DataTree declaration ("declaration");
-            auto declarationTransaction = declaration.beginTransaction();
-            declarationTransaction.setProperty ("name", name);
-            declarationTransaction.setProperty ("value", value);
-            declarationTransaction.commit();
-
-            transaction.addChild (mark (declaration, start));
+            transaction.addChild (mark (DataTree ("declaration", { { "name", name }, { "value", value } }), start));
         }
     }
 
@@ -677,11 +607,8 @@ private:
         StringArray declared;
         StringArray watched;
 
-        while (! match ("}"))
+        while (nextMember())
         {
-            if (isAtEnd())
-                throw Error { position, "Expected '}'" };
-
             const auto start = position;
             const auto name = parseIdentifier ("Expected a property or an element");
 
@@ -731,7 +658,6 @@ private:
                 properties.add (name);
                 transaction.setProperty (name, parseValueText());
                 mark (element, start, name);
-                expectValueEnd();
             }
         }
     }
@@ -747,33 +673,13 @@ private:
 
         watched.add (property);
         expect (":");
-        skipWhitespace();
-
-        DataTree changed ("changed");
-        auto transaction = changed.beginTransaction();
-
-        transaction.setProperty ("property", property);
-        transaction.setProperty ("handler", parseValueText());
-        expectValueEnd();
-
-        transaction.commit();
-        return changed;
-    }
-
-    // A block closes like an element body, so its `;` is optional
-    void expectValueEnd()
-    {
-        if (endedWithBlock)
-            match (";");
-        else
-            expect (";");
+        return DataTree ("changed", { { "property", property }, { "handler", parseValueText() } });
     }
 
     // A value, or a handler: optional argument names `(a, b) =>`, then a call or a block of calls `{ a (); b (); }`
     String parseValueText()
     {
         skipWhitespace();
-        endedWithBlock = false;
 
         const auto start = position;
         const auto hasArgumentNames = text[position] == '(' && skipArgumentNames();
@@ -786,22 +692,22 @@ private:
         if (text[position] != '{')
         {
             const auto value = parseExpressionText();
-            return hasArgumentNames ? String::fromUTF8 (text + start, position - start).trimEnd() : value;
+            const auto result = hasArgumentNames ? String::fromUTF8 (text + start, position - start).trimEnd() : value;
+            expect (";");
+            return result;
         }
 
         ++position;
 
-        while (! match ("}"))
+        while (nextMember())
         {
-            if (isAtEnd())
-                throw Error { position, "Expected '}'" };
-
             parseExpressionText();
             expect (";");
         }
 
-        endedWithBlock = true;
-        return String::fromUTF8 (text + start, position - start);
+        const auto result = String::fromUTF8 (text + start, position - start);
+        match (";");
+        return result;
     }
 
     // Skips `(name, ...) =>`, returning false when the text isn't that
@@ -838,32 +744,22 @@ private:
 
     DataTree parseLet()
     {
-        DataTree let ("let");
-        auto transaction = let.beginTransaction();
-
-        transaction.setProperty ("name", parseIdentifier ("Expected the name of the let"));
+        const auto name = parseIdentifier ("Expected the name of the let");
         expect (":");
-        transaction.setProperty ("value", parseExpressionText());
+        const auto value = parseExpressionText();
         expect (";");
-
-        transaction.commit();
-        return let;
+        return DataTree ("let", { { "name", name }, { "value", value } });
     }
 
     DataTree parseRepeat()
     {
-        DataTree repeat ("repeat");
+        const auto name = parseIdentifier ("Expected the name of the repeat index");
+        expectKeyword ("in");
+        const auto from = parseExpressionText();
+        expect ("..");
+        const auto to = parseExpressionText();
 
-        {
-            auto transaction = repeat.beginTransaction();
-
-            transaction.setProperty ("name", parseIdentifier ("Expected the name of the repeat index"));
-            expectKeyword ("in");
-            transaction.setProperty ("from", parseExpressionText());
-            expect ("..");
-            transaction.setProperty ("to", parseExpressionText());
-        }
-
+        DataTree repeat ("repeat", { { "name", name }, { "from", from }, { "to", to } });
         parseBody (repeat);
         return repeat;
     }
@@ -987,19 +883,12 @@ private:
         return CharacterFunctions::isLetter (c) || c == '_';
     }
 
-    // Block keywords are lower case, component types are capitalized like `Column`
-    static bool isTypeName (const String& name)
-    {
-        return CharacterFunctions::isUpperCase (static_cast<yup_wchar> (*name.getCharPointer()));
-    }
-
     const String source;
     const String sourceName;
     const char* text;
     std::vector<int> lineStarts;
     std::vector<YuiDiagnostic> positions;
     int position = 0;
-    bool endedWithBlock = false;
 };
 
 //==============================================================================
@@ -1070,7 +959,7 @@ YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolve
             }
 
             const auto rawPath = element.getProperty ("path").toString();
-            const auto path = resolveRelativeYuiImportPath (currentSource, rawPath);
+            const auto path = detail::resolveRelativeYuiPath (currentSource, rawPath);
 
             // Each file is imported once, which also breaks import cycles
             if (imported.contains (path))

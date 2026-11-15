@@ -328,11 +328,7 @@ std::optional<ThemePalette::Role> ThemePalette::getRoleFromName (const String& n
         { "onAccent", Role::onAccent }
     };
 
-    for (const auto& [roleName, role] : roleNames)
-        if (name == roleName)
-            return role;
-
-    return std::nullopt;
+    return detail::findNamed (roleNames, name);
 }
 
 //==============================================================================

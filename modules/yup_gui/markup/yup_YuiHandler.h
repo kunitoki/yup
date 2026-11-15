@@ -36,11 +36,12 @@ namespace yup
 */
 struct YuiHandler
 {
-    /** One call, such as `action ("save", 1)` or `root.onChanged (index)`, with the texts of its arguments. */
+    /** One call, such as `action ("save", 1)` or `root.onChanged (index)`, with its parsed argument expressions. */
     struct Call
     {
-        String callee;
-        StringArray arguments;
+        String target;
+        String name;
+        std::vector<Expression> arguments;
     };
 
     /** The names given to the arguments of the signal, by position. */

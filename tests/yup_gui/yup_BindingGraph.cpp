@@ -327,3 +327,39 @@ TEST_F (BindingGraphTests, UnlinksLeavingTheValuesInPlace)
     source.setValue (1.0);
     EXPECT_FLOAT_EQ (static_cast<float> (target.getValue()), 5.0f);
 }
+
+TEST_F (BindingGraphTests, UpdatesPaletteDependentBindingsOnComponentAndThemePaletteChanges)
+{
+    auto oldTheme = ApplicationTheme::getGlobalTheme();
+    ApplicationTheme::Ptr theme = new ApplicationTheme();
+    ApplicationTheme::setGlobalTheme (theme);
+
+    ThemePalette initialPalette;
+    initialPalette.setColor (ThemePalette::Role::accent, Colors::red);
+    theme->setPalette (initialPalette);
+
+    Component parent ("parent");
+    Slider slider (Slider::LinearHorizontal);
+    parent.addChildComponent (slider);
+
+    ASSERT_TRUE (graph.bind (slider, Identifier ("thumbColor"), "palette.accent", ComponentProperty::Type::color).wasOk());
+    EXPECT_EQ (slider.getColor (Slider::Style::thumbColorId), Colors::red);
+
+    ThemePalette scopedPalette;
+    scopedPalette.setColor (ThemePalette::Role::accent, Colors::cyan);
+    parent.setPalette (scopedPalette);
+    EXPECT_EQ (slider.getColor (Slider::Style::thumbColorId), Colors::cyan);
+
+    parent.setPalette (std::nullopt);
+    EXPECT_EQ (slider.getColor (Slider::Style::thumbColorId), Colors::red);
+
+    ThemePalette updatedThemePalette;
+    updatedThemePalette.setColor (ThemePalette::Role::accent, Colors::lime);
+    theme->setPalette (updatedThemePalette);
+    graph.refreshPaletteBindings();
+    EXPECT_EQ (slider.getColor (Slider::Style::thumbColorId), Colors::lime);
+
+    graph.clear();
+    ApplicationTheme::setGlobalTheme (oldTheme.get());
+}
+

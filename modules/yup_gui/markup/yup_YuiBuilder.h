@@ -128,6 +128,9 @@ public:
     */
     const std::vector<YuiDiagnostic>& getDiagnostics() const noexcept { return diagnostics; }
 
+    /** Optional sink notified when a live binding reports a problem after or during build. */
+    std::function<void (const YuiDiagnostic&)> onDiagnostic;
+
     //==============================================================================
     /** Registers the function run by `action ("name", ...)` handlers, or removes it when null.
 
@@ -167,11 +170,22 @@ private:
         std::map<String, Component*> ids;
     };
 
+    // A value or link written by the document, with the element and property it was written in
+    struct Value
+    {
+        Identifier name;
+        String text;
+        DataTree element;
+        Identifier property;
+    };
+
     struct Composite
     {
         DataTree declaration;
         DataTree body;
         std::unique_ptr<ComponentTypeInfo> info;
+        std::vector<Value> defaults;
+        std::vector<Value> aliases;
         String error;
         bool isResolving = false;
         bool isInstantiating = false;
@@ -186,25 +200,25 @@ private:
         std::unique_ptr<Component> component;
     };
 
+    enum class ApplyOutcome
+    {
+        failed,
+        constant,
+        live
+    };
+
     // The final text of a value written by the document, and whether it was applied as a constant
     struct Applied
     {
         String text;
-        bool isConstant = false;
-        bool isKept = false;
-        bool hasFailed = false;
-    };
-
-    using AppliedValues = std::map<Component*, std::map<String, Applied>>;
-
-    // A value or link written by the document, with the element and property it was written in
-    struct Value
-    {
-        Identifier name;
-        String text;
         DataTree element;
         Identifier property;
+        bool isLink = false;
+        bool isConstant = false;
+        bool isKept = false;
     };
+
+    using AppliedValues = std::unordered_map<Component*, std::unordered_map<Identifier, Applied>>;
 
     struct Pending
     {
@@ -236,11 +250,12 @@ private:
     void applyValues (const AppliedValues& previous);
     void resetValue (Component& component, const ComponentTypeInfo& type, const Identifier& name);
     void applyPending (const Pending& pending);
-    void applyProperty (Component& component, const Value& value, Scope& scope);
+    ApplyOutcome applyProperty (Component& component, const Value& value, Scope& scope);
     void applyLink (Component& component, const Value& link, Scope& scope);
     void applyChanged (Component& component, const Value& change, Scope& scope);
     void connectHandler (Component& component, const ComponentSignal& signal, const Value& value, Scope& scope);
     Result report (const String& message, const DataTree& element, const Identifier& property = {});
+    void report (const Component& component, const Identifier& name, const String& message, const Value& value);
     void emit (Component& component, const Identifier& signal, const Array<var>& arguments);
     const ComponentSignal* findDeclaredSignal (const Component& component, const Identifier& signal) const;
     Component* resolveComponent (const Scope& scope, const String& name, Component* self = nullptr) const;

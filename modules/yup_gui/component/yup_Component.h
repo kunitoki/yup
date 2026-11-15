@@ -2088,16 +2088,20 @@ protected:
     }
 
 private:
-    Identifier resolvePropertyStorageKey (const Identifier& name) const;
+    struct ResolvedProperty;
+    ResolvedProperty resolveProperty (const Identifier& name) const;
+    ResolvedProperty resolveColorProperty (const Identifier& colorId) const;
+    const var* findStoredValue (const Identifier& storageKey, bool isInherited) const;
+    void applyStoredPropertyChange (const ResolvedProperty& resolved, const var* valueToWrite);
     StyleState& getOrCreateStyleState();
     void applyPositionChange (const Rectangle<float>& oldBounds, Point<int> nativePosition);
     void notifyBoundsPropertiesChanged (const Rectangle<float>& oldBounds);
-    void styleStateFlagChanged (const Identifier& name);
     void setHoveredChain (bool isNowHovered);
     void setPressedChain (bool isNowPressed);
     void clearHoveredInSubtree();
     void clearPressedInSubtree();
     void sendEnablementChanged();
+    void sendPaletteChanged();
     void internalRefreshDisplay (double lastFrameTimeSeconds);
     void internalRepaint();
     void internalRepaint (const Rectangle<float>& rect);

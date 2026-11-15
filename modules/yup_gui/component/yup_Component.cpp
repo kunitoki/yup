@@ -41,6 +41,7 @@ struct ComponentIds
     static inline const Identifier focusWithin { "focus-within" };
     static inline const Identifier hovered { "hovered" };
     static inline const Identifier pressed { "pressed" };
+    static inline const Identifier palette { "palette" };
 };
 
 /** Returns the axis-aligned bounding box of the corners of a rectangle mapped through @a mapPoint. */
@@ -192,7 +193,7 @@ void Component::setComponentID (StringRef newComponentID)
 
     componentID = newComponentID;
 
-    styleStateFlagChanged (ComponentIds::id);
+    notifyPropertyChanged (ComponentIds::id);
 }
 
 //==============================================================================
@@ -213,7 +214,6 @@ void Component::setEnabled (bool shouldBeEnabled)
     if (parentComponent != nullptr && ! parentComponent->isEnabled())
         return;
 
-    markStyleDirty();
     repaint();
 
     //if (flags.onDesktop && native != nullptr)
@@ -240,7 +240,7 @@ void Component::sendEnablementChanged()
 {
     const WeakReference<Component> self (this);
 
-    styleStateFlagChanged (ComponentIds::enabled);
+    notifyPropertyChanged (ComponentIds::enabled);
     if (self == nullptr)
         return;
 
@@ -1731,12 +1731,6 @@ bool Component::hasFocusWithin() const
     return false;
 }
 
-void Component::styleStateFlagChanged (const Identifier& name)
-{
-    markStyleDirty();
-    notifyPropertyChanged (name);
-}
-
 void Component::setHoveredChain (bool isNowHovered)
 {
     for (auto* component = this; component != nullptr; component = component->parentComponent)
@@ -1745,7 +1739,7 @@ void Component::setHoveredChain (bool isNowHovered)
             break;
 
         component->flags.isHovered = isNowHovered;
-        component->styleStateFlagChanged (ComponentIds::hovered);
+        component->notifyPropertyChanged (ComponentIds::hovered);
     }
 }
 
@@ -1757,7 +1751,7 @@ void Component::setPressedChain (bool isNowPressed)
             break;
 
         component->flags.isPressed = isNowPressed;
-        component->styleStateFlagChanged (ComponentIds::pressed);
+        component->notifyPropertyChanged (ComponentIds::pressed);
     }
 }
 
@@ -1767,7 +1761,7 @@ void Component::clearHoveredInSubtree()
         return;
 
     flags.isHovered = false;
-    styleStateFlagChanged (ComponentIds::hovered);
+    notifyPropertyChanged (ComponentIds::hovered);
 
     for (auto* child : children)
         child->clearHoveredInSubtree();
@@ -1779,7 +1773,7 @@ void Component::clearPressedInSubtree()
         return;
 
     flags.isPressed = false;
-    styleStateFlagChanged (ComponentIds::pressed);
+    notifyPropertyChanged (ComponentIds::pressed);
 
     for (auto* child : children)
         child->clearPressedInSubtree();
@@ -1796,13 +1790,22 @@ void Component::setStyleSheet (ReferenceCountedObjectPtr<StyleSheet> newStyleShe
 
         styleContext->detach();
         styleContext.reset();
+        markStyleDirty();
         return;
     }
 
     if (styleContext == nullptr)
+    {
+        if (parentComponent != nullptr)
+            if (auto* outerContext = parentComponent->findStyleContext())
+                outerContext->releaseSubtree (*this);
+
         styleContext = std::make_unique<StyleContext> (*this, std::move (newStyleSheet));
+    }
     else
+    {
         styleContext->setStyleSheet (std::move (newStyleSheet));
+    }
 }
 
 ReferenceCountedObjectPtr<StyleSheet> Component::getStyleSheet() const
@@ -1973,7 +1976,7 @@ const ComponentTypeInfo& Component::getClassTypeInfo()
         };
 
         using Type = ComponentProperty::Type;
-        const StringArray selfAlignments { "auto", "start", "end", "center", "stretch", "baseline" };
+        const auto& selfAlignments = detail::layoutSelfAlignmentNames();
 
         addLayoutItem ("flexGrow", Type::number, 0.0, {}, "How much of the free space along the main axis the item takes.");
         addLayoutItem ("flexShrink", Type::number, 1.0, {}, "How much the item shrinks when the main axis overflows.");
@@ -2008,67 +2011,118 @@ const ComponentTypeInfo& Component::getClassTypeInfo()
 
 //==============================================================================
 
-void Component::setProperty (const Identifier& name, const var& value)
+struct Component::ResolvedProperty
+{
+    const ComponentProperty* descriptor = nullptr;
+    Identifier name;
+    Identifier storageKey;
+};
+
+Component::ResolvedProperty Component::resolveProperty (const Identifier& name) const
 {
     const auto* descriptor = getTypeInfo().findProperty (name);
+    return { descriptor, name, descriptor != nullptr ? descriptor->getStorageKey() : name };
+}
 
-    if (descriptor != nullptr && descriptor->isStateBacked())
+Component::ResolvedProperty Component::resolveColorProperty (const Identifier& colorId) const
+{
+    const auto& info = getTypeInfo();
+    const auto* descriptor = info.findPropertyByStorageKey (colorId);
+
+    if (descriptor == nullptr)
     {
-        if (descriptor->setter != nullptr)
-            descriptor->setter (*this, value);
+        if (const auto* byName = info.findProperty (colorId); byName != nullptr && byName->type == ComponentProperty::Type::color)
+            descriptor = byName;
+    }
+
+    if (descriptor != nullptr)
+        return { descriptor, descriptor->name, descriptor->getStorageKey() };
+
+    return { nullptr, colorId, colorId };
+}
+
+const var* Component::findStoredValue (const Identifier& storageKey, bool isInherited) const
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (const auto* value = component->properties.getVarPointer (storageKey))
+            return value;
+
+        if (component->styleState != nullptr)
+            if (const auto* styled = component->styleState->getStyleValue (storageKey))
+                return styled;
+
+        if (! isInherited)
+            break;
+    }
+
+    return nullptr;
+}
+
+void Component::applyStoredPropertyChange (const ResolvedProperty& resolved, const var* valueToWrite)
+{
+    const bool changed = valueToWrite != nullptr
+                           ? properties.set (resolved.storageKey, *valueToWrite)
+                           : properties.remove (resolved.storageKey);
+
+    if (! changed)
+        return;
+
+    const BailOutChecker bailOutChecker (this);
+
+    if (resolved.descriptor != nullptr && resolved.descriptor->affectsParentLayout && parentComponent != nullptr)
+    {
+        parentComponent->childLayoutChanged (*this);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    styleChanged();
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    notifyPropertyChanged (resolved.name);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    repaint();
+}
+
+void Component::setProperty (const Identifier& name, const var& value)
+{
+    const auto resolved = resolveProperty (name);
+
+    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
+    {
+        if (resolved.descriptor->setter != nullptr)
+            resolved.descriptor->setter (*this, value);
         else
             jassertfalse; // Trying to write a read-only property.
 
         return;
     }
 
-    const auto storageKey = descriptor != nullptr ? descriptor->getStorageKey() : name;
-
-    if (! properties.set (storageKey, value))
-        return;
-
-    if (descriptor != nullptr && descriptor->affectsParentLayout && parentComponent != nullptr)
-        parentComponent->childLayoutChanged (*this);
-
-    styleChanged();
-    notifyPropertyChanged (name);
-    repaint();
+    applyStoredPropertyChange (resolved, &value);
 }
 
 void Component::removeProperty (const Identifier& name)
 {
-    const auto* descriptor = getTypeInfo().findProperty (name);
+    const auto resolved = resolveProperty (name);
 
-    if (descriptor != nullptr && descriptor->isStateBacked())
+    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
         return; // State-backed properties cannot be removed.
 
-    const auto storageKey = descriptor != nullptr ? descriptor->getStorageKey() : name;
-
-    if (! properties.remove (storageKey))
-        return;
-
-    if (descriptor != nullptr && descriptor->affectsParentLayout && parentComponent != nullptr)
-        parentComponent->childLayoutChanged (*this);
-
-    styleChanged();
-    notifyPropertyChanged (name);
-    repaint();
+    applyStoredPropertyChange (resolved, nullptr);
 }
 
 var Component::getProperty (const Identifier& name) const
 {
-    if (const auto* descriptor = getTypeInfo().findProperty (name))
-    {
-        if (descriptor->isStateBacked())
-            return descriptor->getter (*this);
+    const auto resolved = resolveProperty (name);
 
-        if (auto* value = properties.getVarPointer (descriptor->getStorageKey()))
-            return *value;
+    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
+        return resolved.descriptor->getter (*this);
 
-        return {};
-    }
-
-    if (auto* value = properties.getVarPointer (name))
+    if (const auto* value = properties.getVarPointer (resolved.storageKey))
         return *value;
 
     return {};
@@ -2076,81 +2130,64 @@ var Component::getProperty (const Identifier& name) const
 
 var Component::findProperty (const Identifier& name) const
 {
-    const auto* descriptor = getTypeInfo().findProperty (name);
+    const auto resolved = resolveProperty (name);
 
-    if (descriptor != nullptr && descriptor->isStateBacked())
-        return descriptor->getter (*this);
+    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
+        return resolved.descriptor->getter (*this);
 
-    const auto storageKey = descriptor != nullptr ? descriptor->getStorageKey() : name;
-
-    for (auto* component = this; component != nullptr; component = component->parentComponent)
-    {
-        if (auto* value = component->properties.getVarPointer (storageKey))
-            return *value;
-
-        if (component->styleState != nullptr)
-            if (auto* styled = component->styleState->getStyleValue (storageKey))
-                return *styled;
-
-        if (descriptor != nullptr && ! descriptor->isInherited)
-            break;
-    }
+    const bool isInherited = resolved.descriptor == nullptr || resolved.descriptor->isInherited;
+    if (const auto* stored = findStoredValue (resolved.storageKey, isInherited))
+        return *stored;
 
     if (auto theme = ApplicationTheme::getGlobalTheme())
     {
         // Theme colors are kept apart from the other defaults, together with the palette ones
-        if (descriptor != nullptr && descriptor->type == ComponentProperty::Type::color)
-            if (auto color = theme->findColor (*this, storageKey))
+        if (resolved.descriptor != nullptr && resolved.descriptor->type == ComponentProperty::Type::color)
+            if (auto color = theme->findDefaultColor (*this, resolved.storageKey))
                 return VariantConverter<Color>::toVar (*color);
 
-        if (auto themed = theme->findProperty (*this, storageKey))
+        if (auto themed = theme->findProperty (*this, resolved.storageKey))
             return *themed;
     }
 
-    if (descriptor != nullptr)
-        return descriptor->defaultValue;
+    if (resolved.descriptor != nullptr)
+        return resolved.descriptor->defaultValue;
 
     return {};
 }
 
 bool Component::hasProperty (const Identifier& name) const
 {
-    if (const auto* descriptor = getTypeInfo().findProperty (name))
-    {
-        if (descriptor->isStateBacked())
-            return true;
+    const auto resolved = resolveProperty (name);
 
-        return properties.contains (descriptor->getStorageKey());
-    }
+    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
+        return true;
 
-    return properties.contains (name);
-}
-
-Identifier Component::resolvePropertyStorageKey (const Identifier& name) const
-{
-    if (const auto* descriptor = getTypeInfo().findProperty (name))
-        return descriptor->getStorageKey();
-
-    return name;
+    return properties.contains (resolved.storageKey);
 }
 
 //==============================================================================
 
 void Component::setColor (const Identifier& colorId, const std::optional<Color>& color)
 {
-    const bool changed = color ? properties.set (colorId, static_cast<int64> (color->getARGB()))
-                               : properties.remove (colorId);
+    const auto resolved = resolveColorProperty (colorId);
 
-    if (! changed)
-        return;
-
-    styleChanged();
-    notifyPropertyChanged (colorId);
+    if (color.has_value())
+    {
+        const var encoded (static_cast<int64> (color->getARGB()));
+        applyStoredPropertyChange (resolved, &encoded);
+    }
+    else
+    {
+        applyStoredPropertyChange (resolved, nullptr);
+    }
 }
 
 std::optional<Color> Component::getColor (const Identifier& colorId) const
 {
-    if (auto color = properties.getVarPointer (colorId); color != nullptr && color->isInt64())
+    const auto resolved = resolveColorProperty (colorId);
+
+    if (const auto* color = properties.getVarPointer (resolved.storageKey); color != nullptr && color->isInt64())
         return Color (static_cast<uint32> (static_cast<int64> (*color)));
 
     return std::nullopt;
@@ -2158,17 +2195,11 @@ std::optional<Color> Component::getColor (const Identifier& colorId) const
 
 std::optional<Color> Component::findColor (const Identifier& colorId) const
 {
-    for (auto* component = this; component != nullptr; component = component->parentComponent)
-    {
-        if (auto color = component->getColor (colorId))
-            return color;
+    const auto resolved = resolveColorProperty (colorId);
+    const bool isInherited = resolved.descriptor == nullptr || resolved.descriptor->isInherited;
 
-        if (component->styleState != nullptr)
-        {
-            if (auto* styled = component->styleState->getStyleValue (colorId); styled != nullptr && styled->isInt64())
-                return Color (static_cast<uint32> (static_cast<int64> (*styled)));
-        }
-    }
+    if (const auto* stored = findStoredValue (resolved.storageKey, isInherited); stored != nullptr && stored->isInt64())
+        return Color (static_cast<uint32> (static_cast<int64> (*stored)));
 
     return std::nullopt;
 }
@@ -2179,8 +2210,39 @@ void Component::setPalette (std::optional<ThemePalette> newPalette)
 {
     palette = newPalette.has_value() ? std::make_unique<ThemePalette> (std::move (*newPalette)) : nullptr;
 
+    markStyleDirty();
+    sendPaletteChanged();
+}
+
+void Component::sendPaletteChanged()
+{
+    const BailOutChecker bailOutChecker (this);
+
     styleChanged();
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    notifyPropertyChanged (ComponentIds::palette);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
     repaint();
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (int i = 0; i < getNumChildComponents(); ++i)
+    {
+        auto* child = getChildComponent (i);
+        if (child == nullptr || child->palette != nullptr)
+            continue;
+
+        if (child->styleState != nullptr && child->styleState->getStylePalette() != nullptr)
+            continue;
+
+        child->sendPaletteChanged();
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
 }
 
 const ThemePalette* Component::getPalette() const
@@ -3130,14 +3192,14 @@ void Component::internalFocusChanged (bool gotFocus)
 
     flags.isFocused = gotFocus;
 
-    styleStateFlagChanged (ComponentIds::focused);
+    notifyPropertyChanged (ComponentIds::focused);
     if (self == nullptr)
         return;
 
     for (WeakReference<Component> component (this); component != nullptr;)
     {
         const WeakReference<Component> next (component->parentComponent);
-        component->styleStateFlagChanged (ComponentIds::focusWithin);
+        component->notifyPropertyChanged (ComponentIds::focusWithin);
         component = next;
     }
 

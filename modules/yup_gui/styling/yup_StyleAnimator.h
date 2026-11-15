@@ -237,29 +237,37 @@ public:
 
 private:
     //==============================================================================
-    struct RunningTransition
+    struct Timing
+    {
+        double duration = 0.0;
+        double delay = 0.0;
+        Easing easing;
+        double iterations = 1.0;
+        Direction direction = Direction::normal;
+        FillMode fillMode = FillMode::none;
+    };
+
+    struct RunningEntry
+    {
+        WeakReference<Component> component;
+        Timing timing;
+        std::vector<Track> tracks;
+        double start = 0.0;
+        bool isTransition = false;
+        bool holding = false;
+    };
+
+    struct Update
     {
         WeakReference<Component> component;
         Identifier storageId;
-        ComponentProperty::Type type;
-        var from, to;
-        Transition transition;
-        double start = 0.0;
-    };
-
-    struct RunningAnimation
-    {
-        WeakReference<Component> component;
-        Animation animation;
-        std::vector<Track> tracks;
-        double start = 0.0;
-        bool holding = false;
+        std::optional<var> value;
     };
 
     static var sample (const Track& track, double progress, const Easing& easing);
 
-    std::vector<RunningTransition> transitions;
-    std::vector<RunningAnimation> animations;
+    std::vector<RunningEntry> entries;
+    std::vector<Update> updates;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StyleAnimator)
 };

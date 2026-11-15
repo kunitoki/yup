@@ -164,6 +164,11 @@ TEST_F (StyleSelectorTests, AcceptsFocusedAndHoveredAliases)
 {
     EXPECT_TRUE (StyleSelector::parse ("Slider:focused").wasOk());
     EXPECT_TRUE (StyleSelector::parse ("Slider:hovered").wasOk());
+    EXPECT_TRUE (StyleSelector::parse ("Slider:active").wasOk());
+    EXPECT_TRUE (StyleSelector::parse ("Component:focus-within").wasOk());
+
+    EXPECT_TRUE (parse ("Slider:active").getReferencedProperties().contains (Identifier ("pressed")));
+    EXPECT_TRUE (parse ("Component:focus-within").getReferencedProperties().contains (Identifier ("focus-within")));
 }
 
 TEST_F (StyleSelectorTests, CombinatorsDoNotEscapeTheStyleRoot)

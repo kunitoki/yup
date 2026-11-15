@@ -546,3 +546,28 @@ TEST_F (ApplicationThemeTest, SetPaletteReplacesPreviousPaletteColors)
     theme->setPalette (ThemePalette (std::vector<Color> { Colors::white, Colors::black }, ThemePalette::Mode::light));
     EXPECT_FALSE (ApplicationTheme::findComponentColor (c, accentOnly).has_value());
 }
+
+TEST_F (ApplicationThemeTest, FindDefaultColorSkipsComponentOverridesAndUsesScopedPalette)
+{
+    Component parent ("parent");
+    Component child ("child");
+    parent.addChildComponent (child);
+
+    const Identifier id ("scopedColor");
+    theme->setPaletteMapping ([id] (const ThemePalette& palette, ApplicationTheme& t)
+    {
+        t.setPaletteColor (id, palette.getColor (ThemePalette::Role::accent));
+    });
+
+    ThemePalette scoped;
+    scoped.setColor (ThemePalette::Role::accent, Colors::cyan);
+    parent.setPalette (scoped);
+    child.setColor (id, Colors::red);
+
+    EXPECT_EQ (theme->findColor (child, id), Colors::red);
+    EXPECT_EQ (theme->findDefaultColor (child, id), Colors::cyan);
+
+    theme->setColor (id, Colors::yellow);
+    EXPECT_EQ (theme->findDefaultColor (child, id), Colors::yellow);
+}
+

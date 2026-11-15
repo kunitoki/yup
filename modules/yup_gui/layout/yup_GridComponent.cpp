@@ -25,20 +25,22 @@ namespace yup
 namespace
 {
 
-const StringArray gridAlignments { "start", "end", "center", "stretch", "baseline" };
-const StringArray gridSelfAlignments { "auto", "start", "end", "center", "stretch", "baseline" };
+const detail::EnumNames<Grid::AlignItems> gridAlignments {
+    { "start", Grid::AlignItems::start },
+    { "end", Grid::AlignItems::end },
+    { "center", Grid::AlignItems::center },
+    { "stretch", Grid::AlignItems::stretch },
+    { "baseline", Grid::AlignItems::baseline }
+};
 
-Grid::AlignItems toAlignItems (const String& name)
-{
-    const auto index = gridAlignments.indexOf (name);
-    return index >= 0 ? static_cast<Grid::AlignItems> (index) : Grid::AlignItems::stretch;
-}
-
-GridItem::AlignSelf toGridAlignSelf (const String& name)
-{
-    const auto index = gridSelfAlignments.indexOf (name);
-    return index > 0 ? static_cast<GridItem::AlignSelf> (index) : GridItem::AlignSelf::autoAlign;
-}
+const detail::EnumNames<GridItem::AlignSelf> gridSelfAlignments {
+    { "auto", GridItem::AlignSelf::autoAlign },
+    { "start", GridItem::AlignSelf::start },
+    { "end", GridItem::AlignSelf::end },
+    { "center", GridItem::AlignSelf::center },
+    { "stretch", GridItem::AlignSelf::stretch },
+    { "baseline", GridItem::AlignSelf::baseline }
+};
 
 constexpr int maxGridTrackRepeatCount = 4096;
 
@@ -53,61 +55,6 @@ std::optional<int> tryParseGridRepeatCount (const String& raw)
         return std::nullopt;
 
     return count;
-}
-
-bool splitGridTopLevel (const String& text, bool commaOnly, StringArray& outTokens)
-{
-    outTokens.clear();
-
-    int depth = 0;
-    int tokenStart = 0;
-    const int length = text.length();
-
-    for (int i = 0; i < length; ++i)
-    {
-        const auto ch = text[i];
-
-        if (ch == '(')
-        {
-            ++depth;
-            continue;
-        }
-
-        if (ch == ')')
-        {
-            --depth;
-            if (depth < 0)
-                return false;
-
-            continue;
-        }
-
-        if (depth == 0)
-        {
-            const bool isSeparator = commaOnly
-                                       ? (ch == ',')
-                                       : (ch == ',' || CharacterFunctions::isWhitespace (ch));
-
-            if (isSeparator)
-            {
-                const auto segment = text.substring (tokenStart, i).trim();
-
-                if (commaOnly || segment.isNotEmpty())
-                    outTokens.add (segment);
-
-                tokenStart = i + 1;
-            }
-        }
-    }
-
-    if (depth != 0)
-        return false;
-
-    const auto tail = text.substring (tokenStart).trim();
-    if (commaOnly || tail.isNotEmpty())
-        outTokens.add (tail);
-
-    return true;
 }
 
 std::optional<String> extractGridFunctionArgs (const String& token, StringRef functionName)
@@ -167,7 +114,7 @@ std::optional<Grid::TrackInfo> tryParseSingleGridTrack (const String& rawToken)
     if (const auto argsText = extractGridFunctionArgs (token, "minmax"))
     {
         StringArray args;
-        if (! splitGridTopLevel (*argsText, true, args) || args.size() != 2)
+        if (! detail::splitTopLevel (*argsText, true, args) || args.size() != 2)
             return std::nullopt;
 
         const auto minimum = tryParseSimpleGridTrack (args[0]);
@@ -182,7 +129,7 @@ std::optional<Grid::TrackInfo> tryParseSingleGridTrack (const String& rawToken)
     if (const auto argsText = extractGridFunctionArgs (token, "fit-content"))
     {
         StringArray args;
-        if (! splitGridTopLevel (*argsText, true, args) || args.size() != 1)
+        if (! detail::splitTopLevel (*argsText, true, args) || args.size() != 1)
             return std::nullopt;
 
         if (const auto maximumPx = detail::parseStrictFloat (args[0], false, true))
@@ -260,7 +207,7 @@ Array<Grid::TrackInfo> parseGridTrackTemplate (const var& value,
     }
 
     StringArray tokens;
-    if (! splitGridTopLevel (text, false, tokens) || tokens.isEmpty())
+    if (! detail::splitTopLevel (text, false, tokens) || tokens.isEmpty())
         return {};
 
     for (const auto& token : tokens)
@@ -268,11 +215,11 @@ Array<Grid::TrackInfo> parseGridTrackTemplate (const var& value,
         if (const auto repeatArgsText = extractGridFunctionArgs (token, "repeat"))
         {
             StringArray repeatArgs;
-            if (! splitGridTopLevel (*repeatArgsText, true, repeatArgs) || repeatArgs.size() != 2)
+            if (! detail::splitTopLevel (*repeatArgsText, true, repeatArgs) || repeatArgs.size() != 2)
                 return {};
 
             StringArray patternTokens;
-            if (! splitGridTopLevel (repeatArgs[1], false, patternTokens) || patternTokens.isEmpty())
+            if (! detail::splitTopLevel (repeatArgs[1], false, patternTokens) || patternTokens.isEmpty())
                 return {};
 
             Array<Grid::TrackInfo> pattern;
@@ -397,17 +344,17 @@ const ComponentTypeInfo& GridComponent::getClassTypeInfo()
         props.push_back (ComponentProperty {
             .name = Properties::justifyId,
             .type = ComponentProperty::Type::enumeration,
-            .defaultValue = gridAlignments[3],
+            .defaultValue = gridAlignments.names[3],
             .isInherited = false,
-            .enumValues = gridAlignments,
+            .enumValues = gridAlignments.names,
             .description = "How the children are placed horizontally in their cells." });
 
         props.push_back (ComponentProperty {
             .name = Properties::alignId,
             .type = ComponentProperty::Type::enumeration,
-            .defaultValue = gridAlignments[3],
+            .defaultValue = gridAlignments.names[3],
             .isInherited = false,
-            .enumValues = gridAlignments,
+            .enumValues = gridAlignments.names,
             .description = "How the children are placed vertically in their cells." });
 
         return ComponentTypeInfo { Identifier ("Grid"), &LayoutComponent::getClassTypeInfo(), std::move (props), {}, []
@@ -434,8 +381,8 @@ void GridComponent::performLayout (Rectangle<float> area)
     grid.gap = gap;
     grid.templateColumns = parseGridTrackTemplate (findProperty (Properties::columnsId), area.getWidth(), gap, grid.autoColumns);
     grid.templateRows = parseGridTrackTemplate (findProperty (Properties::rowsId), area.getHeight(), gap, grid.autoRows);
-    grid.justifyItems = toAlignItems (findProperty (Properties::justifyId).toString());
-    grid.alignItems = toAlignItems (findProperty (Properties::alignId).toString());
+    grid.justifyItems = gridAlignments.toEnum (findProperty (Properties::justifyId).toString(), Grid::AlignItems::stretch);
+    grid.alignItems = gridAlignments.toEnum (findProperty (Properties::alignId).toString(), Grid::AlignItems::stretch);
 
     const auto areas = findProperty (Properties::areasId).toString().trim();
     bool hasAreas = false;
@@ -475,8 +422,8 @@ void GridComponent::performLayout (Rectangle<float> area)
         item.minHeight = getItemNumber (*child, Properties::minHeightId);
         item.maxHeight = getItemNumber (*child, Properties::maxHeightId);
         item.margin = getItemMargin (*child);
-        item.justifySelf = toGridAlignSelf (getItemString (*child, Properties::justifySelfId));
-        item.alignSelf = toGridAlignSelf (getItemString (*child, Properties::alignSelfId));
+        item.justifySelf = gridSelfAlignments.toEnum (getItemString (*child, Properties::justifySelfId), GridItem::AlignSelf::autoAlign);
+        item.alignSelf = gridSelfAlignments.toEnum (getItemString (*child, Properties::alignSelfId), GridItem::AlignSelf::autoAlign);
 
         grid.items.add (item);
     }

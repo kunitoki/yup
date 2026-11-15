@@ -108,8 +108,6 @@ void ToggleButton::setToggleState (bool shouldBeToggled, NotificationType notifi
     {
         toggleState = shouldBeToggled;
 
-        markStyleDirty();
-
         auto bailOutChecker = BailOutChecker (this);
 
         notifyPropertyChanged (ToggleButtonIds::checked);

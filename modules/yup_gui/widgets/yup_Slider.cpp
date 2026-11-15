@@ -27,6 +27,21 @@ namespace yup
 namespace
 {
 
+struct SliderIds
+{
+    static inline const Identifier sliderType { "sliderType" };
+    static inline const Identifier minimum { "minimum" };
+    static inline const Identifier maximum { "maximum" };
+    static inline const Identifier interval { "interval" };
+    static inline const Identifier skew { "skew" };
+    static inline const Identifier defaultValue { "defaultValue" };
+    static inline const Identifier value { "value" };
+    static inline const Identifier normalized { "normalized" };
+    static inline const Identifier minValue { "minValue" };
+    static inline const Identifier maxValue { "maxValue" };
+    static inline const Identifier dragging { "dragging" };
+};
+
 void setSliderRangeBound (Component& component, const var& value, bool isMinimum)
 {
     const auto bound = static_cast<double> (value);
@@ -90,7 +105,7 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
             "rotaryVerticalDrag", "incDecButtons", "twoValueHorizontal", "twoValueVertical", "threeValueHorizontal", "threeValueVertical" };
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("sliderType"),
+            .name = SliderIds::sliderType,
             .type = ComponentProperty::Type::enumeration,
             .defaultValue = sliderTypes[LinearHorizontal],
             .getter = [] (const Component& c) { return var (sliderTypes[static_cast<const Slider&> (c).getSliderType()]); },
@@ -104,7 +119,7 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
 
         // The range comes before the values it constrains, the builder applies values in declaration order
         props.push_back (ComponentProperty {
-            .name = Identifier ("minimum"),
+            .name = SliderIds::minimum,
             .type = ComponentProperty::Type::number,
             .defaultValue = 0.0,
             .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getRange().start); },
@@ -113,7 +128,7 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
             .description = "The lowest value of the range." });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("maximum"),
+            .name = SliderIds::maximum,
             .type = ComponentProperty::Type::number,
             .defaultValue = 1.0,
             .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getRange().end); },
@@ -122,7 +137,7 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
             .description = "The highest value of the range." });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("interval"),
+            .name = SliderIds::interval,
             .type = ComponentProperty::Type::number,
             .defaultValue = 0.0,
             .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getInterval()); },
@@ -139,7 +154,7 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
             .description = "The step between values, 0 for continuous." });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("skew"),
+            .name = SliderIds::skew,
             .type = ComponentProperty::Type::number,
             .defaultValue = 1.0,
             .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getSkewFactor()); },
@@ -152,7 +167,7 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
             .description = "The skew factor of the range, 1 for linear, below 1 to give the lower values more space." });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("defaultValue"),
+            .name = SliderIds::defaultValue,
             .type = ComponentProperty::Type::number,
             .defaultValue = 0.0,
             .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getDefaultValue()); },
@@ -161,34 +176,34 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
             .description = "The value a double-click resets to." });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("value"),
+            .name = SliderIds::value,
             .type = ComponentProperty::Type::number,
             .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getValue()); },
             .setter = [] (Component& c, const var& v) { static_cast<Slider&> (c).setValue (static_cast<double> (v)); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("normalized"),
+            .name = SliderIds::normalized,
             .type = ComponentProperty::Type::number,
             .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getValueNormalised()); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("minValue"),
+            .name = SliderIds::minValue,
             .type = ComponentProperty::Type::number,
             .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getMinValue()); },
             .setter = [] (Component& c, const var& v) { static_cast<Slider&> (c).setMinValue (static_cast<double> (v)); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("maxValue"),
+            .name = SliderIds::maxValue,
             .type = ComponentProperty::Type::number,
             .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).getMaxValue()); },
             .setter = [] (Component& c, const var& v) { static_cast<Slider&> (c).setMaxValue (static_cast<double> (v)); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("dragging"),
+            .name = SliderIds::dragging,
             .type = ComponentProperty::Type::boolean,
             .defaultValue = false,
             .getter = [] (const Component& c) { return var (static_cast<const Slider&> (c).isCurrentlyBeingDragged()); },
@@ -248,8 +263,21 @@ void Slider::setValue (double newValue, NotificationType notification)
     if (! approximatelyEqual (currentValue, newValue))
     {
         currentValue = newValue;
+
+        const BailOutChecker bailOutChecker (this);
+
+        notifyPropertyChanged (SliderIds::value);
+        if (bailOutChecker.shouldBailOut())
+            return;
+
+        notifyPropertyChanged (SliderIds::normalized);
+        if (bailOutChecker.shouldBailOut())
+            return;
+
         sendValueChanged (notification);
-        repaint();
+
+        if (! bailOutChecker.shouldBailOut())
+            repaint();
     }
 }
 
@@ -288,8 +316,17 @@ void Slider::setMinValue (double newMinValue, NotificationType notification, boo
     if (! approximatelyEqual (minValue, newMinValue))
     {
         minValue = newMinValue;
+
+        const BailOutChecker bailOutChecker (this);
+
+        notifyPropertyChanged (SliderIds::minValue);
+        if (bailOutChecker.shouldBailOut())
+            return;
+
         sendMinValueChanged (notification);
-        repaint();
+
+        if (! bailOutChecker.shouldBailOut())
+            repaint();
     }
 }
 
@@ -314,8 +351,17 @@ void Slider::setMaxValue (double newMaxValue, NotificationType notification, boo
     if (! approximatelyEqual (maxValue, newMaxValue))
     {
         maxValue = newMaxValue;
+
+        const BailOutChecker bailOutChecker (this);
+
+        notifyPropertyChanged (SliderIds::maxValue);
+        if (bailOutChecker.shouldBailOut())
+            return;
+
         sendMaxValueChanged (notification);
-        repaint();
+
+        if (! bailOutChecker.shouldBailOut())
+            repaint();
     }
 }
 
@@ -337,7 +383,7 @@ void Slider::setDefaultValue (double newDefaultValue)
     if (! approximatelyEqual (defaultValue, newDefaultValue))
     {
         defaultValue = newDefaultValue;
-        notifyPropertyChanged (Identifier ("defaultValue"));
+        notifyPropertyChanged (SliderIds::defaultValue);
     }
 }
 
@@ -351,6 +397,7 @@ double Slider::getDefaultValue() const
 void Slider::setRange (const NormalisableRange<double>& newRange)
 {
     const auto previousRange = range;
+    const auto previousValue = currentValue;
 
     range = newRange;
     setDefaultValue (constrainValue (defaultValue));
@@ -358,7 +405,16 @@ void Slider::setRange (const NormalisableRange<double>& newRange)
     setMinValue (constrainValue (minValue), dontSendNotification);
     setMaxValue (constrainValue (maxValue), dontSendNotification);
 
+    const BailOutChecker bailOutChecker (this);
+
     sendRangeChanged (previousRange);
+
+    if (! bailOutChecker.shouldBailOut()
+        && approximatelyEqual (previousValue, currentValue)
+        && ! approximatelyEqual (previousRange.convertTo0to1 (currentValue), range.convertTo0to1 (currentValue)))
+    {
+        notifyPropertyChanged (SliderIds::normalized);
+    }
 }
 
 void Slider::setRange (double minValue, double maxValue, double stepSize)
@@ -388,16 +444,9 @@ void Slider::setSkewFactor (double skewFactor)
 
     if (! approximatelyEqual (range.skew, skewFactor))
     {
-        const auto previousRange = range;
-        range.skew = skewFactor;
-
-        // Reapply constraints to current values with new skew
-        setDefaultValue (constrainValue (defaultValue));
-        setValue (constrainValue (currentValue), dontSendNotification);
-        setMinValue (constrainValue (minValue), dontSendNotification);
-        setMaxValue (constrainValue (maxValue), dontSendNotification);
-
-        sendRangeChanged (previousRange);
+        auto updatedRange = range;
+        updatedRange.skew = skewFactor;
+        setRange (updatedRange);
         repaint();
     }
 }
@@ -406,16 +455,9 @@ void Slider::setSkewFactorFromMidpoint (double midpointValue)
 {
     midpointValue = jlimit (range.getRange().getStart(), range.getRange().getEnd(), midpointValue);
 
-    const auto previousRange = range;
-    range.setSkewForCentre (midpointValue);
-
-    // Reapply constraints to current values with new skew
-    setDefaultValue (constrainValue (defaultValue));
-    setValue (constrainValue (currentValue), dontSendNotification);
-    setMinValue (constrainValue (minValue), dontSendNotification);
-    setMaxValue (constrainValue (maxValue), dontSendNotification);
-
-    sendRangeChanged (previousRange);
+    auto updatedRange = range;
+    updatedRange.setSkewForCentre (midpointValue);
+    setRange (updatedRange);
     repaint();
 }
 
@@ -444,6 +486,7 @@ void Slider::setSliderType (SliderType newType)
     if (sliderType != newType)
     {
         sliderType = newType;
+        notifyPropertyChanged (SliderIds::sliderType);
         repaint();
         resized();
     }
@@ -569,12 +612,26 @@ void Slider::mouseDown (const MouseEvent& event)
     mouseDragStartPosition = mouseDownPosition;
     isMouseOverSlider = true;
 
+    const bool wasDragging = dragMode != notDragging;
     dragMode = getDragModeForMousePosition (mouseDownPosition);
 
     if (dragMode != notDragging)
     {
+        const BailOutChecker bailOutChecker (this);
+
+        if (! wasDragging)
+        {
+            notifyPropertyChanged (SliderIds::dragging);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
         if (onDragStart)
+        {
             onDragStart (event);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
 
         // For linear sliders, implement improved click behavior
         bool shouldJumpToClickPosition = false;
@@ -642,10 +699,21 @@ void Slider::mouseUp (const MouseEvent& event)
 {
     if (dragMode != notDragging)
     {
-        if (onDragEnd)
-            onDragEnd (event);
-
         dragMode = notDragging;
+
+        const BailOutChecker bailOutChecker (this);
+
+        notifyPropertyChanged (SliderIds::dragging);
+        if (bailOutChecker.shouldBailOut())
+            return;
+
+        if (onDragEnd)
+        {
+            onDragEnd (event);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
         repaint();
     }
 
@@ -714,8 +782,6 @@ void Slider::sendValueChanged (NotificationType notification)
 
         if (onValueChanged)
             onValueChanged (getValue());
-
-        notifyPropertyChanged (Identifier ("value"));
     });
 }
 
@@ -743,17 +809,31 @@ void Slider::sendMaxValueChanged (NotificationType notification)
 
 void Slider::sendRangeChanged (const NormalisableRange<double>& previousRange)
 {
+    const BailOutChecker bailOutChecker (this);
+
     if (! approximatelyEqual (previousRange.start, range.start))
-        notifyPropertyChanged (Identifier ("minimum"));
+    {
+        notifyPropertyChanged (SliderIds::minimum);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
 
     if (! approximatelyEqual (previousRange.end, range.end))
-        notifyPropertyChanged (Identifier ("maximum"));
+    {
+        notifyPropertyChanged (SliderIds::maximum);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
 
     if (! approximatelyEqual (previousRange.interval, range.interval))
-        notifyPropertyChanged (Identifier ("interval"));
+    {
+        notifyPropertyChanged (SliderIds::interval);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
 
     if (! approximatelyEqual (previousRange.skew, range.skew))
-        notifyPropertyChanged (Identifier ("skew"));
+        notifyPropertyChanged (SliderIds::skew);
 }
 
 //==============================================================================

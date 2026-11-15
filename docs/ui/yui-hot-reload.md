@@ -25,14 +25,14 @@ if (loader.loadFile (sourceFolder.getChildFile ("ui.yui")).wasOk())
 loader.setWatching (true);
 ```
 
-The paths of `import`s are relative to the folder of the file loaded, for the
-main file and for every imported one alike:
+The paths of `import`s are relative to the folder of the file containing the
+`import` statement:
 
 ```text
 ui/
   ui.yui           import "parts/style.yui";
   parts/
-    style.yui      import "parts/palette.yui";   (not "palette.yui")
+    style.yui      import "palette.yui";
     palette.yui
 ```
 

@@ -25,11 +25,6 @@ namespace yup
 namespace
 {
 
-String getTreeDiffId (const DataTree& element)
-{
-    return element.getProperty ("id").toString().unquoted().trim();
-}
-
 bool hasSamePropertyNames (const DataTree& target, const DataTree& source)
 {
     if (target.getNumProperties() != source.getNumProperties())
@@ -75,7 +70,7 @@ std::vector<DataTree> matchChildren (const DataTree& target, const DataTree& sou
     const auto match = [&] (int sourceIndex, bool byId)
     {
         const auto sourceChild = source.getChild (sourceIndex);
-        const auto id = getTreeDiffId (sourceChild);
+        const auto id = detail::getYuiElementId (sourceChild);
 
         if (byId && id.isEmpty())
             return;
@@ -87,7 +82,7 @@ std::vector<DataTree> matchChildren (const DataTree& target, const DataTree& sou
             if (used[static_cast<size_t> (i)] || targetChild.getType() != sourceChild.getType())
                 continue;
 
-            if (byId && getTreeDiffId (targetChild) != id)
+            if (byId && detail::getYuiElementId (targetChild) != id)
                 continue;
 
             matches[static_cast<size_t> (sourceIndex)] = targetChild;

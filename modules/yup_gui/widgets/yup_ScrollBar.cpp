@@ -22,6 +22,16 @@
 namespace yup
 {
 
+namespace
+{
+
+struct ScrollBarIds
+{
+    static inline const Identifier dragging { "dragging" };
+};
+
+} // namespace
+
 //==============================================================================
 const Identifier ScrollBar::Style::trackColorId { "scrollBarTrack" };
 const Identifier ScrollBar::Style::thumbColorId { "scrollBarThumb" };
@@ -46,7 +56,7 @@ const ComponentTypeInfo& ScrollBar::getClassTypeInfo()
         props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, {}, "The thumb corner radius, unset for a pill."));
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("dragging"),
+            .name = ScrollBarIds::dragging,
             .type = ComponentProperty::Type::boolean,
             .getter = [] (const Component& c) { return var (static_cast<const ScrollBar&> (c).isDragging()); },
             .isState = true,
@@ -244,9 +254,13 @@ void ScrollBar::mouseDown (const MouseEvent& event)
     if (thumbBounds.contains (clickPos))
     {
         // Start dragging thumb
+        const bool wasDragging = isDraggingThumb;
         isDraggingThumb = true;
         dragStartPosition = clickPos;
         dragStartRangeStart = currentRangeStart;
+
+        if (! wasDragging)
+            notifyPropertyChanged (ScrollBarIds::dragging);
 
         repaint();
     }
@@ -270,6 +284,7 @@ void ScrollBar::mouseUp (const MouseEvent& event)
     if (isDraggingThumb)
     {
         isDraggingThumb = false;
+        notifyPropertyChanged (ScrollBarIds::dragging);
 
         repaint();
     }

@@ -46,10 +46,12 @@ std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent, std::vect
         {
             declaration.qualifier = Identifier (name.substring (0, dot));
             declaration.name = Identifier (name.substring (dot + 1));
+            declaration.cascadeKey = Identifier (name);
         }
         else
         {
             declaration.name = Identifier (name);
+            declaration.cascadeKey = declaration.name;
         }
 
         declaration.value = element.getProperty ("value").toString().trim();
@@ -213,51 +215,16 @@ ResultValue<StyleSheet::Ptr> StyleSheet::parse (const String& text)
     return fromTree (parsed.document);
 }
 
-std::vector<StringArray> StyleSheet::tokenizeValue (const String& value)
+bool StyleSheet::isStyleElement (const DataTree& element) noexcept
 {
-    std::vector<StringArray> entries (1);
-    String token;
-    int depth = 0;
+    static const Identifier style ("style");
+    static const Identifier rule ("rule");
+    static const Identifier palette ("palette");
+    static const Identifier drawing ("drawing");
+    static const Identifier keyframes ("keyframes");
 
-    const auto flush = [&]
-    {
-        if (token.isEmpty())
-            return;
-
-        auto& tokens = entries.back();
-
-        if (token.startsWithChar ('(') && ! tokens.isEmpty())
-            tokens.set (tokens.size() - 1, tokens[tokens.size() - 1] + token);
-        else
-            tokens.add (token);
-
-        token.clear();
-    };
-
-    for (auto p = value.getCharPointer(); ! p.isEmpty(); ++p)
-    {
-        const auto c = *p;
-
-        if (depth == 0 && (c == ',' || CharacterFunctions::isWhitespace (c)))
-        {
-            flush();
-
-            if (c == ',')
-                entries.emplace_back();
-
-            continue;
-        }
-
-        if (c == '(')
-            ++depth;
-        else if (c == ')')
-            depth = jmax (0, depth - 1);
-
-        token += c;
-    }
-
-    flush();
-    return entries;
+    const auto type = element.getType();
+    return type == style || type == rule || type == palette || type == drawing || type == keyframes;
 }
 
 //==============================================================================

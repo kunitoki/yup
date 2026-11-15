@@ -37,25 +37,14 @@ const Identifier& classProperty()
     return identifier;
 }
 
-bool isComponentElement (const DataTree& element)
-{
-    const auto type = element.getType().toString();
-    return type.isNotEmpty() && CharacterFunctions::isUpperCase (type[0]);
-}
-
-String getElementId (const DataTree& element)
-{
-    return element.getProperty (idProperty()).toString().unquoted().trim();
-}
-
 DataTree findElementById (const DataTree& element, const String& id)
 {
-    if (getElementId (element) == id)
+    if (detail::getYuiElementId (element) == id)
         return element;
 
     for (const auto& child : element)
     {
-        if (! isComponentElement (child))
+        if (! detail::isYuiComponentElement (child))
             continue;
 
         if (auto found = findElementById (child, id); found.isValid())
@@ -65,39 +54,39 @@ DataTree findElementById (const DataTree& element, const String& id)
     return {};
 }
 
-// Like C++ members, values apply in the order the type declares them (bases first), so a property constraining
-// another one, a Slider range, applies before it wherever the document writes it; undeclared names come last
-template <class Value>
-std::vector<const Value*> inDeclarationOrder (const ComponentTypeInfo& type, const std::vector<Value>& values)
+std::size_t declarationRankOf (const ComponentTypeInfo& type, const Identifier& name)
 {
     std::vector<const ComponentTypeInfo*> chain;
 
     for (const auto* info = &type; info != nullptr; info = info->getBaseTypeInfo())
         chain.insert (chain.begin(), info);
 
-    const auto rankOf = [&chain] (const Identifier& name)
+    std::size_t rank = 0;
+
+    for (const auto* info : chain)
     {
-        std::size_t rank = 0;
-
-        for (const auto* info : chain)
+        for (const auto& property : info->getOwnProperties())
         {
-            for (const auto& property : info->getOwnProperties())
-            {
-                if (property.name == name)
-                    return rank;
+            if (property.name == name)
+                return rank;
 
-                ++rank;
-            }
+            ++rank;
         }
+    }
 
-        return std::numeric_limits<std::size_t>::max();
-    };
+    return std::numeric_limits<std::size_t>::max();
+}
 
+// Like C++ members, values apply in the order the type declares them (bases first), so a property constraining
+// another one, a Slider range, applies before it wherever the document writes it; undeclared names come last
+template <class Value>
+std::vector<const Value*> inDeclarationOrder (const ComponentTypeInfo& type, const std::vector<Value>& values)
+{
     std::vector<std::pair<std::size_t, const Value*>> ranked;
     ranked.reserve (values.size());
 
     for (const auto& value : values)
-        ranked.emplace_back (rankOf (value.name), &value);
+        ranked.emplace_back (declarationRankOf (type, value.name), &value);
 
     std::stable_sort (ranked.begin(), ranked.end(), [] (const auto& a, const auto& b) { return a.first < b.first; });
 
@@ -146,6 +135,38 @@ ComponentProperty makeDeclaredProperty (const DataTree& declaration, bool isInhe
 YuiBuilder::YuiBuilder()
 {
     registerBuiltInComponentTypes();
+
+    bindings.onDiagnostic = [this] (Component* target, const Identifier& property, const String& message)
+    {
+        DataTree element;
+        Identifier sourceProperty;
+        String prefix;
+
+        if (target != nullptr)
+        {
+            prefix = target->getTypeInfo().getTypeName().toString() + "." + property.toString() + ": ";
+
+            if (const auto compIt = applied.find (target); compIt != applied.end())
+            {
+                if (const auto valIt = compIt->second.find (property); valIt != compIt->second.end())
+                {
+                    element = valIt->second.element;
+                    sourceProperty = valIt->second.property;
+                }
+            }
+        }
+
+        const YuiDiagnostic diagnostic {
+            .message = prefix + message,
+            .element = element,
+            .property = sourceProperty
+        };
+
+        diagnostics.push_back (diagnostic);
+
+        if (onDiagnostic != nullptr)
+            onDiagnostic (diagnostic);
+    };
 }
 
 YuiBuilder::~YuiBuilder()
@@ -173,7 +194,7 @@ Result YuiBuilder::build (const DataTree& document)
 
         for (const auto& element : document)
         {
-            if (isComponentElement (element))
+            if (detail::isYuiComponentElement (element))
             {
                 root = element;
                 break;
@@ -181,7 +202,7 @@ Result YuiBuilder::build (const DataTree& document)
         }
     }
 
-    const auto checked = root.isValid() && isComponentElement (root)
+    const auto checked = root.isValid() && detail::isYuiComponentElement (root)
                            ? checkTypes (root)
                            : report ("The document has no root component", document);
 
@@ -198,7 +219,7 @@ Result YuiBuilder::build (const DataTree& document)
     for (auto& [name, model] : models)
         model->refreshProperties();
 
-    const auto previousScopes = std::exchange (scopes, {});
+    scopes.clear();
     previousComponents = std::exchange (components, {});
 
     auto& scope = *scopes.emplace_back (std::make_unique<Scope>());
@@ -332,7 +353,7 @@ void YuiBuilder::collectDeclarations (const DataTree& document)
         composite.declaration = element;
 
         for (const auto& child : element)
-            if (isComponentElement (child))
+            if (detail::isYuiComponentElement (child))
                 composite.body = child;
 
         composites.emplace (name, std::move (composite));
@@ -382,7 +403,7 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
 
     for (const auto& declaration : composite.declaration)
     {
-        if (isComponentElement (declaration))
+        if (detail::isYuiComponentElement (declaration))
             continue;
 
         const auto kind = declaration.getType().toString();
@@ -391,6 +412,9 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
         if (kind == "property")
         {
             properties.push_back (makeDeclaredProperty (declaration, false));
+
+            if (declaration.hasProperty ("value"))
+                composite.defaults.push_back ({ name, declaration.getProperty ("value").toString(), declaration });
         }
         else if (kind == "signal")
         {
@@ -415,8 +439,8 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
         else if (kind == "alias")
         {
             const auto target = declaration.getProperty ("target").toString();
-            const auto dot = target.indexOfChar ('.');
-            const auto element = dot > 0 ? findElementById (composite.body, target.substring (0, dot)) : DataTree();
+            const auto split = detail::splitYuiPath (target);
+            const auto element = split.has_value() ? findElementById (composite.body, split->first) : DataTree();
 
             if (! element.isValid())
             {
@@ -429,11 +453,11 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
             if (elementType.failed())
                 continue;
 
-            const auto* aliased = elementType.getValue()->findProperty (Identifier (target.substring (dot + 1)));
+            const auto* aliased = elementType.getValue()->findProperty (split->second);
 
             if (aliased == nullptr)
             {
-                report (where + "." + name.toString() + ": " + element.getType().toString() + " has no property '" + target.substring (dot + 1) + "'", declaration);
+                report (where + "." + name.toString() + ": " + element.getType().toString() + " has no property '" + split->second.toString() + "'", declaration);
                 continue;
             }
 
@@ -446,6 +470,7 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
             alias.isInherited = false;
             alias.affectsParentLayout = false;
             properties.push_back (std::move (alias));
+            composite.aliases.push_back ({ name, target, declaration });
         }
     }
 
@@ -486,7 +511,7 @@ Result YuiBuilder::checkTypes (const DataTree& element)
 
     for (const auto& child : element)
     {
-        if (! isComponentElement (child))
+        if (! detail::isYuiComponentElement (child))
             continue;
 
         if (auto result = checkTypes (child); result.failed())
@@ -515,23 +540,7 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
         component->setTypeInfo (composite.info.get());
 
         // The declared defaults and aliases come before the values of the body and of the use site
-        Pending declarations { component, &bodyScope };
-
-        for (const auto& declaration : composite.declaration)
-        {
-            if (isComponentElement (declaration))
-                continue;
-
-            const auto kind = declaration.getType().toString();
-            const Identifier name (declaration.getProperty ("name").toString());
-
-            if (kind == "property" && declaration.hasProperty ("value"))
-                declarations.values.push_back ({ name, declaration.getProperty ("value").toString(), declaration });
-            else if (kind == "alias" && composite.info->findProperty (name) != nullptr)
-                declarations.links.push_back ({ name, declaration.getProperty ("target").toString(), declaration });
-        }
-
-        pending.insert (pending.begin() + declarationsIndex, std::move (declarations));
+        pending.insert (pending.begin() + declarationsIndex, Pending { component, &bodyScope, composite.defaults, composite.aliases });
         applyIdentity (*component, element, scope, true);
     }
     else
@@ -584,7 +593,7 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
         if (child.getType() == bindType || child.getType() == changedType)
             continue;
 
-        if (! isComponentElement (child))
+        if (! detail::isYuiComponentElement (child))
         {
             report ("'" + child.getType().toString() + "' is not a component type", child);
             continue;
@@ -643,7 +652,7 @@ void YuiBuilder::applyIdentity (Component& component, const DataTree& element, S
     // A kept component loses the identity it had, unless it's a composite instance keeping the one of its body
     if (element.hasProperty (idProperty()))
     {
-        const auto id = getElementId (element);
+        const auto id = detail::getYuiElementId (element);
         component.setComponentID (id);
 
         if (! scope.ids.emplace (id, &component).second)
@@ -707,19 +716,16 @@ void YuiBuilder::applyTokens (Component& root, Scope& scope)
 
 void YuiBuilder::applyValues (const AppliedValues& previous)
 {
-    const auto linkText = [] (const String& path)
-    {
-        return "<=> " + path;
-    };
-
     // Later values of a property override earlier ones, so the last text is the one applied
     for (const auto& entry : pending)
     {
+        auto& values = applied[entry.component];
+
         for (const auto& value : entry.values)
-            applied[entry.component][value.name.toString()] = { value.text };
+            values[value.name] = { value.text, value.element, value.property, false };
 
         for (const auto& link : entry.links)
-            applied[entry.component][link.name.toString()] = { linkText (link.text) };
+            values[link.name] = { link.text, link.element, link.property, true };
     }
 
     for (const auto& record : components)
@@ -731,35 +737,34 @@ void YuiBuilder::applyValues (const AppliedValues& previous)
             continue;
 
         auto& values = applied[component];
+        std::vector<Identifier> removed;
 
         for (const auto& [name, before] : found->second)
         {
             if (const auto now = values.find (name); now == values.end())
-                resetValue (*component, *record.type, Identifier (name));
-            else
-                now->second.isKept = before.isConstant && before.text == now->second.text;
+            {
+                removed.push_back (name);
+            }
+            else if (before.isConstant && ! before.isLink && ! now->second.isLink && before.text == now->second.text)
+            {
+                now->second.isKept = true;
+                now->second.isConstant = true;
+            }
         }
+
+        std::sort (removed.begin(), removed.end(), [&record] (const Identifier& a, const Identifier& b)
+        {
+            return declarationRankOf (*record.type, a) < declarationRankOf (*record.type, b);
+        });
+
+        for (const auto& name : removed)
+            resetValue (*component, *record.type, name);
     }
 
     for (const auto& entry : pending)
         applyPending (entry);
 
     pending.clear();
-
-    // Constants applied again with the same text are skipped next time, keeping what the user changed since
-    for (auto& [component, values] : applied)
-    {
-        for (auto& [name, value] : values)
-        {
-            const Identifier property (name);
-
-            value.isConstant = value.isKept
-                            || (! value.hasFailed
-                                && ! value.text.startsWith ("<=>")
-                                && component->getTypeInfo().findSignal (property) == nullptr
-                                && bindings.findBinding (*component, property) == nullptr);
-        }
-    }
 }
 
 void YuiBuilder::resetValue (Component& component, const ComponentTypeInfo& type, const Identifier& name)
@@ -793,24 +798,31 @@ void YuiBuilder::applyPending (const Pending& entry)
 
     for (const auto* entryValue : inDeclarationOrder (entry.component->getTypeInfo(), entry.values))
     {
-        auto& value = values[entryValue->name.toString()];
+        auto& value = values[entryValue->name];
 
         if (value.isKept)
             continue;
 
-        const auto numDiagnostics = diagnostics.size();
-        applyProperty (*entry.component, *entryValue, *entry.scope);
-        value.hasFailed = value.hasFailed || diagnostics.size() > numDiagnostics;
+        value.element = entryValue->element;
+        value.property = entryValue->property;
+        value.isConstant = ! value.isLink && applyProperty (*entry.component, *entryValue, *entry.scope) == ApplyOutcome::constant;
     }
 
     for (const auto& link : entry.links)
+    {
+        auto& value = values[link.name];
+        value.element = link.element;
+        value.property = link.property;
+        value.isLink = true;
+        value.isConstant = false;
         applyLink (*entry.component, link, *entry.scope);
+    }
 
     for (const auto& change : entry.changes)
         applyChanged (*entry.component, change, *entry.scope);
 }
 
-void YuiBuilder::applyProperty (Component& component, const Value& value, Scope& scope)
+YuiBuilder::ApplyOutcome YuiBuilder::applyProperty (Component& component, const Value& value, Scope& scope)
 {
     const auto& typeInfo = component.getTypeInfo();
     const auto& name = value.name;
@@ -818,16 +830,15 @@ void YuiBuilder::applyProperty (Component& component, const Value& value, Scope&
     if (const auto* signal = typeInfo.findSignal (name))
     {
         connectHandler (component, *signal, value, scope);
-        return;
+        return ApplyOutcome::live;
     }
 
     const auto* descriptor = typeInfo.findProperty (name);
-    const auto where = typeInfo.getTypeName().toString() + "." + name.toString();
 
     if (descriptor != nullptr && descriptor->isReadOnly())
     {
-        report (where + ": the property is read-only", value.element, value.property);
-        return;
+        report (component, name, "the property is read-only", value);
+        return ApplyOutcome::failed;
     }
 
     if (descriptor != nullptr && descriptor->type == ComponentProperty::Type::enumeration)
@@ -835,62 +846,61 @@ void YuiBuilder::applyProperty (Component& component, const Value& value, Scope&
         const auto enumValue = value.text.unquoted().trim();
 
         if (! descriptor->enumValues.contains (enumValue))
-            report (where + ": expected one of " + descriptor->enumValues.joinIntoString (", "), value.element, value.property);
-        else
-            component.setProperty (name, enumValue);
+        {
+            report (component, name, "expected one of " + descriptor->enumValues.joinIntoString (", "), value);
+            return ApplyOutcome::failed;
+        }
 
-        return;
+        component.setProperty (name, enumValue);
+        return ApplyOutcome::constant;
     }
 
     std::optional<ComponentProperty::Type> type;
 
     if (descriptor != nullptr)
     {
-        switch (descriptor->type)
+        if (ComponentProperty::isExpressionType (descriptor->type) || descriptor->type == ComponentProperty::Type::array)
         {
-            case ComponentProperty::Type::number:
-            case ComponentProperty::Type::integer:
-            case ComponentProperty::Type::boolean:
-            case ComponentProperty::Type::string:
-            case ComponentProperty::Type::color:
-            case ComponentProperty::Type::point:
-            case ComponentProperty::Type::rectangle:
-            case ComponentProperty::Type::array:   type = descriptor->type; break;
-            case ComponentProperty::Type::any:     break;
-
-            default:
-                report (where + ": properties of this type can't be set from .yui yet", value.element, value.property);
-                return;
+            type = descriptor->type;
+        }
+        else if (descriptor->type != ComponentProperty::Type::any)
+        {
+            report (component, name, "properties of this type can't be set from .yui yet", value);
+            return ApplyOutcome::failed;
         }
     }
 
-    if (auto result = bindings.bind (component, name, value.text, type); result.failed())
-        report (where + ": " + result.getErrorMessage(), value.element, value.property);
+    bool isLive = false;
+
+    if (auto result = bindings.bind (component, name, value.text, type, &isLive); result.failed())
+    {
+        report (component, name, result.getErrorMessage(), value);
+        return ApplyOutcome::failed;
+    }
+
+    return isLive ? ApplyOutcome::live : ApplyOutcome::constant;
 }
 
 void YuiBuilder::applyLink (Component& component, const Value& link, Scope& scope)
 {
     const auto& name = link.name;
-    const auto& path = link.text;
-    const auto where = component.getTypeInfo().getTypeName().toString() + "." + name.toString();
-    const auto dot = path.indexOfChar ('.');
+    const auto split = detail::splitYuiPath (link.text);
 
-    if (dot <= 0)
+    if (! split.has_value())
     {
-        report (where + ": expected element.property after '<=>'", link.element, link.property);
+        report (component, name, "expected element.property after '<=>'", link);
         return;
     }
 
-    const auto elementName = path.substring (0, dot);
-    auto* source = resolve (scope, elementName, &component);
+    auto* source = resolve (scope, split->first, &component);
 
     if (source == nullptr)
     {
-        report (where + ": unknown element '" + elementName + "'", link.element, link.property);
+        report (component, name, "unknown element '" + split->first + "'", link);
         return;
     }
 
-    const Identifier sourceProperty (path.substring (dot + 1));
+    const auto& sourceProperty = split->second;
 
     auto* model = dynamic_cast<Model*> (source);
     if (model != nullptr && source->getTypeInfo().findProperty (sourceProperty) == nullptr)
@@ -898,13 +908,13 @@ void YuiBuilder::applyLink (Component& component, const Value& link, Scope& scop
 
     if (source->getTypeInfo().findProperty (sourceProperty) == nullptr)
     {
-        report (where + ": " + source->getTypeInfo().getTypeName().toString() + " has no property '" + sourceProperty.toString() + "'", link.element, link.property);
+        report (component, name, source->getTypeInfo().getTypeName().toString() + " has no property '" + sourceProperty.toString() + "'", link);
         return;
     }
 
     if (const auto* descriptor = component.getTypeInfo().findProperty (name); descriptor != nullptr && descriptor->isReadOnly())
     {
-        report (where + ": the property is read-only", link.element, link.property);
+        report (component, name, "the property is read-only", link);
         return;
     }
 
@@ -919,16 +929,17 @@ void YuiBuilder::applyLink (Component& component, const Value& link, Scope& scop
 void YuiBuilder::applyChanged (Component& component, const Value& change, Scope& scope)
 {
     const auto* descriptor = component.getTypeInfo().findProperty (change.name);
+    const Identifier changedName ("changed " + change.name.toString());
 
     if (descriptor == nullptr)
     {
-        report (component.getTypeInfo().getTypeName().toString() + ".changed " + change.name.toString() + ": unknown property '" + change.name.toString() + "'", change.element);
+        report (component, changedName, "unknown property '" + change.name.toString() + "'", Value { changedName, {}, change.element });
         return;
     }
 
     // A changed handler is the handler of a signal emitted with the new value
     const ComponentSignal signal {
-        .name = Identifier ("changed " + change.name.toString()),
+        .name = changedName,
         .connect = [this, property = change.name] (Component& target, ComponentSignal::Handler handler)
         {
             watchers.push_back (std::make_unique<YuiPropertyWatcher> (target, property, std::move (handler)));
@@ -941,11 +952,9 @@ void YuiBuilder::applyChanged (Component& component, const Value& change, Scope&
 
 void YuiBuilder::connectHandler (Component& component, const ComponentSignal& signal, const Value& value, Scope& scope)
 {
-    const auto where = component.getTypeInfo().getTypeName().toString() + "." + signal.name.toString();
-
     const auto fail = [&] (const String& message)
     {
-        report (where + ": " + message, value.element, value.property);
+        report (component, signal.name, message, value);
     };
 
     const auto parsed = YuiHandler::parse (value.text);
@@ -968,50 +977,52 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
         std::vector<std::shared_ptr<PropertyExpression>> values;
     };
 
-    std::vector<Step> steps;
+    auto steps = std::make_shared<std::vector<Step>>();
 
     for (const auto& call : handler.calls)
     {
         Step step;
-        auto arguments = call.arguments;
+        std::size_t firstArgument = 0;
         const ComponentSignal* emitted = nullptr;
 
-        if (call.callee == "action")
+        if (call.target.isEmpty() && call.name == "action")
         {
-            if (arguments.isEmpty() || ! arguments[0].isQuotedString())
+            if (call.arguments.empty()
+                || call.arguments[0].getKind() != Expression::Kind::constant
+                || ! call.arguments[0].getConstantValue().isString())
                 return fail ("action expects the name of the action as a string");
 
-            step.actionName = arguments[0].unquoted();
-            arguments.remove (0);
+            step.actionName = call.arguments[0].getConstantValue().toString();
+            firstArgument = 1;
         }
         else
         {
-            const auto dot = call.callee.lastIndexOfChar ('.');
-            auto* target = dot > 0 ? resolve (scope, call.callee.substring (0, dot), &component) : nullptr;
+            const auto callee = call.target.isEmpty() ? call.name : call.target + "." + call.name;
+            auto* target = call.target.isNotEmpty() ? resolve (scope, call.target, &component) : nullptr;
 
             if (target == nullptr)
-                return fail ("unknown function '" + call.callee + "'");
+                return fail ("unknown function '" + callee + "'");
 
-            step.emitted = Identifier (call.callee.substring (dot + 1));
-
+            step.emitted = Identifier (call.name);
             emitted = findDeclaredSignal (*target, step.emitted);
 
             if (emitted == nullptr)
-                return fail ("'" + call.callee + "' is not a signal declared by a component");
+                return fail ("'" + callee + "' is not a signal declared by a component");
 
             step.emitter = target;
         }
 
         // The arguments are evaluated each time the signal is emitted, typed as the emitted signal declares them
-        for (int i = 0; i < arguments.size(); ++i)
+        for (std::size_t i = firstArgument; i < call.arguments.size(); ++i)
         {
+            const auto argIndex = i - firstArgument;
             std::optional<ComponentProperty::Type> type;
 
-            if (emitted != nullptr && i < static_cast<int> (emitted->arguments.size()))
-                if (const auto declared = emitted->arguments[static_cast<size_t> (i)].type; ComponentProperty::isExpressionType (declared))
+            if (emitted != nullptr && argIndex < emitted->arguments.size())
+                if (const auto declared = emitted->arguments[argIndex].type; ComponentProperty::isExpressionType (declared))
                     type = declared;
 
-            auto compiled = PropertyExpression::compile (component, arguments[i], type, resolverFor (scope), getModelResolver(), locals.get());
+            auto compiled = PropertyExpression::compile (component, call.arguments[i].toString(), type, resolverFor (scope), getModelResolver(), locals.get());
 
             if (compiled.failed())
                 return fail (compiled.getErrorMessage());
@@ -1019,12 +1030,12 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
             step.values.push_back (std::move (compiled.getReference()));
         }
 
-        steps.push_back (std::move (step));
+        steps->push_back (std::move (step));
     }
 
-    signal.connect (component, [this, locals, steps] (const Array<var>& signalArguments)
+    signal.connect (component, [this, locals, steps = std::shared_ptr<const std::vector<Step>> (std::move (steps))] (const Array<var>& signalArguments)
     {
-        for (const auto& step : steps)
+        for (const auto& step : *steps)
         {
             // Set for each call, as a call emitting a signal can run this handler again
             locals->setValues (signalArguments);
@@ -1089,6 +1100,11 @@ Result YuiBuilder::report (const String& message, const DataTree& element, const
 {
     diagnostics.push_back ({ .message = message, .element = element, .property = property });
     return Result::fail (message);
+}
+
+void YuiBuilder::report (const Component& component, const Identifier& name, const String& message, const Value& value)
+{
+    report (component.getTypeInfo().getTypeName().toString() + "." + name.toString() + ": " + message, value.element, value.property);
 }
 
 //==============================================================================

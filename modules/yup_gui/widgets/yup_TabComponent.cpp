@@ -22,6 +22,19 @@
 namespace yup
 {
 
+namespace
+{
+
+struct TabComponentIds
+{
+    static inline const Identifier placement { "placement" };
+    static inline const Identifier tabBarThickness { "tabBarThickness" };
+    static inline const Identifier selectedTab { "selectedTab" };
+    static inline const Identifier title { "title" };
+};
+
+} // namespace
+
 //==============================================================================
 TabComponent::TabComponent (StringRef componentID)
     : Component (componentID)
@@ -53,7 +66,7 @@ const ComponentTypeInfo& TabComponent::getClassTypeInfo()
         static const StringArray placementNames { "top", "bottom", "left", "right" };
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("placement"),
+            .name = TabComponentIds::placement,
             .type = ComponentProperty::Type::enumeration,
             .defaultValue = placementNames[0],
             .getter = [] (const Component& c) { return var (placementNames[static_cast<int> (static_cast<const TabComponent&> (c).getTabBarPlacement())]); },
@@ -67,7 +80,7 @@ const ComponentTypeInfo& TabComponent::getClassTypeInfo()
             .description = "Where the bar sits around the content." });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("tabBarThickness"),
+            .name = TabComponentIds::tabBarThickness,
             .type = ComponentProperty::Type::number,
             .defaultValue = 36.0,
             .getter = [] (const Component& c) { return var (static_cast<double> (static_cast<const TabComponent&> (c).getTabBarThickness())); },
@@ -76,7 +89,7 @@ const ComponentTypeInfo& TabComponent::getClassTypeInfo()
             .description = "The thickness of the bar across its tabs." });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("selectedTab"),
+            .name = TabComponentIds::selectedTab,
             .type = ComponentProperty::Type::string,
             .getter = [] (const Component& c) { return var (static_cast<const TabComponent&> (c).getTabBar().getSelectedTabId().toString()); },
             .setter = [] (Component& c, const var& v) { static_cast<TabComponent&> (c).getTabBar().setSelectedTab (Identifier (v.toString())); },
@@ -171,6 +184,9 @@ Component* TabComponent::getTabContent (const Identifier& tabId) const
 //==============================================================================
 void TabComponent::setTabBarPlacement (Placement newPlacement)
 {
+    if (placement == newPlacement)
+        return;
+
     placement = newPlacement;
 
     const auto vertical = placement == Placement::left || placement == Placement::right;
@@ -178,12 +194,18 @@ void TabComponent::setTabBarPlacement (Placement newPlacement)
     tabBar.setFlipped (placement == Placement::bottom || placement == Placement::right);
 
     resized();
+    notifyPropertyChanged (TabComponentIds::placement);
 }
 
 void TabComponent::setTabBarThickness (float newThickness)
 {
-    tabBarThickness = jmax (0.0f, newThickness);
+    const auto clamped = jmax (0.0f, newThickness);
+    if (approximatelyEqual (tabBarThickness, clamped))
+        return;
+
+    tabBarThickness = clamped;
     resized();
+    notifyPropertyChanged (TabComponentIds::tabBarThickness);
 }
 
 //==============================================================================
@@ -249,6 +271,7 @@ void TabComponent::tabSelectionChanged (TabBar& bar, const Identifier& tabId)
 {
     ignoreUnused (bar, tabId);
     updatePageVisibility();
+    notifyPropertyChanged (TabComponentIds::selectedTab);
 }
 
 void TabComponent::tabRemoved (TabBar& bar, const Identifier& tabId)
@@ -270,9 +293,7 @@ void TabComponent::tabRemoved (TabBar& bar, const Identifier& tabId)
 
 void TabComponent::componentPropertyChanged (Component& component, const Identifier& name)
 {
-    static const Identifier titleProperty ("title");
-
-    if (name != titleProperty)
+    if (name != TabComponentIds::title)
         return;
 
     for (const auto& page : pages)

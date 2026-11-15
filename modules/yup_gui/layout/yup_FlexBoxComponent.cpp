@@ -25,24 +25,44 @@ namespace yup
 namespace
 {
 
-const StringArray directions { "row", "rowReverse", "column", "columnReverse" };
-const StringArray wraps { "noWrap", "wrap", "wrapReverse" };
-const StringArray justifications { "start", "end", "center", "spaceBetween", "spaceAround", "spaceEvenly" };
-const StringArray flexAlignments { "start", "end", "center", "stretch", "baseline" };
-const StringArray flexSelfAlignments { "auto", "start", "end", "center", "stretch", "baseline" };
+const detail::EnumNames<FlexBox::Direction> flexDirections {
+    { "row", FlexBox::Direction::row },
+    { "rowReverse", FlexBox::Direction::rowReverse },
+    { "column", FlexBox::Direction::column },
+    { "columnReverse", FlexBox::Direction::columnReverse }
+};
 
-template <class EnumType>
-EnumType toFlexEnum (const String& name, const StringArray& names, EnumType fallback)
-{
-    const auto index = names.indexOf (name);
-    return index >= 0 ? static_cast<EnumType> (index) : fallback;
-}
+const detail::EnumNames<FlexBox::Wrap> flexWraps {
+    { "noWrap", FlexBox::Wrap::noWrap },
+    { "wrap", FlexBox::Wrap::wrap },
+    { "wrapReverse", FlexBox::Wrap::wrapReverse }
+};
 
-FlexItem::AlignSelf toFlexAlignSelf (const String& name)
-{
-    const auto index = flexSelfAlignments.indexOf (name);
-    return index > 0 ? static_cast<FlexItem::AlignSelf> (index) : FlexItem::AlignSelf::autoAlign;
-}
+const detail::EnumNames<FlexBox::JustifyContent> flexJustifications {
+    { "start", FlexBox::JustifyContent::flexStart },
+    { "end", FlexBox::JustifyContent::flexEnd },
+    { "center", FlexBox::JustifyContent::center },
+    { "spaceBetween", FlexBox::JustifyContent::spaceBetween },
+    { "spaceAround", FlexBox::JustifyContent::spaceAround },
+    { "spaceEvenly", FlexBox::JustifyContent::spaceEvenly }
+};
+
+const detail::EnumNames<FlexBox::AlignItems> flexAlignments {
+    { "start", FlexBox::AlignItems::flexStart },
+    { "end", FlexBox::AlignItems::flexEnd },
+    { "center", FlexBox::AlignItems::center },
+    { "stretch", FlexBox::AlignItems::stretch },
+    { "baseline", FlexBox::AlignItems::baseline }
+};
+
+const detail::EnumNames<FlexItem::AlignSelf> flexSelfAlignments {
+    { "auto", FlexItem::AlignSelf::autoAlign },
+    { "start", FlexItem::AlignSelf::flexStart },
+    { "end", FlexItem::AlignSelf::flexEnd },
+    { "center", FlexItem::AlignSelf::center },
+    { "stretch", FlexItem::AlignSelf::stretch },
+    { "baseline", FlexItem::AlignSelf::baseline }
+};
 
 } // namespace
 
@@ -50,12 +70,12 @@ FlexItem::AlignSelf toFlexAlignSelf (const String& name)
 
 void FlexBoxComponent::setDirection (FlexBox::Direction newDirection)
 {
-    setProperty (Properties::directionId, directions[static_cast<int> (newDirection)]);
+    setProperty (Properties::directionId, flexDirections.toString (newDirection));
 }
 
 FlexBox::Direction FlexBoxComponent::getDirection() const
 {
-    return toFlexEnum (findProperty (Properties::directionId).toString(), directions, FlexBox::Direction::row);
+    return flexDirections.toEnum (findProperty (Properties::directionId).toString(), FlexBox::Direction::row);
 }
 
 //==============================================================================
@@ -69,33 +89,33 @@ const ComponentTypeInfo& FlexBoxComponent::getClassTypeInfo()
         props.push_back (ComponentProperty {
             .name = Properties::directionId,
             .type = ComponentProperty::Type::enumeration,
-            .defaultValue = directions[0],
+            .defaultValue = flexDirections.names[0],
             .isInherited = false,
-            .enumValues = directions,
+            .enumValues = flexDirections.names,
             .description = "The direction the children are laid out in." });
 
         props.push_back (ComponentProperty {
             .name = Properties::wrapId,
             .type = ComponentProperty::Type::enumeration,
-            .defaultValue = wraps[0],
+            .defaultValue = flexWraps.names[0],
             .isInherited = false,
-            .enumValues = wraps,
+            .enumValues = flexWraps.names,
             .description = "Whether the children wrap onto more lines." });
 
         props.push_back (ComponentProperty {
             .name = Properties::justifyId,
             .type = ComponentProperty::Type::enumeration,
-            .defaultValue = justifications[0],
+            .defaultValue = flexJustifications.names[0],
             .isInherited = false,
-            .enumValues = justifications,
+            .enumValues = flexJustifications.names,
             .description = "How the children are distributed along the main axis." });
 
         props.push_back (ComponentProperty {
             .name = Properties::alignId,
             .type = ComponentProperty::Type::enumeration,
-            .defaultValue = flexAlignments[3],
+            .defaultValue = flexAlignments.names[3],
             .isInherited = false,
-            .enumValues = flexAlignments,
+            .enumValues = flexAlignments.names,
             .description = "How the children are placed on the cross axis." });
 
         return ComponentTypeInfo { Identifier ("FlexBox"), &LayoutComponent::getClassTypeInfo(), std::move (props), {}, []
@@ -119,9 +139,9 @@ void FlexBoxComponent::performLayout (Rectangle<float> area)
     FlexBox flexBox;
 
     flexBox.flexDirection = getDirection();
-    flexBox.flexWrap = toFlexEnum (findProperty (Properties::wrapId).toString(), wraps, FlexBox::Wrap::noWrap);
-    flexBox.justifyContent = toFlexEnum (findProperty (Properties::justifyId).toString(), justifications, FlexBox::JustifyContent::flexStart);
-    flexBox.alignItems = toFlexEnum (findProperty (Properties::alignId).toString(), flexAlignments, FlexBox::AlignItems::stretch);
+    flexBox.flexWrap = flexWraps.toEnum (findProperty (Properties::wrapId).toString(), FlexBox::Wrap::noWrap);
+    flexBox.justifyContent = flexJustifications.toEnum (findProperty (Properties::justifyId).toString(), FlexBox::JustifyContent::flexStart);
+    flexBox.alignItems = flexAlignments.toEnum (findProperty (Properties::alignId).toString(), FlexBox::AlignItems::stretch);
     flexBox.gap = getGap();
 
     for (auto* child : getLayoutChildren())
@@ -132,7 +152,7 @@ void FlexBoxComponent::performLayout (Rectangle<float> area)
         item.flexShrink = jmax (0.0f, getItemNumber (*child, Properties::flexShrinkId));
         item.flexBasis = getItemNumber (*child, Properties::flexBasisId);
         item.order = getItemInteger (*child, Properties::orderId);
-        item.alignSelf = toFlexAlignSelf (getItemString (*child, Properties::alignSelfId));
+        item.alignSelf = flexSelfAlignments.toEnum (getItemString (*child, Properties::alignSelfId), FlexItem::AlignSelf::autoAlign);
         item.margin = getItemMargin (*child);
         item.width = getItemNumber (*child, Properties::preferredWidthId);
         item.height = getItemNumber (*child, Properties::preferredHeightId);

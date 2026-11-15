@@ -95,13 +95,15 @@ public:
         @param property  The name of the property that is written.
         @param text      The expression text.
         @param type      The type of the value, or nothing to probe it from the text.
+        @param isLive    Optional flag set to true when the expression reads dynamic inputs, false when constant.
 
         @returns A failure if the expression does not compile, otherwise ok.
     */
     Result bind (Component& target,
                  const Identifier& property,
                  const String& text,
-                 std::optional<ComponentProperty::Type> type = std::nullopt);
+                 std::optional<ComponentProperty::Type> type = std::nullopt,
+                 bool* isLive = nullptr);
 
     /** Removes the binding on a property, leaving its current value in place.
 
@@ -152,12 +154,18 @@ public:
     /** Re-evaluates every binding, for example after the palette changed. */
     void refreshAll();
 
+    /** Re-evaluates only the bindings that read a role of the palette. */
+    void refreshPaletteBindings();
+
     //==============================================================================
     /** Returns the problems met while evaluating, such as a binding broken by a cycle. */
     const StringArray& getDiagnostics() const noexcept { return diagnostics; }
 
     /** Clears the diagnostics. */
     void clearDiagnostics();
+
+    /** Optional sink notified whenever an evaluation-time problem occurs, such as a cycle. */
+    std::function<void (Component* target, const Identifier& property, const String& message)> onDiagnostic;
 
 private:
     //==============================================================================

@@ -136,15 +136,12 @@ public:
     void removeModel (const String& name);
 
     //==============================================================================
-    /** Returns the problems met by the last load and by the styling of its interface since.
+    /** Returns the problems met by the last load and by the styling or bindings of its interface since.
 
         A failed parse leaves its error as the only entry. Each problem is listed once, with
         the line and column it was written at when known.
     */
     const std::vector<YuiDiagnostic>& getDiagnostics() const noexcept { return diagnostics; }
-
-    /** Returns the source map of the last successful load, or an empty map after a failed load or clear(). */
-    const YuiSourceMap& getSourceMap() const noexcept { return sourceMap; }
 
     /** Returns the builder creating the components, to inspect its bindings. */
     YuiBuilder& getBuilder() noexcept { return builder; }
@@ -181,16 +178,16 @@ private:
     //==============================================================================
     class LoadAction;
 
-    Result loadTree (const DataTree& document, const YuiSourceMap& map);
-    Result buildTree (const DataTree& document, const YuiSourceMap& map);
+    Result loadTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map);
+    Result buildTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map);
+    Result fail (const String& message);
     void resetState();
     Result notifyLoaded (Result result);
-    void report (const YuiSourceMap& map, const YuiDiagnostic& diagnostic);
+    void report (const std::shared_ptr<const YuiSourceMap>& map, const YuiDiagnostic& diagnostic);
 
     YuiBuilder builder;
     DataTree tree;
-    YuiSourceMap sourceMap;
-    YuiSourceMap loadedSourceMap;
+    std::shared_ptr<const YuiSourceMap> sourceMap;
     StyleSheet::Ptr styleSheet;
     std::vector<YuiDiagnostic> diagnostics;
     UndoManager* undoManager = nullptr;

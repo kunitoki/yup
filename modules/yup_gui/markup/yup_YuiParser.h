@@ -85,7 +85,8 @@ public:
         Every `import "path";` is replaced by the blocks of the imported text, recursively, so
         the document holds everything in import order and no `import` element. Each path is
         imported once, the first time it is met, which also makes import cycles harmless.
-        Paths are passed to the resolver as written, so it decides what they are relative to.
+        Nested import paths are normalized and resolved relative to the directory of the file
+        importing them before being passed to @p resolveImport.
 
         @param text           The text to parse.
         @param resolveImport  Returns the text of an imported path.

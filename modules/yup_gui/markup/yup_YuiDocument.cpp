@@ -27,11 +27,10 @@ namespace
 
 std::vector<std::pair<int, DataTree>> findStyleElements (const DataTree& document)
 {
-    static const StringArray types { "style", "rule", "palette", "drawing", "keyframes" };
     std::vector<std::pair<int, DataTree>> found;
 
     for (int i = 0; i < document.getNumChildren(); ++i)
-        if (const auto child = document.getChild (i); types.contains (child.getType().toString()))
+        if (const auto child = document.getChild (i); StyleSheet::isStyleElement (child))
             found.emplace_back (i, child);
 
     return found;
@@ -52,7 +51,14 @@ bool hasSameStyle (const DataTree& a, const DataTree& b)
 
 //==============================================================================
 
-YuiDocument::YuiDocument() = default;
+YuiDocument::YuiDocument()
+{
+    builder.onDiagnostic = [this] (const YuiDiagnostic& diagnostic)
+    {
+        if (! isLoading && lastLoadSucceeded)
+            report (sourceMap, diagnostic);
+    };
+}
 
 YuiDocument::~YuiDocument()
 {
@@ -63,14 +69,12 @@ YuiDocument::~YuiDocument()
 
 Result YuiDocument::loadFromString (const String& text, YuiParser::ImportResolver resolveImport)
 {
-    const auto parsed = resolveImport != nullptr ? YuiParser::parse (text, resolveImport) : YuiParser::parse (text);
+    const auto parsed = YuiParser::parse (text, resolveImport);
 
     if (! parsed.wasOk())
     {
-        sourceMap = {};
-        lastLoadSucceeded = false;
         diagnostics = parsed.diagnostics;
-        return notifyLoaded (Result::fail (diagnostics.front().toString()));
+        return notifyLoaded (fail (diagnostics.front().toString()));
     }
 
     return load (parsed.document, parsed.sourceMap);
@@ -81,7 +85,11 @@ Result YuiDocument::loadFromString (const String& text, YuiParser::ImportResolve
 class YuiDocument::LoadAction final : public UndoableAction
 {
 public:
-    LoadAction (YuiDocument& documentToLoad, DataTree before, YuiSourceMap beforeMap, DataTree after, YuiSourceMap afterMap)
+    LoadAction (YuiDocument& documentToLoad,
+                DataTree before,
+                std::shared_ptr<const YuiSourceMap> beforeMap,
+                DataTree after,
+                std::shared_ptr<const YuiSourceMap> afterMap)
         : document (&documentToLoad)
         , previousTree (std::move (before))
         , previousMap (std::move (beforeMap))
@@ -118,20 +126,22 @@ public:
 private:
     WeakReference<YuiDocument> document;
     DataTree previousTree;
-    YuiSourceMap previousMap;
+    std::shared_ptr<const YuiSourceMap> previousMap;
     DataTree loadedTree;
-    YuiSourceMap loadedMap;
+    std::shared_ptr<const YuiSourceMap> loadedMap;
 };
 
 //==============================================================================
 
 Result YuiDocument::load (const DataTree& document, const YuiSourceMap& map)
 {
+    auto sharedMap = std::make_shared<const YuiSourceMap> (map);
+
     if (undoManager == nullptr || ! undoManager->isEnabled())
-        return loadTree (document, map);
+        return loadTree (document, sharedMap);
 
     // The undo manager performs the load, and keeps it only when it succeeds
-    ReferenceCountedObjectPtr<LoadAction> action (new LoadAction (*this, tree.isValid() ? tree.clone() : DataTree(), loadedSourceMap, document.clone(), map));
+    ReferenceCountedObjectPtr<LoadAction> action (new LoadAction (*this, tree.isValid() ? tree.clone() : DataTree(), sourceMap, document.clone(), std::move (sharedMap)));
 
     undoManager->beginNewTransaction();
     undoManager->perform (action.get());
@@ -139,9 +149,15 @@ Result YuiDocument::load (const DataTree& document, const YuiSourceMap& map)
     return action->result;
 }
 
-Result YuiDocument::loadTree (const DataTree& document, const YuiSourceMap& map)
+Result YuiDocument::loadTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map)
 {
     return notifyLoaded (buildTree (document, map));
+}
+
+Result YuiDocument::fail (const String& message)
+{
+    lastLoadSucceeded = false;
+    return Result::fail (message);
 }
 
 Result YuiDocument::notifyLoaded (Result result)
@@ -154,15 +170,17 @@ Result YuiDocument::notifyLoaded (Result result)
     return result;
 }
 
-void YuiDocument::report (const YuiSourceMap& map, const YuiDiagnostic& diagnostic)
+void YuiDocument::report (const std::shared_ptr<const YuiSourceMap>& map, const YuiDiagnostic& diagnostic)
 {
-    const auto located = map.locate (diagnostic);
-    const auto text = located.toString();
+    const auto located = map != nullptr ? map->locate (diagnostic) : diagnostic;
 
     // Styling reports the same problem again each time a component is restyled
-    const auto isKnown = std::any_of (diagnostics.begin(), diagnostics.end(), [&text] (const YuiDiagnostic& known)
+    const auto isKnown = std::any_of (diagnostics.begin(), diagnostics.end(), [&located] (const YuiDiagnostic& known)
     {
-        return known.toString() == text;
+        return known.line == located.line
+            && known.column == located.column
+            && known.source == located.source
+            && known.message == located.message;
     });
 
     if (isKnown)
@@ -179,7 +197,7 @@ void YuiDocument::report (const YuiSourceMap& map, const YuiDiagnostic& diagnost
     }
 }
 
-Result YuiDocument::buildTree (const DataTree& document, const YuiSourceMap& map)
+Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map)
 {
     const ScopedValueSetter<bool> loading (isLoading, true);
     diagnostics.clear();
@@ -194,10 +212,8 @@ Result YuiDocument::buildTree (const DataTree& document, const YuiSourceMap& map
 
         if (parsed.failed())
         {
-            sourceMap = {};
-            lastLoadSucceeded = false;
             report (map, failure);
-            return Result::fail (diagnostics.back().toString());
+            return fail (diagnostics.back().toString());
         }
 
         sheet = parsed.getReference();
@@ -215,15 +231,12 @@ Result YuiDocument::buildTree (const DataTree& document, const YuiSourceMap& map
 
     if (auto result = builder.build (tree); result.failed())
     {
-        sourceMap = {};
-        lastLoadSucceeded = false;
-
         // Located before the rollback, which detaches the elements the patch added
         for (const auto& diagnostic : builder.getDiagnostics())
             report (map, diagnostic);
 
         // The error that made the build fail is the last one reported
-        const auto failure = map.locate (builder.getDiagnostics().back()).toString();
+        const auto failure = (map != nullptr ? map->locate (builder.getDiagnostics().back()) : builder.getDiagnostics().back()).toString();
 
         // Restoring the same elements lets the next load keep the components still shown
         if (isPatched)
@@ -231,12 +244,11 @@ Result YuiDocument::buildTree (const DataTree& document, const YuiSourceMap& map
         else
             tree = previousTree;
 
-        return Result::fail (failure);
+        return fail (failure);
     }
 
     styleSheet = sheet;
     sourceMap = map;
-    loadedSourceMap = map;
     lastLoadSucceeded = true;
 
     auto& root = *builder.getRoot();
@@ -249,6 +261,10 @@ Result YuiDocument::buildTree (const DataTree& document, const YuiSourceMap& map
     auto& context = *root.getStyleContext();
     context.setComponentResolver (builder.getComponentResolver());
     context.setModelResolver (builder.getModelResolver());
+    context.onPaletteChanged = [this]
+    {
+        builder.getBindings().refreshPaletteBindings();
+    };
     context.onDiagnostic = [this] (const YuiDiagnostic& diagnostic)
     {
         if (lastLoadSucceeded)
@@ -263,8 +279,7 @@ void YuiDocument::resetState()
 {
     builder.clear();
     tree = {};
-    sourceMap = {};
-    loadedSourceMap = {};
+    sourceMap.reset();
     styleSheet = nullptr;
     diagnostics.clear();
     lastLoadSucceeded = false;

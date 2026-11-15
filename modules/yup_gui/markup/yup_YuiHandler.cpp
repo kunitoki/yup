@@ -26,72 +26,64 @@ namespace yup
 namespace
 {
 
-// Splits on the separators outside strings and brackets, dropping empty pieces
-StringArray splitOutsideNesting (const String& text, yup_wchar separator)
+void skipHandlerTrivia (const char* text, int& offset) noexcept
 {
-    StringArray pieces;
-    auto position = text.getCharPointer();
-    auto start = position;
-    yup_wchar quote = 0;
-    int depth = 0;
-
     for (;;)
     {
-        const auto current = position;
-        const auto c = position.getAndAdvance();
+        const auto c = text[offset];
 
-        if (c == 0 || (c == separator && depth == 0 && quote == 0))
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
         {
-            const auto piece = String (start, current).trim();
+            ++offset;
+        }
+        else if (c == '/' && text[offset + 1] == '/')
+        {
+            while (text[offset] != 0 && text[offset] != '\n')
+                ++offset;
+        }
+        else if (c == '/' && text[offset + 1] == '*')
+        {
+            const auto* end = std::strstr (text + offset + 2, "*/");
+            if (end == nullptr)
+                return;
 
-            if (piece.isNotEmpty())
-                pieces.add (piece);
-
-            if (c == 0)
-                break;
-
-            start = position;
+            offset = static_cast<int> (end - text) + 2;
         }
-        else if (quote != 0)
+        else
         {
-            if (c == '\\' && ! position.isEmpty())
-                ++position;
-            else if (c == quote)
-                quote = 0;
-        }
-        else if (c == '"' || c == '\'')
-        {
-            quote = c;
-        }
-        else if (c == '(' || c == '[')
-        {
-            ++depth;
-        }
-        else if ((c == ')' || c == ']') && depth > 0)
-        {
-            --depth;
+            return;
         }
     }
-
-    return pieces;
 }
 
-// Parses `callee (argument, ...)`
-std::optional<YuiHandler::Call> parseCall (const String& text)
+std::optional<YuiHandler::Call> extractHandlerCall (const Expression& expr, char firstChar)
 {
-    const auto open = text.indexOfChar ('(');
+    if (expr.getKind() == Expression::Kind::call && firstChar != '#')
+    {
+        YuiHandler::Call call;
+        call.name = expr.getName();
+        call.arguments.reserve (static_cast<std::size_t> (expr.getNumInputs()));
 
-    if (open <= 0 || ! text.endsWithChar (')'))
-        return std::nullopt;
+        for (int i = 0; i < expr.getNumInputs(); ++i)
+            call.arguments.push_back (expr.getInput (i));
 
-    YuiHandler::Call call;
-    call.callee = text.substring (0, open).trim();
+        return call;
+    }
 
-    if (! call.callee.containsOnly ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_."))
-        return std::nullopt;
+    if (expr.getKind() == Expression::Kind::method && expr.getInput (0).getKind() == Expression::Kind::symbol)
+    {
+        YuiHandler::Call call;
+        call.target = expr.getInput (0).getName();
+        call.name = expr.getName();
+        call.arguments.reserve (static_cast<std::size_t> (expr.getNumInputs() - 1));
 
-    call.arguments = splitOutsideNesting (text.substring (open + 1, text.length() - 1), ',');
-    return call;
+        for (int i = 1; i < expr.getNumInputs(); ++i)
+            call.arguments.push_back (expr.getInput (i));
+
+        return call;
+    }
+
+    return std::nullopt;
 }
 
 } // namespace
@@ -100,19 +92,23 @@ std::optional<YuiHandler::Call> parseCall (const String& text)
 
 ResultValue<YuiHandler> YuiHandler::parse (const String& text)
 {
+    static const String callExpectedError ("expected a call, like action (\"name\") or root.signal()");
+
     YuiHandler handler;
     auto body = text.trim();
 
     if (body.startsWithChar ('('))
     {
         const auto close = body.indexOfChar (')');
-        const auto rest = body.substring (close + 1).trimStart();
+        const auto rest = close >= 0 ? body.substring (close + 1).trimStart() : String();
 
         if (rest.startsWith ("=>"))
         {
             for (const auto& name : StringArray::fromTokens (body.substring (1, close), ",", {}))
             {
                 const auto trimmed = name.trim();
+                if (trimmed.isEmpty())
+                    continue;
 
                 if (handler.argumentNames.contains (trimmed))
                     return ResultValue<YuiHandler>::fail ("the argument '" + trimmed + "' is named twice");
@@ -124,20 +120,59 @@ ResultValue<YuiHandler> YuiHandler::parse (const String& text)
         }
     }
 
-    const auto statements = body.startsWithChar ('{')
-                              ? splitOutsideNesting (body.substring (1, body.length() - 1), ';')
-                              : StringArray (body);
-
-    for (const auto& statement : statements)
+    if (body.startsWithChar ('{'))
     {
-        auto call = parseCall (statement);
+        if (! body.endsWithChar ('}'))
+            return ResultValue<YuiHandler>::fail (callExpectedError);
 
-        if (! call.has_value())
-            return ResultValue<YuiHandler>::fail ("expected a call, like action (\"name\") or root.signal()");
+        const auto block = body.substring (1, body.length() - 1);
+        const auto* utf8 = block.toRawUTF8();
+        int offset = 0;
 
-        handler.calls.push_back (std::move (*call));
+        for (;;)
+        {
+            skipHandlerTrivia (utf8, offset);
+
+            while (utf8[offset] == ';')
+            {
+                ++offset;
+                skipHandlerTrivia (utf8, offset);
+            }
+
+            if (utf8[offset] == 0)
+                break;
+
+            const auto firstChar = utf8[offset];
+            const auto parsed = Expression::parseExpression (StringRef (CharPointer_UTF8 (utf8)), offset);
+
+            if (parsed.failed() || (utf8[offset] != ';' && utf8[offset] != 0))
+                return ResultValue<YuiHandler>::fail (callExpectedError);
+
+            auto call = extractHandlerCall (parsed.getReference(), firstChar);
+            if (! call.has_value())
+                return ResultValue<YuiHandler>::fail (callExpectedError);
+
+            handler.calls.push_back (std::move (*call));
+        }
+
+        return ResultValue<YuiHandler>::ok (std::move (handler));
     }
 
+    if (body.isEmpty())
+        return ResultValue<YuiHandler>::fail (callExpectedError);
+
+    const auto* utf8 = body.toRawUTF8();
+    int offset = 0;
+    const auto parsed = Expression::parseExpression (StringRef (CharPointer_UTF8 (utf8)), offset);
+
+    if (parsed.failed() || utf8[offset] != 0)
+        return ResultValue<YuiHandler>::fail (callExpectedError);
+
+    auto call = extractHandlerCall (parsed.getReference(), utf8[0]);
+    if (! call.has_value())
+        return ResultValue<YuiHandler>::fail (callExpectedError);
+
+    handler.calls.push_back (std::move (*call));
     return ResultValue<YuiHandler>::ok (std::move (handler));
 }
 

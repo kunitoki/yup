@@ -184,13 +184,13 @@ See [Handlers and actions](yui-documents.md#handlers-and-actions).
 
 ## Imports
 
-`import "path";` inserts the blocks of another file where it is written. Each
-path is imported once, the first time it is met, so shared files can be
-imported from several places and cycles are harmless. What a path is relative
-to is up to the loader: `YuiLoader` resolves every path from the folder of the
-main file, or by name among embedded resources (see [Hot
-reloading](yui-hot-reload.md)), while `YuiDocument::loadFromString` asks a
-callback.
+`import "path";` inserts the blocks of another file where it is written. Nested
+imports resolve relative to the directory of the file importing them, and each
+resolved path is imported once, the first time it is met, so shared files can
+be imported from several places and cycles are harmless. `YuiLoader` resolves
+the normalized path from the folder of the main file, or by name among embedded
+resources (see [Hot reloading](yui-hot-reload.md)), while
+`YuiDocument::loadFromString` passes it to its import callback.
 
 ## Errors
 

@@ -529,3 +529,67 @@ TEST_F (YuiDocumentTests, DrawingsReadBindingProviderModelsDirectly)
     params.beginTransaction().setProperty ("cutoff", 0.1);
     EXPECT_TRUE (document.getDiagnostics().empty());
 }
+
+TEST_F (YuiDocumentTests, ReportsBindingCyclesDuringLoadAndAtRuntimeWithSourceLocations)
+{
+    {
+        YuiDocument document;
+        const auto result = document.loadFromString ("Component {\n"
+                                                     "    Slider { id: a; minValue: 0; maxValue: 100; value: b.value + 1; }\n"
+                                                     "    Slider { id: b; minValue: 0; maxValue: 100; value: a.value + 1; }\n"
+                                                     "}");
+
+        ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+        ASSERT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+        EXPECT_TRUE (document.getDiagnostics().front().line == 2 || document.getDiagnostics().front().line == 3);
+        EXPECT_TRUE (document.getDiagnostics().front().toString().contains ("Binding cycle detected"));
+    }
+
+    struct Recorder final : YuiDocument::Listener
+    {
+        void documentLoaded (YuiDocument&, const Result&) override {}
+
+        void documentDiagnosed (YuiDocument&, const YuiDiagnostic& diagnostic) override
+        {
+            diagnosed.add (diagnostic.toString());
+        }
+
+        StringArray diagnosed;
+    };
+
+    YuiDocument document;
+    Recorder recorder;
+    document.addListener (&recorder);
+
+    const auto result = document.loadFromString ("Component {\n"
+                                                 "    ToggleButton { id: gate; checked: false; }\n"
+                                                 "    Slider { id: a; minValue: 0; maxValue: 100; value: gate.checked ? b.value + 1 : 0; }\n"
+                                                 "    Slider { id: b; minValue: 0; maxValue: 100; value: a.value + 1; }\n"
+                                                 "}");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+
+    auto* gate = document.findById<ToggleButton> ("gate");
+    ASSERT_NE (gate, nullptr);
+    gate->setToggleState (true, dontSendNotification);
+
+    ASSERT_EQ (recorder.diagnosed.size(), 1);
+    EXPECT_TRUE (recorder.diagnosed[0].contains ("Binding cycle detected"));
+    ASSERT_EQ (document.getDiagnostics().size(), 1u);
+    EXPECT_TRUE (document.getDiagnostics().front().line == 3 || document.getDiagnostics().front().line == 4);
+
+    document.removeListener (&recorder);
+}
+
+TEST_F (YuiDocumentTests, LoadFromStringWithoutImportResolverFailsWhenDocumentContainsImport)
+{
+    YuiDocument document;
+    const auto result = document.loadFromString ("import \"missing.yui\";\nComponent { }");
+
+    EXPECT_TRUE (result.failed());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u);
+    EXPECT_EQ (document.getDiagnostics().front().toString(), "1:1: Can't import 'missing.yui'");
+}
+
+

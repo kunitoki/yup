@@ -24,6 +24,20 @@ namespace yup
 
 //==============================================================================
 
+namespace
+{
+
+struct TextEditorIds
+{
+    static inline const Identifier text { "text" };
+    static inline const Identifier readOnly { "readOnly" };
+    static inline const Identifier multiLine { "multiLine" };
+};
+
+} // namespace
+
+//==============================================================================
+
 const Identifier TextEditor::Style::backgroundColorId = "textEditorBackground";
 const Identifier TextEditor::Style::textColorId = "textEditorText";
 const Identifier TextEditor::Style::caretColorId = "textEditorCaret";
@@ -54,21 +68,21 @@ const ComponentTypeInfo& TextEditor::getClassTypeInfo()
         props.push_back (makeNumberProperty (Identifier ("focusedOutlineWidth"), Style::focusedOutlineWidthId, 2.0, "The outline width when focused."));
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("text"),
+            .name = TextEditorIds::text,
             .type = ComponentProperty::Type::string,
             .getter = [] (const Component& c) { return var (static_cast<const TextEditor&> (c).getText()); },
             .setter = [] (Component& c, const var& v) { static_cast<TextEditor&> (c).setText (v.toString()); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("readOnly"),
+            .name = TextEditorIds::readOnly,
             .type = ComponentProperty::Type::boolean,
             .getter = [] (const Component& c) { return var (static_cast<const TextEditor&> (c).isReadOnly()); },
             .setter = [] (Component& c, const var& v) { static_cast<TextEditor&> (c).setReadOnly (static_cast<bool> (v)); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("multiLine"),
+            .name = TextEditorIds::multiLine,
             .type = ComponentProperty::Type::boolean,
             .getter = [] (const Component& c) { return var (static_cast<const TextEditor&> (c).isMultiLine()); },
             .setter = [] (Component& c, const var& v) { static_cast<TextEditor&> (c).setMultiLine (static_cast<bool> (v)); },
@@ -135,12 +149,16 @@ void TextEditor::setText (String newText, NotificationType notification)
 
 void TextEditor::sendTextChanged (NotificationType notification)
 {
+    const BailOutChecker bailOutChecker (this);
+
+    notifyPropertyChanged (TextEditorIds::text);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
     sendChangeNotification (notification, [this]
     {
         if (onTextChange)
             onTextChange();
-
-        notifyPropertyChanged (Identifier ("text"));
     });
 }
 
@@ -177,6 +195,7 @@ void TextEditor::setMultiLine (bool shouldBeMultiLine)
         multiLine = shouldBeMultiLine;
         needsUpdate = true;
         updateTextInputRectIfActive();
+        notifyPropertyChanged (TextEditorIds::multiLine);
         repaint();
     }
 }
@@ -206,6 +225,8 @@ void TextEditor::setReadOnly (bool shouldBeReadOnly)
             requestTextInput();
         else
             relinquishTextInput();
+
+        notifyPropertyChanged (TextEditorIds::readOnly);
     }
 }
 

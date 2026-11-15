@@ -839,6 +839,53 @@ TEST_F (StyleContextTests, AncestorStateClassAndIdChangesRestyleCombinatorDescen
     EXPECT_DOUBLE_EQ (glow (icon), 6.0);
 }
 
+TEST_F (StyleContextTests, FocusWithinAndActiveRestyleAncestorsAndSiblings)
+{
+    Component root ("root");
+    Component row ("row");
+    Component input ("input");
+    Component icon ("icon");
+    icon.addStyleClass (Identifier ("icon"));
+
+    root.addAndMakeVisible (row);
+    row.addAndMakeVisible (input);
+    row.addAndMakeVisible (icon);
+
+    attach (root, R"yui(
+        style {
+            #row { glow: 1; }
+            #row:focus-within { glow: 10; }
+            .icon { glow: 2; }
+            #row:focus-within .icon { glow: 20; }
+            #input:active { glow: 30; }
+        })yui");
+
+    EXPECT_DOUBLE_EQ (glow (row), 1.0);
+    EXPECT_DOUBLE_EQ (glow (icon), 2.0);
+
+    ComponentTestHelper<StyleContext>::triggerFocusGained (input);
+    restyle (root);
+    EXPECT_TRUE (input.hasFocusWithin());
+    EXPECT_TRUE (row.hasFocusWithin());
+    EXPECT_TRUE (root.hasFocusWithin());
+    EXPECT_DOUBLE_EQ (glow (row), 10.0);
+    EXPECT_DOUBLE_EQ (glow (icon), 20.0);
+
+    ComponentTestHelper<StyleContext>::triggerFocusLost (input);
+    restyle (root);
+    EXPECT_FALSE (row.hasFocusWithin());
+    EXPECT_DOUBLE_EQ (glow (row), 1.0);
+    EXPECT_DOUBLE_EQ (glow (icon), 2.0);
+
+    ComponentTestHelper<StyleContext>::triggerMouseDown (input, MouseEvent {});
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (input), 30.0);
+
+    ComponentTestHelper<StyleContext>::triggerMouseUp (input, MouseEvent {});
+    restyle (root);
+    EXPECT_TRUE (input.findProperty (Identifier ("glow")).isVoid());
+}
+
 TEST_F (StyleContextTests, DetachingAChildStopsItsAnimationsAndClearsCachedState)
 {
     Component root ("root");
@@ -879,3 +926,46 @@ TEST_F (StyleContextTests, DetachingAChildStopsItsAnimationsAndClearsCachedState
     root.removeChildComponent (second);
     second->~Component();
 }
+
+TEST_F (StyleContextTests, ComponentSetPaletteMarksSubtreeDirtyAndRefreshesPaletteRules)
+{
+    Component root ("root");
+    Component section ("section");
+    Slider child (Slider::LinearHorizontal);
+    child.addStyleClass (Identifier ("themed"));
+    section.addAndMakeVisible (child);
+    root.addAndMakeVisible (section);
+
+    attach (root, "style { .themed { thumbColor: palette.accent; } }");
+
+    ThemePalette custom;
+    custom.setColor (ThemePalette::Role::accent, Colors::magenta);
+    section.setPalette (custom);
+
+    restyle (root);
+    EXPECT_EQ (VariantConverter<Color>::fromVar (child.findProperty (Identifier ("thumbColor"))), Colors::magenta);
+}
+
+TEST_F (StyleContextTests, NestedStylesheetReleasesOuterComputedValuesAndRestoresOnRemoval)
+{
+    Component root ("root");
+    Component inner ("inner");
+    Slider slider (Slider::LinearHorizontal);
+    inner.addAndMakeVisible (slider);
+    root.addAndMakeVisible (inner);
+
+    attach (root, "style { Slider { trackWidth: 14; minValue: 10; } }");
+    EXPECT_DOUBLE_EQ (static_cast<double> (slider.findProperty (Identifier ("trackWidth"))), 14.0);
+    EXPECT_DOUBLE_EQ (slider.getMinimum(), 10.0);
+
+    attach (inner, "style { Slider { thumbColor: #ff0000; } }");
+    EXPECT_EQ (VariantConverter<Color>::fromVar (slider.findProperty (Identifier ("thumbColor"))), Color (0xffff0000));
+    EXPECT_NE (static_cast<double> (slider.findProperty (Identifier ("trackWidth"))), 14.0);
+    EXPECT_DOUBLE_EQ (slider.getMinimum(), 0.0);
+
+    inner.setStyleSheet (nullptr);
+    restyle (root);
+    EXPECT_DOUBLE_EQ (static_cast<double> (slider.findProperty (Identifier ("trackWidth"))), 14.0);
+    EXPECT_DOUBLE_EQ (slider.getMinimum(), 10.0);
+}
+

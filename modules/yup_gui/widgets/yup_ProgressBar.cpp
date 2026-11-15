@@ -22,6 +22,17 @@
 namespace yup
 {
 
+namespace
+{
+
+struct ProgressBarIds
+{
+    static inline const Identifier progress { "progress" };
+    static inline const Identifier indeterminate { "indeterminate" };
+};
+
+} // namespace
+
 //==============================================================================
 const Identifier ProgressBar::Style::backgroundColorId { "progressBarBackground" };
 const Identifier ProgressBar::Style::foregroundColorId { "progressBarForeground" };
@@ -39,14 +50,14 @@ const ComponentTypeInfo& ProgressBar::getClassTypeInfo()
         props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, {}, "The corner radius, unset for a pill."));
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("progress"),
+            .name = ProgressBarIds::progress,
             .type = ComponentProperty::Type::number,
             .getter = [] (const Component& c) { return var (static_cast<const ProgressBar&> (c).getProgress()); },
             .setter = [] (Component& c, const var& v) { static_cast<ProgressBar&> (c).setProgress (static_cast<double> (v)); },
             .isStyleable = false });
 
         props.push_back (ComponentProperty {
-            .name = Identifier ("indeterminate"),
+            .name = ProgressBarIds::indeterminate,
             .type = ComponentProperty::Type::boolean,
             .getter = [] (const Component& c) { return var (static_cast<const ProgressBar&> (c).isIndeterminate()); },
             .isStyleable = false });
@@ -77,10 +88,12 @@ ProgressBar::~ProgressBar()
 //==============================================================================
 void ProgressBar::setProgress (double newProgress, NotificationType notification)
 {
+    const bool wasIndeterminate = indeterminate.get();
+    const double oldProgress = currentProgress.get();
+
     // Check if entering indeterminate mode
     if (newProgress < 0.0)
     {
-        const bool wasIndeterminate = indeterminate.get();
         indeterminate.set (true);
         currentProgress.set (-1.0);
 
@@ -90,21 +103,51 @@ void ProgressBar::setProgress (double newProgress, NotificationType notification
             lastAnimationTime = Time::getCurrentTime();
         }
 
+        const BailOutChecker bailOutChecker (this);
+
+        if (! approximatelyEqual (oldProgress, -1.0))
+        {
+            notifyPropertyChanged (ProgressBarIds::progress);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
+        if (! wasIndeterminate)
+        {
+            notifyPropertyChanged (ProgressBarIds::indeterminate);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
         updateProgress (-1.0, notification);
         return;
     }
 
     // Normal progress mode - clamp to valid range
     newProgress = jlimit (0.0, 1.0, newProgress);
-
-    const bool wasIndeterminate = indeterminate.get();
     indeterminate.set (false);
-
-    const double oldProgress = currentProgress.get();
     currentProgress.set (newProgress);
 
-    if (wasIndeterminate || ! approximatelyEqual (oldProgress, newProgress))
+    const bool progressDidChange = ! approximatelyEqual (oldProgress, newProgress);
+
+    if (wasIndeterminate || progressDidChange)
     {
+        const BailOutChecker bailOutChecker (this);
+
+        if (progressDidChange)
+        {
+            notifyPropertyChanged (ProgressBarIds::progress);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
+        if (wasIndeterminate)
+        {
+            notifyPropertyChanged (ProgressBarIds::indeterminate);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
         updateProgress (newProgress, notification);
     }
 }

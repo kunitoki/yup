@@ -261,6 +261,9 @@ void StyleContext::refresh (double elapsedSeconds)
         {
             lastPaletteGeneration = generation;
             markPaletteDependentDirty (root);
+
+            if (onPaletteChanged != nullptr)
+                onPaletteChanged();
         }
     }
 
@@ -481,12 +484,15 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
 
         bool changed = styleState->clearComputedValues();
         changed |= styleState->clearAnimatedValues();
-        changed |= styleState->setStylePalette (std::nullopt);
+        const bool paletteChanged = styleState->setStylePalette (std::nullopt);
+        changed |= paletteChanged;
         changed |= applyEffects (component);
         styleState->setPaletteDependent (false);
         clearCacheValues (cache);
 
-        if (changed)
+        if (paletteChanged && component.palette == nullptr)
+            component.sendPaletteChanged();
+        else if (changed)
             component.repaint();
 
         for (int i = 0; i < previous.size(); ++i)
@@ -507,6 +513,7 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     static const Identifier transitionDeclaration ("transition");
 
     bool changed = false;
+    bool paletteChanged = false;
     bool layoutChanged = false;
     bool paletteDependent = false;
     Array<Identifier> written;
@@ -520,12 +527,14 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
         if (palette == nullptr)
             report (paletteDeclaration, "Unknown palette '" + name + "'");
         else
-            changed |= state.setStylePalette (*palette);
+            paletteChanged = state.setStylePalette (*palette);
     }
     else
     {
-        changed |= state.setStylePalette (std::nullopt);
+        paletteChanged = state.setStylePalette (std::nullopt);
     }
+
+    changed |= paletteChanged;
 
     // The drawing comes next, the properties it declares type the declarations setting them
     const DrawingStyle* drawing = nullptr;
@@ -630,7 +639,11 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     changed |= applyEffects (component, &paletteDependent);
     state.setPaletteDependent (paletteDependent);
 
-    if (changed)
+    if (paletteChanged && component.palette == nullptr)
+    {
+        component.sendPaletteChanged();
+    }
+    else if (changed)
     {
         component.styleChanged();
         component.repaint();
@@ -672,8 +685,11 @@ bool StyleContext::evaluate (Component& component,
 
         entry->expression = std::move (compiled.getReference());
 
+        static const Identifier paletteProperty ("palette");
+
         for (const auto& dep : entry->expression->getDependencies())
-            entry->dependencies.push_back ({ dep.component, dep.provider, dep.property });
+            if (dep.component != &component || dep.property != paletteProperty)
+                entry->dependencies.push_back ({ dep.component, dep.provider, dep.property });
 
         addDependencies (entry->dependencies);
     }
@@ -1218,6 +1234,12 @@ void StyleContext::forgetComponent (Component& component)
     for (int i = 0; i < component.getNumChildComponents(); ++i)
         if (auto* child = component.getChildComponent (i))
             forgetComponent (*child);
+}
+
+void StyleContext::releaseSubtree (Component& component)
+{
+    clearSubtree (component);
+    forgetComponent (component);
 }
 
 void StyleContext::clearSubtree (Component& component)

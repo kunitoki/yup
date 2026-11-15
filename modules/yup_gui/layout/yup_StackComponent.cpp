@@ -25,30 +25,12 @@ namespace yup
 namespace
 {
 
-const StringArray stackAlignments { "stretch", "start", "center", "end" };
-
-StackLayout::Align toStackAlign (const String& name, StackLayout::Align fallback)
-{
-    const auto index = stackAlignments.indexOf (name);
-    return index >= 0 ? static_cast<StackLayout::Align> (index + 1) : fallback;
-}
-
-StackLayout::Align toStackSelfAlign (const String& name)
-{
-    if (name == "start")
-        return StackLayout::Align::start;
-
-    if (name == "end")
-        return StackLayout::Align::end;
-
-    if (name == "center")
-        return StackLayout::Align::center;
-
-    if (name == "stretch")
-        return StackLayout::Align::stretch;
-
-    return StackLayout::Align::automatic;
-}
+const detail::EnumNames<StackLayout::Align> stackAlignments {
+    { "stretch", StackLayout::Align::stretch },
+    { "start", StackLayout::Align::start },
+    { "center", StackLayout::Align::center },
+    { "end", StackLayout::Align::end }
+};
 
 } // namespace
 
@@ -63,17 +45,17 @@ const ComponentTypeInfo& StackComponent::getClassTypeInfo()
         props.push_back (ComponentProperty {
             .name = Properties::justifyId,
             .type = ComponentProperty::Type::enumeration,
-            .defaultValue = stackAlignments[0],
+            .defaultValue = stackAlignments.names[0],
             .isInherited = false,
-            .enumValues = stackAlignments,
+            .enumValues = stackAlignments.names,
             .description = "How the children that don't align themselves are placed horizontally." });
 
         props.push_back (ComponentProperty {
             .name = Properties::alignId,
             .type = ComponentProperty::Type::enumeration,
-            .defaultValue = stackAlignments[0],
+            .defaultValue = stackAlignments.names[0],
             .isInherited = false,
-            .enumValues = stackAlignments,
+            .enumValues = stackAlignments.names,
             .description = "How the children that don't align themselves are placed vertically." });
 
         return ComponentTypeInfo { Identifier ("Stack"), &LayoutComponent::getClassTypeInfo(), std::move (props), {}, []
@@ -96,8 +78,8 @@ void StackComponent::performLayout (Rectangle<float> area)
 {
     StackLayout stack;
 
-    stack.alignX = toStackAlign (findProperty (Properties::justifyId).toString(), StackLayout::Align::stretch);
-    stack.alignY = toStackAlign (findProperty (Properties::alignId).toString(), StackLayout::Align::stretch);
+    stack.alignX = stackAlignments.toEnum (findProperty (Properties::justifyId).toString(), StackLayout::Align::stretch);
+    stack.alignY = stackAlignments.toEnum (findProperty (Properties::alignId).toString(), StackLayout::Align::stretch);
 
     for (auto* child : getLayoutChildren())
     {
@@ -105,8 +87,8 @@ void StackComponent::performLayout (Rectangle<float> area)
 
         item.width = getItemNumber (*child, Properties::preferredWidthId);
         item.height = getItemNumber (*child, Properties::preferredHeightId);
-        item.alignX = toStackSelfAlign (getItemString (*child, Properties::justifySelfId));
-        item.alignY = toStackSelfAlign (getItemString (*child, Properties::alignSelfId));
+        item.alignX = stackAlignments.toEnum (getItemString (*child, Properties::justifySelfId), StackLayout::Align::automatic);
+        item.alignY = stackAlignments.toEnum (getItemString (*child, Properties::alignSelfId), StackLayout::Align::automatic);
         item.margin = getItemMargin (*child);
 
         stack.items.add (item);

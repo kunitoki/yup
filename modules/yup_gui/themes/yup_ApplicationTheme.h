@@ -147,6 +147,19 @@ public:
     */
     std::optional<Color> findColor (const Component& component, const Identifier& colorId) const;
 
+    /** Returns the theme default or palette-derived color for @p colorId without checking @p component's
+        own property or style store.
+
+        Explicit colors set with ApplicationTheme::setColor() take precedence over palette colors mapped
+        from @p component's closest Component::findPalette() or this theme's palette.
+
+        @param component     The component used to locate any scoped palette.
+        @param colorId       The identifier for the color to retrieve.
+
+        @return The theme or palette color, or std::nullopt if none is registered.
+    */
+    std::optional<Color> findDefaultColor (const Component& component, const Identifier& colorId) const;
+
     /** Sets a color in this theme.
 
         Colors set this way take precedence over the colors derived from the palette, and are kept when the

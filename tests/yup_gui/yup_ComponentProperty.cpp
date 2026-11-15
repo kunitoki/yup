@@ -35,10 +35,19 @@ protected:
             ignoreUnused (component);
             ++callCount;
             lastName = name;
+            names.add (name);
+        }
+
+        void reset()
+        {
+            callCount = 0;
+            lastName = {};
+            names.clear();
         }
 
         int callCount = 0;
         Identifier lastName;
+        Array<Identifier> names;
     };
 
     static const ComponentProperty* findByName (const std::vector<const ComponentProperty*>& properties, const Identifier& name)
@@ -307,6 +316,30 @@ TEST_F (ComponentPropertyTest, SetColorNotifiesListener)
     c.removeComponentListener (&listener);
 }
 
+TEST_F (ComponentPropertyTest, SetColorOnDescriptorMapsStorageKeyAndNotifiesPropertyName)
+{
+    RecordingListener listener;
+    Slider slider (Slider::LinearHorizontal);
+    slider.addComponentListener (&listener);
+
+    slider.setColor (Slider::Style::thumbColorId, Colors::magenta);
+
+    EXPECT_EQ (listener.callCount, 1);
+    EXPECT_EQ (listener.lastName, Identifier ("thumbColor"));
+    EXPECT_EQ (slider.getColor (Slider::Style::thumbColorId), Colors::magenta);
+    EXPECT_EQ (slider.getColor (Identifier ("thumbColor")), Colors::magenta);
+    EXPECT_EQ (slider.findColor (Identifier ("thumbColor")), Colors::magenta);
+    EXPECT_EQ (VariantConverter<Color>::fromVar (slider.getProperty (Identifier ("thumbColor"))), Colors::magenta);
+
+    slider.setColor (Identifier ("thumbColor"), std::nullopt);
+
+    EXPECT_EQ (listener.callCount, 2);
+    EXPECT_EQ (listener.lastName, Identifier ("thumbColor"));
+    EXPECT_FALSE (slider.getColor (Slider::Style::thumbColorId).has_value());
+
+    slider.removeComponentListener (&listener);
+}
+
 // =============================================================================
 // ComponentTypeInfo
 // =============================================================================
@@ -433,4 +466,223 @@ TEST_F (ComponentPropertyTest, TypeInfoFlattenedLookupOverridesBaseAndSurvivesMo
     EXPECT_EQ (movedAssign.findProperty (Identifier ("accent")), &movedAssign.getOwnProperties()[1]);
     EXPECT_EQ (movedAssign.findPropertyByStorageKey (Identifier ("customAccentKey")), &movedAssign.getOwnProperties()[1]);
     EXPECT_DOUBLE_EQ (static_cast<double> (movedAssign.findProperty (Identifier ("opacity"))->defaultValue), 0.5);
+}
+
+TEST_F (ComponentPropertyTest, AllWritableStateBackedPropertiesNotifyListeners)
+{
+    const ComponentTypeInfo* const types[] = {
+        &Component::getClassTypeInfo(),
+        &TextButton::getClassTypeInfo(),
+        &ToggleButton::getClassTypeInfo(),
+        &SwitchButton::getClassTypeInfo(),
+        &Label::getClassTypeInfo(),
+        &Slider::getClassTypeInfo(),
+        &ComboBox::getClassTypeInfo(),
+        &TextEditor::getClassTypeInfo(),
+        &ProgressBar::getClassTypeInfo(),
+        &ScrollBar::getClassTypeInfo(),
+        &ListBox::getClassTypeInfo(),
+        &Viewport::getClassTypeInfo(),
+        &TabComponent::getClassTypeInfo(),
+        &LayoutComponent::getClassTypeInfo(),
+        &GridComponent::getClassTypeInfo()
+    };
+
+    for (const auto* typeInfo : types)
+    {
+        auto instance = typeInfo->createInstance();
+        ASSERT_NE (instance, nullptr) << typeInfo->getTypeName().toString();
+
+        Component pageOne;
+        Component pageTwo;
+        if (auto* tabs = dynamic_cast<TabComponent*> (instance.get()))
+        {
+            tabs->addTab (Identifier ("one"), "One", pageOne);
+            tabs->addTab (Identifier ("two"), "Two", pageTwo);
+        }
+
+        RecordingListener listener;
+        instance->addComponentListener (&listener);
+
+        for (const auto& property : typeInfo->getOwnProperties())
+        {
+            if (! property.isStateBacked() || property.isReadOnly())
+                continue;
+
+            const auto current = property.getter (*instance);
+            var nextValue;
+
+            switch (property.type)
+            {
+                case ComponentProperty::Type::boolean:
+                    nextValue = ! static_cast<bool> (current);
+                    break;
+
+                case ComponentProperty::Type::number:
+                    nextValue = approximatelyEqual (static_cast<double> (current), 0.5) ? var (0.75) : var (0.5);
+                    break;
+
+                case ComponentProperty::Type::integer:
+                    nextValue = static_cast<int> (current) == 1 ? var (0) : var (1);
+                    break;
+
+                case ComponentProperty::Type::string:
+                    nextValue = property.name == Identifier ("selectedTab") ? var ("two") : var ("updated");
+                    break;
+
+                case ComponentProperty::Type::enumeration:
+                    ASSERT_GE (property.enumValues.size(), 2) << property.name.toString();
+                    nextValue = property.enumValues[current.toString() == property.enumValues[0] ? 1 : 0];
+                    break;
+
+                case ComponentProperty::Type::array:
+                {
+                    Array<var> elements;
+                    elements.add ("Alpha");
+                    elements.add ("Beta");
+                    nextValue = elements;
+                    break;
+                }
+
+                default:
+                    FAIL() << "Unhandled writable state-backed property type on " << typeInfo->getTypeName().toString() << "." << property.name.toString();
+            }
+
+            listener.reset();
+            instance->setProperty (property.name, nextValue);
+
+            EXPECT_TRUE (listener.names.contains (property.name))
+                << typeInfo->getTypeName().toString() << "." << property.name.toString() << " did not notify on change";
+        }
+
+        instance->removeComponentListener (&listener);
+    }
+}
+
+TEST_F (ComponentPropertyTest, StateBackedMutatorsNotifyEvenWithDontSendNotification)
+{
+    RecordingListener listener;
+
+    {
+        Component component ("initial");
+        component.setBounds (1.0f, 2.0f, 30.0f, 40.0f);
+        component.addComponentListener (&listener);
+
+        // Changing only x must not emit spurious y/width/height notifications.
+        component.setBounds (10.0f, 2.0f, 30.0f, 40.0f);
+        ASSERT_EQ (listener.names.size(), 1);
+        EXPECT_EQ (listener.names[0], Identifier ("x"));
+
+        listener.reset();
+        component.setComponentID ("renamed");
+        EXPECT_TRUE (listener.names.contains (Identifier ("id")));
+
+        component.removeComponentListener (&listener);
+    }
+
+    {
+        Slider slider (Slider::TwoValueHorizontal);
+        slider.setRange (0.0, 10.0, 0.0);
+        slider.addComponentListener (&listener);
+
+        listener.reset();
+        slider.setValue (5.0, dontSendNotification);
+        EXPECT_TRUE (listener.names.contains (Identifier ("value")));
+        EXPECT_TRUE (listener.names.contains (Identifier ("normalized")));
+
+        // Changing the range while value stays inside it still shifts normalized.
+        listener.reset();
+        slider.setRange (0.0, 20.0, 0.0);
+        EXPECT_TRUE (listener.names.contains (Identifier ("maximum")));
+        EXPECT_TRUE (listener.names.contains (Identifier ("normalized")));
+
+        listener.reset();
+        slider.setMinValue (2.0, dontSendNotification, false);
+        EXPECT_TRUE (listener.names.contains (Identifier ("minValue")));
+
+        listener.reset();
+        slider.setMaxValue (8.0, dontSendNotification, false);
+        EXPECT_TRUE (listener.names.contains (Identifier ("maxValue")));
+
+        slider.removeComponentListener (&listener);
+    }
+
+    {
+        Label label;
+        label.addComponentListener (&listener);
+        listener.reset();
+        label.setText ("quiet", dontSendNotification);
+        EXPECT_TRUE (listener.names.contains (Identifier ("text")));
+        label.removeComponentListener (&listener);
+    }
+
+    {
+        TextEditor editor;
+        editor.addComponentListener (&listener);
+        listener.reset();
+        editor.setText ("quiet", dontSendNotification);
+        EXPECT_TRUE (listener.names.contains (Identifier ("text")));
+        editor.removeComponentListener (&listener);
+    }
+
+    {
+        ComboBox combo;
+        combo.setItems ({ "One", "Two" }, dontSendNotification);
+        combo.addComponentListener (&listener);
+
+        listener.reset();
+        combo.setSelectedId (2, dontSendNotification);
+        EXPECT_TRUE (listener.names.contains (Identifier ("selectedId")));
+        EXPECT_TRUE (listener.names.contains (Identifier ("selectedIndex")));
+        EXPECT_TRUE (listener.names.contains (Identifier ("text")));
+
+        combo.removeComponentListener (&listener);
+    }
+
+    {
+        ListBox listBox;
+        listBox.setItems ({ "One", "Two" });
+        listBox.addComponentListener (&listener);
+
+        listener.reset();
+        listBox.selectRow (1, false, dontSendNotification);
+        EXPECT_TRUE (listener.names.contains (Identifier ("selectedRow")));
+
+        listener.reset();
+        listBox.deselectAllRows (dontSendNotification);
+        EXPECT_TRUE (listener.names.contains (Identifier ("selectedRow")));
+
+        listBox.removeComponentListener (&listener);
+    }
+
+    {
+        ProgressBar bar;
+        bar.addComponentListener (&listener);
+
+        listener.reset();
+        bar.setProgress (0.4, dontSendNotification);
+        EXPECT_TRUE (listener.names.contains (Identifier ("progress")));
+
+        listener.reset();
+        bar.setProgress (-1.0, dontSendNotification);
+        EXPECT_TRUE (listener.names.contains (Identifier ("progress")));
+        EXPECT_TRUE (listener.names.contains (Identifier ("indeterminate")));
+
+        bar.removeComponentListener (&listener);
+    }
+
+    {
+        TabComponent tabs;
+        Component firstPage;
+        Component secondPage;
+        tabs.addTab (Identifier ("first"), "First", firstPage);
+        tabs.addTab (Identifier ("second"), "Second", secondPage);
+        tabs.addComponentListener (&listener);
+
+        listener.reset();
+        tabs.getTabBar().setSelectedTab (Identifier ("second"), dontSendNotification);
+        EXPECT_TRUE (listener.names.contains (Identifier ("selectedTab")));
+
+        tabs.removeComponentListener (&listener);
+    }
 }

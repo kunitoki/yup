@@ -46,7 +46,8 @@ void BindingGraph::setModelResolver (DrawingScope::ModelResolver resolver)
 Result BindingGraph::bind (Component& target,
                            const Identifier& property,
                            const String& text,
-                           std::optional<ComponentProperty::Type> type)
+                           std::optional<ComponentProperty::Type> type,
+                           bool* isLive)
 {
     auto compiled = PropertyExpression::compile (target, text, type, componentResolver, modelResolver);
 
@@ -56,8 +57,12 @@ Result BindingGraph::bind (Component& target,
     unbind (target, property);
 
     auto expression = std::move (compiled.getReference());
+    const bool live = expression->hasInputs();
 
-    if (! expression->hasInputs())
+    if (isLive != nullptr)
+        *isLive = live;
+
+    if (! live)
     {
         const auto value = expression->evaluate();
 
@@ -197,6 +202,18 @@ void BindingGraph::refreshAll()
         dirty.push_back (binding.get());
 
     if (! isFlushing)
+        flush();
+}
+
+void BindingGraph::refreshPaletteBindings()
+{
+    for (const auto& binding : bindings)
+    {
+        if (binding->readsPalette())
+            dirty.push_back (binding.get());
+    }
+
+    if (! isFlushing && ! dirty.empty())
         flush();
 }
 
@@ -436,7 +453,11 @@ void BindingGraph::flush()
 
         if (++evaluations[binding] > maxEvaluationsPerFlush)
         {
-            diagnostics.add ("Binding cycle detected while evaluating \"" + binding->getSource() + "\", the binding was removed");
+            const auto message = "Binding cycle detected while evaluating \"" + binding->getSource() + "\", the binding was removed";
+            diagnostics.add (message);
+
+            auto* target = binding->getTarget();
+            const auto property = binding->getProperty();
 
             for (int bindingIndex = 0; bindingIndex < static_cast<int> (bindings.size()); ++bindingIndex)
             {
@@ -446,6 +467,9 @@ void BindingGraph::flush()
                     break;
                 }
             }
+
+            if (onDiagnostic != nullptr)
+                onDiagnostic (target, property, message);
 
             continue;
         }

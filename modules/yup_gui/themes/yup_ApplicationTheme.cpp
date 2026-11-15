@@ -60,6 +60,11 @@ std::optional<Color> ApplicationTheme::findColor (const Component& component, co
     if (auto color = component.findColor (colorId))
         return color;
 
+    return findDefaultColor (component, colorId);
+}
+
+std::optional<Color> ApplicationTheme::findDefaultColor (const Component& component, const Identifier& colorId) const
+{
     if (auto it = defaultColors.find (colorId); it != defaultColors.end())
         return it->second;
 

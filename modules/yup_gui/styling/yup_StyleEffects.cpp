@@ -26,12 +26,6 @@ namespace yup
 namespace
 {
 
-bool isShadowLength (const String& token)
-{
-    const auto digits = token.startsWithChar ('-') ? token.substring (1) : token;
-    return digits.containsAnyOf ("0123456789") && digits.containsOnly ("0123456789.");
-}
-
 std::optional<MouseCursor::Type> findStyleCursor (const String& name)
 {
     static const std::pair<const char*, MouseCursor::Type> cursors[] = {
@@ -51,11 +45,7 @@ std::optional<MouseCursor::Type> findStyleCursor (const String& name)
         { "resizeAll", MouseCursor::ResizeAll }
     };
 
-    for (const auto& [cursorName, type] : cursors)
-        if (name == cursorName)
-            return type;
-
-    return std::nullopt;
+    return detail::findNamed (cursors, name);
 }
 
 } // namespace
@@ -139,17 +129,24 @@ std::vector<StyleState::Shadow> StyleEffects::parseShadows (const String& text, 
     if (text.isEmpty() || text == "none")
         return shadows;
 
-    const auto layers = StyleSheet::tokenizeValue (text);
+    const auto layers = detail::tokenizeStyleValue (text);
 
     for (int index = 0; index < static_cast<int> (layers.size()); ++index)
     {
         const auto& tokens = layers[static_cast<size_t> (index)];
 
         // Up to four lengths, then a color expression taking the remaining tokens
+        float parsedLengths[4] {};
         int lengths = 0;
 
-        while (lengths < jmin (4, tokens.size() - 1) && isShadowLength (tokens[lengths]))
-            ++lengths;
+        while (lengths < jmin (4, tokens.size() - 1))
+        {
+            const auto length = detail::parseStrictFloat (tokens[lengths]);
+            if (! length.has_value())
+                break;
+
+            parsedLengths[lengths++] = *length;
+        }
 
         if (lengths < 2)
         {
@@ -163,9 +160,9 @@ std::vector<StyleState::Shadow> StyleEffects::parseShadows (const String& text, 
             return {};
 
         StyleState::Shadow shadow;
-        shadow.offset = { tokens[0].getFloatValue(), tokens[1].getFloatValue() };
-        shadow.blur = lengths > 2 ? jmax (0.0f, tokens[2].getFloatValue()) : 0.0f;
-        shadow.spread = lengths > 3 ? tokens[3].getFloatValue() : 0.0f;
+        shadow.offset = { parsedLengths[0], parsedLengths[1] };
+        shadow.blur = lengths > 2 ? jmax (0.0f, parsedLengths[2]) : 0.0f;
+        shadow.spread = lengths > 3 ? parsedLengths[3] : 0.0f;
         shadow.color = *color;
         shadows.push_back (shadow);
     }
