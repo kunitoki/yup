@@ -30,7 +30,7 @@
     name:             Opus is a totally open, royalty-free, highly versatile audio codec
     description:      Opus is a totally open, royalty-free, highly versatile audio codec.
     website:          https://opus-codec.org/
-    upstream:         https://downloads.xiph.org/releases/opus/opus-1.6.tar.gz
+    upstream:         https://ftp.osuosl.org/pub/xiph/releases/opus/opus-1.6.tar.gz
     sha256:           b7637334527201fdfd6dd6a02e67aceffb0e5e60155bbd89175647a80301c92c
     license:          BSD
 

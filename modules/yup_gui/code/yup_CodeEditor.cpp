@@ -34,6 +34,7 @@ public:
 
     void codeDocumentChanged (CodeDocument&, int, int) override
     {
+        ++editor.documentChangeCount;
         editor.needsStyledTextUpdate = true;
         editor.cachedDocumentTextDirty = true;
         editor.repaint();
@@ -41,6 +42,43 @@ public:
 
 private:
     CodeEditor& editor;
+};
+
+//==============================================================================
+
+/* Records the caret and selection around an edit. Undo actions run in reverse order, so this
+   action only stores the state to restore: the editor applies it once the whole transaction
+   has been undone or redone and the text is back in place.
+*/
+class CodeEditor::SelectionAction : public UndoableAction
+{
+public:
+    SelectionAction (CodeEditor& editor, int caretBefore, Range<int> selectionBefore, int caretAfter, Range<int> selectionAfter)
+        : editor (&editor)
+        , before (caretBefore, selectionBefore)
+        , after (caretAfter, selectionAfter)
+    {
+    }
+
+    bool isValid() const override
+    {
+        return editor != nullptr;
+    }
+
+    bool perform (UndoableActionState stateToPerform) override
+    {
+        auto* codeEditor = static_cast<CodeEditor*> (editor.get());
+        if (codeEditor == nullptr)
+            return false;
+
+        codeEditor->pendingSelectionRestore = (stateToPerform == UndoableActionState::Undo) ? before : after;
+        return true;
+    }
+
+private:
+    WeakReference<Component> editor;
+    std::pair<int, Range<int>> before;
+    std::pair<int, Range<int>> after;
 };
 
 //==============================================================================
@@ -387,12 +425,15 @@ void CodeEditor::insertText (StringRef textToInsert)
     if (! canEdit() || textToInsert.isEmpty())
         return;
 
-    const auto endPosition = document->replaceRange (document->indexToPosition (selection.getStart()),
-                                                     document->indexToPosition (selection.getEnd()),
-                                                     textToInsert);
+    performUndoableEdit ([&]
+    {
+        const auto endPosition = document->replaceRange (document->indexToPosition (selection.getStart()),
+                                                         document->indexToPosition (selection.getEnd()),
+                                                         textToInsert);
 
-    caretPosition = document->positionToIndex (endPosition);
-    selection = Range<int>::emptyRange (caretPosition);
+        caretPosition = document->positionToIndex (endPosition);
+        selection = Range<int>::emptyRange (caretPosition);
+    });
 
     updateCaretPosition();
 }
@@ -413,11 +454,14 @@ void CodeEditor::cut()
 
     if (hasSelection())
     {
-        document->removeRange (document->indexToPosition (selection.getStart()),
-                               document->indexToPosition (selection.getEnd()));
+        performUndoableEdit ([this]
+        {
+            document->removeRange (document->indexToPosition (selection.getStart()),
+                                   document->indexToPosition (selection.getEnd()));
 
-        caretPosition = selection.getStart();
-        selection = Range<int>::emptyRange (caretPosition);
+            caretPosition = selection.getStart();
+            selection = Range<int>::emptyRange (caretPosition);
+        });
 
         updateCaretPosition();
     }
@@ -438,13 +482,15 @@ bool CodeEditor::undo()
     if (document == nullptr)
         return false;
 
+    pendingSelectionRestore.reset();
+
     const bool result = document->undo();
-    if (result)
-    {
-        caretPosition = jlimit (0, document->getNumCharacters(), caretPosition);
-        selection = Range<int>::emptyRange (caretPosition);
-    }
-    updateCaretPosition();
+    if (result && pendingSelectionRestore.has_value())
+        restoreSelection (pendingSelectionRestore->first, pendingSelectionRestore->second);
+    else
+        restoreSelection (caretPosition, Range<int>::emptyRange (caretPosition));
+
+    pendingSelectionRestore.reset();
     return result;
 }
 
@@ -453,14 +499,136 @@ bool CodeEditor::redo()
     if (document == nullptr)
         return false;
 
+    pendingSelectionRestore.reset();
+
     const bool result = document->redo();
-    if (result)
-    {
-        caretPosition = jlimit (0, document->getNumCharacters(), caretPosition);
-        selection = Range<int>::emptyRange (caretPosition);
-    }
-    updateCaretPosition();
+    if (result && pendingSelectionRestore.has_value())
+        restoreSelection (pendingSelectionRestore->first, pendingSelectionRestore->second);
+    else
+        restoreSelection (caretPosition, Range<int>::emptyRange (caretPosition));
+
+    pendingSelectionRestore.reset();
     return result;
+}
+
+void CodeEditor::performUndoableEdit (const std::function<void()>& edit, bool isStandaloneCommand)
+{
+    auto undoManager = document->getUndoManager();
+
+    std::optional<UndoManager::ScopedTransaction> transaction;
+    if (isStandaloneCommand)
+        transaction.emplace (*undoManager);
+
+    const auto caretBefore = caretPosition;
+    const auto selectionBefore = selection;
+    const auto changeCountBefore = documentChangeCount;
+
+    edit();
+
+    if (documentChangeCount == changeCountBefore)
+        return;
+
+    undoManager->perform (new SelectionAction (*this, caretBefore, selectionBefore, caretPosition, selection));
+    pendingSelectionRestore.reset();
+}
+
+void CodeEditor::restoreSelection (int newCaretPosition, Range<int> newSelection)
+{
+    const int numChars = document->getNumCharacters();
+
+    selection = Range (jlimit (0, numChars, newSelection.getStart()),
+                       jlimit (0, numChars, newSelection.getEnd()));
+
+    caretPosition = jlimit (selection.getStart(), selection.getEnd(), newCaretPosition);
+    updateCaretPosition();
+}
+
+//==============================================================================
+
+Range<int> CodeEditor::getSelectedLines() const
+{
+    const auto start = document->indexToPosition (selection.getStart());
+    const auto end = document->indexToPosition (selection.getEnd());
+
+    int lastLine = end.getLineNumber();
+    if (lastLine > start.getLineNumber() && end.getColumnNumber() == 0)
+        --lastLine;
+
+    return { start.getLineNumber(), lastLine + 1 };
+}
+
+void CodeEditor::indentSelection()
+{
+    changeIndentOfSelectedLines (false);
+}
+
+void CodeEditor::outdentSelection()
+{
+    changeIndentOfSelectedLines (true);
+}
+
+void CodeEditor::changeIndentOfSelectedLines (bool outdent)
+{
+    if (! canEdit())
+        return;
+
+    const auto lines = getSelectedLines();
+    const auto startPosition = document->indexToPosition (selection.getStart());
+    const auto endPosition = document->indexToPosition (selection.getEnd());
+    const bool caretAtEnd = caretPosition == selection.getEnd();
+    const bool keepSelectionLineStart = hasSelection();
+    const auto indentText = String::repeatedString (" ", tabWidth);
+
+    performUndoableEdit ([&]
+    {
+        std::vector<int> columnDeltas (static_cast<size_t> (lines.getLength()), 0);
+
+        for (int line = lines.getStart(); line < lines.getEnd(); ++line)
+        {
+            const auto lineText = document->getLine (line);
+            auto& delta = columnDeltas[static_cast<size_t> (line - lines.getStart())];
+
+            if (outdent)
+            {
+                int numToRemove = 0;
+                if (lineText[0] == '\t')
+                    numToRemove = 1;
+                else
+                    while (numToRemove < tabWidth && lineText[numToRemove] == ' ')
+                        ++numToRemove;
+
+                if (numToRemove > 0)
+                    document->removeRange (CodeDocument::Position (*document, line, 0), CodeDocument::Position (*document, line, numToRemove));
+
+                delta = -numToRemove;
+            }
+            else if (lineText.isNotEmpty())
+            {
+                document->insertText (CodeDocument::Position (*document, line, 0), indentText);
+                delta = tabWidth;
+            }
+        }
+
+        const auto mapPosition = [&] (const CodeDocument::Position& position, bool keepLineStart)
+        {
+            const int line = position.getLineNumber();
+            int column = position.getColumnNumber();
+
+            if (lines.contains (line) && ! (keepLineStart && column == 0))
+                column = jmax (0, column + columnDeltas[static_cast<size_t> (line - lines.getStart())]);
+
+            return document->positionToIndex (CodeDocument::Position (*document, line, column));
+        };
+
+        const int newStart = mapPosition (startPosition, keepSelectionLineStart);
+        const int newEnd = mapPosition (endPosition, false);
+
+        selection = Range (newStart, newEnd);
+        caretPosition = caretAtEnd ? newEnd : newStart;
+    },
+                         true);
+
+    updateCaretPosition();
 }
 
 bool CodeEditor::canUndo() const
@@ -928,6 +1096,18 @@ int CodeEditor::getGlyphIndexAtPosition (const Point<float>& position) const
 {
     const auto textArea = getTextArea();
     const auto relativePosition = position - textArea.getTopLeft() + scrollOffset;
+
+    if (document != nullptr && relativePosition.getY() >= 0.0f)
+    {
+        // Empty lines (the trailing one in particular) produce no glyphs, so resolve them by line.
+        const int line = static_cast<int> (relativePosition.getY() / getLineHeight());
+        if (line >= document->getNumLines())
+            return document->getNumCharacters();
+
+        if (document->getLine (line).isEmpty())
+            return document->getLineStartOffset (line);
+    }
+
     const auto windowRelativePosition = relativePosition.translated (0.0f, -(windowFirstLine * getLineHeight()));
 
     return styledText.getGlyphIndexAtPosition (windowRelativePosition) + windowStartIndex;
@@ -1169,7 +1349,20 @@ bool CodeEditor::keyDown (const KeyPress& key, const Point<float>&)
     else if (key.getKey() == KeyPress::tabKey)
     {
         if (canEdit())
-            insertText (String::repeatedString (" ", tabWidth));
+        {
+            const auto selectedLines = getSelectedLines();
+            const auto firstLineStart = document->getLineStartOffset (selectedLines.getStart());
+            const bool coversWholeLine = hasSelection()
+                                      && selection.getStart() == firstLineStart
+                                      && selection.getEnd() >= firstLineStart + document->getLine (selectedLines.getStart()).length();
+
+            if (shiftDown)
+                outdentSelection();
+            else if (selectedLines.getLength() > 1 || coversWholeLine)
+                indentSelection();
+            else
+                insertText (String::repeatedString (" ", tabWidth));
+        }
     }
     else if (ctrlDown)
     {
@@ -1230,20 +1423,26 @@ void CodeEditor::handleBackspace()
 
     if (hasSelection())
     {
-        document->removeRange (document->indexToPosition (selection.getStart()),
-                               document->indexToPosition (selection.getEnd()));
+        performUndoableEdit ([this]
+        {
+            document->removeRange (document->indexToPosition (selection.getStart()),
+                                   document->indexToPosition (selection.getEnd()));
 
-        caretPosition = selection.getStart();
-        selection = Range<int>::emptyRange (caretPosition);
+            caretPosition = selection.getStart();
+            selection = Range<int>::emptyRange (caretPosition);
+        });
     }
     else if (caretPosition > 0)
     {
-        const int start = caretPosition - 1;
-        document->removeRange (document->indexToPosition (start),
-                               document->indexToPosition (caretPosition));
+        performUndoableEdit ([this]
+        {
+            const int start = caretPosition - 1;
+            document->removeRange (document->indexToPosition (start),
+                                   document->indexToPosition (caretPosition));
 
-        caretPosition = start;
-        selection = Range<int>::emptyRange (caretPosition);
+            caretPosition = start;
+            selection = Range<int>::emptyRange (caretPosition);
+        });
     }
 
     updateCaretPosition();
@@ -1256,16 +1455,22 @@ void CodeEditor::handleDelete()
 
     if (hasSelection())
     {
-        document->removeRange (document->indexToPosition (selection.getStart()),
-                               document->indexToPosition (selection.getEnd()));
+        performUndoableEdit ([this]
+        {
+            document->removeRange (document->indexToPosition (selection.getStart()),
+                                   document->indexToPosition (selection.getEnd()));
 
-        caretPosition = selection.getStart();
-        selection = Range<int>::emptyRange (caretPosition);
+            caretPosition = selection.getStart();
+            selection = Range<int>::emptyRange (caretPosition);
+        });
     }
     else if (caretPosition < document->getNumCharacters())
     {
-        document->removeRange (document->indexToPosition (caretPosition),
-                               document->indexToPosition (caretPosition + 1));
+        performUndoableEdit ([this]
+        {
+            document->removeRange (document->indexToPosition (caretPosition),
+                                   document->indexToPosition (caretPosition + 1));
+        });
     }
 
     updateCaretPosition();
@@ -1441,11 +1646,14 @@ void CodeEditor::deleteWordBackward()
 
     if (wordStart < caretPosition)
     {
-        document->removeRange (document->indexToPosition (wordStart),
-                               document->indexToPosition (caretPosition));
+        performUndoableEdit ([&]
+        {
+            document->removeRange (document->indexToPosition (wordStart),
+                                   document->indexToPosition (caretPosition));
 
-        caretPosition = wordStart;
-        selection = Range<int>::emptyRange (caretPosition);
+            caretPosition = wordStart;
+            selection = Range<int>::emptyRange (caretPosition);
+        });
 
         updateCaretPosition();
     }
@@ -1466,8 +1674,11 @@ void CodeEditor::deleteWordForward()
 
     if (wordEnd > caretPosition)
     {
-        document->removeRange (document->indexToPosition (caretPosition),
-                               document->indexToPosition (wordEnd));
+        performUndoableEdit ([&]
+        {
+            document->removeRange (document->indexToPosition (caretPosition),
+                                   document->indexToPosition (wordEnd));
+        });
 
         updateCaretPosition();
     }
@@ -1582,12 +1793,15 @@ int CodeEditor::replaceNext (StringRef searchTextToFind, StringRef replacement, 
     if (! matches)
         return 0;
 
-    const auto endPos = document->replaceRange (document->indexToPosition (selection.getStart()),
-                                                document->indexToPosition (selection.getEnd()),
-                                                replacement);
+    performUndoableEdit ([&]
+    {
+        const auto endPos = document->replaceRange (document->indexToPosition (selection.getStart()),
+                                                    document->indexToPosition (selection.getEnd()),
+                                                    replacement);
 
-    caretPosition = document->positionToIndex (endPos);
-    selection = Range<int>::emptyRange (caretPosition);
+        caretPosition = document->positionToIndex (endPos);
+        selection = Range<int>::emptyRange (caretPosition);
+    });
 
     findNext (searchTextToFind, caseSensitive);
 
@@ -1603,15 +1817,21 @@ int CodeEditor::replaceAll (StringRef searchTextToFind, StringRef replacement, b
     if (matches.empty())
         return 0;
 
-    document->getUndoManager()->beginNewTransaction();
-
-    for (auto it = matches.rbegin(); it != matches.rend(); ++it)
+    performUndoableEdit ([&]
     {
-        document->replaceRange (document->indexToPosition (it->getStart()),
-                                document->indexToPosition (it->getEnd()),
-                                replacement);
-    }
+        for (auto it = matches.rbegin(); it != matches.rend(); ++it)
+        {
+            document->replaceRange (document->indexToPosition (it->getStart()),
+                                    document->indexToPosition (it->getEnd()),
+                                    replacement);
+        }
 
+        caretPosition = jlimit (0, document->getNumCharacters(), caretPosition);
+        selection = Range<int>::emptyRange (caretPosition);
+    },
+                         true);
+
+    updateCaretPosition();
     return static_cast<int> (matches.size());
 }
 

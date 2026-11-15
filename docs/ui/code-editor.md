@@ -181,7 +181,11 @@ Highlights:
 
 - **Editing** — caret/selection (shift+arrows extend with proper anchor
   semantics), home/end, word navigation, backspace/delete, clipboard
-  (ctrl+c/x/v), undo/redo (ctrl+z/y), read-only mode, tab expands to spaces.
+  (ctrl+c/x/v), undo/redo (ctrl+z/y) restoring the caret and selection around
+  each edit, read-only mode, tab expands to spaces. With a multi-line or
+  whole-line selection, tab indents every touched line and shift+tab outdents
+  them (also available as `indentSelection` / `outdentSelection`); a line where
+  the selection ends at column 0 is left alone, and empty lines are not indented.
 - **Smart auto-indent** — pressing enter copies the current line's leading
   whitespace.
 - **Syntax colors** — tokens are rendered from the active `CodeEditorScheme`;

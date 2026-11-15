@@ -194,6 +194,92 @@ TEST (CodeEditorTest, TabInsertsSpaces)
     EXPECT_EQ (String ("x  "), editor.getText());
 }
 
+TEST (CodeEditorTest, TabIndentsFullySelectedLine)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("abc\ndef");
+    editor.setSelection (Range<int> (0, 3));
+    editor.keyDown (KeyPress (KeyPress::tabKey), {});
+
+    EXPECT_EQ (String ("    abc\ndef"), editor.getText());
+    EXPECT_EQ (Range<int> (0, 7), editor.getSelection());
+}
+
+TEST (CodeEditorTest, TabIndentsAllLinesTouchedBySelection)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("abc\ndef\n\nghi\njkl");
+    editor.setSelection (Range<int> (0, 10)); // "abc" .. "g" of "ghi"
+    editor.keyDown (KeyPress (KeyPress::tabKey), {});
+
+    EXPECT_EQ (String ("    abc\n    def\n\n    ghi\njkl"), editor.getText());
+    EXPECT_EQ (Range<int> (0, 22), editor.getSelection());
+}
+
+TEST (CodeEditorTest, TabSkipsLineWhereSelectionEndsAtColumnZero)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("abc\ndef\nghi");
+    editor.setSelection (Range<int> (0, 8));
+    editor.keyDown (KeyPress (KeyPress::tabKey), {});
+
+    EXPECT_EQ (String ("    abc\n    def\nghi"), editor.getText());
+    EXPECT_EQ (Range<int> (0, 16), editor.getSelection());
+}
+
+TEST (CodeEditorTest, ShiftTabOutdentsSelectedLines)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("      abc\n\tdef\n  ghi\njkl");
+    editor.setSelection (Range<int> (2, 18));
+    editor.keyDown (KeyPress (KeyPress::tabKey, KeyModifiers (KeyModifiers::shiftMask)), {});
+
+    EXPECT_EQ (String ("  abc\ndef\nghi\njkl"), editor.getText());
+    EXPECT_EQ (Range<int> (0, 11), editor.getSelection());
+}
+
+TEST (CodeEditorTest, ShiftTabWithoutSelectionOutdentsCaretLine)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("x\n        abc");
+    editor.setCaretPosition (12);
+    editor.keyDown (KeyPress (KeyPress::tabKey, KeyModifiers (KeyModifiers::shiftMask)), {});
+
+    EXPECT_EQ (String ("x\n    abc"), editor.getText());
+    EXPECT_EQ (8, editor.getCaretPosition());
+    EXPECT_FALSE (editor.hasSelection());
+}
+
+TEST (CodeEditorTest, IndentIsUndoneInOneStepRestoringSelection)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("abc\ndef");
+    editor.setSelection (Range<int> (1, 6));
+    editor.keyDown (KeyPress (KeyPress::tabKey), {});
+
+    ASSERT_EQ (String ("    abc\n    def"), editor.getText());
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("abc\ndef"), editor.getText());
+    EXPECT_EQ (Range<int> (1, 6), editor.getSelection());
+
+    EXPECT_TRUE (editor.redo());
+    EXPECT_EQ (String ("    abc\n    def"), editor.getText());
+    EXPECT_EQ (Range<int> (5, 14), editor.getSelection());
+}
+
 // ==============================================================================
 // Caret movement and selection
 // ==============================================================================
@@ -364,6 +450,63 @@ TEST (CodeEditorTest, UndoAndRedo)
 
     EXPECT_TRUE (editor.redo());
     EXPECT_EQ (String ("hello world"), editor.getText());
+}
+
+TEST (CodeEditorTest, UndoRestoresSelectionReplacedByTyping)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("hello world");
+    editor.setSelection (Range<int> (6, 11));
+    editor.insertText ("there");
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("hello world"), editor.getText());
+    EXPECT_EQ (Range<int> (6, 11), editor.getSelection());
+    EXPECT_EQ (11, editor.getCaretPosition());
+
+    EXPECT_TRUE (editor.redo());
+    EXPECT_EQ (String ("hello there"), editor.getText());
+    EXPECT_EQ (11, editor.getCaretPosition());
+    EXPECT_FALSE (editor.hasSelection());
+}
+
+TEST (CodeEditorTest, UndoRestoresCaretBeforeDeletion)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("abc\ndef");
+    editor.setCaretPosition (2);
+
+    editor.keyDown (KeyPress (KeyPress::deleteKey), {});
+    ASSERT_EQ (String ("ab\ndef"), editor.getText());
+
+    editor.setCaretPosition (6);
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("abc\ndef"), editor.getText());
+    EXPECT_EQ (2, editor.getCaretPosition());
+}
+
+TEST (CodeEditorTest, UndoKeepsSelectionAnchorDirection)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("abcdef");
+    editor.setCaretPosition (4);
+    editor.keyDown (KeyPress (KeyPress::leftKey, KeyModifiers (KeyModifiers::shiftMask)), {});
+    editor.keyDown (KeyPress (KeyPress::leftKey, KeyModifiers (KeyModifiers::shiftMask)), {});
+    ASSERT_EQ (Range<int> (2, 4), editor.getSelection());
+    ASSERT_EQ (2, editor.getCaretPosition());
+
+    editor.insertText ("X");
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (Range<int> (2, 4), editor.getSelection());
+    EXPECT_EQ (2, editor.getCaretPosition());
 }
 
 TEST (CodeEditorTest, ControlZUndoes)
@@ -2030,6 +2173,39 @@ TEST (CodeEditorTest, MouseDownInTextAreaMovesCaretAndClearsSelection)
     editor.mouseDown (event);
 
     EXPECT_FALSE (editor.hasSelection());
+}
+
+TEST (CodeEditorTest, MouseDownOnEmptyLastLineMovesCaretThere)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("hello\nworld\n");
+    editor.setSize (400, 200);
+    editor.setLineNumbersVisible (false);
+
+    const auto textArea = editor.getTextArea();
+    const auto lineHeight = editor.getLineHeight();
+
+    editor.mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (textArea.getX() + 30.0f, textArea.getY() + lineHeight * 2.5f)));
+    EXPECT_EQ (12, editor.getCaretPosition());
+
+    editor.setCaretPosition (0);
+    editor.mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (textArea.getX() + 30.0f, textArea.getY() + lineHeight * 6.0f)));
+    EXPECT_EQ (12, editor.getCaretPosition());
+}
+
+TEST (CodeEditorTest, MouseDownOnEmptyMiddleLineMovesCaretThere)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("hello\n\nworld");
+    editor.setSize (400, 200);
+    editor.setLineNumbersVisible (false);
+
+    const auto textArea = editor.getTextArea();
+    editor.mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (textArea.getX() + 30.0f, textArea.getY() + editor.getLineHeight() * 1.5f)));
+
+    EXPECT_EQ (6, editor.getCaretPosition());
 }
 
 TEST (CodeEditorTest, MouseDragExtendsSelectionWhileDragging)

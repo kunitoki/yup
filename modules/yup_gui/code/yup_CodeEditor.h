@@ -177,10 +177,30 @@ public:
     /** Pastes text from the clipboard at the caret. */
     void paste();
 
-    /** Undoes the most recent edit, if any. */
+    /** Indents the lines touched by the selection (or the caret line) by one tab width (undoable).
+
+        Empty lines are left untouched. The selection is kept and follows the moved text.
+    */
+    void indentSelection();
+
+    /** Removes one level of indentation from the lines touched by the selection (or the caret line).
+
+        Up to one tab width of leading spaces, or a single leading tab, is removed from each line.
+        The selection is kept and follows the moved text.
+    */
+    void outdentSelection();
+
+    //==============================================================================
+    /** Undoes the most recent edit, if any.
+
+        The caret and selection are restored to what they were before the undone edit.
+    */
     bool undo();
 
-    /** Redoes the most recently undone edit, if any. */
+    /** Redoes the most recently undone edit, if any.
+
+        The caret and selection are restored to what they were after the redone edit.
+    */
     bool redo();
 
     /** Returns true if an undo is available. */
@@ -399,6 +419,12 @@ private:
 
     class DocumentListener;
     class Minimap;
+    class SelectionAction;
+
+    void performUndoableEdit (const std::function<void()>& edit, bool isStandaloneCommand = false);
+    void restoreSelection (int newCaretPosition, Range<int> newSelection);
+    Range<int> getSelectedLines() const;
+    void changeIndentOfSelectedLines (bool outdent);
 
     void initialiseEditor();
     void updateStyledTextIfNeeded();
@@ -465,6 +491,7 @@ private:
 
     int caretPosition = 0;
     Range<int> selection;
+    std::optional<std::pair<int, Range<int>>> pendingSelectionRestore;
 
     bool readOnly = false;
     bool lineNumbersVisible = true;
@@ -474,6 +501,7 @@ private:
     bool needsStyledTextUpdate = true;
 
     int tabWidth = 4;
+    int documentChangeCount = 0;
 
     Point<float> scrollOffset;
 

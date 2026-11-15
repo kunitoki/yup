@@ -68,6 +68,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fixed `Component::setOpacity` not repainting the component, so opacity changes only showed on the next unrelated repaint. `Label` now honors `textHeightProportion`: when set (explicitly, by a stylesheet or on a parent), the text height is that proportion of the label height, otherwise the font keeps its own height. `Label::setText` now reports `text` changes to property listeners, and `Label` gains a `justification` property.
 - Fixed `Component::setEnabled` only notifying the component itself: it now repaints, and every descendant whose effective enabled state changes gets `enablementChanged()` and reports the `enabled` property to its listeners, so bindings and drawings reading `enabled` update.
 - Fixed standalone macOS applications sometimes failing to come to the front on launch or when clicking the Dock icon.
+- `CodeEditor`: Tab indents every line touched by a multi-line or whole-line selection and Shift+Tab outdents them (`indentSelection`, `outdentSelection`, one undo step each). Undo and redo now restore the caret and selection around the edit, and clicking an empty line (including the last one) places the caret on it.
 
 ### Build System
 
