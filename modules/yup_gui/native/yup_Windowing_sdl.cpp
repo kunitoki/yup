@@ -880,7 +880,7 @@ void SDLComponentNative::setFocusedComponent (Component* comp, FocusChangeType c
     {
         auto focusBailOut = Component::BailOutChecker (lastComponentFocused.get());
 
-        lastComponentFocused->focusLost();
+        lastComponentFocused->internalFocusChanged (false);
 
         if (! focusBailOut.shouldBailOut())
             lastComponentFocused->repaint();
@@ -916,7 +916,7 @@ void SDLComponentNative::setFocusedComponent (Component* comp, FocusChangeType c
     {
         auto focusBailOut = Component::BailOutChecker (lastComponentFocused.get());
 
-        lastComponentFocused->focusGained();
+        lastComponentFocused->internalFocusChanged (true);
 
         if (! focusBailOut.shouldBailOut())
         {

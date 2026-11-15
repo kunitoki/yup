@@ -99,15 +99,15 @@ void ToggleButton::setToggleState (bool shouldBeToggled, NotificationType notifi
 
         auto bailOutChecker = BailOutChecker (this);
 
+        notifyPropertyChanged (Identifier ("checked"));
+        if (bailOutChecker.shouldBailOut())
+            return;
+
         sendChangeNotification (notification, [this]
         {
             auto innerBailOut = BailOutChecker (this);
 
             toggleStateChanged();
-            if (innerBailOut.shouldBailOut())
-                return;
-
-            notifyPropertyChanged (Identifier ("checked"));
             if (innerBailOut.shouldBailOut())
                 return;
 

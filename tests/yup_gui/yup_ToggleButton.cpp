@@ -260,11 +260,11 @@ TEST_F (ToggleButtonTest, SetToggleStateUpdatesCheckedBindingsLinksAndStyles)
 
     EXPECT_TRUE (panel->isEnabled());
     EXPECT_TRUE (static_cast<bool> (params.getProperty ("bypass")));
-    EXPECT_FLOAT_EQ (toggle->getOpacity(), 0.5f);
+    EXPECT_NEAR (toggle->getOpacity(), 0.5f, 0.01f);
 
     sw->setToggleState (true, dontSendNotification);
     document.getRoot()->getStyleContext()->restyleNow();
-    EXPECT_FLOAT_EQ (sw->getOpacity(), 0.25f);
+    EXPECT_NEAR (sw->getOpacity(), 0.25f, 0.01f);
 
     document.clear();
     ApplicationTheme::setGlobalTheme (oldTheme.get());

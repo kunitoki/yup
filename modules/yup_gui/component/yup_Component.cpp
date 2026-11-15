@@ -1211,8 +1211,6 @@ void Component::internalHierarchyChanged()
 {
     if (auto* context = findStyleContext())
         context->markDirty (*this);
-    else if (styleState != nullptr)
-        styleState->clearComputedValues();
 
     parentHierarchyChanged();
 
@@ -1670,6 +1668,11 @@ bool Component::isPressed() const noexcept
     return flags.isPressed;
 }
 
+bool Component::isFocused() const noexcept
+{
+    return flags.isFocused;
+}
+
 bool Component::hasFocusWithin() const
 {
     auto nativeComponent = getNativeComponent();
@@ -1897,7 +1900,7 @@ const ComponentTypeInfo& Component::getClassTypeInfo()
             .name = Identifier ("focused"),
             .type = ComponentProperty::Type::boolean,
             .defaultValue = false,
-            .getter = [] (const Component& c) { return var (c.hasKeyboardFocus()); },
+            .getter = [] (const Component& c) { return var (c.isFocused()); },
             .isState = true,
             .isStyleable = false });
 
@@ -3061,6 +3064,8 @@ void Component::internalMoved (int xpos, int ypos)
 void Component::internalFocusChanged (bool gotFocus)
 {
     const WeakReference<Component> self (this);
+
+    flags.isFocused = gotFocus;
 
     for (auto* component = this; component != nullptr; component = component->parentComponent)
         component->markStyleDirty();

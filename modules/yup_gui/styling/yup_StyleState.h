@@ -111,6 +111,9 @@ public:
     */
     bool clearAnimatedValues();
 
+    /** Returns the animated values, keyed by storage id. */
+    const NamedValueSet& getAnimatedValues() const noexcept { return animatedValues; }
+
     /** Returns the value the style layer shows for a property: the animated one, else the computed one.
 
         @param storageId The storage id of the property.

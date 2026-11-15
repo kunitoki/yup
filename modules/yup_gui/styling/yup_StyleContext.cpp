@@ -1342,6 +1342,8 @@ void StyleContext::detachComponent (Component& component)
 
     if (auto* state = component.styleState.get())
     {
+        const auto shown = state->getAnimatedValues();
+
         restoreAllStateBacked (component);
         restoreDrawing (component);
 
@@ -1350,6 +1352,9 @@ void StyleContext::detachComponent (Component& component)
         changed |= state->setStylePalette (std::nullopt);
         changed |= applyEffects (component);
         state->setPaletteDependent (false);
+
+        for (int i = 0; i < shown.size(); ++i)
+            changed |= state->setComputedValue (shown.getName (i), *shown.getVarPointerAt (i));
 
         if (changed)
             component.repaint();

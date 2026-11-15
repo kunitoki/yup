@@ -127,7 +127,10 @@ public:
     /** Removes everything the context computed from the subtree, leaving explicit values alone. */
     void detach();
 
-    /** Removes everything the context computed or animated for a detached child subtree. */
+    /** Removes everything the context computed or animated for a detached child subtree.
+
+        Running transitions and animations stop, and the values they showed are kept.
+    */
     void detachComponent (Component& component);
 
     /** Drops animator tracks, dirty entries and caches for a component subtree being destroyed. */

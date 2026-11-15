@@ -287,7 +287,7 @@ bool StyleSelector::Compound::matches (const Component& component, const Compone
         else if (name == "pressed" || name == "active")
             state = component.isPressed();
         else if (name == "focus" || name == "focused")
-            state = component.hasKeyboardFocus();
+            state = component.isFocused();
         else if (name == "focus-within")
             state = component.hasFocusWithin();
         else if (name == "disabled")

@@ -174,7 +174,8 @@ TEST_F (YuiWriterTests, RoundTripsStringsWithBothQuoteKindsAndEscapes)
     {
         auto tx = labelNode.beginTransaction();
         tx.setProperty ("id", "quoteLabel");
-        tx.setProperty ("text", "\"He said 'hi'\"\tand\\slash\nline2");
+        // Instance values are expression source, so a string is stored as its literal
+        tx.setProperty ("text", R"("\"He said 'hi'\"\tand\\slash\nline2")");
     }
 
     {

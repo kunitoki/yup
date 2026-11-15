@@ -1826,10 +1826,16 @@ public:
     */
     bool isPressed() const noexcept;
 
+    /** Returns true between the focus gain and the focus loss reported to this component.
+
+        This is what the `:focus` and `:focused` pseudo-classes match.
+    */
+    bool isFocused() const noexcept;
+
     /** Returns true when this component or one of its children holds the keyboard focus.
 
         This is what the `:focus-within` pseudo-class matches, while `:focus` matches
-        hasKeyboardFocus().
+        isFocused().
     */
     bool hasFocusWithin() const;
 
@@ -2267,6 +2273,7 @@ private:
         bool popupContainer : 1;
         bool isHovered : 1;
         bool isPressed : 1;
+        bool isFocused : 1;
         bool isBeingDeleted : 1;
     };
 

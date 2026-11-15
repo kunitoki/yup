@@ -809,10 +809,13 @@ TEST_F (StyleContextTests, AncestorStateClassAndIdChangesRestyleCombinatorDescen
 
     ComponentTestHelper<StyleContext>::triggerFocusGained (row);
     restyle (root);
+    EXPECT_TRUE (row.isFocused());
+    EXPECT_TRUE (static_cast<bool> (row.getProperty (Identifier ("focused"))));
     EXPECT_DOUBLE_EQ (glow (icon), 4.0);
 
     ComponentTestHelper<StyleContext>::triggerFocusLost (row);
     restyle (root);
+    EXPECT_FALSE (row.isFocused());
     EXPECT_DOUBLE_EQ (glow (icon), 1.0);
 
     row.addStyleClass (Identifier ("active"));
