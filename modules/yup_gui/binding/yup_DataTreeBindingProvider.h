@@ -29,14 +29,14 @@ namespace yup
     Exposes the properties of a DataTree to a UI.
 
     Each property of the tree becomes a bindable value with the same name, typed from the value
-    it holds when the provider is created: numbers (integer or not) as `number`, booleans as
-    `boolean`, strings as `string`, anything else as `any`. Properties added to the tree later
-    are not exposed.
+    it currently holds: numbers (integer or not) as `number`, booleans as `boolean`, strings as
+    `string`, arrays as `array`, and anything else as `any`. Properties added to the tree later
+    are exposed dynamically as well.
 
     Changes made through the UI are written in a transaction of the tree, recorded by the undo
-    manager when one is given. Each gesture, such as a knob drag, starts a new undo transaction,
-    so undoing reverts the whole drag at once. Changes made to the tree by anything else are
-    reported to the UI as well.
+    manager when one is given. Each gesture, such as a knob drag, runs inside a scoped undo
+    transaction from @ref beginGesture to @ref endGesture, so undoing reverts the whole drag at
+    once. Changes made to the tree by anything else are reported to the UI as well.
 
     @code
     DataTree params ("params");
@@ -80,14 +80,18 @@ public:
     void setValue (const Identifier& name, const var& value) override;
     /** @internal */
     void beginGesture (const Identifier& name) override;
+    /** @internal */
+    void endGesture (const Identifier& name) override;
 
 private:
     //==============================================================================
     void propertyChanged (DataTree& changedTree, const Identifier& property) override;
 
+    static ComponentProperty::Type inferType (const var& value);
+
     DataTree tree;
     UndoManager* undoManager = nullptr;
-    std::vector<Property> properties;
+    std::optional<UndoManager::ScopedTransaction> activeGesture;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DataTreeBindingProvider)
 };

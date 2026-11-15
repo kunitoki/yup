@@ -175,6 +175,20 @@ function (yup_audio_plugin)
             INTERFACE_SYSTEM_INCLUDE_DIRECTORIES ${system_include_dirs})
     endif()
 
+    # OBJECT libraries linked PRIVATE into another OBJECT library only supply compile usage
+    # requirements; forward them on INTERFACE so every plugin format binary links their objects.
+    set (shared_object_libraries "")
+    set (visited_object_targets "")
+    _yup_collect_object_libraries (shared_object_libraries visited_object_targets
+        ${core_libraries}
+        ${additional_libraries}
+        ${target_modules})
+
+    if (shared_object_libraries)
+        list (REMOVE_DUPLICATES shared_object_libraries)
+        target_link_libraries (${target_name}_shared INTERFACE ${shared_object_libraries})
+    endif()
+
     set_target_properties (${target_name}_shared PROPERTIES
         FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
         POSITION_INDEPENDENT_CODE ON

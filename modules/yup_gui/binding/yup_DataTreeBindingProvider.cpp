@@ -26,28 +26,26 @@ DataTreeBindingProvider::DataTreeBindingProvider (DataTree treeToUse, UndoManage
     : tree (std::move (treeToUse))
     , undoManager (undoManagerToUse)
 {
-    for (int i = 0; i < tree.getNumProperties(); ++i)
-    {
-        const auto name = tree.getPropertyName (i);
-        const auto value = tree.getProperty (name);
-
-        auto type = ComponentProperty::Type::any;
-
-        if (value.isBool())
-            type = ComponentProperty::Type::boolean;
-        else if (value.isInt() || value.isInt64() || value.isDouble())
-            type = ComponentProperty::Type::number;
-        else if (value.isString())
-            type = ComponentProperty::Type::string;
-
-        properties.push_back ({ name, type });
-    }
-
     tree.addListener (this);
+}
+
+ComponentProperty::Type DataTreeBindingProvider::inferType (const var& value)
+{
+    if (value.isBool())
+        return ComponentProperty::Type::boolean;
+
+    if (value.isInt() || value.isInt64() || value.isDouble())
+        return ComponentProperty::Type::number;
+
+    if (value.isString())
+        return ComponentProperty::Type::string;
+
+    return ComponentProperty::Type::any;
 }
 
 DataTreeBindingProvider::~DataTreeBindingProvider()
 {
+    activeGesture.reset();
     tree.removeListener (this);
 }
 
@@ -55,7 +53,30 @@ DataTreeBindingProvider::~DataTreeBindingProvider()
 
 std::vector<BindingProvider::Property> DataTreeBindingProvider::getProperties() const
 {
-    return properties;
+    std::vector<Property> result;
+    result.reserve (static_cast<std::size_t> (tree.getNumProperties()));
+
+    for (int i = 0; i < tree.getNumProperties(); ++i)
+    {
+        const auto name = tree.getPropertyName (i);
+        const auto value = tree.getProperty (name);
+
+        if (const auto* elements = value.getArray())
+        {
+            auto elementType = elements->isEmpty() ? ComponentProperty::Type::number : inferType ((*elements)[0]);
+
+            for (const auto& element : *elements)
+                if (inferType (element) != elementType)
+                    elementType = ComponentProperty::Type::any;
+
+            result.push_back ({ name, ComponentProperty::Type::array, elementType });
+            continue;
+        }
+
+        result.push_back ({ name, inferType (value) });
+    }
+
+    return result;
 }
 
 var DataTreeBindingProvider::getValue (const Identifier& name) const
@@ -73,8 +94,15 @@ void DataTreeBindingProvider::setValue (const Identifier& name, const var& value
 
 void DataTreeBindingProvider::beginGesture (const Identifier& name)
 {
+    activeGesture.reset();
+
     if (undoManager != nullptr)
-        undoManager->beginNewTransaction ("Change " + name.toString());
+        activeGesture.emplace (*undoManager, "Change " + name.toString());
+}
+
+void DataTreeBindingProvider::endGesture (const Identifier&)
+{
+    activeGesture.reset();
 }
 
 //==============================================================================

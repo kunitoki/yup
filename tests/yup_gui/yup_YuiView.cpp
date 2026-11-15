@@ -102,3 +102,17 @@ TEST_F (YuiViewTests, TheInterfaceFollowsTheEnabledStateOfTheView)
     view.setEnabled (true);
     EXPECT_TRUE (knob->isEnabled());
 }
+
+TEST_F (YuiViewTests, ClearingTheDocumentUnmountsTheRootComponent)
+{
+    YuiView view;
+    view.setSize (200, 100);
+
+    ASSERT_TRUE (view.getDocument().loadFromString ("Column { Slider { id: knob; } }").wasOk());
+    EXPECT_EQ (view.getNumChildComponents(), 1);
+
+    view.getDocument().clear();
+
+    EXPECT_EQ (view.getDocument().getRoot(), nullptr);
+    EXPECT_EQ (view.getNumChildComponents(), 0);
+}

@@ -87,6 +87,9 @@ public:
     */
     void setScrollStep (float pixels);
 
+    /** Returns the wheel distance, in pixels, for each unit of wheel movement. */
+    float getScrollStep() const noexcept { return scrollStep; }
+
     /** Chooses which scrollbars may appear when the content exceeds the visible area.
 
         Both scrollbars are enabled by default and appear only when needed. A hidden scrollbar
@@ -108,8 +111,14 @@ public:
     ScrollBar& getHorizontalScrollBar() noexcept { return horizontalScrollBar; }
 
     //==============================================================================
+    /** Returns the type info describing the properties of this class. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    //==============================================================================
     /** @internal */
     void resized() override;
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override;
     /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds) override;
     /** @internal */

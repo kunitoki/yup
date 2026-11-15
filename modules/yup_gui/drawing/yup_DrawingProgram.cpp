@@ -331,7 +331,7 @@ private:
         return path + ": " + error;
     }
 
-    CompiledExpression compileStatements (const Statements& statements, const String& path)
+    CompiledExpression compileStatements (const Statements& statements, const String& path, StringArray* referencedSymbols = nullptr)
     {
         String text;
         StringArray lineLabels;
@@ -344,7 +344,14 @@ private:
                 lineLabels.add (statement.label);
         }
 
-        auto compiled = CompiledExpression::compile (text, context);
+        auto parsed = Expression::parse (text);
+        if (parsed.failed())
+            fail (locateError (parsed.getErrorMessage(), lineLabels, path));
+
+        if (referencedSymbols != nullptr)
+            *referencedSymbols = parsed.getReference().getReferencedSymbols();
+
+        auto compiled = CompiledExpression::compile (parsed.getReference(), context);
         if (compiled.failed())
             fail (locateError (compiled.getErrorMessage(), lineLabels, path));
 
@@ -430,10 +437,28 @@ private:
             const auto name = parseName (element, path);
             const auto typeName = getRequired (element, "type", path);
             const auto type = ComponentProperty::getTypeFromName (typeName);
-            const auto* expressionType = drawingScope.getExpressionType (type);
+            const auto elementType = ComponentProperty::getElementTypeFromName (typeName);
+            const auto* expressionType = drawingScope.getExpressionType (type, elementType);
 
             if (expressionType == nullptr)
-                fail (path + ".type: '" + typeName + "' can't be used in a drawing, use number, integer, boolean, string or color");
+                fail (path + ".type: '" + typeName + "' can't be used in a drawing, use number, integer, boolean, string, color, point, rectangle or an array of those");
+
+            const auto property = (int) result.properties.size();
+            const auto input = "_property_" + name;
+
+            propertyInputs[input] = { expressionType, property, false };
+            result.properties.push_back (ComponentProperty { .name = Identifier (name), .type = type, .elementType = elementType });
+
+            // An array is empty when the component doesn't set it, so it needs no default
+            if (type == ComponentProperty::Type::array)
+            {
+                if (element.hasProperty ("value"))
+                    fail (path + ".value: an array property can't have a default");
+
+                declare (scope, name, { input, {} }, path, path);
+                verifiedLets.add (scope.symbols[name]);
+                continue;
+            }
 
             auto fallback = element.hasProperty ("value") ? parseValue (element, "value", path, scope) : Value { getDefaultText (type), {} };
 
@@ -444,13 +469,9 @@ private:
             if (type == ComponentProperty::Type::number)
                 fallback.text = "float " + fallback.text;
 
-            const auto property = (int) result.properties.size();
-            const auto input = "_property_" + name;
             const auto isSet = "_hasProperty_" + name;
 
-            propertyInputs[input] = { expressionType, property, false };
             propertyInputs[isSet] = { context.getType<bool>(), property, true };
-            result.properties.push_back (ComponentProperty { .name = Identifier (name), .type = type });
 
             declare (scope, name, { "(" + isSet + " ? " + input + " : " + fallback.text + ")", fallback.uses }, path, path + ".value");
             verifiedLets.add (scope.symbols[name]);
@@ -465,7 +486,12 @@ private:
             case ComponentProperty::Type::boolean: return "(false)";
             case ComponentProperty::Type::string:  return "(\"\")";
             case ComponentProperty::Type::color:   return "(#00000000)";
-            default:                               return "(0.0)";
+            case ComponentProperty::Type::point:   return "(point (0, 0))";
+
+            case ComponentProperty::Type::rectangle:
+                return "(rect (0, 0, 0, 0))";
+
+            default: return "(0.0)";
         }
     }
 
@@ -484,7 +510,7 @@ private:
 
         jassert (actual != nullptr);
 
-        const auto* expected = drawingScope.getExpressionType (type);
+        const auto* expected = drawingScope.getExpressionType (type, ComponentProperty::Type::any);
         const auto isNumber = actual == context.getType<int>() || actual == context.getType<double>();
 
         if (actual != nullptr && actual != expected && ! (type == ComponentProperty::Type::number && isNumber))
@@ -589,6 +615,8 @@ private:
 
     std::unique_ptr<Node> compileRepeat (const DataTree& element, const String& path, const Scope& scope)
     {
+        static constexpr int maxRepeatCount = 4096;
+
         checkElement (element, path, { "id", "name", "from", "to" }, true);
 
         const auto name = parseName (element, path);
@@ -605,9 +633,26 @@ private:
         statements.push_back ({ "_start = int " + from.text + ";", path + ".from" });
         statements.push_back ({ "_end = int " + to.text + ";", path + ".to" });
 
-        node->program = compileStatements (statements, path);
+        StringArray referencedSymbols;
+        node->program = compileStatements (statements, path, &referencedSymbols);
         node->start = findOutput<int> (node->program, "_start");
         node->end = findOutput<int> (node->program, "_end");
+
+        const bool hasRuntimeInputs = std::any_of (referencedSymbols.begin(), referencedSymbols.end(), [&] (const String& symbol)
+        {
+            return node->program.findInput (symbol) >= 0;
+        });
+
+        if (! hasRuntimeInputs)
+        {
+            ExpressionState constantState (node->program, 1);
+            constantState.evaluate();
+            const auto count = static_cast<int64> (constantState.get (node->end)) - static_cast<int64> (constantState.get (node->start));
+
+            if (count > maxRepeatCount)
+                fail (path + ": repeat count (" + String (count) + ") exceeds the maximum of " + String (maxRepeatCount));
+        }
+
         addSlot (*node, false);
 
         auto inner = scope.enter();
@@ -693,6 +738,7 @@ struct DrawingBaseContext
     DrawingBaseContext()
     {
         ExpressionDrawing::declareOutputs (context);
+        DrawingScope::addExpressionArrayTypes (context);
         bounds = context.addInput<Rectangle<float>> ("bounds");
         font = context.addInput<Font> ("defaultFont");
         index = context.addInput<int> ("_index");
@@ -802,17 +848,32 @@ private:
 };
 
 //==============================================================================
-DrawingProgram::DrawingProgram (Component& target)
-    : context (getDrawingBaseContext().context)
+DrawingProgram::DrawingProgram (Component& target,
+                                DrawingScope::ComponentResolver componentResolver,
+                                DrawingScope::ModelResolver modelResolver)
+    : targetComponent (&target)
+    , context (getDrawingBaseContext().context)
     , scope (target, context)
 {
+    scope.setComponentResolver (std::move (componentResolver));
+    scope.setModelResolver (std::move (modelResolver));
 }
 
-DrawingProgram::~DrawingProgram() = default;
-
-ResultValue<std::unique_ptr<DrawingProgram>> DrawingProgram::create (Component& target, const DataTree& drawing)
+DrawingProgram::~DrawingProgram()
 {
-    std::unique_ptr<DrawingProgram> program (new DrawingProgram (target));
+    for (auto* component : observedComponents)
+        component->removeComponentListener (this);
+
+    for (auto* provider : observedProviders)
+        provider->removeListener (this);
+}
+
+ResultValue<std::unique_ptr<DrawingProgram>> DrawingProgram::create (Component& target,
+                                                                     const DataTree& drawing,
+                                                                     DrawingScope::ComponentResolver componentResolver,
+                                                                     DrawingScope::ModelResolver modelResolver)
+{
+    std::unique_ptr<DrawingProgram> program (new DrawingProgram (target, std::move (componentResolver), std::move (modelResolver)));
 
     auto& cache = CompiledCache::getInstance();
     const auto key = CompiledCache::makeKey (drawing);
@@ -838,6 +899,7 @@ void DrawingProgram::instantiate (std::shared_ptr<const Compiled> compiledToUse)
     compiled = std::move (compiledToUse);
     slots = std::make_unique<Slot[]> (compiled->evaluated.size());
     propertyValues.resize (compiled->properties.size());
+    propertyArrays.resize (compiled->properties.size());
 
     for (size_t i = 0; i < compiled->evaluated.size(); ++i)
     {
@@ -848,7 +910,97 @@ void DrawingProgram::instantiate (std::shared_ptr<const Compiled> compiledToUse)
 
         if (node.repeated)
             state->bindRowIndex (getDrawingBaseContext().index);
+
+        for (const auto& dependency : scope.getDependencies (node.getProgram()))
+        {
+            const bool isExternalComponent = dependency.component != nullptr && dependency.component != targetComponent.get();
+            const bool isProvider = dependency.provider != nullptr;
+
+            if (! isExternalComponent && ! isProvider)
+                continue;
+
+            const auto isKnown = std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& known)
+            {
+                return known.component == dependency.component
+                    && known.provider == dependency.provider
+                    && known.property == dependency.property;
+            });
+
+            if (! isKnown)
+                dependencies.push_back (dependency);
+
+            if (isExternalComponent && observedComponents.insert (dependency.component).second)
+                dependency.component->addComponentListener (this);
+            else if (isProvider && observedProviders.insert (dependency.provider).second)
+                dependency.provider->addListener (this);
+        }
     }
+}
+
+void DrawingProgram::componentPropertyChanged (Component& component, const Identifier& property)
+{
+    auto* target = targetComponent.get();
+    if (target == nullptr)
+        return;
+
+    const bool matches = std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
+    {
+        return dependency.component == &component && dependency.property == property;
+    });
+
+    if (matches)
+        target->repaint();
+}
+
+void DrawingProgram::componentMoved (Component& component)
+{
+    static const Identifier xId ("x");
+    static const Identifier yId ("y");
+
+    componentPropertyChanged (component, xId);
+    componentPropertyChanged (component, yId);
+}
+
+void DrawingProgram::componentResized (Component& component)
+{
+    static const Identifier widthId ("width");
+    static const Identifier heightId ("height");
+
+    componentPropertyChanged (component, widthId);
+    componentPropertyChanged (component, heightId);
+}
+
+void DrawingProgram::componentBeingDeleted (Component& component)
+{
+    observedComponents.erase (&component);
+
+    for (auto& dependency : dependencies)
+        if (dependency.component == &component)
+            dependency.component = nullptr;
+}
+
+void DrawingProgram::bindingValueChanged (BindingProvider& provider, const Identifier& name)
+{
+    auto* target = targetComponent.get();
+    if (target == nullptr)
+        return;
+
+    const bool matches = std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
+    {
+        return dependency.provider == &provider && dependency.property == name;
+    });
+
+    if (matches)
+        target->repaint();
+}
+
+void DrawingProgram::bindingProviderBeingDeleted (BindingProvider& provider)
+{
+    observedProviders.erase (&provider);
+
+    for (auto& dependency : dependencies)
+        if (dependency.provider == &provider)
+            dependency.provider = nullptr;
 }
 
 //==============================================================================
@@ -876,14 +1028,21 @@ DrawingProgram::Slot* DrawingProgram::prepare (const Node& node, Rectangle<float
     {
         const auto& value = propertyValues[(size_t) input.property];
 
+        const auto& property = compiled->properties[(size_t) input.property];
+
         if (input.isSet)
             slot.state->set (ExpressionInput<bool> { input.input }, ! value.isVoid());
+        else if (property.type == ComponentProperty::Type::array)
+            propertyArrays[(size_t) input.property].bind (*slot.state, input.input, property.elementType, value);
         else if (value.isVoid())
             continue;
-        else if (compiled->properties[(size_t) input.property].type == ComponentProperty::Type::color)
-            slot.state->set (ExpressionInput<Color> { input.input }, VariantConverter<Color>::fromVar (value));
         else
-            slot.state->setVar (input.input, value);
+            DrawingScope::withExpressionType (property.type, [&] (auto tag)
+            {
+                using Type = typename decltype (tag)::type;
+
+                slot.state->set (ExpressionInput<Type> { input.input }, VariantConverter<Type>::fromVar (value));
+            });
     }
 
     return &slot;

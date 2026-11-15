@@ -516,6 +516,33 @@ struct VariantConverter<String>
     static var toVar (const String& s) { return s; }
 };
 
+/** Converts a StringArray to and from a var holding an array of strings. */
+template <>
+struct VariantConverter<StringArray>
+{
+    static StringArray fromVar (const var& v)
+    {
+        StringArray result;
+
+        if (const auto* values = v.getArray())
+            for (const auto& value : *values)
+                result.add (value.toString());
+
+        return result;
+    }
+
+    static var toVar (const StringArray& strings)
+    {
+        Array<var> values;
+        values.ensureStorageAllocated (strings.size());
+
+        for (const auto& string : strings)
+            values.add (string);
+
+        return var (std::move (values));
+    }
+};
+
 #endif
 
 /**

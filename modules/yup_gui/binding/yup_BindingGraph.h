@@ -60,7 +60,9 @@ namespace yup
 
     @tags{UI}
 */
-class YUP_API BindingGraph : private ComponentListener
+class YUP_API BindingGraph
+    : private ComponentListener
+    , private BindingProvider::Listener
 {
 public:
     //==============================================================================
@@ -76,6 +78,12 @@ public:
         It applies to the bindings created after it is set.
     */
     void setComponentResolver (DrawingScope::ComponentResolver resolver);
+
+    /** Sets the resolver turning a name into a BindingProvider, for expressions referencing models.
+
+        It applies to the bindings created after it is set.
+    */
+    void setModelResolver (DrawingScope::ModelResolver resolver);
 
     //==============================================================================
     /** Gives a property of a component its value from an expression.
@@ -103,6 +111,9 @@ public:
 
     /** Removes every binding of a component, leaving the current values in place. */
     void unbindAll (Component& target);
+
+    /** Removes every binding reading from a provider, leaving the current values in place. */
+    void forgetProvider (BindingProvider& provider);
 
     /** Removes every binding and every link. */
     void clear();
@@ -168,15 +179,20 @@ private:
     void componentMoved (Component& component) override;
     void componentResized (Component& component) override;
     void componentBeingDeleted (Component& component) override;
+    void bindingValueChanged (BindingProvider& provider, const Identifier& name) override;
+    void bindingProviderBeingDeleted (BindingProvider& provider) override;
 
     void observe (Component& component);
     void unobserve (Component& component);
+    void observe (BindingProvider& provider);
+    void unobserve (BindingProvider& provider);
     void addObservedOf (const PropertyBinding& binding);
     void removeObservedOf (const PropertyBinding& binding);
     void removeBinding (int index);
     void removeLink (int index);
     void syncLinks (Component& component, const Identifier& property);
     void invalidate (const Component& component, const Identifier& property);
+    void invalidate (const BindingProvider& provider, const Identifier& property);
     void markDirty (PropertyBinding& binding);
     void flush();
 
@@ -185,8 +201,10 @@ private:
     std::vector<std::shared_ptr<Link>> links;
     std::vector<PropertyBinding*> dirty;
     std::map<Component*, int> observed;
+    std::map<BindingProvider*, int> observedProviders;
     std::map<PropertyBinding*, int> evaluations;
     DrawingScope::ComponentResolver componentResolver;
+    DrawingScope::ModelResolver modelResolver;
     PropertyBinding* writingBinding = nullptr;
     StringArray diagnostics;
     bool isFlushing = false;

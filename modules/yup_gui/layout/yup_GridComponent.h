@@ -62,7 +62,8 @@ public:
     void setRows (const var& rows);
 
     //==============================================================================
-    /** Parses a track list such as `"1fr 80px auto 20%"`, or a plain count. */
+    /** Parses a track list such as `"1fr 80px auto 20%"`, `"minmax(80px, 1fr)"`, `"fit-content(120px)"`
+        or `"repeat(3, 1fr)"`, or a plain track count. Returns an empty array when invalid. */
     static Array<Grid::TrackInfo> parseTracks (const var& value);
 
     //==============================================================================

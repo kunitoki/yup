@@ -251,8 +251,11 @@ TEST_F (DrawingProgramTest, DeclaresItsProperties)
             property bezel: number = 0.8;
             property ring: color = palette.accent;
             property ticks: integer;
-            circle { center: bounds.center; radius: r; stroke: ring; }
+            property origin: point = bounds.center;
+            property lanes: number[];
+            circle { center: origin; radius: r; stroke: ring; }
             repeat i in 0 .. ticks { line { from: bounds.center; to: polar (bounds.center, r, i); } }
+            repeat i in 0 .. len (lanes) { line { from: origin; to: polar (origin, r * lanes[i], i); } }
         })yui");
 
     ASSERT_TRUE (parsed.wasOk()) << parsed.diagnostics.front().toString();
@@ -261,22 +264,28 @@ TEST_F (DrawingProgramTest, DeclaresItsProperties)
     ASSERT_TRUE (program.wasOk()) << program.getErrorMessage();
 
     const auto& properties = program.getReference()->getProperties();
-    ASSERT_EQ (properties.size(), 3u);
+    ASSERT_EQ (properties.size(), 5u);
     EXPECT_EQ (properties[0].name, Identifier ("bezel"));
     EXPECT_EQ (properties[0].type, ComponentProperty::Type::number);
     EXPECT_EQ (properties[1].type, ComponentProperty::Type::color);
     EXPECT_EQ (properties[2].type, ComponentProperty::Type::integer);
+    EXPECT_EQ (properties[3].type, ComponentProperty::Type::point);
+    EXPECT_EQ (properties[4].type, ComponentProperty::Type::array);
+    EXPECT_EQ (properties[4].elementType, ComponentProperty::Type::number);
 
     EXPECT_NO_THROW (drawHeadless (*program.getReference(), slider));
 
     slider.setProperty (Identifier ("ticks"), 4);
     slider.setProperty (Identifier ("ring"), VariantConverter<Color>::toVar (Colors::red));
+    slider.setProperty (Identifier ("origin"), VariantConverter<Point<float>>::toVar ({ 10.0f, 20.0f }));
+    slider.setProperty (Identifier ("lanes"), var (Array<var> { 0.25, 0.5, 0.75 }));
     EXPECT_NO_THROW (drawHeadless (*program.getReference(), slider));
 }
 
 TEST_F (DrawingProgramTest, ReportsPropertyErrors)
 {
-    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"point\"/></drawing>"), "drawing/property[0].type: 'point' can't be used in a drawing, use number, integer, boolean, string or color");
+    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"font\"/></drawing>"), "drawing/property[0].type: 'font' can't be used in a drawing, use number, integer, boolean, string, color, point, rectangle or an array of those");
+    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"number[]\" value=\"1\"/></drawing>"), "drawing/property[0].value: an array property can't have a default");
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"color\" value=\"true\"/></drawing>"), "drawing/property[0].value: the type 'bool' doesn't match the property type 'color'");
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"integer\" value=\"0.5f\"/></drawing>"), "drawing/property[0].value: the type 'float' doesn't match the property type 'integer'");
     EXPECT_TRUE (createError ("<drawing><property name=\"a\" type=\"number\" value=\"nope\"/></drawing>").startsWith ("drawing/property[0].value: "));
@@ -284,6 +293,13 @@ TEST_F (DrawingProgramTest, ReportsPropertyErrors)
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"number\"/><let name=\"a\" value=\"1\"/></drawing>"), "drawing/let[0].name: 'a' is already defined");
     EXPECT_EQ (createError ("<drawing><layer><property name=\"a\" type=\"number\"/></layer></drawing>"), "drawing/layer[0]/property[0]: a 'property' can only be declared at the top of a drawing");
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"number\" value=\"1\"/><circle center=\"bounds.center\" radius=\"a\"/></drawing>"), String());
+}
+
+TEST_F (DrawingProgramTest, RejectsConstantRepeatExceedingMaximumCount)
+{
+    const auto error = createError ("<drawing><repeat name=\"i\" from=\"0\" to=\"5000\"><circle center=\"bounds.center\" radius=\"1\"/></repeat></drawing>");
+    EXPECT_FALSE (error.isEmpty());
+    EXPECT_TRUE (error.contains ("4096")) << error;
 }
 
 //==============================================================================

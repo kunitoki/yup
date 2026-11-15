@@ -63,6 +63,19 @@ public:
     /** Adds a separator line to the drop-down list. */
     void addSeparator();
 
+    /** Replaces every item with the given texts, numbered from 1 in the order they are given.
+
+        A selection whose ID is still in range is kept, otherwise the selection is cleared and
+        reported.
+
+        @param newItems      The texts of the items
+        @param notification  Whether to report a cleared selection
+    */
+    void setItems (const StringArray& newItems, NotificationType notification = sendNotification);
+
+    /** Returns the texts of the items, separators excluded. */
+    StringArray getItems() const;
+
     /** Removes all items from the list. */
     void clear();
 
@@ -204,6 +217,7 @@ private:
     void showPopup();
     void hidePopup();
     void updateDisplayText();
+    void sendSelectionChanged (NotificationType notification);
 
     Array<ComboBoxItem> items;
     int selectedItemId = 0;

@@ -260,6 +260,17 @@ public:
         return addInput<ExpressionArrayView<T>> (name);
     }
 
+    /** Registers the type of arrays with elements of type T, returning it (or the one already registered).
+
+        Array types are registered by addArray, register one ahead when a symbol resolver returns it.
+        Returns nullptr when T is neither built-in nor registered.
+    */
+    template <class T>
+    const ExpressionType* addArrayType()
+    {
+        return resolveType<ExpressionArrayView<T>>();
+    }
+
     /** Declares an input of a type known at runtime, returning its index or -1 if the name is already used. */
     int addInput (const String& name, const ExpressionType& type);
 

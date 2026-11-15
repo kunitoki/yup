@@ -25,6 +25,94 @@ namespace yup
 namespace
 {
 
+String unquoteYuiText (const String& raw)
+{
+    const auto trimmed = raw.trim();
+
+    if (trimmed.length() < 2)
+        return raw;
+
+    const auto quote = trimmed[0];
+    if (quote != '"' && quote != '\'')
+        return raw;
+
+    String unescaped;
+    auto ptr = trimmed.getCharPointer();
+    ++ptr;
+
+    while (! ptr.isEmpty())
+    {
+        const auto c = ptr.getAndAdvance();
+
+        if (c == quote)
+            return ptr.isEmpty() ? unescaped : raw;
+
+        if (c != '\\')
+        {
+            unescaped << String::charToString (c);
+            continue;
+        }
+
+        if (ptr.isEmpty())
+            return raw;
+
+        const auto escaped = ptr.getAndAdvance();
+
+        switch (escaped)
+        {
+            case '\\': unescaped << '\\'; break;
+            case '"':  unescaped << '"'; break;
+            case '\'': unescaped << '\''; break;
+            case 'n':  unescaped << '\n'; break;
+            case 'r':  unescaped << '\r'; break;
+            case 't':  unescaped << '\t'; break;
+            default:   unescaped << '\\' << String::charToString (escaped); break;
+        }
+    }
+
+    return raw;
+}
+
+String normalizeYuiImportPath (const String& rawPath)
+{
+    const auto normalizedSeparators = rawPath.trim().replaceCharacter ('\\', '/');
+    if (normalizedSeparators.isEmpty())
+        return {};
+
+    StringArray segments;
+
+    for (const auto& token : StringArray::fromTokens (normalizedSeparators, "/", ""))
+    {
+        if (token.isEmpty() || token == ".")
+            continue;
+
+        if (token == ".." && ! segments.isEmpty() && segments[segments.size() - 1] != "..")
+        {
+            segments.remove (segments.size() - 1);
+            continue;
+        }
+
+        segments.add (token);
+    }
+
+    return segments.joinIntoString ("/");
+}
+
+String resolveRelativeYuiImportPath (const String& importerPath, const String& importedPath)
+{
+    const auto cleanedImport = importedPath.trim().replaceCharacter ('\\', '/');
+    if (cleanedImport.startsWithChar ('/'))
+        return normalizeYuiImportPath (cleanedImport.substring (1));
+
+    const auto normalizedImporter = normalizeYuiImportPath (importerPath);
+    const auto slash = normalizedImporter.lastIndexOfChar ('/');
+
+    if (slash < 0)
+        return normalizeYuiImportPath (cleanedImport);
+
+    return normalizeYuiImportPath (normalizedImporter.substring (0, slash + 1) + cleanedImport);
+}
+
 //==============================================================================
 class YuiTextParser
 {
@@ -138,7 +226,7 @@ private:
         skipWhitespace();
 
         const auto start = position;
-        const auto path = parseRawValue().unquoted().trim();
+        const auto path = unquoteYuiText (parseRawValue()).trim();
 
         if (path.isEmpty())
             throw Error { start, "Expected the path of the import" };
@@ -184,7 +272,7 @@ private:
 
             expect (":");
             properties.add (name);
-            transaction.setProperty (name, parseRawValue().unquoted());
+            transaction.setProperty (name, unquoteYuiText (parseRawValue()));
             mark (palette, start, name);
             expect (";");
         }
@@ -410,7 +498,15 @@ private:
         if (! types.contains (type))
             throw Error { start, "Unknown type '" + type + "', expected one of " + types.joinIntoString (", ") };
 
-        return type;
+        if (! match ("["))
+            return type;
+
+        expect ("]");
+
+        if (ComponentProperty::getElementTypeFromName (type + "[]") == ComponentProperty::Type::any)
+            throw Error { start, "'" + type + "' has no array type" };
+
+        return type + "[]";
     }
 
     String parseTypeName (const String& error)
@@ -667,13 +763,27 @@ private:
         return repeat;
     }
 
-    // Values are kept as written, the expression parser only finds where they end
+    // Values are kept as written, the expression parser only finds where they end. A value starting
+    // with '[' is an array literal, whose elements are expressions of their own.
     String parseExpressionText()
     {
         skipWhitespace();
 
-        // The expression parser counts lines from the start of what it gets, so it only gets the rest of the text
         const auto start = position;
+
+        if (text[position] == '[')
+        {
+            StringArray elements;
+            int offset = 0;
+
+            if (auto result = PropertyExpression::splitArrayLiteral (StringRef (CharPointer_UTF8 (text + start)), elements, offset); result.failed())
+                throw Error { start + offset, result.getErrorMessage() };
+
+            position = start + offset;
+            return String::fromUTF8 (text + start, offset);
+        }
+
+        // The expression parser counts lines from the start of what it gets, so it only gets the rest of the text
         int length = 0;
         const auto parsed = Expression::parseExpression (StringRef (CharPointer_UTF8 (text + start)), length);
 
@@ -843,7 +953,7 @@ YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolve
     std::vector<DataTree> elements;
     auto positions = std::move (parsed.positions);
 
-    std::function<std::optional<YuiDiagnostic> (const DataTree&)> collect = [&] (const DataTree& document) -> std::optional<YuiDiagnostic>
+    std::function<std::optional<YuiDiagnostic> (const DataTree&, const String&)> collect = [&] (const DataTree& document, const String& currentSource) -> std::optional<YuiDiagnostic>
     {
         for (const auto& element : document)
         {
@@ -853,7 +963,8 @@ YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolve
                 continue;
             }
 
-            const auto path = element.getProperty ("path").toString();
+            const auto rawPath = element.getProperty ("path").toString();
+            const auto path = resolveRelativeYuiImportPath (currentSource, rawPath);
 
             // Each file is imported once, which also breaks import cycles
             if (imported.contains (path))
@@ -882,14 +993,14 @@ YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolve
 
             positions.insert (positions.end(), importedResult.positions.begin(), importedResult.positions.end());
 
-            if (auto diagnostic = collect (importedResult.result.document))
+            if (auto diagnostic = collect (importedResult.result.document, path))
                 return diagnostic;
         }
 
         return std::nullopt;
     };
 
-    if (auto diagnostic = collect (parsed.result.document))
+    if (auto diagnostic = collect (parsed.result.document, {}))
         return { .diagnostics = { *diagnostic } };
 
     // The elements move to the merged document, keeping the identities their positions refer to

@@ -1131,6 +1131,59 @@ TEST_F (DataTreeTests, TransactionSetThenRemoveAllPropertiesNotifies)
     tree.removeListener (&listener);
 }
 
+TEST_F (DataTreeTests, TransactionRemoveAllThenSetPropertiesReplacesAtomically)
+{
+    struct EmptyObserver final : DataTree::Listener
+    {
+        void propertyChanged (DataTree& changed, const Identifier&) override
+        {
+            if (changed.getNumProperties() == 0)
+                sawEmptyState = true;
+        }
+
+        bool sawEmptyState = false;
+    };
+
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    const Identifier first ("first");
+    const Identifier second ("second");
+    const Identifier third ("third");
+
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.setProperty (first, 1);
+        transaction.setProperty (second, 2);
+    }
+
+    EmptyObserver observer;
+    tree.addListener (&observer);
+
+    undoManager->beginNewTransaction();
+    {
+        auto transaction = tree.beginTransaction (undoManager);
+        transaction.removeAllProperties();
+        transaction.setProperty (third, 3);
+        transaction.setProperty (first, 1);
+    }
+
+    tree.removeListener (&observer);
+
+    EXPECT_FALSE (observer.sawEmptyState);
+    ASSERT_EQ (2, tree.getNumProperties());
+    EXPECT_EQ (third, tree.getPropertyName (0));
+    EXPECT_EQ (first, tree.getPropertyName (1));
+    EXPECT_EQ (var (1), tree.getProperty (first));
+    EXPECT_FALSE (tree.hasProperty (second));
+
+    undoManager->undo();
+
+    ASSERT_EQ (2, tree.getNumProperties());
+    EXPECT_EQ (first, tree.getPropertyName (0));
+    EXPECT_EQ (second, tree.getPropertyName (1));
+    EXPECT_EQ (var (1), tree.getProperty (first));
+    EXPECT_EQ (var (2), tree.getProperty (second));
+}
+
 TEST_F (DataTreeTests, AssigningSameObjectDoesNotRedirect)
 {
     TestListener listener;

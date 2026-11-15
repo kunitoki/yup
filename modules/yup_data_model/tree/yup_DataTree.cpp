@@ -243,6 +243,71 @@ private:
 
 //==============================================================================
 
+class ReplacePropertiesAction : public UndoableAction
+{
+public:
+    ReplacePropertiesAction (std::shared_ptr<DataTree::DataObject> obj, NamedValueSet replacement)
+        : dataObject (std::move (obj))
+        , newProperties (std::move (replacement))
+    {
+    }
+
+    bool isValid() const override
+    {
+        return dataObject != nullptr;
+    }
+
+    bool perform (UndoableActionState state) override
+    {
+        if (dataObject == nullptr)
+            return false;
+
+        NamedValueSet previous;
+
+        if (state == UndoableActionState::Redo)
+        {
+            oldProperties = dataObject->properties;
+            previous = std::exchange (dataObject->properties, newProperties);
+        }
+        else
+        {
+            previous = std::exchange (dataObject->properties, oldProperties);
+        }
+
+        const auto& current = dataObject->properties;
+        yup::Array<Identifier> changedNames;
+
+        for (int i = 0; i < previous.size(); ++i)
+        {
+            const auto name = previous.getName (i);
+            const auto* nextValue = current.getVarPointer (name);
+
+            if (nextValue == nullptr || ! previous.getValueAt (i).equalsWithSameType (*nextValue))
+                changedNames.addIfNotAlreadyThere (name);
+        }
+
+        for (int i = 0; i < current.size(); ++i)
+        {
+            const auto name = current.getName (i);
+
+            if (! previous.contains (name))
+                changedNames.addIfNotAlreadyThere (name);
+        }
+
+        for (const auto& name : changedNames)
+            dataObject->sendPropertyChangeMessage (name);
+
+        return true;
+    }
+
+private:
+    std::shared_ptr<DataTree::DataObject> dataObject;
+    NamedValueSet newProperties;
+    NamedValueSet oldProperties;
+};
+
+//==============================================================================
+
 class AddChildAction : public UndoableAction
 {
 public:
@@ -1429,8 +1494,10 @@ void DataTree::Transaction::commit()
     std::vector<UndoableAction::Ptr> actions;
 
     // Create property actions that capture current state
-    for (const auto& change : propertyChanges)
+    for (std::size_t i = 0; i < propertyChanges.size(); ++i)
     {
+        const auto& change = propertyChanges[i];
+
         switch (change.type)
         {
             case PropertyChange::Set:
@@ -1447,7 +1514,28 @@ void DataTree::Transaction::commit()
 
             case PropertyChange::RemoveAll:
             {
-                actions.push_back (new RemoveAllPropertiesAction (dataObject));
+                if (i + 1 >= propertyChanges.size())
+                {
+                    actions.push_back (new RemoveAllPropertiesAction (dataObject));
+                    break;
+                }
+
+                NamedValueSet replacement;
+
+                for (std::size_t j = i + 1; j < propertyChanges.size(); ++j)
+                {
+                    const auto& subsequent = propertyChanges[j];
+
+                    if (subsequent.type == PropertyChange::Set)
+                        replacement.set (subsequent.name, subsequent.newValue);
+                    else if (subsequent.type == PropertyChange::Remove)
+                        replacement.remove (subsequent.name);
+                    else if (subsequent.type == PropertyChange::RemoveAll)
+                        replacement.clear();
+                }
+
+                actions.push_back (new ReplacePropertiesAction (dataObject, std::move (replacement)));
+                i = propertyChanges.size();
                 break;
             }
         }
@@ -1514,9 +1602,38 @@ void DataTree::Transaction::setProperty (const Identifier& name, const var& newV
     if (! active || dataObject == nullptr)
         return;
 
-    // Check if we already have a change for this property
-    for (auto& change : propertyChanges)
+    const var* effectiveValue = dataObject->properties.getVarPointer (name);
+    std::size_t lastResetIndex = 0;
+    bool hasReset = false;
+
+    for (std::size_t i = 0; i < propertyChanges.size(); ++i)
     {
+        const auto& existing = propertyChanges[i];
+
+        if (existing.type == PropertyChange::RemoveAll)
+        {
+            effectiveValue = nullptr;
+            lastResetIndex = i + 1;
+            hasReset = true;
+        }
+        else if (existing.name == name)
+        {
+            if (existing.type == PropertyChange::Remove)
+            {
+                effectiveValue = nullptr;
+                lastResetIndex = i + 1;
+                hasReset = true;
+            }
+            else if (existing.type == PropertyChange::Set)
+            {
+                effectiveValue = &existing.newValue;
+            }
+        }
+    }
+
+    for (std::size_t i = lastResetIndex; i < propertyChanges.size(); ++i)
+    {
+        auto& change = propertyChanges[i];
         if (change.name == name && change.type == PropertyChange::Set)
         {
             change.newValue = newValue;
@@ -1524,21 +1641,14 @@ void DataTree::Transaction::setProperty (const Identifier& name, const var& newV
         }
     }
 
-    // Get current value for undo purposes
-    var oldValue;
-    if (auto* value = dataObject->properties.getVarPointer (name))
-        oldValue = *value;
-
-    // Skip if no change
-    if (oldValue == newValue)
+    if (! hasReset && effectiveValue != nullptr && effectiveValue->equalsWithSameType (newValue))
         return;
 
-    // Record the change
     PropertyChange change;
     change.type = PropertyChange::Set;
     change.name = name;
     change.newValue = newValue;
-    change.oldValue = oldValue;
+    change.oldValue = effectiveValue != nullptr ? *effectiveValue : var();
     propertyChanges.push_back (change);
 }
 
@@ -1547,14 +1657,25 @@ void DataTree::Transaction::removeProperty (const Identifier& name)
     if (! active || dataObject == nullptr)
         return;
 
-    if (! dataObject->properties.contains (name))
+    const var* effectiveValue = dataObject->properties.getVarPointer (name);
+
+    for (const auto& existing : propertyChanges)
+    {
+        if (existing.type == PropertyChange::RemoveAll)
+            effectiveValue = nullptr;
+        else if (existing.name == name && existing.type == PropertyChange::Remove)
+            effectiveValue = nullptr;
+        else if (existing.name == name && existing.type == PropertyChange::Set)
+            effectiveValue = &existing.newValue;
+    }
+
+    if (effectiveValue == nullptr)
         return;
 
-    // Record the change
     PropertyChange change;
     change.type = PropertyChange::Remove;
     change.name = name;
-    change.oldValue = dataObject->properties[name];
+    change.oldValue = *effectiveValue;
     propertyChanges.push_back (change);
 }
 
@@ -1563,10 +1684,24 @@ void DataTree::Transaction::removeAllProperties()
     if (! active || dataObject == nullptr)
         return;
 
-    if (dataObject->properties.size() == 0)
+    Array<Identifier> effectiveNames;
+
+    for (int i = 0; i < dataObject->properties.size(); ++i)
+        effectiveNames.add (dataObject->properties.getName (i));
+
+    for (const auto& existing : propertyChanges)
+    {
+        if (existing.type == PropertyChange::RemoveAll)
+            effectiveNames.clearQuick();
+        else if (existing.type == PropertyChange::Remove)
+            effectiveNames.removeFirstMatchingValue (existing.name);
+        else if (existing.type == PropertyChange::Set)
+            effectiveNames.addIfNotAlreadyThere (existing.name);
+    }
+
+    if (effectiveNames.isEmpty())
         return;
 
-    // Record the change
     PropertyChange change;
     change.type = PropertyChange::RemoveAll;
     propertyChanges.push_back (change);

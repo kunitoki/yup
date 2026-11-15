@@ -44,6 +44,12 @@ const Identifier& componentEnabledPropertyId()
     return identifier;
 }
 
+const Identifier& componentFocusedPropertyId()
+{
+    static const Identifier identifier ("focused");
+    return identifier;
+}
+
 /** Returns the axis-aligned bounding box of the corners of a rectangle mapped through @a mapPoint. */
 template <class MapPoint>
 Rectangle<float> getMappedBounds (const Rectangle<float>& bounds, MapPoint&& mapPoint)
@@ -147,6 +153,8 @@ Component::Component (StringRef componentID)
 
 Component::~Component()
 {
+    flags.isBeingDeleted = true;
+
     componentListeners.call (&ComponentListener::componentBeingDeleted, *this);
 
     if (parentComponent != nullptr)
@@ -156,6 +164,9 @@ Component::~Component()
 
         if (flags.isPressed)
             parentComponent->setPressedChain (false);
+
+        if (auto* context = parentComponent->findStyleContext())
+            context->forgetComponent (*this);
     }
 
     styleContext.reset();
@@ -235,6 +246,11 @@ void Component::setEnabled (bool shouldBeEnabled)
 void Component::sendEnablementChanged()
 {
     const WeakReference<Component> self (this);
+
+    markStyleDirty();
+
+    if (auto* context = findStyleContext())
+        context->propertyChanged (*this, componentEnabledPropertyId());
 
     componentListeners.call (&ComponentListener::componentPropertyChanged, *this, componentEnabledPropertyId());
     if (self == nullptr)
@@ -324,10 +340,15 @@ String Component::getTitle() const
 
 void Component::setTitle (const String& title)
 {
+    if (componentTitle == title)
+        return;
+
     componentTitle = title;
 
     if (flags.onDesktop && native != nullptr)
         native->setTitle (title);
+
+    notifyPropertyChanged (Identifier ("title"));
 }
 
 //==============================================================================
@@ -1146,9 +1167,23 @@ void Component::removeChildComponent (int index)
     if (component->isShowing())
         repaint (component->getPaintBounds().translated (component->getPosition()));
 
+    auto* formerContext = component->styleContext == nullptr ? findStyleContext() : nullptr;
+
     component->parentComponent = nullptr;
 
     auto bailOutChecker = BailOutChecker (this);
+    auto childBailOutChecker = BailOutChecker (component);
+
+    if (formerContext != nullptr)
+    {
+        if (component->flags.isBeingDeleted)
+            formerContext->forgetComponent (*component);
+        else
+            formerContext->detachComponent (*component);
+
+        if (bailOutChecker.shouldBailOut() || childBailOutChecker.shouldBailOut())
+            return;
+    }
 
     if (getNativeComponent() != nullptr)
     {
@@ -1653,6 +1688,9 @@ bool Component::hasFocusWithin() const
 void Component::styleStateFlagChanged (const Identifier& name)
 {
     markStyleDirty();
+
+    if (auto* context = findStyleContext())
+        context->propertyChanged (*this, name);
 
     componentListeners.call (&ComponentListener::componentPropertyChanged, *this, name);
 }
@@ -3022,8 +3060,17 @@ void Component::internalMoved (int xpos, int ypos)
 
 void Component::internalFocusChanged (bool gotFocus)
 {
+    const WeakReference<Component> self (this);
+
     for (auto* component = this; component != nullptr; component = component->parentComponent)
         component->markStyleDirty();
+
+    if (auto* context = findStyleContext())
+        context->propertyChanged (*this, componentFocusedPropertyId());
+
+    componentListeners.call (&ComponentListener::componentPropertyChanged, *this, componentFocusedPropertyId());
+    if (self == nullptr)
+        return;
 
     if (gotFocus)
         focusGained();

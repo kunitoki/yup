@@ -37,6 +37,7 @@ protected:
         ApplicationTheme::setGlobalTheme (theme);
 
         addGraphicsExpressionTypes (context);
+        DrawingScope::addExpressionArrayTypes (context);
     }
 
     void TearDown() override
@@ -172,6 +173,58 @@ TEST_F (DrawingScopeTest, UnknownPaletteRoleFailsToCompile)
     EXPECT_TRUE (compiled.failed());
 }
 
+TEST_F (DrawingScopeTest, ResolvesPointAndRectangleProperties)
+{
+    const ComponentTypeInfo extended (Identifier ("Knob"),
+                                      &Slider::getClassTypeInfo(),
+                                      { ComponentProperty { .name = Identifier ("origin"), .type = ComponentProperty::Type::point },
+                                        ComponentProperty { .name = Identifier ("area"), .type = ComponentProperty::Type::rectangle } });
+
+    Slider slider (Slider::LinearHorizontal);
+    slider.setTypeInfo (&extended);
+    slider.setProperty (Identifier ("origin"), VariantConverter<Point<float>>::toVar ({ 3.0f, 4.0f }));
+    slider.setProperty (Identifier ("area"), VariantConverter<Rectangle<float>>::toVar ({ 1.0f, 2.0f, 10.0f, 20.0f }));
+
+    DrawingScope scope (slider, context);
+
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = origin.y")), 4.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = area.width + area.x")), 11.0);
+}
+
+TEST_F (DrawingScopeTest, ResolvesArrayProperties)
+{
+    const ComponentTypeInfo extended (Identifier ("Knob"),
+                                      &Slider::getClassTypeInfo(),
+                                      { ComponentProperty { .name = Identifier ("lanes"), .type = ComponentProperty::Type::array, .elementType = ComponentProperty::Type::number },
+                                        ComponentProperty { .name = Identifier ("names"), .type = ComponentProperty::Type::array, .elementType = ComponentProperty::Type::string },
+                                        ComponentProperty { .name = Identifier ("spots"), .type = ComponentProperty::Type::array, .elementType = ComponentProperty::Type::point } });
+
+    Slider slider (Slider::LinearHorizontal);
+    slider.setTypeInfo (&extended);
+
+    DrawingScope scope (slider, context);
+
+    // An array the component doesn't hold a value for is empty
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = len (lanes)")), 0.0);
+
+    slider.setProperty (Identifier ("lanes"), var (Array<var> { 0.5, 1.5, 2.5 }));
+    slider.setProperty (Identifier ("names"), var (Array<var> { "a", "bb" }));
+    slider.setProperty (Identifier ("spots"), var (Array<var> { VariantConverter<Point<float>>::toVar ({ 1.0f, 2.0f }),
+                                                               VariantConverter<Point<float>>::toVar ({ 3.0f, 4.0f }) }));
+
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = len (lanes)")), 3.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = lanes[1] + lanes[2]")), 4.0);
+    EXPECT_EQ (evaluate (scope, "out = names[1]").toString(), "bb");
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = spots[1].x")), 3.0);
+
+    // The values follow the component, and a value that isn't an array leaves it empty
+    slider.setProperty (Identifier ("lanes"), var (Array<var> { 1.0 }));
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = len (lanes)")), 1.0);
+
+    slider.setProperty (Identifier ("lanes"), 7.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = len (lanes)")), 0.0);
+}
+
 TEST_F (DrawingScopeTest, DestroyedComponentFeedsNothing)
 {
     auto slider = std::make_unique<Slider> (Slider::LinearHorizontal);
@@ -195,4 +248,36 @@ TEST_F (DrawingScopeTest, DestroyedComponentFeedsNothing)
 
     // value defaults to 0 when the component is gone, so the result is just the constant.
     EXPECT_DOUBLE_EQ (static_cast<double> (state.getVar (outputIndex)), 1.0);
+}
+
+TEST_F (DrawingScopeTest, ResolvesBindingProviderModelsDirectly)
+{
+    DataTree params ("params");
+    {
+        auto tx = params.beginTransaction();
+        tx.setProperty ("cutoff", 0.25);
+        tx.setProperty ("bypass", true);
+        tx.setProperty ("label", "Warm");
+        tx.setProperty ("curve", var (Array<var> { 2.0, 6.0 }));
+    }
+
+    DataTreeBindingProvider provider (params);
+    Slider slider (Slider::LinearHorizontal);
+
+    DrawingScope scope (slider, context);
+    scope.setModelResolver ([&] (const String& name) -> BindingProvider*
+    {
+        return name == "params" ? &provider : nullptr;
+    });
+
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = params.cutoff * 4")), 1.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = params.bypass ? params.curve[1] : 0")), 6.0);
+    EXPECT_EQ (evaluate (scope, "out = params.label").toString(), "Warm");
+
+    auto compiled = CompiledExpression::compile ("out = params.cutoff + params.curve[0]", context);
+    ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+    const auto deps = scope.getDependencies (compiled.getReference());
+    ASSERT_EQ (deps.size(), 2u);
+    EXPECT_EQ (deps[0].provider, &provider);
+    EXPECT_EQ (deps[1].provider, &provider);
 }

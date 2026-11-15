@@ -149,6 +149,12 @@ public:
     /** Returns the bindings keeping the built properties up to date. */
     BindingGraph& getBindings() noexcept { return bindings; }
 
+    /** Returns a resolver looking up components in the top-level document scope. */
+    DrawingScope::ComponentResolver getComponentResolver() const;
+
+    /** Returns a resolver looking up registered BindingProvider models by name. */
+    DrawingScope::ModelResolver getModelResolver() const;
+
 private:
     //==============================================================================
     class Model;
@@ -233,6 +239,7 @@ private:
     Result report (const String& message, const DataTree& element, const Identifier& property = {});
     void emit (Component& component, const Identifier& signal, const Array<var>& arguments);
     bool isDeclaredSignal (const Component& component, const Identifier& signal) const;
+    Component* resolveComponent (const Scope& scope, const String& name, Component* self = nullptr) const;
     Component* resolve (const Scope& scope, const String& name, Component* self = nullptr) const;
     DrawingScope::ComponentResolver resolverFor (const Scope& scope) const;
 

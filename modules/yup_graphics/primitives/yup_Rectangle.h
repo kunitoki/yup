@@ -2260,9 +2260,40 @@ template <class T>
     return { xy, static_cast<T> (width), static_cast<T> (height) };
 }
 
+#ifndef DOXYGEN
+
+/** Converts a Rectangle to and from a var, as an array of x, y, width and height.
+
+    An array is used rather than an object because vars holding an object compare by identity,
+    so an object valued property would look changed on every write.
+*/
+template <>
+struct VariantConverter<Rectangle<float>>
+{
+    static Rectangle<float> fromVar (const var& v)
+    {
+        const auto* values = v.getArray();
+
+        if (values == nullptr || values->size() < 4)
+            return {};
+
+        return { static_cast<float> (values->getReference (0)),
+                 static_cast<float> (values->getReference (1)),
+                 static_cast<float> (values->getReference (2)),
+                 static_cast<float> (values->getReference (3)) };
+    }
+
+    static var toVar (const Rectangle<float>& rectangle)
+    {
+        return var (Array<var> { static_cast<double> (rectangle.getX()),
+                                 static_cast<double> (rectangle.getY()),
+                                 static_cast<double> (rectangle.getWidth()),
+                                 static_cast<double> (rectangle.getHeight()) });
+    }
+};
+
 } // namespace yup
 
-#ifndef DOXYGEN
 namespace std
 {
 

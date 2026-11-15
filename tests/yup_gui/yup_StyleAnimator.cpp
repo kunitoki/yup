@@ -184,6 +184,36 @@ TEST_F (StyleAnimatorTests, InterpolatesNumbersIntegersAndColors)
     EXPECT_NEAR (mixed.getAlpha(), 128, 1);
 }
 
+TEST_F (StyleAnimatorTests, InterpolatesPointsRectanglesAndArraysElementWise)
+{
+    const auto point = StyleAnimator::interpolate (VariantConverter<Point<float>>::toVar ({ 0.0f, 10.0f }),
+                                                   VariantConverter<Point<float>>::toVar ({ 10.0f, 20.0f }),
+                                                   0.5,
+                                                   Type::point);
+
+    EXPECT_EQ (VariantConverter<Point<float>>::fromVar (point), Point<float> (5.0f, 15.0f));
+
+    const auto area = StyleAnimator::interpolate (VariantConverter<Rectangle<float>>::toVar ({ 0.0f, 0.0f, 10.0f, 20.0f }),
+                                                  VariantConverter<Rectangle<float>>::toVar ({ 2.0f, 2.0f, 20.0f, 20.0f }),
+                                                  0.5,
+                                                  Type::rectangle);
+
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (area), Rectangle<float> (1.0f, 1.0f, 15.0f, 20.0f));
+
+    const auto lanes = StyleAnimator::interpolate (var (Array<var> { 0.0, 4.0 }), var (Array<var> { 10.0, 4.0 }), 0.25, Type::array);
+    ASSERT_NE (lanes.getArray(), nullptr);
+    ASSERT_EQ (lanes.getArray()->size(), 2);
+    EXPECT_DOUBLE_EQ (static_cast<double> ((*lanes.getArray())[0]), 2.5);
+
+    // Elements that aren't numbers, and arrays of different sizes, switch halfway
+    const auto names = StyleAnimator::interpolate (var (Array<var> { "a" }), var (Array<var> { "b" }), 0.6, Type::array);
+    EXPECT_EQ ((*names.getArray())[0].toString(), "b");
+
+    const auto resized = StyleAnimator::interpolate (var (Array<var> { 0.0 }), var (Array<var> { 1.0, 2.0 }), 0.4, Type::array);
+    ASSERT_EQ (resized.getArray()->size(), 1);
+    EXPECT_DOUBLE_EQ (static_cast<double> ((*resized.getArray())[0]), 0.0);
+}
+
 TEST_F (StyleAnimatorTests, SwitchesOtherValuesHalfway)
 {
     EXPECT_EQ (StyleAnimator::interpolate ("a", "b", 0.4, Type::string).toString(), "a");

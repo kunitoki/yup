@@ -247,6 +247,11 @@ and `!=` for types with `operator==`. A constructor named after the type is
 called as `vec (3, 4)`; qualified constructors like
 `constructor ("vec.unit", ...)` are called as `vec.unit (...)`.
 
+`addArray<Vec>` registers the array type it needs. When a symbol resolver
+returns an array type instead, register it ahead of the compilation with
+`addArrayType<Vec>()`, since a program only sees the types the context held
+when it started compiling.
+
 ```
 let v = vec (3, 4);
 v.length + v.scaled (2).x + v.yx.x

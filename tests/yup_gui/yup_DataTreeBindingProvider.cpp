@@ -36,6 +36,9 @@ protected:
         transaction.setProperty ("bypass", false);
         transaction.setProperty ("name", "Lead");
         transaction.setProperty ("curve", var (Array<var> { 1, 2 }));
+        transaction.setProperty ("names", var (Array<var> { "a", "b" }));
+        transaction.setProperty ("mixed", var (Array<var> { 1, "b" }));
+        transaction.setProperty ("empty", var (Array<var>()));
     }
 
     struct RecordingListener : BindingProvider::Listener
@@ -52,22 +55,32 @@ TEST_F (DataTreeBindingProviderTests, InfersThePropertyTypesFromTheValues)
 {
     DataTreeBindingProvider provider (tree);
     const auto properties = provider.getProperties();
-    ASSERT_EQ (properties.size(), 5u);
+    ASSERT_EQ (properties.size(), 8u);
 
-    const auto typeOf = [&] (const char* name)
+    const auto propertyOf = [&] (const char* name)
     {
         for (const auto& property : properties)
             if (property.name == Identifier (name))
-                return std::optional<ComponentProperty::Type> (property.type);
+                return property;
 
-        return std::optional<ComponentProperty::Type>();
+        return BindingProvider::Property {};
+    };
+
+    const auto typeOf = [&] (const char* name)
+    {
+        return propertyOf (name).type;
     };
 
     EXPECT_EQ (typeOf ("cutoff"), ComponentProperty::Type::number);
     EXPECT_EQ (typeOf ("steps"), ComponentProperty::Type::number);
     EXPECT_EQ (typeOf ("bypass"), ComponentProperty::Type::boolean);
     EXPECT_EQ (typeOf ("name"), ComponentProperty::Type::string);
-    EXPECT_EQ (typeOf ("curve"), ComponentProperty::Type::any);
+
+    EXPECT_EQ (typeOf ("curve"), ComponentProperty::Type::array);
+    EXPECT_EQ (propertyOf ("curve").elementType, ComponentProperty::Type::number);
+    EXPECT_EQ (propertyOf ("names").elementType, ComponentProperty::Type::string);
+    EXPECT_EQ (propertyOf ("mixed").elementType, ComponentProperty::Type::any);
+    EXPECT_EQ (propertyOf ("empty").elementType, ComponentProperty::Type::number);
 }
 
 TEST_F (DataTreeBindingProviderTests, ReadsAndWritesTheTree)
@@ -115,5 +128,39 @@ TEST_F (DataTreeBindingProviderTests, MakesEachGestureAnUndoTransaction)
     EXPECT_DOUBLE_EQ (static_cast<double> (tree.getProperty ("cutoff")), 0.6);
 
     undoManager.undo();
+    EXPECT_DOUBLE_EQ (static_cast<double> (tree.getProperty ("cutoff")), 0.4);
+}
+
+TEST_F (DataTreeBindingProviderTests, ExposesPropertiesAddedAfterConstructionAndClosesGestureTransactions)
+{
+    UndoManager undoManager;
+    DataTreeBindingProvider provider (tree, &undoManager);
+
+    tree.beginTransaction().setProperty ("resonance", 0.7);
+
+    const auto properties = provider.getProperties();
+    const auto it = std::find_if (properties.begin(), properties.end(), [] (const BindingProvider::Property& prop)
+    {
+        return prop.name == Identifier ("resonance");
+    });
+
+    ASSERT_NE (it, properties.end());
+    EXPECT_EQ (it->type, ComponentProperty::Type::number);
+    EXPECT_DOUBLE_EQ (static_cast<double> (provider.getValue ("resonance")), 0.7);
+
+    provider.beginGesture ("cutoff");
+    provider.setValue ("cutoff", 0.5);
+    provider.setValue ("cutoff", 0.6);
+    provider.endGesture ("cutoff");
+
+    // Writing outside the gesture must start a separate UndoManager transaction
+    provider.setValue ("steps", 12);
+    EXPECT_EQ (undoManager.getNumTransactions(), 2);
+
+    ASSERT_TRUE (undoManager.undo());
+    EXPECT_EQ (static_cast<int> (tree.getProperty ("steps")), 4);
+    EXPECT_DOUBLE_EQ (static_cast<double> (tree.getProperty ("cutoff")), 0.6);
+
+    ASSERT_TRUE (undoManager.undo());
     EXPECT_DOUBLE_EQ (static_cast<double> (tree.getProperty ("cutoff")), 0.4);
 }

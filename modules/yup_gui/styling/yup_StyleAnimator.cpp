@@ -266,6 +266,28 @@ var StyleAnimator::interpolate (const var& from, const var& to, double progress,
         }
     }
 
+    // Points, rectangles and arrays of numbers are vars holding numbers, interpolated element by element
+    if (const auto* start = from.getArray())
+    {
+        if (const auto* end = to.getArray(); end != nullptr && end->size() == start->size())
+        {
+            Array<var> values;
+            values.ensureStorageAllocated (start->size());
+
+            for (int i = 0; i < start->size(); ++i)
+            {
+                const auto& first = (*start)[i];
+                const auto& second = (*end)[i];
+
+                values.add (isNumeric (first) && isNumeric (second)
+                                ? var (static_cast<double> (first) + (static_cast<double> (second) - static_cast<double> (first)) * progress)
+                                : (progress < 0.5 ? first : second));
+            }
+
+            return var (std::move (values));
+        }
+    }
+
     return progress < 0.5 ? from : to;
 }
 

@@ -753,3 +753,126 @@ TEST_F (StyleContextTests, ReportsMalformedShadows)
     EXPECT_TRUE (root.getStyleState()->getShadows().empty());
     EXPECT_FLOAT_EQ (root.getPaintMargin().getLeft(), 0.0f);
 }
+
+namespace yup
+{
+
+template <>
+class ComponentTestHelper<StyleContext>
+{
+public:
+    static void triggerMouseEnter (Component& component, const MouseEvent& event) { component.internalMouseEnter (event); }
+    static void triggerMouseExit (Component& component, const MouseEvent& event) { component.internalMouseExit (event); }
+    static void triggerMouseDown (Component& component, const MouseEvent& event) { component.internalMouseDown (event); }
+    static void triggerMouseUp (Component& component, const MouseEvent& event) { component.internalMouseUp (event); }
+    static void triggerFocusGained (Component& component) { component.internalFocusChanged (true); }
+    static void triggerFocusLost (Component& component) { component.internalFocusChanged (false); }
+};
+
+} // namespace yup
+
+TEST_F (StyleContextTests, AncestorStateClassAndIdChangesRestyleCombinatorDescendants)
+{
+    Component root ("root");
+    Component row ("row");
+    Component icon ("icon");
+    icon.addStyleClass (Identifier ("icon"));
+
+    root.addAndMakeVisible (row);
+    row.addAndMakeVisible (icon);
+
+    attach (root, R"yui(
+        style {
+            .icon { glow: 1; }
+            #row:hover .icon { glow: 2; }
+            #row:pressed > .icon { glow: 3; }
+            #row:focused .icon { glow: 4; }
+            .active .icon { glow: 5; }
+            #featured > .icon { glow: 6; }
+            #row:disabled .icon { glow: 7; }
+        })yui");
+
+    EXPECT_DOUBLE_EQ (glow (icon), 1.0);
+
+    ComponentTestHelper<StyleContext>::triggerMouseEnter (row, MouseEvent {});
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (icon), 2.0);
+
+    ComponentTestHelper<StyleContext>::triggerMouseDown (row, MouseEvent {});
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (icon), 3.0);
+
+    ComponentTestHelper<StyleContext>::triggerMouseUp (row, MouseEvent {});
+    ComponentTestHelper<StyleContext>::triggerMouseExit (row, MouseEvent {});
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (icon), 1.0);
+
+    ComponentTestHelper<StyleContext>::triggerFocusGained (row);
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (icon), 4.0);
+
+    ComponentTestHelper<StyleContext>::triggerFocusLost (row);
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (icon), 1.0);
+
+    row.addStyleClass (Identifier ("active"));
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (icon), 5.0);
+
+    row.removeStyleClass (Identifier ("active"));
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (icon), 1.0);
+
+    row.setEnabled (false);
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (icon), 7.0);
+
+    row.setEnabled (true);
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (icon), 1.0);
+
+    row.setComponentID ("featured");
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (icon), 6.0);
+}
+
+TEST_F (StyleContextTests, DetachingAChildStopsItsAnimationsAndClearsCachedState)
+{
+    Component root ("root");
+    Component knob ("knob");
+    knob.addStyleClass (Identifier ("knob"));
+    root.addAndMakeVisible (knob);
+
+    attach (root, "style { .knob { glow: 0; transition: glow 1s; } .lit { glow: 10; } }");
+    EXPECT_DOUBLE_EQ (glow (knob), 0.0);
+
+    knob.addStyleClass (Identifier ("lit"));
+    advance (root, 0.0);
+    advance (root, 0.25);
+    EXPECT_DOUBLE_EQ (glow (knob), 2.5);
+    ASSERT_NE (knob.getStyleState(), nullptr);
+    EXPECT_NE (knob.getStyleState()->getAnimatedValue (Identifier ("glow")), nullptr);
+
+    const auto detachedGlow = glow (knob);
+    root.removeChildComponent (&knob);
+
+    EXPECT_EQ (knob.getStyleState()->getAnimatedValue (Identifier ("glow")), nullptr);
+
+    advance (root, 0.5);
+    EXPECT_DOUBLE_EQ (glow (knob), detachedGlow);
+
+    alignas (Component) unsigned char slot[sizeof (Component)];
+    auto* first = new (slot) Component ("slot");
+    first->addStyleClass (Identifier ("lit"));
+    root.addAndMakeVisible (first);
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (*first), 10.0);
+    first->~Component();
+
+    auto* second = new (slot) Component ("slot");
+    root.addAndMakeVisible (second);
+    restyle (root);
+    EXPECT_TRUE (second->findProperty (Identifier ("glow")).isVoid());
+    root.removeChildComponent (second);
+    second->~Component();
+}

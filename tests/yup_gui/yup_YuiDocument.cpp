@@ -408,3 +408,81 @@ TEST_F (YuiDocumentTests, UndoesTheGesturesMadeOnACompositeLinkedToAModel)
     EXPECT_FLOAT_EQ (static_cast<float> (params.getProperty ("cutoff")), 0.4f);
     EXPECT_FLOAT_EQ (static_cast<float> (knob->getValue()), 0.4f);
 }
+
+TEST_F (YuiDocumentTests, ClearNotifiesListenersAndFailedLoadClearsStaleSourceMap)
+{
+    struct Recorder final : YuiDocument::Listener
+    {
+        void documentLoaded (YuiDocument& doc, const Result& result) override
+        {
+            results.add (result.wasOk());
+            roots.add (doc.getRoot());
+        }
+
+        void documentDiagnosed (YuiDocument&, const YuiDiagnostic& diagnostic) override
+        {
+            lateDiagnostics.add (diagnostic.toString());
+        }
+
+        Array<bool> results;
+        Array<Component*> roots;
+        StringArray lateDiagnostics;
+    };
+
+    YuiDocument document;
+    Recorder recorder;
+    document.addListener (&recorder);
+
+    ASSERT_TRUE (document.loadFromString ("style {\n\n\n    .late { cursor: finger; }\n}\nComponent { Slider { id: knob; } }").wasOk());
+    ASSERT_EQ (recorder.results.size(), 1);
+    EXPECT_NE (recorder.roots[0], nullptr);
+
+    const auto failed = document.loadFromString ("Component {\n    Slider {" );
+    EXPECT_TRUE (failed.failed());
+    ASSERT_FALSE (document.getDiagnostics().empty());
+    EXPECT_EQ (document.getDiagnostics().front().line, 2);
+
+    auto* knob = document.findById ("knob");
+    ASSERT_NE (knob, nullptr);
+    knob->addStyleClass ("late");
+    document.getRoot()->getStyleContext()->restyleNow();
+    EXPECT_TRUE (recorder.lateDiagnostics.isEmpty());
+
+    document.clear();
+    ASSERT_EQ (recorder.results.size(), 3);
+    EXPECT_TRUE (recorder.results[2]);
+    EXPECT_EQ (recorder.roots[2], nullptr);
+
+    document.removeListener (&recorder);
+}
+
+TEST_F (YuiDocumentTests, DrawingsReadBindingProviderModelsDirectly)
+{
+    DataTree params ("params");
+    params.beginTransaction().setProperty ("cutoff", 0.5);
+    DataTreeBindingProvider provider (params);
+
+    YuiDocument document;
+    document.setModel ("params", provider);
+
+    const auto result = document.loadFromString (R"yui(
+        drawing Meter {
+            rect { bounds: rect (0, 0, bounds.width * params.cutoff, bounds.height); fill: #ff0000; }
+        }
+        style {
+            #meter { drawing: Meter; }
+        }
+        Component {
+            Component { id: meter; }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+
+    params.beginTransaction().setProperty ("cutoff", 0.9);
+    EXPECT_TRUE (document.getDiagnostics().empty());
+
+    document.removeModel ("params");
+    params.beginTransaction().setProperty ("cutoff", 0.1);
+    EXPECT_TRUE (document.getDiagnostics().empty());
+}

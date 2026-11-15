@@ -155,7 +155,12 @@ overridden per component.
   fill and stroke of the caller, gradients are not inherited.
 - `repeat` exposes the current index as an integer `let` named by `name`. Integer
   division truncates, so write `i / 10.0` for a fraction. A `repeat` holds shapes
-  and `let`s only, it can't contain `layer`, `group` or another `repeat`.
+  and `let`s only, it can't contain `layer`, `group` or another `repeat`, and its
+  iteration count is capped at `4096` (constant ranges above `4096` fail to
+  compile).
+- In `.yui` documents, drawings can also read registered `BindingProvider` models
+  directly (such as `params.cutoff`) in addition to component properties and
+  `palette.<role>`.
 - Every element accepts an optional `id`, used in error messages.
 
 ## Properties
@@ -176,15 +181,30 @@ drawing Knob {
 }
 ```
 
-- The type is `number`, `integer`, `boolean`, `string` or `color`.
+- The type is `number`, `integer`, `boolean`, `string`, `color`, `point`,
+  `rectangle` or an array of any of them (`number[]`).
 - The default is optional and is an expression, so it can read the component,
   the palette, `bounds` and the properties declared before it. It must have the
   property's type; a `number` accepts any number. Without a default a property
-  is `0`, `false`, empty or transparent.
+  is `0`, `false`, empty or transparent. An array property can't have a default,
+  it is empty until the component provides one.
 - Every paint reads the property by name from the component the drawing is
   installed on, like `Component::findProperty`: a value set on the component, a
   value a stylesheet computed for it, or one of these on a parent. The default
   is used when none is found.
+
+An array property is read with `lanes[i]` and `len (lanes)`, so a drawing can
+paint a list whose length the component decides:
+
+```yui
+drawing Lanes {
+    property lanes: number[];
+
+    repeat i in 0 .. len (lanes) {
+        line { from: point (0, lanes[i] * bounds.height); to: point (bounds.width, lanes[i] * bounds.height); }
+    }
+}
+```
 
 So a stylesheet sets them like any other property, typed by the drawing, and
 can vary them per class, id or state:

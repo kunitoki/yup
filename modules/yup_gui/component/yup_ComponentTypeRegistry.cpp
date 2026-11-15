@@ -99,6 +99,8 @@ void registerBuiltInComponentTypes()
     registry.registerType (ProgressBar::getClassTypeInfo());
     registry.registerType (ScrollBar::getClassTypeInfo());
     registry.registerType (ListBox::getClassTypeInfo());
+    registry.registerType (Viewport::getClassTypeInfo());
+    registry.registerType (TabComponent::getClassTypeInfo());
     registry.registerType (FlexBoxComponent::getClassTypeInfo());
     registry.registerType (RowComponent::getClassTypeInfo());
     registry.registerType (ColumnComponent::getClassTypeInfo());

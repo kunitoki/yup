@@ -52,6 +52,15 @@ const ComponentTypeInfo& ComboBox::getClassTypeInfo()
         props.push_back (makeNumberProperty (Identifier ("focusedOutlineWidth"), Style::focusedOutlineWidthId, 2.0, "The outline width when focused."));
 
         props.push_back (ComponentProperty {
+            .name = Identifier ("items"),
+            .type = ComponentProperty::Type::array,
+            .elementType = ComponentProperty::Type::string,
+            .getter = [] (const Component& c) { return VariantConverter<StringArray>::toVar (static_cast<const ComboBox&> (c).getItems()); },
+            .setter = [] (Component& c, const var& v) { static_cast<ComboBox&> (c).setItems (VariantConverter<StringArray>::fromVar (v)); },
+            .isStyleable = false,
+            .description = "The texts of the items, numbered from 1 in order." });
+
+        props.push_back (ComponentProperty {
             .name = Identifier ("selectedId"),
             .type = ComponentProperty::Type::integer,
             .getter = [] (const Component& c) { return var (static_cast<const ComboBox&> (c).getSelectedId()); },
@@ -127,6 +136,41 @@ void ComboBox::addItemList (const StringArray& itemsToAdd, int firstItemId)
 void ComboBox::addSeparator()
 {
     items.add ({ {}, 0, true });
+}
+
+void ComboBox::setItems (const StringArray& newItems, NotificationType notification)
+{
+    const auto previousId = selectedItemId;
+
+    items.clear();
+
+    for (int i = 0; i < newItems.size(); ++i)
+        items.add ({ newItems[i], i + 1, false });
+
+    if (previousId > newItems.size())
+        selectedItemId = 0;
+
+    updateDisplayText();
+
+    notifyPropertyChanged (Identifier ("items"));
+
+    if (selectedItemId != previousId)
+        sendSelectionChanged (notification);
+    else
+        notifyPropertyChanged (Identifier ("text"));
+
+    repaint();
+}
+
+StringArray ComboBox::getItems() const
+{
+    StringArray result;
+
+    for (const auto& item : items)
+        if (! item.isSeparator)
+            result.add (item.text);
+
+    return result;
 }
 
 //==============================================================================
@@ -226,17 +270,26 @@ void ComboBox::setSelectedId (int newItemId, NotificationType notification)
             selectedItemId = newItemId;
             updateDisplayText();
 
-            sendChangeNotification (notification, [this]
-            {
-                selectedItemChanged();
-
-                if (onSelectedItemChanged)
-                    onSelectedItemChanged();
-            });
+            sendSelectionChanged (notification);
 
             repaint();
         }
     }
+}
+
+void ComboBox::sendSelectionChanged (NotificationType notification)
+{
+    sendChangeNotification (notification, [this]
+    {
+        selectedItemChanged();
+
+        if (onSelectedItemChanged)
+            onSelectedItemChanged();
+
+        notifyPropertyChanged (Identifier ("selectedId"));
+        notifyPropertyChanged (Identifier ("selectedIndex"));
+        notifyPropertyChanged (Identifier ("text"));
+    });
 }
 
 void ComboBox::setTextWhenNothingSelected (String newPlaceholderText)

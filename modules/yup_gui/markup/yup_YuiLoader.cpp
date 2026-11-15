@@ -33,6 +33,46 @@ std::optional<String> readYuiFile (const File& file)
     return file.loadFileAsString();
 }
 
+String normalizeYuiLoaderPath (const String& rawPath)
+{
+    const auto normalizedSeparators = rawPath.trim().replaceCharacter ('\\', '/');
+    if (normalizedSeparators.isEmpty())
+        return {};
+
+    StringArray segments;
+
+    for (const auto& token : StringArray::fromTokens (normalizedSeparators, "/", ""))
+    {
+        if (token.isEmpty() || token == ".")
+            continue;
+
+        if (token == ".." && ! segments.isEmpty() && segments[segments.size() - 1] != "..")
+        {
+            segments.remove (segments.size() - 1);
+            continue;
+        }
+
+        segments.add (token);
+    }
+
+    return segments.joinIntoString ("/");
+}
+
+String resolveRelativeYuiLoaderPath (const String& baseFilePath, const String& relativePath)
+{
+    const auto cleanedRelative = relativePath.trim().replaceCharacter ('\\', '/');
+    if (cleanedRelative.startsWithChar ('/'))
+        return normalizeYuiLoaderPath (cleanedRelative.substring (1));
+
+    const auto normalizedBase = normalizeYuiLoaderPath (baseFilePath);
+    const auto slash = normalizedBase.lastIndexOfChar ('/');
+
+    if (slash < 0)
+        return normalizeYuiLoaderPath (cleanedRelative);
+
+    return normalizeYuiLoaderPath (normalizedBase.substring (0, slash + 1) + cleanedRelative);
+}
+
 } // namespace
 
 //==============================================================================
@@ -57,7 +97,7 @@ Result YuiLoader::loadFile (const File& fileToLoad)
 Result YuiLoader::loadResource (const String& path, ResourceFinder finder)
 {
     file = File();
-    resourcePath = path;
+    resourcePath = normalizeYuiLoaderPath (path);
     findResource = std::move (finder);
     overrides.clear();
 
@@ -75,11 +115,15 @@ Result YuiLoader::reload()
 {
     loadedFiles.clear();
 
-    const auto text = resolve (getMainPath());
+    const auto mainPath = getMainPath();
+    const auto text = resolve (mainPath);
 
     const auto resolveImport = [this] (const String& path)
     {
-        return resolve (path);
+        if (file == File() && findResource != nullptr)
+            return resolve (resolveRelativeYuiLoaderPath (resourcePath, path));
+
+        return resolve (normalizeYuiLoaderPath (path));
     };
 
     const auto result = text.has_value()
@@ -97,7 +141,7 @@ Result YuiLoader::reload()
 //==============================================================================
 void YuiLoader::setOverride (const String& path, const String& text)
 {
-    overrides[path] = text;
+    overrides[normalizeYuiLoaderPath (path)] = text;
 }
 
 void YuiLoader::clearOverrides()
@@ -107,10 +151,23 @@ void YuiLoader::clearOverrides()
 
 std::optional<String> YuiLoader::getLoadedText (const String& path) const
 {
+    const auto normalized = normalizeYuiLoaderPath (path);
+
     for (const auto& loaded : loadedFiles)
     {
-        if (loaded.path == path)
+        if (loaded.path == normalized)
             return loaded.text;
+    }
+
+    if (file == File() && resourcePath.containsChar ('/'))
+    {
+        const auto relativeToResource = resolveRelativeYuiLoaderPath (resourcePath, normalized);
+
+        for (const auto& loaded : loadedFiles)
+        {
+            if (loaded.path == relativeToResource)
+                return loaded.text;
+        }
     }
 
     return std::nullopt;
@@ -119,28 +176,45 @@ std::optional<String> YuiLoader::getLoadedText (const String& path) const
 //==============================================================================
 String YuiLoader::getMainPath() const
 {
-    return file != File() ? file.getFileName() : resourcePath;
+    return file != File() ? normalizeYuiLoaderPath (file.getFileName()) : resourcePath;
 }
 
 std::optional<String> YuiLoader::resolve (const String& path)
 {
-    auto& loaded = loadedFiles.emplace_back();
-    loaded.path = path;
+    const auto normalized = normalizeYuiLoaderPath (path);
 
-    if (const auto found = overrides.find (path); found != overrides.end())
+    for (const auto& existing : loadedFiles)
     {
-        loaded.text = found->second;
+        if (existing.path == normalized)
+            return existing.text;
+    }
+
+    auto& loaded = loadedFiles.emplace_back();
+    loaded.path = normalized;
+
+    auto foundOverride = overrides.find (normalized);
+
+    if (foundOverride == overrides.end() && file == File() && normalized != resourcePath && resourcePath.containsChar ('/'))
+    {
+        const auto prefix = resourcePath.upToLastOccurrenceOf ("/", true, false);
+        if (normalized.startsWith (prefix))
+            foundOverride = overrides.find (normalized.substring (prefix.length()));
+    }
+
+    if (foundOverride != overrides.end())
+    {
+        loaded.text = foundOverride->second;
     }
     else if (file != File())
     {
-        loaded.file = file.getParentDirectory().getChildFile (path);
+        loaded.file = file.getParentDirectory().getChildFile (normalized);
         loaded.text = readYuiFile (loaded.file);
     }
     else if (findResource != nullptr)
     {
         std::size_t size = 0;
 
-        if (const auto* data = findResource (path.toRawUTF8(), size))
+        if (const auto* data = findResource (normalized.toRawUTF8(), size))
             loaded.text = String::fromUTF8 (reinterpret_cast<const char*> (data), static_cast<int> (size));
     }
 

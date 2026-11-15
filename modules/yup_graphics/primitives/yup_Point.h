@@ -1404,9 +1404,34 @@ template <std::size_t I, class ValueType>
     return shearing (factorX, factorY, center.getX(), center.getY());
 }
 
+#ifndef DOXYGEN
+
+/** Converts a Point to and from a var, as an array of its two coordinates.
+
+    An array is used rather than an object because vars holding an object compare by identity,
+    so an object valued property would look changed on every write.
+*/
+template <>
+struct VariantConverter<Point<float>>
+{
+    static Point<float> fromVar (const var& v)
+    {
+        const auto* values = v.getArray();
+
+        if (values == nullptr || values->size() < 2)
+            return {};
+
+        return { static_cast<float> (values->getReference (0)), static_cast<float> (values->getReference (1)) };
+    }
+
+    static var toVar (Point<float> point)
+    {
+        return var (Array<var> { static_cast<double> (point.getX()), static_cast<double> (point.getY()) });
+    }
+};
+
 } // namespace yup
 
-#ifndef DOXYGEN
 namespace std
 {
 

@@ -34,11 +34,30 @@ bool isRawDeclaration (const Identifier& name)
     return rawNames.contains (name);
 }
 
-bool isDescendantOfOrSame (const Component& component, const Component& ancestor)
+bool isManagedByRoot (const Component& component, const Component& root)
 {
     for (auto* c = &component; c != nullptr; c = c->getParentComponent())
-        if (c == &ancestor)
+    {
+        if (c == &root)
             return true;
+
+        if (c->getStyleContext() != nullptr)
+            return false;
+    }
+
+    return false;
+}
+
+bool hasAncestorInSet (Component& component, const Component& root, const std::set<Component*>& candidates)
+{
+    for (auto* parent = component.getParentComponent(); parent != nullptr; parent = parent->getParentComponent())
+    {
+        if (candidates.find (parent) != candidates.end())
+            return true;
+
+        if (parent == &root || parent->getStyleContext() != nullptr)
+            break;
+    }
 
     return false;
 }
@@ -122,12 +141,20 @@ struct StyleContext::ResolvedDeclaration
     }
 };
 
+struct StyleContext::BoundDependency
+{
+    Component* component = nullptr;
+    BindingProvider* provider = nullptr;
+    Identifier property;
+};
+
 /* One compiled declaration value, kept per component so that frames reuse the program. */
 struct StyleContext::CompiledValue
 {
     String source;
     std::optional<ComponentProperty::Type> type;
     std::unique_ptr<PropertyExpression> expression;
+    std::vector<BoundDependency> dependencies;
 };
 
 /* Everything the context keeps for a component it visited, styled or not, so later restyles transition. */
@@ -175,7 +202,7 @@ StyleContext::StyleContext (Component& rootToUse, StyleSheet::Ptr sheetToUse)
 
 StyleContext::~StyleContext()
 {
-    caches.clear();
+    clearAllCaches();
 }
 
 //==============================================================================
@@ -186,11 +213,59 @@ void StyleContext::setStyleSheet (StyleSheet::Ptr newStyleSheet)
         return;
 
     clearSubtree (root);
-    caches.clear();
+    clearAllCaches();
     animator.clear();
     diagnostics.clear();
 
     styleSheet = std::move (newStyleSheet);
+
+    markDirty (root);
+}
+
+void StyleContext::setComponentResolver (ComponentResolver resolver)
+{
+    componentResolver = std::move (resolver);
+
+    for (auto& [ptr, cache] : caches)
+    {
+        if (cache == nullptr)
+            continue;
+
+        clearCacheValues (*cache);
+
+        if (auto* comp = cache->component.get())
+            restoreDrawing (*comp);
+        else
+        {
+            cache->drawingName = {};
+            cache->drawingStyle = nullptr;
+            cache->savedStyle = nullptr;
+        }
+    }
+
+    markDirty (root);
+}
+
+void StyleContext::setModelResolver (ModelResolver resolver)
+{
+    modelResolver = std::move (resolver);
+
+    for (auto& [ptr, cache] : caches)
+    {
+        if (cache == nullptr)
+            continue;
+
+        clearCacheValues (*cache);
+
+        if (auto* comp = cache->component.get())
+            restoreDrawing (*comp);
+        else
+        {
+            cache->drawingName = {};
+            cache->drawingStyle = nullptr;
+            cache->savedStyle = nullptr;
+        }
+    }
 
     markDirty (root);
 }
@@ -208,10 +283,10 @@ void StyleContext::markDirty (Component& component)
 
 void StyleContext::propertyChanged (Component& component, const Identifier& name)
 {
-    if (styleSheet == nullptr || ! styleSheet->watchesProperty (name))
-        return;
+    if (styleSheet != nullptr && styleSheet->watchesProperty (name))
+        markDirty (component);
 
-    markDirty (component);
+    invalidateDependencies (&component, nullptr, name);
 }
 
 //==============================================================================
@@ -245,29 +320,60 @@ void StyleContext::restyleNow()
     if (dirtyComponents.isEmpty())
         return;
 
-    auto pending = std::move (dirtyComponents);
-    dirtyComponents.clear();
     diagnostics.clear();
 
-    for (const auto& dirty : pending)
+    for (int pass = 0; pass < 4 && ! dirtyComponents.isEmpty(); ++pass)
     {
-        auto* component = dirty.get();
+        auto pending = std::move (dirtyComponents);
+        dirtyComponents.clear();
 
-        if (component == nullptr || ! isDescendantOfOrSame (*component, root))
-            continue;
+        std::vector<Component*> ordered;
+        std::set<Component*> candidates;
 
-        restyleSubtree (*component, collectInherited (*component));
+        for (const auto& dirty : pending)
+        {
+            auto* component = dirty.get();
+
+            if (component == nullptr || ! isManagedByRoot (*component, root))
+                continue;
+
+            if (candidates.insert (component).second)
+                ordered.push_back (component);
+        }
+
+        for (auto* component : ordered)
+        {
+            if (hasAncestorInSet (*component, root, candidates))
+                continue;
+
+            restyleSubtree (*component, collectInherited (*component));
+        }
     }
 
     // Drops the caches of the components that went away
     for (auto it = caches.begin(); it != caches.end();)
-        it = it->second->component.get() == nullptr ? caches.erase (it) : std::next (it);
+    {
+        if (it->second == nullptr || it->second->component.get() != it->first)
+        {
+            if (it->second != nullptr)
+                clearCacheValues (*it->second);
+
+            it = caches.erase (it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
 }
 
 //==============================================================================
 
 void StyleContext::restyleSubtree (Component& component, const DeclarationMap& inherited)
 {
+    if (&component != &root && component.getStyleContext() != nullptr)
+        return;
+
     DeclarationMap inheritedForChildren;
     applyToComponent (component, inherited, inheritedForChildren);
 
@@ -386,7 +492,7 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
         previous = styleState->getComputedValues();
 
     // A component styled for the first time shows its values at once, later restyles transition
-    const bool firstStyle = caches.find (&component) == caches.end();
+    const bool firstStyle = findCache (component) == nullptr;
     auto& cache = getCache (component);
 
     const auto affectsParentLayout = [&typeInfo] (const Identifier& name)
@@ -404,7 +510,10 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     if (direct.empty())
     {
         if (styleState == nullptr)
+        {
+            clearCacheValues (cache);
             return;
+        }
 
         animator.removeComponent (component);
         restoreAllStateBacked (component);
@@ -415,7 +524,7 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
         changed |= styleState->setStylePalette (std::nullopt);
         changed |= applyEffects (component);
         styleState->setPaletteDependent (false);
-        cache.values.clear();
+        clearCacheValues (cache);
 
         if (changed)
             component.repaint();
@@ -586,11 +695,14 @@ bool StyleContext::evaluate (Component& component,
     // A value that failed to compile is kept, so that it isn't compiled and reported again until it changes
     if (entry == nullptr || entry->source != valueText || entry->type != type)
     {
+        if (entry != nullptr)
+            removeDependencies (entry->dependencies);
+
         entry = std::make_unique<CompiledValue>();
         entry->source = valueText;
         entry->type = type;
 
-        auto compiled = PropertyExpression::compile (component, valueText, type);
+        auto compiled = PropertyExpression::compile (component, valueText, type, componentResolver, modelResolver);
 
         if (compiled.failed())
         {
@@ -599,6 +711,11 @@ bool StyleContext::evaluate (Component& component,
         }
 
         entry->expression = std::move (compiled.getReference());
+
+        for (const auto& dep : entry->expression->getDependencies())
+            entry->dependencies.push_back ({ dep.component, dep.provider, dep.property });
+
+        addDependencies (entry->dependencies);
     }
 
     if (entry->expression == nullptr)
@@ -636,12 +753,11 @@ void StyleContext::syncStateBacked (Component& component, const Identifier& stor
 
 void StyleContext::restoreStateBacked (Component& component, const Identifier& storageId)
 {
-    const auto it = caches.find (&component);
-
-    if (it == caches.end())
+    auto* cache = findCache (component);
+    if (cache == nullptr)
         return;
 
-    auto& saved = it->second->savedState;
+    auto& saved = cache->savedState;
 
     if (const auto* original = saved.getVarPointer (storageId))
     {
@@ -656,12 +772,11 @@ void StyleContext::restoreStateBacked (Component& component, const Identifier& s
 
 void StyleContext::restoreAllStateBacked (Component& component)
 {
-    const auto it = caches.find (&component);
-
-    if (it == caches.end())
+    auto* cache = findCache (component);
+    if (cache == nullptr)
         return;
 
-    auto& saved = it->second->savedState;
+    auto& saved = cache->savedState;
 
     for (int i = saved.size(); --i >= 0;)
         restoreStateBacked (component, saved.getName (i));
@@ -683,7 +798,7 @@ const DrawingStyle* StyleContext::installDrawing (Component& component, const St
         return nullptr;
     }
 
-    auto created = DrawingStyle::create (component, drawing);
+    auto created = DrawingStyle::create (component, drawing, componentResolver, modelResolver);
 
     if (created.failed())
     {
@@ -725,20 +840,18 @@ const ComponentProperty* StyleContext::findStoredProperty (const ComponentTypeIn
 
 void StyleContext::restoreDrawing (Component& component)
 {
-    const auto it = caches.find (&component);
+    auto* cache = findCache (component);
 
-    if (it == caches.end() || it->second->drawingStyle == nullptr)
+    if (cache == nullptr || cache->drawingStyle == nullptr)
         return;
 
-    auto& cache = *it->second;
-
     // The application may have replaced the drawing in the meantime, and its choice wins
-    if (component.getStyle().get() == cache.drawingStyle.get())
-        component.setStyle (std::move (cache.savedStyle));
+    if (component.getStyle().get() == cache->drawingStyle.get())
+        component.setStyle (std::move (cache->savedStyle));
 
-    cache.drawingName = {};
-    cache.drawingStyle = nullptr;
-    cache.savedStyle = nullptr;
+    cache->drawingName = {};
+    cache->drawingStyle = nullptr;
+    cache->savedStyle = nullptr;
 }
 
 bool StyleContext::applyEffects (Component& component, bool* paletteDependent)
@@ -923,17 +1036,56 @@ bool StyleContext::applyShadows (Component& component, const String& text, bool&
     return component.getOrCreateStyleState().setShadows (std::move (shadows));
 }
 
-StyleContext::ComponentCache& StyleContext::getCache (Component& component)
+StyleContext::ComponentCache* StyleContext::findCache (const Component& component)
 {
-    auto& cache = caches[&component];
+    const auto it = caches.find (const_cast<Component*> (&component));
 
-    if (cache == nullptr)
+    if (it == caches.end())
+        return nullptr;
+
+    if (it->second == nullptr || it->second->component.get() != &component)
     {
-        cache = std::make_unique<ComponentCache>();
-        cache->component = WeakReference<Component> (&component);
+        if (it->second != nullptr)
+            clearCacheValues (*it->second);
+
+        caches.erase (it);
+        return nullptr;
     }
 
+    return it->second.get();
+}
+
+StyleContext::ComponentCache& StyleContext::getCache (Component& component)
+{
+    if (auto* existing = findCache (component))
+        return *existing;
+
+    auto& cache = caches[&component];
+    cache = std::make_unique<ComponentCache>();
+    cache->component = WeakReference<Component> (&component);
     return *cache;
+}
+
+void StyleContext::clearCacheValues (ComponentCache& cache)
+{
+    for (auto& [id, val] : cache.values)
+        if (val != nullptr)
+            removeDependencies (val->dependencies);
+
+    cache.values.clear();
+}
+
+void StyleContext::clearAllCaches()
+{
+    for (auto& [component, count] : observedComponents)
+        component->removeComponentListener (this);
+
+    for (auto& [provider, count] : observedProviders)
+        provider->removeListener (this);
+
+    observedComponents.clear();
+    observedProviders.clear();
+    caches.clear();
 }
 
 //==============================================================================
@@ -947,8 +1099,8 @@ var StyleContext::getBaseValue (Component& component, const ComponentProperty* d
 
     if (descriptor != nullptr && descriptor->isStateBacked())
     {
-        if (const auto it = caches.find (&component); it != caches.end())
-            if (const auto* original = it->second->savedState.getVarPointer (storageId))
+        if (auto* cache = findCache (component))
+            if (const auto* original = cache->savedState.getVarPointer (storageId))
                 return *original;
 
         return descriptor->getter (component);
@@ -1101,7 +1253,7 @@ std::vector<StyleAnimator::Track> StyleContext::compileTracks (Component& compon
             else if (existing != compiled.end())
                 type = existing->track.type;
 
-            auto expression = PropertyExpression::compile (component, declaration.value, type);
+            auto expression = PropertyExpression::compile (component, declaration.value, type, componentResolver, modelResolver);
 
             if (expression.failed())
             {
@@ -1171,14 +1323,80 @@ void StyleContext::showAnimatedValue (Component& component, const Identifier& st
 void StyleContext::detach()
 {
     clearSubtree (root);
-    caches.clear();
+    clearAllCaches();
     animator.clear();
     dirtyComponents.clear();
     diagnostics.clear();
 }
 
+void StyleContext::detachComponent (Component& component)
+{
+    if (&component != &root && component.getStyleContext() != nullptr)
+        return;
+
+    animator.removeComponent (component);
+
+    for (int i = dirtyComponents.size(); --i >= 0;)
+        if (dirtyComponents.getReference (i).get() == &component || dirtyComponents.getReference (i).get() == nullptr)
+            dirtyComponents.remove (i);
+
+    if (auto* state = component.styleState.get())
+    {
+        restoreAllStateBacked (component);
+        restoreDrawing (component);
+
+        bool changed = state->clearComputedValues();
+        changed |= state->clearAnimatedValues();
+        changed |= state->setStylePalette (std::nullopt);
+        changed |= applyEffects (component);
+        state->setPaletteDependent (false);
+
+        if (changed)
+            component.repaint();
+    }
+
+    if (const auto it = caches.find (&component); it != caches.end())
+    {
+        if (it->second != nullptr)
+            clearCacheValues (*it->second);
+
+        caches.erase (it);
+    }
+
+    for (int i = 0; i < component.getNumChildComponents(); ++i)
+        if (auto* child = component.getChildComponent (i))
+            detachComponent (*child);
+}
+
+void StyleContext::forgetComponent (Component& component)
+{
+    if (&component != &root && component.getStyleContext() != nullptr)
+        return;
+
+    animator.removeComponent (component);
+
+    for (int i = dirtyComponents.size(); --i >= 0;)
+        if (dirtyComponents.getReference (i).get() == &component || dirtyComponents.getReference (i).get() == nullptr)
+            dirtyComponents.remove (i);
+
+    if (const auto it = caches.find (&component); it != caches.end())
+    {
+        if (it->second != nullptr)
+            clearCacheValues (*it->second);
+
+        caches.erase (it);
+    }
+
+    for (int i = 0; i < component.getNumChildComponents(); ++i)
+        if (auto* child = component.getChildComponent (i))
+            forgetComponent (*child);
+}
+
 void StyleContext::clearSubtree (Component& component)
 {
+    if (&component != &root && component.getStyleContext() != nullptr)
+        return;
+
     if (auto* state = component.styleState.get())
     {
         restoreAllStateBacked (component);
@@ -1201,12 +1419,164 @@ void StyleContext::clearSubtree (Component& component)
 
 void StyleContext::markPaletteDependentDirty (Component& component)
 {
+    if (&component != &root && component.getStyleContext() != nullptr)
+        return;
+
     if (auto* state = component.styleState.get(); state != nullptr && state->isPaletteDependent())
         markDirty (component);
 
     for (int i = 0; i < component.getNumChildComponents(); ++i)
         if (auto* child = component.getChildComponent (i))
             markPaletteDependentDirty (*child);
+}
+
+void StyleContext::addDependencies (const std::vector<BoundDependency>& dependencies)
+{
+    for (const auto& dependency : dependencies)
+    {
+        if (dependency.component != nullptr)
+        {
+            if (++observedComponents[dependency.component] == 1)
+                dependency.component->addComponentListener (this);
+        }
+        else if (dependency.provider != nullptr)
+        {
+            if (++observedProviders[dependency.provider] == 1)
+                dependency.provider->addListener (this);
+        }
+    }
+}
+
+void StyleContext::removeDependencies (const std::vector<BoundDependency>& dependencies)
+{
+    for (const auto& dependency : dependencies)
+    {
+        if (dependency.component != nullptr)
+        {
+            if (const auto it = observedComponents.find (dependency.component); it != observedComponents.end() && --it->second <= 0)
+            {
+                auto* component = it->first;
+                observedComponents.erase (it);
+                component->removeComponentListener (this);
+            }
+        }
+        else if (dependency.provider != nullptr)
+        {
+            if (const auto it = observedProviders.find (dependency.provider); it != observedProviders.end() && --it->second <= 0)
+            {
+                auto* provider = it->first;
+                observedProviders.erase (it);
+                provider->removeListener (this);
+            }
+        }
+    }
+}
+
+void StyleContext::invalidateDependencies (const Component* sourceComponent, const BindingProvider* sourceProvider, const Identifier& property)
+{
+    for (const auto& [ptr, cache] : caches)
+    {
+        if (cache == nullptr)
+            continue;
+
+        auto* styled = cache->component.get();
+        if (styled == nullptr || styled != ptr)
+            continue;
+
+        bool matched = false;
+
+        for (const auto& [storageId, compiled] : cache->values)
+        {
+            if (compiled == nullptr)
+                continue;
+
+            for (const auto& dependency : compiled->dependencies)
+            {
+                if ((sourceComponent != nullptr && dependency.component == sourceComponent && dependency.property == property)
+                    || (sourceProvider != nullptr && dependency.provider == sourceProvider && dependency.property == property))
+                {
+                    matched = true;
+                    break;
+                }
+            }
+
+            if (matched)
+                break;
+        }
+
+        if (matched)
+            markDirty (*styled);
+    }
+}
+
+void StyleContext::componentPropertyChanged (Component& component, const Identifier& property)
+{
+    invalidateDependencies (&component, nullptr, property);
+}
+
+void StyleContext::componentMoved (Component& component)
+{
+    static const Identifier xId ("x");
+    static const Identifier yId ("y");
+
+    invalidateDependencies (&component, nullptr, xId);
+    invalidateDependencies (&component, nullptr, yId);
+}
+
+void StyleContext::componentResized (Component& component)
+{
+    static const Identifier widthId ("width");
+    static const Identifier heightId ("height");
+
+    invalidateDependencies (&component, nullptr, widthId);
+    invalidateDependencies (&component, nullptr, heightId);
+}
+
+void StyleContext::componentBeingDeleted (Component& component)
+{
+    observedComponents.erase (&component);
+
+    for (auto& [ptr, cache] : caches)
+    {
+        if (cache == nullptr)
+            continue;
+
+        for (auto& [storageId, compiled] : cache->values)
+        {
+            if (compiled == nullptr)
+                continue;
+
+            for (auto& dependency : compiled->dependencies)
+                if (dependency.component == &component)
+                    dependency.component = nullptr;
+        }
+    }
+}
+
+void StyleContext::bindingValueChanged (BindingProvider& provider, const Identifier& name)
+{
+    invalidateDependencies (nullptr, &provider, name);
+}
+
+void StyleContext::bindingProviderBeingDeleted (BindingProvider& provider)
+{
+    observedProviders.erase (&provider);
+
+    for (auto& [ptr, cache] : caches)
+    {
+        if (cache == nullptr)
+            continue;
+
+        for (auto& [storageId, compiled] : cache->values)
+        {
+            if (compiled == nullptr)
+                continue;
+
+            for (auto& dependency : compiled->dependencies)
+                if (dependency.provider == &provider)
+                    dependency.provider = nullptr;
+        }
+    }
 }
 
 void StyleContext::report (const Identifier& declarationName, const String& message)

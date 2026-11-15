@@ -69,6 +69,9 @@ public:
     /** Returns true if the expression reads the given property of the given component. */
     bool dependsOn (const Component& component, const Identifier& name) const;
 
+    /** Returns true if the expression reads the given property of the given binding provider. */
+    bool dependsOn (const BindingProvider& provider, const Identifier& name) const;
+
     /** Returns true if the expression reads a role of the palette. */
     bool readsPalette() const noexcept { return expression->readsPalette(); }
 

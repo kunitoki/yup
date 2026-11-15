@@ -259,9 +259,10 @@ string of 1, 2 or 4 values in CSS order (`"8"`, `"8 16"`, `"4 8 4 8"`).
   (`start`, `end`, `center`, `spaceBetween`, `spaceAround`, `spaceEvenly`) and
   `align` (`start`, `end`, `center`, `stretch`, `baseline`).
 - `Grid`: `columns` and `rows`, either a track count (`3` means three `1fr`
-  tracks) or a track list (`"1fr 80px 25% auto"`), `areas`, one row of area
-  names per comma separated group (`"head head, side main"`), and `justify` /
-  `align`.
+  tracks) or a track list (`"1fr 80px 25% auto"`, `"minmax(80px, 1fr)"`,
+  `"fit-content(120px)"`, `"repeat(3, 1fr)"`, `"repeat(auto-fill, 100px)"`),
+  `areas`, one row of area names per comma separated group
+  (`"head head, side main"`), and `justify` / `align`.
 - `Stack`: `justify` and `align` (`stretch`, `start`, `center`, `end`).
 
 ### Item properties

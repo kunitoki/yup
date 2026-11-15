@@ -26,12 +26,14 @@ ComponentTypeInfo::ComponentTypeInfo (Identifier typeNameToUse,
                                       const ComponentTypeInfo* baseTypeInfoToUse,
                                       std::vector<ComponentProperty> propertiesToUse,
                                       std::vector<ComponentSignal> signalsToUse,
-                                      Factory factoryToUse)
+                                      Factory factoryToUse,
+                                      ChildAttacher childAttacherToUse)
     : typeName (std::move (typeNameToUse))
     , baseTypeInfo (baseTypeInfoToUse)
     , properties (std::move (propertiesToUse))
     , signals (std::move (signalsToUse))
     , factory (std::move (factoryToUse))
+    , childAttacher (std::move (childAttacherToUse))
 {
     for (int index = 0; index < static_cast<int> (properties.size()); ++index)
         propertyIndex.insert_or_assign (properties[static_cast<size_t> (index)].name, index);
@@ -110,6 +112,29 @@ std::unique_ptr<Component> ComponentTypeInfo::createInstance() const
         return factory();
 
     return nullptr;
+}
+
+bool ComponentTypeInfo::hasChildAttacher() const noexcept
+{
+    for (const auto* info = this; info != nullptr; info = info->baseTypeInfo)
+        if (info->childAttacher != nullptr)
+            return true;
+
+    return false;
+}
+
+void ComponentTypeInfo::attachChild (Component& parent, Component& child) const
+{
+    for (const auto* info = this; info != nullptr; info = info->baseTypeInfo)
+    {
+        if (info->childAttacher != nullptr)
+        {
+            info->childAttacher (parent, child);
+            return;
+        }
+    }
+
+    parent.addAndMakeVisible (child);
 }
 
 } // namespace yup

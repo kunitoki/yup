@@ -143,6 +143,9 @@ public:
     */
     const std::vector<YuiDiagnostic>& getDiagnostics() const noexcept { return diagnostics; }
 
+    /** Returns the source map of the last successful load, or an empty map after a failed load or clear(). */
+    const YuiSourceMap& getSourceMap() const noexcept { return sourceMap; }
+
     /** Returns the builder creating the components, to inspect its bindings. */
     YuiBuilder& getBuilder() noexcept { return builder; }
 
@@ -180,16 +183,19 @@ private:
 
     Result loadTree (const DataTree& document, const YuiSourceMap& map);
     Result buildTree (const DataTree& document, const YuiSourceMap& map);
+    void resetState();
     Result notifyLoaded (Result result);
     void report (const YuiSourceMap& map, const YuiDiagnostic& diagnostic);
 
     YuiBuilder builder;
     DataTree tree;
     YuiSourceMap sourceMap;
+    YuiSourceMap loadedSourceMap;
     StyleSheet::Ptr styleSheet;
     std::vector<YuiDiagnostic> diagnostics;
     UndoManager* undoManager = nullptr;
     bool isLoading = false;
+    bool lastLoadSucceeded = false;
     ListenerList<Listener> listeners;
 
     YUP_DECLARE_WEAK_REFERENCEABLE (YuiDocument)

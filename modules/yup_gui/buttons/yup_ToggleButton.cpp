@@ -95,15 +95,28 @@ void ToggleButton::setToggleState (bool shouldBeToggled, NotificationType notifi
     {
         toggleState = shouldBeToggled;
 
+        markStyleDirty();
+
+        auto bailOutChecker = BailOutChecker (this);
+
         sendChangeNotification (notification, [this]
         {
+            auto innerBailOut = BailOutChecker (this);
+
             toggleStateChanged();
+            if (innerBailOut.shouldBailOut())
+                return;
+
+            notifyPropertyChanged (Identifier ("checked"));
+            if (innerBailOut.shouldBailOut())
+                return;
 
             if (onClick)
                 onClick();
         });
 
-        repaint();
+        if (! bailOutChecker.shouldBailOut())
+            repaint();
     }
 }
 
@@ -112,6 +125,7 @@ void ToggleButton::setButtonText (String newText)
     if (buttonText != newText)
     {
         buttonText = newText;
+        notifyPropertyChanged (Identifier ("text"));
         resized();
     }
 }

@@ -44,20 +44,13 @@ bool hasSamePropertyNames (const DataTree& target, const DataTree& source)
     return true;
 }
 
-bool patchProperties (DataTree& target, const DataTree& source, UndoManager* undoManager)
+bool patchProperties (const DataTree& target, const DataTree& source, DataTree::Transaction& transaction)
 {
     const auto sameNames = hasSamePropertyNames (target, source);
-
-    // A queued set is skipped when the value doesn't change, even after a queued removal
-    if (! sameNames)
-    {
-        auto removal = target.beginTransaction (undoManager);
-        removal.removeAllProperties();
-        removal.commit();
-    }
-
-    auto transaction = target.beginTransaction (undoManager);
     auto changed = ! sameNames;
+
+    if (! sameNames)
+        transaction.removeAllProperties();
 
     for (int i = 0; i < source.getNumProperties(); ++i)
     {
@@ -71,7 +64,6 @@ bool patchProperties (DataTree& target, const DataTree& source, UndoManager* und
         }
     }
 
-    transaction.commit();
     return changed;
 }
 
@@ -118,12 +110,12 @@ std::vector<DataTree> matchChildren (const DataTree& target, const DataTree& sou
 
 bool patchTree (DataTree& target, const DataTree& source, UndoManager* undoManager)
 {
-    auto changed = patchProperties (target, source, undoManager);
     auto matches = matchChildren (target, source);
 
     // Queued child changes apply one after the other, so the indices follow a simulated list
     std::vector<DataTree> children;
     auto transaction = target.beginTransaction (undoManager);
+    auto changed = patchProperties (target, source, transaction);
 
     for (const auto& child : target)
     {
@@ -178,6 +170,10 @@ bool YuiTreeDiff::apply (DataTree& target, const DataTree& source, UndoManager* 
     jassert (target.getType() == source.getType());
     if (target.getType() != source.getType())
         return false;
+
+    std::optional<UndoManager::ScopedTransaction> scopedTransaction;
+    if (undoManager != nullptr && undoManager->isEnabled())
+        scopedTransaction.emplace (*undoManager);
 
     return patchTree (target, source, undoManager);
 }

@@ -73,6 +73,39 @@ TEST_F (ExpressionContextTests, DeclaresInputs)
     EXPECT_EQ (context.getInputType (2), context.getType<ExpressionArrayView<double>>());
 }
 
+TEST_F (ExpressionContextTests, RegistersArrayTypesAhead)
+{
+    struct Unregistered
+    {
+    };
+
+    const auto* type = context.addArrayType<int>();
+
+    ASSERT_NE (nullptr, type);
+    EXPECT_EQ (String ("int[]"), type->getName());
+    EXPECT_EQ (&ExpressionType::intType(), type->getElementType());
+    EXPECT_EQ (type, context.addArrayType<int>());
+    EXPECT_EQ (type, context.getType<ExpressionArrayView<int>>());
+    EXPECT_EQ (nullptr, context.addArrayType<Unregistered>());
+
+    context.setSymbolResolver ([type] (const String& name)
+    {
+        return name == "items" ? type : nullptr;
+    });
+
+    const auto program = compile ("count = len (items); last = items[count - 1];");
+    ASSERT_EQ (1, program.getNumInputs());
+
+    const int values[] = { 4, 5, 6 };
+
+    ExpressionState state (program);
+    state.bindArray (ExpressionArray<int> { program.findInput ("items") }, values, 3);
+    state.evaluate();
+
+    EXPECT_EQ (3, static_cast<int> (state.getVar (program.findOutput ("count"))));
+    EXPECT_EQ (6, static_cast<int> (state.getVar (program.findOutput ("last"))));
+}
+
 TEST_F (ExpressionContextTests, FindsTypes)
 {
     EXPECT_EQ (&ExpressionType::intType(), context.findType ("int"));

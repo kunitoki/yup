@@ -73,6 +73,26 @@ Two properties are special in the instance tree: `id` names an element so
 expressions and C++ (`findById`) can reach it, and `class` gives it style
 classes, separated by spaces or commas (`class: "knob large";`).
 
+Most components simply parent their children, but a few take them in their own
+way: `Viewport` makes its child the scrolled content, and `TabComponent` turns
+each child into a page, with the child's `id` as the tab id and its `title` as
+the text of the tab:
+
+```yui
+TabComponent {
+    selectedTab: "mix";
+    Column   { id: mix;  title: "Mix"; }
+    Viewport { id: list; title: "List"; Column { height: 900; } }
+}
+```
+
+Lists have no children either, they are filled from their `items` property:
+
+```yui
+ComboBox { items: ["sine", "square"]; selectedId: 1; }
+ListBox  { items: ["left", "right"]; selectedRow: 0; }
+```
+
 An element's values apply in the order its type declares the properties, base
 types first, and `<=>` links after them, whatever the order in the document. A
 property that constrains another therefore applies first:
@@ -91,6 +111,7 @@ with the [graphics types](../graphics/expressions.md) available:
 | Colors | `#ff8800`, `#ff880080`, `rgb (255, 136, 0)`, `palette.accent.darker (0.1)` |
 | Enumerations | `round`, `rotaryVerticalDrag`, `center` (a bare name the property knows) |
 | Graphics values | `bounds.center`, `rect (0, 0, 20, 20)`, `polar (bounds.center, r, a)` |
+| Arrays | `[0.25, 0.5]`, `["low", "high"]`, `lanes[0]`, `len (lanes)` |
 | Operators and calls | `enabled ? 1 : 0.4`, `lerp (a0, a1, normalized)`, `min (width, height) / 2` |
 
 An expression reads the names around it: the properties of the component it
@@ -106,11 +127,20 @@ because some aren't expressions (`transition: bezelSize 150ms easeOut;`,
 ## Declarations
 
 `property` declares a typed value with an optional default expression. The
-types are `number`, `integer`, `boolean`, `string` and `color`:
+types are `number`, `integer`, `boolean`, `string`, `color`, `point`,
+`rectangle`, and an array of any of them written `type[]`:
 
 ```yui
 property bezelSize: number = 0.8;
+property lanes: number[] = [0.25, 0.5];
+property origin: point = point (1, 2);
 ```
+
+An array holds one element type. Its elements are expressions, read with
+`lanes[0]` and counted with `len (lanes)`, and an index outside the array
+reads a zero value. `point` and `rectangle` values are written `point (x, y)`
+and `rect (x, y, w, h)` and are stored as arrays of their components, so `<=>`
+links and transitions see them change element by element.
 
 | Where | Declares |
 |---|---|

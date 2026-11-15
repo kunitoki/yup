@@ -39,8 +39,16 @@ PropertyBinding::~PropertyBinding() = default;
 bool PropertyBinding::dependsOn (const Component& component, const Identifier& name) const
 {
     return std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
-                        {
+    {
         return dependency.component == &component && dependency.property == name;
+    });
+}
+
+bool PropertyBinding::dependsOn (const BindingProvider& provider, const Identifier& name) const
+{
+    return std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
+    {
+        return dependency.provider == &provider && dependency.property == name;
     });
 }
 

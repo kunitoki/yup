@@ -183,40 +183,72 @@ EdgeSpacing<float> LayoutComponent::getItemMargin (const Component& child)
     return parseSpacing (child.findProperty (Properties::marginId));
 }
 
+namespace
+{
+
+std::optional<float> parseLayoutSpacingScalar (const String& rawToken)
+{
+    const auto token = rawToken.trim();
+    if (token.isEmpty())
+        return std::nullopt;
+
+    const auto numberText = token.endsWithIgnoreCase ("px") ? token.dropLastCharacters (2).trim() : token;
+    if (numberText.isEmpty())
+        return std::nullopt;
+
+    const auto utf8 = numberText.toStdString();
+    char* end = nullptr;
+    const float parsed = std::strtof (utf8.c_str(), &end);
+
+    if (end == utf8.c_str() || *end != '\0' || ! std::isfinite (parsed))
+        return std::nullopt;
+
+    return parsed;
+}
+
+} // namespace
+
 EdgeSpacing<float> LayoutComponent::parseSpacing (const var& value)
 {
-    if (value.isVoid() || value.isUndefined())
+    if (value.isVoid() || value.isUndefined() || value.isBool())
         return {};
 
     if (! value.isString())
     {
         const auto amount = static_cast<float> (static_cast<double> (value));
-        return EdgeSpacing<float> (amount);
+        return std::isfinite (amount) ? EdgeSpacing<float> (amount) : EdgeSpacing<float>();
     }
 
     const auto tokens = splitTokens (value.toString());
+    if (tokens.isEmpty() || tokens.size() > 4)
+        return {};
 
-    const auto valueAt = [&tokens] (int index)
+    float values[4] = {};
+    for (int i = 0; i < tokens.size(); ++i)
     {
-        return tokens[index].getFloatValue();
-    };
+        const auto parsed = parseLayoutSpacingScalar (tokens[i]);
+        if (! parsed.has_value())
+            return {};
+
+        values[i] = *parsed;
+    }
 
     switch (tokens.size())
     {
-        case 0:
-            return {};
-
         case 1:
-            return EdgeSpacing<float> (valueAt (0));
+            return EdgeSpacing<float> (values[0]);
 
         case 2:
-            return EdgeSpacing<float> (valueAt (1), valueAt (0));
+            return EdgeSpacing<float> (values[1], values[0]);
 
         case 3:
-            return EdgeSpacing<float> (valueAt (1), valueAt (0), valueAt (1), valueAt (2));
+            return EdgeSpacing<float> (values[1], values[0], values[1], values[2]);
+
+        case 4:
+            return EdgeSpacing<float> (values[3], values[0], values[1], values[2]);
 
         default:
-            return EdgeSpacing<float> (valueAt (3), valueAt (0), valueAt (1), valueAt (2));
+            return {};
     }
 }
 

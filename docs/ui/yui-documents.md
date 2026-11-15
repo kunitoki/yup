@@ -170,7 +170,8 @@ component LabeledKnob : Column {
   properties, so stylesheets match it as `LabeledKnob` or `Column`, and C++
   reaches it as a `ColumnComponent`.
 - `property name: type = default;` declares a typed property, such as a
-  `number`, `integer`, `boolean`, `string` or `color`. Inside the block it is read as
+  `number`, `integer`, `boolean`, `string`, `color`, `point`, `rectangle` or an
+  array of them (`number[]`). Inside the block it is read as
   `root.label`; from outside it is set like any other property.
 - `property alias value <=> knob.value;` exposes a property of a part under a
   new name, with the type of the original.
@@ -219,6 +220,8 @@ after loading.
 | `Slider`       | `onValueChanged`        | the value  |
 | `TextEditor`   | `onTextChange`          |            |
 | `ComboBox`     | `onSelectedItemChanged` |            |
+| `ListBox`      | `onSelectionChanged`    |            |
+| `TabComponent` | `onTabChanged`          | the tab id |
 
 ```cpp
 document.setAction ("changed", [this] (const Array<var>& args)
@@ -257,7 +260,9 @@ Label       { text: format ("cutoff %.0f%%", params.cutoff * 100); }
 
 A model is a `BindingProvider`: a set of typed values that can be read, written
 and observed. `DataTreeBindingProvider` exposes the properties of a `DataTree`,
-typed from the values it holds when it is created:
+typed from the values it holds when it is created. A value holding an array
+becomes an array property, of the type its elements share, read with
+`params.names[0]` and `len (params.names)`:
 
 ```cpp
 DataTree params ("params");

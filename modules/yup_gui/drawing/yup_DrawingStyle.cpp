@@ -27,9 +27,12 @@ DrawingStyle::DrawingStyle (std::unique_ptr<DrawingProgram> programToUse)
 {
 }
 
-ResultValue<DrawingStyle::Ptr> DrawingStyle::create (Component& target, const DataTree& drawing)
+ResultValue<DrawingStyle::Ptr> DrawingStyle::create (Component& target,
+                                                     const DataTree& drawing,
+                                                     DrawingScope::ComponentResolver componentResolver,
+                                                     DrawingScope::ModelResolver modelResolver)
 {
-    auto compiled = DrawingProgram::create (target, drawing);
+    auto compiled = DrawingProgram::create (target, drawing, std::move (componentResolver), std::move (modelResolver));
     if (compiled.failed())
         return makeResultValueFail (compiled.getErrorMessage());
 

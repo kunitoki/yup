@@ -62,7 +62,10 @@ public:
 
         @return A style on success, or a failure carrying the compiler message.
     */
-    static ResultValue<DrawingStyle::Ptr> create (Component& target, const DataTree& drawing);
+    static ResultValue<DrawingStyle::Ptr> create (Component& target,
+                                                  const DataTree& drawing,
+                                                  DrawingScope::ComponentResolver componentResolver = nullptr,
+                                                  DrawingScope::ModelResolver modelResolver = nullptr);
 
     //==============================================================================
     /** Returns the properties the drawing declares (see DrawingProgram::getProperties). */

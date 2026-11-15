@@ -45,13 +45,23 @@ void YuiView::documentLoaded (YuiDocument&, const Result&)
 {
     auto* root = document.getRoot();
 
+    for (int i = getNumChildComponents(); --i >= 0;)
+    {
+        if (auto* child = getChildComponent (i); child != root)
+            removeChildComponent (i);
+    }
+
     if (root == nullptr)
+    {
+        repaint();
         return;
+    }
 
     if (root->getParentComponent() != this)
         addAndMakeVisible (*root);
 
     resized();
+    repaint();
 }
 
 } // namespace yup

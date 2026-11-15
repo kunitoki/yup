@@ -83,8 +83,36 @@ TEST_F (ComponentPropertyTest, StoreBackedDescriptorHelpers)
     EXPECT_EQ (property.type, ComponentProperty::Type::color);
 }
 
-TEST_F (ComponentPropertyTest, StorageKeyFallsBackToName)
+TEST_F (ComponentPropertyTest, TypeNamesIncludeArrays)
 {
+    using Type = ComponentProperty::Type;
+
+    EXPECT_EQ (Type::number, ComponentProperty::getTypeFromName ("number"));
+    EXPECT_EQ (Type::drawing, ComponentProperty::getTypeFromName ("drawing"));
+    EXPECT_EQ (Type::any, ComponentProperty::getTypeFromName ("nonsense"));
+    EXPECT_EQ (Type::any, ComponentProperty::getElementTypeFromName ("number"));
+
+    EXPECT_EQ (Type::array, ComponentProperty::getTypeFromName ("string[]"));
+    EXPECT_EQ (Type::string, ComponentProperty::getElementTypeFromName ("string[]"));
+    EXPECT_EQ (Type::array, ComponentProperty::getTypeFromName ("color[]"));
+    EXPECT_EQ (Type::color, ComponentProperty::getElementTypeFromName ("color[]"));
+
+    EXPECT_EQ (Type::array, ComponentProperty::getTypeFromName ("point[]"));
+    EXPECT_EQ (Type::point, ComponentProperty::getElementTypeFromName ("point[]"));
+
+    // Only the scalar types an expression can read make an array.
+    EXPECT_EQ (Type::any, ComponentProperty::getTypeFromName ("drawing[]"));
+    EXPECT_EQ (Type::any, ComponentProperty::getElementTypeFromName ("drawing[]"));
+    EXPECT_EQ (Type::any, ComponentProperty::getTypeFromName ("nonsense[]"));
+    EXPECT_EQ (Type::any, ComponentProperty::getTypeFromName ("number[][]"));
+
+    EXPECT_TRUE (ComponentProperty::isExpressionType (Type::integer));
+    EXPECT_TRUE (ComponentProperty::isExpressionType (Type::rectangle));
+    EXPECT_FALSE (ComponentProperty::isExpressionType (Type::array));
+    EXPECT_FALSE (ComponentProperty::isExpressionType (Type::font));
+}
+
+TEST_F (ComponentPropertyTest, StorageKeyFallsBackToName){
     ComponentProperty property {
         .name = Identifier ("custom"),
         .type = ComponentProperty::Type::number

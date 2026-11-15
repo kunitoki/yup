@@ -152,9 +152,37 @@ TEST_F (StyleSelectorTests, ComputesCssSpecificity)
 
 TEST_F (StyleSelectorTests, ReportsReferencedProperties)
 {
-    const auto selector = parse ("Slider[title=\"a\"]:hover");
+    const auto selector = parse ("Slider[title=\"a\"]:hover:focused:disabled");
 
     EXPECT_TRUE (selector.getReferencedProperties().contains (Identifier ("title")));
+    EXPECT_TRUE (selector.getReferencedProperties().contains (Identifier ("hovered")));
+    EXPECT_TRUE (selector.getReferencedProperties().contains (Identifier ("focused")));
+    EXPECT_TRUE (selector.getReferencedProperties().contains (Identifier ("enabled")));
+}
+
+TEST_F (StyleSelectorTests, AcceptsFocusedAndHoveredAliases)
+{
+    EXPECT_TRUE (StyleSelector::parse ("Slider:focused").wasOk());
+    EXPECT_TRUE (StyleSelector::parse ("Slider:hovered").wasOk());
+}
+
+TEST_F (StyleSelectorTests, CombinatorsDoNotEscapeTheStyleRoot)
+{
+    Component outer ("outer");
+    outer.addStyleClass (Identifier ("card"));
+
+    Component styleRoot ("panel");
+    outer.addChildComponent (styleRoot);
+
+    Slider knob (Slider::LinearHorizontal, "knob");
+    styleRoot.addChildComponent (knob);
+
+    EXPECT_FALSE (parse (".card > #panel").matches (styleRoot, &styleRoot));
+    EXPECT_FALSE (parse ("#outer > #panel").matches (styleRoot, &styleRoot));
+    EXPECT_FALSE (parse ("#outer #knob").matches (knob, &styleRoot));
+    EXPECT_FALSE (parse (".card #knob").matches (knob, &styleRoot));
+    EXPECT_TRUE (parse ("#panel > #knob").matches (knob, &styleRoot));
+    EXPECT_TRUE (parse ("#panel #knob").matches (knob, &styleRoot));
 }
 
 TEST_F (StyleSelectorTests, FailsForInvalidText)

@@ -116,3 +116,39 @@ TEST_F (YuiTreeDiffTests, RecordsTheChangesAsOneUndoableTransaction)
     EXPECT_TRUE (undoManager.undo());
     EXPECT_TRUE (target.isEquivalentTo (original));
 }
+
+TEST_F (YuiTreeDiffTests, ReorderingPropertiesNeverExposesEmptyStateAndUsesOneUndoStep)
+{
+    struct EmptyPropertyWatcher final : DataTree::Listener
+    {
+        void propertyChanged (DataTree& changed, const Identifier&) override
+        {
+            if (changed.getNumProperties() == 0)
+                sawEmptyProperties = true;
+        }
+
+        bool sawEmptyProperties = false;
+    };
+
+    auto target = parse ("Slider { minValue: 0; value: 5; }");
+    const auto original = target.clone();
+    const auto source = parse ("Slider { maxValue: 10; minValue: 0; value: 5; }");
+
+    auto sliderNode = target.getChild (0);
+    EmptyPropertyWatcher watcher;
+    sliderNode.addListener (&watcher);
+
+    UndoManager undoManager;
+    EXPECT_TRUE (YuiTreeDiff::apply (target, source, &undoManager));
+
+    sliderNode.removeListener (&watcher);
+
+    EXPECT_FALSE (watcher.sawEmptyProperties);
+    EXPECT_EQ (getPropertyNames (sliderNode), StringArray ("maxValue", "minValue", "value"));
+    EXPECT_EQ (static_cast<int> (sliderNode.getProperty ("value")), 5);
+    EXPECT_EQ (undoManager.getNumTransactions(), 1);
+
+    EXPECT_TRUE (undoManager.undo());
+    EXPECT_TRUE (target.isEquivalentTo (original));
+    EXPECT_EQ (getPropertyNames (sliderNode), StringArray ("minValue", "value"));
+}

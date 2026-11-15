@@ -36,6 +36,11 @@ void BindingGraph::setComponentResolver (DrawingScope::ComponentResolver resolve
     componentResolver = std::move (resolver);
 }
 
+void BindingGraph::setModelResolver (DrawingScope::ModelResolver resolver)
+{
+    modelResolver = std::move (resolver);
+}
+
 //==============================================================================
 
 Result BindingGraph::bind (Component& target,
@@ -43,7 +48,7 @@ Result BindingGraph::bind (Component& target,
                            const String& text,
                            std::optional<ComponentProperty::Type> type)
 {
-    auto compiled = PropertyExpression::compile (target, text, type, componentResolver);
+    auto compiled = PropertyExpression::compile (target, text, type, componentResolver, modelResolver);
 
     if (compiled.failed())
         return Result::fail (compiled.getErrorMessage());
@@ -97,6 +102,28 @@ void BindingGraph::unbindAll (Component& target)
     }
 }
 
+void BindingGraph::forgetProvider (BindingProvider& provider)
+{
+    for (int index = static_cast<int> (bindings.size()) - 1; index >= 0; --index)
+    {
+        const auto& dependencies = bindings[static_cast<size_t> (index)]->getDependencies();
+
+        const bool readsIt = std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
+        {
+            return dependency.provider == &provider;
+        });
+
+        if (readsIt)
+            removeBinding (index);
+    }
+
+    if (const auto it = observedProviders.find (&provider); it != observedProviders.end())
+    {
+        observedProviders.erase (it);
+        provider.removeListener (this);
+    }
+}
+
 void BindingGraph::clear()
 {
     for (int index = static_cast<int> (bindings.size()) - 1; index >= 0; --index)
@@ -106,6 +133,7 @@ void BindingGraph::clear()
         removeLink (index);
 
     jassert (observed.empty());
+    jassert (observedProviders.empty());
 
     dirty.clear();
     evaluations.clear();
@@ -246,6 +274,16 @@ void BindingGraph::componentBeingDeleted (Component& component)
     }
 }
 
+void BindingGraph::bindingValueChanged (BindingProvider& provider, const Identifier& name)
+{
+    invalidate (provider, name);
+}
+
+void BindingGraph::bindingProviderBeingDeleted (BindingProvider& provider)
+{
+    forgetProvider (provider);
+}
+
 //==============================================================================
 
 void BindingGraph::observe (Component& component)
@@ -268,13 +306,38 @@ void BindingGraph::unobserve (Component& component)
     component.removeComponentListener (this);
 }
 
+void BindingGraph::observe (BindingProvider& provider)
+{
+    if (++observedProviders[&provider] == 1)
+        provider.addListener (this);
+}
+
+void BindingGraph::unobserve (BindingProvider& provider)
+{
+    const auto it = observedProviders.find (&provider);
+
+    if (it == observedProviders.end())
+        return;
+
+    if (--it->second > 0)
+        return;
+
+    observedProviders.erase (it);
+    provider.removeListener (this);
+}
+
 void BindingGraph::addObservedOf (const PropertyBinding& binding)
 {
     if (auto* target = binding.getTarget())
         observe (*target);
 
     for (const auto& dependency : binding.getDependencies())
-        observe (*dependency.component);
+    {
+        if (dependency.component != nullptr)
+            observe (*dependency.component);
+        else if (dependency.provider != nullptr)
+            observe (*dependency.provider);
+    }
 }
 
 void BindingGraph::removeObservedOf (const PropertyBinding& binding)
@@ -283,7 +346,12 @@ void BindingGraph::removeObservedOf (const PropertyBinding& binding)
         unobserve (*target);
 
     for (const auto& dependency : binding.getDependencies())
-        unobserve (*dependency.component);
+    {
+        if (dependency.component != nullptr)
+            unobserve (*dependency.component);
+        else if (dependency.provider != nullptr)
+            unobserve (*dependency.provider);
+    }
 }
 
 void BindingGraph::removeBinding (int index)
@@ -345,6 +413,15 @@ void BindingGraph::invalidate (const Component& component, const Identifier& pro
     for (const auto& binding : bindings)
     {
         if (binding->dependsOn (component, property))
+            markDirty (*binding);
+    }
+}
+
+void BindingGraph::invalidate (const BindingProvider& provider, const Identifier& property)
+{
+    for (const auto& binding : bindings)
+    {
+        if (binding->dependsOn (provider, property))
             markDirty (*binding);
     }
 }

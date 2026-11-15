@@ -2053,6 +2053,14 @@ public:
     };
 
 protected:
+    /** Tells the style context the component's styling may have changed, so it restyles it and its
+        descendants on the next frame.
+
+        Call it from a widget whose own state takes part in selectors, such as a toggle state read
+        by a `:checked` rule, after the state changed.
+    */
+    void markStyleDirty();
+
     /** @internal This is used by subclasses to simplify sending notifications. */
     template <class F>
     void sendChangeNotification (NotificationType notification, F&& function)
@@ -2077,7 +2085,6 @@ protected:
 private:
     Identifier resolvePropertyStorageKey (const Identifier& name) const;
     StyleState& getOrCreateStyleState();
-    void markStyleDirty();
     void styleStateFlagChanged (const Identifier& name);
     void setHoveredChain (bool isNowHovered);
     void setPressedChain (bool isNowPressed);
@@ -2260,6 +2267,7 @@ private:
         bool popupContainer : 1;
         bool isHovered : 1;
         bool isPressed : 1;
+        bool isBeingDeleted : 1;
     };
 
     union

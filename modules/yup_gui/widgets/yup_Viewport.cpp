@@ -53,6 +53,38 @@ Viewport::~Viewport()
     ownedComponent.reset();
 }
 
+const ComponentTypeInfo& Viewport::getClassTypeInfo()
+{
+    static const ComponentTypeInfo info = []
+    {
+        std::vector<ComponentProperty> props;
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("scrollStep"),
+            .type = ComponentProperty::Type::number,
+            .defaultValue = 40.0,
+            .getter = [] (const Component& c) { return var (static_cast<double> (static_cast<const Viewport&> (c).getScrollStep())); },
+            .setter = [] (Component& c, const var& v) { static_cast<Viewport&> (c).setScrollStep (static_cast<float> (static_cast<double> (v))); },
+            .isStyleable = false,
+            .description = "How far one wheel or key step scrolls, in points." });
+
+        auto attachChild = [] (Component& parent, Component& child)
+        {
+            static_cast<Viewport&> (parent).setViewedComponent (&child);
+        };
+
+        return ComponentTypeInfo { Identifier ("Viewport"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<Viewport>(); }, std::move (attachChild) };
+    }();
+
+    return info;
+}
+
+const ComponentTypeInfo& Viewport::getDefaultTypeInfo() const
+{
+    return getClassTypeInfo();
+}
+
+//==============================================================================
 void Viewport::setViewedComponent (Component* component, bool deleteWhenNoLongerNeeded)
 {
     if (component == viewedComponent)

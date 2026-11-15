@@ -26,7 +26,7 @@ YuiDocument::YuiDocument() = default;
 
 YuiDocument::~YuiDocument()
 {
-    clear();
+    resetState();
 }
 
 //==============================================================================
@@ -37,6 +37,8 @@ Result YuiDocument::loadFromString (const String& text, YuiParser::ImportResolve
 
     if (! parsed.wasOk())
     {
+        sourceMap = {};
+        lastLoadSucceeded = false;
         diagnostics = parsed.diagnostics;
         return notifyLoaded (Result::fail (diagnostics.front().toString()));
     }
@@ -99,7 +101,7 @@ Result YuiDocument::load (const DataTree& document, const YuiSourceMap& map)
         return loadTree (document, map);
 
     // The undo manager performs the load, and keeps it only when it succeeds
-    ReferenceCountedObjectPtr<LoadAction> action (new LoadAction (*this, tree.isValid() ? tree.clone() : DataTree(), sourceMap, document.clone(), map));
+    ReferenceCountedObjectPtr<LoadAction> action (new LoadAction (*this, tree.isValid() ? tree.clone() : DataTree(), loadedSourceMap, document.clone(), map));
 
     undoManager->beginNewTransaction();
     undoManager->perform (action.get());
@@ -157,6 +159,8 @@ Result YuiDocument::buildTree (const DataTree& document, const YuiSourceMap& map
 
     if (sheet.failed())
     {
+        sourceMap = {};
+        lastLoadSucceeded = false;
         report (map, failure);
         return Result::fail (diagnostics.back().toString());
     }
@@ -173,6 +177,9 @@ Result YuiDocument::buildTree (const DataTree& document, const YuiSourceMap& map
 
     if (auto result = builder.build (tree); result.failed())
     {
+        sourceMap = {};
+        lastLoadSucceeded = false;
+
         // Located before the rollback, which detaches the elements the patch added
         for (const auto& diagnostic : builder.getDiagnostics())
             report (map, diagnostic);
@@ -191,6 +198,8 @@ Result YuiDocument::buildTree (const DataTree& document, const YuiSourceMap& map
 
     styleSheet = sheet.getReference();
     sourceMap = map;
+    loadedSourceMap = map;
+    lastLoadSucceeded = true;
 
     auto& root = *builder.getRoot();
     root.setStyleSheet (styleSheet);
@@ -200,22 +209,33 @@ Result YuiDocument::buildTree (const DataTree& document, const YuiSourceMap& map
 
     // The style problems met later, when a rule starts matching, are reported too
     auto& context = *root.getStyleContext();
+    context.setComponentResolver (builder.getComponentResolver());
+    context.setModelResolver (builder.getModelResolver());
     context.onDiagnostic = [this] (const YuiDiagnostic& diagnostic)
     {
-        report (sourceMap, diagnostic);
+        if (lastLoadSucceeded)
+            report (sourceMap, diagnostic);
     };
 
     context.restyleNow();
     return Result::ok();
 }
 
-void YuiDocument::clear()
+void YuiDocument::resetState()
 {
     builder.clear();
     tree = {};
     sourceMap = {};
+    loadedSourceMap = {};
     styleSheet = nullptr;
     diagnostics.clear();
+    lastLoadSucceeded = false;
+}
+
+void YuiDocument::clear()
+{
+    resetState();
+    notifyLoaded (Result::ok());
 }
 
 //==============================================================================
@@ -228,11 +248,19 @@ void YuiDocument::setAction (const String& name, YuiBuilder::Action action)
 void YuiDocument::setModel (const String& name, BindingProvider& provider)
 {
     builder.setModel (name, provider);
+
+    if (auto* root = builder.getRoot())
+        if (auto* context = root->getStyleContext())
+            context->setModelResolver (builder.getModelResolver());
 }
 
 void YuiDocument::removeModel (const String& name)
 {
     builder.removeModel (name);
+
+    if (auto* root = builder.getRoot())
+        if (auto* context = root->getStyleContext())
+            context->setModelResolver (builder.getModelResolver());
 }
 
 } // namespace yup

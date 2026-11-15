@@ -52,6 +52,14 @@ public:
     /** A factory that creates a component instance of this type. */
     using Factory = std::function<std::unique_ptr<Component>()>;
 
+    /** Adds a child to a component of this type.
+
+        Containers that do more than parent their children declare one, so a Viewport takes its
+        child as the viewed component and a TabComponent turns it into a page. Without one the
+        child is simply made a visible child.
+    */
+    using ChildAttacher = std::function<void (Component& parent, Component& child)>;
+
     //==============================================================================
     /** Creates a type info.
 
@@ -60,12 +68,20 @@ public:
         @param properties      The property descriptors declared on this type.
         @param signals         The signals (events) this type emits.
         @param factory         An optional factory used to instantiate this type.
+        @param childAttacher   An optional way to add a child, inherited by the derived types.
     */
     ComponentTypeInfo (Identifier typeName,
                        const ComponentTypeInfo* baseTypeInfo,
                        std::vector<ComponentProperty> properties,
                        std::vector<ComponentSignal> signals = {},
-                       Factory factory = {});
+                       Factory factory = {},
+                       ChildAttacher childAttacher = {});
+
+    /** Moves a type info, so one held by value can be replaced in place. */
+    ComponentTypeInfo (ComponentTypeInfo&&) = default;
+
+    /** Moves a type info, so one held by value can be replaced in place. */
+    ComponentTypeInfo& operator= (ComponentTypeInfo&&) = default;
 
     //==============================================================================
     /** Returns the type name, for example "Slider". */
@@ -131,6 +147,17 @@ public:
     /** Creates a new instance of this type, or nullptr when no factory is available. */
     std::unique_ptr<Component> createInstance() const;
 
+    //==============================================================================
+    /** Returns true when this type or a base adds its children in its own way. */
+    bool hasChildAttacher() const noexcept;
+
+    /** Adds a child to a parent of this type, the way the type wants it.
+
+        @param parent    The parent, which must be of this type.
+        @param child     The child to add.
+    */
+    void attachChild (Component& parent, Component& child) const;
+
 private:
     //==============================================================================
     Identifier typeName;
@@ -139,6 +166,7 @@ private:
     std::unordered_map<Identifier, int> propertyIndex;
     std::vector<ComponentSignal> signals;
     Factory factory;
+    ChildAttacher childAttacher;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentTypeInfo)
 };

@@ -163,3 +163,43 @@ TEST_F (YuiWriterTests, WritesSingleElements)
     EXPECT_EQ (YuiWriter::write (document.getChild (0).getChild (0)), "Label {\n    text: \"Hi\";\n}\n");
     EXPECT_EQ (YuiWriter::write (DataTree ("yui")), "");
 }
+
+TEST_F (YuiWriterTests, RoundTripsStringsWithBothQuoteKindsAndEscapes)
+{
+    DataTree document ("yui");
+    DataTree importNode ("import");
+    importNode.beginTransaction().setProperty ("path", "dir's/\"theme\".yui");
+
+    DataTree labelNode ("Label");
+    {
+        auto tx = labelNode.beginTransaction();
+        tx.setProperty ("id", "quoteLabel");
+        tx.setProperty ("text", "\"He said 'hi'\"\tand\\slash\nline2");
+    }
+
+    {
+        auto tx = document.beginTransaction();
+        tx.addChild (importNode);
+        tx.addChild (labelNode);
+    }
+
+    const auto written = YuiWriter::write (document);
+    const auto reparsed = YuiParser::parse (written);
+    ASSERT_TRUE (reparsed.wasOk()) << YuiDiagnostic::join (reparsed.diagnostics) << "\n" << written;
+    EXPECT_TRUE (reparsed.document.isEquivalentTo (document)) << written;
+    EXPECT_EQ (YuiWriter::write (reparsed.document), written);
+
+    ApplicationTheme::Ptr oldTheme = ApplicationTheme::getGlobalTheme();
+    ApplicationTheme::Ptr theme = new ApplicationTheme();
+    ApplicationTheme::setGlobalTheme (theme);
+
+    YuiDocument liveDoc;
+    const auto loadResult = liveDoc.loadFromString (YuiWriter::write (labelNode));
+    ASSERT_TRUE (loadResult.wasOk()) << loadResult.getErrorMessage();
+    auto* builtLabel = liveDoc.findById<Label> ("quoteLabel");
+    ASSERT_NE (builtLabel, nullptr);
+    EXPECT_EQ (builtLabel->getText(), String ("\"He said 'hi'\"\tand\\slash\nline2"));
+
+    liveDoc.clear();
+    ApplicationTheme::setGlobalTheme (oldTheme.get());
+}

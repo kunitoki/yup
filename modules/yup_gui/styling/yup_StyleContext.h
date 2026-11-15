@@ -57,8 +57,17 @@ class DrawingStyle;
     @tags{UI}
 */
 class YUP_API StyleContext
+    : private ComponentListener
+    , private BindingProvider::Listener
 {
 public:
+    //==============================================================================
+    /** Turns the prefix of a symbol such as `knob` in `knob.value` into a component. */
+    using ComponentResolver = std::function<Component*(const String& name)>;
+
+    /** Turns the prefix of a symbol such as `params` in `params.cutoff` into a binding provider. */
+    using ModelResolver = std::function<BindingProvider*(const String& name)>;
+
     //==============================================================================
     /** Creates a context over a subtree.
 
@@ -68,7 +77,7 @@ public:
     StyleContext (Component& root, StyleSheet::Ptr styleSheet);
 
     /** Destructor. */
-    ~StyleContext();
+    ~StyleContext() override;
 
     //==============================================================================
     /** Returns the component the context is attached to. */
@@ -82,6 +91,12 @@ public:
 
     /** Returns the stylesheet the context applies, which may be nullptr. */
     StyleSheet::Ptr getStyleSheet() const noexcept { return styleSheet; }
+
+    /** Sets the resolver used by style and drawing expressions referencing other named components. */
+    void setComponentResolver (ComponentResolver resolver);
+
+    /** Sets the resolver used by style and drawing expressions referencing BindingProvider models. */
+    void setModelResolver (ModelResolver resolver);
 
     //==============================================================================
     /** Marks a component and its descendants as needing a restyle.
@@ -112,6 +127,12 @@ public:
     /** Removes everything the context computed from the subtree, leaving explicit values alone. */
     void detach();
 
+    /** Removes everything the context computed or animated for a detached child subtree. */
+    void detachComponent (Component& component);
+
+    /** Drops animator tracks, dirty entries and caches for a component subtree being destroyed. */
+    void forgetComponent (Component& component);
+
     //==============================================================================
     /** Returns the diagnostics the last restyle produced, one per declaration that failed.
 
@@ -130,6 +151,7 @@ public:
 
 private:
     //==============================================================================
+    struct BoundDependency;
     struct CompiledValue;
     struct ComponentCache;
     struct ResolvedDeclaration;
@@ -142,7 +164,10 @@ private:
     DeclarationMap collectInherited (Component& component) const;
     void collectDeclarations (Component& component, DeclarationMap& direct, DeclarationMap& qualified) const;
     bool evaluate (Component& component, const Identifier& declarationName, const Identifier& storageId, std::optional<ComponentProperty::Type> type, const String& valueText, var& result, bool& paletteDependent);
+    ComponentCache* findCache (const Component& component);
     ComponentCache& getCache (Component& component);
+    void clearCacheValues (ComponentCache& cache);
+    void clearAllCaches();
     void syncStateBacked (Component& component, const Identifier& storageId);
     void restoreStateBacked (Component& component, const Identifier& storageId);
     void restoreAllStateBacked (Component& component);
@@ -164,10 +189,25 @@ private:
     void report (const Identifier& declarationName, const String& message);
     void report (const YuiDiagnostic& diagnostic);
 
+    void addDependencies (const std::vector<BoundDependency>& dependencies);
+    void removeDependencies (const std::vector<BoundDependency>& dependencies);
+    void invalidateDependencies (const Component* sourceComponent, const BindingProvider* sourceProvider, const Identifier& property);
+
+    void componentPropertyChanged (Component& component, const Identifier& property) override;
+    void componentMoved (Component& component) override;
+    void componentResized (Component& component) override;
+    void componentBeingDeleted (Component& component) override;
+    void bindingValueChanged (BindingProvider& provider, const Identifier& name) override;
+    void bindingProviderBeingDeleted (BindingProvider& provider) override;
+
     Component& root;
     StyleSheet::Ptr styleSheet;
+    ComponentResolver componentResolver;
+    ModelResolver modelResolver;
     Array<WeakReference<Component>> dirtyComponents;
     std::map<Component*, std::unique_ptr<ComponentCache>> caches;
+    std::map<Component*, int> observedComponents;
+    std::map<BindingProvider*, int> observedProviders;
     StyleAnimator animator;
     std::vector<YuiDiagnostic> diagnostics;
     const DeclarationMap* currentDeclarations = nullptr;

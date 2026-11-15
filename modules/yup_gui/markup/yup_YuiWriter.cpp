@@ -269,15 +269,42 @@ private:
 
     static String quoted (const String& value)
     {
-        const auto quote = value.containsChar ('"') && ! value.containsChar ('\'') ? "'" : "\"";
-        return quote + value + quote;
+        const char quote = (value.containsChar ('"') && ! value.containsChar ('\'')) ? '\'' : '"';
+        String escaped;
+
+        for (auto ptr = value.getCharPointer(); ! ptr.isEmpty();)
+        {
+            const auto c = ptr.getAndAdvance();
+
+            if (c == '\\')
+                escaped << "\\\\";
+            else if (c == static_cast<yup_wchar> (quote))
+                escaped << '\\' << String::charToString (c);
+            else if (c == '\n')
+                escaped << "\\n";
+            else if (c == '\r')
+                escaped << "\\r";
+            else if (c == '\t')
+                escaped << "\\t";
+            else
+                escaped << String::charToString (c);
+        }
+
+        const auto delimiter = String::charToString (static_cast<yup_wchar> (quote));
+        return delimiter + escaped + delimiter;
     }
 
     // Palette values are read verbatim with the quotes removed, so anything that can't be read back raw is quoted
     static String paletteValue (const String& value)
     {
-        if (value.isEmpty() || value != value.trim() || value.containsAnyOf (";{}()[]\"'"))
+        if (value.isEmpty()
+            || value != value.trim()
+            || value.containsAnyOf (";{}()[]\"'\\\r\n\t")
+            || value.contains ("//")
+            || value.contains ("/*"))
+        {
             return quoted (value);
+        }
 
         return value;
     }

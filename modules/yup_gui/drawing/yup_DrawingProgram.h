@@ -74,21 +74,28 @@ namespace yup
     @tags{UI}
 */
 class YUP_API DrawingProgram
+    : private ComponentListener
+    , private BindingProvider::Listener
 {
 public:
     //==============================================================================
     /** Compiles a drawing tree for a component, or reuses the compilation of another program.
 
-        @param target     The component whose properties and bounds the drawing reads.
-        @param drawing    The drawing tree, with a root of type `drawing`.
+        @param target             The component whose properties and bounds the drawing reads.
+        @param drawing            The drawing tree, with a root of type `drawing`.
+        @param componentResolver  Optional resolver for named components referenced by expressions.
+        @param modelResolver      Optional resolver for BindingProvider models referenced by expressions.
 
         @return A compiled program on success, or a failure whose message starts with the
                 path of the offending element, like `Knob/layer[0]/arc[1].to`.
     */
-    static ResultValue<std::unique_ptr<DrawingProgram>> create (Component& target, const DataTree& drawing);
+    static ResultValue<std::unique_ptr<DrawingProgram>> create (Component& target,
+                                                                const DataTree& drawing,
+                                                                DrawingScope::ComponentResolver componentResolver = nullptr,
+                                                                DrawingScope::ModelResolver modelResolver = nullptr);
 
     /** Destructor. */
-    ~DrawingProgram();
+    ~DrawingProgram() override;
 
     //==============================================================================
     /** Feeds the component's live state and draws the elements in order.
@@ -119,18 +126,32 @@ private:
     class Compiler;
     class CompiledCache;
 
-    explicit DrawingProgram (Component& target);
+    explicit DrawingProgram (Component& target,
+                             DrawingScope::ComponentResolver componentResolver,
+                             DrawingScope::ModelResolver modelResolver);
 
     void instantiate (std::shared_ptr<const Compiled> compiledToUse);
     Slot* prepare (const Node& node, Rectangle<float> bounds, const Font& font);
     void drawNodes (Graphics& g, const std::vector<std::unique_ptr<Node>>& children, Rectangle<float> bounds, const Font& font, int numRows);
     void drawNode (Graphics& g, const Node& node, Rectangle<float> bounds, const Font& font, int numRows);
 
+    void componentPropertyChanged (Component& component, const Identifier& property) override;
+    void componentMoved (Component& component) override;
+    void componentResized (Component& component) override;
+    void componentBeingDeleted (Component& component) override;
+    void bindingValueChanged (BindingProvider& provider, const Identifier& name) override;
+    void bindingProviderBeingDeleted (BindingProvider& provider) override;
+
+    WeakReference<Component> targetComponent;
     ExpressionContext context;
     DrawingScope scope;
     std::shared_ptr<const Compiled> compiled;
     std::unique_ptr<Slot[]> slots;
     std::vector<var> propertyValues;
+    std::vector<DrawingScope::ArrayInput> propertyArrays;
+    std::vector<DrawingScope::Dependency> dependencies;
+    std::set<Component*> observedComponents;
+    std::set<BindingProvider*> observedProviders;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrawingProgram)
 };

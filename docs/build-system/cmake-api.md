@@ -512,18 +512,22 @@ yup_add_yui_resources(<library_name>
 
 Embeds `.yui` files through `yup_add_embedded_binary_resources`, for
 `YuiLoader::loadResource`. Besides the byte arrays, it generates a
-`<library_name>.h` header declaring a function that finds a file by the path
-an `import` uses, its path relative to `BASE_DIR`:
+`<library_name>.h` header declaring a function that finds a file by the `/`
+normalized path an `import` uses, relative to `BASE_DIR` (every file must
+reside inside `BASE_DIR`):
 
 ```cpp
 namespace <namespace>
 {
-const uint8_t* <library_name>_find (const char* path, std::size_t& size);
+const uint8_t* <c_identifier>_find (const char* path, std::size_t& size);
 }
 ```
 
-It returns `nullptr` for an unknown path. Editing an embedded file configures
-the project again on the next build.
+`<c_identifier>` is `string(MAKE_C_IDENTIFIER)` applied to `<library_name>`, so
+target names containing `-` remain valid C++. It returns `nullptr` for an
+unknown path. Targets produced by `yup_add_yui_resources` can be passed in
+`MODULES` of both `yup_standalone_app` and `yup_audio_plugin`. Editing an
+embedded file configures the project again on the next build.
 
 #### Arguments
 

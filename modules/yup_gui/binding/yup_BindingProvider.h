@@ -60,6 +60,9 @@ public:
 
         /** The type of the value, which decides how expressions read it. */
         ComponentProperty::Type type = ComponentProperty::Type::any;
+
+        /** The type of the elements, when the value is an array. */
+        ComponentProperty::Type elementType = ComponentProperty::Type::any;
     };
 
     //==============================================================================
@@ -71,10 +74,24 @@ public:
 
         /** Called after a value of the provider changed. */
         virtual void bindingValueChanged (BindingProvider& provider, const Identifier& name) = 0;
+
+        /** Called when the provider is about to be destroyed. */
+        virtual void bindingProviderBeingDeleted (BindingProvider& provider)
+        {
+            ignoreUnused (provider);
+        }
     };
 
     //==============================================================================
-    virtual ~BindingProvider() = default;
+    virtual ~BindingProvider()
+    {
+        listeners.call ([this] (Listener& listener)
+        {
+            listener.bindingProviderBeingDeleted (*this);
+        });
+
+        masterReference.clear();
+    }
 
     //==============================================================================
     /** Returns the values the provider exposes. */
@@ -111,7 +128,10 @@ protected:
     }
 
 private:
+    friend class WeakReference<BindingProvider>;
+
     ListenerList<Listener> listeners;
+    WeakReference<BindingProvider>::Master masterReference;
 };
 
 } // namespace yup

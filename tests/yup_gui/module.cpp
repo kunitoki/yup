@@ -49,6 +49,7 @@
 #include "yup_DragAndDropTarget.cpp"
 #include "yup_DragImageComponent.cpp"
 #include "yup_DrawingScope.cpp"
+#include "yup_PropertyExpression.cpp"
 #include "yup_DrawingProgram.cpp"
 #include "yup_DrawingStyle.cpp"
 #include "yup_FileChooser.cpp"

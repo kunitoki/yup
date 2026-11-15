@@ -34,8 +34,11 @@ namespace yup
     It is how stylesheet declarations and `.yui` instance properties become values.
 
     The value type comes from the property it is meant for. Without a type, as for custom
-    properties, the expression is tried as a color, a number, a boolean and a string, and
-    the first type it compiles to wins.
+    properties, the expression is tried as a color, a number, a boolean, a string, a point,
+    a rectangle and then as an array of each of those, and the first type it compiles to wins.
+
+    A text such as `[1, gain.value]` is an array literal: each element is an expression of its
+    own, of any type, and the value is a var holding them all.
 
     @code
     auto expression = PropertyExpression::compile (slider, "palette.accent.withAlpha (0.5)", ComponentProperty::Type::color);
@@ -63,14 +66,30 @@ public:
     static ResultValue<std::unique_ptr<PropertyExpression>> compile (Component& component,
                                                                      const String& text,
                                                                      std::optional<ComponentProperty::Type> type,
-                                                                     DrawingScope::ComponentResolver resolver = nullptr);
+                                                                     DrawingScope::ComponentResolver resolver = nullptr,
+                                                                     DrawingScope::ModelResolver modelResolver = nullptr);
+
+    /** Splits an array literal such as `[1, gain.value, [2, 3]]` into the texts of its elements.
+
+        Each element is an expression of its own, and a nested literal is one element. The elements
+        are added to @p elements, which is not cleared.
+
+        @param text       The text the literal is in, which may hold more than the literal.
+        @param elements   Receives the text of each element.
+        @param offset     In: the UTF-8 byte offset of the `[`, possibly preceded by whitespace.
+                          Out: the offset just after the `]`, or of the problem when it fails.
+
+        @returns Whether the literal is well formed, the message of a failure carrying no position.
+    */
+    static Result splitArrayLiteral (StringRef text, StringArray& elements, int& offset);
 
     ~PropertyExpression();
 
     //==============================================================================
     /** Evaluates the expression with the current state of the component.
 
-        Colors are returned in their var form (see VariantConverter<Color>), numbers as doubles.
+        Colors, points and rectangles are returned in their var form (see VariantConverter),
+        numbers as doubles, and arrays as a var holding the values of their elements.
     */
     var evaluate();
 
@@ -92,8 +111,16 @@ public:
 private:
     PropertyExpression() = default;
 
+    static ResultValue<std::unique_ptr<PropertyExpression>> compileArrayLiteral (Component& component,
+                                                                                 const String& text,
+                                                                                 std::optional<ComponentProperty::Type> type,
+                                                                                 DrawingScope::ComponentResolver resolver,
+                                                                                 DrawingScope::ModelResolver modelResolver);
+
     String source;
     ComponentProperty::Type type = ComponentProperty::Type::number;
+    ComponentProperty::Type elementType = ComponentProperty::Type::any;
+    std::vector<std::unique_ptr<PropertyExpression>> elements;
     std::unique_ptr<ExpressionContext> context;
     std::unique_ptr<DrawingScope> scope;
     std::unique_ptr<CompiledExpression> program;

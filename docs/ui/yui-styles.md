@@ -60,7 +60,7 @@ Slider { id: cutoff; class: "knob large"; }
 | `#cutoff` | The component with the ID |
 | `*` | Any component |
 | `:root` | The component the sheet is attached to |
-| `:hover`, `:pressed` (or `:active`), `:focus`, `:focus-within`, `:disabled`, `:enabled` | Interaction states |
+| `:hover` (or `:hovered`), `:pressed` (or `:active`), `:focus` (or `:focused`), `:focus-within`, `:disabled`, `:enabled` | Interaction states |
 | `:checked`, `:dragging`, ... | Any boolean state property of the component's type |
 | `[label]` | Components having the property |
 | `[sliderType=rotary]`, `[text!="Off"]` | Components whose property has, or hasn't, the value |
@@ -274,9 +274,10 @@ and a fill mode (`none`, `forwards`, `backwards`, `both`).
 - An animation restarts when the `animation:` text changes and stops when no
   rule declares it. A missing `from` or `to` keyframe uses the value the style
   gives the property.
-- Numbers, integers and colors (component-wise in sRGB) are interpolated, other
-  values switch halfway. Points, rectangles and transforms are not interpolated
-  yet.
+- Numbers, integers and colors (component-wise in sRGB) are interpolated, as
+  are arrays of the same length, element by element, so points and rectangles
+  (stored as arrays of their components) interpolate too. Other values switch
+  halfway. Transforms are not interpolated yet.
 - Animated values sit between explicit values and stylesheet values, so a
   value set from C++ still wins.
 

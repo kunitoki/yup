@@ -33,6 +33,11 @@ void DrawingScope::setComponentResolver (ComponentResolver resolver)
     componentResolver = std::move (resolver);
 }
 
+void DrawingScope::setModelResolver (ModelResolver resolver)
+{
+    modelResolver = std::move (resolver);
+}
+
 void DrawingScope::install()
 {
     context.setSymbolResolver ([this] (const String& name)
@@ -41,17 +46,31 @@ void DrawingScope::install()
     });
 }
 
+std::optional<BindingProvider::Property> DrawingScope::findProviderProperty (const BindingProvider& provider, const Identifier& name)
+{
+    for (const auto& property : provider.getProperties())
+        if (property.name == name)
+            return property;
+
+    return std::nullopt;
+}
+
 const ExpressionType* DrawingScope::resolveSymbol (const String& symbol) const
 {
     if (symbol.startsWith ("palette."))
         return typeForPaletteRole (symbol.substring (8));
 
-    String propertyName;
+    const auto target = resolveTarget (symbol);
 
-    if (auto* target = resolveTarget (symbol, propertyName))
+    if (target.component != nullptr)
     {
-        if (const auto* property = target->getTypeInfo().findProperty (Identifier (propertyName)))
-            return getExpressionType (property->type);
+        if (const auto* property = target.component->getTypeInfo().findProperty (target.property))
+            return getExpressionType (property->type, property->elementType);
+    }
+    else if (target.provider != nullptr)
+    {
+        if (const auto property = findProviderProperty (*target.provider, target.property))
+            return getExpressionType (property->type, property->elementType);
     }
 
     return nullptr;
@@ -71,78 +90,94 @@ void DrawingScope::updateInputs (const CompiledExpression& program, ExpressionSt
             continue;
         }
 
-        String propertyName;
+        const auto target = resolveTarget (name);
 
-        auto* target = resolveTarget (name, propertyName);
-        if (target == nullptr)
-            continue;
+        ComponentProperty::Type type = ComponentProperty::Type::any;
+        ComponentProperty::Type elementType = ComponentProperty::Type::any;
+        var value;
 
-        const Identifier propertyId (propertyName);
+        if (target.component != nullptr)
+        {
+            const auto* property = target.component->getTypeInfo().findProperty (target.property);
+            if (property == nullptr)
+                continue;
 
-        const auto* property = target->getTypeInfo().findProperty (propertyId);
-        if (property == nullptr)
-            continue;
+            type = property->type;
+            elementType = property->elementType;
+            value = target.component->findProperty (target.property);
+        }
+        else if (target.provider != nullptr)
+        {
+            const auto property = findProviderProperty (*target.provider, target.property);
+            if (! property.has_value())
+                continue;
 
-        const auto value = target->findProperty (propertyId);
-
-        if (property->type == ComponentProperty::Type::color)
-            state.set (ExpressionInput<Color> { i }, VariantConverter<Color>::fromVar (value));
+            type = property->type;
+            elementType = property->elementType;
+            value = target.provider->getValue (target.property);
+        }
         else
-            state.setVar (i, value);
+        {
+            continue;
+        }
+
+        if (type == ComponentProperty::Type::array)
+            arrayInputs[name].bind (state, i, elementType, value);
+        else
+            withExpressionType (type, [&] (auto tag)
+            {
+                using Type = typename decltype (tag)::type;
+
+                state.set (ExpressionInput<Type> { i }, VariantConverter<Type>::fromVar (value));
+            });
     }
 }
 
-Component* DrawingScope::resolveTarget (const String& symbol, String& propertyName) const
+DrawingScope::ResolvedTarget DrawingScope::resolveTarget (const String& symbol) const
 {
     auto* self = component.get();
     if (self == nullptr)
-        return nullptr;
+        return {};
 
     if (symbol.startsWith ("parent."))
-    {
-        propertyName = symbol.substring (7);
-        return self->getParentComponent();
-    }
+        return { self->getParentComponent(), nullptr, Identifier (symbol.substring (7)) };
 
     if (symbol.startsWith ("self."))
+        return { self, nullptr, Identifier (symbol.substring (5)) };
+
+    const auto dot = symbol.indexOfChar ('.');
+
+    if (dot > 0)
     {
-        propertyName = symbol.substring (5);
-        return self;
+        const auto prefix = symbol.substring (0, dot);
+        const Identifier propertyId (symbol.substring (dot + 1));
+
+        if (componentResolver != nullptr)
+            if (auto* resolved = componentResolver (prefix))
+                return { resolved, nullptr, propertyId };
+
+        if (modelResolver != nullptr)
+            if (auto* provider = modelResolver (prefix))
+                return { nullptr, provider, propertyId };
+
+        return {};
     }
-
-    if (componentResolver != nullptr)
-    {
-        const auto dot = symbol.indexOfChar ('.');
-
-        if (dot > 0)
-        {
-            if (auto* resolved = componentResolver (symbol.substring (0, dot)))
-            {
-                propertyName = symbol.substring (dot + 1);
-                return resolved;
-            }
-
-            return nullptr;
-        }
-    }
-
-    propertyName = symbol;
 
     // A bare name the component doesn't declare reads the closest ancestor declaring it as inherited, like a token
     const Identifier propertyId (symbol);
 
     if (self->getTypeInfo().findProperty (propertyId) != nullptr)
-        return self;
+        return { self, nullptr, propertyId };
 
     for (auto* ancestor = self->getParentComponent(); ancestor != nullptr; ancestor = ancestor->getParentComponent())
     {
         const auto* property = ancestor->getTypeInfo().findProperty (propertyId);
 
         if (property != nullptr && property->isStoreBacked() && property->isInherited)
-            return ancestor;
+            return { ancestor, nullptr, propertyId };
     }
 
-    return self;
+    return { self, nullptr, propertyId };
 }
 
 std::vector<DrawingScope::Dependency> DrawingScope::getDependencies (const CompiledExpression& program) const
@@ -156,41 +191,94 @@ std::vector<DrawingScope::Dependency> DrawingScope::getDependencies (const Compi
         if (name.startsWith ("palette."))
             continue;
 
-        String propertyName;
+        const auto target = resolveTarget (name);
 
-        auto* target = resolveTarget (name, propertyName);
-        if (target == nullptr)
+        if (target.component != nullptr)
+        {
+            if (target.component->getTypeInfo().findProperty (target.property) == nullptr)
+                continue;
+        }
+        else if (target.provider != nullptr)
+        {
+            if (! findProviderProperty (*target.provider, target.property).has_value())
+                continue;
+        }
+        else
+        {
             continue;
-
-        const Identifier propertyId (propertyName);
-
-        if (target->getTypeInfo().findProperty (propertyId) == nullptr)
-            continue;
+        }
 
         const auto isKnown = std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
         {
-            return dependency.component == target && dependency.property == propertyId;
+            return dependency.component == target.component
+                && dependency.provider == target.provider
+                && dependency.property == target.property;
         });
 
         if (! isKnown)
-            dependencies.push_back ({ target, propertyId });
+            dependencies.push_back ({ target.component, target.provider, target.property });
     }
 
     return dependencies;
 }
 
-const ExpressionType* DrawingScope::getExpressionType (ComponentProperty::Type type) const
+const ExpressionType* DrawingScope::getExpressionType (ComponentProperty::Type type, ComponentProperty::Type elementType) const
 {
-    switch (type)
-    {
-        case ComponentProperty::Type::number:  return context.getType<float>();
-        case ComponentProperty::Type::integer: return context.getType<int>();
-        case ComponentProperty::Type::boolean: return context.getType<bool>();
-        case ComponentProperty::Type::string:  return context.getType<String>();
-        case ComponentProperty::Type::color:   return context.getType<Color>();
+    const ExpressionType* result = nullptr;
 
-        default:                               return nullptr;
+    if (type == ComponentProperty::Type::array)
+        withExpressionType (elementType, [&] (auto tag)
+        {
+            result = context.addArrayType<typename decltype (tag)::type>();
+        });
+    else
+        withExpressionType (type, [&] (auto tag)
+        {
+            result = context.getType<typename decltype (tag)::type>();
+        });
+
+    return result;
+}
+
+void DrawingScope::addExpressionArrayTypes (ExpressionContext& context)
+{
+    for (const auto type : { ComponentProperty::Type::number,
+                             ComponentProperty::Type::integer,
+                             ComponentProperty::Type::boolean,
+                             ComponentProperty::Type::string,
+                             ComponentProperty::Type::color,
+                             ComponentProperty::Type::point,
+                             ComponentProperty::Type::rectangle })
+    {
+        withExpressionType (type, [&] (auto tag)
+        {
+            context.addArrayType<typename decltype (tag)::type>();
+        });
     }
+}
+
+void DrawingScope::ArrayInput::bind (ExpressionState& state, int input, ComponentProperty::Type elementType, const var& value)
+{
+    withExpressionType (elementType, [&] (auto tag)
+    {
+        using Type = typename decltype (tag)::type;
+
+        if (! std::holds_alternative<Array<Type>> (values))
+            values = Array<Type>();
+
+        auto& elements = std::get<Array<Type>> (values);
+        elements.clearQuick();
+
+        if (const auto* source = value.getArray())
+        {
+            elements.ensureStorageAllocated (source->size());
+
+            for (const auto& element : *source)
+                elements.add (VariantConverter<Type>::fromVar (element));
+        }
+
+        state.bindArray (ExpressionArray<Type> { input }, elements.data(), elements.size());
+    });
 }
 
 const ExpressionType* DrawingScope::typeForPaletteRole (const String& roleName) const

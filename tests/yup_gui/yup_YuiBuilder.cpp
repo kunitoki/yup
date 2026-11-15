@@ -150,7 +150,7 @@ TEST_F (YuiBuilderTests, ReportsWhereEachProblemIsWritten)
 {
     const auto located = buildAndLocate (R"yui(component Slider : Component { }
 component Card : Column {
-    property spot: point;
+    property spot: font;
     property level: number = unknownSymbol;
     property alias lost <=> missing.value;
     property alias none <=> knob.nothing;
@@ -606,6 +606,53 @@ TEST_F (YuiBuilderTests, InstantiatesADeclaredComponent)
     EXPECT_NE (typeInfo->findSignal (Identifier ("onChanged")), nullptr);
 }
 
+TEST_F (YuiBuilderTests, DeclaresArrayAndPointProperties)
+{
+    YuiBuilder builder;
+    const auto result = builder.build (parse (R"yui(
+        component Lanes : Column {
+            property lanes: number[] = [0.25, 0.5];
+            property names: string[];
+            property origin: point = point (1, 2);
+
+            Slider { id: knob; value: len (root.lanes) / 4.0; }
+            Label { id: caption; text: root.names[0]; }
+        }
+
+        Row {
+            Lanes { id: plain; }
+            Lanes { id: filled; lanes: [1, 2, 3]; names: ["x"]; origin: point (5, 6); }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* plain = builder.findById ("plain");
+    auto* filled = builder.findById ("filled");
+    ASSERT_NE (plain, nullptr);
+    ASSERT_NE (filled, nullptr);
+
+    const auto sizeOf = [] (Component& component, const char* name)
+    {
+        const auto* elements = component.findProperty (Identifier (name)).getArray();
+        return elements != nullptr ? elements->size() : -1;
+    };
+
+    EXPECT_EQ (sizeOf (*plain, "lanes"), 2);
+    EXPECT_EQ (sizeOf (*plain, "names"), 0);
+    EXPECT_EQ (sizeOf (*filled, "lanes"), 3);
+    EXPECT_EQ (VariantConverter<Point<float>>::fromVar (plain->getProperty (Identifier ("origin"))), Point<float> (1.0f, 2.0f));
+    EXPECT_EQ (VariantConverter<Point<float>>::fromVar (filled->getProperty (Identifier ("origin"))), Point<float> (5.0f, 6.0f));
+
+    EXPECT_FLOAT_EQ (static_cast<float> (dynamic_cast<Slider*> (plain->getChildComponent (0))->getValue()), 0.5f);
+    EXPECT_FLOAT_EQ (static_cast<float> (dynamic_cast<Slider*> (filled->getChildComponent (0))->getValue()), 0.75f);
+    EXPECT_EQ (dynamic_cast<Label*> (filled->getChildComponent (1))->getText(), "x");
+
+    // The values of an array are read again when it changes
+    plain->setProperty (Identifier ("lanes"), var (Array<var> { 1.0, 2.0, 3.0, 4.0 }));
+    EXPECT_FLOAT_EQ (static_cast<float> (dynamic_cast<Slider*> (plain->getChildComponent (0))->getValue()), 1.0f);
+}
+
 TEST_F (YuiBuilderTests, NestsDeclaredComponents)
 {
     YuiBuilder builder;
@@ -708,6 +755,37 @@ TEST_F (YuiBuilderTests, LinksPropertiesToAModel)
     EXPECT_FLOAT_EQ (static_cast<float> (knob->getValue()), 0.2f);
 }
 
+TEST_F (YuiBuilderTests, ReadsTheArrayPropertiesOfAModel)
+{
+    DataTree tree ("params");
+    tree.beginTransaction().setProperty ("names", var (Array<var> { "low", "high" }));
+    tree.beginTransaction().setProperty ("gains", var (Array<var> { 0.25, 0.75 }));
+
+    DataTreeBindingProvider params (tree, nullptr);
+
+    YuiBuilder builder;
+    builder.setModel ("params", params);
+
+    const auto result = builder.build (parse (R"yui(
+        Component {
+            Label { id: caption; text: params.names[1]; }
+            Slider { id: knob; value: params.gains[len (params.gains) - 1]; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* caption = builder.findById<Label> ("caption");
+    auto* knob = builder.findById<Slider> ("knob");
+    ASSERT_NE (caption, nullptr);
+    ASSERT_NE (knob, nullptr);
+    EXPECT_EQ (caption->getText(), "high");
+    EXPECT_FLOAT_EQ (static_cast<float> (knob->getValue()), 0.75f);
+
+    tree.beginTransaction().setProperty ("gains", var (Array<var> { 0.5, 0.125 }));
+    EXPECT_FLOAT_EQ (static_cast<float> (knob->getValue()), 0.125f);
+}
+
 TEST_F (YuiBuilderTests, FollowsTheGesturesOfTheComponentsLinkedToAModel)
 {
     RecordingProvider provider;
@@ -767,4 +845,106 @@ TEST_F (YuiBuilderTests, MakesEachChangeOutsideAGestureAGestureOfItsOwn)
 
     EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.3f);
     EXPECT_EQ (provider.gestures.joinIntoString (", "), "begin gain, end gain");
+}
+
+TEST_F (YuiBuilderTests, PlacesTheChildOfAViewportAsItsContent)
+{
+    YuiBuilder builder;
+    const auto result = builder.build (parse (R"yui(
+        Viewport {
+            id: scroller;
+            scrollStep: 12;
+
+            Column { id: content; height: 900; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* viewport = builder.findById<Viewport> ("scroller");
+    ASSERT_NE (viewport, nullptr);
+    EXPECT_FLOAT_EQ (viewport->getScrollStep(), 12.0f);
+    EXPECT_EQ (viewport->getViewedComponent(), builder.findById ("content"));
+}
+
+TEST_F (YuiBuilderTests, TurnsTheChildrenOfATabComponentIntoTabs)
+{
+    YuiBuilder builder;
+    const auto result = builder.build (parse (R"yui(
+        TabComponent {
+            id: tabs;
+            placement: bottom;
+            selectedTab: "second";
+
+            Column { id: first; title: "First"; }
+            Column { id: second; title: "Second"; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* tabs = builder.findById<TabComponent> ("tabs");
+    ASSERT_NE (tabs, nullptr);
+    EXPECT_EQ (tabs->getTabBarPlacement(), TabComponent::Placement::bottom);
+    EXPECT_EQ (tabs->getTabContent (Identifier ("first")), builder.findById ("first"));
+    EXPECT_EQ (tabs->getTabContent (Identifier ("second")), builder.findById ("second"));
+    EXPECT_EQ (tabs->getTabBar().getSelectedTabId().toString(), "second");
+
+    // The title of a page is the text of its tab, before and after it is built
+    const auto* button = tabs->getTabBar().getTabButton (Identifier ("first"));
+    ASSERT_NE (button, nullptr);
+    EXPECT_EQ (button->getText(), "First");
+
+    builder.findById ("first")->setTitle ("Renamed");
+    EXPECT_EQ (button->getText(), "Renamed");
+}
+
+TEST_F (YuiBuilderTests, NumbersTheTabsOfThePagesWithoutAnId)
+{
+    YuiBuilder builder;
+    const auto result = builder.build (parse (R"yui(
+        TabComponent {
+            id: tabs;
+
+            Column { title: "First"; }
+            Column { title: "Second"; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    auto* tabs = builder.findById<TabComponent> ("tabs");
+    ASSERT_NE (tabs, nullptr);
+    ASSERT_NE (tabs->getTabContent (Identifier ("tab1")), nullptr);
+    ASSERT_NE (tabs->getTabContent (Identifier ("tab2")), nullptr);
+    EXPECT_EQ (tabs->getTabContent (Identifier ("tab2"))->getTitle(), "Second");
+}
+
+TEST_F (YuiBuilderTests, RebuildingLeavesTheChildrenOfAContainerWhereItPutThem)
+{
+    auto document = parse (R"yui(
+        Viewport {
+            id: scroller;
+            Column { id: content; }
+        })yui");
+
+    YuiBuilder builder;
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    auto* viewport = builder.findById<Viewport> ("scroller");
+    auto* content = builder.findById ("content");
+    ASSERT_NE (viewport, nullptr);
+    ASSERT_EQ (viewport->getViewedComponent(), content);
+
+    YuiTreeDiff::apply (document, parse (R"yui(
+        Viewport {
+            id: scroller;
+            scrollStep: 8;
+            Column { id: content; }
+        })yui"));
+
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    EXPECT_EQ (builder.findById ("content"), content);
+    EXPECT_EQ (viewport->getViewedComponent(), content);
+    EXPECT_FLOAT_EQ (viewport->getScrollStep(), 8.0f);
 }

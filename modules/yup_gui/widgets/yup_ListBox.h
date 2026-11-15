@@ -298,6 +298,22 @@ public:
     ListBoxModel* getModel() const noexcept;
 
     //==============================================================================
+    /** Shows a plain list of texts, one row each.
+
+        A model owned by the list is installed, replacing any model set before, so the rows can be
+        filled without writing one: this is what the `items` property of `.yui` sets.
+
+        @param newItems  The text of each row, in order
+    */
+    void setItems (const StringArray& newItems);
+
+    /** Returns the texts shown by @ref setItems.
+
+        @return The texts of the rows, or an empty array when another model is set
+    */
+    StringArray getItems() const;
+
+    //==============================================================================
     /** Sets the selection mode.
 
         @param mode  The selection mode to use
@@ -885,7 +901,10 @@ private:
     float getMinScrollOffset() const;
 
     //==============================================================================
+    struct ItemsModel;
+
     ListBoxModel* model = nullptr;
+    std::unique_ptr<ItemsModel> itemsModel;
     Orientation orientation = Orientation::vertical;
     SelectionMode selectionMode = SelectionMode::single;
 

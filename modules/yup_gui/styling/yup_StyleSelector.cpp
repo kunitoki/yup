@@ -237,7 +237,19 @@ ResultValue<StyleSelector> StyleSelector::parse (const String& text)
             selector.referencedProperties.addIfNotAlreadyThere (attribute.name);
 
         for (const auto& pseudoClass : compound.pseudoClasses)
+        {
             selector.referencedProperties.addIfNotAlreadyThere (pseudoClass);
+
+            const auto name = pseudoClass.toString();
+            if (name == "hover")
+                selector.referencedProperties.addIfNotAlreadyThere (Identifier ("hovered"));
+            else if (name == "active")
+                selector.referencedProperties.addIfNotAlreadyThere (Identifier ("pressed"));
+            else if (name == "focus")
+                selector.referencedProperties.addIfNotAlreadyThere (Identifier ("focused"));
+            else if (name == "disabled")
+                selector.referencedProperties.addIfNotAlreadyThere (Identifier ("enabled"));
+        }
 
         selector.compounds.push_back (std::move (compound));
 
@@ -270,11 +282,11 @@ bool StyleSelector::Compound::matches (const Component& component, const Compone
         const auto name = pseudoClass.toString();
         bool state = false;
 
-        if (name == "hover")
+        if (name == "hover" || name == "hovered")
             state = component.isHovered();
         else if (name == "pressed" || name == "active")
             state = component.isPressed();
-        else if (name == "focus")
+        else if (name == "focus" || name == "focused")
             state = component.hasKeyboardFocus();
         else if (name == "focus-within")
             state = component.hasFocusWithin();
@@ -330,6 +342,9 @@ bool StyleSelector::matchesFrom (const Component& component, int compoundIndex, 
 
     if (compoundIndex == 0)
         return true;
+
+    if (&component == styleRoot)
+        return false;
 
     const auto& next = compounds[static_cast<size_t> (compoundIndex)];
     auto* parent = component.getParentComponent();

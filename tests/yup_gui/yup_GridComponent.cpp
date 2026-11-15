@@ -83,3 +83,47 @@ TEST_F (GridComponentTests, PlacesChildrenInNamedAreas)
     EXPECT_EQ (first.getBounds(), Rectangle<float> (0.0f, 0.0f, 100.0f, 20.0f));
     EXPECT_EQ (second.getBounds(), Rectangle<float> (50.0f, 20.0f, 50.0f, 20.0f));
 }
+
+TEST_F (GridComponentTests, ParsesMinmaxFitContentAndRepeatTracks)
+{
+    const auto tracks = GridComponent::parseTracks ("minmax(80px, 1fr) fit-content(120px) repeat(2, 40px 1fr)");
+
+    ASSERT_EQ (tracks.size(), 6);
+    EXPECT_EQ (tracks.getReference (0).minimum.type, Grid::TrackInfo::SizeType::pixels);
+    EXPECT_FLOAT_EQ (tracks.getReference (0).minimum.value, 80.0f);
+    EXPECT_TRUE (tracks.getReference (0).isFractional());
+
+    EXPECT_FLOAT_EQ (tracks.getReference (1).minimum.value, 0.0f);
+    EXPECT_FLOAT_EQ (tracks.getReference (1).maximum.value, 120.0f);
+
+    EXPECT_FLOAT_EQ (tracks.getReference (2).maximum.value, 40.0f);
+    EXPECT_TRUE (tracks.getReference (3).isFractional());
+    EXPECT_FLOAT_EQ (tracks.getReference (4).maximum.value, 40.0f);
+    EXPECT_TRUE (tracks.getReference (5).isFractional());
+
+    GridComponent grid;
+    Component third { "third" };
+    grid.addAndMakeVisible (first);
+    grid.addAndMakeVisible (second);
+    grid.addAndMakeVisible (third);
+    grid.setColumns ("repeat(auto-fill, 50px)");
+    grid.setRows (1);
+    grid.setBounds (0, 0, 150, 30);
+
+    EXPECT_EQ (first.getBounds(), Rectangle<float> (0.0f, 0.0f, 50.0f, 30.0f));
+    EXPECT_EQ (second.getBounds(), Rectangle<float> (50.0f, 0.0f, 50.0f, 30.0f));
+    EXPECT_EQ (third.getBounds(), Rectangle<float> (100.0f, 0.0f, 50.0f, 30.0f));
+}
+
+TEST_F (GridComponentTests, RejectsInvalidTracksInsteadOfProducingZeroPixelTracks)
+{
+    EXPECT_TRUE (GridComponent::parseTracks ("bogus").isEmpty());
+    EXPECT_TRUE (GridComponent::parseTracks ("1fr bogus").isEmpty());
+    EXPECT_TRUE (GridComponent::parseTracks ("-10px").isEmpty());
+    EXPECT_TRUE (GridComponent::parseTracks ("minmax(1fr, 2fr)").isEmpty());
+    EXPECT_TRUE (GridComponent::parseTracks ("minmax(80px)").isEmpty());
+    EXPECT_TRUE (GridComponent::parseTracks ("minmax(80px, 1fr").isEmpty());
+    EXPECT_TRUE (GridComponent::parseTracks ("repeat(0, 1fr)").isEmpty());
+    EXPECT_TRUE (GridComponent::parseTracks ("repeat(5000, 1fr)").isEmpty());
+    EXPECT_TRUE (GridComponent::parseTracks (0).isEmpty());
+}

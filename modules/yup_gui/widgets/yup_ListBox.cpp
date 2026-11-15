@@ -130,7 +130,43 @@ const ComponentTypeInfo& ListBox::getClassTypeInfo()
             .defaultValue = static_cast<double> (listBoxDefaultRefreshIndicatorSize),
             .description = "The size of the pull-to-refresh indicator along the scroll axis." });
 
-        return ComponentTypeInfo { Identifier ("ListBox"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<ListBox>(); } };
+        props.push_back (ComponentProperty {
+            .name = Identifier ("items"),
+            .type = ComponentProperty::Type::array,
+            .elementType = ComponentProperty::Type::string,
+            .getter = [] (const Component& c) { return VariantConverter<StringArray>::toVar (static_cast<const ListBox&> (c).getItems()); },
+            .setter = [] (Component& c, const var& v) { static_cast<ListBox&> (c).setItems (VariantConverter<StringArray>::fromVar (v)); },
+            .isStyleable = false,
+            .description = "The text of each row, shown by a model the list owns." });
+
+        props.push_back (ComponentProperty {
+            .name = Identifier ("selectedRow"),
+            .type = ComponentProperty::Type::integer,
+            .getter = [] (const Component& c) { return var (static_cast<const ListBox&> (c).getSelectedRow()); },
+            .setter = [] (Component& c, const var& v)
+            {
+                auto& listBox = static_cast<ListBox&> (c);
+                const auto row = static_cast<int> (v);
+
+                if (row < 0)
+                    listBox.deselectAllRows();
+                else
+                    listBox.selectRow (row);
+            },
+            .isStyleable = false,
+            .description = "The index of the selected row, or -1 when nothing is selected." });
+
+        ComponentSignal selectionChanged {
+            .name = Identifier ("onSelectionChanged"),
+            .connect = [] (Component& component, ComponentSignal::Handler handler)
+            {
+                if (auto* listBox = dynamic_cast<ListBox*> (&component))
+                    listBox->onSelectionChanged = [handler = std::move (handler)] { handler ({}); };
+            },
+            .description = "Emitted when the selected rows change"
+        };
+
+        return ComponentTypeInfo { Identifier ("ListBox"), &Component::getClassTypeInfo(), std::move (props), { std::move (selectionChanged) }, [] { return std::make_unique<ListBox>(); } };
     }();
 
     return info;
@@ -384,6 +420,47 @@ void ListBox::setModel (ListBoxModel* newModel)
 ListBoxModel* ListBox::getModel() const noexcept
 {
     return model;
+}
+
+//==============================================================================
+
+struct ListBox::ItemsModel : public ListBoxModel
+{
+    int getNumRows() override
+    {
+        return items.size();
+    }
+
+    String getRowText (int rowIndex) override
+    {
+        return items[rowIndex];
+    }
+
+    StringArray items;
+};
+
+void ListBox::setItems (const StringArray& newItems)
+{
+    if (itemsModel != nullptr && model == itemsModel.get() && itemsModel->items == newItems)
+        return;
+
+    if (itemsModel == nullptr)
+        itemsModel = std::make_unique<ItemsModel>();
+
+    itemsModel->items = newItems;
+
+    setModel (nullptr);
+    setModel (itemsModel.get());
+
+    notifyPropertyChanged (Identifier ("items"));
+}
+
+StringArray ListBox::getItems() const
+{
+    if (itemsModel == nullptr || model != itemsModel.get())
+        return {};
+
+    return itemsModel->items;
 }
 
 //==============================================================================
@@ -1741,6 +1818,8 @@ void ListBox::navigateTo (int rowIndex, const KeyModifiers& modifiers)
 
 void ListBox::notifySelectionChanged()
 {
+    notifyPropertyChanged (Identifier ("selectedRow"));
+
     if (onSelectionChanged)
         onSelectionChanged();
 

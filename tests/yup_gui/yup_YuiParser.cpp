@@ -266,6 +266,38 @@ TEST_F (YuiParserTest, ParsesDrawingProperties)
     EXPECT_EQ (parseError ("drawing { layer { property a: number; } }"), "1:28: Expected ':'");
 }
 
+TEST_F (YuiParserTest, ParsesArrayTypesAndLiterals)
+{
+    const auto result = YuiParser::parse (R"yui(
+        component Picker : Column {
+            property items: string[] = ["a", "b"];
+            property lanes: number[];
+
+            Column {
+                values: [];
+                mixed: [1, model.gain, [2, 3]];
+            }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.diagnostics.front().toString();
+
+    const auto component = result.document.getChildWithName ("component");
+
+    const auto items = component.getChild (0);
+    EXPECT_EQ (items.getProperty ("type").toString(), "string[]");
+    EXPECT_EQ (items.getProperty ("value").toString(), "[\"a\", \"b\"]");
+    EXPECT_EQ (component.getChild (1).getProperty ("type").toString(), "number[]");
+
+    const auto body = component.getChildWithName ("Column").getChildWithName ("Column");
+    EXPECT_EQ (body.getProperty ("values").toString(), "[]");
+    EXPECT_EQ (body.getProperty ("mixed").toString(), "[1, model.gain, [2, 3]]");
+
+    EXPECT_EQ (parseError ("tokens { property a: font[] = 1; }"), "1:22: 'font' has no array type");
+    EXPECT_EQ (parseError ("tokens { property a: number[ = 1; }"), "1:30: Expected ']'");
+    EXPECT_EQ (parseError ("Component { items: [1, ]; }"), "1:24: Unexpected character ']'");
+    EXPECT_EQ (parseError ("Component { items: [1 2]; }"), "1:23: Expected ',' or ']'");
+}
+
 TEST_F (YuiParserTest, ParsesComponents)
 {
     const auto result = YuiParser::parse (R"yui(

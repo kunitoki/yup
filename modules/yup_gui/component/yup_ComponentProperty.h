@@ -66,6 +66,7 @@ struct ComponentProperty
         enumeration, /**< One of a fixed set of string values (see @ref enumValues). */
         font,        /**< A font. */
         drawing,     /**< The name of a drawing program. */
+        array,       /**< A list of values, stored as a var array (see @ref elementType). */
         any          /**< An untyped value. */
     };
 
@@ -81,6 +82,13 @@ struct ComponentProperty
 
     /** The value type of the property. */
     Type type = Type::any;
+
+    /** The type of the elements of an @ref Type::array property, Type::any when they are untyped.
+
+        Only the types an expression reads are typed (see @ref isExpressionType). Ignored for any
+        other @ref type.
+    */
+    Type elementType = Type::any;
 
     /** The default value, and the single source of truth for curated defaults. */
     var defaultValue;
@@ -127,7 +135,8 @@ struct ComponentProperty
     const Identifier& getStorageKey() const noexcept { return storageId.isValid() ? storageId : name; }
 
     /** Returns the type a `.yui` declaration names: `number`, `integer`, `boolean`, `string`, `color`,
-        `point`, `rectangle`, `font` or `drawing`, and Type::any for any other name.
+        `point`, `rectangle`, `font` or `drawing`, Type::array for an array of a scalar type such as
+        `string[]`, and Type::any for any other name.
     */
     static Type getTypeFromName (const String& typeName)
     {
@@ -143,11 +152,41 @@ struct ComponentProperty
             { "drawing", Type::drawing }
         };
 
+        if (typeName.endsWith ("[]"))
+            return getElementTypeFromName (typeName) != Type::any ? Type::array : Type::any;
+
         for (const auto& [candidate, type] : types)
             if (typeName == candidate)
                 return type;
 
         return Type::any;
+    }
+
+    /** Returns the element type a `.yui` array declaration such as `string[]` names, Type::any otherwise.
+
+        Only the scalar types an expression reads make an array (see @ref isExpressionType), so
+        `drawing[]` is untyped.
+    */
+    static Type getElementTypeFromName (const String& typeName)
+    {
+        if (! typeName.endsWith ("[]"))
+            return Type::any;
+
+        const auto element = getTypeFromName (typeName.dropLastCharacters (2));
+
+        return isExpressionType (element) ? element : Type::any;
+    }
+
+    /** Returns true for the scalar types an expression reads and writes.
+
+        These are number, integer, boolean, string, color, point and rectangle. They are the types a
+        value expression can produce, a drawing can declare, and an array can hold.
+    */
+    static bool isExpressionType (Type type) noexcept
+    {
+        return type == Type::number || type == Type::integer || type == Type::boolean
+            || type == Type::string || type == Type::color || type == Type::point
+            || type == Type::rectangle;
     }
 };
 

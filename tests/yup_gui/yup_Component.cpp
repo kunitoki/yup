@@ -1467,6 +1467,31 @@ TEST_F (ComponentMockTest, TitleMethods)
     EXPECT_TRUE (mockComponent->getTitle().isEmpty());
 }
 
+TEST_F (ComponentMockTest, TitleChangesAreReportedOnce)
+{
+    struct Listener : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override
+        {
+            if (name == Identifier ("title"))
+                ++changes;
+        }
+
+        int changes = 0;
+    };
+
+    Listener listener;
+    mockComponent->addComponentListener (&listener);
+
+    mockComponent->setTitle ("Test Title");
+    EXPECT_EQ (listener.changes, 1);
+
+    mockComponent->setTitle ("Test Title");
+    EXPECT_EQ (listener.changes, 1);
+
+    mockComponent->removeComponentListener (&listener);
+}
+
 TEST_F (ComponentMockTest, KeyboardFocusMethods)
 {
     // Test default focus behavior

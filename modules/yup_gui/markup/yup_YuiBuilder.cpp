@@ -112,23 +112,28 @@ std::vector<const Value*> inDeclarationOrder (const ComponentTypeInfo& type, con
 
 ComponentProperty makeDeclaredProperty (const DataTree& declaration, bool isInherited)
 {
-    const auto type = ComponentProperty::getTypeFromName (declaration.getProperty ("type").toString());
+    const auto typeName = declaration.getProperty ("type").toString();
+    const auto type = ComponentProperty::getTypeFromName (typeName);
 
     var defaultValue;
 
     switch (type)
     {
-        case ComponentProperty::Type::number:  defaultValue = 0.0; break;
-        case ComponentProperty::Type::integer: defaultValue = 0; break;
-        case ComponentProperty::Type::boolean: defaultValue = false; break;
-        case ComponentProperty::Type::string:  defaultValue = String(); break;
-        case ComponentProperty::Type::color:   defaultValue = static_cast<int64> (0); break;
-        default:                               break;
+        case ComponentProperty::Type::number:    defaultValue = 0.0; break;
+        case ComponentProperty::Type::integer:   defaultValue = 0; break;
+        case ComponentProperty::Type::boolean:   defaultValue = false; break;
+        case ComponentProperty::Type::string:    defaultValue = String(); break;
+        case ComponentProperty::Type::color:     defaultValue = static_cast<int64> (0); break;
+        case ComponentProperty::Type::point:     defaultValue = VariantConverter<Point<float>>::toVar ({}); break;
+        case ComponentProperty::Type::rectangle: defaultValue = VariantConverter<Rectangle<float>>::toVar ({}); break;
+        case ComponentProperty::Type::array:     defaultValue = var (Array<var>()); break;
+        default:                                 break;
     }
 
     return ComponentProperty {
         .name = Identifier (declaration.getProperty ("name").toString()),
         .type = type,
+        .elementType = ComponentProperty::getElementTypeFromName (typeName),
         .defaultValue = defaultValue,
         .isInherited = isInherited
     };
@@ -214,17 +219,30 @@ class YuiBuilder::Model final
 {
 public:
     explicit Model (BindingProvider& providerToUse)
-        : provider (providerToUse)
+        : provider (&providerToUse)
         , info (Identifier ("Model"), &Component::getClassTypeInfo(), makeProperties (providerToUse))
     {
         setTypeInfo (&info);
-        provider.addListener (this);
+        provider->addListener (this);
     }
 
     ~Model() override
     {
         stopTrackingGestures();
-        provider.removeListener (this);
+
+        if (provider != nullptr)
+            provider->removeListener (this);
+    }
+
+    BindingProvider* getProvider() const noexcept { return provider; }
+
+    void refreshProperties()
+    {
+        if (provider == nullptr)
+            return;
+
+        info = ComponentTypeInfo (Identifier ("Model"), &Component::getClassTypeInfo(), makeProperties (*provider));
+        setTypeInfo (&info);
     }
 
     // The provider is told about a gesture while the component linked to one of its values is pressed
@@ -259,9 +277,11 @@ private:
             properties.push_back ({
                 .name = property.name,
                 .type = property.type,
+                .elementType = property.elementType,
                 .getter = [name = property.name] (const Component& component)
                 {
-                    return static_cast<const Model&> (component).provider.getValue (name);
+                    const auto* model = static_cast<const Model&> (component).provider;
+                    return model != nullptr ? model->getValue (name) : var();
                 },
                 .setter = [name = property.name] (Component& component, const var& value)
                 {
@@ -284,7 +304,7 @@ private:
 
     void write (const Identifier& name, const var& value)
     {
-        if (provider.getValue (name) == value)
+        if (provider == nullptr || provider->getValue (name) == value)
             return;
 
         const auto isInGesture = std::any_of (tracked.begin(), tracked.end(), [&] (const auto& entry)
@@ -293,19 +313,19 @@ private:
         });
 
         if (! isInGesture)
-            provider.beginGesture (name);
+            provider->beginGesture (name);
 
-        provider.setValue (name, value);
+        provider->setValue (name, value);
 
         if (! isInGesture)
-            provider.endGesture (name);
+            provider->endGesture (name);
     }
 
     void stopTracking (Component& component)
     {
         for (auto& entry : tracked)
-            if (entry.component == &component && entry.isInGesture)
-                provider.endGesture (entry.property);
+            if (entry.component == &component && entry.isInGesture && provider != nullptr)
+                provider->endGesture (entry.property);
 
         tracked.erase (std::remove_if (tracked.begin(), tracked.end(), [&] (const auto& entry)
         {
@@ -321,11 +341,22 @@ private:
         notifyPropertyChanged (name);
     }
 
+    void bindingProviderBeingDeleted (BindingProvider& deletedProvider) override
+    {
+        if (provider != &deletedProvider)
+            return;
+
+        for (auto& entry : tracked)
+            entry.isInGesture = false;
+
+        provider = nullptr;
+    }
+
     void componentPropertyChanged (Component& component, const Identifier& property) override
     {
         static const Identifier pressedProperty ("pressed");
 
-        if (property != pressedProperty)
+        if (property != pressedProperty || provider == nullptr)
             return;
 
         const auto isPressed = component.isPressed();
@@ -338,9 +369,9 @@ private:
             entry.isInGesture = isPressed;
 
             if (isPressed)
-                provider.beginGesture (entry.property);
+                provider->beginGesture (entry.property);
             else
-                provider.endGesture (entry.property);
+                provider->endGesture (entry.property);
         }
     }
 
@@ -349,7 +380,7 @@ private:
         stopTracking (component);
     }
 
-    BindingProvider& provider;
+    BindingProvider* provider = nullptr;
     ComponentTypeInfo info;
     std::vector<Tracked> tracked;
 };
@@ -408,6 +439,9 @@ Result YuiBuilder::build (const DataTree& document)
 
     resetBindings();
 
+    for (auto& [name, model] : models)
+        model->refreshProperties();
+
     const auto previousScopes = std::exchange (scopes, {});
     previousComponents = std::exchange (components, {});
 
@@ -418,6 +452,7 @@ Result YuiBuilder::build (const DataTree& document)
     // The tree exists before any value is applied, so expressions can reference any element
     applyValues (std::exchange (applied, {}));
     bindings.setComponentResolver (resolverFor (scope));
+    bindings.setModelResolver (getModelResolver());
 
     // Children go first, so that no parent is destroyed while still holding them
     while (! previousComponents.empty())
@@ -446,6 +481,7 @@ void YuiBuilder::resetBindings()
     bindings.clear();
     bindings.clearDiagnostics();
     bindings.setComponentResolver (nullptr);
+    bindings.setModelResolver (nullptr);
     pending.clear();
     connections.clear();
 
@@ -488,12 +524,24 @@ void YuiBuilder::setAction (const String& name, Action action)
 
 void YuiBuilder::setModel (const String& name, BindingProvider& provider)
 {
+    if (const auto found = models.find (name); found != models.end())
+    {
+        if (auto* existing = found->second->getProvider())
+            bindings.forgetProvider (*existing);
+    }
+
     models[name] = std::make_unique<Model> (provider);
 }
 
 void YuiBuilder::removeModel (const String& name)
 {
-    models.erase (name);
+    if (const auto found = models.find (name); found != models.end())
+    {
+        if (auto* existing = found->second->getProvider())
+            bindings.forgetProvider (*existing);
+
+        models.erase (found);
+    }
 }
 
 //==============================================================================
@@ -730,11 +778,13 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
 
         component = created.get();
 
+        // The identity comes first, so a container placing its children itself knows them
+        applyIdentity (*component, element, scope, false);
+
         if (parent != nullptr)
             placeChild (*parent, *component, isReused);
 
         components.push_back ({ key, parent, &type, std::move (created) });
-        applyIdentity (*component, element, scope, false);
     }
 
     static const Identifier bindType ("bind");
@@ -791,11 +841,17 @@ std::unique_ptr<Component> YuiBuilder::reuseComponent (const DataTree& element, 
 
 void YuiBuilder::placeChild (Component& parent, Component& child, bool isReused)
 {
+    const auto& parentType = parent.getTypeInfo();
+
     if (! isReused)
     {
-        parent.addAndMakeVisible (child);
+        parentType.attachChild (parent, child);
         return;
     }
+
+    // A container that places its children itself keeps them where it put them
+    if (parentType.hasChildAttacher())
+        return;
 
     // A kept child only moves when it isn't after its previous sibling, so its subtree isn't notified for nothing
     for (auto it = components.rbegin(); it != components.rend(); ++it)
@@ -960,6 +1016,7 @@ void YuiBuilder::resetValue (Component& component, const ComponentTypeInfo& type
 void YuiBuilder::applyPending (const Pending& entry)
 {
     bindings.setComponentResolver (resolverFor (*entry.scope));
+    bindings.setModelResolver (getModelResolver());
     auto& values = applied[entry.component];
 
     for (const auto* entryValue : inDeclarationOrder (entry.component->getTypeInfo(), entry.values))
@@ -1020,7 +1077,10 @@ void YuiBuilder::applyProperty (Component& component, const Value& value, Scope&
             case ComponentProperty::Type::integer:
             case ComponentProperty::Type::boolean:
             case ComponentProperty::Type::string:
-            case ComponentProperty::Type::color:   type = descriptor->type; break;
+            case ComponentProperty::Type::color:
+            case ComponentProperty::Type::point:
+            case ComponentProperty::Type::rectangle:
+            case ComponentProperty::Type::array:   type = descriptor->type; break;
             case ComponentProperty::Type::any:     break;
 
             default:
@@ -1057,6 +1117,10 @@ void YuiBuilder::applyLink (Component& component, const Value& link, Scope& scop
 
     const Identifier sourceProperty (path.substring (dot + 1));
 
+    auto* model = dynamic_cast<Model*> (source);
+    if (model != nullptr && source->getTypeInfo().findProperty (sourceProperty) == nullptr)
+        model->refreshProperties();
+
     if (source->getTypeInfo().findProperty (sourceProperty) == nullptr)
     {
         report (where + ": " + source->getTypeInfo().getTypeName().toString() + " has no property '" + sourceProperty.toString() + "'", link.element, link.property);
@@ -1071,7 +1135,7 @@ void YuiBuilder::applyLink (Component& component, const Value& link, Scope& scop
 
     bindings.link (component, name, *source, sourceProperty);
 
-    if (auto* model = dynamic_cast<Model*> (source))
+    if (model != nullptr)
         model->trackGestures (component, sourceProperty);
 }
 
@@ -1131,7 +1195,7 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
 
     for (const auto& argument : arguments)
     {
-        auto compiled = PropertyExpression::compile (component, argument, std::nullopt, resolverFor (scope));
+        auto compiled = PropertyExpression::compile (component, argument, std::nullopt, resolverFor (scope), getModelResolver());
 
         if (compiled.failed())
         {
@@ -1207,7 +1271,7 @@ Result YuiBuilder::report (const String& message, const DataTree& element, const
 
 //==============================================================================
 
-Component* YuiBuilder::resolve (const Scope& scope, const String& name, Component* self) const
+Component* YuiBuilder::resolveComponent (const Scope& scope, const String& name, Component* self) const
 {
     if (self != nullptr && name == "self")
         return self;
@@ -1221,6 +1285,14 @@ Component* YuiBuilder::resolve (const Scope& scope, const String& name, Componen
     if (const auto found = scope.ids.find (name); found != scope.ids.end())
         return found->second;
 
+    return nullptr;
+}
+
+Component* YuiBuilder::resolve (const Scope& scope, const String& name, Component* self) const
+{
+    if (auto* component = resolveComponent (scope, name, self))
+        return component;
+
     if (const auto found = models.find (name); found != models.end())
         return found->second.get();
 
@@ -1231,7 +1303,29 @@ DrawingScope::ComponentResolver YuiBuilder::resolverFor (const Scope& scope) con
 {
     return [this, scopeToUse = &scope] (const String& name)
     {
-        return resolve (*scopeToUse, name);
+        return resolveComponent (*scopeToUse, name);
+    };
+}
+
+DrawingScope::ComponentResolver YuiBuilder::getComponentResolver() const
+{
+    return [this] (const String& name) -> Component*
+    {
+        if (scopes.empty())
+            return nullptr;
+
+        return resolveComponent (*scopes.front(), name);
+    };
+}
+
+DrawingScope::ModelResolver YuiBuilder::getModelResolver() const
+{
+    return [this] (const String& name) -> BindingProvider*
+    {
+        if (const auto found = models.find (name); found != models.end())
+            return found->second->getProvider();
+
+        return nullptr;
     };
 }
 

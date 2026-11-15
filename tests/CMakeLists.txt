@@ -213,7 +213,13 @@ if ("yup_gui" IN_LIST target_modules)
             "${yui_resources_dir}/ui.yui"
             "${yui_resources_dir}/parts/style.yui")
 
-    list (APPEND target_modules YuiTestResources)
+    yup_add_yui_resources (yui-nested-resources
+        BASE_DIR "${yui_resources_dir}"
+        FILES
+            "${yui_resources_dir}/parts/panel.yui"
+            "${yui_resources_dir}/parts/style.yui")
+
+    list (APPEND target_modules YuiTestResources yui-nested-resources)
 endif()
 
 # ==== Shared runtime: the linked modules are compiled once into a static library,

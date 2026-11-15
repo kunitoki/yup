@@ -273,6 +273,43 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_collect_object_libraries output_variable visited_variable)
+    set (object_libraries "${${output_variable}}")
+    set (visited_targets "${${visited_variable}}")
+
+    foreach (linked_target IN LISTS ARGN)
+        if (NOT TARGET "${linked_target}")
+            continue()
+        endif()
+
+        get_target_property (aliased_target "${linked_target}" ALIASED_TARGET)
+        if (aliased_target)
+            set (linked_target "${aliased_target}")
+        endif()
+
+        if ("${linked_target}" IN_LIST visited_targets)
+            continue()
+        endif()
+        list (APPEND visited_targets "${linked_target}")
+
+        get_target_property (target_type "${linked_target}" TYPE)
+        get_target_property (target_is_imported "${linked_target}" IMPORTED)
+        if ("${target_type}" STREQUAL "OBJECT_LIBRARY" AND NOT target_is_imported)
+            list (APPEND object_libraries "${linked_target}")
+        endif()
+
+        get_target_property (target_libraries "${linked_target}" INTERFACE_LINK_LIBRARIES)
+        if (target_libraries)
+            _yup_collect_object_libraries (object_libraries visited_targets ${target_libraries})
+        endif()
+    endforeach()
+
+    set (${output_variable} "${object_libraries}" PARENT_SCOPE)
+    set (${visited_variable} "${visited_targets}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
 function (_yup_target_list_contains target_list target_name output_variable)
     foreach (target IN LISTS target_list)
         if ("${target}" STREQUAL "${target_name}" OR "${target}" STREQUAL "yup::${target_name}")

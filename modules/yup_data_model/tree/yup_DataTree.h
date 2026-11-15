@@ -1274,6 +1274,7 @@ private:
     friend class PropertySetAction;
     friend class PropertyRemoveAction;
     friend class RemoveAllPropertiesAction;
+    friend class ReplacePropertiesAction;
     friend class AddChildAction;
     friend class RemoveChildAction;
     friend class RemoveAllChildrenAction;

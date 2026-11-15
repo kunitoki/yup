@@ -31,6 +31,8 @@ protected:
     class TestLayout : public LayoutComponent
     {
     public:
+        using LayoutComponent::parseSpacing;
+
         int layoutCount = 0;
         Rectangle<float> lastArea;
 
@@ -87,4 +89,12 @@ TEST_F (LayoutComponentTests, DoesNotInheritItemPropertiesFromTheParent)
 
     EXPECT_FLOAT_EQ (layout.findPropertyAs<float> (Identifier ("flexGrow")), 3.0f);
     EXPECT_FLOAT_EQ (child.findPropertyAs<float> (Identifier ("flexGrow")), 0.0f);
+}
+
+TEST_F (LayoutComponentTests, RejectsSpacingWithExtraOrMalformedTokens)
+{
+    EXPECT_EQ (TestLayout::parseSpacing ("8px 16px"), EdgeSpacing<float> (16.0f, 8.0f));
+    EXPECT_EQ (TestLayout::parseSpacing ("1 2 3 4 5"), EdgeSpacing<float>());
+    EXPECT_EQ (TestLayout::parseSpacing ("8 bogus"), EdgeSpacing<float>());
+    EXPECT_EQ (TestLayout::parseSpacing ("abc"), EdgeSpacing<float>());
 }

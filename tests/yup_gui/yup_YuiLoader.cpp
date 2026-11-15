@@ -28,6 +28,11 @@
 #include <YuiTestResources.h>
 #endif
 
+#if __has_include(<yui-nested-resources.h>)
+#define YUP_HAS_YUI_NESTED_RESOURCES 1
+#include <yui-nested-resources.h>
+#endif
+
 using namespace yup;
 
 class YuiLoaderTests : public ::testing::Test
@@ -292,6 +297,67 @@ TEST_F (YuiLoaderTests, LoadsEmbeddedResources)
     EXPECT_TRUE (loader.loadResource ("missing.yui", &YuiLoaderTests::findResource).failed());
     EXPECT_DOUBLE_EQ (getTrackWidth (document), 3.0);
 }
+
+TEST_F (YuiLoaderTests, ResolvesNestedRelativeImportsInResourcesMatchingFiles)
+{
+    write ("shared/common.yui", "tokens { property sharedWidth: number = 6; }");
+    write ("sub/knob.yui", "import \"../shared/common.yui\"; style { .knob { trackWidth: sharedWidth; } }");
+    write ("sub/panel.yui", R"yui(
+        import "knob.yui";
+
+        Component {
+            Slider { id: knob; class: "knob"; }
+        })yui");
+
+    YuiDocument fileDocument;
+    YuiLoader fileLoader (fileDocument);
+    ASSERT_TRUE (fileLoader.loadFile (folder.getChildFile ("sub/panel.yui")).wasOk());
+    EXPECT_DOUBLE_EQ (getTrackWidth (fileDocument), 6.0);
+
+    const auto findNestedResource = [] (const char* path, std::size_t& size) -> const uint8*
+    {
+        static const char* common = "tokens { property sharedWidth: number = 6; }";
+        static const char* knob = "import \"../shared/common.yui\"; style { .knob { trackWidth: sharedWidth; } }";
+        static const char* panel = "import \"knob.yui\"; Component { Slider { id: knob; class: \"knob\"; } }";
+
+        const char* text = nullptr;
+        const String key (path != nullptr ? path : "");
+
+        if (key == "shared/common.yui")
+            text = common;
+        else if (key == "sub/knob.yui")
+            text = knob;
+        else if (key == "sub/panel.yui")
+            text = panel;
+
+        size = text != nullptr ? std::strlen (text) : 0;
+        return reinterpret_cast<const uint8*> (text);
+    };
+
+    YuiDocument resourceDocument;
+    YuiLoader resourceLoader (resourceDocument);
+    const auto result = resourceLoader.loadResource ("sub/panel.yui", findNestedResource);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_DOUBLE_EQ (getTrackWidth (resourceDocument), 6.0);
+
+    resourceLoader.setOverride ("./sub/../sub/knob.yui", "style { .knob { trackWidth: 12; } }");
+    ASSERT_TRUE (resourceLoader.reload().wasOk());
+    EXPECT_DOUBLE_EQ (getTrackWidth (resourceDocument), 12.0);
+    EXPECT_EQ (resourceLoader.getLoadedText ("sub\\knob.yui"), String ("style { .knob { trackWidth: 12; } }"));
+}
+
+#if YUP_HAS_YUI_NESTED_RESOURCES
+TEST_F (YuiLoaderTests, LoadsHyphenatedTargetAndNestedResourcesEmbeddedWithCMake)
+{
+    YuiDocument document;
+    YuiLoader loader (document);
+
+    const auto result = loader.loadResource ("parts/panel.yui", yui_nested_resources_find);
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_DOUBLE_EQ (getTrackWidth (document), 4.0);
+}
+#endif
 
 #if YUP_HAS_YUI_TEST_RESOURCES
 TEST_F (YuiLoaderTests, LoadsResourcesEmbeddedWithCMake)
