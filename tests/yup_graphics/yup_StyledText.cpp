@@ -320,91 +320,91 @@ TEST (StyledTextTests, SetWrapMultipleTimes)
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationLeft)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::left);
+    auto align = StyledText::toHorizontalAlign (Justification::left);
 
     EXPECT_EQ (StyledText::left, align);
 }
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationCenter)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::horizontalCenter);
+    auto align = StyledText::toHorizontalAlign (Justification::horizontalCenter);
 
     EXPECT_EQ (StyledText::center, align);
 }
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationRight)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::right);
+    auto align = StyledText::toHorizontalAlign (Justification::right);
 
     EXPECT_EQ (StyledText::right, align);
 }
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationCentered)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::center);
+    auto align = StyledText::toHorizontalAlign (Justification::center);
 
     EXPECT_EQ (StyledText::center, align);
 }
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationCenteredLeft)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::centerLeft);
+    auto align = StyledText::toHorizontalAlign (Justification::centerLeft);
 
     EXPECT_EQ (StyledText::left, align);
 }
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationCenteredRight)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::centerRight);
+    auto align = StyledText::toHorizontalAlign (Justification::centerRight);
 
     EXPECT_EQ (StyledText::right, align);
 }
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationWithoutHorizontalFlagIsLeft)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::top);
+    auto align = StyledText::toHorizontalAlign (Justification::top);
 
     EXPECT_EQ (StyledText::left, align);
 }
 
 TEST (StyledTextTests, VerticalAlignFromJustificationTop)
 {
-    auto align = StyledText::verticalAlignFromJustification (Justification::top);
+    auto align = StyledText::toVerticalAlign (Justification::top);
 
     EXPECT_EQ (StyledText::top, align);
 }
 
 TEST (StyledTextTests, VerticalAlignFromJustificationMiddle)
 {
-    auto align = StyledText::verticalAlignFromJustification (Justification::verticalCenter);
+    auto align = StyledText::toVerticalAlign (Justification::verticalCenter);
 
     EXPECT_EQ (StyledText::middle, align);
 }
 
 TEST (StyledTextTests, VerticalAlignFromJustificationBottom)
 {
-    auto align = StyledText::verticalAlignFromJustification (Justification::bottom);
+    auto align = StyledText::toVerticalAlign (Justification::bottom);
 
     EXPECT_EQ (StyledText::bottom, align);
 }
 
 TEST (StyledTextTests, VerticalAlignFromJustificationCentered)
 {
-    auto align = StyledText::verticalAlignFromJustification (Justification::center);
+    auto align = StyledText::toVerticalAlign (Justification::center);
 
     EXPECT_EQ (StyledText::middle, align);
 }
 
 TEST (StyledTextTests, VerticalAlignFromJustificationCenteredTop)
 {
-    auto align = StyledText::verticalAlignFromJustification (Justification::centerTop);
+    auto align = StyledText::toVerticalAlign (Justification::centerTop);
 
     EXPECT_EQ (StyledText::top, align);
 }
 
 TEST (StyledTextTests, VerticalAlignFromJustificationCenteredBottom)
 {
-    auto align = StyledText::verticalAlignFromJustification (Justification::centerBottom);
+    auto align = StyledText::toVerticalAlign (Justification::centerBottom);
 
     EXPECT_EQ (StyledText::bottom, align);
 }

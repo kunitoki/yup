@@ -2028,8 +2028,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getSelectionRectangles", &StyledText::getSelectionRectangles, "startIndex"_a, "endIndex"_a)
         .def ("isValidCharacterIndex", &StyledText::isValidCharacterIndex, "characterIndex"_a)
 
-        .def_static ("horizontalAlignFromJustification", &StyledText::horizontalAlignFromJustification)
-        .def_static ("verticalAlignFromJustification", &StyledText::verticalAlignFromJustification)
+        .def_static ("toHorizontalAlign", &StyledText::toHorizontalAlign)
+        .def_static ("toVerticalAlign", &StyledText::toVerticalAlign)
 
         .def ("__repr__", [] (const StyledText& self)
         {

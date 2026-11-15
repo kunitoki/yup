@@ -219,8 +219,8 @@ void Label::prepareText()
     {
         auto modifier = styledText.startUpdate();
         modifier.setMaxSize (currentSize);
-        modifier.setHorizontalAlign (StyledText::horizontalAlignFromJustification (justification));
-        modifier.setVerticalAlign (StyledText::verticalAlignFromJustification (justification));
+        modifier.setHorizontalAlign (StyledText::toHorizontalAlign (justification));
+        modifier.setVerticalAlign (StyledText::toVerticalAlign (justification));
         modifier.setOverflow (StyledText::visible);
         modifier.setWrap (StyledText::noWrap);
         modifier.clear();

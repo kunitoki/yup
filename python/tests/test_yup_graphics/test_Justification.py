@@ -6,17 +6,17 @@ import yup
 # Justification accepts yup.Justification.left and friends directly.
 
 def test_flags_are_accepted_where_a_justification_is_expected():
-    assert yup.StyledText.horizontalAlignFromJustification(yup.Justification.left) \
-        == yup.StyledText.horizontalAlignFromJustification(yup.Justification(yup.Justification.left))
+    assert yup.StyledText.toHorizontalAlign(yup.Justification.left) \
+        == yup.StyledText.toHorizontalAlign(yup.Justification(yup.Justification.left))
 
-    assert yup.StyledText.verticalAlignFromJustification(yup.Justification.bottom) \
-        == yup.StyledText.verticalAlignFromJustification(yup.Justification(yup.Justification.bottom))
+    assert yup.StyledText.toVerticalAlign(yup.Justification.bottom) \
+        == yup.StyledText.toVerticalAlign(yup.Justification(yup.Justification.bottom))
 
 def test_combined_flags_are_accepted_where_a_justification_is_expected():
     combined = yup.Justification.left | yup.Justification.bottom
 
-    assert yup.StyledText.horizontalAlignFromJustification(combined) \
-        == yup.StyledText.horizontalAlignFromJustification(yup.Justification.left)
+    assert yup.StyledText.toHorizontalAlign(combined) \
+        == yup.StyledText.toHorizontalAlign(yup.Justification.left)
 
 """
 #==================================================================================================
