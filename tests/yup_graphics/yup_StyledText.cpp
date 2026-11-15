@@ -1766,3 +1766,34 @@ TEST_F (StyledTextLayoutTests, ClearAndAppendReusesDefaultRenderPathAndComputesL
     EXPECT_FALSE (startCaret.isEmpty());
     EXPECT_GT (endCaret.getX(), startCaret.getX());
 }
+
+TEST_F (StyledTextLayoutTests, DetachesRenderPathWhenExternallyRetainedDuringClearOrUpdate)
+{
+    StyledText text;
+    shape (text, "hello");
+
+    ASSERT_EQ (1u, text.getRenderStyles().size());
+    rive::rcp<rive::RenderPath> inFlightClearPath = text.getRenderStyles()[0]->path;
+    ASSERT_NE (nullptr, inFlightClearPath.get());
+
+    {
+        auto modifier = text.startUpdate();
+        modifier.clear();
+        modifier.appendText ("resized", loadStyledTextTestFont());
+    }
+
+    ASSERT_EQ (1u, text.getRenderStyles().size());
+    EXPECT_NE (inFlightClearPath.get(), text.getRenderStyles()[0]->path.get());
+
+    rive::rcp<rive::RenderPath> inFlightUpdatePath = text.getRenderStyles()[0]->path;
+    ASSERT_NE (nullptr, inFlightUpdatePath.get());
+
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ 120.0f, 40.0f });
+    }
+
+    ASSERT_EQ (1u, text.getRenderStyles().size());
+    EXPECT_NE (inFlightUpdatePath.get(), text.getRenderStyles()[0]->path.get());
+}
+

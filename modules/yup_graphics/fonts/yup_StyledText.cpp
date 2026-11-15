@@ -27,6 +27,15 @@ namespace yup
 namespace
 {
 
+bool canReuseExclusiveRenderPath (const rive::rcp<rive::RenderPath>& path) noexcept
+{
+    if (path == nullptr || path->debugging_refcnt() != 1)
+        return false;
+
+    std::atomic_thread_fence (std::memory_order_acquire);
+    return true;
+}
+
 rive::TextAlign toTextAlign (StyledText::HorizontalAlign align) noexcept
 {
     if (align == StyledText::left || align == StyledText::justified)
@@ -249,7 +258,7 @@ void StyledText::clear()
     {
         for (auto& style : styles)
         {
-            if (style.paint == nullptr && style.path != nullptr)
+            if (style.paint == nullptr && canReuseExclusiveRenderPath (style.path))
             {
                 style.path->rewind();
                 spareDefaultPath = std::move (style.path);
@@ -441,7 +450,11 @@ void StyledText::update()
 
     for (RenderStyle& style : styles)
     {
-        style.path->rewind();
+        if (canReuseExclusiveRenderPath (style.path))
+            style.path->rewind();
+        else
+            style.path = rive::make_rcp<rive::RiveRenderPath>();
+
         style.isEmpty = true;
     }
 
