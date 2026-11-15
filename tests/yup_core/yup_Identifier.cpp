@@ -122,3 +122,36 @@ TEST (Identifier, UseInAssociativeContainers)
     EXPECT_EQ (ids.find (Identifier ("test1"))->first, Identifier ("test1"));
     EXPECT_EQ (ids.find (Identifier ("test1"))->second, Identifier ("test2"));
 }
+
+TEST (Identifier, HashIsSharedByEqualIdentifiers)
+{
+    const std::hash<Identifier> hasher;
+    const Identifier first (String ("preferredWidth"));
+    const Identifier second (String ("preferred") + "Width");
+
+    EXPECT_EQ (first.getCharPointer().getAddress(), second.getCharPointer().getAddress());
+    EXPECT_EQ (hasher (first), hasher (second));
+}
+
+TEST (Identifier, HashDiffersForNamesSharingAPrefix)
+{
+    const std::hash<Identifier> hasher;
+    const Identifier first ("preferredWidth");
+    const Identifier second ("preferredHeight");
+
+    EXPECT_NE (first.getCharPointer().getAddress(), second.getCharPointer().getAddress());
+    EXPECT_NE (hasher (first), hasher (second));
+}
+
+TEST (Identifier, HashHandlesShortNames)
+{
+    const std::hash<Identifier> hasher;
+    const Identifier first (String ("x"));
+    const Identifier firstAgain (String ("xy").substring (0, 1));
+    const Identifier second (String ("y"));
+
+    EXPECT_EQ (first.getCharPointer().getAddress(), firstAgain.getCharPointer().getAddress());
+    EXPECT_EQ (hasher (first), hasher (firstAgain));
+    EXPECT_NE (hasher (first), hasher (second));
+}
+

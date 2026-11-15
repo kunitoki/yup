@@ -163,7 +163,7 @@ struct hash<yup::Identifier>
 {
     size_t operator() (const yup::Identifier& identifier) const noexcept
     {
-        return static_cast<size_t> (*reinterpret_cast<uintptr_t*> (identifier.getCharPointer().getAddress()));
+        return static_cast<size_t> (reinterpret_cast<uintptr_t> (identifier.getCharPointer().getAddress()));
     }
 };
 
