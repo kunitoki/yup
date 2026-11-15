@@ -82,54 +82,17 @@ FlexBox::Direction FlexBoxComponent::getDirection() const
 
 const ComponentTypeInfo& FlexBoxComponent::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
+    using Type = ComponentProperty::Type;
+    using LayoutEffect = ComponentProperty::LayoutEffect;
 
-        props.push_back (ComponentProperty {
-            .name = Properties::directionId,
-            .type = ComponentProperty::Type::enumeration,
-            .defaultValue = flexDirections.names[0],
-            .isInherited = false,
-            .enumValues = flexDirections.names,
-            .description = "The direction the children are laid out in." });
-
-        props.push_back (ComponentProperty {
-            .name = Properties::wrapId,
-            .type = ComponentProperty::Type::enumeration,
-            .defaultValue = flexWraps.names[0],
-            .isInherited = false,
-            .enumValues = flexWraps.names,
-            .description = "Whether the children wrap onto more lines." });
-
-        props.push_back (ComponentProperty {
-            .name = Properties::justifyId,
-            .type = ComponentProperty::Type::enumeration,
-            .defaultValue = flexJustifications.names[0],
-            .isInherited = false,
-            .enumValues = flexJustifications.names,
-            .description = "How the children are distributed along the main axis." });
-
-        props.push_back (ComponentProperty {
-            .name = Properties::alignId,
-            .type = ComponentProperty::Type::enumeration,
-            .defaultValue = flexAlignments.names[3],
-            .isInherited = false,
-            .enumValues = flexAlignments.names,
-            .description = "How the children are placed on the cross axis." });
-
-        return ComponentTypeInfo { Identifier ("FlexBox"), &LayoutComponent::getClassTypeInfo(), std::move (props), {}, []
-                                   {
-            return std::make_unique<FlexBoxComponent>();
-                                  } };
-    }();
+    static const auto info = ComponentTypeBuilder<FlexBoxComponent> (Identifier ("FlexBox"), LayoutComponent::getClassTypeInfo())
+                                 .layoutProperty (Properties::directionId, Type::enumeration, flexDirections.names[0], LayoutEffect::own, "The direction the children are laid out in.", flexDirections.names)
+                                 .layoutProperty (Properties::wrapId, Type::enumeration, flexWraps.names[0], LayoutEffect::own, "Whether the children wrap onto more lines.", flexWraps.names)
+                                 .layoutProperty (Properties::justifyId, Type::enumeration, flexJustifications.names[0], LayoutEffect::own, "How the children are distributed along the main axis.", flexJustifications.names)
+                                 .layoutProperty (Properties::alignId, Type::enumeration, flexAlignments.names[3], LayoutEffect::own, "How the children are placed on the cross axis.", flexAlignments.names)
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& FlexBoxComponent::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 //==============================================================================
@@ -153,13 +116,7 @@ void FlexBoxComponent::performLayout (Rectangle<float> area)
         item.flexBasis = getItemNumber (*child, Properties::flexBasisId);
         item.order = getItemInteger (*child, Properties::orderId);
         item.alignSelf = flexSelfAlignments.toEnum (getItemString (*child, Properties::alignSelfId), FlexItem::AlignSelf::autoAlign);
-        item.margin = getItemMargin (*child);
-        item.width = getItemNumber (*child, Properties::preferredWidthId);
-        item.height = getItemNumber (*child, Properties::preferredHeightId);
-        item.minWidth = getItemNumber (*child, Properties::minWidthId);
-        item.maxWidth = getItemNumber (*child, Properties::maxWidthId);
-        item.minHeight = getItemNumber (*child, Properties::minHeightId);
-        item.maxHeight = getItemNumber (*child, Properties::maxHeightId);
+        readItemSizing (item, *child);
 
         flexBox.items.add (item);
     }
@@ -169,58 +126,21 @@ void FlexBoxComponent::performLayout (Rectangle<float> area)
 
 //==============================================================================
 
-RowComponent::RowComponent()
-{
-    setDirection (FlexBox::Direction::row);
-}
-
-RowComponent::RowComponent (StringRef componentID)
-    : FlexBoxComponent (componentID)
-{
-    setDirection (FlexBox::Direction::row);
-}
-
 const ComponentTypeInfo& RowComponent::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info { Identifier ("Row"), &FlexBoxComponent::getClassTypeInfo(), {}, {}, []
-                                          {
-        return std::make_unique<RowComponent>();
-                                         } };
-
+    static const auto info = ComponentTypeBuilder<RowComponent> (Identifier ("Row"), FlexBoxComponent::getClassTypeInfo()).build();
     return info;
-}
-
-const ComponentTypeInfo& RowComponent::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 //==============================================================================
 
-ColumnComponent::ColumnComponent()
-{
-    setDirection (FlexBox::Direction::column);
-}
-
-ColumnComponent::ColumnComponent (StringRef componentID)
-    : FlexBoxComponent (componentID)
-{
-    setDirection (FlexBox::Direction::column);
-}
-
 const ComponentTypeInfo& ColumnComponent::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info { Identifier ("Column"), &FlexBoxComponent::getClassTypeInfo(), {}, {}, []
-                                          {
-        return std::make_unique<ColumnComponent>();
-                                         } };
+    static const auto info = ComponentTypeBuilder<ColumnComponent> (Identifier ("Column"), FlexBoxComponent::getClassTypeInfo())
+                                 .layoutProperty (Properties::directionId, ComponentProperty::Type::enumeration, flexDirections.names[2], ComponentProperty::LayoutEffect::own, "The direction the children are laid out in.", flexDirections.names)
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& ColumnComponent::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 } // namespace yup

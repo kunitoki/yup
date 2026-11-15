@@ -83,13 +83,17 @@ protected:
 
 TEST_F (ComponentPropertyTest, StoreBackedDescriptorHelpers)
 {
-    const auto property = makeColorProperty (Identifier ("thumbColor"), Identifier ("sliderThumb"));
+    const auto info = ComponentTypeBuilder<Component> (Identifier ("TestStoreBacked"))
+                          .color ("thumbColor", Identifier ("sliderThumb"))
+                          .build();
+    const auto* property = info.findProperty (Identifier ("thumbColor"));
+    ASSERT_NE (property, nullptr);
 
-    EXPECT_TRUE (property.isStoreBacked());
-    EXPECT_FALSE (property.isStateBacked());
-    EXPECT_FALSE (property.isReadOnly());
-    EXPECT_EQ (property.getStorageKey(), Identifier ("sliderThumb"));
-    EXPECT_EQ (property.type, ComponentProperty::Type::color);
+    EXPECT_TRUE (property->isStoreBacked());
+    EXPECT_FALSE (property->isStateBacked());
+    EXPECT_FALSE (property->isReadOnly());
+    EXPECT_EQ (property->getStorageKey(), Identifier ("sliderThumb"));
+    EXPECT_EQ (property->type, ComponentProperty::Type::color);
 }
 
 TEST_F (ComponentPropertyTest, TypeNamesIncludeArrays)
@@ -452,20 +456,21 @@ TEST_F (ComponentPropertyTest, TypeInfoFlattenedLookupOverridesBaseAndSurvivesMo
     const auto* byStorage = derived.findPropertyByStorageKey (Identifier ("customAccentKey"));
     ASSERT_NE (byStorage, nullptr);
     EXPECT_EQ (byStorage->name, Identifier ("accent"));
+    EXPECT_EQ (byStorage, &derived.getOwnProperties()[1]);
     EXPECT_NE (derived.findPropertyByStorageKey (Slider::Style::thumbColorId), nullptr);
+}
 
-    ComponentTypeInfo movedCtor (std::move (derived));
-    const auto* movedAccent = movedCtor.findPropertyByStorageKey (Identifier ("customAccentKey"));
-    ASSERT_NE (movedAccent, nullptr);
-    EXPECT_EQ (movedAccent, &movedCtor.getOwnProperties()[1]);
-    EXPECT_EQ (movedCtor.findProperty (Identifier ("accent")), movedAccent);
-    EXPECT_NE (movedCtor.findProperty (Identifier ("value")), nullptr);
+TEST_F (ComponentPropertyTest, ButtonSubtypesDeriveFromButtonTypeInfo)
+{
+    const auto& buttonType = Button::getClassTypeInfo();
+    EXPECT_FALSE (buttonType.hasFactory());
+    EXPECT_NE (buttonType.findSignal (Identifier ("onClick")), nullptr);
 
-    ComponentTypeInfo movedAssign (Identifier ("Placeholder"), nullptr, {});
-    movedAssign = std::move (movedCtor);
-    EXPECT_EQ (movedAssign.findProperty (Identifier ("accent")), &movedAssign.getOwnProperties()[1]);
-    EXPECT_EQ (movedAssign.findPropertyByStorageKey (Identifier ("customAccentKey")), &movedAssign.getOwnProperties()[1]);
-    EXPECT_DOUBLE_EQ (static_cast<double> (movedAssign.findProperty (Identifier ("opacity"))->defaultValue), 0.5);
+    for (const auto* typeInfo : { &TextButton::getClassTypeInfo(), &ToggleButton::getClassTypeInfo(), &SwitchButton::getClassTypeInfo() })
+    {
+        EXPECT_TRUE (typeInfo->isDerivedFrom (buttonType)) << typeInfo->getTypeName().toString();
+        EXPECT_NE (typeInfo->findSignal (Identifier ("onClick")), nullptr) << typeInfo->getTypeName().toString();
+    }
 }
 
 TEST_F (ComponentPropertyTest, AllWritableStateBackedPropertiesNotifyListeners)
@@ -484,8 +489,9 @@ TEST_F (ComponentPropertyTest, AllWritableStateBackedPropertiesNotifyListeners)
         &ListBox::getClassTypeInfo(),
         &Viewport::getClassTypeInfo(),
         &TabComponent::getClassTypeInfo(),
-        &LayoutComponent::getClassTypeInfo(),
-        &GridComponent::getClassTypeInfo()
+        &FlexBoxComponent::getClassTypeInfo(),
+        &GridComponent::getClassTypeInfo(),
+        &StackComponent::getClassTypeInfo()
     };
 
     for (const auto* typeInfo : types)

@@ -24,18 +24,6 @@ namespace yup
 
 //==============================================================================
 
-namespace
-{
-
-struct TextButtonIds
-{
-    static inline const Identifier text { "text" };
-};
-
-} // namespace
-
-//==============================================================================
-
 const Identifier TextButton::Style::backgroundColorId = "textButtonBackground";
 const Identifier TextButton::Style::backgroundPressedColorId = "textButtonBackgroundPressed";
 const Identifier TextButton::Style::textColorId = "textButtonText";
@@ -50,37 +38,20 @@ const Identifier TextButton::Style::focusedOutlineWidthId = "textButtonFocusedOu
 
 const ComponentTypeInfo& TextButton::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
-
-        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
-        props.push_back (makeColorProperty (Identifier ("backgroundPressedColor"), Style::backgroundPressedColorId));
-        props.push_back (makeColorProperty (Identifier ("textColor"), Style::textColorId));
-        props.push_back (makeColorProperty (Identifier ("textPressedColor"), Style::textPressedColorId));
-        props.push_back (makeColorProperty (Identifier ("outlineColor"), Style::outlineColorId));
-        props.push_back (makeColorProperty (Identifier ("outlineFocusedColor"), Style::outlineFocusedColorId));
-
-        props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, 4.0, "The corner radius."));
-        props.push_back (makeNumberProperty (Identifier ("outlineWidth"), Style::outlineWidthId, 1.0, "The outline width."));
-        props.push_back (makeNumberProperty (Identifier ("focusedOutlineWidth"), Style::focusedOutlineWidthId, 2.0, "The outline width when focused."));
-
-        props.push_back (ComponentProperty {
-            .name = TextButtonIds::text,
-            .type = ComponentProperty::Type::string,
-            .getter = [] (const Component& c) { return var (static_cast<const TextButton&> (c).getButtonText()); },
-            .setter = [] (Component& c, const var& v) { static_cast<TextButton&> (c).setButtonText (v.toString()); },
-            .isStyleable = false });
-
-        return ComponentTypeInfo { Identifier ("TextButton"), &Component::getClassTypeInfo(), std::move (props), { Button::getClickSignal() }, [] { return std::make_unique<TextButton>(); } };
-    }();
+    static const auto info = ComponentTypeBuilder<TextButton> (Identifier ("TextButton"), Button::getClassTypeInfo())
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("backgroundPressedColor", Style::backgroundPressedColorId)
+                                 .color ("textColor", Style::textColorId)
+                                 .color ("textPressedColor", Style::textPressedColorId)
+                                 .color ("outlineColor", Style::outlineColorId)
+                                 .color ("outlineFocusedColor", Style::outlineFocusedColorId)
+                                 .number ("cornerRadius", Style::cornerRadiusId, 4.0, "The corner radius.")
+                                 .number ("outlineWidth", Style::outlineWidthId, 1.0, "The outline width.")
+                                 .number ("focusedOutlineWidth", Style::focusedOutlineWidthId, 2.0, "The outline width when focused.")
+                                 .property (textPropertyId, &TextButton::getButtonText, &TextButton::setButtonText)
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& TextButton::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 //==============================================================================
@@ -101,7 +72,7 @@ void TextButton::setButtonText (StringRef newButtonText)
         buttonText = newButtonText;
 
         updateTextLayout();
-        notifyPropertyChanged (TextButtonIds::text);
+        notifyPropertyChanged (textPropertyId);
     }
 }
 

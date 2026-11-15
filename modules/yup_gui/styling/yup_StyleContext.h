@@ -80,9 +80,6 @@ public:
     ~StyleContext() override;
 
     //==============================================================================
-    /** Returns the component the context is attached to. */
-    Component& getRoot() const noexcept { return root; }
-
     /** Replaces the stylesheet and restyles the whole subtree.
 
         @param newStyleSheet The new sheet, which may be nullptr.
@@ -161,36 +158,60 @@ public:
 private:
     //==============================================================================
     struct BoundDependency;
+    struct ValueKey;
+    struct ValueKeyHash;
     struct CompiledValue;
     struct ComponentCache;
+    struct CacheMap;
     struct ResolvedDeclaration;
     struct PendingTransition;
 
-    using DeclarationMap = std::map<Identifier, ResolvedDeclaration>;
+    enum class ReleaseMode
+    {
+        forgetOnly,
+        resetAndForget,
+        freezeAnimatedAndForget
+    };
+
+    using DeclarationMap = std::unordered_map<Identifier, ResolvedDeclaration>;
+
+    template <class Fn>
+    void forEachManaged (Component& component, Fn&& fn);
 
     void restyleSubtree (Component& component, const DeclarationMap& inherited);
     void applyToComponent (Component& component, const DeclarationMap& inherited, DeclarationMap& inheritedForChildren);
     DeclarationMap collectInherited (Component& component) const;
     void collectDeclarations (Component& component, DeclarationMap& direct, DeclarationMap& qualified) const;
-    bool evaluate (Component& component, const Identifier& declarationName, const Identifier& storageId, std::optional<ComponentProperty::Type> type, const String& valueText, var& result, bool& paletteDependent);
+    static void mergeResolvedDeclaration (DeclarationMap& target, const Identifier& key, const ResolvedDeclaration& candidate);
+    bool evaluate (Component& component,
+                   ComponentCache& cache,
+                   ValueKey key,
+                   const Identifier& declarationName,
+                   const Identifier& storageId,
+                   std::optional<ComponentProperty::Type> type,
+                   const String& valueText,
+                   var& result,
+                   bool& paletteDependent);
     ComponentCache* findCache (const Component& component);
-    ComponentCache& getCache (Component& component);
+    ComponentCache& getCache (Component& component, bool& created);
     void clearCacheValues (ComponentCache& cache);
     void clearAllCaches();
-    void syncStateBacked (Component& component, const Identifier& storageId);
-    void restoreStateBacked (Component& component, const Identifier& storageId);
-    void restoreAllStateBacked (Component& component);
-    const DrawingStyle* installDrawing (Component& component, const String& name);
-    void restoreDrawing (Component& component);
-    bool applyEffects (Component& component, bool* paletteDependent = nullptr);
+    void resetCompiledValues();
+    bool resetStyle (Component& component, ComponentCache* cache, bool keepAnimatedValues = false, bool* paletteCleared = nullptr);
+    void release (Component& subtreeRoot, ReleaseMode mode);
+    void syncStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId);
+    void restoreStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId);
+    void restoreAllStateBacked (Component& component, ComponentCache& cache);
+    const DrawingStyle* installDrawing (Component& component, ComponentCache& cache, const String& name);
+    void restoreDrawing (Component& component, ComponentCache& cache);
+    bool applyEffects (Component& component, ComponentCache& cache, const StyleSheet::Declaration* shadowDeclaration = nullptr, bool* paletteDependent = nullptr);
     static const ComponentProperty* findDescriptor (const ComponentTypeInfo& typeInfo, const DrawingStyle* drawing, const Identifier& name);
     static const ComponentProperty* findStoredProperty (const ComponentTypeInfo& typeInfo, const Identifier& storageId);
-    var getBaseValue (Component& component, const ComponentProperty* descriptor, const Identifier& storageId);
-    bool updateTransitions (Component& component, const std::vector<PendingTransition>& pending, Array<Identifier>& touched);
-    bool updateAnimations (Component& component, const DeclarationMap& direct, const NamedValueSet& previous, const DrawingStyle* drawing, Array<Identifier>& touched);
-    std::vector<StyleAnimator::Track> compileTracks (Component& component, const StyleSheet::KeyframeSequence& keyframes, const DrawingStyle* drawing);
+    var getBaseValue (Component& component, const ComponentCache& cache, const ComponentProperty* descriptor, const Identifier& storageId);
+    bool updateTransitions (Component& component, const ComponentCache& cache, const std::vector<PendingTransition>& pending, Array<Identifier>& touched);
+    bool updateAnimations (Component& component, const ComponentCache& cache, const DeclarationMap& direct, const String& previousAnimation, const DrawingStyle* drawing, Array<Identifier>& touched);
+    std::vector<StyleAnimator::Track> compileTracks (Component& component, const ComponentCache& cache, const StyleSheet::KeyframeSequence& keyframes, const DrawingStyle* drawing);
     void showAnimatedValue (Component& component, const Identifier& storageId, const var* value);
-    void clearSubtree (Component& component);
     void markPaletteDependentDirty (Component& component);
     void report (const Identifier& declarationName, const String& message);
     void report (const YuiDiagnostic& diagnostic);
@@ -209,7 +230,7 @@ private:
     ComponentResolver componentResolver;
     ModelResolver modelResolver;
     Array<WeakReference<Component>> dirtyComponents;
-    std::map<Component*, std::unique_ptr<ComponentCache>> caches;
+    std::unique_ptr<CacheMap> caches;
     std::map<Component*, int> observedComponents;
     std::map<BindingProvider*, int> observedProviders;
     StyleAnimator animator;
@@ -217,6 +238,7 @@ private:
     const DeclarationMap* currentDeclarations = nullptr;
     double clock = 0.0;
     uint32 lastPaletteGeneration = 0;
+    bool isRestyling = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StyleContext)
 };

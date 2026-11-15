@@ -24,6 +24,11 @@ namespace yup
 
 //==============================================================================
 
+const Identifier Button::textPropertyId ("text");
+const Identifier Button::checkedPropertyId ("checked");
+
+//==============================================================================
+
 Button::Button (StringRef componentID)
     : Component (componentID)
 {
@@ -31,17 +36,13 @@ Button::Button (StringRef componentID)
     setWantsKeyboardFocus (true);
 }
 
-ComponentSignal Button::getClickSignal()
+const ComponentTypeInfo& Button::getClassTypeInfo()
 {
-    return ComponentSignal {
-        .name = Identifier ("onClick"),
-        .connect = [] (Component& component, ComponentSignal::Handler handler)
-        {
-            if (auto* button = dynamic_cast<Button*> (&component))
-                button->onClick = [handler = std::move (handler)] { handler ({}); };
-        },
-        .description = "Emitted when the button is clicked"
-    };
+    static const auto info = ComponentTypeBuilder<Button> (Identifier ("Button"))
+                                 .signal ("onClick", &Button::onClick, "Emitted when the button is clicked")
+                                 .build();
+
+    return info;
 }
 
 //==============================================================================

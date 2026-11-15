@@ -56,7 +56,7 @@ namespace yup
     run. Symbols resolve through DrawingScope: bare names and `self.` on the target, `parent.`
     on its parent, `palette.` on the palette, and any other prefix through the resolver.
 
-    @see PropertyBinding, PropertyExpression, DrawingScope, YuiBuilder
+    @see PropertyExpression, DrawingScope, YuiBuilder
 
     @tags{UI}
 */
@@ -111,9 +111,6 @@ public:
     */
     bool unbind (Component& target, const Identifier& property);
 
-    /** Removes every binding of a component, leaving the current values in place. */
-    void unbindAll (Component& target);
-
     /** Removes every binding reading from a provider, leaving the current values in place. */
     void forgetProvider (BindingProvider& provider);
 
@@ -148,8 +145,8 @@ public:
     /** Returns how many live bindings the graph holds. */
     int getNumBindings() const noexcept { return static_cast<int> (bindings.size()); }
 
-    /** Returns the binding on a property, or nullptr if it has none. */
-    const PropertyBinding* findBinding (const Component& target, const Identifier& property) const;
+    /** Returns true if the property currently has a live binding. */
+    bool hasBinding (const Component& target, const Identifier& property) const noexcept;
 
     /** Re-evaluates every binding, for example after the palette changed. */
     void refreshAll();
@@ -169,6 +166,8 @@ public:
 
 private:
     //==============================================================================
+    struct Binding;
+
     struct Link
     {
         Component* first = nullptr;
@@ -192,27 +191,27 @@ private:
     void unobserve (Component& component);
     void observe (BindingProvider& provider);
     void unobserve (BindingProvider& provider);
-    void addObservedOf (const PropertyBinding& binding);
-    void removeObservedOf (const PropertyBinding& binding);
+    void addObservedOf (const Binding& binding);
+    void removeObservedOf (const Binding& binding);
     void removeBinding (int index);
     void removeLink (int index);
     void syncLinks (Component& component, const Identifier& property);
     void invalidate (const Component& component, const Identifier& property);
     void invalidate (const BindingProvider& provider, const Identifier& property);
-    void markDirty (PropertyBinding& binding);
+    void markDirty (Binding& binding);
     void flush();
 
     //==============================================================================
-    std::vector<std::unique_ptr<PropertyBinding>> bindings;
+    std::vector<std::unique_ptr<Binding>> bindings;
     std::vector<std::shared_ptr<Link>> links;
-    std::vector<PropertyBinding*> dirty;
+    std::vector<Binding*> dirty;
     std::map<Component*, int> observed;
     std::map<BindingProvider*, int> observedProviders;
-    std::map<PropertyBinding*, int> evaluations;
     DrawingScope::ComponentResolver componentResolver;
     DrawingScope::ModelResolver modelResolver;
-    PropertyBinding* writingBinding = nullptr;
+    Binding* writingBinding = nullptr;
     StringArray diagnostics;
+    uint64 currentFlushEpoch = 0;
     bool isFlushing = false;
 
     static constexpr int maxEvaluationsPerFlush = 16;

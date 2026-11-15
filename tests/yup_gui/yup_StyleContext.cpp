@@ -969,3 +969,37 @@ TEST_F (StyleContextTests, NestedStylesheetReleasesOuterComputedValuesAndRestore
     EXPECT_DOUBLE_EQ (slider.getMinimum(), 10.0);
 }
 
+TEST_F (StyleContextTests, UnwatchedStateChangesDoNotTriggerRestyle)
+{
+    struct CountingComponent : public Component
+    {
+        using Component::Component;
+
+        void styleChanged() override { ++styleChanges; }
+
+        int styleChanges = 0;
+    };
+
+    Component root ("root");
+    CountingComponent button ("btn");
+    button.addStyleClass (Identifier ("knob"));
+    root.addAndMakeVisible (button);
+
+    attach (root, "style { .knob { glow: 4; } }");
+    button.styleChanges = 0;
+
+    ComponentTestHelper<StyleContext>::triggerMouseEnter (button, MouseEvent {});
+    ComponentTestHelper<StyleContext>::triggerMouseDown (button, MouseEvent {});
+    ComponentTestHelper<StyleContext>::triggerMouseUp (button, MouseEvent {});
+    ComponentTestHelper<StyleContext>::triggerMouseExit (button, MouseEvent {});
+    ComponentTestHelper<StyleContext>::triggerFocusGained (button);
+    ComponentTestHelper<StyleContext>::triggerFocusLost (button);
+    button.setEnabled (false);
+    button.setEnabled (true);
+    restyle (root);
+
+    EXPECT_EQ (button.styleChanges, 0);
+    EXPECT_DOUBLE_EQ (glow (button), 4.0);
+}
+
+

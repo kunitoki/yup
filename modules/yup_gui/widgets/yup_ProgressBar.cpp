@@ -41,36 +41,15 @@ const Identifier ProgressBar::Style::cornerRadiusId { "progressBarCornerRadius" 
 //==============================================================================
 const ComponentTypeInfo& ProgressBar::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
-
-        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
-        props.push_back (makeColorProperty (Identifier ("foregroundColor"), Style::foregroundColorId));
-        props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, {}, "The corner radius, unset for a pill."));
-
-        props.push_back (ComponentProperty {
-            .name = ProgressBarIds::progress,
-            .type = ComponentProperty::Type::number,
-            .getter = [] (const Component& c) { return var (static_cast<const ProgressBar&> (c).getProgress()); },
-            .setter = [] (Component& c, const var& v) { static_cast<ProgressBar&> (c).setProgress (static_cast<double> (v)); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = ProgressBarIds::indeterminate,
-            .type = ComponentProperty::Type::boolean,
-            .getter = [] (const Component& c) { return var (static_cast<const ProgressBar&> (c).isIndeterminate()); },
-            .isStyleable = false });
-
-        return ComponentTypeInfo { Identifier ("ProgressBar"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<ProgressBar>(); } };
-    }();
+    static const auto info = ComponentTypeBuilder<ProgressBar> (Identifier ("ProgressBar"))
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("foregroundColor", Style::foregroundColorId)
+                                 .number ("cornerRadius", Style::cornerRadiusId, {}, "The corner radius, unset for a pill.")
+                                 .property (ProgressBarIds::progress, &ProgressBar::getProgress, [] (ProgressBar& p, double v) { p.setProgress (v); })
+                                 .readOnly (ProgressBarIds::indeterminate, &ProgressBar::isIndeterminate)
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& ProgressBar::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 //==============================================================================

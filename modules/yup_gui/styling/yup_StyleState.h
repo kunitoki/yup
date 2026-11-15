@@ -182,10 +182,6 @@ public:
     */
     void paintShadows (Graphics& g, Rectangle<float> bounds, float cornerRadius) const;
 
-    //==============================================================================
-    /** Returns true when the component holds nothing a stylesheet computed. */
-    bool isEmpty() const noexcept;
-
 private:
     NamedValueSet computedValues;
     NamedValueSet animatedValues;

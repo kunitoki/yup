@@ -38,38 +38,15 @@ const detail::EnumNames<StackLayout::Align> stackAlignments {
 
 const ComponentTypeInfo& StackComponent::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
+    using Type = ComponentProperty::Type;
+    using LayoutEffect = ComponentProperty::LayoutEffect;
 
-        props.push_back (ComponentProperty {
-            .name = Properties::justifyId,
-            .type = ComponentProperty::Type::enumeration,
-            .defaultValue = stackAlignments.names[0],
-            .isInherited = false,
-            .enumValues = stackAlignments.names,
-            .description = "How the children that don't align themselves are placed horizontally." });
-
-        props.push_back (ComponentProperty {
-            .name = Properties::alignId,
-            .type = ComponentProperty::Type::enumeration,
-            .defaultValue = stackAlignments.names[0],
-            .isInherited = false,
-            .enumValues = stackAlignments.names,
-            .description = "How the children that don't align themselves are placed vertically." });
-
-        return ComponentTypeInfo { Identifier ("Stack"), &LayoutComponent::getClassTypeInfo(), std::move (props), {}, []
-                                   {
-            return std::make_unique<StackComponent>();
-                                  } };
-    }();
+    static const auto info = ComponentTypeBuilder<StackComponent> (Identifier ("Stack"), LayoutComponent::getClassTypeInfo())
+                                 .layoutProperty (Properties::justifyId, Type::enumeration, stackAlignments.names[0], LayoutEffect::own, "How the children that don't align themselves are placed horizontally.", stackAlignments.names)
+                                 .layoutProperty (Properties::alignId, Type::enumeration, stackAlignments.names[0], LayoutEffect::own, "How the children that don't align themselves are placed vertically.", stackAlignments.names)
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& StackComponent::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 //==============================================================================
@@ -85,11 +62,9 @@ void StackComponent::performLayout (Rectangle<float> area)
     {
         StackLayout::Item item (*child);
 
-        item.width = getItemNumber (*child, Properties::preferredWidthId);
-        item.height = getItemNumber (*child, Properties::preferredHeightId);
+        readItemSizing (item, *child);
         item.alignX = stackAlignments.toEnum (getItemString (*child, Properties::justifySelfId), StackLayout::Align::automatic);
         item.alignY = stackAlignments.toEnum (getItemString (*child, Properties::alignSelfId), StackLayout::Align::automatic);
-        item.margin = getItemMargin (*child);
 
         stack.items.add (item);
     }

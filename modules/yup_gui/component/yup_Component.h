@@ -30,6 +30,7 @@ template <class T>
 class ComponentTestHelper;
 #endif
 
+class ComponentTypeInfo;
 class StyleContext;
 class StyleSheet;
 
@@ -93,7 +94,7 @@ public:
         Widgets override this to return their own static type info. Unregistered subclasses
         inherit the type info of their nearest registered base.
     */
-    virtual const ComponentTypeInfo& getDefaultTypeInfo() const;
+    virtual const ComponentTypeInfo& getDefaultTypeInfo() const { return getClassTypeInfo(); }
 
     /** Returns the static type info describing the Component base type. */
     static const ComponentTypeInfo& getClassTypeInfo();
@@ -1278,9 +1279,18 @@ public:
 
         @param child The direct child whose layout changed.
 
-        @see childrenChanged, ComponentProperty::affectsParentLayout
+        @see childrenChanged, layoutPropertyChanged, ComponentProperty::layoutEffect
     */
     virtual void childLayoutChanged (Component& child);
+
+    /** Called on a component when one of its own container layout properties changes.
+
+        Layout containers override this to lay their children out again without inspecting
+        unrelated visual property changes.
+
+        @see childLayoutChanged, ComponentProperty::layoutEffect
+    */
+    virtual void layoutPropertyChanged();
 
     /** Called on a child when its index amongst its parent's children changes.
 

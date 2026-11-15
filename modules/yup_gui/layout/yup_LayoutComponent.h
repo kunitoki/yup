@@ -115,7 +115,7 @@ public:
     static const ComponentTypeInfo& getClassTypeInfo();
 
     /** @internal */
-    const ComponentTypeInfo& getDefaultTypeInfo() const override;
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     /** @internal */
     void resized() override;
@@ -127,7 +127,7 @@ public:
     void childLayoutChanged (Component& child) override;
 
     /** @internal */
-    void styleChanged() override;
+    void layoutPropertyChanged() override;
 
 protected:
     //==============================================================================
@@ -150,21 +150,31 @@ protected:
     /** Reads the `margin` property of a child. */
     static EdgeSpacing<float> getItemMargin (const Component& child);
 
-    /** Converts a number, or a string of 1, 2 or 4 values in CSS order, into an edge spacing. */
+    /** Populates the shared sizing and margin fields of a layout item from @p child. */
+    template <class Item>
+    static void readItemSizing (Item& item, const Component& child)
+    {
+        item.width = getItemNumber (child, Properties::preferredWidthId);
+        item.height = getItemNumber (child, Properties::preferredHeightId);
+        item.margin = getItemMargin (child);
+
+        if constexpr (requires { item.minWidth; })
+        {
+            item.minWidth = getItemNumber (child, Properties::minWidthId);
+            item.maxWidth = getItemNumber (child, Properties::maxWidthId);
+            item.minHeight = getItemNumber (child, Properties::minHeightId);
+            item.maxHeight = getItemNumber (child, Properties::maxHeightId);
+        }
+    }
+
+    /** Converts a number, an array of 4 edges, or a string of 1, 2 or 4 values in CSS order, into an edge spacing. */
     static EdgeSpacing<float> parseSpacing (const var& value);
 
     /** Splits a track or area list on whitespace and commas. */
     static StringArray splitTokens (const String& text);
 
-    /** @internal Returns true when performLayout only depends on the standard container layout properties. */
-    virtual bool usesOnlyStandardLayoutProperties() const noexcept { return false; }
-
 private:
-    std::array<var, 9> captureContainerProperties() const;
-
     bool isPerformingLayout = false;
-    bool hasLayoutSnapshot = false;
-    std::array<var, 9> lastContainerProperties;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LayoutComponent)
 };

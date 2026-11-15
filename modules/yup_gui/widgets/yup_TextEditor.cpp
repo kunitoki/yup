@@ -52,61 +52,23 @@ const Identifier TextEditor::Style::focusedOutlineWidthId = "textEditorFocusedOu
 
 const ComponentTypeInfo& TextEditor::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
-
-        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
-        props.push_back (makeColorProperty (Identifier ("textColor"), Style::textColorId));
-        props.push_back (makeColorProperty (Identifier ("caretColor"), Style::caretColorId));
-        props.push_back (makeColorProperty (Identifier ("selectionColor"), Style::selectionColorId));
-        props.push_back (makeColorProperty (Identifier ("outlineColor"), Style::outlineColorId));
-        props.push_back (makeColorProperty (Identifier ("focusedOutlineColor"), Style::focusedOutlineColorId));
-
-        props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, 4.0, "The corner radius."));
-        props.push_back (makeNumberProperty (Identifier ("outlineWidth"), Style::outlineWidthId, 1.0, "The outline width."));
-        props.push_back (makeNumberProperty (Identifier ("focusedOutlineWidth"), Style::focusedOutlineWidthId, 2.0, "The outline width when focused."));
-
-        props.push_back (ComponentProperty {
-            .name = TextEditorIds::text,
-            .type = ComponentProperty::Type::string,
-            .getter = [] (const Component& c) { return var (static_cast<const TextEditor&> (c).getText()); },
-            .setter = [] (Component& c, const var& v) { static_cast<TextEditor&> (c).setText (v.toString()); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = TextEditorIds::readOnly,
-            .type = ComponentProperty::Type::boolean,
-            .getter = [] (const Component& c) { return var (static_cast<const TextEditor&> (c).isReadOnly()); },
-            .setter = [] (Component& c, const var& v) { static_cast<TextEditor&> (c).setReadOnly (static_cast<bool> (v)); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = TextEditorIds::multiLine,
-            .type = ComponentProperty::Type::boolean,
-            .getter = [] (const Component& c) { return var (static_cast<const TextEditor&> (c).isMultiLine()); },
-            .setter = [] (Component& c, const var& v) { static_cast<TextEditor&> (c).setMultiLine (static_cast<bool> (v)); },
-            .isStyleable = false });
-
-        ComponentSignal textChange {
-            .name = Identifier ("onTextChange"),
-            .connect = [] (Component& component, ComponentSignal::Handler handler)
-            {
-                if (auto* editor = dynamic_cast<TextEditor*> (&component))
-                    editor->onTextChange = [handler = std::move (handler)] { handler ({}); };
-            },
-            .description = "Emitted when the text is edited"
-        };
-
-        return ComponentTypeInfo { Identifier ("TextEditor"), &Component::getClassTypeInfo(), std::move (props), { std::move (textChange) }, [] { return std::make_unique<TextEditor>(); } };
-    }();
+    static const auto info = ComponentTypeBuilder<TextEditor> (Identifier ("TextEditor"))
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("textColor", Style::textColorId)
+                                 .color ("caretColor", Style::caretColorId)
+                                 .color ("selectionColor", Style::selectionColorId)
+                                 .color ("outlineColor", Style::outlineColorId)
+                                 .color ("focusedOutlineColor", Style::focusedOutlineColorId)
+                                 .number ("cornerRadius", Style::cornerRadiusId, 4.0, "The corner radius.")
+                                 .number ("outlineWidth", Style::outlineWidthId, 1.0, "The outline width.")
+                                 .number ("focusedOutlineWidth", Style::focusedOutlineWidthId, 2.0, "The outline width when focused.")
+                                 .property (TextEditorIds::text, &TextEditor::getText, [] (TextEditor& e, const String& v) { e.setText (v); })
+                                 .property (TextEditorIds::readOnly, &TextEditor::isReadOnly, &TextEditor::setReadOnly)
+                                 .property (TextEditorIds::multiLine, &TextEditor::isMultiLine, &TextEditor::setMultiLine)
+                                 .signal ("onTextChange", &TextEditor::onTextChange, "Emitted when the text is edited")
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& TextEditor::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 //==============================================================================

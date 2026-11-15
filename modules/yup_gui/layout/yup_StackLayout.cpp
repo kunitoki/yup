@@ -129,15 +129,10 @@ void StackLayout::performLayout (Rectangle<float> targetArea)
     jassert (padding.getLeft() >= 0.0f && padding.getRight() >= 0.0f);
     jassert (padding.getTop() >= 0.0f && padding.getBottom() >= 0.0f);
 
-    const auto paddedArea = targetArea.reduced (std::max (0.0f, padding.getLeft()),
-                                                std::max (0.0f, padding.getTop()),
-                                                std::max (0.0f, padding.getRight()),
-                                                std::max (0.0f, padding.getBottom()));
-
-    const Rectangle<float> contentArea (paddedArea.getX(),
-                                        paddedArea.getY(),
-                                        std::max (0.0f, paddedArea.getWidth()),
-                                        std::max (0.0f, paddedArea.getHeight()));
+    const auto contentArea = targetArea.reduced (std::max (0.0f, padding.getLeft()),
+                                                 std::max (0.0f, padding.getTop()),
+                                                 std::max (0.0f, padding.getRight()),
+                                                 std::max (0.0f, padding.getBottom()));
 
     for (auto& item : items)
     {

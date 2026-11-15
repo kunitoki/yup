@@ -24,19 +24,6 @@ namespace yup
 
 //==============================================================================
 
-namespace
-{
-
-struct ToggleButtonIds
-{
-    static inline const Identifier checked { "checked" };
-    static inline const Identifier text { "text" };
-};
-
-} // namespace
-
-//==============================================================================
-
 const Identifier ToggleButton::Style::backgroundColorId = "toggleButtonBackground";
 const Identifier ToggleButton::Style::backgroundToggledColorId = "toggleButtonBackgroundToggled";
 const Identifier ToggleButton::Style::textColorId = "toggleButtonText";
@@ -51,45 +38,21 @@ const Identifier ToggleButton::Style::focusedOutlineWidthId = "toggleButtonFocus
 
 const ComponentTypeInfo& ToggleButton::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
-
-        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
-        props.push_back (makeColorProperty (Identifier ("backgroundToggledColor"), Style::backgroundToggledColorId));
-        props.push_back (makeColorProperty (Identifier ("textColor"), Style::textColorId));
-        props.push_back (makeColorProperty (Identifier ("textToggledColor"), Style::textToggledColorId));
-        props.push_back (makeColorProperty (Identifier ("borderColor"), Style::borderColorId));
-        props.push_back (makeColorProperty (Identifier ("borderToggledColor"), Style::borderToggledColorId));
-
-        props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, 4.0, "The corner radius."));
-        props.push_back (makeNumberProperty (Identifier ("outlineWidth"), Style::outlineWidthId, 1.0, "The outline width."));
-        props.push_back (makeNumberProperty (Identifier ("focusedOutlineWidth"), Style::focusedOutlineWidthId, 2.0, "The outline width when focused."));
-
-        props.push_back (ComponentProperty {
-            .name = ToggleButtonIds::checked,
-            .type = ComponentProperty::Type::boolean,
-            .getter = [] (const Component& c) { return var (static_cast<const ToggleButton&> (c).getToggleState()); },
-            .setter = [] (Component& c, const var& v) { static_cast<ToggleButton&> (c).setToggleState (static_cast<bool> (v)); },
-            .isState = true,
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = ToggleButtonIds::text,
-            .type = ComponentProperty::Type::string,
-            .getter = [] (const Component& c) { return var (static_cast<const ToggleButton&> (c).getButtonText()); },
-            .setter = [] (Component& c, const var& v) { static_cast<ToggleButton&> (c).setButtonText (v.toString()); },
-            .isStyleable = false });
-
-        return ComponentTypeInfo { Identifier ("ToggleButton"), &Component::getClassTypeInfo(), std::move (props), { Button::getClickSignal() }, [] { return std::make_unique<ToggleButton>(); } };
-    }();
+    static const auto info = ComponentTypeBuilder<ToggleButton> (Identifier ("ToggleButton"), Button::getClassTypeInfo())
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("backgroundToggledColor", Style::backgroundToggledColorId)
+                                 .color ("textColor", Style::textColorId)
+                                 .color ("textToggledColor", Style::textToggledColorId)
+                                 .color ("borderColor", Style::borderColorId)
+                                 .color ("borderToggledColor", Style::borderToggledColorId)
+                                 .number ("cornerRadius", Style::cornerRadiusId, 4.0, "The corner radius.")
+                                 .number ("outlineWidth", Style::outlineWidthId, 1.0, "The outline width.")
+                                 .number ("focusedOutlineWidth", Style::focusedOutlineWidthId, 2.0, "The outline width when focused.")
+                                 .state (checkedPropertyId, &ToggleButton::getToggleState, [] (ToggleButton& b, bool v) { b.setToggleState (v); })
+                                 .property (textPropertyId, &ToggleButton::getButtonText, &ToggleButton::setButtonText)
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& ToggleButton::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 //==============================================================================
@@ -110,7 +73,7 @@ void ToggleButton::setToggleState (bool shouldBeToggled, NotificationType notifi
 
         auto bailOutChecker = BailOutChecker (this);
 
-        notifyPropertyChanged (ToggleButtonIds::checked);
+        notifyPropertyChanged (checkedPropertyId);
         if (bailOutChecker.shouldBailOut())
             return;
 
@@ -136,7 +99,7 @@ void ToggleButton::setButtonText (String newText)
     if (buttonText != newText)
     {
         buttonText = newText;
-        notifyPropertyChanged (ToggleButtonIds::text);
+        notifyPropertyChanged (textPropertyId);
         resized();
     }
 }

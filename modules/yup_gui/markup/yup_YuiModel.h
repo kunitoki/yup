@@ -35,9 +35,9 @@ class YuiBuilder::Model final
 public:
     explicit Model (BindingProvider& providerToUse)
         : provider (&providerToUse)
-        , info (Identifier ("Model"), &Component::getClassTypeInfo(), makeProperties (providerToUse))
+        , info (std::make_unique<ComponentTypeInfo> (Identifier ("Model"), &Component::getClassTypeInfo(), makeProperties (providerToUse)))
     {
-        setTypeInfo (&info);
+        setTypeInfo (info.get());
         provider->addListener (this);
     }
 
@@ -56,8 +56,9 @@ public:
         if (provider == nullptr)
             return;
 
-        info = ComponentTypeInfo (Identifier ("Model"), &Component::getClassTypeInfo(), makeProperties (*provider));
-        setTypeInfo (&info);
+        auto updated = std::make_unique<ComponentTypeInfo> (Identifier ("Model"), &Component::getClassTypeInfo(), makeProperties (*provider));
+        setTypeInfo (updated.get());
+        info = std::move (updated);
     }
 
     // The provider is told about a gesture while the component linked to one of its values is pressed
@@ -196,7 +197,7 @@ private:
     }
 
     BindingProvider* provider = nullptr;
-    ComponentTypeInfo info;
+    std::unique_ptr<ComponentTypeInfo> info;
     std::vector<Tracked> tracked;
 };
 

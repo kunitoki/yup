@@ -43,34 +43,17 @@ const Identifier ScrollBar::Style::cornerRadiusId { "scrollBarCornerRadius" };
 //==============================================================================
 const ComponentTypeInfo& ScrollBar::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
-
-        props.push_back (makeColorProperty (Identifier ("trackColor"), Style::trackColorId));
-        props.push_back (makeColorProperty (Identifier ("thumbColor"), Style::thumbColorId));
-        props.push_back (makeColorProperty (Identifier ("thumbHoverColor"), Style::thumbHoverColorId));
-        props.push_back (makeColorProperty (Identifier ("thumbDraggingColor"), Style::thumbDraggingColorId));
-
-        props.push_back (makeNumberProperty (Identifier ("thumbInset"), Style::thumbInsetId, 3.0, "The inset of the thumb inside the bar."));
-        props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, {}, "The thumb corner radius, unset for a pill."));
-
-        props.push_back (ComponentProperty {
-            .name = ScrollBarIds::dragging,
-            .type = ComponentProperty::Type::boolean,
-            .getter = [] (const Component& c) { return var (static_cast<const ScrollBar&> (c).isDragging()); },
-            .isState = true,
-            .isStyleable = false });
-
-        return ComponentTypeInfo { Identifier ("ScrollBar"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<ScrollBar>(); } };
-    }();
+    static const auto info = ComponentTypeBuilder<ScrollBar> (Identifier ("ScrollBar"))
+                                 .color ("trackColor", Style::trackColorId)
+                                 .color ("thumbColor", Style::thumbColorId)
+                                 .color ("thumbHoverColor", Style::thumbHoverColorId)
+                                 .color ("thumbDraggingColor", Style::thumbDraggingColorId)
+                                 .number ("thumbInset", Style::thumbInsetId, 3.0, "The inset of the thumb inside the bar.")
+                                 .number ("cornerRadius", Style::cornerRadiusId, {}, "The thumb corner radius, unset for a pill.")
+                                 .state (ScrollBarIds::dragging, &ScrollBar::isDragging)
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& ScrollBar::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 //==============================================================================

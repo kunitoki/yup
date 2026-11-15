@@ -126,6 +126,8 @@ private:
     class Compiler;
     class CompiledCache;
 
+    static constexpr int maxRepeatCount = 4096;
+
     explicit DrawingProgram (Component& target,
                              DrawingScope::ComponentResolver componentResolver,
                              DrawingScope::ModelResolver modelResolver);

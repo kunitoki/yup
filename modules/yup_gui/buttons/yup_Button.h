@@ -61,8 +61,12 @@ public:
     /** A callback that is called when the button is clicked. */
     std::function<void()> onClick;
 
-    /** Returns the `onClick` signal, which the type info of every registered button declares. */
-    static ComponentSignal getClickSignal();
+    //==============================================================================
+    /** Returns the static type info describing the Button base type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
     /** @internal */
@@ -75,6 +79,10 @@ public:
     void mouseDown (const MouseEvent& event) override;
     /** @internal */
     void mouseUp (const MouseEvent& event) override;
+
+protected:
+    static const Identifier textPropertyId;
+    static const Identifier checkedPropertyId;
 
 private:
     bool isButtonCurrentlyOver = false;

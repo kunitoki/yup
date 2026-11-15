@@ -22,6 +22,54 @@
 namespace yup
 {
 
+struct BindingGraph::Binding
+{
+    Binding (Component& targetToUse, const Identifier& propertyToUse, std::unique_ptr<PropertyExpression> expressionToUse)
+        : target (&targetToUse)
+        , property (propertyToUse)
+        , expression (std::move (expressionToUse))
+        , dependencies (expression->getDependencies())
+    {
+    }
+
+    bool dependsOn (const Component& component, const Identifier& name) const noexcept
+    {
+        return std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
+        {
+            return dependency.component == &component && dependency.property == name;
+        });
+    }
+
+    bool dependsOn (const BindingProvider& provider, const Identifier& name) const noexcept
+    {
+        return std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
+        {
+            return dependency.provider == &provider && dependency.property == name;
+        });
+    }
+
+    void evaluate()
+    {
+        auto* component = target.get();
+        if (component == nullptr)
+            return;
+
+        const auto value = expression->evaluate();
+
+        if (component->getProperty (property) != value)
+            component->setProperty (property, value);
+    }
+
+    WeakReference<Component> target;
+    Identifier property;
+    std::unique_ptr<PropertyExpression> expression;
+    std::vector<DrawingScope::Dependency> dependencies;
+    uint64 flushEpoch = 0;
+    int evaluations = 0;
+};
+
+//==============================================================================
+
 BindingGraph::BindingGraph() = default;
 
 BindingGraph::~BindingGraph()
@@ -73,7 +121,7 @@ Result BindingGraph::bind (Component& target,
         return Result::ok();
     }
 
-    auto binding = std::make_unique<PropertyBinding> (target, property, std::move (expression));
+    auto binding = std::make_unique<Binding> (target, property, std::move (expression));
     auto* bindingToEvaluate = binding.get();
 
     addObservedOf (*binding);
@@ -88,7 +136,7 @@ bool BindingGraph::unbind (Component& target, const Identifier& property)
 {
     for (int index = 0; index < static_cast<int> (bindings.size()); ++index)
     {
-        if (bindings[index]->getTarget() == &target && bindings[index]->getProperty() == property)
+        if (bindings[index]->target.get() == &target && bindings[index]->property == property)
         {
             removeBinding (index);
             return true;
@@ -98,20 +146,11 @@ bool BindingGraph::unbind (Component& target, const Identifier& property)
     return false;
 }
 
-void BindingGraph::unbindAll (Component& target)
-{
-    for (int index = static_cast<int> (bindings.size()) - 1; index >= 0; --index)
-    {
-        if (bindings[index]->getTarget() == &target)
-            removeBinding (index);
-    }
-}
-
 void BindingGraph::forgetProvider (BindingProvider& provider)
 {
     for (int index = static_cast<int> (bindings.size()) - 1; index >= 0; --index)
     {
-        const auto& dependencies = bindings[static_cast<size_t> (index)]->getDependencies();
+        const auto& dependencies = bindings[static_cast<size_t> (index)]->dependencies;
 
         const bool readsIt = std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
         {
@@ -141,7 +180,6 @@ void BindingGraph::clear()
     jassert (observedProviders.empty());
 
     dirty.clear();
-    evaluations.clear();
 }
 
 //==============================================================================
@@ -185,15 +223,12 @@ bool BindingGraph::unlink (Component& component, const Identifier& property)
 
 //==============================================================================
 
-const PropertyBinding* BindingGraph::findBinding (const Component& target, const Identifier& property) const
+bool BindingGraph::hasBinding (const Component& target, const Identifier& property) const noexcept
 {
-    for (const auto& binding : bindings)
+    return std::any_of (bindings.begin(), bindings.end(), [&] (const auto& binding)
     {
-        if (binding->getTarget() == &target && binding->getProperty() == property)
-            return binding.get();
-    }
-
-    return nullptr;
+        return binding->target.get() == &target && binding->property == property;
+    });
 }
 
 void BindingGraph::refreshAll()
@@ -208,10 +243,8 @@ void BindingGraph::refreshAll()
 void BindingGraph::refreshPaletteBindings()
 {
     for (const auto& binding : bindings)
-    {
-        if (binding->readsPalette())
+        if (binding->expression->readsPalette())
             dirty.push_back (binding.get());
-    }
 
     if (! isFlushing && ! dirty.empty())
         flush();
@@ -230,7 +263,7 @@ void BindingGraph::componentPropertyChanged (Component& component, const Identif
     {
         auto* binding = bindings[index].get();
 
-        if (binding != writingBinding && binding->getTarget() == &component && binding->getProperty() == property)
+        if (binding != writingBinding && binding->target.get() == &component && binding->property == property)
         {
             removeBinding (index);
             break;
@@ -255,16 +288,14 @@ void BindingGraph::componentBeingDeleted (Component& component)
     {
         auto* binding = bindings[index].get();
 
-        if (binding->getTarget() == &component)
+        if (binding->target.get() == &component)
         {
             removeBinding (index);
             continue;
         }
 
-        const auto& dependencies = binding->getDependencies();
-
-        const auto readsIt = std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
-                                          {
+        const auto readsIt = std::any_of (binding->dependencies.begin(), binding->dependencies.end(), [&] (const auto& dependency)
+        {
             return dependency.component == &component;
         });
 
@@ -295,10 +326,7 @@ void BindingGraph::unobserve (Component& component)
 {
     const auto it = observed.find (&component);
 
-    if (it == observed.end())
-        return;
-
-    if (--it->second > 0)
+    if (it == observed.end() || --it->second > 0)
         return;
 
     observed.erase (it);
@@ -315,22 +343,19 @@ void BindingGraph::unobserve (BindingProvider& provider)
 {
     const auto it = observedProviders.find (&provider);
 
-    if (it == observedProviders.end())
-        return;
-
-    if (--it->second > 0)
+    if (it == observedProviders.end() || --it->second > 0)
         return;
 
     observedProviders.erase (it);
     provider.removeListener (this);
 }
 
-void BindingGraph::addObservedOf (const PropertyBinding& binding)
+void BindingGraph::addObservedOf (const Binding& binding)
 {
-    if (auto* target = binding.getTarget())
+    if (auto* target = binding.target.get())
         observe (*target);
 
-    for (const auto& dependency : binding.getDependencies())
+    for (const auto& dependency : binding.dependencies)
     {
         if (dependency.component != nullptr)
             observe (*dependency.component);
@@ -339,12 +364,12 @@ void BindingGraph::addObservedOf (const PropertyBinding& binding)
     }
 }
 
-void BindingGraph::removeObservedOf (const PropertyBinding& binding)
+void BindingGraph::removeObservedOf (const Binding& binding)
 {
-    if (auto* target = binding.getTarget())
+    if (auto* target = binding.target.get())
         unobserve (*target);
 
-    for (const auto& dependency : binding.getDependencies())
+    for (const auto& dependency : binding.dependencies)
     {
         if (dependency.component != nullptr)
             unobserve (*dependency.component);
@@ -360,12 +385,8 @@ void BindingGraph::removeBinding (int index)
     removeObservedOf (*binding);
 
     for (auto& pending : dirty)
-    {
         if (pending == binding)
             pending = nullptr;
-    }
-
-    evaluations.erase (binding);
 
     if (writingBinding == binding)
         writingBinding = nullptr;
@@ -410,26 +431,20 @@ void BindingGraph::syncLinks (Component& component, const Identifier& property)
 void BindingGraph::invalidate (const Component& component, const Identifier& property)
 {
     for (const auto& binding : bindings)
-    {
         if (binding->dependsOn (component, property))
             markDirty (*binding);
-    }
 }
 
 void BindingGraph::invalidate (const BindingProvider& provider, const Identifier& property)
 {
     for (const auto& binding : bindings)
-    {
         if (binding->dependsOn (provider, property))
             markDirty (*binding);
-    }
 }
 
-void BindingGraph::markDirty (PropertyBinding& binding)
+void BindingGraph::markDirty (Binding& binding)
 {
-    const auto isPending = std::find (dirty.begin(), dirty.end(), &binding) != dirty.end();
-
-    if (! isPending)
+    if (std::find (dirty.begin(), dirty.end(), &binding) == dirty.end())
         dirty.push_back (&binding);
 
     if (! isFlushing)
@@ -439,8 +454,7 @@ void BindingGraph::markDirty (PropertyBinding& binding)
 void BindingGraph::flush()
 {
     const ScopedValueSetter<bool> flushing (isFlushing, true);
-
-    evaluations.clear();
+    ++currentFlushEpoch;
 
     for (size_t index = 0; index < dirty.size(); ++index)
     {
@@ -451,13 +465,19 @@ void BindingGraph::flush()
 
         dirty[index] = nullptr;
 
-        if (++evaluations[binding] > maxEvaluationsPerFlush)
+        if (binding->flushEpoch != currentFlushEpoch)
         {
-            const auto message = "Binding cycle detected while evaluating \"" + binding->getSource() + "\", the binding was removed";
+            binding->flushEpoch = currentFlushEpoch;
+            binding->evaluations = 0;
+        }
+
+        if (++binding->evaluations > maxEvaluationsPerFlush)
+        {
+            const auto message = "Binding cycle detected while evaluating \"" + binding->expression->getSource() + "\", the binding was removed";
             diagnostics.add (message);
 
-            auto* target = binding->getTarget();
-            const auto property = binding->getProperty();
+            auto* target = binding->target.get();
+            const auto property = binding->property;
 
             for (int bindingIndex = 0; bindingIndex < static_cast<int> (bindings.size()); ++bindingIndex)
             {
@@ -474,13 +494,11 @@ void BindingGraph::flush()
             continue;
         }
 
-        const ScopedValueSetter<PropertyBinding*> writing (writingBinding, binding);
-
+        const ScopedValueSetter<Binding*> writing (writingBinding, binding);
         binding->evaluate();
     }
 
     dirty.clear();
-    evaluations.clear();
 }
 
 } // namespace yup

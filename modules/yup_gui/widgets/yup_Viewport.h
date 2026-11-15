@@ -118,7 +118,7 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
-    const ComponentTypeInfo& getDefaultTypeInfo() const override;
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
     /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds) override;
     /** @internal */

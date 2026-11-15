@@ -48,65 +48,32 @@ const Identifier Label::Style::textHeightProportionId { "labelTextHeightProporti
 
 const ComponentTypeInfo& Label::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
-
-        props.push_back (makeColorProperty (Identifier ("textFillColor"), Style::textFillColorId));
-        props.push_back (makeColorProperty (Identifier ("textStrokeColor"), Style::textStrokeColorId));
-        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
-        props.push_back (makeColorProperty (Identifier ("outlineColor"), Style::outlineColorId));
-
-        props.push_back (ComponentProperty {
-            .name = Identifier ("textHeightProportion"),
-            .storageId = Style::textHeightProportionId,
-            .type = ComponentProperty::Type::number,
-            .description = "The height of the text as a proportion of the label height. Unset, the font keeps its own height." });
-
-        props.push_back (ComponentProperty {
-            .name = LabelIds::text,
-            .type = ComponentProperty::Type::string,
-            .getter = [] (const Component& c) { return var (static_cast<const Label&> (c).getText()); },
-            .setter = [] (Component& c, const var& v) { static_cast<Label&> (c).setText (v.toString()); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = LabelIds::strokeWidth,
-            .type = ComponentProperty::Type::number,
-            .getter = [] (const Component& c) { return var (static_cast<double> (static_cast<const Label&> (c).getStrokeWidth())); },
-            .setter = [] (Component& c, const var& v) { static_cast<Label&> (c).setStrokeWidth (static_cast<float> (static_cast<double> (v))); },
-            .isStyleable = false });
-
-        static const StringArray justificationNames { "left", "right", "topLeft", "centerTop", "topRight", "centerLeft", "center", "centerRight", "bottomLeft", "centerBottom", "bottomRight" };
-        static const Justification::Flags justifications[] = { Justification::left, Justification::right, Justification::topLeft, Justification::centerTop, Justification::topRight, Justification::centerLeft, Justification::center, Justification::centerRight, Justification::bottomLeft, Justification::centerBottom, Justification::bottomRight };
-
-        props.push_back (ComponentProperty {
-            .name = LabelIds::justification,
-            .type = ComponentProperty::Type::enumeration,
-            .defaultValue = justificationNames[0],
-            .getter = [] (const Component& c)
-            {
-                const auto flags = static_cast<const Label&> (c).getJustification().getFlags();
-                const auto found = std::find (std::begin (justifications), std::end (justifications), flags);
-                return var (found != std::end (justifications) ? justificationNames[static_cast<int> (found - std::begin (justifications))] : String());
-            },
-            .setter = [] (Component& c, const var& v)
-            {
-                if (const auto index = justificationNames.indexOf (v.toString()); index >= 0)
-                    static_cast<Label&> (c).setJustification (justifications[index]);
-            },
-            .isStyleable = false,
-            .enumValues = justificationNames });
-
-        return ComponentTypeInfo { Identifier ("Label"), &Component::getClassTypeInfo(), std::move (props), {}, [] { return std::make_unique<Label>(); } };
-    }();
+    static const auto info = ComponentTypeBuilder<Label> (Identifier ("Label"))
+                                 .color ("textFillColor", Style::textFillColorId)
+                                 .color ("textStrokeColor", Style::textStrokeColorId)
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("outlineColor", Style::outlineColorId)
+                                 .number ("textHeightProportion", Style::textHeightProportionId, {}, "The height of the text as a proportion of the label height. Unset, the font keeps its own height.")
+                                 .property (LabelIds::text, &Label::getText, [] (Label& l, const String& v) { l.setText (v); })
+                                 .property (LabelIds::strokeWidth, &Label::getStrokeWidth, &Label::setStrokeWidth)
+                                 .enumeration<Justification::Flags> (
+                                     LabelIds::justification,
+                                     { { "left", Justification::left },
+                                       { "right", Justification::right },
+                                       { "topLeft", Justification::topLeft },
+                                       { "centerTop", Justification::centerTop },
+                                       { "topRight", Justification::topRight },
+                                       { "centerLeft", Justification::centerLeft },
+                                       { "center", Justification::center },
+                                       { "centerRight", Justification::centerRight },
+                                       { "bottomLeft", Justification::bottomLeft },
+                                       { "centerBottom", Justification::centerBottom },
+                                       { "bottomRight", Justification::bottomRight } },
+                                     [] (const Label& l) { return l.getJustification().getFlags(); },
+                                     [] (Label& l, Justification::Flags f) { l.setJustification (f); })
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& Label::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 //==============================================================================

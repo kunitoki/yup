@@ -34,12 +34,6 @@ void ComponentTypeRegistry::registerType (const ComponentTypeInfo& typeInfo)
     types.insert_or_assign (typeInfo.getTypeName(), &typeInfo);
 }
 
-void ComponentTypeRegistry::unregisterType (const Identifier& typeName)
-{
-    const ScopedLock sl (lock);
-    types.erase (typeName);
-}
-
 const ComponentTypeInfo* ComponentTypeRegistry::findType (const Identifier& typeName) const
 {
     const ScopedLock sl (lock);
@@ -50,38 +44,6 @@ const ComponentTypeInfo* ComponentTypeRegistry::findType (const Identifier& type
     return nullptr;
 }
 
-bool ComponentTypeRegistry::isRegistered (const Identifier& typeName) const
-{
-    const ScopedLock sl (lock);
-    return types.find (typeName) != types.end();
-}
-
-StringArray ComponentTypeRegistry::getRegisteredTypeNames() const
-{
-    const ScopedLock sl (lock);
-
-    StringArray names;
-    for (const auto& entry : types)
-        names.add (entry.first.toString());
-
-    names.sort (false);
-    return names;
-}
-
-std::unique_ptr<Component> ComponentTypeRegistry::createInstance (const Identifier& typeName) const
-{
-    if (auto* typeInfo = findType (typeName))
-        return typeInfo->createInstance();
-
-    return nullptr;
-}
-
-void ComponentTypeRegistry::clear()
-{
-    const ScopedLock sl (lock);
-    types.clear();
-}
-
 //==============================================================================
 
 void registerBuiltInComponentTypes()
@@ -89,6 +51,7 @@ void registerBuiltInComponentTypes()
     auto& registry = ComponentTypeRegistry::getInstance();
 
     registry.registerType (Component::getClassTypeInfo());
+    registry.registerType (Button::getClassTypeInfo());
     registry.registerType (Label::getClassTypeInfo());
     registry.registerType (Slider::getClassTypeInfo());
     registry.registerType (TextButton::getClassTypeInfo());
@@ -101,6 +64,7 @@ void registerBuiltInComponentTypes()
     registry.registerType (ListBox::getClassTypeInfo());
     registry.registerType (Viewport::getClassTypeInfo());
     registry.registerType (TabComponent::getClassTypeInfo());
+    registry.registerType (LayoutComponent::getClassTypeInfo());
     registry.registerType (FlexBoxComponent::getClassTypeInfo());
     registry.registerType (RowComponent::getClassTypeInfo());
     registry.registerType (ColumnComponent::getClassTypeInfo());

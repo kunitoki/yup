@@ -39,7 +39,6 @@
 #include "yup_ComponentEffectRegistry.cpp"
 #include "yup_ComponentPointMapping.cpp"
 #include "yup_ComponentProperty.cpp"
-#include "yup_ComponentPropertyAttachment.cpp"
 #include "yup_ComponentTypeRegistry.cpp"
 #include "yup_DataTreeViewItem.cpp"
 #include "yup_Desktop.cpp"

@@ -109,7 +109,7 @@ public:
 
             Scope scope;
             declareProperties (drawing, path, scope);
-            compileChildren (drawing, path, std::move (scope), false, result.nodes);
+            compileElements (drawing, path, std::move (scope), false, result.nodes);
         }
         catch (const Error& error)
         {
@@ -228,6 +228,12 @@ private:
     }
 
     //==============================================================================
+    static String elementPath (const String& parentPath, const DataTree& element, int index)
+    {
+        return parentPath + "/" + element.getType().toString()
+             + (element.hasProperty ("id") ? "#" + element.getProperty ("id").toString() : "[" + String (index) + "]");
+    }
+
     static void checkElement (const DataTree& element, const String& path, const StringArray& allowed, bool allowChildren)
     {
         for (int i = 0; i < element.getNumProperties(); ++i)
@@ -355,26 +361,7 @@ private:
         if (compiled.failed())
             fail (locateError (compiled.getErrorMessage(), lineLabels, path));
 
-        for (const auto& statement : statements)
-            if (statement.symbol.isNotEmpty())
-                verifiedLets.addIfNotAlreadyThere (statement.symbol);
-
         return compiled.getReference();
-    }
-
-    /* Compiles on its own each let of the scope no program has compiled yet, in declaration order,
-       so its errors are reported even when nothing uses it, and before the errors of later elements. */
-    void verifyLets (const Scope& scope)
-    {
-        for (const auto& let : scope.lets)
-        {
-            if (verifiedLets.contains (let.symbol))
-                continue;
-
-            auto check = selectLets (scope, { let.symbol });
-            check.push_back ({ let.symbol + ";", let.label });
-            compileStatements (check, let.label);
-        }
     }
 
     /* Declares a let under an internal name, so it can't clash with the outputs the elements assign. */
@@ -432,8 +419,7 @@ private:
             if (element.getType().toString() != "property")
                 continue;
 
-            const auto path = drawingPath + "/property" + (element.hasProperty ("id") ? "#" + element.getProperty ("id").toString() : "[" + String (index) + "]");
-            ++index;
+            const auto path = elementPath (drawingPath, element, index++);
 
             checkElement (element, path, { "id", "name", "type", "value" }, false);
 
@@ -459,7 +445,6 @@ private:
                     fail (path + ".value: an array property can't have a default");
 
                 declare (scope, name, { input, {} }, path, path);
-                verifiedLets.add (scope.symbols[name]);
                 continue;
             }
 
@@ -477,7 +462,6 @@ private:
             propertyInputs[isSet] = { context.getType<bool>(), property, true };
 
             declare (scope, name, { "(" + isSet + " ? " + input + " : " + fallback.text + ")", fallback.uses }, path, path + ".value");
-            verifiedLets.add (scope.symbols[name]);
         }
     }
 
@@ -521,30 +505,14 @@ private:
     }
 
     //==============================================================================
-    void compileChildren (const DataTree& parent, const String& parentPath, Scope scope, bool insideRepeat, std::vector<std::unique_ptr<Node>>& target)
-    {
-        try
-        {
-            compileElements (parent, parentPath, scope, insideRepeat, target);
-        }
-        catch (const Error&)
-        {
-            verifyLets (scope);
-            throw;
-        }
-
-        verifyLets (scope);
-    }
-
-    void compileElements (const DataTree& parent, const String& parentPath, Scope& scope, bool insideRepeat, std::vector<std::unique_ptr<Node>>& target)
+    void compileElements (const DataTree& parent, const String& parentPath, Scope scope, bool insideRepeat, std::vector<std::unique_ptr<Node>>& target)
     {
         std::map<String, int> counts;
 
         for (const auto& element : parent)
         {
             const auto type = element.getType().toString();
-            const auto index = counts[type]++;
-            const auto path = parentPath + "/" + type + (element.hasProperty ("id") ? "#" + element.getProperty ("id").toString() : "[" + String (index) + "]");
+            const auto path = elementPath (parentPath, element, counts[type]++);
 
             if (type == "property")
             {
@@ -561,6 +529,10 @@ private:
 
                 const auto name = parseName (element, path);
                 declare (scope, name, parseValue (element, "value", path, scope), path, path + ".value");
+
+                auto check = selectLets (scope, { scope.symbols[name] });
+                check.push_back ({ scope.symbols[name] + ";", path + ".value" });
+                compileStatements (check, path + ".value");
                 continue;
             }
 
@@ -612,14 +584,12 @@ private:
             addSlot (*node, false);
         }
 
-        compileChildren (element, path, scope.enter(), false, node->children);
+        compileElements (element, path, scope.enter(), false, node->children);
         return node;
     }
 
     std::unique_ptr<Node> compileRepeat (const DataTree& element, const String& path, const Scope& scope)
     {
-        static constexpr int maxRepeatCount = 4096;
-
         checkElement (element, path, { "id", "name", "from", "to" }, true);
 
         const auto name = parseName (element, path);
@@ -660,7 +630,7 @@ private:
 
         auto inner = scope.enter();
         declare (inner, name, { "int " + from.text + " + _index", from.uses }, path, path + ".from");
-        compileChildren (element, path, std::move (inner), true, node->children);
+        compileElements (element, path, std::move (inner), true, node->children);
         return node;
     }
 
@@ -672,8 +642,15 @@ private:
         if (shape == nullptr)
             fail (path + ": unknown element '" + type + "'");
 
-        if (element.getNumChildren() > 0)
-            fail (path + ": a '" + type + "' can't have children");
+        StringArray allowed { "id" };
+        for (const auto& entry : shape->geometry)
+            allowed.add (entry.upToFirstOccurrenceOf ("=", false, false));
+        for (const auto& entry : shape->paint)
+            allowed.add (entry.upToFirstOccurrenceOf (":", false, false));
+        for (const auto& entry : getCommonPaint())
+            allowed.add (entry.upToFirstOccurrenceOf (":", false, false));
+
+        checkElement (element, path, allowed, false);
 
         Statements own;
         StringArray geometry, uses;
@@ -701,9 +678,6 @@ private:
             if (output.isEmpty())
                 output = findPaintOutput (getCommonPaint(), property);
 
-            if (output.isEmpty())
-                fail (path + ": unknown property '" + property + "'");
-
             const auto value = parseValue (element, property, path, scope);
             own.push_back ({ output + " = " + value.text + ";", path + "." + property });
             uses.addArray (value.uses);
@@ -726,7 +700,6 @@ private:
     const DrawingScope& drawingScope;
     Compiled& result;
     std::map<String, PropertyInput> propertyInputs;
-    StringArray verifiedLets;
     int numSymbols = 0;
 };
 
@@ -775,79 +748,51 @@ public:
     }
 
     /* Returns a compilation whose symbols resolve in the scope to the types they had when compiled, if any. */
-    std::shared_ptr<const Compiled> find (const String& key, const DrawingScope& scope)
+    std::shared_ptr<const Compiled> find (const DataTree& drawing, const DrawingScope& scope)
     {
-        std::vector<std::shared_ptr<const Compiled>> candidates;
-
+        for (auto it = entries.begin(); it != entries.end();)
         {
-            const ScopedLock sl (lock);
-
-            if (const auto found = entries.find (key); found != entries.end())
+            auto candidate = it->compiled.lock();
+            if (candidate == nullptr)
             {
-                for (const auto& entry : found->second)
-                    if (auto candidate = entry.lock())
-                        candidates.push_back (std::move (candidate));
+                it = entries.erase (it);
+                continue;
             }
-        }
 
-        for (auto& candidate : candidates)
-        {
-            const auto resolvesAlike = std::all_of (candidate->symbols.begin(), candidate->symbols.end(), [&] (const auto& symbol)
+            if (it->drawing.isEquivalentTo (drawing)
+                && std::all_of (candidate->symbols.begin(), candidate->symbols.end(), [&] (const auto& symbol)
+                {
+                    return scope.resolveSymbol (symbol.first) == symbol.second;
+                }))
             {
-                return scope.resolveSymbol (symbol.first) == symbol.second;
-            });
-
-            if (resolvesAlike)
                 return candidate;
+            }
+
+            ++it;
         }
 
         return nullptr;
     }
 
-    void add (const String& key, const std::shared_ptr<const Compiled>& compiled)
+    void add (const DataTree& drawing, const std::shared_ptr<const Compiled>& compiled)
     {
-        const ScopedLock sl (lock);
-
-        // Every edit of a drawing makes a new key, so the unused ones are dropped as they come
-        for (auto it = entries.begin(); it != entries.end();)
+        entries.erase (std::remove_if (entries.begin(), entries.end(), [] (const auto& entry)
         {
-            auto& list = it->second;
-            list.erase (std::remove_if (list.begin(), list.end(), [] (const auto& entry) { return entry.expired(); }), list.end());
-            it = list.empty() ? entries.erase (it) : std::next (it);
-        }
+            return entry.compiled.expired();
+        }),
+                       entries.end());
 
-        entries[key].push_back (compiled);
-    }
-
-    /* The text the compiler reads from a drawing tree: element types, property names and values, in order. */
-    static String makeKey (const DataTree& drawing)
-    {
-        String key;
-        appendKey (key, drawing);
-        return key;
+        entries.push_back ({ drawing.clone(), compiled });
     }
 
 private:
-    static void appendKey (String& key, const DataTree& element)
+    struct Entry
     {
-        key << element.getType().toString() << "{";
+        DataTree drawing;
+        std::weak_ptr<const Compiled> compiled;
+    };
 
-        for (int i = 0; i < element.getNumProperties(); ++i)
-        {
-            const auto name = element.getPropertyName (i);
-            const auto value = element.getProperty (name).toString();
-
-            key << name.toString() << "=" << (int) value.getNumBytesAsUTF8() << ":" << value;
-        }
-
-        for (const auto& child : element)
-            appendKey (key, child);
-
-        key << "}";
-    }
-
-    CriticalSection lock;
-    std::unordered_map<String, std::vector<std::weak_ptr<const Compiled>>> entries;
+    std::vector<Entry> entries;
 };
 
 //==============================================================================
@@ -879,8 +824,7 @@ ResultValue<std::unique_ptr<DrawingProgram>> DrawingProgram::create (Component& 
     std::unique_ptr<DrawingProgram> program (new DrawingProgram (target, std::move (componentResolver), std::move (modelResolver)));
 
     auto& cache = CompiledCache::getInstance();
-    const auto key = CompiledCache::makeKey (drawing);
-    auto compiled = cache.find (key, program->scope);
+    auto compiled = cache.find (drawing, program->scope);
 
     if (compiled == nullptr)
     {
@@ -889,7 +833,7 @@ ResultValue<std::unique_ptr<DrawingProgram>> DrawingProgram::create (Component& 
         if (const auto compiledResult = Compiler (program->context, program->scope, *result).compile (drawing); compiledResult.failed())
             return makeResultValueFail (compiledResult.getErrorMessage());
 
-        cache.add (key, result);
+        cache.add (drawing, result);
         compiled = std::move (result);
     }
 
@@ -1017,17 +961,8 @@ DrawingProgram::Slot* DrawingProgram::prepare (const Node& node, Rectangle<float
 
         if (input.isSet)
             slot.state->set (ExpressionInput<bool> { input.input }, ! value.isVoid());
-        else if (property.type == ComponentProperty::Type::array)
-            propertyArrays[(size_t) input.property].bind (*slot.state, input.input, property.elementType, value);
-        else if (value.isVoid())
-            continue;
-        else
-            DrawingScope::withExpressionType (property.type, [&] (auto tag)
-            {
-                using Type = typename decltype (tag)::type;
-
-                slot.state->set (ExpressionInput<Type> { input.input }, VariantConverter<Type>::fromVar (value));
-            });
+        else if (! value.isVoid() || property.type == ComponentProperty::Type::array)
+            DrawingScope::setInputValue (*slot.state, input.input, property.type, property.elementType, value, propertyArrays[(size_t) input.property]);
     }
 
     return &slot;
@@ -1046,8 +981,6 @@ void DrawingProgram::drawNodes (Graphics& g, const std::vector<std::unique_ptr<N
 
 void DrawingProgram::drawNode (Graphics& g, const Node& node, Rectangle<float> bounds, const Font& font, int numRows)
 {
-    constexpr int maxRepeatCount = 4096;
-
     auto* slot = prepare (node, bounds, font);
 
     if (node.kind == Node::Kind::shape)

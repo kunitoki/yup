@@ -38,37 +38,6 @@ ComponentTypeInfo::ComponentTypeInfo (Identifier typeNameToUse,
     rebuildIndices();
 }
 
-ComponentTypeInfo::ComponentTypeInfo (ComponentTypeInfo&& other) noexcept
-    : typeName (std::move (other.typeName))
-    , baseTypeInfo (other.baseTypeInfo)
-    , properties (std::move (other.properties))
-    , signals (std::move (other.signals))
-    , factory (std::move (other.factory))
-    , childAttacher (std::move (other.childAttacher))
-{
-    other.mergedPropertyIndex.clear();
-    other.storageKeyIndex.clear();
-    rebuildIndices();
-}
-
-ComponentTypeInfo& ComponentTypeInfo::operator= (ComponentTypeInfo&& other) noexcept
-{
-    if (this != &other)
-    {
-        typeName = std::move (other.typeName);
-        baseTypeInfo = other.baseTypeInfo;
-        properties = std::move (other.properties);
-        signals = std::move (other.signals);
-        factory = std::move (other.factory);
-        childAttacher = std::move (other.childAttacher);
-        other.mergedPropertyIndex.clear();
-        other.storageKeyIndex.clear();
-        rebuildIndices();
-    }
-
-    return *this;
-}
-
 void ComponentTypeInfo::rebuildIndices()
 {
     mergedPropertyIndex.clear();

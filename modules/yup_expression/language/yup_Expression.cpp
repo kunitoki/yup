@@ -964,7 +964,17 @@ StringRef Expression::getOperatorSymbol (ExpressionOperator op) noexcept
 
 String Expression::getOperatorFunctionName (ExpressionOperator op)
 {
-    return "operator" + String (getOperatorSymbol (op));
+    static const auto names = []
+    {
+        std::array<String, (size_t) ExpressionOperator::logicalOr + 1> result;
+
+        for (size_t i = 0; i < result.size(); ++i)
+            result[i] = "operator" + String (getOperatorSymbol ((ExpressionOperator) i));
+
+        return result;
+    }();
+
+    return names[(size_t) op];
 }
 
 //==============================================================================

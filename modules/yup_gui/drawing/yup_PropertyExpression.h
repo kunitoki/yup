@@ -34,8 +34,7 @@ namespace yup
     It is how stylesheet declarations and `.yui` instance properties become values.
 
     The value type comes from the property it is meant for. Without a type, as for custom
-    properties, the expression is tried as a color, a number, a boolean, a string, a point,
-    a rectangle and then as an array of each of those, and the first type it compiles to wins.
+    properties, the expression is compiled once and its type is inferred from its output.
 
     A text such as `[1, gain.value]` is an array literal: each element is an expression of its
     own, of any type, and the value is a var holding them all.
@@ -113,7 +112,7 @@ public:
     std::vector<DrawingScope::Dependency> getDependencies() const;
 
 private:
-    PropertyExpression() = default;
+    explicit PropertyExpression (ExpressionContext contextToUse = {});
 
     static ResultValue<std::unique_ptr<PropertyExpression>> compileArrayLiteral (Component& component,
                                                                                  const String& text,
@@ -126,10 +125,10 @@ private:
     ComponentProperty::Type type = ComponentProperty::Type::number;
     ComponentProperty::Type elementType = ComponentProperty::Type::any;
     std::vector<std::unique_ptr<PropertyExpression>> elements;
-    std::unique_ptr<ExpressionContext> context;
-    std::unique_ptr<DrawingScope> scope;
-    std::unique_ptr<CompiledExpression> program;
-    std::unique_ptr<ExpressionState> state;
+    ExpressionContext context;
+    std::optional<DrawingScope> scope;
+    CompiledExpression program;
+    std::optional<ExpressionState> state;
     bool paletteDependent = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PropertyExpression)

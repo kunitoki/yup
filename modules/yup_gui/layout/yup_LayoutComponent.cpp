@@ -55,7 +55,7 @@ const Identifier LayoutComponent::Properties::gridRowSpanId ("gridRowSpan");
 
 void LayoutComponent::setPadding (const EdgeSpacing<float>& newPadding)
 {
-    setProperty (Properties::paddingId, String (newPadding.getTop()) + " " + String (newPadding.getRight()) + " " + String (newPadding.getBottom()) + " " + String (newPadding.getLeft()));
+    setProperty (Properties::paddingId, VariantConverter<EdgeSpacing<float>>::toVar (newPadding));
 }
 
 EdgeSpacing<float> LayoutComponent::getPadding() const
@@ -75,73 +75,28 @@ float LayoutComponent::getGap() const
 
 //==============================================================================
 
-std::array<var, 9> LayoutComponent::captureContainerProperties() const
-{
-    return {
-        findProperty (Properties::paddingId),
-        findProperty (Properties::gapId),
-        findProperty (Properties::directionId),
-        findProperty (Properties::wrapId),
-        findProperty (Properties::justifyId),
-        findProperty (Properties::alignId),
-        findProperty (Properties::columnsId),
-        findProperty (Properties::rowsId),
-        findProperty (Properties::areasId)
-    };
-}
-
 void LayoutComponent::updateLayout()
 {
     if (isPerformingLayout)
         return;
 
     const ScopedValueSetter<bool> scope (isPerformingLayout, true);
-
-    lastContainerProperties = captureContainerProperties();
-    hasLayoutSnapshot = true;
-
-    const auto padding = getPadding();
-    auto area = getLocalBounds();
-
-    area = Rectangle<float> (area.getX() + padding.getLeft(),
-                             area.getY() + padding.getTop(),
-                             jmax (0.0f, area.getWidth() - padding.getLeft() - padding.getRight()),
-                             jmax (0.0f, area.getHeight() - padding.getTop() - padding.getBottom()));
-
-    performLayout (area);
+    performLayout (getLocalBounds().reduced (getPadding()));
 }
 
 //==============================================================================
 
 const ComponentTypeInfo& LayoutComponent::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
+    using Type = ComponentProperty::Type;
+    using LayoutEffect = ComponentProperty::LayoutEffect;
 
-        props.push_back (ComponentProperty {
-            .name = Properties::paddingId,
-            .type = ComponentProperty::Type::any,
-            .defaultValue = 0.0,
-            .isInherited = false,
-            .description = "The space kept inside the bounds: a number, or 1, 2 or 4 values (top right bottom left)." });
-
-        props.push_back (ComponentProperty {
-            .name = Properties::gapId,
-            .type = ComponentProperty::Type::number,
-            .defaultValue = 0.0,
-            .isInherited = false,
-            .description = "The space kept between the children." });
-
-        return ComponentTypeInfo { Identifier ("Layout"), &Component::getClassTypeInfo(), std::move (props), {}, nullptr };
-    }();
+    static const auto info = ComponentTypeBuilder<LayoutComponent> (Identifier ("Layout"))
+                                 .layoutProperty (Properties::paddingId, Type::any, 0.0, LayoutEffect::own, "The space kept inside the bounds: a number, or 1, 2 or 4 values (top right bottom left).")
+                                 .layoutProperty (Properties::gapId, Type::number, 0.0, LayoutEffect::own, "The space kept between the children.")
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& LayoutComponent::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 void LayoutComponent::resized()
@@ -159,51 +114,8 @@ void LayoutComponent::childLayoutChanged ([[maybe_unused]] Component& child)
     updateLayout();
 }
 
-namespace
+void LayoutComponent::layoutPropertyChanged()
 {
-
-bool sameLayoutPropertyValue (const var& a, const var& b)
-{
-    if (a.isArray() && b.isArray())
-    {
-        const auto* arrayA = a.getArray();
-        const auto* arrayB = b.getArray();
-
-        if (arrayA->size() != arrayB->size())
-            return false;
-
-        for (int i = 0; i < arrayA->size(); ++i)
-        {
-            if (! sameLayoutPropertyValue (arrayA->getReference (i), arrayB->getReference (i)))
-                return false;
-        }
-
-        return true;
-    }
-
-    return a.equalsWithSameType (b);
-}
-
-bool sameLayoutProperties (const std::array<var, 9>& a, const std::array<var, 9>& b)
-{
-    for (std::size_t i = 0; i < a.size(); ++i)
-    {
-        if (! sameLayoutPropertyValue (a[i], b[i]))
-            return false;
-    }
-
-    return true;
-}
-
-} // namespace
-
-void LayoutComponent::styleChanged()
-{
-    Component::styleChanged();
-
-    if (hasLayoutSnapshot && usesOnlyStandardLayoutProperties() && sameLayoutProperties (captureContainerProperties(), lastContainerProperties))
-        return;
-
     updateLayout();
 }
 
@@ -246,6 +158,9 @@ EdgeSpacing<float> LayoutComponent::parseSpacing (const var& value)
 {
     if (value.isVoid() || value.isUndefined() || value.isBool())
         return {};
+
+    if (value.isArray())
+        return VariantConverter<EdgeSpacing<float>>::fromVar (value);
 
     if (! value.isString())
     {

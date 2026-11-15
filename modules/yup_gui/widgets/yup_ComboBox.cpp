@@ -53,75 +53,24 @@ const Identifier ComboBox::Style::focusedOutlineWidthId = "comboBoxFocusedOutlin
 
 const ComponentTypeInfo& ComboBox::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
-
-        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
-        props.push_back (makeColorProperty (Identifier ("textColor"), Style::textColorId));
-        props.push_back (makeColorProperty (Identifier ("borderColor"), Style::borderColorId));
-        props.push_back (makeColorProperty (Identifier ("arrowColor"), Style::arrowColorId));
-        props.push_back (makeColorProperty (Identifier ("focusedBorderColor"), Style::focusedBorderColorId));
-
-        props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, 4.0, "The corner radius."));
-        props.push_back (makeNumberProperty (Identifier ("outlineWidth"), Style::outlineWidthId, 1.0, "The outline width."));
-        props.push_back (makeNumberProperty (Identifier ("focusedOutlineWidth"), Style::focusedOutlineWidthId, 2.0, "The outline width when focused."));
-
-        props.push_back (ComponentProperty {
-            .name = ComboBoxIds::items,
-            .type = ComponentProperty::Type::array,
-            .elementType = ComponentProperty::Type::string,
-            .getter = [] (const Component& c) { return VariantConverter<StringArray>::toVar (static_cast<const ComboBox&> (c).getItems()); },
-            .setter = [] (Component& c, const var& v) { static_cast<ComboBox&> (c).setItems (VariantConverter<StringArray>::fromVar (v)); },
-            .isStyleable = false,
-            .description = "The texts of the items, numbered from 1 in order." });
-
-        props.push_back (ComponentProperty {
-            .name = ComboBoxIds::selectedId,
-            .type = ComponentProperty::Type::integer,
-            .getter = [] (const Component& c) { return var (static_cast<const ComboBox&> (c).getSelectedId()); },
-            .setter = [] (Component& c, const var& v) { static_cast<ComboBox&> (c).setSelectedId (static_cast<int> (v)); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = ComboBoxIds::selectedIndex,
-            .type = ComponentProperty::Type::integer,
-            .getter = [] (const Component& c) { return var (static_cast<const ComboBox&> (c).getSelectedItemIndex()); },
-            .setter = [] (Component& c, const var& v) { static_cast<ComboBox&> (c).setSelectedItemIndex (static_cast<int> (v)); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = ComboBoxIds::text,
-            .type = ComponentProperty::Type::string,
-            .getter = [] (const Component& c) { return var (static_cast<const ComboBox&> (c).getText()); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = ComboBoxIds::open,
-            .type = ComponentProperty::Type::boolean,
-            .getter = [] (const Component& c) { return var (static_cast<const ComboBox&> (c).isPopupShown()); },
-            .isState = true,
-            .isStyleable = false });
-
-        ComponentSignal selectedItemChanged {
-            .name = Identifier ("onSelectedItemChanged"),
-            .connect = [] (Component& component, ComponentSignal::Handler handler)
-            {
-                if (auto* comboBox = dynamic_cast<ComboBox*> (&component))
-                    comboBox->onSelectedItemChanged = [handler = std::move (handler)] { handler ({}); };
-            },
-            .description = "Emitted when another item is selected"
-        };
-
-        return ComponentTypeInfo { Identifier ("ComboBox"), &Component::getClassTypeInfo(), std::move (props), { std::move (selectedItemChanged) }, [] { return std::make_unique<ComboBox>(); } };
-    }();
+    static const auto info = ComponentTypeBuilder<ComboBox> (Identifier ("ComboBox"))
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("textColor", Style::textColorId)
+                                 .color ("borderColor", Style::borderColorId)
+                                 .color ("arrowColor", Style::arrowColorId)
+                                 .color ("focusedBorderColor", Style::focusedBorderColorId)
+                                 .number ("cornerRadius", Style::cornerRadiusId, 4.0, "The corner radius.")
+                                 .number ("outlineWidth", Style::outlineWidthId, 1.0, "The outline width.")
+                                 .number ("focusedOutlineWidth", Style::focusedOutlineWidthId, 2.0, "The outline width when focused.")
+                                 .property (ComboBoxIds::items, &ComboBox::getItems, [] (ComboBox& c, const StringArray& v) { c.setItems (v); }, {}, "The texts of the items, numbered from 1 in order.")
+                                 .property (ComboBoxIds::selectedId, &ComboBox::getSelectedId, [] (ComboBox& c, int v) { c.setSelectedId (v); })
+                                 .property (ComboBoxIds::selectedIndex, &ComboBox::getSelectedItemIndex, [] (ComboBox& c, int v) { c.setSelectedItemIndex (v); })
+                                 .readOnly (ComboBoxIds::text, &ComboBox::getText)
+                                 .state (ComboBoxIds::open, &ComboBox::isPopupShown)
+                                 .signal ("onSelectedItemChanged", &ComboBox::onSelectedItemChanged, "Emitted when another item is selected")
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& ComboBox::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 //==============================================================================

@@ -97,9 +97,8 @@ TEST_F (FlexBoxComponentTests, AlignsAnItemOnTheCrossAxis)
 
 TEST_F (FlexBoxComponentTests, IsRegisteredUnderTheMarkupNames)
 {
-    auto& registry = ComponentTypeRegistry::getInstance();
-    registry.clear();
     registerBuiltInComponentTypes();
+    auto& registry = ComponentTypeRegistry::getInstance();
 
     for (const auto& name : { "FlexBox", "Row", "Column", "Grid", "Stack" })
     {
@@ -107,6 +106,28 @@ TEST_F (FlexBoxComponentTests, IsRegisteredUnderTheMarkupNames)
         ASSERT_NE (info, nullptr) << name;
         EXPECT_NE (info->createInstance(), nullptr) << name;
     }
+}
 
-    registry.clear();
+TEST_F (FlexBoxComponentTests, ColumnDirectionCanBeOverriddenByStyleSheet)
+{
+    ColumnComponent column;
+    column.addAndMakeVisible (first);
+    column.addAndMakeVisible (second);
+
+    first.setProperty (Identifier ("flexGrow"), 1.0);
+    second.setProperty (Identifier ("flexGrow"), 1.0);
+    first.setProperty (Identifier ("flexBasis"), 0.0);
+    second.setProperty (Identifier ("flexBasis"), 0.0);
+    column.setBounds (0, 0, 100, 40);
+
+    EXPECT_EQ (column.getDirection(), FlexBox::Direction::column);
+    EXPECT_EQ (second.getBounds(), Rectangle<float> (0.0f, 20.0f, 100.0f, 20.0f));
+
+    auto parsed = StyleSheet::parse ("Column { direction: row; }");
+    ASSERT_TRUE (parsed.wasOk());
+    column.getStyleContext().addStyleSheet (*parsed);
+
+    EXPECT_EQ (column.getDirection(), FlexBox::Direction::row);
+    EXPECT_EQ (first.getBounds(), Rectangle<float> (0.0f, 0.0f, 50.0f, 40.0f));
+    EXPECT_EQ (second.getBounds(), Rectangle<float> (50.0f, 0.0f, 50.0f, 40.0f));
 }

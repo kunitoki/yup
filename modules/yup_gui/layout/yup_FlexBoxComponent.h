@@ -62,14 +62,11 @@ public:
     static const ComponentTypeInfo& getClassTypeInfo();
 
     /** @internal */
-    const ComponentTypeInfo& getDefaultTypeInfo() const override;
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
 protected:
     /** @internal */
     void performLayout (Rectangle<float> area) override;
-
-    /** @internal */
-    bool usesOnlyStandardLayoutProperties() const noexcept override { return true; }
 
 private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FlexBoxComponent)
@@ -87,16 +84,19 @@ class YUP_API RowComponent : public FlexBoxComponent
 {
 public:
     /** Creates a row. */
-    RowComponent();
+    RowComponent() = default;
 
     /** Creates a row with an identifier. */
-    explicit RowComponent (StringRef componentID);
+    explicit RowComponent (StringRef componentID)
+        : FlexBoxComponent (componentID)
+    {
+    }
 
     /** Returns the static type info describing the Row type. */
     static const ComponentTypeInfo& getClassTypeInfo();
 
     /** @internal */
-    const ComponentTypeInfo& getDefaultTypeInfo() const override;
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
 private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RowComponent)
@@ -114,16 +114,19 @@ class YUP_API ColumnComponent : public FlexBoxComponent
 {
 public:
     /** Creates a column. */
-    ColumnComponent();
+    ColumnComponent() = default;
 
     /** Creates a column with an identifier. */
-    explicit ColumnComponent (StringRef componentID);
+    explicit ColumnComponent (StringRef componentID)
+        : FlexBoxComponent (componentID)
+    {
+    }
 
     /** Returns the static type info describing the Column type. */
     static const ComponentTypeInfo& getClassTypeInfo();
 
     /** @internal */
-    const ComponentTypeInfo& getDefaultTypeInfo() const override;
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
 private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ColumnComponent)

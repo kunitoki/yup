@@ -30,14 +30,7 @@ namespace
 
 const ComponentTypeInfo& customTypeInfo()
 {
-    static const ComponentTypeInfo info {
-        Identifier ("TestCustomType"),
-        &Component::getClassTypeInfo(),
-        {},
-        {},
-        [] { return std::make_unique<Component>(); }
-    };
-
+    static const auto info = ComponentTypeBuilder<Component> (Identifier ("TestCustomType")).build();
     return info;
 }
 
@@ -48,14 +41,7 @@ class ComponentTypeRegistryTest : public ::testing::Test
 protected:
     void SetUp() override
     {
-        auto& registry = ComponentTypeRegistry::getInstance();
-        registry.clear();
         registerBuiltInComponentTypes();
-    }
-
-    void TearDown() override
-    {
-        ComponentTypeRegistry::getInstance().clear();
     }
 };
 
@@ -63,8 +49,8 @@ TEST_F (ComponentTypeRegistryTest, RegistersAllBuiltInTypes)
 {
     auto& registry = ComponentTypeRegistry::getInstance();
 
-    for (const char* name : { "Component", "Label", "Slider", "TextButton", "ToggleButton", "SwitchButton", "ComboBox", "TextEditor", "ProgressBar", "ScrollBar", "ListBox" })
-        EXPECT_TRUE (registry.isRegistered (Identifier (name))) << name;
+    for (const char* name : { "Component", "Button", "Layout", "Label", "Slider", "TextButton", "ToggleButton", "SwitchButton", "ComboBox", "TextEditor", "ProgressBar", "ScrollBar", "ListBox", "Viewport", "TabComponent", "FlexBox", "Row", "Column", "Grid", "Stack" })
+        EXPECT_NE (registry.findType (Identifier (name)), nullptr) << name;
 }
 
 TEST_F (ComponentTypeRegistryTest, FindTypeReturnsMatchingInfo)
@@ -78,55 +64,34 @@ TEST_F (ComponentTypeRegistryTest, FindTypeReturnsMatchingInfo)
     EXPECT_EQ (registry.findType (Identifier ("DoesNotExist")), nullptr);
 }
 
-TEST_F (ComponentTypeRegistryTest, RegisteredTypeNamesAreSorted)
-{
-    const auto names = ComponentTypeRegistry::getInstance().getRegisteredTypeNames();
-
-    EXPECT_TRUE (names.contains ("Component"));
-    EXPECT_TRUE (names.contains ("Slider"));
-
-    for (int i = 1; i < names.size(); ++i)
-        EXPECT_LE (names[i - 1].compare (names[i]), 0);
-}
-
-TEST_F (ComponentTypeRegistryTest, CreateInstanceUsesFactory)
+TEST_F (ComponentTypeRegistryTest, TypeInfosCreateExpectedInstances)
 {
     auto& registry = ComponentTypeRegistry::getInstance();
 
-    auto label = registry.createInstance (Identifier ("Label"));
+    const auto* labelInfo = registry.findType (Identifier ("Label"));
+    ASSERT_NE (labelInfo, nullptr);
+    auto label = labelInfo->createInstance();
     ASSERT_NE (label, nullptr);
     EXPECT_EQ (label->getTypeInfo().getTypeName(), Identifier ("Label"));
 
-    auto slider = registry.createInstance (Identifier ("Slider"));
+    const auto* sliderInfo = registry.findType (Identifier ("Slider"));
+    ASSERT_NE (sliderInfo, nullptr);
+    auto slider = sliderInfo->createInstance();
     ASSERT_NE (slider, nullptr);
     EXPECT_EQ (slider->getProperty (Identifier ("sliderType")), var ("linearHorizontal"));
 
-    // Unknown types also yield nullptr.
-    EXPECT_EQ (registry.createInstance (Identifier ("DoesNotExist")), nullptr);
+    const auto* buttonInfo = registry.findType (Identifier ("Button"));
+    ASSERT_NE (buttonInfo, nullptr);
+    EXPECT_EQ (buttonInfo->createInstance(), nullptr);
 }
 
-TEST_F (ComponentTypeRegistryTest, RegisterAndUnregisterCustomType)
+TEST_F (ComponentTypeRegistryTest, RegisterCustomType)
 {
     auto& registry = ComponentTypeRegistry::getInstance();
-
-    EXPECT_FALSE (registry.isRegistered (Identifier ("TestCustomType")));
 
     registry.registerType (customTypeInfo());
-    EXPECT_TRUE (registry.isRegistered (Identifier ("TestCustomType")));
 
-    auto instance = registry.createInstance (Identifier ("TestCustomType"));
-    EXPECT_NE (instance, nullptr);
-
-    registry.unregisterType (Identifier ("TestCustomType"));
-    EXPECT_FALSE (registry.isRegistered (Identifier ("TestCustomType")));
-}
-
-TEST_F (ComponentTypeRegistryTest, ClearRemovesAllTypes)
-{
-    auto& registry = ComponentTypeRegistry::getInstance();
-
-    registry.clear();
-
-    EXPECT_FALSE (registry.isRegistered (Identifier ("Component")));
-    EXPECT_TRUE (registry.getRegisteredTypeNames().isEmpty());
+    const auto* registered = registry.findType (Identifier ("TestCustomType"));
+    ASSERT_NE (registered, nullptr);
+    EXPECT_NE (registered->createInstance(), nullptr);
 }

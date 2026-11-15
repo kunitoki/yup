@@ -77,12 +77,6 @@ public:
                        Factory factory = {},
                        ChildAttacher childAttacher = {});
 
-    /** Moves a type info, so one held by value can be replaced in place. */
-    ComponentTypeInfo (ComponentTypeInfo&& other) noexcept;
-
-    /** Moves a type info, so one held by value can be replaced in place. */
-    ComponentTypeInfo& operator= (ComponentTypeInfo&& other) noexcept;
-
     //==============================================================================
     /** Returns the type name, for example "Slider". */
     const Identifier& getTypeName() const noexcept { return typeName; }
@@ -172,6 +166,429 @@ private:
     ChildAttacher childAttacher;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentTypeInfo)
+};
+
+#ifndef DOXYGEN
+namespace detail
+{
+
+template <class ValueType>
+struct ComponentPropertyValueTraits;
+
+template <>
+struct ComponentPropertyValueTraits<bool>
+{
+    static constexpr auto type = ComponentProperty::Type::boolean;
+    static constexpr auto elementType = ComponentProperty::Type::any;
+    static var toVar (bool v) { return var (v); }
+    static bool fromVar (const var& v) { return static_cast<bool> (v); }
+};
+
+template <>
+struct ComponentPropertyValueTraits<int>
+{
+    static constexpr auto type = ComponentProperty::Type::integer;
+    static constexpr auto elementType = ComponentProperty::Type::any;
+    static var toVar (int v) { return var (v); }
+    static int fromVar (const var& v) { return static_cast<int> (v); }
+};
+
+template <>
+struct ComponentPropertyValueTraits<float>
+{
+    static constexpr auto type = ComponentProperty::Type::number;
+    static constexpr auto elementType = ComponentProperty::Type::any;
+    static var toVar (float v) { return var (static_cast<double> (v)); }
+    static float fromVar (const var& v) { return static_cast<float> (static_cast<double> (v)); }
+};
+
+template <>
+struct ComponentPropertyValueTraits<double>
+{
+    static constexpr auto type = ComponentProperty::Type::number;
+    static constexpr auto elementType = ComponentProperty::Type::any;
+    static var toVar (double v) { return var (v); }
+    static double fromVar (const var& v) { return static_cast<double> (v); }
+};
+
+template <>
+struct ComponentPropertyValueTraits<String>
+{
+    static constexpr auto type = ComponentProperty::Type::string;
+    static constexpr auto elementType = ComponentProperty::Type::any;
+    static var toVar (const String& v) { return var (v); }
+    static String fromVar (const var& v) { return v.toString(); }
+};
+
+template <>
+struct ComponentPropertyValueTraits<StringArray>
+{
+    static constexpr auto type = ComponentProperty::Type::array;
+    static constexpr auto elementType = ComponentProperty::Type::string;
+    static var toVar (const StringArray& v) { return VariantConverter<StringArray>::toVar (v); }
+    static StringArray fromVar (const var& v) { return VariantConverter<StringArray>::fromVar (v); }
+};
+
+template <>
+struct ComponentPropertyValueTraits<Color>
+{
+    static constexpr auto type = ComponentProperty::Type::color;
+    static constexpr auto elementType = ComponentProperty::Type::any;
+    static var toVar (const Color& v) { return VariantConverter<Color>::toVar (v); }
+    static Color fromVar (const var& v) { return VariantConverter<Color>::fromVar (v); }
+};
+
+template <>
+struct ComponentPropertyValueTraits<Point<float>>
+{
+    static constexpr auto type = ComponentProperty::Type::point;
+    static constexpr auto elementType = ComponentProperty::Type::any;
+    static var toVar (Point<float> v) { return VariantConverter<Point<float>>::toVar (v); }
+    static Point<float> fromVar (const var& v) { return VariantConverter<Point<float>>::fromVar (v); }
+};
+
+template <>
+struct ComponentPropertyValueTraits<Rectangle<float>>
+{
+    static constexpr auto type = ComponentProperty::Type::rectangle;
+    static constexpr auto elementType = ComponentProperty::Type::any;
+    static var toVar (const Rectangle<float>& v) { return VariantConverter<Rectangle<float>>::toVar (v); }
+    static Rectangle<float> fromVar (const var& v) { return VariantConverter<Rectangle<float>>::fromVar (v); }
+};
+
+} // namespace detail
+#endif
+
+//==============================================================================
+/** Builds a signal descriptor bound to a `std::function<void (Args...)>` member on @p T. */
+template <class T, class U, class... Args>
+    requires std::derived_from<T, Component> && std::derived_from<T, U>
+ComponentSignal makeSignal (Identifier name,
+                            std::function<void (Args...)> U::* member,
+                            String description = {},
+                            std::vector<ComponentSignal::Argument> arguments = {})
+{
+    return ComponentSignal {
+        .name = std::move (name),
+        .connect = [member] (Component& component, ComponentSignal::Handler handler)
+        {
+            if (auto* target = dynamic_cast<T*> (&component))
+            {
+                target->*member = [handler = std::move (handler)] (Args... args)
+                {
+                    handler ({ detail::ComponentPropertyValueTraits<std::decay_t<Args>>::toVar (args)... });
+                };
+            }
+        },
+        .description = std::move (description),
+        .arguments = std::move (arguments)
+    };
+}
+
+//==============================================================================
+/**
+    Fluent builder for constructing a @ref ComponentTypeInfo for component type @p T.
+
+    Automatically binds @ref Component::getClassTypeInfo as the default base type,
+    supplies `std::make_unique<T>` as the default factory for concrete default-constructible
+    components, infers @ref ComponentProperty::Type from getter return types, and defaults
+    state-backed properties to non-styleable.
+
+    @tags{UI}
+*/
+template <class T>
+    requires std::derived_from<T, Component>
+class ComponentTypeBuilder
+{
+public:
+    explicit ComponentTypeBuilder (Identifier name)
+        : typeName (std::move (name))
+        , baseTypeInfo (std::is_same_v<T, Component> ? nullptr : &Component::getClassTypeInfo())
+    {
+        initDefaultFactory();
+    }
+
+    ComponentTypeBuilder (Identifier name, const ComponentTypeInfo& base)
+        : typeName (std::move (name))
+        , baseTypeInfo (&base)
+    {
+        initDefaultFactory();
+    }
+
+    ComponentTypeBuilder& factory (ComponentTypeInfo::Factory customFactory)
+    {
+        typeFactory = std::move (customFactory);
+        return *this;
+    }
+
+    ComponentTypeBuilder& childAttacher (ComponentTypeInfo::ChildAttacher customChildAttacher)
+    {
+        typeChildAttacher = std::move (customChildAttacher);
+        return *this;
+    }
+
+    ComponentTypeBuilder& addProperty (ComponentProperty prop)
+    {
+        properties.push_back (std::move (prop));
+        return *this;
+    }
+
+    ComponentTypeBuilder& color (Identifier name, Identifier storageId, String description = {})
+    {
+        return addProperty (ComponentProperty {
+            .name = std::move (name),
+            .storageId = std::move (storageId),
+            .type = ComponentProperty::Type::color,
+            .description = std::move (description) });
+    }
+
+    ComponentTypeBuilder& number (Identifier name, Identifier storageId, var defaultValue = {}, String description = {})
+    {
+        return addProperty (ComponentProperty {
+            .name = std::move (name),
+            .storageId = std::move (storageId),
+            .type = ComponentProperty::Type::number,
+            .defaultValue = std::move (defaultValue),
+            .description = std::move (description) });
+    }
+
+    ComponentTypeBuilder& layoutProperty (Identifier name,
+                                          ComponentProperty::Type type,
+                                          var defaultValue = {},
+                                          ComponentProperty::LayoutEffect layoutEffect = ComponentProperty::LayoutEffect::own,
+                                          String description = {},
+                                          StringArray enumValues = {})
+    {
+        return addProperty (ComponentProperty {
+            .name = std::move (name),
+            .type = type,
+            .defaultValue = std::move (defaultValue),
+            .isInherited = false,
+            .layoutEffect = layoutEffect,
+            .enumValues = std::move (enumValues),
+            .description = std::move (description) });
+    }
+
+    template <class Getter, class Setter>
+        requires std::invocable<Setter, T&, std::decay_t<std::invoke_result_t<Getter, const T&>>>
+    ComponentTypeBuilder& property (Identifier name,
+                                    Getter getter,
+                                    Setter setter,
+                                    var defaultValue = {},
+                                    String description = {})
+    {
+        return addTypedProperty (std::move (name), std::move (getter), std::move (setter), std::move (defaultValue), std::move (description), false, false);
+    }
+
+    template <class Getter, class Setter>
+        requires std::invocable<Setter, T&, std::decay_t<std::invoke_result_t<Getter, const T&>>>
+    ComponentTypeBuilder& styleableProperty (Identifier name,
+                                             Getter getter,
+                                             Setter setter,
+                                             var defaultValue = {},
+                                             String description = {})
+    {
+        return addTypedProperty (std::move (name), std::move (getter), std::move (setter), std::move (defaultValue), std::move (description), false, true);
+    }
+
+    template <class Getter>
+    ComponentTypeBuilder& readOnly (Identifier name,
+                                    Getter getter,
+                                    var defaultValue = {},
+                                    String description = {})
+    {
+        using ValueType = std::decay_t<std::invoke_result_t<Getter, const T&>>;
+        using Traits = detail::ComponentPropertyValueTraits<ValueType>;
+
+        return addProperty (ComponentProperty {
+            .name = std::move (name),
+            .type = Traits::type,
+            .elementType = Traits::elementType,
+            .defaultValue = std::move (defaultValue),
+            .getter = [getter = std::move (getter)] (const Component& c)
+            {
+                return Traits::toVar (std::invoke (getter, static_cast<const T&> (c)));
+            },
+            .isStyleable = false,
+            .description = std::move (description) });
+    }
+
+    template <class Getter, class Setter>
+        requires std::invocable<Setter, T&, std::decay_t<std::invoke_result_t<Getter, const T&>>>
+    ComponentTypeBuilder& state (Identifier name,
+                                 Getter getter,
+                                 Setter setter,
+                                 var defaultValue = {},
+                                 String description = {})
+    {
+        return addTypedProperty (std::move (name), std::move (getter), std::move (setter), std::move (defaultValue), std::move (description), true, false);
+    }
+
+    template <class Getter>
+    ComponentTypeBuilder& state (Identifier name,
+                                 Getter getter,
+                                 var defaultValue = {},
+                                 String description = {})
+    {
+        using ValueType = std::decay_t<std::invoke_result_t<Getter, const T&>>;
+        using Traits = detail::ComponentPropertyValueTraits<ValueType>;
+
+        return addProperty (ComponentProperty {
+            .name = std::move (name),
+            .type = Traits::type,
+            .elementType = Traits::elementType,
+            .defaultValue = std::move (defaultValue),
+            .getter = [getter = std::move (getter)] (const Component& c)
+            {
+                return Traits::toVar (std::invoke (getter, static_cast<const T&> (c)));
+            },
+            .isState = true,
+            .isStyleable = false,
+            .description = std::move (description) });
+    }
+
+    template <class Getter, class Setter>
+    ComponentTypeBuilder& enumeration (Identifier name,
+                                       StringArray names,
+                                       Getter getter,
+                                       Setter setter,
+                                       String description = {})
+    {
+        using EnumType = std::decay_t<std::invoke_result_t<Getter, const T&>>;
+        var defaultValue = names.isEmpty() ? var() : var (names[0]);
+
+        return addProperty (ComponentProperty {
+            .name = std::move (name),
+            .type = ComponentProperty::Type::enumeration,
+            .defaultValue = std::move (defaultValue),
+            .getter = [names, getter = std::move (getter)] (const Component& c)
+            {
+                const auto index = static_cast<int> (std::invoke (getter, static_cast<const T&> (c)));
+                return isPositiveAndBelow (index, names.size()) ? var (names[index]) : var (String());
+            },
+            .setter = [names, setter = std::move (setter)] (Component& c, const var& v)
+            {
+                if (const auto index = names.indexOf (v.toString()); index >= 0)
+                    std::invoke (setter, static_cast<T&> (c), static_cast<EnumType> (index));
+            },
+            .isStyleable = false,
+            .enumValues = std::move (names),
+            .description = std::move (description) });
+    }
+
+    template <class EnumType, class Getter, class Setter>
+    ComponentTypeBuilder& enumeration (Identifier name,
+                                       std::initializer_list<std::pair<const char*, EnumType>> entries,
+                                       Getter getter,
+                                       Setter setter,
+                                       String description = {})
+    {
+        StringArray names;
+        std::vector<EnumType> values;
+        values.reserve (entries.size());
+
+        for (const auto& [entryName, entryValue] : entries)
+        {
+            names.add (entryName);
+            values.push_back (entryValue);
+        }
+
+        var defaultValue = names.isEmpty() ? var() : var (names[0]);
+
+        return addProperty (ComponentProperty {
+            .name = std::move (name),
+            .type = ComponentProperty::Type::enumeration,
+            .defaultValue = std::move (defaultValue),
+            .getter = [names, values, getter = std::move (getter)] (const Component& c)
+            {
+                const auto current = std::invoke (getter, static_cast<const T&> (c));
+                for (std::size_t i = 0; i < values.size(); ++i)
+                    if (values[i] == current)
+                        return var (names[static_cast<int> (i)]);
+
+                return var (String());
+            },
+            .setter = [names, values, setter = std::move (setter)] (Component& c, const var& v)
+            {
+                if (const auto index = names.indexOf (v.toString()); index >= 0)
+                    std::invoke (setter, static_cast<T&> (c), values[static_cast<std::size_t> (index)]);
+            },
+            .isStyleable = false,
+            .enumValues = std::move (names),
+            .description = std::move (description) });
+    }
+
+    ComponentTypeBuilder& signal (ComponentSignal sig)
+    {
+        signals.push_back (std::move (sig));
+        return *this;
+    }
+
+    template <class U, class... Args>
+        requires std::derived_from<T, U>
+    ComponentTypeBuilder& signal (Identifier name,
+                                  std::function<void (Args...)> U::* member,
+                                  String description = {},
+                                  std::vector<ComponentSignal::Argument> arguments = {})
+    {
+        return signal (makeSignal<T> (std::move (name), member, std::move (description), std::move (arguments)));
+    }
+
+    ComponentTypeInfo build()
+    {
+        return ComponentTypeInfo {
+            std::move (typeName),
+            baseTypeInfo,
+            std::move (properties),
+            std::move (signals),
+            std::move (typeFactory),
+            std::move (typeChildAttacher)
+        };
+    }
+
+private:
+    void initDefaultFactory()
+    {
+        if constexpr (! std::is_abstract_v<T> && std::is_default_constructible_v<T>)
+            typeFactory = [] () -> std::unique_ptr<Component> { return std::make_unique<T>(); };
+    }
+
+    template <class Getter, class Setter>
+    ComponentTypeBuilder& addTypedProperty (Identifier name,
+                                            Getter getter,
+                                            Setter setter,
+                                            var defaultValue,
+                                            String description,
+                                            bool isState,
+                                            bool isStyleable)
+    {
+        using ValueType = std::decay_t<std::invoke_result_t<Getter, const T&>>;
+        using Traits = detail::ComponentPropertyValueTraits<ValueType>;
+
+        return addProperty (ComponentProperty {
+            .name = std::move (name),
+            .type = Traits::type,
+            .elementType = Traits::elementType,
+            .defaultValue = std::move (defaultValue),
+            .getter = [getter = std::move (getter)] (const Component& c)
+            {
+                return Traits::toVar (std::invoke (getter, static_cast<const T&> (c)));
+            },
+            .setter = [setter = std::move (setter)] (Component& c, const var& v)
+            {
+                std::invoke (setter, static_cast<T&> (c), Traits::fromVar (v));
+            },
+            .isState = isState,
+            .isStyleable = isStyleable,
+            .description = std::move (description) });
+    }
+
+    Identifier typeName;
+    const ComponentTypeInfo* baseTypeInfo = nullptr;
+    std::vector<ComponentProperty> properties;
+    std::vector<ComponentSignal> signals;
+    ComponentTypeInfo::Factory typeFactory;
+    ComponentTypeInfo::ChildAttacher typeChildAttacher;
 };
 
 } // namespace yup

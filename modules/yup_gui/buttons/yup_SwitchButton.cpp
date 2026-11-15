@@ -27,11 +27,7 @@ namespace yup
 namespace
 {
 
-struct SwitchButtonIds
-{
-    static inline const Identifier checked { "checked" };
-    static inline const Identifier vertical { "vertical" };
-};
+const Identifier switchVerticalPropertyId ("vertical");
 
 } // namespace
 
@@ -47,41 +43,17 @@ const Identifier SwitchButton::Style::thumbInsetId = "switchButtonThumbInset";
 
 const ComponentTypeInfo& SwitchButton::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
-
-        props.push_back (makeColorProperty (Identifier ("switchColor"), Style::switchColorId));
-        props.push_back (makeColorProperty (Identifier ("switchOffBackgroundColor"), Style::switchOffBackgroundColorId));
-        props.push_back (makeColorProperty (Identifier ("switchOnBackgroundColor"), Style::switchOnBackgroundColorId));
-
-        props.push_back (makeNumberProperty (Identifier ("cornerRadius"), Style::cornerRadiusId, {}, "The corner radius, unset for a pill."));
-        props.push_back (makeNumberProperty (Identifier ("thumbInset"), Style::thumbInsetId, 4.0, "The inset of the handle inside its slot."));
-
-        props.push_back (ComponentProperty {
-            .name = SwitchButtonIds::checked,
-            .type = ComponentProperty::Type::boolean,
-            .getter = [] (const Component& c) { return var (static_cast<const SwitchButton&> (c).getToggleState()); },
-            .setter = [] (Component& c, const var& v) { static_cast<SwitchButton&> (c).setToggleState (static_cast<bool> (v)); },
-            .isState = true,
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = SwitchButtonIds::vertical,
-            .type = ComponentProperty::Type::boolean,
-            .getter = [] (const Component& c) { return var (static_cast<const SwitchButton&> (c).isVertical()); },
-            .setter = [] (Component& c, const var& v) { static_cast<SwitchButton&> (c).setVertical (static_cast<bool> (v)); },
-            .isStyleable = false });
-
-        return ComponentTypeInfo { Identifier ("SwitchButton"), &Component::getClassTypeInfo(), std::move (props), { Button::getClickSignal() }, [] { return std::make_unique<SwitchButton>(); } };
-    }();
+    static const auto info = ComponentTypeBuilder<SwitchButton> (Identifier ("SwitchButton"), Button::getClassTypeInfo())
+                                 .color ("switchColor", Style::switchColorId)
+                                 .color ("switchOffBackgroundColor", Style::switchOffBackgroundColorId)
+                                 .color ("switchOnBackgroundColor", Style::switchOnBackgroundColorId)
+                                 .number ("cornerRadius", Style::cornerRadiusId, {}, "The corner radius, unset for a pill.")
+                                 .number ("thumbInset", Style::thumbInsetId, 4.0, "The inset of the handle inside its slot.")
+                                 .state (checkedPropertyId, &SwitchButton::getToggleState, [] (SwitchButton& b, bool v) { b.setToggleState (v); })
+                                 .property (switchVerticalPropertyId, &SwitchButton::isVertical, &SwitchButton::setVertical)
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& SwitchButton::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 //==============================================================================
@@ -105,7 +77,7 @@ void SwitchButton::setToggleState (bool shouldBeToggled, NotificationType notifi
 
         auto bailOutChecker = BailOutChecker (this);
 
-        notifyPropertyChanged (SwitchButtonIds::checked);
+        notifyPropertyChanged (checkedPropertyId);
         if (bailOutChecker.shouldBailOut())
             return;
 
@@ -137,7 +109,7 @@ void SwitchButton::setVertical (bool shouldBeVertical)
         isAnimating = false;
 
         updateSwitchCirclePosition();
-        notifyPropertyChanged (SwitchButtonIds::vertical);
+        notifyPropertyChanged (switchVerticalPropertyId);
         repaint();
     }
 }

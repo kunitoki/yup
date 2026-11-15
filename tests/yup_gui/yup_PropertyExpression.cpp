@@ -93,7 +93,7 @@ TEST_F (PropertyExpressionTests, ProbesTheTypeOfAValue)
     slider.setBounds (0, 0, 40, 20);
 
     EXPECT_EQ (PropertyExpression::compile (slider, "0.5", std::nullopt).getReference()->getType(), ComponentProperty::Type::number);
-    EXPECT_EQ (PropertyExpression::compile (slider, "true", ComponentProperty::Type::boolean).getReference()->getType(), ComponentProperty::Type::boolean);
+    EXPECT_EQ (PropertyExpression::compile (slider, "true", std::nullopt).getReference()->getType(), ComponentProperty::Type::boolean);
     EXPECT_EQ (PropertyExpression::compile (slider, "\"hi\"", std::nullopt).getReference()->getType(), ComponentProperty::Type::string);
     EXPECT_EQ (PropertyExpression::compile (slider, "#ff0000", std::nullopt).getReference()->getType(), ComponentProperty::Type::color);
     EXPECT_EQ (PropertyExpression::compile (slider, "point (1, 2)", std::nullopt).getReference()->getType(), ComponentProperty::Type::point);
@@ -130,7 +130,7 @@ TEST_F (PropertyExpressionTests, EvaluatesArrayLiterals)
     };
 
     EXPECT_EQ (evaluate (slider, "[]").getArray()->size(), 0);
-    EXPECT_EQ (elementsOf (evaluate (slider, "[1, value * 2, \"a\", true]")), "1.0|1.0|a|1.0");
+    EXPECT_EQ (elementsOf (evaluate (slider, "[1, value * 2, \"a\", true]")), "1.0|1.0|a|1");
 
     // A nested literal is one element, an array of its own
     const auto nested = evaluate (slider, "[[1, 2], 3]", ComponentProperty::Type::array);

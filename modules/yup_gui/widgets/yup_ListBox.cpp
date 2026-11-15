@@ -125,69 +125,26 @@ const Identifier ListBox::Style::refreshIndicatorSizeId { "listBoxRefreshIndicat
 
 const ComponentTypeInfo& ListBox::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
-
-        props.push_back (makeColorProperty (Identifier ("backgroundColor"), Style::backgroundColorId));
-        props.push_back (makeColorProperty (Identifier ("outlineColor"), Style::outlineColorId));
-        props.push_back (makeColorProperty (Identifier ("rowBackgroundColor"), Style::rowBackgroundColorId));
-        props.push_back (makeColorProperty (Identifier ("selectedRowBackgroundColor"), Style::selectedRowBackgroundColorId));
-        props.push_back (makeColorProperty (Identifier ("hoveredRowBackgroundColor"), Style::hoveredRowBackgroundColorId));
-        props.push_back (makeColorProperty (Identifier ("refreshIndicatorColor"), Style::refreshIndicatorColorId));
-
-        props.push_back (ComponentProperty {
-            .name = Identifier ("refreshIndicatorSize"),
-            .storageId = Style::refreshIndicatorSizeId,
-            .type = ComponentProperty::Type::number,
-            .defaultValue = static_cast<double> (listBoxDefaultRefreshIndicatorSize),
-            .description = "The size of the pull-to-refresh indicator along the scroll axis." });
-
-        props.push_back (ComponentProperty {
-            .name = ListBoxIds::items,
-            .type = ComponentProperty::Type::array,
-            .elementType = ComponentProperty::Type::string,
-            .getter = [] (const Component& c) { return VariantConverter<StringArray>::toVar (static_cast<const ListBox&> (c).getItems()); },
-            .setter = [] (Component& c, const var& v) { static_cast<ListBox&> (c).setItems (VariantConverter<StringArray>::fromVar (v)); },
-            .isStyleable = false,
-            .description = "The text of each row, shown by a model the list owns." });
-
-        props.push_back (ComponentProperty {
-            .name = ListBoxIds::selectedRow,
-            .type = ComponentProperty::Type::integer,
-            .getter = [] (const Component& c) { return var (static_cast<const ListBox&> (c).getSelectedRow()); },
-            .setter = [] (Component& c, const var& v)
-            {
-                auto& listBox = static_cast<ListBox&> (c);
-                const auto row = static_cast<int> (v);
-
-                if (row < 0)
-                    listBox.deselectAllRows();
-                else
-                    listBox.selectRow (row);
-            },
-            .isStyleable = false,
-            .description = "The index of the selected row, or -1 when nothing is selected." });
-
-        ComponentSignal selectionChanged {
-            .name = Identifier ("onSelectionChanged"),
-            .connect = [] (Component& component, ComponentSignal::Handler handler)
-            {
-                if (auto* listBox = dynamic_cast<ListBox*> (&component))
-                    listBox->onSelectionChanged = [handler = std::move (handler)] { handler ({}); };
-            },
-            .description = "Emitted when the selected rows change"
-        };
-
-        return ComponentTypeInfo { Identifier ("ListBox"), &Component::getClassTypeInfo(), std::move (props), { std::move (selectionChanged) }, [] { return std::make_unique<ListBox>(); } };
-    }();
+    static const auto info = ComponentTypeBuilder<ListBox> (Identifier ("ListBox"))
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("outlineColor", Style::outlineColorId)
+                                 .color ("rowBackgroundColor", Style::rowBackgroundColorId)
+                                 .color ("selectedRowBackgroundColor", Style::selectedRowBackgroundColorId)
+                                 .color ("hoveredRowBackgroundColor", Style::hoveredRowBackgroundColorId)
+                                 .color ("refreshIndicatorColor", Style::refreshIndicatorColorId)
+                                 .number ("refreshIndicatorSize", Style::refreshIndicatorSizeId, static_cast<double> (listBoxDefaultRefreshIndicatorSize), "The size of the pull-to-refresh indicator along the scroll axis.")
+                                 .property (ListBoxIds::items, &ListBox::getItems, &ListBox::setItems, {}, "The text of each row, shown by a model the list owns.")
+                                 .property (ListBoxIds::selectedRow, &ListBox::getSelectedRow, [] (ListBox& listBox, int row)
+                                 {
+                                     if (row < 0)
+                                         listBox.deselectAllRows();
+                                     else
+                                         listBox.selectRow (row);
+                                 }, {}, "The index of the selected row, or -1 when nothing is selected.")
+                                 .signal ("onSelectionChanged", &ListBox::onSelectionChanged, "Emitted when the selected rows change")
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& ListBox::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 //==============================================================================
@@ -407,6 +364,21 @@ ListBox::~ListBox()
 }
 
 //==============================================================================
+struct ListBox::ItemsModel : public ListBoxModel
+{
+    int getNumRows() override
+    {
+        return items.size();
+    }
+
+    String getRowText (int rowIndex) override
+    {
+        return items[rowIndex];
+    }
+
+    StringArray items;
+};
+
 void ListBox::setModel (ListBoxModel* newModel)
 {
     if (model == newModel)
@@ -451,21 +423,6 @@ ListBoxModel* ListBox::getModel() const noexcept
 }
 
 //==============================================================================
-
-struct ListBox::ItemsModel : public ListBoxModel
-{
-    int getNumRows() override
-    {
-        return items.size();
-    }
-
-    String getRowText (int rowIndex) override
-    {
-        return items[rowIndex];
-    }
-
-    StringArray items;
-};
 
 void ListBox::setItems (const StringArray& newItems)
 {

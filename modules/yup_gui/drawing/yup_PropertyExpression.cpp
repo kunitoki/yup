@@ -37,14 +37,6 @@ String withoutPosition (const String& message)
              : message;
 }
 
-// The types a value can have, in the order they are tried when the property doesn't name one
-constexpr std::array<ComponentProperty::Type, 6> probedTypes { ComponentProperty::Type::color,
-                                                               ComponentProperty::Type::number,
-                                                               ComponentProperty::Type::boolean,
-                                                               ComponentProperty::Type::string,
-                                                               ComponentProperty::Type::point,
-                                                               ComponentProperty::Type::rectangle };
-
 // Registering the graphics types is far slower than compiling a typical value, so every expression
 // starts from a copy of this context, which shares its types and declarations
 const ExpressionContext& getPropertyExpressionBaseContext()
@@ -60,60 +52,9 @@ const ExpressionContext& getPropertyExpressionBaseContext()
     return context;
 }
 
-template <class T>
-var toVar (const T& value)
-{
-    if constexpr (std::is_same_v<T, float>)
-        return static_cast<double> (value);
-    else if constexpr (std::is_same_v<T, int> || std::is_same_v<T, bool> || std::is_same_v<T, String>)
-        return value;
-    else
-        return VariantConverter<T>::toVar (value);
-}
-
-template <class T>
-var readOutput (const CompiledExpression& program, ExpressionState& state)
-{
-    auto output = program.getOutput<T> (outputName);
-
-    if (output.failed())
-        return {};
-
-    return toVar (state.get (output.getReference()));
-}
-
-template <class T>
-var readArrayOutput (const CompiledExpression& program, ExpressionState& state)
-{
-    auto output = program.getOutput<ExpressionArrayView<T>> (outputName);
-
-    if (output.failed())
-        return {};
-
-    const auto view = state.get (output.getReference());
-
-    Array<var> values;
-    values.ensureStorageAllocated (view.size);
-
-    for (int i = 0; i < view.size; ++i)
-        values.add (toVar (view.data[i]));
-
-    return var (values);
-}
-
 // Types that aren't bridged are compiled as numbers, which is what an untyped value falls back to
-void declareValueOutput (ExpressionContext& context, ComponentProperty::Type type, ComponentProperty::Type elementType)
+void declareValueOutput (ExpressionContext& context, ComponentProperty::Type type)
 {
-    if (type == ComponentProperty::Type::array)
-    {
-        DrawingScope::withExpressionType (elementType, [&] (auto tag)
-        {
-            context.declareOutput<ExpressionArrayView<typename decltype (tag)::type>> (outputName);
-        });
-
-        return;
-    }
-
     if (! DrawingScope::withExpressionType (type, [&] (auto tag)
         {
             context.declareOutput<typename decltype (tag)::type> (outputName);
@@ -123,29 +64,63 @@ void declareValueOutput (ExpressionContext& context, ComponentProperty::Type typ
     }
 }
 
+std::optional<ComponentProperty::Type> findMatchingExpressionType (const DrawingScope& scope, const ExpressionType& target)
+{
+    for (const auto candidate : ComponentProperty::expressionTypes)
+        if (scope.getExpressionType (candidate) == &target)
+            return candidate;
+
+    return std::nullopt;
+}
+
 var readValueOutput (const CompiledExpression& program,
                      ExpressionState& state,
                      ComponentProperty::Type type,
                      ComponentProperty::Type elementType)
 {
-    var value;
-
     if (type == ComponentProperty::Type::array)
     {
+        var value;
+
         DrawingScope::withExpressionType (elementType, [&] (auto tag)
         {
-            value = readArrayOutput<typename decltype (tag)::type> (program, state);
+            using Type = typename decltype (tag)::type;
+
+            const auto view = state.get (ExpressionOutput<ExpressionArrayView<Type>> { 0 });
+            Array<var> values;
+            values.ensureStorageAllocated (view.size);
+
+            for (int i = 0; i < view.size; ++i)
+                values.add (VariantConverter<Type>::toVar (view.data[i]));
+
+            value = var (std::move (values));
         });
 
         return value;
     }
 
+    if (type == ComponentProperty::Type::number)
+    {
+        const auto* outputType = program.getOutputType (0);
+
+        if (outputType != nullptr && outputType->is<double>())
+            return state.get (ExpressionOutput<double> { 0 });
+
+        if (outputType != nullptr && outputType->is<int>())
+            return static_cast<double> (state.get (ExpressionOutput<int> { 0 }));
+
+        return VariantConverter<float>::toVar (state.get (ExpressionOutput<float> { 0 }));
+    }
+
+    var value;
+
     if (! DrawingScope::withExpressionType (type, [&] (auto tag)
         {
-            value = readOutput<typename decltype (tag)::type> (program, state);
+            using Type = typename decltype (tag)::type;
+            value = VariantConverter<Type>::toVar (state.get (ExpressionOutput<Type> { 0 }));
         }))
     {
-        value = readOutput<float> (program, state);
+        value = VariantConverter<float>::toVar (state.get (ExpressionOutput<float> { 0 }));
     }
 
     return value;
@@ -155,6 +130,11 @@ var readValueOutput (const CompiledExpression& program,
 
 //==============================================================================
 
+PropertyExpression::PropertyExpression (ExpressionContext contextToUse)
+    : context (std::move (contextToUse))
+{
+}
+
 ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Component& component,
                                                                               const String& text,
                                                                               std::optional<ComponentProperty::Type> type,
@@ -162,71 +142,76 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Co
                                                                               DrawingScope::ModelResolver modelResolver,
                                                                               BindingProvider* locals)
 {
-    struct Candidate
-    {
-        ComponentProperty::Type type;
-        ComponentProperty::Type elementType = ComponentProperty::Type::any;
-    };
-
     if (text.trimStart().startsWithChar ('['))
         return compileArrayLiteral (component, text, type, std::move (resolver), std::move (modelResolver), locals);
 
-    std::vector<Candidate> candidates;
+    std::unique_ptr<PropertyExpression> expression (new PropertyExpression (getPropertyExpressionBaseContext()));
+    expression->source = text;
 
-    if (type.has_value() && *type != ComponentProperty::Type::array)
-    {
-        candidates.push_back ({ *type });
-    }
-    else
-    {
-        if (! type.has_value())
-            for (const auto probed : probedTypes)
-                candidates.push_back ({ probed });
+    const bool hasFixedScalarType = type.has_value()
+                                 && *type != ComponentProperty::Type::array
+                                 && *type != ComponentProperty::Type::any;
 
-        // Without the element type, every array a value could be is tried
-        for (const auto probed : probedTypes)
-            candidates.push_back ({ ComponentProperty::Type::array, probed });
+    if (hasFixedScalarType)
+    {
+        expression->type = *type;
+        declareValueOutput (expression->context, *type);
     }
 
-    String error;
+    expression->scope.emplace (component, expression->context);
+    expression->scope->setComponentResolver (std::move (resolver));
+    expression->scope->setModelResolver (std::move (modelResolver));
+    expression->scope->setLocals (locals);
+    expression->scope->install();
 
-    for (const auto candidate : candidates)
+    auto compiled = CompiledExpression::compile (String (outputName) + " = (" + text + ");\n", expression->context);
+    if (compiled.failed())
+        return makeResultValueFail (compiled.getErrorMessage());
+
+    expression->program = compiled.getReference();
+
+    if (! hasFixedScalarType)
     {
-        std::unique_ptr<PropertyExpression> expression (new PropertyExpression());
-        expression->source = text;
-        expression->type = candidate.type;
-        expression->elementType = candidate.elementType;
-        expression->context = std::make_unique<ExpressionContext> (getPropertyExpressionBaseContext());
+        const auto* outputType = expression->program.getOutputType (0);
+        jassert (outputType != nullptr);
 
-        declareValueOutput (*expression->context, candidate.type, candidate.elementType);
+        if (outputType == nullptr)
+            return makeResultValueFail ("Expression produced no output");
 
-        expression->scope = std::make_unique<DrawingScope> (component, *expression->context);
-        expression->scope->setComponentResolver (resolver);
-        expression->scope->setModelResolver (modelResolver);
-        expression->scope->setLocals (locals);
-        expression->scope->install();
-
-        auto compiled = CompiledExpression::compile (String (outputName) + " = (" + text + ");\n", *expression->context);
-
-        if (compiled.failed())
+        if (const auto* elem = outputType->getElementType())
         {
-            if (error.isEmpty())
-                error = compiled.getErrorMessage();
+            const auto matchedElement = findMatchingExpressionType (*expression->scope, *elem);
+            if (! matchedElement.has_value())
+                return makeResultValueFail ("Unsupported array element type '" + elem->getName() + "'");
 
-            continue;
+            expression->type = ComponentProperty::Type::array;
+            expression->elementType = *matchedElement;
         }
-
-        expression->program = std::make_unique<CompiledExpression> (compiled.getReference());
-        expression->state = std::make_unique<ExpressionState> (*expression->program, 1);
-
-        for (int i = 0; i < expression->program->getNumInputs(); ++i)
-            if (expression->program->getInputName (i).startsWith ("palette."))
-                expression->paletteDependent = true;
-
-        return makeResultValueOk (std::move (expression));
+        else if (type == ComponentProperty::Type::array)
+        {
+            return makeResultValueFail ("Cannot convert '" + outputType->getName() + "' to an array");
+        }
+        else if (outputType->is<float>() || outputType->is<double>() || outputType->is<int>())
+        {
+            expression->type = ComponentProperty::Type::number;
+        }
+        else if (const auto matched = findMatchingExpressionType (*expression->scope, *outputType))
+        {
+            expression->type = *matched;
+        }
+        else
+        {
+            return makeResultValueFail ("Unsupported expression type '" + outputType->getName() + "'");
+        }
     }
 
-    return makeResultValueFail (error);
+    expression->state.emplace (expression->program, 1);
+
+    for (int i = 0; i < expression->program.getNumInputs(); ++i)
+        if (expression->program.getInputName (i).startsWith ("palette."))
+            expression->paletteDependent = true;
+
+    return makeResultValueOk (std::move (expression));
 }
 
 ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compileArrayLiteral (Component& component,
@@ -343,7 +328,7 @@ PropertyExpression::~PropertyExpression() = default;
 
 var PropertyExpression::evaluate()
 {
-    if (program == nullptr)
+    if (! state.has_value())
     {
         Array<var> values;
         values.ensureStorageAllocated (static_cast<int> (elements.size()));
@@ -354,26 +339,26 @@ var PropertyExpression::evaluate()
         return var (std::move (values));
     }
 
-    scope->updateInputs (*program, *state);
+    scope->updateInputs (program, *state);
     state->evaluate();
 
-    return readValueOutput (*program, *state, type, elementType);
+    return readValueOutput (program, *state, type, elementType);
 }
 
 bool PropertyExpression::hasInputs() const noexcept
 {
-    if (program == nullptr)
+    if (! state.has_value())
         return std::any_of (elements.begin(), elements.end(), [] (const auto& element)
         {
             return element->hasInputs();
         });
 
-    return program->getNumInputs() > 0;
+    return program.getNumInputs() > 0;
 }
 
 std::vector<DrawingScope::Dependency> PropertyExpression::getDependencies() const
 {
-    if (program == nullptr)
+    if (! state.has_value())
     {
         std::vector<DrawingScope::Dependency> dependencies;
 
@@ -384,7 +369,7 @@ std::vector<DrawingScope::Dependency> PropertyExpression::getDependencies() cons
         return dependencies;
     }
 
-    return scope->getDependencies (*program);
+    return scope->getDependencies (program);
 }
 
 } // namespace yup

@@ -56,23 +56,8 @@ public:
     */
     void registerType (const ComponentTypeInfo& typeInfo);
 
-    /** Removes a type by name. */
-    void unregisterType (const Identifier& typeName);
-
     /** Finds a registered type info by name, or nullptr when it is not registered. */
     const ComponentTypeInfo* findType (const Identifier& typeName) const;
-
-    /** Returns true when a type with the given name is registered. */
-    bool isRegistered (const Identifier& typeName) const;
-
-    /** Returns the names of every registered type. */
-    StringArray getRegisteredTypeNames() const;
-
-    /** Creates an instance of a registered type, or nullptr when the type is unknown or has no factory. */
-    std::unique_ptr<Component> createInstance (const Identifier& typeName) const;
-
-    /** Removes every registered type. */
-    void clear();
 
 private:
     //==============================================================================

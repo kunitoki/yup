@@ -166,9 +166,33 @@ TEST_F (LayoutComponentTests, StandardContainersSkipRelayoutOnUnrelatedStyleChan
     EXPECT_EQ (flex.layoutCount, afterInitialLayout + 5);
     EXPECT_FLOAT_EQ (child.getX(), 0.0f);
 
-    // Custom LayoutComponent subclasses still relayout on styleChanged when they may read custom properties.
-    layout.setBounds (0.0f, 0.0f, 100.0f, 50.0f);
-    const int customBefore = layout.layoutCount;
-    layout.setProperty (Identifier ("customLayoutProperty"), 42);
-    EXPECT_GT (layout.layoutCount, customBefore);
+    // Custom LayoutComponent subclasses declare their own LayoutEffect::own properties via ComponentTypeBuilder.
+    struct CustomTrackLayout : LayoutComponent
+    {
+        int layoutCount = 0;
+
+        static const ComponentTypeInfo& getClassTypeInfo()
+        {
+            static const auto info = ComponentTypeBuilder<CustomTrackLayout> (Identifier ("CustomTrackLayout"), LayoutComponent::getClassTypeInfo())
+                                         .layoutProperty (Identifier ("customLayoutProperty"), ComponentProperty::Type::integer, 1)
+                                         .build();
+            return info;
+        }
+
+        const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+        void performLayout (Rectangle<float>) override
+        {
+            ++layoutCount;
+        }
+    };
+
+    CustomTrackLayout customLayout;
+    customLayout.setBounds (0.0f, 0.0f, 100.0f, 50.0f);
+    const int customBefore = customLayout.layoutCount;
+    customLayout.setProperty (Identifier ("unrelatedToken"), 99);
+    EXPECT_EQ (customLayout.layoutCount, customBefore);
+
+    customLayout.setProperty (Identifier ("customLayoutProperty"), 42);
+    EXPECT_EQ (customLayout.layoutCount, customBefore + 1);
 }

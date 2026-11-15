@@ -158,9 +158,6 @@ Component::~Component()
 
         if (flags.isPressed)
             parentComponent->setPressedChain (false);
-
-        if (auto* context = parentComponent->findStyleContext())
-            context->forgetComponent (*this);
     }
 
     styleContext.reset();
@@ -1200,17 +1197,21 @@ void Component::removeChildComponent (int index)
     component->parentComponent = nullptr;
 
     auto bailOutChecker = BailOutChecker (this);
-    auto childBailOutChecker = BailOutChecker (component);
 
     if (formerContext != nullptr)
     {
         if (component->flags.isBeingDeleted)
+        {
             formerContext->forgetComponent (*component);
+        }
         else
+        {
+            auto childBailOutChecker = BailOutChecker (component);
             formerContext->detachComponent (*component);
 
-        if (bailOutChecker.shouldBailOut() || childBailOutChecker.shouldBailOut())
-            return;
+            if (bailOutChecker.shouldBailOut() || childBailOutChecker.shouldBailOut())
+                return;
+        }
     }
 
     if (getNativeComponent() != nullptr)
@@ -1265,6 +1266,8 @@ void Component::parentHierarchyChanged() {}
 void Component::childrenChanged() {}
 
 void Component::childLayoutChanged ([[maybe_unused]] Component& child) {}
+
+void Component::layoutPropertyChanged() {}
 
 void Component::indexInParentChildrenChanged ([[maybe_unused]] int oldIndex, [[maybe_unused]] int newIndex) {}
 
@@ -1865,146 +1868,51 @@ void Component::setTypeInfo (const ComponentTypeInfo* newTypeInfo)
     markStyleDirty();
 }
 
-const ComponentTypeInfo& Component::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
-}
-
 const ComponentTypeInfo& Component::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
+    using Type = ComponentProperty::Type;
+    using LayoutEffect = ComponentProperty::LayoutEffect;
+    const auto& selfAlignments = detail::layoutSelfAlignmentNames();
 
-        props.push_back (ComponentProperty {
-            .name = ComponentIds::id,
-            .type = ComponentProperty::Type::string,
-            .getter = [] (const Component& c) { return var (c.getComponentID()); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = ComponentIds::title,
-            .type = ComponentProperty::Type::string,
-            .getter = [] (const Component& c) { return var (c.getTitle()); },
-            .setter = [] (Component& c, const var& v) { c.setTitle (v.toString()); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = ComponentIds::visible,
-            .type = ComponentProperty::Type::boolean,
-            .defaultValue = true,
-            .getter = [] (const Component& c) { return var (c.isVisible()); },
-            .setter = [] (Component& c, const var& v) { c.setVisible (static_cast<bool> (v)); } });
-
-        props.push_back (ComponentProperty {
-            .name = ComponentIds::enabled,
-            .type = ComponentProperty::Type::boolean,
-            .defaultValue = true,
-            .getter = [] (const Component& c) { return var (c.isEnabled()); },
-            .setter = [] (Component& c, const var& v) { c.setEnabled (static_cast<bool> (v)); } });
-
-        props.push_back (ComponentProperty {
-            .name = ComponentIds::opacity,
-            .type = ComponentProperty::Type::number,
-            .defaultValue = 1.0,
-            .getter = [] (const Component& c) { return var (static_cast<double> (c.getOpacity())); },
-            .setter = [] (Component& c, const var& v) { c.setOpacity (static_cast<float> (static_cast<double> (v))); } });
-
-        props.push_back (ComponentProperty {
-            .name = ComponentIds::x,
-            .type = ComponentProperty::Type::number,
-            .getter = [] (const Component& c) { return var (static_cast<double> (c.getX())); },
-            .setter = [] (Component& c, const var& v) { c.setBounds (static_cast<float> (static_cast<double> (v)), c.getY(), c.getWidth(), c.getHeight()); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = ComponentIds::y,
-            .type = ComponentProperty::Type::number,
-            .getter = [] (const Component& c) { return var (static_cast<double> (c.getY())); },
-            .setter = [] (Component& c, const var& v) { c.setBounds (c.getX(), static_cast<float> (static_cast<double> (v)), c.getWidth(), c.getHeight()); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = ComponentIds::width,
-            .type = ComponentProperty::Type::number,
-            .getter = [] (const Component& c) { return var (static_cast<double> (c.getWidth())); },
-            .setter = [] (Component& c, const var& v) { c.setBounds (c.getX(), c.getY(), static_cast<float> (static_cast<double> (v)), c.getHeight()); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = ComponentIds::height,
-            .type = ComponentProperty::Type::number,
-            .getter = [] (const Component& c) { return var (static_cast<double> (c.getHeight())); },
-            .setter = [] (Component& c, const var& v) { c.setBounds (c.getX(), c.getY(), c.getWidth(), static_cast<float> (static_cast<double> (v))); },
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = ComponentIds::focused,
-            .type = ComponentProperty::Type::boolean,
-            .defaultValue = false,
-            .getter = [] (const Component& c) { return var (c.isFocused()); },
-            .isState = true,
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = ComponentIds::hovered,
-            .type = ComponentProperty::Type::boolean,
-            .defaultValue = false,
-            .getter = [] (const Component& c) { return var (c.isHovered()); },
-            .isState = true,
-            .isStyleable = false });
-
-        props.push_back (ComponentProperty {
-            .name = ComponentIds::pressed,
-            .type = ComponentProperty::Type::boolean,
-            .defaultValue = false,
-            .getter = [] (const Component& c) { return var (c.isPressed()); },
-            .isState = true,
-            .isStyleable = false });
-
-        // Layout item properties, read by the parent layout container
-        const auto addLayoutItem = [&props] (const char* name, ComponentProperty::Type type, var defaultValue, StringArray enumValues, const char* description)
-        {
-            props.push_back (ComponentProperty {
-                .name = Identifier (name),
-                .type = type,
-                .defaultValue = std::move (defaultValue),
-                .isInherited = false,
-                .affectsParentLayout = true,
-                .enumValues = std::move (enumValues),
-                .description = description });
-        };
-
-        using Type = ComponentProperty::Type;
-        const auto& selfAlignments = detail::layoutSelfAlignmentNames();
-
-        addLayoutItem ("flexGrow", Type::number, 0.0, {}, "How much of the free space along the main axis the item takes.");
-        addLayoutItem ("flexShrink", Type::number, 1.0, {}, "How much the item shrinks when the main axis overflows.");
-        addLayoutItem ("flexBasis", Type::number, -1.0, {}, "The initial main size of the item, negative for automatic.");
-        addLayoutItem ("order", Type::integer, 0, {}, "The order of the item in a flex container.");
-        addLayoutItem ("alignSelf", Type::enumeration, "auto", selfAlignments, "The cross axis alignment of the item, overriding the container one.");
-        addLayoutItem ("justifySelf", Type::enumeration, "auto", selfAlignments, "The horizontal alignment of the item in a grid or stack cell.");
-        addLayoutItem ("margin", Type::any, 0.0, {}, "The outer spacing of the item: a number, or 1, 2 or 4 values (top right bottom left).");
-        addLayoutItem ("preferredWidth", Type::number, -1.0, {}, "The width the layout gives the item, negative for automatic.");
-        addLayoutItem ("preferredHeight", Type::number, -1.0, {}, "The height the layout gives the item, negative for automatic.");
-        addLayoutItem ("minWidth", Type::number, -1.0, {}, "The minimum width of the item, negative for none.");
-        addLayoutItem ("maxWidth", Type::number, -1.0, {}, "The maximum width of the item, negative for none.");
-        addLayoutItem ("minHeight", Type::number, -1.0, {}, "The minimum height of the item, negative for none.");
-        addLayoutItem ("maxHeight", Type::number, -1.0, {}, "The maximum height of the item, negative for none.");
-        addLayoutItem ("gridArea", Type::string, String(), {}, "The named grid area the item occupies.");
-        addLayoutItem ("gridColumn", Type::integer, -1, {}, "The zero based grid column of the item, negative for automatic placement.");
-        addLayoutItem ("gridRow", Type::integer, -1, {}, "The zero based grid row of the item, negative for automatic placement.");
-        addLayoutItem ("gridColumnSpan", Type::integer, 1, {}, "The number of grid columns the item spans.");
-        addLayoutItem ("gridRowSpan", Type::integer, 1, {}, "The number of grid rows the item spans.");
-
-        return ComponentTypeInfo { Identifier ("Component"), nullptr, std::move (props), {}, []
-        {
-            // A plain component paints nothing, so a created one must not claim to be opaque
-            auto component = std::make_unique<Component>();
-            component->setOpaque (false);
-            return component;
-        } };
-    }();
+    static const auto info = ComponentTypeBuilder<Component> (Identifier ("Component"))
+                                 .factory ([]
+                                 {
+                                     // A plain component paints nothing, so a created one must not claim to be opaque
+                                     auto component = std::make_unique<Component>();
+                                     component->setOpaque (false);
+                                     return component;
+                                 })
+                                 .readOnly (ComponentIds::id, &Component::getComponentID)
+                                 .property (ComponentIds::title, &Component::getTitle, &Component::setTitle)
+                                 .styleableProperty (ComponentIds::visible, &Component::isVisible, &Component::setVisible, true)
+                                 .styleableProperty (ComponentIds::enabled, &Component::isEnabled, &Component::setEnabled, true)
+                                 .styleableProperty (ComponentIds::opacity, &Component::getOpacity, &Component::setOpacity, 1.0)
+                                 .property (ComponentIds::x, &Component::getX, [] (Component& c, float v) { c.setBounds (v, c.getY(), c.getWidth(), c.getHeight()); })
+                                 .property (ComponentIds::y, &Component::getY, [] (Component& c, float v) { c.setBounds (c.getX(), v, c.getWidth(), c.getHeight()); })
+                                 .property (ComponentIds::width, &Component::getWidth, [] (Component& c, float v) { c.setBounds (c.getX(), c.getY(), v, c.getHeight()); })
+                                 .property (ComponentIds::height, &Component::getHeight, [] (Component& c, float v) { c.setBounds (c.getX(), c.getY(), c.getWidth(), v); })
+                                 .state (ComponentIds::focused, &Component::isFocused, false)
+                                 .state (ComponentIds::hovered, &Component::isHovered, false)
+                                 .state (ComponentIds::pressed, &Component::isPressed, false)
+                                 .layoutProperty ("flexGrow", Type::number, 0.0, LayoutEffect::parent, "How much of the free space along the main axis the item takes.")
+                                 .layoutProperty ("flexShrink", Type::number, 1.0, LayoutEffect::parent, "How much the item shrinks when the main axis overflows.")
+                                 .layoutProperty ("flexBasis", Type::number, -1.0, LayoutEffect::parent, "The initial main size of the item, negative for automatic.")
+                                 .layoutProperty ("order", Type::integer, 0, LayoutEffect::parent, "The order of the item in a flex container.")
+                                 .layoutProperty ("alignSelf", Type::enumeration, "auto", LayoutEffect::parent, "The cross axis alignment of the item, overriding the container one.", selfAlignments)
+                                 .layoutProperty ("justifySelf", Type::enumeration, "auto", LayoutEffect::parent, "The horizontal alignment of the item in a grid or stack cell.", selfAlignments)
+                                 .layoutProperty ("margin", Type::any, 0.0, LayoutEffect::parent, "The outer spacing of the item: a number, or 1, 2 or 4 values (top right bottom left).")
+                                 .layoutProperty ("preferredWidth", Type::number, -1.0, LayoutEffect::parent, "The width the layout gives the item, negative for automatic.")
+                                 .layoutProperty ("preferredHeight", Type::number, -1.0, LayoutEffect::parent, "The height the layout gives the item, negative for automatic.")
+                                 .layoutProperty ("minWidth", Type::number, -1.0, LayoutEffect::parent, "The minimum width of the item, negative for none.")
+                                 .layoutProperty ("maxWidth", Type::number, -1.0, LayoutEffect::parent, "The maximum width of the item, negative for none.")
+                                 .layoutProperty ("minHeight", Type::number, -1.0, LayoutEffect::parent, "The minimum height of the item, negative for none.")
+                                 .layoutProperty ("maxHeight", Type::number, -1.0, LayoutEffect::parent, "The maximum height of the item, negative for none.")
+                                 .layoutProperty ("gridArea", Type::string, String(), LayoutEffect::parent, "The named grid area the item occupies.")
+                                 .layoutProperty ("gridColumn", Type::integer, -1, LayoutEffect::parent, "The zero based grid column of the item, negative for automatic placement.")
+                                 .layoutProperty ("gridRow", Type::integer, -1, LayoutEffect::parent, "The zero based grid row of the item, negative for automatic placement.")
+                                 .layoutProperty ("gridColumnSpan", Type::integer, 1, LayoutEffect::parent, "The number of grid columns the item spans.")
+                                 .layoutProperty ("gridRowSpan", Type::integer, 1, LayoutEffect::parent, "The number of grid rows the item spans.")
+                                 .build();
 
     return info;
 }
@@ -2070,11 +1978,20 @@ void Component::applyStoredPropertyChange (const ResolvedProperty& resolved, con
 
     const BailOutChecker bailOutChecker (this);
 
-    if (resolved.descriptor != nullptr && resolved.descriptor->affectsParentLayout && parentComponent != nullptr)
+    if (resolved.descriptor != nullptr)
     {
-        parentComponent->childLayoutChanged (*this);
-        if (bailOutChecker.shouldBailOut())
-            return;
+        if (resolved.descriptor->layoutEffect == ComponentProperty::LayoutEffect::own)
+        {
+            layoutPropertyChanged();
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+        else if (resolved.descriptor->layoutEffect == ComponentProperty::LayoutEffect::parent && parentComponent != nullptr)
+        {
+            parentComponent->childLayoutChanged (*this);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
     }
 
     styleChanged();

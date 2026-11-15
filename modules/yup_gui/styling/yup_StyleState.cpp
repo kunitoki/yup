@@ -148,11 +148,4 @@ void StyleState::paintShadows (Graphics& g, Rectangle<float> bounds, float corne
     }
 }
 
-//==============================================================================
-
-bool StyleState::isEmpty() const noexcept
-{
-    return computedValues.size() == 0 && animatedValues.size() == 0 && stylePalette == nullptr && shadows.empty();
-}
-
 } // namespace yup

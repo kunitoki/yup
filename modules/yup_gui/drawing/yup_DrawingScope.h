@@ -238,6 +238,14 @@ public:
         std::variant<Array<float>, Array<int>, Array<bool>, Array<String>, Array<Color>, Array<Point<float>>, Array<Rectangle<float>>> values;
     };
 
+    /** Writes one reflected property value into an expression input, using @p arrayInput for arrays. */
+    static void setInputValue (ExpressionState& state,
+                               int input,
+                               ComponentProperty::Type type,
+                               ComponentProperty::Type elementType,
+                               const var& value,
+                               ArrayInput& arrayInput);
+
 private:
     //==============================================================================
     struct ResolvedTarget

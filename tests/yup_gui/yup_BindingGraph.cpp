@@ -220,11 +220,12 @@ TEST_F (BindingGraphTests, UnbindsLeavingTheValueInPlace)
     nameIt ("source", source);
 
     ASSERT_TRUE (graph.bind (target, Identifier (valueId), "source.value", ComponentProperty::Type::number).wasOk());
+    EXPECT_TRUE (graph.hasBinding (target, Identifier (valueId)));
     source.setValue (5.0);
 
     EXPECT_TRUE (graph.unbind (target, Identifier (valueId)));
     EXPECT_FALSE (graph.unbind (target, Identifier (valueId)));
-    EXPECT_EQ (graph.findBinding (target, Identifier (valueId)), nullptr);
+    EXPECT_FALSE (graph.hasBinding (target, Identifier (valueId)));
 
     source.setValue (1.0);
     EXPECT_FLOAT_EQ (static_cast<float> (target.getValue()), 5.0f);

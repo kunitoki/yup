@@ -106,18 +106,13 @@ ComponentProperty makeDeclaredProperty (const DataTree& declaration, bool isInhe
 
     var defaultValue;
 
-    switch (type)
-    {
-        case ComponentProperty::Type::number:    defaultValue = 0.0; break;
-        case ComponentProperty::Type::integer:   defaultValue = 0; break;
-        case ComponentProperty::Type::boolean:   defaultValue = false; break;
-        case ComponentProperty::Type::string:    defaultValue = String(); break;
-        case ComponentProperty::Type::color:     defaultValue = static_cast<int64> (0); break;
-        case ComponentProperty::Type::point:     defaultValue = VariantConverter<Point<float>>::toVar ({}); break;
-        case ComponentProperty::Type::rectangle: defaultValue = VariantConverter<Rectangle<float>>::toVar ({}); break;
-        case ComponentProperty::Type::array:     defaultValue = var (Array<var>()); break;
-        default:                                 break;
-    }
+    if (type == ComponentProperty::Type::array)
+        defaultValue = var (Array<var>());
+    else
+        DrawingScope::withExpressionType (type, [&] (auto tag)
+        {
+            defaultValue = VariantConverter<typename decltype (tag)::type>::toVar ({});
+        });
 
     return ComponentProperty {
         .name = Identifier (declaration.getProperty ("name").toString()),
@@ -468,7 +463,7 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
             alias.setter = nullptr;
             alias.isState = false;
             alias.isInherited = false;
-            alias.affectsParentLayout = false;
+            alias.layoutEffect = ComponentProperty::LayoutEffect::none;
             properties.push_back (std::move (alias));
             composite.aliases.push_back ({ name, target, declaration });
         }

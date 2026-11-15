@@ -274,16 +274,26 @@ void DrawingScope::updateInputs (const CompiledExpression& program, ExpressionSt
             continue;
         }
 
-        if (type == ComponentProperty::Type::array)
-            input.arrayInput.bind (state, input.index, elementType, value);
-        else
-            withExpressionType (type, [&] (auto tag)
-            {
-                using Type = typename decltype (tag)::type;
-
-                state.set (ExpressionInput<Type> { input.index }, VariantConverter<Type>::fromVar (value));
-            });
+        setInputValue (state, input.index, type, elementType, value, input.arrayInput);
     }
+}
+
+void DrawingScope::setInputValue (ExpressionState& state,
+                                  int input,
+                                  ComponentProperty::Type type,
+                                  ComponentProperty::Type elementType,
+                                  const var& value,
+                                  ArrayInput& arrayInput)
+{
+    if (type == ComponentProperty::Type::array)
+        arrayInput.bind (state, input, elementType, value);
+    else
+        withExpressionType (type, [&] (auto tag)
+        {
+            using Type = typename decltype (tag)::type;
+
+            state.set (ExpressionInput<Type> { input }, VariantConverter<Type>::fromVar (value));
+        });
 }
 
 DrawingScope::ResolvedTarget DrawingScope::resolveTarget (const String& symbol) const
@@ -408,13 +418,7 @@ const ExpressionType* DrawingScope::getExpressionType (ComponentProperty::Type t
 
 void DrawingScope::addExpressionArrayTypes (ExpressionContext& context)
 {
-    for (const auto type : { ComponentProperty::Type::number,
-                             ComponentProperty::Type::integer,
-                             ComponentProperty::Type::boolean,
-                             ComponentProperty::Type::string,
-                             ComponentProperty::Type::color,
-                             ComponentProperty::Type::point,
-                             ComponentProperty::Type::rectangle })
+    for (const auto type : ComponentProperty::expressionTypes)
     {
         withExpressionType (type, [&] (auto tag)
         {

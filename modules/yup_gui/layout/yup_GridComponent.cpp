@@ -26,8 +26,8 @@ namespace
 {
 
 const detail::EnumNames<Grid::AlignItems> gridAlignments {
-    { "start", Grid::AlignItems::start },
-    { "end", Grid::AlignItems::end },
+    { "start", Grid::AlignItems::flexStart },
+    { "end", Grid::AlignItems::flexEnd },
     { "center", Grid::AlignItems::center },
     { "stretch", Grid::AlignItems::stretch },
     { "baseline", Grid::AlignItems::baseline }
@@ -35,8 +35,8 @@ const detail::EnumNames<Grid::AlignItems> gridAlignments {
 
 const detail::EnumNames<GridItem::AlignSelf> gridSelfAlignments {
     { "auto", GridItem::AlignSelf::autoAlign },
-    { "start", GridItem::AlignSelf::start },
-    { "end", GridItem::AlignSelf::end },
+    { "start", GridItem::AlignSelf::flexStart },
+    { "end", GridItem::AlignSelf::flexEnd },
     { "center", GridItem::AlignSelf::center },
     { "stretch", GridItem::AlignSelf::stretch },
     { "baseline", GridItem::AlignSelf::baseline }
@@ -319,56 +319,18 @@ Array<Grid::TrackInfo> GridComponent::parseTracks (const var& value)
 
 const ComponentTypeInfo& GridComponent::getClassTypeInfo()
 {
-    static const ComponentTypeInfo info = []
-    {
-        std::vector<ComponentProperty> props;
+    using Type = ComponentProperty::Type;
+    using LayoutEffect = ComponentProperty::LayoutEffect;
 
-        props.push_back (ComponentProperty {
-            .name = Properties::columnsId,
-            .type = ComponentProperty::Type::any,
-            .isInherited = false,
-            .description = "The column tracks: a count, or a list such as \"1fr 80px auto 20%\"." });
-
-        props.push_back (ComponentProperty {
-            .name = Properties::rowsId,
-            .type = ComponentProperty::Type::any,
-            .isInherited = false,
-            .description = "The row tracks: a count, or a list such as \"1fr 80px auto 20%\"." });
-
-        props.push_back (ComponentProperty {
-            .name = Properties::areasId,
-            .type = ComponentProperty::Type::string,
-            .isInherited = false,
-            .description = "The named areas, one row per comma separated group, as in \"head head, side main\"." });
-
-        props.push_back (ComponentProperty {
-            .name = Properties::justifyId,
-            .type = ComponentProperty::Type::enumeration,
-            .defaultValue = gridAlignments.names[3],
-            .isInherited = false,
-            .enumValues = gridAlignments.names,
-            .description = "How the children are placed horizontally in their cells." });
-
-        props.push_back (ComponentProperty {
-            .name = Properties::alignId,
-            .type = ComponentProperty::Type::enumeration,
-            .defaultValue = gridAlignments.names[3],
-            .isInherited = false,
-            .enumValues = gridAlignments.names,
-            .description = "How the children are placed vertically in their cells." });
-
-        return ComponentTypeInfo { Identifier ("Grid"), &LayoutComponent::getClassTypeInfo(), std::move (props), {}, []
-                                   {
-            return std::make_unique<GridComponent>();
-                                  } };
-    }();
+    static const auto info = ComponentTypeBuilder<GridComponent> (Identifier ("Grid"), LayoutComponent::getClassTypeInfo())
+                                 .layoutProperty (Properties::columnsId, Type::any, {}, LayoutEffect::own, "The column tracks: a count, or a list such as \"1fr 80px auto 20%\".")
+                                 .layoutProperty (Properties::rowsId, Type::any, {}, LayoutEffect::own, "The row tracks: a count, or a list such as \"1fr 80px auto 20%\".")
+                                 .layoutProperty (Properties::areasId, Type::string, {}, LayoutEffect::own, "The named areas, one row per comma separated group, as in \"head head, side main\".")
+                                 .layoutProperty (Properties::justifyId, Type::enumeration, gridAlignments.names[3], LayoutEffect::own, "How the children are placed horizontally in their cells.", gridAlignments.names)
+                                 .layoutProperty (Properties::alignId, Type::enumeration, gridAlignments.names[3], LayoutEffect::own, "How the children are placed vertically in their cells.", gridAlignments.names)
+                                 .build();
 
     return info;
-}
-
-const ComponentTypeInfo& GridComponent::getDefaultTypeInfo() const
-{
-    return getClassTypeInfo();
 }
 
 //==============================================================================
@@ -415,13 +377,7 @@ void GridComponent::performLayout (Rectangle<float> area)
             item.rowSpan = jmax (1, getItemInteger (*child, Properties::gridRowSpanId));
         }
 
-        item.width = getItemNumber (*child, Properties::preferredWidthId);
-        item.height = getItemNumber (*child, Properties::preferredHeightId);
-        item.minWidth = getItemNumber (*child, Properties::minWidthId);
-        item.maxWidth = getItemNumber (*child, Properties::maxWidthId);
-        item.minHeight = getItemNumber (*child, Properties::minHeightId);
-        item.maxHeight = getItemNumber (*child, Properties::maxHeightId);
-        item.margin = getItemMargin (*child);
+        readItemSizing (item, *child);
         item.justifySelf = gridSelfAlignments.toEnum (getItemString (*child, Properties::justifySelfId), GridItem::AlignSelf::autoAlign);
         item.alignSelf = gridSelfAlignments.toEnum (getItemString (*child, Properties::alignSelfId), GridItem::AlignSelf::autoAlign);
 

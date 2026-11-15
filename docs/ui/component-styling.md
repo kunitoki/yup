@@ -160,28 +160,26 @@ button.setProperty ("cornerRadius", 0.0);                    // this button
 ### Binding a reflected property to a model
 
 State-backed properties (`value`, `text`, ...) reflect the widget's own model.
-`ComponentPropertyAttachment` two-way binds one of them to a `DataTree` property
-through a `CachedValue`, so the widget mirrors the document and writes edits back:
+`DataTreeBindingProvider` and `BindingGraph` two-way link one of them to a
+`DataTree` property, so the widget mirrors the document and writes edits back:
 
 ```cpp
 DataTree model ("Filter");
+DataTreeBindingProvider provider (model);
+BindingGraph bindings;
 
 Slider cutoff (Slider::LinearHorizontal);
-ComponentPropertyAttachment cutoffBinding (cutoff, "value", model, "cutoff");
+bindings.link (cutoff, "value", provider, "cutoff");
 ```
 
-On construction the model wins when the `DataTree` already holds the property,
-otherwise it is seeded from the component's current value. Dragging the slider
-updates `model["cutoff"]`; a transaction that changes `model["cutoff"]` updates
-the slider. The attachment holds a weak reference to the component, so either side
-may outlive it. Create, use and destroy attachments on the message thread.
-
-Pass an `UndoManager::Ptr` to make widget edits undoable, joining the same undo
-history as the rest of the document (the initial seed is never undoable):
+On link establishment the provider seeds the component when the property holds a
+value. Dragging the slider updates `model["cutoff"]`; a transaction that changes
+`model["cutoff"]` updates the slider. Pass an `UndoManager::Ptr` to
+`DataTreeBindingProvider` to make widget edits join the document's undo history:
 
 ```cpp
 UndoManager::Ptr undo = new UndoManager();
-ComponentPropertyAttachment cutoffBinding (cutoff, "value", model, "cutoff", undo);
+DataTreeBindingProvider provider (model, undo);
 ```
 
 ### Expressions over component properties

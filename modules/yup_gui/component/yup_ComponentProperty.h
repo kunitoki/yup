@@ -71,6 +71,15 @@ struct ComponentProperty
     };
 
     //==============================================================================
+    /** Which layout needs updating when this property changes on a component. */
+    enum class LayoutEffect
+    {
+        none,  /**< Visual or non-layout property. */
+        own,   /**< Container layout property (`padding`, `gap`, `direction`, ...). */
+        parent /**< Child layout item property (`flexGrow`, `margin`, `gridArea`, ...). */
+    };
+
+    //==============================================================================
     /** The name of the property, as used in `.yui`, Python and the CLI schema. */
     Identifier name;
 
@@ -112,8 +121,8 @@ struct ComponentProperty
     */
     bool isInherited = true;
 
-    /** True when a change of this property on a child changes how its parent lays it out. */
-    bool affectsParentLayout = false;
+    /** Which layout needs updating when this property changes on a component. */
+    LayoutEffect layoutEffect = LayoutEffect::none;
 
     /** The allowed values for an @ref Type::enumeration property. */
     StringArray enumValues;
@@ -174,43 +183,30 @@ struct ComponentProperty
         return isExpressionType (element) ? element : Type::any;
     }
 
+    /** The scalar types an expression reads and writes. */
+    static constexpr std::array<Type, 7> expressionTypes {
+        Type::number,
+        Type::integer,
+        Type::boolean,
+        Type::string,
+        Type::color,
+        Type::point,
+        Type::rectangle
+    };
+
     /** Returns true for the scalar types an expression reads and writes.
 
         These are number, integer, boolean, string, color, point and rectangle. They are the types a
         value expression can produce, a drawing can declare, and an array can hold.
     */
-    static bool isExpressionType (Type type) noexcept
+    static constexpr bool isExpressionType (Type type) noexcept
     {
-        return type == Type::number || type == Type::integer || type == Type::boolean
-            || type == Type::string || type == Type::color || type == Type::point
-            || type == Type::rectangle;
+        for (const auto candidate : expressionTypes)
+            if (candidate == type)
+                return true;
+
+        return false;
     }
 };
-
-//==============================================================================
-/** Builds a store-backed color property descriptor mapping a `.yui` name to a Style color id. */
-inline ComponentProperty makeColorProperty (Identifier name, Identifier storageId, String description = {})
-{
-    return ComponentProperty {
-        .name = std::move (name),
-        .storageId = std::move (storageId),
-        .type = ComponentProperty::Type::color,
-        .description = std::move (description)
-    };
-}
-
-/** Builds a store-backed number property descriptor mapping a `.yui` name to a Style id, such as the
-    curated geometry read by the theme. An undefined default leaves the choice to the paint code.
-*/
-inline ComponentProperty makeNumberProperty (Identifier name, Identifier storageId, var defaultValue, String description = {})
-{
-    return ComponentProperty {
-        .name = std::move (name),
-        .storageId = std::move (storageId),
-        .type = ComponentProperty::Type::number,
-        .defaultValue = std::move (defaultValue),
-        .description = std::move (description)
-    };
-}
 
 } // namespace yup

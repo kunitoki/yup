@@ -223,14 +223,10 @@ TEST_F (YuiBuilderTests, ReportsWhereTheErrorFailingTheBuildIsWritten)
         { "style { }", "The document has no root component" }
     };
 
-    // The layout base type has no factory, applications may register such types
-    auto& registry = ComponentTypeRegistry::getInstance();
-    registry.registerType (LayoutComponent::getClassTypeInfo());
+    registerBuiltInComponentTypes();
 
     for (const auto& [text, expected] : cases)
         EXPECT_EQ (buildAndLocate (text, false).joinIntoString ("\n"), String (expected)) << text;
-
-    registry.unregisterType (LayoutComponent::getClassTypeInfo().getTypeName());
 }
 
 TEST_F (YuiBuilderTests, LinksTwoPropertiesBothWays)

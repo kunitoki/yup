@@ -325,10 +325,13 @@ struct ExpressionCompiler
         {
             for (auto length = name.length(); length > 0; length = name.substring (0, length).lastIndexOfChar ('.'))
             {
-                if (auto value = (this->*lookup) (name.substring (0, length), e))
+                const auto isWholeName = length == name.length();
+
+                if (auto value = (this->*lookup) (isWholeName ? name : name.substring (0, length), e))
                 {
-                    for (const auto& member : StringArray::fromTokens (name.substring (length + 1), ".", {}))
-                        *value = compileMember (*value, member, e);
+                    if (! isWholeName)
+                        for (const auto& member : StringArray::fromTokens (name.substring (length + 1), ".", {}))
+                            *value = compileMember (*value, member, e);
 
                     return *value;
                 }
@@ -626,32 +629,41 @@ struct ExpressionCompiler
         int numBest = 0;
     };
 
-    std::vector<const ExpressionFunction*> findFunctions (const String& name) const
+    template <class Callback>
+    void forEachFunction (const String& name, Callback&& callback) const
     {
-        std::vector<const ExpressionFunction*> result;
+        const std::vector<ExpressionFunction>* custom = nullptr;
         const auto& functions = context.getDeclarations().functions;
 
         if (const auto it = functions.find (name); it != functions.end())
-            for (const auto& function : it->second)
-                result.push_back (&function);
+        {
+            custom = &it->second;
 
-        const auto numCustom = result.size();
+            for (const auto& function : *custom)
+                callback (function);
+        }
+
         const auto& builtins = ExpressionContext::getBuiltinFunctions();
 
         if (const auto it = builtins.find (name); it != builtins.end())
         {
             for (const auto& function : it->second)
             {
-                const auto isReplaced = std::any_of (result.begin(), result.begin() + (std::ptrdiff_t) numCustom, [&] (const auto* custom)
+                const auto isReplaced = custom != nullptr && std::any_of (custom->begin(), custom->end(), [&] (const auto& c)
                 {
-                    return custom->hasSameSignature (function);
+                    return c.hasSameSignature (function);
                 });
 
                 if (! isReplaced)
-                    result.push_back (&function);
+                    callback (function);
             }
         }
+    }
 
+    std::vector<const ExpressionFunction*> findFunctions (const String& name) const
+    {
+        std::vector<const ExpressionFunction*> result;
+        forEachFunction (name, [&] (const auto& function) { result.push_back (&function); });
         return result;
     }
 
@@ -660,26 +672,26 @@ struct ExpressionCompiler
         Overload result;
         auto bestCost = std::numeric_limits<int>::max();
 
-        for (const auto* function : findFunctions (name))
+        forEachFunction (name, [&] (const ExpressionFunction& function)
         {
-            if (function->parameterTypes.size() != args.size())
-                continue;
+            if (function.parameterTypes.size() != args.size())
+                return;
 
             auto cost = 0;
 
             for (size_t i = 0; i < args.size() && cost >= 0; ++i)
             {
-                const auto argumentCost = conversionCost (args[i], function->parameterTypes[i]);
+                const auto argumentCost = conversionCost (args[i], function.parameterTypes[i]);
                 cost = argumentCost < 0 ? -1 : cost + argumentCost;
             }
 
             if (cost < 0 || cost > bestCost)
-                continue;
+                return;
 
             result.numBest = cost == bestCost ? result.numBest + 1 : 1;
-            result.function = cost == bestCost ? result.function : function;
+            result.function = cost == bestCost ? result.function : &function;
             bestCost = cost;
-        }
+        });
 
         return result;
     }
@@ -814,11 +826,16 @@ struct ExpressionCompiler
 
     const ExpressionFunction* findConversion (const ExpressionType* from, const ExpressionType* to) const
     {
-        for (const auto* function : findFunctions ("@convert"))
-            if (function->parameterTypes.size() == 1 && function->parameterTypes[0] == from && function->resultType == to)
-                return function;
+        static const String convertName ("@convert");
+        const ExpressionFunction* result = nullptr;
 
-        return nullptr;
+        forEachFunction (convertName, [&] (const ExpressionFunction& function)
+        {
+            if (result == nullptr && function.parameterTypes.size() == 1 && function.parameterTypes[0] == from && function.resultType == to)
+                result = &function;
+        });
+
+        return result;
     }
 
     Value convert (const Value& value, const ExpressionType* target, const Expression& e)
@@ -849,21 +866,24 @@ struct ExpressionCompiler
 
     Value emit (ExpressionThunk thunk, std::shared_ptr<const void> state, const ExpressionType* resultType, const std::vector<Value>& args, bool isPure)
     {
-        std::vector<int> inputs;
-        std::vector<const void*> constants;
-
-        for (const auto& arg : args)
+        if (isPure && std::all_of (args.begin(), args.end(), [this] (const auto& arg) { return getConstant (arg) != nullptr; }))
         {
-            inputs.push_back (arg.reg);
-            constants.push_back (getConstant (arg));
-        }
+            std::vector<const void*> constants;
+            constants.reserve (args.size());
 
-        if (isPure && std::find (constants.begin(), constants.end(), nullptr) == constants.end())
-        {
+            for (const auto& arg : args)
+                constants.push_back (getConstant (arg));
+
             auto box = resultType->createValue();
             thunk (state.get(), box.get(), constants.data(), 1);
             return { addRegister (resultType, std::move (box)), resultType };
         }
+
+        std::vector<int> inputs;
+        inputs.reserve (args.size());
+
+        for (const auto& arg : args)
+            inputs.push_back (arg.reg);
 
         if (isPure)
         {
