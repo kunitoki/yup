@@ -193,13 +193,33 @@ var& var::operator= (StringRef v) { return *this = var (v); }
 
 var& var::operator= (const MemoryBlock& v) { return *this = var (v); }
 
+var& var::operator= (MemoryBlock&& v) { return *this = var (std::move (v)); }
+
 var& var::operator= (const Array<var>& v) { return *this = var (v); }
+
+var& var::operator= (Array<var>&& v) { return *this = var (std::move (v)); }
 
 var& var::operator= (ReferenceCountedObject* v) { return *this = var (v); }
 
 var& var::operator= (std::unique_ptr<DynamicObject> v) { return *this = var (std::move (v)); }
 
 var& var::operator= (NativeFunction v) { return *this = var (std::move (v)); }
+
+//==============================================================================
+var var::array (std::initializer_list<var> items)
+{
+    return var (Array<var> (items));
+}
+
+var var::object (std::initializer_list<std::pair<Identifier, var>> properties)
+{
+    auto result = std::make_unique<DynamicObject>();
+
+    for (const auto& [name, propertyValue] : properties)
+        result->setProperty (name, propertyValue);
+
+    return var (std::move (result));
+}
 
 //==============================================================================
 int var::convertToInt() const noexcept
@@ -390,7 +410,7 @@ bool canCompare (const var& v1, const var& v2)
     return v1.isComparable() && v2.isComparable();
 }
 
-static std::partial_ordering compare (const var& v1, const var& v2)
+std::partial_ordering var::compare (const var& v1, const var& v2)
 {
     if (! canCompare (v1, v2))
         return std::partial_ordering::unordered;
@@ -409,14 +429,6 @@ static std::partial_ordering compare (const var& v1, const var& v2)
 bool operator== (const var& v1, const var& v2) { return v1.equals (v2); }
 
 bool operator!= (const var& v1, const var& v2) { return ! v1.equals (v2); }
-
-bool operator< (const var& v1, const var& v2) { return compare (v1, v2) < 0; }
-
-bool operator> (const var& v1, const var& v2) { return compare (v1, v2) > 0; }
-
-bool operator<= (const var& v1, const var& v2) { return compare (v1, v2) <= 0; }
-
-bool operator>= (const var& v1, const var& v2) { return compare (v1, v2) >= 0; }
 
 //==============================================================================
 var var::clone() const noexcept
@@ -600,6 +612,11 @@ Array<var>* var::convertToArray()
 void var::append (const var& n)
 {
     convertToArray()->add (n);
+}
+
+void var::append (var&& n)
+{
+    convertToArray()->add (std::move (n));
 }
 
 void var::remove (const int index)

@@ -32,10 +32,23 @@ obj->setProperty ("name", "YUP");
 obj->setProperty ("count", 3);
 var object (obj);
 var name = object["name"];        // "YUP"
+
+// Builders and range-for (a var that isn't an array is an empty range)
+var list   = var::array ({ 1, "two", 3.0 });
+var config = var::object ({ { "name", "YUP" },
+                            { "size", var::array ({ 640, 480 }) } });
+
+for (const auto& item : list)
+    YUP_DBG (item.toString());
 ```
 
 Type predicates: `isVoid`, `isBool`, `isInt`, `isInt64`, `isDouble`, `isString`,
 `isArray`, `isObject`, `isMethod`.
+
+`<`, `<=`, `>`, `>=` and `<=>` (a `std::partial_ordering`) compare two strings
+lexically and other primitive values numerically. Undefined, objects, arrays,
+binary data and methods are unordered, so every relational operator returns
+false for them.
 
 Copying a `var` is cheap: strings copy the `String`, and objects, arrays and
 methods share their payload by reference count. A copied array is the same

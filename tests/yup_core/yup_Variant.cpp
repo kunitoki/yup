@@ -2855,3 +2855,143 @@ TEST_F (VariantCoverageTests, UnserialisableTypesWriteVoid)
     EXPECT_EQ (writeVar (makeMethod (1)), expected.getMemoryBlock());
 #endif
 }
+
+//==============================================================================
+TEST_F (VariantCoverageTests, RangeForIteratesArrayElements)
+{
+    const auto list = var::array ({ 1, 2, 3 });
+
+    int total = 0;
+    for (const auto& item : list)
+        total += (int) item;
+
+    EXPECT_EQ (total, 6);
+    EXPECT_EQ (list.end() - list.begin(), 3);
+    EXPECT_EQ (list.begin(), &list[0]);
+}
+
+TEST_F (VariantCoverageTests, RangeForCanModifyElements)
+{
+    auto list = var::array ({ 1, 2, 3 });
+
+    for (auto& item : list)
+        item = (int) item * 10;
+
+    EXPECT_TRUE (list == var::array ({ 10, 20, 30 }));
+}
+
+TEST_F (VariantCoverageTests, RangeForTreatsNonArraysAsEmpty)
+{
+    const var values[] = { var(), var::undefined(), var (1), var ("text"), var (new DynamicObject()), var (makeBlock ("x")), makeMethod (1), var (Array<var>()) };
+
+    for (const auto& v : values)
+    {
+        SCOPED_TRACE (v.toString().toStdString());
+
+        int count = 0;
+        for ([[maybe_unused]] const auto& item : v)
+            ++count;
+
+        EXPECT_EQ (count, 0);
+        EXPECT_EQ (v.begin(), v.end());
+    }
+}
+
+TEST_F (VariantCoverageTests, RangeIteratorsWorkWithStandardAlgorithms)
+{
+    auto list = var::array ({ 3, "1", 2.5 });
+
+    std::sort (list.begin(), list.end());
+
+    EXPECT_TRUE (list.equalsWithSameType (var::array ({ "1", 2.5, 3 })));
+    EXPECT_TRUE (list[0].isString());
+    EXPECT_EQ (std::find (list.begin(), list.end(), var (2.5)), list.begin() + 1);
+}
+
+//==============================================================================
+TEST_F (VariantCoverageTests, ArrayBuilderCreatesArrays)
+{
+    const auto list = var::array ({ 1, "two", 3.5, var::array ({ true }) });
+
+    ASSERT_TRUE (list.isArray());
+    ASSERT_EQ (list.size(), 4);
+    EXPECT_TRUE (list[0].isInt());
+    EXPECT_EQ (list[1].toString(), "two");
+    EXPECT_TRUE (list[2].isDouble());
+    ASSERT_TRUE (list[3].isArray());
+    EXPECT_TRUE (list[3][0].isBool());
+
+    const auto empty = var::array ({});
+    EXPECT_TRUE (empty.isArray());
+    EXPECT_EQ (empty.size(), 0);
+}
+
+TEST_F (VariantCoverageTests, ObjectBuilderCreatesDynamicObjects)
+{
+    const auto config = var::object ({ { "name", "yup" },
+                                       { "size", var::array ({ 640, 480 }) },
+                                       { "nested", var::object ({ { "flag", true } }) },
+                                       { "name", "last" } });
+
+    auto* object = config.getDynamicObject();
+    ASSERT_NE (object, nullptr);
+    EXPECT_EQ (object->getProperties().size(), 3);
+    EXPECT_EQ (config["name"].toString(), "last");
+    EXPECT_EQ ((int) config["size"][1], 480);
+    ASSERT_NE (config["nested"].getDynamicObject(), nullptr);
+    EXPECT_TRUE (config["nested"]["flag"].isBool());
+
+    const auto empty = var::object ({});
+    ASSERT_NE (empty.getDynamicObject(), nullptr);
+    EXPECT_EQ (empty.getDynamicObject()->getProperties().size(), 0);
+}
+
+//==============================================================================
+TEST_F (VariantCoverageTests, AppendMovesRvalues)
+{
+    var block (makeBlock ("data"));
+    const auto* blockData = block.getBinaryData();
+
+    var list;
+    list.append (std::move (block));
+    list.append (var ("text"));
+
+    ASSERT_EQ (list.size(), 2);
+    EXPECT_EQ (list[0].getBinaryData(), blockData);
+    EXPECT_EQ (list[1].toString(), "text");
+    EXPECT_TRUE (block.isVoid());
+}
+
+TEST_F (VariantCoverageTests, AssignmentMovesArraysAndBlocks)
+{
+    Array<var> items { var (1), var (2) };
+    const auto* itemData = items.begin();
+
+    var v;
+    v = std::move (items);
+    ASSERT_TRUE (v.isArray());
+    EXPECT_EQ (v.size(), 2);
+    EXPECT_EQ (v.begin(), itemData);
+
+    auto block = makeBlock ("payload");
+    const auto* blockData = block.getData();
+
+    v = std::move (block);
+    ASSERT_TRUE (v.isBinaryData());
+    EXPECT_EQ (v.getBinaryData()->getData(), blockData);
+    EXPECT_EQ (v.getBinaryData()->toString(), "payload");
+}
+
+//==============================================================================
+TEST_F (VariantCoverageTests, ThreeWayComparisonReturnsPartialOrdering)
+{
+    EXPECT_TRUE ((var (1) <=> var (2)) == std::partial_ordering::less);
+    EXPECT_TRUE ((var ("b") <=> var ("a")) == std::partial_ordering::greater);
+    EXPECT_TRUE ((var (2.0) <=> var ((int64) 2)) == std::partial_ordering::equivalent);
+    EXPECT_TRUE ((var() <=> var (0)) == std::partial_ordering::equivalent);
+    EXPECT_TRUE ((var::array ({ 1 }) <=> var (1)) == std::partial_ordering::unordered);
+    EXPECT_TRUE ((var (1) <=> var::undefined()) == std::partial_ordering::unordered);
+
+    // A hidden friend, so types that merely convert to var don't become three-way comparable
+    static_assert (! std::three_way_comparable<String>);
+}

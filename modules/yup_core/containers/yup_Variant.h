@@ -119,11 +119,37 @@ public:
     var (Array<var>&&);
     var& operator= (var&&) noexcept;
     var& operator= (String&&);
+    var& operator= (MemoryBlock&&);
+    var& operator= (Array<var>&&);
 
     void swapWith (var& other) noexcept;
 
     /** Returns a var object that can be used where you need the javascript "undefined" value. */
-    static var undefined() noexcept;
+    [[nodiscard]] static var undefined() noexcept;
+
+    /** Creates an array var holding the given values.
+
+        @code
+        auto list = var::array ({ 1, "two", 3.0 });
+        @endcode
+
+        @see object
+    */
+    [[nodiscard]] static var array (std::initializer_list<var> items);
+
+    /** Creates a var holding a new DynamicObject with the given properties.
+
+        Values can be any var, including nested arrays and objects. If a name appears more
+        than once, the last value wins.
+
+        @code
+        auto config = var::object ({ { "name", "yup" },
+                                     { "size", var::array ({ 640, 480 }) } });
+        @endcode
+
+        @see array
+    */
+    [[nodiscard]] static var object (std::initializer_list<std::pair<Identifier, var>> properties);
 
     //==============================================================================
     operator int() const noexcept;
@@ -132,7 +158,7 @@ public:
     operator float() const noexcept;
     operator double() const noexcept;
     operator String() const;
-    String toString() const;
+    [[nodiscard]] String toString() const;
 
     /** If this variant holds an array, this provides access to it.
         NOTE: Beware when you use this - the array pointer is only valid for the lifetime
@@ -140,7 +166,7 @@ public:
         var objects that are the return-value of a function, and which may go out of scope before
         you use the array!
     */
-    Array<var>* getArray() const noexcept;
+    [[nodiscard]] Array<var>* getArray() const noexcept;
 
     /** If this variant holds a memory block, this provides access to it.
         NOTE: Beware when you use this - the MemoryBlock pointer is only valid for the lifetime
@@ -148,23 +174,23 @@ public:
         var objects that are the return-value of a function, and which may go out of scope before
         you use the MemoryBlock!
     */
-    MemoryBlock* getBinaryData() const noexcept;
+    [[nodiscard]] MemoryBlock* getBinaryData() const noexcept;
 
-    ReferenceCountedObject* getObject() const noexcept;
-    DynamicObject* getDynamicObject() const noexcept;
+    [[nodiscard]] ReferenceCountedObject* getObject() const noexcept;
+    [[nodiscard]] DynamicObject* getDynamicObject() const noexcept;
 
     //==============================================================================
-    bool isVoid() const noexcept;
-    bool isUndefined() const noexcept;
-    bool isInt() const noexcept;
-    bool isInt64() const noexcept;
-    bool isBool() const noexcept;
-    bool isDouble() const noexcept;
-    bool isString() const noexcept;
-    bool isObject() const noexcept;
-    bool isArray() const noexcept;
-    bool isBinaryData() const noexcept;
-    bool isMethod() const noexcept;
+    [[nodiscard]] bool isVoid() const noexcept;
+    [[nodiscard]] bool isUndefined() const noexcept;
+    [[nodiscard]] bool isInt() const noexcept;
+    [[nodiscard]] bool isInt64() const noexcept;
+    [[nodiscard]] bool isBool() const noexcept;
+    [[nodiscard]] bool isDouble() const noexcept;
+    [[nodiscard]] bool isString() const noexcept;
+    [[nodiscard]] bool isObject() const noexcept;
+    [[nodiscard]] bool isArray() const noexcept;
+    [[nodiscard]] bool isBinaryData() const noexcept;
+    [[nodiscard]] bool isMethod() const noexcept;
 
     /** Returns true if this var has the same value as the one supplied.
         Note that this ignores the type, so a string var "123" and an integer var with the
@@ -182,28 +208,61 @@ public:
 
         @see equalsWithSameType
     */
-    bool equals (const var& other) const noexcept;
+    [[nodiscard]] bool equals (const var& other) const noexcept;
 
     /** Returns true if this var has the same value and type as the one supplied.
         This differs from equals() because e.g. "123" and 123 will be considered different.
         @see equals
     */
-    bool equalsWithSameType (const var& other) const noexcept;
+    [[nodiscard]] bool equalsWithSameType (const var& other) const noexcept;
 
     /** Returns true if this var has the same type as the one supplied. */
-    bool hasSameTypeAs (const var& other) const noexcept;
+    [[nodiscard]] bool hasSameTypeAs (const var& other) const noexcept;
+
+    /** Orders two var objects, providing the <, <=, > and >= operators.
+
+        Two strings are compared lexically; any other mix of void, int, int64, bool, double and
+        string values is compared numerically. The result is unordered when either side is
+        undefined, an object, an array, binary data or a method, so all four relational
+        operators return false for such values.
+    */
+    friend std::partial_ordering operator<=> (const var& a, const var& b) { return compare (a, b); }
 
     /** Returns a deep copy of this object.
         For simple types this just returns a copy, but if the object contains any arrays
         or DynamicObjects, they will be cloned (recursively).
     */
-    var clone() const noexcept;
+    [[nodiscard]] var clone() const noexcept;
 
     //==============================================================================
     /** If the var is an array, this returns the number of elements.
         If the var isn't actually an array, this will return 0.
     */
-    int size() const;
+    [[nodiscard]] int size() const;
+
+    /** Returns a pointer to the first element, if the var is an array.
+
+        Together with end() this lets a range-based for loop iterate over an array var. A var
+        that isn't an array behaves as an empty range.
+
+        @code
+        for (const auto& item : var::array ({ 1, 2, 3 }))
+            total += (int) item;
+        @endcode
+
+        NOTE: like getArray(), the returned pointers are only valid while the array is alive and
+        isn't resized, so don't modify the array while iterating it.
+    */
+    [[nodiscard]] var* begin() noexcept;
+
+    /** Returns a pointer past the last element, if the var is an array. @see begin */
+    [[nodiscard]] var* end() noexcept;
+
+    /** Returns a pointer to the first element, if the var is an array. @see begin */
+    [[nodiscard]] const var* begin() const noexcept;
+
+    /** Returns a pointer past the last element, if the var is an array. @see begin */
+    [[nodiscard]] const var* end() const noexcept;
 
     /** If the var is an array, this can be used to return one of its elements.
         To call this method, you must make sure that the var is actually an array, and
@@ -212,7 +271,7 @@ public:
         For more control over the array's contents, you can call getArray() and manipulate
         it directly as an Array\<var\>.
     */
-    const var& operator[] (int arrayIndex) const;
+    [[nodiscard]] const var& operator[] (int arrayIndex) const;
 
     /** If the var is an array, this can be used to return one of its elements.
         To call this method, you must make sure that the var is actually an array, and
@@ -231,6 +290,12 @@ public:
         it directly as an Array\<var\>.
     */
     void append (const var& valueToAppend);
+
+    /** Appends an element to the var by moving it, converting the var to an array if it isn't
+        already one.
+        @see append
+    */
+    void append (var&& valueToAppend);
 
     /** Inserts an element to the var, converting it to an array if it isn't already one.
         If the var isn't an array, it will be converted to one, and if its value was non-void,
@@ -260,23 +325,23 @@ public:
         and returns its index.
         If the var isn't an array, or if the value isn't found, this returns -1.
     */
-    int indexOf (const var& value) const;
+    [[nodiscard]] int indexOf (const var& value) const;
 
     //==============================================================================
     /** If this variant is an object, this returns one of its properties. */
-    const var& operator[] (const Identifier& propertyName) const;
+    [[nodiscard]] const var& operator[] (const Identifier& propertyName) const;
     /** If this variant is an object, this returns one of its properties. */
-    const var& operator[] (const char* propertyName) const;
+    [[nodiscard]] const var& operator[] (const char* propertyName) const;
     /** If this variant is an object, this returns one of its properties. */
-    const var& operator[] (StringRef propertyName) const;
+    [[nodiscard]] const var& operator[] (StringRef propertyName) const;
     /** If this variant is an object, this returns one of its properties, or a default fallback value if the property is not set. */
-    var getProperty (const Identifier& propertyName, const var& defaultReturnValue) const;
+    [[nodiscard]] var getProperty (const Identifier& propertyName, const var& defaultReturnValue) const;
     /** Returns true if this variant is an object and if it has the given property. */
-    bool hasProperty (const Identifier& propertyName) const noexcept;
+    [[nodiscard]] bool hasProperty (const Identifier& propertyName) const noexcept;
     /** If this variant is an object, this returns one of its methods, or a default fallback value if the property is not set. */
-    var getMethod (const Identifier& methodName, const var& defaultReturnValue) const;
+    [[nodiscard]] var getMethod (const Identifier& methodName, const var& defaultReturnValue) const;
     /** Returns true if this variant is an object and if it has the given method. */
-    bool hasMethod (const Identifier& methodName) const noexcept;
+    [[nodiscard]] bool hasMethod (const Identifier& methodName) const noexcept;
 
     /** Invokes a named method call with no arguments. */
     var call (const Identifier& method) const;
@@ -293,7 +358,7 @@ public:
     /** Invokes a named method call with a list of arguments. */
     var invoke (const Identifier& method, const var* arguments, int numArguments) const;
     /** If this object is a method, this returns the function pointer. */
-    NativeFunction getNativeFunction() const;
+    [[nodiscard]] NativeFunction getNativeFunction() const;
 
     //==============================================================================
     /** Writes a binary representation of this value to a stream.
@@ -308,7 +373,7 @@ public:
         arrays are read as void.
         @see JSON
     */
-    static var readFromStream (InputStream& input);
+    [[nodiscard]] static var readFromStream (InputStream& input);
 
 private:
     //==============================================================================
@@ -353,6 +418,8 @@ private:
     ValueUnion value {};
 
     bool isComparable() const noexcept { return type <= Type::string && type != Type::undefined; }
+
+    static std::partial_ordering compare (const var&, const var&);
 
     const String* getString() const noexcept;
 
@@ -571,6 +638,14 @@ inline Array<var>* var::getArray() const noexcept { return type == Type::array ?
 
 inline MemoryBlock* var::getBinaryData() const noexcept { return type == Type::binary ? value.binaryValue : nullptr; }
 
+inline var* var::begin() noexcept { return isArray() ? getArray()->begin() : nullptr; }
+
+inline var* var::end() noexcept { return isArray() ? getArray()->end() : nullptr; }
+
+inline const var* var::begin() const noexcept { return isArray() ? getArray()->begin() : nullptr; }
+
+inline const var* var::end() const noexcept { return isArray() ? getArray()->end() : nullptr; }
+
 //==============================================================================
 inline var::operator int() const noexcept { return type == Type::int_ ? value.intValue : convertToInt(); }
 
@@ -588,13 +663,5 @@ inline var::operator String() const { return toString(); }
 YUP_API bool operator== (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
 YUP_API bool operator!= (const var&, const var&);
-/** Compares the values of two var objects, using the var::equals() comparison. */
-YUP_API bool operator< (const var&, const var&);
-/** Compares the values of two var objects, using the var::equals() comparison. */
-YUP_API bool operator<= (const var&, const var&);
-/** Compares the values of two var objects, using the var::equals() comparison. */
-YUP_API bool operator> (const var&, const var&);
-/** Compares the values of two var objects, using the var::equals() comparison. */
-YUP_API bool operator>= (const var&, const var&);
 
 } // namespace yup
