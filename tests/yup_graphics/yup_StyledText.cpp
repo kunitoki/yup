@@ -1753,7 +1753,7 @@ TEST_F (StyledTextLayoutTests, ClearAndAppendReusesDefaultRenderPathAndComputesL
     {
         auto modifier = text.startUpdate();
         modifier.clear();
-        modifier.appendText ("world!", font);
+        modifier.appendText ("world!", loadStyledTextTestFont());
     }
 
     ASSERT_EQ (1u, text.getRenderStyles().size());

@@ -93,7 +93,8 @@ const ComponentTypeInfo& TabComponent::getClassTypeInfo()
                         handler ({ var (tabId.toString()) });
                     };
             },
-            .description = "Emitted with its id when another tab is selected"
+            .description = "Emitted with its id when another tab is selected",
+            .arguments = { { Identifier ("tab"), ComponentProperty::Type::string } }
         };
 
         auto attachChild = [] (Component& parent, Component& child)

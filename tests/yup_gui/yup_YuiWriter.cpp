@@ -150,7 +150,7 @@ TEST_F (YuiWriterTests, RoundTripsTokensComponentsAndInstances)
             Label { text: label; }
         }
         Column {
-            Slider { id: gain; value <=> model.gain; }
+            Slider { id: gain; value <=> model.gain; onValueChanged: (v) => action ("gain", v); changed pressed: { action ("a"); action ("b"); } }
             Label { text: gain.pressed ? "pressed" : "idle"; }
         })yui");
 }

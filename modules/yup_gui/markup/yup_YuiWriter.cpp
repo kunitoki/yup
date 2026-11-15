@@ -153,6 +153,10 @@ private:
         {
             writeLine (depth, text (element, "property") + " <=> " + text (element, "target") + ";");
         }
+        else if (type == "changed")
+        {
+            writeLine (depth, "changed " + text (element, "property") + ": " + text (element, "handler") + ";");
+        }
         else
         {
             writeElement (type, element, depth, {}, &YuiTextWriter::writeBodyMember);

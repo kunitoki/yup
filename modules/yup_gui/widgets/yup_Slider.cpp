@@ -202,7 +202,8 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
                 if (auto* slider = dynamic_cast<Slider*> (&component))
                     slider->onValueChanged = [handler = std::move (handler)] (double value) { handler ({ value }); };
             },
-            .description = "Emitted with the new value when the value changes"
+            .description = "Emitted with the new value when the value changes",
+            .arguments = { { Identifier ("value"), ComponentProperty::Type::number } }
         };
 
         return ComponentTypeInfo { Identifier ("Slider"), &Component::getClassTypeInfo(), std::move (props), { std::move (valueChanged) }, [] { return std::make_unique<Slider> (LinearHorizontal); } };

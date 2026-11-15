@@ -113,6 +113,14 @@ public:
     */
     void setModelResolver (ModelResolver resolver);
 
+    /** Sets values read by their bare name before the properties of the component.
+
+        The named arguments of a `.yui` handler are read this way: in `(width) => action ("w", width)`,
+        `width` is the argument, not the property of the component. The provider is not owned.
+        Call this before @ref install.
+    */
+    void setLocals (BindingProvider* locals);
+
     //==============================================================================
     /** Registers the symbol resolver on the context, replacing any previous one.
 
@@ -277,6 +285,7 @@ private:
     ExpressionContext& context;
     ComponentResolver componentResolver;
     ModelResolver modelResolver;
+    WeakReference<BindingProvider> locals;
     mutable std::vector<std::unique_ptr<CachedProgram>> cachedPrograms;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrawingScope)

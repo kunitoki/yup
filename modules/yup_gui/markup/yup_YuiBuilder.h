@@ -24,6 +24,8 @@
 namespace yup
 {
 
+class YuiPropertyWatcher;
+
 //==============================================================================
 /**
     Creates the components of a `.yui` document.
@@ -210,6 +212,7 @@ private:
         Scope* scope = nullptr;
         std::vector<Value> values;
         std::vector<Value> links;
+        std::vector<Value> changes;
     };
 
     struct Connection
@@ -235,10 +238,11 @@ private:
     void applyPending (const Pending& pending);
     void applyProperty (Component& component, const Value& value, Scope& scope);
     void applyLink (Component& component, const Value& link, Scope& scope);
+    void applyChanged (Component& component, const Value& change, Scope& scope);
     void connectHandler (Component& component, const ComponentSignal& signal, const Value& value, Scope& scope);
     Result report (const String& message, const DataTree& element, const Identifier& property = {});
     void emit (Component& component, const Identifier& signal, const Array<var>& arguments);
-    bool isDeclaredSignal (const Component& component, const Identifier& signal) const;
+    const ComponentSignal* findDeclaredSignal (const Component& component, const Identifier& signal) const;
     Component* resolveComponent (const Scope& scope, const String& name, Component* self = nullptr) const;
     Component* resolve (const Scope& scope, const String& name, Component* self = nullptr) const;
     DrawingScope::ComponentResolver resolverFor (const Scope& scope) const;
@@ -252,6 +256,7 @@ private:
     std::vector<DataTree> tokens;
     std::vector<Pending> pending;
     std::vector<Connection> connections;
+    std::vector<std::unique_ptr<YuiPropertyWatcher>> watchers;
     std::map<String, Action> actions;
     std::map<String, std::unique_ptr<Model>> models;
     BindingGraph bindings;

@@ -190,6 +190,49 @@ TEST_F (YuiDocumentTests, ReloadingUpdatesTheInterfaceInPlace)
     EXPECT_EQ (document.findById<Label> ("caption")->getText(), "b");
 }
 
+TEST_F (YuiDocumentTests, ReloadingWithTheSameStyleKeepsTheStyleSheetAndItsTransitions)
+{
+    const String style = "style { .knob { glow: 0; transition: glow 1s; } .lit { glow: 10; } }";
+    const auto components = [] (const String& classes, const String& caption)
+    {
+        return "Component { Component { id: knob; class: \"" + classes + "\"; } Label { id: caption; text: \"" + caption + "\"; } }";
+    };
+
+    const auto glow = [] (const Component& c) { return static_cast<double> (c.findProperty (Identifier ("glow"))); };
+
+    YuiDocument document;
+    ASSERT_TRUE (document.loadFromString (style + components ("knob", "a")).wasOk());
+
+    const auto sheet = document.getStyleSheet();
+    auto* knob = document.findById ("knob");
+    ASSERT_NE (knob, nullptr);
+    auto& context = *document.getRoot()->getStyleContext();
+
+    // The style is unchanged, so the class added by the reload transitions like one added from code
+    ASSERT_TRUE (document.loadFromString (style + components ("knob lit", "a")).wasOk());
+    EXPECT_EQ (document.getStyleSheet(), sheet);
+    context.refresh (0.0);
+    context.refresh (0.25);
+    EXPECT_DOUBLE_EQ (glow (*knob), 2.5);
+
+    ASSERT_TRUE (document.loadFromString (style + components ("knob lit", "b")).wasOk());
+    EXPECT_EQ (document.getStyleSheet(), sheet);
+    EXPECT_EQ (document.findById<Label> ("caption")->getText(), "b");
+    EXPECT_DOUBLE_EQ (glow (*knob), 2.5);
+
+    context.refresh (0.25);
+    EXPECT_DOUBLE_EQ (glow (*knob), 5.0);
+
+    // Moving the style after the components changes where its declarations are written
+    ASSERT_TRUE (document.loadFromString (components ("knob lit", "b") + style).wasOk());
+    EXPECT_NE (document.getStyleSheet(), sheet);
+
+    const auto moved = document.getStyleSheet();
+    ASSERT_TRUE (document.loadFromString ("style { .knob { glow: 1; } }" + components ("knob", "b")).wasOk());
+    EXPECT_NE (document.getStyleSheet(), moved);
+    EXPECT_DOUBLE_EQ (glow (*document.findById ("knob")), 1.0);
+}
+
 TEST_F (YuiDocumentTests, ReloadsAreUndoable)
 {
     UndoManager undoManager;

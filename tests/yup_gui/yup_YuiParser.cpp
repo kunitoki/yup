@@ -361,6 +361,46 @@ TEST_F (YuiParserTest, ParsesTwoWayBindings)
     EXPECT_EQ (parseError ("Column { value: 1; value <=> a.b; }"), "1:20: The property 'value' is already set");
 }
 
+TEST_F (YuiParserTest, ParsesHandlerArgumentsBlocksAndChangedHandlers)
+{
+    const auto result = YuiParser::parse ("Column {\n"
+                                          "    Slider { onValueChanged: (v) => action (\"set\", v); changed value: { action (\"a\"); root.moved (); } }\n"
+                                          "    Label { changed: 1; onClick: () => { }; }\n"
+                                          "}");
+
+    ASSERT_TRUE (result.wasOk()) << result.diagnostics.front().toString();
+
+    const auto column = result.document.getChildWithName ("Column");
+    const auto slider = column.getChild (0);
+    EXPECT_EQ (slider.getProperty ("onValueChanged").toString(), "(v) => action (\"set\", v)");
+    ASSERT_EQ (slider.getNumChildren(), 1);
+
+    const auto changed = slider.getChild (0);
+    EXPECT_EQ (changed.getType().toString(), "changed");
+    EXPECT_EQ (changed.getProperty ("property").toString(), "value");
+    EXPECT_EQ (changed.getProperty ("handler").toString(), "{ action (\"a\"); root.moved (); }");
+    EXPECT_EQ (locate (result, slider, "onValueChanged"), "2:14: here");
+    EXPECT_EQ (locate (result, changed, "handler"), "2:56: here");
+
+    // A property named changed is still a property
+    const auto label = column.getChild (1);
+    EXPECT_EQ (label.getProperty ("changed").toString(), "1");
+    EXPECT_EQ (label.getProperty ("onClick").toString(), "() => { }");
+
+    // Parentheses that aren't argument names are part of the value
+    const auto values = YuiParser::parse ("Column { a: (b) * 2; c: (d + e); f: (1); }");
+    ASSERT_TRUE (values.wasOk()) << values.diagnostics.front().toString();
+
+    const auto valuesColumn = values.document.getChildWithName ("Column");
+    EXPECT_EQ (valuesColumn.getProperty ("a").toString(), "(b) * 2");
+    EXPECT_EQ (valuesColumn.getProperty ("c").toString(), "(d + e)");
+    EXPECT_EQ (valuesColumn.getProperty ("f").toString(), "(1)");
+
+    EXPECT_EQ (parseError ("Column { changed value: x; changed value: y; }"), "1:36: A changed handler for 'value' is already set");
+    EXPECT_EQ (parseError ("Column { onClick: { action (\"a\") }; }"), "1:34: Expected ';'");
+    EXPECT_EQ (parseError ("Column { onClick: { action (\"a\");"), "1:34: Expected '}'");
+}
+
 TEST_F (YuiParserTest, ParsesPropertyDeclarationsInStyleRules)
 {
     const auto result = YuiParser::parse ("style { Slider.knob { property glow: number = 0; transition: glow 150ms; } }");

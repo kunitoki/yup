@@ -168,12 +168,16 @@ to `to - 1`. Both only exist inside drawings, see
 property (`value <=> params.cutoff;`), see [Two-way
 bindings](yui-documents.md#two-way-bindings).
 
-A property named after a signal is a handler holding one call, either an
-action registered by the application or a signal of the enclosing component:
+A property named after a signal is a handler: a call, either an action
+registered by the application or a signal of the enclosing component, or a
+block of calls. `(a, b) =>` names the signal's arguments, and
+`changed property: handler;` runs a handler when a property changes:
 
 ```yui
 TextButton { text: "Reset"; onClick: action ("reset"); }
-Slider     { onValueChanged: root.onChanged (value); }
+Slider     { onValueChanged: (v) => root.onChanged (v); }
+TextButton { onClick: { action ("save"); root.onDone (); } }
+Slider     { changed value: (v) => action ("log", v); }
 ```
 
 See [Handlers and actions](yui-documents.md#handlers-and-actions).

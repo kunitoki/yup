@@ -62,38 +62,6 @@ bool hasAncestorInSet (Component& component, const Component& root, const std::s
     return false;
 }
 
-bool isShadowLength (const String& token)
-{
-    const auto digits = token.startsWithChar ('-') ? token.substring (1) : token;
-    return digits.containsAnyOf ("0123456789") && digits.containsOnly ("0123456789.");
-}
-
-std::optional<MouseCursor::Type> findStyleCursor (const String& name)
-{
-    static const std::pair<const char*, MouseCursor::Type> cursors[] = {
-        { "none", MouseCursor::None },
-        { "default", MouseCursor::Default },
-        { "arrow", MouseCursor::Arrow },
-        { "text", MouseCursor::Text },
-        { "wait", MouseCursor::Wait },
-        { "waitArrow", MouseCursor::WaitArrow },
-        { "hand", MouseCursor::Hand },
-        { "crosshair", MouseCursor::Crosshair },
-        { "crossbones", MouseCursor::Crossbones },
-        { "resizeLeftRight", MouseCursor::ResizeLeftRight },
-        { "resizeUpDown", MouseCursor::ResizeUpDown },
-        { "resizeTopLeftRightBottom", MouseCursor::ResizeTopLeftRightBottom },
-        { "resizeBottomLeftRightTop", MouseCursor::ResizeBottomLeftRightTop },
-        { "resizeAll", MouseCursor::ResizeAll }
-    };
-
-    for (const auto& [cursorName, type] : cursors)
-        if (name == cursorName)
-            return type;
-
-    return std::nullopt;
-}
-
 /* The type an animated value interpolates as, guessed from the value when no descriptor types it. */
 ComponentProperty::Type inferAnimatedType (const ComponentProperty* descriptor, const var& value)
 {
@@ -168,15 +136,7 @@ struct StyleContext::ComponentCache
     DrawingStyle::Ptr drawingStyle;
     ComponentStyle::Ptr savedStyle;
 
-    String effectName;
-    ComponentEffect::Ptr effect;
-    ComponentEffect::Ptr savedEffect;
-
-    std::optional<MouseCursor> cursor;
-    MouseCursor savedCursor;
-
-    std::optional<EdgeSpacing<float>> paintMargin;
-    EdgeSpacing<float> savedPaintMargin;
+    StyleEffects effects;
 };
 
 /* A transition the new style of a component declares, with the value shown before the restyle. */
@@ -868,167 +828,30 @@ bool StyleContext::applyEffects (Component& component, bool* paletteDependent)
         return value != nullptr ? value->toString().trim() : String();
     };
 
-    applyCursor (component, valueOf (cursorDeclaration));
-    applyEffect (component, valueOf (effectDeclaration));
-
-    bool shadowsReadPalette = false;
-    const bool changed = applyShadows (component, valueOf (shadowDeclaration), shadowsReadPalette);
-
-    if (paletteDependent != nullptr)
-        *paletteDependent |= shadowsReadPalette;
-
-    return changed;
-}
-
-void StyleContext::applyCursor (Component& component, const String& name)
-{
-    auto& cache = getCache (component);
-
-    // As with drawings, a cursor the application set in the meantime wins over the styled one
-    const bool styled = cache.cursor.has_value() && component.getMouseCursor() == *cache.cursor;
-    const auto type = findStyleCursor (name);
-
-    if (name.isNotEmpty() && ! type.has_value())
-        report ("cursor", "Unknown cursor '" + name + "'");
-
-    if (! type.has_value())
+    const auto reporter = [this] (const Identifier& declaration, const String& message)
     {
-        if (styled)
-            component.setMouseCursor (cache.savedCursor);
+        report (declaration, message);
+    };
 
-        cache.cursor.reset();
-        return;
-    }
-
-    if (! styled)
-        cache.savedCursor = component.getMouseCursor();
-
-    cache.cursor = MouseCursor (*type);
-
-    if (component.getMouseCursor() != *cache.cursor)
-        component.setMouseCursor (*cache.cursor);
-}
-
-void StyleContext::applyEffect (Component& component, const String& name)
-{
-    auto& cache = getCache (component);
-
-    const bool styled = cache.effectName.isNotEmpty() && component.getComponentEffect().get() == cache.effect.get();
-
-    if (styled && name == cache.effectName)
-        return;
-
-    ComponentEffect::Ptr effect;
-
-    if (name.isNotEmpty() && name != "none")
+    const auto evaluateColor = [&] (int layer, const String& source) -> std::optional<Color>
     {
-        effect = ComponentEffectRegistry::getInstance().createEffect (name);
+        var color;
+        bool readsPalette = false;
 
-        if (effect == nullptr)
-            report ("effect", "Unknown effect '" + name + "'");
-    }
+        if (! evaluate (component, shadowDeclaration, Identifier ("shadow[" + String (layer) + "]"), ComponentProperty::Type::color, source, color, readsPalette))
+            return std::nullopt;
 
-    if (name.isEmpty() || (effect == nullptr && name != "none"))
-    {
-        if (styled)
-            component.setComponentEffect (std::move (cache.savedEffect));
+        if (paletteDependent != nullptr)
+            *paletteDependent |= readsPalette;
 
-        cache.effectName = {};
-        cache.effect = nullptr;
-        cache.savedEffect = nullptr;
-        return;
-    }
+        return Color (static_cast<uint32> (static_cast<int64> (color)));
+    };
 
-    if (! styled)
-        cache.savedEffect = component.getComponentEffect();
+    auto& effects = getCache (component).effects;
+    effects.applyCursor (component, valueOf (cursorDeclaration), reporter);
+    effects.applyEffect (component, valueOf (effectDeclaration), reporter);
 
-    cache.effectName = name;
-    cache.effect = effect;
-    component.setComponentEffect (std::move (effect));
-}
-
-bool StyleContext::applyShadows (Component& component, const String& text, bool& paletteDependent)
-{
-    std::vector<StyleState::Shadow> shadows;
-
-    if (text.isNotEmpty() && text != "none")
-    {
-        const auto layers = StyleSheet::tokenizeValue (text);
-
-        for (int index = 0; index < static_cast<int> (layers.size()); ++index)
-        {
-            const auto& tokens = layers[static_cast<size_t> (index)];
-
-            // Up to four lengths, then a color expression taking the remaining tokens
-            int lengths = 0;
-
-            while (lengths < jmin (4, tokens.size() - 1) && isShadowLength (tokens[lengths]))
-                ++lengths;
-
-            if (lengths < 2)
-            {
-                report ("shadow", "shadow: Expected 'x y [blur [spread]] color', got '" + tokens.joinIntoString (" ") + "'");
-                shadows.clear();
-                break;
-            }
-
-            var color;
-            bool colorReadsPalette = false;
-            const Identifier colorId ("shadow[" + String (index) + "]");
-
-            if (! evaluate (component, "shadow", colorId, ComponentProperty::Type::color, tokens.joinIntoString (" ", lengths), color, colorReadsPalette))
-            {
-                shadows.clear();
-                break;
-            }
-
-            paletteDependent |= colorReadsPalette;
-
-            StyleState::Shadow shadow;
-            shadow.offset = { tokens[0].getFloatValue(), tokens[1].getFloatValue() };
-            shadow.blur = lengths > 2 ? jmax (0.0f, tokens[2].getFloatValue()) : 0.0f;
-            shadow.spread = lengths > 3 ? tokens[3].getFloatValue() : 0.0f;
-            shadow.color = Color (static_cast<uint32> (static_cast<int64> (color)));
-            shadows.push_back (shadow);
-        }
-    }
-
-    // The paint margin grows to hold the shadows, keeping what the application asked for
-    auto& cache = getCache (component);
-    const auto current = component.getPaintMargin();
-    const bool styled = cache.paintMargin.has_value() && current == *cache.paintMargin;
-
-    if (shadows.empty())
-    {
-        if (styled)
-            component.setPaintMargin (cache.savedPaintMargin);
-
-        cache.paintMargin.reset();
-    }
-    else
-    {
-        if (! styled)
-            cache.savedPaintMargin = current;
-
-        auto left = cache.savedPaintMargin.getLeft();
-        auto top = cache.savedPaintMargin.getTop();
-        auto right = cache.savedPaintMargin.getRight();
-        auto bottom = cache.savedPaintMargin.getBottom();
-
-        for (const auto& shadow : shadows)
-        {
-            const auto reach = shadow.blur + jmax (0.0f, shadow.spread);
-            left = jmax (left, reach - shadow.offset.getX());
-            top = jmax (top, reach - shadow.offset.getY());
-            right = jmax (right, reach + shadow.offset.getX());
-            bottom = jmax (bottom, reach + shadow.offset.getY());
-        }
-
-        cache.paintMargin = EdgeSpacing<float> (left, top, right, bottom);
-
-        if (current != *cache.paintMargin)
-            component.setPaintMargin (*cache.paintMargin);
-    }
+    auto shadows = effects.applyShadows (component, valueOf (shadowDeclaration), evaluateColor, reporter);
 
     if (component.styleState == nullptr && shadows.empty())
         return false;

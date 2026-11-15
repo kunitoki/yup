@@ -40,6 +40,12 @@ void DrawingScope::setModelResolver (ModelResolver resolver)
     cachedPrograms.clear();
 }
 
+void DrawingScope::setLocals (BindingProvider* newLocals)
+{
+    locals = newLocals;
+    cachedPrograms.clear();
+}
+
 void DrawingScope::install()
 {
     context.setSymbolResolver ([this] (const String& name)
@@ -195,7 +201,11 @@ void DrawingScope::updateInputs (const CompiledExpression& program, ExpressionSt
         }
         else if (input.kind == ParsedInput::Kind::bareProperty)
         {
-            if (const auto* own = self->getTypeInfo().findProperty (input.property))
+            if (auto* local = locals.get(); local != nullptr && findProviderProperty (*local, input.property).has_value())
+            {
+                targetProvider = local;
+            }
+            else if (const auto* own = self->getTypeInfo().findProperty (input.property))
             {
                 targetComponent = self;
                 descriptor = own;
@@ -308,6 +318,9 @@ DrawingScope::ResolvedTarget DrawingScope::resolveTarget (const String& symbol) 
 
     // A bare name the component doesn't declare reads the closest ancestor declaring it as inherited, like a token
     const Identifier propertyId (symbol);
+
+    if (auto* local = locals.get(); local != nullptr && findProviderProperty (*local, propertyId).has_value())
+        return { nullptr, local, propertyId };
 
     if (self->getTypeInfo().findProperty (propertyId) != nullptr)
         return { self, nullptr, propertyId };

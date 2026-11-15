@@ -82,6 +82,7 @@ classDiagram
     }
     class ComponentSignal {
         name
+        arguments
         connect()
     }
     class ComponentTypeRegistry {
@@ -394,7 +395,9 @@ flowchart LR
   property, and `<=>` reuses the graph's links. Drags on linked components open
   and close the provider's gestures, and any other change is a gesture of its own.
 - A property named after a signal connects a handler. When the signal fires, the
-  handler runs a document action or emits a signal declared by a composite.
+  handler runs document actions or emits signals declared by composites, reading
+  the signal's arguments through the names it gives them. `changed property:`
+  handlers run the same way when a property changes.
 
 ## See also
 

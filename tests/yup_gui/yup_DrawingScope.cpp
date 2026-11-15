@@ -284,7 +284,7 @@ TEST_F (DrawingScopeTest, ResolvesBindingProviderModelsDirectly)
 
 TEST_F (DrawingScopeTest, CachedProgramFollowsReparentingTypeChangesAndReplacedTargets)
 {
-    const ComponentTypeInfo rootTokens (Identifier ("RootTokens"),
+    ComponentTypeInfo rootTokens (Identifier ("RootTokens"),
                                         &Slider::getClassTypeInfo(),
                                         { ComponentProperty { .name = Identifier ("token"),
                                                               .type = ComponentProperty::Type::number,

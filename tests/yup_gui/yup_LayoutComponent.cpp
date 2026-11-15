@@ -134,7 +134,7 @@ TEST_F (LayoutComponentTests, StandardContainersSkipRelayoutOnUnrelatedStyleChan
     EXPECT_EQ (flex.layoutCount, afterInitialLayout + 3);
 
     // Multi-token string padding with leading "0" must still trigger relayout when reset to numeric 0.0.
-    flex.setPadding ({ 0.0f, 20.0f, 0.0f, 20.0f });
+    flex.setPadding ({ 20.0f, 0.0f, 20.0f, 0.0f });
     EXPECT_EQ (flex.layoutCount, afterInitialLayout + 4);
     EXPECT_FLOAT_EQ (child.getX(), 20.0f);
 

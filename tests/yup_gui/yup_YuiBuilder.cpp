@@ -532,6 +532,142 @@ TEST_F (YuiBuilderTests, ReportsHandlersThatArentCalls)
     EXPECT_EQ (builder.getDiagnostics().size(), 3u) << YuiDiagnostic::join (builder.getDiagnostics());
 }
 
+TEST_F (YuiBuilderTests, NamesTheArgumentsOfASignalInItsHandler)
+{
+    YuiBuilder builder;
+    Array<var> received;
+    builder.setAction ("record", [&] (const Array<var>& arguments) { received = arguments; });
+
+    const auto result = builder.build (parse (R"yui(
+        component Picker : Column {
+            signal onPicked (index: integer, name: string);
+            TextButton { onClick: root.onPicked (2, "two"); }
+        }
+
+        Column {
+            Slider { id: knob; onValueChanged: (width) => action ("record", width * 2); }
+            Picker { id: picker; onPicked: (i, label) => action ("record", label, i + 1); }
+            Picker { id: forwarded; onPicked: (i) => action ("record"); }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    // A named argument hides the property of the same name
+    builder.findById<Slider> ("knob")->setValue (0.25);
+    ASSERT_EQ (received.size(), 1);
+    EXPECT_FLOAT_EQ (static_cast<float> (received[0]), 0.5f);
+
+    auto* picker = builder.findById ("picker");
+    ASSERT_NE (picker, nullptr);
+    dynamic_cast<TextButton*> (picker->getChildComponent (0))->onClick();
+    ASSERT_EQ (received.size(), 2);
+    EXPECT_EQ (received[0].toString(), "two");
+    EXPECT_EQ (static_cast<int> (received[1]), 3);
+
+    // A call without arguments still receives the ones of the signal
+    dynamic_cast<TextButton*> (builder.findById ("forwarded")->getChildComponent (0))->onClick();
+    ASSERT_EQ (received.size(), 2);
+    EXPECT_EQ (static_cast<int> (received[0]), 2);
+    EXPECT_EQ (received[1].toString(), "two");
+}
+
+TEST_F (YuiBuilderTests, RunsTheCallsOfAHandlerBlockInOrder)
+{
+    YuiBuilder builder;
+    StringArray log;
+    builder.setAction ("log", [&] (const Array<var>& arguments)
+    {
+        StringArray texts;
+
+        for (const auto& argument : arguments)
+            texts.add (argument.toString());
+
+        log.add (texts.joinIntoString (" "));
+    });
+
+    const auto result = builder.build (parse (R"yui(
+        component Panel : Column {
+            signal onDone (count: integer);
+            TextButton { onClick: { action ("log", "first"); root.onDone (2); action ("log", "last"); } }
+        }
+
+        Column {
+            Panel { id: panel; onDone: (count) => { action ("log", "done"); action ("log"); } }
+            TextButton { id: idle; onClick: { }; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    dynamic_cast<TextButton*> (builder.findById ("panel")->getChildComponent (0))->onClick();
+    builder.findById<TextButton> ("idle")->onClick();
+
+    // A call without arguments forwards the signal's, typed as the signal declares them
+    EXPECT_EQ (log.joinIntoString ("\n"), "first\ndone\n2\nlast");
+}
+
+TEST_F (YuiBuilderTests, RunsChangedHandlersWhenTheirPropertyChanges)
+{
+    auto document = parse (R"yui(
+        Component {
+            Slider { id: knob; changed value: (v) => action ("value", v * 2); }
+            Label { id: caption; changed text: action ("text"); }
+        })yui");
+
+    YuiBuilder builder;
+    Array<var> values, texts;
+    builder.setAction ("value", [&] (const Array<var>& arguments) { values.addArray (arguments); });
+    builder.setAction ("text", [&] (const Array<var>& arguments) { texts.addArray (arguments); });
+
+    // Building again replaces the handlers instead of adding to them
+    ASSERT_TRUE (builder.build (document).wasOk());
+    ASSERT_TRUE (builder.build (document).wasOk());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* knob = builder.findById<Slider> ("knob");
+    auto* caption = builder.findById<Label> ("caption");
+    ASSERT_NE (knob, nullptr);
+    ASSERT_NE (caption, nullptr);
+
+    knob->setValue (0.25);
+    caption->setText ("hello", sendNotificationSync);
+
+    ASSERT_EQ (values.size(), 1);
+    EXPECT_FLOAT_EQ (static_cast<float> (values[0]), 0.5f);
+    ASSERT_EQ (texts.size(), 1);
+    EXPECT_EQ (texts[0].toString(), "hello");
+
+    YuiTreeDiff::apply (document, parse ("Component { Slider { id: knob; } Label { id: caption; } }"));
+    ASSERT_TRUE (builder.build (document).wasOk());
+    ASSERT_EQ (builder.findById<Slider> ("knob"), knob);
+
+    knob->setValue (0.75);
+    EXPECT_EQ (values.size(), 1);
+}
+
+TEST_F (YuiBuilderTests, ReportsWhereHandlerProblemsAreWritten)
+{
+    const auto located = buildAndLocate (R"yui(
+        Component {
+            TextButton { onClick: (a) => action ("x"); }
+            TextButton { onClick: { action ("x"); 3; } }
+            TextButton { onClick: (a, a) => action ("x"); }
+            Slider { changed nothing: action ("x"); }
+            Slider { changed value: (v, w) => action ("x"); }
+        })yui",
+                                         true);
+
+    EXPECT_EQ (located.joinIntoString ("\n"), StringArray ({
+                                                  "3:26: TextButton.onClick: expected at most 0 argument names",
+                                                  "4:26: TextButton.onClick: expected a call, like action (\"name\") or root.signal()",
+                                                  "5:26: TextButton.onClick: the argument 'a' is named twice",
+                                                  "6:22: Slider.changed nothing: unknown property 'nothing'",
+                                                  "7:22: Slider.changed value: expected at most 1 argument names",
+                                              })
+                                                  .joinIntoString ("\n"));
+}
+
 TEST_F (YuiBuilderTests, InstantiatesADeclaredComponent)
 {
     YuiBuilder builder;

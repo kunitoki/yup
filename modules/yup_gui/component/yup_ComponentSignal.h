@@ -46,6 +46,19 @@ struct ComponentSignal
     /** Receives the arguments a signal is emitted with. */
     using Handler = std::function<void (const Array<var>& arguments)>;
 
+    /** One argument the signal is emitted with, which a `.yui` handler can name: `(v) => action ("set", v)`. */
+    struct Argument
+    {
+        /** The name the argument is documented with. Handlers name the arguments by position. */
+        Identifier name;
+
+        /** The type of the value, which decides how expressions read it. */
+        ComponentProperty::Type type = ComponentProperty::Type::any;
+
+        /** The type of the elements, when the value is an array. */
+        ComponentProperty::Type elementType = ComponentProperty::Type::any;
+    };
+
     //==============================================================================
     /** The name of the signal, as used in `.yui`, for example "onClick". */
     Identifier name;
@@ -55,6 +68,9 @@ struct ComponentSignal
 
     /** A human readable description, surfaced by tooling. */
     String description;
+
+    /** The arguments the signal is emitted with, in order. */
+    std::vector<Argument> arguments;
 };
 
 } // namespace yup

@@ -60,6 +60,9 @@ public:
         @param text       The expression text.
         @param type       The type of the value, or nothing to probe it from the text.
         @param resolver   The resolver for references to other named components, or nothing.
+        @param modelResolver  The resolver for references to binding providers, or nothing.
+        @param locals     Values read by their bare name before the properties of the component, or
+                          nullptr. Not owned, it must outlive the expression (see DrawingScope::setLocals).
 
         @returns The compiled expression, or the error of the first type tried.
     */
@@ -67,7 +70,8 @@ public:
                                                                      const String& text,
                                                                      std::optional<ComponentProperty::Type> type,
                                                                      DrawingScope::ComponentResolver resolver = nullptr,
-                                                                     DrawingScope::ModelResolver modelResolver = nullptr);
+                                                                     DrawingScope::ModelResolver modelResolver = nullptr,
+                                                                     BindingProvider* locals = nullptr);
 
     /** Splits an array literal such as `[1, gain.value, [2, 3]]` into the texts of its elements.
 
@@ -115,7 +119,8 @@ private:
                                                                                  const String& text,
                                                                                  std::optional<ComponentProperty::Type> type,
                                                                                  DrawingScope::ComponentResolver resolver,
-                                                                                 DrawingScope::ModelResolver modelResolver);
+                                                                                 DrawingScope::ModelResolver modelResolver,
+                                                                                 BindingProvider* locals);
 
     String source;
     ComponentProperty::Type type = ComponentProperty::Type::number;

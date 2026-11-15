@@ -22,6 +22,36 @@
 namespace yup
 {
 
+namespace
+{
+
+std::vector<std::pair<int, DataTree>> findStyleElements (const DataTree& document)
+{
+    static const StringArray types { "style", "rule", "palette", "drawing", "keyframes" };
+    std::vector<std::pair<int, DataTree>> found;
+
+    for (int i = 0; i < document.getNumChildren(); ++i)
+        if (const auto child = document.getChild (i); types.contains (child.getType().toString()))
+            found.emplace_back (i, child);
+
+    return found;
+}
+
+/** True when both documents hold equivalent style elements at the same positions, so a stylesheet read from one
+    describes the other too, down to where each declaration is written.
+*/
+bool hasSameStyle (const DataTree& a, const DataTree& b)
+{
+    return std::ranges::equal (findStyleElements (a), findStyleElements (b), [] (const auto& x, const auto& y)
+    {
+        return x.first == y.first && x.second.isEquivalentTo (y.second);
+    });
+}
+
+} // namespace
+
+//==============================================================================
+
 YuiDocument::YuiDocument() = default;
 
 YuiDocument::~YuiDocument()
@@ -154,15 +184,23 @@ Result YuiDocument::buildTree (const DataTree& document, const YuiSourceMap& map
     const ScopedValueSetter<bool> loading (isLoading, true);
     diagnostics.clear();
 
-    YuiDiagnostic failure;
-    auto sheet = StyleSheet::fromTree (document, &failure);
+    // An unchanged style keeps the stylesheet, so nothing is restyled from scratch and transitions keep running
+    auto sheet = styleSheet;
 
-    if (sheet.failed())
+    if (sheet == nullptr || ! hasSameStyle (tree, document))
     {
-        sourceMap = {};
-        lastLoadSucceeded = false;
-        report (map, failure);
-        return Result::fail (diagnostics.back().toString());
+        YuiDiagnostic failure;
+        auto parsed = StyleSheet::fromTree (document, &failure);
+
+        if (parsed.failed())
+        {
+            sourceMap = {};
+            lastLoadSucceeded = false;
+            report (map, failure);
+            return Result::fail (diagnostics.back().toString());
+        }
+
+        sheet = parsed.getReference();
     }
 
     // The builder keeps the components of the elements still in the patched tree
@@ -196,7 +234,7 @@ Result YuiDocument::buildTree (const DataTree& document, const YuiSourceMap& map
         return Result::fail (failure);
     }
 
-    styleSheet = sheet.getReference();
+    styleSheet = sheet;
     sourceMap = map;
     loadedSourceMap = map;
     lastLoadSucceeded = true;

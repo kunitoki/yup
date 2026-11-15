@@ -111,6 +111,10 @@ and safe for the application:
 - A value the document no longer writes goes back to what a new component has,
   and the components of removed elements are destroyed.
 - Changing the type of an element creates a new component.
+- When the `style`, `palette`, `drawing` and `keyframes` blocks are unchanged
+  and in the same place, the stylesheet is kept: running transitions and
+  animations go on, and a class changed by the reload transitions as it would
+  from code. Any change to them restyles the interface from scratch.
 
 Reloads can be undone. With an `UndoManager` set, each successful load is one
 transaction, and undoing it loads the previous document in place:
@@ -192,36 +196,50 @@ properties and signals from C++.
 
 ## Handlers and actions
 
-A property named after a signal is a handler. It holds one call, run every time
-the signal is emitted:
+A property named after a signal is a handler, run every time the signal is
+emitted. It holds one call, or a block of calls run in order:
 
 ```yui
 TextButton { text: "Reset"; onClick: action ("reset"); }
 Slider     { onValueChanged: action ("changed", "Cutoff", value); }
-Slider     { onValueChanged: root.onChanged (value); }
+Slider     { onValueChanged: (v) => root.onChanged (v * 100); }
+TextButton { onClick: { action ("save"); root.onDone (); } }
 ```
 
 - `action ("name", arguments...)` runs the function registered with
   `setAction`, passing the values of the arguments. With no arguments, the
   action receives the arguments of the signal instead.
 - `root.signal (arguments...)` or `id.signal (...)` emits a signal declared by
-  a `component` block.
+  a `component` block, converting the arguments to the types it declares.
+- `(a, b) => call` names the arguments of the signal, in order. The names hide
+  the properties of the component with the same name, and a handler may name
+  fewer arguments than the signal has.
+- `{ call; call; }` runs each call in order, `{ }` does nothing. The `;` after
+  a block is optional.
 
 Arguments are expressions evaluated when the signal fires, against the
 component the handler is written on, so `value` above is the slider's current
 value. Actions are looked up when they run, so they can be registered before or
 after loading.
 
-| Component      | Signal                  | Arguments  |
-|----------------|-------------------------|------------|
-| `TextButton`   | `onClick`               |            |
-| `ToggleButton` | `onClick`               |            |
-| `SwitchButton` | `onClick`               |            |
-| `Slider`       | `onValueChanged`        | the value  |
-| `TextEditor`   | `onTextChange`          |            |
-| `ComboBox`     | `onSelectedItemChanged` |            |
-| `ListBox`      | `onSelectionChanged`    |            |
-| `TabComponent` | `onTabChanged`          | the tab id |
+| Component      | Signal                  | Arguments          |
+|----------------|-------------------------|--------------------|
+| `TextButton`   | `onClick`               |                    |
+| `ToggleButton` | `onClick`               |                    |
+| `SwitchButton` | `onClick`               |                    |
+| `Slider`       | `onValueChanged`        | `value` (number)   |
+| `TextEditor`   | `onTextChange`          |                    |
+| `ComboBox`     | `onSelectedItemChanged` |                    |
+| `ListBox`      | `onSelectionChanged`    |                    |
+| `TabComponent` | `onTabChanged`          | `tab` (string, id) |
+
+`changed property: handler;` runs a handler whenever a property of the element
+changes, from the user, code or a binding, with the new value as its argument:
+
+```yui
+Slider { id: cutoff; changed value: (v) => action ("log", v); }
+Label  { changed text: { action ("textChanged"); } }
+```
 
 ```cpp
 document.setAction ("changed", [this] (const Array<var>& args)

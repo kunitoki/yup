@@ -675,6 +675,7 @@ private:
         auto transaction = element.beginTransaction();
         StringArray properties;
         StringArray declared;
+        StringArray watched;
 
         while (! match ("}"))
         {
@@ -710,6 +711,10 @@ private:
                 parseBody (child);
                 transaction.addChild (mark (child, start));
             }
+            else if (name == "changed" && isIdentifierStart (text[position]))
+            {
+                transaction.addChild (mark (parseChangedHandler (watched), start));
+            }
             else
             {
                 if (properties.contains (name))
@@ -724,11 +729,111 @@ private:
 
                 expect (":");
                 properties.add (name);
-                transaction.setProperty (name, parseExpressionText());
+                transaction.setProperty (name, parseValueText());
                 mark (element, start, name);
-                expect (";");
+                expectValueEnd();
             }
         }
+    }
+
+    // After `changed`: `property: handler;`, run when the property changes
+    DataTree parseChangedHandler (StringArray& watched)
+    {
+        const auto start = position;
+        const auto property = parseIdentifier ("Expected the name of the property");
+
+        if (watched.contains (property))
+            throw Error { start, "A changed handler for '" + property + "' is already set" };
+
+        watched.add (property);
+        expect (":");
+        skipWhitespace();
+
+        DataTree changed ("changed");
+        auto transaction = changed.beginTransaction();
+
+        transaction.setProperty ("property", property);
+        transaction.setProperty ("handler", parseValueText());
+        expectValueEnd();
+
+        transaction.commit();
+        return changed;
+    }
+
+    // A block closes like an element body, so its `;` is optional
+    void expectValueEnd()
+    {
+        if (endedWithBlock)
+            match (";");
+        else
+            expect (";");
+    }
+
+    // A value, or a handler: optional argument names `(a, b) =>`, then a call or a block of calls `{ a (); b (); }`
+    String parseValueText()
+    {
+        skipWhitespace();
+        endedWithBlock = false;
+
+        const auto start = position;
+        const auto hasArgumentNames = text[position] == '(' && skipArgumentNames();
+
+        if (! hasArgumentNames)
+            position = start;
+
+        skipWhitespace();
+
+        if (text[position] != '{')
+        {
+            const auto value = parseExpressionText();
+            return hasArgumentNames ? String::fromUTF8 (text + start, position - start).trimEnd() : value;
+        }
+
+        ++position;
+
+        while (! match ("}"))
+        {
+            if (isAtEnd())
+                throw Error { position, "Expected '}'" };
+
+            parseExpressionText();
+            expect (";");
+        }
+
+        endedWithBlock = true;
+        return String::fromUTF8 (text + start, position - start);
+    }
+
+    // Skips `(name, ...) =>`, returning false when the text isn't that
+    bool skipArgumentNames()
+    {
+        ++position;
+        skipWhitespace();
+
+        if (text[position] != ')')
+        {
+            for (;;)
+            {
+                skipWhitespace();
+
+                if (! isIdentifierStart (text[position]))
+                    return false;
+
+                parseIdentifier ({});
+                skipWhitespace();
+
+                if (text[position] != ',')
+                    break;
+
+                ++position;
+            }
+        }
+
+        if (text[position] != ')')
+            return false;
+
+        ++position;
+        return match ("=>");
     }
 
     DataTree parseLet()
@@ -894,6 +999,7 @@ private:
     std::vector<int> lineStarts;
     std::vector<YuiDiagnostic> positions;
     int position = 0;
+    bool endedWithBlock = false;
 };
 
 //==============================================================================

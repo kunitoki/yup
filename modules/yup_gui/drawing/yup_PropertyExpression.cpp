@@ -159,7 +159,8 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Co
                                                                               const String& text,
                                                                               std::optional<ComponentProperty::Type> type,
                                                                               DrawingScope::ComponentResolver resolver,
-                                                                              DrawingScope::ModelResolver modelResolver)
+                                                                              DrawingScope::ModelResolver modelResolver,
+                                                                              BindingProvider* locals)
 {
     struct Candidate
     {
@@ -168,7 +169,7 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Co
     };
 
     if (text.trimStart().startsWithChar ('['))
-        return compileArrayLiteral (component, text, type, std::move (resolver), std::move (modelResolver));
+        return compileArrayLiteral (component, text, type, std::move (resolver), std::move (modelResolver), locals);
 
     std::vector<Candidate> candidates;
 
@@ -202,6 +203,7 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Co
         expression->scope = std::make_unique<DrawingScope> (component, *expression->context);
         expression->scope->setComponentResolver (resolver);
         expression->scope->setModelResolver (modelResolver);
+        expression->scope->setLocals (locals);
         expression->scope->install();
 
         auto compiled = CompiledExpression::compile (String (outputName) + " = (" + text + ");\n", *expression->context);
@@ -231,7 +233,8 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compileArra
                                                                                           const String& text,
                                                                                           std::optional<ComponentProperty::Type> type,
                                                                                           DrawingScope::ComponentResolver resolver,
-                                                                                          DrawingScope::ModelResolver modelResolver)
+                                                                                          DrawingScope::ModelResolver modelResolver,
+                                                                                          BindingProvider* locals)
 {
     if (type.has_value() && *type != ComponentProperty::Type::array && *type != ComponentProperty::Type::any)
         return makeResultValueFail ("An array can't be the value of this property");
@@ -251,7 +254,7 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compileArra
 
     for (const auto& elementText : elementTexts)
     {
-        auto element = compile (component, elementText, std::nullopt, resolver, modelResolver);
+        auto element = compile (component, elementText, std::nullopt, resolver, modelResolver, locals);
 
         if (element.failed())
             return makeResultValueFail (element.getErrorMessage());

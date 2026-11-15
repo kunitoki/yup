@@ -139,251 +139,7 @@ ComponentProperty makeDeclaredProperty (const DataTree& declaration, bool isInhe
     };
 }
 
-struct Call
-{
-    String callee;
-    StringArray arguments;
-};
-
-// Parses `callee (argument, ...)`, splitting the arguments on the commas outside strings and brackets
-std::optional<Call> parseCall (const String& text)
-{
-    const auto trimmed = text.trim();
-    const auto open = trimmed.indexOfChar ('(');
-
-    if (open <= 0 || ! trimmed.endsWithChar (')'))
-        return std::nullopt;
-
-    Call call;
-    call.callee = trimmed.substring (0, open).trim();
-
-    if (! call.callee.containsOnly ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_."))
-        return std::nullopt;
-
-    const auto inner = trimmed.substring (open + 1, trimmed.length() - 1);
-
-    auto position = inner.getCharPointer();
-    auto start = position;
-    yup_wchar quote = 0;
-    int depth = 0;
-
-    for (;;)
-    {
-        const auto current = position;
-        const auto c = position.getAndAdvance();
-
-        if (c == 0 || (c == ',' && depth == 0 && quote == 0))
-        {
-            const auto argument = String (start, current).trim();
-
-            if (argument.isNotEmpty())
-                call.arguments.add (argument);
-
-            if (c == 0)
-                break;
-
-            start = position;
-        }
-        else if (quote != 0)
-        {
-            if (c == '\\' && ! position.isEmpty())
-                ++position;
-            else if (c == quote)
-                quote = 0;
-        }
-        else if (c == '"' || c == '\'')
-        {
-            quote = c;
-        }
-        else if (c == '(' || c == '[')
-        {
-            ++depth;
-        }
-        else if ((c == ')' || c == ']') && depth > 0)
-        {
-            --depth;
-        }
-    }
-
-    return call;
-}
-
 } // namespace
-
-//==============================================================================
-/** Exposes a BindingProvider as a component, so expressions and links reach it like any element. */
-class YuiBuilder::Model final
-    : public Component
-    , private BindingProvider::Listener
-    , private ComponentListener
-{
-public:
-    explicit Model (BindingProvider& providerToUse)
-        : provider (&providerToUse)
-        , info (Identifier ("Model"), &Component::getClassTypeInfo(), makeProperties (providerToUse))
-    {
-        setTypeInfo (&info);
-        provider->addListener (this);
-    }
-
-    ~Model() override
-    {
-        stopTrackingGestures();
-
-        if (provider != nullptr)
-            provider->removeListener (this);
-    }
-
-    BindingProvider* getProvider() const noexcept { return provider; }
-
-    void refreshProperties()
-    {
-        if (provider == nullptr)
-            return;
-
-        info = ComponentTypeInfo (Identifier ("Model"), &Component::getClassTypeInfo(), makeProperties (*provider));
-        setTypeInfo (&info);
-    }
-
-    // The provider is told about a gesture while the component linked to one of its values is pressed
-    void trackGestures (Component& component, const Identifier& property)
-    {
-        if (! isTracking (component))
-            component.addComponentListener (this);
-
-        tracked.push_back ({ &component, property });
-    }
-
-    void stopTrackingGestures()
-    {
-        while (! tracked.empty())
-            stopTracking (*tracked.back().component);
-    }
-
-private:
-    struct Tracked
-    {
-        Component* component = nullptr;
-        Identifier property;
-        bool isInGesture = false;
-    };
-
-    static std::vector<ComponentProperty> makeProperties (BindingProvider& provider)
-    {
-        std::vector<ComponentProperty> properties;
-
-        for (const auto& property : provider.getProperties())
-        {
-            properties.push_back ({
-                .name = property.name,
-                .type = property.type,
-                .elementType = property.elementType,
-                .getter = [name = property.name] (const Component& component)
-                {
-                    const auto* model = static_cast<const Model&> (component).provider;
-                    return model != nullptr ? model->getValue (name) : var();
-                },
-                .setter = [name = property.name] (Component& component, const var& value)
-                {
-                    static_cast<Model&> (component).write (name, value);
-                },
-                .isStyleable = false,
-                .isInherited = false });
-        }
-
-        return properties;
-    }
-
-    bool isTracking (const Component& component) const
-    {
-        return std::any_of (tracked.begin(), tracked.end(), [&] (const auto& entry)
-        {
-            return entry.component == &component;
-        });
-    }
-
-    void write (const Identifier& name, const var& value)
-    {
-        if (provider == nullptr || provider->getValue (name) == value)
-            return;
-
-        const auto isInGesture = std::any_of (tracked.begin(), tracked.end(), [&] (const auto& entry)
-        {
-            return entry.property == name && entry.isInGesture;
-        });
-
-        if (! isInGesture)
-            provider->beginGesture (name);
-
-        provider->setValue (name, value);
-
-        if (! isInGesture)
-            provider->endGesture (name);
-    }
-
-    void stopTracking (Component& component)
-    {
-        for (auto& entry : tracked)
-            if (entry.component == &component && entry.isInGesture && provider != nullptr)
-                provider->endGesture (entry.property);
-
-        tracked.erase (std::remove_if (tracked.begin(), tracked.end(), [&] (const auto& entry)
-        {
-            return entry.component == &component;
-        }),
-                       tracked.end());
-
-        component.removeComponentListener (this);
-    }
-
-    void bindingValueChanged (BindingProvider&, const Identifier& name) override
-    {
-        notifyPropertyChanged (name);
-    }
-
-    void bindingProviderBeingDeleted (BindingProvider& deletedProvider) override
-    {
-        if (provider != &deletedProvider)
-            return;
-
-        for (auto& entry : tracked)
-            entry.isInGesture = false;
-
-        provider = nullptr;
-    }
-
-    void componentPropertyChanged (Component& component, const Identifier& property) override
-    {
-        static const Identifier pressedProperty ("pressed");
-
-        if (property != pressedProperty || provider == nullptr)
-            return;
-
-        const auto isPressed = component.isPressed();
-
-        for (auto& entry : tracked)
-        {
-            if (entry.component != &component || entry.isInGesture == isPressed)
-                continue;
-
-            entry.isInGesture = isPressed;
-
-            if (isPressed)
-                provider->beginGesture (entry.property);
-            else
-                provider->endGesture (entry.property);
-        }
-    }
-
-    void componentBeingDeleted (Component& component) override
-    {
-        stopTracking (component);
-    }
-
-    BindingProvider* provider = nullptr;
-    ComponentTypeInfo info;
-    std::vector<Tracked> tracked;
-};
 
 //==============================================================================
 
@@ -484,6 +240,7 @@ void YuiBuilder::resetBindings()
     bindings.setModelResolver (nullptr);
     pending.clear();
     connections.clear();
+    watchers.clear();
 
     for (auto& [name, model] : models)
         model->stopTrackingGestures();
@@ -637,11 +394,23 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
         }
         else if (kind == "signal")
         {
+            std::vector<ComponentSignal::Argument> arguments;
+
+            for (const auto& argument : declaration)
+            {
+                const auto argumentType = argument.getProperty ("type").toString();
+
+                arguments.push_back ({ Identifier (argument.getProperty ("name").toString()),
+                                       ComponentProperty::getTypeFromName (argumentType),
+                                       ComponentProperty::getElementTypeFromName (argumentType) });
+            }
+
             signals.push_back ({ .name = name,
                                  .connect = [this, name] (Component& component, ComponentSignal::Handler handler)
                                  {
                                      connections.push_back ({ &component, name, std::move (handler) });
-                                 } });
+                                 },
+                                 .arguments = std::move (arguments) });
         }
         else if (kind == "alias")
         {
@@ -788,6 +557,7 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
     }
 
     static const Identifier bindType ("bind");
+    static const Identifier changedType ("changed");
 
     Pending values { component, &scope };
 
@@ -803,13 +573,15 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
     {
         if (child.getType() == bindType)
             values.links.push_back ({ Identifier (child.getProperty ("property").toString()), child.getProperty ("target").toString(), child });
+        else if (child.getType() == changedType)
+            values.changes.push_back ({ Identifier (child.getProperty ("property").toString()), child.getProperty ("handler").toString(), child, Identifier ("handler") });
     }
 
     pending.push_back (std::move (values));
 
     for (const auto& child : element)
     {
-        if (child.getType() == bindType)
+        if (child.getType() == bindType || child.getType() == changedType)
             continue;
 
         if (! isComponentElement (child))
@@ -1033,6 +805,9 @@ void YuiBuilder::applyPending (const Pending& entry)
 
     for (const auto& link : entry.links)
         applyLink (*entry.component, link, *entry.scope);
+
+    for (const auto& change : entry.changes)
+        applyChanged (*entry.component, change, *entry.scope);
 }
 
 void YuiBuilder::applyProperty (Component& component, const Value& value, Scope& scope)
@@ -1141,92 +916,139 @@ void YuiBuilder::applyLink (Component& component, const Value& link, Scope& scop
 
 //==============================================================================
 
-void YuiBuilder::connectHandler (Component& component, const ComponentSignal& signal, const Value& value, Scope& scope)
+void YuiBuilder::applyChanged (Component& component, const Value& change, Scope& scope)
 {
-    const auto where = component.getTypeInfo().getTypeName().toString() + "." + signal.name.toString();
-    const auto call = parseCall (value.text);
+    const auto* descriptor = component.getTypeInfo().findProperty (change.name);
 
-    if (! call.has_value())
+    if (descriptor == nullptr)
     {
-        report (where + ": expected a call, like action (\"name\") or root.signal()", value.element, value.property);
+        report (component.getTypeInfo().getTypeName().toString() + ".changed " + change.name.toString() + ": unknown property '" + change.name.toString() + "'", change.element);
         return;
     }
 
-    auto arguments = call->arguments;
-    String actionName;
-    WeakReference<Component> emitter;
-    Identifier emitted;
-
-    if (call->callee == "action")
-    {
-        if (arguments.isEmpty() || ! arguments[0].isQuotedString())
+    // A changed handler is the handler of a signal emitted with the new value
+    const ComponentSignal signal {
+        .name = Identifier ("changed " + change.name.toString()),
+        .connect = [this, property = change.name] (Component& target, ComponentSignal::Handler handler)
         {
-            report (where + ": action expects the name of the action as a string", value.element, value.property);
-            return;
+            watchers.push_back (std::make_unique<YuiPropertyWatcher> (target, property, std::move (handler)));
+        },
+        .arguments = { { change.name, descriptor->type, descriptor->elementType } }
+    };
+
+    connectHandler (component, signal, change, scope);
+}
+
+void YuiBuilder::connectHandler (Component& component, const ComponentSignal& signal, const Value& value, Scope& scope)
+{
+    const auto where = component.getTypeInfo().getTypeName().toString() + "." + signal.name.toString();
+
+    const auto fail = [&] (const String& message)
+    {
+        report (where + ": " + message, value.element, value.property);
+    };
+
+    const auto parsed = YuiHandler::parse (value.text);
+
+    if (parsed.failed())
+        return fail (parsed.getErrorMessage());
+
+    const auto& handler = parsed.getReference();
+
+    if (handler.argumentNames.size() > static_cast<int> (signal.arguments.size()))
+        return fail ("expected at most " + String (static_cast<int> (signal.arguments.size())) + " argument names");
+
+    auto locals = std::make_shared<YuiHandlerArguments> (handler.argumentNames, signal.arguments);
+
+    struct Step
+    {
+        String actionName;
+        WeakReference<Component> emitter;
+        Identifier emitted;
+        std::vector<std::shared_ptr<PropertyExpression>> values;
+    };
+
+    std::vector<Step> steps;
+
+    for (const auto& call : handler.calls)
+    {
+        Step step;
+        auto arguments = call.arguments;
+        const ComponentSignal* emitted = nullptr;
+
+        if (call.callee == "action")
+        {
+            if (arguments.isEmpty() || ! arguments[0].isQuotedString())
+                return fail ("action expects the name of the action as a string");
+
+            step.actionName = arguments[0].unquoted();
+            arguments.remove (0);
+        }
+        else
+        {
+            const auto dot = call.callee.lastIndexOfChar ('.');
+            auto* target = dot > 0 ? resolve (scope, call.callee.substring (0, dot), &component) : nullptr;
+
+            if (target == nullptr)
+                return fail ("unknown function '" + call.callee + "'");
+
+            step.emitted = Identifier (call.callee.substring (dot + 1));
+
+            emitted = findDeclaredSignal (*target, step.emitted);
+
+            if (emitted == nullptr)
+                return fail ("'" + call.callee + "' is not a signal declared by a component");
+
+            step.emitter = target;
         }
 
-        actionName = arguments[0].unquoted();
-        arguments.remove (0);
+        // The arguments are evaluated each time the signal is emitted, typed as the emitted signal declares them
+        for (int i = 0; i < arguments.size(); ++i)
+        {
+            std::optional<ComponentProperty::Type> type;
+
+            if (emitted != nullptr && i < static_cast<int> (emitted->arguments.size()))
+                if (const auto declared = emitted->arguments[static_cast<size_t> (i)].type; ComponentProperty::isExpressionType (declared))
+                    type = declared;
+
+            auto compiled = PropertyExpression::compile (component, arguments[i], type, resolverFor (scope), getModelResolver(), locals.get());
+
+            if (compiled.failed())
+                return fail (compiled.getErrorMessage());
+
+            step.values.push_back (std::move (compiled.getReference()));
+        }
+
+        steps.push_back (std::move (step));
     }
-    else
+
+    signal.connect (component, [this, locals, steps] (const Array<var>& signalArguments)
     {
-        const auto dot = call->callee.lastIndexOfChar ('.');
-        auto* target = dot > 0 ? resolve (scope, call->callee.substring (0, dot), &component) : nullptr;
-
-        if (target == nullptr)
+        for (const auto& step : steps)
         {
-            report (where + ": unknown function '" + call->callee + "'", value.element, value.property);
-            return;
-        }
+            // Set for each call, as a call emitting a signal can run this handler again
+            locals->setValues (signalArguments);
 
-        emitted = Identifier (call->callee.substring (dot + 1));
+            auto callArguments = signalArguments;
 
-        if (! isDeclaredSignal (*target, emitted))
-        {
-            report (where + ": '" + call->callee + "' is not a signal declared by a component", value.element, value.property);
-            return;
-        }
+            if (! step.values.empty())
+            {
+                callArguments.clearQuick();
 
-        emitter = target;
-    }
+                for (const auto& argument : step.values)
+                    callArguments.add (argument->evaluate());
+            }
 
-    // The arguments are evaluated each time the signal is emitted
-    std::vector<std::shared_ptr<PropertyExpression>> values;
-
-    for (const auto& argument : arguments)
-    {
-        auto compiled = PropertyExpression::compile (component, argument, std::nullopt, resolverFor (scope), getModelResolver());
-
-        if (compiled.failed())
-        {
-            report (where + ": " + compiled.getErrorMessage(), value.element, value.property);
-            return;
-        }
-
-        values.push_back (std::move (compiled.getReference()));
-    }
-
-    signal.connect (component, [this, actionName, emitter, emitted, values] (const Array<var>& signalArguments)
-    {
-        auto callArguments = signalArguments;
-
-        if (! values.empty())
-        {
-            callArguments.clearQuick();
-
-            for (const auto& argument : values)
-                callArguments.add (argument->evaluate());
-        }
-
-        if (actionName.isEmpty())
-        {
-            if (auto* target = emitter.get())
-                emit (*target, emitted, callArguments);
-        }
-        else if (const auto found = actions.find (actionName); found != actions.end())
-        {
-            const auto action = found->second;
-            action (callArguments);
+            if (step.actionName.isEmpty())
+            {
+                if (auto* target = step.emitter.get())
+                    emit (*target, step.emitted, callArguments);
+            }
+            else if (const auto found = actions.find (step.actionName); found != actions.end())
+            {
+                const auto action = found->second;
+                action (callArguments);
+            }
         }
     });
 }
@@ -1243,7 +1065,7 @@ void YuiBuilder::emit (Component& component, const Identifier& signal, const Arr
         handler (arguments);
 }
 
-bool YuiBuilder::isDeclaredSignal (const Component& component, const Identifier& signal) const
+const ComponentSignal* YuiBuilder::findDeclaredSignal (const Component& component, const Identifier& signal) const
 {
     for (const auto* info = &component.getTypeInfo(); info != nullptr; info = info->getBaseTypeInfo())
     {
@@ -1257,10 +1079,10 @@ bool YuiBuilder::isDeclaredSignal (const Component& component, const Identifier&
 
         for (const auto& declared : info->getOwnSignals())
             if (declared.name == signal)
-                return true;
+                return &declared;
     }
 
-    return false;
+    return nullptr;
 }
 
 Result YuiBuilder::report (const String& message, const DataTree& element, const Identifier& property)

@@ -177,9 +177,6 @@ private:
     const DrawingStyle* installDrawing (Component& component, const String& name);
     void restoreDrawing (Component& component);
     bool applyEffects (Component& component, bool* paletteDependent = nullptr);
-    void applyCursor (Component& component, const String& name);
-    void applyEffect (Component& component, const String& name);
-    bool applyShadows (Component& component, const String& text, bool& paletteDependent);
     static const ComponentProperty* findDescriptor (const ComponentTypeInfo& typeInfo, const DrawingStyle* drawing, const Identifier& name);
     static const ComponentProperty* findStoredProperty (const ComponentTypeInfo& typeInfo, const Identifier& storageId);
     var getBaseValue (Component& component, const ComponentProperty* descriptor, const Identifier& storageId);
