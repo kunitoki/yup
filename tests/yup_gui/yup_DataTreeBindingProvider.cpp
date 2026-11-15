@@ -164,3 +164,30 @@ TEST_F (DataTreeBindingProviderTests, ExposesPropertiesAddedAfterConstructionAnd
     ASSERT_TRUE (undoManager.undo());
     EXPECT_DOUBLE_EQ (static_cast<double> (tree.getProperty ("cutoff")), 0.4);
 }
+
+TEST_F (DataTreeBindingProviderTests, FindsIndividualPropertiesAndHandlesMissingNames)
+{
+    DataTreeBindingProvider provider (tree);
+
+    const auto cutoff = provider.findProperty ("cutoff");
+    ASSERT_TRUE (cutoff.has_value());
+    EXPECT_EQ (cutoff->name, Identifier ("cutoff"));
+    EXPECT_EQ (cutoff->type, ComponentProperty::Type::number);
+
+    const auto curve = provider.findProperty ("curve");
+    ASSERT_TRUE (curve.has_value());
+    EXPECT_EQ (curve->type, ComponentProperty::Type::array);
+    EXPECT_EQ (curve->elementType, ComponentProperty::Type::number);
+
+    const auto mixed = provider.findProperty ("mixed");
+    ASSERT_TRUE (mixed.has_value());
+    EXPECT_EQ (mixed->type, ComponentProperty::Type::array);
+    EXPECT_EQ (mixed->elementType, ComponentProperty::Type::any);
+
+    EXPECT_FALSE (provider.findProperty ("missing").has_value());
+
+    tree.beginTransaction().setProperty ("drive", 0.9);
+    const auto drive = provider.findProperty ("drive");
+    ASSERT_TRUE (drive.has_value());
+    EXPECT_EQ (drive->type, ComponentProperty::Type::number);
+}

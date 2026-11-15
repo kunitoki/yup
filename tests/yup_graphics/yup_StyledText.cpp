@@ -1737,3 +1737,32 @@ TEST_F (StyledTextLayoutTests, RepeatedColorGlyphsAreAllDrawnInColor)
     EXPECT_TRUE (first.getRenderStyles().empty());
     EXPECT_EQ (1, second.getNumColorGlyphs());
 }
+
+TEST_F (StyledTextLayoutTests, ClearAndAppendReusesDefaultRenderPathAndComputesLazyGlyphLookup)
+{
+    StyledText text;
+    shape (text, "hello");
+
+    ASSERT_EQ (1u, text.getRenderStyles().size());
+    const rive::RenderPath* firstPath = text.getRenderStyles()[0]->path.get();
+    ASSERT_NE (nullptr, firstPath);
+    EXPECT_TRUE (text.isValidCharacterIndex (0));
+    EXPECT_TRUE (text.isValidCharacterIndex (5));
+    EXPECT_FALSE (text.isValidCharacterIndex (6));
+
+    {
+        auto modifier = text.startUpdate();
+        modifier.clear();
+        modifier.appendText ("world!", font);
+    }
+
+    ASSERT_EQ (1u, text.getRenderStyles().size());
+    EXPECT_EQ (firstPath, text.getRenderStyles()[0]->path.get());
+    EXPECT_TRUE (text.isValidCharacterIndex (6));
+    EXPECT_FALSE (text.isValidCharacterIndex (7));
+
+    const auto startCaret = text.getCaretBounds (0);
+    const auto endCaret = text.getCaretBounds (6);
+    EXPECT_FALSE (startCaret.isEmpty());
+    EXPECT_GT (endCaret.getX(), startCaret.getX());
+}

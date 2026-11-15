@@ -2413,3 +2413,46 @@ TEST (PathTests, FillRulePreservedInCombinedPath_NonZero)
     const auto result = left.combinedWith (right, Path::BooleanOperation::Union);
     EXPECT_FALSE (result.isEmpty());
 }
+
+TEST (PathTests, GetClockwiseRenderPathCachesAndInvalidatesOnMutation)
+{
+    const Path empty;
+    const auto* emptyClockwise = empty.getClockwiseRenderPath();
+    ASSERT_NE (emptyClockwise, nullptr);
+    EXPECT_EQ (empty.getClockwiseRenderPath(), emptyClockwise);
+
+    Path ellipse;
+    ellipse.addEllipse (0.0f, 0.0f, 20.0f, 10.0f);
+    const auto* firstEllipse = ellipse.getClockwiseRenderPath();
+    ASSERT_NE (firstEllipse, nullptr);
+    EXPECT_EQ (ellipse.getClockwiseRenderPath(), firstEllipse);
+
+    const auto mirrored = ellipse.transformed (AffineTransform::scaling (-1.0f, 1.0f));
+    const auto* mirroredClockwise = mirrored.getClockwiseRenderPath();
+    ASSERT_NE (mirroredClockwise, nullptr);
+    EXPECT_EQ (mirrored.getClockwiseRenderPath(), mirroredClockwise);
+
+    Path rounded;
+    rounded.addRoundedRectangle (0.0f, 0.0f, 40.0f, 20.0f, 4.0f);
+    const auto* firstRounded = rounded.getClockwiseRenderPath();
+    ASSERT_NE (firstRounded, nullptr);
+    EXPECT_EQ (rounded.getClockwiseRenderPath(), firstRounded);
+
+    rounded.addRectangle (10.0f, 5.0f, 40.0f, 20.0f);
+    const auto* mutatedRounded = rounded.getClockwiseRenderPath();
+    ASSERT_NE (mutatedRounded, nullptr);
+    EXPECT_NE (mutatedRounded, firstRounded);
+    EXPECT_EQ (rounded.getClockwiseRenderPath(), mutatedRounded);
+
+    Path ring;
+    ring.addRectangle (0.0f, 0.0f, 20.0f, 20.0f);
+    ring.addRectangle (5.0f, 5.0f, 10.0f, 10.0f);
+    ring.setUsingNonZeroWinding (true);
+    const auto* nonZeroRing = ring.getClockwiseRenderPath();
+    ASSERT_NE (nonZeroRing, nullptr);
+
+    ring.setUsingNonZeroWinding (false);
+    const auto* evenOddRing = ring.getClockwiseRenderPath();
+    ASSERT_NE (evenOddRing, nullptr);
+    EXPECT_NE (evenOddRing, nonZeroRing);
+}

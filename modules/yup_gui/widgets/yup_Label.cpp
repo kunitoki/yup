@@ -116,6 +116,7 @@ void Label::setText (String newText, NotificationType notification)
         return;
 
     text = std::move (newText);
+    textDirty = true;
     invalidateCache();
 
     sendChangeNotification (notification, [this]
@@ -142,7 +143,11 @@ void Label::setFont (Font newFont)
 
 void Label::resetFont()
 {
+    if (! font.has_value())
+        return;
+
     font.reset();
+    invalidateCache();
 }
 
 //==============================================================================
@@ -162,7 +167,7 @@ void Label::setJustification (Justification newJustification)
         return;
 
     justification = newJustification;
-    repaint();
+    invalidateCache();
 }
 
 //==============================================================================
@@ -203,10 +208,17 @@ void Label::prepareText()
     if (const auto proportion = findProperty (textHeightProportion); ! proportion.isVoid())
         fontToUse = fontToUse.withHeight (static_cast<float> (getHeight()) * static_cast<float> (static_cast<double> (proportion)));
 
+    const auto currentSize = getSize();
+    if (! textDirty && fontToUse == preparedFont && currentSize == preparedSize && justification == preparedJustification)
+    {
+        needsUpdate = false;
+        return;
+    }
+
     auto setup = [&] (const Font& f)
     {
         auto modifier = styledText.startUpdate();
-        modifier.setMaxSize (getSize());
+        modifier.setMaxSize (currentSize);
         modifier.setHorizontalAlign (StyledText::horizontalAlignFromJustification (justification));
         modifier.setVerticalAlign (StyledText::verticalAlignFromJustification (justification));
         modifier.setOverflow (StyledText::visible);
@@ -220,12 +232,16 @@ void Label::prepareText()
 
     if (text.isNotEmpty())
     {
-        const float availableWidth = static_cast<float> (getWidth());
+        const float availableWidth = currentSize.getWidth();
         const float textWidth = styledText.getComputedTextBounds().getWidth();
         if (availableWidth > 0.0f && textWidth > availableWidth)
             setup (fontToUse.withHeight (fontToUse.getHeight() * (availableWidth / textWidth)));
     }
 
+    preparedFont = fontToUse;
+    preparedSize = currentSize;
+    preparedJustification = justification;
+    textDirty = false;
     needsUpdate = false;
 }
 

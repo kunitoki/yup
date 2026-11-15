@@ -191,6 +191,9 @@ private:
     NamedValueSet animatedValues;
     std::unique_ptr<ThemePalette> stylePalette;
     std::vector<Shadow> shadows;
+    mutable std::vector<Path> cachedShadowPaths;
+    mutable Rectangle<float> cachedShadowBounds;
+    mutable float cachedShadowCornerRadius = -1.0f;
     bool paletteDependent = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StyleState)

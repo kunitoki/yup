@@ -133,7 +133,11 @@ private:
     float strokeWidth = 0.0f;
     Justification justification { Justification::left };
     std::optional<Font> font;
+    Font preparedFont;
+    Size<float> preparedSize { -1.0f, -1.0f };
+    Justification preparedJustification { Justification::left };
     bool needsUpdate = true;
+    bool textDirty = true;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Label)
 };

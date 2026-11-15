@@ -239,16 +239,45 @@ private:
         Identifier property;
     };
 
+    struct ParsedInput
+    {
+        enum class Kind
+        {
+            paletteDark,
+            paletteRole,
+            selfProperty,
+            parentProperty,
+            bareProperty,
+            prefixed
+        };
+
+        int index = 0;
+        Kind kind = Kind::bareProperty;
+        ThemePalette::Role paletteRole = ThemePalette::Role::surface;
+        String prefix;
+        Identifier property;
+        mutable ArrayInput arrayInput;
+        mutable WeakReference<Component> cachedComponent;
+        mutable WeakReference<BindingProvider> cachedProvider;
+    };
+
+    struct CachedProgram
+    {
+        CompiledExpression program;
+        std::vector<ParsedInput> inputs;
+        bool usesPalette = false;
+    };
+
+    const CachedProgram& getCachedProgram (const CompiledExpression& program) const;
     ResolvedTarget resolveTarget (const String& symbol) const;
     static std::optional<BindingProvider::Property> findProviderProperty (const BindingProvider& provider, const Identifier& name);
     const ExpressionType* typeForPaletteRole (const String& roleName) const;
-    static void updatePaletteInput (const Component& target, const String& roleName, int index, ExpressionState& state);
 
     WeakReference<Component> component;
     ExpressionContext& context;
     ComponentResolver componentResolver;
     ModelResolver modelResolver;
-    mutable std::map<String, ArrayInput> arrayInputs;
+    mutable std::vector<std::unique_ptr<CachedProgram>> cachedPrograms;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrawingScope)
 };

@@ -94,6 +94,30 @@ public:
         noWrap = 1 ///< Lines only break at newlines.
     };
 
+    /** Converts the horizontal flags of a Justification into a HorizontalAlign value. */
+    static constexpr HorizontalAlign toHorizontalAlign (Justification justification) noexcept
+    {
+        if (justification.testFlags (Justification::left))
+            return left;
+
+        if (justification.testFlags (Justification::right))
+            return right;
+
+        return center;
+    }
+
+    /** Converts the vertical flags of a Justification into a VerticalAlign value. */
+    static constexpr VerticalAlign toVerticalAlign (Justification justification) noexcept
+    {
+        if (justification.testFlags (Justification::top))
+            return top;
+
+        if (justification.testFlags (Justification::bottom))
+            return bottom;
+
+        return middle;
+    }
+
     //==============================================================================
     /** Creates an empty text. */
     StyledText();
@@ -340,6 +364,7 @@ private:
     void setWrap (TextWrap value);
 
     void update();
+    void ensureGlyphLookup() const;
     int findParagraphNewlinePosition (int orderedLineIndex) const;
     int findParagraphNewlinePositionByIndex (int paragraphIndex) const;
     std::shared_ptr<const std::vector<ColorGlyphLayer>> findColorGlyphLayers (const rive::rcp<rive::Font>& font, rive::GlyphID glyphId);
@@ -351,9 +376,11 @@ private:
     rive::GlyphRun ellipsisRun;
     rive::StyledText styledTexts;
     std::vector<RenderStyle> styles;
+    rive::rcp<rive::RenderPath> spareDefaultPath;
     std::vector<RenderStyle*> renderStyles;
     std::vector<ColorGlyph> colorGlyphs;
-    rive::GlyphLookup glyphLookup;
+    mutable rive::GlyphLookup glyphLookup;
+    mutable bool glyphLookupDirty = false;
     std::unordered_map<uint32_t, rive::rcp<rive::RenderPaint>> colorPaints;
 
     std::unordered_map<const rive::Font*, std::unordered_map<rive::GlyphID, std::shared_ptr<const std::vector<ColorGlyphLayer>>>> colorGlyphLayerCache;

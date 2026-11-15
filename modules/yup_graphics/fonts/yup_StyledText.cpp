@@ -55,34 +55,61 @@ rive::TextWrap toTextWrap (StyledText::TextWrap wrap) noexcept
 class GlyphOutlineCache
 {
 public:
+    using OutlineMap = std::unordered_map<rive::GlyphID, rive::rcp<rive::RiveRenderPath>>;
+
+    class Session
+    {
+    public:
+        explicit Session (GlyphOutlineCache& owner) noexcept
+            : cache (owner)
+            , sl (owner.lock)
+        {
+        }
+
+        void appendOutline (const rive::rcp<rive::Font>& font,
+                            rive::GlyphID glyphId,
+                            const rive::Mat2D& transform,
+                            rive::RenderPath& destination)
+        {
+            if (lastFont != font.get())
+            {
+                lastFont = font.get();
+                lastOutlines = &cache.findOutlines (font);
+            }
+
+            auto outline = lastOutlines->find (glyphId);
+            if (outline == lastOutlines->end())
+            {
+                auto rawPath = font->getPath (glyphId);
+                outline = lastOutlines->emplace (glyphId, rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::nonZero, rawPath)).first;
+            }
+
+            if (! outline->second->getRawPath().empty())
+                destination.addRenderPath (outline->second.get(), transform);
+        }
+
+    private:
+        GlyphOutlineCache& cache;
+        const ScopedLock sl;
+        const rive::Font* lastFont = nullptr;
+        OutlineMap* lastOutlines = nullptr;
+    };
+
     static GlyphOutlineCache& getInstance()
     {
         static GlyphOutlineCache cache;
         return cache;
     }
 
-    rive::RawPath getOutline (const rive::rcp<rive::Font>& font, rive::GlyphID glyphId, const rive::Mat2D& transform)
-    {
-        const ScopedLock sl (lock);
-
-        auto& outlines = findOutlines (font);
-
-        auto outline = outlines.find (glyphId);
-        if (outline == outlines.end())
-            outline = outlines.emplace (glyphId, font->getPath (glyphId)).first;
-
-        return outline->second.transform (transform);
-    }
-
 private:
     struct FontOutlines
     {
         rive::rcp<rive::Font> font;
-        std::unordered_map<rive::GlyphID, rive::RawPath> outlines;
+        OutlineMap outlines;
         uint64 lastUse = 0;
     };
 
-    std::unordered_map<rive::GlyphID, rive::RawPath>& findOutlines (const rive::rcp<rive::Font>& font)
+    OutlineMap& findOutlines (const rive::rcp<rive::Font>& font)
     {
         auto entry = std::find_if (fonts.begin(), fonts.end(), [&font] (const FontOutlines& candidate)
         {
@@ -248,6 +275,19 @@ StyledText::TextModifier StyledText::startUpdate()
 
 void StyledText::clear()
 {
+    if (spareDefaultPath == nullptr)
+    {
+        for (auto& style : styles)
+        {
+            if (style.paint == nullptr && style.path != nullptr)
+            {
+                style.path->rewind();
+                spareDefaultPath = std::move (style.path);
+                break;
+            }
+        }
+    }
+
     styledTexts.clear();
     shape = rive::SimpleArray<rive::Paragraph>();
     lines = rive::SimpleArray<rive::SimpleArray<rive::GlyphLine>>();
@@ -257,10 +297,12 @@ void StyledText::clear()
     renderStyles.clear();
     colorGlyphs.clear();
     glyphLookup.clear();
+    glyphLookupDirty = false;
     colorPaints.clear();
     bounds = {};
     paragraphYOffsets.clear();
-    lineGlyphX.clear();
+    for (auto& xs : lineGlyphX)
+        xs.clear();
     lineEndX.clear();
     defaultLineHeight = 0.0f;
     isDirty = false;
@@ -382,7 +424,9 @@ void StyledText::appendText (StringRef text,
 
     if (styleIndex == styles.size())
     {
-        auto path = rive::make_rcp<rive::RiveRenderPath>();
+        auto path = (paint == nullptr && spareDefaultPath != nullptr)
+                      ? std::move (spareDefaultPath)
+                      : rive::rcp<rive::RenderPath> (rive::make_rcp<rive::RiveRenderPath>());
         styles.emplace_back (paint, std::move (path), true);
     }
 
@@ -453,11 +497,13 @@ void StyledText::update()
 
     if (shape.empty())
     {
+        glyphLookup.clear();
+        glyphLookupDirty = false;
         bounds = { 0.0f, 0.0f, 0.0f, 0.0f };
         return;
     }
 
-    glyphLookup.compute (styledTexts.unichars(), shape);
+    glyphLookupDirty = true;
 
     int paragraphIndex = 0;
     float y = 0.0f;
@@ -534,8 +580,13 @@ void StyledText::update()
 
     paragraphIndex = 0;
 
-    lineGlyphX.assign (static_cast<size_t> (lastLineIndex) + 1, {});
-    lineEndX.assign (static_cast<size_t> (lastLineIndex) + 1, 0.0f);
+    const auto numLines = static_cast<size_t> (lastLineIndex) + 1;
+    lineGlyphX.resize (numLines);
+    for (auto& xs : lineGlyphX)
+        xs.clear();
+    lineEndX.assign (numLines, 0.0f);
+
+    GlyphOutlineCache::Session outlineSession (GlyphOutlineCache::getInstance());
 
     for (const rive::SimpleArray<rive::GlyphLine>& paragraphLines : lines)
     {
@@ -605,8 +656,7 @@ void StyledText::update()
                     continue;
                 }
 
-                rive::RawPath path = GlyphOutlineCache::getInstance().getOutline (run->font, glyphId, glyphTransform);
-                path.addTo (style->path.get());
+                outlineSession.appendOutline (run->font, glyphId, glyphTransform, *style->path);
 
                 if (style->isEmpty)
                 {
@@ -852,6 +902,8 @@ Rectangle<float> StyledText::getCaretBounds (int characterIndex) const
 
             ++glyphIdx;
         }
+
+        ensureGlyphLookup();
 
         if (characterIndex < static_cast<int> (line.lastCodePointIndex (glyphLookup)))
         {
@@ -1197,13 +1249,22 @@ std::shared_ptr<const std::vector<StyledText::ColorGlyphLayer>> StyledText::deco
 
 //==============================================================================
 
+void StyledText::ensureGlyphLookup() const
+{
+    if (! glyphLookupDirty)
+        return;
+
+    glyphLookupDirty = false;
+    glyphLookup.compute (styledTexts.unichars(), shape);
+}
+
 bool StyledText::isValidCharacterIndex (int characterIndex) const
 {
     jassert (! isDirty);
     if (isDirty || characterIndex < 0)
         return false;
 
-    if (glyphLookup.size() == 0)
+    if (shape.empty())
         return characterIndex == 0;
 
     return characterIndex <= (int) styledTexts.unichars().size();

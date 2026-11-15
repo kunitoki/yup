@@ -98,3 +98,53 @@ TEST_F (LayoutComponentTests, RejectsSpacingWithExtraOrMalformedTokens)
     EXPECT_EQ (TestLayout::parseSpacing ("8 bogus"), EdgeSpacing<float>());
     EXPECT_EQ (TestLayout::parseSpacing ("abc"), EdgeSpacing<float>());
 }
+
+TEST_F (LayoutComponentTests, StandardContainersSkipRelayoutOnUnrelatedStyleChanges)
+{
+    struct CountingFlexBox : FlexBoxComponent
+    {
+        int layoutCount = 0;
+
+        void performLayout (Rectangle<float> area) override
+        {
+            ++layoutCount;
+            FlexBoxComponent::performLayout (area);
+        }
+    };
+
+    CountingFlexBox flex;
+    Component child;
+    flex.addAndMakeVisible (child);
+    flex.setBounds (0.0f, 0.0f, 200.0f, 80.0f);
+
+    const int afterInitialLayout = flex.layoutCount;
+    EXPECT_GT (afterInitialLayout, 0);
+
+    flex.setProperty (Identifier ("customVisualToken"), 0.75);
+    flex.setColor (Identifier ("customColor"), Colors::orange);
+    EXPECT_EQ (flex.layoutCount, afterInitialLayout);
+
+    flex.setGap (12.0f);
+    EXPECT_EQ (flex.layoutCount, afterInitialLayout + 1);
+
+    flex.setPadding ({ 4.0f, 8.0f, 4.0f, 8.0f });
+    EXPECT_EQ (flex.layoutCount, afterInitialLayout + 2);
+
+    child.setProperty (LayoutComponent::Properties::flexGrowId, 2.0);
+    EXPECT_EQ (flex.layoutCount, afterInitialLayout + 3);
+
+    // Multi-token string padding with leading "0" must still trigger relayout when reset to numeric 0.0.
+    flex.setPadding ({ 0.0f, 20.0f, 0.0f, 20.0f });
+    EXPECT_EQ (flex.layoutCount, afterInitialLayout + 4);
+    EXPECT_FLOAT_EQ (child.getX(), 20.0f);
+
+    flex.removeProperty (LayoutComponent::Properties::paddingId);
+    EXPECT_EQ (flex.layoutCount, afterInitialLayout + 5);
+    EXPECT_FLOAT_EQ (child.getX(), 0.0f);
+
+    // Custom LayoutComponent subclasses still relayout on styleChanged when they may read custom properties.
+    layout.setBounds (0.0f, 0.0f, 100.0f, 50.0f);
+    const int customBefore = layout.layoutCount;
+    layout.setProperty (Identifier ("customLayoutProperty"), 42);
+    EXPECT_GT (layout.layoutCount, customBefore);
+}

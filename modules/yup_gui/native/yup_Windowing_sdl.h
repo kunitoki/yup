@@ -289,6 +289,7 @@ private:
     WeakReference<SDLComponentNative>::Master masterReference;
 
     SDL_Window* window = nullptr;
+    void* nativeWindowHandle = nullptr;
     std::optional<float> aspectRatio;
     SDL_GLContext windowContext = nullptr;
     SDL_GLContext computeContext = nullptr;

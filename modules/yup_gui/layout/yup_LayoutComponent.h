@@ -156,8 +156,15 @@ protected:
     /** Splits a track or area list on whitespace and commas. */
     static StringArray splitTokens (const String& text);
 
+    /** @internal Returns true when performLayout only depends on the standard container layout properties. */
+    virtual bool usesOnlyStandardLayoutProperties() const noexcept { return false; }
+
 private:
+    std::array<var, 9> captureContainerProperties() const;
+
     bool isPerformingLayout = false;
+    bool hasLayoutSnapshot = false;
+    std::array<var, 9> lastContainerProperties;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LayoutComponent)
 };

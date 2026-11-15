@@ -285,7 +285,7 @@ public:
 
         @param gradient The new color gradient to use for subsequent fill drawing operations.
     */
-    void setFillColorGradient (ColorGradient gradient);
+    void setFillColorGradient (const ColorGradient& gradient);
 
     /** Retrieves the current color gradient for fills.
 
@@ -359,7 +359,7 @@ public:
 
         @param gradient The new color gradient to use for subsequent stroke drawing operations.
     */
-    void setStrokeColorGradient (ColorGradient gradient);
+    void setStrokeColorGradient (const ColorGradient& gradient);
 
     /** Retrieves the current color gradient for strokes.
 
@@ -1048,6 +1048,7 @@ private:
     bool committed = false;
 
     std::vector<RenderOptions> renderOptions;
+    std::size_t renderOptionsDepth = 1;
 };
 
 } // namespace yup

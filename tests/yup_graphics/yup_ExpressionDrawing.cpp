@@ -42,6 +42,25 @@ protected:
         return drawing.failed() ? drawing.getErrorMessage() : String();
     }
 
+    static Font loadTestFont (float height = 14.0f)
+    {
+        const auto fontFile =
+#if YUP_EMSCRIPTEN
+            File ("/")
+#else
+            File (__FILE__)
+                .getParentDirectory()
+                .getParentDirectory()
+#endif
+                .getChildFile ("data")
+                .getChildFile ("fonts")
+                .getChildFile ("Linefont-VariableFont_wdth,wght.ttf");
+
+        auto loaded = Font::loadFontFromFile (fontFile);
+        EXPECT_TRUE (loaded.wasOk());
+        return loaded.wasOk() ? loaded.getValue().withHeight (height) : Font();
+    }
+
     ExpressionContext context;
     ExpressionArray<float> values;
     ExpressionInput<int> row;
@@ -377,4 +396,43 @@ TEST_F (ExpressionDrawingTests, CacheRebuildsWhenGradientsChange)
     data[0] = 0.5f;
     EXPECT_TRUE (draw());
     EXPECT_FALSE (draw());
+}
+
+TEST_F (ExpressionDrawingTests, CacheReusesShapedLabelsAndUpdatesWhenDefaultFontChanges)
+{
+    auto graphicsContext = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    ASSERT_NE (graphicsContext, nullptr);
+    auto renderer = graphicsContext->makeRenderer (200, 200);
+    ASSERT_NE (renderer, nullptr);
+    Graphics g (*graphicsContext, *renderer);
+
+    const auto smallFont = loadTestFont (12.0f);
+    const auto largeFont = smallFont.withHeight (22.0f);
+    ASSERT_FALSE (smallFont.isEmpty());
+
+    auto drawing = ExpressionDrawing::create (R"(
+        label = string (values[row], 1);
+        labelRect = rect (row * 40, 10, 36, 24);
+        labelColor = rgb (255, 255, 255);
+        labelStroke = rgb (0, 0, 0);
+        labelJustification = right;
+    )", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    std::vector<float> data { 1.5f, 3.0f };
+
+    ExpressionState state (drawing.getReference().getProgram());
+    state.bindArray (values, data.data(), (int) data.size());
+    state.bindRowIndex (row);
+
+    ExpressionDrawing::Cache cache;
+
+    drawing.getReference().draw (g, state, (int) data.size(), &smallFont, &cache);
+    EXPECT_TRUE (cache.wasRebuilt());
+
+    drawing.getReference().draw (g, state, (int) data.size(), &smallFont, &cache);
+    EXPECT_FALSE (cache.wasRebuilt());
+
+    drawing.getReference().draw (g, state, (int) data.size(), &largeFont, &cache);
+    EXPECT_FALSE (cache.wasRebuilt());
 }

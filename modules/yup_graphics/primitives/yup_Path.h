@@ -970,6 +970,8 @@ public:
     explicit Path (rive::rcp<rive::RiveRenderPath> newPath);
     /** @internal Returns the raw render path to use in the renderer. */
     rive::RiveRenderPath* getRenderPath() const;
+    /** @internal Returns a render path whose filled area winds clockwise, cached across draws. */
+    rive::RiveRenderPath* getClockwiseRenderPath() const;
     /** @internal */
     void appendPath (rive::rcp<rive::RiveRenderPath> other);
     /** @internal */
@@ -978,6 +980,10 @@ public:
 private:
     rive::rcp<rive::RiveRenderPath> path;
     uint64 fillPolygonMutationID = 0;
+    uint64 simpleContourMutationID = 0;
+    mutable rive::rcp<rive::RiveRenderPath> cachedClockwisePath;
+    mutable uint64 cachedClockwiseMutationID = 0;
+    mutable bool cachedClockwiseNonZero = true;
 };
 
 } // namespace yup

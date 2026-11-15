@@ -35,29 +35,72 @@ ComponentTypeInfo::ComponentTypeInfo (Identifier typeNameToUse,
     , factory (std::move (factoryToUse))
     , childAttacher (std::move (childAttacherToUse))
 {
-    for (int index = 0; index < static_cast<int> (properties.size()); ++index)
-        propertyIndex.insert_or_assign (properties[static_cast<size_t> (index)].name, index);
+    rebuildIndices();
+}
+
+ComponentTypeInfo::ComponentTypeInfo (ComponentTypeInfo&& other) noexcept
+    : typeName (std::move (other.typeName))
+    , baseTypeInfo (other.baseTypeInfo)
+    , properties (std::move (other.properties))
+    , signals (std::move (other.signals))
+    , factory (std::move (other.factory))
+    , childAttacher (std::move (other.childAttacher))
+{
+    other.mergedPropertyIndex.clear();
+    other.storageKeyIndex.clear();
+    rebuildIndices();
+}
+
+ComponentTypeInfo& ComponentTypeInfo::operator= (ComponentTypeInfo&& other) noexcept
+{
+    if (this != &other)
+    {
+        typeName = std::move (other.typeName);
+        baseTypeInfo = other.baseTypeInfo;
+        properties = std::move (other.properties);
+        signals = std::move (other.signals);
+        factory = std::move (other.factory);
+        childAttacher = std::move (other.childAttacher);
+        other.mergedPropertyIndex.clear();
+        other.storageKeyIndex.clear();
+        rebuildIndices();
+    }
+
+    return *this;
+}
+
+void ComponentTypeInfo::rebuildIndices()
+{
+    mergedPropertyIndex.clear();
+    storageKeyIndex.clear();
+
+    if (baseTypeInfo != nullptr)
+    {
+        mergedPropertyIndex = baseTypeInfo->mergedPropertyIndex;
+        storageKeyIndex = baseTypeInfo->storageKeyIndex;
+    }
+
+    for (const auto& property : properties)
+    {
+        mergedPropertyIndex.insert_or_assign (property.name, &property);
+
+        if (property.isStoreBacked())
+            storageKeyIndex.insert_or_assign (property.getStorageKey(), &property);
+    }
 }
 
 const ComponentProperty* ComponentTypeInfo::findProperty (const Identifier& name) const
 {
-    if (auto it = propertyIndex.find (name); it != propertyIndex.end())
-        return &properties[static_cast<size_t> (it->second)];
-
-    if (baseTypeInfo != nullptr)
-        return baseTypeInfo->findProperty (name);
+    if (const auto it = mergedPropertyIndex.find (name); it != mergedPropertyIndex.end())
+        return it->second;
 
     return nullptr;
 }
 
 const ComponentProperty* ComponentTypeInfo::findPropertyByStorageKey (const Identifier& storageKey) const
 {
-    for (const auto& property : properties)
-        if (property.isStoreBacked() && property.getStorageKey() == storageKey)
-            return &property;
-
-    if (baseTypeInfo != nullptr)
-        return baseTypeInfo->findPropertyByStorageKey (storageKey);
+    if (const auto it = storageKeyIndex.find (storageKey); it != storageKeyIndex.end())
+        return it->second;
 
     return nullptr;
 }

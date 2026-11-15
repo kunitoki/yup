@@ -78,10 +78,10 @@ public:
                        ChildAttacher childAttacher = {});
 
     /** Moves a type info, so one held by value can be replaced in place. */
-    ComponentTypeInfo (ComponentTypeInfo&&) = default;
+    ComponentTypeInfo (ComponentTypeInfo&& other) noexcept;
 
     /** Moves a type info, so one held by value can be replaced in place. */
-    ComponentTypeInfo& operator= (ComponentTypeInfo&&) = default;
+    ComponentTypeInfo& operator= (ComponentTypeInfo&& other) noexcept;
 
     //==============================================================================
     /** Returns the type name, for example "Slider". */
@@ -160,10 +160,13 @@ public:
 
 private:
     //==============================================================================
+    void rebuildIndices();
+
     Identifier typeName;
     const ComponentTypeInfo* baseTypeInfo = nullptr;
     std::vector<ComponentProperty> properties;
-    std::unordered_map<Identifier, int> propertyIndex;
+    std::unordered_map<Identifier, const ComponentProperty*> mergedPropertyIndex;
+    std::unordered_map<Identifier, const ComponentProperty*> storageKeyIndex;
     std::vector<ComponentSignal> signals;
     Factory factory;
     ChildAttacher childAttacher;

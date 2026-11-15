@@ -413,3 +413,56 @@ TEST_F (LabelTest, SetsTheJustificationByName)
     label->setProperty (Identifier ("justification"), "sideways");
     EXPECT_EQ (label->getJustification(), Justification::centerRight);
 }
+
+TEST_F (LabelTest, PaintSkipsReshapingOnColorChangeAndInvalidatesOnFontOrJustificationChange)
+{
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (200, 50);
+    Graphics g (*context, *renderer);
+
+    auto fontResult = Font::loadFontFromFile (
+#if YUP_EMSCRIPTEN
+        File ("/")
+#else
+        File (__FILE__).getParentDirectory().getParentDirectory()
+#endif
+            .getChildFile ("data")
+            .getChildFile ("fonts")
+            .getChildFile ("Linefont-VariableFont_wdth,wght.ttf"));
+    ASSERT_TRUE (fontResult.wasOk());
+
+    const auto baseFont = fontResult.getValue().withHeight (14.0f);
+    label->setFont (baseFont);
+    label->setText ("SynthKnob", dontSendNotification);
+    label->paint (g);
+
+    const auto initialBounds = label->getStyledText().getComputedTextBounds();
+    EXPECT_GT (initialBounds.getWidth(), 0.0f);
+    EXPECT_EQ (label->getStyledText().getHorizontalAlign(), StyledText::left);
+    EXPECT_EQ (label->getStyledText().getWrap(), StyledText::noWrap);
+
+    // Mark wrap on StyledText so we can detect whether prepareText() reshapes it.
+    label->getStyledText().startUpdate().setWrap (StyledText::wrap);
+    EXPECT_EQ (label->getStyledText().getWrap(), StyledText::wrap);
+
+    // Color-only style changes skip prepareText() reshaping on paint.
+    label->setColor (Label::Style::textFillColorId, Colors::cyan);
+    label->paint (g);
+    EXPECT_EQ (label->getStyledText().getWrap(), StyledText::wrap);
+
+    // Justification changes invalidate and reshape StyledText on paint.
+    label->setJustification (Justification::center);
+    label->paint (g);
+    EXPECT_EQ (label->getStyledText().getHorizontalAlign(), StyledText::center);
+    EXPECT_EQ (label->getStyledText().getWrap(), StyledText::noWrap);
+
+    // Changing font height and resetting font both update StyledText on paint.
+    label->setFont (baseFont.withHeight (28.0f));
+    label->paint (g);
+    const auto largerBounds = label->getStyledText().getComputedTextBounds();
+    EXPECT_GT (largerBounds.getHeight(), initialBounds.getHeight());
+
+    label->resetFont();
+    label->paint (g);
+    EXPECT_FALSE (label->getFont().has_value());
+}

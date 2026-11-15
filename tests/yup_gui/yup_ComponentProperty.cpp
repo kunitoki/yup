@@ -400,3 +400,37 @@ TEST_F (ComponentPropertyTest, OverriddenTypeInfoReportsDerivedType)
     EXPECT_EQ (label.getTypeInfo().getTypeName(), Identifier ("Label"));
     EXPECT_TRUE (label.getTypeInfo().isSubtypeOf (Identifier ("Component")));
 }
+
+TEST_F (ComponentPropertyTest, TypeInfoFlattenedLookupOverridesBaseAndSurvivesMove)
+{
+    ComponentTypeInfo derived (Identifier ("CustomSlider"),
+                               &Slider::getClassTypeInfo(),
+                               { ComponentProperty { .name = Identifier ("opacity"),
+                                                     .type = ComponentProperty::Type::number,
+                                                     .defaultValue = 0.5 },
+                                 ComponentProperty { .name = Identifier ("accent"),
+                                                     .storageId = Identifier ("customAccentKey"),
+                                                     .type = ComponentProperty::Type::color } });
+
+    const auto* overridden = derived.findProperty (Identifier ("opacity"));
+    ASSERT_NE (overridden, nullptr);
+    EXPECT_DOUBLE_EQ (static_cast<double> (overridden->defaultValue), 0.5);
+
+    const auto* byStorage = derived.findPropertyByStorageKey (Identifier ("customAccentKey"));
+    ASSERT_NE (byStorage, nullptr);
+    EXPECT_EQ (byStorage->name, Identifier ("accent"));
+    EXPECT_NE (derived.findPropertyByStorageKey (Slider::Style::thumbColorId), nullptr);
+
+    ComponentTypeInfo movedCtor (std::move (derived));
+    const auto* movedAccent = movedCtor.findPropertyByStorageKey (Identifier ("customAccentKey"));
+    ASSERT_NE (movedAccent, nullptr);
+    EXPECT_EQ (movedAccent, &movedCtor.getOwnProperties()[1]);
+    EXPECT_EQ (movedCtor.findProperty (Identifier ("accent")), movedAccent);
+    EXPECT_NE (movedCtor.findProperty (Identifier ("value")), nullptr);
+
+    ComponentTypeInfo movedAssign (Identifier ("Placeholder"), nullptr, {});
+    movedAssign = std::move (movedCtor);
+    EXPECT_EQ (movedAssign.findProperty (Identifier ("accent")), &movedAssign.getOwnProperties()[1]);
+    EXPECT_EQ (movedAssign.findPropertyByStorageKey (Identifier ("customAccentKey")), &movedAssign.getOwnProperties()[1]);
+    EXPECT_DOUBLE_EQ (static_cast<double> (movedAssign.findProperty (Identifier ("opacity"))->defaultValue), 0.5);
+}

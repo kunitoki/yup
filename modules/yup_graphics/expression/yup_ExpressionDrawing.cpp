@@ -283,15 +283,34 @@ struct ExpressionDrawing::DrawBuffers
         std::optional<Color> fill, stroke;
         std::optional<Font> font;
         Justification justification = Justification::center;
+        mutable std::shared_ptr<StyledText> cachedStyledText;
+        mutable Font cachedFont;
 
         bool changesColors() const noexcept { return fill.has_value() || stroke.has_value(); }
 
         void draw (Graphics& g, const Font* defaultFont) const
         {
-            const auto* textFont = font.has_value() && ! font->isEmpty() ? &*font : defaultFont;
-
-            if (textFont == nullptr)
+            if (text.isEmpty())
                 return;
+
+            const auto* textFont = font.has_value() && ! font->isEmpty() ? &*font : defaultFont;
+            if (textFont == nullptr || textFont->isEmpty())
+                return;
+
+            if (cachedStyledText == nullptr || cachedFont != *textFont)
+            {
+                auto shaped = std::make_shared<StyledText>();
+                {
+                    auto modifier = shaped->startUpdate();
+                    modifier.setMaxSize (area.getSize());
+                    modifier.appendText (text, *textFont);
+                    modifier.setHorizontalAlign (StyledText::toHorizontalAlign (justification));
+                    modifier.setVerticalAlign (StyledText::toVerticalAlign (justification));
+                }
+
+                cachedFont = *textFont;
+                cachedStyledText = std::move (shaped);
+            }
 
             if (fill)
                 g.setFillColor (*fill);
@@ -300,10 +319,10 @@ struct ExpressionDrawing::DrawBuffers
                 g.setStrokeColor (*stroke);
 
             if (fill || ! stroke)
-                g.fillFittedText (text, *textFont, area, justification);
+                g.fillFittedText (*cachedStyledText, area);
 
             if (stroke)
-                g.strokeFittedText (text, *textFont, area, justification);
+                g.strokeFittedText (*cachedStyledText, area);
         }
     };
 

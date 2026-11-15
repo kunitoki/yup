@@ -1271,6 +1271,8 @@ Path& Path::addLine (const Line<float>& line)
 
 Path& Path::addRectangle (float x, float y, float width, float height)
 {
+    const bool wasEmpty = isEmpty();
+
     width = jmax (0.0f, width);
     height = jmax (0.0f, height);
 
@@ -1281,6 +1283,9 @@ Path& Path::addRectangle (float x, float y, float width, float height)
     lineTo (x + width, y + height);
     lineTo (x, y + height);
     lineTo (x, y);
+
+    if (wasEmpty)
+        simpleContourMutationID = path->getRawPathMutationID();
 
     return *this;
 }
@@ -1294,6 +1299,8 @@ Path& Path::addRectangle (const Rectangle<float>& rect)
 
 Path& Path::addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
+    const bool wasEmpty = isEmpty();
+
     reservePathShapeSpace (*path, 9, 17);
 
     width = jmax (0.0f, width);
@@ -1331,6 +1338,9 @@ Path& Path::addRoundedRectangle (float x, float y, float width, float height, fl
     // Top-left corner
     cubicTo (x, y + radiusTopLeft - radiusTopLeft * kappa, x + radiusTopLeft - radiusTopLeft * kappa, y, x + radiusTopLeft, y);
 
+    if (wasEmpty)
+        simpleContourMutationID = path->getRawPathMutationID();
+
     return *this;
 }
 
@@ -1353,6 +1363,8 @@ Path& Path::addRoundedRectangle (const Rectangle<float>& rect, float radius)
 
 Path& Path::addEllipse (float x, float y, float width, float height)
 {
+    const bool wasEmpty = isEmpty();
+
     reservePathShapeSpace (*path, 6, 13);
 
     width = jmax (0.0f, width);
@@ -1372,6 +1384,9 @@ Path& Path::addEllipse (float x, float y, float width, float height)
     cubicTo (cx + dx, cy + ry, cx + rx, cy + dy, cx + rx, cy);
     close();
 
+    if (wasEmpty)
+        simpleContourMutationID = path->getRawPathMutationID();
+
     return *this;
 }
 
@@ -1384,6 +1399,8 @@ Path& Path::addEllipse (const Rectangle<float>& r)
 
 Path& Path::addCenteredEllipse (float centerX, float centerY, float radiusX, float radiusY)
 {
+    const bool wasEmpty = isEmpty();
+
     reservePathShapeSpace (*path, 6, 13);
 
     radiusX = jmax (0.0f, radiusX);
@@ -1402,6 +1419,9 @@ Path& Path::addCenteredEllipse (float centerX, float centerY, float radiusX, flo
     cubicTo (cx - rx, cy + dy, cx - dx, cy + ry, cx, cy + ry);
     cubicTo (cx + dx, cy + ry, cx + rx, cy + dy, cx + rx, cy);
     close();
+
+    if (wasEmpty)
+        simpleContourMutationID = path->getRawPathMutationID();
 
     return *this;
 }
@@ -1442,6 +1462,7 @@ Path& Path::addArc (const Rectangle<float>& rect,
 Path& Path::addCenteredArc (float centerX, float centerY, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
     const int segments = jlimit (2, 54, static_cast<int> (std::ceil (std::abs (toRadians - fromRadians) / 0.1f)));
+    reservePathShapeSpace (*path, segments + 2, segments + 2);
 
     const float delta = (toRadians - fromRadians) / segments;
     const float cosTheta = std::cos (rotationOfEllipse);
@@ -1911,6 +1932,10 @@ void Path::swapWithPath (Path& other) noexcept
 {
     path.swap (other.path);
     std::swap (fillPolygonMutationID, other.fillPolygonMutationID);
+    std::swap (simpleContourMutationID, other.simpleContourMutationID);
+    cachedClockwisePath.swap (other.cachedClockwisePath);
+    std::swap (cachedClockwiseMutationID, other.cachedClockwiseMutationID);
+    std::swap (cachedClockwiseNonZero, other.cachedClockwiseNonZero);
 }
 
 //==============================================================================
@@ -1918,26 +1943,54 @@ void Path::swapWithPath (Path& other) noexcept
 Path Path::createCopy() const
 {
     auto newPath = rive::make_rcp<rive::RiveRenderPath>();
-    newPath->addRenderPath (path.get(), {});
     newPath->fillRule (path->getFillRule());
-    return Path { std::move (newPath) };
+
+    if (path->getRawPath().empty())
+        return Path { std::move (newPath) };
+
+    const auto mutationID = path->getRawPathMutationID();
+    const bool wasSimple = simpleContourMutationID != 0 && simpleContourMutationID == mutationID;
+    const bool wasFillPolygon = fillPolygonMutationID != 0 && fillPolygonMutationID == mutationID;
+
+    newPath->addRenderPath (path.get(), {});
+
+    Path copy { std::move (newPath) };
+    if (wasSimple)
+        copy.simpleContourMutationID = copy.path->getRawPathMutationID();
+    if (wasFillPolygon)
+        copy.fillPolygonMutationID = copy.path->getRawPathMutationID();
+
+    return copy;
 }
 
 //==============================================================================
 
 Path& Path::transform (const AffineTransform& t)
 {
+    const bool wasSimple = simpleContourMutationID != 0 && simpleContourMutationID == path->getRawPathMutationID();
+
     auto newPath = rive::make_rcp<rive::RiveRenderPath>();
     newPath->addRenderPath (path.get(), t.toMat2D());
     path = std::move (newPath);
+
+    if (wasSimple)
+        simpleContourMutationID = path->getRawPathMutationID();
+
     return *this;
 }
 
 Path Path::transformed (const AffineTransform& t) const
 {
+    const bool wasSimple = simpleContourMutationID != 0 && simpleContourMutationID == path->getRawPathMutationID();
+
     auto newPath = rive::make_rcp<rive::RiveRenderPath>();
     newPath->addRenderPath (path.get(), t.toMat2D());
-    return Path { std::move (newPath) };
+
+    Path result { std::move (newPath) };
+    if (wasSimple)
+        result.simpleContourMutationID = result.path->getRawPathMutationID();
+
+    return result;
 }
 
 //==============================================================================
@@ -2773,6 +2826,46 @@ Path Path::createFillPolygon() const
     auto result = fromClipperPaths (Clipper2Lib::Union (contours, toClipperFillRule (*this), clipperDecimalPrecision));
     result.fillPolygonMutationID = result.path->getRawPathMutationID();
     return result;
+}
+
+rive::RiveRenderPath* Path::getClockwiseRenderPath() const
+{
+    const uint64 mutationID = path->getRawPathMutationID();
+    const bool nonZero = isUsingNonZeroWinding();
+
+    if (cachedClockwisePath != nullptr
+        && cachedClockwiseMutationID == mutationID
+        && cachedClockwiseNonZero == nonZero)
+    {
+        return cachedClockwisePath.get();
+    }
+
+    auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
+    renderPath->fillRule (rive::FillRule::clockwise);
+
+    if (fillPolygonMutationID != 0 && fillPolygonMutationID == mutationID)
+    {
+        renderPath->addRenderPath (path.get(), {});
+    }
+    else if (simpleContourMutationID != 0 && simpleContourMutationID == mutationID)
+    {
+        if (! path->getRawPath().empty())
+        {
+            if (path->getCoarseArea() >= 0.0f)
+                renderPath->addRenderPath (path.get(), {});
+            else
+                renderPath->addRenderPathBackwards (path.get(), {});
+        }
+    }
+    else
+    {
+        renderPath->addRenderPath (createFillPolygon().getRenderPath(), {});
+    }
+
+    cachedClockwisePath = std::move (renderPath);
+    cachedClockwiseMutationID = mutationID;
+    cachedClockwiseNonZero = nonZero;
+    return cachedClockwisePath.get();
 }
 
 //==============================================================================

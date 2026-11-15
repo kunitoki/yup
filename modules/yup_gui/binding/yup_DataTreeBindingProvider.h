@@ -75,6 +75,8 @@ public:
     /** @internal */
     std::vector<Property> getProperties() const override;
     /** @internal */
+    std::optional<Property> findProperty (const Identifier& name) const override;
+    /** @internal */
     var getValue (const Identifier& name) const override;
     /** @internal */
     void setValue (const Identifier& name, const var& value) override;
@@ -88,6 +90,7 @@ private:
     void propertyChanged (DataTree& changedTree, const Identifier& property) override;
 
     static ComponentProperty::Type inferType (const var& value);
+    static Property makeProperty (const Identifier& name, const var& value);
 
     DataTree tree;
     UndoManager* undoManager = nullptr;

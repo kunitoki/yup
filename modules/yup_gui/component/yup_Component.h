@@ -1435,8 +1435,7 @@ public:
         return VariantConverter<T>::fromVar (getProperty (name));
     }
 
-    /**
-        Finds a property value, cascading up the parent chain and falling back to the theme and
+    /** Finds a property value, cascading up the parent chain and falling back to the theme and
         the descriptor default for store-backed properties.
 
         Color properties fall back to the theme colors, including those derived from the closest
@@ -2100,7 +2099,7 @@ private:
     void internalRefreshDisplay (double lastFrameTimeSeconds);
     void internalRepaint();
     void internalRepaint (const Rectangle<float>& rect);
-    void internalPaint (Graphics& g, const RectangleList<float>& repaintRegions, bool renderContinuous);
+    void internalPaint (Graphics& g, const RectangleList<float>& repaintRegions, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
     void internalMouseEnter (const MouseEvent& event);
     void internalMouseExit (const MouseEvent& event);
     void internalMouseDown (const MouseEvent& event);
@@ -2194,10 +2193,10 @@ private:
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
     AffineTransform getTransformToTopLevelComponent() const;
     Point<float> getTopLevelScreenOrigin() const;
-    void applyPaintState (Graphics& g, const RectangleList<float>& clipRegion) const;
-    void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous);
+    void applyPaintState (Graphics& g, const RectangleList<float>& clipRegion, const RectangleList<float>* activeClipRegion = nullptr) const;
+    void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
     void paintStyleShadows (Graphics& g) const;
-    void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous);
+    void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
     GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt);
     std::optional<RectangleList<float>> takeEffectDirtyRegion (bool renderContinuous);
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);

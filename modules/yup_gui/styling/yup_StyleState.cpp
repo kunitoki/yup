@@ -110,18 +110,41 @@ bool StyleState::setShadows (std::vector<Shadow> newShadows)
         return false;
 
     shadows = std::move (newShadows);
+    cachedShadowPaths.clear();
     return true;
 }
 
 void StyleState::paintShadows (Graphics& g, Rectangle<float> bounds, float cornerRadius) const
 {
+    if (shadows.empty())
+        return;
+
+    if (cachedShadowPaths.size() != shadows.size()
+        || cachedShadowBounds != bounds
+        || ! approximatelyEqual (cachedShadowCornerRadius, cornerRadius))
+    {
+        cachedShadowBounds = bounds;
+        cachedShadowCornerRadius = cornerRadius;
+        cachedShadowPaths.clear();
+        cachedShadowPaths.reserve (shadows.size());
+
+        for (auto it = shadows.rbegin(); it != shadows.rend(); ++it)
+        {
+            Path shadowPath;
+            shadowPath.addRoundedRectangle (bounds.translated (it->offset).enlarged (it->spread),
+                                            jmax (0.0f, cornerRadius + it->spread));
+            cachedShadowPaths.push_back (std::move (shadowPath));
+        }
+    }
+
     const auto savedState = g.saveState();
 
-    for (auto it = shadows.rbegin(); it != shadows.rend(); ++it)
+    size_t index = 0;
+    for (auto it = shadows.rbegin(); it != shadows.rend(); ++it, ++index)
     {
         g.setFeather (it->blur);
         g.setFillColor (it->color);
-        g.fillRoundedRect (bounds.translated (it->offset).enlarged (it->spread), jmax (0.0f, cornerRadius + it->spread));
+        g.fillPath (cachedShadowPaths[index]);
     }
 }
 

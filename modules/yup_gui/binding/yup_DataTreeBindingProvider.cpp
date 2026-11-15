@@ -51,6 +51,22 @@ DataTreeBindingProvider::~DataTreeBindingProvider()
 
 //==============================================================================
 
+BindingProvider::Property DataTreeBindingProvider::makeProperty (const Identifier& name, const var& value)
+{
+    if (const auto* elements = value.getArray())
+    {
+        auto elementType = elements->isEmpty() ? ComponentProperty::Type::number : inferType ((*elements)[0]);
+
+        for (const auto& element : *elements)
+            if (inferType (element) != elementType)
+                elementType = ComponentProperty::Type::any;
+
+        return { name, ComponentProperty::Type::array, elementType };
+    }
+
+    return { name, inferType (value) };
+}
+
 std::vector<BindingProvider::Property> DataTreeBindingProvider::getProperties() const
 {
     std::vector<Property> result;
@@ -59,24 +75,18 @@ std::vector<BindingProvider::Property> DataTreeBindingProvider::getProperties() 
     for (int i = 0; i < tree.getNumProperties(); ++i)
     {
         const auto name = tree.getPropertyName (i);
-        const auto value = tree.getProperty (name);
-
-        if (const auto* elements = value.getArray())
-        {
-            auto elementType = elements->isEmpty() ? ComponentProperty::Type::number : inferType ((*elements)[0]);
-
-            for (const auto& element : *elements)
-                if (inferType (element) != elementType)
-                    elementType = ComponentProperty::Type::any;
-
-            result.push_back ({ name, ComponentProperty::Type::array, elementType });
-            continue;
-        }
-
-        result.push_back ({ name, inferType (value) });
+        result.push_back (makeProperty (name, tree.getProperty (name)));
     }
 
     return result;
+}
+
+std::optional<BindingProvider::Property> DataTreeBindingProvider::findProperty (const Identifier& name) const
+{
+    if (! tree.hasProperty (name))
+        return std::nullopt;
+
+    return makeProperty (name, tree.getProperty (name));
 }
 
 var DataTreeBindingProvider::getValue (const Identifier& name) const

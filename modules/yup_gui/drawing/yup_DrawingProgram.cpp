@@ -400,6 +400,9 @@ private:
 
         for (int i = 0; i < program.getNumInputs(); ++i)
         {
+            if (! program.usesInput (i))
+                continue;
+
             if (const auto found = propertyInputs.find (program.getInputName (i)); found != propertyInputs.end())
                 node.properties.push_back ({ i, found->second.property, found->second.isSet });
         }

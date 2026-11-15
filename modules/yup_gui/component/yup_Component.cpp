@@ -1983,7 +1983,7 @@ void Component::setProperty (const Identifier& name, const var& value)
         return;
     }
 
-    const auto storageKey = resolvePropertyStorageKey (name);
+    const auto storageKey = descriptor != nullptr ? descriptor->getStorageKey() : name;
 
     if (! properties.set (storageKey, value))
         return;
@@ -2003,7 +2003,7 @@ void Component::removeProperty (const Identifier& name)
     if (descriptor != nullptr && descriptor->isStateBacked())
         return; // State-backed properties cannot be removed.
 
-    const auto storageKey = resolvePropertyStorageKey (name);
+    const auto storageKey = descriptor != nullptr ? descriptor->getStorageKey() : name;
 
     if (! properties.remove (storageKey))
         return;
@@ -2406,10 +2406,13 @@ void Component::internalRepaint (const Rectangle<float>& rect)
 
 //==============================================================================
 
-void Component::paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous)
+void Component::paintChildrenAndOverChildren (Graphics& g,
+                                              const RectangleList<float>& clipRegion,
+                                              bool renderContinuous,
+                                              const RectangleList<float>* activeClipRegion)
 {
     for (auto child : children)
-        child->internalPaint (g, clipRegion, renderContinuous);
+        child->internalPaint (g, clipRegion, renderContinuous, activeClipRegion);
 
     paintOverChildren (g);
 }
@@ -2501,7 +2504,7 @@ std::optional<RectangleList<float>> Component::takeEffectDirtyRegion (bool rende
 
 //==============================================================================
 
-void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRegion) const
+void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRegion, const RectangleList<float>* activeClipRegion) const
 {
     const auto toTopLevel = getTransformToTopLevelComponent();
 
@@ -2509,7 +2512,7 @@ void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRe
     g.setDrawingArea ({});
     g.setTransform (AffineTransform::identity());
 
-    if (! flags.unclippedRendering)
+    if (! flags.unclippedRendering && (activeClipRegion == nullptr || *activeClipRegion != clipRegion))
         setClipRegion (g, clipRegion);
 
     // The translation goes in the drawing area and only the linear part in the transform, so an
@@ -2533,7 +2536,11 @@ void Component::paintStyleShadows (Graphics& g) const
     styleState->paintShadows (g, getLocalBounds(), findPropertyAs<float> (cornerRadiusId));
 }
 
-void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous)
+void Component::paintSubtree (Graphics& g,
+                              const RectangleList<float>& clipRegion,
+                              float opacity,
+                              bool renderContinuous,
+                              const RectangleList<float>* activeClipRegion)
 {
     isRepainting.store (true, std::memory_order_relaxed);
 
@@ -2563,7 +2570,9 @@ void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegio
         const auto globalState = g.saveState();
 
         g.setOpacity (opacity);
-        applyPaintState (g, clipRegion);
+        applyPaintState (g, clipRegion, activeClipRegion);
+
+        const auto* subtreeActiveClip = flags.unclippedRendering ? activeClipRegion : &clipRegion;
 
         bool canSkipPaint = false;
         if (! flags.unclippedRendering && toTopLevel.isOnlyTranslation() && clipRegion.getNumRectangles() == 1)
@@ -2597,7 +2606,7 @@ void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegio
             const int64 childrenStartTicks = Time::getHighResolutionTicks();
 
             for (auto child : children)
-                child->internalPaint (g, clipRegion, renderContinuous);
+                child->internalPaint (g, clipRegion, renderContinuous, subtreeActiveClip);
 
             metrics.childrenTicks += Time::getHighResolutionTicks() - childrenStartTicks;
 
@@ -2614,14 +2623,17 @@ void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegio
         }
         else
         {
-            paintChildrenAndOverChildren (g, clipRegion, renderContinuous);
+            paintChildrenAndOverChildren (g, clipRegion, renderContinuous, subtreeActiveClip);
         }
     }
 }
 
 //==============================================================================
 
-void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintRegions, bool renderContinuous)
+void Component::internalPaint (Graphics& g,
+                               const RectangleList<float>& repaintRegions,
+                               bool renderContinuous,
+                               const RectangleList<float>* activeClipRegion)
 {
     if (! isVisible() || flags.manuallyComposited || getWidth() <= 0.0f || getHeight() <= 0.0f)
         return;
@@ -2659,7 +2671,7 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
         {
             const auto saved = g.saveState();
             g.setOpacity (opacity);
-            applyPaintState (g, boundsToRedraw);
+            applyPaintState (g, boundsToRedraw, activeClipRegion);
 
             paintStyleShadows (g);
             componentEffect->apply (g, texture, getLocalBounds());
@@ -2708,7 +2720,7 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
         {
             const auto saved = g.saveState();
             g.setOpacity (opacity);
-            applyPaintState (g, boundsToRedraw);
+            applyPaintState (g, boundsToRedraw, activeClipRegion);
             paintStyleShadows (g);
 
             if (cachedTextureCanvas != nullptr)
@@ -2719,11 +2731,11 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
 
         isRepainting.store (false, std::memory_order_relaxed);
 
-        paintChildrenAndOverChildren (g, boundsToRedraw, renderContinuous);
+        paintChildrenAndOverChildren (g, boundsToRedraw, renderContinuous, activeClipRegion);
         return;
     }
 
-    paintSubtree (g, boundsToRedraw, opacity, renderContinuous);
+    paintSubtree (g, boundsToRedraw, opacity, renderContinuous, activeClipRegion);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
     paintDebugOverlay (g, boundsToRedraw);

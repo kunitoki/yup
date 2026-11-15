@@ -351,6 +351,19 @@ public:
         return rectangles.end();
     }
 
+    //==============================================================================
+    /** Returns true if both lists hold the same rectangles in the same order. */
+    bool operator== (const RectangleList& other) const noexcept
+    {
+        return rectangles == other.rectangles;
+    }
+
+    /** Returns true if the lists differ. */
+    bool operator!= (const RectangleList& other) const noexcept
+    {
+        return rectangles != other.rectangles;
+    }
+
 private:
     void mergeRectangles()
     {

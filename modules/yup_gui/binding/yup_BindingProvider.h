@@ -97,6 +97,16 @@ public:
     /** Returns the values the provider exposes. */
     virtual std::vector<Property> getProperties() const = 0;
 
+    /** Finds a single exposed property by name, or std::nullopt when the provider doesn't expose it. */
+    virtual std::optional<Property> findProperty (const Identifier& name) const
+    {
+        for (const auto& property : getProperties())
+            if (property.name == name)
+                return property;
+
+        return std::nullopt;
+    }
+
     /** Returns the current value of a property, or void if the provider doesn't expose it. */
     virtual var getValue (const Identifier& name) const = 0;
 

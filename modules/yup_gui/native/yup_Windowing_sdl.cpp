@@ -189,6 +189,8 @@ SDLComponentNative::SDLComponentNative (Component& component,
     SDL_SetWindowFocusable (window, ! options.flags.test (nonFocusableWindow));
     SDL_PumpEvents();
 
+    nativeWindowHandle = getNativeWindowHandle (window);
+
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created window: id=" << static_cast<int64> (SDL_GetWindowID (window)) << ", window=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (window))));
 
     windowUnitsPerPoint = getWindowUnitsPerPoint (window);
@@ -362,6 +364,7 @@ SDLComponentNative::~SDLComponentNative()
         SDL_DestroyWindow (window);
 
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: destroyed window");
+        nativeWindowHandle = nullptr;
         window = nullptr;
     }
 
@@ -1154,7 +1157,11 @@ GraphicsContext* SDLComponentNative::getGraphicsContext()
 
 void* SDLComponentNative::getNativeHandle() const
 {
+#if YUP_ANDROID
     return getNativeWindowHandle (window);
+#else
+    return nativeWindowHandle;
+#endif
 }
 
 //==============================================================================

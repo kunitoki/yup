@@ -77,6 +77,9 @@ protected:
     /** @internal */
     void performLayout (Rectangle<float> area) override;
 
+    /** @internal */
+    bool usesOnlyStandardLayoutProperties() const noexcept override { return true; }
+
 private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GridComponent)
 };

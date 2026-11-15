@@ -75,12 +75,30 @@ float LayoutComponent::getGap() const
 
 //==============================================================================
 
+std::array<var, 9> LayoutComponent::captureContainerProperties() const
+{
+    return {
+        findProperty (Properties::paddingId),
+        findProperty (Properties::gapId),
+        findProperty (Properties::directionId),
+        findProperty (Properties::wrapId),
+        findProperty (Properties::justifyId),
+        findProperty (Properties::alignId),
+        findProperty (Properties::columnsId),
+        findProperty (Properties::rowsId),
+        findProperty (Properties::areasId)
+    };
+}
+
 void LayoutComponent::updateLayout()
 {
     if (isPerformingLayout)
         return;
 
     const ScopedValueSetter<bool> scope (isPerformingLayout, true);
+
+    lastContainerProperties = captureContainerProperties();
+    hasLayoutSnapshot = true;
 
     const auto padding = getPadding();
     auto area = getLocalBounds();
@@ -141,9 +159,50 @@ void LayoutComponent::childLayoutChanged ([[maybe_unused]] Component& child)
     updateLayout();
 }
 
+namespace
+{
+
+bool sameLayoutPropertyValue (const var& a, const var& b)
+{
+    if (a.isArray() && b.isArray())
+    {
+        const auto* arrayA = a.getArray();
+        const auto* arrayB = b.getArray();
+
+        if (arrayA->size() != arrayB->size())
+            return false;
+
+        for (int i = 0; i < arrayA->size(); ++i)
+        {
+            if (! sameLayoutPropertyValue (arrayA->getReference (i), arrayB->getReference (i)))
+                return false;
+        }
+
+        return true;
+    }
+
+    return a.equalsWithSameType (b);
+}
+
+bool sameLayoutProperties (const std::array<var, 9>& a, const std::array<var, 9>& b)
+{
+    for (std::size_t i = 0; i < a.size(); ++i)
+    {
+        if (! sameLayoutPropertyValue (a[i], b[i]))
+            return false;
+    }
+
+    return true;
+}
+
+} // namespace
+
 void LayoutComponent::styleChanged()
 {
     Component::styleChanged();
+
+    if (hasLayoutSnapshot && usesOnlyStandardLayoutProperties() && sameLayoutProperties (captureContainerProperties(), lastContainerProperties))
+        return;
 
     updateLayout();
 }

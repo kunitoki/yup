@@ -281,3 +281,91 @@ TEST_F (DrawingScopeTest, ResolvesBindingProviderModelsDirectly)
     EXPECT_EQ (deps[0].provider, &provider);
     EXPECT_EQ (deps[1].provider, &provider);
 }
+
+TEST_F (DrawingScopeTest, CachedProgramFollowsReparentingTypeChangesAndReplacedTargets)
+{
+    const ComponentTypeInfo rootTokens (Identifier ("RootTokens"),
+                                        &Slider::getClassTypeInfo(),
+                                        { ComponentProperty { .name = Identifier ("token"),
+                                                              .type = ComponentProperty::Type::number,
+                                                              .defaultValue = 0.0,
+                                                              .isInherited = true } });
+
+    Slider parentA (Slider::LinearHorizontal);
+    parentA.setTypeInfo (&rootTokens);
+    parentA.setRange (0.0, 100.0, 0.0);
+    parentA.setValue (10.0, dontSendNotification);
+    parentA.setProperty (Identifier ("token"), 5.0);
+
+    Slider parentB (Slider::LinearHorizontal);
+    parentB.setTypeInfo (&rootTokens);
+    parentB.setRange (0.0, 100.0, 0.0);
+    parentB.setValue (20.0, dontSendNotification);
+    parentB.setProperty (Identifier ("token"), 15.0);
+
+    auto external = std::make_unique<Slider> (Slider::LinearHorizontal);
+    external->setRange (0.0, 100.0, 0.0);
+    external->setValue (3.0, dontSendNotification);
+
+    Slider child (Slider::LinearHorizontal);
+    child.setRange (0.0, 100.0, 0.0);
+    child.setValue (2.0, dontSendNotification);
+    parentA.addChildComponent (child);
+
+    DrawingScope scope (child, context);
+    scope.setComponentResolver ([&] (const String& id) -> Component*
+    {
+        return id == "knob" ? external.get() : nullptr;
+    });
+    scope.install();
+
+    auto compiled = CompiledExpression::compile ("out = value + self.value + parent.value + token + knob.value", context);
+    ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+
+    const auto& program = compiled.getReference();
+    const int outputIndex = program.findOutput ("out");
+    ExpressionState state (program);
+
+    const auto evalOnce = [&]
+    {
+        scope.updateInputs (program, state);
+        state.evaluate();
+        return static_cast<double> (state.getVar (outputIndex));
+    };
+
+    EXPECT_DOUBLE_EQ (evalOnce(), 2.0 + 2.0 + 10.0 + 5.0 + 3.0);
+
+    // Reparenting updates both parent.value and inherited bare token lookups.
+    parentB.addChildComponent (child);
+    child.setValue (4.0, dontSendNotification);
+    EXPECT_DOUBLE_EQ (evalOnce(), 4.0 + 4.0 + 20.0 + 15.0 + 3.0);
+
+    // Recreating the resolved target refreshes the weak reference automatically.
+    external = std::make_unique<Slider> (Slider::LinearHorizontal);
+    external->setRange (0.0, 100.0, 0.0);
+    external->setValue (9.0, dontSendNotification);
+    EXPECT_DOUBLE_EQ (evalOnce(), 4.0 + 4.0 + 20.0 + 15.0 + 9.0);
+
+    // Updating the component resolver invalidates cached bindings immediately.
+    Slider replacement (Slider::LinearHorizontal);
+    replacement.setRange (0.0, 100.0, 0.0);
+    replacement.setValue (30.0, dontSendNotification);
+    scope.setComponentResolver ([&] (const String& id) -> Component*
+    {
+        return id == "knob" ? &replacement : nullptr;
+    });
+    EXPECT_DOUBLE_EQ (evalOnce(), 4.0 + 4.0 + 20.0 + 15.0 + 30.0);
+
+    // Replacing a ComponentTypeInfo in place via move-assignment refreshes descriptors without dangling pointers.
+    rootTokens = ComponentTypeInfo {
+        Identifier ("RootTokensRebuilt"),
+        &Slider::getClassTypeInfo(),
+        { ComponentProperty {
+            .name = Identifier ("token"),
+            .type = ComponentProperty::Type::number,
+            .defaultValue = 99.0,
+            .isInherited = true } }
+    };
+    parentB.removeProperty (Identifier ("token"));
+    EXPECT_DOUBLE_EQ (evalOnce(), 4.0 + 4.0 + 20.0 + 99.0 + 30.0);
+}
