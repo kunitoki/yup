@@ -714,6 +714,7 @@ public:
 
         selectComponent (initialIndex);
 
+        updateWindowTitle();
         startTimerHz (1);
     }
 
@@ -997,11 +998,11 @@ struct Application : yup::YUPApplication, yup::Timer
         if (const auto exitAfterArg = args.getIntValueForOption ("--exit", 0); exitAfterArg > 0)
             exitAfter = exitAfterArg;
 
+        window = std::make_unique<CustomWindow> (initialDemo);
+
         yup::MessageManager::callAsync ([this, initialDemo, exitAfter]
         {
             yup::Process::makeForegroundProcess();
-
-            window = std::make_unique<CustomWindow> (initialDemo);
 
 #if YUP_MOBILE
             window->centreWithSize ({ 720, 1280 });
@@ -1010,6 +1011,7 @@ struct Application : yup::YUPApplication, yup::Timer
 #endif
 
             window->setVisible (true);
+            window->toFront (true);
 
             if (exitAfter.has_value())
                 startTimer (*exitAfter);
