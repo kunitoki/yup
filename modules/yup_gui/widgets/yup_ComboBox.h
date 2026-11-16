@@ -36,10 +36,14 @@ class YUP_API ComboBox : public Component
 public:
     //==============================================================================
     /** Creates a ComboBox.
+    */
+    ComboBox();
+
+    /** Creates a ComboBox.
 
         @param componentID    The component identifier for this combo box
     */
-    ComboBox (StringRef componentID = {});
+    explicit ComboBox (StringRef componentID);
 
     //==============================================================================
     /** Destructor. */

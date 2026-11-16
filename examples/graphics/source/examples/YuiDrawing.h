@@ -60,14 +60,6 @@ public:
         tabs.onSelectionChanged = [this] (const yup::Identifier&) { showSelectedSource(); };
         addAndMakeVisible (tabs);
 
-        enabledToggle.setButtonText ("Enabled");
-        enabledToggle.setToggleState (true, yup::dontSendNotification);
-        enabledToggle.onClick = [this]
-        {
-            view.setEnabled (enabledToggle.getToggleState());
-        };
-        addAndMakeVisible (enabledToggle);
-
         status.setMultiLine (true);
         status.setReadOnly (true);
         addAndMakeVisible (status);
@@ -137,7 +129,6 @@ public:
         auto right = rightPane.getBounds();
         auto footer = right.removeFromBottom (114.0f);
         status.setBounds (footer.removeFromBottom (84.0f));
-        enabledToggle.setBounds (footer.removeFromBottom (24.0f).removeFromLeft (120.0f));
 
         view.setBounds (right.withTrimmedBottom (6.0f));
     }
@@ -292,7 +283,6 @@ private:
 
     std::vector<std::unique_ptr<Source>> sources;
     yup::TabBar tabs { "tabs" };
-    yup::ToggleButton enabledToggle { "enabledToggle" };
     yup::TextEditor status { "status" };
     yup::ResizableDivider divider { yup::ResizableDivider::Orientation::vertical, "divider" };
     yup::Component leftPane, rightPane;

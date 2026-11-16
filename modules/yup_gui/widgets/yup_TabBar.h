@@ -85,7 +85,13 @@ public:
 
     //==============================================================================
     /** Creates an empty bar. */
-    TabBar (StringRef componentID = {});
+    TabBar();
+
+    /** Creates an empty bar.
+    
+        @param componentID  An identifier for this component
+    */
+    explicit TabBar (StringRef componentID);
 
     /** Destructor. */
     ~TabBar() override;

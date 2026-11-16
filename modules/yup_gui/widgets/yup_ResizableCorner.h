@@ -44,11 +44,14 @@ class YUP_API ResizableCorner : public Component
 {
 public:
     //==============================================================================
+    /** Creates a ResizableCorner. */
+    ResizableCorner();
+
     /** Creates a ResizableCorner.
 
-        @param componentID  An optional identifier for this component
+        @param componentID  An identifier for this component
     */
-    explicit ResizableCorner (StringRef componentID = {});
+    explicit ResizableCorner (StringRef componentID);
 
     /** Destructor. */
     ~ResizableCorner() override;

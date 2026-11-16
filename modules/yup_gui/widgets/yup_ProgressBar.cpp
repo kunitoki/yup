@@ -53,6 +53,11 @@ const ComponentTypeInfo& ProgressBar::getClassTypeInfo()
 }
 
 //==============================================================================
+ProgressBar::ProgressBar()
+    : ProgressBar (StringRef {})
+{
+}
+
 ProgressBar::ProgressBar (StringRef componentID)
     : Component (componentID)
 {
@@ -60,9 +65,7 @@ ProgressBar::ProgressBar (StringRef componentID)
     lastAnimationTime = Time::getCurrentTime();
 }
 
-ProgressBar::~ProgressBar()
-{
-}
+ProgressBar::~ProgressBar() = default;
 
 //==============================================================================
 void ProgressBar::setProgress (double newProgress, NotificationType notification)

@@ -36,6 +36,11 @@ struct TabComponentIds
 } // namespace
 
 //==============================================================================
+TabComponent::TabComponent()
+    : TabComponent (StringRef {})
+{
+}
+
 TabComponent::TabComponent (StringRef componentID)
     : Component (componentID)
 {

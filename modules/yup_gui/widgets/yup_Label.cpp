@@ -78,6 +78,11 @@ const ComponentTypeInfo& Label::getClassTypeInfo()
 
 //==============================================================================
 
+Label::Label()
+    : Label (StringRef {})
+{
+}
+
 Label::Label (StringRef componentID)
     : Component (componentID)
 {

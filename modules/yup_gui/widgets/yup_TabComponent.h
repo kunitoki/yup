@@ -58,7 +58,13 @@ public:
 
     //==============================================================================
     /** Creates an empty tab component. */
-    TabComponent (StringRef componentID = {});
+    TabComponent();
+
+    /** Creates an empty tab component.
+    
+        @param componentID  An identifier for this component.
+    */
+    explicit TabComponent (StringRef componentID);
 
     /** Destructor. */
     ~TabComponent() override;

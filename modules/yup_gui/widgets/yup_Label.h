@@ -36,7 +36,13 @@ class YUP_API Label : public Component
 public:
     //==============================================================================
     /** Creates an empty label. */
-    Label (StringRef componentID = {});
+    Label();
+
+    /** Creates an empty label.
+    
+        @param componentID  Identifier for this component.
+    */
+    explicit Label (StringRef componentID);
 
     //==============================================================================
     /** Returns the label's current text.

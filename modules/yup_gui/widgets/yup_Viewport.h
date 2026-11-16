@@ -45,8 +45,15 @@ class YUP_API Viewport : public Component,
                          private ComponentListener
 {
 public:
+    //==============================================================================
     /** Creates an empty viewport with automatically hidden scrollbars. */
     Viewport();
+
+    /** Creates an empty viewport with automatically hidden scrollbars.
+    
+        @param ComponentID  The ID to assign to this viewport component.
+    */
+    explicit Viewport (StringRef ComponentID);
 
     /** Removes the viewed component and any registered listeners. */
     ~Viewport() override;

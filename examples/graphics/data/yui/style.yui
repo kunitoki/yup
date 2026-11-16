@@ -7,7 +7,7 @@
 // whose modulation lane an animation sweeps like an LFO.
 style {
     .panel {
-        // palette: Porcelain;
+        palette: Porcelain;
     }
 
     .labeled {

@@ -47,6 +47,11 @@ const ComponentTypeInfo& ResizableCorner::getClassTypeInfo()
 }
 
 //==============================================================================
+ResizableCorner::ResizableCorner()
+    : ResizableCorner (StringRef {})
+{
+}
+
 ResizableCorner::ResizableCorner (StringRef componentID)
     : Component (componentID)
 {
@@ -54,9 +59,7 @@ ResizableCorner::ResizableCorner (StringRef componentID)
     setMouseCursor (MouseCursor::ResizeTopLeftRightBottom);
 }
 
-ResizableCorner::~ResizableCorner()
-{
-}
+ResizableCorner::~ResizableCorner() = default;
 
 //==============================================================================
 void ResizableCorner::setCornerSize (float newCornerSize)

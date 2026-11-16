@@ -30,25 +30,27 @@ Grid {
         gap: spacing;
 
         Label { class: title; text: "Filter"; flexGrow: 1; textHeightProportion: 0.7; }
+        ToggleButton { id: power; text: "Enabled"; checked: true; preferredWidth: 88; }
         TextButton { text: "Undo"; preferredWidth: 72; onClick: action ("undo"); }
         TextButton { text: "Reset"; preferredWidth: 72; onClick: action ("reset"); }
     }
 
-    LabeledKnob { id: cutoff; gridArea: "cutoff"; label: "CUTOFF";
+    LabeledKnob { id: cutoff; enabled: power.checked; gridArea: "cutoff"; label: "CUTOFF";
                   value <=> params.cutoff; onChanged: action ("changed", "Cutoff", value); }
 
-    LabeledKnob { id: resonance; gridArea: "resonance"; label: "RESO";
+    LabeledKnob { id: resonance; enabled: power.checked; gridArea: "resonance"; label: "RESO";
                   value <=> params.resonance; onChanged: action ("changed", "Resonance", value); }
 
-    LabeledKnob { id: drive; gridArea: "drive"; label: "DRIVE";
+    LabeledKnob { id: drive; enabled: power.checked; gridArea: "drive"; label: "DRIVE";
                   value <=> params.drive; onChanged: action ("changed", "Drive", value); }
 
-    LabeledKnob { id: mix; class: synth; gridArea: "mix"; label: "MIX";
+    LabeledKnob { id: mix; enabled: power.checked; class: synth; gridArea: "mix"; label: "MIX";
                   value <=> params.mix; onChanged: action ("changed", "Mix", value); }
 
     Label {
         gridArea: "foot";
         class: readout;
+        enabled: power.checked;
         justification: center;
         textHeightProportion: 0.75;
         text: format ("cutoff %.0f%%   resonance %.0f%%   ", params.cutoff * 100, params.resonance * 100)

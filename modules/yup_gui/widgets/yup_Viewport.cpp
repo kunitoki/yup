@@ -30,8 +30,14 @@ struct ViewportIds
 };
 
 } // namespace
-
+    
 Viewport::Viewport()
+    : Viewport (StringRef {})
+{
+}
+
+Viewport::Viewport (StringRef ComponentID)
+    : Component (ComponentID)
 {
     setOpaque (false);
     setWantedGestures (GestureType::pan);

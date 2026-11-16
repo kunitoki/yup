@@ -47,11 +47,14 @@ class YUP_API ImageComponent : public Component
 {
 public:
     //==============================================================================
+    /** Creates an empty ImageComponent. */
+    ImageComponent();
+
     /** Creates an empty ImageComponent.
 
-        @param componentID  Optional identifier for this component.
+        @param componentID  Identifier for this component.
     */
-    explicit ImageComponent (StringRef componentID = {});
+    explicit ImageComponent (StringRef componentID);
 
     /** Destructor. */
     ~ImageComponent() override;

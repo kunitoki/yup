@@ -49,7 +49,10 @@ class YUP_API TextEditor : public Component
 public:
     //==============================================================================
     /** Creates a text editor with an optional component ID. */
-    TextEditor (StringRef componentID = {});
+    TextEditor();
+
+    /** Creates a text editor with an optional component ID. */
+    explicit TextEditor (StringRef componentID);
 
     //==============================================================================
     /** Returns the editor's current text.

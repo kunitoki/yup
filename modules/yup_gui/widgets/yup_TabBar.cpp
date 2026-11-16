@@ -137,6 +137,11 @@ void TabBar::Motion::retarget (Rectangle<float> target, bool animate)
 }
 
 //==============================================================================
+TabBar::TabBar()
+    : TabBar (StringRef {})
+{
+}
+
 TabBar::TabBar (StringRef componentID)
     : Component (componentID)
 {

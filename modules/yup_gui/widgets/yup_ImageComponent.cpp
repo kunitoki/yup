@@ -92,6 +92,11 @@ const ComponentTypeInfo& ImageComponent::getClassTypeInfo()
 
 //==============================================================================
 
+ImageComponent::ImageComponent()
+    : ImageComponent (StringRef {})
+{
+}
+
 ImageComponent::ImageComponent (StringRef componentID)
     : Component (componentID)
 {

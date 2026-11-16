@@ -42,11 +42,14 @@ class YUP_API ProgressBar : public Component
 {
 public:
     //==============================================================================
+    /** Creates a ProgressBar. */
+    ProgressBar();
+
     /** Creates a ProgressBar.
 
         @param componentID  An optional identifier for this component
     */
-    explicit ProgressBar (StringRef componentID = {});
+    explicit ProgressBar (StringRef componentID);
 
     /** Destructor. */
     ~ProgressBar() override;

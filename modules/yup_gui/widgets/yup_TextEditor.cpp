@@ -73,6 +73,11 @@ const ComponentTypeInfo& TextEditor::getClassTypeInfo()
 
 //==============================================================================
 
+TextEditor::TextEditor()
+    : TextEditor (StringRef {})
+{
+}
+
 TextEditor::TextEditor (StringRef componentID)
     : Component (componentID)
     , caretTimer (bindFront (&TextEditor::blinkCaret, this))
@@ -80,7 +85,6 @@ TextEditor::TextEditor (StringRef componentID)
     setWantsKeyboardFocus (true);
     setMouseCursor (MouseCursor::Text);
 
-    // Start with empty text
     setText ("", dontSendNotification);
 }
 

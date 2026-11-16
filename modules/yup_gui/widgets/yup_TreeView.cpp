@@ -277,13 +277,16 @@ const Identifier TreeView::Style::dropIndicatorColorId { "treeViewDropIndicator"
 const Identifier TreeView::Style::itemHoveredColorId { "treeViewItemHovered" };
 
 //==============================================================================
+TreeView::TreeView()
+    : TreeView (StringRef {})
+{
+}
+
 TreeView::TreeView (StringRef componentID)
     : Component (componentID)
 {
-    // The list paints everything, this component only paints the drop indicator over it.
     setOpaque (false);
 
-    // The rows paint the hover of the item under the mouse themselves, see TreeView::Style::itemHoveredColorId.
     setColor (ListBox::Style::hoveredRowBackgroundColorId, Colors::transparentBlack);
 
     model = std::make_unique<TreeListModel> (*this);

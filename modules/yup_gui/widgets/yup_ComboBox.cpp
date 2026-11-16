@@ -75,6 +75,11 @@ const ComponentTypeInfo& ComboBox::getClassTypeInfo()
 
 //==============================================================================
 
+ComboBox::ComboBox()
+    : ComboBox (StringRef {})
+{
+}
+
 ComboBox::ComboBox (StringRef componentID)
     : Component (componentID)
 {

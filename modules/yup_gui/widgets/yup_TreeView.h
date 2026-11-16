@@ -59,11 +59,14 @@ class YUP_API TreeView : public Component
 {
 public:
     //==============================================================================
+    /** Creates an empty TreeView. */
+    TreeView();
+
     /** Creates an empty TreeView.
 
         @param componentID  Optional component identifier
     */
-    explicit TreeView (StringRef componentID = {});
+    explicit TreeView (StringRef componentID);
 
     /** Destructor. Deletes the root item. */
     ~TreeView() override;
