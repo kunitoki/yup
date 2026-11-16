@@ -79,10 +79,12 @@ public:
             animation,
             cursor,
             effect,
-            shadow
+            filter,
+            shadow,
+            glow
         };
 
-        /** One pre-parsed geometry layer of a `shadow:` declaration. */
+        /** One pre-parsed geometry layer of a `shadow:` or `glow:` declaration. */
         struct ShadowLayer
         {
             Point<float> offset;
@@ -123,6 +125,9 @@ public:
 
         /** Pre-parsed shadow geometry layers for `shadow:` declarations. */
         std::vector<ShadowLayer> shadows;
+
+        /** Pre-parsed filter steps for `filter:` declarations. */
+        std::vector<FilterEffect::ParsedStep> filters;
 
         /** Pre-computed diagnostic message when a non-expression declaration fails to parse. */
         String parseError;
@@ -186,6 +191,9 @@ public:
     /** Returns true when the element is a style, rule, palette, drawing or keyframes block. */
     static bool isStyleElement (const DataTree& element) noexcept;
 
+    /** Parses a `palette` element into @p palettes, returning a diagnostic if invalid. */
+    static std::optional<YuiDiagnostic> readPaletteElement (const DataTree& element, std::map<String, ThemePalette>& palettes);
+
     //==============================================================================
     /** Returns the rules of the sheet, in source order. */
     const std::vector<Rule>& getRules() const noexcept { return rules; }
@@ -211,6 +219,9 @@ public:
     */
     DataTree findDrawing (const String& name) const;
 
+    /** Returns a custom property declared inside a rule of this sheet (`property name: type`), or nullptr. */
+    const ComponentProperty* findDeclaredProperty (const Identifier& name) const;
+
     //==============================================================================
     /** Returns true when some selector reads a property, so changing it must restyle.
 
@@ -229,6 +240,7 @@ private:
     std::vector<KeyframeSequence> keyframes;
     std::map<String, ThemePalette> palettes;
     std::map<String, DataTree> drawings;
+    std::map<Identifier, ComponentProperty> declaredProperties;
     Array<Identifier> watchedProperties;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StyleSheet)

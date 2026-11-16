@@ -36,6 +36,16 @@ constexpr float tabButtonVerticalLength = 32.0f;
 constexpr float tabButtonCustomMargin = 8.0f;
 constexpr float tabButtonSelectedWeight = 600.0f;
 
+struct TabButtonIds
+{
+    static inline const Identifier text { "text" };
+    static inline const Identifier iconGlyph { "iconGlyph" };
+    static inline const Identifier closable { "closable" };
+    static inline const Identifier selected { "selected" };
+    static inline const Identifier overflowButton { "overflowButton" };
+    static inline const Identifier closeButtonOver { "closeButtonOver" };
+};
+
 } // namespace
 
 //==============================================================================
@@ -43,6 +53,32 @@ const Identifier TabButton::Style::textColorId { "tabButtonText" };
 const Identifier TabButton::Style::textSelectedColorId { "tabButtonTextSelected" };
 const Identifier TabButton::Style::hoveredBackgroundColorId { "tabButtonHoveredBackground" };
 const Identifier TabButton::Style::closeButtonColorId { "tabButtonCloseButton" };
+const Identifier TabButton::Style::cornerRadiusId { "tabButtonCornerRadius" };
+
+//==============================================================================
+const ComponentTypeInfo& TabButton::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<TabButton> (Identifier ("TabButton"), Button::getClassTypeInfo())
+                                 .color ("textColor", Style::textColorId)
+                                 .color ("textSelectedColor", Style::textSelectedColorId)
+                                 .color ("hoveredBackgroundColor", Style::hoveredBackgroundColorId)
+                                 .color ("closeButtonColor", Style::closeButtonColorId)
+                                 .number ("cornerRadius", Style::cornerRadiusId, 5.0, "The corner radius of the hovered tab background.")
+                                 .property (TabButtonIds::text, &TabButton::getText, &TabButton::setText, String(), "The text shown by the tab.")
+                                 .property (
+                                     TabButtonIds::iconGlyph,
+                                     &TabButton::getIconGlyph,
+                                     [] (TabButton& b, const String& v) { b.setIconGlyph (v); },
+                                     String(),
+                                     "The glyph from the theme icon font shown by the tab.")
+                                 .property (TabButtonIds::closable, &TabButton::isClosable, &TabButton::setClosable, false, "Whether the tab shows a close button.")
+                                 .state (TabButtonIds::selected, &TabButton::isSelected, false, "Whether this tab is selected.")
+                                 .readOnly (TabButtonIds::overflowButton, &TabButton::isOverflowButton, false, "Whether this button represents hidden overflow tabs.")
+                                 .state (TabButtonIds::closeButtonOver, &TabButton::isCloseButtonOver, false, "Whether the mouse pointer is over the close button.")
+                                 .build();
+
+    return info;
+}
 
 //==============================================================================
 TabButton::TabButton (TabBar& owner, const Identifier& tabId)
@@ -63,6 +99,7 @@ void TabButton::setText (const String& newText)
         return;
 
     text = newText;
+    notifyPropertyChanged (TabButtonIds::text);
     contentChanged();
 }
 
@@ -71,8 +108,13 @@ void TabButton::setIconGlyph (const String& newGlyph)
     if (iconGlyph == newGlyph && ! iconImage.isValid())
         return;
 
+    const auto glyphChanged = (iconGlyph != newGlyph);
     iconGlyph = newGlyph;
     iconImage = {};
+
+    if (glyphChanged)
+        notifyPropertyChanged (TabButtonIds::iconGlyph);
+
     contentChanged();
 }
 
@@ -83,8 +125,13 @@ void TabButton::setIconGlyph (const char* utf8Glyph)
 
 void TabButton::setIconImage (const Image& newImage)
 {
+    const auto hadGlyph = iconGlyph.isNotEmpty();
     iconImage = newImage;
     iconGlyph = {};
+
+    if (hadGlyph)
+        notifyPropertyChanged (TabButtonIds::iconGlyph);
+
     contentChanged();
 }
 
@@ -98,8 +145,14 @@ void TabButton::setClosable (bool shouldBeClosable)
     if (closable == shouldBeClosable)
         return;
 
+    const auto wasCloseOver = closeButtonOver;
     closable = shouldBeClosable;
     closeButtonOver = false;
+    notifyPropertyChanged (TabButtonIds::closable);
+
+    if (wasCloseOver)
+        notifyPropertyChanged (TabButtonIds::closeButtonOver);
+
     contentChanged();
 }
 
@@ -183,6 +236,7 @@ void TabButton::setSelected (bool shouldBeSelected)
         return;
 
     selected = shouldBeSelected;
+    notifyPropertyChanged (TabButtonIds::selected);
     repaint();
 }
 
@@ -269,7 +323,12 @@ void TabButton::enablementChanged()
 
 void TabButton::mouseExit (const MouseEvent& event)
 {
-    closeButtonOver = false;
+    if (closeButtonOver)
+    {
+        closeButtonOver = false;
+        notifyPropertyChanged (TabButtonIds::closeButtonOver);
+    }
+
     Button::mouseExit (event);
 }
 
@@ -281,6 +340,7 @@ void TabButton::mouseMove (const MouseEvent& event)
         return;
 
     closeButtonOver = over;
+    notifyPropertyChanged (TabButtonIds::closeButtonOver);
     repaint();
 }
 

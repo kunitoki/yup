@@ -68,15 +68,20 @@ void setSliderRangeBound (Slider& slider, double bound, bool isMinimum)
 
 //==============================================================================
 
-const Identifier Slider::Style::backgroundColorId { "Slider_backgroundColorId" };
-const Identifier Slider::Style::trackColorId { "Slider_trackColorId" };
-const Identifier Slider::Style::thumbColorId { "Slider_thumbColorId" };
-const Identifier Slider::Style::thumbOverColorId { "Slider_thumbOverColorId" };
-const Identifier Slider::Style::thumbDownColorId { "Slider_thumbDownColorId" };
-const Identifier Slider::Style::textColorId { "Slider_textColorId" };
-const Identifier Slider::Style::trackWidthId { "Slider_trackWidthId" };
-const Identifier Slider::Style::thumbSizeId { "Slider_thumbSizeId" };
-const Identifier Slider::Style::rotaryInsetId { "Slider_rotaryInsetId" };
+const Identifier Slider::Style::backgroundColorId { "sliderBackgroundColorId" };
+const Identifier Slider::Style::trackColorId { "sliderTrackColorId" };
+const Identifier Slider::Style::thumbColorId { "sliderThumbColorId" };
+const Identifier Slider::Style::thumbOverColorId { "sliderThumbOverColorId" };
+const Identifier Slider::Style::thumbDownColorId { "sliderThumbDownColorId" };
+const Identifier Slider::Style::textColorId { "sliderTextColorId" };
+const Identifier Slider::Style::trackWidthId { "sliderTrackWidthId" };
+const Identifier Slider::Style::thumbSizeId { "sliderThumbSizeId" };
+const Identifier Slider::Style::rotaryInsetId { "sliderRotaryInsetId" };
+const Identifier Slider::Style::rotaryDialInsetId { "sliderRotaryDialInsetId" };
+const Identifier Slider::Style::rotaryDialOutlineWidthId { "sliderRotaryDialOutlineWidthId" };
+const Identifier Slider::Style::rotaryPointerInsetId { "sliderRotaryPointerInsetId" };
+const Identifier Slider::Style::rotaryPointerWidthId { "sliderRotaryPointerWidthId" };
+const Identifier Slider::Style::rotaryArcWidthId { "sliderRotaryArcWidthId" };
 
 //==============================================================================
 
@@ -94,6 +99,11 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
                                  .number ("trackWidth", Style::trackWidthId, 4.0, "The thickness of the linear track.")
                                  .number ("thumbSize", Style::thumbSizeId, 16.0, "The diameter of the linear thumbs.")
                                  .number ("rotaryInset", Style::rotaryInsetId, 0.1, "The inset of the rotary dial, as a proportion of the width.")
+                                 .number ("rotaryDialInset", Style::rotaryDialInsetId, 0.105, "The inset of the rotary dial body inside the arc bounds, as a proportion of the width.")
+                                 .number ("rotaryDialOutlineWidth", Style::rotaryDialOutlineWidthId, 0.0175, "The stroke width of the rotary dial outline, as a proportion of the width.")
+                                 .number ("rotaryPointerInset", Style::rotaryPointerInsetId, 0.175, "The inset of the rotary pointer tip inside the arc bounds, as a proportion of the width.")
+                                 .number ("rotaryPointerWidth", Style::rotaryPointerWidthId, 0.03, "The stroke width of the rotary pointer, as a proportion of the width.")
+                                 .number ("rotaryArcWidth", Style::rotaryArcWidthId, 0.075, "The stroke width of the rotary track and value arcs, as a proportion of the width.")
                                  .enumeration (
                                      SliderIds::sliderType,
                                      { "linearHorizontal", "linearVertical", "linearBarHorizontal", "linearBarVertical", "rotary", "rotaryHorizontalDrag",

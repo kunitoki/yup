@@ -59,6 +59,9 @@ public:
     /** Finds a registered type info by name, or nullptr when it is not registered. */
     const ComponentTypeInfo* findType (const Identifier& typeName) const;
 
+    /** Returns all registered component type infos, sorted by type name. */
+    std::vector<const ComponentTypeInfo*> getRegisteredTypes() const;
+
 private:
     //==============================================================================
     ComponentTypeRegistry() = default;

@@ -777,6 +777,13 @@ public:
     void setMinimapVisible (bool shouldBeVisible);
 
     //==============================================================================
+    /** Returns the static type info describing the CodeEditor type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
     /** @internal Returns the rectangle of the text area (used by the theme for painting). */
     Rectangle<float> getTextArea() const;
 

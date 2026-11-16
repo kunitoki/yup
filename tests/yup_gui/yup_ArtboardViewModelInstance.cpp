@@ -249,7 +249,7 @@ TEST_F (ArtboardViewModelInstanceTests, BindViewModelInstanceRequiresMatchingFil
 // ArtboardViewModelInstance handle against tests/data/rive/responsive-sliders.riv
 //
 // responsive-sliders.riv models a recipe with four ingredients, each driven by
-// a nested "Slider_instance" viewmodel (color + min/max/slider_value/width),
+// a nested "SliderInstance" viewmodel (color + min/max/slider_value/width),
 // aggregated by a "Main" viewmodel (four nested viewmodels + four numbers) with
 // an authored "Main" instance. These tests exercise nested viewmodels, dotted
 // paths, cross-handle visibility and change callbacks on that real fixture.
@@ -347,7 +347,7 @@ TEST_F (ResponsiveSlidersInstanceTests, AuthoredMainCloneExposesFullStructure)
 
         auto nested = mainInstance->getNestedInstance (nestedName);
         ASSERT_NE (nullptr, nested.get());
-        EXPECT_EQ (String ("Slider_instance"), nested->getName());
+        EXPECT_EQ (String ("SliderInstance"), nested->getName());
         EXPECT_EQ (artboardFile.get(), nested->getArtboardFile());
     }
 

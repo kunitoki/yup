@@ -399,4 +399,17 @@ private:
     float height = 12.0f;
 };
 
+//==============================================================================
+#ifndef DOXYGEN
+
+/** Converts a Font to and from a var, preserving typeface identity and height equality. */
+template <>
+struct YUP_API VariantConverter<Font>
+{
+    static Font fromVar (const var& v);
+    static var toVar (const Font& f);
+};
+
+#endif // DOXYGEN
+
 } // namespace yup

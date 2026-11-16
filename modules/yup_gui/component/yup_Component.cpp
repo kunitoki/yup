@@ -37,6 +37,8 @@ struct ComponentIds
     static inline const Identifier y { "y" };
     static inline const Identifier width { "width" };
     static inline const Identifier height { "height" };
+    static inline const Identifier bounds { "bounds" };
+    static inline const Identifier transform { "transform" };
     static inline const Identifier focused { "focused" };
     static inline const Identifier focusWithin { "focus-within" };
     static inline const Identifier hovered { "hovered" };
@@ -382,7 +384,14 @@ void Component::notifyBoundsPropertiesChanged (const Rectangle<float>& oldBounds
     }
 
     if (oldBounds.getHeight() != boundsInParent.getHeight())
+    {
         notifyPropertyChanged (ComponentIds::height);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    if (oldBounds != boundsInParent)
+        notifyPropertyChanged (ComponentIds::bounds);
 }
 
 Point<float> Component::getPosition() const
@@ -663,7 +672,7 @@ AffineTransform Component::getTransformToTopLevelComponent() const
     for (auto comp = this; comp != nullptr && ! comp->flags.onDesktop && ! comp->flags.paintAsOffscreenRoot; comp = comp->getParentComponent())
     {
         if (comp->isTransformed())
-            toTopLevel = toTopLevel.followedBy (comp->getTransform());
+            toTopLevel = toTopLevel.followedBy (comp->getCombinedTransform());
 
         toTopLevel = toTopLevel.translated (comp->getPosition());
     }
@@ -734,7 +743,30 @@ void Component::setTransform (const AffineTransform& newTransform)
     transform = newTransform;
     repaint();
 
+    const BailOutChecker bailOutChecker (this);
+
     transformChanged();
+
+    if (! bailOutChecker.shouldBailOut())
+        notifyPropertyChanged (ComponentIds::transform);
+}
+
+void Component::setStyleTransform (const AffineTransform& newTransform)
+{
+    const AffineTransform current = styleState != nullptr ? styleState->getStyleTransform() : AffineTransform();
+    if (current == newTransform)
+        return;
+
+    repaint();
+    getOrCreateStyleState().setStyleTransform (newTransform);
+    repaint();
+
+    const BailOutChecker bailOutChecker (this);
+
+    transformChanged();
+
+    if (! bailOutChecker.shouldBailOut())
+        notifyPropertyChanged (ComponentIds::transform);
 }
 
 AffineTransform Component::getTransform() const
@@ -742,9 +774,20 @@ AffineTransform Component::getTransform() const
     return transform;
 }
 
+AffineTransform Component::getCombinedTransform() const
+{
+    if (styleState == nullptr || ! styleState->hasStyleTransform())
+        return transform;
+
+    if (transform.isIdentity())
+        return styleState->getStyleTransform();
+
+    return styleState->getStyleTransform().followedBy (transform);
+}
+
 bool Component::isTransformed() const
 {
-    return ! transform.isIdentity();
+    return ! transform.isIdentity() || (styleState != nullptr && styleState->hasStyleTransform());
 }
 
 void Component::transformChanged()
@@ -1887,10 +1930,12 @@ const ComponentTypeInfo& Component::getClassTypeInfo()
                                  .styleableProperty (ComponentIds::visible, &Component::isVisible, &Component::setVisible, true)
                                  .styleableProperty (ComponentIds::enabled, &Component::isEnabled, &Component::setEnabled, true)
                                  .styleableProperty (ComponentIds::opacity, &Component::getOpacity, &Component::setOpacity, 1.0)
+                                 .styleableProperty (ComponentIds::transform, &Component::getTransform, &Component::setTransform, VariantConverter<AffineTransform>::toVar (AffineTransform()))
                                  .property (ComponentIds::x, &Component::getX, [] (Component& c, float v) { c.setBounds (v, c.getY(), c.getWidth(), c.getHeight()); })
                                  .property (ComponentIds::y, &Component::getY, [] (Component& c, float v) { c.setBounds (c.getX(), v, c.getWidth(), c.getHeight()); })
                                  .property (ComponentIds::width, &Component::getWidth, [] (Component& c, float v) { c.setBounds (c.getX(), c.getY(), v, c.getHeight()); })
                                  .property (ComponentIds::height, &Component::getHeight, [] (Component& c, float v) { c.setBounds (c.getX(), c.getY(), c.getWidth(), v); })
+                                 .property (ComponentIds::bounds, &Component::getBounds, [] (Component& c, const Rectangle<float>& v) { c.setBounds (v); })
                                  .state (ComponentIds::focused, &Component::isFocused, false)
                                  .state (ComponentIds::hovered, &Component::isHovered, false)
                                  .state (ComponentIds::pressed, &Component::isPressed, false)
@@ -2047,6 +2092,9 @@ var Component::getProperty (const Identifier& name) const
 
 var Component::findProperty (const Identifier& name) const
 {
+    if (name == ComponentIds::transform)
+        return VariantConverter<AffineTransform>::toVar (getCombinedTransform());
+
     const auto resolved = resolveProperty (name);
 
     if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
@@ -2187,16 +2235,69 @@ const ThemePalette* Component::findPalette() const
 void Component::setComponentEffect (ComponentEffect::Ptr effect)
 {
     componentEffect = std::move (effect);
-
-    if (componentEffect == nullptr)
-        effectOffscreenCanvas = nullptr;
-
+    releaseUnusedEffectCanvases();
     repaint();
 }
 
 ComponentEffect::Ptr Component::getComponentEffect() const
 {
     return componentEffect;
+}
+
+bool Component::hasActiveEffect() const noexcept
+{
+    return componentEffect != nullptr || (styleState != nullptr && styleState->getFilterEffect() != nullptr);
+}
+
+void Component::releaseUnusedEffectCanvases() noexcept
+{
+    if (componentEffect == nullptr || styleState == nullptr || styleState->getFilterEffect() == nullptr)
+        filterIntermediateCanvas = nullptr;
+
+    if (! hasActiveEffect())
+        effectOffscreenCanvas = nullptr;
+}
+
+void Component::applyActiveEffects (Graphics& g, GpuTexture::Ptr texture, Rectangle<float> bounds, float scale)
+{
+    auto* filterEffect = styleState != nullptr ? styleState->getFilterEffect().get() : nullptr;
+
+    if (componentEffect != nullptr && filterEffect != nullptr && texture != nullptr)
+    {
+        const int width = texture->getWidth();
+        const int height = texture->getHeight();
+
+        if (filterIntermediateCanvas == nullptr
+            || filterIntermediateCanvas->getWidth() != width
+            || filterIntermediateCanvas->getHeight() != height)
+        {
+            filterIntermediateCanvas = GpuCanvas::create (g.getGraphicsContext(), width, height);
+        }
+
+        if (filterIntermediateCanvas != nullptr)
+        {
+            const Rectangle<float> localBounds (0.0f, 0.0f, bounds.getWidth(), bounds.getHeight());
+            auto& intermediateG = filterIntermediateCanvas->beginDraw ({}, scale);
+            intermediateG.setDrawingArea (localBounds);
+            componentEffect->apply (intermediateG, texture, localBounds);
+            filterIntermediateCanvas->commit();
+
+            if (auto postEffectTexture = filterIntermediateCanvas->asTexture())
+            {
+                filterEffect->apply (g, std::move (postEffectTexture), bounds);
+                return;
+            }
+        }
+    }
+    else
+    {
+        filterIntermediateCanvas = nullptr;
+    }
+
+    if (componentEffect != nullptr)
+        componentEffect->apply (g, std::move (texture), bounds);
+    else if (filterEffect != nullptr)
+        filterEffect->apply (g, std::move (texture), bounds);
 }
 
 void Component::setCachedToTexture (bool shouldCache)
@@ -2270,7 +2371,7 @@ GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool in
 
     const auto renderSnapshot = [&] () -> GpuCanvas::Ptr
     {
-        const bool applyEffect = includeEffects && componentEffect != nullptr;
+        const bool applyEffect = includeEffects && hasActiveEffect();
 
         auto canvas = renderSubtreeOffscreen (ctx, getOpacity(), false, scale, applyEffect ? nullptr : std::move (reuseCanvas));
         if (canvas == nullptr)
@@ -2291,7 +2392,7 @@ GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool in
         auto& g = effectCanvas->beginDraw ({}, scale);
         auto localBounds = getLocalBounds();
         g.setDrawingArea (localBounds);
-        componentEffect->apply (g, texture, localBounds);
+        applyActiveEffects (g, texture, localBounds, scale);
 
         return effectCanvas;
     };
@@ -2399,7 +2500,7 @@ void Component::internalRepaint (const Rectangle<float>& rect)
 
         // A warp can move pixels anywhere inside the component, so the whole of it is
         // presented again; what changed underneath is kept, so only that is repainted
-        if (component->componentEffect != nullptr)
+        if (component->hasActiveEffect())
         {
             component->effectDirtyRegion.add (dirtyArea);
             dirtyArea = component->getLocalBounds();
@@ -2410,7 +2511,7 @@ void Component::internalRepaint (const Rectangle<float>& rect)
         if (parent != nullptr && component->flags.manuallyComposited)
             dirtyArea = parent->getLocalBounds();
         else if (! component->flags.onDesktop)
-            dirtyArea = getTransformedBounds (dirtyArea, component->transform.translated (component->getPosition()));
+            dirtyArea = getTransformedBounds (dirtyArea, component->getCombinedTransform().translated (component->getPosition()));
 
         if (parent == nullptr)
         {
@@ -2547,7 +2648,7 @@ void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRe
 
 void Component::paintStyleShadows (Graphics& g) const
 {
-    if (styleState == nullptr || styleState->getShadows().empty())
+    if (styleState == nullptr || (styleState->getShadows().empty() && styleState->getGlows().empty()))
         return;
 
     static const Identifier cornerRadiusId ("cornerRadius");
@@ -2673,7 +2774,7 @@ void Component::internalPaint (Graphics& g,
     if (opacity <= 0.0f)
         return;
 
-    if (componentEffect != nullptr)
+    if (hasActiveEffect())
     {
         auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(),
                                               1.0f,
@@ -2692,7 +2793,7 @@ void Component::internalPaint (Graphics& g,
             applyPaintState (g, boundsToRedraw, activeClipRegion);
 
             paintStyleShadows (g);
-            componentEffect->apply (g, texture, getLocalBounds());
+            applyActiveEffects (g, texture, getLocalBounds(), g.getContextScale());
         }
 
         effectOffscreenCanvas = canvas;
@@ -3299,17 +3400,18 @@ std::optional<Point<float>> Component::getChildPointFromLocal (const Component& 
     if (! child.isTransformed())
         return childPoint;
 
-    if (approximatelyEqual (child.transform.getDeterminant(), 0.0f))
+    const auto combined = child.getCombinedTransform();
+    if (approximatelyEqual (combined.getDeterminant(), 0.0f))
         return std::nullopt;
 
-    return childPoint.transformed (child.transform.inverted());
+    return childPoint.transformed (combined.inverted());
 }
 
 std::optional<Point<float>> Component::getLocalPointFromChild (const Component& child, Point<float> childPoint) const
 {
     jassert (child.parentComponent == this);
 
-    return childPoint.transformed (child.transform) + child.getPosition();
+    return childPoint.transformed (child.getCombinedTransform()) + child.getPosition();
 }
 
 std::optional<Point<float>> Component::getLocalPointFromParent (Point<float> parentPoint) const
@@ -3460,7 +3562,7 @@ AffineTransform Component::getTransformToScreen() const
     for (auto comp = this; comp->parentComponent != nullptr; comp = comp->parentComponent)
     {
         if (comp->isTransformed())
-            transform = transform.followedBy (comp->getTransform());
+            transform = transform.followedBy (comp->getCombinedTransform());
 
         transform = transform.translated (comp->getPosition());
     }

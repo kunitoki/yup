@@ -299,6 +299,13 @@ public:
     };
 
     //==============================================================================
+    /** Returns the static type info describing the TabBar type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */

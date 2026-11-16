@@ -571,3 +571,33 @@ TEST_F (ApplicationThemeTest, FindDefaultColorSkipsComponentOverridesAndUsesScop
     EXPECT_EQ (theme->findDefaultColor (child, id), Colors::yellow);
 }
 
+TEST_F (ApplicationThemeTest, ComponentPaletteCacheIsBoundedAcrossDistinctPalettes)
+{
+    const Identifier id ("accentId");
+    theme->setPaletteMapping ([id] (const ThemePalette& palette, ApplicationTheme& t)
+    {
+        t.setPaletteColor (id, palette.getColor (ThemePalette::Role::accent));
+    });
+
+    Component component ("target");
+    const size_t totalPalettes = ApplicationTheme::maxCachedComponentPalettes * 3;
+
+    for (size_t i = 0; i < totalPalettes; ++i)
+    {
+        const Color accent = Color::fromRGBA (static_cast<uint8> (i & 0xff),
+                                              static_cast<uint8> ((i * 7) & 0xff),
+                                              static_cast<uint8> ((i * 13) & 0xff),
+                                              255);
+
+        ThemePalette palette;
+        palette.setColor (ThemePalette::Role::accent, accent);
+        component.setPalette (palette);
+
+        EXPECT_EQ (theme->findColor (component, id), accent);
+        EXPECT_LE (theme->getNumCachedComponentPalettes(), ApplicationTheme::maxCachedComponentPalettes);
+    }
+
+    EXPECT_EQ (theme->getNumCachedComponentPalettes(), ApplicationTheme::maxCachedComponentPalettes);
+}
+
+

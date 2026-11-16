@@ -485,13 +485,21 @@ TEST_F (ComponentPropertyTest, AllWritableStateBackedPropertiesNotifyListeners)
         &ComboBox::getClassTypeInfo(),
         &TextEditor::getClassTypeInfo(),
         &ProgressBar::getClassTypeInfo(),
+        &ImageComponent::getClassTypeInfo(),
         &ScrollBar::getClassTypeInfo(),
+        &ListBoxItem::getClassTypeInfo(),
         &ListBox::getClassTypeInfo(),
+        &TreeViewRow::getClassTypeInfo(),
+        &TreeView::getClassTypeInfo(),
         &Viewport::getClassTypeInfo(),
+        &TabBar::getClassTypeInfo(),
         &TabComponent::getClassTypeInfo(),
+        &ResizableCorner::getClassTypeInfo(),
+        &CodeEditor::getClassTypeInfo(),
         &FlexBoxComponent::getClassTypeInfo(),
         &GridComponent::getClassTypeInfo(),
-        &StackComponent::getClassTypeInfo()
+        &StackComponent::getClassTypeInfo(),
+        &WindowComponent::getClassTypeInfo()
     };
 
     for (const auto* typeInfo : types)
@@ -510,6 +518,11 @@ TEST_F (ComponentPropertyTest, AllWritableStateBackedPropertiesNotifyListeners)
             {
                 tabs->addTab (Identifier ("one"), "One", pageOne);
                 tabs->addTab (Identifier ("two"), "Two", pageTwo);
+            }
+            else if (auto* bar = dynamic_cast<TabBar*> (instance.get()))
+            {
+                bar->addTab (Identifier ("one"), "One");
+                bar->addTab (Identifier ("two"), "Two");
             }
             else if (auto* combo = dynamic_cast<ComboBox*> (instance.get()))
             {
@@ -547,6 +560,22 @@ TEST_F (ComponentPropertyTest, AllWritableStateBackedPropertiesNotifyListeners)
                     nextValue = property.enumValues[current.toString() == property.enumValues[0] ? 1 : 0];
                     break;
 
+                case ComponentProperty::Type::point:
+                    nextValue = VariantConverter<Point<float>>::toVar ({ 12.0f, 24.0f });
+                    break;
+
+                case ComponentProperty::Type::rectangle:
+                    nextValue = VariantConverter<Rectangle<float>>::toVar ({ 5.0f, 10.0f, 80.0f, 40.0f });
+                    break;
+
+                case ComponentProperty::Type::transform:
+                    nextValue = VariantConverter<AffineTransform>::toVar (AffineTransform::translation (8.0f, 16.0f));
+                    break;
+
+                case ComponentProperty::Type::color:
+                    nextValue = VariantConverter<Color>::toVar (Color (0xff123456));
+                    break;
+
                 case ComponentProperty::Type::array:
                 {
                     Array<var> elements;
@@ -581,10 +610,15 @@ TEST_F (ComponentPropertyTest, StateBackedMutatorsNotifyEvenWithDontSendNotifica
         component.setBounds (1.0f, 2.0f, 30.0f, 40.0f);
         component.addComponentListener (&listener);
 
-        // Changing only x must not emit spurious y/width/height notifications.
+        // Changing only x must notify x and bounds, without spurious y/width/height notifications.
         component.setBounds (10.0f, 2.0f, 30.0f, 40.0f);
-        ASSERT_EQ (listener.names.size(), 1);
-        EXPECT_EQ (listener.names[0], Identifier ("x"));
+        ASSERT_EQ (listener.names.size(), 2);
+        EXPECT_TRUE (listener.names.contains (Identifier ("x")));
+        EXPECT_TRUE (listener.names.contains (Identifier ("bounds")));
+
+        listener.reset();
+        component.setTransform (AffineTransform::translation (4.0f, 6.0f));
+        EXPECT_TRUE (listener.names.contains (Identifier ("transform")));
 
         listener.reset();
         component.setComponentID ("renamed");
@@ -699,3 +733,42 @@ TEST_F (ComponentPropertyTest, StateBackedMutatorsNotifyEvenWithDontSendNotifica
         tabs.removeComponentListener (&listener);
     }
 }
+
+TEST_F (ComponentPropertyTest, SliderCuratedRotaryGeometryDefaultsAndOverrides)
+{
+    Slider slider (Slider::RotaryVerticalDrag);
+
+    EXPECT_FLOAT_EQ (slider.findPropertyAs<float> (Identifier ("rotaryInset")), 0.1f);
+    EXPECT_FLOAT_EQ (slider.findPropertyAs<float> (Identifier ("rotaryDialInset")), 0.105f);
+    EXPECT_FLOAT_EQ (slider.findPropertyAs<float> (Identifier ("rotaryDialOutlineWidth")), 0.0175f);
+    EXPECT_FLOAT_EQ (slider.findPropertyAs<float> (Identifier ("rotaryPointerInset")), 0.175f);
+    EXPECT_FLOAT_EQ (slider.findPropertyAs<float> (Identifier ("rotaryPointerWidth")), 0.03f);
+    EXPECT_FLOAT_EQ (slider.findPropertyAs<float> (Identifier ("rotaryArcWidth")), 0.075f);
+
+    slider.setProperty (Identifier ("rotaryArcWidth"), 0.12);
+    EXPECT_FLOAT_EQ (slider.findPropertyAs<float> (Identifier ("rotaryArcWidth")), 0.12f);
+}
+
+TEST_F (ComponentPropertyTest, NonDefaultConstructibleGuiTypesExposeDescriptorsWithoutSpawningDesktopWindows)
+{
+    EXPECT_FALSE (DocumentWindow::getClassTypeInfo().hasFactory());
+    EXPECT_NE (DocumentWindow::getClassTypeInfo().findProperty (Identifier ("backgroundColor")), nullptr);
+    EXPECT_NE (DocumentWindow::getClassTypeInfo().findProperty (Identifier ("resizable")), nullptr);
+
+    EXPECT_FALSE (TabButton::getClassTypeInfo().hasFactory());
+    EXPECT_TRUE (TabButton::getClassTypeInfo().isSubtypeOf (Button::getClassTypeInfo()));
+    EXPECT_NE (TabButton::getClassTypeInfo().findProperty (Identifier ("cornerRadius")), nullptr);
+
+    TabBar bar;
+    auto& tab = bar.addTab (Identifier ("main"), "Main");
+    RecordingListener listener;
+    tab.addComponentListener (&listener);
+
+    tab.setText ("Updated");
+    tab.setClosable (true);
+    EXPECT_TRUE (listener.names.contains (Identifier ("text")));
+    EXPECT_TRUE (listener.names.contains (Identifier ("closable")));
+
+    tab.removeComponentListener (&listener);
+}
+

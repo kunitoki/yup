@@ -39,6 +39,9 @@
     iosFrameworks:        CoreMotion
     iosSimFrameworks:     CoreMotion
     linuxLibs:            X11
+    shaderDirectory:      effects
+    shaderBundles:        ComponentBlurEffect
+                          ComponentColorMatrixEffect
 
   END_YUP_MODULE_DECLARATION
 
@@ -135,6 +138,8 @@ class DeferredReplayer;
 
 //==============================================================================
 
+#include <array>
+#include <atomic>
 #include <optional>
 #include <tuple>
 #include <unordered_map>
@@ -163,6 +168,11 @@ class DeferredReplayer;
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
 #include "effects/yup_ComponentEffect.h"
+#include "effects/yup_BlurEffect.h"
+#include "effects/yup_DropShadowEffect.h"
+#include "effects/yup_GlowEffect.h"
+#include "effects/yup_ColorMatrixEffect.h"
+#include "effects/yup_FilterEffect.h"
 #include "effects/yup_ComponentEffectRegistry.h"
 #include "themes/yup_ThemePalette.h"
 #include "component/yup_ComponentStyle.h"
@@ -220,6 +230,7 @@ class DeferredReplayer;
 #include "widgets/yup_ScrollBar.h"
 #include "widgets/yup_Viewport.h"
 #include "widgets/yup_ProgressBar.h"
+#include "widgets/yup_ImageComponent.h"
 #include "widgets/yup_ResizableCorner.h"
 #include "widgets/yup_ListBoxItem.h"
 #include "widgets/yup_ListBox.h"
@@ -250,6 +261,7 @@ class DeferredReplayer;
 #include "layout/yup_FlexBoxComponent.h"
 #include "layout/yup_GridComponent.h"
 #include "layout/yup_StackComponent.h"
+#include "layout/yup_WindowComponent.h"
 
 //==============================================================================
 

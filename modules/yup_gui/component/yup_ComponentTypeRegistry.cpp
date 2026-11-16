@@ -44,4 +44,22 @@ const ComponentTypeInfo* ComponentTypeRegistry::findType (const Identifier& type
     return nullptr;
 }
 
+std::vector<const ComponentTypeInfo*> ComponentTypeRegistry::getRegisteredTypes() const
+{
+    const ScopedLock sl (lock);
+
+    std::vector<const ComponentTypeInfo*> result;
+    result.reserve (types.size());
+
+    for (const auto& [name, info] : types)
+        result.push_back (info);
+
+    std::sort (result.begin(), result.end(), [] (const ComponentTypeInfo* a, const ComponentTypeInfo* b)
+    {
+        return a->getTypeName().toString() < b->getTypeName().toString();
+    });
+
+    return result;
+}
+
 } // namespace yup

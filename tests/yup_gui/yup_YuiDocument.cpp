@@ -592,4 +592,85 @@ TEST_F (YuiDocumentTests, LoadFromStringWithoutImportResolverFailsWhenDocumentCo
     EXPECT_EQ (document.getDiagnostics().front().toString(), "1:1: Can't import 'missing.yui'");
 }
 
+TEST_F (YuiDocumentTests, ValidatesDocumentTreesAgainstSchemaAndReportsLocations)
+{
+    const auto schema = YuiDocument::createSchema();
+    ASSERT_NE (schema, nullptr);
+    EXPECT_TRUE (schema->isValid());
+    EXPECT_TRUE (schema->hasNodeType (Identifier ("yui")));
+    EXPECT_TRUE (schema->hasNodeType (Identifier ("style")));
+    EXPECT_TRUE (schema->hasNodeType (Identifier ("rule")));
+    EXPECT_TRUE (schema->hasNodeType (Identifier ("Slider")));
+
+    const auto validParsed = YuiParser::parse ("style { Slider { trackWidth: 4; } }\nColumn { Slider { id: knob; } }");
+    ASSERT_TRUE (validParsed.wasOk());
+    EXPECT_TRUE (schema->validate (validParsed.document).wasOk());
+
+    // Loading a valid document first so we verify a malformed DataTree keeps the loaded UI intact.
+    YuiDocument document;
+    ASSERT_TRUE (document.loadFromString ("Column { Slider { id: knob; } }").wasOk());
+    auto* existingKnob = document.findById ("knob");
+    ASSERT_NE (existingKnob, nullptr);
+
+    // Construct a malformed DataTree: a `rule` missing its required `selector` property, with a source map entry.
+    DataTree brokenDoc ("yui");
+    DataTree styleBlock ("style");
+    DataTree badRule ("rule");
+    DataTree rootComp ("Column");
+    styleBlock.beginTransaction().addChild (badRule);
+    {
+        auto tx = brokenDoc.beginTransaction();
+        tx.addChild (styleBlock);
+        tx.addChild (rootComp);
+    }
+
+    EXPECT_TRUE (schema->validate (brokenDoc).failed());
+
+    YuiSourceMap map;
+    map.add (badRule, {}, 7, 5, "broken.yui");
+
+    const auto badLoad = document.load (brokenDoc, map);
+    EXPECT_TRUE (badLoad.failed());
+    EXPECT_EQ (document.findById ("knob"), existingKnob);
+    ASSERT_EQ (document.getDiagnostics().size(), 1u);
+    EXPECT_EQ (document.getDiagnostics().front().source, "broken.yui");
+    EXPECT_EQ (document.getDiagnostics().front().line, 7);
+    EXPECT_EQ (document.getDiagnostics().front().column, 5);
+}
+
+TEST_F (YuiDocumentTests, LiveTreeMutationsUpdateComponentsAndStyleSheetAutomatically)
+{
+    YuiDocument document;
+    ASSERT_TRUE (document.loadFromString (R"yui(
+        style {
+            Slider { trackWidth: 6; }
+        }
+        Column {
+            Slider { id: knob; value: 0.2; }
+            Label { id: title; text: "Init"; }
+        }
+    )yui")
+                     .wasOk());
+
+    auto* knob = document.findById<Slider> ("knob");
+    auto* title = document.findById<Label> ("title");
+    ASSERT_NE (knob, nullptr);
+    ASSERT_NE (title, nullptr);
+    EXPECT_DOUBLE_EQ (static_cast<double> (knob->findProperty (Identifier ("trackWidth"))), 6.0);
+
+    // Mutate the live DataTree returned by getTree(): both style declarations and component properties update in place.
+    auto liveTree = document.getTree();
+    auto styleDecl = liveTree.getChild (0).getChild (0).getChild (0);
+    auto labelNode = liveTree.getChild (1).getChild (1);
+
+    labelNode.beginTransaction().setProperty ("text", "\"Live\"");
+    EXPECT_EQ (document.findById<Label> ("title"), title);
+    EXPECT_EQ (title->getText(), "Live");
+
+    styleDecl.beginTransaction().setProperty ("value", "12");
+    EXPECT_EQ (document.findById<Slider> ("knob"), knob);
+    EXPECT_DOUBLE_EQ (static_cast<double> (knob->findProperty (Identifier ("trackWidth"))), 12.0);
+}
+
+
 

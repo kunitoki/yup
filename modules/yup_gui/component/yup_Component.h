@@ -711,9 +711,15 @@ public:
     AffineTransform getTransform() const;
 
     /**
+        Returns the effective transform applied to this component, combining any stylesheet
+        transform from StyleState with the explicit transform set via setTransform().
+     */
+    AffineTransform getCombinedTransform() const;
+
+    /**
         Check if the component is transformed.
 
-        @return True if the component is transformed, false otherwise.
+        @return True if the component has a non-identity explicit or style transform, false otherwise.
      */
     bool isTransformed() const;
 
@@ -2206,6 +2212,7 @@ private:
     void sendMoved();
     void sendResized();
     void sendChildBoundsChangedToParent();
+    void setStyleTransform (const AffineTransform& newTransform);
 
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
     AffineTransform getTransformToTopLevelComponent() const;
@@ -2214,6 +2221,9 @@ private:
     void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
     void paintStyleShadows (Graphics& g) const;
     void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
+    bool hasActiveEffect() const noexcept;
+    void applyActiveEffects (Graphics& g, GpuTexture::Ptr texture, Rectangle<float> bounds, float scale);
+    void releaseUnusedEffectCanvases() noexcept;
     GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt);
     std::optional<RectangleList<float>> takeEffectDirtyRegion (bool renderContinuous);
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
@@ -2259,6 +2269,7 @@ private:
     std::optional<float> windowAspectRatio;
     GpuCanvas::Ptr cachedTextureCanvas;
     GpuCanvas::Ptr effectOffscreenCanvas;
+    GpuCanvas::Ptr filterIntermediateCanvas;
     RectangleList<float> effectDirtyRegion;
     static constexpr int maximumDirtyRectangles = 8;
     GpuCanvas::Ptr presentedCanvas;

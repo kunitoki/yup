@@ -52,6 +52,29 @@ Path modifiedExpressionPath (const Path& source, F&& modify)
 } // namespace
 
 //==============================================================================
+StrokeDashPattern StrokeDashPattern::fromString (StringRef text)
+{
+    const auto trimmed = String (text).trim();
+    if (trimmed.isEmpty() || trimmed.equalsIgnoreCase ("none"))
+        return {};
+
+    auto tokens = StringArray::fromTokens (trimmed, " ,\t\r\n", "");
+    tokens.removeEmptyStrings (true);
+
+    Array<float> values;
+    values.ensureStorageAllocated (tokens.size());
+
+    for (const auto& token : tokens)
+    {
+        const float value = token.getFloatValue();
+        if (value > 0.0f)
+            values.add (value);
+    }
+
+    return StrokeDashPattern (std::move (values));
+}
+
+//==============================================================================
 void addGraphicsExpressionTypes (ExpressionContext& context)
 {
     using P = Point<float>;
@@ -60,6 +83,7 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
     using L = Line<float>;
     using T = AffineTransform;
     using G = ColorGradient;
+    using D = StrokeDashPattern;
 
     // All types are registered before any function, as signatures reference each other
     auto point = context.addType<P> ("point");
@@ -69,6 +93,7 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
     auto color = context.addType<Color> ("color");
     auto transform = context.addType<T> ("transform");
     auto path = context.addType<Path> ("path");
+    auto dash = context.addType<D> ("dash");
     auto font = context.addType<Font> ("font");
     auto gradient = context.addType<G> ("gradient");
 
@@ -118,6 +143,27 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
                                                                 { "centerRight", Justification::centerRight },
                                                                 { "centerBottom", Justification::centerBottom },
                                                             });
+
+    context.addEnum<Fitting> ("fitting", {
+                                             { "none", Fitting::none },
+                                             { "scaleToFit", Fitting::scaleToFit },
+                                             { "fitWidth", Fitting::fitWidth },
+                                             { "fitHeight", Fitting::fitHeight },
+                                             { "scaleToFill", Fitting::scaleToFill },
+                                             { "fill", Fitting::fill },
+                                             { "tile", Fitting::tile },
+                                             { "centerCrop", Fitting::centerCrop },
+                                             { "centerInside", Fitting::centerInside },
+                                             { "stretchWidth", Fitting::stretchWidth },
+                                             { "stretchHeight", Fitting::stretchHeight },
+                                         });
+
+    context.addEnum<LayerMaskMode> ("maskMode", {
+                                                    { "alpha", LayerMaskMode::Alpha },
+                                                    { "invertedAlpha", LayerMaskMode::InvertedAlpha },
+                                                    { "luminance", LayerMaskMode::Luminance },
+                                                    { "invertedLuminance", LayerMaskMode::InvertedLuminance },
+                                                });
 
     point
         .constructor ([] (float x, float y) { return P (x, y); })
@@ -325,7 +371,27 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
         .method ("withNonZeroWinding", [] (const Path& p, bool nonZero)
         {
             return modifiedExpressionPath (p, [&] (Path& o) { o.setUsingNonZeroWinding (nonZero); });
-        });
+        })
+        .method ("createDashed", [] (const Path& p, const D& d) { return p.createDashed (d.asSpan()); })
+        .method ("createDashed", [] (const Path& p, const D& d, float offset) { return p.createDashed (d.asSpan(), offset); });
+
+    context.addArrayType<float>();
+
+    dash
+        .constructor ([] { return D(); })
+        .constructor ([] (float a) { return D (Array<float> { a }); })
+        .constructor ([] (float a, float b) { return D (Array<float> { a, b }); })
+        .constructor ([] (float a, float b, float c, float d) { return D (Array<float> { a, b, c, d }); })
+        .constructor ([] (float a, float b, float c, float d, float e, float f) { return D (Array<float> { a, b, c, d, e, f }); })
+        .constructor ([] (const String& text) { return D::fromString (text); })
+        .constructor ([] (ExpressionArrayView<float> values) -> D
+        {
+            return (values.data != nullptr && values.size > 0) ? D (Array<float> (values.data, values.size)) : D();
+        })
+        .member ("isEmpty", [] (const D& d) { return d.isEmpty(); })
+        .equality();
+
+    context.addFunction ("dash", [] (const D& d) { return d; });
 
     font
         .constructor ([] { return Font(); })

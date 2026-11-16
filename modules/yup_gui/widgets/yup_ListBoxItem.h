@@ -144,6 +144,13 @@ public:
     };
 
     //==============================================================================
+    /** Returns the static type info describing the ListBoxItem type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
     /** @internal */
     Rectangle<float> getTextBoundsForRendering() const { return textBounds; }
     /** @internal*/

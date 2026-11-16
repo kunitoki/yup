@@ -63,6 +63,7 @@ struct ComponentProperty
         color,       /**< A color, stored as an ARGB int64. */
         point,       /**< A 2D point. */
         rectangle,   /**< A rectangle. */
+        transform,   /**< A 2D affine transform. */
         enumeration, /**< One of a fixed set of string values (see @ref enumValues). */
         font,        /**< A font. */
         drawing,     /**< The name of a drawing program. */
@@ -146,19 +147,19 @@ struct ComponentProperty
     /** Returns the scalar and special type names recognized in `.yui` property declarations. */
     static const StringArray& getDeclaredTypeNames()
     {
-        static const StringArray names { "number", "integer", "boolean", "string", "color", "point", "rectangle", "font", "drawing", "any" };
+        static const StringArray names { "number", "integer", "boolean", "string", "color", "point", "rectangle", "transform", "font", "drawing", "any" };
         return names;
     }
 
     /** Returns the type a `.yui` declaration names: `number`, `integer`, `boolean`, `string`, `color`,
-        `point`, `rectangle`, `font` or `drawing`, Type::array for an array of a scalar type such as
+        `point`, `rectangle`, `transform`, `font` or `drawing`, Type::array for an array of a scalar type such as
         `string[]`, and Type::any for any other name.
     */
     static Type getTypeFromName (const String& typeName)
     {
         static constexpr Type scalarTypes[] = {
             Type::number, Type::integer, Type::boolean, Type::string, Type::color,
-            Type::point, Type::rectangle, Type::font, Type::drawing, Type::any
+            Type::point, Type::rectangle, Type::transform, Type::font, Type::drawing, Type::any
         };
 
         if (typeName.endsWith ("[]"))
@@ -184,19 +185,21 @@ struct ComponentProperty
     }
 
     /** The scalar types an expression reads and writes. */
-    static constexpr std::array<Type, 7> expressionTypes {
+    static constexpr std::array<Type, 9> expressionTypes {
         Type::number,
         Type::integer,
         Type::boolean,
         Type::string,
         Type::color,
         Type::point,
-        Type::rectangle
+        Type::rectangle,
+        Type::transform,
+        Type::font
     };
 
     /** Returns true for the scalar types an expression reads and writes.
 
-        These are number, integer, boolean, string, color, point and rectangle. They are the types a
+        These are number, integer, boolean, string, color, point, rectangle, transform and font. They are the types a
         value expression can produce, a drawing can declare, and an array can hold.
     */
     static constexpr bool isExpressionType (Type type) noexcept

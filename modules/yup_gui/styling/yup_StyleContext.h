@@ -198,9 +198,11 @@ private:
                        ComponentCache& cache,
                        const StyleSheet::Declaration* cursorDeclaration,
                        const StyleSheet::Declaration* effectDeclaration,
+                       const StyleSheet::Declaration* filterDeclaration,
                        const StyleSheet::Declaration* shadowDeclaration,
+                       const StyleSheet::Declaration* glowDeclaration,
                        bool* paletteDependent);
-    static const ComponentProperty* findDescriptor (const ComponentTypeInfo& typeInfo, const DrawingStyle* drawing, const Identifier& name);
+    const ComponentProperty* findDescriptor (const Component& component, const DrawingStyle* drawing, const Identifier& name) const;
     static const ComponentProperty* findStoredProperty (const ComponentTypeInfo& typeInfo, const Identifier& storageId);
     var getBaseValue (Component& component, const ComponentCache& cache, const ComponentProperty* descriptor, const Identifier& storageId);
     bool updateTransitions (Component& component, const ComponentCache& cache, const std::vector<PendingTransition>& pending, Array<Identifier>& touched);

@@ -758,6 +758,81 @@ TEST_F (StyleContextTests, ReportsMalformedShadows)
     EXPECT_FLOAT_EQ (root.getPaintMargin().getLeft(), 0.0f);
 }
 
+TEST_F (StyleContextTests, ParsesGlowLayersComposesWithShadowsAndClearsOnNone)
+{
+    Component root ("root");
+    attach (root, R"yui(
+        palette Ember { colors: "#100b00-#85cb33-#efffc8-#a5cbc3-#3b341f"; accent: #ff9a1f; }
+        style {
+            #root {
+                palette: Ember;
+                shadow: 0 4 6 #00000080;
+                glow: 10 2 palette.accent.withAlpha (0.5), 4 #ffffff40;
+            }
+            #root.dim { glow: none; }
+        })yui");
+
+    ASSERT_NE (root.getStyleState(), nullptr);
+    const auto& shadows = root.getStyleState()->getShadows();
+    const auto& glows = root.getStyleState()->getGlows();
+    ASSERT_EQ (shadows.size(), 1u);
+    ASSERT_EQ (glows.size(), 2u);
+
+    EXPECT_EQ (glows[0].offset, Point<float> (0.0f, 0.0f));
+    EXPECT_FLOAT_EQ (glows[0].blur, 10.0f);
+    EXPECT_FLOAT_EQ (glows[0].spread, 2.0f);
+    EXPECT_EQ (glows[0].color, Color (0xffff9a1f).withAlpha (0.5f));
+
+    EXPECT_EQ (glows[1].offset, Point<float> (0.0f, 0.0f));
+    EXPECT_FLOAT_EQ (glows[1].blur, 4.0f);
+    EXPECT_FLOAT_EQ (glows[1].spread, 0.0f);
+    EXPECT_EQ (glows[1].color, Color (0x40ffffff));
+
+    const auto margin = root.getPaintMargin();
+    EXPECT_FLOAT_EQ (margin.getLeft(), 12.0f);
+    EXPECT_FLOAT_EQ (margin.getTop(), 12.0f);
+    EXPECT_FLOAT_EQ (margin.getRight(), 12.0f);
+    EXPECT_FLOAT_EQ (margin.getBottom(), 12.0f);
+
+    root.addStyleClass (Identifier ("dim"));
+    restyle (root);
+    EXPECT_TRUE (root.getStyleState()->getGlows().empty());
+    EXPECT_EQ (root.getStyleState()->getShadows().size(), 1u);
+    EXPECT_FLOAT_EQ (root.getPaintMargin().getBottom(), 10.0f);
+}
+
+TEST_F (StyleContextTests, ReportsMalformedGlowAndInvalidGlowColor)
+{
+    Component root ("root");
+    attach (root, "style { #root { glow: 8 2 4 #ff0000; } }");
+    expectDiagnostic (root, "glow: Expected 'blur [spread] color'");
+
+    Component second ("second");
+    attach (second, "style { #second { glow: 8 notAColor; } }");
+    expectDiagnostic (second, "glow[0]: ");
+}
+
+TEST_F (StyleContextTests, AppliesCssFilterDeclarations)
+{
+    Component root ("root");
+    attach (root, "style { .blurred { filter: blur(4px); } .gray { filter: grayscale(100%); } }");
+
+    root.addStyleClass (Identifier ("blurred"));
+    restyle (root);
+    ASSERT_NE (root.getStyleState(), nullptr);
+    ASSERT_NE (root.getStyleState()->getFilterEffect(), nullptr);
+    ASSERT_EQ (root.getStyleState()->getFilterEffect()->getOperations().size(), 1u);
+    EXPECT_EQ (root.getStyleState()->getFilterEffect()->getOperations()[0].type, FilterEffect::Type::blur);
+    EXPECT_EQ (root.getComponentEffect(), nullptr);
+
+    root.removeStyleClass (Identifier ("blurred"));
+    root.addStyleClass (Identifier ("gray"));
+    restyle (root);
+    ASSERT_NE (root.getStyleState()->getFilterEffect(), nullptr);
+    ASSERT_EQ (root.getStyleState()->getFilterEffect()->getOperations().size(), 1u);
+    EXPECT_EQ (root.getStyleState()->getFilterEffect()->getOperations()[0].type, FilterEffect::Type::grayscale);
+}
+
 namespace yup
 {
 
@@ -1071,5 +1146,217 @@ TEST_F (StyleContextTests, DeclarationValuesFollowTokensParentsSiblingsAndModels
     restyle (root);
     EXPECT_DOUBLE_EQ (glow (target), 8.0 + 25.0 + 5.0 * 3.0);
 }
+
+TEST_F (StyleContextTests, StylesAndAnimatesTransformInSeparateLayerComposedWithExplicitTransform)
+{
+    Component root ("root");
+    root.setBounds (0.0f, 0.0f, 400.0f, 400.0f);
+
+    Component card ("card");
+    card.setBounds (10.0f, 20.0f, 100.0f, 50.0f);
+    card.setTransform (AffineTransform::translation (30.0f, 0.0f));
+    card.addStyleClass (Identifier ("card"));
+    root.addAndMakeVisible (card);
+
+    attach (root, R"yui(
+        style {
+            .card { transition: transform 1s linear; }
+            .shifted { transform: transform.translation (0, 40); }
+        }
+    )yui");
+
+    EXPECT_EQ (card.getTransform(), AffineTransform::translation (30.0f, 0.0f));
+    EXPECT_EQ (card.getCombinedTransform(), AffineTransform::translation (30.0f, 0.0f));
+
+    card.addStyleClass (Identifier ("shifted"));
+    advance (root, 0.0);
+    advance (root, 0.5);
+
+    // Explicit C++ transform stays untouched while the style transform animates and composes with it.
+    EXPECT_EQ (card.getTransform(), AffineTransform::translation (30.0f, 0.0f));
+    EXPECT_NEAR (card.getCombinedTransform().getTranslateX(), 30.0f, 1.0e-3f);
+    EXPECT_NEAR (card.getCombinedTransform().getTranslateY(), 20.0f, 1.0e-3f);
+    EXPECT_NE (card.getStyleState(), nullptr);
+    EXPECT_NEAR (card.getStyleState()->getStyleTransform().getTranslateY(), 20.0f, 1.0e-3f);
+
+    advance (root, 0.5);
+    EXPECT_NEAR (card.getCombinedTransform().getTranslateX(), 30.0f, 1.0e-3f);
+    EXPECT_NEAR (card.getCombinedTransform().getTranslateY(), 40.0f, 1.0e-3f);
+
+    // Coordinate mapping and hit-testing follow the composed transform: card local (5, 5) maps to parent (10 + 30 + 5, 20 + 40 + 5) = (45, 65).
+    EXPECT_EQ (root.findComponentAt ({ 45.0f, 65.0f }), &card);
+    EXPECT_EQ (root.findComponentAt ({ 15.0f, 25.0f }), &root);
+
+    // Removing the class transitions the style transform back to identity while preserving the explicit C++ transform.
+    card.removeStyleClass (Identifier ("shifted"));
+    advance (root, 0.0);
+    advance (root, 1.0);
+    EXPECT_EQ (card.getTransform(), AffineTransform::translation (30.0f, 0.0f));
+    EXPECT_NEAR (card.getCombinedTransform().getTranslateX(), 30.0f, 1.0e-3f);
+    EXPECT_NEAR (card.getCombinedTransform().getTranslateY(), 0.0f, 1.0e-3f);
+}
+
+TEST_F (StyleContextTests, EmitsWarningDiagnosticsForUndeclaredCustomPropertiesUnlessDeclaredInRuleOrDrawing)
+{
+    const auto parsed = YuiParser::parse (R"yui(
+        drawing Ring {
+            property ringThickness: number = 2;
+            circle { center: bounds.center; radius: ringThickness; }
+        }
+        style {
+            #undeclared { mysteryValue: 42; cornerRadius: 8; }
+            #declaredWithDefault { property declaredProp: number = 1; declaredProp: 7; }
+            #declaredWithoutDefault { property bareProp: number; bareProp: 9; }
+            #withDrawing { drawing: Ring; ringThickness: 5; }
+        }
+    )yui");
+    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+
+    Component root ("root");
+    Component undeclared ("undeclared");
+    Component declaredWithDefault ("declaredWithDefault");
+    Component declaredWithoutDefault ("declaredWithoutDefault");
+    Component withDrawing ("withDrawing");
+    root.addAndMakeVisible (undeclared);
+    root.addAndMakeVisible (declaredWithDefault);
+    root.addAndMakeVisible (declaredWithoutDefault);
+    root.addAndMakeVisible (withDrawing);
+
+    root.setStyleSheet (build (parsed.document));
+    restyle (root);
+
+    // Undeclared property still evaluates and writes into the style store, but emits a Severity::warning diagnostic.
+    EXPECT_DOUBLE_EQ (static_cast<double> (undeclared.findProperty (Identifier ("mysteryValue"))), 42.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> (declaredWithDefault.findProperty (Identifier ("declaredProp"))), 7.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> (declaredWithoutDefault.findProperty (Identifier ("bareProp"))), 9.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> (withDrawing.findProperty (Identifier ("ringThickness"))), 5.0);
+
+    const auto& diagnostics = root.getStyleContext()->getDiagnostics();
+    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    EXPECT_EQ (diagnostics[0].severity, YuiDiagnostic::Severity::warning);
+    EXPECT_TRUE (diagnostics[0].isWarning());
+    EXPECT_FALSE (diagnostics[0].isError());
+    EXPECT_TRUE (diagnostics[0].message.contains ("mysteryValue")) << diagnostics[0].message;
+
+    const auto located = parsed.sourceMap.locate (diagnostics[0]);
+    EXPECT_TRUE (located.toString().contains ("warning: ")) << located.toString();
+}
+
+TEST_F (StyleContextTests, ExplicitInstanceDrawingStyleBeatsStylesheetDrawingAndExposesProperties)
+{
+    const auto parsed = YuiParser::parse (R"yui(
+        drawing DefaultDial {
+            property dialScale: number = 1;
+            circle { center: bounds.center; radius: 10 * dialScale; }
+        }
+        drawing CustomDial {
+            property customThickness: number = 2;
+            circle { center: bounds.center; radius: 10 + customThickness; }
+        }
+        style {
+            Slider {
+                drawing: DefaultDial;
+                customThickness: 6;
+            }
+        }
+    )yui");
+    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+
+    auto sheet = build (parsed.document);
+
+    Component root ("root");
+    Slider defaultSlider (Slider::RotaryVerticalDrag);
+    Slider customSlider (Slider::RotaryVerticalDrag);
+
+    auto explicitStyle = DrawingStyle::create (customSlider, sheet->findDrawing ("CustomDial"));
+    ASSERT_TRUE (explicitStyle.wasOk()) << explicitStyle.getErrorMessage();
+    customSlider.setStyle (explicitStyle.getReference());
+
+    root.addAndMakeVisible (defaultSlider);
+    root.addAndMakeVisible (customSlider);
+    root.setStyleSheet (sheet);
+    restyle (root);
+
+    // defaultSlider gets DefaultDial from the stylesheet; customSlider keeps its explicit CustomDial
+    // and still has customThickness typed and styled without an undeclared-property warning on customSlider.
+    EXPECT_NE (defaultSlider.getStyle().get(), explicitStyle.getReference().get());
+    EXPECT_EQ (customSlider.getStyle().get(), explicitStyle.getReference().get());
+    EXPECT_DOUBLE_EQ (static_cast<double> (customSlider.findProperty (Identifier ("customThickness"))), 6.0);
+}
+
+TEST_F (StyleContextTests, DrawingPropertiesReachStyleRulesWhenMoreSpecificSelectorOverridesDrawing)
+{
+    const auto parsed = YuiParser::parse (R"yui(
+        drawing PorcelainKnob {
+            property bezelSize: number = 0.72;
+            circle { center: bounds.center; radius: 16 * bezelSize; }
+        }
+        drawing SynthKnob {
+            circle { center: bounds.center; radius: 16; }
+        }
+        style {
+            .knob {
+                drawing: PorcelainKnob;
+                bezelSize: 0.8;
+            }
+            .synth .knob {
+                drawing: SynthKnob;
+            }
+        }
+    )yui");
+    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+
+    Component root ("root");
+    Component synthSection ("synth");
+    synthSection.addStyleClass (Identifier ("synth"));
+
+    Slider porcelain (Slider::RotaryVerticalDrag);
+    porcelain.addStyleClass (Identifier ("knob"));
+
+    Slider synth (Slider::RotaryVerticalDrag);
+    synth.addStyleClass (Identifier ("knob"));
+
+    synthSection.addAndMakeVisible (synth);
+    root.addAndMakeVisible (porcelain);
+    root.addAndMakeVisible (synthSection);
+
+    root.setStyleSheet (build (parsed.document));
+    restyle (root);
+
+    EXPECT_TRUE (root.getStyleContext()->getDiagnostics().empty())
+        << YuiDiagnostic::join (root.getStyleContext()->getDiagnostics());
+    EXPECT_DOUBLE_EQ (static_cast<double> (porcelain.findProperty (Identifier ("bezelSize"))), 0.8);
+    EXPECT_DOUBLE_EQ (static_cast<double> (synth.findProperty (Identifier ("bezelSize"))), 0.8);
+}
+
+TEST_F (StyleContextTests, DrawingCompilationFailureLocatesChildPropertyLineInSourceMap)
+{
+    const auto parsed = YuiParser::parse (
+        "drawing BrokenDial {\n"
+        "    circle {\n"
+        "        center: bounds.center;\n"
+        "        radius: missingVar;\n"
+        "    }\n"
+        "}\n"
+        "style {\n"
+        "    Slider { drawing: BrokenDial; }\n"
+        "}\n");
+    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+
+    Component root ("root");
+    Slider slider (Slider::RotaryVerticalDrag);
+    root.addAndMakeVisible (slider);
+    root.setStyleSheet (build (parsed.document));
+    restyle (root);
+
+    const auto& diagnostics = root.getStyleContext()->getDiagnostics();
+    ASSERT_EQ (diagnostics.size(), 1u);
+    const auto located = parsed.sourceMap.locate (diagnostics[0]);
+    EXPECT_EQ (located.line, 4);
+    EXPECT_EQ (diagnostics[0].property, Identifier ("radius"));
+}
+
+
+
 
 

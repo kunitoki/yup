@@ -156,7 +156,139 @@ std::vector<yup_wchar> toCodepoints (const String& text)
     return result;
 }
 
+struct CodeEditorIds
+{
+    static inline const Identifier text { "text" };
+    static inline const Identifier syntax { "syntax" };
+    static inline const Identifier scheme { "scheme" };
+    static inline const Identifier readOnly { "readOnly" };
+    static inline const Identifier lineNumbersVisible { "lineNumbersVisible" };
+    static inline const Identifier tabWidth { "tabWidth" };
+    static inline const Identifier indentUsingTabs { "indentUsingTabs" };
+    static inline const Identifier autoClosingEnabled { "autoClosingEnabled" };
+    static inline const Identifier occurrenceHighlightingEnabled { "occurrenceHighlightingEnabled" };
+    static inline const Identifier indentGuidesVisible { "indentGuidesVisible" };
+    static inline const Identifier whitespaceVisible { "whitespaceVisible" };
+    static inline const Identifier minimapVisible { "minimapVisible" };
+};
+
+String syntaxIdFromDefinitionName (const String& definitionName)
+{
+    if (definitionName.isEmpty())
+        return "none";
+
+    if (definitionName == "C++")
+        return "cpp";
+
+    if (definitionName == "GLSL")
+        return "glsl";
+
+    if (definitionName == "Python")
+        return "python";
+
+    if (definitionName == "XML")
+        return "xml";
+
+    if (definitionName == "YDSP")
+        return "ydsp";
+
+    if (definitionName == "YUI")
+        return "yui";
+
+    return definitionName.toLowerCase();
+}
+
+String schemeIdFromDisplayName (const String& displayName)
+{
+    if (displayName.isEmpty())
+        return "default";
+
+    if (displayName == "Monokai")
+        return "monokai";
+
+    if (displayName == "Alabaster")
+        return "alabaster";
+
+    if (displayName == "One Dark")
+        return "oneDark";
+
+    if (displayName == "Solarized Dark")
+        return "solarizedDark";
+
+    if (displayName == "Solarized Light")
+        return "solarizedLight";
+
+    return displayName.removeCharacters (" -_").toLowerCase();
+}
+
 } // namespace
+
+//==============================================================================
+
+const ComponentTypeInfo& CodeEditor::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<CodeEditor> (Identifier ("CodeEditor"))
+                                 .property (
+                                     CodeEditorIds::text,
+                                     &CodeEditor::getText,
+                                     [] (CodeEditor& c, const String& v)
+                                     {
+                                         if (c.getText() != v)
+                                             c.setText (v);
+                                     },
+                                     String(),
+                                     "The full text of the document.")
+                                 .addProperty (ComponentProperty {
+                                     .name = CodeEditorIds::syntax,
+                                     .type = ComponentProperty::Type::enumeration,
+                                     .defaultValue = "none",
+                                     .getter = [] (const Component& component) -> var
+                                     {
+                                         const auto& editor = static_cast<const CodeEditor&> (component);
+                                         return syntaxIdFromDefinitionName (editor.getSyntaxDefinition().getName());
+                                     },
+                                     .setter = [] (Component& component, const var& value)
+                                     {
+                                         auto& editor = static_cast<CodeEditor&> (component);
+                                         const auto language = value.toString();
+                                         editor.setSyntaxDefinition (language == "none" ? StringRef() : StringRef (language));
+                                     },
+                                     .isStyleable = false,
+                                     .enumValues = { "none", "cpp", "glsl", "python", "xml", "ydsp", "yui" },
+                                     .description = "The built-in syntax highlighting definition." })
+                                 .addProperty (ComponentProperty {
+                                     .name = CodeEditorIds::scheme,
+                                     .type = ComponentProperty::Type::enumeration,
+                                     .defaultValue = "default",
+                                     .getter = [] (const Component& component) -> var
+                                     {
+                                         const auto& editor = static_cast<const CodeEditor&> (component);
+                                         return schemeIdFromDisplayName (editor.getScheme().getName());
+                                     },
+                                     .setter = [] (Component& component, const var& value)
+                                     {
+                                         auto& editor = static_cast<CodeEditor&> (component);
+                                         const auto name = value.toString();
+                                         editor.setScheme (name.isEmpty() || name == "default"
+                                                               ? CodeEditorScheme::getDefault()
+                                                               : CodeEditorScheme::getBuiltIn (name));
+                                     },
+                                     .isStyleable = false,
+                                     .enumValues = { "default", "monokai", "alabaster", "oneDark", "solarizedDark", "solarizedLight" },
+                                     .description = "The built-in color scheme used to render the editor." })
+                                 .property (CodeEditorIds::readOnly, &CodeEditor::isReadOnly, &CodeEditor::setReadOnly, false, "Whether the editor is read-only.")
+                                 .property (CodeEditorIds::lineNumbersVisible, &CodeEditor::isLineNumbersVisible, &CodeEditor::setLineNumbersVisible, true, "Whether the line-number gutter is visible.")
+                                 .property (CodeEditorIds::tabWidth, &CodeEditor::getTabWidth, &CodeEditor::setTabWidth, 4, "The number of spaces a tab expands to.")
+                                 .property (CodeEditorIds::indentUsingTabs, &CodeEditor::isIndentUsingTabs, &CodeEditor::setIndentUsingTabs, false, "Whether indentation inserts tabs instead of spaces.")
+                                 .property (CodeEditorIds::autoClosingEnabled, &CodeEditor::isAutoClosingEnabled, &CodeEditor::setAutoClosingEnabled, true, "Whether typed brackets and quotes are closed automatically.")
+                                 .property (CodeEditorIds::occurrenceHighlightingEnabled, &CodeEditor::isOccurrenceHighlightingEnabled, &CodeEditor::setOccurrenceHighlightingEnabled, true, "Whether occurrences of the word at the caret are highlighted.")
+                                 .property (CodeEditorIds::indentGuidesVisible, &CodeEditor::isIndentGuidesVisible, &CodeEditor::setIndentGuidesVisible, true, "Whether vertical indent guides are painted.")
+                                 .property (CodeEditorIds::whitespaceVisible, &CodeEditor::isWhitespaceVisible, &CodeEditor::setWhitespaceVisible, false, "Whether whitespace markers are rendered.")
+                                 .property (CodeEditorIds::minimapVisible, &CodeEditor::isMinimapVisible, &CodeEditor::setMinimapVisible, false, "Whether the minimap overview is visible.")
+                                 .build();
+
+    return info;
+}
 
 //==============================================================================
 
@@ -178,6 +310,7 @@ public:
         editor.needsStyledTextUpdate = true;
         editor.searchMatchesNeedUpdate = editor.searchText.isNotEmpty();
         editor.hideHover();
+        editor.notifyPropertyChanged (CodeEditorIds::text);
         editor.repaint();
     }
 
@@ -586,8 +719,13 @@ void CodeEditor::setDocument (CodeDocument& newDocument)
 
 void CodeEditor::setSyntaxDefinition (const SyntaxDefinition& definition)
 {
+    const auto oldName = getSyntaxDefinition().getName();
     tokeniser.setSyntaxDefinition (definition);
     needsStyledTextUpdate = true;
+
+    if (getSyntaxDefinition().getName() != oldName)
+        notifyPropertyChanged (CodeEditorIds::syntax);
+
     repaint();
 }
 
@@ -616,8 +754,13 @@ const SyntaxDefinition& CodeEditor::getSyntaxDefinition() const
 
 void CodeEditor::setScheme (const CodeEditorScheme& newScheme)
 {
+    const auto oldName = scheme.getName();
     scheme = newScheme;
     needsStyledTextUpdate = true;
+
+    if (scheme.getName() != oldName)
+        notifyPropertyChanged (CodeEditorIds::scheme);
+
     repaint();
 }
 
@@ -683,6 +826,7 @@ void CodeEditor::setReadOnly (bool shouldBeReadOnly)
     if (readOnly != shouldBeReadOnly)
     {
         readOnly = shouldBeReadOnly;
+        notifyPropertyChanged (CodeEditorIds::readOnly);
         repaint();
     }
 }
@@ -1277,6 +1421,7 @@ void CodeEditor::setLineNumbersVisible (bool shouldBeVisible)
     if (lineNumbersVisible != shouldBeVisible)
     {
         lineNumbersVisible = shouldBeVisible;
+        notifyPropertyChanged (CodeEditorIds::lineNumbersVisible);
         resized();
         repaint();
     }
@@ -1301,29 +1446,49 @@ int CodeEditor::getTabWidth() const
 
 void CodeEditor::setIndentUsingTabs (bool shouldUseTabs)
 {
+    if (indentUsingTabs == shouldUseTabs)
+        return;
+
     indentUsingTabs = shouldUseTabs;
+    notifyPropertyChanged (CodeEditorIds::indentUsingTabs);
 }
 
 void CodeEditor::setAutoClosingEnabled (bool shouldAutoClose)
 {
+    if (autoClosingEnabled == shouldAutoClose)
+        return;
+
     autoClosingEnabled = shouldAutoClose;
+    notifyPropertyChanged (CodeEditorIds::autoClosingEnabled);
 }
 
 void CodeEditor::setOccurrenceHighlightingEnabled (bool shouldHighlight)
 {
+    if (occurrenceHighlighting == shouldHighlight)
+        return;
+
     occurrenceHighlighting = shouldHighlight;
+    notifyPropertyChanged (CodeEditorIds::occurrenceHighlightingEnabled);
     repaint();
 }
 
 void CodeEditor::setIndentGuidesVisible (bool shouldBeVisible)
 {
+    if (indentGuidesVisible == shouldBeVisible)
+        return;
+
     indentGuidesVisible = shouldBeVisible;
+    notifyPropertyChanged (CodeEditorIds::indentGuidesVisible);
     repaint();
 }
 
 void CodeEditor::setWhitespaceVisible (bool shouldBeVisible)
 {
+    if (whitespaceVisible == shouldBeVisible)
+        return;
+
     whitespaceVisible = shouldBeVisible;
+    notifyPropertyChanged (CodeEditorIds::whitespaceVisible);
     repaint();
 }
 
@@ -1334,7 +1499,12 @@ String CodeEditor::getIndentUnit() const
 
 void CodeEditor::setTabWidth (int newTabWidth)
 {
-    tabWidth = jmax (1, newTabWidth);
+    const auto clamped = jmax (1, newTabWidth);
+    if (tabWidth == clamped)
+        return;
+
+    tabWidth = clamped;
+    notifyPropertyChanged (CodeEditorIds::tabWidth);
 }
 
 void CodeEditor::setScrollOffset (Point<float> newOffset)
@@ -3985,6 +4155,7 @@ void CodeEditor::setMinimapVisible (bool shouldBeVisible)
                 removeChildComponent (minimap.get());
         }
 
+        notifyPropertyChanged (CodeEditorIds::minimapVisible);
         resized();
         repaint();
     }

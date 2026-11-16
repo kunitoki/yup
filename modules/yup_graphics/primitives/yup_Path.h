@@ -645,6 +645,19 @@ public:
     */
     Path withRoundedCorners (float cornerRadius) const;
 
+    /** Creates a dashed path from the contours of this path.
+
+        Odd-length dash patterns are repeated once to alternate dashes and gaps. Curves are
+        flattened along the path so dashes follow curved segments smoothly, and dash phase
+        resets at the start of each sub-path.
+
+        @param dashLengths Alternating dash and gap lengths. Empty or non-positive patterns return a copy of this path.
+        @param dashOffset  Phase offset into the dash pattern before the first segment begins.
+
+        @return A new Path made of open sub-paths for each visible dash segment.
+    */
+    [[nodiscard]] Path createDashed (Span<const float> dashLengths, float dashOffset = 0.0f) const;
+
     //==============================================================================
 
     /** Starts a new sub-path at the specified point.

@@ -104,6 +104,46 @@ bool StyleState::setStylePalette (std::optional<ThemePalette> newPalette)
 
 //==============================================================================
 
+bool StyleState::setStyleTransform (const AffineTransform& newTransform) noexcept
+{
+    if (styleTransform == newTransform)
+        return false;
+
+    styleTransform = newTransform;
+    return true;
+}
+
+//==============================================================================
+
+bool StyleState::setFilterOperations (std::vector<FilterEffect::Operation> newOperations)
+{
+    if (newOperations.empty())
+        return setFilterEffect (nullptr);
+
+    if (filterEffect == nullptr)
+    {
+        filterEffect = FilterEffect::Ptr (new FilterEffect (std::move (newOperations)));
+        return true;
+    }
+
+    if (filterEffect->getOperations() == newOperations)
+        return false;
+
+    filterEffect->setOperations (std::move (newOperations));
+    return true;
+}
+
+bool StyleState::setFilterEffect (FilterEffect::Ptr newFilter)
+{
+    if (filterEffect == newFilter)
+        return false;
+
+    filterEffect = std::move (newFilter);
+    return true;
+}
+
+//==============================================================================
+
 bool StyleState::setShadows (std::vector<Shadow> newShadows)
 {
     if (shadows == newShadows)
@@ -114,38 +154,61 @@ bool StyleState::setShadows (std::vector<Shadow> newShadows)
     return true;
 }
 
+bool StyleState::setGlows (std::vector<Shadow> newGlows)
+{
+    if (glows == newGlows)
+        return false;
+
+    glows = std::move (newGlows);
+    cachedShadowPaths.clear();
+    return true;
+}
+
 void StyleState::paintShadows (Graphics& g, Rectangle<float> bounds, float cornerRadius) const
 {
-    if (shadows.empty())
+    const auto totalLayers = shadows.size() + glows.size();
+    if (totalLayers == 0)
         return;
 
-    if (cachedShadowPaths.size() != shadows.size()
+    if (cachedShadowPaths.size() != totalLayers
         || cachedShadowBounds != bounds
         || ! approximatelyEqual (cachedShadowCornerRadius, cornerRadius))
     {
         cachedShadowBounds = bounds;
         cachedShadowCornerRadius = cornerRadius;
         cachedShadowPaths.clear();
-        cachedShadowPaths.reserve (shadows.size());
+        cachedShadowPaths.reserve (totalLayers);
 
-        for (auto it = shadows.rbegin(); it != shadows.rend(); ++it)
+        const auto appendReversed = [&] (const std::vector<Shadow>& layers)
         {
-            Path shadowPath;
-            shadowPath.addRoundedRectangle (bounds.translated (it->offset).enlarged (it->spread),
-                                            jmax (0.0f, cornerRadius + it->spread));
-            cachedShadowPaths.push_back (std::move (shadowPath));
-        }
+            for (auto it = layers.rbegin(); it != layers.rend(); ++it)
+            {
+                Path shadowPath;
+                shadowPath.addRoundedRectangle (bounds.translated (it->offset).enlarged (it->spread),
+                                                jmax (0.0f, cornerRadius + it->spread));
+                cachedShadowPaths.push_back (std::move (shadowPath));
+            }
+        };
+
+        appendReversed (shadows);
+        appendReversed (glows);
     }
 
     const auto savedState = g.saveState();
 
     size_t index = 0;
-    for (auto it = shadows.rbegin(); it != shadows.rend(); ++it, ++index)
+    const auto drawReversed = [&] (const std::vector<Shadow>& layers)
     {
-        g.setFeather (it->blur);
-        g.setFillColor (it->color);
-        g.fillPath (cachedShadowPaths[index]);
-    }
+        for (auto it = layers.rbegin(); it != layers.rend(); ++it, ++index)
+        {
+            g.setFeather (it->blur);
+            g.setFillColor (it->color);
+            g.fillPath (cachedShadowPaths[index]);
+        }
+    };
+
+    drawReversed (shadows);
+    drawReversed (glows);
 }
 
 } // namespace yup

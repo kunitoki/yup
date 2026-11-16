@@ -335,7 +335,9 @@ TEST_F (DrawingStyleTest, DeclaresItsProperties)
 
 TEST_F (DrawingStyleTest, ReportsPropertyErrors)
 {
-    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"font\"/></drawing>"), "drawing/property[0].type: 'font' can't be used in a drawing, use number, integer, boolean, string, color, point, rectangle or an array of those");
+    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"font\"/></drawing>"), String());
+    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"transform\"/></drawing>"), String());
+    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"font[]\"/></drawing>"), "drawing/property[0].type: 'font[]' can't be used in a drawing, use number, integer, boolean, string, color, point, rectangle, transform, font or an array of scalar types");
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"number[]\" value=\"1\"/></drawing>"), "drawing/property[0].value: an array property can't have a default");
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"color\" value=\"true\"/></drawing>"), "drawing/property[0].value: the type 'bool' doesn't match the property type 'color'");
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"integer\" value=\"0.5f\"/></drawing>"), "drawing/property[0].value: the type 'float' doesn't match the property type 'integer'");
@@ -344,6 +346,93 @@ TEST_F (DrawingStyleTest, ReportsPropertyErrors)
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"number\"/><let name=\"a\" value=\"1\"/></drawing>"), "drawing/let[0].name: 'a' is already defined");
     EXPECT_EQ (createError ("<drawing><layer><property name=\"a\" type=\"number\"/></layer></drawing>"), "drawing/layer[0]/property[0]: a 'property' can only be declared at the top of a drawing");
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"number\" value=\"1\"/><circle center=\"bounds.center\" radius=\"a\"/></drawing>"), String());
+}
+
+TEST_F (DrawingStyleTest, CompilesAndPaintsDashedStrokesClipLayerMasksImagesAndSvgs)
+{
+    // 1x1 red RGBA PNG encoded as a data URI
+    static constexpr const char* redPixelPng =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+    Slider slider (Slider::RotaryVerticalDrag);
+    configure (slider);
+
+    const auto parsed = YuiParser::parse (String (R"yui(
+        drawing Complete {
+            property customDashes: number[];
+            line { from: point (0, 4); to: point (48, 4); stroke: #ffffff; strokeWidth: 2; dash: dash (6, 3); dashOffset: 2; }
+            line { from: point (0, 10); to: point (48, 10); stroke: #ffffff; strokeWidth: 2; dash: "4, 2"; }
+            line { from: point (0, 16); to: point (48, 16); stroke: #ffffff; strokeWidth: 2; dash: 3; }
+            line { from: point (0, 22); to: point (48, 22); stroke: #ffffff; strokeWidth: 2; dash: customDashes; }
+            path { data: "M 0 28 L 48 28"; stroke: #ffffff; strokeWidth: 1.5; dash: "5, 3"; }
+            clip {
+                bounds: bounds.reduced (4);
+                rect { bounds: bounds; fill: #224466; }
+            }
+            layer {
+                opacity: 0.9;
+                blend: screen;
+                mask: rect (4, 4, 40, 40);
+                maskMode: alpha;
+                rect { bounds: bounds; fill: #ff4422; }
+                mask {
+                    mode: luminance;
+                    circle { center: bounds.center; radius: 16; fill: #ffffff; }
+                }
+            }
+            image {
+                bounds: rect (2, 2, 12, 12);
+                source: ")yui") + redPixelPng + R"yui(";
+                fitting: scaleToFit;
+                justification: center;
+                opacity: 0.85;
+            }
+            svg {
+                bounds: rect (16, 16, 16, 16);
+                data: "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='#00ff88'/></svg>";
+                fitting: scaleToFit;
+            }
+        }
+    )yui");
+    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+
+    auto style = DrawingStyle::create (slider, parsed.document.getChildWithName ("drawing"));
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    slider.setProperty (Identifier ("customDashes"), var (Array<var> { 5.0, 2.0 }));
+    EXPECT_NO_THROW (paintHeadless (*style.getReference(), slider));
+
+    EXPECT_EQ (createError ("<drawing><mask/></drawing>"), "drawing/mask[0]: a 'mask' can only appear inside a 'layer'");
+    EXPECT_EQ (createError ("<drawing><repeat name=\"i\" from=\"0\" to=\"2\"><clip/></repeat></drawing>"), "drawing/repeat[0]/clip[0]: a 'clip' can't be nested inside a repeat");
+    EXPECT_EQ (createError ("<drawing><image/></drawing>"), "drawing/image[0]: missing the required property 'source'");
+    EXPECT_EQ (createError ("<drawing><svg/></drawing>"), "drawing/svg[0]: missing the required property 'source'");
+    EXPECT_EQ (createError ("<drawing><svg source=\"a.svg\" data=\"&lt;svg/&gt;\"/></drawing>"), "drawing/svg[0]: specify either 'source' or 'data', not both");
+}
+
+TEST_F (DrawingStyleTest, ReportsStructuredChildElementAndPropertyLocations)
+{
+    const auto parsed = YuiParser::parse (
+        "drawing Broken {\n"
+        "    rect {\n"
+        "        bounds: bounds;\n"
+        "        fill: unknownSymbol + 1;\n"
+        "    }\n"
+        "}\n");
+    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+
+    Slider slider (Slider::RotaryVerticalDrag);
+    configure (slider);
+
+    YuiDiagnostic failure;
+    auto created = DrawingStyle::create (slider, parsed.document.getChildWithName ("drawing"), nullptr, &failure);
+    EXPECT_TRUE (created.failed());
+    EXPECT_TRUE (failure.element.isValid());
+    EXPECT_EQ (failure.element.getType(), Identifier ("rect"));
+    EXPECT_EQ (failure.property, Identifier ("fill"));
+
+    const auto located = parsed.sourceMap.locate (failure);
+    EXPECT_EQ (located.line, 4);
+    EXPECT_GT (located.column, 1);
 }
 
 TEST_F (DrawingStyleTest, RejectsConstantRepeatExceedingMaximumCount)
@@ -449,3 +538,49 @@ TEST_F (DrawingStyleGpuTest, PropertiesReadTheComponentAndItsParentsOrTheirDefau
     second.setProperty (Identifier ("shown"), false);
     EXPECT_EQ (centerColor (second).getAlpha(), 0);
 }
+
+TEST_F (DrawingStyleGpuTest, ClipsShapesMasksLayersAndRendersInlineSvg)
+{
+    const auto clipped = parseYui (R"yui(
+        drawing {
+            clip {
+                bounds: rect (6, 6, 4, 4);
+                rect { bounds: bounds; fill: #ff0000; }
+            }
+        })yui");
+
+    DrawnComponent clippedComp (clipped);
+    const auto clippedImage = clippedComp.snapshotToImage (*gpuContext);
+    ASSERT_TRUE (clippedImage.isValid());
+    EXPECT_EQ (clippedImage.getPixelColor (8, 8), Color (0xffff0000));
+    EXPECT_EQ (clippedImage.getPixelColor (1, 1).getAlpha(), 0);
+
+    const auto masked = parseYui (R"yui(
+        drawing {
+            layer {
+                rect { bounds: bounds; fill: #ff0000; }
+                mask {
+                    mode: alpha;
+                    rect { bounds: rect (6, 6, 4, 4); fill: #ffffff; }
+                }
+            }
+        })yui");
+
+    DrawnComponent maskedComp (masked);
+    const auto maskedImage = maskedComp.snapshotToImage (*gpuContext);
+    ASSERT_TRUE (maskedImage.isValid());
+    EXPECT_EQ (maskedImage.getPixelColor (8, 8), Color (0xffff0000));
+    EXPECT_EQ (maskedImage.getPixelColor (1, 1).getAlpha(), 0);
+
+    const auto inlineSvg = parseYui (R"yui(
+        drawing {
+            svg {
+                bounds: bounds;
+                data: "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='#00ff00'/></svg>";
+            }
+        })yui");
+
+    DrawnComponent svgComp (inlineSvg);
+    EXPECT_EQ (centerColor (svgComp), Color (0xff00ff00));
+}
+

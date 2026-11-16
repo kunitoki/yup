@@ -22,6 +22,10 @@
 namespace yup
 {
 
+#if YUP_MODULE_AVAILABLE_yup_audio_gui
+YUP_API void registerAudioGuiComponentTypes();
+#endif
+
 void registerBuiltInComponentTypes()
 {
     static std::once_flag once;
@@ -39,16 +43,30 @@ void registerBuiltInComponentTypes()
         registry.registerType (ComboBox::getClassTypeInfo());
         registry.registerType (TextEditor::getClassTypeInfo());
         registry.registerType (ProgressBar::getClassTypeInfo());
+        registry.registerType (ImageComponent::getClassTypeInfo());
         registry.registerType (ScrollBar::getClassTypeInfo());
+        registry.registerType (ListBoxItem::getClassTypeInfo());
         registry.registerType (ListBox::getClassTypeInfo());
+        registry.registerType (TreeViewRow::getClassTypeInfo());
+        registry.registerType (TreeView::getClassTypeInfo());
         registry.registerType (Viewport::getClassTypeInfo());
+        registry.registerType (TabButton::getClassTypeInfo());
+        registry.registerType (TabBar::getClassTypeInfo());
         registry.registerType (TabComponent::getClassTypeInfo());
+        registry.registerType (ResizableCorner::getClassTypeInfo());
+        registry.registerType (CodeEditor::getClassTypeInfo());
+        registry.registerType (DocumentWindow::getClassTypeInfo());
         registry.registerType (LayoutComponent::getClassTypeInfo());
         registry.registerType (FlexBoxComponent::getClassTypeInfo());
         registry.registerType (RowComponent::getClassTypeInfo());
         registry.registerType (ColumnComponent::getClassTypeInfo());
         registry.registerType (GridComponent::getClassTypeInfo());
         registry.registerType (StackComponent::getClassTypeInfo());
+        registry.registerType (WindowComponent::getClassTypeInfo());
+
+#if YUP_MODULE_AVAILABLE_yup_audio_gui
+        registerAudioGuiComponentTypes();
+#endif
     });
 }
 
@@ -64,6 +82,18 @@ const Identifier& idProperty()
 const Identifier& classProperty()
 {
     static const Identifier identifier ("class");
+    return identifier;
+}
+
+const Identifier& paletteProperty()
+{
+    static const Identifier identifier ("palette");
+    return identifier;
+}
+
+const Identifier& drawingProperty()
+{
+    static const Identifier identifier ("drawing");
     return identifier;
 }
 
@@ -110,6 +140,12 @@ std::size_t declarationRankOf (const ComponentTypeInfo& type, const Identifier& 
         }
     }
 
+    if (name == paletteProperty())
+        return std::numeric_limits<std::size_t>::max() - 2;
+
+    if (name == drawingProperty())
+        return std::numeric_limits<std::size_t>::max() - 1;
+
     return std::numeric_limits<std::size_t>::max();
 }
 
@@ -144,6 +180,8 @@ ComponentProperty makeDeclaredProperty (const DataTree& declaration, bool isInhe
 
     if (type == ComponentProperty::Type::array)
         defaultValue = var (Array<var>());
+    else if (type == ComponentProperty::Type::drawing)
+        defaultValue = var (String());
     else
         DrawingScope::withExpressionType (type, [&] (auto tag)
         {
@@ -163,7 +201,81 @@ ComponentProperty makeDeclaredProperty (const DataTree& declaration, bool isInhe
 
 //==============================================================================
 
+struct YuiBuilder::TreeWatcher final : DataTreeListener
+{
+    explicit TreeWatcher (YuiBuilder& ownerToUse)
+        : owner (ownerToUse)
+    {
+    }
+
+    ~TreeWatcher() override
+    {
+        detachAll();
+    }
+
+    void resetRoot (const DataTree& root)
+    {
+        detachAll();
+
+        if (! root.isValid())
+            return;
+
+        watchedRoot = root;
+        attachSubtree (watchedRoot);
+    }
+
+    void detachAll()
+    {
+        for (auto& node : watchedNodes)
+            if (node.isValid())
+                node.removeListener (this);
+
+        watchedNodes.clear();
+        watchedRoot = {};
+    }
+
+    void propertyChanged (DataTree&, const Identifier&) override { handleMutation(); }
+    void childAdded (DataTree&, DataTree&) override { handleMutation(); }
+    void childRemoved (DataTree&, DataTree&, int) override { handleMutation(); }
+    void childMoved (DataTree&, DataTree&, int, int) override { handleMutation(); }
+    void treeRedirected (DataTree&) override { handleMutation(); }
+
+    void attachSubtree (DataTree node)
+    {
+        if (! node.isValid())
+            return;
+
+        node.addListener (this);
+        watchedNodes.push_back (node);
+
+        for (int i = 0; i < node.getNumChildren(); ++i)
+            attachSubtree (node.getChild (i));
+    }
+
+    void handleMutation()
+    {
+        if (owner.ignoreTreeChanges || ! watchedRoot.isValid())
+            return;
+
+        if (owner.onTreeMutated != nullptr)
+        {
+            owner.onTreeMutated();
+            return;
+        }
+
+        const auto rootCopy = watchedRoot;
+        owner.build (rootCopy);
+    }
+
+    YuiBuilder& owner;
+    DataTree watchedRoot;
+    std::vector<DataTree> watchedNodes;
+};
+
+//==============================================================================
+
 YuiBuilder::YuiBuilder()
+    : treeWatcher (std::make_unique<TreeWatcher> (*this))
 {
     registerBuiltInComponentTypes();
 
@@ -209,8 +321,17 @@ YuiBuilder::~YuiBuilder()
 
 Result YuiBuilder::build (const DataTree& document)
 {
+    const ScopedValueSetter<bool> guard (ignoreTreeChanges, true);
+    const auto previousWatchedRoot = treeWatcher != nullptr ? treeWatcher->watchedRoot : DataTree();
+
+    if (treeWatcher != nullptr)
+        treeWatcher->detachAll();
+
     // The previous declarations stay alive until the reused components have their new types
     auto previousComposites = std::exchange (composites, {});
+    auto previousPalettes = std::exchange (palettes, {});
+    auto previousDrawings = std::exchange (drawings, {});
+    auto previousDeclaredProperties = std::exchange (declaredProperties, {});
     auto previousTokens = std::exchange (tokens, {});
     auto previousTokensInfo = std::move (tokensInfo);
     diagnostics.clear();
@@ -240,8 +361,15 @@ Result YuiBuilder::build (const DataTree& document)
     if (checked.failed())
     {
         composites = std::move (previousComposites);
+        palettes = std::move (previousPalettes);
+        drawings = std::move (previousDrawings);
+        declaredProperties = std::move (previousDeclaredProperties);
         tokens = std::move (previousTokens);
         tokensInfo = std::move (previousTokensInfo);
+
+        if (treeWatcher != nullptr)
+            treeWatcher->resetRoot (previousWatchedRoot);
+
         return checked;
     }
 
@@ -264,11 +392,17 @@ Result YuiBuilder::build (const DataTree& document)
     while (! previousComponents.empty())
         previousComponents.pop_back();
 
+    if (treeWatcher != nullptr)
+        treeWatcher->resetRoot (document);
+
     return Result::ok();
 }
 
 void YuiBuilder::clear()
 {
+    if (treeWatcher != nullptr)
+        treeWatcher->detachAll();
+
     resetBindings();
 
     while (! components.empty())
@@ -277,6 +411,9 @@ void YuiBuilder::clear()
     applied.clear();
     scopes.clear();
     composites.clear();
+    palettes.clear();
+    drawings.clear();
+    declaredProperties.clear();
     tokens.clear();
     tokensInfo.reset();
     diagnostics.clear();
@@ -339,8 +476,66 @@ void YuiBuilder::removeModel (const String& name)
 
 //==============================================================================
 
+void YuiBuilder::collectStyleDeclarations (const DataTree& parent)
+{
+    const auto collectProps = [this] (const DataTree& container)
+    {
+        for (const auto& child : container)
+        {
+            if (child.getType().toString() != "property")
+                continue;
+
+            const auto rawName = child.getProperty ("name").toString().trim();
+            const auto dot = rawName.indexOfChar ('.');
+            const Identifier unqualified (dot >= 0 ? rawName.substring (dot + 1) : rawName);
+            const auto propTypeName = child.getProperty ("type").toString().trim();
+
+            if (unqualified.isValid() && propTypeName.isNotEmpty())
+            {
+                declaredProperties.try_emplace (unqualified, ComponentProperty {
+                    .name = unqualified,
+                    .type = ComponentProperty::getTypeFromName (propTypeName),
+                    .elementType = ComponentProperty::getElementTypeFromName (propTypeName),
+                    .isInherited = true
+                });
+            }
+        }
+    };
+
+    for (const auto& element : parent)
+    {
+        const auto kind = element.getType().toString();
+
+        if (kind == "style")
+        {
+            collectProps (element);
+            collectStyleDeclarations (element);
+        }
+        else if (kind == "rule")
+        {
+            collectProps (element);
+        }
+        else if (kind == "palette")
+        {
+            if (auto problem = StyleSheet::readPaletteElement (element, palettes))
+                diagnostics.push_back (*problem);
+        }
+        else if (kind == "drawing")
+        {
+            const auto name = element.getProperty ("name").toString().trim();
+
+            if (name.isNotEmpty())
+                drawings.insert_or_assign (name, element);
+
+            collectProps (element);
+        }
+    }
+}
+
 void YuiBuilder::collectDeclarations (const DataTree& document)
 {
+    collectStyleDeclarations (document);
+
     for (const auto& element : document)
     {
         const auto kind = element.getType().toString();
@@ -810,6 +1005,18 @@ void YuiBuilder::resetValue (Component& component, const ComponentTypeInfo& type
 
     const auto* descriptor = typeInfo.findProperty (name);
 
+    if (descriptor == nullptr && name == paletteProperty())
+    {
+        component.setPalette (std::nullopt);
+        return;
+    }
+
+    if (descriptor == nullptr && name == drawingProperty())
+    {
+        component.setStyle (nullptr);
+        return;
+    }
+
     if (descriptor == nullptr || ! descriptor->isStateBacked())
     {
         component.removeProperty (name);
@@ -866,9 +1073,138 @@ YuiBuilder::ApplyOutcome YuiBuilder::applyProperty (Component& component, const 
 
     const auto* descriptor = typeInfo.findProperty (name);
 
+    if (descriptor == nullptr)
+    {
+        if (const auto* drawingStyle = dynamic_cast<const DrawingStyle*> (component.getStyle().get()))
+        {
+            for (const auto& property : drawingStyle->getProperties())
+            {
+                if (property.name == name)
+                {
+                    descriptor = &property;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (descriptor == nullptr)
+    {
+        for (const auto* ancestor = component.getParentComponent(); ancestor != nullptr; ancestor = ancestor->getParentComponent())
+        {
+            const auto* candidate = ancestor->getTypeInfo().findProperty (name);
+            if (candidate != nullptr && candidate->isStoreBacked() && candidate->isInherited)
+            {
+                descriptor = candidate;
+                break;
+            }
+        }
+    }
+
+    if (descriptor == nullptr)
+    {
+        if (const auto found = declaredProperties.find (name); found != declaredProperties.end())
+            descriptor = &found->second;
+    }
+
     if (descriptor != nullptr && descriptor->isReadOnly())
     {
         report (component, name, "the property is read-only", value);
+        return ApplyOutcome::failed;
+    }
+
+    if (descriptor == nullptr && name == paletteProperty())
+    {
+        const auto paletteName = value.text.unquoted().trim();
+
+        if (paletteName.isEmpty() || paletteName == "none")
+        {
+            component.setPalette (std::nullopt);
+            return ApplyOutcome::constant;
+        }
+
+        if (const auto found = palettes.find (paletteName); found != palettes.end())
+        {
+            component.setPalette (found->second);
+            return ApplyOutcome::constant;
+        }
+
+        report (component, name, "unknown palette '" + paletteName + "'", value);
+        return ApplyOutcome::failed;
+    }
+
+    if (descriptor == nullptr && name == drawingProperty())
+    {
+        const auto drawingName = value.text.unquoted().trim();
+
+        if (drawingName.isEmpty() || drawingName == "none")
+        {
+            component.setStyle (nullptr);
+            return ApplyOutcome::constant;
+        }
+
+        const auto installNamedDrawing = [&] (const String& targetName) -> ApplyOutcome
+        {
+            if (targetName.isEmpty() || targetName == "none")
+            {
+                component.setStyle (nullptr);
+                return ApplyOutcome::constant;
+            }
+
+            const auto found = drawings.find (targetName);
+            if (found == drawings.end())
+            {
+                report (component, name, "unknown drawing '" + targetName + "'", value);
+                return ApplyOutcome::failed;
+            }
+
+            YuiDiagnostic failure;
+            auto created = DrawingStyle::create (component, found->second, resolverFor (scope), &failure);
+            if (created.failed())
+            {
+                diagnostics.push_back ({
+                    .message = component.getTypeInfo().getTypeName().toString() + "." + name.toString() + ": " + created.getErrorMessage(),
+                    .element = failure.element.isValid() ? failure.element : value.element,
+                    .property = failure.element.isValid() ? failure.property : value.property
+                });
+                return ApplyOutcome::failed;
+            }
+
+            component.setStyle (created.getReference());
+            return ApplyOutcome::constant;
+        };
+
+        if (drawings.find (drawingName) != drawings.end())
+            return installNamedDrawing (drawingName);
+
+        if (auto compiled = PropertyExpression::compile (component, value.text, ComponentProperty::Type::string, resolverFor (scope)); compiled.wasOk())
+            return installNamedDrawing (compiled.getReference()->evaluate().toString());
+
+        report (component, name, "unknown drawing '" + drawingName + "'", value);
+        return ApplyOutcome::failed;
+    }
+
+    if (descriptor != nullptr && descriptor->type == ComponentProperty::Type::drawing)
+    {
+        const auto drawingName = value.text.unquoted().trim();
+
+        if (drawingName.isEmpty() || drawingName == "none")
+        {
+            component.setProperty (name, String());
+            return ApplyOutcome::constant;
+        }
+
+        if (drawings.find (drawingName) != drawings.end())
+        {
+            component.setProperty (name, drawingName);
+            return ApplyOutcome::constant;
+        }
+
+        bool isLive = false;
+        if (bindings.bind (component, name, value.text, ComponentProperty::Type::string, resolverFor (scope), &isLive).wasOk())
+            return isLive ? ApplyOutcome::live : ApplyOutcome::constant;
+
+        report (component, name, "unknown drawing '" + drawingName + "'", value);
         return ApplyOutcome::failed;
     }
 
@@ -907,6 +1243,22 @@ YuiBuilder::ApplyOutcome YuiBuilder::applyProperty (Component& component, const 
     {
         report (component, name, result.getErrorMessage(), value);
         return ApplyOutcome::failed;
+    }
+
+    static const Identifier cornerRadiusName ("cornerRadius");
+    if (descriptor == nullptr && name != cornerRadiusName)
+    {
+        const YuiDiagnostic warning {
+            .message = typeInfo.getTypeName().toString() + "." + name.toString() + ": undeclared property '" + name.toString() + "'",
+            .element = value.element,
+            .property = value.property,
+            .severity = YuiDiagnostic::Severity::warning
+        };
+
+        diagnostics.push_back (warning);
+
+        if (onDiagnostic != nullptr)
+            onDiagnostic (warning);
     }
 
     return isLive ? ApplyOutcome::live : ApplyOutcome::constant;

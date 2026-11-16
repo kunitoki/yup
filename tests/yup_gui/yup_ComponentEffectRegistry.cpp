@@ -75,3 +75,15 @@ TEST_F (ComponentEffectRegistryTests, ReturnsNullForUnknownNames)
     EXPECT_FALSE (registry.isRegistered (effectName));
     EXPECT_EQ (registry.createEffect (effectName), nullptr);
 }
+
+TEST_F (ComponentEffectRegistryTests, StartsEmptyForUserDefinedEffectsOnly)
+{
+    const auto& registry = ComponentEffectRegistry::getInstance();
+
+    EXPECT_FALSE (registry.isRegistered ("blur"));
+    EXPECT_FALSE (registry.isRegistered ("dropShadow"));
+    EXPECT_FALSE (registry.isRegistered ("glow"));
+    EXPECT_FALSE (registry.isRegistered ("grayscale"));
+    EXPECT_FALSE (registry.isRegistered ("sepia"));
+    EXPECT_FALSE (registry.isRegistered ("invert"));
+}

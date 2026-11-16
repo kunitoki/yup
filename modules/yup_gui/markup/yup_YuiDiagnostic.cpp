@@ -34,7 +34,9 @@ String YuiDiagnostic::toString() const
     if (line > 0)
         prefix << line << ":" << column << ":";
 
-    return prefix.isEmpty() ? message : prefix + " " + message;
+    const String body = severity == Severity::warning ? ("warning: " + message) : message;
+
+    return prefix.isEmpty() ? body : prefix + " " + body;
 }
 
 String YuiDiagnostic::join (const std::vector<YuiDiagnostic>& diagnostics, StringRef separator)

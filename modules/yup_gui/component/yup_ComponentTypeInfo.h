@@ -256,6 +256,24 @@ struct ComponentPropertyValueTraits<Rectangle<float>>
     static Rectangle<float> fromVar (const var& v) { return VariantConverter<Rectangle<float>>::fromVar (v); }
 };
 
+template <>
+struct ComponentPropertyValueTraits<AffineTransform>
+{
+    static constexpr auto type = ComponentProperty::Type::transform;
+    static constexpr auto elementType = ComponentProperty::Type::any;
+    static var toVar (const AffineTransform& v) { return VariantConverter<AffineTransform>::toVar (v); }
+    static AffineTransform fromVar (const var& v) { return VariantConverter<AffineTransform>::fromVar (v); }
+};
+
+template <>
+struct ComponentPropertyValueTraits<Font>
+{
+    static constexpr auto type = ComponentProperty::Type::font;
+    static constexpr auto elementType = ComponentProperty::Type::any;
+    static var toVar (const Font& v) { return VariantConverter<Font>::toVar (v); }
+    static Font fromVar (const var& v) { return VariantConverter<Font>::fromVar (v); }
+};
+
 } // namespace detail
 #endif
 
@@ -369,42 +387,65 @@ public:
             .description = std::move (description) });
     }
 
-    template <class Getter, class Setter>
+    template <class Getter, class DefaultType>
+    static constexpr bool isValidDefaultValue =
+        ! std::invocable<DefaultType, T&, std::decay_t<std::invoke_result_t<Getter, const T&>>>
+        && ! std::is_member_function_pointer_v<std::decay_t<DefaultType>>
+        && (std::constructible_from<var, DefaultType>
+            || std::convertible_to<DefaultType, std::decay_t<std::invoke_result_t<Getter, const T&>>>);
+
+    template <class Getter, class Setter, class DefaultType = var>
         requires std::invocable<Setter, T&, std::decay_t<std::invoke_result_t<Getter, const T&>>>
+              && isValidDefaultValue<Getter, DefaultType>
     ComponentTypeBuilder& property (Identifier name,
                                     Getter getter,
                                     Setter setter,
-                                    var defaultValue = {},
+                                    DefaultType&& defaultValue = {},
                                     String description = {})
     {
-        return addTypedProperty (std::move (name), std::move (getter), std::move (setter), std::move (defaultValue), std::move (description), false, false);
+        return addTypedProperty (std::move (name),
+                                 std::move (getter),
+                                 std::move (setter),
+                                 toDefaultVar<Getter> (std::forward<DefaultType> (defaultValue)),
+                                 std::move (description),
+                                 false,
+                                 false);
     }
 
-    template <class Getter, class Setter>
+    template <class Getter, class Setter, class DefaultType = var>
         requires std::invocable<Setter, T&, std::decay_t<std::invoke_result_t<Getter, const T&>>>
+              && isValidDefaultValue<Getter, DefaultType>
     ComponentTypeBuilder& styleableProperty (Identifier name,
                                              Getter getter,
                                              Setter setter,
-                                             var defaultValue = {},
+                                             DefaultType&& defaultValue = {},
                                              String description = {})
     {
-        return addTypedProperty (std::move (name), std::move (getter), std::move (setter), std::move (defaultValue), std::move (description), false, true);
+        return addTypedProperty (std::move (name),
+                                 std::move (getter),
+                                 std::move (setter),
+                                 toDefaultVar<Getter> (std::forward<DefaultType> (defaultValue)),
+                                 std::move (description),
+                                 false,
+                                 true);
     }
 
-    template <class Getter>
+    template <class Getter, class DefaultType = var>
+        requires isValidDefaultValue<Getter, DefaultType>
     ComponentTypeBuilder& readOnly (Identifier name,
                                     Getter getter,
-                                    var defaultValue = {},
+                                    DefaultType&& defaultValue = {},
                                     String description = {})
     {
         using ValueType = std::decay_t<std::invoke_result_t<Getter, const T&>>;
         using Traits = detail::ComponentPropertyValueTraits<ValueType>;
+        auto resolvedDefault = toDefaultVar<Getter> (std::forward<DefaultType> (defaultValue));
 
         return addProperty (ComponentProperty {
             .name = std::move (name),
             .type = Traits::type,
             .elementType = Traits::elementType,
-            .defaultValue = std::move (defaultValue),
+            .defaultValue = std::move (resolvedDefault),
             .getter = [getter = std::move (getter)] (const Component& c)
             {
                 return Traits::toVar (std::invoke (getter, static_cast<const T&> (c)));
@@ -413,31 +454,40 @@ public:
             .description = std::move (description) });
     }
 
-    template <class Getter, class Setter>
+    template <class Getter, class Setter, class DefaultType = var>
         requires std::invocable<Setter, T&, std::decay_t<std::invoke_result_t<Getter, const T&>>>
+              && isValidDefaultValue<Getter, DefaultType>
     ComponentTypeBuilder& state (Identifier name,
                                  Getter getter,
                                  Setter setter,
-                                 var defaultValue = {},
+                                 DefaultType&& defaultValue = {},
                                  String description = {})
     {
-        return addTypedProperty (std::move (name), std::move (getter), std::move (setter), std::move (defaultValue), std::move (description), true, false);
+        return addTypedProperty (std::move (name),
+                                 std::move (getter),
+                                 std::move (setter),
+                                 toDefaultVar<Getter> (std::forward<DefaultType> (defaultValue)),
+                                 std::move (description),
+                                 true,
+                                 false);
     }
 
-    template <class Getter>
+    template <class Getter, class DefaultType = var>
+        requires isValidDefaultValue<Getter, DefaultType>
     ComponentTypeBuilder& state (Identifier name,
                                  Getter getter,
-                                 var defaultValue = {},
+                                 DefaultType&& defaultValue = {},
                                  String description = {})
     {
         using ValueType = std::decay_t<std::invoke_result_t<Getter, const T&>>;
         using Traits = detail::ComponentPropertyValueTraits<ValueType>;
+        auto resolvedDefault = toDefaultVar<Getter> (std::forward<DefaultType> (defaultValue));
 
         return addProperty (ComponentProperty {
             .name = std::move (name),
             .type = Traits::type,
             .elementType = Traits::elementType,
-            .defaultValue = std::move (defaultValue),
+            .defaultValue = std::move (resolvedDefault),
             .getter = [getter = std::move (getter)] (const Component& c)
             {
                 return Traits::toVar (std::invoke (getter, static_cast<const T&> (c)));
@@ -551,6 +601,20 @@ private:
     {
         if constexpr (! std::is_abstract_v<T> && std::is_default_constructible_v<T>)
             typeFactory = [] () -> std::unique_ptr<Component> { return std::make_unique<T>(); };
+    }
+
+    template <class Getter, class DefaultType>
+    static var toDefaultVar (DefaultType&& defaultValue)
+    {
+        using ValueType = std::decay_t<std::invoke_result_t<Getter, const T&>>;
+        using Traits = detail::ComponentPropertyValueTraits<ValueType>;
+
+        if constexpr (std::is_same_v<std::decay_t<DefaultType>, var>)
+            return std::forward<DefaultType> (defaultValue);
+        else if constexpr (std::convertible_to<DefaultType, ValueType>)
+            return Traits::toVar (static_cast<ValueType> (std::forward<DefaultType> (defaultValue)));
+        else
+            return var (std::forward<DefaultType> (defaultValue));
     }
 
     template <class Getter, class Setter>

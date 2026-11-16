@@ -26,9 +26,10 @@ namespace yup
 /** Enumeration for color spaces. */
 enum class ColorSpace : unsigned int
 {
-    RGB,     ///< Standard RGB color space.
-    SRGB,    ///< Standard sRGB color space with gamma correction.
-    Spectral ///< Spectral color space for accurate color representation based on light spectra.
+    RGB,       ///< Standard RGB color space.
+    SRGB,      ///< Standard sRGB color space with gamma correction.
+    LinearRGB, ///< Linear RGB color space without gamma encoding.
+    Spectral   ///< Spectral color space for accurate color representation based on light spectra.
 };
 
 //==============================================================================

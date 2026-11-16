@@ -60,6 +60,11 @@ struct CuratedGeometry
     static inline const Identifier thumbSize { "thumbSize" };
     static inline const Identifier thumbInset { "thumbInset" };
     static inline const Identifier rotaryInset { "rotaryInset" };
+    static inline const Identifier rotaryDialInset { "rotaryDialInset" };
+    static inline const Identifier rotaryDialOutlineWidth { "rotaryDialOutlineWidth" };
+    static inline const Identifier rotaryPointerInset { "rotaryPointerInset" };
+    static inline const Identifier rotaryPointerWidth { "rotaryPointerWidth" };
+    static inline const Identifier rotaryArcWidth { "rotaryArcWidth" };
 
     static float getOutlineWidth (const Component& component, bool focused)
     {
@@ -111,17 +116,19 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
     const auto toRadians = rotaryEndAngle;
     const auto toCurrentRadians = fromRadians + (toRadians - fromRadians) * sliderValue;
 
+    const auto arcWidth = slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryArcWidth));
+
     Path backgroundPath;
-    backgroundPath.addEllipse (bounds.reduced (slider.proportionOfWidth (0.105f)));
+    backgroundPath.addEllipse (bounds.reduced (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryDialInset))));
 
     g.setFillColor (colors.background);
     g.fillPath (backgroundPath);
 
     g.setStrokeColor (colors.background.darker (0.3f));
-    g.setStrokeWidth (slider.proportionOfWidth (0.0175f));
+    g.setStrokeWidth (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryDialOutlineWidth)));
     g.strokePath (backgroundPath);
 
-    const auto reducedBounds = bounds.reduced (slider.proportionOfWidth (0.175f));
+    const auto reducedBounds = bounds.reduced (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryPointerInset)));
     const auto pos = center.getPointOnCircumference (
         reducedBounds.getWidth() / 2.0f,
         reducedBounds.getHeight() / 2.0f,
@@ -132,7 +139,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 
     g.setStrokeCap (StrokeCap::Round);
     g.setStrokeColor (colors.text);
-    g.setStrokeWidth (slider.proportionOfWidth (0.03f));
+    g.setStrokeWidth (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryPointerWidth)));
     g.strokePath (foregroundLine);
 
     Path backgroundArc;
@@ -146,7 +153,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 
     g.setStrokeCap (StrokeCap::Round);
     g.setStrokeColor (colors.track);
-    g.setStrokeWidth (slider.proportionOfWidth (0.075f));
+    g.setStrokeWidth (arcWidth);
     g.strokePath (backgroundArc);
 
     Path foregroundArc;
@@ -164,7 +171,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 
     g.setStrokeCap (StrokeCap::Round);
     g.setStrokeColor (thumbColor);
-    g.setStrokeWidth (slider.proportionOfWidth (0.075f));
+    g.setStrokeWidth (arcWidth);
     g.strokePath (foregroundArc);
 
     /*
@@ -1438,7 +1445,7 @@ void paintTabButton (Graphics& g, const ApplicationTheme& theme, const TabButton
     if (button.isButtonOver() && ! selected && button.isEnabled())
     {
         g.setFillColor (hoveredColor);
-        g.fillRoundedRect (button.getLocalBounds(), tabBarPillCornerRadius);
+        g.fillRoundedRect (button.getLocalBounds(), button.findPropertyAs<float> (CuratedGeometry::cornerRadius));
     }
 
     const auto textColor = (selected ? theme.findColor (button, TabButton::Style::textSelectedColorId).value_or (palette.getColor (PaletteRole::text))

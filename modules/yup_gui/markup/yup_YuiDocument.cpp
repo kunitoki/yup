@@ -47,7 +47,303 @@ bool hasSameStyle (const DataTree& a, const DataTree& b)
     });
 }
 
+var makeSchemaProperty (const String& type, bool required = false, const String& description = {})
+{
+    DynamicObject::Ptr prop (new DynamicObject());
+    prop->setProperty ("type", type);
+
+    if (required)
+        prop->setProperty ("required", true);
+
+    if (description.isNotEmpty())
+        prop->setProperty ("description", description);
+
+    return var (prop.get());
+}
+
+var makeSchemaNode (DynamicObject::Ptr properties, const StringArray& allowedChildren = {}, int maxChildren = -1)
+{
+    DynamicObject::Ptr node (new DynamicObject());
+
+    if (properties != nullptr)
+        node->setProperty ("properties", var (properties.get()));
+
+    if (! allowedChildren.isEmpty() || maxChildren >= 0)
+    {
+        DynamicObject::Ptr children (new DynamicObject());
+
+        if (! allowedChildren.isEmpty())
+        {
+            Array<var> allowed;
+            allowed.ensureStorageAllocated (allowedChildren.size());
+
+            for (const auto& childType : allowedChildren)
+                allowed.add (childType);
+
+            children->setProperty ("allowedTypes", var (allowed));
+        }
+
+        if (maxChildren >= 0)
+            children->setProperty ("maxCount", maxChildren);
+
+        node->setProperty ("children", var (children.get()));
+    }
+
+    return var (node.get());
+}
+
+bool isGrammarNodeType (const Identifier& type) noexcept
+{
+    static const StringArray grammarTypes {
+        "yui", "import", "tokens", "palette", "style", "rule", "keyframes", "keyframe",
+        "declaration", "property", "alias", "signal", "argument", "component", "drawing",
+        "let", "repeat", "group", "clip", "layer", "mask", "rect", "ellipse", "circle", "line",
+        "arc", "path", "polygon", "star", "text", "image", "svg", "bind", "changed"
+    };
+
+    return grammarTypes.contains (type.toString());
+}
+
+bool isStrictGrammarContainer (const Identifier& type) noexcept
+{
+    static const StringArray strictContainers {
+        "import", "tokens", "palette", "style", "rule", "keyframes", "keyframe",
+        "declaration", "property", "alias", "signal", "argument", "drawing",
+        "let", "repeat", "group", "clip", "layer", "mask", "rect", "ellipse", "circle",
+        "line", "arc", "path", "polygon", "star", "text", "image", "svg", "bind", "changed"
+    };
+
+    return strictContainers.contains (type.toString());
+}
+
+std::optional<YuiDiagnostic> validateGrammarNodes (const DataTreeSchema& schema, const DataTree& node)
+{
+    if (! node.isValid())
+        return YuiDiagnostic { .message = "Invalid DataTree" };
+
+    const auto nodeType = node.getType();
+
+    if (isGrammarNodeType (nodeType))
+    {
+        const auto propNames = schema.getPropertyNames (nodeType);
+
+        for (const auto& propNameText : propNames)
+        {
+            const Identifier propName (propNameText);
+            const auto info = schema.getPropertyInfo (nodeType, propName);
+
+            if (info.required && ! node.hasProperty (propName))
+                return YuiDiagnostic { .message = "Required property '" + propNameText + "' is missing on '" + nodeType.toString() + "'", .element = node };
+
+            if (node.hasProperty (propName))
+            {
+                const auto check = schema.validatePropertyValue (nodeType, propName, node.getProperty (propName));
+                if (check.failed())
+                    return YuiDiagnostic { .message = check.getErrorMessage(), .element = node, .property = propName };
+            }
+        }
+
+        if (isStrictGrammarContainer (nodeType))
+        {
+            for (int i = 0; i < node.getNumChildren(); ++i)
+            {
+                const auto child = node.getChild (i);
+                const auto childCheck = schema.validateChildAddition (nodeType, child.getType(), i);
+                if (childCheck.failed())
+                    return YuiDiagnostic { .message = childCheck.getErrorMessage(), .element = child };
+            }
+        }
+    }
+
+    for (int i = 0; i < node.getNumChildren(); ++i)
+        if (auto problem = validateGrammarNodes (schema, node.getChild (i)))
+            return problem;
+
+    return std::nullopt;
+}
+
 } // namespace
+
+//==============================================================================
+
+DataTreeSchema::Ptr YuiDocument::createSchema()
+{
+    registerBuiltInComponentTypes();
+
+    const auto registeredTypes = ComponentTypeRegistry::getInstance().getRegisteredTypes();
+
+    StringArray componentTypeNames;
+    for (const auto* info : registeredTypes)
+        componentTypeNames.add (info->getTypeName().toString());
+
+    StringArray yuiChildren { "import", "tokens", "palette", "style", "drawing", "component" };
+    yuiChildren.addArray (componentTypeNames);
+
+    const StringArray drawingBodyChildren {
+        "let", "repeat", "group", "clip", "layer",
+        "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "text", "image", "svg"
+    };
+    StringArray layerChildren = drawingBodyChildren;
+    layerChildren.add ("mask");
+    StringArray drawingChildren { "property" };
+    drawingChildren.addArray (drawingBodyChildren);
+
+    DynamicObject::Ptr nodeTypes (new DynamicObject());
+
+    nodeTypes->setProperty ("yui", makeSchemaNode (nullptr, yuiChildren));
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("path", makeSchemaProperty ("string", true, "Imported .yui path."));
+        nodeTypes->setProperty ("import", makeSchemaNode (props, {}, 0));
+    }
+
+    nodeTypes->setProperty ("tokens", makeSchemaNode (nullptr, { "property" }));
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("name", makeSchemaProperty ("string", true, "Palette name."));
+        props->setProperty ("colors", makeSchemaProperty ("string", false, "Seed color list."));
+        props->setProperty ("mode", makeSchemaProperty ("string", false, "Palette mode (dark or light)."));
+        nodeTypes->setProperty ("palette", makeSchemaNode (props, {}, 0));
+    }
+
+    nodeTypes->setProperty ("style", makeSchemaNode (nullptr, { "rule", "palette", "drawing", "keyframes", "property" }));
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("selector", makeSchemaProperty ("string", true, "CSS-like rule selector."));
+        nodeTypes->setProperty ("rule", makeSchemaNode (props, { "declaration", "property" }));
+    }
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("name", makeSchemaProperty ("string", true, "Keyframe sequence name."));
+        nodeTypes->setProperty ("keyframes", makeSchemaNode (props, { "keyframe" }));
+    }
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        DynamicObject::Ptr atProp (new DynamicObject());
+        atProp->setProperty ("type", "number");
+        atProp->setProperty ("required", true);
+        atProp->setProperty ("minimum", 0.0);
+        atProp->setProperty ("maximum", 1.0);
+        props->setProperty ("at", var (atProp.get()));
+        nodeTypes->setProperty ("keyframe", makeSchemaNode (props, { "declaration" }));
+    }
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("name", makeSchemaProperty ("string", true));
+        props->setProperty ("value", makeSchemaProperty ("string", true));
+        nodeTypes->setProperty ("declaration", makeSchemaNode (props, {}, 0));
+    }
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("name", makeSchemaProperty ("string", true));
+        props->setProperty ("type", makeSchemaProperty ("string", true));
+        props->setProperty ("value", makeSchemaProperty ("string", false));
+        nodeTypes->setProperty ("property", makeSchemaNode (props, {}, 0));
+    }
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("name", makeSchemaProperty ("string", true));
+        props->setProperty ("target", makeSchemaProperty ("string", true));
+        nodeTypes->setProperty ("alias", makeSchemaNode (props, {}, 0));
+    }
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("name", makeSchemaProperty ("string", true));
+        nodeTypes->setProperty ("signal", makeSchemaNode (props, { "argument" }));
+    }
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("name", makeSchemaProperty ("string", true));
+        props->setProperty ("type", makeSchemaProperty ("string", true));
+        nodeTypes->setProperty ("argument", makeSchemaNode (props, {}, 0));
+    }
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("name", makeSchemaProperty ("string", true));
+        props->setProperty ("base", makeSchemaProperty ("string", true));
+        nodeTypes->setProperty ("component", makeSchemaNode (props));
+    }
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("name", makeSchemaProperty ("string", false));
+        nodeTypes->setProperty ("drawing", makeSchemaNode (props, drawingChildren));
+    }
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("name", makeSchemaProperty ("string", true));
+        props->setProperty ("value", makeSchemaProperty ("string", true));
+        nodeTypes->setProperty ("let", makeSchemaNode (props, {}, 0));
+    }
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("name", makeSchemaProperty ("string", true));
+        props->setProperty ("from", makeSchemaProperty ("string", true));
+        props->setProperty ("to", makeSchemaProperty ("string", true));
+        nodeTypes->setProperty ("repeat", makeSchemaNode (props, drawingBodyChildren));
+    }
+
+    for (const auto* containerType : { "group", "clip", "mask" })
+        nodeTypes->setProperty (containerType, makeSchemaNode (nullptr, drawingBodyChildren));
+
+    nodeTypes->setProperty ("layer", makeSchemaNode (nullptr, layerChildren));
+
+    for (const auto* leafType : { "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "text", "image", "svg" })
+        nodeTypes->setProperty (leafType, makeSchemaNode (nullptr, {}, 0));
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("property", makeSchemaProperty ("string", true));
+        props->setProperty ("target", makeSchemaProperty ("string", true));
+        nodeTypes->setProperty ("bind", makeSchemaNode (props, {}, 0));
+    }
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("property", makeSchemaProperty ("string", true));
+        props->setProperty ("handler", makeSchemaProperty ("string", true));
+        nodeTypes->setProperty ("changed", makeSchemaNode (props, {}, 0));
+    }
+
+    for (const auto* typeInfo : registeredTypes)
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("id", makeSchemaProperty ("string", false, "Component identifier."));
+        props->setProperty ("class", makeSchemaProperty ("string", false, "Space-separated style classes."));
+        props->setProperty ("palette", makeSchemaProperty ("string", false, "Scoped palette name or 'none'."));
+        props->setProperty ("drawing", makeSchemaProperty ("string", false, "Instance drawing name or 'none'."));
+
+        for (const auto* current = typeInfo; current != nullptr; current = current->getBaseTypeInfo())
+        {
+            for (const auto& prop : current->getOwnProperties())
+                if (! props->hasProperty (prop.name))
+                    props->setProperty (prop.name, makeSchemaProperty ("string", false, prop.description));
+
+            for (const auto& sig : current->getOwnSignals())
+                if (! props->hasProperty (sig.name))
+                    props->setProperty (sig.name, makeSchemaProperty ("string", false, sig.description));
+        }
+
+        nodeTypes->setProperty (typeInfo->getTypeName(), makeSchemaNode (props));
+    }
+
+    DynamicObject::Ptr rootSchema (new DynamicObject());
+    rootSchema->setProperty ("nodeTypes", var (nodeTypes.get()));
+    return DataTreeSchema::fromJsonSchema (var (rootSchema.get()));
+}
 
 //==============================================================================
 
@@ -57,6 +353,12 @@ YuiDocument::YuiDocument()
     {
         if (! isLoading && lastLoadSucceeded)
             report (sourceMap, diagnostic);
+    };
+
+    builder.onTreeMutated = [this]
+    {
+        if (! isLoading && lastLoadSucceeded && tree.isValid())
+            handleLiveTreeMutation();
     };
 }
 
@@ -200,7 +502,26 @@ void YuiDocument::report (const std::shared_ptr<const YuiSourceMap>& map, const 
 Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map)
 {
     const ScopedValueSetter<bool> loading (isLoading, true);
+    const auto previousIgnore = builder.isIgnoringTreeChanges();
+    builder.setIgnoreTreeChanges (true);
     diagnostics.clear();
+
+    if (const auto schema = createSchema(); schema != nullptr)
+    {
+        if (! document.isValid() || (document.getType() != Identifier ("yui") && document.getType() != Identifier ("style")))
+        {
+            report (map, { .message = "Expected a 'yui' document", .element = document });
+            builder.setIgnoreTreeChanges (previousIgnore);
+            return fail (diagnostics.back().toString());
+        }
+
+        if (auto problem = validateGrammarNodes (*schema, document))
+        {
+            report (map, *problem);
+            builder.setIgnoreTreeChanges (previousIgnore);
+            return fail (diagnostics.back().toString());
+        }
+    }
 
     // An unchanged style keeps the stylesheet, so nothing is restyled from scratch and transitions keep running
     auto sheet = styleSheet;
@@ -213,6 +534,7 @@ Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<c
         if (parsed.failed())
         {
             report (map, failure);
+            builder.setIgnoreTreeChanges (previousIgnore);
             return fail (diagnostics.back().toString());
         }
 
@@ -244,8 +566,11 @@ Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<c
         else
             tree = previousTree;
 
+        builder.setIgnoreTreeChanges (previousIgnore);
         return fail (failure);
     }
+
+    builder.setIgnoreTreeChanges (previousIgnore);
 
     styleSheet = sheet;
     sourceMap = map;
@@ -257,6 +582,12 @@ Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<c
     for (const auto& diagnostic : builder.getDiagnostics())
         report (map, diagnostic);
 
+    attachStyleContext (root);
+    return Result::ok();
+}
+
+void YuiDocument::attachStyleContext (Component& root)
+{
     // The style problems met later, when a rule starts matching, are reported too
     auto& context = *root.getStyleContext();
     context.setComponentResolver (builder.getComponentResolver());
@@ -271,7 +602,53 @@ Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<c
     };
 
     context.restyleNow();
-    return Result::ok();
+}
+
+void YuiDocument::handleLiveTreeMutation()
+{
+    const ScopedValueSetter<bool> loading (isLoading, true);
+    const auto previousIgnore = builder.isIgnoringTreeChanges();
+    builder.setIgnoreTreeChanges (true);
+    diagnostics.clear();
+
+    if (const auto schema = createSchema(); schema != nullptr)
+    {
+        if (auto problem = validateGrammarNodes (*schema, tree))
+        {
+            report (sourceMap, *problem);
+            builder.setIgnoreTreeChanges (previousIgnore);
+            return;
+        }
+    }
+
+    YuiDiagnostic failure;
+    auto parsedSheet = StyleSheet::fromTree (tree, &failure);
+    if (parsedSheet.failed())
+    {
+        report (sourceMap, failure);
+        builder.setIgnoreTreeChanges (previousIgnore);
+        return;
+    }
+
+    if (builder.build (tree).failed())
+    {
+        for (const auto& diagnostic : builder.getDiagnostics())
+            report (sourceMap, diagnostic);
+
+        builder.setIgnoreTreeChanges (previousIgnore);
+        return;
+    }
+
+    builder.setIgnoreTreeChanges (previousIgnore);
+
+    styleSheet = parsedSheet.getReference();
+    auto& root = *builder.getRoot();
+    root.setStyleSheet (styleSheet);
+
+    for (const auto& diagnostic : builder.getDiagnostics())
+        report (sourceMap, diagnostic);
+
+    attachStyleContext (root);
 }
 
 void YuiDocument::resetState()

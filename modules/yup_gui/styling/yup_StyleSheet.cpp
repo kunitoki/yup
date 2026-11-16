@@ -47,6 +47,48 @@ std::optional<MouseCursor::Type> findStyleCursor (const String& name)
     return detail::findNamed (cursors, name);
 }
 
+bool isExpressionInfixOperator (const String& token)
+{
+    static const char* const operators[] = {
+        "+", "-", "*", "/", "%", "?", ":", "==", "!=", "<", "<=", ">", ">=", "&&", "||"
+    };
+
+    for (const auto* op : operators)
+        if (token == op)
+            return true;
+
+    return false;
+}
+
+bool looksLikeGlowDeclaration (const String& parsed, const std::vector<StringArray>& entries)
+{
+    if (parsed.isEmpty() || parsed == "none")
+        return true;
+
+    if (entries.size() > 1)
+        return true;
+
+    if (entries.empty() || entries.front().isEmpty())
+        return false;
+
+    const auto& tokens = entries.front();
+
+    if (tokens[0].startsWithChar ('#'))
+        return true;
+
+    int lengths = 0;
+    while (lengths < tokens.size() && detail::parseStrictFloat (tokens[lengths]).has_value())
+        ++lengths;
+
+    if (lengths == 0 || lengths == tokens.size())
+        return false;
+
+    if (lengths >= 3)
+        return true;
+
+    return ! isExpressionInfixOperator (tokens[lengths]);
+}
+
 void parseRuleDeclarationValue (StyleSheet::Declaration& declaration)
 {
     using Kind = StyleSheet::Declaration::Kind;
@@ -56,7 +98,9 @@ void parseRuleDeclarationValue (StyleSheet::Declaration& declaration)
     static const Identifier animationId ("animation");
     static const Identifier cursorId ("cursor");
     static const Identifier effectId ("effect");
+    static const Identifier filterId ("filter");
     static const Identifier shadowId ("shadow");
+    static const Identifier glowId ("glow");
 
     if (declaration.name == paletteId)
     {
@@ -72,6 +116,16 @@ void parseRuleDeclarationValue (StyleSheet::Declaration& declaration)
     {
         declaration.kind = Kind::effect;
         declaration.parsedName = declaration.value.unquoted().trim();
+    }
+    else if (declaration.name == filterId)
+    {
+        declaration.kind = Kind::filter;
+        declaration.parsedName = declaration.value.unquoted().trim();
+
+        if (auto parsed = FilterEffect::parseSteps (declaration.parsedName, true); parsed.wasOk())
+            declaration.filters = std::move (parsed.getReference());
+        else
+            declaration.parseError = "filter: " + parsed.getErrorMessage();
     }
     else if (declaration.name == cursorId)
     {
@@ -142,21 +196,87 @@ void parseRuleDeclarationValue (StyleSheet::Declaration& declaration)
             });
         }
     }
+    else if (declaration.name == glowId)
+    {
+        const auto parsed = declaration.value.unquoted().trim();
+        const auto entries = detail::tokenizeStyleValue (parsed);
+
+        if (! looksLikeGlowDeclaration (parsed, entries))
+            return;
+
+        declaration.kind = Kind::glow;
+        declaration.parsedName = parsed;
+
+        if (parsed.isEmpty() || parsed == "none")
+            return;
+
+        for (const auto& tokens : entries)
+        {
+            float parsedLengths[2] {};
+            int lengths = 0;
+
+            while (lengths < jmin (2, tokens.size() - 1))
+            {
+                const auto length = detail::parseStrictFloat (tokens[lengths]);
+                if (! length.has_value())
+                    break;
+
+                parsedLengths[lengths++] = *length;
+            }
+
+            if (lengths < 1 || detail::parseStrictFloat (tokens[lengths]).has_value())
+            {
+                declaration.shadows.clear();
+                declaration.parseError = "glow: Expected 'blur [spread] color', got '" + tokens.joinIntoString (" ") + "'";
+                return;
+            }
+
+            declaration.shadows.push_back ({
+                .offset = {},
+                .blur = jmax (0.0f, parsedLengths[0]),
+                .spread = lengths > 1 ? parsedLengths[1] : 0.0f,
+                .colorExpression = tokens.joinIntoString (" ", lengths)
+            });
+        }
+    }
 }
 
-std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent, std::vector<StyleSheet::Declaration>& target, bool isKeyframe)
+std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent,
+                                               std::vector<StyleSheet::Declaration>& target,
+                                               std::map<Identifier, ComponentProperty>& declaredProperties,
+                                               bool isKeyframe)
 {
     for (const auto& element : parent)
     {
-        // A property declared in a rule (`property glow: number = 0;`) also sets its default
+        // A property declared in a rule (`property glow: number [= 0];`) types custom properties and optionally sets a default
         const auto type = element.getType().toString();
-        if (type != "declaration" && ! (type == "property" && element.hasProperty ("value")))
+        if (type != "declaration" && type != "property")
             continue;
 
         const auto name = element.getProperty ("name").toString().trim();
 
         if (name.isEmpty())
             return YuiDiagnostic { .message = "A declaration needs a name", .element = element };
+
+        if (type == "property")
+        {
+            const auto dot = name.indexOfChar ('.');
+            const Identifier unqualified (dot >= 0 ? name.substring (dot + 1) : name);
+            const auto propTypeName = element.getProperty ("type").toString().trim();
+
+            if (unqualified.isValid())
+            {
+                declaredProperties.insert_or_assign (unqualified, ComponentProperty {
+                    .name = unqualified,
+                    .type = ComponentProperty::getTypeFromName (propTypeName),
+                    .elementType = ComponentProperty::getElementTypeFromName (propTypeName),
+                    .isInherited = true
+                });
+            }
+
+            if (! element.hasProperty ("value"))
+                continue;
+        }
 
         StyleSheet::Declaration declaration;
         declaration.element = element;
@@ -181,7 +301,7 @@ std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent, std::vect
         if (declaration.value.isEmpty())
             return YuiDiagnostic { .message = "The declaration '" + name + "' needs a value", .element = element };
 
-        if (! isKeyframe)
+        if (! isKeyframe && type == "declaration" && ! declaration.qualifier.isValid())
             parseRuleDeclarationValue (declaration);
 
         target.push_back (std::move (declaration));
@@ -256,12 +376,38 @@ ResultValue<StyleSheet::Ptr> StyleSheet::fromTree (const DataTree& tree, YuiDiag
 
 std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
 {
+    const auto collectDeclaredProperties = [this] (const DataTree& container)
+    {
+        for (const auto& child : container)
+        {
+            if (child.getType().toString() != "property")
+                continue;
+
+            const auto rawName = child.getProperty ("name").toString().trim();
+            const auto dot = rawName.indexOfChar ('.');
+            const Identifier unqualified (dot >= 0 ? rawName.substring (dot + 1) : rawName);
+            const auto propTypeName = child.getProperty ("type").toString().trim();
+
+            if (unqualified.isValid() && propTypeName.isNotEmpty())
+            {
+                declaredProperties.try_emplace (unqualified, ComponentProperty {
+                    .name = unqualified,
+                    .type = ComponentProperty::getTypeFromName (propTypeName),
+                    .elementType = ComponentProperty::getElementTypeFromName (propTypeName),
+                    .isInherited = true
+                });
+            }
+        }
+    };
+
     for (const auto& element : parent)
     {
         const auto type = element.getType().toString();
 
         if (type == "style")
         {
+            collectDeclaredProperties (element);
+
             if (auto problem = addElements (element))
                 return problem;
         }
@@ -276,7 +422,7 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
             rule.selector = selector.getReference();
             rule.order = static_cast<int> (rules.size());
 
-            if (auto problem = readDeclarations (element, rule.declarations, false))
+            if (auto problem = readDeclarations (element, rule.declarations, declaredProperties, false))
                 return problem;
 
             for (const auto& property : rule.selector.getReferencedProperties())
@@ -286,7 +432,7 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
         }
         else if (type == "palette")
         {
-            if (auto problem = readPalette (element, palettes))
+            if (auto problem = readPaletteElement (element, palettes))
                 return problem;
         }
         else if (type == "drawing")
@@ -295,6 +441,12 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
 
             if (name.isNotEmpty())
                 drawings.insert_or_assign (name, element);
+
+            collectDeclaredProperties (element);
+        }
+        else if (type == "tokens" || type == "component")
+        {
+            collectDeclaredProperties (element);
         }
         else if (type == "keyframes")
         {
@@ -314,7 +466,7 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
                 Keyframe frame;
                 frame.position = jlimit (0.0, 1.0, static_cast<double> (frameElement.getProperty ("at")));
 
-                if (auto problem = readDeclarations (frameElement, frame.declarations, true))
+                if (auto problem = readDeclarations (frameElement, frame.declarations, declaredProperties, true))
                     return problem;
 
                 sequence.frames.push_back (std::move (frame));
@@ -348,10 +500,18 @@ bool StyleSheet::isStyleElement (const DataTree& element) noexcept
     static const Identifier rule ("rule");
     static const Identifier palette ("palette");
     static const Identifier drawing ("drawing");
+    static const Identifier tokens ("tokens");
+    static const Identifier component ("component");
     static const Identifier keyframes ("keyframes");
 
     const auto type = element.getType();
-    return type == style || type == rule || type == palette || type == drawing || type == keyframes;
+    return type == style || type == rule || type == palette || type == drawing
+        || type == tokens || type == component || type == keyframes;
+}
+
+std::optional<YuiDiagnostic> StyleSheet::readPaletteElement (const DataTree& element, std::map<String, ThemePalette>& palettes)
+{
+    return readPalette (element, palettes);
 }
 
 //==============================================================================
@@ -375,6 +535,12 @@ DataTree StyleSheet::findDrawing (const String& name) const
 {
     const auto it = drawings.find (name);
     return it != drawings.end() ? it->second : DataTree();
+}
+
+const ComponentProperty* StyleSheet::findDeclaredProperty (const Identifier& name) const
+{
+    const auto it = declaredProperties.find (name);
+    return it != declaredProperties.end() ? &it->second : nullptr;
 }
 
 StringArray StyleSheet::getPaletteNames() const

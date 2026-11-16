@@ -135,6 +135,43 @@ public:
     const ThemePalette* getStylePalette() const noexcept { return stylePalette.get(); }
 
     //==============================================================================
+    /** Sets the transform a stylesheet or running animation applies to this component.
+
+        This transform is kept separate from Component::setTransform() and composed with it
+        when painting and routing input, so explicit C++ transforms and stylesheet transforms
+        never overwrite one another.
+
+        @param newTransform The style transform to apply.
+
+        @returns True if the style transform changed.
+    */
+    bool setStyleTransform (const AffineTransform& newTransform) noexcept;
+
+    /** Returns the transform a stylesheet or running animation applies to this component. */
+    const AffineTransform& getStyleTransform() const noexcept { return styleTransform; }
+
+    /** Returns true when the style transform is not the identity transform. */
+    bool hasStyleTransform() const noexcept { return ! styleTransform.isIdentity(); }
+
+    //==============================================================================
+    /** Sets the CSS filter effect chain computed by a stylesheet `filter:` declaration.
+
+        @param newOperations The ordered filter operations, empty for none.
+
+        @returns True if the active filter operations changed.
+    */
+    bool setFilterOperations (std::vector<FilterEffect::Operation> newOperations);
+
+    /** Replaces or clears the stylesheet FilterEffect directly.
+
+        @returns True if the filter changed.
+    */
+    bool setFilterEffect (FilterEffect::Ptr newFilter);
+
+    /** Returns the FilterEffect computed by a stylesheet `filter:` declaration, or nullptr. */
+    FilterEffect::Ptr getFilterEffect() const noexcept { return filterEffect; }
+
+    //==============================================================================
     /** One layer of a `shadow:` declaration, painted behind the component. */
     struct Shadow
     {
@@ -164,7 +201,18 @@ public:
     /** Returns the shadow layers, the first one painted on top. */
     const std::vector<Shadow>& getShadows() const noexcept { return shadows; }
 
-    /** Paints the shadow layers as feathered rounded rectangles.
+    /** Sets the glow layers, centered behind the component, the first one painted on top.
+
+        @param newGlows The layers, empty for none.
+
+        @returns True if the layers changed.
+    */
+    bool setGlows (std::vector<Shadow> newGlows);
+
+    /** Returns the glow layers, the first one painted on top. */
+    const std::vector<Shadow>& getGlows() const noexcept { return glows; }
+
+    /** Paints the shadow and glow layers as feathered rounded rectangles.
 
         @param g            The graphics context, in the component coordinates.
         @param bounds       The component bounds the layers follow.
@@ -176,7 +224,10 @@ private:
     NamedValueSet computedValues;
     NamedValueSet animatedValues;
     std::unique_ptr<ThemePalette> stylePalette;
+    AffineTransform styleTransform;
+    FilterEffect::Ptr filterEffect;
     std::vector<Shadow> shadows;
+    std::vector<Shadow> glows;
     mutable std::vector<Path> cachedShadowPaths;
     mutable Rectangle<float> cachedShadowBounds;
     mutable float cachedShadowCornerRadius = -1.0f;

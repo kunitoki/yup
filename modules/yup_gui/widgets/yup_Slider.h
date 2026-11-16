@@ -282,9 +282,14 @@ public:
         static const Identifier thumbDownColorId;  /**< Color for thumb/knob or value indicator when pressed */
         static const Identifier textColorId;       /**< Color for text labels */
 
-        static const Identifier trackWidthId;      /**< Thickness of the linear track, 4 by default */
-        static const Identifier thumbSizeId;       /**< Diameter of the linear thumbs, 16 by default */
-        static const Identifier rotaryInsetId;     /**< Rotary dial inset as a proportion of the width, 0.1 by default */
+        static const Identifier trackWidthId;             /**< Thickness of the linear track, 4 by default */
+        static const Identifier thumbSizeId;              /**< Diameter of the linear thumbs, 16 by default */
+        static const Identifier rotaryInsetId;            /**< Rotary dial inset as a proportion of the width, 0.1 by default */
+        static const Identifier rotaryDialInsetId;        /**< Rotary dial body inset inside the arc bounds as a proportion of the width, 0.105 by default */
+        static const Identifier rotaryDialOutlineWidthId; /**< Rotary dial outline stroke width as a proportion of the width, 0.0175 by default */
+        static const Identifier rotaryPointerInsetId;     /**< Rotary pointer tip inset inside the arc bounds as a proportion of the width, 0.175 by default */
+        static const Identifier rotaryPointerWidthId;     /**< Rotary pointer stroke width as a proportion of the width, 0.03 by default */
+        static const Identifier rotaryArcWidthId;         /**< Rotary track and value arc stroke width as a proportion of the width, 0.075 by default */
     };
 
     //==============================================================================

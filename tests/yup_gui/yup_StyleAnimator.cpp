@@ -178,10 +178,47 @@ TEST_F (StyleAnimatorTests, InterpolatesNumbersIntegersAndColors)
     const auto white = VariantConverter<Color>::toVar (Color (0x00ffffff));
     const auto mixed = VariantConverter<Color>::fromVar (StyleAnimator::interpolate (black, white, 0.5, Type::color));
 
-    EXPECT_NEAR (mixed.getRed(), 128, 1);
-    EXPECT_NEAR (mixed.getGreen(), 128, 1);
-    EXPECT_NEAR (mixed.getBlue(), 128, 1);
+    // 50% linear RGB luminance (0.5) companded to sRGB is ~188 (not 128 as in gamma-encoded sRGB), while alpha stays linear.
+    EXPECT_NEAR (mixed.getRed(), 188, 1);
+    EXPECT_NEAR (mixed.getGreen(), 188, 1);
+    EXPECT_NEAR (mixed.getBlue(), 188, 1);
     EXPECT_NEAR (mixed.getAlpha(), 128, 1);
+
+    const auto startOnly = VariantConverter<Color>::fromVar (StyleAnimator::interpolate (black, white, 0.0, Type::color));
+    const auto endOnly = VariantConverter<Color>::fromVar (StyleAnimator::interpolate (black, white, 1.0, Type::color));
+    EXPECT_EQ (startOnly, Color (0xff000000));
+    EXPECT_EQ (endOnly, Color (0x00ffffff));
+}
+
+TEST_F (StyleAnimatorTests, InterpolatesTransformsByDecomposingAndFallsBackForSingularMatrices)
+{
+    const auto identity = VariantConverter<AffineTransform>::toVar (AffineTransform());
+    const auto halfTurn = VariantConverter<AffineTransform>::toVar (AffineTransform::rotation (MathConstants<float>::pi));
+    const auto midRotation = VariantConverter<AffineTransform>::fromVar (
+        StyleAnimator::interpolate (identity, halfTurn, 0.5, Type::transform));
+
+    // Decomposed interpolation rotates smoothly through 90deg instead of collapsing to the zero matrix.
+    const auto expectedQuarterTurn = AffineTransform::rotation (MathConstants<float>::halfPi);
+    EXPECT_NEAR (midRotation.getScaleX(), expectedQuarterTurn.getScaleX(), 1.0e-4f);
+    EXPECT_NEAR (midRotation.getShearX(), expectedQuarterTurn.getShearX(), 1.0e-4f);
+    EXPECT_NEAR (midRotation.getShearY(), expectedQuarterTurn.getShearY(), 1.0e-4f);
+    EXPECT_NEAR (midRotation.getScaleY(), expectedQuarterTurn.getScaleY(), 1.0e-4f);
+
+    const auto translatedAndScaled = VariantConverter<AffineTransform>::toVar (
+        AffineTransform::scaling (2.0f, 4.0f).translated (20.0f, -10.0f));
+    const auto midComposed = VariantConverter<AffineTransform>::fromVar (
+        StyleAnimator::interpolate (identity, translatedAndScaled, 0.5, Type::transform));
+    EXPECT_NEAR (midComposed.getScaleX(), 1.5f, 1.0e-4f);
+    EXPECT_NEAR (midComposed.getScaleY(), 2.5f, 1.0e-4f);
+    EXPECT_NEAR (midComposed.getTranslateX(), 10.0f, 1.0e-4f);
+    EXPECT_NEAR (midComposed.getTranslateY(), -5.0f, 1.0e-4f);
+
+    // Singular matrices such as scaling(0) fall back to element-wise interpolation without NaNs.
+    const auto zeroScale = VariantConverter<AffineTransform>::toVar (AffineTransform::scaling (0.0f));
+    const auto midPopIn = VariantConverter<AffineTransform>::fromVar (
+        StyleAnimator::interpolate (zeroScale, identity, 0.25, Type::transform));
+    EXPECT_NEAR (midPopIn.getScaleX(), 0.25f, 1.0e-4f);
+    EXPECT_NEAR (midPopIn.getScaleY(), 0.25f, 1.0e-4f);
 }
 
 TEST_F (StyleAnimatorTests, InterpolatesPointsRectanglesAndArraysElementWise)

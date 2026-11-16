@@ -269,6 +269,76 @@ ResultValue<std::vector<StyleAnimator::Animation>> StyleAnimator::parseAnimation
 
 //==============================================================================
 
+namespace
+{
+
+struct DecomposedStyleTransform2D
+{
+    double translateX = 0.0;
+    double translateY = 0.0;
+    double angle = 0.0;
+    double scaleX = 1.0;
+    double scaleY = 1.0;
+    double skew = 0.0;
+};
+
+std::optional<DecomposedStyleTransform2D> decomposeStyleTransform2D (const AffineTransform& transform) noexcept
+{
+    const double det = static_cast<double> (transform.getScaleX()) * static_cast<double> (transform.getScaleY())
+                     - static_cast<double> (transform.getShearX()) * static_cast<double> (transform.getShearY());
+
+    if (std::abs (det) < 1.0e-6)
+        return std::nullopt;
+
+    const double col0x = transform.getScaleX();
+    const double col0y = transform.getShearY();
+    const double sx = std::hypot (col0x, col0y);
+
+    if (sx < 1.0e-6)
+        return std::nullopt;
+
+    const double ux = col0x / sx;
+    const double uy = col0y / sx;
+    const double vx = -uy;
+    const double vy = ux;
+
+    const double col1x = transform.getShearX();
+    const double col1y = transform.getScaleY();
+    const double r01 = col1x * ux + col1y * uy;
+    const double sy = col1x * vx + col1y * vy;
+
+    if (std::abs (sy) < 1.0e-6)
+        return std::nullopt;
+
+    return DecomposedStyleTransform2D {
+        .translateX = transform.getTranslateX(),
+        .translateY = transform.getTranslateY(),
+        .angle = std::atan2 (uy, ux),
+        .scaleX = sx,
+        .scaleY = sy,
+        .skew = r01 / sy
+    };
+}
+
+AffineTransform recomposeStyleTransform2D (const DecomposedStyleTransform2D& decomposed) noexcept
+{
+    const double ux = std::cos (decomposed.angle);
+    const double uy = std::sin (decomposed.angle);
+    const double vx = -uy;
+    const double vy = ux;
+
+    return {
+        static_cast<float> (decomposed.scaleX * ux),
+        static_cast<float> (decomposed.scaleY * (decomposed.skew * ux + vx)),
+        static_cast<float> (decomposed.translateX),
+        static_cast<float> (decomposed.scaleX * uy),
+        static_cast<float> (decomposed.scaleY * (decomposed.skew * uy + vy)),
+        static_cast<float> (decomposed.translateY)
+    };
+}
+
+} // namespace
+
 var StyleAnimator::interpolate (const var& from, const var& to, double progress, ComponentProperty::Type type)
 {
     const auto isNumeric = [] (const var& value)
@@ -291,10 +361,36 @@ var StyleAnimator::interpolate (const var& from, const var& to, double progress,
 
             case ComponentProperty::Type::color:
                 return VariantConverter<Color>::toVar (VariantConverter<Color>::fromVar (from)
-                                                           .mixedWith (VariantConverter<Color>::fromVar (to), static_cast<float> (progress), ColorSpace::SRGB));
+                                                           .mixedWith (VariantConverter<Color>::fromVar (to), static_cast<float> (progress), ColorSpace::LinearRGB));
 
             default:
                 break;
+        }
+    }
+
+    if (type == ComponentProperty::Type::transform)
+    {
+        const auto startTransform = VariantConverter<AffineTransform>::fromVar (from);
+        const auto endTransform = VariantConverter<AffineTransform>::fromVar (to);
+
+        if (const auto a = decomposeStyleTransform2D (startTransform), b = decomposeStyleTransform2D (endTransform);
+            a.has_value() && b.has_value())
+        {
+            double deltaAngle = std::fmod (b->angle - a->angle, MathConstants<double>::twoPi);
+
+            if (deltaAngle > MathConstants<double>::pi)
+                deltaAngle -= MathConstants<double>::twoPi;
+            else if (deltaAngle <= -MathConstants<double>::pi)
+                deltaAngle += MathConstants<double>::twoPi;
+
+            return VariantConverter<AffineTransform>::toVar (recomposeStyleTransform2D ({
+                .translateX = a->translateX + (b->translateX - a->translateX) * progress,
+                .translateY = a->translateY + (b->translateY - a->translateY) * progress,
+                .angle = a->angle + deltaAngle * progress,
+                .scaleX = a->scaleX + (b->scaleX - a->scaleX) * progress,
+                .scaleY = a->scaleY + (b->scaleY - a->scaleY) * progress,
+                .skew = a->skew + (b->skew - a->skew) * progress
+            }));
         }
     }
 

@@ -220,6 +220,12 @@ public:
     */
     void setPaletteMapping (PaletteMapping mapping);
 
+    /** The maximum number of per-component palette mappings kept cached at once. */
+    static constexpr size_t maxCachedComponentPalettes = 32;
+
+    /** Returns the number of per-component palette mappings currently cached on this theme. */
+    size_t getNumCachedComponentPalettes() const noexcept;
+
     /** Sets a palette derived color in this theme.
 
         This is meant to be called from a palette mapping function. Palette colors are cleared every time the

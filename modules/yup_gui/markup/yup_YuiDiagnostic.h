@@ -39,6 +39,13 @@ namespace yup
 */
 struct YUP_API YuiDiagnostic
 {
+    /** Severity level of a `.yui` diagnostic. */
+    enum class Severity
+    {
+        error,  /**< Prevents a declaration, binding or document load from succeeding. */
+        warning /**< Advisory problem that does not block evaluation or loading. */
+    };
+
     /** What went wrong. */
     String message;
 
@@ -57,7 +64,16 @@ struct YUP_API YuiDiagnostic
     /** The 1-based column of the problem, counted in characters. */
     int column = 0;
 
-    /** Returns the diagnostic as `source:line:column: message`, omitting the parts that are unknown. */
+    /** The severity of the diagnostic (`Severity::error` by default). */
+    Severity severity = Severity::error;
+
+    /** Returns true when @ref severity is `Severity::error`. */
+    bool isError() const noexcept { return severity == Severity::error; }
+
+    /** Returns true when @ref severity is `Severity::warning`. */
+    bool isWarning() const noexcept { return severity == Severity::warning; }
+
+    /** Returns the diagnostic as `source:line:column: [warning: ]message`, omitting the parts that are unknown. */
     String toString() const;
 
     /** Returns the diagnostics as strings, joined by a separator. */

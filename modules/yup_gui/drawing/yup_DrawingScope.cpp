@@ -22,6 +22,46 @@
 namespace yup
 {
 
+namespace
+{
+
+ComponentProperty::Type inferThemePropertyType (const var& value) noexcept
+{
+    if (value.isBool())
+        return ComponentProperty::Type::boolean;
+
+    if (value.isInt())
+        return ComponentProperty::Type::integer;
+
+    if (value.isDouble())
+        return ComponentProperty::Type::number;
+
+    if (value.isString())
+        return ComponentProperty::Type::string;
+
+    if (value.isInt64())
+        return ComponentProperty::Type::color;
+
+    if (const auto* array = value.getArray())
+    {
+        if (array->size() == 2 && ((*array)[0].isVoid() || (*array)[0].isObject()))
+            return ComponentProperty::Type::font;
+
+        if (array->size() == 2)
+            return ComponentProperty::Type::point;
+
+        if (array->size() == 4)
+            return ComponentProperty::Type::rectangle;
+
+        if (array->size() == 6)
+            return ComponentProperty::Type::transform;
+    }
+
+    return ComponentProperty::Type::any;
+}
+
+} // namespace
+
 DrawingScope::DrawingScope (Component& componentToUse, ExpressionContext& contextToUse)
     : component (&componentToUse)
     , context (contextToUse)
@@ -63,6 +103,30 @@ DrawingScope::ParsedInput DrawingScope::parse (const String& symbol, int index)
             return { .index = index, .kind = ParsedInput::Kind::paletteRole, .paletteRole = *role };
 
         return { .index = index, .kind = ParsedInput::Kind::invalid };
+    }
+
+    if (symbol.startsWith ("theme."))
+    {
+        const auto memberName = symbol.substring (6);
+        if (memberName.isEmpty())
+            return { .index = index, .kind = ParsedInput::Kind::invalid };
+
+        if (memberName == "font" || memberName == "defaultFont")
+            return { .index = index, .kind = ParsedInput::Kind::themeDefaultFont };
+
+        if (memberName == "iconFont")
+            return { .index = index, .kind = ParsedInput::Kind::themeIconFont };
+
+        if (memberName == "monospaceFont")
+            return { .index = index, .kind = ParsedInput::Kind::themeMonospaceFont };
+
+        if (memberName == "dark")
+            return { .index = index, .kind = ParsedInput::Kind::themeDark };
+
+        if (const auto role = ThemePalette::getRoleFromName (memberName))
+            return { .index = index, .kind = ParsedInput::Kind::themePaletteRole, .paletteRole = *role };
+
+        return { .index = index, .kind = ParsedInput::Kind::themeMember, .property = Identifier (memberName) };
     }
 
     if (symbol.isEmpty())
@@ -166,6 +230,12 @@ DrawingScope::ResolvedProperty DrawingScope::resolve (const ParsedInput& input) 
         case ParsedInput::Kind::invalid:
         case ParsedInput::Kind::paletteDark:
         case ParsedInput::Kind::paletteRole:
+        case ParsedInput::Kind::themeDefaultFont:
+        case ParsedInput::Kind::themeIconFont:
+        case ParsedInput::Kind::themeMonospaceFont:
+        case ParsedInput::Kind::themeDark:
+        case ParsedInput::Kind::themePaletteRole:
+        case ParsedInput::Kind::themeMember:
             return {};
     }
 
@@ -176,11 +246,40 @@ const ExpressionType* DrawingScope::resolveSymbol (const String& symbol) const
 {
     const auto input = parse (symbol);
 
-    if (input.kind == ParsedInput::Kind::paletteDark)
-        return context.getType<bool>();
+    switch (input.kind)
+    {
+        case ParsedInput::Kind::paletteDark:
+        case ParsedInput::Kind::themeDark:
+            return context.getType<bool>();
 
-    if (input.kind == ParsedInput::Kind::paletteRole)
-        return context.getType<Color>();
+        case ParsedInput::Kind::paletteRole:
+        case ParsedInput::Kind::themePaletteRole:
+            return context.getType<Color>();
+
+        case ParsedInput::Kind::themeDefaultFont:
+        case ParsedInput::Kind::themeIconFont:
+        case ParsedInput::Kind::themeMonospaceFont:
+            return context.getType<Font>();
+
+        case ParsedInput::Kind::themeMember:
+        {
+            const auto theme = ApplicationTheme::getGlobalTheme();
+            auto* self = component.get();
+            if (theme == nullptr || self == nullptr)
+                return nullptr;
+
+            if (theme->findDefaultColor (*self, input.property).has_value())
+                return context.getType<Color>();
+
+            if (const auto prop = theme->findProperty (*self, input.property); prop.has_value())
+                return getExpressionType (inferThemePropertyType (*prop), ComponentProperty::Type::any);
+
+            return nullptr;
+        }
+
+        default:
+            break;
+    }
 
     const auto resolved = resolve (input);
     return resolved.descriptor != nullptr
@@ -191,6 +290,8 @@ const ExpressionType* DrawingScope::resolveSymbol (const String& symbol) const
 DrawingScope::BoundInputs DrawingScope::bindInputs (const CompiledExpression& program) const
 {
     BoundInputs bound;
+    const auto theme = ApplicationTheme::getGlobalTheme();
+    auto* self = component.get();
 
     for (int i = context.getNumInputs(); i < program.getNumInputs(); ++i)
     {
@@ -201,8 +302,23 @@ DrawingScope::BoundInputs DrawingScope::bindInputs (const CompiledExpression& pr
         if (input.kind == ParsedInput::Kind::invalid)
             continue;
 
-        if (input.kind == ParsedInput::Kind::paletteDark || input.kind == ParsedInput::Kind::paletteRole)
+        if (input.isPaletteOrTheme())
+        {
             bound.paletteDependent = true;
+
+            if (input.kind == ParsedInput::Kind::themeMember && theme != nullptr && self != nullptr)
+            {
+                if (theme->findDefaultColor (*self, input.property).has_value())
+                {
+                    input.isThemeColor = true;
+                    input.themeType = ComponentProperty::Type::color;
+                }
+                else if (const auto prop = theme->findProperty (*self, input.property); prop.has_value())
+                {
+                    input.themeType = inferThemePropertyType (*prop);
+                }
+            }
+        }
 
         bound.inputs.push_back (std::move (input));
     }
@@ -216,18 +332,19 @@ void DrawingScope::updateInputs (BoundInputs& bound, ExpressionState& state) con
     if (self == nullptr || bound.inputs.empty())
         return;
 
+    static const ThemePalette defaultPalette;
+    const auto theme = bound.paletteDependent ? ApplicationTheme::getGlobalTheme() : nullptr;
     const ThemePalette* palette = nullptr;
 
     if (bound.paletteDependent)
     {
-        static const ThemePalette defaultPalette;
-
-        const auto theme = ApplicationTheme::getGlobalTheme();
         palette = theme != nullptr ? &theme->getPalette (*self) : self->findPalette();
 
         if (palette == nullptr)
             palette = &defaultPalette;
     }
+
+    const ThemePalette& globalPalette = theme != nullptr ? theme->getPalette() : defaultPalette;
 
     for (auto& input : bound.inputs)
     {
@@ -240,6 +357,54 @@ void DrawingScope::updateInputs (BoundInputs& bound, ExpressionState& state) con
         if (input.kind == ParsedInput::Kind::paletteRole)
         {
             state.set (ExpressionInput<Color> { input.index }, palette->getColor (input.paletteRole));
+            continue;
+        }
+
+        if (input.kind == ParsedInput::Kind::themeDefaultFont)
+        {
+            state.set (ExpressionInput<Font> { input.index }, theme != nullptr ? theme->getDefaultFont() : Font());
+            continue;
+        }
+
+        if (input.kind == ParsedInput::Kind::themeIconFont)
+        {
+            state.set (ExpressionInput<Font> { input.index }, theme != nullptr ? theme->getDefaultIconFont() : Font());
+            continue;
+        }
+
+        if (input.kind == ParsedInput::Kind::themeMonospaceFont)
+        {
+            state.set (ExpressionInput<Font> { input.index }, theme != nullptr ? theme->getDefaultMonospaceFont() : Font());
+            continue;
+        }
+
+        if (input.kind == ParsedInput::Kind::themeDark)
+        {
+            state.set (ExpressionInput<bool> { input.index }, globalPalette.getMode() == ThemePalette::Mode::dark);
+            continue;
+        }
+
+        if (input.kind == ParsedInput::Kind::themePaletteRole)
+        {
+            state.set (ExpressionInput<Color> { input.index }, globalPalette.getColor (input.paletteRole));
+            continue;
+        }
+
+        if (input.kind == ParsedInput::Kind::themeMember)
+        {
+            if (theme == nullptr)
+                continue;
+
+            if (input.isThemeColor)
+            {
+                state.set (ExpressionInput<Color> { input.index }, theme->findDefaultColor (*self, input.property).value_or (Color()));
+            }
+            else if (input.themeType != ComponentProperty::Type::any)
+            {
+                const auto prop = theme->findProperty (*self, input.property).value_or (var());
+                setInputValue (state, input.index, input.themeType, ComponentProperty::Type::any, prop, input.arrayInput);
+            }
+
             continue;
         }
 
@@ -265,6 +430,8 @@ void DrawingScope::setInputValue (ExpressionState& state,
 {
     if (type == ComponentProperty::Type::array)
         arrayInput.bind (state, input, elementType, value);
+    else if (type == ComponentProperty::Type::drawing || type == ComponentProperty::Type::enumeration)
+        state.set (ExpressionInput<String> { input }, value.toString());
     else
         withExpressionType (type, [&] (auto tag)
         {
@@ -285,7 +452,7 @@ std::vector<DrawingScope::Dependency> DrawingScope::getDependencies (const Compi
 
         const auto input = parse (program.getInputName (i), i);
 
-        if (input.kind == ParsedInput::Kind::paletteDark || input.kind == ParsedInput::Kind::paletteRole)
+        if (input.isPaletteOrTheme())
             continue;
 
         const auto resolved = resolve (input);
@@ -313,6 +480,8 @@ const ExpressionType* DrawingScope::getExpressionType (ComponentProperty::Type t
         {
             result = context.addArrayType<typename decltype (tag)::type>();
         });
+    else if (type == ComponentProperty::Type::drawing || type == ComponentProperty::Type::enumeration)
+        result = context.getType<String>();
     else
         withExpressionType (type, [&] (auto tag)
         {

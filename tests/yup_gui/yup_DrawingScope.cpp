@@ -411,3 +411,66 @@ TEST_F (DrawingScopeTest, CachedProgramFollowsReparentingTypeChangesAndReplacedT
     parentB.removeProperty (Identifier ("token"));
     EXPECT_DOUBLE_EQ (evalOnce(), 4.0 + 4.0 + 20.0 + 99.0 + 30.0);
 }
+
+TEST_F (DrawingScopeTest, BridgesFontAndFontArrayPropertiesAndThemeScope)
+{
+    auto oldTheme = ApplicationTheme::getGlobalTheme();
+    ApplicationTheme::Ptr customTheme = new ApplicationTheme();
+    customTheme->setDefaultFont (Font().withHeight (15.0f));
+    customTheme->setDefaultIconFont (Font().withHeight (19.0f));
+    customTheme->setDefaultMonospaceFont (Font().withHeight (13.0f));
+
+    ThemePalette darkPalette;
+    darkPalette.setMode (ThemePalette::Mode::dark);
+    darkPalette.setColor (ThemePalette::Role::accent, Color (0xff336699));
+    customTheme->setPalette (darkPalette);
+    customTheme->setColor (Identifier ("brandHighlight"), Color (0xffff8844));
+    customTheme->setProperty (Identifier ("gridSnap"), 8.0);
+    ApplicationTheme::setGlobalTheme (customTheme);
+
+    const ComponentTypeInfo withFonts (Identifier ("WithFonts"),
+                                       &Component::getClassTypeInfo(),
+                                       { ComponentProperty { .name = Identifier ("headlineFont"),
+                                                             .type = ComponentProperty::Type::font,
+                                                             .defaultValue = VariantConverter<Font>::toVar (Font().withHeight (22.0f)) },
+                                         ComponentProperty { .name = Identifier ("fontStack"),
+                                                             .type = ComponentProperty::Type::array,
+                                                             .elementType = ComponentProperty::Type::font } });
+
+    Component panel ("panel");
+    panel.setTypeInfo (&withFonts);
+    panel.setProperty (Identifier ("fontStack"), var (Array<var> {
+                                                     VariantConverter<Font>::toVar (Font().withHeight (10.0f)),
+                                                     VariantConverter<Font>::toVar (Font().withHeight (28.0f)) }));
+
+    DrawingScope scope (panel, context);
+
+    // Font properties and font[] arrays bridge cleanly through VariantConverter<Font>.
+    EXPECT_FLOAT_EQ (static_cast<float> (evaluate (scope, "out = headlineFont.height")), 22.0f);
+    const auto scaledFont = VariantConverter<Font>::fromVar (evaluate (scope, "out = headlineFont.withHeight (30)"));
+    EXPECT_FLOAT_EQ (scaledFont.getHeight(), 30.0f);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = len (fontStack)")), 2.0);
+    EXPECT_FLOAT_EQ (static_cast<float> (evaluate (scope, "out = fontStack[1].height")), 28.0f);
+
+    // theme.* resolves default fonts, theme palette mode/roles, and registered theme colors/properties.
+    EXPECT_FLOAT_EQ (static_cast<float> (evaluate (scope, "out = theme.font.height")), 15.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (evaluate (scope, "out = theme.defaultFont.height")), 15.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (evaluate (scope, "out = theme.iconFont.height")), 19.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (evaluate (scope, "out = theme.monospaceFont.height")), 13.0f);
+    EXPECT_TRUE (static_cast<bool> (evaluate (scope, "out = theme.dark")));
+    EXPECT_EQ (VariantConverter<Color>::fromVar (evaluate (scope, "out = theme.accent")), Color (0xff336699));
+    EXPECT_EQ (VariantConverter<Color>::fromVar (evaluate (scope, "out = theme.brandHighlight")), Color (0xffff8844));
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = theme.gridSnap * 2")), 16.0);
+
+    // Expressions reading theme.* mark BoundInputs as palette/theme-dependent so StyleContext refreshes on theme changes.
+    scope.install();
+    auto compiled = CompiledExpression::compile ("out = theme.font.height", context);
+    ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+    EXPECT_TRUE (scope.bindInputs (compiled.getReference()).readsPalette());
+
+    customTheme->setDefaultFont (Font().withHeight (21.0f));
+    EXPECT_FLOAT_EQ (static_cast<float> (evaluate (scope, "out = theme.font.height")), 21.0f);
+
+    ApplicationTheme::setGlobalTheme (oldTheme);
+}
+

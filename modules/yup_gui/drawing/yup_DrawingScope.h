@@ -103,7 +103,7 @@ public:
         void bind (ExpressionState& state, int input, ComponentProperty::Type elementType, const var& value);
 
     private:
-        std::variant<Array<float>, Array<int>, Array<bool>, Array<String>, Array<Color>, Array<Point<float>>, Array<Rectangle<float>>> values;
+        std::variant<Array<float>, Array<int>, Array<bool>, Array<String>, Array<Color>, Array<Point<float>>, Array<Rectangle<float>>, Array<AffineTransform>, Array<Font>> values;
     };
 
     //==============================================================================
@@ -229,6 +229,8 @@ public:
             case ComponentProperty::Type::color:     function (std::type_identity<Color>()); return true;
             case ComponentProperty::Type::point:     function (std::type_identity<Point<float>>()); return true;
             case ComponentProperty::Type::rectangle: function (std::type_identity<Rectangle<float>>()); return true;
+            case ComponentProperty::Type::transform: function (std::type_identity<AffineTransform>()); return true;
+            case ComponentProperty::Type::font:      function (std::type_identity<Font>()); return true;
 
             default:                                 return false;
         }
@@ -259,6 +261,12 @@ private:
             invalid,
             paletteDark,
             paletteRole,
+            themeDefaultFont,
+            themeIconFont,
+            themeMonospaceFont,
+            themeDark,
+            themePaletteRole,
+            themeMember,
             selfProperty,
             parentProperty,
             bareProperty,
@@ -268,11 +276,25 @@ private:
         int index = 0;
         Kind kind = Kind::invalid;
         ThemePalette::Role paletteRole = ThemePalette::Role::surface;
+        ComponentProperty::Type themeType = ComponentProperty::Type::any;
+        bool isThemeColor = false;
         String prefix;
         Identifier property;
         ArrayInput arrayInput;
         mutable WeakReference<Component> cachedComponent;
         mutable uint32 cachedResolverGeneration = 0;
+
+        bool isPaletteOrTheme() const noexcept
+        {
+            return kind == Kind::paletteDark
+                || kind == Kind::paletteRole
+                || kind == Kind::themeDefaultFont
+                || kind == Kind::themeIconFont
+                || kind == Kind::themeMonospaceFont
+                || kind == Kind::themeDark
+                || kind == Kind::themePaletteRole
+                || kind == Kind::themeMember;
+        }
     };
 
     struct ResolvedProperty

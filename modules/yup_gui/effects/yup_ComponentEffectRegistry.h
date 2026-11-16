@@ -75,7 +75,7 @@ public:
 
 private:
     //==============================================================================
-    ComponentEffectRegistry() = default;
+    ComponentEffectRegistry();
 
     std::unordered_map<Identifier, Factory> factories;
     mutable CriticalSection lock;

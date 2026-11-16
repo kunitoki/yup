@@ -630,4 +630,94 @@ rive::rcp<rive::Font> Font::getFont() const
     return font;
 }
 
+//==============================================================================
+
+namespace
+{
+
+struct FontTypefaceHolder;
+
+struct FontHolderRegistry
+{
+    std::mutex mutex;
+    std::unordered_map<const rive::Font*, FontTypefaceHolder*> holders;
+};
+
+const std::shared_ptr<FontHolderRegistry>& getFontHolderRegistry()
+{
+    static const auto registry = std::make_shared<FontHolderRegistry>();
+    return registry;
+}
+
+struct FontTypefaceHolder final : ReferenceCountedObject
+{
+    FontTypefaceHolder (rive::rcp<rive::Font> fontToHold, std::shared_ptr<FontHolderRegistry> registryToUse)
+        : font (std::move (fontToHold))
+        , registry (std::move (registryToUse))
+    {
+    }
+
+    ~FontTypefaceHolder() override
+    {
+        if (registry == nullptr || font == nullptr)
+            return;
+
+        const std::scoped_lock lock (registry->mutex);
+        if (const auto it = registry->holders.find (font.get()); it != registry->holders.end() && it->second == this)
+            registry->holders.erase (it);
+    }
+
+    rive::rcp<rive::Font> font;
+    std::shared_ptr<FontHolderRegistry> registry;
+};
+
+} // namespace
+
+Font VariantConverter<Font>::fromVar (const var& v)
+{
+    const auto* values = v.getArray();
+    if (values == nullptr || values->size() != 2)
+        return {};
+
+    const auto& heightVar = (*values)[1];
+    if (! (heightVar.isDouble() || heightVar.isInt() || heightVar.isInt64()))
+        return {};
+
+    const auto parsedHeight = static_cast<float> (heightVar);
+
+    if ((*values)[0].isVoid())
+        return Font().withHeight (parsedHeight);
+
+    if (const auto* holder = dynamic_cast<const FontTypefaceHolder*> ((*values)[0].getObject()))
+        return Font (holder->font, parsedHeight);
+
+    return {};
+}
+
+var VariantConverter<Font>::toVar (const Font& f)
+{
+    if (f.getFont() == nullptr)
+        return Array<var> { var(), static_cast<double> (f.getHeight()) };
+
+    const auto& registry = getFontHolderRegistry();
+    ReferenceCountedObjectPtr<FontTypefaceHolder> holder;
+
+    {
+        const std::scoped_lock lock (registry->mutex);
+        const auto* rawFont = f.getFont().get();
+
+        if (const auto it = registry->holders.find (rawFont); it != registry->holders.end() && it->second->getReferenceCount() > 0)
+        {
+            holder = it->second;
+        }
+        else
+        {
+            holder = new FontTypefaceHolder (f.getFont(), registry);
+            registry->holders[rawFont] = holder.get();
+        }
+    }
+
+    return Array<var> { var (holder.get()), static_cast<double> (f.getHeight()) };
+}
+
 } // namespace yup

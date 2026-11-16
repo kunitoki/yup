@@ -22,9 +22,32 @@
 namespace yup
 {
 
+namespace
+{
+
+struct DocumentWindowIds
+{
+    static inline const Identifier resizable { "resizable" };
+};
+
+} // namespace
+
 //==============================================================================
 
 const Identifier DocumentWindow::Style::backgroundColorId = "documentWindowBackground";
+
+//==============================================================================
+
+const ComponentTypeInfo& DocumentWindow::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<DocumentWindow> (Identifier ("DocumentWindow"))
+                                 .factory (nullptr)
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .property (DocumentWindowIds::resizable, &DocumentWindow::isResizable, &DocumentWindow::setResizable, false, "Whether the window is resizable.")
+                                 .build();
+
+    return info;
+}
 
 //==============================================================================
 
@@ -70,8 +93,13 @@ bool DocumentWindow::isResizable() const
 
 void DocumentWindow::setResizable (bool shouldBeResizable)
 {
+    const auto wasResizable = isResizable();
+
     if (auto native = getNativeComponent())
         native->setResizable (shouldBeResizable);
+
+    if (isResizable() != wasResizable)
+        notifyPropertyChanged (DocumentWindowIds::resizable);
 }
 
 //==============================================================================

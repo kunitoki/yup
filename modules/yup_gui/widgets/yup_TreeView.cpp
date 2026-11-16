@@ -45,7 +45,48 @@ double treeViewInverseEaseOut (float eased)
     return 1.0 - std::sqrt (jlimit (0.0, 1.0, 1.0 - static_cast<double> (eased)));
 }
 
+struct TreeViewIds
+{
+    static inline const Identifier rootItemVisible { "rootItemVisible" };
+    static inline const Identifier openCloseButtonsVisible { "openCloseButtonsVisible" };
+    static inline const Identifier indentSize { "indentSize" };
+    static inline const Identifier defaultItemHeight { "defaultItemHeight" };
+    static inline const Identifier indentGuidesVisible { "indentGuidesVisible" };
+    static inline const Identifier expandAnimationTime { "expandAnimationTime" };
+    static inline const Identifier selectionMode { "selectionMode" };
+};
+
 } // namespace
+
+//==============================================================================
+const ComponentTypeInfo& TreeView::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<TreeView> (Identifier ("TreeView"))
+                                 .color ("indentGuideColor", Style::indentGuideColorId)
+                                 .color ("disclosureColor", Style::disclosureColorId)
+                                 .color ("itemTextColor", Style::itemTextColorId)
+                                 .color ("itemTextSelectedColor", Style::itemTextSelectedColorId)
+                                 .color ("dropIndicatorColor", Style::dropIndicatorColorId)
+                                 .color ("itemHoveredColor", Style::itemHoveredColorId)
+                                 .property (TreeViewIds::rootItemVisible, &TreeView::isRootItemVisible, &TreeView::setRootItemVisible, true, "Whether the root item has a visible row.")
+                                 .property (TreeViewIds::openCloseButtonsVisible, &TreeView::areOpenCloseButtonsVisible, &TreeView::setOpenCloseButtonsVisible, true, "Whether disclosure buttons are shown.")
+                                 .property (TreeViewIds::indentSize, &TreeView::getIndentSize, &TreeView::setIndentSize, 20.0, "How far each tree level is indented, in points.")
+                                 .property (TreeViewIds::defaultItemHeight, &TreeView::getDefaultItemHeight, &TreeView::setDefaultItemHeight, 24.0, "The default row height in points.")
+                                 .property (TreeViewIds::indentGuidesVisible, &TreeView::areIndentGuidesVisible, &TreeView::setIndentGuidesVisible, true, "Whether vertical indent guides are painted.")
+                                 .property (TreeViewIds::expandAnimationTime, &TreeView::getExpandAnimationTime, &TreeView::setExpandAnimationTime, 0.15, "How long expanding or collapsing an item animates, in seconds.")
+                                 .enumeration<ListBox::SelectionMode> (
+                                     TreeViewIds::selectionMode,
+                                     { { "single", ListBox::SelectionMode::single },
+                                       { "none", ListBox::SelectionMode::none },
+                                       { "multiple", ListBox::SelectionMode::multiple } },
+                                     &TreeView::getSelectionMode,
+                                     &TreeView::setSelectionMode,
+                                     "How many items can be selected at once.")
+                                 .signal ("onSelectionChanged", &TreeView::onSelectionChanged, "Emitted when the selected items change.")
+                                 .build();
+
+    return info;
+}
 
 //==============================================================================
 /** Feeds the visible items to the inner list. */
@@ -307,6 +348,8 @@ void TreeView::setRootItemVisible (bool shouldBeVisible)
     rootVisible = shouldBeVisible;
     ensureHiddenRootIsOpen();
     endBulkUpdate();
+
+    notifyPropertyChanged (TreeViewIds::rootItemVisible);
 }
 
 bool TreeView::isRootItemVisible() const noexcept
@@ -320,6 +363,7 @@ void TreeView::setOpenCloseButtonsVisible (bool shouldBeVisible)
         return;
 
     openCloseButtonsVisible = shouldBeVisible;
+    notifyPropertyChanged (TreeViewIds::openCloseButtonsVisible);
     list->updateContent();
 }
 
@@ -331,7 +375,12 @@ bool TreeView::areOpenCloseButtonsVisible() const noexcept
 //==============================================================================
 void TreeView::setIndentSize (float newIndentSize)
 {
-    indentSize = jmax (0.0f, newIndentSize);
+    const auto clamped = jmax (0.0f, newIndentSize);
+    if (approximatelyEqual (indentSize, clamped))
+        return;
+
+    indentSize = clamped;
+    notifyPropertyChanged (TreeViewIds::indentSize);
     list->updateContent();
 }
 
@@ -342,8 +391,13 @@ float TreeView::getIndentSize() const noexcept
 
 void TreeView::setDefaultItemHeight (float newHeight)
 {
-    defaultItemHeight = jmax (1.0f, newHeight);
+    const auto clamped = jmax (1.0f, newHeight);
+    if (approximatelyEqual (defaultItemHeight, clamped))
+        return;
+
+    defaultItemHeight = clamped;
     list->setRowSize (defaultItemHeight);
+    notifyPropertyChanged (TreeViewIds::defaultItemHeight);
     list->updateContent();
 }
 
@@ -354,7 +408,11 @@ float TreeView::getDefaultItemHeight() const noexcept
 
 void TreeView::setIndentGuidesVisible (bool shouldBeVisible)
 {
+    if (indentGuidesVisible == shouldBeVisible)
+        return;
+
     indentGuidesVisible = shouldBeVisible;
+    notifyPropertyChanged (TreeViewIds::indentGuidesVisible);
     list->repaint();
 }
 
@@ -365,7 +423,12 @@ bool TreeView::areIndentGuidesVisible() const noexcept
 
 void TreeView::setExpandAnimationTime (double seconds)
 {
-    expandAnimationTime = jmax (0.0, seconds);
+    const auto clamped = jmax (0.0, seconds);
+    if (approximatelyEqual (expandAnimationTime, clamped))
+        return;
+
+    expandAnimationTime = clamped;
+    notifyPropertyChanged (TreeViewIds::expandAnimationTime);
 
     if (expandAnimationTime <= 0.0)
         finishAnimation();
@@ -405,7 +468,11 @@ float TreeView::getScrollPosition() const noexcept
 //==============================================================================
 void TreeView::setSelectionMode (ListBox::SelectionMode mode)
 {
+    if (list->getSelectionMode() == mode)
+        return;
+
     list->setSelectionMode (mode);
+    notifyPropertyChanged (TreeViewIds::selectionMode);
 
     // The list drops the selection without telling its model when selection is turned off.
     handleListSelectionChanged();

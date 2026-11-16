@@ -31,8 +31,9 @@ struct ExpressionDrawing::Fields
     Field<int> series;
     Field<Color> fill, stroke, tint, labelColor, labelStroke;
     Field<ColorGradient> fillGradient, strokeGradient;
-    Field<float> strokeWidth, strokeMiterLimit, opacity, feather, radius;
+    Field<float> strokeWidth, strokeMiterLimit, strokeDashOffset, opacity, feather, radius;
     Field<float> cornerRadius, topLeftRadius, topRightRadius, bottomLeftRadius, bottomRightRadius;
+    Field<StrokeDashPattern> strokeDash;
     Field<StrokeCap> strokeCap;
     Field<StrokeJoin> strokeJoin;
     Field<StrokePosition> strokePosition;
@@ -98,6 +99,8 @@ void forEachDrawingField (F&& f, Values&&... fields)
     f ("strokeGradient", fields.strokeGradient...);
     f ("strokeWidth", fields.strokeWidth...);
     f ("strokeMiterLimit", fields.strokeMiterLimit...);
+    f ("strokeDash", fields.strokeDash...);
+    f ("strokeDashOffset", fields.strokeDashOffset...);
     f ("opacity", fields.opacity...);
     f ("feather", fields.feather...);
     f ("radius", fields.radius...);
@@ -166,7 +169,8 @@ struct ExpressionDrawing::DrawBuffers
         bool shouldStroke = false;
         std::optional<Color> fill, stroke, tint;
         std::optional<ColorGradient> fillGradient, strokeGradient;
-        std::optional<float> strokeWidth, miterLimit, opacity, feather;
+        std::optional<float> strokeWidth, miterLimit, strokeDashOffset, opacity, feather;
+        std::optional<StrokeDashPattern> strokeDash;
         std::optional<StrokeCap> cap;
         std::optional<StrokeJoin> join;
         std::optional<StrokePosition> strokePosition;
@@ -181,6 +185,8 @@ struct ExpressionDrawing::DrawBuffers
 
         bool hasStroke() const noexcept { return stroke.has_value() || strokeGradient.has_value(); }
 
+        bool hasDash() const noexcept { return strokeDash.has_value() && ! strokeDash->isEmpty(); }
+
         bool isFillOnly() const noexcept { return shouldFill && ! shouldStroke; }
 
         bool canMerge() const noexcept { return ! feather.has_value() || *feather <= 0.0f; }
@@ -188,6 +194,9 @@ struct ExpressionDrawing::DrawBuffers
         bool canMergeOverlapping() const noexcept
         {
             if (shouldFill == shouldStroke || fillGradient || strokeGradient)
+                return false;
+
+            if (shouldStroke && hasDash())
                 return false;
 
             if ((opacity && *opacity < 1.0f) || (blend && *blend != BlendMode::SrcOver) || (tint && ! tint->isOpaque()))
@@ -333,6 +342,8 @@ struct ExpressionDrawing::DrawBuffers
             : style (shapeStyle)
             , path (shape)
         {
+            if (style.shouldStroke && style.hasDash())
+                dashedPath = shape.createDashed (style.strokeDash->asSpan(), style.strokeDashOffset.value_or (0.0f));
         }
 
         Operation (const Style& labelStyle, Text labelText)
@@ -343,6 +354,7 @@ struct ExpressionDrawing::DrawBuffers
 
         Style style;
         std::optional<Path> path;
+        std::optional<Path> dashedPath;
         std::optional<Text> label;
 
         void draw (Graphics& g, const Font* labelFont) const
@@ -361,7 +373,7 @@ struct ExpressionDrawing::DrawBuffers
                     g.fillPath (*path);
 
                 if (style.shouldStroke)
-                    g.strokePath (*path);
+                    g.strokePath (dashedPath ? *dashedPath : *path);
             }
             else if (label)
             {
@@ -513,6 +525,8 @@ void ExpressionDrawing::DrawBuffers::addRow (const Lanes& lanes, int lane)
     style.strokeGradient = getOptionalOutput (lanes.strokeGradient);
     style.strokeWidth = getOptionalOutput (lanes.strokeWidth);
     style.miterLimit = getOptionalOutput (lanes.strokeMiterLimit);
+    style.strokeDash = getOptionalOutput (lanes.strokeDash);
+    style.strokeDashOffset = getOptionalOutput (lanes.strokeDashOffset);
     style.opacity = getOptionalOutput (lanes.opacity);
     style.feather = getOptionalOutput (lanes.feather);
     style.cap = getOptionalOutput (lanes.strokeCap);

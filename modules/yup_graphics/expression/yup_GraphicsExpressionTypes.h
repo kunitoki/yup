@@ -25,6 +25,35 @@ namespace yup
 {
 
 //==============================================================================
+/** Alternating stroke dash and gap lengths used by graphics expressions.
+
+    @tags{Graphics}
+*/
+struct YUP_API StrokeDashPattern
+{
+    Array<float> lengths;
+
+    StrokeDashPattern() = default;
+
+    explicit StrokeDashPattern (Array<float> dashLengths) noexcept
+        : lengths (std::move (dashLengths))
+    {
+    }
+
+    /** Returns true when no dash pattern is active (solid stroke). */
+    bool isEmpty() const noexcept { return lengths.isEmpty(); }
+
+    /** Returns the alternating dash and gap lengths as a span. */
+    Span<const float> asSpan() const noexcept { return { lengths.getRawDataPointer(), static_cast<size_t> (lengths.size()) }; }
+
+    /** Parses comma- or whitespace-separated positive numbers, or `"none"` for an empty pattern. */
+    static StrokeDashPattern fromString (StringRef text);
+
+    bool operator== (const StrokeDashPattern& other) const noexcept { return lengths == other.lengths; }
+    bool operator!= (const StrokeDashPattern& other) const noexcept { return lengths != other.lengths; }
+};
+
+//==============================================================================
 /** Registers the graphics types with an ExpressionContext.
 
     The following types become available to expressions, all using `float` coordinates:
@@ -53,8 +82,10 @@ namespace yup
     - `path` (Path): `path()` (empty), `path ("M 0 0 L 10 10 Z")` (SVG path data); members `bounds length
       isEmpty`; methods `pointAt` (normalized 0-1 position) `moveTo lineTo quadTo cubicTo close addRectangle addRoundedRectangle
       addEllipse addLine addArc addTriangle addPolygon addStar appendPath transformed scaledToFit
-      withRoundedCorners withNonZeroWinding`. Paths are values: methods return a modified copy, as in
+      withRoundedCorners withNonZeroWinding createDashed`. Paths are values: methods return a modified copy, as in
       `path().moveTo (0, 0).lineTo (10, 10).close()`. Programs using paths may allocate when evaluated.
+    - `dash` (StrokeDashPattern): `dash()` (solid), `dash (on)` / `dash (on, off, ...)`, `dash ("6, 3")`,
+      or `dash (floatArray)`; member `isEmpty`, `== !=`.
     - `font` (Font): `font()` (empty), usually provided as an input; members `height isEmpty`;
       methods `withHeight withAxisValue (tag, value)`, `== !=`.
     - `gradient` (ColorGradient): `linearGradient (color1, point1, color2, point2)`,
@@ -65,10 +96,12 @@ namespace yup
 
     The enumerations `cap` (`butt round square`), `join` (`miter round bevel`), `strokePosition`
     (`inside center outside`), `blend` (`srcOver screen overlay darken lighten colorDodge colorBurn
-    hardLight softLight difference exclusion multiply hue saturation color luminosity additive`) and
+    hardLight softLight difference exclusion multiply hue saturation color luminosity additive`),
     `justification` (`left right horizontalCenter top bottom verticalCenter topLeft topRight bottomLeft
-    bottomRight centerLeft centerTop center centerRight centerBottom`) map to StrokeCap, StrokeJoin,
-    StrokePosition, BlendMode and Justification::Flags.
+    bottomRight centerLeft centerTop center centerRight centerBottom`), `fitting` (`none scaleToFit
+    fitWidth fitHeight scaleToFill fill tile centerCrop centerInside stretchWidth stretchHeight`) and
+    `maskMode` (`alpha invertedAlpha luminance invertedLuminance`) map to StrokeCap, StrokeJoin,
+    StrokePosition, BlendMode, Justification::Flags, Fitting and LayerMaskMode.
 
     The function `polar (center, radius, angle)` returns the point at `radius` from `center`, with the
     angle in radians measured from the positive x axis towards the positive y axis (clockwise on screen).

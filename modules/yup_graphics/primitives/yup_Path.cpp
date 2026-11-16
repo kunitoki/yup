@@ -2828,6 +2828,200 @@ Path Path::createFillPolygon() const
     return result;
 }
 
+Path Path::createDashed (Span<const float> dashLengths, float dashOffset) const
+{
+    if (dashLengths.empty())
+        return *this;
+
+    Array<float> positiveDashes;
+    positiveDashes.ensureStorageAllocated (static_cast<int> (dashLengths.size()) * 2);
+
+    for (const float dash : dashLengths)
+    {
+        if (dash > 0.0f)
+            positiveDashes.add (dash);
+    }
+
+    if (positiveDashes.isEmpty())
+        return *this;
+
+    if ((positiveDashes.size() % 2) != 0)
+    {
+        const int originalSize = positiveDashes.size();
+        for (int i = 0; i < originalSize; ++i)
+            positiveDashes.add (positiveDashes[i]);
+    }
+
+    float totalPatternLength = 0.0f;
+    for (const float dash : positiveDashes)
+        totalPatternLength += dash;
+
+    if (! (totalPatternLength > 0.0f))
+        return *this;
+
+    Path result;
+    int dashIndex = 0;
+    float patternPosition = 0.0f;
+    bool inDashSubPath = false;
+
+    const auto advanceDashIndex = [&]
+    {
+        patternPosition = 0.0f;
+        dashIndex = (dashIndex + 1) % positiveDashes.size();
+
+        if ((dashIndex % 2) != 0)
+            inDashSubPath = false;
+    };
+
+    const auto resetDashPosition = [&]
+    {
+        dashIndex = 0;
+        inDashSubPath = false;
+        patternPosition = std::fmod (dashOffset, totalPatternLength);
+        if (patternPosition < 0.0f)
+            patternPosition += totalPatternLength;
+
+        while (patternPosition >= positiveDashes[dashIndex])
+        {
+            patternPosition -= positiveDashes[dashIndex];
+            dashIndex = (dashIndex + 1) % positiveDashes.size();
+        }
+    };
+
+    resetDashPosition();
+
+    const auto drawLineDash = [&] (Point<float> start, Point<float> end)
+    {
+        const float length = start.distanceTo (end);
+        if (! (length > 0.0f))
+            return;
+
+        const auto direction = (end - start) / length;
+        float distance = 0.0f;
+
+        while (distance < length)
+        {
+            const float remainingInDash = positiveDashes[dashIndex] - patternPosition;
+            if (! (remainingInDash > 0.0f))
+            {
+                advanceDashIndex();
+                continue;
+            }
+
+            const float remainingInLine = length - distance;
+            const bool finishesDash = remainingInDash <= remainingInLine;
+            const float step = finishesDash ? remainingInDash : remainingInLine;
+
+            if ((dashIndex % 2) == 0 && step > 0.0f)
+            {
+                const auto dashEnd = finishesDash ? (start + direction * (distance + step)) : end;
+
+                if (! inDashSubPath)
+                {
+                    result.startNewSubPath (start + direction * distance);
+                    inDashSubPath = true;
+                }
+
+                result.lineTo (dashEnd);
+            }
+
+            if (finishesDash)
+            {
+                const float nextDistance = distance + step;
+                advanceDashIndex();
+
+                if (nextDistance <= distance)
+                    break;
+
+                distance = nextDistance;
+            }
+            else
+            {
+                distance = length;
+                patternPosition += step;
+
+                if (patternPosition >= positiveDashes[dashIndex])
+                    advanceDashIndex();
+            }
+        }
+    };
+
+    Point<float> current;
+    Point<float> subPathStart;
+    bool hasCurrent = false;
+
+    for (const auto& segment : *this)
+    {
+        switch (segment.verb)
+        {
+            case Verb::MoveTo:
+                current = segment.point;
+                subPathStart = current;
+                hasCurrent = true;
+                resetDashPosition();
+                break;
+
+            case Verb::LineTo:
+                if (hasCurrent)
+                    drawLineDash (current, segment.point);
+                current = segment.point;
+                break;
+
+            case Verb::Close:
+                if (hasCurrent)
+                    drawLineDash (current, subPathStart);
+                current = subPathStart;
+                inDashSubPath = false;
+                break;
+
+            case Verb::QuadTo:
+                if (hasCurrent)
+                {
+                    const float controlLength = current.distanceTo (segment.controlPoint1) + segment.controlPoint1.distanceTo (segment.point);
+                    const int numSegments = estimateCurveSegments (controlLength);
+                    auto previous = current;
+
+                    for (int i = 1; i <= numSegments; ++i)
+                    {
+                        const auto next = evaluateClipperQuadratic (current,
+                                                                    segment.controlPoint1,
+                                                                    segment.point,
+                                                                    static_cast<float> (i) / static_cast<float> (numSegments));
+                        drawLineDash (previous, next);
+                        previous = next;
+                    }
+                }
+                current = segment.point;
+                break;
+
+            case Verb::CubicTo:
+                if (hasCurrent)
+                {
+                    const float controlLength = current.distanceTo (segment.controlPoint1)
+                                              + segment.controlPoint1.distanceTo (segment.controlPoint2)
+                                              + segment.controlPoint2.distanceTo (segment.point);
+                    const int numSegments = estimateCurveSegments (controlLength);
+                    auto previous = current;
+
+                    for (int i = 1; i <= numSegments; ++i)
+                    {
+                        const auto next = evaluateClipperCubic (current,
+                                                                segment.controlPoint1,
+                                                                segment.controlPoint2,
+                                                                segment.point,
+                                                                static_cast<float> (i) / static_cast<float> (numSegments));
+                        drawLineDash (previous, next);
+                        previous = next;
+                    }
+                }
+                current = segment.point;
+                break;
+        }
+    }
+
+    return result;
+}
+
 rive::RiveRenderPath* Path::getClockwiseRenderPath() const
 {
     const uint64 mutationID = path->getRawPathMutationID();

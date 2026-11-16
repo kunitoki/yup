@@ -25,6 +25,8 @@ namespace yup
 namespace
 {
 
+const Identifier styleContextTransformId { "transform" };
+
 /* Tracks one component state property (style, cursor, effect, paint margin) owned by a
    stylesheet while leaving later explicit application overrides untouched. */
 template <class T>
@@ -582,7 +584,9 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     static const Identifier animationDeclaration ("animation");
     static const Identifier cursorDeclaration ("cursor");
     static const Identifier effectDeclaration ("effect");
+    static const Identifier filterDeclaration ("filter");
     static const Identifier shadowDeclaration ("shadow");
+    static const Identifier glowDeclaration ("glow");
 
     const auto* paletteDecl = findWinningDeclaration (direct, paletteDeclaration);
     const auto* drawingDecl = findWinningDeclaration (direct, drawingDeclaration);
@@ -590,7 +594,12 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     const auto* animationDecl = findWinningDeclaration (direct, animationDeclaration);
     const auto* cursorDecl = findWinningDeclaration (direct, cursorDeclaration);
     const auto* effectDecl = findWinningDeclaration (direct, effectDeclaration);
+    const auto* filterDecl = findWinningDeclaration (direct, filterDeclaration);
     const auto* shadowDecl = findWinningDeclaration (direct, shadowDeclaration);
+    const auto* glowCandidate = findWinningDeclaration (direct, glowDeclaration);
+    const auto* glowDecl = (glowCandidate != nullptr && glowCandidate->kind == StyleSheet::Declaration::Kind::glow)
+                             ? glowCandidate
+                             : nullptr;
 
     bool changed = false;
     bool paletteChanged = false;
@@ -614,10 +623,17 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
 
     changed |= paletteChanged;
 
-    // The drawing comes next, the properties it declares type the declarations setting them
+    // The drawing comes next, the properties it declares type the declarations setting them.
+    // An explicit DrawingStyle already installed on the component instance takes precedence over stylesheet rules.
+    static constexpr auto getComponentStyle = [] (const Component& c) { return c.getStyle(); };
+    const auto* explicitDrawing = ! cache.drawingOverride.isActive (component, getComponentStyle)
+                                    ? dynamic_cast<const DrawingStyle*> (component.getStyle().get())
+                                    : nullptr;
     const DrawingStyle* drawing = nullptr;
 
-    if (drawingDecl != nullptr)
+    if (explicitDrawing != nullptr)
+        drawing = explicitDrawing;
+    else if (drawingDecl != nullptr)
         drawing = installDrawing (component, cache, *drawingDecl);
     else
         restoreDrawing (component, cache);
@@ -635,10 +651,15 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
         {
             for (const auto& transition : transitionDecl->transitions)
             {
-                const auto* descriptor = findDescriptor (typeInfo, drawing, transition.property);
+                const auto* descriptor = findDescriptor (component, drawing, transition.property);
                 const auto storageId = descriptor != nullptr ? descriptor->getStorageKey() : transition.property;
+                const auto from = firstStyle
+                                    ? var()
+                                    : (storageId == styleContextTransformId
+                                           ? VariantConverter<AffineTransform>::toVar (component.styleState != nullptr ? component.styleState->getStyleTransform() : AffineTransform())
+                                           : component.findProperty (transition.property));
 
-                pendingTransitions.push_back ({ transition, descriptor, storageId, firstStyle ? var() : component.findProperty (transition.property) });
+                pendingTransitions.push_back ({ transition, descriptor, storageId, from });
             }
         }
     }
@@ -655,7 +676,7 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
         if (declaration.kind != StyleSheet::Declaration::Kind::property)
             continue;
 
-        const auto* descriptor = findDescriptor (typeInfo, drawing, name);
+        const auto* descriptor = findDescriptor (component, drawing, name);
         const auto storageId = descriptor != nullptr ? descriptor->getStorageKey() : name;
 
         if (descriptor != nullptr && ! descriptor->isStyleable)
@@ -679,6 +700,16 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
                         descriptor))
         {
             continue;
+        }
+
+        static const Identifier shadowCornerRadiusName ("cornerRadius");
+        if (descriptor == nullptr && name != shadowCornerRadiusName)
+        {
+            report ({
+                .message = "Undeclared property '" + name.toString() + "' on " + typeInfo.getTypeName().toString(),
+                .element = declaration.element,
+                .severity = YuiDiagnostic::Severity::warning
+            });
         }
 
         paletteDependent |= valuePaletteDependent;
@@ -726,7 +757,7 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     for (const auto& storageId : touched)
         syncStateBacked (component, cache, storageId);
 
-    changed |= applyEffects (component, cache, cursorDecl, effectDecl, shadowDecl, &paletteDependent);
+    changed |= applyEffects (component, cache, cursorDecl, effectDecl, filterDecl, shadowDecl, glowDecl, &paletteDependent);
     cache.paletteDependent = paletteDependent;
 
     if (paletteChanged && component.palette == nullptr)
@@ -788,7 +819,19 @@ bool StyleContext::evaluate (Component& component,
         if (compiled.failed())
         {
             entry.failed = true;
-            const auto label = key.layer >= 0 ? "shadow[" + String (key.layer) + "]" : storageId.toString();
+            String label = storageId.toString();
+
+            if (key.layer >= 0)
+            {
+                const auto* ownerDecl = key.declaration;
+                const auto prefix = ownerDecl != nullptr && ownerDecl->kind == StyleSheet::Declaration::Kind::glow
+                                      ? "glow["
+                                      : (ownerDecl != nullptr && ownerDecl->kind == StyleSheet::Declaration::Kind::filter
+                                             ? "filter["
+                                             : "shadow[");
+                label = String (prefix) + String (key.layer) + "]";
+            }
+
             const auto detail = isEnum ? ("expected one of " + descriptor->enumValues.joinIntoString (", ")) : compiled.getErrorMessage();
             report ({ .message = label + ": " + detail, .element = element });
             return false;
@@ -830,6 +873,13 @@ bool StyleContext::evaluate (Component& component,
 
 void StyleContext::syncStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId)
 {
+    if (storageId == styleContextTransformId)
+    {
+        const auto* styled = component.styleState != nullptr ? component.styleState->getStyleValue (storageId) : nullptr;
+        component.setStyleTransform (styled != nullptr ? VariantConverter<AffineTransform>::fromVar (*styled) : AffineTransform());
+        return;
+    }
+
     const auto* descriptor = findStoredProperty (component.getTypeInfo(), storageId);
 
     if (descriptor == nullptr || ! descriptor->isStateBacked() || descriptor->setter == nullptr)
@@ -894,11 +944,16 @@ const DrawingStyle* StyleContext::installDrawing (Component& component, Componen
         return nullptr;
     }
 
-    auto created = DrawingStyle::create (component, drawing, componentResolver);
+    YuiDiagnostic failure;
+    auto created = DrawingStyle::create (component, drawing, componentResolver, &failure);
 
     if (created.failed())
     {
-        report ({ .message = "drawing " + name + ": " + created.getErrorMessage(), .element = drawing });
+        report ({
+            .message = "drawing " + name + ": " + created.getErrorMessage(),
+            .element = failure.element.isValid() ? failure.element : drawing,
+            .property = failure.property
+        });
         restoreDrawing (component, cache);
         return nullptr;
     }
@@ -911,15 +966,26 @@ const DrawingStyle* StyleContext::installDrawing (Component& component, Componen
     return cache.drawingStyle.get();
 }
 
-const ComponentProperty* StyleContext::findDescriptor (const ComponentTypeInfo& typeInfo, const DrawingStyle* drawing, const Identifier& name)
+const ComponentProperty* StyleContext::findDescriptor (const Component& component, const DrawingStyle* drawing, const Identifier& name) const
 {
-    if (const auto* descriptor = typeInfo.findProperty (name))
+    if (const auto* descriptor = component.getTypeInfo().findProperty (name))
         return descriptor;
 
     if (drawing != nullptr)
         for (const auto& property : drawing->getProperties())
             if (property.name == name)
                 return &property;
+
+    for (const auto* ancestor = component.getParentComponent(); ancestor != nullptr; ancestor = ancestor->getParentComponent())
+    {
+        const auto* candidate = ancestor->getTypeInfo().findProperty (name);
+        if (candidate != nullptr && candidate->isStoreBacked() && candidate->isInherited)
+            return candidate;
+    }
+
+    if (styleSheet != nullptr)
+        if (const auto* declared = styleSheet->findDeclaredProperty (name))
+            return declared;
 
     return nullptr;
 }
@@ -950,7 +1016,9 @@ bool StyleContext::applyEffects (Component& component,
                                  ComponentCache& cache,
                                  const StyleSheet::Declaration* cursorDecl,
                                  const StyleSheet::Declaration* effectDecl,
+                                 const StyleSheet::Declaration* filterDecl,
                                  const StyleSheet::Declaration* shadowDecl,
+                                 const StyleSheet::Declaration* glowDecl,
                                  bool* paletteDependent)
 {
     static constexpr auto getCursor = [] (const Component& c) { return c.getMouseCursor(); };
@@ -1007,77 +1075,188 @@ bool StyleContext::applyEffects (Component& component,
         changed |= cache.effectOverride.restore (component, getEffect, setEffect);
     }
 
-    std::vector<StyleState::Shadow> shadows;
+    std::vector<FilterEffect::Operation> filterOperations;
 
-    if (shadowDecl != nullptr)
+    if (filterDecl != nullptr)
     {
-        if (shadowDecl->parseError.isNotEmpty())
+        if (filterDecl->parseError.isNotEmpty())
         {
-            report ({ .message = shadowDecl->parseError, .element = shadowDecl->element });
+            report ({ .message = filterDecl->parseError, .element = filterDecl->element });
         }
         else
         {
-            shadows.reserve (shadowDecl->shadows.size());
+            filterOperations.reserve (filterDecl->filters.size());
 
-            for (int layerIndex = 0; layerIndex < static_cast<int> (shadowDecl->shadows.size()); ++layerIndex)
+            for (int stepIndex = 0; stepIndex < static_cast<int> (filterDecl->filters.size()); ++stepIndex)
             {
-                const auto& layer = shadowDecl->shadows[static_cast<size_t> (layerIndex)];
-                var colorVar;
-                bool readsPalette = false;
+                const auto& step = filterDecl->filters[static_cast<size_t> (stepIndex)];
+                FilterEffect::Operation op {
+                    .type = step.type,
+                    .amount = step.amount,
+                    .offset = step.offset,
+                    .color = step.color
+                };
 
-                if (! evaluate (component,
-                                cache,
-                                { shadowDecl, layerIndex },
-                                shadowDecl->element,
-                                {},
-                                ComponentProperty::Type::color,
-                                layer.colorExpression,
-                                colorVar,
-                                readsPalette))
+                if (step.amountExpression.isNotEmpty())
                 {
-                    shadows.clear();
-                    break;
+                    var amountVar;
+                    bool readsPalette = false;
+
+                    if (! evaluate (component,
+                                    cache,
+                                    { filterDecl, stepIndex },
+                                    filterDecl->element,
+                                    {},
+                                    ComponentProperty::Type::number,
+                                    step.amountExpression,
+                                    amountVar,
+                                    readsPalette))
+                    {
+                        filterOperations.clear();
+                        break;
+                    }
+
+                    if (paletteDependent != nullptr)
+                        *paletteDependent |= readsPalette;
+
+                    op.amount = FilterEffect::clampAmount (op.type, static_cast<float> (static_cast<double> (amountVar)));
+                }
+                else if (step.colorExpression.isNotEmpty())
+                {
+                    var colorVar;
+                    bool readsPalette = false;
+
+                    if (! evaluate (component,
+                                    cache,
+                                    { filterDecl, stepIndex },
+                                    filterDecl->element,
+                                    {},
+                                    ComponentProperty::Type::color,
+                                    step.colorExpression,
+                                    colorVar,
+                                    readsPalette))
+                    {
+                        filterOperations.clear();
+                        break;
+                    }
+
+                    if (paletteDependent != nullptr)
+                        *paletteDependent |= readsPalette;
+
+                    op.color = Color (static_cast<uint32> (static_cast<int64> (colorVar)));
                 }
 
-                if (paletteDependent != nullptr)
-                    *paletteDependent |= readsPalette;
-
-                shadows.push_back ({
-                    .offset = layer.offset,
-                    .blur = layer.blur,
-                    .spread = layer.spread,
-                    .color = Color (static_cast<uint32> (static_cast<int64> (colorVar)))
-                });
+                filterOperations.push_back (op);
             }
         }
     }
 
-    if (shadows.empty())
+    const auto evaluateShadowLayers = [&] (const StyleSheet::Declaration* decl)
+    {
+        std::vector<StyleState::Shadow> layers;
+
+        if (decl == nullptr)
+            return layers;
+
+        if (decl->parseError.isNotEmpty())
+        {
+            report ({ .message = decl->parseError, .element = decl->element });
+            return layers;
+        }
+
+        layers.reserve (decl->shadows.size());
+
+        for (int layerIndex = 0; layerIndex < static_cast<int> (decl->shadows.size()); ++layerIndex)
+        {
+            const auto& layer = decl->shadows[static_cast<size_t> (layerIndex)];
+            var colorVar;
+            bool readsPalette = false;
+
+            if (! evaluate (component,
+                            cache,
+                            { decl, layerIndex },
+                            decl->element,
+                            {},
+                            ComponentProperty::Type::color,
+                            layer.colorExpression,
+                            colorVar,
+                            readsPalette))
+            {
+                layers.clear();
+                break;
+            }
+
+            if (paletteDependent != nullptr)
+                *paletteDependent |= readsPalette;
+
+            layers.push_back ({
+                .offset = layer.offset,
+                .blur = layer.blur,
+                .spread = layer.spread,
+                .color = Color (static_cast<uint32> (static_cast<int64> (colorVar)))
+            });
+        }
+
+        return layers;
+    };
+
+    auto shadows = evaluateShadowLayers (shadowDecl);
+    auto glows = evaluateShadowLayers (glowDecl);
+
+    if (component.styleState != nullptr || ! filterOperations.empty() || ! shadows.empty() || ! glows.empty())
+    {
+        auto& state = component.getOrCreateStyleState();
+
+        if (state.setFilterOperations (std::move (filterOperations)))
+        {
+            component.releaseUnusedEffectCanvases();
+            changed = true;
+        }
+
+        changed |= state.setShadows (std::move (shadows));
+        changed |= state.setGlows (std::move (glows));
+    }
+
+    const auto* activeState = component.styleState.get();
+    const auto filterMargin = (activeState != nullptr && activeState->getFilterEffect() != nullptr)
+                                ? activeState->getFilterEffect()->getRequiredMargin()
+                                : EdgeSpacing<float>();
+    const bool hasShadows = activeState != nullptr && ! activeState->getShadows().empty();
+    const bool hasGlows = activeState != nullptr && ! activeState->getGlows().empty();
+    const bool hasFilterMargin = filterMargin != EdgeSpacing<float>();
+
+    if (! hasShadows && ! hasGlows && ! hasFilterMargin)
     {
         changed |= cache.paintMarginOverride.restore (component, getMargin, setMargin);
     }
     else
     {
         const auto base = cache.paintMarginOverride.base (component, getMargin);
-        auto left = base.getLeft();
-        auto top = base.getTop();
-        auto right = base.getRight();
-        auto bottom = base.getBottom();
+        auto left = jmax (base.getLeft(), filterMargin.getLeft());
+        auto top = jmax (base.getTop(), filterMargin.getTop());
+        auto right = jmax (base.getRight(), filterMargin.getRight());
+        auto bottom = jmax (base.getBottom(), filterMargin.getBottom());
 
-        for (const auto& shadow : shadows)
+        const auto expandMargin = [&] (const std::vector<StyleState::Shadow>& layers)
         {
-            const auto reach = shadow.blur + jmax (0.0f, shadow.spread);
-            left = jmax (left, reach - shadow.offset.getX());
-            top = jmax (top, reach - shadow.offset.getY());
-            right = jmax (right, reach + shadow.offset.getX());
-            bottom = jmax (bottom, reach + shadow.offset.getY());
+            for (const auto& layer : layers)
+            {
+                const auto reach = layer.blur + jmax (0.0f, layer.spread);
+                left = jmax (left, reach - layer.offset.getX());
+                top = jmax (top, reach - layer.offset.getY());
+                right = jmax (right, reach + layer.offset.getX());
+                bottom = jmax (bottom, reach + layer.offset.getY());
+            }
+        };
+
+        if (activeState != nullptr)
+        {
+            expandMargin (activeState->getShadows());
+            expandMargin (activeState->getGlows());
         }
 
         changed |= cache.paintMarginOverride.apply (component, EdgeSpacing<float> (left, top, right, bottom), getMargin, setMargin);
     }
-
-    if (component.styleState != nullptr || ! shadows.empty())
-        changed |= component.getOrCreateStyleState().setShadows (std::move (shadows));
 
     return changed;
 }
@@ -1128,6 +1307,9 @@ var StyleContext::getBaseValue (Component& component, const ComponentCache& cach
 
     if (const auto* computed = state.getComputedValue (storageId))
         return *computed;
+
+    if (storageId == styleContextTransformId)
+        return VariantConverter<AffineTransform>::toVar (AffineTransform());
 
     if (descriptor != nullptr && descriptor->isStateBacked())
     {
@@ -1262,7 +1444,7 @@ std::vector<StyleAnimator::Track> StyleContext::compileTracks (Component& compon
     {
         for (const auto& declaration : keyframe.declarations)
         {
-            const auto* descriptor = findDescriptor (typeInfo, drawing, declaration.name);
+            const auto* descriptor = findDescriptor (component, drawing, declaration.name);
 
             if (descriptor != nullptr && ! descriptor->isStyleable)
             {
@@ -1369,7 +1551,7 @@ bool StyleContext::resetStyle (Component& component, ComponentCache* cache, bool
         cache->paletteDependent = false;
         restoreAllStateBacked (component, *cache);
         restoreDrawing (component, *cache);
-        changed |= applyEffects (component, *cache, nullptr, nullptr, nullptr, nullptr);
+        changed |= applyEffects (component, *cache, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
     }
 
     auto* state = component.styleState.get();
@@ -1380,6 +1562,13 @@ bool StyleContext::resetStyle (Component& component, ComponentCache* cache, bool
 
     changed |= state->clearComputedValues();
     changed |= state->clearAnimatedValues();
+    if (state->setFilterEffect (nullptr))
+    {
+        component.releaseUnusedEffectCanvases();
+        changed = true;
+    }
+    changed |= state->setShadows ({});
+    changed |= state->setGlows ({});
     const bool clearedPalette = state->setStylePalette (std::nullopt);
     changed |= clearedPalette;
 
@@ -1388,6 +1577,14 @@ bool StyleContext::resetStyle (Component& component, ComponentCache* cache, bool
 
     for (int i = 0; i < shown.size(); ++i)
         changed |= state->setComputedValue (shown.getName (i), *shown.getVarPointerAt (i));
+
+    const auto* styledTransform = state->getStyleValue (styleContextTransformId);
+    const auto nextStyleTransform = styledTransform != nullptr ? VariantConverter<AffineTransform>::fromVar (*styledTransform) : AffineTransform();
+    if (state->getStyleTransform() != nextStyleTransform)
+    {
+        component.setStyleTransform (nextStyleTransform);
+        changed = true;
+    }
 
     return changed;
 }

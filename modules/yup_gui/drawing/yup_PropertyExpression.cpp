@@ -162,7 +162,8 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Co
     expression->scope->setLocals (locals);
     expression->scope->install();
 
-    auto compiled = CompiledExpression::compile (String (outputName) + " = (" + text + ");\n", expression->context);
+    const String expressionText = (type == ComponentProperty::Type::transform && text.trim() == "none") ? String ("transform()") : text;
+    auto compiled = CompiledExpression::compile (String (outputName) + " = (" + expressionText + ");\n", expression->context);
     if (compiled.failed())
         return makeResultValueFail (compiled.getErrorMessage());
 

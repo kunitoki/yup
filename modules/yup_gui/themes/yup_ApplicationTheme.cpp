@@ -86,13 +86,23 @@ std::optional<Color> ApplicationTheme::findPaletteColor (const ThemePalette& com
         return candidate.first == componentPalette;
     });
 
-    // Mapped once per distinct palette, by running the palette mapping on a theme of its own.
+    // Mapped once per distinct palette with bounded LRU eviction so hot reloads never grow unboundedly.
     if (entry == componentPaletteColors.end())
     {
         ApplicationTheme mapped;
         mapped.paletteMapping = paletteMapping;
         mapped.setPalette (componentPalette);
-        entry = componentPaletteColors.emplace (componentPaletteColors.end(), componentPalette, std::move (mapped.paletteColors));
+
+        if (componentPaletteColors.size() >= maxCachedComponentPalettes)
+            componentPaletteColors.erase (componentPaletteColors.begin());
+
+        componentPaletteColors.emplace_back (componentPalette, std::move (mapped.paletteColors));
+        entry = std::prev (componentPaletteColors.end());
+    }
+    else if (std::next (entry) != componentPaletteColors.end())
+    {
+        std::rotate (entry, std::next (entry), componentPaletteColors.end());
+        entry = std::prev (componentPaletteColors.end());
     }
 
     if (auto it = entry->second.find (colorId); it != entry->second.end())
@@ -101,15 +111,24 @@ std::optional<Color> ApplicationTheme::findPaletteColor (const ThemePalette& com
     return std::nullopt;
 }
 
+size_t ApplicationTheme::getNumCachedComponentPalettes() const noexcept
+{
+    const SpinLock::ScopedLockType lock (componentPaletteColorsLock);
+    return componentPaletteColors.size();
+}
+
 void ApplicationTheme::setColor (const Identifier& colorId, const Color& color)
 {
     defaultColors.insert_or_assign (colorId, color);
+    ++paletteGeneration;
 }
 
 void ApplicationTheme::setColors (std::initializer_list<std::pair<const Identifier&, const Color&>> colors)
 {
     for (const auto& entry : colors)
         defaultColors.insert_or_assign (entry.first, entry.second);
+
+    ++paletteGeneration;
 }
 
 //==============================================================================
@@ -173,12 +192,15 @@ std::optional<var> ApplicationTheme::findProperty (const Component& component, c
 void ApplicationTheme::setProperty (const Identifier& id, const var& value)
 {
     defaultProperties.insert_or_assign (id, value);
+    ++paletteGeneration;
 }
 
 void ApplicationTheme::setProperties (std::initializer_list<std::pair<const Identifier&, var>> properties)
 {
     for (const auto& entry : properties)
         defaultProperties.insert_or_assign (entry.first, entry.second);
+
+    ++paletteGeneration;
 }
 
 //==============================================================================
@@ -186,6 +208,7 @@ void ApplicationTheme::setProperties (std::initializer_list<std::pair<const Iden
 void ApplicationTheme::setDefaultFont (Font font)
 {
     defaultFont = std::move (font);
+    ++paletteGeneration;
 }
 
 const Font& ApplicationTheme::getDefaultFont() const
@@ -196,6 +219,7 @@ const Font& ApplicationTheme::getDefaultFont() const
 void ApplicationTheme::setDefaultIconFont (Font font)
 {
     defaultIconFont = std::move (font);
+    ++paletteGeneration;
 }
 
 const Font& ApplicationTheme::getDefaultIconFont() const
@@ -206,6 +230,7 @@ const Font& ApplicationTheme::getDefaultIconFont() const
 void ApplicationTheme::setDefaultMonospaceFont (Font font)
 {
     defaultMonospaceFont = std::move (font);
+    ++paletteGeneration;
 }
 
 const Font& ApplicationTheme::getDefaultMonospaceFont() const

@@ -22,6 +22,8 @@
 namespace yup
 {
 
+ComponentEffectRegistry::ComponentEffectRegistry() = default;
+
 ComponentEffectRegistry& ComponentEffectRegistry::getInstance()
 {
     static ComponentEffectRegistry instance;

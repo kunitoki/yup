@@ -22,12 +22,43 @@
 namespace yup
 {
 
+namespace
+{
+
+struct ListBoxItemIds
+{
+    static inline const Identifier text { "text" };
+    static inline const Identifier iconPosition { "iconPosition" };
+    static inline const Identifier selected { "selected" };
+    static inline const Identifier hovered { "hovered" };
+};
+
+} // namespace
+
 //==============================================================================
 const Identifier ListBoxItem::Style::textColorId { "listBoxItemText" };
 const Identifier ListBoxItem::Style::textColorSelectedId { "listBoxItemTextSelected" };
 const Identifier ListBoxItem::Style::backgroundColorId { "listBoxItemBackground" };
 const Identifier ListBoxItem::Style::backgroundColorSelectedId { "listBoxItemBackgroundSelected" };
 const Identifier ListBoxItem::Style::backgroundColorHoveredId { "listBoxItemBackgroundHovered" };
+
+//==============================================================================
+const ComponentTypeInfo& ListBoxItem::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<ListBoxItem> (Identifier ("ListBoxItem"))
+                                 .color ("textColor", Style::textColorId)
+                                 .color ("textSelectedColor", Style::textColorSelectedId)
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("backgroundSelectedColor", Style::backgroundColorSelectedId)
+                                 .color ("backgroundHoveredColor", Style::backgroundColorHoveredId)
+                                 .property (ListBoxItemIds::text, &ListBoxItem::getText, &ListBoxItem::setText, String(), "The text displayed by the list item.")
+                                 .enumeration (ListBoxItemIds::iconPosition, { "left", "right", "above", "below" }, &ListBoxItem::getIconPosition, &ListBoxItem::setIconPosition, "Where the icon is positioned relative to the text.")
+                                 .state (ListBoxItemIds::selected, &ListBoxItem::isSelected, &ListBoxItem::setSelected, false, "Whether this list item is selected.")
+                                 .state (ListBoxItemIds::hovered, &ListBoxItem::isHovered, &ListBoxItem::setHovered, false, "Whether this list item is hovered.")
+                                 .build();
+
+    return info;
+}
 
 //==============================================================================
 ListBoxItem::ListBoxItem()
@@ -44,6 +75,7 @@ void ListBoxItem::setText (const String& newText)
     if (text != newText)
     {
         text = newText;
+        notifyPropertyChanged (ListBoxItemIds::text);
         calculateLayout();
         repaint();
     }
@@ -91,6 +123,7 @@ void ListBoxItem::setIconPosition (IconPosition position)
     if (iconPosition != position)
     {
         iconPosition = position;
+        notifyPropertyChanged (ListBoxItemIds::iconPosition);
         calculateLayout();
         repaint();
     }
@@ -107,6 +140,7 @@ void ListBoxItem::setSelected (bool shouldBeSelected)
     if (selected != shouldBeSelected)
     {
         selected = shouldBeSelected;
+        notifyPropertyChanged (ListBoxItemIds::selected);
         repaint();
     }
 }
@@ -122,6 +156,7 @@ void ListBoxItem::setHovered (bool shouldBeHovered)
     if (hovered != shouldBeHovered)
     {
         hovered = shouldBeHovered;
+        notifyPropertyChanged (ListBoxItemIds::hovered);
         repaint();
     }
 }

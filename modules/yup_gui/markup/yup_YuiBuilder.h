@@ -131,6 +131,17 @@ public:
     /** Optional sink notified when a live binding reports a problem after or during build. */
     std::function<void (const YuiDiagnostic&)> onDiagnostic;
 
+    /** Optional hook invoked when the built DataTree is mutated in place.
+        When null, the builder automatically rebuilds from its watched DataTree.
+    */
+    std::function<void()> onTreeMutated;
+
+    /** Temporarily suppresses automatic rebuilds triggered by DataTree mutations. */
+    void setIgnoreTreeChanges (bool shouldIgnore) noexcept { ignoreTreeChanges = shouldIgnore; }
+
+    /** Returns true when DataTree mutation notifications are currently suppressed. */
+    bool isIgnoringTreeChanges() const noexcept { return ignoreTreeChanges; }
+
     //==============================================================================
     /** Registers the function run by `action ("name", ...)` handlers, or removes it when null.
 
@@ -231,8 +242,11 @@ private:
         ComponentSignal::Handler handler;
     };
 
+    struct TreeWatcher;
+
     //==============================================================================
     void collectDeclarations (const DataTree& document);
+    void collectStyleDeclarations (const DataTree& parent);
     void resetBindings();
     ResultValue<const ComponentTypeInfo*> resolveType (const Identifier& typeName);
     Result resolveComposite (const Identifier& typeName, Composite& composite);
@@ -262,15 +276,20 @@ private:
     AppliedValues applied;
     std::vector<std::unique_ptr<Scope>> scopes;
     std::map<Identifier, Composite> composites;
+    std::map<String, ThemePalette> palettes;
+    std::map<String, DataTree> drawings;
+    std::map<Identifier, ComponentProperty> declaredProperties;
     std::unique_ptr<ComponentTypeInfo> tokensInfo;
     std::vector<DataTree> tokens;
     std::vector<Pending> pending;
     std::vector<Connection> connections;
     std::vector<std::unique_ptr<YuiPropertyWatcher>> watchers;
+    std::unique_ptr<TreeWatcher> treeWatcher;
     std::map<String, Action> actions;
     std::map<String, std::unique_ptr<BindingModel>> models;
     BindingGraph bindings;
     std::vector<YuiDiagnostic> diagnostics;
+    bool ignoreTreeChanges = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YuiBuilder)
 };

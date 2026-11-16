@@ -68,6 +68,10 @@ public:
     ~YuiDocument();
 
     //==============================================================================
+    /** Creates a DataTreeSchema describing the `.yui` document grammar and all registered component types. */
+    static DataTreeSchema::Ptr createSchema();
+
+    //==============================================================================
     /** Parses `.yui` text and loads the interface it describes.
 
         @param text           The `.yui` text.
@@ -180,6 +184,8 @@ private:
 
     Result loadTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map);
     Result buildTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map);
+    void handleLiveTreeMutation();
+    void attachStyleContext (Component& root);
     Result fail (const String& message);
     void resetState();
     Result notifyLoaded (Result result);

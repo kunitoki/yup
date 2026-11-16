@@ -185,7 +185,7 @@ Column {
         "10:19: tokens: 'accent' is declared more than once",
         "4:14: Card.level: ",
         "9:48: Column.broken: ",
-        "12:12: Card.spot: properties of this type can't be set from .yui yet",
+        "12:12: Card.spot: ",
         "13:24: Slider.hovered: the property is read-only",
         "14:24: Slider.sliderType: expected one of ",
         "15:14: Slider.width: ",
@@ -1103,3 +1103,227 @@ TEST_F (YuiBuilderTests, RebuildingLeavesTheChildrenOfAContainerWhereItPutThem)
     EXPECT_EQ (viewport->getViewedComponent(), content);
     EXPECT_FLOAT_EQ (viewport->getScrollStep(), 8.0f);
 }
+
+TEST_F (YuiBuilderTests, BuildsWindowImageAndAdditionalGuiWidgets)
+{
+    YuiBuilder builder;
+    const auto result = builder.build (parse (R"yui(
+        Window {
+            id: win;
+            title: "Preview";
+            width: 320;
+            height: 200;
+            backgroundColor: #20242a;
+
+            Image {
+                id: backdrop;
+                fitting: scaleToFill;
+                justification: topLeft;
+                imageOpacity: 0.75;
+            }
+
+            CodeEditor {
+                id: editor;
+                syntax: cpp;
+                scheme: oneDark;
+                text: "int x = 1;";
+                minimapVisible: true;
+            }
+
+            ResizableCorner {
+                id: corner;
+                cornerSize: 20;
+            }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* window = builder.findById<WindowComponent> ("win");
+    ASSERT_NE (window, nullptr);
+    EXPECT_EQ (window->getTitle(), "Preview");
+    EXPECT_EQ (window->findColor (WindowComponent::Style::backgroundColorId), Color (0xff20242a));
+
+    auto* backdrop = builder.findById<ImageComponent> ("backdrop");
+    ASSERT_NE (backdrop, nullptr);
+    EXPECT_EQ (backdrop->getFitting(), Fitting::scaleToFill);
+    EXPECT_EQ (backdrop->getJustification(), Justification::topLeft);
+    EXPECT_FLOAT_EQ (backdrop->getImageOpacity(), 0.75f);
+    EXPECT_EQ (backdrop->getBounds(), Rectangle<float> (0.0f, 0.0f, 320.0f, 200.0f));
+
+    auto* editor = builder.findById<CodeEditor> ("editor");
+    ASSERT_NE (editor, nullptr);
+    EXPECT_EQ (editor->getSyntaxDefinition().getName(), "C++");
+    EXPECT_EQ (editor->getScheme().getName(), "One Dark");
+    EXPECT_EQ (editor->getText(), "int x = 1;");
+    EXPECT_TRUE (editor->isMinimapVisible());
+
+    auto* corner = builder.findById<ResizableCorner> ("corner");
+    ASSERT_NE (corner, nullptr);
+    EXPECT_FLOAT_EQ (corner->getCornerSize(), 20.0f);
+}
+
+TEST_F (YuiBuilderTests, SupportsFontAndDrawingPropertiesPlusInstancePaletteAndDrawingAttributes)
+{
+    theme->setDefaultFont (Font().withHeight (16.0f));
+
+    YuiBuilder builder;
+    auto document = parse (R"yui(
+        palette Ember {
+            colors: "#18181b, #ff7a18";
+            mode: dark;
+            accent: #ff9933;
+        }
+
+        drawing RingDial {
+            property ringSize: number = 4;
+            circle { radius: ringSize; stroke: palette.accent; }
+        }
+
+        drawing DotDial {
+            circle { radius: 6; fill: palette.accent; }
+        }
+
+        component Badge : Label {
+            property headingFont: font = theme.font.withHeight (24);
+            property badgeDrawing: drawing = RingDial;
+            text: format ("%.0f", root.headingFont.height);
+        }
+
+        Column {
+            id: panel;
+            palette: Ember;
+
+            Badge { id: defaultBadge; }
+            Badge { id: customBadge; headingFont: theme.font.withHeight (32); badgeDrawing: DotDial; }
+            Slider { id: dial; drawing: RingDial; }
+            Slider { id: plainDial; drawing: none; palette: none; }
+        }
+    )yui");
+
+    ASSERT_TRUE (builder.build (document).wasOk());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* panel = builder.findById ("panel");
+    ASSERT_NE (panel, nullptr);
+    ASSERT_NE (panel->findPalette(), nullptr);
+    EXPECT_EQ (panel->findPalette()->getColor (ThemePalette::Role::accent), Color (0xffff9933));
+
+    auto* defaultBadge = builder.findById<Label> ("defaultBadge");
+    auto* customBadge = builder.findById<Label> ("customBadge");
+    ASSERT_NE (defaultBadge, nullptr);
+    ASSERT_NE (customBadge, nullptr);
+    EXPECT_EQ (defaultBadge->getText(), "24");
+    EXPECT_EQ (customBadge->getText(), "32");
+    EXPECT_EQ (defaultBadge->getProperty (Identifier ("badgeDrawing")).toString(), "RingDial");
+    EXPECT_EQ (customBadge->getProperty (Identifier ("badgeDrawing")).toString(), "DotDial");
+
+    auto* dial = builder.findById<Slider> ("dial");
+    auto* plainDial = builder.findById<Slider> ("plainDial");
+    ASSERT_NE (dial, nullptr);
+    ASSERT_NE (plainDial, nullptr);
+    EXPECT_NE (dynamic_cast<const DrawingStyle*> (dial->getStyle().get()), nullptr);
+    EXPECT_EQ (plainDial->getStyle(), nullptr);
+}
+
+TEST_F (YuiBuilderTests, EmitsWarningForUndeclaredInstancePropertiesAndErrorsForUnknownInstancePaletteOrDrawing)
+{
+    YuiBuilder builder;
+    ASSERT_TRUE (builder.build (parse (R"yui(
+        Column {
+            Slider { id: a; mysterySetting: 123; }
+            Slider { id: b; palette: MissingPalette; drawing: MissingDrawing; }
+        }
+    )yui"))
+                     .wasOk());
+
+    const auto& diagnostics = builder.getDiagnostics();
+    ASSERT_EQ (diagnostics.size(), 3u) << YuiDiagnostic::join (diagnostics);
+
+    int warnings = 0;
+    int errors = 0;
+
+    for (const auto& diagnostic : diagnostics)
+    {
+        if (diagnostic.isWarning())
+        {
+            ++warnings;
+            EXPECT_TRUE (diagnostic.message.contains ("mysterySetting")) << diagnostic.message;
+        }
+        else if (diagnostic.isError())
+        {
+            ++errors;
+        }
+    }
+
+    EXPECT_EQ (warnings, 1);
+    EXPECT_EQ (errors, 2);
+}
+
+TEST_F (YuiBuilderTests, LiveDataTreeMutationsPatchBuiltComponentsWithoutManualRebuild)
+{
+    auto document = parse (R"yui(
+        Column {
+            id: rootCol;
+            Slider { id: knob; value: 0.25; }
+            Label { id: first; text: "One"; }
+            Label { id: second; text: "Two"; }
+        }
+    )yui");
+
+    YuiBuilder builder;
+    ASSERT_TRUE (builder.build (document).wasOk());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* rootCol = builder.findById ("rootCol");
+    auto* knob = builder.findById<Slider> ("knob");
+    auto* first = builder.findById<Label> ("first");
+    auto* second = builder.findById<Label> ("second");
+    ASSERT_NE (rootCol, nullptr);
+    ASSERT_NE (knob, nullptr);
+    ASSERT_NE (first, nullptr);
+    ASSERT_NE (second, nullptr);
+
+    // User state on knob survives unrelated live DataTree mutations.
+    knob->setValue (0.75);
+
+    auto rootTree = document.getChild (0);
+    auto firstTree = rootTree.getChild (1);
+
+    // 1. Property mutation updates Label in place without recreating Slider or losing user value.
+    firstTree.beginTransaction().setProperty ("text", "\"Updated\"");
+    EXPECT_EQ (builder.findById<Slider> ("knob"), knob);
+    EXPECT_DOUBLE_EQ (knob->getValue(), 0.75);
+    EXPECT_EQ (builder.findById<Label> ("first"), first);
+    EXPECT_EQ (first->getText(), "Updated");
+
+    // 2. Adding a child DataTree instantiates and attaches the new child automatically.
+    DataTree addedTree ("Label");
+    {
+        auto tx = addedTree.beginTransaction();
+        tx.setProperty ("id", "third");
+        tx.setProperty ("text", "\"Three\"");
+    }
+    rootTree.beginTransaction().addChild (addedTree);
+
+    auto* third = builder.findById<Label> ("third");
+    ASSERT_NE (third, nullptr);
+    EXPECT_EQ (third->getText(), "Three");
+    EXPECT_EQ (rootCol->getNumChildComponents(), 4);
+
+    // Mutating a property on the newly added child is also observed automatically.
+    addedTree.beginTransaction().setProperty ("text", "\"Three!\"");
+    EXPECT_EQ (third->getText(), "Three!");
+
+    // 3. Moving a child DataTree reorders the child Component in its parent.
+    rootTree.beginTransaction().moveChild (3, 1);
+    EXPECT_EQ (rootCol->getChildComponent (1), third);
+
+    // 4. Removing a child DataTree destroys only that child Component.
+    rootTree.beginTransaction().removeChild (1);
+    EXPECT_EQ (builder.findById ("third"), nullptr);
+    EXPECT_EQ (rootCol->getNumChildComponents(), 3);
+    EXPECT_EQ (builder.findById<Slider> ("knob"), knob);
+}
+
+

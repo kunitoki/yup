@@ -50,6 +50,8 @@ namespace yup
     | `strokeJoin`          | `join`           | `miter`, `round` or `bevel` corners.                           |
     | `strokeMiterLimit`    | `float`          | Longest miter join, in stroke widths.                          |
     | `strokePosition`      | `strokePosition` | Stroke `inside`, `center` or `outside` the shapes.             |
+    | `strokeDash`          | `dash`           | Alternating stroke dash and gap lengths.                       |
+    | `strokeDashOffset`    | `float`          | Phase offset into `strokeDash`.                                |
     | `opacity`             | `float`          | Multiplies the opacity of the Graphics.                        |
     | `feather`             | `float`          | Blurs the edges of the shapes (glows and shadows).             |
     | `blend`               | `blend`          | Blend mode (`multiply`, `screen`, `additive`...).              |

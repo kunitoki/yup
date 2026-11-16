@@ -25,6 +25,7 @@ namespace yup
 {
 
 class DependencyObserver;
+struct YuiDiagnostic;
 
 //==============================================================================
 /**
@@ -33,10 +34,13 @@ class DependencyObserver;
     A drawing is a tree of elements, the DataTree form of a `drawing` block in a `.yui`
     file. Its root has the type `drawing` and its children are drawn in order:
 
-    - shapes: `rect`, `ellipse`, `circle`, `arc`, `line`, `path`, `polygon`, `star` and `text`,
-      each with its own geometry and paint properties;
+    - shapes: `rect`, `ellipse`, `circle`, `arc`, `line`, `path`, `polygon`, `star`, `text`,
+      `image` and `svg`, each with its own geometry and paint properties (including `dash`
+      and `dashOffset` for stroked shapes);
     - `let` (`name`, `value`): a local visible to the following siblings and their children;
-    - `layer` (`opacity`, `visible`): draws its children into a transparency layer;
+    - `layer` (`opacity`, `blend`, `clip`, `clipPath`, `mask`, `maskMode`, `visible` and optional
+      `mask` children): draws its children into a transparency layer;
+    - `clip` (`bounds`/`rect`, `path`/`clipPath`, `visible`): clips its children;
     - `group` (`transform`, `visible`): draws its children under a transform;
     - `repeat` (`name`, `from`, `to`): draws its shapes once for every int from `from` up to,
       but not including, `to`, exposed to them under `name`;
@@ -74,12 +78,14 @@ public:
         @param target             The component the style is created for and installed on.
         @param drawing            The drawing tree, with a root of type `drawing`.
         @param componentResolver  Optional resolver for named components and models referenced by expressions.
+        @param failure            Optional diagnostic populated with the offending child element and property on failure.
 
         @return A style on success, or a failure whose message starts with the path of the offending element.
     */
     static ResultValue<DrawingStyle::Ptr> create (Component& target,
                                                   const DataTree& drawing,
-                                                  DrawingScope::ComponentResolver componentResolver = nullptr);
+                                                  DrawingScope::ComponentResolver componentResolver = nullptr,
+                                                  YuiDiagnostic* failure = nullptr);
 
     /** Destructor. */
     ~DrawingStyle() override;
