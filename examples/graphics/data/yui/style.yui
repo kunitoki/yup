@@ -1,0 +1,67 @@
+// The stylesheet: it scopes the palette to the whole UI, picks the drawing for every
+// element of class 'knob', maps palette roles to the slider colors the drawing reads, sets
+// the properties the drawing declares, and colors the title and the readouts. The knobs
+// transition their bezel and track color, so the resting bezel size is declared too. Each
+// labeled knob sits on a card made of two shadow layers: a solid one in the raised surface
+// color over a soft drop shadow. The 'synth' knob swaps in the drawing of the synth plugin,
+// whose modulation lane an animation sweeps like an LFO.
+style {
+    .panel {
+        // palette: Porcelain;
+    }
+
+    .labeled {
+        cornerRadius: 10;
+        shadow: 0 0 palette.surfaceRaised, 0 3 10 #00000024;
+    }
+
+    .knob {
+        drawing: PorcelainKnob;
+        cursor: resizeUpDown;
+        trackColor: palette.accent;
+        backgroundColor: palette.surfaceRaised;
+        thumbColor: palette.text;
+        textColor: palette.textMuted;
+        bezelSize: 0.8;
+        transition: bezelSize 150ms easeOut, trackColor 200ms;
+    }
+
+    .knob:hover {
+        trackColor: palette.accent.darker (0.08);
+    }
+
+    .knob:pressed {
+        thumbColor: palette.accent.darker (0.4);
+        bezelSize: 0.84;
+    }
+
+    #drive .knob {
+        capSize: 0.5;
+    }
+
+    .synth .knob {
+        drawing: SynthKnob;
+        backgroundColor: palette.surface.darker (0.04);
+        trackColor: palette.outline;
+        thumbColor: palette.accent.darker (0.2);
+        textColor: palette.text;
+        animation: lfo 1.5s easeInOut infinite alternate;
+    }
+
+    @keyframes lfo {
+        from { modulation: 0.02; }
+        to { modulation: 0.2; }
+    }
+
+    TextButton {
+        cursor: hand;
+    }
+
+    .title {
+        textFillColor: palette.text;
+    }
+
+    .readout {
+        textFillColor: palette.textMuted;
+    }
+}

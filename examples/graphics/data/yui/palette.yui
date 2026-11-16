@@ -1,0 +1,15 @@
+// The colors of the demo. The source colors build a full light palette, then single roles
+// are pinned to match the porcelain look of the knob.
+palette Porcelain {
+    mode: light;
+    colors: #ece9e1, #9aa3c0, #8d8b85, #3a3a3e, #fbfaf6;
+
+    background: #ece9e1;
+    surface: #f4f2ec;
+    surfaceRaised: #f3f1eb;
+    outline: #c9c6be;
+    text: #3a3a3e;
+    textMuted: #8d8b85;
+    accent: #9aa3c0;
+    onAccent: #ffffff;
+}
