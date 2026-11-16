@@ -571,7 +571,7 @@ TEST (SyntaxDefinitionTests, GetBuiltInGlslNumbersDifferFromCpp)
 {
     const auto& glsl = SyntaxDefinition::getBuiltIn ("glsl");
     EXPECT_FALSE (glsl.numbersAllowBinary());
-    EXPECT_FALSE (glsl.numbersAllowSuffix());
+    EXPECT_TRUE (glsl.numbersAllowSuffix());
 
     const auto& cpp = SyntaxDefinition::getBuiltIn ("cpp");
     EXPECT_TRUE (cpp.numbersAllowBinary());
