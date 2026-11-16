@@ -22,10 +22,6 @@
 namespace yup
 {
 
-#if YUP_MODULE_AVAILABLE_yup_audio_gui
-YUP_API void registerAudioGuiComponentTypes();
-#endif
-
 void registerBuiltInComponentTypes()
 {
     static std::once_flag once;
@@ -63,10 +59,6 @@ void registerBuiltInComponentTypes()
         registry.registerType (GridComponent::getClassTypeInfo());
         registry.registerType (StackComponent::getClassTypeInfo());
         registry.registerType (WindowComponent::getClassTypeInfo());
-
-#if YUP_MODULE_AVAILABLE_yup_audio_gui
-        registerAudioGuiComponentTypes();
-#endif
     });
 }
 
