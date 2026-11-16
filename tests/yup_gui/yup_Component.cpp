@@ -5125,3 +5125,63 @@ TEST_F (ComponentHeadlessRenderTest, OffscreenRenderingRunsInsideTheNativeGraphi
     EXPECT_EQ (comp.renderToTexture (*context), nullptr);
     EXPECT_EQ (0, comp.paintCount);
 }
+
+//==============================================================================
+
+class ComponentPropertySourceTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        parent.addAndMakeVisible (child);
+    }
+
+    Component parent { "sourceParent" };
+    Component child { "sourceChild" };
+};
+
+TEST_F (ComponentPropertySourceTests, StateBackedPropertiesComeFromTheComponentItself)
+{
+    child.setBounds ({ 0.0f, 0.0f, 32.0f, 16.0f });
+
+    const auto source = child.findPropertySource ("width");
+
+    EXPECT_EQ (source.layer, Component::PropertySource::Layer::stateBacked);
+    EXPECT_EQ (source.component, &child);
+    EXPECT_FLOAT_EQ (static_cast<float> (source.value), 32.0f);
+}
+
+TEST_F (ComponentPropertySourceTests, TransformIsAlwaysStateBacked)
+{
+    EXPECT_EQ (child.findPropertySource ("transform").layer, Component::PropertySource::Layer::stateBacked);
+}
+
+TEST_F (ComponentPropertySourceTests, AnExplicitValueIsReportedOnTheComponentHoldingIt)
+{
+    child.setProperty ("customThing", 7);
+
+    const auto source = child.findPropertySource ("customThing");
+
+    EXPECT_EQ (source.layer, Component::PropertySource::Layer::explicitly);
+    EXPECT_EQ (source.component, &child);
+    EXPECT_EQ (static_cast<int> (source.value), 7);
+}
+
+TEST_F (ComponentPropertySourceTests, AnInheritedValueIsReportedOnTheParentHoldingIt)
+{
+    parent.setProperty ("customThing", 7);
+
+    const auto source = child.findPropertySource ("customThing");
+
+    EXPECT_EQ (source.layer, Component::PropertySource::Layer::explicitly);
+    EXPECT_EQ (source.component, &parent);
+}
+
+TEST_F (ComponentPropertySourceTests, AnUnknownPropertyHasNoSource)
+{
+    const auto source = child.findPropertySource ("neverSetAnywhere");
+
+    EXPECT_EQ (source.layer, Component::PropertySource::Layer::unset);
+    EXPECT_EQ (source.component, nullptr);
+    EXPECT_TRUE (source.value.isVoid());
+}

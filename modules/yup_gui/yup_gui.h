@@ -165,6 +165,7 @@ class DeferredReplayer;
 #include "mouse/yup_KineticScroller.h"
 #include "clipboard/yup_SystemClipboard.h"
 #include "desktop/yup_Screen.h"
+#include "desktop/yup_DesktopInputFilter.h"
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
 #include "effects/yup_ComponentEffect.h"

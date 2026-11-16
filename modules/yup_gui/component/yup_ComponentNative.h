@@ -755,6 +755,14 @@ public:
     virtual void runWithGraphicsContext (const std::function<void()>& fn) { fn(); }
 
     //==============================================================================
+    /** Returns the areas that were dirty when the frame being painted started.
+
+        A development tool reads this while the frame is painted, to show what the window really
+        had to repaint.
+    */
+    const RectangleList<float>& getFrameRepaintAreas() const noexcept { return frameRepaintAreas; }
+
+    //==============================================================================
     /** Returns the Component this native window displays.
 
         @return The root Component associated with this native component.
@@ -788,6 +796,8 @@ protected:
     Component& component;
     /** The configuration flags for this native component. */
     Flags flags;
+    /** The areas that were dirty when the frame being painted started. */
+    RectangleList<float> frameRepaintAreas;
 
 private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentNative)

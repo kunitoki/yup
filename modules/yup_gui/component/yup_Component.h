@@ -921,6 +921,25 @@ public:
     Rectangle<float> getPaintBounds() const;
 
     //==============================================================================
+    /** Keeps this component out of the layout performed by its parent.
+
+        A LayoutComponent positions every visible child it has. A component excluded from the
+        layout keeps the bounds it is given, so it can be laid over its siblings: this is what a
+        development tool overlay or a drag image added to a running interface needs.
+
+        @param shouldBeExcluded True to leave this component where it is put.
+
+        @see isExcludedFromParentLayout, LayoutComponent
+    */
+    void setExcludedFromParentLayout (bool shouldBeExcluded);
+
+    /** Returns true when the layout of the parent leaves this component alone.
+
+        @see setExcludedFromParentLayout
+    */
+    bool isExcludedFromParentLayout() const;
+
+    //==============================================================================
     /** Enables or disables paint measurement suppression for this component.
 
         When suppression is enabled, component paint listeners will not receive
@@ -1469,6 +1488,64 @@ public:
     {
         return VariantConverter<T>::fromVar (findProperty (name));
     }
+
+    //==============================================================================
+    /** Where the value returned by findProperty() came from.
+
+        Development tools show this so that an edit goes to the right place: overwriting an
+        animated or stylesheet driven value on the component is undone the next time the style
+        recomputes, while a value inherited from an ancestor has to be edited on that ancestor.
+
+        @see findPropertySource
+    */
+    struct PropertySource
+    {
+        /** The layers a resolved value can come from, in resolution order. */
+        enum class Layer
+        {
+            unset,       /**< Nothing supplies the property, the returned value is undefined. */
+            stateBacked, /**< A getter on the component itself, such as the bounds or the title. */
+            explicitly,  /**< An explicit value set with setProperty() on `component`. */
+            styled,      /**< A stylesheet, animation or computed style value held by `component`. */
+            theme,       /**< The global ApplicationTheme, including palette derived colors. */
+            defaulted    /**< The default value from the property descriptor. */
+        };
+
+        /** The layer that supplied the value. */
+        Layer layer = Layer::unset;
+
+        /** The component the value came from, which is an ancestor for inherited properties, or
+            nullptr when the value came from the theme or the descriptor default. */
+        const Component* component = nullptr;
+
+        /** The descriptor of the resolved property, or nullptr when the property is not declared
+            by the component type. */
+        const ComponentProperty* descriptor = nullptr;
+
+        /** The key the value is stored under, which differs from the property name for properties
+            declared with a storage key. */
+        Identifier storageKey;
+
+        /** The resolved value, which is what findProperty() returns. */
+        var value;
+
+        /** Returns true when writing to this component with setProperty() takes effect durably. */
+        bool isLocallyEditable() const noexcept
+        {
+            return layer != Layer::styled;
+        }
+    };
+
+    /** Explains where findProperty() takes the value of @p name from.
+
+        Resolves exactly as findProperty() does and reports the layer and the supplying component
+        along with the value, without changing anything.
+
+        @param name The property name to resolve.
+
+        @return The resolved value together with its origin.
+    */
+    PropertySource findPropertySource (const Identifier& name) const;
 
     /** Notifies listeners that a state-backed property changed internally.
 
@@ -2293,6 +2370,7 @@ private:
         bool blockSelfMouseEvents : 1;
         bool blockChildrenMouseEvents : 1;
         bool paintProfilingDisabled : 1;
+        bool excludedFromParentLayout : 1;
         bool cachedToTexture : 1;
         bool cachedTextureStale : 1;
         bool paintAsOffscreenRoot : 1;

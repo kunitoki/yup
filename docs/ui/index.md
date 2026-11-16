@@ -40,8 +40,10 @@ windowing, widgets, and theming are still to come.
   `.yui` documents, styling, drawings and bindings, and how data flows between them.
 - [Data-driven drawing](yui-drawing.md) - paint components from a tree of
   shapes whose values are expressions over the component's properties.
+- [Declarative layout in `.yui`](yui-layout.md) - `Row`, `Column`, `FlexBox`,
+  `Grid`, `Stack`, item sizing, base bounds and styled layouts.
 - [Stylesheets](yui-styles.md) - selectors, the cascade, palettes,
-  transitions, shadows and cursors for any component tree.
+  transitions, shadows, glows, CSS filters and cursors for any component tree.
 - [Reactive bindings](yui-reactivity.md) - properties computed from other
   properties, re-evaluated whenever what they read changes.
 - [Complete UIs in `.yui`](yui-documents.md) - `YuiDocument`, tokens,
@@ -89,13 +91,14 @@ windowing, widgets, and theming are still to come.
 :maxdepth: 1
 
 component-basics
-layout
+component-layout
 component-drag-and-drop
 gestures
 component-styling
 yui-language
 yui-architecture
 yui-drawing
+yui-layout
 yui-styles
 yui-reactivity
 yui-documents

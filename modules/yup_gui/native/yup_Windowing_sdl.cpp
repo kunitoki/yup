@@ -1373,14 +1373,24 @@ void SDLComponentNative::timerCallback()
 #if ! (YUP_MOBILE || YUP_EMSCRIPTEN)
     if (window != nullptr && ! cancelMouseGestureIfReleasedElsewhere()) // WIN ONLY: currentMouseButtons != MouseEvent::noButtons
     {
-        const auto cursorPosition = getCursorPosition();
+        // A gesture started somewhere else owns the pointer until the button goes up, so this
+        // window neither hovers nor drags anything while it runs
+        const auto gestureOwnedElsewhere = lastComponentClicked == nullptr
+                                        && currentMouseButtons == MouseEvent::noButtons
+                                        && activeTouches.isEmpty()
+                                        && SDL_GetGlobalMouseState (nullptr, nullptr) != 0;
 
-        const bool framePainted = framePaintedSincePointerCheck.exchange (false);
+        if (! gestureOwnedElsewhere)
+        {
+            const auto cursorPosition = getCursorPosition();
 
-        if (lastMouseMovePosition != cursorPosition)
-            handleMouseMoveOrDrag (cursorPosition);
-        else if (framePainted)
-            revalidateStationaryPointer();
+            const bool framePainted = framePaintedSincePointerCheck.exchange (false);
+
+            if (lastMouseMovePosition != cursorPosition)
+                handleMouseMoveOrDrag (cursorPosition);
+            else if (framePainted)
+                revalidateStationaryPointer();
+        }
     }
 
     pollCapturedMouseState();
@@ -1551,7 +1561,12 @@ bool SDLComponentNative::renderFrame()
                 YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
 
                 const auto dpiScale = getScaleDpi();
-                const auto repaintRegion = makeRepaintRegion (repaintAreas, component.getLocalBounds(), repaintMode);
+                const auto localBounds = component.getLocalBounds();
+
+                const auto repaintRegion = makeRepaintRegion (repaintAreas, localBounds, repaintMode);
+
+                // Kept for the frame, so that a development tool can show what it had to repaint
+                frameRepaintAreas = repaintAreas;
 
                 Graphics g (*context, *renderer, dpiScale);
                 component.internalPaint (g, repaintRegion, renderContinuous);
@@ -1846,6 +1861,14 @@ bool SDLComponentNative::isRendering() const
 
 void SDLComponentNative::handleMouseMoveOrDrag (const Point<float>& position, TouchFinger* touchFinger)
 {
+    const auto buttons = touchFinger != nullptr ? touchFinger->buttons : currentMouseButtons;
+
+    if (isMouseEventFiltered (buttons != MouseEvent::noButtons ? DesktopInputFilter::InputEventType::mouseDrag
+                                                               : DesktopInputFilter::InputEventType::mouseMove,
+                              position,
+                              buttons))
+        return;
+
     if (touchFinger != nullptr)
     {
         const auto fingerId = touchFinger->fingerId;
@@ -1955,6 +1978,9 @@ void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEve
 {
     updateKeyModifiers (modifiers);
 
+    if (isMouseEventFiltered (DesktopInputFilter::InputEventType::mouseDown, position, button))
+        return;
+
     if (touchFinger != nullptr)
     {
         const auto fingerId = touchFinger->fingerId;
@@ -2048,6 +2074,9 @@ void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEve
 void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger, bool wasCanceled)
 {
     updateKeyModifiers (modifiers);
+
+    if (isMouseEventFiltered (DesktopInputFilter::InputEventType::mouseUp, position, button))
+        return;
 
     if (touchFinger != nullptr)
     {
@@ -2462,6 +2491,9 @@ void SDLComponentNative::handleMouseWheel (const Point<float>& position, const M
                      .withModifiers (currentKeyModifiers)
                      .withPosition (position);
 
+    if (Desktop::hasInputFilters() && Desktop::getInstance()->filterMouseWheel (component, event, wheelData))
+        return;
+
     if (lastMouseDownPosition)
         event = event.withLastMouseDownPosition (*lastMouseDownPosition);
 
@@ -2493,6 +2525,9 @@ void SDLComponentNative::handleMouseEnter (const Point<float>& position)
     if (currentMouseButtons != MouseEvent::noButtons)
         return;
 
+    if (isMouseEventFiltered (DesktopInputFilter::InputEventType::mouseEnter, position, currentMouseButtons))
+        return;
+
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
@@ -2511,6 +2546,9 @@ void SDLComponentNative::handleMouseEnter (const Point<float>& position)
 void SDLComponentNative::handleMouseLeave (const Point<float>& position)
 {
     if (currentMouseButtons != MouseEvent::noButtons)
+        return;
+
+    if (isMouseEventFiltered (DesktopInputFilter::InputEventType::mouseExit, position, currentMouseButtons))
         return;
 
     auto event = MouseEvent()
@@ -2533,6 +2571,9 @@ void SDLComponentNative::handleMouseLeave (const Point<float>& position)
 void SDLComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& position)
 {
     updateKeyModifiers (keys.getModifiers());
+
+    if (Desktop::hasInputFilters() && Desktop::getInstance()->filterKeyDown (component, keys, position))
+        return;
 
     // SDL repeats a held key, so only the transition from up to down is a state change.
     if (keyState[keys.getKey()] == 0)
@@ -2565,6 +2606,9 @@ void SDLComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>
 void SDLComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& position)
 {
     updateKeyModifiers (keys.getModifiers());
+
+    if (Desktop::hasInputFilters() && Desktop::getInstance()->filterKeyUp (component, keys, position))
+        return;
 
     if (keyState[keys.getKey()] != 0)
     {
@@ -2620,6 +2664,19 @@ void SDLComponentNative::handleItemsDragPosition (const Point<float>& position, 
 bool SDLComponentNative::hasNativeKeyboardFocus() const
 {
     return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_INPUT_FOCUS) != 0;
+}
+
+bool SDLComponentNative::isMouseEventFiltered (DesktopInputFilter::InputEventType type, const Point<float>& position, MouseEvent::Buttons buttons)
+{
+    if (! Desktop::hasInputFilters())
+        return false;
+
+    const auto event = MouseEvent()
+                           .withButtons (buttons)
+                           .withModifiers (currentKeyModifiers)
+                           .withPosition (position);
+
+    return Desktop::getInstance()->filterMouseEvent (type, component, event);
 }
 
 //==============================================================================

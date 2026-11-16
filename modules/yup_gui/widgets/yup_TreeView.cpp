@@ -1625,7 +1625,7 @@ std::optional<TreeView::DropTarget> TreeView::findDropTarget (const DragAndDropS
             zone = Zone::before;
         else if (fraction > 0.75f)
             zone = Zone::after;
-        else if (rowItem->mightContainSubItems())
+        else if (rowItem->canContainDroppedItems())
             zone = Zone::into;
         else
             zone = fraction < 0.5f ? Zone::before : Zone::after;

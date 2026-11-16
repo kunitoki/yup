@@ -42,8 +42,8 @@ namespace yup
     @keyframes pulse { from { glow: 0; } to { glow: 8; } }
     @endcode
 
-    Numbers, integers and colors (component-wise in sRGB) are interpolated, every other value
-    switches halfway.
+    Numbers, integers, transforms, CSS filter chains and colors (component-wise in linear RGB)
+    are interpolated, every other value switches halfway.
 
     @see StyleContext, StyleState, StyleSheet
 

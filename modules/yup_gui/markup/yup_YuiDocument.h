@@ -123,9 +123,6 @@ public:
     /** Returns the type info of a type declared by the document or registered, or nullptr. */
     const ComponentTypeInfo* findTypeInfo (const Identifier& typeName) { return builder.findTypeInfo (typeName); }
 
-    /** Returns the stylesheet attached to the root, or nullptr if nothing is loaded. */
-    StyleSheet::Ptr getStyleSheet() const noexcept { return styleSheet; }
-
     //==============================================================================
     /** Registers the function run by `action ("name", ...)` handlers (see YuiBuilder::setAction). */
     void setAction (const String& name, YuiBuilder::Action action);
@@ -149,6 +146,38 @@ public:
 
     /** Returns the builder creating the components, to inspect its bindings. */
     YuiBuilder& getBuilder() noexcept { return builder; }
+
+    /** Returns the source map of the document loaded last, or nullptr.
+
+        The map turns an element or a property of the tree into the line and column it was
+        written at, which is how a development tool jumps from a component to its markup.
+    */
+    std::shared_ptr<const YuiSourceMap> getSourceMap() const noexcept { return sourceMap; }
+
+    /** Returns the stylesheet built from the document, or nullptr when it declares no style.
+
+        The sheet gives the rules styling the interface, which a development tool walks to show
+        why a component looks the way it does.
+    */
+    StyleSheet::Ptr getStyleSheet() const noexcept { return styleSheet; }
+
+    //==============================================================================
+    /** Returns the document that built @p component, or the closest ancestor of it, or nullptr.
+
+        Development tools pick a component on screen and need to know whether it came from markup
+        before deciding where an edit should be written. The search walks up the parents, so a
+        child added in code to a component built from a document reports that document.
+
+        @param component The component to look up.
+    */
+    static YuiDocument* findDocumentFor (const Component* component);
+
+    /** Returns every document that exists now, in the order they were created.
+
+        Development tools gather the diagnostics of a whole application without being handed each
+        of its documents, which is what this is for.
+    */
+    static std::vector<YuiDocument*> getAllDocuments();
 
     //==============================================================================
     /** Receives the loads of a document. */
@@ -181,6 +210,8 @@ public:
 private:
     //==============================================================================
     class LoadAction;
+
+    static std::vector<YuiDocument*>& getLiveDocuments();
 
     Result loadTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map);
     Result buildTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map);

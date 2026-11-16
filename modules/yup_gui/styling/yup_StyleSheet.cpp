@@ -301,7 +301,7 @@ std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent,
         if (declaration.value.isEmpty())
             return YuiDiagnostic { .message = "The declaration '" + name + "' needs a value", .element = element };
 
-        if (! isKeyframe && type == "declaration" && ! declaration.qualifier.isValid())
+        if ((! isKeyframe || declaration.name == Identifier ("filter")) && type == "declaration" && ! declaration.qualifier.isValid())
             parseRuleDeclarationValue (declaration);
 
         target.push_back (std::move (declaration));

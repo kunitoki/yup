@@ -394,6 +394,14 @@ var StyleAnimator::interpolate (const var& from, const var& to, double progress,
         }
     }
 
+    if (FilterEffect::isOperationsVar (from) && FilterEffect::isOperationsVar (to))
+    {
+        return FilterEffect::operationsToVar (FilterEffect::interpolate (
+            FilterEffect::operationsFromVar (from),
+            FilterEffect::operationsFromVar (to),
+            static_cast<float> (progress)));
+    }
+
     // Points, rectangles and arrays of numbers are vars holding numbers, interpolated element by element
     if (const auto* start = from.getArray())
     {

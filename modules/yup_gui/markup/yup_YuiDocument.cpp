@@ -349,6 +349,8 @@ DataTreeSchema::Ptr YuiDocument::createSchema()
 
 YuiDocument::YuiDocument()
 {
+    getLiveDocuments().push_back (this);
+
     builder.onDiagnostic = [this] (const YuiDiagnostic& diagnostic)
     {
         if (! isLoading && lastLoadSucceeded)
@@ -364,7 +366,35 @@ YuiDocument::YuiDocument()
 
 YuiDocument::~YuiDocument()
 {
+    auto& live = getLiveDocuments();
+    live.erase (std::remove (live.begin(), live.end(), this), live.end());
+
     resetState();
+}
+
+std::vector<YuiDocument*>& YuiDocument::getLiveDocuments()
+{
+    static std::vector<YuiDocument*> documents;
+    return documents;
+}
+
+YuiDocument* YuiDocument::findDocumentFor (const Component* component)
+{
+    for (; component != nullptr; component = component->getParentComponent())
+    {
+        for (auto* document : getLiveDocuments())
+        {
+            if (document->getRoot() == component)
+                return document;
+        }
+    }
+
+    return nullptr;
+}
+
+std::vector<YuiDocument*> YuiDocument::getAllDocuments()
+{
+    return getLiveDocuments();
 }
 
 //==============================================================================

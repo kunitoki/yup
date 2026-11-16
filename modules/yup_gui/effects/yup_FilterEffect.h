@@ -118,8 +118,29 @@ public:
     /** Clamps a numeric argument to the CSS domain of @a type. */
     static float clampAmount (Type type, float value) noexcept;
 
+    /** Returns the CSS identity (no-op) operation corresponding to @a target. */
+    static Operation identityOperationFor (const Operation& target) noexcept;
+
+    /** Interpolates two CSS filter chains according to CSS Filter Effects rules.
+
+        Matching filter primitives are interpolated step-by-step, padding a shorter or empty
+        chain with @ref identityOperationFor. Chains with mismatched primitive types switch
+        discretely at `progress = 0.5`.
+    */
+    static std::vector<Operation> interpolate (const std::vector<Operation>& from,
+                                               const std::vector<Operation>& to,
+                                               float progress);
+
     /** Creates a FilterEffect from a literal CSS `filter` string. */
     static ResultValue<Ptr> fromString (StringRef filterText);
+
+    //==============================================================================
+    /** @internal */
+    static bool isOperationsVar (const var& value) noexcept;
+    /** @internal */
+    static var operationsToVar (const std::vector<Operation>& operations);
+    /** @internal */
+    static std::vector<Operation> operationsFromVar (const var& value);
 
     //==============================================================================
     /** Replaces the chain of filter operations. */

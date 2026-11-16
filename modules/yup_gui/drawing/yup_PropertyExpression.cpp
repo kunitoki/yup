@@ -163,7 +163,7 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Co
     expression->scope->install();
 
     const String expressionText = (type == ComponentProperty::Type::transform && text.trim() == "none") ? String ("transform()") : text;
-    auto compiled = CompiledExpression::compile (String (outputName) + " = (" + expressionText + ");\n", expression->context);
+    auto compiled = CompiledExpression::compile (String (outputName) + " = (" + expressionText + "\n);\n", expression->context);
     if (compiled.failed())
         return makeResultValueFail (compiled.getErrorMessage());
 
@@ -226,7 +226,34 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compileArra
     if (auto result = splitArrayLiteral (text, elementTexts, offset); result.failed())
         return makeResultValueFail (result.getErrorMessage());
 
-    if (String::fromUTF8 (text.toRawUTF8() + offset).trim().isNotEmpty())
+    const auto* raw = text.toRawUTF8();
+    for (;;)
+    {
+        if (raw[offset] != 0 && CharacterFunctions::isWhitespace (raw[offset]))
+        {
+            ++offset;
+        }
+        else if (raw[offset] == '/' && raw[offset + 1] == '/')
+        {
+            offset += 2;
+            while (raw[offset] != 0 && raw[offset] != '\n')
+                ++offset;
+        }
+        else if (raw[offset] == '/' && raw[offset + 1] == '*')
+        {
+            const auto* end = std::strstr (raw + offset + 2, "*/");
+            if (end == nullptr)
+                return makeResultValueFail ("Unterminated comment");
+
+            offset = static_cast<int> (end - raw) + 2;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    if (raw[offset] != 0)
         return makeResultValueFail ("Expected the end of the array");
 
     std::unique_ptr<PropertyExpression> expression (new PropertyExpression());
@@ -251,15 +278,41 @@ Result PropertyExpression::splitArrayLiteral (StringRef text, StringArray& eleme
 {
     const auto* chars = text.text.getAddress();
 
-    const auto skipSpaces = [&] (int from)
+    const auto skipSpaces = [&] (int& pos) -> Result
     {
-        while (chars[from] != 0 && CharacterFunctions::isWhitespace (chars[from]))
-            ++from;
+        for (;;)
+        {
+            if (chars[pos] != 0 && CharacterFunctions::isWhitespace (chars[pos]))
+            {
+                ++pos;
+            }
+            else if (chars[pos] == '/' && chars[pos + 1] == '/')
+            {
+                pos += 2;
+                while (chars[pos] != 0 && chars[pos] != '\n')
+                    ++pos;
+            }
+            else if (chars[pos] == '/' && chars[pos + 1] == '*')
+            {
+                const auto* end = std::strstr (chars + pos + 2, "*/");
+                if (end == nullptr)
+                    return Result::fail ("Unterminated comment");
 
-        return from;
+                pos = static_cast<int> (end - chars) + 2;
+            }
+            else
+            {
+                return Result::ok();
+            }
+        }
     };
 
-    auto position = skipSpaces (offset);
+    auto position = offset;
+    if (auto res = skipSpaces (position); res.failed())
+    {
+        offset = position;
+        return res;
+    }
 
     if (chars[position] != '[')
     {
@@ -267,18 +320,28 @@ Result PropertyExpression::splitArrayLiteral (StringRef text, StringArray& eleme
         return Result::fail ("Expected '['");
     }
 
-    position = skipSpaces (position + 1);
+    ++position;
+    if (auto res = skipSpaces (position); res.failed())
+    {
+        offset = position;
+        return res;
+    }
 
     if (chars[position] != ']')
     {
         for (;;)
         {
-            const auto elementStart = skipSpaces (position);
+            if (auto res = skipSpaces (position); res.failed())
+            {
+                offset = position;
+                return res;
+            }
+
+            const auto elementStart = position;
 
             if (chars[elementStart] == '[')
             {
                 StringArray nested;
-                position = elementStart;
 
                 if (auto result = splitArrayLiteral (text, nested, position); result.failed())
                 {
@@ -288,7 +351,6 @@ Result PropertyExpression::splitArrayLiteral (StringRef text, StringArray& eleme
             }
             else
             {
-                position = elementStart;
                 const auto parsed = Expression::parseExpression (text, position);
 
                 if (parsed.failed())
@@ -299,7 +361,12 @@ Result PropertyExpression::splitArrayLiteral (StringRef text, StringArray& eleme
             }
 
             elements.add (String::fromUTF8 (chars + elementStart, position - elementStart).trimEnd());
-            position = skipSpaces (position);
+
+            if (auto res = skipSpaces (position); res.failed())
+            {
+                offset = position;
+                return res;
+            }
 
             if (chars[position] != ',')
                 break;

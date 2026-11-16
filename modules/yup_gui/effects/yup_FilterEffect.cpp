@@ -305,7 +305,11 @@ float FilterEffect::clampAmount (Type type, float value) noexcept
 
 ResultValue<std::vector<FilterEffect::ParsedStep>> FilterEffect::parseSteps (StringRef filterText, bool allowExpressions)
 {
-    const String text = String (filterText).trim();
+    const auto stripped = detail::stripStyleComments (filterText);
+    if (stripped.failed())
+        return makeResultValueFail (stripped.getErrorMessage() + " in filter");
+
+    const String text = stripped.getReference().trim();
     std::vector<ParsedStep> steps;
 
     if (text.isEmpty() || text == "none")
@@ -591,6 +595,148 @@ ResultValue<FilterEffect::Ptr> FilterEffect::fromString (StringRef filterText)
         return makeResultValueFail (parsed.getErrorMessage());
 
     return makeResultValueOk (Ptr (new FilterEffect (std::move (parsed.getReference()))));
+}
+
+FilterEffect::Operation FilterEffect::identityOperationFor (const Operation& target) noexcept
+{
+    switch (target.type)
+    {
+        case Type::blur:
+            return Operation::blur (0.0f);
+
+        case Type::brightness:
+            return Operation::brightness (1.0f);
+
+        case Type::contrast:
+            return Operation::contrast (1.0f);
+
+        case Type::dropShadow:
+            return Operation::dropShadow ({ 0.0f, 0.0f }, 0.0f, target.color.withAlpha (static_cast<uint8> (0)));
+
+        case Type::grayscale:
+            return Operation::grayscale (0.0f);
+
+        case Type::hueRotate:
+            return Operation::hueRotate (0.0f);
+
+        case Type::invert:
+            return Operation::invert (0.0f);
+
+        case Type::opacity:
+            return Operation::opacity (1.0f);
+
+        case Type::saturate:
+            return Operation::saturate (1.0f);
+
+        case Type::sepia:
+            return Operation::sepia (0.0f);
+    }
+
+    return Operation::opacity (1.0f);
+}
+
+std::vector<FilterEffect::Operation> FilterEffect::interpolate (const std::vector<Operation>& from,
+                                                                const std::vector<Operation>& to,
+                                                                float progress)
+{
+    const auto sharedCount = jmin (from.size(), to.size());
+
+    for (size_t i = 0; i < sharedCount; ++i)
+        if (from[i].type != to[i].type)
+            return progress < 0.5f ? from : to;
+
+    const auto totalCount = jmax (from.size(), to.size());
+    std::vector<Operation> result;
+    result.reserve (totalCount);
+
+    for (size_t i = 0; i < totalCount; ++i)
+    {
+        const Operation a = i < from.size() ? from[i] : identityOperationFor (to[i]);
+        const Operation b = i < to.size() ? to[i] : identityOperationFor (from[i]);
+
+        if (a.type == Type::dropShadow)
+        {
+            result.push_back ({
+                .type = Type::dropShadow,
+                .amount = jmax (0.0f, a.amount + (b.amount - a.amount) * progress),
+                .offset = {
+                    a.offset.getX() + (b.offset.getX() - a.offset.getX()) * progress,
+                    a.offset.getY() + (b.offset.getY() - a.offset.getY()) * progress },
+                .color = a.color.mixedWith (b.color, jlimit (0.0f, 1.0f, progress), ColorSpace::LinearRGB)
+            });
+        }
+        else
+        {
+            result.push_back ({
+                .type = a.type,
+                .amount = clampAmount (a.type, a.amount + (b.amount - a.amount) * progress),
+                .offset = {},
+                .color = Colors::transparentBlack
+            });
+        }
+    }
+
+    return result;
+}
+
+bool FilterEffect::isOperationsVar (const var& value) noexcept
+{
+    const auto* array = value.getArray();
+    return array != nullptr && ! array->isEmpty() && (*array)[0].isString() && (*array)[0].toString() == "__yup_filter";
+}
+
+var FilterEffect::operationsToVar (const std::vector<Operation>& ops)
+{
+    Array<var> encoded;
+    encoded.ensureStorageAllocated (static_cast<int> (ops.size()) + 1);
+    encoded.add (var ("__yup_filter"));
+
+    for (const auto& op : ops)
+    {
+        Array<var> item;
+        item.ensureStorageAllocated (5);
+        item.add (static_cast<int> (op.type));
+        item.add (static_cast<double> (op.amount));
+        item.add (static_cast<double> (op.offset.getX()));
+        item.add (static_cast<double> (op.offset.getY()));
+        item.add (static_cast<int64> (op.color.getARGB()));
+        encoded.add (var (std::move (item)));
+    }
+
+    return var (std::move (encoded));
+}
+
+std::vector<FilterEffect::Operation> FilterEffect::operationsFromVar (const var& value)
+{
+    std::vector<Operation> result;
+    const auto* array = value.getArray();
+
+    if (array == nullptr || array->isEmpty() || ! (*array)[0].isString() || (*array)[0].toString() != "__yup_filter")
+        return result;
+
+    result.reserve (static_cast<size_t> (array->size() - 1));
+
+    for (int i = 1; i < array->size(); ++i)
+    {
+        const auto* item = (*array)[i].getArray();
+        if (item == nullptr || item->size() < 5)
+            continue;
+
+        const auto typeInt = static_cast<int> ((*item)[0]);
+        if (typeInt < static_cast<int> (Type::blur) || typeInt > static_cast<int> (Type::sepia))
+            continue;
+
+        result.push_back ({
+            .type = static_cast<Type> (typeInt),
+            .amount = static_cast<float> (static_cast<double> ((*item)[1])),
+            .offset = {
+                static_cast<float> (static_cast<double> ((*item)[2])),
+                static_cast<float> (static_cast<double> ((*item)[3])) },
+            .color = Color (static_cast<uint32> (static_cast<int64> ((*item)[4])))
+        });
+    }
+
+    return result;
 }
 
 void FilterEffect::setOperations (std::vector<Operation> newOperations)

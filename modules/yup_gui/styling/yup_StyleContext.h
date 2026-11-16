@@ -194,11 +194,16 @@ private:
     void restoreAllStateBacked (Component& component, ComponentCache& cache);
     const DrawingStyle* installDrawing (Component& component, ComponentCache& cache, const StyleSheet::Declaration& declaration);
     void restoreDrawing (Component& component, ComponentCache& cache);
+    bool evaluateFilterDeclaration (Component& component,
+                                    ComponentCache& cache,
+                                    const StyleSheet::Declaration& filterDeclaration,
+                                    std::vector<FilterEffect::Operation>& outOperations,
+                                    bool* paletteDependent);
+    bool syncStyledFilterAndMargins (Component& component, ComponentCache& cache);
     bool applyEffects (Component& component,
                        ComponentCache& cache,
                        const StyleSheet::Declaration* cursorDeclaration,
                        const StyleSheet::Declaration* effectDeclaration,
-                       const StyleSheet::Declaration* filterDeclaration,
                        const StyleSheet::Declaration* shadowDeclaration,
                        const StyleSheet::Declaration* glowDeclaration,
                        bool* paletteDependent);
@@ -207,7 +212,7 @@ private:
     var getBaseValue (Component& component, const ComponentCache& cache, const ComponentProperty* descriptor, const Identifier& storageId);
     bool updateTransitions (Component& component, const ComponentCache& cache, const std::vector<PendingTransition>& pending, Array<Identifier>& touched);
     bool updateAnimations (Component& component, ComponentCache& cache, const StyleSheet::Declaration* animationDeclaration, const DrawingStyle* drawing, Array<Identifier>& touched);
-    std::vector<StyleAnimator::Track> compileTracks (Component& component, const ComponentCache& cache, const StyleSheet::KeyframeSequence& keyframes, const DrawingStyle* drawing);
+    std::vector<StyleAnimator::Track> compileTracks (Component& component, ComponentCache& cache, const StyleSheet::KeyframeSequence& keyframes, const DrawingStyle* drawing);
     void showAnimatedValue (Component& component, const Identifier& storageId, const var* value);
     void markPaletteDependentDirty (Component& component);
     void report (const YuiDiagnostic& diagnostic);

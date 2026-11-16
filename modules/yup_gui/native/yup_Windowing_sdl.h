@@ -258,6 +258,8 @@ private:
 
     bool hasNativeKeyboardFocus() const;
 
+    bool isMouseEventFiltered (DesktopInputFilter::InputEventType type, const Point<float>& position, MouseEvent::Buttons buttons);
+
     void updateDesiredFrameRate();
     void updateEffectiveFrameRate (bool hasFocus);
 

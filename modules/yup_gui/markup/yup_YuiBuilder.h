@@ -120,6 +120,25 @@ public:
     /** Returns the type info of a type declared by the built document or registered, or nullptr. */
     const ComponentTypeInfo* findTypeInfo (const Identifier& typeName);
 
+    //==============================================================================
+    /** Returns the document element a built component came from, or an invalid tree.
+
+        Development tools use this to map a component picked on screen back to the markup that
+        describes it, so an edit can be written to the document rather than to the component.
+
+        For an instance of a composite type this is the use site element, not the body of the
+        declaration.
+
+        @param component The component to look up.
+    */
+    DataTree findElementFor (const Component* component) const;
+
+    /** Returns the component built from a document element, or nullptr.
+
+        @param element The element to look up.
+    */
+    Component* findComponentFor (const DataTree& element) const;
+
     /** Returns the problems met by the last build.
 
         There is one per value that couldn't be applied, plus the error that made the build fail.

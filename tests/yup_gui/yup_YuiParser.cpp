@@ -545,3 +545,44 @@ TEST_F (YuiParserTest, ReturnsNoDocumentOnErrors)
     EXPECT_FALSE (result.document.isValid());
     EXPECT_EQ (result.diagnostics.size(), 1u);
 }
+
+TEST_F (YuiParserTest, StripsCommentsInsideRawStyleValuesSelectorsAndExpressions)
+{
+    const auto result = YuiParser::parse (R"yui(
+        style {
+            Slider/*attach*/.knob:hover {
+                filter: hue-rotate(value * 180deg)
+                        /*brightness(1 + value * 0.2);
+                        drop-shadow(0 4px 8px palette.accent.withAlpha(value * 0.6))*/;
+                label: "http://example/*not-a-comment*/;ok"; // end of line ; }
+            }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.diagnostics.front().toString();
+
+    const auto rule = result.document.getChildWithName ("style").getChild (0);
+    EXPECT_EQ (rule.getProperty ("selector").toString(), "Slider.knob:hover");
+    ASSERT_EQ (rule.getNumChildren(), 2);
+    EXPECT_EQ (rule.getChild (0).getProperty ("value").toString(), "hue-rotate(value * 180deg)");
+    EXPECT_EQ (rule.getChild (1).getProperty ("value").toString(), "\"http://example/*not-a-comment*/;ok\"");
+
+    EXPECT_EQ (parseError ("style { Slider { filter: blur(4px) /* unclosed } }"), "1:36: Unterminated comment");
+
+    Component comp;
+    auto scalarExpr = PropertyExpression::compile (comp, "2 + 3 // trailing comment", ComponentProperty::Type::number);
+    ASSERT_TRUE (scalarExpr.wasOk()) << scalarExpr.getErrorMessage();
+    EXPECT_DOUBLE_EQ (static_cast<double> (scalarExpr.getReference()->evaluate()), 5.0);
+
+    auto arrayExpr = PropertyExpression::compile (comp, "[1, /* mid */ 2, // line\n 3]", ComponentProperty::Type::array);
+    ASSERT_TRUE (arrayExpr.wasOk()) << arrayExpr.getErrorMessage();
+    const auto* evaluatedArray = arrayExpr.getReference()->evaluate().getArray();
+    ASSERT_NE (evaluatedArray, nullptr);
+    ASSERT_EQ (evaluatedArray->size(), 3);
+    EXPECT_DOUBLE_EQ (static_cast<double> ((*evaluatedArray)[0]), 1.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> ((*evaluatedArray)[1]), 2.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> ((*evaluatedArray)[2]), 3.0);
+
+    auto unclosedArray = PropertyExpression::compile (comp, "[1, /* unclosed]", ComponentProperty::Type::array);
+    EXPECT_TRUE (unclosedArray.failed());
+}
+

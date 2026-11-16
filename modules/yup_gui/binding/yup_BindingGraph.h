@@ -132,6 +132,27 @@ public:
     /** Returns true if the property currently has a live binding. */
     bool hasBinding (const Component& target, const Identifier& property) const noexcept;
 
+    //==============================================================================
+    /** A binding, as reported by getAllBindings(). */
+    struct BindingInfo
+    {
+        /** The component whose property the binding writes, or nullptr when it was destroyed. */
+        Component* target = nullptr;
+
+        /** The property the binding writes. */
+        Identifier property;
+
+        /** The component properties the expression reads, and therefore re-evaluates on. */
+        std::vector<DrawingScope::Dependency> dependencies;
+    };
+
+    /** Returns every binding held by the graph, for a development tool to show.
+
+        The expression text is not kept by the graph: it belongs to the document the binding was
+        written in, which is where a tool reads it from.
+    */
+    std::vector<BindingInfo> getAllBindings() const;
+
     /** Re-evaluates every binding, for example after the palette changed. */
     void refreshAll();
 

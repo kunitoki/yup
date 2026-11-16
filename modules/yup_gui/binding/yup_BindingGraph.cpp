@@ -200,8 +200,18 @@ bool BindingGraph::hasBinding (const Component& target, const Identifier& proper
     });
 }
 
-void BindingGraph::refreshAll()
+std::vector<BindingGraph::BindingInfo> BindingGraph::getAllBindings() const
 {
+    std::vector<BindingInfo> result;
+    result.reserve (bindings.size());
+
+    for (const auto& binding : bindings)
+        result.push_back ({ binding->target.get(), binding->property, binding->dependencies });
+
+    return result;
+}
+
+void BindingGraph::refreshAll(){
     for (const auto& binding : bindings)
         dirty.push_back (binding.get());
 

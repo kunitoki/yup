@@ -94,6 +94,11 @@ protected:
             return acceptsDrops;
         }
 
+        bool canContainDroppedItems() const override
+        {
+            return takesDropsInside || TreeViewItem::canContainDroppedItems();
+        }
+
         void itemDropped (const DragAndDropSourceDetails& details, int insertIndex) override
         {
             ignoreUnused (details);
@@ -113,6 +118,7 @@ protected:
         std::vector<bool> selectionChanges;
         bool draggable = true;
         bool acceptsDrops = true;
+        bool takesDropsInside = false;
         std::vector<int> droppedAt;
     };
 
@@ -1037,6 +1043,18 @@ TEST_F (TreeViewTests, DropInTheMiddleOfALeafPicksTheNearestSide)
     tree->itemDropped (dragAt (rowY (2, 0.6f)));
 
     EXPECT_EQ ((std::vector<int> { 1, 2 }), root.droppedAt);
+}
+
+TEST_F (TreeViewTests, DropInTheMiddleOfALeafTakingDropsInsertsIntoIt)
+{
+    auto& root = buildTree();
+    root.setOpen (true);
+
+    find ("b").takesDropsInside = true;
+
+    EXPECT_TRUE (tree->itemDropped (dragAt (rowY (2, 0.5f))));
+    EXPECT_EQ ((std::vector<int> { 0 }), find ("b").droppedAt);
+    EXPECT_TRUE (root.droppedAt.empty());
 }
 
 TEST_F (TreeViewTests, DropBelowAnOpenItemInsertsItsFirstSubItem)

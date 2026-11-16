@@ -33,6 +33,7 @@ protected:
     class TestLayout : public LayoutComponent
     {
     public:
+        using LayoutComponent::getLayoutChildren;
         using LayoutComponent::parseSpacing;
 
         int layoutCount = 0;
@@ -82,6 +83,36 @@ TEST_F (LayoutComponentTests, LaysOutAgainWhenAChildIsHidden)
     EXPECT_GT (layout.layoutCount, before);
 }
 
+TEST_F (LayoutComponentTests, LeavesChildrenExcludedFromTheLayoutOut)
+{
+    Component laidOut;
+    Component overlay;
+
+    layout.addAndMakeVisible (laidOut);
+    layout.addAndMakeVisible (overlay);
+    overlay.setExcludedFromParentLayout (true);
+
+    EXPECT_TRUE (overlay.isExcludedFromParentLayout());
+    EXPECT_FALSE (laidOut.isExcludedFromParentLayout());
+
+    const auto children = layout.getLayoutChildren();
+
+    ASSERT_EQ (children.size(), 1u);
+    EXPECT_EQ (children.front(), &laidOut);
+}
+
+TEST_F (LayoutComponentTests, LaysOutAgainWhenAChildIsExcludedFromTheLayout)
+{
+    Component child;
+    layout.addAndMakeVisible (child);
+    layout.setBounds (0, 0, 100, 60);
+
+    const auto before = layout.layoutCount;
+    child.setExcludedFromParentLayout (true);
+
+    EXPECT_GT (layout.layoutCount, before);
+}
+
 TEST_F (LayoutComponentTests, DoesNotInheritItemPropertiesFromTheParent)
 {
     Component child;
@@ -110,7 +141,7 @@ TEST_F (LayoutComponentTests, ParsesDecimalSpacingRegardlessOfCLocale)
     const char* current = std::setlocale (LC_NUMERIC, nullptr);
     const String savedLocale = current != nullptr ? String (current) : String ("C");
     const ScopeGuard restoreLocale { [&savedLocale]
-    {
+                                     {
         std::setlocale (LC_NUMERIC, savedLocale.toRawUTF8());
     } };
 

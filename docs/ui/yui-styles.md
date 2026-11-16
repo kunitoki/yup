@@ -137,12 +137,18 @@ stylesheet can reshape the built-in widgets without a drawing:
 
 | Widget | Properties (default) |
 |---|---|
-| `Slider` | `trackWidth` (4) and `thumbSize` (16) for linear sliders, `rotaryInset` (0.1 of the width) for rotary ones |
+| `Slider` | `trackWidth` (4) and `thumbSize` (16) for linear sliders; `rotaryInset` (unset: derived from track and thumb), `rotaryTrackWidth` (8) and `rotaryThumbRadius` (5) for rotary ones |
 | `TextButton`, `ToggleButton`, `TextEditor`, `ComboBox` | `cornerRadius` (4), `outlineWidth` (1), `focusedOutlineWidth` (2) |
 | `SwitchButton` | `cornerRadius` (unset: a pill), `thumbInset` (4) |
 | `ProgressBar` | `cornerRadius` (unset: a pill) |
 | `ScrollBar` | `thumbInset` (3), `cornerRadius` (unset: a pill) |
 | `Label` | `textHeightProportion` (unset: the font keeps its height) |
+| `Image` | `source`, `fitting`, `justification`, `imageOpacity` |
+
+Audio widgets in `yup_audio_gui` (`KMeterComponent`, `MidiKeyboardComponent`,
+`AudioGraphComponent`, `SpectrumAnalyzerComponent`, `CartesianPlane`, `XYPad`)
+also register their themeable colors, properties and signals for `.yui` markup
+and stylesheets.
 
 ```yui
 style {
@@ -157,11 +163,13 @@ only change the painting: a slider keeps its own hit area for the thumb.
 
 ### Declaring properties
 
-A rule can declare a typed property, giving the matched components a default
-other rules and expressions can use:
+A rule (or a `style`, `drawing`, `tokens` or `component` block) can declare a
+typed property, giving matched components a known type and optional default that
+other rules and expressions can use without emitting an undeclared-property
+warning (`YuiDiagnostic::Severity::warning`):
 
 ```yui
-style { .knob { property glow: number = 0; } }
+style { .knob { property glowAmount: number = 0; } }
 ```
 
 ## Palettes
@@ -222,8 +230,9 @@ style {
 }
 ```
 
-See [Layout components](component-layout.md#layout-components) for the
-containers and their properties.
+See [Declarative layout in `.yui`](yui-layout.md) and
+[Layout components](component-layout.md#layout-components) for the containers
+and their properties.
 
 ## Transitions and animations
 
@@ -275,44 +284,65 @@ and a fill mode (`none`, `forwards`, `backwards`, `both`).
 - An animation restarts when the `animation:` text changes and stops when no
   rule declares it. A missing `from` or `to` keyframe uses the value the style
   gives the property.
-- Numbers, integers and colors (component-wise in sRGB) are interpolated, as
-  are arrays of the same length, element by element, so points and rectangles
-  (stored as arrays of their components) interpolate too. Other values switch
-  halfway. Transforms are not interpolated yet.
+- Numbers, integers, `transform` values, `filter` chains and colors
+  (component-wise in linear RGB) are interpolated, as are arrays of the same
+  length, element by element, so points and rectangles (stored as arrays of
+  their components) interpolate too. Matching `filter` primitives interpolate
+  step by step, padding a shorter or `none` chain with identity operations
+  (`0deg`, `0px`, `1`, transparent `drop-shadow`), while mismatched primitive
+  types switch halfway like other discrete values.
+- Stylesheet `transform:` values live in their own style layer and compose with
+  any explicit C++ `Component::setTransform()` without overwriting it or
+  affecting parent layout bounds.
 - Animated values sit between explicit values and stylesheet values, so a
   value set from C++ still wins.
 
-## Shadows, effects and cursors
+## Shadows, glows, filters, effects and cursors
 
-Three declarations style how a component sits on screen rather than what it
-paints:
+Five declarations style how a component is composited or interacted with rather
+than what it paints internally:
 
 ```yui
 style {
     .card {
         cornerRadius: 8;
-        shadow: 0 4 12 #00000060, 0 0 2 palette.accent.withAlpha (0.4);
+        shadow: 0 4 12 #00000060;
+        glow: 10 2 palette.accent.withAlpha (0.4);
         cursor: hand;
     }
-    .card:disabled { effect: blur; }
+    .card:hover    { filter: brightness(108%) drop-shadow(0 6 10 #00000050); }
+    .card:disabled { filter: grayscale(100%) opacity(60%); effect: customHalftone; }
 }
 ```
 
-- `shadow:` takes comma separated layers, each `x y [blur [spread]] color`
-  like CSS, or `none`. A layer is the component's rounded rectangle, offset,
-  grown by the spread and feathered by the blur, painted behind the component,
-  the first layer on top. The color is an expression, so palette roles work.
-  The corner radius is the `cornerRadius` property found for the component (its
-  own, a stylesheet one or a parent's, or the [widget geometry](#widget-geometry)
-  one), 0 when there is none. A glow is a
-  shadow without offset: `shadow: 0 0 8 palette.accent;`.
-- `effect:` installs a `ComponentEffect` registered by name, or `none`. Each
-  component gets its own instance from the factory:
+- `shadow:` takes comma-separated layers, each `x y [blur [spread]] color`
+  like CSS, or `none`. Each layer offsets, spreads and feathers the component's
+  rounded rectangle behind the component, the first layer on top. The color is
+  an expression, so palette roles work. The corner radius comes from the
+  component's `cornerRadius` property (or `0` when unset).
+- `glow:` takes comma-separated centered glow layers, each `blur [spread] color`,
+  or `none`. Glows compose cleanly alongside `shadow:` without overwriting shadow
+  layers from other matching rules.
+- `filter:` applies a space-separated chain of standard CSS `<filter-function>`
+  operations to the component's rendered output, or `none`:
+  - `blur([radius])` (non-negative length, `0px` default)
+  - `brightness([amount])`, `contrast([amount])`, `saturate([amount])`
+    (number or `%`, `>= 0`, `1` / `100%` default)
+  - `grayscale([amount])`, `invert([amount])`, `opacity([amount])`,
+    `sepia([amount])` (number or `%`, clamped to `[0, 1]`, `1` default)
+  - `hue-rotate([angle])` (`deg`, `rad`, `grad`, `turn` or `0`)
+  - `drop-shadow(offsetX offsetY [blur] [color])` (follows the rendered alpha
+    silhouette of the component; color accepts `.yui` expressions such as
+    `palette.accent.withAlpha (0.5)`)
+  Consecutive color-matrix filters collapse into a single GPU pass, and `filter:`
+  runs in its own style layer so it never overwrites a C++ `setComponentEffect()`.
+- `effect:` is strictly for user-defined `ComponentEffect` factories registered
+  by the application in `ComponentEffectRegistry`, or `none`:
 
   ```cpp
-  ComponentEffectRegistry::getInstance().registerEffect ("blur", []
+  ComponentEffectRegistry::getInstance().registerEffect ("customHalftone", []
   {
-      return ComponentEffect::Ptr (new MyBlurEffect());
+      return ComponentEffect::Ptr (new CustomHalftoneEffect());
   });
   ```
 
@@ -321,11 +351,11 @@ style {
   `resizeUpDown`, `resizeTopLeftRightBottom`, `resizeBottomLeftRightTop` and
   `resizeAll`.
 
-The paint margin of the component grows to hold its shadows. When no rule sets
-one of these declarations anymore, the component gets back the cursor, effect
-or paint margin it had before, unless the application changed it in between.
-Unknown names and malformed shadows are reported as diagnostics. They switch
-at once, transitions don't interpolate them.
+The paint margin of the component grows automatically to hold its `shadow:`,
+`glow:` and `filter: drop-shadow(...)` layers. When no rule sets one of these
+declarations anymore, the component gets back the cursor, effect or paint margin
+it had before, unless the application changed it in between. Unknown names and
+malformed declarations are reported as diagnostics.
 
 ## See also
 

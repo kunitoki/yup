@@ -127,8 +127,11 @@ std::vector<Component*> LayoutComponent::getLayoutChildren() const
 
     for (int i = 0; i < getNumChildComponents(); ++i)
     {
-        if (auto* child = getChildComponent (i); child != nullptr && child->isVisible())
+        if (auto* child = getChildComponent (i);
+            child != nullptr && child->isVisible() && ! child->isExcludedFromParentLayout())
+        {
             children.push_back (child);
+        }
     }
 
     return children;

@@ -557,6 +557,8 @@ private:
         skipWhitespace();
 
         const auto start = position;
+        std::string out;
+        int chunkStart = position;
         int depth = 0;
 
         for (;;)
@@ -581,6 +583,39 @@ private:
                 continue;
             }
 
+            if (c == '/' && text[position + 1] == '/')
+            {
+                out.append (text + chunkStart, static_cast<size_t> (position - chunkStart));
+                position += 2;
+
+                while (text[position] != 0 && text[position] != '\n')
+                    ++position;
+
+                chunkStart = position;
+                continue;
+            }
+
+            if (c == '/' && text[position + 1] == '*')
+            {
+                out.append (text + chunkStart, static_cast<size_t> (position - chunkStart));
+
+                const auto* end = std::strstr (text + position + 2, "*/");
+                if (end == nullptr)
+                    throw Error { position, "Unterminated comment" };
+
+                position = static_cast<int> (end - text) + 2;
+                const auto next = text[position];
+                const bool prevIsSpace = out.empty() || out.back() == ' ' || out.back() == '\t' || out.back() == '\n' || out.back() == '\r';
+                const bool nextIsSpace = next == 0 || next == ' ' || next == '\t' || next == '\n' || next == '\r' || next == terminator;
+                const bool selectorAttachment = terminator == '{' && (next == '.' || next == '#' || next == ':' || next == '[');
+
+                if (! prevIsSpace && ! nextIsSpace && ! selectorAttachment)
+                    out.push_back (' ');
+
+                chunkStart = position;
+                continue;
+            }
+
             if (depth == 0 && c == terminator)
                 break;
 
@@ -594,7 +629,8 @@ private:
             ++position;
         }
 
-        return String::fromUTF8 (text + start, position - start).trim();
+        out.append (text + chunkStart, static_cast<size_t> (position - chunkStart));
+        return String::fromUTF8 (out.data(), static_cast<int> (out.size())).trim();
     }
 
     // The declarations of a component (properties, aliases and signals) go to its own transaction

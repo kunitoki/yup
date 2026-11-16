@@ -149,6 +149,31 @@ public:
     void removeGlobalMouseListener (MouseListener* listener);
 
     //==============================================================================
+    /** Adds a filter consulted before any input event is dispatched to the components.
+
+        Filters are called in the order they were added, and the first one consuming an event
+        stops the others. A filter must be removed before it is destroyed.
+
+        @param filter The filter to add.
+
+        @see DesktopInputFilter
+    */
+    void addInputFilter (DesktopInputFilter* filter);
+
+    /** Removes an input filter.
+
+        @param filter The filter to remove.
+    */
+    void removeInputFilter (DesktopInputFilter* filter);
+
+    /** Returns true when at least one input filter is installed.
+
+        This is a cheap process-wide check for the windowing layer, which must not construct the
+        Desktop singleton just to find out that nothing is filtering.
+    */
+    static bool hasInputFilters() noexcept;
+
+    //==============================================================================
     /** Gets a native component by its userdata pointer.
 
         @param userdata The userdata pointer used to identify the component
@@ -197,6 +222,22 @@ public:
     void handleGlobalMouseDrag (const MouseEvent& event);
     /** @internal */
     void handleGlobalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
+    /** @internal */
+    bool filterMouseEvent (DesktopInputFilter::InputEventType type, Component& rootComponent, const MouseEvent& event);
+    /** @internal */
+    bool filterMouseWheel (Component& rootComponent, const MouseEvent& event, const MouseWheelData& wheelData);
+    /** @internal */
+    bool filterKeyDown (Component& rootComponent, const KeyPress& keys, const Point<float>& position);
+    /** @internal */
+    bool filterKeyUp (Component& rootComponent, const KeyPress& keys, const Point<float>& position);
+
+    //==============================================================================
+    /** Returns the root components of every visible native window, in no particular order.
+
+        A tool listing the interfaces of a process walks these: the main windows, the plugin
+        editors and the popups currently open.
+    */
+    std::vector<Component*> getTopLevelComponents() const;
 
     //==============================================================================
     YUP_DECLARE_SINGLETON (Desktop, false)
@@ -221,6 +262,9 @@ private:
     ListenerList<MouseListener> globalMouseListeners;
     Array<MouseListener*> pendingMouseListeners;
     bool sendingMouseEvent = false;
+
+    std::vector<DesktopInputFilter*> inputFilters;
+    static std::atomic<int> installedInputFilterCount;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Desktop)
 };

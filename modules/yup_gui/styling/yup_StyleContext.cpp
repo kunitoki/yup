@@ -26,6 +26,19 @@ namespace
 {
 
 const Identifier styleContextTransformId { "transform" };
+const Identifier styleContextFilterPropertyId { "filter" };
+const Identifier styleContextFilterStorageId { "__styleFilter" };
+
+Identifier resolveStyleStorageId (const ComponentProperty* descriptor, const Identifier& propertyName)
+{
+    if (descriptor != nullptr)
+        return descriptor->getStorageKey();
+
+    if (propertyName == styleContextFilterPropertyId)
+        return styleContextFilterStorageId;
+
+    return propertyName;
+}
 
 /* Tracks one component state property (style, cursor, effect, paint margin) owned by a
    stylesheet while leaving later explicit application overrides untouched. */
@@ -652,14 +665,27 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
             for (const auto& transition : transitionDecl->transitions)
             {
                 const auto* descriptor = findDescriptor (component, drawing, transition.property);
-                const auto storageId = descriptor != nullptr ? descriptor->getStorageKey() : transition.property;
-                const auto from = firstStyle
-                                    ? var()
-                                    : (storageId == styleContextTransformId
-                                           ? VariantConverter<AffineTransform>::toVar (component.styleState != nullptr ? component.styleState->getStyleTransform() : AffineTransform())
-                                           : component.findProperty (transition.property));
+                const auto storageId = resolveStyleStorageId (descriptor, transition.property);
+                var from;
 
-                pendingTransitions.push_back ({ transition, descriptor, storageId, from });
+                if (! firstStyle)
+                {
+                    if (storageId == styleContextTransformId)
+                    {
+                        from = VariantConverter<AffineTransform>::toVar (component.styleState != nullptr ? component.styleState->getStyleTransform() : AffineTransform());
+                    }
+                    else if (storageId == styleContextFilterStorageId)
+                    {
+                        const auto* currentFilter = component.styleState != nullptr ? component.styleState->getStyleValue (styleContextFilterStorageId) : nullptr;
+                        from = currentFilter != nullptr ? *currentFilter : FilterEffect::operationsToVar ({});
+                    }
+                    else
+                    {
+                        from = component.findProperty (transition.property);
+                    }
+                }
+
+                pendingTransitions.push_back ({ transition, descriptor, storageId, std::move (from) });
             }
         }
     }
@@ -722,6 +748,17 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
         }
     }
 
+    if (filterDecl != nullptr)
+    {
+        std::vector<FilterEffect::Operation> filterOperations;
+
+        if (evaluateFilterDeclaration (component, cache, *filterDecl, filterOperations, &paletteDependent))
+        {
+            written.add (styleContextFilterStorageId);
+            changed |= state.setComputedValue (styleContextFilterStorageId, FilterEffect::operationsToVar (filterOperations));
+        }
+    }
+
     // Removes what the previous restyle computed and no rule matches anymore
     auto touched = written;
     const auto& computed = state.getComputedValues();
@@ -757,7 +794,7 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     for (const auto& storageId : touched)
         syncStateBacked (component, cache, storageId);
 
-    changed |= applyEffects (component, cache, cursorDecl, effectDecl, filterDecl, shadowDecl, glowDecl, &paletteDependent);
+    changed |= applyEffects (component, cache, cursorDecl, effectDecl, shadowDecl, glowDecl, &paletteDependent);
     cache.paletteDependent = paletteDependent;
 
     if (paletteChanged && component.palette == nullptr)
@@ -877,6 +914,12 @@ void StyleContext::syncStateBacked (Component& component, ComponentCache& cache,
     {
         const auto* styled = component.styleState != nullptr ? component.styleState->getStyleValue (storageId) : nullptr;
         component.setStyleTransform (styled != nullptr ? VariantConverter<AffineTransform>::fromVar (*styled) : AffineTransform());
+        return;
+    }
+
+    if (storageId == styleContextFilterStorageId)
+    {
+        syncStyledFilterAndMargins (component, cache);
         return;
     }
 
@@ -1012,11 +1055,154 @@ void StyleContext::restoreDrawing (Component& component, ComponentCache& cache)
     cache.drawingStyle = nullptr;
 }
 
+bool StyleContext::evaluateFilterDeclaration (Component& component,
+                                              ComponentCache& cache,
+                                              const StyleSheet::Declaration& filterDecl,
+                                              std::vector<FilterEffect::Operation>& outOperations,
+                                              bool* paletteDependent)
+{
+    outOperations.clear();
+
+    if (filterDecl.parseError.isNotEmpty())
+    {
+        report ({ .message = filterDecl.parseError, .element = filterDecl.element });
+        return false;
+    }
+
+    outOperations.reserve (filterDecl.filters.size());
+
+    for (int stepIndex = 0; stepIndex < static_cast<int> (filterDecl.filters.size()); ++stepIndex)
+    {
+        const auto& step = filterDecl.filters[static_cast<size_t> (stepIndex)];
+        FilterEffect::Operation op {
+            .type = step.type,
+            .amount = step.amount,
+            .offset = step.offset,
+            .color = step.color
+        };
+
+        if (step.amountExpression.isNotEmpty())
+        {
+            var amountVar;
+            bool readsPalette = false;
+
+            if (! evaluate (component,
+                            cache,
+                            { &filterDecl, stepIndex },
+                            filterDecl.element,
+                            {},
+                            ComponentProperty::Type::number,
+                            step.amountExpression,
+                            amountVar,
+                            readsPalette))
+            {
+                outOperations.clear();
+                return false;
+            }
+
+            if (paletteDependent != nullptr)
+                *paletteDependent |= readsPalette;
+
+            op.amount = FilterEffect::clampAmount (op.type, static_cast<float> (static_cast<double> (amountVar)));
+        }
+        else if (step.colorExpression.isNotEmpty())
+        {
+            var colorVar;
+            bool readsPalette = false;
+
+            if (! evaluate (component,
+                            cache,
+                            { &filterDecl, stepIndex },
+                            filterDecl.element,
+                            {},
+                            ComponentProperty::Type::color,
+                            step.colorExpression,
+                            colorVar,
+                            readsPalette))
+            {
+                outOperations.clear();
+                return false;
+            }
+
+            if (paletteDependent != nullptr)
+                *paletteDependent |= readsPalette;
+
+            op.color = Color (static_cast<uint32> (static_cast<int64> (colorVar)));
+        }
+
+        outOperations.push_back (op);
+    }
+
+    return true;
+}
+
+bool StyleContext::syncStyledFilterAndMargins (Component& component, ComponentCache& cache)
+{
+    static constexpr auto getMargin = [] (const Component& c) { return c.getPaintMargin(); };
+    static constexpr auto setMargin = [] (Component& c, const EdgeSpacing<float>& margin) { c.setPaintMargin (margin); };
+
+    bool changed = false;
+
+    const auto* styledFilter = component.styleState != nullptr ? component.styleState->getStyleValue (styleContextFilterStorageId) : nullptr;
+    auto filterOperations = styledFilter != nullptr ? FilterEffect::operationsFromVar (*styledFilter) : std::vector<FilterEffect::Operation> {};
+
+    if (component.styleState != nullptr || ! filterOperations.empty())
+    {
+        if (component.getOrCreateStyleState().setFilterOperations (std::move (filterOperations)))
+        {
+            component.releaseUnusedEffectCanvases();
+            changed = true;
+        }
+    }
+
+    const auto* activeState = component.styleState.get();
+    const auto filterMargin = (activeState != nullptr && activeState->getFilterEffect() != nullptr)
+                                ? activeState->getFilterEffect()->getRequiredMargin()
+                                : EdgeSpacing<float>();
+    const bool hasShadows = activeState != nullptr && ! activeState->getShadows().empty();
+    const bool hasGlows = activeState != nullptr && ! activeState->getGlows().empty();
+    const bool hasFilterMargin = filterMargin != EdgeSpacing<float>();
+
+    if (! hasShadows && ! hasGlows && ! hasFilterMargin)
+    {
+        changed |= cache.paintMarginOverride.restore (component, getMargin, setMargin);
+    }
+    else
+    {
+        const auto base = cache.paintMarginOverride.base (component, getMargin);
+        auto left = jmax (base.getLeft(), filterMargin.getLeft());
+        auto top = jmax (base.getTop(), filterMargin.getTop());
+        auto right = jmax (base.getRight(), filterMargin.getRight());
+        auto bottom = jmax (base.getBottom(), filterMargin.getBottom());
+
+        const auto expandMargin = [&] (const std::vector<StyleState::Shadow>& layers)
+        {
+            for (const auto& layer : layers)
+            {
+                const auto reach = layer.blur + jmax (0.0f, layer.spread);
+                left = jmax (left, reach - layer.offset.getX());
+                top = jmax (top, reach - layer.offset.getY());
+                right = jmax (right, reach + layer.offset.getX());
+                bottom = jmax (bottom, reach + layer.offset.getY());
+            }
+        };
+
+        if (activeState != nullptr)
+        {
+            expandMargin (activeState->getShadows());
+            expandMargin (activeState->getGlows());
+        }
+
+        changed |= cache.paintMarginOverride.apply (component, EdgeSpacing<float> (left, top, right, bottom), getMargin, setMargin);
+    }
+
+    return changed;
+}
+
 bool StyleContext::applyEffects (Component& component,
                                  ComponentCache& cache,
                                  const StyleSheet::Declaration* cursorDecl,
                                  const StyleSheet::Declaration* effectDecl,
-                                 const StyleSheet::Declaration* filterDecl,
                                  const StyleSheet::Declaration* shadowDecl,
                                  const StyleSheet::Declaration* glowDecl,
                                  bool* paletteDependent)
@@ -1025,8 +1211,6 @@ bool StyleContext::applyEffects (Component& component,
     static constexpr auto setCursor = [] (Component& c, const MouseCursor& cursor) { c.setMouseCursor (cursor); };
     static constexpr auto getEffect = [] (const Component& c) { return c.getComponentEffect(); };
     static constexpr auto setEffect = [] (Component& c, ComponentEffect::Ptr effect) { c.setComponentEffect (std::move (effect)); };
-    static constexpr auto getMargin = [] (const Component& c) { return c.getPaintMargin(); };
-    static constexpr auto setMargin = [] (Component& c, const EdgeSpacing<float>& margin) { c.setPaintMargin (margin); };
 
     bool changed = false;
 
@@ -1073,82 +1257,6 @@ bool StyleContext::applyEffects (Component& component,
     {
         cache.effectName = {};
         changed |= cache.effectOverride.restore (component, getEffect, setEffect);
-    }
-
-    std::vector<FilterEffect::Operation> filterOperations;
-
-    if (filterDecl != nullptr)
-    {
-        if (filterDecl->parseError.isNotEmpty())
-        {
-            report ({ .message = filterDecl->parseError, .element = filterDecl->element });
-        }
-        else
-        {
-            filterOperations.reserve (filterDecl->filters.size());
-
-            for (int stepIndex = 0; stepIndex < static_cast<int> (filterDecl->filters.size()); ++stepIndex)
-            {
-                const auto& step = filterDecl->filters[static_cast<size_t> (stepIndex)];
-                FilterEffect::Operation op {
-                    .type = step.type,
-                    .amount = step.amount,
-                    .offset = step.offset,
-                    .color = step.color
-                };
-
-                if (step.amountExpression.isNotEmpty())
-                {
-                    var amountVar;
-                    bool readsPalette = false;
-
-                    if (! evaluate (component,
-                                    cache,
-                                    { filterDecl, stepIndex },
-                                    filterDecl->element,
-                                    {},
-                                    ComponentProperty::Type::number,
-                                    step.amountExpression,
-                                    amountVar,
-                                    readsPalette))
-                    {
-                        filterOperations.clear();
-                        break;
-                    }
-
-                    if (paletteDependent != nullptr)
-                        *paletteDependent |= readsPalette;
-
-                    op.amount = FilterEffect::clampAmount (op.type, static_cast<float> (static_cast<double> (amountVar)));
-                }
-                else if (step.colorExpression.isNotEmpty())
-                {
-                    var colorVar;
-                    bool readsPalette = false;
-
-                    if (! evaluate (component,
-                                    cache,
-                                    { filterDecl, stepIndex },
-                                    filterDecl->element,
-                                    {},
-                                    ComponentProperty::Type::color,
-                                    step.colorExpression,
-                                    colorVar,
-                                    readsPalette))
-                    {
-                        filterOperations.clear();
-                        break;
-                    }
-
-                    if (paletteDependent != nullptr)
-                        *paletteDependent |= readsPalette;
-
-                    op.color = Color (static_cast<uint32> (static_cast<int64> (colorVar)));
-                }
-
-                filterOperations.push_back (op);
-            }
-        }
     }
 
     const auto evaluateShadowLayers = [&] (const StyleSheet::Declaration* decl)
@@ -1203,61 +1311,14 @@ bool StyleContext::applyEffects (Component& component,
     auto shadows = evaluateShadowLayers (shadowDecl);
     auto glows = evaluateShadowLayers (glowDecl);
 
-    if (component.styleState != nullptr || ! filterOperations.empty() || ! shadows.empty() || ! glows.empty())
+    if (component.styleState != nullptr || ! shadows.empty() || ! glows.empty())
     {
         auto& state = component.getOrCreateStyleState();
-
-        if (state.setFilterOperations (std::move (filterOperations)))
-        {
-            component.releaseUnusedEffectCanvases();
-            changed = true;
-        }
-
         changed |= state.setShadows (std::move (shadows));
         changed |= state.setGlows (std::move (glows));
     }
 
-    const auto* activeState = component.styleState.get();
-    const auto filterMargin = (activeState != nullptr && activeState->getFilterEffect() != nullptr)
-                                ? activeState->getFilterEffect()->getRequiredMargin()
-                                : EdgeSpacing<float>();
-    const bool hasShadows = activeState != nullptr && ! activeState->getShadows().empty();
-    const bool hasGlows = activeState != nullptr && ! activeState->getGlows().empty();
-    const bool hasFilterMargin = filterMargin != EdgeSpacing<float>();
-
-    if (! hasShadows && ! hasGlows && ! hasFilterMargin)
-    {
-        changed |= cache.paintMarginOverride.restore (component, getMargin, setMargin);
-    }
-    else
-    {
-        const auto base = cache.paintMarginOverride.base (component, getMargin);
-        auto left = jmax (base.getLeft(), filterMargin.getLeft());
-        auto top = jmax (base.getTop(), filterMargin.getTop());
-        auto right = jmax (base.getRight(), filterMargin.getRight());
-        auto bottom = jmax (base.getBottom(), filterMargin.getBottom());
-
-        const auto expandMargin = [&] (const std::vector<StyleState::Shadow>& layers)
-        {
-            for (const auto& layer : layers)
-            {
-                const auto reach = layer.blur + jmax (0.0f, layer.spread);
-                left = jmax (left, reach - layer.offset.getX());
-                top = jmax (top, reach - layer.offset.getY());
-                right = jmax (right, reach + layer.offset.getX());
-                bottom = jmax (bottom, reach + layer.offset.getY());
-            }
-        };
-
-        if (activeState != nullptr)
-        {
-            expandMargin (activeState->getShadows());
-            expandMargin (activeState->getGlows());
-        }
-
-        changed |= cache.paintMarginOverride.apply (component, EdgeSpacing<float> (left, top, right, bottom), getMargin, setMargin);
-    }
-
+    changed |= syncStyledFilterAndMargins (component, cache);
     return changed;
 }
 
@@ -1310,6 +1371,9 @@ var StyleContext::getBaseValue (Component& component, const ComponentCache& cach
 
     if (storageId == styleContextTransformId)
         return VariantConverter<AffineTransform>::toVar (AffineTransform());
+
+    if (storageId == styleContextFilterStorageId)
+        return FilterEffect::operationsToVar ({});
 
     if (descriptor != nullptr && descriptor->isStateBacked())
     {
@@ -1427,7 +1491,7 @@ bool StyleContext::updateAnimations (Component& component,
 }
 
 std::vector<StyleAnimator::Track> StyleContext::compileTracks (Component& component,
-                                                               const ComponentCache& cache,
+                                                               ComponentCache& cache,
                                                                const StyleSheet::KeyframeSequence& keyframes,
                                                                const DrawingStyle* drawing)
 {
@@ -1437,13 +1501,33 @@ std::vector<StyleAnimator::Track> StyleContext::compileTracks (Component& compon
         const ComponentProperty* descriptor = nullptr;
     };
 
-    const auto& typeInfo = component.getTypeInfo();
     std::vector<CompiledTrack> compiled;
 
     for (const auto& keyframe : keyframes.frames)
     {
         for (const auto& declaration : keyframe.declarations)
         {
+            if (declaration.kind == StyleSheet::Declaration::Kind::filter)
+            {
+                std::vector<FilterEffect::Operation> ops;
+                if (! evaluateFilterDeclaration (component, cache, declaration, ops, &cache.paletteDependent))
+                    continue;
+
+                auto existing = std::find_if (compiled.begin(), compiled.end(), [] (const auto& entry)
+                {
+                    return entry.track.storageId == styleContextFilterStorageId;
+                });
+
+                if (existing == compiled.end())
+                {
+                    compiled.push_back ({ { styleContextFilterStorageId, ComponentProperty::Type::any, {} }, nullptr });
+                    existing = std::prev (compiled.end());
+                }
+
+                existing->track.frames.push_back ({ keyframe.position, FilterEffect::operationsToVar (ops) });
+                continue;
+            }
+
             const auto* descriptor = findDescriptor (component, drawing, declaration.name);
 
             if (descriptor != nullptr && ! descriptor->isStyleable)
@@ -1551,7 +1635,13 @@ bool StyleContext::resetStyle (Component& component, ComponentCache* cache, bool
         cache->paletteDependent = false;
         restoreAllStateBacked (component, *cache);
         restoreDrawing (component, *cache);
-        changed |= applyEffects (component, *cache, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+        if (component.styleState != nullptr)
+        {
+            component.styleState->removeComputedValue (styleContextFilterStorageId);
+            if (! keepAnimatedValues)
+                component.styleState->removeAnimatedValue (styleContextFilterStorageId);
+        }
+        changed |= applyEffects (component, *cache, nullptr, nullptr, nullptr, nullptr, nullptr);
     }
 
     auto* state = component.styleState.get();
@@ -1585,6 +1675,9 @@ bool StyleContext::resetStyle (Component& component, ComponentCache* cache, bool
         component.setStyleTransform (nextStyleTransform);
         changed = true;
     }
+
+    if (const auto* styledFilter = state->getStyleValue (styleContextFilterStorageId))
+        changed |= state->setFilterOperations (FilterEffect::operationsFromVar (*styledFilter));
 
     return changed;
 }

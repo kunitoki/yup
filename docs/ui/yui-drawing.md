@@ -87,9 +87,14 @@ the text and in the tree.
 | `polygon` | `center`, `sides`, `radius`, `angle` (default `0`)           | A regular polygon.                 |
 | `star`    | `center`, `points`, `innerRadius`, `outerRadius`, `angle`    | A star, `angle` defaults to `0`.   |
 | `text`    | `bounds`, `text`                                             | A text label placed in `bounds`.   |
+| `image`   | `source`, `bounds` (default `bounds`)                        | A raster image from a file path or `data:image/...;base64,...` URI. |
+| `svg`     | `source` or `data`, `bounds` (default `bounds`)              | An SVG from a file path (`source`) or inline SVG XML (`data` or `source`). |
 
 Geometry properties are required unless a default is listed. Shapes can't have
-children.
+children. `image` and `svg` also accept `fitting` (`scaleToFit` by default, or
+`none`, `fitWidth`, `fitHeight`, `scaleToFill`, `fill`, `centerCrop`,
+`centerInside`, `stretchWidth`, `stretchHeight`, `tile`) and `justification`
+(`center` by default).
 
 ## Paint properties
 
@@ -101,6 +106,7 @@ Every shape accepts these optional properties:
 | `stroke`, `strokeGradient`          | color, gradient | Strokes the shape.                                |
 | `strokeWidth`, `strokeMiterLimit`   | float         | Stroke geometry.                                    |
 | `strokePosition`                    | enum          | `center`, `inside` or `outside`.                    |
+| `dash`, `dashOffset`                | dash, float   | Dashes the stroke (`dash (6, 3)`, `"6, 3"`, `4` or a `number[]` property) and shifts the pattern start. |
 | `cap`, `join`                       | enum          | Stroke cap (`butt`, `round`, `square`) and join.    |
 | `feather`, `opacity`, `tint`        | float, float, color | Softens, fades or tints the shape.            |
 | `blend`                             | enum          | Blend mode.                                         |
@@ -141,7 +147,9 @@ overridden per component.
 | Element  | Properties                         | Children | Effect                                                   |
 |----------|------------------------------------|----------|----------------------------------------------------------|
 | `let`    | `name`, `value`                    | no       | Names a value for the elements that follow it.           |
-| `layer`  | `opacity`, `visible` (optional)    | yes      | Composites its children together at a shared opacity.    |
+| `layer`  | `opacity`, `blend`, `clip`, `clipPath`, `mask`, `maskMode`, `visible` (optional) | yes (+ `mask`) | Composites its children into a transparency layer with optional blend mode, clip and masks. |
+| `mask`   | `mode` (`alpha`, `invertedAlpha`, `luminance`, `invertedLuminance`), `visible` (optional) | yes | Draws a mask applied to the enclosing `layer`. |
+| `clip`   | `bounds`/`rect`, `path`/`clipPath`, `visible` (optional) | yes | Clips its children to a rectangle and/or path. |
 | `group`  | `transform`, `visible` (optional)  | yes      | Applies one transform to all its children.               |
 | `repeat` | `name`, `from`, `to`               | shapes   | Draws its shapes once per integer in `from .. to - 1`.   |
 
@@ -150,14 +158,16 @@ overridden per component.
   property or a `let` of an outer scope, but not another `let` of its own scope.
   Names start with a letter and contain letters, digits and `_`; names starting
   with `_` are reserved.
-- `layer` opacity fades its children as one image, so overlapping children don't
-  show through each other. Children without their own paint inherit the solid
-  fill and stroke of the caller, gradients are not inherited.
+- `layer` composites its children as one image so overlapping children don't
+  show through each other, supports `blend` modes (`multiply`, `screen`, ...),
+  and accepts a `mask` path/rect property and/or child `mask { ... }` blocks.
+  Children without their own paint inherit the solid fill and stroke of the
+  caller, gradients are not inherited.
 - `repeat` exposes the current index as an integer `let` named by `name`. Integer
   division truncates, so write `i / 10.0` for a fraction. A `repeat` holds shapes
-  and `let`s only, it can't contain `layer`, `group` or another `repeat`, and its
-  iteration count is capped at `4096` (constant ranges above `4096` fail to
-  compile).
+  and `let`s only, it can't contain `layer`, `group`, `clip` or another `repeat`,
+  and its iteration count is capped at `4096` (constant ranges above `4096` fail
+  to compile).
 - In `.yui` documents, drawings can also read registered `BindingProvider` models
   directly (such as `params.cutoff`) in addition to component properties and
   `palette.<role>`.
@@ -182,7 +192,7 @@ drawing Knob {
 ```
 
 - The type is `number`, `integer`, `boolean`, `string`, `color`, `point`,
-  `rectangle` or an array of any of them (`number[]`).
+  `rectangle`, `transform`, `font` or an array of scalar types (`number[]`, ...).
 - The default is optional and is an expression, so it can read the component,
   the palette, `bounds` and the properties declared before it. It must have the
   property's type; a `number` accepts any number. Without a default a property
@@ -232,7 +242,11 @@ drawing/repeat[0]/layer[0]: a 'layer' can't be nested inside a repeat
 ```
 
 Elements are numbered by type within their parent, or named by their `id`. The
-root is named by its `name` property, or `drawing`.
+root is named by its `name` property, or `drawing`. Passing an optional
+`YuiDiagnostic*` to `DrawingStyle::create` also populates the offending child
+`DataTree` element and property `Identifier`, so `YuiDocument`, `YuiBuilder` and
+`StyleContext` resolve errors to the exact child line and column through the
+parser's `SourceMap`.
 
 ## Using a drawing from C++
 
@@ -292,15 +306,10 @@ document with `YuiDocument`.
 
 ## Limitations
 
-- A semi-transparent `layer` is rendered offscreen at the logical size of the
-  component, so it can look soft on high-density displays.
-- `repeat` takes a fixed range; collections of dynamic length (such as per-voice
-  modulation arcs) and nested repeats are planned. This is why the synth plugin
-  knob, ported to `synthknob.yui` in the `YuiDrawing` example, draws a single
-  modulation lane.
-- Image and SVG shapes, layer blending and masking are planned.
-- Compile errors are reported against the drawing tree, not mapped back to
-  source lines.
+- A semi-transparent or masked `layer` is rendered offscreen at the logical size
+  of the component, so it can look soft on high-density displays.
+- Nested `repeat` blocks are not supported; pass a dynamic `number[]` array
+  property (`repeat i in 0 .. len (lanes)`) to draw variable-length collections.
 
 ## See also
 

@@ -454,6 +454,34 @@ const ComponentTypeInfo* YuiBuilder::findTypeInfo (const Identifier& typeName)
     return resolved.wasOk() ? resolved.getValue() : nullptr;
 }
 
+DataTree YuiBuilder::findElementFor (const Component* component) const
+{
+    if (component == nullptr)
+        return {};
+
+    for (const auto& record : components)
+    {
+        if (record.component.get() == component)
+            return record.element;
+    }
+
+    return {};
+}
+
+Component* YuiBuilder::findComponentFor (const DataTree& element) const
+{
+    if (! element.isValid())
+        return nullptr;
+
+    for (const auto& record : components)
+    {
+        if (record.element == element)
+            return record.component.get();
+    }
+
+    return nullptr;
+}
+
 //==============================================================================
 
 void YuiBuilder::setAction (const String& name, Action action)

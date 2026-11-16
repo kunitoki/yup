@@ -86,11 +86,15 @@ TabComponent {
 }
 ```
 
-Lists have no children either, they are filled from their `items` property:
+Lists have no children either, they are filled from their `items` property;
+`Image` displays a raster or SVG file (`source`, `fitting`, `justification`,
+`imageOpacity`), and `Window` can serve as the root element to carry window
+metadata (`title`, `resizable`, `fullScreen`):
 
 ```yui
 ComboBox { items: ["sine", "square"]; selectedId: 1; }
 ListBox  { items: ["left", "right"]; selectedRow: 0; }
+Image    { source: "logo.svg"; fitting: scaleToFit; }
 ```
 
 An element's values apply in the order its type declares the properties, base
@@ -128,7 +132,7 @@ because some aren't expressions (`transition: bezelSize 150ms easeOut;`,
 
 `property` declares a typed value with an optional default expression. The
 types are `number`, `integer`, `boolean`, `string`, `color`, `point`,
-`rectangle`, and an array of any of them written `type[]`:
+`rectangle`, `transform`, `font`, and an array of scalar types written `type[]`:
 
 ```yui
 property bezelSize: number = 0.8;

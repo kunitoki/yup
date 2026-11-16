@@ -929,6 +929,22 @@ Rectangle<float> Component::getPaintBounds() const
     return getLocalBounds().enlarged (paintMargin);
 }
 
+void Component::setExcludedFromParentLayout (bool shouldBeExcluded)
+{
+    if (flags.excludedFromParentLayout == shouldBeExcluded)
+        return;
+
+    flags.excludedFromParentLayout = shouldBeExcluded;
+
+    if (auto* parent = getParentComponent())
+        parent->childLayoutChanged (*this);
+}
+
+bool Component::isExcludedFromParentLayout() const
+{
+    return flags.excludedFromParentLayout;
+}
+
 void Component::setPaintProfilingDisabled (bool shouldBeDisabled)
 {
     flags.paintProfilingDisabled = shouldBeDisabled;
@@ -2119,6 +2135,87 @@ var Component::findProperty (const Identifier& name) const
         return resolved.descriptor->defaultValue;
 
     return {};
+}
+
+Component::PropertySource Component::findPropertySource (const Identifier& name) const
+{
+    PropertySource source;
+
+    if (name == ComponentIds::transform)
+    {
+        source.layer = PropertySource::Layer::stateBacked;
+        source.component = this;
+        source.storageKey = name;
+        source.value = VariantConverter<AffineTransform>::toVar (getCombinedTransform());
+        return source;
+    }
+
+    const auto resolved = resolveProperty (name);
+    source.descriptor = resolved.descriptor;
+    source.storageKey = resolved.storageKey;
+
+    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
+    {
+        source.layer = PropertySource::Layer::stateBacked;
+        source.component = this;
+        source.value = resolved.descriptor->getter (*this);
+        return source;
+    }
+
+    const bool isInherited = resolved.descriptor == nullptr || resolved.descriptor->isInherited;
+
+    for (const auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (const auto* value = component->properties.getVarPointer (resolved.storageKey))
+        {
+            source.layer = PropertySource::Layer::explicitly;
+            source.component = component;
+            source.value = *value;
+            return source;
+        }
+
+        if (component->styleState != nullptr)
+        {
+            if (const auto* styled = component->styleState->getStyleValue (resolved.storageKey))
+            {
+                source.layer = PropertySource::Layer::styled;
+                source.component = component;
+                source.value = *styled;
+                return source;
+            }
+        }
+
+        if (! isInherited)
+            break;
+    }
+
+    if (auto theme = ApplicationTheme::getGlobalTheme())
+    {
+        if (resolved.descriptor != nullptr && resolved.descriptor->type == ComponentProperty::Type::color)
+        {
+            if (auto color = theme->findDefaultColor (*this, resolved.storageKey))
+            {
+                source.layer = PropertySource::Layer::theme;
+                source.value = VariantConverter<Color>::toVar (*color);
+                return source;
+            }
+        }
+
+        if (auto themed = theme->findProperty (*this, resolved.storageKey))
+        {
+            source.layer = PropertySource::Layer::theme;
+            source.value = *themed;
+            return source;
+        }
+    }
+
+    if (resolved.descriptor != nullptr)
+    {
+        source.layer = PropertySource::Layer::defaulted;
+        source.value = resolved.descriptor->defaultValue;
+    }
+
+    return source;
 }
 
 bool Component::hasProperty (const Identifier& name) const

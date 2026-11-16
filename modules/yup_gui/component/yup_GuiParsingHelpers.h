@@ -113,9 +113,85 @@ inline const StringArray& layoutSelfAlignmentNames()
     return names;
 }
 
-inline bool splitTopLevel (const String& text, bool commaOnly, StringArray& outTokens)
+inline ResultValue<String> stripStyleComments (StringRef rawText)
+{
+    const auto* utf8 = rawText.text.getAddress();
+    if (utf8 == nullptr)
+        return makeResultValueOk (String());
+
+    std::string out;
+    int pos = 0;
+    int chunkStart = 0;
+
+    while (utf8[pos] != 0)
+    {
+        const auto ch = utf8[pos];
+
+        if (ch == '"' || ch == '\'')
+        {
+            ++pos;
+            while (utf8[pos] != 0 && utf8[pos] != ch)
+            {
+                if (utf8[pos] == '\\' && utf8[pos + 1] != 0)
+                    ++pos;
+
+                ++pos;
+            }
+
+            if (utf8[pos] == ch)
+                ++pos;
+
+            continue;
+        }
+
+        if (ch == '/' && utf8[pos + 1] == '/')
+        {
+            out.append (utf8 + chunkStart, static_cast<size_t> (pos - chunkStart));
+            pos += 2;
+
+            while (utf8[pos] != 0 && utf8[pos] != '\n')
+                ++pos;
+
+            chunkStart = pos;
+            continue;
+        }
+
+        if (ch == '/' && utf8[pos + 1] == '*')
+        {
+            out.append (utf8 + chunkStart, static_cast<size_t> (pos - chunkStart));
+
+            const auto* end = std::strstr (utf8 + pos + 2, "*/");
+            if (end == nullptr)
+                return makeResultValueFail ("Unterminated comment");
+
+            pos = static_cast<int> (end - utf8) + 2;
+            const auto next = utf8[pos];
+            const bool prevIsSpace = out.empty() || out.back() == ' ' || out.back() == '\t' || out.back() == '\n' || out.back() == '\r';
+            const bool nextIsSpace = next == 0 || next == ' ' || next == '\t' || next == '\n' || next == '\r';
+
+            if (! prevIsSpace && ! nextIsSpace)
+                out.push_back (' ');
+
+            chunkStart = pos;
+            continue;
+        }
+
+        ++pos;
+    }
+
+    out.append (utf8 + chunkStart, static_cast<size_t> (pos - chunkStart));
+    return makeResultValueOk (String::fromUTF8 (out.data(), static_cast<int> (out.size())));
+}
+
+inline bool splitTopLevel (const String& rawText, bool commaOnly, StringArray& outTokens)
 {
     outTokens.clear();
+
+    const auto stripped = stripStyleComments (rawText);
+    if (stripped.failed())
+        return false;
+
+    const auto& text = stripped.getReference();
 
     int depth = 0;
     yup_wchar quote = 0;
@@ -184,8 +260,11 @@ inline bool splitTopLevel (const String& text, bool commaOnly, StringArray& outT
     return true;
 }
 
-inline std::vector<StringArray> tokenizeStyleValue (const String& value)
+inline std::vector<StringArray> tokenizeStyleValue (const String& rawValue)
 {
+    const auto stripped = stripStyleComments (rawValue);
+    const String& value = stripped.wasOk() ? stripped.getReference() : rawValue;
+
     std::vector<StringArray> entries (1);
     String token;
     int depth = 0;
