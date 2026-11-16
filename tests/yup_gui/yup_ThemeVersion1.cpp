@@ -78,6 +78,19 @@ TEST (ThemeVersion1Tests, ScrollBarColorsAreRegistered)
     EXPECT_TRUE (theme->findColor (scrollBar, ScrollBar::Style::thumbColorId).has_value());
 }
 
+TEST (ThemeVersion1Tests, ResizableDividerColorsAreRegistered)
+{
+    auto theme = createThemeVersion1();
+    ASSERT_NE (nullptr, theme.get());
+
+    ResizableDivider divider;
+    EXPECT_TRUE (theme->findColor (divider, ResizableDivider::Style::backgroundColorId).has_value());
+    EXPECT_TRUE (theme->findColor (divider, ResizableDivider::Style::lineColorId).has_value());
+    EXPECT_TRUE (theme->findColor (divider, ResizableDivider::Style::hoverColorId).has_value());
+    EXPECT_TRUE (theme->findColor (divider, ResizableDivider::Style::draggingColorId).has_value());
+    EXPECT_TRUE (theme->findColor (divider, ResizableDivider::Style::gripColorId).has_value());
+}
+
 TEST (ThemeVersion1Tests, DefaultFontHeightIsUnified)
 {
     auto theme = createThemeVersion1();

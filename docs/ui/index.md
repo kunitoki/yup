@@ -85,6 +85,9 @@ windowing, widgets, and theming are still to come.
   closable tabs.
 - [File chooser](file-chooser.md) - `FileChooser` for opening and saving
   files, and how picks behave on the web.
+- [Resizable divider](resizable-divider.md) - `ResizableDivider`, a draggable
+  bar splitting two panes, with limits, resize policies, snapping, collapsing
+  and keyboard control.
 
 ```{toctree}
 :hidden:
@@ -115,4 +118,5 @@ list-box
 tree-view
 tabs
 file-chooser
+resizable-divider
 ```

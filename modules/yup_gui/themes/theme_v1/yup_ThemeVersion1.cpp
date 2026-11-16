@@ -1104,6 +1104,73 @@ void paintResizableCorner (Graphics& g, const ApplicationTheme& theme, const Res
 
 //==============================================================================
 
+void paintResizableDivider (Graphics& g, const ApplicationTheme& theme, const ResizableDivider& divider)
+{
+    const auto bounds = divider.getLocalBounds();
+    const auto& palette = theme.getPalette (divider);
+
+    if (const auto backgroundColor = theme.findColor (divider, ResizableDivider::Style::backgroundColorId); backgroundColor && ! backgroundColor->isTransparent())
+    {
+        g.setFillColor (*backgroundColor);
+        g.fillRect (bounds);
+    }
+
+    const bool isVertical = divider.getOrientation() == ResizableDivider::Orientation::vertical;
+    const bool isActive = divider.isDragging() || divider.isHovered() || divider.hasKeyboardFocus();
+    const auto crossExtent = isVertical ? bounds.getWidth() : bounds.getHeight();
+    const auto lineThickness = jmin (crossExtent, isActive ? divider.getActiveLineThickness() : divider.getLineThickness());
+
+    Color lineColor;
+    if (divider.isDragging())
+        lineColor = theme.findColor (divider, ResizableDivider::Style::draggingColorId).value_or (palette.getColor (PaletteRole::accent));
+    else if (isActive)
+        lineColor = theme.findColor (divider, ResizableDivider::Style::hoverColorId).value_or (palette.getColor (PaletteRole::accent).withAlpha (0.75f));
+    else
+        lineColor = theme.findColor (divider, ResizableDivider::Style::lineColorId).value_or (palette.getColor (PaletteRole::outline));
+
+    if (lineThickness > 0.0f)
+    {
+        const auto center = bounds.getCenter();
+
+        g.setFillColor (lineColor);
+        g.fillRect (isVertical ? Rectangle<float> (center.getX() - lineThickness * 0.5f, bounds.getY(), lineThickness, bounds.getHeight())
+                               : Rectangle<float> (bounds.getX(), center.getY() - lineThickness * 0.5f, bounds.getWidth(), lineThickness));
+    }
+
+    if (divider.getGripStyle() == ResizableDivider::GripStyle::none)
+        return;
+
+    const auto center = bounds.getCenter();
+    const auto mainExtent = isVertical ? bounds.getHeight() : bounds.getWidth();
+    const auto gripColor = theme.findColor (divider, ResizableDivider::Style::gripColorId)
+                               .value_or (palette.getColor (PaletteRole::textMuted).withAlpha (0.65f));
+
+    g.setFillColor (gripColor);
+
+    if (divider.getGripStyle() == ResizableDivider::GripStyle::pill)
+    {
+        const auto length = jmin (24.0f, mainExtent * 0.5f);
+        const auto width = jmin (4.0f, crossExtent);
+        auto pill = isVertical ? Rectangle<float> (0.0f, 0.0f, width, length) : Rectangle<float> (0.0f, 0.0f, length, width);
+
+        g.fillRoundedRect (pill.withCenter (center), width * 0.5f);
+        return;
+    }
+
+    const auto radius = jmin (1.5f, crossExtent * 0.5f);
+    const auto spacing = radius * 4.0f;
+
+    for (int i = -1; i <= 1; ++i)
+    {
+        const auto offset = spacing * static_cast<float> (i);
+        const auto dotCenter = isVertical ? center.translated (0.0f, offset) : center.translated (offset, 0.0f);
+
+        g.fillEllipse (Rectangle<float> (0.0f, 0.0f, radius * 2.0f, radius * 2.0f).withCenter (dotCenter));
+    }
+}
+
+//==============================================================================
+
 void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const ProgressBar& progressBar)
 {
     const auto bounds = progressBar.getLocalBounds();
@@ -2508,6 +2575,12 @@ void mapPaletteThemeVersion1 (const ThemePalette& palette, ApplicationTheme& the
 
     set (ResizableCorner::Style::lineColorId, textMuted.withAlpha (0.6f));
 
+    set (ResizableDivider::Style::backgroundColorId, Colors::transparentBlack);
+    set (ResizableDivider::Style::lineColorId, outline);
+    set (ResizableDivider::Style::hoverColorId, accent.withAlpha (0.75f));
+    set (ResizableDivider::Style::draggingColorId, accent);
+    set (ResizableDivider::Style::gripColorId, textMuted.withAlpha (0.65f));
+
     set (ListBox::Style::backgroundColorId, surface);
     set (ListBox::Style::outlineColorId, outline);
     set (ListBox::Style::rowBackgroundColorId, Colors::transparentBlack);
@@ -2647,6 +2720,7 @@ ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
     theme->setComponentStyle<ScrollBar> (ComponentStyle::createStyle<ScrollBar> (paintScrollBar));
     theme->setComponentStyle<ProgressBar> (ComponentStyle::createStyle<ProgressBar> (paintProgressBar));
     theme->setComponentStyle<ResizableCorner> (ComponentStyle::createStyle<ResizableCorner> (paintResizableCorner));
+    theme->setComponentStyle<ResizableDivider> (ComponentStyle::createStyle<ResizableDivider> (paintResizableDivider));
 
     theme->setComponentStyle<ListBox> (ComponentStyle::createStyle<ListBox> (paintListBox));
 

@@ -82,6 +82,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `CodeEditor` hover popup (`setHoverProvider`) showing diagnostic messages and provider text.
 - `CodeEditor` completion popup (`setCompletionProvider`, Ctrl+Space and trigger characters) with fuzzy filtering.
 - `CodeEditor` semantic tokens (`setSemanticTokens`) drawn over the syntax highlighting.
+- Added `ResizableDivider`, a draggable bar splitting a leading and a trailing pane, with pixel or percent limits, resize policies, snap positions, collapsing, double click reset and keyboard nudging.
 
 ### Build System
 

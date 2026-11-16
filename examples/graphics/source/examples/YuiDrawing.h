@@ -68,8 +68,17 @@ public:
         };
         addAndMakeVisible (enabledToggle);
 
-        status.setJustification (yup::Justification::centerLeft);
+        status.setMultiLine (true);
+        status.setReadOnly (true);
         addAndMakeVisible (status);
+
+        divider.setThickness (10.0f);
+        divider.setPosition (yup::ResizableDivider::Length::percent (55.0f));
+        divider.setMinPosition (yup::ResizableDivider::Length::pixels (200.0f));
+        divider.setMinTrailingSize (yup::ResizableDivider::Length::pixels (200.0f));
+        divider.setDefaultPosition (yup::ResizableDivider::Length::percent (55.0f));
+        divider.onPositionChanged = [this] (float) { resized(); };
+        addAndMakeVisible (divider);
 
         addAndMakeVisible (view);
 
@@ -117,17 +126,17 @@ public:
 
     void resized() override
     {
-        auto bounds = getLocalBounds().reduced (10);
+        divider.layoutComponents (getLocalBounds().reduced (10), &leftPane, &rightPane);
 
-        auto left = bounds.removeFromLeft (bounds.getWidth() * 0.55f);
+        auto left = leftPane.getBounds();
         tabs.setBounds (left.removeFromTop (32.0f));
 
         for (auto& source : sources)
             source->editor.setBounds (left.withTrimmedTop (4.0f));
 
-        auto right = bounds.withTrimmedLeft (10.0f);
-        auto footer = right.removeFromBottom (54.0f);
-        status.setBounds (footer.removeFromBottom (24.0f));
+        auto right = rightPane.getBounds();
+        auto footer = right.removeFromBottom (114.0f);
+        status.setBounds (footer.removeFromBottom (84.0f));
         enabledToggle.setBounds (footer.removeFromBottom (24.0f).removeFromLeft (120.0f));
 
         view.setBounds (right.withTrimmedBottom (6.0f));
@@ -262,7 +271,7 @@ private:
         if (lastLoad.failed())
             setStatus ("Error: " + lastLoad.getErrorMessage());
         else if (! problems.empty())
-            setStatus (yup::YuiDiagnostic::join (problems, "; "));
+            setStatus (yup::YuiDiagnostic::join (problems, "\n"));
         else
             setStatus ("Built with " + yup::String (view.getDocument().getBuilder().getBindings().getNumBindings()) + " bindings. Drag a knob, undo, or edit any tab"
                        + (view.getLoader().isWatching() ? " or file." : "."));
@@ -284,7 +293,9 @@ private:
     std::vector<std::unique_ptr<Source>> sources;
     yup::TabBar tabs { "tabs" };
     yup::ToggleButton enabledToggle { "enabledToggle" };
-    yup::Label status { "status" };
+    yup::TextEditor status { "status" };
+    yup::ResizableDivider divider { yup::ResizableDivider::Orientation::vertical, "divider" };
+    yup::Component leftPane, rightPane;
     yup::Result lastLoad = yup::Result::ok();
     bool showingFiles = false;
 

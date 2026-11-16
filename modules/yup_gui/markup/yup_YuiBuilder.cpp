@@ -50,6 +50,7 @@ void registerBuiltInComponentTypes()
         registry.registerType (TabBar::getClassTypeInfo());
         registry.registerType (TabComponent::getClassTypeInfo());
         registry.registerType (ResizableCorner::getClassTypeInfo());
+        registry.registerType (ResizableDivider::getClassTypeInfo());
         registry.registerType (CodeEditor::getClassTypeInfo());
         registry.registerType (DocumentWindow::getClassTypeInfo());
         registry.registerType (LayoutComponent::getClassTypeInfo());

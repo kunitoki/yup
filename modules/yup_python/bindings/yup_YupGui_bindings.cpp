@@ -1781,6 +1781,130 @@ void registerYupGuiBindings (py::module_& m)
     scrollBarStyle.attr ("thumbInsetId") = ScrollBar::Style::thumbInsetId;
     scrollBarStyle.attr ("cornerRadiusId") = ScrollBar::Style::cornerRadiusId;
 
+    // ============================================================================================ yup::ResizableDivider
+
+    py::class_<ResizableDivider, Component, PyComponent<ResizableDivider>, py::smart_holder> classResizableDivider (m, "ResizableDivider");
+
+    py::enum_<ResizableDivider::Orientation> (classResizableDivider, "Orientation")
+        .value ("vertical", ResizableDivider::Orientation::vertical)
+        .value ("horizontal", ResizableDivider::Orientation::horizontal)
+        .export_values();
+
+    py::enum_<ResizableDivider::Unit> (classResizableDivider, "Unit")
+        .value ("pixels", ResizableDivider::Unit::pixels)
+        .value ("percent", ResizableDivider::Unit::percent)
+        .export_values();
+
+    py::enum_<ResizableDivider::ResizePolicy> (classResizableDivider, "ResizePolicy")
+        .value ("proportional", ResizableDivider::ResizePolicy::proportional)
+        .value ("preserveLeading", ResizableDivider::ResizePolicy::preserveLeading)
+        .value ("preserveTrailing", ResizableDivider::ResizePolicy::preserveTrailing)
+        .export_values();
+
+    py::enum_<ResizableDivider::CollapseSide> (classResizableDivider, "CollapseSide")
+        .value ("none", ResizableDivider::CollapseSide::none)
+        .value ("leading", ResizableDivider::CollapseSide::leading)
+        .value ("trailing", ResizableDivider::CollapseSide::trailing)
+        .export_values();
+
+    py::enum_<ResizableDivider::GripStyle> (classResizableDivider, "GripStyle")
+        .value ("none", ResizableDivider::GripStyle::none)
+        .value ("pill", ResizableDivider::GripStyle::pill)
+        .value ("dots", ResizableDivider::GripStyle::dots)
+        .export_values();
+
+    py::class_<ResizableDivider::Length> (classResizableDivider, "Length")
+        .def (py::init<>())
+        .def (py::init ([] (float value, ResizableDivider::Unit unit) { return ResizableDivider::Length { value, unit }; }), "value"_a, "unit"_a = ResizableDivider::Unit::pixels)
+        .def_readwrite ("value", &ResizableDivider::Length::value)
+        .def_readwrite ("unit", &ResizableDivider::Length::unit)
+        .def_static ("pixels", &ResizableDivider::Length::pixels, "value"_a)
+        .def_static ("percent", &ResizableDivider::Length::percent, "value"_a)
+        .def ("resolve", &ResizableDivider::Length::resolve, "usableExtent"_a)
+        .def (py::self == py::self);
+
+    classResizableDivider
+        .def (py::init<ResizableDivider::Orientation, StringRef>(), "orientation"_a = ResizableDivider::Orientation::vertical, "componentID"_a = StringRef())
+
+        .def ("setOrientation", &ResizableDivider::setOrientation, "newOrientation"_a)
+        .def ("getOrientation", &ResizableDivider::getOrientation)
+        .def ("setThickness", &ResizableDivider::setThickness, "newThickness"_a)
+        .def ("getThickness", &ResizableDivider::getThickness)
+        .def ("setLineThickness", &ResizableDivider::setLineThickness, "newThickness"_a)
+        .def ("getLineThickness", &ResizableDivider::getLineThickness)
+        .def ("setActiveLineThickness", &ResizableDivider::setActiveLineThickness, "newThickness"_a)
+        .def ("getActiveLineThickness", &ResizableDivider::getActiveLineThickness)
+        .def ("setGripStyle", &ResizableDivider::setGripStyle, "newGripStyle"_a)
+        .def ("getGripStyle", &ResizableDivider::getGripStyle)
+        .def ("isHovered", &ResizableDivider::isHovered)
+        .def ("isDragging", &ResizableDivider::isDragging)
+
+        .def ("setAvailableExtent", &ResizableDivider::setAvailableExtent, "newExtent"_a)
+        .def ("getAvailableExtent", &ResizableDivider::getAvailableExtent)
+        .def ("getUsableExtent", &ResizableDivider::getUsableExtent)
+        .def ("setPosition", py::overload_cast<float, NotificationType> (&ResizableDivider::setPosition),
+              "newPosition"_a, "notification"_a = NotificationType::sendNotification)
+        .def ("setPosition", py::overload_cast<ResizableDivider::Length, NotificationType> (&ResizableDivider::setPosition),
+              "newPosition"_a, "notification"_a = NotificationType::sendNotification)
+        .def ("getPosition", &ResizableDivider::getPosition)
+        .def ("setNormalizedPosition", &ResizableDivider::setNormalizedPosition,
+              "newRatio"_a, "notification"_a = NotificationType::sendNotification)
+        .def ("getNormalizedPosition", &ResizableDivider::getNormalizedPosition)
+        .def ("getEffectivePosition", &ResizableDivider::getEffectivePosition)
+        .def ("layoutComponents", &ResizableDivider::layoutComponents, "area"_a, "leading"_a, "trailing"_a)
+
+        .def ("setMinPosition", &ResizableDivider::setMinPosition, "newMinPosition"_a)
+        .def ("getMinPosition", &ResizableDivider::getMinPosition)
+        .def ("setMaxPosition", &ResizableDivider::setMaxPosition, "newMaxPosition"_a)
+        .def ("getMaxPosition", &ResizableDivider::getMaxPosition)
+        .def ("setMinTrailingSize", &ResizableDivider::setMinTrailingSize, "newMinTrailingSize"_a)
+        .def ("getMinTrailingSize", &ResizableDivider::getMinTrailingSize)
+        .def ("getResolvedMinPosition", &ResizableDivider::getResolvedMinPosition)
+        .def ("getResolvedMaxPosition", &ResizableDivider::getResolvedMaxPosition)
+        .def ("setResizePolicy", &ResizableDivider::setResizePolicy, "newPolicy"_a)
+        .def ("getResizePolicy", &ResizableDivider::getResizePolicy)
+        .def ("setDefaultPosition", &ResizableDivider::setDefaultPosition, "newDefaultPosition"_a)
+        .def ("getDefaultPosition", &ResizableDivider::getDefaultPosition)
+
+        .def ("setSnapPositions", [] (ResizableDivider& self, const std::vector<ResizableDivider::Length>& positions)
+        {
+            self.setSnapPositions (Span<const ResizableDivider::Length> (positions.data(), positions.size()));
+        },
+              "newSnapPositions"_a)
+        .def ("addSnapPosition", &ResizableDivider::addSnapPosition, "snapPosition"_a)
+        .def ("clearSnapPositions", &ResizableDivider::clearSnapPositions)
+        .def ("getSnapPositions", &ResizableDivider::getSnapPositions)
+        .def ("setSnapThreshold", &ResizableDivider::setSnapThreshold, "newThreshold"_a)
+        .def ("getSnapThreshold", &ResizableDivider::getSnapThreshold)
+
+        .def ("setCanCollapseLeading", &ResizableDivider::setCanCollapseLeading, "shouldBeAllowed"_a)
+        .def ("canCollapseLeading", &ResizableDivider::canCollapseLeading)
+        .def ("setCanCollapseTrailing", &ResizableDivider::setCanCollapseTrailing, "shouldBeAllowed"_a)
+        .def ("canCollapseTrailing", &ResizableDivider::canCollapseTrailing)
+        .def ("setCollapseThreshold", &ResizableDivider::setCollapseThreshold, "newThreshold"_a)
+        .def ("getCollapseThreshold", &ResizableDivider::getCollapseThreshold)
+        .def ("setCollapsedSide", &ResizableDivider::setCollapsedSide,
+              "newSide"_a, "notification"_a = NotificationType::sendNotification)
+        .def ("getCollapsedSide", &ResizableDivider::getCollapsedSide)
+        .def ("isCollapsed", &ResizableDivider::isCollapsed)
+
+        .def ("setKeyboardStep", &ResizableDivider::setKeyboardStep, "newStep"_a)
+        .def ("getKeyboardStep", &ResizableDivider::getKeyboardStep)
+
+        .def_readwrite ("onPositionChanged", &ResizableDivider::onPositionChanged)
+        .def_readwrite ("onDragDelta", &ResizableDivider::onDragDelta)
+        .def_readwrite ("onDragStarted", &ResizableDivider::onDragStarted)
+        .def_readwrite ("onDragEnded", &ResizableDivider::onDragEnded)
+        .def_readwrite ("onCollapsedChanged", &ResizableDivider::onCollapsedChanged)
+        .def_readwrite ("onDoubleClick", &ResizableDivider::onDoubleClick);
+
+    py::class_<ResizableDivider::Style> resizableDividerStyle (classResizableDivider, "Style");
+    resizableDividerStyle.attr ("backgroundColorId") = ResizableDivider::Style::backgroundColorId;
+    resizableDividerStyle.attr ("lineColorId") = ResizableDivider::Style::lineColorId;
+    resizableDividerStyle.attr ("hoverColorId") = ResizableDivider::Style::hoverColorId;
+    resizableDividerStyle.attr ("draggingColorId") = ResizableDivider::Style::draggingColorId;
+    resizableDividerStyle.attr ("gripColorId") = ResizableDivider::Style::gripColorId;
+
     // ============================================================================================ yup::ListBoxModel
 
     py::class_<ListBoxModel, PyListBoxModel<>> classListBoxModel (m, "ListBoxModel");
