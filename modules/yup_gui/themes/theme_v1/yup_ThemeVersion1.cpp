@@ -418,6 +418,23 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
 
 //==============================================================================
 
+static Color getCodeDiagnosticColor (const CodeEditorScheme& scheme, CodeEditor::Diagnostic::Severity severity)
+{
+    switch (severity)
+    {
+        case CodeEditor::Diagnostic::Severity::error:
+            return scheme.getColor (CodeEditorScheme::ColorId::diagnosticError).value_or (Color (0xfff14c4c));
+        case CodeEditor::Diagnostic::Severity::warning:
+            return scheme.getColor (CodeEditorScheme::ColorId::diagnosticWarning).value_or (Color (0xffcca700));
+        case CodeEditor::Diagnostic::Severity::information:
+            return scheme.getColor (CodeEditorScheme::ColorId::diagnosticInformation).value_or (Color (0xff3794ff));
+        case CodeEditor::Diagnostic::Severity::hint:
+            break;
+    }
+
+    return scheme.getColor (CodeEditorScheme::ColorId::diagnosticHint).value_or (Color (0x80d4d4d4));
+}
+
 void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEditor& editor)
 {
     ignoreUnused (theme);
@@ -443,11 +460,11 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
     }
 
     // Error lines
-    if (! editor.getErrorLines().empty())
+    if (const auto errorLines = editor.getErrorLines(); ! errorLines.empty())
     {
         g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::errorLine).value_or (Color (0x40e51400)));
 
-        for (const int line : editor.getErrorLines())
+        for (const int line : errorLines)
         {
             const float lineY = textArea.getY() + line * editor.getLineHeight() - scrollOffset.getY();
             g.fillRect (Rectangle<float> (textArea.getX(), lineY, textArea.getWidth(), editor.getLineHeight()));
@@ -493,6 +510,13 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
                 g.fillEllipse (Rectangle<float> (bounds.getX() + 5.0f, y + lineHeight * 0.5f - 4.0f, 8.0f, 8.0f));
             }
         }
+
+        // Diagnostic markers
+        for (const auto& marker : editor.getDiagnosticGutterMarkers())
+        {
+            g.setFillColor (getCodeDiagnosticColor (scheme, marker.severity));
+            g.fillRect (marker.area);
+        }
     }
 
     auto clipState = g.saveState();
@@ -513,6 +537,37 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
     for (const auto& rectangle : editor.getSearchMatchAreas())
         g.fillRect (rectangle);
 
+    // Indent guides
+    g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::indentGuide).value_or (Color (0x26d4d4d4)));
+
+    for (const auto& rectangle : editor.getIndentGuideAreas())
+        g.fillRect (rectangle);
+
+    // Word occurrences
+    g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::wordOccurrence).value_or (Color (0x1fd4d4d4)));
+
+    for (const auto& rectangle : editor.getWordOccurrenceAreas())
+        g.fillRect (rectangle);
+
+    // Bracket match
+    g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::bracketMatch).value_or (Color (0x40d4d4d4)));
+
+    for (const auto& rectangle : editor.getBracketMatchAreas())
+        g.fillRect (rectangle);
+
+    // Whitespace
+    g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::whitespace).value_or (Color (0x4dd4d4d4)));
+
+    for (const auto& marker : editor.getWhitespaceMarkers())
+    {
+        const auto center = marker.area.getCenter();
+
+        if (marker.isTab)
+            g.fillRect (Rectangle<float> (marker.area.getX() + 2.0f, center.getY() - 0.5f, jmax (1.0f, marker.area.getWidth() - 4.0f), 1.0f));
+        else
+            g.fillEllipse (Rectangle<float> (center.getX() - 1.0f, center.getY() - 1.0f, 2.0f, 2.0f));
+    }
+
     // Text
     const float windowY = editor.getWindowFirstLine() * editor.getLineHeight();
     const auto scrolledTextBounds = textArea.translated (-scrollOffset.getX(), windowY - scrollOffset.getY());
@@ -523,6 +578,28 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
     {
         g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::caret).value_or (Colors::white));
         g.fillRect (editor.getCaretBounds());
+    }
+
+    // Diagnostic squiggles
+    g.setStrokeWidth (1.0f);
+
+    for (const auto& marker : editor.getDiagnosticUnderlineAreas())
+    {
+        constexpr float step = 2.0f;
+        const float bottom = marker.area.getBottom() - 1.0f;
+
+        Path squiggle;
+        squiggle.moveTo (marker.area.getX(), bottom);
+
+        bool up = true;
+        for (float x = marker.area.getX() + step; x <= marker.area.getRight() + step * 0.5f; x += step)
+        {
+            squiggle.lineTo (x, up ? bottom - step : bottom);
+            up = ! up;
+        }
+
+        g.setStrokeColor (getCodeDiagnosticColor (scheme, marker.severity));
+        g.strokePath (squiggle);
     }
 
     clipState.restore();

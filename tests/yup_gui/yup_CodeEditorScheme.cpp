@@ -91,6 +91,16 @@ TEST (CodeEditorSchemeTests, SetAndGetTokenColorRoundTrips)
     EXPECT_EQ (color, scheme.getColor (SyntaxDefinition::TokenType::keyword).value_or (Color (0)));
 }
 
+TEST (CodeEditorSchemeTests, ScopeColorFallsBackToParentScopes)
+{
+    CodeEditorScheme scheme;
+    scheme.setColor (Identifier ("keyword.control"), Color (0xff112233));
+
+    EXPECT_EQ (Color (0xff112233), scheme.getColorForScope (Identifier ("keyword.control.flow.cpp")).value_or (Color (0)));
+    EXPECT_EQ (scheme.getColor (SyntaxDefinition::TokenType::keyword), scheme.getColorForScope (Identifier ("keyword.other")));
+    EXPECT_FALSE (scheme.getColorForScope (Identifier ("entity.name.function")).has_value());
+}
+
 TEST (CodeEditorSchemeTests, OverridingAColorReplacesIt)
 {
     CodeEditorScheme scheme;

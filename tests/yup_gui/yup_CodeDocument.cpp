@@ -31,12 +31,14 @@ namespace
 class RecordingListener : public CodeDocument::Listener
 {
 public:
-    void codeDocumentChanged (CodeDocument&, int firstChangedLine, int lastChangedLine) override
+    void codeDocumentChanged (CodeDocument&, const CodeDocument::Change& change) override
     {
-        changes.emplace_back (firstChangedLine, lastChangedLine);
+        changes.emplace_back (change.firstLine, change.getLastChangedLine());
+        details.push_back (change);
     }
 
     std::vector<std::pair<int, int>> changes;
+    std::vector<CodeDocument::Change> details;
 };
 
 } // namespace
@@ -639,18 +641,49 @@ TEST (CodeDocumentTests, SetTextWithNotificationNotifiesWholeRange)
 // Content invariants
 // ==============================================================================
 
-TEST (CodeDocumentTests, CRLFLineEndingsKeepCarriageReturnInLineText)
+TEST (CodeDocumentTests, CRLFLineEndingsAreDetectedAndPreserved)
 {
-    // Lines are split on '\n' only, so '\r' remains part of the line text. This
-    // matches the current implementation; consumers must handle it.
     CodeDocument document;
-    document.setText ("a\r\nb");
+    document.setText ("a\r\nb\r\n");
 
-    EXPECT_EQ (2, document.getNumLines());
-    EXPECT_EQ (String ("a\r"), document.getLine (0));
+    EXPECT_EQ (CodeDocument::LineEnding::crlf, document.getLineEnding());
+    EXPECT_EQ (3, document.getNumLines());
+    EXPECT_EQ (String ("a"), document.getLine (0));
     EXPECT_EQ (String ("b"), document.getLine (1));
-    EXPECT_EQ (String ("a\r\nb"), document.getText());
+    EXPECT_EQ (String ("a\r\nb\r\n"), document.getText());
     EXPECT_EQ (4, document.getNumCharacters());
+
+    document.insertText (CodeDocument::Position (document, 1, 1), "x\r\ny");
+    EXPECT_EQ (String ("bx"), document.getLine (1));
+    EXPECT_EQ (String ("y"), document.getLine (2));
+    EXPECT_EQ (String ("a\nbx\ny"), document.getTextBetween (0, 6));
+
+    document.setLineEnding (CodeDocument::LineEnding::lf);
+    EXPECT_EQ (String ("a\nbx\ny\n"), document.getText());
+}
+
+TEST (CodeDocumentTests, LineFeedTextUsesLineFeedEnding)
+{
+    CodeDocument document;
+    document.setText ("a\nb\r\n");
+
+    EXPECT_EQ (CodeDocument::LineEnding::lf, document.getLineEnding());
+    EXPECT_EQ (String ("b"), document.getLine (1));
+
+    document.setText ("\r\n");
+    EXPECT_EQ (CodeDocument::LineEnding::crlf, document.getLineEnding());
+    EXPECT_EQ (2, document.getNumLines());
+}
+
+TEST (CodeDocumentTests, GetTextBetweenClampsAndJoinsLines)
+{
+    CodeDocument document;
+    document.setText ("abc\ndef");
+
+    EXPECT_EQ (String ("c\nd"), document.getTextBetween (2, 5));
+    EXPECT_EQ (String ("abc\ndef"), document.getTextBetween (-5, 100));
+    EXPECT_TRUE (document.getTextBetween (4, 4).isEmpty());
+    EXPECT_TRUE (document.getTextBetween (5, 2).isEmpty());
 }
 
 TEST (CodeDocumentTests, GetNumCharactersMatchesTextLength)
@@ -694,4 +727,37 @@ TEST (CodeDocumentTests, RepeatedUndoRedoCyclesAreStable)
         EXPECT_TRUE (document.redo());
         EXPECT_EQ (finalText, document.getText());
     }
+}
+
+TEST (CodeDocumentTests, ChangeReportsLinesRemovedAndInserted)
+{
+    CodeDocument document;
+    document.setText ("a\nb\nc\nd");
+
+    RecordingListener listener;
+    document.addListener (&listener);
+
+    document.insertText (CodeDocument::Position (document, 1, 1), "x\ny\nz");
+    document.removeRange (CodeDocument::Position (document, 0, 1), CodeDocument::Position (document, 2, 0));
+    document.insertText (CodeDocument::Position (document, 0, 0), "q");
+    document.setText ("one\ntwo");
+
+    ASSERT_EQ (4u, listener.details.size());
+
+    EXPECT_EQ (1, listener.details[0].firstLine);
+    EXPECT_EQ (1, listener.details[0].numLinesRemoved);
+    EXPECT_EQ (3, listener.details[0].numLinesInserted);
+    EXPECT_EQ (2, listener.details[0].getLineDelta());
+
+    EXPECT_EQ (0, listener.details[1].firstLine);
+    EXPECT_EQ (3, listener.details[1].numLinesRemoved);
+    EXPECT_EQ (1, listener.details[1].numLinesInserted);
+    EXPECT_EQ (-2, listener.details[1].getLineDelta());
+
+    EXPECT_EQ (0, listener.details[2].getLineDelta());
+
+    EXPECT_EQ (4, listener.details[3].numLinesRemoved);
+    EXPECT_EQ (2, listener.details[3].numLinesInserted);
+
+    document.removeListener (&listener);
 }

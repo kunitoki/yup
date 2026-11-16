@@ -66,7 +66,19 @@ public:
     {
         int start = 0;                                                         /**< The character offset within the line. */
         int end = 0;                                                           /**< The character offset one past the token. */
-        SyntaxDefinition::TokenType type = SyntaxDefinition::TokenType::other; /**< The token type. */
+        SyntaxDefinition::TokenType type = SyntaxDefinition::TokenType::other; /**< The token type, derived from the first component of the scope. */
+        Identifier scope;                                                      /**< The dotted scope name (e.g. "keyword" or "entity.name.function"). */
+    };
+
+    //==============================================================================
+    /** An entry of the stack of SyntaxDefinition states pushed by rules. */
+    struct StateFrame
+    {
+        int state = -1;      /**< The index of the state in the SyntaxDefinition. */
+        StringArray captures; /**< The captures of the rule that pushed the state. */
+
+        bool operator== (const StateFrame& other) const { return state == other.state && captures == other.captures; }
+        bool operator!= (const StateFrame& other) const { return ! operator== (other); }
     };
 
     //==============================================================================
@@ -120,7 +132,7 @@ public:
 
     //==============================================================================
     /** @internal Called by the document when its content changes. */
-    void codeDocumentChanged (CodeDocument& document, int firstChangedLine, int lastChangedLine) override;
+    void codeDocumentChanged (CodeDocument& document, const CodeDocument::Change& change) override;
 
 private:
     struct TokenCache
@@ -128,7 +140,8 @@ private:
         std::vector<Token> tokens;
         uint8_t stateBefore = LineState::normal;
         uint8_t stateAfter = LineState::normal;
-        String rawStringDelimiter; /**< The delimiter of a raw string literal in effect on this line. */
+        String rawStringDelimiter;          /**< The delimiter of a raw string literal in effect on this line. */
+        std::vector<StateFrame> stackAfter; /**< The rule state stack at the end of the line. */
     };
 
     const TokenCache& tokenize (const CodeDocument& document, int lineIndex);
@@ -139,6 +152,7 @@ private:
 
     std::vector<std::optional<TokenCache>> cache;
     std::vector<bool> dirty;
+    std::unordered_map<String, CodeRegex> expandedRules;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CodeTokeniser)
 };

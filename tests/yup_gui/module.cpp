@@ -31,6 +31,8 @@
 #include "yup_CodeDocument.cpp"
 #include "yup_CodeEditor.cpp"
 #include "yup_CodeEditorScheme.cpp"
+#include "yup_CodeFindBar.cpp"
+#include "yup_CodeRegex.cpp"
 #include "yup_CodeTokeniser.cpp"
 #include "yup_ComboBox.cpp"
 #include "yup_Component.cpp"

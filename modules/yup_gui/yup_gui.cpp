@@ -256,6 +256,7 @@
 #include "widgets/yup_ScrollBar.cpp"
 #include "widgets/yup_Viewport.cpp"
 #include "code/yup_CodeEditor.cpp"
+#include "code/yup_CodeFindBar.cpp"
 #include "widgets/yup_ProgressBar.cpp"
 #include "widgets/yup_ResizableCorner.cpp"
 #include "widgets/yup_ListBoxItem.cpp"

@@ -54,7 +54,11 @@ void splitIntoLines (StringRef text, std::vector<String>& result)
                 break;
         }
 
-        result.push_back (String (startOfLine, endOfLine));
+        auto line = String (startOfLine, endOfLine);
+        if (! reachedEnd && line.endsWithChar ('\r'))
+            line = line.dropLastCharacters (1);
+
+        result.push_back (std::move (line));
 
         if (reachedEnd)
             break;
@@ -100,7 +104,7 @@ String CodeDocument::getText() const
         result << lines[i];
 
         if (i + 1 < lines.size())
-            result << newLineChars;
+            result << (lineEnding == LineEnding::crlf ? "\r\n" : "\n");
     }
 
     return result;
@@ -125,17 +129,29 @@ void CodeDocument::setText (StringRef newText, NotificationType notification)
     // new document.
     undoManager->clear();
 
+    const Change change { 0, getNumLines(), 0 };
+
+    const auto firstNewLine = CharacterFunctions::find (newText.text, static_cast<yup_wchar> ('\n'));
+    lineEnding = ! firstNewLine.isEmpty() && firstNewLine != newText.text && firstNewLine[-1] == '\r' ? LineEnding::crlf : LineEnding::lf;
+
     splitIntoLines (newText, lines);
     offsetsDirty = true;
 
     if (notification != dontSendNotification)
     {
-        const int lastChangedLine = static_cast<int> (lines.size()) - 1;
-        listeners.call ([this, lastChangedLine] (Listener& l)
+        listeners.call ([this, change, numLines = getNumLines()] (Listener& l)
         {
-            l.codeDocumentChanged (*this, 0, lastChangedLine);
+            l.codeDocumentChanged (*this, { change.firstLine, change.numLinesRemoved, numLines });
         });
     }
+}
+
+String CodeDocument::getTextBetween (int startIndex, int endIndex) const
+{
+    if (startIndex >= endIndex)
+        return {};
+
+    return getTextInRange (indexToPosition (startIndex), indexToPosition (endIndex));
 }
 
 //==============================================================================
@@ -351,10 +367,10 @@ CodeDocument::Position CodeDocument::applyEdit (const Position& start, const Pos
 
     offsetsDirty = true;
 
-    const int lastChangedLine = startLine + static_cast<int> (replacement.size()) - 1;
-    listeners.call ([this, startLine, lastChangedLine] (Listener& l)
+    const Change change { startLine, endLine - startLine + 1, static_cast<int> (replacement.size()) };
+    listeners.call ([this, &change] (Listener& l)
     {
-        l.codeDocumentChanged (*this, startLine, lastChangedLine);
+        l.codeDocumentChanged (*this, change);
     });
 
     if (newLines.empty())
@@ -386,7 +402,7 @@ String CodeDocument::getTextInRange (const Position& start, const Position& end)
             result << lines[static_cast<size_t> (line)].substring (begin, finish);
 
         if (line < endLine)
-            result << newLineChars;
+            result << "\n";
     }
 
     return result;
@@ -417,7 +433,7 @@ void CodeDocument::ensureOffsetsBuilt() const
     for (const auto& line : lines)
     {
         lineStartOffsets.push_back (offset);
-        offset += static_cast<int> (line.length()) + static_cast<int> (newLineChars.length());
+        offset += static_cast<int> (line.length()) + 1;
     }
 
     offsetsDirty = false;

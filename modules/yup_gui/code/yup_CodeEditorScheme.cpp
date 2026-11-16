@@ -24,6 +24,33 @@ namespace yup
 
 //==============================================================================
 
+namespace
+{
+
+void setDecorationColors (CodeEditorScheme& scheme)
+{
+    const auto text = scheme.getColor (CodeEditorScheme::ColorId::text).value_or (Color (0xffd4d4d4));
+
+    scheme.setColor (CodeEditorScheme::ColorId::bracketMatch, text.withAlpha (0.25f));
+    scheme.setColor (CodeEditorScheme::ColorId::wordOccurrence, text.withAlpha (0.12f));
+    scheme.setColor (CodeEditorScheme::ColorId::indentGuide, text.withAlpha (0.15f));
+    scheme.setColor (CodeEditorScheme::ColorId::whitespace, text.withAlpha (0.3f));
+    scheme.setColor (CodeEditorScheme::ColorId::diagnosticError, Color (0xfff14c4c));
+    scheme.setColor (CodeEditorScheme::ColorId::diagnosticWarning, Color (0xffcca700));
+    scheme.setColor (CodeEditorScheme::ColorId::diagnosticInformation, Color (0xff3794ff));
+    scheme.setColor (CodeEditorScheme::ColorId::diagnosticHint, text.withAlpha (0.5f));
+}
+
+void setScopeColors (CodeEditorScheme& scheme, std::initializer_list<std::pair<const char*, uint32>> scopeColors)
+{
+    for (const auto& [scope, argb] : scopeColors)
+        scheme.setColor (Identifier (scope), Color (argb));
+}
+
+} // namespace
+
+//==============================================================================
+
 CodeEditorScheme::CodeEditorScheme()
 {
     // Seed the classic dark editor palette. Individual colors can be overridden
@@ -52,6 +79,20 @@ CodeEditorScheme::CodeEditorScheme()
     setColor (SyntaxDefinition::TokenType::identifier, Color (0xffd4d4d4));
     setColor (SyntaxDefinition::TokenType::whitespace, Color (0xffd4d4d4));
     setColor (SyntaxDefinition::TokenType::other, Color (0xffd4d4d4));
+
+    setScopeColors (*this, {
+        { "keyword.control", 0xffc586c0 }, { "keyword.constant", 0xff569cd6 }, { "keyword.operator", 0xff569cd6 },
+        { "keyword.attribute", 0xffdcdcaa }, { "keyword.directive", 0xffc586c0 }, { "keyword.tag", 0xff569cd6 },
+        { "string.escape", 0xffd7ba7d }, { "string.format", 0xff9cdcfe }, { "string.interpolation", 0xff9cdcfe },
+        { "string.include", 0xffce9178 }, { "comment.doc.tag", 0xff569cd6 }, { "comment.todo", 0xffff8c00 },
+        { "comment.link", 0xff3794ff }, { "identifier.function", 0xffdcdcaa }, { "identifier.builtin", 0xffdcdcaa },
+        { "identifier.constant", 0xff4fc1ff }, { "identifier.macro", 0xff569cd6 }, { "identifier.member", 0xff9cdcfe },
+        { "identifier.property", 0xff9cdcfe }, { "identifier.language", 0xff569cd6 }, { "type.class", 0xff4ec9b0 },
+        { "type.namespace", 0xff4ec9b0 }, { "type.attribute", 0xff9cdcfe }, { "type.selector", 0xffd7ba7d },
+        { "number.color", 0xffce9178 }
+    });
+
+    setDecorationColors (*this);
 }
 
 //==============================================================================
@@ -96,6 +137,23 @@ void CodeEditorScheme::setColor (SyntaxDefinition::TokenType tokenType, Color co
 std::optional<Color> CodeEditorScheme::getColor (SyntaxDefinition::TokenType tokenType) const
 {
     return getColor (tokenTypeToColorId (tokenType));
+}
+
+std::optional<Color> CodeEditorScheme::getColorForScope (const Identifier& scope) const
+{
+    if (auto color = getColor (scope))
+        return color;
+
+    auto name = scope.toString();
+    for (int dot = name.lastIndexOfChar ('.'); dot > 0; dot = name.lastIndexOfChar ('.'))
+    {
+        name = name.substring (0, dot);
+
+        if (auto color = getColor (Identifier (name)))
+            return color;
+    }
+
+    return std::nullopt;
 }
 
 Identifier CodeEditorScheme::tokenTypeToColorId (SyntaxDefinition::TokenType tokenType)
@@ -151,6 +209,18 @@ CodeEditorScheme makeMonokai()
     scheme.setColor (SyntaxDefinition::TokenType::whitespace, Color (0xfff8f8f2));
     scheme.setColor (SyntaxDefinition::TokenType::other, Color (0xfff8f8f2));
 
+    setScopeColors (scheme, {
+        { "keyword.control", 0xfff92672 }, { "keyword.constant", 0xffae81ff }, { "keyword.operator", 0xfff92672 },
+        { "keyword.attribute", 0xffa6e22e }, { "keyword.directive", 0xfff92672 }, { "keyword.tag", 0xfff92672 },
+        { "string.escape", 0xffae81ff }, { "string.format", 0xffae81ff }, { "string.interpolation", 0xfffd971f },
+        { "comment.doc.tag", 0xff66d9ef }, { "comment.todo", 0xfffd971f }, { "comment.link", 0xff66d9ef },
+        { "identifier.function", 0xffa6e22e }, { "identifier.builtin", 0xff66d9ef }, { "identifier.constant", 0xffae81ff },
+        { "identifier.macro", 0xffa6e22e }, { "identifier.property", 0xffa6e22e }, { "identifier.language", 0xfffd971f },
+        { "type.class", 0xffa6e22e }, { "type.namespace", 0xffa6e22e }, { "type.attribute", 0xffa6e22e },
+        { "type.selector", 0xffa6e22e }, { "number.unit", 0xfff92672 }
+    });
+
+    setDecorationColors (scheme);
     return scheme;
 }
 
@@ -184,6 +254,13 @@ CodeEditorScheme makeAlabaster()
     scheme.setColor (SyntaxDefinition::TokenType::whitespace, Color (0xff000000));
     scheme.setColor (SyntaxDefinition::TokenType::other, Color (0xff000000));
 
+    setScopeColors (scheme, {
+        { "keyword.constant", 0xff7a3e9d }, { "identifier.constant", 0xff7a3e9d }, { "number.color", 0xff7a3e9d },
+        { "string.escape", 0xff777777 }, { "string.format", 0xff777777 }, { "string.interpolation", 0xff777777 },
+        { "comment.todo", 0xffcc6600 }, { "comment.link", 0xff325cc0 }, { "type.selector", 0xff325cc0 }
+    });
+
+    setDecorationColors (scheme);
     return scheme;
 }
 
@@ -217,6 +294,18 @@ CodeEditorScheme makeOneDark()
     scheme.setColor (SyntaxDefinition::TokenType::whitespace, Color (0xffabb2bf));
     scheme.setColor (SyntaxDefinition::TokenType::other, Color (0xffabb2bf));
 
+    setScopeColors (scheme, {
+        { "keyword.control", 0xffc678dd }, { "keyword.constant", 0xffd19a66 }, { "keyword.operator", 0xffc678dd },
+        { "keyword.attribute", 0xffe5c07b }, { "keyword.directive", 0xffc678dd }, { "keyword.tag", 0xffe06c75 },
+        { "string.escape", 0xff56b6c2 }, { "string.format", 0xffd19a66 }, { "string.interpolation", 0xffe06c75 },
+        { "comment.doc.tag", 0xffc678dd }, { "comment.todo", 0xffe5c07b }, { "comment.link", 0xff61afef },
+        { "identifier.function", 0xff61afef }, { "identifier.builtin", 0xff56b6c2 }, { "identifier.constant", 0xffd19a66 },
+        { "identifier.macro", 0xff61afef }, { "identifier.member", 0xffe06c75 }, { "identifier.property", 0xffe06c75 },
+        { "identifier.language", 0xffe06c75 }, { "type.class", 0xffe5c07b }, { "type.namespace", 0xffe5c07b },
+        { "type.attribute", 0xffd19a66 }, { "type.selector", 0xffd19a66 }, { "number.unit", 0xffe06c75 }
+    });
+
+    setDecorationColors (scheme);
     return scheme;
 }
 
@@ -250,6 +339,18 @@ CodeEditorScheme makeSolarizedDark()
     scheme.setColor (SyntaxDefinition::TokenType::whitespace, Color (0xff839496));
     scheme.setColor (SyntaxDefinition::TokenType::other, Color (0xff839496));
 
+    setScopeColors (scheme, {
+        { "keyword.control", 0xff859900 }, { "keyword.constant", 0xff2aa198 }, { "keyword.operator", 0xff859900 },
+        { "keyword.attribute", 0xff6c71c4 }, { "keyword.directive", 0xffcb4b16 }, { "keyword.tag", 0xff268bd2 },
+        { "string.escape", 0xffdc322f }, { "string.format", 0xffcb4b16 }, { "string.interpolation", 0xffcb4b16 },
+        { "comment.doc.tag", 0xff6c71c4 }, { "comment.todo", 0xffd33682 }, { "comment.link", 0xff268bd2 },
+        { "identifier.function", 0xff268bd2 }, { "identifier.builtin", 0xff268bd2 }, { "identifier.constant", 0xffcb4b16 },
+        { "identifier.macro", 0xffcb4b16 }, { "identifier.property", 0xff268bd2 }, { "identifier.language", 0xff6c71c4 },
+        { "type.class", 0xffb58900 }, { "type.namespace", 0xffb58900 }, { "type.attribute", 0xffb58900 },
+        { "type.selector", 0xff268bd2 }, { "number.unit", 0xffcb4b16 }
+    });
+
+    setDecorationColors (scheme);
     return scheme;
 }
 
@@ -283,6 +384,18 @@ CodeEditorScheme makeSolarizedLight()
     scheme.setColor (SyntaxDefinition::TokenType::whitespace, Color (0xff657b83));
     scheme.setColor (SyntaxDefinition::TokenType::other, Color (0xff657b83));
 
+    setScopeColors (scheme, {
+        { "keyword.control", 0xff859900 }, { "keyword.constant", 0xff2aa198 }, { "keyword.operator", 0xff859900 },
+        { "keyword.attribute", 0xff6c71c4 }, { "keyword.directive", 0xffcb4b16 }, { "keyword.tag", 0xff268bd2 },
+        { "string.escape", 0xffdc322f }, { "string.format", 0xffcb4b16 }, { "string.interpolation", 0xffcb4b16 },
+        { "comment.doc.tag", 0xff6c71c4 }, { "comment.todo", 0xffd33682 }, { "comment.link", 0xff268bd2 },
+        { "identifier.function", 0xff268bd2 }, { "identifier.builtin", 0xff268bd2 }, { "identifier.constant", 0xffcb4b16 },
+        { "identifier.macro", 0xffcb4b16 }, { "identifier.property", 0xff268bd2 }, { "identifier.language", 0xff6c71c4 },
+        { "type.class", 0xffb58900 }, { "type.namespace", 0xffb58900 }, { "type.attribute", 0xffb58900 },
+        { "type.selector", 0xff268bd2 }, { "number.unit", 0xffcb4b16 }
+    });
+
+    setDecorationColors (scheme);
     return scheme;
 }
 

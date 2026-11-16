@@ -193,7 +193,8 @@ TEST (SyntaxDefinitionTests, BuiltInYuiLoads)
     EXPECT_TRUE (definition.isKeyword ("drawing"));
     EXPECT_TRUE (definition.isKeyword ("let"));
     EXPECT_TRUE (definition.isKeyword ("repeat"));
-    EXPECT_TRUE (definition.isKeyword ("circle"));
+    EXPECT_TRUE (definition.isType ("circle"));
+    EXPECT_EQ (Identifier ("type.shape"), definition.getWordScope ("circle"));
     EXPECT_FALSE (definition.isKeyword ("knob"));
 
     EXPECT_TRUE (definition.isType ("color"));
@@ -238,6 +239,73 @@ TEST (SyntaxDefinitionTests, LoadFromDataParsesCustomDefinition)
     EXPECT_FALSE (definition.isKeyword ("baz"));
     EXPECT_TRUE (definition.isType ("widget"));
     EXPECT_EQ (String (";"), definition.getLineCommentPrefix());
+}
+
+TEST (SyntaxDefinitionTests, LoadFromDataParsesWordSetsAndStates)
+{
+    SyntaxDefinition definition;
+    auto result = definition.loadFromData (R"json({
+        "name": "TestLang",
+        "wordSets": { "support.function": ["print", "len"] },
+        "states": {
+            "root": { "rules": [
+                { "match": "(def)\\s+(\\w+)", "captures": { "1": "keyword", "2": "entity.name.function" } },
+                { "match": "<<(\\w+)", "scope": "string", "push": "heredoc" }
+            ] },
+            "heredoc": { "scope": "string.heredoc", "rules": [ { "match": "^$1$", "pop": true } ] }
+        }
+    })json");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_EQ (Identifier ("support.function"), definition.getWordScope ("len"));
+    EXPECT_TRUE (definition.getWordScope ("other").isNull());
+
+    ASSERT_EQ (2, definition.getNumStates());
+    const auto root = definition.findState ("root");
+    const auto heredoc = definition.findState ("heredoc");
+    ASSERT_GE (root, 0);
+    ASSERT_GE (heredoc, 0);
+
+    const auto& rule = definition.getState (root).rules[0];
+    ASSERT_EQ (2u, rule.captures.size());
+    EXPECT_EQ (Identifier ("entity.name.function"), rule.captures[1].second);
+    EXPECT_EQ (String ("heredoc"), definition.getState (root).rules[1].push);
+    EXPECT_NE (nullptr, definition.getCompiledRule (root, 0));
+
+    EXPECT_EQ (Identifier ("string.heredoc"), definition.getState (heredoc).scope);
+    EXPECT_TRUE (definition.getState (heredoc).rules[0].pop);
+    EXPECT_EQ (nullptr, definition.getCompiledRule (heredoc, 0));
+}
+
+TEST (SyntaxDefinitionTests, LoadFromDataRejectsInvalidRulePattern)
+{
+    SyntaxDefinition definition;
+    auto result = definition.loadFromData (R"json({
+        "name": "TestLang",
+        "states": { "root": { "rules": [ { "match": "([a-z" } ] } }
+    })json");
+
+    EXPECT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().contains ("root"));
+}
+
+TEST (SyntaxDefinitionTests, AddStateReplacesStateWithSameName)
+{
+    SyntaxDefinition definition;
+    ASSERT_TRUE (definition.addState ({ "root", {}, { { "a", Identifier ("keyword") } } }).wasOk());
+    ASSERT_TRUE (definition.addState ({ "root", {}, { { "b", Identifier ("type") }, { "c", Identifier ("type") } } }).wasOk());
+
+    ASSERT_EQ (1, definition.getNumStates());
+    EXPECT_EQ (2u, definition.getState (0).rules.size());
+    EXPECT_EQ (-1, definition.findState ("missing"));
+    EXPECT_EQ (nullptr, definition.getCompiledRule (0, 5));
+}
+
+TEST (SyntaxDefinitionTests, ScopeToTokenTypeUsesFirstComponent)
+{
+    EXPECT_EQ (SyntaxDefinition::TokenType::keyword, SyntaxDefinition::scopeToTokenType (Identifier ("keyword.control")));
+    EXPECT_EQ (SyntaxDefinition::TokenType::operator_, SyntaxDefinition::scopeToTokenType (Identifier ("operator")));
+    EXPECT_EQ (SyntaxDefinition::TokenType::other, SyntaxDefinition::scopeToTokenType (Identifier ("entity.name")));
 }
 
 TEST (SyntaxDefinitionTests, LoadFromDataRejectsInvalidJson)
@@ -595,4 +663,56 @@ TEST (SyntaxDefinitionTests, TokenTypeToStringFallsBackToOtherForUnknownValue)
     const auto unknownType = static_cast<SyntaxDefinition::TokenType> (255);
 
     EXPECT_EQ (String ("other"), SyntaxDefinition::tokenTypeToString (unknownType));
+}
+
+// ==============================================================================
+// Language configuration
+// ==============================================================================
+
+TEST (SyntaxDefinitionTests, LanguageConfigurationDefaults)
+{
+    SyntaxDefinition definition;
+    ASSERT_TRUE (definition.loadFromData (R"({ "name": "Tiny", "strings": { "delimiters": ["\"", "'''"] } })").wasOk());
+
+    using Pair = SyntaxDefinition::CharacterPair;
+    const std::vector<Pair> brackets { { '(', ')' }, { '[', ']' }, { '{', '}' } };
+    EXPECT_EQ (brackets, definition.getBracketPairs());
+
+    const std::vector<Pair> autoClosing { { '(', ')' }, { '[', ']' }, { '{', '}' }, { '"', '"' } };
+    EXPECT_EQ (autoClosing, definition.getAutoClosingPairs());
+
+    EXPECT_TRUE (definition.isWordSeparator (' '));
+    EXPECT_TRUE (definition.isWordSeparator ('.'));
+    EXPECT_FALSE (definition.isWordSeparator ('_'));
+    EXPECT_FALSE (definition.isWordSeparator ('a'));
+    EXPECT_EQ (nullptr, definition.getIncreaseIndentPattern());
+}
+
+TEST (SyntaxDefinitionTests, LanguageConfigurationLoadsFromJson)
+{
+    SyntaxDefinition definition;
+    ASSERT_TRUE (definition.loadFromData (R"json({
+        "name": "Custom",
+        "brackets": ["()", "<>"],
+        "autoClosingPairs": ["()", "``"],
+        "wordSeparators": "-",
+        "increaseIndentPattern": "\\bdo\\s*$"
+    })json").wasOk());
+
+    using Pair = SyntaxDefinition::CharacterPair;
+    EXPECT_EQ ((std::vector<Pair> { { '(', ')' }, { '<', '>' } }), definition.getBracketPairs());
+    EXPECT_EQ ((std::vector<Pair> { { '(', ')' }, { '`', '`' } }), definition.getAutoClosingPairs());
+    EXPECT_TRUE (definition.isWordSeparator ('-'));
+    EXPECT_FALSE (definition.isWordSeparator ('.'));
+
+    ASSERT_NE (nullptr, definition.getIncreaseIndentPattern());
+    EXPECT_TRUE (definition.getIncreaseIndentPattern()->findNext (CodeRegex::Subject ("loop do"), 0).has_value());
+}
+
+TEST (SyntaxDefinitionTests, LanguageConfigurationRejectsInvalidEntries)
+{
+    SyntaxDefinition definition;
+    EXPECT_TRUE (definition.loadFromData (R"({ "name": "Bad", "brackets": ["(("] })").wasOk());
+    EXPECT_TRUE (definition.loadFromData (R"({ "name": "Bad", "brackets": ["((("] })").failed());
+    EXPECT_TRUE (definition.loadFromData (R"({ "name": "Bad", "increaseIndentPattern": "(" })").failed());
 }
