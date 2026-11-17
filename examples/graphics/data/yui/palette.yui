@@ -13,3 +13,46 @@ palette Porcelain {
     accent: #9aa3c0;
     onAccent: #ffffff;
 }
+
+// The dark palettes of the other knobs, scoped to their cards by the stylesheet
+palette Midnight {
+    mode: dark;
+    colors: #252628, #78c8ff, #8a8d92, #d9dbde, #2c2d30;
+
+    background: #252628;
+    surface: #292a2d;
+    surfaceRaised: #2c2d30;
+    outline: #45484c;
+    text: #d9dbde;
+    textMuted: #8a8d92;
+    accent: #78c8ff;
+    onAccent: #0b1a26;
+}
+
+palette Slate {
+    mode: dark;
+    colors: #3a4245, #a9c9c8, #93a0a2, #e4ebec, #414b4e;
+
+    background: #3a4245;
+    surface: #3e474a;
+    surfaceRaised: #414b4e;
+    outline: #66726f;
+    text: #eef3f3;
+    textMuted: #93a0a2;
+    accent: #a9c9c8;
+    onAccent: #1c2224;
+}
+
+palette Steel {
+    mode: dark;
+    colors: #2f3337, #f0b45a, #8f949a, #e2e4e6, #353a3e;
+
+    background: #2f3337;
+    surface: #32373b;
+    surfaceRaised: #353a3e;
+    outline: #565c62;
+    text: #e2e4e6;
+    textMuted: #8f949a;
+    accent: #f0b45a;
+    onAccent: #2a1a05;
+}

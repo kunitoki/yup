@@ -235,4 +235,5 @@ update_emscripten_examples DEMOPATH="../yup-demos/demos":
   @just update_emscripten_example Themes themes {{DEMOPATH}}
   @just update_emscripten_example TreeView tree-view {{DEMOPATH}}
   @just update_emscripten_example Widgets widgets {{DEMOPATH}}
+  @just update_emscripten_example YuiDrawing yui-drawing {{DEMOPATH}}
   @just update_emscripten_example YdspSynths ydsp-synths {{DEMOPATH}}

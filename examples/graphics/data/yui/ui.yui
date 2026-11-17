@@ -1,7 +1,9 @@
 // The UI: the files below are merged in order, then the root component is built.
 import "palette.yui";
 import "knob.yui";
-import "synthknob.yui";
+import "haloknob.yui";
+import "flutedknob.yui";
+import "brushedknob.yui";
 import "components.yui";
 import "style.yui";
 
@@ -14,8 +16,8 @@ tokens {
 
 // The root is a grid: a header across the top, two rows of two knobs, a summary at the bottom.
 // The knobs are linked both ways to 'params', a DataTree model owned by the demo, so they
-// keep their values when the UI is rebuilt and every drag is one undo step. The 'synth' knob
-// is drawn by the drawing ported from the synth plugin.
+// keep their values when the UI is rebuilt and every drag is one undo step. Each knob has its
+// own look: a class on the knob picks its drawing, palette and effects in the stylesheet.
 Grid {
     id: panel;
     class: panel;
@@ -38,13 +40,13 @@ Grid {
     LabeledKnob { id: cutoff; enabled: power.checked; gridArea: "cutoff"; label: "CUTOFF";
                   value <=> params.cutoff; onChanged: action ("changed", "Cutoff", value); }
 
-    LabeledKnob { id: resonance; enabled: power.checked; gridArea: "resonance"; label: "RESO";
+    LabeledKnob { id: resonance; enabled: power.checked; class: halo; gridArea: "resonance"; label: "RESO";
                   value <=> params.resonance; onChanged: action ("changed", "Resonance", value); }
 
-    LabeledKnob { id: drive; enabled: power.checked; gridArea: "drive"; label: "DRIVE";
+    LabeledKnob { id: drive; enabled: power.checked; class: fluted; gridArea: "drive"; label: "DRIVE";
                   value <=> params.drive; onChanged: action ("changed", "Drive", value); }
 
-    LabeledKnob { id: mix; enabled: power.checked; class: synth; gridArea: "mix"; label: "MIX";
+    LabeledKnob { id: mix; enabled: power.checked; class: brushed; gridArea: "mix"; label: "MIX";
                   value <=> params.mix; onChanged: action ("changed", "Mix", value); }
 
     Label {

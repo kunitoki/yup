@@ -44,10 +44,11 @@ public:
                 setStatus (arguments[0].toString() + " changed to " + yup::String (static_cast<double> (arguments[1]) * 100.0, 0) + " %");
         });
 
-        for (const auto* fileName : { "ui.yui", "components.yui", "knob.yui", "synthknob.yui", "palette.yui", "style.yui" })
+        for (const auto* fileName : { "ui.yui", "components.yui", "knob.yui", "haloknob.yui", "flutedknob.yui", "brushedknob.yui", "palette.yui", "style.yui" })
         {
             auto& source = *sources.emplace_back (std::make_unique<Source> (fileName));
             source.editor.setSyntaxDefinition ("yui");
+            source.editor.setMinimapVisible (false);
             source.editor.setScheme (yup::CodeEditorScheme::getBuiltIn ("oneDark"));
             source.document.addListener (this);
             source.editor.setOpaque (false);
@@ -64,7 +65,7 @@ public:
         status.setReadOnly (true);
         addAndMakeVisible (status);
 
-        divider.setThickness (10.0f);
+        divider.setThickness (20.0f);
         divider.setPosition (yup::ResizableDivider::Length::percent (55.0f));
         divider.setMinPosition (yup::ResizableDivider::Length::pixels (200.0f));
         divider.setMinTrailingSize (yup::ResizableDivider::Length::pixels (200.0f));

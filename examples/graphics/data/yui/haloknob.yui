@@ -1,0 +1,86 @@
+// A matte dome inside a ring of ticks that light up to the value, with a lit dot as the
+// pointer. The dome is barely darker than the panel, so its shape comes from the light: a
+// soft shadow below it, a rounded edge lit from above and the glow of the ticks it reflects.
+// The colors come from the slider properties the stylesheet sets: backgroundColor (the dome),
+// trackColor (the unlit ticks), thumbColor (the lit ticks and the dot) and textColor (the
+// labels). 'haloGlow' scales the glow, so the stylesheet can raise it on hover and animate it
+// while the knob is dragged.
+drawing HaloKnob {
+    property haloGlow: number = 0.6;
+
+    let size: min (bounds.width, bounds.height);
+    let c: bounds.center;
+    let r: size * 0.4;                  // the outer radius of the ticks
+    let knobRadius: r * 0.8;
+
+    let a0: 135deg;
+    let sweep: 270deg;
+    let av: a0 + sweep * normalized;
+
+    let lit: enabled ? thumbColor : textColor.withAlpha (0.5);
+    let core: enabled ? mix (lit, #ffffff, 0.6) : lit;
+    let glowAmount: enabled ? clamp (haloGlow, 0.0, 2.0) : 0.0;
+    let ink: enabled ? textColor : textColor.withAlpha (0.5);
+    let tickWidth: max (1.0, r * 0.026);
+
+    // The light of the lit ticks spilling on the panel
+    arc { id: spill; center: c; radius: r * 0.94; from: a0; to: av;
+          stroke: lit.withAlpha (0.1 * glowAmount); strokeWidth: r * 0.16; feather: r * 0.12;
+          visible: normalized > 0 && glowAmount > 0; }
+
+    // The ticks: the lit ones are a bright core over a feathered halo
+    repeat i in 0 .. 28 {
+        let a: a0 + sweep * i / 27.0;
+        let on: i / 27.0 <= normalized + 0.0001;
+
+        line { from: polar (c, r * 0.895, a); to: polar (c, r * 0.985, a);
+               stroke: lit.withAlpha (0.5 * glowAmount); strokeWidth: tickWidth * 3.5; cap: round; feather: tickWidth * 3;
+               visible: on && glowAmount > 0; }
+
+        line { from: polar (c, r * 0.895, a); to: polar (c, r * 0.985, a);
+               stroke: on ? core : trackColor; strokeWidth: on ? tickWidth : tickWidth * 0.7; cap: round; }
+    }
+
+    let labelFont: defaultFont.withHeight (r * 0.1);
+    let labelBox: rect (0, 0, r * 0.6, r * 0.16);
+
+    text { id: min; bounds: labelBox.withCenter (polar (c, r * 1.16, a0)); text: "MIN"; font: labelFont; fill: ink; }
+    text { id: max; bounds: labelBox.withCenter (polar (c, r * 1.16, a0 + sweep)); text: "MAX"; font: labelFont; fill: ink; }
+    text { id: name; bounds: labelBox.withCenter (polar (c, r * 1.05, 90deg)); text: parent.label; font: labelFont; fill: ink; }
+
+    // The dome sits on a wide ambient shadow and a tight contact one
+    circle { id: ambient; center: c.translated (0, knobRadius * 0.16); radius: knobRadius * 0.98;
+             fill: rgba (0, 0, 0, 0.55); feather: knobRadius * 0.28; }
+
+    circle { id: contact; center: c.translated (0, knobRadius * 0.04); radius: knobRadius * 1.01;
+             fill: rgba (0, 0, 0, 0.5); feather: knobRadius * 0.06; }
+
+    // Its rounded edge is lit from above, around a face that is almost flat
+    circle { id: edge; center: c; radius: knobRadius;
+             fillGradient: linearGradient (backgroundColor.brighter (0.1), c.translated (0, -knobRadius),
+                                           backgroundColor.darker (0.08), c.translated (0, knobRadius)); }
+
+    circle { id: face; center: c; radius: knobRadius * 0.955; feather: knobRadius * 0.02;
+             fillGradient: linearGradient (backgroundColor.brighter (0.015), c.translated (0, -knobRadius),
+                                           backgroundColor.darker (0.035), c.translated (0, knobRadius)); }
+
+    circle { id: rim; center: c; radius: knobRadius;
+             strokeGradient: linearGradient (rgba (255, 255, 255, 0.2), c.translated (0, -knobRadius),
+                                             rgba (255, 255, 255, 0.0), c.translated (0, -knobRadius * 0.2));
+             strokeWidth: max (1.0, knobRadius * 0.012); strokePosition: inside; }
+
+    // The lit ticks reflected on the edge
+    arc { id: reflection; center: c; radius: knobRadius * 0.975; from: a0; to: av;
+          stroke: lit.withAlpha (0.16 * glowAmount); strokeWidth: knobRadius * 0.03; feather: knobRadius * 0.04;
+          visible: normalized > 0 && glowAmount > 0; }
+
+    // The pointer: a lit dot in a small recess
+    let dotCenter: polar (c, knobRadius * 0.74, av);
+
+    circle { id: recess; center: dotCenter; radius: knobRadius * 0.07; fill: rgba (0, 0, 0, 0.5); feather: knobRadius * 0.03; }
+
+    circle { id: dotGlow; center: dotCenter; radius: knobRadius * 0.09;
+             fill: lit.withAlpha (0.55 * glowAmount); feather: knobRadius * 0.12; visible: glowAmount > 0; }
+
+    circle { id: pointer; center: dotCenter; radius: max (1.5, knobRadius * 0.042); fill: core; }
+}

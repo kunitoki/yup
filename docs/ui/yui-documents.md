@@ -351,6 +351,7 @@ two-value slider, not its range.
   `Stack` containers and their item properties.
 
 The `YuiDrawing` graphics example edits a complete UI built this way, split
-across `ui.yui`, `components.yui`, `knob.yui`, `synthknob.yui`, `palette.yui`
-and `style.yui`. It rebuilds shortly after each keystroke, and on desktop it
+across `ui.yui`, `components.yui`, four knob drawings (`knob.yui`,
+`haloknob.yui`, `flutedknob.yui`, `brushedknob.yui`), `palette.yui` and
+`style.yui`. It rebuilds shortly after each keystroke, and on desktop it
 reloads when one of the files is saved in another editor.

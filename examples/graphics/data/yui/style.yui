@@ -3,8 +3,10 @@
 // the properties the drawing declares, and colors the title and the readouts. The knobs
 // transition their bezel and track color, so the resting bezel size is declared too. Each
 // labeled knob sits on a card made of two shadow layers: a solid one in the raised surface
-// color over a soft drop shadow. The 'synth' knob swaps in the drawing of the synth plugin,
-// whose modulation lane an animation sweeps like an LFO.
+// color over a soft drop shadow. The 'halo', 'fluted' and 'brushed' knobs swap in their own
+// drawing and a dark palette for their card, each with its own hover and press effect: the
+// halo glows brighter and pulses while dragged, the fluted knob brightens and sinks in, and
+// the light turns on the brushed metal while it glows in its accent color.
 style {
     .panel {
         palette: Porcelain;
@@ -35,22 +37,76 @@ style {
         bezelSize: 0.84;
     }
 
-    #drive .knob {
-        capSize: 0.5;
+    .halo {
+        palette: Midnight;
     }
 
-    .synth .knob {
-        drawing: SynthKnob;
-        backgroundColor: palette.surface.darker (0.04);
+    .halo .knob {
+        drawing: HaloKnob;
+        backgroundColor: palette.surfaceRaised;
         trackColor: palette.outline;
-        thumbColor: palette.accent.darker (0.2);
-        textColor: palette.text;
-        animation: lfo 1.5s easeInOut infinite alternate;
+        thumbColor: palette.accent;
+        textColor: palette.textMuted;
+        haloGlow: 0.6;
+        transition: haloGlow 250ms easeOut;
     }
 
-    @keyframes lfo {
-        from { modulation: 0.02; }
-        to { modulation: 0.2; }
+    .halo .knob:hover:enabled {
+        haloGlow: 1;
+    }
+
+    .halo .knob:pressed {
+        animation: breathe 0.8s easeInOut infinite alternate;
+    }
+
+    @keyframes breathe {
+        from { haloGlow: 1; }
+        to { haloGlow: 1.8; }
+    }
+
+    .fluted {
+        palette: Slate;
+    }
+
+    .fluted .knob {
+        drawing: FlutedKnob;
+        backgroundColor: #191b1c;
+        trackColor: palette.outline;
+        thumbColor: palette.text;
+        textColor: palette.textMuted;
+        shadowLift: 1;
+        filter: none;
+        transition: shadowLift 150ms easeOut, filter 200ms;
+    }
+
+    .fluted .knob:hover:enabled {
+        filter: brightness(125%);
+    }
+
+    .fluted .knob:pressed {
+        shadowLift: 0.4;
+    }
+
+    .brushed {
+        palette: Steel;
+    }
+
+    .brushed .knob {
+        drawing: BrushedKnob;
+        backgroundColor: #17191b;
+        trackColor: palette.outline;
+        thumbColor: palette.text;
+        textColor: palette.textMuted;
+        sheenAngle: 0;
+        transition: sheenAngle 400ms easeOut;
+    }
+
+    .brushed .knob:hover:enabled {
+        sheenAngle: 25deg;
+    }
+
+    .brushed .knob:pressed {
+        filter: drop-shadow(0 0 8 palette.accent.withAlpha (0.5));
     }
 
     TextButton {
