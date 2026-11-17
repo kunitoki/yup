@@ -50,6 +50,7 @@ Result YuiLoader::loadFile (const File& fileToLoad)
     resourcePath = {};
     findResource = nullptr;
     overrides.clear();
+    document.setBaseDirectory (fileToLoad != File() ? fileToLoad.getParentDirectory() : File());
 
     return reload();
 }
@@ -60,6 +61,7 @@ Result YuiLoader::loadResource (const String& path, ResourceFinder finder)
     resourcePath = detail::normalizeYuiPath (path);
     findResource = std::move (finder);
     overrides.clear();
+    document.setBaseDirectory ({});
 
     return reload();
 }

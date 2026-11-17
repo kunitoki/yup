@@ -808,6 +808,50 @@ TEST_F (YuiBuilderTests, DeclaresArrayAndPointProperties)
     EXPECT_FLOAT_EQ (static_cast<float> (dynamic_cast<Slider*> (plain->getChildComponent (0))->getValue()), 1.0f);
 }
 
+TEST_F (YuiBuilderTests, DeclaresTransformProperties)
+{
+    YuiBuilder builder;
+    const auto result = builder.build (parse (R"yui(
+        tokens {
+            property panelShift: transform = transform.translation (6, 12);
+        }
+
+        component Badge : Column {
+            property iconTransform: transform = transform.scaling (2);
+            property steps: transform[] = [transform.translation (1, 2), transform.translation (3, 4)];
+            transform: root.iconTransform;
+        }
+
+        Row {
+            transform: panelShift;
+            Badge { id: defaultBadge; }
+            Badge { id: customBadge; iconTransform: transform.translation (15, 25); }
+            Badge { id: resetBadge; iconTransform: none; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    ASSERT_NE (builder.getRoot(), nullptr);
+    EXPECT_EQ (builder.getRoot()->getTransform(), AffineTransform::translation (6.0f, 12.0f));
+
+    auto* defaultBadge = builder.findById ("defaultBadge");
+    auto* customBadge = builder.findById ("customBadge");
+    auto* resetBadge = builder.findById ("resetBadge");
+    ASSERT_NE (defaultBadge, nullptr);
+    ASSERT_NE (customBadge, nullptr);
+    ASSERT_NE (resetBadge, nullptr);
+
+    EXPECT_EQ (defaultBadge->getTransform(), AffineTransform::scaling (2.0f));
+    EXPECT_EQ (customBadge->getTransform(), AffineTransform::translation (15.0f, 25.0f));
+    EXPECT_TRUE (resetBadge->getTransform().isIdentity());
+
+    const auto* steps = defaultBadge->getProperty (Identifier ("steps")).getArray();
+    ASSERT_NE (steps, nullptr);
+    ASSERT_EQ (steps->size(), 2);
+    EXPECT_EQ (VariantConverter<AffineTransform>::fromVar ((*steps)[1]), AffineTransform::translation (3.0f, 4.0f));
+}
+
 TEST_F (YuiBuilderTests, NestsDeclaredComponents)
 {
     YuiBuilder builder;

@@ -4,6 +4,7 @@ import "knob.yui";
 import "haloknob.yui";
 import "flutedknob.yui";
 import "brushedknob.yui";
+import "scope.yui";
 import "components.yui";
 import "style.yui";
 
@@ -11,19 +12,20 @@ import "style.yui";
 // the root, so changing one updates everything that reads it.
 tokens {
     property spacing: number = 10;
-    property rowHeight: number = 24;
+    property rowHeight: number = 30;
 }
 
-// The root is a grid: a header across the top, two rows of two knobs, a summary at the bottom.
-// The knobs are linked both ways to 'params', a DataTree model owned by the demo, so they
-// keep their values when the UI is rebuilt and every drag is one undo step. Each knob has its
-// own look: a class on the knob picks its drawing, palette and effects in the stylesheet.
+// The root is a grid: a header across the top, a mode selector paired with a live filter
+// scope, two rows of two knobs, and a summary at the bottom. The mode and knobs are linked
+// both ways to 'params', a DataTree model owned by the demo, so they keep their values when
+// the UI is rebuilt and every change is one undo step. Each knob has its own look: a class
+// on the knob picks its drawing, palette and effects in the stylesheet.
 Grid {
     id: panel;
     class: panel;
     columns: "1fr 1fr";
-    rows: format ("%.0fpx 1fr 1fr %.0fpx", rowHeight + 4, rowHeight);
-    areas: "head head, cutoff resonance, drive mix, foot foot";
+    rows: format ("%.0fpx %.0fpx 1fr 1fr %.0fpx", rowHeight, rowHeight + 200, rowHeight);
+    areas: "head head, bar bar, cutoff resonance, drive mix, foot foot";
     padding: spacing;
     gap: spacing;
 
@@ -31,10 +33,34 @@ Grid {
         gridArea: "head";
         gap: spacing;
 
+        Image { id: brand; class: brand; source: "../logo_black.png"; preferredWidth: 26; fitting: scaleToFit; }
         Label { class: title; text: "Filter"; flexGrow: 1; textHeightProportion: 0.7; }
+        ComboBox {
+            id: mode;
+            enabled: power.checked;
+            preferredWidth: 118;
+            items: ["Lowpass", "Bandpass", "Highpass", "Notch"];
+            selectedIndex <=> params.mode;
+            onSelectedItemChanged: action ("mode", self.text);
+        }
         ToggleButton { id: power; text: "Enabled"; checked: true; preferredWidth: 88; }
         TextButton { text: "Undo"; preferredWidth: 72; onClick: action ("undo"); }
         TextButton { text: "Reset"; preferredWidth: 72; onClick: action ("reset"); }
+    }
+
+    Row {
+        gridArea: "bar";
+        gap: spacing;
+
+        FilterDisplay {
+            id: scope;
+            enabled: power.checked;
+            flexGrow: 1;
+            mode: mode.selectedIndex;
+            cutoff: params.cutoff;
+            resonance: params.resonance;
+            mix: params.mix;
+        }
     }
 
     LabeledKnob { id: cutoff; enabled: power.checked; gridArea: "cutoff"; label: "CUTOFF";
@@ -55,7 +81,7 @@ Grid {
         enabled: power.checked;
         justification: center;
         textHeightProportion: 0.75;
-        text: format ("cutoff %.0f%%   resonance %.0f%%   ", params.cutoff * 100, params.resonance * 100)
+        text: mode.text + format ("   cutoff %.0f%%   resonance %.0f%%   ", params.cutoff * 100, params.resonance * 100)
               + format ("drive %.0f%%   mix %.0f%%", params.drive * 100, params.mix * 100);
     }
 }

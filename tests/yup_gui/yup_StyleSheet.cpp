@@ -192,3 +192,42 @@ TEST_F (StyleSheetTests, KeepsTheElementsOfDeclarationsInTheirDocument)
     EXPECT_EQ (element.getType(), Identifier ("declaration"));
     EXPECT_EQ (element.getRoot().getType(), Identifier ("yui"));
 }
+
+TEST_F (StyleSheetTests, ExpandsCommaSeparatedSelectorBlocksWithPerBranchSpecificity)
+{
+    auto sheet = StyleSheet::parse (R"yui(
+        style {
+            TextButton,
+            ComboBox:open {
+                cursor: hand;
+            }
+            Slider, #special {
+                opacity: 0.4;
+            }
+            .override {
+                opacity: 0.8;
+            }
+        })yui");
+
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+
+    const auto& rules = sheet.getReference()->getRules();
+    ASSERT_EQ (rules.size(), 5u);
+    EXPECT_EQ (rules[0].selector.toString(), "TextButton");
+    EXPECT_EQ (rules[1].selector.toString(), "ComboBox:open");
+    EXPECT_TRUE (sheet.getReference()->watchesProperty (Identifier ("open")));
+
+    Component root;
+    Slider normalSlider (Slider::LinearHorizontal, "normal");
+    normalSlider.addStyleClass (Identifier ("override"));
+    Slider specialSlider (Slider::LinearHorizontal, "special");
+    specialSlider.addStyleClass (Identifier ("override"));
+    root.addChildComponent (normalSlider);
+    root.addChildComponent (specialSlider);
+
+    root.setStyleSheet (sheet.getReference());
+
+    // `.override` (100) beats the `Slider` branch (1), while the `#special` branch (10000) beats `.override`.
+    EXPECT_NEAR (normalSlider.getOpacity(), 0.8f, 1.0e-5f);
+    EXPECT_NEAR (specialSlider.getOpacity(), 0.4f, 1.0e-5f);
+}

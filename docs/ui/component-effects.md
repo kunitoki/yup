@@ -126,7 +126,68 @@ myComponent.setComponentEffect (nullptr);
 
 ---
 
-## Built-in Effect Patterns
+## Built-in Effects in `yup_gui`
+
+`yup_gui` ships ready-to-use `ComponentEffect` classes so common post-processing
+needs no custom GLSL:
+
+| Class | Purpose | Main parameters |
+|---|---|---|
+| `BlurEffect` | Two-pass separable Gaussian blur | `radius` in logical points |
+| `DropShadowEffect` | Blurred alpha-silhouette shadow behind the sharp subtree | `color`, `radius`, `offset` in logical points |
+| `GlowEffect` | Additive tinted bloom composited with the sharp subtree | `radius`, `intensity` (`0..1`), `color` |
+| `ColorMatrixEffect` | 4x5 RGBA color-matrix transform with CSS/SVG presets | `Matrix`, or `grayscale`, `sepia`, `invert`, `saturate`, `brightness`, `contrast`, `hueRotate`, `opacity` |
+| `FilterEffect` | Ordered chain of CSS `<filter-function>` operations | `blur`, `brightness`, `contrast`, `drop-shadow`, `grayscale`, `hue-rotate`, `invert`, `opacity`, `saturate`, `sepia` |
+
+```cpp
+// Attach a built-in C++ effect directly:
+myCard.setComponentEffect (new yup::DropShadowEffect (yup::Color (0x66000000), 8.0f, { 0.0f, 4.0f }));
+
+// Or parse a CSS filter chain in C++:
+if (auto ops = yup::FilterEffect::parse ("hue-rotate(90deg) brightness(115%)"); ops.wasOk())
+    myCard.setComponentEffect (new yup::FilterEffect (ops.getValue()));
+```
+
+### Using Effects from `.yui` Stylesheets
+
+Stylesheets separate built-in CSS filter chains from application-defined effects:
+
+- **`filter:`** configures an internal `FilterEffect` layer directly from CSS
+  `<filter-function>` syntax, supports live `.yui` expressions for scalar and
+  color arguments, automatically expands the component's paint margin for
+  `blur(...)` and `drop-shadow(...)` outsets, and animates smoothly through
+  `transition:` and `@keyframes`.
+- **`effect:`** looks up a custom effect factory by name in
+  `ComponentEffectRegistry` and calls `setComponentEffect`, so both `filter:`
+  and a custom `effect:` can be active on the same component:
+
+```cpp
+yup::ComponentEffectRegistry::getInstance().registerEffect ("crtScan", []
+{
+    return yup::ComponentEffect::Ptr (new CrtScanEffect());
+});
+```
+
+```yui
+style {
+    .screen {
+        effect: crtScan;
+        filter: contrast(110%) saturate(120%);
+        transition: filter 200ms easeOut;
+    }
+
+    .screen:disabled {
+        filter: grayscale(100%) opacity(60%);
+    }
+}
+```
+
+See [Stylesheets in `.yui`](yui-styles.md#cursors-effects-filters-shadows-and-glow)
+for full syntax and animation rules.
+
+---
+
+## Custom Effect Examples
 
 The [graphics example](../../examples/graphics/) demonstrates several reusable
 effect patterns implemented as `ComponentEffect` subclasses. Each lives in

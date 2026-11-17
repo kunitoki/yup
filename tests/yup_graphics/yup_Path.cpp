@@ -867,6 +867,29 @@ TEST (PathTests, CreateCopyKeepsFillRule)
     EXPECT_FALSE (p1.createCopy().isUsingNonZeroWinding());
 }
 
+TEST (PathTests, CreateCopyPreservesOpenContourAndClose)
+{
+    Path open;
+    open.moveTo (0.0f, 0.0f);
+    open.lineTo (30.0f, 0.0f);
+
+    Path extended = open.createCopy();
+    extended.lineTo (30.0f, 40.0f);
+
+    EXPECT_EQ (2, open.size());
+    EXPECT_FALSE (open.isExplicitlyClosed());
+    EXPECT_EQ (3, extended.size());
+    EXPECT_NEAR (70.0f, extended.getLength(), 1.0e-3f);
+
+    Path closed = extended.createCopy();
+    closed.close();
+
+    EXPECT_FALSE (extended.isExplicitlyClosed());
+    EXPECT_TRUE (closed.isExplicitlyClosed());
+    EXPECT_EQ (4, closed.size());
+    EXPECT_NEAR (120.0f, closed.getLength(), 1.0e-3f);
+}
+
 TEST (PathTests, IteratorPostfixIncrement)
 {
     Path p;

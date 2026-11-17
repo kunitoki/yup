@@ -125,6 +125,61 @@ TEST_F (YuiLoaderTests, LoadsAFileWithItsImportsRelativeToIt)
     EXPECT_DOUBLE_EQ (getTrackWidth (document), 7.0);
 }
 
+TEST_F (YuiLoaderTests, ResolvesRelativeImageAndSvgAssetsAgainstTheLoadedYuiDirectory)
+{
+    static constexpr const char* redDotPngBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+    MemoryOutputStream pngBytes;
+    ASSERT_TRUE (Base64::convertFromBase64 (pngBytes, redDotPngBase64));
+
+    auto pngFile = folder.getChildFile ("assets/dot.png");
+    pngFile.getParentDirectory().createDirectory();
+    ASSERT_TRUE (pngFile.replaceWithData (pngBytes.getData(), pngBytes.getDataSize()));
+
+    write ("assets/icon.svg", "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'><rect width='8' height='8' fill='#ff0000'/></svg>");
+    write ("sub/panel.yui", R"yui(
+        drawing RelativeBadge {
+            image { bounds: bounds; source: "../assets/dot.png"; }
+            svg { bounds: bounds; source: "../assets/icon.svg"; }
+        }
+        style {
+            #drawn { drawing: RelativeBadge; }
+        }
+        Row {
+            Image { id: pngImg; source: "../assets/dot.png"; }
+            Image { id: svgImg; source: "../assets/icon.svg"; }
+            Component { id: drawn; }
+        })yui");
+
+    YuiDocument document;
+    YuiLoader loader (document);
+    const auto result = loader.loadFile (folder.getChildFile ("sub/panel.yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_EQ (document.getBaseDirectory(), folder.getChildFile ("sub"));
+
+    const auto* pngImg = document.findById<ImageComponent> ("pngImg");
+    ASSERT_NE (pngImg, nullptr);
+    EXPECT_TRUE (pngImg->getImage().isValid());
+
+    const auto* svgImg = document.findById<ImageComponent> ("svgImg");
+    ASSERT_NE (svgImg, nullptr);
+    EXPECT_NE (svgImg->getDrawable(), nullptr);
+
+    const auto* drawn = document.findById ("drawn");
+    ASSERT_NE (drawn, nullptr);
+    ASSERT_NE (drawn->getStyle(), nullptr);
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (16, 16);
+    auto factory = context->makeFactory();
+    Graphics g (*context, *renderer);
+    Component panel;
+    panel.setBounds (0.0f, 0.0f, 16.0f, 16.0f);
+    drawn->getStyle()->paint (g, *theme, panel);
+}
+
 TEST_F (YuiLoaderTests, ReloadsTheFileInPlaceAndReportsEachLoad)
 {
     YuiDocument document;

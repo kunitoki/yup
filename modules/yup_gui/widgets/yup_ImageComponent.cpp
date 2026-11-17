@@ -33,13 +33,28 @@ struct ImageComponentIds
     static inline const Identifier imageOpacity { "imageOpacity" };
 };
 
-File resolveImageComponentSourceFile (const String& path)
+File resolveImageComponentSourceFile (const String& path, const File& baseDirectory, const Component* owner)
 {
     if (path.isEmpty())
         return {};
 
     if (File::isAbsolutePath (path))
         return File (path);
+
+    if (baseDirectory != File())
+    {
+        if (const auto candidate = baseDirectory.getChildFile (path); candidate.existsAsFile())
+            return candidate;
+    }
+
+    if (owner != nullptr)
+    {
+        if (const auto* document = YuiDocument::findDocumentFor (owner); document != nullptr && document->getBaseDirectory() != File())
+        {
+            if (const auto candidate = document->getBaseDirectory().getChildFile (path); candidate.existsAsFile())
+                return candidate;
+        }
+    }
 
     return File::getCurrentWorkingDirectory().getChildFile (path);
 }
@@ -127,32 +142,80 @@ void ImageComponent::setSource (const String& newSource)
         return;
 
     source = newSource;
+    reloadSource();
+
+    notifyPropertyChanged (ImageComponentIds::source);
+    repaint();
+}
+
+void ImageComponent::setBaseDirectory (const File& directory)
+{
+    if (baseDirectory == directory)
+        return;
+
+    baseDirectory = directory;
+
+    if (source.isNotEmpty() && ! File::isAbsolutePath (source))
+    {
+        reloadSource();
+        repaint();
+    }
+}
+
+void ImageComponent::reloadSource()
+{
     image = {};
     drawable.reset();
 
-    const auto file = resolveImageComponentSourceFile (source);
-    if (file.existsAsFile())
+    const auto trimmed = source.trim();
+    if (trimmed.isEmpty())
+        return;
+
+    if (trimmed.startsWithIgnoreCase ("data:image/"))
     {
-        if (file.hasFileExtension (".svg"))
+        if (const auto marker = trimmed.indexOfIgnoreCase ("base64,"); marker >= 0)
         {
-            auto parsed = std::make_shared<Drawable>();
-            if (parsed->parseSVG (file))
-                drawable = std::move (parsed);
-        }
-        else
-        {
-            MemoryBlock block;
-            if (file.loadFileAsData (block) && block.getSize() > 0)
+            MemoryOutputStream decoded;
+            if (Base64::convertFromBase64 (decoded, trimmed.substring (marker + 7).trim()) && decoded.getDataSize() > 0)
             {
-                auto loaded = Image::loadFromData ({ static_cast<const uint8*> (block.getData()), block.getSize() });
+                auto loaded = Image::loadFromData ({ static_cast<const uint8*> (decoded.getData()), decoded.getDataSize() });
                 if (loaded.wasOk())
                     image = std::move (loaded.getReference());
             }
         }
+
+        return;
     }
 
-    notifyPropertyChanged (ImageComponentIds::source);
-    repaint();
+    if (trimmed.startsWithChar ('<'))
+    {
+        auto parsed = std::make_shared<Drawable>();
+        if (parsed->parseSVG (trimmed))
+            drawable = std::move (parsed);
+
+        return;
+    }
+
+    const auto file = resolveImageComponentSourceFile (trimmed, baseDirectory, this);
+    if (! file.existsAsFile())
+        return;
+
+    if (file.hasFileExtension (".svg"))
+    {
+        auto parsed = std::make_shared<Drawable>();
+        if (parsed->parseSVG (file))
+            drawable = std::move (parsed);
+    }
+    else
+    {
+        MemoryBlock block;
+        if (file.loadFileAsData (block) && block.getSize() > 0)
+        {
+            auto loaded = Image::loadFromData ({ static_cast<const uint8*> (block.getData()), block.getSize() });
+            if (loaded.wasOk())
+                image = std::move (loaded.getReference());
+        }
+    }
 }
 
 void ImageComponent::setFitting (Fitting newFitting)
@@ -258,6 +321,14 @@ Rectangle<float> ImageComponent::computeFittedBounds (Rectangle<float> sourceBou
 
 void ImageComponent::paint (Graphics& g)
 {
+    if (auto style = getStyle())
+    {
+        if (auto theme = ApplicationTheme::getGlobalTheme())
+            style->paint (g, *theme, *this);
+
+        return;
+    }
+
     if (imageOpacity <= 0.0f)
         return;
 

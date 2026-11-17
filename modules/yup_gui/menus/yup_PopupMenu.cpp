@@ -29,10 +29,34 @@ namespace
 
 static std::vector<PopupMenu::Ptr> activePopups;
 
-constexpr float separatorHeight = 8.0f;    // TODO: move to Options
-constexpr float verticalPadding = 4.0f;    // TODO: move to Style
-constexpr float itemHeight = 22.0f;        // TODO: move to Options
-constexpr float defaultMenuWidth = 200.0f; // TODO: move to Options
+constexpr float separatorHeight = 8.0f;
+constexpr float defaultVerticalPadding = 4.0f;
+constexpr float defaultItemHeight = 22.0f;
+constexpr float defaultMenuWidth = 200.0f;
+
+bool isNonInheritedPopupProperty (const Identifier& name)
+{
+    static const Identifier idProp ("id");
+    static const Identifier visibleProp ("visible");
+    static const Identifier xProp ("x");
+    static const Identifier yProp ("y");
+    static const Identifier widthProp ("width");
+    static const Identifier heightProp ("height");
+    static const Identifier boundsProp ("bounds");
+    static const Identifier transformProp ("transform");
+    static const Identifier filterStorageProp ("__styleFilter");
+
+    return name == idProp
+        || name == visibleProp
+        || name == xProp
+        || name == yProp
+        || name == widthProp
+        || name == heightProp
+        || name == boundsProp
+        || name == transformProp
+        || name == filterStorageProp;
+}
+
 constexpr float horizontalTextPadding = 12.0f;
 constexpr float tickedTextIndent = 8.0f;
 constexpr float submenuArrowWidth = 24.0f;
@@ -311,14 +335,6 @@ float measureMenuTextWidth (const String& text, const Font& font)
     return styledText.getComputedTextBounds().getWidth();
 }
 
-float getItemHeight (const PopupMenu::Item& item)
-{
-    if (item.isCustomComponent())
-        return item.customComponent->getHeight();
-
-    return item.isSeparator() ? separatorHeight : itemHeight;
-}
-
 } // namespace
 
 //==============================================================================
@@ -447,6 +463,42 @@ PopupMenu::~PopupMenu()
 {
     if (isVisible())
         dismiss();
+
+    clearInheritedStyle();
+    detachStyledPopup();
+}
+
+const ComponentTypeInfo& PopupMenu::getClassTypeInfo()
+{
+    const auto layoutNumber = [] (Identifier name, Identifier storageId, var defaultValue, String description)
+    {
+        return ComponentProperty {
+            .name = std::move (name),
+            .storageId = std::move (storageId),
+            .type = ComponentProperty::Type::number,
+            .defaultValue = std::move (defaultValue),
+            .layoutEffect = ComponentProperty::LayoutEffect::own,
+            .description = std::move (description)
+        };
+    };
+
+    static const auto info = ComponentTypeBuilder<PopupMenu> (Identifier ("PopupMenu"))
+                                 .color ("backgroundColor", Style::menuBackground, "The background color of the menu.")
+                                 .color ("borderColor", Style::menuBorder, "The border color of the menu.")
+                                 .color ("itemTextColor", Style::menuItemText, "The text color of enabled menu items.")
+                                 .color ("itemTextDisabledColor", Style::menuItemTextDisabled, "The text color of disabled menu items.")
+                                 .color ("itemBackgroundColor", Style::menuItemBackground, "The background color of menu items.")
+                                 .color ("itemHighlightedBackgroundColor", Style::menuItemBackgroundHighlighted, "The background color of the highlighted menu item.")
+                                 .color ("itemActiveSubmenuBackgroundColor", Style::menuItemBackgroundActiveSubmenu, "The background color of an item with an open submenu.")
+                                 .number ("cornerRadius", Style::cornerRadiusId, 4.0, "The corner radius of the menu panel.")
+                                 .number ("outlineWidth", Style::outlineWidthId, 1.0, "The border stroke width of the menu panel.")
+                                 .number ("itemCornerRadius", Style::itemCornerRadiusId, 2.0, "The corner radius of item highlight rectangles.")
+                                 .addProperty (layoutNumber ("itemHeight", Style::itemHeightId, defaultItemHeight, "The height of standard menu rows."))
+                                 .addProperty (layoutNumber ("verticalPadding", Style::verticalPaddingId, defaultVerticalPadding, "The top and bottom inner padding of the menu."))
+                                 .signal ("onItemSelected", &PopupMenu::onItemSelected, "Emitted when an item is selected.", { { "itemID", ComponentProperty::Type::integer } })
+                                 .build();
+
+    return info;
 }
 
 //==============================================================================
@@ -533,9 +585,11 @@ void PopupMenu::setupMenuItems()
                                                         options.maxWidth.value_or (std::numeric_limits<int>::max())));
 
     float width = minimumWidth;
+    const auto padY = getResolvedVerticalPadding();
+    const auto rowHeight = getResolvedItemHeight();
 
     // First pass: calculate total content height and determine width
-    totalContentHeight = verticalPadding; // Top padding
+    totalContentHeight = padY; // Top padding
     for (const auto& item : items)
     {
         if (item->isCustomComponent())
@@ -545,7 +599,7 @@ void PopupMenu::setupMenuItems()
         }
         else
         {
-            totalContentHeight += item->isSeparator() ? separatorHeight : itemHeight;
+            totalContentHeight += item->isSeparator() ? separatorHeight : rowHeight;
 
             if (! item->isSeparator())
             {
@@ -566,7 +620,7 @@ void PopupMenu::setupMenuItems()
             }
         }
     }
-    totalContentHeight += verticalPadding; // Bottom padding
+    totalContentHeight += padY; // Bottom padding
     width = jlimit (minimumWidth, maximumWidth, width);
 
     // Calculate available content height properly (without depending on current position)
@@ -581,11 +635,11 @@ void PopupMenu::setupMenuItems()
 
     updateVisibleItemRange();
 
-    const auto menuHeight = verticalPadding * 2.0f
+    const auto menuHeight = padY * 2.0f
                           + getVisibleItemsHeight()
                           + (showScrollIndicators ? scrollIndicatorHeight * 2.0f : 0.0f);
     setSize (static_cast<int> (std::ceil (width)),
-             static_cast<int> (std::ceil (jmax (itemHeight, menuHeight))));
+             static_cast<int> (std::ceil (jmax (rowHeight, menuHeight))));
 
     // Remove all child components first
     for (auto& item : items)
@@ -729,14 +783,17 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
     YUP_MODULE_DBG (GUI_POPUPMENU, "showCustom: isSubmenu=" << (isSubmenu ? 1 : 0) << " isOnDesktop=" << (isOnDesktop() ? 1 : 0) << " numItems=" << getNumItems() << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
 
     if (! isSubmenu)
+    {
         dismissAllPopups();
+        parentMenu = nullptr;
+    }
+
+    clearInheritedStyle();
+    detachStyledPopup();
 
     isBeingDismissed = false;
     this->options = options;
     menuCallback = std::move (callback);
-
-    if (auto* source = isSubmenu ? parentMenu.get() : options.targetComponent)
-        inheritColors (*source);
 
     if (! isSubmenu)
         focusComponentToRestore = getFocusComponentForDismissal();
@@ -774,6 +831,8 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
         }
     }
 
+    applyPopupStyling (isSubmenu);
+
     removeActivePopup (this);
     activePopups.push_back (this);
 
@@ -787,25 +846,187 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
     YUP_MODULE_DBG (GUI_POPUPMENU, "showCustom EXIT: visible=" << (isVisible() ? 1 : 0) << " size=" << getWidth() << "x" << getHeight() << " screenBounds=" << getScreenBounds().toString() << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
 }
 
-void PopupMenu::inheritColors (const Component& source)
+void PopupMenu::applyPopupStyling (bool isSubmenu)
 {
-    if (getPalette() == nullptr)
-        if (const auto* sourcePalette = source.findPalette())
-            setPalette (*sourcePalette);
-
-    for (const auto* colorId : { &Style::menuBackground,
-                                 &Style::menuBorder,
-                                 &Style::menuItemText,
-                                 &Style::menuItemTextDisabled,
-                                 &Style::menuItemBackground,
-                                 &Style::menuItemBackgroundHighlighted,
-                                 &Style::menuItemBackgroundActiveSubmenu })
+    if (isSubmenu)
     {
-        if (getColor (*colorId).has_value())
+        if (const auto* parent = getParentMenu())
+            inheritFromParentMenu (*parent);
+
+        return;
+    }
+
+    auto* context = options.targetComponent != nullptr ? options.targetComponent->findStyleContext() : nullptr;
+    if (context == nullptr)
+        context = findStyleContext();
+
+    if (context != nullptr)
+    {
+        styledContextRoot = &context->getRoot();
+        context->stylePopup (*this, options.targetComponent);
+    }
+
+    if (options.targetComponent != nullptr)
+        inheritFromTarget (*options.targetComponent);
+}
+
+void PopupMenu::inheritFromTarget (const Component& source)
+{
+    if (getPalette() == nullptr && (getStyleState() == nullptr || getStyleState()->getStylePalette() == nullptr))
+    {
+        if (const auto* sourcePalette = source.findPalette())
+        {
+            setPalette (*sourcePalette);
+            inheritedStyle.palette = true;
+        }
+    }
+
+    for (const auto* storageId : { &Style::menuBackground,
+                                   &Style::menuBorder,
+                                   &Style::menuItemText,
+                                   &Style::menuItemTextDisabled,
+                                   &Style::menuItemBackground,
+                                   &Style::menuItemBackgroundHighlighted,
+                                   &Style::menuItemBackgroundActiveSubmenu,
+                                   &Style::cornerRadiusId,
+                                   &Style::outlineWidthId,
+                                   &Style::itemCornerRadiusId,
+                                   &Style::itemHeightId,
+                                   &Style::verticalPaddingId })
+    {
+        if (getProperties().contains (*storageId))
             continue;
 
-        if (const auto color = source.findColor (*colorId))
-            setColor (*colorId, *color);
+        if (getStyleState() != nullptr && getStyleState()->getStyleValue (*storageId) != nullptr)
+            continue;
+
+        const auto inherited = source.findPropertySource (*storageId);
+        if (inherited.layer == PropertySource::Layer::explicitly || inherited.layer == PropertySource::Layer::styled)
+        {
+            setProperty (*storageId, inherited.value);
+            inheritedStyle.properties.addIfNotAlreadyThere (*storageId);
+        }
+    }
+}
+
+void PopupMenu::inheritFromParentMenu (const PopupMenu& parent)
+{
+    if (getPalette() == nullptr)
+    {
+        if (const auto* parentPalette = parent.findPalette())
+        {
+            setPalette (*parentPalette);
+            inheritedStyle.palette = true;
+        }
+    }
+
+    const auto& parentProps = parent.getProperties();
+    for (int i = 0; i < parentProps.size(); ++i)
+    {
+        const auto name = parentProps.getName (i);
+        if (isNonInheritedPopupProperty (name) || getProperties().contains (name))
+            continue;
+
+        setProperty (name, *parentProps.getVarPointerAt (i));
+        inheritedStyle.properties.addIfNotAlreadyThere (name);
+    }
+
+    if (const auto* parentState = parent.getStyleState())
+    {
+        auto copyStyledSet = [this, parentState] (const NamedValueSet& values)
+        {
+            for (int i = 0; i < values.size(); ++i)
+            {
+                const auto name = values.getName (i);
+                if (isNonInheritedPopupProperty (name) || getProperties().contains (name))
+                    continue;
+
+                if (const auto* val = parentState->getStyleValue (name))
+                {
+                    setProperty (name, *val);
+                    inheritedStyle.properties.addIfNotAlreadyThere (name);
+                }
+            }
+        };
+
+        copyStyledSet (parentState->getAnimatedValues());
+        copyStyledSet (parentState->getComputedValues());
+    }
+
+    if (getStyle() == nullptr && parent.getStyle() != nullptr)
+    {
+        setStyle (parent.getStyle());
+        inheritedStyle.style = true;
+    }
+
+    if (exactlyEqual (getOpacity(), 1.0f) && ! exactlyEqual (parent.getOpacity(), 1.0f))
+    {
+        inheritedStyle.previousOpacity = getOpacity();
+        setOpacity (parent.getOpacity());
+    }
+
+    StyleContext::copyVisualStyle (parent, *this);
+    inheritedStyle.visualStyle = true;
+
+    if (getComponentEffect() == nullptr && parent.getComponentEffect() != nullptr)
+    {
+        setComponentEffect (parent.getComponentEffect());
+        inheritedStyle.effect = true;
+    }
+
+    if (options.parentComponent != nullptr)
+    {
+        const auto ownMargin = getPaintMargin();
+        const auto parentMargin = parent.getPaintMargin();
+        setPaintMargin (jmax (ownMargin.getLeft(), parentMargin.getLeft()),
+                        jmax (ownMargin.getTop(), parentMargin.getTop()),
+                        jmax (ownMargin.getRight(), parentMargin.getRight()),
+                        jmax (ownMargin.getBottom(), parentMargin.getBottom()));
+    }
+}
+
+void PopupMenu::clearInheritedStyle()
+{
+    for (const auto& prop : inheritedStyle.properties)
+        removeProperty (prop);
+
+    if (inheritedStyle.previousOpacity.has_value())
+        setOpacity (*inheritedStyle.previousOpacity);
+
+    if (inheritedStyle.palette)
+        setPalette (std::nullopt);
+
+    if (inheritedStyle.style)
+        setStyle (nullptr);
+
+    if (inheritedStyle.effect)
+        setComponentEffect (nullptr);
+
+    if (inheritedStyle.visualStyle)
+        StyleContext::clearVisualStyle (*this);
+
+    inheritedStyle = {};
+}
+
+void PopupMenu::detachStyledPopup()
+{
+    if (auto* rootComp = styledContextRoot.get())
+        if (auto* context = rootComp->getStyleContext())
+            context->releaseSubtree (*this);
+
+    styledContextRoot = nullptr;
+}
+
+void PopupMenu::refreshSubmenuStyle()
+{
+    if (currentSubmenu != nullptr && currentSubmenu->isVisible())
+    {
+        currentSubmenu->clearInheritedStyle();
+        currentSubmenu->inheritFromParentMenu (*this);
+        currentSubmenu->setupMenuItems();
+        currentSubmenu->positionMenu();
+        currentSubmenu->repaint();
+        currentSubmenu->refreshSubmenuStyle();
     }
 }
 
@@ -831,6 +1052,10 @@ void PopupMenu::dismiss (int itemID)
 
     if (getParentComponent() == nullptr && isOnDesktop())
         removeFromDesktop();
+
+    clearInheritedStyle();
+    detachStyledPopup();
+    parentMenu = nullptr;
 
     selectedItemIndex = -1;
 
@@ -885,9 +1110,44 @@ void PopupMenu::restoreFocusAfterDismissal()
 
 //==============================================================================
 
+void PopupMenu::layoutPropertyChanged()
+{
+    if (isVisible() && ! isBeingDismissed && ! items.empty())
+    {
+        setupMenuItems();
+        positionMenu();
+        repaint();
+    }
+}
+
+float PopupMenu::getResolvedItemHeight() const
+{
+    return jmax (1.0f, findPropertyAs<float> ("itemHeight"));
+}
+
+float PopupMenu::getResolvedVerticalPadding() const
+{
+    return jmax (0.0f, findPropertyAs<float> ("verticalPadding"));
+}
+
+float PopupMenu::getItemHeight (const Item& item) const
+{
+    if (item.isCustomComponent())
+        return item.customComponent->getHeight();
+
+    return item.isSeparator() ? separatorHeight : getResolvedItemHeight();
+}
+
 void PopupMenu::paint (Graphics& g)
 {
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
+    auto style = getStyle();
+    for (const auto* menu = getParentMenu(); style == nullptr && menu != nullptr; menu = menu->getParentMenu())
+        style = menu->getStyle();
+
+    if (style == nullptr)
+        style = ApplicationTheme::findComponentStyle (*this);
+
+    if (style != nullptr)
         style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
 }
 
@@ -1270,6 +1530,7 @@ void PopupMenu::cleanupSubmenu (PopupMenu::Ptr submenu)
     if (! submenu)
         return;
 
+    submenu->hideSubmenus();
     submenu->setVisible (false);
 
     removeActivePopup (submenu.get());
@@ -1283,6 +1544,9 @@ void PopupMenu::cleanupSubmenu (PopupMenu::Ptr submenu)
         submenu->removeFromDesktop();
     }
 
+    submenu->clearInheritedStyle();
+    submenu->detachStyledPopup();
+    submenu->parentMenu = nullptr;
     submenu->resetInternalState();
 }
 
@@ -1530,7 +1794,7 @@ int PopupMenu::getPreviousSelectableItemIndex (int currentIndex) const
 
 void PopupMenu::calculateAvailableHeight()
 {
-    const auto minimumMenuHeight = itemHeight + (verticalPadding * 2.0f);
+    const auto minimumMenuHeight = getResolvedItemHeight() + (getResolvedVerticalPadding() * 2.0f);
 
     if (options.parentComponent)
     {
@@ -1573,7 +1837,7 @@ void PopupMenu::layoutVisibleItems (float width)
         item->area = Rectangle<float>();
     }
 
-    float currentY = verticalPadding;
+    float currentY = getResolvedVerticalPadding();
     if (showScrollIndicators)
         currentY += scrollIndicatorHeight; // Space for up arrow
 
@@ -1593,7 +1857,7 @@ void PopupMenu::layoutVisibleItems (float width)
         else
         {
             // Regular text item or separator
-            const auto height = item.isSeparator() ? separatorHeight : itemHeight;
+            const auto height = getItemHeight (item);
             item.area = Rectangle<float> (0.0f, currentY, width, height);
             currentY += height;
         }
@@ -1621,7 +1885,7 @@ void PopupMenu::updateVisibleItemRange()
     if (showScrollIndicators)
         availableHeight -= 2 * scrollIndicatorHeight;
 
-    availableHeight -= 2 * verticalPadding; // Top and bottom padding
+    availableHeight -= 2.0f * getResolvedVerticalPadding(); // Top and bottom padding
 
     // Get the current start index (preserve it if already set correctly)
     int startIndex = visibleItemRange.getStart();
@@ -1678,10 +1942,10 @@ void PopupMenu::applyVisibleItemRange()
     updateVisibleItemRange();
 
     // Re-layout visible items using the exact height of the visible rows.
-    const auto menuHeight = verticalPadding * 2.0f
+    const auto menuHeight = getResolvedVerticalPadding() * 2.0f
                           + getVisibleItemsHeight()
                           + (showScrollIndicators ? scrollIndicatorHeight * 2.0f : 0.0f);
-    setSize (getWidth(), static_cast<int> (std::ceil (jmax (itemHeight, menuHeight))));
+    setSize (getWidth(), static_cast<int> (std::ceil (jmax (getResolvedItemHeight(), menuHeight))));
     layoutVisibleItems (getWidth());
 
     // Repaint to update the display
@@ -1703,7 +1967,7 @@ void PopupMenu::scrollTickedItemUnderMouse()
 
     const auto tickedIndex = static_cast<int> (std::distance (items.begin(), ticked));
     const auto tickedHalfHeight = getItemHeight (**ticked) * 0.5f;
-    const auto firstRowY = verticalPadding + scrollIndicatorHeight;
+    const auto firstRowY = getResolvedVerticalPadding() + scrollIndicatorHeight;
 
     auto mouseY = firstRowY;
     if (auto* desktop = Desktop::getInstance())

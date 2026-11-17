@@ -53,6 +53,9 @@ struct YUP_API ExpressionFunction
     /** The block routine evaluating the function. */
     ExpressionThunk thunk = nullptr;
 
+    /** Optional in-place routine when a method mutates and returns its first argument (`T& (T&, ...)`). */
+    ExpressionThunk inPlaceThunk = nullptr;
+
     /** The state passed to the thunk, kept alive by every program using the function. */
     std::shared_ptr<const void> state;
 
@@ -128,20 +131,86 @@ struct ExpressionInvoker
     }
 };
 
+template <class R, class... A>
+struct ExpressionIsInPlace : std::false_type
+{
+};
+
+template <class T, class... Rest>
+struct ExpressionIsInPlace<T&, T&, Rest...> : std::bool_constant<! std::is_const_v<T>>
+{
+};
+
+template <class F>
+struct ExpressionInPlaceState
+{
+    F function;
+    const ExpressionType* type = nullptr;
+};
+
+template <class F, class Target, class... Rest>
+struct ExpressionInPlaceInvoker
+{
+    static void inPlaceThunk (const void* rawState, void* output, const void* const* args, int numRows)
+    {
+        invoke (rawState, output, args, numRows, std::index_sequence_for<Rest...>());
+    }
+
+    static void thunk (const void* rawState, void* output, const void* const* args, int numRows)
+    {
+        const auto& state = *static_cast<const ExpressionInPlaceState<F>*> (rawState);
+        state.type->clone (output, args[0], numRows);
+        invoke (rawState, output, args + 1, numRows, std::index_sequence_for<Rest...>());
+    }
+
+    template <size_t... I>
+    static void invoke (const void* rawState, void* output, [[maybe_unused]] const void* const* args, int numRows, std::index_sequence<I...>)
+    {
+        auto& function = *const_cast<F*> (&static_cast<const ExpressionInPlaceState<F>*> (rawState)->function);
+        auto* target = static_cast<Target*> (output);
+
+        for (int row = 0; row < numRows; ++row)
+            (void) function (target[row], static_cast<const Rest*> (args[I])[row]...);
+    }
+};
+
+template <class F, class T, class... Rest, class Resolver>
+ExpressionFunction makeInPlaceExpressionFunction (const String& name, F function, bool isPure, Resolver&& resolveType, T& (*) (T&, Rest...))
+{
+    auto* targetType = resolveType (std::type_identity<std::decay_t<T>>());
+
+    ExpressionFunction result;
+    result.name = name;
+    result.parameterTypes = { targetType, resolveType (std::type_identity<std::decay_t<Rest>>())... };
+    result.resultType = targetType;
+    result.thunk = &ExpressionInPlaceInvoker<F, std::decay_t<T>, std::decay_t<Rest>...>::thunk;
+    result.inPlaceThunk = &ExpressionInPlaceInvoker<F, std::decay_t<T>, std::decay_t<Rest>...>::inPlaceThunk;
+    result.state = std::make_shared<ExpressionInPlaceState<F>> (ExpressionInPlaceState<F> { std::move (function), targetType });
+    result.isPure = isPure;
+    return result;
+}
+
 template <class F, class R, class... A, class Resolver>
 ExpressionFunction makeExpressionFunction (const String& name, F function, bool isPure, Resolver&& resolveType, R (*) (A...))
 {
     static_assert (! std::is_void_v<R>, "Expression functions must return a value");
     static_assert (! std::is_member_pointer_v<F>, "Wrap member function pointers in a lambda");
 
-    ExpressionFunction result;
-    result.name = name;
-    result.parameterTypes = { resolveType (std::type_identity<std::decay_t<A>>())... };
-    result.resultType = resolveType (std::type_identity<std::decay_t<R>>());
-    result.thunk = &ExpressionInvoker<F, std::decay_t<R>, std::decay_t<A>...>::thunk;
-    result.state = std::make_shared<F> (std::move (function));
-    result.isPure = isPure;
-    return result;
+    if constexpr (ExpressionIsInPlace<R, A...>::value)
+    {
+        return makeInPlaceExpressionFunction<F> (name, std::move (function), isPure, std::forward<Resolver> (resolveType), static_cast<R (*) (A...)> (nullptr));
+    }
+    else
+    {
+        ExpressionFunction result;
+        result.name = name;
+        result.parameterTypes = { resolveType (std::type_identity<std::decay_t<A>>())... };
+        result.resultType = resolveType (std::type_identity<std::decay_t<R>>());
+        result.thunk = &ExpressionInvoker<F, std::decay_t<R>, std::decay_t<A>...>::thunk;
+        result.state = std::make_shared<F> (std::move (function));
+        result.isPure = isPure;
+        return result;
+    }
 }
 
 /** Creates an ExpressionFunction from a callable, using resolveType (std::type_identity<T>) to map C++ types. */

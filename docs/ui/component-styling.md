@@ -69,7 +69,7 @@ Theme-level color resolution via `theme->findColor(component, id)`:
 2. If not found, checks the colors set with `theme->setColor()`.
 3. If not found, checks the colors derived from the closest palette set on the component or a parent with `Component::setPalette()`, or else from the theme palette (see [Palettes](#palettes)).
 
-A `PopupMenu` opened relative to a component (`PopupMenu::Options::withRelativePosition()`, as a `ComboBox` opens its list) takes the palette and the `PopupMenu::Style` colors set on that component or its parents, unless the menu sets them itself, and its submenus take the menu's. Setting the menu colors on a panel styles every menu opened from inside it, even though the menu is added to a popup container higher up.
+A `PopupMenu` opened relative to a component (`PopupMenu::Options::withRelativePosition()`, as a `ComboBox` opens its list) is also styled by that component's `.yui` stylesheet context and takes the palette and `PopupMenu::Style` values set on that component or its parents unless the menu sets them itself. Submenus track their originating parent `PopupMenu` via a `WeakReference` and inherit its resolved style directly, even when mounted on a higher-level popup container or as desktop windows.
 
 ### Widget style IDs
 
@@ -91,7 +91,7 @@ Every themable widget exposes color IDs:
 | `TreeView::Style` | `indentGuideColorId`, `disclosureColorId`, `itemTextColorId`, `itemTextSelectedColorId`, `dropIndicatorColorId`, `itemHoveredColorId` (the rows also use the `ListBox::Style` colors) |
 | `TabBar::Style` | `trackColorId`, `indicatorColorId`, `underlineColorId`, `focusOutlineColorId` |
 | `TabButton::Style` | `textColorId`, `textSelectedColorId`, `hoveredBackgroundColorId`, `closeButtonColorId` |
-| `PopupMenu::Style` | `menuBackground`, `menuBorder`, `menuItemText`, `menuItemTextDisabled`, `menuItemBackground`, `menuItemBackgroundHighlighted`, `menuItemBackgroundActiveSubmenu` |
+| `PopupMenu::Style` | `menuBackground`, `menuBorder`, `menuItemText`, `menuItemTextDisabled`, `menuItemBackground`, `menuItemBackgroundHighlighted`, `menuItemBackgroundActiveSubmenu` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `itemCornerRadiusId`, `itemHeightId`, `verticalPaddingId`) |
 | `DocumentWindow::Style` | `backgroundColorId` |
 | `MidiKeyboardComponent::Style` | `whiteKeyColorId`, `whiteKeyPressedColorId`, `whiteKeyShadowColorId`, `blackKeyColorId`, `blackKeyPressedColorId`, `blackKeyShadowColorId`, `keyOutlineColorId`, `scrollButtonBackgroundColorId`, `scrollButtonArrowColorId` |
 | `KMeterComponent::Style` | `backgroundColorId`, `greenZoneColorId`, `amberZoneColorId`, `redZoneColorId`, `averageLevelColorId`, `peakLevelColorId`, `peakLevelClipColorId`, `peakHoldColorId` |
@@ -211,8 +211,8 @@ state.evaluate();
 // state.getVar (program.findOutput ("out")) is 50 when value is 0.5
 ```
 
-Number, integer, boolean, string, color, point, rectangle and typed array
-properties are bridged. Parse through the scope to declare the symbols it reads,
+Number, integer, boolean, string, color, point, rectangle, transform, font and
+typed array properties are bridged. Parse through the scope to declare the symbols it reads,
 bind the resulting program's input indices once with `bindInputs`, and call
 `updateInputs` before each evaluation. The scope holds weak references to the
 resolved components, so a destroyed component simply feeds nothing. This is the

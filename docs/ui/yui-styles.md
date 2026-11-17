@@ -65,10 +65,11 @@ Slider { id: cutoff; class: "knob large"; }
 | `[label]` | Components having the property |
 | `[sliderType=rotary]`, `[text!="Off"]` | Components whose property has, or hasn't, the value |
 | `A B`, `A > B` | `B` inside `A`, or directly inside it |
+| `A, B` | Components matching either `A` or `B` (each branch keeps its own specificity) |
 
-Parts combine as in CSS: `Row.toolbar > TextButton:hover`. Pseudo-elements,
-`:not()`, sibling combinators and selector lists separated by commas are not
-supported.
+Parts combine as in CSS: `Row.toolbar > TextButton:hover` or
+`ComboBox:hover:enabled, ComboBox:open`. Pseudo-elements, `:not()` and sibling
+combinators are not supported.
 
 A rule overrides a rule with a lower specificity (IDs count most, then classes,
 attributes and pseudo-classes, then types), and a later rule overrides an
@@ -139,6 +140,7 @@ stylesheet can reshape the built-in widgets without a drawing:
 |---|---|
 | `Slider` | `trackWidth` (4) and `thumbSize` (16) for linear sliders; `rotaryInset` (unset: derived from track and thumb), `rotaryTrackWidth` (8) and `rotaryThumbRadius` (5) for rotary ones |
 | `TextButton`, `ToggleButton`, `TextEditor`, `ComboBox` | `cornerRadius` (4), `outlineWidth` (1), `focusedOutlineWidth` (2) |
+| `PopupMenu` | `cornerRadius` (4), `outlineWidth` (1), `itemCornerRadius` (2), `itemHeight` (22), `verticalPadding` (4) |
 | `SwitchButton` | `cornerRadius` (unset: a pill), `thumbInset` (4) |
 | `ProgressBar` | `cornerRadius` (unset: a pill) |
 | `ScrollBar` | `thumbInset` (3), `cornerRadius` (unset: a pill) |
@@ -154,8 +156,18 @@ and stylesheets.
 style {
     TextButton { cornerRadius: 12; focusedOutlineWidth: 3; }
     .compact   { Slider.trackWidth: 2; Slider.thumbSize: 10; }
+    PopupMenu  { cornerRadius: 8; itemCornerRadius: 5; itemHeight: 26; }
 }
 ```
+
+A transient `PopupMenu` opened relative to a widget (such as a `ComboBox`
+dropdown or a context menu using `PopupMenu::Options::withRelativePosition()`)
+is styled by that widget's stylesheet context, so `PopupMenu`, combinators like
+`ComboBox > PopupMenu`, and qualified declarations like
+`.toolbar { PopupMenu.backgroundColor: ...; }` match even when the popup is
+mounted on a top-level popup container or as a desktop window. Any submenus
+opened from that menu inherit their originating parent `PopupMenu`'s resolved
+style automatically.
 
 Like the colors they are kept per widget type (`TextButton::Style::cornerRadiusId`),
 so a `cornerRadius` given to a card doesn't round the buttons inside it. They

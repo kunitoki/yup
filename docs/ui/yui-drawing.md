@@ -83,7 +83,7 @@ the text and in the tree.
 | `circle`  | `center`, `radius`                                           | A circle.                          |
 | `arc`     | `center`, `radius`, `from`, `to`                             | An open arc between two angles.    |
 | `line`    | `from`, `to`                                                 | A line between two points.         |
-| `path`    | `data`                                                       | A path from SVG path data.         |
+| `path`    | `data`                                                       | A path from SVG path data or a `path()` value. |
 | `polygon` | `center`, `sides`, `radius`, `angle` (default `0`)           | A regular polygon.                 |
 | `star`    | `center`, `points`, `innerRadius`, `outerRadius`, `angle`    | A star, `angle` defaults to `0`.   |
 | `text`    | `bounds`, `text`                                             | A text label placed in `bounds`.   |

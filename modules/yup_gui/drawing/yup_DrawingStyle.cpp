@@ -25,13 +25,19 @@ namespace yup
 namespace
 {
 
-File resolveDrawingSourceFile (const String& path)
+File resolveDrawingSourceFile (const String& path, const File& baseDirectory)
 {
     if (path.isEmpty())
         return {};
 
     if (File::isAbsolutePath (path))
         return File (path);
+
+    if (baseDirectory != File())
+    {
+        if (const auto candidate = baseDirectory.getChildFile (path); candidate.existsAsFile())
+            return candidate;
+    }
 
     return File::getCurrentWorkingDirectory().getChildFile (path);
 }
@@ -107,9 +113,11 @@ Rectangle<float> computeDrawingFittedBounds (Rectangle<float> sourceBounds,
     return { x, y, scaledWidth, scaledHeight };
 }
 
-const Image& resolveDrawingImage (std::map<String, Image>& cache, const String& source)
+const Image& resolveDrawingImage (std::map<String, Image>& cache, const String& source, const File& baseDirectory)
 {
-    if (const auto found = cache.find (source); found != cache.end())
+    const auto cacheKey = baseDirectory != File() ? (baseDirectory.getFullPathName() + "\n" + source) : source;
+
+    if (const auto found = cache.find (cacheKey); found != cache.end())
         return found->second;
 
     Image image;
@@ -130,7 +138,7 @@ const Image& resolveDrawingImage (std::map<String, Image>& cache, const String& 
     }
     else
     {
-        const auto file = resolveDrawingSourceFile (trimmed);
+        const auto file = resolveDrawingSourceFile (trimmed, baseDirectory);
         if (file.existsAsFile())
         {
             MemoryBlock block;
@@ -143,12 +151,17 @@ const Image& resolveDrawingImage (std::map<String, Image>& cache, const String& 
         }
     }
 
-    return cache.emplace (source, std::move (image)).first->second;
+    return cache.emplace (cacheKey, std::move (image)).first->second;
 }
 
-std::shared_ptr<Drawable> resolveDrawingSvg (std::map<String, std::shared_ptr<Drawable>>& cache, const String& source, bool inlineOnly)
+std::shared_ptr<Drawable> resolveDrawingSvg (std::map<String, std::shared_ptr<Drawable>>& cache,
+                                             const String& source,
+                                             bool inlineOnly,
+                                             const File& baseDirectory)
 {
-    if (const auto found = cache.find (source); found != cache.end())
+    const auto cacheKey = baseDirectory != File() ? (baseDirectory.getFullPathName() + "\n" + source) : source;
+
+    if (const auto found = cache.find (cacheKey); found != cache.end())
         return found->second;
 
     std::shared_ptr<Drawable> drawable;
@@ -165,13 +178,13 @@ std::shared_ptr<Drawable> resolveDrawingSvg (std::map<String, std::shared_ptr<Dr
         }
         else
         {
-            const auto file = resolveDrawingSourceFile (trimmed);
+            const auto file = resolveDrawingSourceFile (trimmed, baseDirectory);
             if (file.existsAsFile() && parsed->parseSVG (file))
                 drawable = std::move (parsed);
         }
     }
 
-    cache.emplace (source, drawable);
+    cache.emplace (cacheKey, drawable);
     return drawable;
 }
 
@@ -1446,6 +1459,10 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, Rectangle<float> bou
 
     if (node.kind == Node::Kind::image || node.kind == Node::Kind::svg)
     {
+        File baseDirectory;
+        if (const auto* document = YuiDocument::findDocumentFor (targetComponent.get()))
+            baseDirectory = document->getBaseDirectory();
+
         for (int startRow = 0; startRow < numRows;)
         {
             const auto numEvaluated = slot->state->evaluateBlock (startRow, numRows - startRow);
@@ -1503,12 +1520,12 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, Rectangle<float> bou
 
                 if (node.kind == Node::Kind::svg)
                 {
-                    if (const auto drawable = resolveDrawingSvg (slot->svgCache, src, node.svgInlineOnly))
+                    if (const auto drawable = resolveDrawingSvg (slot->svgCache, src, node.svgInlineOnly, baseDirectory))
                         drawable->paint (g, targetArea, fitting, justification);
                 }
                 else
                 {
-                    const auto& image = resolveDrawingImage (slot->imageCache, src);
+                    const auto& image = resolveDrawingImage (slot->imageCache, src, baseDirectory);
                     if (! image.isValid())
                         continue;
 

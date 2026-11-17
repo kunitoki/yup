@@ -999,4 +999,28 @@ private:
     mutable bool cachedClockwiseNonZero = true;
 };
 
+//==============================================================================
+#ifndef DOXYGEN
+
+template <>
+struct VariantConverter<Path>
+{
+    static Path fromVar (const var& v)
+    {
+        if (! v.isString())
+            return {};
+
+        Path result;
+        result.fromString (v.toString());
+        return result;
+    }
+
+    static var toVar (const Path& path)
+    {
+        return var (path.toString());
+    }
+};
+
+#endif // DOXYGEN
+
 } // namespace yup

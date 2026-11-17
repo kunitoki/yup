@@ -1689,7 +1689,10 @@ TEST_F (CodeTokeniserRuleTests, BuiltInYuiScopes)
     document.setText ("component LabeledKnob : Column {\n"
                       "    property label: string = \"VALUE\";\n"
                       "    width: 150ms; fill: #ff8800;\n"
-                      "    .knob:hover { color: rgba(0, 0, 0, 0.5); }");
+                      "    .knob:hover { color: rgba(0, 0, 0, 0.5); }\n"
+                      "    ComboBox:hover:enabled,\n"
+                      "    .open { cursor: hand; }\n"
+                      "    tint: palette.accent.darker (0.1),\n");
 
     EXPECT_EQ (String ("keyword"), scopeOf (0, "component"));
     EXPECT_EQ (String ("type.class"), scopeOf (0, "LabeledKnob"));
@@ -1706,6 +1709,12 @@ TEST_F (CodeTokeniserRuleTests, BuiltInYuiScopes)
     EXPECT_EQ (String ("type.selector"), scopeOf (3, ":hover"));
     EXPECT_EQ (String ("identifier.property"), scopeOf (3, "color"));
     EXPECT_EQ (String ("identifier.builtin"), scopeOf (3, "rgba"));
+    EXPECT_EQ (String ("type.class"), scopeOf (4, "ComboBox"));
+    EXPECT_EQ (String ("type.selector"), scopeOf (4, ":hover"));
+    EXPECT_EQ (String ("type.selector"), scopeOf (4, ":enabled"));
+    EXPECT_EQ (String ("type.selector"), scopeOf (5, ".open"));
+    EXPECT_EQ (String ("identifier.property"), scopeOf (6, "tint"));
+    EXPECT_EQ (String ("identifier.function"), scopeOf (6, "darker"));
 }
 
 TEST_F (CodeTokeniserRuleTests, BuiltInYdspScopes)

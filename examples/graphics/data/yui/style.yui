@@ -109,8 +109,51 @@ style {
         filter: drop-shadow(0 0 8 palette.accent.withAlpha (0.5));
     }
 
-    TextButton {
+    TextButton, ComboBox {
         cursor: hand;
+    }
+
+    ComboBox {
+        backgroundColor: palette.surfaceRaised;
+        textColor: palette.text;
+        borderColor: palette.outline;
+        arrowColor: palette.textMuted;
+        focusedBorderColor: palette.accent;
+        cornerRadius: 7;
+        transition: borderColor 150ms easeOut;
+    }
+
+    ComboBox:hover:enabled,
+    ComboBox:open {
+        borderColor: palette.accent;
+        arrowColor: palette.text;
+    }
+
+    PopupMenu {
+        backgroundColor: palette.surfaceRaised;
+        borderColor: palette.outline;
+        itemTextColor: palette.text;
+        itemTextDisabledColor: palette.textMuted;
+        itemHighlightedBackgroundColor: palette.accent.withAlpha (0.25);
+        itemActiveSubmenuBackgroundColor: palette.accent.withAlpha (0.16);
+        cornerRadius: 8;
+        itemCornerRadius: 5;
+        itemHeight: 26;
+        verticalPadding: 5;
+        shadow: 0 8 20 #00000055;
+    }
+
+    .scope {
+        palette: Midnight;
+        drawing: FilterScope;
+        cornerRadius: 10;
+        shadow: 0 3 10 #00000024;
+        badgeOffset: none;
+        transition: badgeOffset 200ms easeOut;
+    }
+
+    .scope:hover:enabled {
+        badgeOffset: transform.translation (2, -1);
     }
 
     .title {

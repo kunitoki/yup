@@ -195,4 +195,33 @@ TEST_F (StyleSelectorTests, FailsForInvalidText)
     EXPECT_TRUE (StyleSelector::parse ("").failed());
     EXPECT_TRUE (StyleSelector::parse (".").failed());
     EXPECT_TRUE (StyleSelector::parse ("Slider >").failed());
+    EXPECT_TRUE (StyleSelector::parse ("TextButton, ComboBox").failed());
+}
+
+TEST_F (StyleSelectorTests, ParsesCommaSeparatedSelectorLists)
+{
+    const auto list = StyleSelector::parseList ("TextButton, ComboBox:hover:enabled,\n    #cutoff");
+    ASSERT_TRUE (list.wasOk()) << list.getErrorMessage();
+
+    const auto& selectors = list.getReference();
+    ASSERT_EQ (selectors.size(), 3u);
+    EXPECT_EQ (selectors[0].toString(), "TextButton");
+    EXPECT_EQ (selectors[0].getSpecificity(), 1);
+    EXPECT_EQ (selectors[1].toString(), "ComboBox:hover:enabled");
+    EXPECT_EQ (selectors[1].getSpecificity(), 201);
+    EXPECT_EQ (selectors[2].toString(), "#cutoff");
+    EXPECT_EQ (selectors[2].getSpecificity(), 10000);
+
+    const auto withQuotedComma = StyleSelector::parseList ("Label[text=\"Hello, world\"], Slider[title='a, b']");
+    ASSERT_TRUE (withQuotedComma.wasOk()) << withQuotedComma.getErrorMessage();
+    ASSERT_EQ (withQuotedComma.getReference().size(), 2u);
+
+    Label label;
+    label.setText ("Hello, world", dontSendNotification);
+    EXPECT_TRUE (withQuotedComma.getReference()[0].matches (label));
+
+    EXPECT_TRUE (StyleSelector::parseList ("").failed());
+    EXPECT_TRUE (StyleSelector::parseList (", Slider").failed());
+    EXPECT_TRUE (StyleSelector::parseList ("Slider, ").failed());
+    EXPECT_TRUE (StyleSelector::parseList ("Slider, , Label").failed());
 }

@@ -1952,7 +1952,7 @@ Path Path::createCopy() const
     const bool wasSimple = simpleContourMutationID != 0 && simpleContourMutationID == mutationID;
     const bool wasFillPolygon = fillPolygonMutationID != 0 && fillPolygonMutationID == mutationID;
 
-    newPath->addRenderPath (path.get(), {});
+    const_cast<rive::RawPath&> (newPath->getRawPath()) = path->getRawPath();
 
     Path copy { std::move (newPath) };
     if (wasSimple)

@@ -100,6 +100,13 @@ public:
     void clear();
 
     //==============================================================================
+    /** Sets the base directory used to resolve relative asset paths (such as `Image.source`). */
+    void setBaseDirectory (const File& directory) { baseDirectory = directory; }
+
+    /** Returns the base directory used to resolve relative asset paths. */
+    const File& getBaseDirectory() const noexcept { return baseDirectory; }
+
+    //==============================================================================
     /** Returns the root component, or nullptr if nothing is built. */
     Component* getRoot() const noexcept;
 
@@ -308,6 +315,7 @@ private:
     std::map<String, std::unique_ptr<BindingModel>> models;
     BindingGraph bindings;
     std::vector<YuiDiagnostic> diagnostics;
+    File baseDirectory;
     bool ignoreTreeChanges = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YuiBuilder)

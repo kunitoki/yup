@@ -34,6 +34,7 @@ struct CompiledExpression::Program
     struct Instruction
     {
         ExpressionThunk thunk = nullptr;
+        ExpressionThunk inPlaceThunk = nullptr;
         std::shared_ptr<const void> state;
         int output = -1;
         std::vector<int> inputs;
@@ -132,6 +133,28 @@ struct ExpressionFusedThunks
     std::vector<ComparisonThunks> comparisons;
 };
 
+struct FusedInPlaceChain
+{
+    struct Step
+    {
+        ExpressionThunk inPlaceThunk = nullptr;
+        std::shared_ptr<const void> state;
+        int argOffset = 0;
+    };
+
+    const ExpressionType* type = nullptr;
+    std::vector<Step> steps;
+
+    static void thunk (const void* rawState, void* output, const void* const* args, int numRows)
+    {
+        const auto& chain = *static_cast<const FusedInPlaceChain*> (rawState);
+        chain.type->clone (output, args[0], numRows);
+
+        for (const auto& step : chain.steps)
+            step.inPlaceThunk (step.state.get(), output, args + step.argOffset, numRows);
+    }
+};
+
 } // namespace
 
 //==============================================================================
@@ -182,6 +205,9 @@ struct ExpressionCompiler
         removeUnusedCode();
 
         if (fuseInstructions())
+            removeUnusedCode();
+
+        if (fuseInPlaceChains())
             removeUnusedCode();
     }
 
@@ -861,10 +887,15 @@ struct ExpressionCompiler
         for (size_t i = 0; i < args.size(); ++i)
             args[i] = convert (args[i], function.parameterTypes[i], e);
 
-        return emit (function.thunk, function.state, function.resultType, args, function.isPure);
+        return emit (function.thunk, function.state, function.resultType, args, function.isPure, function.inPlaceThunk);
     }
 
-    Value emit (ExpressionThunk thunk, std::shared_ptr<const void> state, const ExpressionType* resultType, const std::vector<Value>& args, bool isPure)
+    Value emit (ExpressionThunk thunk,
+                std::shared_ptr<const void> state,
+                const ExpressionType* resultType,
+                const std::vector<Value>& args,
+                bool isPure,
+                ExpressionThunk inPlaceThunk = nullptr)
     {
         if (isPure && std::all_of (args.begin(), args.end(), [this] (const auto& arg) { return getConstant (arg) != nullptr; }))
         {
@@ -895,7 +926,7 @@ struct ExpressionCompiler
         }
 
         const auto output = addRegister (resultType);
-        program.code.push_back ({ thunk, std::move (state), output, std::move (inputs), isPure });
+        program.code.push_back ({ thunk, inPlaceThunk, std::move (state), output, std::move (inputs), isPure });
         return { output, resultType };
     }
 
@@ -1004,6 +1035,77 @@ struct ExpressionCompiler
         {
             if (fuseArithmetic (instruction, fused, findSingleUseProducer) || fuseCompareSelect (instruction, fused, findSingleUseProducer))
                 hasFused = true;
+        }
+
+        return hasFused;
+    }
+
+    bool fuseInPlaceChains()
+    {
+        std::vector<int> uses (program.registers.size(), 0);
+        std::vector<int> producers (program.registers.size(), -1);
+
+        for (const auto& output : program.outputs)
+            uses[(size_t) output.reg] += 2;
+
+        for (size_t i = 0; i < program.code.size(); ++i)
+        {
+            producers[(size_t) program.code[i].output] = (int) i;
+
+            for (auto reg : program.code[i].inputs)
+                ++uses[(size_t) reg];
+        }
+
+        bool hasFused = false;
+
+        for (size_t i = program.code.size(); i-- > 0;)
+        {
+            auto& tail = program.code[i];
+            if (tail.inPlaceThunk == nullptr || ! tail.isPure || tail.inputs.empty())
+                continue;
+
+            std::vector<Program::Instruction*> chain { &tail };
+
+            while (true)
+            {
+                const auto seedReg = chain.back()->inputs[0];
+                const auto prodIdx = producers[(size_t) seedReg];
+                if (prodIdx < 0 || uses[(size_t) seedReg] != 1)
+                    break;
+
+                auto& prev = program.code[(size_t) prodIdx];
+                if (prev.inPlaceThunk == nullptr || ! prev.isPure || prev.inputs.empty())
+                    break;
+
+                chain.push_back (&prev);
+            }
+
+            if (chain.size() < 2)
+                continue;
+
+            std::reverse (chain.begin(), chain.end());
+
+            auto fusedState = std::make_shared<FusedInPlaceChain>();
+            fusedState->type = program.registers[(size_t) tail.output].type;
+            fusedState->steps.reserve (chain.size());
+
+            std::vector<int> fusedInputs { chain.front()->inputs[0] };
+
+            for (auto* step : chain)
+            {
+                const int argOffset = (int) fusedInputs.size();
+                fusedInputs.insert (fusedInputs.end(), step->inputs.begin() + 1, step->inputs.end());
+                fusedState->steps.push_back ({ step->inPlaceThunk, step->state, argOffset });
+
+                if (step != &tail)
+                    step->inPlaceThunk = nullptr;
+            }
+
+            tail.thunk = &FusedInPlaceChain::thunk;
+            tail.inPlaceThunk = nullptr;
+            tail.state = std::move (fusedState);
+            tail.inputs = std::move (fusedInputs);
+            hasFused = true;
         }
 
         return hasFused;

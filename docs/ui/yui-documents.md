@@ -174,8 +174,9 @@ component LabeledKnob : Column {
   properties, so stylesheets match it as `LabeledKnob` or `Column`, and C++
   reaches it as a `ColumnComponent`.
 - `property name: type = default;` declares a typed property, such as a
-  `number`, `integer`, `boolean`, `string`, `color`, `point`, `rectangle` or an
-  array of them (`number[]`). Inside the block it is read as
+  `number`, `integer`, `boolean`, `string`, `color`, `point`, `rectangle`,
+  `transform`, `font`, `drawing`, `any`, or an array of expression types
+  (`number[]`, `transform[]`, ...). Inside the block it is read as
   `root.label`; from outside it is set like any other property.
 - `property alias value <=> knob.value;` exposes a property of a part under a
   new name, with the type of the original.

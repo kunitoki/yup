@@ -123,6 +123,18 @@ public:
     /** Drops animator tracks, dirty entries and caches for a component subtree being destroyed. */
     void forgetComponent (Component& component);
 
+    /** Returns the root component this context is attached to. */
+    Component& getRoot() noexcept { return root; }
+
+    /** Styles a transient popup component against this context, anchored at @p owner when provided. */
+    void stylePopup (Component& popup, Component* owner = nullptr);
+
+    /** Copies visual style layers (shadows, glows and CSS filter) from @p source onto @p target. */
+    static void copyVisualStyle (const Component& source, Component& target);
+
+    /** Clears visual style layers previously copied with copyVisualStyle(). */
+    static void clearVisualStyle (Component& target);
+
     /** Clears all computed values, animations and caches for a child subtree gaining its own stylesheet. */
     void releaseSubtree (Component& component);
 
@@ -152,6 +164,7 @@ private:
     struct CompiledValue;
     struct ComponentCache;
     struct CacheMap;
+    struct PopupMap;
     struct ResolvedDeclaration;
     struct PendingTransition;
 
@@ -219,11 +232,15 @@ private:
     void rebuildObserver();
     void invalidateDependencies (const Component& sourceComponent, const Identifier& property);
 
+    bool isManagedPopup (const Component& component) const noexcept;
+    Component* findPopupOwner (const Component& component) const noexcept;
+
     Component& root;
     StyleSheet::Ptr styleSheet;
     ComponentResolver componentResolver;
     Array<WeakReference<Component>> dirtyComponents;
     std::unique_ptr<CacheMap> caches;
+    std::unique_ptr<PopupMap> popups;
     DependencyObserver observer;
     StyleAnimator animator;
     std::vector<YuiDiagnostic> diagnostics;

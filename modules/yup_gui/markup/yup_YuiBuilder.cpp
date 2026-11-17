@@ -37,6 +37,7 @@ void registerBuiltInComponentTypes()
         registry.registerType (ToggleButton::getClassTypeInfo());
         registry.registerType (SwitchButton::getClassTypeInfo());
         registry.registerType (ComboBox::getClassTypeInfo());
+        registry.registerType (PopupMenu::getClassTypeInfo());
         registry.registerType (TextEditor::getClassTypeInfo());
         registry.registerType (ProgressBar::getClassTypeInfo());
         registry.registerType (ImageComponent::getClassTypeInfo());
@@ -894,6 +895,12 @@ void YuiBuilder::placeChild (Component& parent, Component& child, bool isReused)
 
 void YuiBuilder::applyIdentity (Component& component, const DataTree& element, Scope& scope, bool isUseSite)
 {
+    if (! isUseSite)
+    {
+        if (auto* imageComponent = dynamic_cast<ImageComponent*> (&component))
+            imageComponent->setBaseDirectory (baseDirectory);
+    }
+
     // A kept component loses the identity it had, unless it's a composite instance keeping the one of its body
     if (element.hasProperty (idProperty()))
     {

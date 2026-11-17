@@ -35,6 +35,8 @@ namespace yup
     const auto selector = StyleSelector::parse (".panel > Slider:hover");
     if (selector.wasOk() && selector.getReference().matches (slider, &root))
         ...
+
+    const auto list = StyleSelector::parseList ("TextButton, ComboBox:open");
     @endcode
 
     @see StyleSheet, StyleContext
@@ -49,7 +51,7 @@ public:
     StyleSelector() = default;
 
     //==============================================================================
-    /** Parses a selector.
+    /** Parses a single selector.
 
         @param text The selector text.
 
@@ -57,14 +59,29 @@ public:
     */
     static ResultValue<StyleSelector> parse (const String& text);
 
+    /** Parses a comma-separated list of one or more selectors.
+
+        Commas inside attribute brackets (`[text="a, b"]`) and quoted strings are preserved,
+        and each selector in the list is compiled independently with its own specificity.
+
+        @param text The selector or comma-separated selector list text.
+
+        @returns The compiled selectors in source order, or a failure describing the syntax error.
+    */
+    static ResultValue<std::vector<StyleSelector>> parseList (const String& text);
+
     //==============================================================================
     /** Returns true when this selector matches a component.
 
-        @param component The component to match.
-        @param styleRoot The component the stylesheet is attached to, matched by `:root`,
-                         and the point where the ancestor walk stops. May be nullptr.
+        @param component      The component to match.
+        @param styleRoot      The component the stylesheet is attached to, matched by `:root`,
+                              and the point where the ancestor walk stops. May be nullptr.
+        @param parentOverride Optional logical parent used for combinator matching on @p component
+                              instead of @ref Component::getParentComponent (for transient popups).
     */
-    bool matches (const Component& component, const Component* styleRoot = nullptr) const;
+    bool matches (const Component& component,
+                  const Component* styleRoot = nullptr,
+                  const Component* parentOverride = nullptr) const;
 
     //==============================================================================
     /** Returns the CSS specificity of this selector. */
@@ -136,7 +153,10 @@ private:
         bool matches (const Component& component, const Component* styleRoot) const;
     };
 
-    bool matchesFrom (const Component& component, int compoundIndex, const Component* styleRoot) const;
+    bool matchesFrom (const Component& component,
+                      int compoundIndex,
+                      const Component* styleRoot,
+                      const Component* parentOverride) const;
 
     std::vector<Compound> compounds;
     Array<Identifier> referencedProperties;

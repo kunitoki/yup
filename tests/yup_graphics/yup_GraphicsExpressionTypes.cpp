@@ -249,6 +249,40 @@ TEST_F (GraphicsExpressionTypesTests, PathMethodsDontModifyTheirSource)
     )"));
 }
 
+TEST_F (GraphicsExpressionTypesTests, ChainedPathMethodsFuseAndPreserveOpenContour)
+{
+    const auto compiled = CompiledExpression::compile (
+        "path().moveTo (bounds.left, bounds.top).lineTo (bounds.right, bounds.top).lineTo (bounds.right, bounds.bottom).close()",
+        context);
+    ASSERT_TRUE (compiled.wasOk());
+    EXPECT_EQ (1, compiled.getReference().getNumInstructions());
+
+    const auto triangle = evaluate<Path> ("path().moveTo (bounds.left, 0).lineTo (30, 0).lineTo (30, 40).close()");
+    EXPECT_TRUE (triangle.isExplicitlyClosed());
+    EXPECT_EQ (4, triangle.size());
+    EXPECT_NEAR (120.0f, triangle.getLength(), 1.0e-3f);
+
+    const auto branched = CompiledExpression::compile (R"(
+        let curve = path().moveTo (bounds.left, 0).lineTo (30, 0).lineTo (30, 40);
+        openOut = curve;
+        closedOut = curve.lineTo (0, 40).close()
+    )",
+                                                       context);
+    ASSERT_TRUE (branched.wasOk());
+    EXPECT_EQ (2, branched.getReference().getNumInstructions());
+
+    ExpressionState state (branched.getReference());
+    state.set (bounds, Rectangle<float> (0.0f, 0.0f, 30.0f, 40.0f));
+    state.evaluate();
+
+    const auto& openPath = state.get (branched.getReference().getOutput<Path> ("openOut").getValue());
+    const auto& closedPath = state.get (branched.getReference().getOutput<Path> ("closedOut").getValue());
+    EXPECT_FALSE (openPath.isExplicitlyClosed());
+    EXPECT_NEAR (70.0f, openPath.getLength(), 1.0e-3f);
+    EXPECT_TRUE (closedPath.isExplicitlyClosed());
+    EXPECT_NEAR (140.0f, closedPath.getLength(), 1.0e-3f);
+}
+
 TEST_F (GraphicsExpressionTypesTests, GradientConstructors)
 {
     const auto linear = evaluate<ColorGradient> ("linearGradient (rgb (255, 0, 0), point (0, 0), rgb (0, 0, 255), bounds.bottomRight)");

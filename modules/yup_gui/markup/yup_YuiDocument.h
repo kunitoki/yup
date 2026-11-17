@@ -95,6 +95,12 @@ public:
     /** Destroys the interface. Actions and models are kept. */
     void clear();
 
+    /** Sets the base directory used to resolve relative asset paths in components and drawings. */
+    void setBaseDirectory (const File& directory) { builder.setBaseDirectory (directory); }
+
+    /** Returns the base directory used to resolve relative asset paths in components and drawings. */
+    const File& getBaseDirectory() const noexcept { return builder.getBaseDirectory(); }
+
     /** Records each successful load as a transaction of an undo manager, or stops when null.
 
         Undoing a load loads the previous document again, in place. The undo manager must

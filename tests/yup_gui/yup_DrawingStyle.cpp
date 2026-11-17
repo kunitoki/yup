@@ -582,5 +582,57 @@ TEST_F (DrawingStyleGpuTest, ClipsShapesMasksLayersAndRendersInlineSvg)
 
     DrawnComponent svgComp (inlineSvg);
     EXPECT_EQ (centerColor (svgComp), Color (0xff00ff00));
+
+    const auto builtPath = parseYui (R"yui(
+        drawing {
+            let area: path().addRectangle (bounds);
+            path { data: area; fill: #0000ff; }
+        })yui");
+
+    DrawnComponent pathComp (builtPath);
+    EXPECT_EQ (centerColor (pathComp), Color (0xff0000ff));
 }
+
+TEST_F (DrawingStyleGpuTest, PaintsPlainAndCompositeComponentsWithoutCustomPaintOverride)
+{
+    const auto solid = parseYui (R"yui(
+        drawing {
+            rect { bounds: bounds; fill: #ff0000; }
+        })yui");
+
+    Component plain;
+    plain.setOpaque (false);
+    plain.setBounds (0.0f, 0.0f, 16.0f, 16.0f);
+
+    auto created = DrawingStyle::create (plain, solid);
+    ASSERT_TRUE (created.wasOk()) << created.getErrorMessage();
+    plain.setStyle (created.getReference());
+    EXPECT_EQ (centerColor (plain), Color (0xffff0000));
+
+    YuiDocument document;
+    ASSERT_TRUE (document.loadFromString (R"yui(
+        component ScopeBox : Component {
+            property shade: color = #00ff00;
+            class: scope;
+        }
+        drawing ScopeDrawing {
+            rect { bounds: bounds; fill: shade; }
+        }
+        style {
+            .scope { drawing: ScopeDrawing; }
+        }
+        Row {
+            ScopeBox { id: scope; flexGrow: 1; }
+        })yui")
+                     .wasOk());
+
+    auto* root = document.getRoot();
+    ASSERT_NE (root, nullptr);
+    root->setBounds (0.0f, 0.0f, 16.0f, 16.0f);
+
+    auto* scope = document.findById ("scope");
+    ASSERT_NE (scope, nullptr);
+    EXPECT_EQ (centerColor (*scope), Color (0xff00ff00));
+}
+
 

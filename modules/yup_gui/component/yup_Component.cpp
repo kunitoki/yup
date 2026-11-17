@@ -1531,8 +1531,16 @@ const NamedValueSet& Component::getProperties() const
 
 //==============================================================================
 
-void Component::paint ([[maybe_unused]] Graphics& g)
+void Component::paint (Graphics& g)
 {
+    if (auto style = getStyle())
+    {
+        if (auto theme = ApplicationTheme::getGlobalTheme())
+            style->paint (g, *theme, *this);
+
+        return;
+    }
+
     jassert (! isOpaque()); // If your component is opaque, you need to paint it !
 }
 

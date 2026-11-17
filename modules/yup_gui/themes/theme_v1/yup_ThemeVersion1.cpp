@@ -834,9 +834,14 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu& p)
 {
     const auto localBounds = p.getLocalBounds();
+    const auto cornerRadius = p.findPropertyAs<float> (CuratedGeometry::cornerRadius);
+    const auto outlineWidth = p.findPropertyAs<float> (CuratedGeometry::outlineWidth);
+    const auto itemCornerRadius = p.findPropertyAs<float> ("itemCornerRadius");
+    const auto* styleState = p.getStyleState();
+    const bool hasStyledShadows = styleState != nullptr && (! styleState->getShadows().empty() || ! styleState->getGlows().empty());
 
-    // The drop shadow fills the paint margin the menu has around it inside a parent.
-    if (const auto paintBounds = p.getPaintBounds(); paintBounds != localBounds)
+    // The drop shadow fills the paint margin the menu has around it inside a parent unless style rules supply shadows or glows.
+    if (const auto paintBounds = p.getPaintBounds(); ! hasStyledShadows && paintBounds != localBounds)
     {
         const auto room = jmin (localBounds.getX() - paintBounds.getX(),
                                 localBounds.getY() - paintBounds.getY(),
@@ -845,11 +850,11 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
 
         g.setFillColor (Colors::black.withAlpha (0.6f));
         g.setFeather (room * 0.6f);
-        g.fillRoundedRect (localBounds.translated (0.0f, room * 0.25f), widgetCornerRadius);
+        g.fillRoundedRect (localBounds.translated (0.0f, room * 0.25f), cornerRadius);
 
         g.setFillColor (Colors::black.withAlpha (0.35f));
         g.setFeather (room * 0.2f);
-        g.fillRoundedRect (localBounds.translated (0.0f, 1.0f), widgetCornerRadius);
+        g.fillRoundedRect (localBounds.translated (0.0f, 1.0f), cornerRadius);
         g.setFeather (0.0f);
     }
 
@@ -858,12 +863,15 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
 
     // Draw menu background
     g.setFillColor (theme.findColor (p, PopupMenu::Style::menuBackground).value_or (palette.getColor (PaletteRole::surfaceRaised)));
-    g.fillRoundedRect (localBounds, widgetCornerRadius);
+    g.fillRoundedRect (localBounds, cornerRadius);
 
     // Draw border
-    g.setStrokeColor (borderColor);
-    g.setStrokeWidth (1.0f);
-    g.strokeRoundedRect (localBounds.reduced (0.5f), widgetCornerRadius);
+    if (outlineWidth > 0.0f && ! borderColor.isTransparent())
+    {
+        g.setStrokeColor (borderColor);
+        g.setStrokeWidth (outlineWidth);
+        g.strokeRoundedRect (localBounds.reduced (outlineWidth * 0.5f), cornerRadius);
+    }
 
     // Draw items
     bool anyItemIsTicked = false;
@@ -893,6 +901,15 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
 
         g.setOpacity (1.0f);
 
+        if (! item->isSeparator())
+        {
+            if (const auto itemBg = theme.findColor (p, PopupMenu::Style::menuItemBackground); itemBg && ! itemBg->isTransparent())
+            {
+                g.setFillColor (*itemBg);
+                g.fillRoundedRect (rect.reduced (2.0f, 1.0f), itemCornerRadius);
+            }
+        }
+
         // Draw hover background or active submenu background
         if (item->isHovered && ! item->isSeparator() && item->isEnabled)
         {
@@ -911,7 +928,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
             }
 
             g.setFillColor (highlightColor);
-            g.fillRoundedRect (rect.reduced (2.0f, 1.0f), 2.0f);
+            g.fillRoundedRect (rect.reduced (2.0f, 1.0f), itemCornerRadius);
         }
         // Also highlight active submenu items even when not hovered
         else if (! item->isSeparator() && item->isEnabled && p.isItemShowingSubmenu (itemIndex))
@@ -920,7 +937,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
                                           .value_or (palette.getColor (PaletteRole::accent).withAlpha (0.15f));
 
             g.setFillColor (activeSubmenuColor);
-            g.fillRoundedRect (rect.reduced (2.0f, 1.0f), 2.0f);
+            g.fillRoundedRect (rect.reduced (2.0f, 1.0f), itemCornerRadius);
         }
 
         if (item->isSeparator())
@@ -966,7 +983,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
             // Draw checkmark if ticked
             if (item->isTicked)
             {
-                auto checkRect = Rectangle<float> (rect.getX() + 4.0f, rect.getY() + 4.0f, 12.0f, 12.0f);
+                auto checkRect = Rectangle<float> (rect.getX() + 4.0f, rect.getCenterY() - 6.0f, 12.0f, 12.0f);
                 g.setStrokeColor (textColor);
                 g.setStrokeWidth (2.0f);
                 g.strokeLine (checkRect.getX() + 2.0f, checkRect.getCenterY(), checkRect.getCenterX(), checkRect.getBottom() - 2.0f);
@@ -997,7 +1014,8 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
             // Draw submenu arrow
             if (item->isSubMenu())
             {
-                auto arrowRect = Rectangle<float> (rect.getRight() - 16.0f, rect.getY() + 4.0f, 8.0f, rect.getHeight() - 8.0f);
+                const auto arrowHeight = jmin (12.0f, jmax (4.0f, rect.getHeight() - 8.0f));
+                auto arrowRect = Rectangle<float> (rect.getRight() - 16.0f, rect.getCenterY() - arrowHeight * 0.5f, 8.0f, arrowHeight);
                 g.setStrokeColor (textColor);
                 g.setStrokeWidth (1.5f);
                 g.strokeLine (arrowRect.getX() + 2.0f, arrowRect.getY() + 2.0f, arrowRect.getRight() - 2.0f, arrowRect.getCenterY());

@@ -56,6 +56,14 @@ WindowComponent::~WindowComponent() = default;
 
 void WindowComponent::paint (Graphics& g)
 {
+    if (auto style = getStyle())
+    {
+        if (auto theme = ApplicationTheme::getGlobalTheme())
+            style->paint (g, *theme, *this);
+
+        return;
+    }
+
     if (const auto color = findColor (Style::backgroundColorId); color.has_value() && color->getAlpha() > 0)
     {
         g.setFillColor (*color);

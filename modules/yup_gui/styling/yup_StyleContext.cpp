@@ -236,6 +236,10 @@ struct StyleContext::CacheMap : std::map<Component*, ComponentCache>
 {
 };
 
+struct StyleContext::PopupMap : std::map<Component*, std::pair<WeakReference<Component>, WeakReference<Component>>>
+{
+};
+
 /* A transition the new style of a component declares, with the value shown before the restyle. */
 struct StyleContext::PendingTransition
 {
@@ -260,6 +264,7 @@ StyleContext::StyleContext (Component& rootToUse, StyleSheet::Ptr sheetToUse)
     : root (rootToUse)
     , styleSheet (std::move (sheetToUse))
     , caches (std::make_unique<CacheMap>())
+    , popups (std::make_unique<PopupMap>())
 {
     observer.onChanged = [this] (Component& component, const Identifier& property)
     {
@@ -296,6 +301,49 @@ void StyleContext::forEachManaged (Component& component, Fn&& fn)
     for (int i = 0; i < component.getNumChildComponents(); ++i)
         if (auto* child = component.getChildComponent (i))
             forEachManaged (*child, fn);
+
+    if (&component == &root)
+    {
+        std::vector<WeakReference<Component>> externalPopups;
+
+        for (auto it = popups->begin(); it != popups->end();)
+        {
+            if (auto* popup = it->second.first.get())
+            {
+                if (! isManagedByRoot (*popup, root))
+                    externalPopups.push_back (it->second.first);
+
+                ++it;
+            }
+            else
+            {
+                it = popups->erase (it);
+            }
+        }
+
+        for (const auto& popupRef : externalPopups)
+            if (auto* popup = popupRef.get())
+                forEachManaged (*popup, fn);
+    }
+}
+
+bool StyleContext::isManagedPopup (const Component& component) const noexcept
+{
+    if (const auto it = popups->find (const_cast<Component*> (&component)); it != popups->end())
+        return it->second.first.get() == &component;
+
+    return false;
+}
+
+Component* StyleContext::findPopupOwner (const Component& component) const noexcept
+{
+    if (const auto it = popups->find (const_cast<Component*> (&component));
+        it != popups->end() && it->second.first.get() == &component)
+    {
+        return it->second.second.get();
+    }
+
+    return nullptr;
 }
 
 //==============================================================================
@@ -414,16 +462,36 @@ void StyleContext::restyleNow()
         {
             auto* component = dirty.get();
 
-            if (component == nullptr || ! isManagedByRoot (*component, root))
+            if (component == nullptr || (! isManagedByRoot (*component, root) && ! isManagedPopup (*component)))
                 continue;
 
             if (candidates.insert (component).second)
                 ordered.push_back (component);
         }
 
+        const bool rootRestyled = candidates.find (&root) != candidates.end();
+
+        if (! rootRestyled)
+        {
+            for (const auto& [popupKey, entry] : *popups)
+            {
+                auto* popup = entry.first.get();
+                auto* owner = entry.second.get();
+
+                if (popup == nullptr || owner == nullptr || candidates.find (popup) != candidates.end())
+                    continue;
+
+                if (candidates.find (owner) != candidates.end() || hasAncestorInSet (*owner, root, candidates))
+                {
+                    candidates.insert (popup);
+                    ordered.push_back (popup);
+                }
+            }
+        }
+
         for (auto* component : ordered)
         {
-            if (hasAncestorInSet (*component, root, candidates))
+            if ((rootRestyled && component != &root) || hasAncestorInSet (*component, root, candidates))
                 continue;
 
             restyleSubtree (*component, collectInherited (*component));
@@ -446,19 +514,56 @@ void StyleContext::restyleSubtree (Component& component, const DeclarationMap& i
     if (&component != &root && component.getStyleContext() != nullptr)
         return;
 
+    if (const auto* menu = dynamic_cast<const PopupMenu*> (&component); menu != nullptr && menu->isSubmenu())
+        return;
+
     DeclarationMap inheritedForChildren;
-    applyToComponent (component, inherited, inheritedForChildren);
+    if (isManagedPopup (component))
+        applyToComponent (component, collectInherited (component), inheritedForChildren);
+    else
+        applyToComponent (component, inherited, inheritedForChildren);
+
+    if (auto* menu = dynamic_cast<PopupMenu*> (&component))
+        menu->refreshSubmenuStyle();
 
     for (int i = 0; i < component.getNumChildComponents(); ++i)
         if (auto* child = component.getChildComponent (i))
             restyleSubtree (*child, inheritedForChildren);
+
+    if (&component == &root)
+    {
+        std::vector<WeakReference<Component>> externalPopups;
+
+        for (auto it = popups->begin(); it != popups->end();)
+        {
+            if (auto* popup = it->second.first.get())
+            {
+                if (! isManagedByRoot (*popup, root))
+                    externalPopups.push_back (it->second.first);
+
+                ++it;
+            }
+            else
+            {
+                it = popups->erase (it);
+            }
+        }
+
+        for (const auto& popupRef : externalPopups)
+            if (auto* popup = popupRef.get())
+                restyleSubtree (*popup, collectInherited (*popup));
+    }
 }
 
 StyleContext::DeclarationMap StyleContext::collectInherited (Component& component) const
 {
     std::vector<Component*> chain;
 
-    for (auto* c = component.getParentComponent(); c != nullptr; c = c->getParentComponent())
+    auto* start = findPopupOwner (component);
+    if (start == nullptr)
+        start = component.getParentComponent();
+
+    for (auto* c = start; c != nullptr; c = c->getParentComponent())
     {
         chain.push_back (c);
 
@@ -485,9 +590,11 @@ void StyleContext::collectDeclarations (Component& component, DeclarationMap& di
     if (styleSheet == nullptr)
         return;
 
+    auto* parentOverride = findPopupOwner (component);
+
     for (const auto& rule : styleSheet->getRules())
     {
-        if (! rule.selector.matches (component, &root))
+        if (! rule.selector.matches (component, &root, parentOverride))
             continue;
 
         const auto specificity = rule.selector.getSpecificity();
@@ -628,6 +735,14 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
             report ({ .message = "Unknown palette '" + paletteDecl->parsedName + "'", .element = paletteDecl->element });
         else
             paletteChanged = state.setStylePalette (*palette);
+    }
+    else if (auto* owner = findPopupOwner (component);
+             owner != nullptr && (component.getParentComponent() == nullptr || component.getParentComponent()->findPalette() == nullptr))
+    {
+        if (const auto* ownerPalette = owner->findPalette())
+            paletteChanged = state.setStylePalette (*ownerPalette);
+        else
+            paletteChanged = state.setStylePalette (std::nullopt);
     }
     else
     {
@@ -1705,6 +1820,8 @@ void StyleContext::release (Component& subtreeRoot, ReleaseMode mode)
         }
     });
 
+    popups->erase (&subtreeRoot);
+
     if (observerDirty)
         rebuildObserver();
 }
@@ -1717,10 +1834,70 @@ void StyleContext::detach()
             component.repaint();
     });
 
+    for (const auto& [popupKey, entry] : *popups)
+    {
+        if (auto* popup = entry.first.get(); popup != nullptr && ! isManagedByRoot (*popup, root))
+            if (resetStyle (*popup, findCache (*popup)))
+                popup->repaint();
+    }
+
+    popups->clear();
     clearAllCaches();
     animator.clear();
     dirtyComponents.clear();
     diagnostics.clear();
+}
+
+void StyleContext::stylePopup (Component& popup, Component* owner)
+{
+    if (popup.getStyleContext() != nullptr)
+        return;
+
+    (*popups)[&popup] = { WeakReference<Component> (&popup), WeakReference<Component> (owner) };
+    markDirty (popup);
+    restyleNow();
+}
+
+void StyleContext::copyVisualStyle (const Component& source, Component& target)
+{
+    const auto* sourceState = source.styleState.get();
+    if (sourceState == nullptr)
+        return;
+
+    const bool hasShadows = ! sourceState->getShadows().empty();
+    const bool hasGlows = ! sourceState->getGlows().empty();
+    const auto sourceFilter = sourceState->getFilterEffect();
+    const auto sourceTransform = sourceState->getStyleTransform();
+    const bool hasTransform = ! sourceTransform.isIdentity();
+
+    if (! hasShadows && ! hasGlows && sourceFilter == nullptr && ! hasTransform)
+        return;
+
+    auto& targetState = target.getOrCreateStyleState();
+
+    if (hasShadows)
+        targetState.setShadows (sourceState->getShadows());
+
+    if (hasGlows)
+        targetState.setGlows (sourceState->getGlows());
+
+    if (sourceFilter != nullptr)
+        targetState.setFilterOperations (sourceFilter->getOperations());
+
+    if (hasTransform)
+        target.setStyleTransform (sourceTransform);
+}
+
+void StyleContext::clearVisualStyle (Component& target)
+{
+    if (target.styleState == nullptr)
+        return;
+
+    target.styleState->setShadows ({});
+    target.styleState->setGlows ({});
+    target.styleState->setFilterOperations ({});
+    target.setStyleTransform ({});
+    target.releaseUnusedEffectCanvases();
 }
 
 void StyleContext::detachComponent (Component& component)

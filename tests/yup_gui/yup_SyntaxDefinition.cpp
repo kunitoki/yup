@@ -194,10 +194,22 @@ TEST (SyntaxDefinitionTests, BuiltInYuiLoads)
     EXPECT_TRUE (definition.isKeyword ("let"));
     EXPECT_TRUE (definition.isKeyword ("repeat"));
     EXPECT_TRUE (definition.isType ("circle"));
+    EXPECT_TRUE (definition.isType ("clip"));
+    EXPECT_TRUE (definition.isType ("mask"));
+    EXPECT_TRUE (definition.isType ("image"));
+    EXPECT_TRUE (definition.isType ("svg"));
     EXPECT_EQ (Identifier ("type.shape"), definition.getWordScope ("circle"));
+    EXPECT_EQ (Identifier ("type.shape"), definition.getWordScope ("clip"));
+    EXPECT_EQ (Identifier ("type.shape"), definition.getWordScope ("mask"));
+    EXPECT_EQ (Identifier ("type.shape"), definition.getWordScope ("image"));
+    EXPECT_EQ (Identifier ("type.shape"), definition.getWordScope ("svg"));
+    EXPECT_EQ (Identifier ("identifier.language"), definition.getWordScope ("theme"));
     EXPECT_FALSE (definition.isKeyword ("knob"));
 
     EXPECT_TRUE (definition.isType ("color"));
+    EXPECT_TRUE (definition.isType ("transform"));
+    EXPECT_TRUE (definition.isType ("font"));
+    EXPECT_TRUE (definition.isType ("any"));
     EXPECT_FALSE (definition.isType ("drawing"));
 
     EXPECT_EQ (String ("//"), definition.getLineCommentPrefix());

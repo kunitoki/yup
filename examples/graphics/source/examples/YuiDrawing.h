@@ -43,8 +43,13 @@ public:
             if (arguments.size() == 2)
                 setStatus (arguments[0].toString() + " changed to " + yup::String (static_cast<double> (arguments[1]) * 100.0, 0) + " %");
         });
+        document.setAction ("mode", [this] (const yup::Array<yup::var>& arguments)
+        {
+            if (! arguments.isEmpty())
+                setStatus ("Mode changed to " + arguments[0].toString());
+        });
 
-        for (const auto* fileName : { "ui.yui", "components.yui", "knob.yui", "haloknob.yui", "flutedknob.yui", "brushedknob.yui", "palette.yui", "style.yui" })
+        for (const auto* fileName : { "ui.yui", "components.yui", "scope.yui", "knob.yui", "haloknob.yui", "flutedknob.yui", "brushedknob.yui", "palette.yui", "style.yui" })
         {
             auto& source = *sources.emplace_back (std::make_unique<Source> (fileName));
             source.editor.setSyntaxDefinition ("yui");
@@ -183,6 +188,7 @@ private:
         yup::DataTree tree ("params");
 
         auto transaction = tree.beginTransaction();
+        transaction.setProperty ("mode", 0);
         transaction.setProperty ("cutoff", 0.65);
         transaction.setProperty ("resonance", 0.3);
         transaction.setProperty ("drive", 0.2);

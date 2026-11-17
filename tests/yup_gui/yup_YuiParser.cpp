@@ -272,6 +272,12 @@ TEST_F (YuiParserTest, ParsesArrayTypesAndLiterals)
         component Picker : Column {
             property items: string[] = ["a", "b"];
             property lanes: number[];
+            property offset: transform = transform.translation (4, 8);
+            property steps: transform[];
+            property titleFont: font;
+            property fonts: font[];
+            property badge: drawing;
+            property payload: any;
 
             Column {
                 values: [];
@@ -287,12 +293,20 @@ TEST_F (YuiParserTest, ParsesArrayTypesAndLiterals)
     EXPECT_EQ (items.getProperty ("type").toString(), "string[]");
     EXPECT_EQ (items.getProperty ("value").toString(), "[\"a\", \"b\"]");
     EXPECT_EQ (component.getChild (1).getProperty ("type").toString(), "number[]");
+    EXPECT_EQ (component.getChild (2).getProperty ("type").toString(), "transform");
+    EXPECT_EQ (component.getChild (2).getProperty ("value").toString(), "transform.translation (4, 8)");
+    EXPECT_EQ (component.getChild (3).getProperty ("type").toString(), "transform[]");
+    EXPECT_EQ (component.getChild (4).getProperty ("type").toString(), "font");
+    EXPECT_EQ (component.getChild (5).getProperty ("type").toString(), "font[]");
+    EXPECT_EQ (component.getChild (6).getProperty ("type").toString(), "drawing");
+    EXPECT_EQ (component.getChild (7).getProperty ("type").toString(), "any");
 
     const auto body = component.getChildWithName ("Column").getChildWithName ("Column");
     EXPECT_EQ (body.getProperty ("values").toString(), "[]");
     EXPECT_EQ (body.getProperty ("mixed").toString(), "[1, model.gain, [2, 3]]");
 
-    EXPECT_EQ (parseError ("tokens { property a: font[] = 1; }"), "1:22: 'font' has no array type");
+    EXPECT_EQ (parseError ("tokens { property a: drawing[] = 1; }"), "1:22: 'drawing' has no array type");
+    EXPECT_EQ (parseError ("tokens { property a: any[] = 1; }"), "1:22: 'any' has no array type");
     EXPECT_EQ (parseError ("tokens { property a: number[ = 1; }"), "1:30: Expected ']'");
     EXPECT_EQ (parseError ("Component { items: [1, ]; }"), "1:24: Unexpected character ']'");
     EXPECT_EQ (parseError ("Component { items: [1 2]; }"), "1:23: Expected ',' or ']'");

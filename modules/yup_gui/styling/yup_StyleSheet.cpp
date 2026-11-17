@@ -413,22 +413,27 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
         }
         else if (type == "rule")
         {
-            auto selector = StyleSelector::parse (element.getProperty ("selector").toString());
+            auto selectors = StyleSelector::parseList (element.getProperty ("selector").toString());
 
-            if (selector.failed())
-                return YuiDiagnostic { .message = selector.getErrorMessage(), .element = element, .property = "selector" };
+            if (selectors.failed())
+                return YuiDiagnostic { .message = selectors.getErrorMessage(), .element = element, .property = "selector" };
 
-            Rule rule;
-            rule.selector = selector.getReference();
-            rule.order = static_cast<int> (rules.size());
+            std::vector<Declaration> declarations;
 
-            if (auto problem = readDeclarations (element, rule.declarations, declaredProperties, false))
+            if (auto problem = readDeclarations (element, declarations, declaredProperties, false))
                 return problem;
 
-            for (const auto& property : rule.selector.getReferencedProperties())
-                watchedProperties.addIfNotAlreadyThere (property);
+            for (auto& selector : selectors.getReference())
+            {
+                for (const auto& property : selector.getReferencedProperties())
+                    watchedProperties.addIfNotAlreadyThere (property);
 
-            rules.push_back (std::move (rule));
+                Rule rule;
+                rule.selector = std::move (selector);
+                rule.declarations = declarations;
+                rule.order = static_cast<int> (rules.size());
+                rules.push_back (std::move (rule));
+            }
         }
         else if (type == "palette")
         {

@@ -83,6 +83,9 @@ ResultValue<StyleSelector> StyleSelector::parse (const String& text)
 
         if (! selector.compounds.empty())
         {
+            if (*position == ',')
+                return makeResultValueFail ("Unexpected ',' in selector '" + selector.source + "'");
+
             if (*position == '>')
             {
                 compound.combinatorToPrevious = Combinator::child;
@@ -289,6 +292,79 @@ ResultValue<StyleSelector> StyleSelector::parse (const String& text)
     return makeResultValueOk (std::move (selector));
 }
 
+ResultValue<std::vector<StyleSelector>> StyleSelector::parseList (const String& text)
+{
+    const auto trimmed = text.trim();
+
+    if (trimmed.isEmpty())
+        return makeResultValueFail ("A selector cannot be empty");
+
+    std::vector<StyleSelector> selectors;
+    auto current = trimmed.getCharPointer();
+    auto segmentStart = current;
+    yup_wchar quote = 0;
+    int bracketDepth = 0;
+
+    auto addSegment = [&] (String::CharPointerType segmentEnd) -> Result
+    {
+        const auto segment = String (segmentStart, segmentEnd).trim();
+
+        if (segment.isEmpty())
+            return Result::fail ("Expected a selector in selector list '" + trimmed + "'");
+
+        auto parsed = parse (segment);
+
+        if (parsed.failed())
+            return Result::fail (parsed.getErrorMessage());
+
+        selectors.push_back (std::move (parsed.getReference()));
+        return Result::ok();
+    };
+
+    while (! current.isEmpty())
+    {
+        const auto ch = *current;
+
+        if (quote != 0)
+        {
+            if (ch == quote)
+                quote = 0;
+
+            ++current;
+            continue;
+        }
+
+        if (ch == '"' || ch == '\'')
+        {
+            quote = ch;
+        }
+        else if (ch == '[')
+        {
+            ++bracketDepth;
+        }
+        else if (ch == ']' && bracketDepth > 0)
+        {
+            --bracketDepth;
+        }
+        else if (ch == ',' && bracketDepth == 0)
+        {
+            if (const auto result = addSegment (current); result.failed())
+                return makeResultValueFail (result.getErrorMessage());
+
+            ++current;
+            segmentStart = current;
+            continue;
+        }
+
+        ++current;
+    }
+
+    if (const auto result = addSegment (current); result.failed())
+        return makeResultValueFail (result.getErrorMessage());
+
+    return makeResultValueOk (std::move (selectors));
+}
+
 //==============================================================================
 
 bool StyleSelector::Compound::matches (const Component& component, const Component* styleRoot) const
@@ -350,15 +426,20 @@ bool StyleSelector::Compound::matches (const Component& component, const Compone
 
 //==============================================================================
 
-bool StyleSelector::matches (const Component& component, const Component* styleRoot) const
+bool StyleSelector::matches (const Component& component,
+                             const Component* styleRoot,
+                             const Component* parentOverride) const
 {
     if (compounds.empty())
         return false;
 
-    return matchesFrom (component, static_cast<int> (compounds.size()) - 1, styleRoot);
+    return matchesFrom (component, static_cast<int> (compounds.size()) - 1, styleRoot, parentOverride);
 }
 
-bool StyleSelector::matchesFrom (const Component& component, int compoundIndex, const Component* styleRoot) const
+bool StyleSelector::matchesFrom (const Component& component,
+                                 int compoundIndex,
+                                 const Component* styleRoot,
+                                 const Component* parentOverride) const
 {
     const auto& compound = compounds[static_cast<size_t> (compoundIndex)];
 
@@ -372,14 +453,14 @@ bool StyleSelector::matchesFrom (const Component& component, int compoundIndex, 
         return false;
 
     const auto& next = compounds[static_cast<size_t> (compoundIndex)];
-    auto* parent = component.getParentComponent();
+    auto* parent = parentOverride != nullptr ? parentOverride : component.getParentComponent();
 
     if (next.combinatorToPrevious == Combinator::child)
-        return parent != nullptr && matchesFrom (*parent, compoundIndex - 1, styleRoot);
+        return parent != nullptr && matchesFrom (*parent, compoundIndex - 1, styleRoot, nullptr);
 
     for (; parent != nullptr; parent = parent->getParentComponent())
     {
-        if (matchesFrom (*parent, compoundIndex - 1, styleRoot))
+        if (matchesFrom (*parent, compoundIndex - 1, styleRoot, nullptr))
             return true;
 
         if (parent == styleRoot)

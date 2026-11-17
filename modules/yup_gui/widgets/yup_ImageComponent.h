@@ -73,11 +73,17 @@ public:
     const std::shared_ptr<Drawable>& getDrawable() const noexcept { return drawable; }
 
     //==============================================================================
-    /** Loads an image or SVG file from @p newSource (absolute or relative to the working directory). */
+    /** Loads an image, SVG file, or `data:image/...;base64,...` URI from @p newSource. */
     void setSource (const String& newSource);
 
     /** Returns the source path last passed to setSource(). */
     const String& getSource() const noexcept { return source; }
+
+    /** Sets an optional base directory checked first when resolving relative @ref setSource paths. */
+    void setBaseDirectory (const File& directory);
+
+    /** Returns the base directory used to resolve relative @ref setSource paths. */
+    const File& getBaseDirectory() const noexcept { return baseDirectory; }
 
     //==============================================================================
     /** Sets how the image or drawable scales within the component bounds. */
@@ -110,9 +116,11 @@ public:
     void paint (Graphics& g) override;
 
 private:
+    void reloadSource();
     Rectangle<float> computeFittedBounds (Rectangle<float> sourceBounds, Rectangle<float> targetArea) const noexcept;
 
     String source;
+    File baseDirectory;
     Image image;
     std::shared_ptr<Drawable> drawable;
     Fitting fitting = Fitting::scaleToFit;

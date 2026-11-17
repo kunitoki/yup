@@ -41,14 +41,6 @@ Color makeExpressionColor (R r, G g, B b, A a) noexcept
     return Color (expressionColorByte (a), expressionColorByte (r), expressionColorByte (g), expressionColorByte (b));
 }
 
-template <class F>
-Path modifiedExpressionPath (const Path& source, F&& modify)
-{
-    auto result = source.createCopy();
-    modify (result);
-    return result;
-}
-
 } // namespace
 
 //==============================================================================
@@ -300,9 +292,11 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
         .method ("inverted", [] (const T& t) { return t.inverted(); })
         .equality();
 
-    // Paths are immutable values: every method returns a modified copy
+    // Paths keep value semantics on shared locals, while single-use builder chains fuse to mutate one Path in place
     path
+        .clone ([] (const Path& p) { return p.createCopy(); })
         .constructor ([] { return Path(); })
+        .constructor ([] (const Path& p) { return p; })
         .constructor ([] (const String& svgData)
         {
             Path result;
@@ -313,64 +307,40 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
         .member ("length", [] (const Path& p) { return p.getLength(); })
         .member ("isEmpty", [] (const Path& p) { return p.isEmpty(); })
         .method ("pointAt", [] (const Path& p, float normalizedPosition) { return p.getPointAlongPath (normalizedPosition); })
-        .method ("moveTo", [] (const Path& p, float x, float y) { return modifiedExpressionPath (p, [&] (Path& r) { r.moveTo (x, y); }); })
-        .method ("moveTo", [] (const Path& p, const P& target) { return modifiedExpressionPath (p, [&] (Path& r) { r.moveTo (target); }); })
-        .method ("lineTo", [] (const Path& p, float x, float y) { return modifiedExpressionPath (p, [&] (Path& r) { r.lineTo (x, y); }); })
-        .method ("lineTo", [] (const Path& p, const P& target) { return modifiedExpressionPath (p, [&] (Path& r) { r.lineTo (target); }); })
-        .method ("quadTo", [] (const Path& p, float x, float y, float controlX, float controlY)
+        .method ("moveTo", [] (Path& p, float x, float y) -> Path& { return p.moveTo (x, y); })
+        .method ("moveTo", [] (Path& p, const P& target) -> Path& { return p.moveTo (target); })
+        .method ("lineTo", [] (Path& p, float x, float y) -> Path& { return p.lineTo (x, y); })
+        .method ("lineTo", [] (Path& p, const P& target) -> Path& { return p.lineTo (target); })
+        .method ("quadTo", [] (Path& p, float x, float y, float controlX, float controlY) -> Path& { return p.quadTo (x, y, controlX, controlY); })
+        .method ("cubicTo", [] (Path& p, float x1, float y1, float x2, float y2, float x, float y) -> Path& { return p.cubicTo (x1, y1, x2, y2, x, y); })
+        .method ("close", [] (Path& p) -> Path& { return p.close(); })
+        .method ("addRectangle", [] (Path& p, const R& r) -> Path& { return p.addRectangle (r); })
+        .method ("addRoundedRectangle", [] (Path& p, const R& r, float radius) -> Path& { return p.addRoundedRectangle (r, radius); })
+        .method ("addEllipse", [] (Path& p, const R& r) -> Path& { return p.addEllipse (r); })
+        .method ("addLine", [] (Path& p, const L& l) -> Path& { return p.addLine (l); })
+        .method ("addArc", [] (Path& p, const R& r, float fromRadians, float toRadians, bool startAsNewSubPath) -> Path& { return p.addArc (r, fromRadians, toRadians, startAsNewSubPath); })
+        .method ("addTriangle", [] (Path& p, const P& a, const P& b, const P& c) -> Path&
         {
-            return modifiedExpressionPath (p, [&] (Path& r) { r.quadTo (x, y, controlX, controlY); });
+            p.addTriangle (a, b, c);
+            return p;
         })
-        .method ("cubicTo", [] (const Path& p, float x1, float y1, float x2, float y2, float x, float y)
+        .method ("addPolygon", [] (Path& p, const P& center, int numSides, float radius) -> Path& { return p.addPolygon (center, numSides, radius); })
+        .method ("addPolygon", [] (Path& p, const P& center, int numSides, float radius, float startAngle) -> Path& { return p.addPolygon (center, numSides, radius, startAngle); })
+        .method ("addStar", [] (Path& p, const P& center, int numPoints, float innerRadius, float outerRadius) -> Path& { return p.addStar (center, numPoints, innerRadius, outerRadius); })
+        .method ("addStar", [] (Path& p, const P& center, int numPoints, float innerRadius, float outerRadius, float startAngle) -> Path& { return p.addStar (center, numPoints, innerRadius, outerRadius, startAngle); })
+        .method ("appendPath", [] (Path& p, const Path& other) -> Path& { return p.appendPath (other); })
+        .method ("appendPath", [] (Path& p, const Path& other, const T& t) -> Path& { return p.appendPath (other, t); })
+        .method ("transformed", [] (Path& p, const T& t) -> Path& { return p.transform (t); })
+        .method ("scaledToFit", [] (Path& p, const R& r, bool preserveProportions) -> Path&
         {
-            return modifiedExpressionPath (p, [&] (Path& r) { r.cubicTo (x1, y1, x2, y2, x, y); });
-        })
-        .method ("close", [] (const Path& p) { return modifiedExpressionPath (p, [] (Path& r) { r.close(); }); })
-        .method ("addRectangle", [] (const Path& p, const R& r) { return modifiedExpressionPath (p, [&] (Path& o) { o.addRectangle (r); }); })
-        .method ("addRoundedRectangle", [] (const Path& p, const R& r, float radius)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addRoundedRectangle (r, radius); });
-        })
-        .method ("addEllipse", [] (const Path& p, const R& r) { return modifiedExpressionPath (p, [&] (Path& o) { o.addEllipse (r); }); })
-        .method ("addLine", [] (const Path& p, const L& l) { return modifiedExpressionPath (p, [&] (Path& o) { o.addLine (l); }); })
-        .method ("addArc", [] (const Path& p, const R& r, float fromRadians, float toRadians, bool startAsNewSubPath)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addArc (r, fromRadians, toRadians, startAsNewSubPath); });
-        })
-        .method ("addTriangle", [] (const Path& p, const P& a, const P& b, const P& c)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addTriangle (a, b, c); });
-        })
-        .method ("addPolygon", [] (const Path& p, const P& center, int numSides, float radius)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addPolygon (center, numSides, radius); });
-        })
-        .method ("addPolygon", [] (const Path& p, const P& center, int numSides, float radius, float startAngle)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addPolygon (center, numSides, radius, startAngle); });
-        })
-        .method ("addStar", [] (const Path& p, const P& center, int numPoints, float innerRadius, float outerRadius)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addStar (center, numPoints, innerRadius, outerRadius); });
-        })
-        .method ("addStar", [] (const Path& p, const P& center, int numPoints, float innerRadius, float outerRadius, float startAngle)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addStar (center, numPoints, innerRadius, outerRadius, startAngle); });
-        })
-        .method ("appendPath", [] (const Path& p, const Path& other) { return modifiedExpressionPath (p, [&] (Path& o) { o.appendPath (other); }); })
-        .method ("appendPath", [] (const Path& p, const Path& other, const T& t)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.appendPath (other, t); });
-        })
-        .method ("transformed", [] (const Path& p, const T& t) { return modifiedExpressionPath (p, [&] (Path& o) { o.transform (t); }); })
-        .method ("scaledToFit", [] (const Path& p, const R& r, bool preserveProportions)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.scaleToFit (r.getX(), r.getY(), r.getWidth(), r.getHeight(), preserveProportions); });
+            p.scaleToFit (r.getX(), r.getY(), r.getWidth(), r.getHeight(), preserveProportions);
+            return p;
         })
         .method ("withRoundedCorners", [] (const Path& p, float radius) { return p.withRoundedCorners (radius); })
-        .method ("withNonZeroWinding", [] (const Path& p, bool nonZero)
+        .method ("withNonZeroWinding", [] (Path& p, bool nonZero) -> Path&
         {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.setUsingNonZeroWinding (nonZero); });
+            p.setUsingNonZeroWinding (nonZero);
+            return p;
         })
         .method ("createDashed", [] (const Path& p, const D& d) { return p.createDashed (d.asSpan()); })
         .method ("createDashed", [] (const Path& p, const D& d, float offset) { return p.createDashed (d.asSpan(), offset); });
@@ -412,11 +382,10 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
         {
             return G (c1, center, c2, direction, G::Angular);
         })
-        .method ("withStop", [] (const G& gr, const Color& c, float delta)
+        .method ("withStop", [] (G& gr, const Color& c, float delta) -> G&
         {
-            auto result = gr;
-            result.addColorStop (c, delta);
-            return result;
+            gr.addColorStop (c, delta);
+            return gr;
         })
         .method ("withAlpha", [] (const G& gr, float a) { return gr.withAlpha (jlimit (0.0f, 1.0f, a)); })
         .method ("withMultipliedAlpha", [] (const G& gr, float a) { return gr.withMultipliedAlpha (jlimit (0.0f, 1.0f, a)); })

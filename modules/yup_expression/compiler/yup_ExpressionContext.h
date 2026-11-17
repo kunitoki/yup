@@ -105,6 +105,15 @@ public:
     template <class F>
     ExpressionTypeBuilder& conversion (F&& function);
 
+    /** Overrides how an independent copy of T is created before an in-place method (`T& (T&, ...)`) mutates it.
+
+        Value types default to copy assignment; handle types whose copy assignment shares underlying
+        storage (such as `Path`) supply a deep-copy function here so shared locals remain immutable
+        while single-use method chains mutate a single instance in place.
+    */
+    template <class F>
+    ExpressionTypeBuilder& clone (F&& function);
+
     /** Declares the component members used for swizzling.
 
         With components `x` and `y` (both registered as members), `p.yx` is compiled as
@@ -515,6 +524,24 @@ template <class F>
 ExpressionTypeBuilder<T>& ExpressionTypeBuilder<T>::conversion (F&& function)
 {
     context.addFunction ("@convert", std::forward<F> (function));
+    return *this;
+}
+
+template <class T>
+template <class F>
+ExpressionTypeBuilder<T>& ExpressionTypeBuilder<T>::clone (F&& function)
+{
+    using Cloner = std::decay_t<F>;
+    type.cloneState = std::make_shared<Cloner> (std::forward<F> (function));
+    type.cloneFunction = [] (const void* state, void* destination, const void* source, int count)
+    {
+        const auto& cloner = *static_cast<const Cloner*> (state);
+        auto* d = static_cast<T*> (destination);
+        const auto* s = static_cast<const T*> (source);
+
+        for (int i = 0; i < count; ++i)
+            d[i] = cloner (s[i]);
+    };
     return *this;
 }
 

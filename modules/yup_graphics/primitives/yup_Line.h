@@ -701,6 +701,36 @@ constexpr ValueType get (const Line<ValueType>& line) noexcept
         static_assert (dependentFalse<I>);
 }
 
+//==============================================================================
+#ifndef DOXYGEN
+
+template <>
+struct VariantConverter<Line<float>>
+{
+    static Line<float> fromVar (const var& v)
+    {
+        const auto* values = v.getArray();
+
+        if (values == nullptr || values->size() < 4)
+            return {};
+
+        return { { static_cast<float> (values->getReference (0)),
+                   static_cast<float> (values->getReference (1)) },
+                 { static_cast<float> (values->getReference (2)),
+                   static_cast<float> (values->getReference (3)) } };
+    }
+
+    static var toVar (const Line<float>& line)
+    {
+        return var (Array<var> { static_cast<double> (line.getStart().getX()),
+                                 static_cast<double> (line.getStart().getY()),
+                                 static_cast<double> (line.getEnd().getX()),
+                                 static_cast<double> (line.getEnd().getY()) });
+    }
+};
+
+#endif // DOXYGEN
+
 } // namespace yup
 
 #ifndef DOXYGEN
