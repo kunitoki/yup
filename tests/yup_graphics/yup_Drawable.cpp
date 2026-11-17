@@ -2188,7 +2188,11 @@ protected:
 
         void transform (const rive::Mat2D&) override {}
 
-        void drawPath (rive::RenderPath*, rive::RenderPaint*) override { drawOpacities.push_back (opacityStack.back()); }
+        void drawPath (rive::RenderPath*, rive::RenderPaint* paint) override
+        {
+            drawOpacities.push_back (opacityStack.back());
+            drawColors.push_back (Color (static_cast<rive::RiveRenderPaint*> (paint)->getColor()));
+        }
 
         void clipPath (rive::RenderPath*) override {}
 
@@ -2207,6 +2211,7 @@ protected:
         void modulateOpacity (float opacity) override { opacityStack.back() *= opacity; }
 
         std::vector<float> drawOpacities;
+        std::vector<Color> drawColors;
 
     private:
         std::vector<float> opacityStack { 1.0f };
@@ -2214,18 +2219,42 @@ protected:
 
     std::vector<float> paintAndRecordOpacities (StringRef svg)
     {
+        RecordingRenderer recorder;
+        paintAndRecord (svg, recorder);
+        return recorder.drawOpacities;
+    }
+
+    std::vector<Color> paintAndRecordColors (StringRef svg)
+    {
+        RecordingRenderer recorder;
+        paintAndRecord (svg, recorder);
+        return recorder.drawColors;
+    }
+
+    void paintAndRecord (StringRef svg, RecordingRenderer& recorder)
+    {
         Drawable drawable;
         EXPECT_TRUE (drawable.parseSVG (svg));
 
         auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
-        RecordingRenderer recorder;
         Graphics graphics (*context, recorder);
 
         drawable.paint (graphics);
-
-        return recorder.drawOpacities;
     }
 };
+
+TEST_F (DrawableUseTests, FillOpacityAppliesToTheDefaultFill)
+{
+    const auto colors = paintAndRecordColors (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<path d=\"M0 0h50v50h-50z\" fill-opacity=\"0\" />"
+        "<g fill-opacity=\"0.5\"><rect width=\"10\" height=\"10\" /></g>"
+        "</svg>");
+
+    ASSERT_EQ (2u, colors.size());
+    EXPECT_EQ (0, colors[0].getAlpha());
+    EXPECT_NEAR (128, colors[1].getAlpha(), 1);
+}
 
 TEST_F (DrawableUseTests, UseOfShapeAppliesReferencedOpacity)
 {

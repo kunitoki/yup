@@ -95,6 +95,7 @@ struct SVGElement : public ReferenceCountedObject
     std::optional<String> fillUrl;
     std::optional<String> strokeUrl;
     std::optional<String> filterUrl;
+    SVGFilter::Ptr filter; // made of the functions of a CSS `filter`, when it doesn't refer to one
 
     std::optional<String> imageHref;
     std::optional<Rectangle<float>> imageBounds;

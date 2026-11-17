@@ -167,7 +167,7 @@ overridden per component.
 | Element  | Properties                         | Children | Effect                                                   |
 |----------|------------------------------------|----------|----------------------------------------------------------|
 | `let`    | `name`, `value`                    | no       | Names a value for the elements that follow it.           |
-| `layer`  | `opacity`, `blend`, `clip`, `clipPath`, `mask`, `maskMode`, `visible` (optional) | yes (+ `mask`) | Composites its children into a transparency layer with optional blend mode, clip and masks. |
+| `layer`  | `opacity`, `blend`, `clip`, `clipPath`, `mask`, `maskMode`, `visible` (optional) | yes (+ `mask`, `filter`) | Composites its children into a transparency layer with optional blend mode, clip and masks, or draws them through a [filter](#filters). |
 | `mask`   | `mode` (`alpha`, `invertedAlpha`, `luminance`, `invertedLuminance`), `visible` (optional) | yes | Draws a mask applied to the enclosing `layer`. |
 | `clip`   | `bounds`/`rect`, `path`/`clipPath`, `visible` (optional) | yes | Clips its children to a rectangle and/or path. |
 | `group`  | `transform`, `opacity`, `blend`, `color`, `visible` and [paint](#paint-set-by-groups) (optional) | yes | Applies a transform, an opacity, a blend mode and a paint to all its children. |
@@ -364,6 +364,60 @@ The outlines of the shapes of a `clipPath` are added up, and several `clipPath`
 blocks intersect. A `clipPath` holds shapes, `let`s and `repeat`s; a `text` has
 no outline to clip to.
 
+## Filters
+
+A `layer` holding a `filter` block is drawn through it: its elements are painted
+into a picture covering the `bounds` of the filter, the primitives of the filter
+run on that picture one after the other, and the result of the last one is
+painted with the `opacity`, the `blend` and the clips of the layer. It is the
+`<filter>` of SVG:
+
+```yui
+layer {
+    filter {
+        bounds: rect (0, 0, 24, 24);                           // what is filtered: the bounds around it when omitted
+
+        blur { in: sourceAlpha; deviation: 2 * amount; result: shadow; }
+        offset { in: shadow; offset: point (1, 2); result: shadow; }
+        composite { in: source; in2: shadow; }                 // the layer over its blurred, moved alpha
+    }
+
+    circle { center: point (12, 12); radius: 6; fill: palette.accent; }
+}
+```
+
+| Primitive      | Properties                                           | What it makes                                             |
+|----------------|------------------------------------------------------|-----------------------------------------------------------|
+| `blur`         | `deviation`                                          | Its input blurred, by a standard deviation.               |
+| `offset`       | `offset` (point)                                     | Its input moved.                                          |
+| `flood`        | `color`                                              | A fill of a color.                                        |
+| `colorMatrix`  | `saturate`, `hueRotate`, `luminanceToAlpha`, `matrix` | Its input with other colors: less or more saturated (1 leaves them), hues turned by an angle, black with the luminance as alpha, or a text of the 20 numbers of a matrix. |
+| `composite`    | `in2`, `operator`, `k1` ... `k4`                     | `in` combined with `in2`: `over` (default), `in`, `out`, `atop`, `xor`, `lighter`, or `arithmetic` (`k1 * in * in2 + k2 * in + k3 * in2 + k4`). |
+| `blend`        | `in2`, `mode`                                        | `in` blended over `in2` (`multiply`, `screen`, ...).      |
+| `morphology`   | `radius`, `dilate`                                   | Its input thinned by a radius, or fattened with `dilate: true`. |
+| `lighting`     | `scale`, `constant`, `specular`, `exponent`, `color`, `azimuth`, `elevation`, `position`, `height` | The alpha of its input lit as a surface `scale` high: matte, or its highlights with `specular: true`. The light is far away along `azimuth` and `elevation`, or at a `position` and a `height`. |
+| `displacement` | `in2`, `scale`, `xChannel`, `yChannel`               | Its input with every pixel moved by up to `scale`, following the `red`, `green`, `blue` or `alpha` of `in2`. |
+| `dropShadow`   | `offset` (point), `deviation`, `color`               | Its input over its shadow.                                |
+
+- Every primitive accepts `in` and `result`. A primitive reads the result of
+  the one before it, the first one reading the layer, unless `in` (and `in2`)
+  name `source` (the layer), `sourceAlpha` (the layer as black with its alpha)
+  or the `result` of an earlier primitive.
+- `deviation`, `radius`, `offset`, `scale`, `position`, `height`, the angles in
+  radians, the colors and the `mode` are expressions, so a filter follows the
+  properties of the component. `in`, `in2`, `result`, `operator`, `dilate`,
+  `specular`, `luminanceToAlpha`, `matrix`, `xChannel` and `yChannel` are fixed.
+- Lengths are in the coordinates of the layer. What a primitive puts outside
+  the `bounds` of the filter is lost, so leave room for blurs and shadows.
+- `linearColors: true` on the `filter` runs it on linear colors, as SVG does by
+  default, instead of the sRGB colors drawings are made of.
+- The picture is kept from one paint to the next when the elements of the layer
+  read nothing of the component (no property, palette color or `bounds`), and is
+  drawn again on every paint otherwise. The filter only runs again when the
+  picture or one of its values changes. It needs a GPU: without one the layer is
+  drawn as it is.
+- A layer with a `filter` can't have a `mask`: put it inside the masked layer.
+
 ## Importing an SVG
 
 `YuiSvgImporter` writes an SVG as a drawing made of the elements above, so its
@@ -402,7 +456,40 @@ The drawing paints what a `Drawable` paints for the same SVG, see the
   the content of a tile overflow and, with a `patternTransform`, may leave part
   of the shape empty;
 - text is written with `defaultFont` unless `Options::fontExpression` returns
-  the font to use for a family, a size, a weight and a style.
+  the font to use for a family, a size, a weight and a style;
+- a filter blurs and thins evenly: the largest of the two lengths SVG can give
+  along x and y is used;
+- an image that isn't a file or a `data:` source, such as one on the network,
+  has to be given to the drawing with an
+  [image resolver](#using-a-drawing-from-c).
+
+An element with a `filter` becomes a `layer` drawn through a [filter](#filters)
+whose `bounds` are the region SVG gives it around that element. A filter ending
+by blending with `BackgroundImage` sets the `blend` of the group instead.
+
+The values are written as they are in the SVG. With `Options::colorProperties`
+every color becomes a [property](#properties) instead, named `color1`, `color2`
+and so on, that the component sets with `setProperty` or a stylesheet assigns:
+
+```yui
+drawing Imported {
+    viewBox: rect (0, 0, 24, 24);
+
+    property color1: color = #000000;
+    property color2: color = #ff0000;
+
+    group {
+        fill: color1;
+
+        path { data: "M 2 12 L 22 12"; fill: none; stroke: color2; strokeWidth: 1; }
+    }
+}
+```
+
+Anything else is parameterized by hand: declare a property and read it where a
+value was written, for example `strokeWidth: 1 + 3 * amount`. The `Svg`
+graphics example does both live: drop an SVG on it, edit the drawing, and every
+property it declares gets a control.
 
 To show an SVG as it is, without editing it, the `svg` element is simpler.
 
@@ -506,6 +593,20 @@ directly when painting by hand:
 ```cpp
 if (style.wasOk())
     style.getReference()->paint (g, theme, slider);
+```
+
+An `image` loads the file its `source` names, or a `data:` source. To take
+images from anywhere else, give the drawing a resolver: it is asked first, once
+for each source, and returning nothing leaves the source to be loaded as usual.
+
+```cpp
+style.getReference()->setImageResolver ([this] (const String& source) -> std::optional<Image>
+{
+    if (const auto found = downloadedImages.find (source); found != downloadedImages.end())
+        return found->second;
+
+    return std::nullopt;
+});
 ```
 
 A drawing is bound to the component it was created for, so install it on that

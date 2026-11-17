@@ -809,6 +809,27 @@ Graphics::ImagePaint Graphics::makeTexturePaint (const GpuTexture::Ptr& texture,
 }
 
 //==============================================================================
+void Graphics::copyPaint (const Graphics& other)
+{
+    const auto& from = other.currentRenderOptions();
+    auto& to = currentRenderOptions();
+
+    to.fillColor = from.fillColor;
+    to.fillGradient = from.fillGradient;
+    to.fillImage = from.fillImage;
+    to.isCurrentFillColor = from.isCurrentFillColor;
+    to.strokeColor = from.strokeColor;
+    to.strokeGradient = from.strokeGradient;
+    to.strokeImage = from.strokeImage;
+    to.isCurrentStrokeColor = from.isCurrentStrokeColor;
+    to.strokeWidth = from.strokeWidth;
+    to.strokePosition = from.strokePosition;
+    to.join = from.join;
+    to.cap = from.cap;
+    to.feather = from.feather;
+}
+
+//==============================================================================
 void Graphics::setFeather (float feather)
 {
     currentRenderOptions().feather = jmax (0.0f, feather);
@@ -1401,6 +1422,21 @@ void Graphics::drawTexture (const GpuTexture::Ptr& texture, const Rectangle<floa
 
     // Graphics is a friend of GpuTexture - may access private getOrAdoptGpuTexture()
     renderTexture (texture->getOrAdoptGpuTexture(), targetArea);
+}
+
+bool Graphics::drawSource (PaintSource& source, const Rectangle<float>& targetArea)
+{
+    const auto contentSize = source.getContentSize();
+    if (targetArea.isEmpty() || ! (contentSize.getWidth() > 0.0f) || ! (contentSize.getHeight() > 0.0f))
+        return false;
+
+    const auto sourceTransform = AffineTransform::scaling (targetArea.getWidth() / contentSize.getWidth(),
+                                                           targetArea.getHeight() / contentSize.getHeight())
+                                     .translated (targetArea.getX(), targetArea.getY());
+
+    const auto texture = source.rasterize (context, sourceTransform.followedBy (currentRenderOptions().getTransform()));
+
+    return texture != nullptr && renderTexture (texture->getOrAdoptGpuTexture(), targetArea);
 }
 
 bool Graphics::renderTexture (rive::rcp<rive::gpu::Texture> texture, const Rectangle<float>& targetArea)

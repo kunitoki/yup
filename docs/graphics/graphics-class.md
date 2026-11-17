@@ -133,6 +133,50 @@ void paint (Graphics& g) override
   `GraphicsContext` goes away. Without a GPU, or with an empty content size,
   the paint draws nothing.
 
+### Filtered content
+
+A `PaintSource` can also be drawn as a picture of its own, through a filter.
+`setFilter` gives it a `FilterGraph`: a list of primitives like the ones of an
+SVG `<filter>`, run on the GPU over the raster of the content. `drawSource`
+draws the result in a rectangle, with the current opacity, blend mode and clip:
+
+```cpp
+FilterGraph glow;
+glow.primitives.push_back ({ .type = FilterGraph::Type::blur, .result = "soft", .deviation = { 4.0f, 4.0f } });
+glow.primitives.push_back ({ .type = FilterGraph::Type::composite, .in = FilterGraph::sourceGraphic, .in2 = "soft" });
+
+badge.setFilter (glow);                                       // a PaintSource with a content box of 64 x 64
+
+if (! g.drawSource (badge, { 10.0f, 10.0f, 64.0f, 64.0f }))
+    paintBadge (g);                                           // no GPU: draw it without the filter
+```
+
+| Primitive      | What it makes                                                              |
+|----------------|----------------------------------------------------------------------------|
+| `blur`         | Its input blurred by `deviation`.                                          |
+| `offset`       | Its input moved by `offset`.                                               |
+| `flood`        | A fill of `color`.                                                         |
+| `colorMatrix`  | Its input with the colors multiplied by `matrix` (see `saturationMatrix`, `hueRotationMatrix`, `luminanceToAlphaMatrix`). |
+| `composite`    | `in` combined with `in2`: `over`, `in`, `out`, `atop`, `exclusiveOr`, `lighter` or `arithmetic`. |
+| `blend`        | `in` blended over `in2` with a `BlendMode`.                                |
+| `morphology`   | Its input thinned by `radius`, or fattened with `dilate`.                  |
+| `merge`        | Its `inputs` stacked, the last one on top.                                 |
+| `lighting`     | The alpha of its input lit as a height map, by a distant or a point light. |
+| `displacement` | `in` with its pixels moved by the colors of `in2`.                         |
+| `dropShadow`   | Its input over its blurred, moved and colored shadow.                      |
+
+- A primitive reads the result of the one before it, unless `in` (and `in2`)
+  name `FilterGraph::sourceGraphic`, `FilterGraph::sourceAlpha` or the `result`
+  of an earlier primitive. The result of the last one is what is drawn.
+- Lengths are in content units, and what a primitive moves out of the content
+  box is lost: leave room around the content for blurs and shadows.
+- The content is only drawn again after `markDirty()`, and the filter only runs
+  again when the content or the filter changes.
+- `Graphics::copyPaint` gives the Graphics of `paintContent` the fill and the
+  stroke of the one being drawn in, for content that carries on with them.
+
+`Drawable` paints the elements of an SVG having a `filter` this way.
+
 See [Primitives](primitives.md#stroke-types) for the stroke types and
 [gradients](primitives.md#colorgradient).
 

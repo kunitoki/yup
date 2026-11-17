@@ -292,6 +292,20 @@ TEST_F (YuiSvgImporterTests, GroupsSetThePaintTheirShapesShare)
     EXPECT_EQ (get (group.getChild (2), "fill").length(), 9);
 }
 
+TEST_F (YuiSvgImporterTests, FillOpacityAppliesToTheDefaultFill)
+{
+    const auto imported = importBody (R"svg(
+        <path d="M0 0h50v50h-50z" fill-opacity="0"/>
+        <g fill-opacity="0.5"><rect width="10" height="10"/></g>
+    )svg");
+    ASSERT_TRUE (imported.wasOk());
+
+    EXPECT_EQ (get (find (imported.drawing, "path"), "fill"), "#00000000");
+    EXPECT_EQ (get (find (find (imported.drawing, "group"), "group"), "fill"), "#00000080");
+    EXPECT_FALSE (find (imported.drawing, "rect").hasProperty ("fill"));
+    EXPECT_TRUE (compileError (imported.drawing).isEmpty()) << compileError (imported.drawing);
+}
+
 TEST_F (YuiSvgImporterTests, CurrentColorIsWrittenWithTheColorItStandsFor)
 {
     const auto imported = importBody (R"svg(
@@ -597,20 +611,186 @@ TEST_F (YuiSvgImporterTests, NestedSvgsBecomeViewports)
     EXPECT_TRUE (compileError (imported.drawing).isEmpty()) << compileError (imported.drawing);
 }
 
-TEST_F (YuiSvgImporterTests, FiltersBecomeFeatherAndBlend)
+TEST_F (YuiSvgImporterTests, FiltersBecomeLayersDrawnThroughAFilter)
 {
     const auto imported = importBody (R"svg(
-        <defs><filter id="soft"><feGaussianBlur stdDeviation="3"/></filter></defs>
-        <rect width="10" height="10" filter="url(#soft)" opacity="0.5" mix-blend-mode="multiply"/>
+        <defs>
+            <filter id="soft" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="3"/></filter>
+            <filter id="ring" x="0" y="0" width="1" height="1">
+                <feMorphology in="SourceAlpha" radius="2" result="thin-1"/>
+                <feComposite in="SourceGraphic" in2="thin-1" operator="out"/>
+                <feFlood flood-color="#00ff00" flood-opacity="0.5" result="green"/>
+                <feMerge><feMergeNode in="green"/><feMergeNode in="SourceGraphic"/><feMergeNode in="thin-1"/></feMerge>
+                <feColorMatrix type="saturate" values="0"/>
+                <feDiffuseLighting surfaceScale="2"><feDistantLight azimuth="90" elevation="45"/></feDiffuseLighting>
+                <feDisplacementMap in2="green" scale="4" xChannelSelector="R"/>
+                <feBlend in2="SourceGraphic" mode="multiply"/>
+                <feOffset dx="1" dy="2"/>
+            </filter>
+        </defs>
+        <rect x="10" y="10" width="20" height="10" filter="url(#soft)" opacity="0.5" mix-blend-mode="multiply"/>
+        <g filter="url(#ring)"><rect width="10" height="10"/><rect x="10" width="10" height="20"/></g>
+        <circle cx="50" cy="50" r="10" style="filter: drop-shadow(2px 3px 1px rgba(0, 0, 0, 0.5))"/>
     )svg");
     ASSERT_TRUE (imported.wasOk());
 
-    const auto rect = find (imported.drawing, "rect");
-    EXPECT_EQ (get (rect, "feather"), "6");
-    EXPECT_EQ (get (rect, "opacity"), "0.5");
-    EXPECT_EQ (get (rect, "blend"), "multiply");
+    const auto expectBounds = [] (const DataTree& filter, float x, float y, float width, float height)
+    {
+        const auto text = get (filter, "bounds");
+        const auto numbers = StringArray::fromTokens (text.fromFirstOccurrenceOf ("(", false, false).upToLastOccurrenceOf (")", false, false), ",", "");
+        ASSERT_EQ (numbers.size(), 4) << text;
 
-    EXPECT_TRUE (compileError (imported.drawing).isEmpty()) << compileError (imported.drawing);
+        EXPECT_NEAR (numbers[0].getFloatValue(), x, 0.01f) << text;
+        EXPECT_NEAR (numbers[1].getFloatValue(), y, 0.01f) << text;
+        EXPECT_NEAR (numbers[2].getFloatValue(), width, 0.01f) << text;
+        EXPECT_NEAR (numbers[3].getFloatValue(), height, 0.01f) << text;
+    };
+
+    // What the filter makes of the element gets its opacity and its blend mode, from the group around the layer
+    const auto blurred = find (imported.drawing, "layer", 0);
+    ASSERT_TRUE (blurred.isValid()) << imported.toText();
+    EXPECT_EQ (blurred.getParent().getType().toString(), "group");
+    EXPECT_EQ (get (blurred.getParent(), "opacity"), "0.5");
+    EXPECT_EQ (get (blurred.getParent(), "blend"), "multiply");
+    EXPECT_FALSE (blurred.hasProperty ("opacity"));
+    EXPECT_FALSE (find (blurred, "rect").hasProperty ("feather"));
+
+    // A tenth of the bounding box around it, unless the filter says where it is rendered
+    const auto soft = blurred.getChildWithName ("filter");
+    ASSERT_TRUE (soft.isValid());
+    expectBounds (soft, 8.0f, 9.0f, 24.0f, 12.0f);
+    EXPECT_FALSE (soft.hasProperty ("linearColors"));
+    ASSERT_EQ (soft.getNumChildren(), 1);
+    EXPECT_EQ (soft.getChild (0).getType().toString(), "blur");
+    EXPECT_EQ (get (soft.getChild (0), "deviation"), "3");
+
+    // The filter of a group is given everything in it, over the box of it all
+    const auto ring = find (imported.drawing, "layer", 1).getChildWithName ("filter");
+    ASSERT_TRUE (ring.isValid()) << imported.toText();
+    expectBounds (ring, 0.0f, 0.0f, 20.0f, 20.0f);
+    EXPECT_EQ (get (ring, "linearColors"), "true");
+    EXPECT_EQ (count (find (imported.drawing, "layer", 1), "rect"), 2);
+
+    StringArray types;
+    for (const auto& primitive : ring)
+        types.add (primitive.getType().toString());
+
+    EXPECT_EQ (types.joinIntoString (" "), "morphology composite flood composite composite colorMatrix lighting displacement blend offset");
+
+    EXPECT_EQ (get (ring.getChild (0), "in"), "sourceAlpha");
+    EXPECT_EQ (get (ring.getChild (0), "radius"), "2");
+    EXPECT_EQ (get (ring.getChild (0), "result"), "thin_1");
+    EXPECT_EQ (get (ring.getChild (1), "in"), "source");
+    EXPECT_EQ (get (ring.getChild (1), "in2"), "thin_1");
+    EXPECT_EQ (get (ring.getChild (1), "operator"), "out");
+    EXPECT_TRUE (get (ring.getChild (2), "color").startsWith ("#00ff00"));
+    EXPECT_EQ (get (ring.getChild (2), "color").length(), 9);
+
+    // A merge puts its pictures over each other, one at a time
+    EXPECT_EQ (get (ring.getChild (3), "in"), "source");
+    EXPECT_EQ (get (ring.getChild (3), "in2"), "green");
+    EXPECT_EQ (get (ring.getChild (4), "in"), "thin_1");
+    EXPECT_FALSE (ring.getChild (4).hasProperty ("in2"));
+
+    EXPECT_TRUE (get (ring.getChild (5), "matrix").startsWith ("\"0.213 0.715 0.072 0 0 "));
+    EXPECT_EQ (get (ring.getChild (6), "scale"), "2");
+    EXPECT_TRUE (ring.getChild (6).hasProperty ("azimuth"));
+    EXPECT_EQ (get (ring.getChild (7), "xChannel"), "red");
+    EXPECT_EQ (get (ring.getChild (7), "yChannel"), "alpha");
+    EXPECT_EQ (get (ring.getChild (8), "mode"), "multiply");
+    EXPECT_EQ (get (ring.getChild (9), "offset"), "point (1, 2)");
+
+    // The functions of CSS have the room they need around the element
+    const auto shadow = find (imported.drawing, "layer", 2).getChildWithName ("filter");
+    ASSERT_TRUE (shadow.isValid()) << imported.toText();
+    expectBounds (shadow, 34.0f, 34.0f, 32.0f, 32.0f);
+    ASSERT_EQ (shadow.getNumChildren(), 1);
+    EXPECT_EQ (shadow.getChild (0).getType().toString(), "dropShadow");
+    EXPECT_EQ (get (shadow.getChild (0), "offset"), "point (2, 3)");
+    EXPECT_EQ (get (shadow.getChild (0), "deviation"), "1");
+    EXPECT_TRUE (get (shadow.getChild (0), "color").startsWith ("#000000"));
+    EXPECT_EQ (get (shadow.getChild (0), "color").length(), 9);
+
+    EXPECT_TRUE (compileError (imported.drawing).isEmpty()) << compileError (imported.drawing) << "\n"
+                                                           << imported.toText();
+}
+
+TEST_F (YuiSvgImporterTests, FiltersBlendingWithTheBackgroundSetTheBlendOfTheElement)
+{
+    const auto imported = importBody (R"svg(
+        <defs>
+            <filter id="multiply"><feBlend mode="multiply" in="SourceGraphic" in2="BackgroundImage"/></filter>
+            <filter id="soft"><feGaussianBlur stdDeviation="2"/><feBlend mode="screen" in2="BackgroundImage"/></filter>
+        </defs>
+        <text x="10" y="20" font-size="12" filter="url(#multiply)">Multiply</text>
+        <rect width="10" height="10" filter="url(#soft)"/>
+    )svg");
+    ASSERT_TRUE (imported.wasOk());
+
+    // The blend is set by a group around what it applies to
+    const auto blendAround = [] (DataTree element)
+    {
+        for (; element.isValid(); element = element.getParent())
+            if (element.hasProperty ("blend"))
+                return get (element, "blend");
+
+        return String();
+    };
+
+    // Nothing is left for a filter to do: the text is drawn as it is, blended
+    const auto text = find (imported.drawing, "text");
+    ASSERT_TRUE (text.isValid()) << imported.toText();
+    EXPECT_EQ (blendAround (text), "multiply") << imported.toText();
+    EXPECT_EQ (count (imported.drawing, "layer"), 1) << imported.toText();
+
+    // What the filter makes before the blend is blended too
+    const auto layer = find (imported.drawing, "layer");
+    ASSERT_TRUE (layer.isValid());
+    EXPECT_EQ (blendAround (layer), "screen") << imported.toText();
+
+    const auto filter = layer.getChildWithName ("filter");
+    ASSERT_EQ (filter.getNumChildren(), 1);
+    EXPECT_EQ (filter.getChild (0).getType().toString(), "blur");
+
+    EXPECT_TRUE (compileError (imported.drawing).isEmpty()) << compileError (imported.drawing) << "\n"
+                                                           << imported.toText();
+}
+
+TEST_F (YuiSvgImporterTests, WarnsAboutImagesADrawingCanNotLoad)
+{
+    const auto href = "https://example.com/pictures/" + String::repeatedString ("a", 80) + ".png";
+
+    SVGDocument::ParseOptions parseOptions;
+    parseOptions.imageResolver = [] (StringRef, const File&) -> std::optional<Image>
+    {
+        Image image (2, 2);
+        image.fillColor (Colors::red);
+        return image;
+    };
+
+    const auto body = "<image href=\"" + href + "\" width=\"10\" height=\"10\"/>";
+
+    // The SVG has it, but the drawing won't find it as a file
+    const auto resolved = YuiSvgImporter::importSvg (StringRef (makeSvg (body)), {}, parseOptions);
+    ASSERT_TRUE (resolved.wasOk());
+    EXPECT_EQ (get (find (resolved.drawing, "image"), "source"), "\"" + href + "\"");
+    ASSERT_EQ (resolved.warnings.size(), 1);
+    EXPECT_TRUE (resolved.warnings[0].contains ("DrawingStyle::setImageResolver")) << resolved.warnings[0];
+
+    // The message tells which image, in full unless it goes on for too long
+    const auto missing = importBody (body);
+    ASSERT_TRUE (missing.wasOk());
+    ASSERT_EQ (missing.warnings.size(), 1);
+    EXPECT_TRUE (missing.warnings[0].contains ("could not be loaded")) << missing.warnings[0];
+    EXPECT_TRUE (missing.warnings[0].contains ("https://example.com/pictures/aaaa")) << missing.warnings[0];
+    EXPECT_TRUE (missing.warnings[0].contains ("...'")) << missing.warnings[0];
+    EXPECT_FALSE (missing.warnings[0].contains (".png")) << missing.warnings[0];
+
+    const auto shortBody = String ("<image href=\"https://example.com/rock.jpg\" width=\"10\" height=\"10\"/>");
+    const auto shortName = importBody (shortBody);
+    ASSERT_TRUE (shortName.wasOk());
+    ASSERT_EQ (shortName.warnings.size(), 1);
+    EXPECT_TRUE (shortName.warnings[0].contains ("'https://example.com/rock.jpg'")) << shortName.warnings[0];
 }
 
 TEST_F (YuiSvgImporterTests, StrokesKeepTheirDashesCapsAndJoins)
@@ -665,6 +845,82 @@ TEST_F (YuiSvgImporterTests, EverythingItWritesCompilesAndIsReadBackFromItsText)
     ASSERT_TRUE (drawing.isValid());
     EXPECT_TRUE (drawing.isEquivalentTo (imported.drawing)) << imported.toText();
     EXPECT_EQ (YuiWriter::write (drawing), imported.toText());
+}
+
+TEST_F (YuiSvgImporterTests, ColorsBecomePropertiesWhenAsked)
+{
+    YuiSvgImporter::Options options;
+    options.colorProperties = true;
+
+    const auto imported = YuiSvgImporter::importSvg (StringRef (makeSvg (R"svg(
+        <defs>
+            <linearGradient id="sky" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="10" y2="0">
+                <stop offset="0" stop-color="#ff0000"/><stop offset="1" stop-color="#0000ff"/>
+            </linearGradient>
+        </defs>
+        <rect width="10" height="10" fill="#ff0000"/>
+        <rect width="10" height="10" fill="url(#sky)" stroke="#00ff00"/>
+        <text x="1" y="12" font-size="10">#ff0000</text>
+    )svg")),
+                                                     options);
+    ASSERT_TRUE (imported.wasOk());
+
+    // One property for each color, in the order they are met, before everything else
+    const StringArray colors { "#ff0000", "#0000ff", "#000000", "#00ff00" };
+    ASSERT_EQ (count (imported.drawing, "property"), colors.size()) << imported.toText();
+
+    for (int i = 0; i < colors.size(); ++i)
+    {
+        const auto property = imported.drawing.getChild (i);
+        EXPECT_EQ (property.getType().toString(), "property");
+        EXPECT_EQ (get (property, "name"), "color" + String (i + 1));
+        EXPECT_EQ (get (property, "type"), "color");
+        EXPECT_EQ (get (property, "value"), colors[i]);
+    }
+
+    EXPECT_EQ (get (findLet (imported.drawing, "skyGradient"), "value"), "linearGradient (color1, point (0, 0), color2, point (10, 0))");
+    EXPECT_EQ (get (find (imported.drawing, "group"), "fill"), "color3");
+    EXPECT_EQ (get (find (imported.drawing, "rect", 0), "fill"), "color1");
+    EXPECT_EQ (get (find (imported.drawing, "rect", 1), "stroke"), "color4");
+
+    // What a text says is not a color
+    EXPECT_EQ (get (find (imported.drawing, "text"), "text"), "\"#ff0000\"");
+
+    Component component;
+    component.setBounds (0.0f, 0.0f, 48.0f, 48.0f);
+
+    const auto style = DrawingStyle::create (component, imported.drawing);
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage() << "\n"
+                                << imported.toText();
+
+    const auto& properties = style.getReference()->getProperties();
+    ASSERT_EQ (static_cast<int> (properties.size()), colors.size());
+    EXPECT_EQ (properties[0].name.toString(), "color1");
+    EXPECT_TRUE (properties[0].type == ComponentProperty::Type::color);
+
+    const auto parsed = YuiParser::parse (imported.toText());
+    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics) << "\n"
+                                 << imported.toText();
+    EXPECT_TRUE (parsed.document.getChildWithName ("drawing").isEquivalentTo (imported.drawing)) << imported.toText();
+}
+
+TEST_F (YuiSvgImporterTests, ColorPropertiesStandForEveryColorItWrites)
+{
+    YuiSvgImporter::Options options;
+    options.colorProperties = true;
+
+    const auto imported = YuiSvgImporter::importSvg (StringRef (makeSvg (everything)), options);
+    ASSERT_TRUE (imported.wasOk());
+    EXPECT_GT (count (imported.drawing, "property"), 0);
+
+    for (const auto& line : StringArray::fromLines (imported.toText()))
+        if (! line.trimStart().startsWith ("property "))
+            EXPECT_FALSE (line.containsChar ('#')) << line;
+
+    // Drawings, patterns and markers read the properties of the drawing they are in
+    const auto error = compileError (imported.drawing);
+    EXPECT_TRUE (error.isEmpty()) << error << "\n"
+                                  << imported.toText();
 }
 
 TEST_F (YuiSvgImporterTests, TheExampleSvgsCompile)
@@ -895,6 +1151,25 @@ TEST_F (YuiSvgImporterParityTests, ClipsMarkersAndViewportsPaintWhatDrawablePain
     )svg", "clips");
 }
 
+TEST_F (YuiSvgImporterParityTests, FiltersPaintWhatDrawablePaints)
+{
+    expectSamePictureForBody (R"svg(
+        <defs>
+            <filter id="soft" x="-0.5" y="-0.5" width="2" height="2"><feGaussianBlur stdDeviation="3"/></filter>
+            <filter id="edge" color-interpolation-filters="sRGB">
+                <feMorphology in="SourceAlpha" radius="3" result="thin"/>
+                <feComposite in="SourceGraphic" in2="thin" operator="out" result="ring"/>
+                <feFlood flood-color="#0000ff"/>
+                <feComposite in2="ring" operator="in"/>
+                <feBlend in2="SourceGraphic" mode="screen"/>
+            </filter>
+        </defs>
+        <rect x="8" y="8" width="30" height="30" fill="#ff0000" filter="url(#soft)" opacity="0.8"/>
+        <g filter="url(#edge)" transform="translate(50 10)"><circle cx="20" cy="20" r="18" fill="#00aa00"/><rect x="10" y="30" width="20" height="20" fill="#884400"/></g>
+        <circle cx="30" cy="70" r="15" fill="#ffcc00" style="filter: drop-shadow(6px 6px 2px rgba(0, 0, 0, 0.6))"/>
+    )svg", "filters");
+}
+
 TEST_F (YuiSvgImporterParityTests, TheExampleSvgsPaintWhatDrawablePaints)
 {
     const auto directory = getSvgDirectory();
@@ -910,4 +1185,33 @@ TEST_F (YuiSvgImporterParityTests, TheExampleSvgsPaintWhatDrawablePaints)
 
         expectSamePicture (file.loadFileAsString(), name, directory);
     }
+}
+
+TEST_F (YuiSvgImporterParityTests, ColorPropertiesRecolorTheDrawing)
+{
+    YuiSvgImporter::Options options;
+    options.colorProperties = true;
+
+    const auto imported = YuiSvgImporter::importSvg (StringRef (makeSvg ("<rect width=\"100\" height=\"100\" fill=\"#ff0000\"/>")), options);
+    ASSERT_TRUE (imported.wasOk());
+
+    Identifier red;
+
+    for (const auto& child : imported.drawing)
+        if (child.getType().toString() == "property" && get (child, "value") == "#ff0000")
+            red = Identifier (get (child, "name"));
+
+    ASSERT_TRUE (red.isValid()) << imported.toText();
+
+    PaintedDrawing drawing (imported.drawing);
+
+    const auto before = drawing.snapshotToImage (*gpuContext).getPixelColor (size / 2, size / 2);
+    EXPECT_GT (before.getRed(), 200);
+    EXPECT_LT (before.getBlue(), 50);
+
+    drawing.setProperty (red, VariantConverter<Color>::toVar (Color (0xff0000ff)));
+
+    const auto after = drawing.snapshotToImage (*gpuContext).getPixelColor (size / 2, size / 2);
+    EXPECT_LT (after.getRed(), 50);
+    EXPECT_GT (after.getBlue(), 200);
 }

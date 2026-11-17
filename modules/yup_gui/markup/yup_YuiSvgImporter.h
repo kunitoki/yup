@@ -44,7 +44,7 @@ namespace yup
       with `use`;
     - patterns, markers, clip paths, masks, nested `<svg>` viewports, images and text become
       `pattern`, `marker`, `clipPath`, `viewport`, `image` and anchored `text` elements;
-    - blur and blend filters become `feather` and `blend`.
+    - an element with a filter becomes a `layer` drawn through a `filter` of the same primitives.
 
     @code
     const auto imported = YuiSvgImporter::importSvg (File ("logo.svg"));
@@ -84,6 +84,14 @@ public:
             @param italic  True when the font-style is italic or oblique.
         */
         std::function<String (StringRef family, float size, int weight, bool italic)> fontExpression;
+
+        /** Declares every color the SVG is painted with as a `color` property of the drawing.
+
+            The properties are named `color1`, `color2` and so on, and default to the colors they
+            stand for: the drawing paints the same picture until the component it styles sets one
+            of them, with Component::setProperty or from a style sheet.
+        */
+        bool colorProperties = false;
     };
 
     //==============================================================================

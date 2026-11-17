@@ -39,6 +39,7 @@
 #include "yup_Drawable.cpp"
 #include "yup_EdgeSpacing.cpp"
 #include "yup_ExpressionDrawing.cpp"
+#include "yup_FilterGraph.cpp"
 #include "yup_Font.cpp"
 #include "yup_Graphics.cpp"
 #include "yup_GraphicsContext.cpp"

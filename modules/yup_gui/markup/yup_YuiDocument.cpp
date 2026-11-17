@@ -99,7 +99,8 @@ bool isGrammarNodeType (const Identifier& type) noexcept
         "declaration", "property", "alias", "signal", "argument", "component", "drawing",
         "let", "repeat", "group", "clip", "layer", "mask", "rect", "ellipse", "circle", "line",
         "arc", "path", "polygon", "star", "text", "image", "svg", "bind", "changed",
-        "viewport", "use", "pattern", "marker", "clipPath"
+        "viewport", "use", "pattern", "marker", "clipPath", "filter", "blur", "offset", "flood",
+        "colorMatrix", "composite", "blend", "morphology", "lighting", "displacement", "dropShadow"
     };
 
     return grammarTypes.contains (type.toString());
@@ -112,7 +113,8 @@ bool isStrictGrammarContainer (const Identifier& type) noexcept
         "declaration", "property", "alias", "signal", "argument", "drawing",
         "let", "repeat", "group", "clip", "layer", "mask", "rect", "ellipse", "circle",
         "line", "arc", "path", "polygon", "star", "text", "image", "svg", "bind", "changed",
-        "viewport", "use", "pattern", "marker", "clipPath"
+        "viewport", "use", "pattern", "marker", "clipPath", "filter", "blur", "offset", "flood",
+        "colorMatrix", "composite", "blend", "morphology", "lighting", "displacement", "dropShadow"
     };
 
     return strictContainers.contains (type.toString());
@@ -190,6 +192,8 @@ DataTreeSchema::Ptr YuiDocument::createSchema()
     clipChildren.add ("clipPath");
     StringArray layerChildren = clipChildren;
     layerChildren.add ("mask");
+    layerChildren.add ("filter");
+    const StringArray filterChildren { "blur", "offset", "flood", "colorMatrix", "composite", "blend", "morphology", "lighting", "displacement", "dropShadow" };
     StringArray drawingChildren { "property" };
     drawingChildren.addArray (drawingBodyChildren);
 
@@ -307,6 +311,10 @@ DataTreeSchema::Ptr YuiDocument::createSchema()
     nodeTypes->setProperty ("clip", makeSchemaNode (nullptr, clipChildren));
     nodeTypes->setProperty ("layer", makeSchemaNode (nullptr, layerChildren));
     nodeTypes->setProperty ("clipPath", makeSchemaNode (nullptr, clipPathChildren));
+    nodeTypes->setProperty ("filter", makeSchemaNode (nullptr, filterChildren));
+
+    for (const auto& primitiveType : filterChildren)
+        nodeTypes->setProperty (Identifier (primitiveType), makeSchemaNode (nullptr, {}, 0));
 
     for (const auto* definitionType : { "pattern", "marker" })
     {

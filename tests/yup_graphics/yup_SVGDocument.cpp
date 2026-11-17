@@ -1771,6 +1771,328 @@ TEST (SVGDocumentTests, FilterOnElementStoredAsUrl)
     });
 }
 
+TEST (SVGDocumentTests, FilterRegionUnitsAndColorSpaceAreParsed)
+{
+    auto doc = parse ("<svg viewBox=\"0 0 200 100\"><defs>"
+                      "<filter id=\"a\"><feOffset dx=\"1\" /></filter>"
+                      "<filter id=\"b\" filterUnits=\"userSpaceOnUse\" primitiveUnits=\"objectBoundingBox\" x=\"10\" y=\"20\" width=\"50%\" height=\"40\""
+                      " color-interpolation-filters=\"sRGB\"><feOffset dx=\"1\" /></filter>"
+                      "<filter id=\"c\" x=\"-25%\" y=\"-.5\" width=\"1.5\" height=\"200%\" style=\"color-interpolation-filters:sRGB\"><feOffset dx=\"1\" /></filter>"
+                      "</defs></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    const auto expectArea = [] (const Rectangle<float>& area, float x, float y, float width, float height)
+    {
+        EXPECT_NEAR (area.getX(), x, 0.001f);
+        EXPECT_NEAR (area.getY(), y, 0.001f);
+        EXPECT_NEAR (area.getWidth(), width, 0.001f);
+        EXPECT_NEAR (area.getHeight(), height, 0.001f);
+    };
+
+    doc->visit ([&] (const SVGData& data)
+    {
+        ASSERT_EQ (3u, data.filters.size());
+
+        // A tenth of the bounding box around it, in linear colors, unless told otherwise
+        const auto& a = *data.filters[0];
+        EXPECT_EQ (SVGFilter::ObjectBoundingBox, a.units);
+        EXPECT_EQ (SVGFilter::UserSpaceOnUse, a.primitiveUnits);
+        EXPECT_TRUE (a.linearColors);
+        expectArea (a.region, -0.1f, -0.1f, 1.2f, 1.2f);
+        expectArea (a.getRegion ({ 10.0f, 10.0f, 100.0f, 50.0f }), 0.0f, 5.0f, 120.0f, 60.0f);
+        EXPECT_TRUE (a.getRegion ({}).isEmpty());
+
+        const auto& b = *data.filters[1];
+        EXPECT_EQ (SVGFilter::UserSpaceOnUse, b.units);
+        EXPECT_EQ (SVGFilter::ObjectBoundingBox, b.primitiveUnits);
+        EXPECT_FALSE (b.linearColors);
+        expectArea (b.region, 10.0f, 20.0f, 100.0f, 40.0f);
+        expectArea (b.getRegion ({ 10.0f, 10.0f, 100.0f, 50.0f }), 10.0f, 20.0f, 100.0f, 40.0f);
+
+        const auto& c = *data.filters[2];
+        EXPECT_FALSE (c.linearColors);
+        expectArea (c.region, -0.25f, -0.5f, 1.5f, 2.0f);
+    });
+}
+
+TEST (SVGDocumentTests, EveryFilterPrimitiveIsKeptInTheChain)
+{
+    auto doc = parse ("<svg><defs><filter id=\"f\">"
+                      "<feOffset in=\"SourceAlpha\" dx=\"2\" dy=\"-3\" result=\"moved\" />"
+                      "<feFlood flood-color=\"#ff0000\" flood-opacity=\"0.5\" />"
+                      "<feColorMatrix type=\"saturate\" values=\"0\" />"
+                      "<feColorMatrix values=\"0 0 0 0 1  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0 \" />"
+                      "<feComposite in2=\"moved\" operator=\"arithmetic\" k1=\"1\" k2=\"2\" k3=\"3\" k4=\"4\" />"
+                      "<feMorphology operator=\"dilate\" radius=\"2 3\" />"
+                      "<feMerge><feMergeNode in=\"moved\" /><feMergeNode in=\"SourceGraphic\" /></feMerge>"
+                      "<feDiffuseLighting surfaceScale=\"2\" diffuseConstant=\"3\" lighting-color=\"#00ff00\"><feDistantLight azimuth=\"90\" elevation=\"45\" /></feDiffuseLighting>"
+                      "<feSpecularLighting specularExponent=\"8\"><fePointLight x=\"1\" y=\"2\" z=\"3\" /></feSpecularLighting>"
+                      "<feDisplacementMap in2=\"moved\" scale=\"10\" xChannelSelector=\"R\" yChannelSelector=\"G\" />"
+                      "<feDropShadow dx=\"1\" dy=\"2\" stdDeviation=\"3\" flood-color=\"#0000ff\" />"
+                      "<feTurbulence baseFrequency=\"0.1\" />"
+                      "<feTile />"
+                      "<feGaussianBlur result=\"same\" />"
+                      "</filter></defs></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        using Type = FilterGraph::Type;
+
+        ASSERT_EQ (1u, data.filters.size());
+        ASSERT_EQ (14u, data.filters[0]->primitives.size());
+        EXPECT_NE (nullptr, dynamic_cast<const SVGFEPrimitive*> (data.filters[0]->primitives[0].get()));
+
+        const auto graph = data.filters[0]->toFilterGraph ({});
+        const auto& primitives = graph.primitives;
+        ASSERT_EQ (14u, primitives.size());
+
+        EXPECT_EQ (Type::offset, primitives[0].type);
+        EXPECT_EQ (String ("SourceAlpha"), primitives[0].in);
+        EXPECT_EQ (String ("moved"), primitives[0].result);
+        EXPECT_EQ (Point<float> (2.0f, -3.0f), primitives[0].offset);
+
+        EXPECT_EQ (Type::flood, primitives[1].type);
+        EXPECT_EQ (255, primitives[1].color.getRed());
+        EXPECT_NEAR (primitives[1].color.getAlpha(), 128, 1);
+
+        EXPECT_EQ (Type::colorMatrix, primitives[2].type);
+        EXPECT_EQ (FilterGraph::saturationMatrix (0.0f), primitives[2].matrix);
+        EXPECT_FLOAT_EQ (0.0f, primitives[3].matrix[0]);
+        EXPECT_FLOAT_EQ (1.0f, primitives[3].matrix[4]);
+
+        EXPECT_EQ (Type::composite, primitives[4].type);
+        EXPECT_EQ (FilterGraph::CompositeOperator::arithmetic, primitives[4].compositeOperator);
+        EXPECT_EQ (String ("moved"), primitives[4].in2);
+        EXPECT_EQ ((std::array<float, 4> { 1.0f, 2.0f, 3.0f, 4.0f }), primitives[4].coefficients);
+
+        EXPECT_EQ (Type::morphology, primitives[5].type);
+        EXPECT_TRUE (primitives[5].dilate);
+        EXPECT_EQ (Point<float> (2.0f, 3.0f), primitives[5].radius);
+
+        EXPECT_EQ (Type::merge, primitives[6].type);
+        EXPECT_EQ (StringArray ({ "moved", "SourceGraphic" }), primitives[6].inputs);
+
+        EXPECT_EQ (Type::lighting, primitives[7].type);
+        EXPECT_FALSE (primitives[7].specular);
+        EXPECT_FLOAT_EQ (2.0f, primitives[7].scale);
+        EXPECT_FLOAT_EQ (3.0f, primitives[7].lightingConstant);
+        EXPECT_EQ (Color (0xff00ff00), primitives[7].color);
+        EXPECT_EQ (FilterGraph::Light::distant, primitives[7].light);
+        EXPECT_NEAR (primitives[7].lightAzimuth, MathConstants<float>::halfPi, 0.001f);
+        EXPECT_NEAR (primitives[7].lightElevation, MathConstants<float>::halfPi * 0.5f, 0.001f);
+
+        EXPECT_TRUE (primitives[8].specular);
+        EXPECT_FLOAT_EQ (8.0f, primitives[8].specularExponent);
+        EXPECT_EQ (FilterGraph::Light::point, primitives[8].light);
+        EXPECT_EQ ((std::array<float, 3> { 1.0f, 2.0f, 3.0f }), primitives[8].lightPosition);
+
+        EXPECT_EQ (Type::displacement, primitives[9].type);
+        EXPECT_FLOAT_EQ (10.0f, primitives[9].scale);
+        EXPECT_EQ (FilterGraph::Channel::red, primitives[9].xChannel);
+        EXPECT_EQ (FilterGraph::Channel::green, primitives[9].yChannel);
+
+        EXPECT_EQ (Type::dropShadow, primitives[10].type);
+        EXPECT_EQ (Point<float> (1.0f, 2.0f), primitives[10].offset);
+        EXPECT_EQ (Point<float> (3.0f, 3.0f), primitives[10].deviation);
+        EXPECT_EQ (Color (0xff0000ff), primitives[10].color);
+
+        // What can't be made is empty, what can't be done leaves its input, and a blur without a deviation too
+        EXPECT_EQ (Type::flood, primitives[11].type);
+        EXPECT_EQ (0, primitives[11].color.getAlpha());
+        EXPECT_EQ (Type::offset, primitives[12].type);
+        EXPECT_EQ (Point<float> (0.0f, 0.0f), primitives[12].offset);
+        EXPECT_EQ (Type::blur, primitives[13].type);
+        EXPECT_EQ (Point<float> (0.0f, 0.0f), primitives[13].deviation);
+        EXPECT_EQ (String ("same"), primitives[13].result);
+    });
+}
+
+TEST (SVGDocumentTests, FilterIsLoweredToTheUserSpaceOfItsElement)
+{
+    auto doc = parse ("<svg><defs><filter id=\"f\" primitiveUnits=\"objectBoundingBox\">"
+                      "<feGaussianBlur stdDeviation=\"0.1\" />"
+                      "<feOffset dx=\"0.5\" dy=\"0.25\" />"
+                      "<feSpecularLighting><fePointLight x=\"0.5\" y=\"0.5\" z=\"1\" /></feSpecularLighting>"
+                      "</filter></defs></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.filters.size());
+
+        // The region starts a tenth of the box before it: at (0, 16)
+        const auto graph = data.filters[0]->toFilterGraph ({ 10.0f, 20.0f, 100.0f, 40.0f });
+        ASSERT_EQ (3u, graph.primitives.size());
+        EXPECT_TRUE (graph.linearColors);
+
+        EXPECT_NEAR (graph.primitives[0].deviation.getX(), 10.0f, 0.001f);
+        EXPECT_NEAR (graph.primitives[0].deviation.getY(), 4.0f, 0.001f);
+        EXPECT_NEAR (graph.primitives[1].offset.getX(), 50.0f, 0.001f);
+        EXPECT_NEAR (graph.primitives[1].offset.getY(), 10.0f, 0.001f);
+
+        // The light is over the middle of the box, as high as its diagonal is long over the square root of two
+        const auto& light = graph.primitives[2].lightPosition;
+        EXPECT_NEAR (light[0], 60.0f, 0.001f);
+        EXPECT_NEAR (light[1], 24.0f, 0.001f);
+        EXPECT_NEAR (light[2], std::hypot (100.0f, 40.0f) / MathConstants<float>::sqrt2, 0.01f);
+    });
+}
+
+TEST (SVGDocumentTests, CssFilterFunctionsBecomeTheFilterOfTheElement)
+{
+    auto doc = parse ("<svg>"
+                      "<g id=\"a\" style=\"filter: drop-shadow(5px 5px 1px rgba(0, 0, 0, 0.4));\"><rect width=\"10\" height=\"10\" /></g>"
+                      "<rect id=\"b\" width=\"10\" height=\"10\" filter=\"blur(2px) saturate(50%)\" />"
+                      "<rect id=\"c\" width=\"10\" height=\"10\" filter=\"blur(2px)\" style=\"filter: none\" />"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        const auto a = data.elementsById["a"];
+        ASSERT_NE (nullptr, a);
+        ASSERT_NE (nullptr, a->filter);
+        EXPECT_FALSE (a->filterUrl.has_value());
+
+        // The shadow gets the room it needs around the bounding box: how far it is moved and three times its blur
+        const auto region = a->filter->getRegion ({ 0.0f, 0.0f, 10.0f, 10.0f });
+        EXPECT_NEAR (region.getX(), -8.0f, 0.001f);
+        EXPECT_NEAR (region.getWidth(), 26.0f, 0.001f);
+
+        const auto shadow = a->filter->toFilterGraph ({ 0.0f, 0.0f, 10.0f, 10.0f });
+        ASSERT_EQ (1u, shadow.primitives.size());
+        EXPECT_FALSE (shadow.linearColors);
+        EXPECT_EQ (FilterGraph::Type::dropShadow, shadow.primitives[0].type);
+        EXPECT_EQ (Point<float> (5.0f, 5.0f), shadow.primitives[0].offset);
+        EXPECT_EQ (Point<float> (1.0f, 1.0f), shadow.primitives[0].deviation);
+        EXPECT_EQ (0, shadow.primitives[0].color.getRed());
+        EXPECT_NEAR (shadow.primitives[0].color.getAlpha(), 102, 1);
+
+        const auto b = data.elementsById["b"];
+        ASSERT_NE (nullptr, b);
+        ASSERT_NE (nullptr, b->filter);
+
+        const auto chain = b->filter->toFilterGraph ({ 0.0f, 0.0f, 10.0f, 10.0f });
+        ASSERT_EQ (2u, chain.primitives.size());
+        EXPECT_EQ (FilterGraph::Type::blur, chain.primitives[0].type);
+        EXPECT_EQ (Point<float> (2.0f, 2.0f), chain.primitives[0].deviation);
+        EXPECT_EQ (FilterGraph::Type::colorMatrix, chain.primitives[1].type);
+        EXPECT_EQ (FilterGraph::saturationMatrix (0.5f), chain.primitives[1].matrix);
+        EXPECT_FLOAT_EQ (6.0f, b->filter->margin);
+
+        const auto c = data.elementsById["c"];
+        ASSERT_NE (nullptr, c);
+        EXPECT_EQ (nullptr, c->filter);
+    });
+}
+
+TEST (SVGDocumentTests, FilterBlendingWithTheBackgroundSetsHowTheElementIsBlended)
+{
+    auto doc = parse ("<svg><defs>"
+                      "<filter id=\"a\"><feBlend mode=\"multiply\" in=\"SourceGraphic\" in2=\"BackgroundImage\" /></filter>"
+                      "<filter id=\"b\"><feGaussianBlur stdDeviation=\"2\" /><feBlend mode=\"screen\" in2=\"BackgroundImage\" /></filter>"
+                      "<filter id=\"c\"><feOffset dx=\"1\" result=\"moved\" /><feFlood /><feBlend mode=\"darken\" in=\"BackgroundImage\" in2=\"moved\" /></filter>"
+                      "<filter id=\"d\"><feBlend mode=\"multiply\" in2=\"BackgroundImage\" /><feOffset dx=\"1\" /></filter>"
+                      "</defs></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (4u, data.filters.size());
+
+        // The blend is all there is: the element is painted as it is, with the blend mode
+        EXPECT_EQ (BlendMode::Multiply, data.filters[0]->getBackdropBlend().value_or (BlendMode::SrcOver));
+        EXPECT_TRUE (data.filters[0]->toFilterGraph ({}).isEmpty());
+
+        // What was made before the blend is the picture to blend
+        EXPECT_EQ (BlendMode::Screen, data.filters[1]->getBackdropBlend().value_or (BlendMode::SrcOver));
+        const auto blurred = data.filters[1]->toFilterGraph ({});
+        ASSERT_EQ (1u, blurred.primitives.size());
+        EXPECT_EQ (FilterGraph::Type::blur, blurred.primitives[0].type);
+
+        // The picture can be one named before
+        EXPECT_EQ (BlendMode::Darken, data.filters[2]->getBackdropBlend().value_or (BlendMode::SrcOver));
+        const auto named = data.filters[2]->toFilterGraph ({});
+        ASSERT_EQ (3u, named.primitives.size());
+        EXPECT_EQ (FilterGraph::Type::offset, named.primitives[2].type);
+        EXPECT_EQ (String ("moved"), named.primitives[2].in);
+        EXPECT_EQ (Point<float> (0.0f, 0.0f), named.primitives[2].offset);
+
+        // Only what the filter ends with is left to the painting
+        EXPECT_FALSE (data.filters[3]->getBackdropBlend().has_value());
+        EXPECT_EQ (2u, data.filters[3]->toFilterGraph ({}).primitives.size());
+    });
+}
+
+TEST (SVGDocumentTests, ContentBoundsFollowTheTransformsOfWhatIsInside)
+{
+    auto doc = parse ("<svg>"
+                      "<g id=\"turned\"><rect x=\"16\" y=\"28\" width=\"32\" height=\"8\" transform=\"rotate(30 32 32)\" /></g>"
+                      "<g id=\"nested\" transform=\"translate(100 100)\"><g transform=\"scale(2)\"><rect x=\"1\" y=\"2\" width=\"3\" height=\"4\" />"
+                      "<circle cx=\"10\" cy=\"10\" r=\"2\" transform=\"translate(-20 0)\" /></g><text x=\"500\" y=\"500\">far</text></g>"
+                      "<path id=\"own\" d=\"M0 0 L10 0 L10 10 Z\" transform=\"rotate(45)\" />"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    const auto expectArea = [] (const Rectangle<float>& area, float x, float y, float width, float height)
+    {
+        EXPECT_NEAR (area.getX(), x, 0.01f);
+        EXPECT_NEAR (area.getY(), y, 0.01f);
+        EXPECT_NEAR (area.getWidth(), width, 0.01f);
+        EXPECT_NEAR (area.getHeight(), height, 0.01f);
+    };
+
+    doc->visit ([&] (const SVGData& data)
+    {
+        // The box of a turned shape is the one around it once turned, not the one of two of its corners
+        const auto turned = data.elementsById["turned"];
+        ASSERT_NE (nullptr, turned.get());
+        expectArea (data.getContentBounds (*turned), 16.144f, 20.536f, 31.713f, 22.928f);
+
+        // The transform of the element itself places the box, it is not part of it. Text is left out
+        const auto nested = data.elementsById["nested"];
+        ASSERT_NE (nullptr, nested.get());
+        expectArea (data.getContentBounds (*nested), -24.0f, 4.0f, 32.0f, 20.0f);
+
+        const auto own = data.elementsById["own"];
+        ASSERT_NE (nullptr, own.get());
+        expectArea (data.getContentBounds (*own), 0.0f, 0.0f, 10.0f, 10.0f);
+    });
+}
+
+TEST (SVGDocumentTests, FillRuleIsInheritedFromTheElementsAround)
+{
+    auto doc = parse ("<svg>"
+                      "<g fill-rule=\"evenodd\">"
+                      "<path id=\"inherits\" d=\"M0 0h10v10h-10z M2 2h6v6h-6z\" />"
+                      "<g><polygon id=\"deeper\" points=\"0,0 10,0 10,10\" /></g>"
+                      "<path id=\"overrides\" fill-rule=\"nonzero\" d=\"M0 0h10v10h-10z\" />"
+                      "</g>"
+                      "<path id=\"own\" style=\"fill-rule:evenodd\" d=\"M0 0h10v10h-10z\" />"
+                      "<path id=\"default\" d=\"M0 0h10v10h-10z\" />"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        const auto usesNonZeroWinding = [&data] (const char* id)
+        {
+            const auto element = data.elementsById[id];
+            return element != nullptr && element->path && element->path->isUsingNonZeroWinding();
+        };
+
+        ASSERT_NE (nullptr, data.elementsById["inherits"].get());
+        ASSERT_NE (nullptr, data.elementsById["deeper"].get());
+
+        EXPECT_FALSE (usesNonZeroWinding ("inherits"));
+        EXPECT_FALSE (usesNonZeroWinding ("deeper"));
+        EXPECT_TRUE (usesNonZeroWinding ("overrides"));
+        EXPECT_FALSE (usesNonZeroWinding ("own"));
+        EXPECT_TRUE (usesNonZeroWinding ("default"));
+    });
+}
+
 // ==============================================================================
 // Gradient parsing edge cases
 // ==============================================================================

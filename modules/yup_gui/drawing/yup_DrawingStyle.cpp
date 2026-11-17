@@ -42,7 +42,7 @@ File resolveDrawingSourceFile (const String& path, const File& baseDirectory)
     return File::getCurrentWorkingDirectory().getChildFile (path);
 }
 
-const Image& resolveDrawingImage (std::map<String, Image>& cache, const String& source, const File& baseDirectory)
+const Image& resolveDrawingImage (std::map<String, Image>& cache, const String& source, const File& baseDirectory, const DrawingStyle::ImageResolver& resolver)
 {
     const auto cacheKey = baseDirectory != File() ? (baseDirectory.getFullPathName() + "\n" + source) : source;
 
@@ -52,7 +52,11 @@ const Image& resolveDrawingImage (std::map<String, Image>& cache, const String& 
     Image image;
     const auto trimmed = source.trim();
 
-    if (trimmed.startsWithIgnoreCase ("data:image/"))
+    if (auto resolved = resolver != nullptr ? resolver (trimmed) : std::nullopt; resolved.has_value() && resolved->isValid())
+    {
+        image = std::move (*resolved);
+    }
+    else if (trimmed.startsWithIgnoreCase ("data:image/"))
     {
         if (const auto marker = trimmed.indexOfIgnoreCase ("base64,"); marker >= 0)
         {
@@ -134,7 +138,20 @@ struct DrawingStyle::Node
         mask,
         clipShapes,
         pattern,
-        marker
+        marker,
+        filter,
+        filterPrimitive
+    };
+
+    /* A primitive of a filter: what it always does, and the outputs of its program setting the rest. */
+    struct FilterPrimitive
+    {
+        FilterGraph::Primitive base;
+        ExpressionOutput<float> deviation, radius, scale, constant, exponent, azimuth, elevation, height, saturate, hueRotate;
+        std::array<ExpressionOutput<float>, 4> coefficients;
+        ExpressionOutput<Point<float>> offset, position;
+        ExpressionOutput<Color> color;
+        ExpressionOutput<BlendMode> mode;
     };
 
     const CompiledExpression& getProgram() const noexcept
@@ -159,8 +176,13 @@ struct DrawingStyle::Node
     bool mapsToArea = false;
     bool clipsToArea = false;
 
-    // Patterns: the tile is only drawn again when the pattern itself changes
+    // Patterns and filtered layers: what they draw is only drawn again when it changes
     bool isStatic = true;
+
+    // Layers: the filter they are drawn through. Filters: their primitives are their children
+    std::unique_ptr<Node> filter;
+    std::unique_ptr<FilterPrimitive> filterPrimitive;
+    bool linearColors = false;
 
     // Markers: how they follow the shape they are drawn on
     bool reversesStart = false;
@@ -261,6 +283,26 @@ struct DrawingStyle::PatternSource final : PaintSource
     AffineTransform contentTransform;
     PatternPaint paint;
     uint32 preparedSerial = 0;
+};
+
+/* Draws the elements of a layer for its filter. */
+struct DrawingStyle::FilterSource final : PaintSource
+{
+    FilterSource (DrawingStyle& ownerToUse, const Node& nodeToDraw)
+        : owner (ownerToUse)
+        , node (nodeToDraw)
+    {
+    }
+
+    Size<float> getContentSize() const override { return region.getSize(); }
+
+    void paintContent (Graphics& g) override { owner.drawFilteredContent (g, *this); }
+
+    DrawingStyle& owner;
+    const Node& node;
+    Rectangle<float> region;
+    const Graphics* parent = nullptr;
+    int numRows = 1;
 };
 
 //==============================================================================
@@ -431,14 +473,16 @@ private:
     /* Where the elements a layer or a clip keeps apart from the ones it draws go. */
     struct Sinks
     {
-        Sinks (std::vector<std::unique_ptr<Node>>* masksToFill = nullptr, std::vector<std::unique_ptr<Node>>* clipShapesToFill = nullptr)
+        Sinks (std::vector<std::unique_ptr<Node>>* masksToFill = nullptr, std::vector<std::unique_ptr<Node>>* clipShapesToFill = nullptr, std::unique_ptr<Node>* filterToSet = nullptr)
             : masks (masksToFill)
             , clipShapes (clipShapesToFill)
+            , filter (filterToSet)
         {
         }
 
         std::vector<std::unique_ptr<Node>>* masks;
         std::vector<std::unique_ptr<Node>>* clipShapes;
+        std::unique_ptr<Node>* filter;
     };
 
     static constexpr const char* objectBoundsSymbol = "_objectBounds";
@@ -1038,6 +1082,18 @@ private:
                 continue;
             }
 
+            if (type == "filter")
+            {
+                if (sinks.filter == nullptr)
+                    fail (path + ": a 'filter' can only appear inside a 'layer'", element);
+
+                if (*sinks.filter != nullptr)
+                    fail (path + ": a 'layer' is drawn through a single 'filter'", element);
+
+                *sinks.filter = compileFilter (element, path, scope);
+                continue;
+            }
+
             if (type == "clipPath")
             {
                 if (sinks.clipShapes == nullptr)
@@ -1465,8 +1521,213 @@ private:
             addSlot (*node, false);
         }
 
-        compileElements (element, path, scope.enter(), Placement::normal, node->children, { &node->masks, &node->clipShapes });
+        // What a filtered layer draws is kept, like the tile of a pattern, until what its elements read around it changes
+        const bool isFiltered = element.getChildWithName ("filter").isValid();
+        auto* const outerPattern = pattern;
+
+        if (isFiltered)
+            node->boundsLevel = numLevels;
+
+        {
+            const ScopedValueSetter<Node*> compiling (pattern, isFiltered ? node.get() : pattern);
+            compileElements (element, path, scope.enter(), Placement::normal, node->children, { &node->masks, &node->clipShapes, &node->filter });
+        }
+
+        if (isFiltered && ! node->isStatic && outerPattern != nullptr)
+            outerPattern->isStatic = false;
+
+        if (isFiltered && (! node->masks.empty() || element.hasProperty ("mask")))
+            fail (path + ": a 'layer' with a 'filter' can't be masked, put it inside the masked 'layer'", element);
+
         return node;
+    }
+
+    /* Compiles the filter of a layer: where it is rendered, and its primitives in the order they run. */
+    std::unique_ptr<Node> compileFilter (const DataTree& element, const String& path, const Scope& scope)
+    {
+        checkElement (element, path, { "id", "bounds", "linearColors" }, true);
+
+        auto node = std::make_unique<Node>();
+        node->kind = Node::Kind::filter;
+        node->linearColors = parseFlag (element, "linearColors", path);
+
+        Statements defaults;
+        if (! element.hasProperty ("bounds"))
+            defaults.push_back ({ "_area = (" + levelSymbol (scope.boundsLevel) + ");", path, element });
+
+        compileProperties (*node, element, path, scope, { "bounds:_area" }, std::move (defaults));
+
+        std::map<String, int> counts;
+
+        for (const auto& child : element)
+        {
+            const auto type = child.getType().toString();
+            node->children.push_back (compileFilterPrimitive (child, elementPath (path, child, counts[type]++), scope));
+        }
+
+        if (node->children.empty())
+            fail (path + ": a 'filter' needs at least one primitive", element);
+
+        return node;
+    }
+
+    std::unique_ptr<Node> compileFilterPrimitive (const DataTree& element, const String& path, const Scope& scope)
+    {
+        using Type = FilterGraph::Type;
+
+        static const std::map<String, std::pair<Type, StringArray>> kinds {
+            { "blur", { Type::blur, { "deviation" } } },
+            { "offset", { Type::offset, { "offset" } } },
+            { "flood", { Type::flood, { "color" } } },
+            { "colorMatrix", { Type::colorMatrix, { "saturate", "hueRotate", "luminanceToAlpha", "matrix" } } },
+            { "composite", { Type::composite, { "in2", "operator", "k1", "k2", "k3", "k4" } } },
+            { "blend", { Type::blend, { "in2", "mode" } } },
+            { "morphology", { Type::morphology, { "radius", "dilate" } } },
+            { "lighting", { Type::lighting, { "scale", "constant", "specular", "exponent", "color", "azimuth", "elevation", "position", "height" } } },
+            { "displacement", { Type::displacement, { "in2", "scale", "xChannel", "yChannel" } } },
+            { "dropShadow", { Type::dropShadow, { "offset", "deviation", "color" } } }
+        };
+
+        const auto kind = kinds.find (element.getType().toString());
+        if (kind == kinds.end())
+            fail (path + ": a 'filter' is made of blur, offset, flood, colorMatrix, composite, blend, morphology, lighting, displacement and dropShadow", element);
+
+        StringArray allowed { "id", "in", "result" };
+        allowed.addArray (kind->second.second);
+        checkElement (element, path, allowed, false);
+
+        auto node = std::make_unique<Node>();
+        node->kind = Node::Kind::filterPrimitive;
+        node->filterPrimitive = std::make_unique<Node::FilterPrimitive>();
+
+        auto& primitive = *node->filterPrimitive;
+        auto& base = primitive.base;
+
+        // What a primitive reads is named: the source of the layer, its alpha, or the result of a primitive before it
+        const auto getName = [&element] (const Identifier& property)
+        {
+            const auto name = element.getProperty (property).toString().trim();
+            return name == "source" ? String (FilterGraph::sourceGraphic) : (name == "sourceAlpha" ? String (FilterGraph::sourceAlpha) : name);
+        };
+
+        const auto getChoice = [&] (const Identifier& property, const StringArray& choices, int fallback)
+        {
+            if (! element.hasProperty (property))
+                return fallback;
+
+            const int index = choices.indexOf (element.getProperty (property).toString().trim());
+            if (index < 0)
+                fail (path + "." + property.toString() + ": expected " + choices.joinIntoString (", "), element, property);
+
+            return index;
+        };
+
+        base.type = kind->second.first;
+        base.in = getName ("in");
+        base.in2 = getName ("in2");
+        base.result = getName ("result");
+        base.dilate = parseFlag (element, "dilate", path);
+        base.specular = parseFlag (element, "specular", path);
+        base.compositeOperator = static_cast<FilterGraph::CompositeOperator> (getChoice ("operator", { "over", "in", "out", "atop", "xor", "lighter", "arithmetic" }, 0));
+        base.xChannel = static_cast<FilterGraph::Channel> (getChoice ("xChannel", { "red", "green", "blue", "alpha" }, 3));
+        base.yChannel = static_cast<FilterGraph::Channel> (getChoice ("yChannel", { "red", "green", "blue", "alpha" }, 3));
+        base.color = base.type == Type::lighting ? Colors::white : Colors::black;
+
+        if (element.hasProperty ("position"))
+            base.light = FilterGraph::Light::point;
+
+        if (parseFlag (element, "luminanceToAlpha", path))
+            base.matrix = FilterGraph::luminanceToAlphaMatrix();
+
+        if (element.hasProperty ("matrix"))
+        {
+            auto values = StringArray::fromTokens (element.getProperty ("matrix").toString().trim().unquoted(), " ,", "");
+            values.removeEmptyStrings();
+
+            if (values.size() != static_cast<int> (base.matrix.size()))
+                fail (path + ".matrix: expected a text of 20 numbers, the rows of red, green, blue and alpha", element, "matrix");
+
+            for (int i = 0; i < values.size(); ++i)
+                base.matrix[static_cast<size_t> (i)] = values[i].getFloatValue();
+        }
+
+        // The other properties are expressions: numbers, but for the two points, the color and the blend mode
+        Statements assignments;
+        StringArray uses, given;
+
+        for (const auto* name : { "deviation", "radius", "scale", "constant", "exponent", "azimuth", "elevation", "height", "saturate", "hueRotate", "k1", "k2", "k3", "k4", "offset", "position", "color", "mode" })
+        {
+            const Identifier propId (name);
+            if (! element.hasProperty (propId))
+                continue;
+
+            const String property (name);
+            const auto value = parseValue (element, propId, path, scope);
+            const bool isNumber = property != "offset" && property != "position" && property != "color" && property != "mode";
+
+            assignments.push_back ({ (property == "mode" ? String ("blend") : "_" + property) + " = " + (isNumber ? "float (" + value.text + ")" : value.text) + ";",
+                                     path + "." + property,
+                                     element,
+                                     propId });
+            uses.addArray (value.uses);
+            given.add (property);
+        }
+
+        if (assignments.empty())
+            return node;
+
+        auto statements = selectLets (scope, uses);
+        statements.insert (statements.end(), assignments.begin(), assignments.end());
+        node->program = compileStatements (statements, path, element);
+
+        const auto number = [&node] (const char* name)
+        {
+            return findOutput<float> (node->program, "_" + String (name));
+        };
+
+        primitive.deviation = number ("deviation");
+        primitive.radius = number ("radius");
+        primitive.scale = number ("scale");
+        primitive.constant = number ("constant");
+        primitive.exponent = number ("exponent");
+        primitive.azimuth = number ("azimuth");
+        primitive.elevation = number ("elevation");
+        primitive.height = number ("height");
+        primitive.saturate = number ("saturate");
+        primitive.hueRotate = number ("hueRotate");
+        primitive.coefficients = { number ("k1"), number ("k2"), number ("k3"), number ("k4") };
+        primitive.offset = findOutput<Point<float>> (node->program, "_offset");
+        primitive.position = findOutput<Point<float>> (node->program, "_position");
+        primitive.color = findOutput<Color> (node->program, "_color");
+        primitive.mode = findOutput<BlendMode> (node->program, "blend");
+
+        // A value of another type leaves its output not found
+        const auto expect = [&] (const char* property, bool wasFound, const char* type)
+        {
+            if (given.contains (property) && ! wasFound)
+                fail (path + "." + property + ": expected a " + type, element, Identifier (property));
+        };
+
+        expect ("offset", primitive.offset.isValid(), "point");
+        expect ("position", primitive.position.isValid(), "point");
+        expect ("color", primitive.color.isValid(), "color");
+        expect ("mode", primitive.mode.isValid(), "blend mode");
+
+        addSlot (*node, false);
+        return node;
+    }
+
+    /* Reads a property that is either `true` or `false`, false when it is not set. */
+    static bool parseFlag (const DataTree& element, const Identifier& property, const String& path)
+    {
+        if (! element.hasProperty (property))
+            return false;
+
+        const auto value = element.getProperty (property).toString().trim();
+        if (value != "true" && value != "false")
+            fail (path + "." + property.toString() + ": expected true or false", element, property);
+
+        return value == "true";
     }
 
     std::unique_ptr<Node> compileClip (const DataTree& element, const String& path, const Scope& scope)
@@ -2143,6 +2404,24 @@ const std::vector<ComponentProperty>& DrawingStyle::getProperties() const noexce
     return compiled->properties;
 }
 
+void DrawingStyle::setImageResolver (ImageResolver newResolver)
+{
+    imageResolver = std::move (newResolver);
+
+    // The images found so far, and what was drawn with them, may not be what the resolver gives
+    for (size_t i = 0; i < compiled->evaluated.size(); ++i)
+        slots[i].imageCache.clear();
+
+    for (auto& source : patternSources)
+        source->markDirty();
+
+    for (auto& [node, source] : filterSources)
+        source->markDirty();
+
+    if (auto* target = targetComponent.get())
+        target->repaint();
+}
+
 void DrawingStyle::paint (Graphics& g, const ApplicationTheme& theme, const Component& component)
 {
     for (size_t i = 0; i < propertyValues.size(); ++i)
@@ -2428,7 +2707,7 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
                 }
                 else
                 {
-                    const auto& image = resolveDrawingImage (slot->imageCache, src, baseDirectory);
+                    const auto& image = resolveDrawingImage (slot->imageCache, src, baseDirectory, imageResolver);
                     if (! image.isValid())
                         continue;
 
@@ -2555,6 +2834,19 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
             const auto savedState = g.saveState();
             applyClips (g, node, slot, context, numRows);
 
+            if (node.filter != nullptr)
+            {
+                // What the filter makes of the layer gets its opacity and its blend mode
+                const auto filteredState = g.saveState();
+                g.setOpacity (g.getOpacity() * opacity);
+
+                if (hasBlend)
+                    g.setBlendMode (slot->state->get (node.blend));
+
+                if (drawFilteredLayer (g, node, context, numRows))
+                    break;
+            }
+
             if (opacity >= 1.0f && ! hasBlend && ! hasMasks)
             {
                 drawNodes (g, node.children, context, numRows);
@@ -2648,8 +2940,120 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
         case Node::Kind::clipShapes:
         case Node::Kind::pattern:
         case Node::Kind::marker:
+        case Node::Kind::filter:
+        case Node::Kind::filterPrimitive:
             break;
     }
+}
+
+/* Draws a layer through its filter: its elements in a raster covering the bounds of the filter, kept while they
+   stay the same, then what the filter makes of it. Returns false when it can't, for the layer to be drawn as it is. */
+bool DrawingStyle::drawFilteredLayer (Graphics& g, const Node& node, const PaintContext& context, int numRows)
+{
+    const auto& filterNode = *node.filter;
+
+    auto* filterSlot = prepare (filterNode, context);
+    if (filterSlot == nullptr)
+        return false;
+
+    filterSlot->state->evaluate();
+
+    const auto region = filterSlot->state->get (filterNode.area);
+    if (region.isEmpty())
+        return false;
+
+    FilterGraph filter;
+    filter.linearColors = filterNode.linearColors;
+
+    for (const auto& child : filterNode.children)
+    {
+        const auto& outputs = *child->filterPrimitive;
+        auto primitive = outputs.base;
+
+        if (auto* slot = prepare (*child, context))
+        {
+            auto& state = *slot->state;
+            state.evaluate();
+
+            const auto read = [&state] (const ExpressionOutput<float>& output, float& value)
+            {
+                if (output.isValid())
+                    value = state.get (output);
+            };
+
+            if (outputs.deviation.isValid())
+                primitive.deviation = Point<float> (state.get (outputs.deviation), state.get (outputs.deviation));
+
+            if (outputs.radius.isValid())
+                primitive.radius = Point<float> (state.get (outputs.radius), state.get (outputs.radius));
+
+            if (outputs.offset.isValid())
+                primitive.offset = state.get (outputs.offset);
+
+            if (outputs.color.isValid())
+                primitive.color = state.get (outputs.color);
+
+            if (outputs.mode.isValid())
+                primitive.blendMode = state.get (outputs.mode);
+
+            if (outputs.saturate.isValid())
+                primitive.matrix = FilterGraph::saturationMatrix (state.get (outputs.saturate));
+
+            if (outputs.hueRotate.isValid())
+                primitive.matrix = FilterGraph::hueRotationMatrix (state.get (outputs.hueRotate));
+
+            if (outputs.position.isValid())
+            {
+                // A light is placed like the elements of the layer, the filter from the corner of its bounds
+                const auto position = state.get (outputs.position) - region.getTopLeft();
+                primitive.lightPosition[0] = position.getX();
+                primitive.lightPosition[1] = position.getY();
+            }
+
+            read (outputs.scale, primitive.scale);
+            read (outputs.constant, primitive.lightingConstant);
+            read (outputs.exponent, primitive.specularExponent);
+            read (outputs.azimuth, primitive.lightAzimuth);
+            read (outputs.elevation, primitive.lightElevation);
+            read (outputs.height, primitive.lightPosition[2]);
+
+            for (size_t i = 0; i < outputs.coefficients.size(); ++i)
+                read (outputs.coefficients[i], primitive.coefficients[i]);
+        }
+
+        filter.primitives.push_back (std::move (primitive));
+    }
+
+    auto& source = filterSources[std::addressof (node)];
+    if (source == nullptr)
+        source = std::make_unique<FilterSource> (*this, node);
+
+    if (! node.isStatic || region != source->region)
+        source->markDirty();
+
+    source->region = region;
+    source->setFilter (std::move (filter));
+
+    // The source only draws while the layer is
+    const ScopedValueSetter<const Graphics*> parentScope (source->parent, std::addressof (g));
+    const ScopedValueSetter<int> rowsScope (source->numRows, numRows);
+
+    return g.drawSource (*source, region);
+}
+
+void DrawingStyle::drawFilteredContent (Graphics& g, const FilterSource& source)
+{
+    if (paintFont == nullptr || source.parent == nullptr)
+        return;
+
+    const auto savedState = g.saveState();
+
+    // The elements are drawn where they are, with the paint set around the layer
+    g.copyPaint (*source.parent);
+    g.setTransform (AffineTransform::translation (-source.region.getX(), -source.region.getY()).followedBy (g.getTransform()));
+
+    const PaintContext context { *paintFont, source.region, g.getTransform() };
+    drawNodes (g, source.node.children, context, source.numRows);
 }
 
 } // namespace yup

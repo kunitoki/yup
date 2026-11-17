@@ -73,7 +73,48 @@ const SVGElement* getInstancedShape (const SVGData& data, const SVGElement& elem
 
     return refElement.get();
 }
+
+// The filter of an element: the one its CSS functions make, or the one it refers to.
+SVGFilter::Ptr getFilter (const SVGData& data, const SVGElement& element)
+{
+    if (element.filter != nullptr)
+        return element.filter;
+
+    return element.filterUrl ? getFilterById (data, *element.filterUrl) : nullptr;
+}
+
 } // namespace
+
+//==============================================================================
+/* The elements painted through a filter, each drawn in a raster kept until the document changes. */
+struct Drawable::FilteredElements
+{
+    struct Source final : PaintSource
+    {
+        Size<float> getContentSize() const override
+        {
+            return region.getSize();
+        }
+
+        void paintContent (Graphics& g) override
+        {
+            if (parent == nullptr || paint == nullptr)
+                return;
+
+            // The element is painted where it is, with the paint set around it
+            g.copyPaint (*parent);
+            g.setTransform (AffineTransform::translation (-region.getX(), -region.getY()).followedBy (g.getTransform()));
+            (*paint) (g);
+        }
+
+        Rectangle<float> region;
+        const Graphics* parent = nullptr;
+        const std::function<void (Graphics&)>* paint = nullptr;
+    };
+
+    // An element, and the <use> it is painted through when it is
+    std::map<std::pair<const SVGElement*, const SVGElement*>, Source> sources;
+};
 
 //==============================================================================
 
@@ -124,6 +165,8 @@ bool Drawable::parseSVG (StringRef svgText, const ParseOptions& options)
 
 void Drawable::prepareDocument()
 {
+    filteredElements = nullptr;
+
     if (document == nullptr)
         return;
 
@@ -252,6 +295,7 @@ Rectangle<float> Drawable::getPathBounds (const SVGElement& element) const
 void Drawable::clear()
 {
     document = nullptr;
+    filteredElements = nullptr;
 }
 
 //==============================================================================
@@ -372,9 +416,6 @@ void Drawable::paintElement (Graphics& g,
 
     const auto savedState = g.saveState();
 
-    bool isFillDefined = hasParentFillEnabled;
-    bool isStrokeDefined = hasParentStrokeEnabled;
-
     if (element.color)
         currentColor = *element.color;
 
@@ -394,26 +435,6 @@ void Drawable::paintElement (Graphics& g,
         currentStrokeDashArray = element.strokeDashArray;
 
     const auto currentStrokeDashOffset = element.strokeDashOffset.value_or (inheritedStrokeDashOffset);
-
-    if (element.filterUrl)
-    {
-        if (auto filter = getFilterById (data, *element.filterUrl))
-        {
-            for (const auto& primitive : filter->primitives)
-            {
-                if (auto blur = dynamic_cast<const SVGFEGaussianBlur*> (primitive.get()))
-                {
-                    const auto svgStdDeviationToFeather = 2.0f;
-                    const auto feather = jmax (g.getFeather(), blur->stdDeviation * svgStdDeviationToFeather);
-                    g.setFeather (feather);
-                }
-                else if (auto blend = dynamic_cast<const SVGFEBlend*> (primitive.get()))
-                {
-                    g.setBlendMode (blend->mode);
-                }
-            }
-        }
-    }
 
     if (element.viewBox && (element.viewportBounds || element.viewportSize))
     {
@@ -438,7 +459,6 @@ void Drawable::paintElement (Graphics& g,
         g.setTransform (viewportTransform.followedBy (g.getTransform()));
     }
 
-    bool hasClipping = false;
     if (element.clipPathUrl)
     {
         if (auto clipPath = getClipPathById (data, *element.clipPathUrl))
@@ -515,20 +535,14 @@ void Drawable::paintElement (Graphics& g,
                 {
                     auto nestedClipShape = buildClipShape (*nestedClipPath, clipBounds);
                     if (! nestedClipShape.isEmpty())
-                    {
                         g.setClipPath (nestedClipShape);
-                        hasClipping = true;
-                    }
                 }
             }
 
             // Apply the clipPath's own elements (intersects with nested clip if present)
             auto clipShape = buildClipShape (*clipPath, clipBounds);
             if (! clipShape.isEmpty())
-            {
                 g.setClipPath (clipShape);
-                hasClipping = true;
-            }
         }
     }
 
@@ -583,6 +597,38 @@ void Drawable::paintElement (Graphics& g,
         }
     }
 
+    const auto paintContent = [&] (Graphics& target)
+    {
+        paintElementContent (target, data, element, hasParentFillEnabled, hasParentStrokeEnabled, currentColor, visitingElements, currentStrokeDashArray, currentStrokeDashOffset, recursionDepth);
+    };
+
+    // A filter is given what the element paints, and what it makes of it gets the opacity, the blend mode and the clip set above
+    if (const auto filter = getFilter (data, element))
+    {
+        if (const auto blend = filter->getBackdropBlend())
+            g.setBlendMode (*blend);
+
+        if (paintThroughFilter (g, data, element, *filter, paintContent))
+            return;
+    }
+
+    paintContent (g);
+}
+
+void Drawable::paintElementContent (Graphics& g,
+                                    const SVGData& data,
+                                    const SVGElement& element,
+                                    bool hasParentFillEnabled,
+                                    bool hasParentStrokeEnabled,
+                                    Color currentColor,
+                                    std::unordered_set<const SVGElement*>& visitingElements,
+                                    const std::optional<Array<float>>& currentStrokeDashArray,
+                                    float currentStrokeDashOffset,
+                                    int recursionDepth)
+{
+    bool isFillDefined = hasParentFillEnabled;
+    bool isStrokeDefined = hasParentStrokeEnabled;
+
     const auto instancedShape = getInstancedShape (data, element);
 
     // Fill setup
@@ -634,6 +680,10 @@ void Drawable::paintElement (Graphics& g,
     }
     else if (hasParentFillEnabled)
     {
+        // Without a fill of its own an element paints with the root fill, which its fill-opacity still applies to
+        if (element.fillOpacity)
+            g.setFillColor (data.rootFillColor.value_or (Colors::black).withMultipliedAlpha (*element.fillOpacity));
+
         isFillDefined = true;
     }
 
@@ -651,8 +701,7 @@ void Drawable::paintElement (Graphics& g,
                 {
                     YUP_DRAWABLE_LOG ("Filling path - tag: " << element.tagName
                                                              << " id: " << (element.id ? *element.id : "none")
-                                                             << " bounds: " << getPathBounds (element).toString()
-                                                             << " clip: " << (hasClipping ? "true" : "false"));
+                                                             << " bounds: " << getPathBounds (element).toString());
                     g.fillPath (*element.path);
                 }
             }
@@ -660,8 +709,7 @@ void Drawable::paintElement (Graphics& g,
             {
                 YUP_DRAWABLE_LOG ("Filling path - tag: " << element.tagName
                                                          << " id: " << (element.id ? *element.id : "none")
-                                                         << " bounds: " << getPathBounds (element).toString()
-                                                         << " clip: " << (hasClipping ? "true" : "false"));
+                                                         << " bounds: " << getPathBounds (element).toString());
                 g.fillPath (*element.path);
             }
         }
@@ -904,6 +952,9 @@ void Drawable::paintElement (Graphics& g,
         }
     }
 
+    // What a <use> paints is filtered on its own: another <use> of the same element can paint it differently
+    const ScopedValueSetter<const SVGElement*> instanceScope (instance, element.reference ? std::addressof (element) : instance);
+
     if (instancedShape != nullptr)
     {
         paintElement (g, data, *instancedShape, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, currentStrokeDashArray, currentStrokeDashOffset, recursionDepth + 1);
@@ -953,6 +1004,43 @@ void Drawable::paintElement (Graphics& g,
         paintElement (g, data, *childElement, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, currentStrokeDashArray, currentStrokeDashOffset, recursionDepth + 1);
 
     // paintDebugElement (g, element);
+}
+
+//==============================================================================
+
+bool Drawable::paintThroughFilter (Graphics& g,
+                                   const SVGData& data,
+                                   const SVGElement& element,
+                                   const SVGFilter& filter,
+                                   const std::function<void (Graphics&)>& paintContent)
+{
+    if (filteredElements == nullptr)
+        filteredElements = std::make_shared<FilteredElements>();
+
+    const auto [found, isNew] = filteredElements->sources.try_emplace ({ std::addressof (element), instance });
+    auto& source = found->second;
+
+    // The document doesn't change, so neither does where its elements are filtered, nor how
+    if (isNew)
+    {
+        const auto bounds = data.getContentBounds (element);
+
+        // A filter with nothing to run, such as one only blending the element, leaves it to be painted as it is
+        if (auto graph = filter.toFilterGraph (bounds); ! graph.isEmpty())
+        {
+            source.region = filter.getRegion (bounds);
+            source.setFilter (std::move (graph));
+        }
+    }
+
+    if (source.region.isEmpty())
+        return false;
+
+    // The source only paints while it is drawn
+    const ScopedValueSetter<const Graphics*> parentScope (source.parent, std::addressof (g));
+    const ScopedValueSetter<const std::function<void (Graphics&)>*> paintScope (source.paint, std::addressof (paintContent));
+
+    return g.drawSource (source, source.region);
 }
 
 //==============================================================================

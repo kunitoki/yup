@@ -2062,6 +2062,87 @@ TEST_F (GraphicsGpuPixelTests, FittedDrawableKeepsMarkersPatternsAndSymbolsInPla
     EXPECT_LT (alphaAt (symbol, 54, 40), 50);
 }
 
+TEST_F (GraphicsGpuPixelTests, DrawablePaintsElementsThroughTheirFilters)
+{
+    const auto renderSvg = [] (const String& body)
+    {
+        Drawable drawable;
+        EXPECT_TRUE (drawable.parseSVG ("<svg viewBox=\"0 0 64 64\">" + body + "</svg>"));
+
+        return render ([&drawable] (Graphics& g)
+        {
+            drawable.paint (g, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+        });
+    };
+
+    // An offset moves what the element paints, as far as the region of the filter reaches
+    const auto moved = renderSvg ("<defs><filter id=\"f\" x=\"-1\" y=\"-1\" width=\"3\" height=\"3\"><feOffset dx=\"16\"/></filter></defs>"
+                                  "<rect x=\"8\" y=\"8\" width=\"16\" height=\"16\" fill=\"#ff0000\" filter=\"url(#f)\"/>");
+    ASSERT_EQ (moved.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_LT (alphaAt (moved, 12, 16), 10);
+    EXPECT_GT (channelAt (moved, 32, 16, 0), 200);
+    EXPECT_GT (alphaAt (moved, 32, 16), 200);
+
+    // The element is filtered with the paint set around it, and what the filter makes gets its opacity
+    const auto faded = renderSvg ("<defs><filter id=\"f\"><feOffset/></filter></defs>"
+                                  "<g fill=\"#0000ff\"><rect x=\"8\" y=\"8\" width=\"32\" height=\"32\" opacity=\"0.5\" filter=\"url(#f)\"/></g>");
+    ASSERT_EQ (faded.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_LT (channelAt (faded, 24, 24, 0), 10);
+    EXPECT_NEAR (channelAt (faded, 24, 24, 2), 128, 10);
+    EXPECT_NEAR (alphaAt (faded, 24, 24), 128, 10);
+
+    // A blur spreads past the element, where a feather would thin it
+    const auto blurred = renderSvg ("<defs><filter id=\"f\" x=\"-0.5\" y=\"-0.5\" width=\"2\" height=\"2\" color-interpolation-filters=\"sRGB\">"
+                                    "<feGaussianBlur stdDeviation=\"3\"/></filter></defs>"
+                                    "<rect x=\"24\" y=\"24\" width=\"16\" height=\"16\" filter=\"url(#f)\"/>");
+    ASSERT_EQ (blurred.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (alphaAt (blurred, 32, 32), 200);
+    EXPECT_GT (alphaAt (blurred, 21, 32), 10);
+    EXPECT_LT (alphaAt (blurred, 21, 32), 128);
+    EXPECT_LT (alphaAt (blurred, 8, 32), 5);
+
+    // The functions of a CSS filter work on a group as a whole
+    const auto shadowed = renderSvg ("<g style=\"filter: drop-shadow(8px 8px 0px #0000ff)\">"
+                                     "<rect x=\"8\" y=\"8\" width=\"16\" height=\"16\" fill=\"#ff0000\"/></g>");
+    ASSERT_EQ (shadowed.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (channelAt (shadowed, 12, 12, 0), 200);
+    EXPECT_LT (channelAt (shadowed, 20, 20, 2), 10);
+    EXPECT_GT (channelAt (shadowed, 28, 28, 2), 200);
+    EXPECT_LT (alphaAt (shadowed, 40, 40), 10);
+}
+
+TEST_F (GraphicsGpuPixelTests, DrawableFiltersTurnedContentInFullAndBlendsWithWhatIsBehind)
+{
+    const auto renderSvg = [] (const String& body)
+    {
+        Drawable drawable;
+        EXPECT_TRUE (drawable.parseSVG ("<svg viewBox=\"0 0 64 64\">" + body + "</svg>"));
+
+        return render ([&drawable] (Graphics& g)
+        {
+            drawable.paint (g, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+        });
+    };
+
+    // The filter covers the box of the bar once turned: both of its ends are there
+    const auto turned = renderSvg ("<defs><filter id=\"f\" x=\"0\" y=\"0\" width=\"1\" height=\"1\"><feOffset/></filter></defs>"
+                                   "<g filter=\"url(#f)\"><rect x=\"16\" y=\"28\" width=\"32\" height=\"8\" fill=\"#ff0000\" transform=\"rotate(30 32 32)\"/></g>");
+    ASSERT_EQ (turned.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (alphaAt (turned, 32, 32), 200);
+    EXPECT_GT (alphaAt (turned, 45, 38), 200);
+    EXPECT_GT (alphaAt (turned, 18, 25), 200);
+
+    // A filter blending with the background multiplies the red square with the green one behind it
+    const auto blended = renderSvg ("<defs><filter id=\"f\"><feBlend mode=\"multiply\" in=\"SourceGraphic\" in2=\"BackgroundImage\"/></filter></defs>"
+                                    "<rect width=\"64\" height=\"64\" fill=\"#00ff00\"/>"
+                                    "<rect x=\"16\" y=\"16\" width=\"32\" height=\"32\" fill=\"#ff0000\" filter=\"url(#f)\"/>");
+    ASSERT_EQ (blended.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (channelAt (blended, 4, 4, 1), 200);
+    EXPECT_LT (channelAt (blended, 32, 32, 0), 10);
+    EXPECT_LT (channelAt (blended, 32, 32, 1), 10);
+    EXPECT_GT (alphaAt (blended, 32, 32), 200);
+}
+
 //==============================================================================
 // What Graphics asks a renderer to draw, checked without a GPU
 //==============================================================================

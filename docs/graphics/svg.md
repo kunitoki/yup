@@ -136,7 +136,12 @@ The parser handles a broad subset of SVG, including:
 - Linear and radial gradients (`SVGGradient`).
 - Clip paths (`SVGClipPath`) and masks (`SVGMask`).
 - Patterns (`SVGPattern`) for tiled fills.
-- Filters (`SVGFilter`).
+- Filters (`SVGFilter`), run on the GPU: `feGaussianBlur`, `feOffset`, `feFlood`,
+  `feColorMatrix`, `feComposite`, `feBlend`, `feMorphology`, `feMerge`,
+  `feDiffuseLighting` and `feSpecularLighting` (distant and point lights),
+  `feDisplacementMap`, `feDropShadow`, and the functions of a CSS `filter`
+  (`blur`, `drop-shadow`, `brightness`, `contrast`, `grayscale`, `hue-rotate`,
+  `invert`, `opacity`, `saturate`, `sepia`). See [filters](#filters).
 - Text elements (with the font resolver above).
 - Embedded and referenced images (with the image resolver above).
 - CSS styling via `<style>` rules (`SVGCssRule`).
@@ -147,6 +152,29 @@ For direct access to the parsed model - elements, gradients, and bounds - an
 `SVGDocument` exposes its `SVGData` through `visit()`. Most applications only
 need `Drawable`; reach for `SVGDocument` when building custom SVG tooling.
 ```
+
+## Filters
+
+An element with a `filter` is painted into an offscreen raster covering the
+region of the filter, at the resolution it has on screen. The primitives run on
+it as a [`FilterGraph`](graphics-class.md#filtered-content), and the result is
+painted with the opacity, the blend mode, the clip and the mask of the element.
+The raster is kept, so a filter only runs again when the SVG is painted larger.
+
+- The region (`x`, `y`, `width`, `height`, `filterUnits`), `primitiveUnits`,
+  the `in` / `in2` / `result` names and `color-interpolation-filters` are
+  honored. What a primitive puts outside the region is cut off, as in a browser.
+- `feTurbulence` and `feImage` make nothing (transparent black), and
+  `feComponentTransfer`, `feConvolveMatrix` and `feTile` leave their input as it
+  is. A spot light is lit as a point light, the `x`, `y`, `width` and `height`
+  of single primitives are ignored, and `FillPaint` and `StrokePaint` are empty.
+- `BackgroundImage` is empty too, except in a filter ending with an `feBlend`
+  of what it made and `BackgroundImage`: that blend becomes the blend mode the
+  element, or its filtered picture, is painted with.
+- Text has no bounding box for a filter to cover, so a filter on a `<text>`
+  alone is not run. Only the blend above applies to it.
+- A blur has one deviation: the largest of the two of `stdDeviation`.
+- Without a GPU the element is painted without its filter.
 
 ## Editing an SVG as a drawing
 
@@ -166,8 +194,9 @@ for (const auto& warning : imported.warnings)
 ```
 
 Groups keep their structure and set the paint their shapes share, gradients
-become named values, and `<use>`, patterns, markers, clip paths, masks, nested
-`<svg>` elements, images and text become the matching elements of the drawing.
+become named values, and `<use>`, patterns, markers, clip paths, masks, filters,
+nested `<svg>` elements, images and text become the matching elements of the
+drawing.
 
 ## See also
 

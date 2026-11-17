@@ -355,7 +355,7 @@ constexpr auto yuiDefinitionJson = R"json({
     "operators": ["<=>", "=>", "..", "&&", "||", "==", "!=", "<=", ">=", "?", ":", ";", ",", ".", "(", ")", "[", "]", "{", "}", "+", "-", "*", "/", "%", "<", ">", "!", "=", "#", "@"],
     "wordSets": {
         "keyword.constant": ["true", "false", "pi", "tau"],
-        "type.shape": ["rect", "circle", "ellipse", "arc", "line", "path", "polygon", "star", "text", "image", "svg", "layer", "group", "clip", "mask", "viewport", "clipPath"],
+        "type.shape": ["rect", "circle", "ellipse", "arc", "line", "path", "polygon", "star", "text", "image", "svg", "layer", "group", "clip", "mask", "viewport", "clipPath", "filter", "blur", "flood", "colorMatrix", "composite", "morphology", "lighting", "displacement", "dropShadow"],
         "identifier.language": ["self", "parent", "root", "theme"],
         "identifier.builtin": ["sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sqrt", "pow", "exp", "log", "log2", "log10", "abs", "floor", "ceil", "round", "trunc", "sign", "fmod", "min", "max", "clamp", "lerp", "mix", "map", "smoothstep", "hypot", "deg", "rad", "len", "format", "rgb", "rgba", "hsl", "hsla", "polar", "linearGradient", "radialGradient", "angularGradient", "action"]
     },

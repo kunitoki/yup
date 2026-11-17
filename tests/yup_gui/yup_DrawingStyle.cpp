@@ -659,6 +659,46 @@ TEST_F (DrawingStyleLanguageTest, ClipsToTheShapesOfAClipPath)
                "drawing/clip[0]/clipPath[0]/repeat[0]/text[0]: a 'text' has no outline to clip to");
 }
 
+TEST_F (DrawingStyleLanguageTest, DrawsLayersThroughTheFilterTheyHold)
+{
+    EXPECT_TRUE (createYuiError (R"yui(
+        drawing {
+            property amount: number = 1;
+
+            layer {
+                opacity: 0.5;
+                filter {
+                    bounds: rect (0, 0, 20, 20);
+                    linearColors: true;
+
+                    morphology { in: sourceAlpha; radius: 2; dilate: true; result: fat; }
+                    blur { deviation: 2 * amount; }
+                    offset { offset: point (1, amount); result: moved; }
+                    flood { color: palette.accent; result: tinted; }
+                    composite { in: tinted; in2: moved; operator: arithmetic; k1: 1; k2: 0.5; }
+                    blend { in: source; in2: fat; mode: multiply; }
+                    colorMatrix { saturate: amount; }
+                    colorMatrix { matrix: "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"; }
+                    lighting { scale: 2; constant: 1; specular: true; exponent: 4; color: #ffffff; position: point (10, 10); height: 5; }
+                    displacement { in2: moved; scale: 3; xChannel: red; yChannel: green; }
+                    dropShadow { offset: point (2, 2); deviation: 1; color: #000000; }
+                }
+                rect { bounds: rect (4, 4, 12, 12); fill: #ff0000; }
+            }
+        })yui").isEmpty());
+
+    EXPECT_TRUE (createYuiError ("drawing { filter { blur { deviation: 2; } } }").contains ("can only appear inside a 'layer'"));
+    EXPECT_TRUE (createYuiError ("drawing { layer { filter { } } }").contains ("needs at least one primitive"));
+    EXPECT_TRUE (createYuiError ("drawing { layer { filter { rect { bounds: bounds; } } } }").contains ("is made of blur"));
+    EXPECT_TRUE (createYuiError ("drawing { layer { filter { blur { radius: 2; } } } }").contains ("unknown property 'radius'"));
+    EXPECT_TRUE (createYuiError ("drawing { layer { filter { offset { offset: 2; } } } }").contains ("expected a point"));
+    EXPECT_TRUE (createYuiError ("drawing { layer { filter { composite { operator: under; } } } }").contains ("expected over, in, out"));
+    EXPECT_TRUE (createYuiError ("drawing { layer { filter { morphology { radius: 1; dilate: maybe; } } } }").contains ("expected true or false"));
+    EXPECT_TRUE (createYuiError ("drawing { layer { filter { colorMatrix { matrix: \"1 0 0\"; } } } }").contains ("20 numbers"));
+    EXPECT_TRUE (createYuiError ("drawing { layer { filter { blur { deviation: 1; } } filter { blur { deviation: 1; } } } }").contains ("a single 'filter'"));
+    EXPECT_TRUE (createYuiError ("drawing { layer { filter { blur { deviation: 1; } } mask { rect { bounds: bounds; fill: #ffffff; } } } }").contains ("can't be masked"));
+}
+
 TEST_F (DrawingStyleLanguageTest, PlacesTextFromAnAnchorAndRoundsRectanglesElliptically)
 {
     Slider slider (Slider::RotaryVerticalDrag);
@@ -1166,6 +1206,102 @@ TEST_F (DrawingStyleGpuTest, ClipPathsClipToAllTheirShapes)
     EXPECT_EQ (image.getPixelColor (6, 8).getAlpha(), 0);
     EXPECT_EQ (image.getPixelColor (11, 8).getAlpha(), 0);
     EXPECT_EQ (image.getPixelColor (2, 1).getAlpha(), 0);
+}
+
+TEST_F (DrawingStyleGpuTest, LayersAreDrawnThroughTheirFilter)
+{
+    // The red square is moved four pixels to the right, and what leaves the bounds of the filter is lost
+    const auto moved = render (R"yui(
+        drawing {
+            layer {
+                filter { bounds: rect (0, 0, 12, 16); offset { offset: point (4, 0); } }
+                rect { bounds: rect (2, 4, 8, 8); fill: #ff0000; }
+            }
+        })yui");
+    ASSERT_TRUE (moved.isValid());
+    EXPECT_EQ (moved.getPixelColor (3, 8).getAlpha(), 0);
+    EXPECT_EQ (moved.getPixelColor (8, 8), Color (0xffff0000));
+    EXPECT_EQ (moved.getPixelColor (13, 8).getAlpha(), 0);
+
+    // Primitives read the layer and each other by name, and the result gets the opacity of the layer
+    const auto tinted = render (R"yui(
+        drawing {
+            group {
+                fill: #ff0000;
+
+                layer {
+                    opacity: 0.5;
+                    filter {
+                        flood { color: #0000ff; result: blue; }
+                        composite { in: blue; in2: sourceAlpha; operator: in; }
+                    }
+                    rect { bounds: rect (4, 4, 8, 8); }
+                }
+            }
+        })yui");
+    ASSERT_TRUE (tinted.isValid());
+    EXPECT_EQ (tinted.getPixelColor (1, 1).getAlpha(), 0);
+    EXPECT_EQ (tinted.getPixelColor (8, 8).getRed(), 0);
+    EXPECT_NEAR (tinted.getPixelColor (8, 8).getAlpha(), 128, 4);
+}
+
+TEST_F (DrawingStyleGpuTest, FiltersFollowThePropertiesTheyRead)
+{
+    DrawnComponent component (parseYui (R"yui(
+        drawing {
+            property shift: number = 0;
+
+            layer {
+                filter { offset { offset: point (shift, 0); } }
+                rect { bounds: rect (0, 4, 4, 8); fill: #00ff00; }
+            }
+        })yui"));
+
+    EXPECT_EQ (component.snapshotToImage (*gpuContext).getPixelColor (2, 8), Color (0xff00ff00));
+
+    component.setProperty ("shift", 8.0);
+
+    const auto image = component.snapshotToImage (*gpuContext);
+    EXPECT_EQ (image.getPixelColor (2, 8).getAlpha(), 0);
+    EXPECT_EQ (image.getPixelColor (10, 8), Color (0xff00ff00));
+}
+
+TEST_F (DrawingStyleGpuTest, ImagesComeFromTheResolverBeforeTheFiles)
+{
+    DrawnComponent component (parseYui (R"yui(
+        drawing {
+            image { bounds: bounds; source: "memory:blue"; fitting: fill; }
+        })yui"));
+
+    // Nothing is called that, among the files
+    EXPECT_EQ (centerColor (component).getAlpha(), 0);
+
+    auto* style = dynamic_cast<DrawingStyle*> (component.getStyle().get());
+    ASSERT_NE (style, nullptr);
+
+    StringArray asked;
+    style->setImageResolver ([&asked] (const String& source) -> std::optional<Image>
+    {
+        asked.add (source);
+
+        Image image (4, 4);
+        image.fillColor (Color (0xff0000ff));
+        return image;
+    });
+
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        const auto painted = centerColor (component);
+        EXPECT_GT (painted.getBlue(), 200);
+        EXPECT_LT (painted.getRed(), 50);
+        EXPECT_GT (painted.getAlpha(), 200);
+    }
+
+    // Asked once for the source, what it returned is kept
+    EXPECT_EQ (asked, StringArray ({ "memory:blue" }));
+
+    style->setImageResolver (nullptr);
+    EXPECT_EQ (centerColor (component).getAlpha(), 0);
 }
 
 TEST_F (DrawingStyleGpuTest, CornerSizeRoundsRectanglesElliptically)

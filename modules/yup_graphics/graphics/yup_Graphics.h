@@ -212,6 +212,17 @@ public:
     [[nodiscard]] SavedState saveState();
 
     //==============================================================================
+    /** Takes the paint of another Graphics: its fill, its stroke and how it strokes, and its feather.
+
+        What is drawn afterwards is painted as it would be there, which is what a layer needs
+        to carry on with the paint set around it. The transform, the clip, the opacity, the
+        tint and the blend mode are left as they are.
+
+        @param other The Graphics to take the paint of.
+    */
+    void copyPaint (const Graphics& other);
+
+    //==============================================================================
     /** Sets the feather for subsequent drawing operations.
 
         @param feather The new feather level.
@@ -785,6 +796,21 @@ public:
         @param targetArea The destination rectangle in the current coordinate space.
     */
     void drawTexture (const GpuTexture::Ptr& texture, const Rectangle<float>& targetArea);
+
+    /** Draws the content of a PaintSource into a target rectangle, through its filter when it has one.
+
+        The content box of the source is stretched over the rectangle. Its raster is made
+        for the size the rectangle has on screen, and kept until the source is marked dirty.
+
+        @param source     The content to draw.
+        @param targetArea The destination rectangle in the current coordinate space.
+
+        @returns False when nothing was drawn: the source has an empty content size, no GPU
+                 is available, or the source is drawn from within its own paintContent().
+
+        @see PaintSource, PaintSource::setFilter
+    */
+    bool drawSource (PaintSource& source, const Rectangle<float>& targetArea);
 
     /** Draws an image mapped onto a triangle mesh.
 

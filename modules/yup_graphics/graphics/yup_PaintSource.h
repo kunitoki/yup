@@ -77,7 +77,7 @@ namespace yup
     @note A PaintSource keeps GPU resources of the GraphicsContext it was last used
           with: call releaseResources() before that context goes away.
 
-    @see Graphics::setFillSource, Graphics::setStrokeSource
+    @see Graphics::setFillSource, Graphics::setStrokeSource, Graphics::drawSource, FilterGraph
 */
 class YUP_API PaintSource
 {
@@ -121,6 +121,19 @@ public:
     */
     void releaseResources();
 
+    //==============================================================================
+    /** Sets a filter the content goes through before it is painted with.
+
+        The filter runs on the raster of the content each time it is drawn again,
+        with lengths in content units. What it moves out of the content box is lost.
+
+        @param newFilter  The filter, an empty one to paint with the content as it is.
+    */
+    void setFilter (FilterGraph newFilter);
+
+    /** Returns the filter the content goes through, empty by default. */
+    const FilterGraph& getFilter() const noexcept { return filter; }
+
 private:
     friend class Graphics;
 
@@ -128,6 +141,9 @@ private:
 
     GraphicsContext* context = nullptr;
     GpuCanvas::Ptr canvas;
+    FilterGraph filter;
+    FilterGraph::State filterState;
+    GpuTexture::Ptr filtered;
     uint8 shrinkStreak = 0;
     bool dirty = true;
     bool rasterizing = false;

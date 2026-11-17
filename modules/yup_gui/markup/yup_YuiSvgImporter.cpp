@@ -25,8 +25,8 @@ namespace yup
 //==============================================================================
 /* Writes an SVG as the elements of a drawing, following what Drawable::paintElement does with it.
 
-   Drawable paints with the state of its Graphics: an element sets a paint, a stroke width or a
-   feather, and what is inside it, or what it instances, is painted with what is left there. A
+   Drawable paints with the state of its Graphics: an element sets a paint or a stroke width,
+   and what is inside it, or what it instances, is painted with what is left there. A
    drawing inherits paint lexically instead, so the converter keeps both: the State is what the
    Graphics holds while an element is painted, the Cascade is what the groups already written
    around it set. An element only gets the properties its cascade doesn't give it.
@@ -76,6 +76,9 @@ public:
             drawing.children.push_back (std::move (root));
         else
             std::move (root.children.begin(), root.children.end(), std::back_inserter (drawing.children));
+
+        if (options.colorProperties)
+            declareColorProperties (drawing);
 
         if (usesDefaultFont)
             warn ("Text is written with 'defaultFont': set Options::fontExpression to choose its fonts");
@@ -134,12 +137,12 @@ private:
         /* The properties in the order they read best in: what the element is, where it is, then how it is painted. */
         std::vector<std::pair<String, String>> getWrittenProperties() const
         {
-            static const StringArray order { "name", "drawing", "id", "viewBox", "fitting", "justification", "tile", "size", "ref", "orient", "units",
+            static const StringArray order { "name", "drawing", "id", "in", "in2", "viewBox", "fitting", "justification", "tile", "size", "ref", "orient", "units",
                                              "bounds", "cornerSize", "center", "radius", "from", "to", "data", "anchor", "text", "source",
                                              "transform", "opacity", "blend", "color",
                                              "fill", "fillGradient", "fillPattern", "stroke", "strokeGradient", "strokeWidth", "strokeMiterLimit",
                                              "cap", "join", "dash", "dashOffset", "markerStart", "markerMid", "markerEnd",
-                                             "feather", "font", "textAnchor", "letterSpacing" };
+                                             "font", "textAnchor", "letterSpacing" };
 
             auto written = properties;
 
@@ -231,7 +234,6 @@ private:
         float strokeWidth = 1.0f;
         std::optional<StrokeJoin> join;
         std::optional<StrokeCap> cap;
-        float feather = 0.0f;
         BlendMode blend = BlendMode::SrcOver;
         std::optional<Array<float>> dash;
         float dashOffset = 0.0f;
@@ -337,6 +339,14 @@ private:
     static String quoted (const String& text)
     {
         return "\"" + text.replace ("\\", "\\\\").replace ("\"", "\\\"").replace ("\n", "\\n").replace ("\r", "\\r").replace ("\t", "\\t") + "\"";
+    }
+
+    /* A text short enough for a message: the content of a `data:` image goes on for pages. */
+    static String shortened (const String& text)
+    {
+        constexpr int maxLength = 96;
+
+        return text.length() <= maxLength ? text : text.substring (0, maxLength) + "...";
     }
 
     static String pathText (const Path& path)
@@ -486,7 +496,6 @@ private:
             { "stroke", "stroke=none" },
             { "dash", "dash=dash ()" },
             { "dashOffset", "dashOffset=0" },
-            { "feather", "feather=0" },
             { "strokeMiterLimit", "strokeMiterLimit=4" },
             { "textAnchor", "textAnchor=start" },
             { "letterSpacing", "letterSpacing=0" }
@@ -585,8 +594,6 @@ private:
             value = makeDash (state.dash, false);
         else if (slot == "dashOffset")
             value = { "dashOffset", numberText (state.dashOffset) };
-        else if (slot == "feather")
-            value = { "feather", numberText (state.feather) };
         else if (slot == "color")
             value = { "color", state.currentColor };
 
@@ -634,6 +641,84 @@ private:
 
         definitionNames[key] = name;
         return name;
+    }
+
+    //==============================================================================
+    /* Declares every color the elements are written with as a property of the drawing, read by name where the color was. */
+    void declareColorProperties (Item& drawing)
+    {
+        std::map<String, String> names;
+        std::vector<Item> declarations;
+
+        const auto getName = [&] (const String& color)
+        {
+            if (const auto found = names.find (color); found != names.end())
+                return found->second;
+
+            const auto name = makeUnique (usedLets, "color" + String (static_cast<int> (names.size()) + 1));
+
+            Item property ("property");
+            property.set ("name", name);
+            property.set ("type", "color");
+            property.set ("value", color);
+            declarations.push_back (std::move (property));
+
+            names[color] = name;
+            return name;
+        };
+
+        const std::function<void (Item&)> visit = [&] (Item& item)
+        {
+            for (auto& property : item.properties)
+                if (property.second.containsChar ('#'))
+                    property.second = replaceColors (property.second, getName);
+
+            for (auto& child : item.children)
+                visit (child);
+        };
+
+        visit (drawing);
+
+        drawing.children.insert (drawing.children.begin(), std::make_move_iterator (declarations.begin()), std::make_move_iterator (declarations.end()));
+    }
+
+    /* Replaces the colors of an expression, but not what its strings hold, with the names given for them. */
+    static String replaceColors (const String& expression, const std::function<String (const String&)>& getName)
+    {
+        String text;
+        bool isQuoted = false;
+
+        for (auto reader = expression.getCharPointer(); ! reader.isEmpty();)
+        {
+            const auto character = reader.getAndAdvance();
+
+            if (isQuoted && character == '\\' && ! reader.isEmpty())
+            {
+                text << String::charToString (character) << String::charToString (reader.getAndAdvance());
+                continue;
+            }
+
+            if (character == '"')
+                isQuoted = ! isQuoted;
+
+            auto end = reader;
+            int numDigits = 0;
+
+            if (character == '#' && ! isQuoted)
+                for (; CharacterFunctions::getHexDigitValue (*end) >= 0; ++end)
+                    ++numDigits;
+
+            if (numDigits != 6 && numDigits != 8)
+            {
+                text << String::charToString (character);
+                continue;
+            }
+
+            text << getName ("#" + String (reader, end));
+            reader = end;
+        }
+
+        return text;
     }
 
     //==============================================================================
@@ -1024,6 +1109,206 @@ private:
     }
 
     //==============================================================================
+    /* Returns the filter of an element: the one its CSS functions make, or the one it refers to. */
+    SVGFilter::Ptr getFilter (const SVGElement& element) const
+    {
+        if (element.filter != nullptr)
+            return element.filter;
+
+        return element.filterUrl ? data.filtersById[*element.filterUrl] : SVGFilter::Ptr();
+    }
+
+    /* Makes the filter an element is drawn through: where it is rendered for that element, and its primitives. */
+    std::optional<Item> makeFilter (const SVGElement& element)
+    {
+        using Type = FilterGraph::Type;
+
+        const auto filter = getFilter (element);
+        if (filter == nullptr)
+            return std::nullopt;
+
+        const auto bounds = data.getContentBounds (element);
+        const auto region = filter->getRegion (bounds);
+        const auto graph = filter->toFilterGraph (bounds);
+
+        // A filter with nothing to run, such as one only blending the element, leaves it to be drawn as it is
+        if (region.isEmpty() || graph.isEmpty())
+            return std::nullopt;
+
+        Item item ("filter");
+        item.set ("bounds", rectText (region));
+
+        if (graph.linearColors)
+            item.set ("linearColors", "true");
+
+        // The names of SVG are written as the names of a drawing
+        const auto nameText = [] (const String& name)
+        {
+            if (name == FilterGraph::sourceGraphic)
+                return String ("source");
+
+            if (name == FilterGraph::sourceAlpha)
+                return String ("sourceAlpha");
+
+            const auto sanitized = sanitizeName (name, "result");
+            return sanitized == "source" || sanitized == "sourceAlpha" ? sanitized + "Result" : sanitized;
+        };
+
+        const auto setName = [&nameText] (Item& primitive, const char* property, const String& name)
+        {
+            if (name.isNotEmpty())
+                primitive.set (property, nameText (name));
+        };
+
+        // The largest of two lengths stands for both, as a drawing blurs and thins evenly
+        const auto lengthText = [this] (Point<float> length, const char* what)
+        {
+            if (length.getX() != length.getY())
+                warn (String ("A filter ") + what + " is as large along x as along y in a drawing: the largest of the two is used");
+
+            return numberText (jmax (length.getX(), length.getY()));
+        };
+
+        for (const auto& source : graph.primitives)
+        {
+            static const char* const types[] = { "blur", "offset", "flood", "colorMatrix", "composite", "blend", "morphology", "merge", "lighting", "displacement", "dropShadow" };
+            static const char* const operators[] = { "over", "in", "out", "atop", "xor", "lighter", "arithmetic" };
+            static const char* const channels[] = { "red", "green", "blue", "alpha" };
+
+            // The pictures a merge stacks are put over each other one at a time
+            if (source.type == Type::merge && source.inputs.size() > 1)
+            {
+                for (int i = 1; i < source.inputs.size(); ++i)
+                {
+                    Item over ("composite");
+                    setName (over, "in", source.inputs[i]);
+
+                    if (i == 1)
+                        setName (over, "in2", source.inputs[0]);
+
+                    if (i + 1 == source.inputs.size())
+                        setName (over, "result", source.result);
+
+                    item.children.push_back (std::move (over));
+                }
+
+                continue;
+            }
+
+            Item primitive (source.type == Type::merge ? "offset" : types[static_cast<size_t> (source.type)]);
+            setName (primitive, "in", source.type == Type::merge && ! source.inputs.isEmpty() ? source.inputs[0] : source.in);
+
+            switch (source.type)
+            {
+                case Type::blur:
+                    primitive.set ("deviation", lengthText (source.deviation, "blur"));
+                    break;
+
+                case Type::offset:
+                    primitive.set ("offset", pointText (source.offset));
+                    break;
+
+                case Type::flood:
+                    primitive.set ("color", colorText (source.color));
+                    break;
+
+                case Type::colorMatrix:
+                {
+                    StringArray values;
+                    for (const auto value : source.matrix)
+                        values.add (numberText (value));
+
+                    primitive.set ("matrix", quoted (values.joinIntoString (" ")));
+                    break;
+                }
+
+                case Type::composite:
+                    setName (primitive, "in2", source.in2);
+
+                    if (source.compositeOperator != FilterGraph::CompositeOperator::over)
+                        primitive.set ("operator", operators[static_cast<size_t> (source.compositeOperator)]);
+
+                    if (source.compositeOperator == FilterGraph::CompositeOperator::arithmetic)
+                        for (size_t i = 0; i < source.coefficients.size(); ++i)
+                            if (source.coefficients[i] != 0.0f)
+                                primitive.set ("k" + String (static_cast<int> (i) + 1), numberText (source.coefficients[i]));
+
+                    break;
+
+                case Type::blend:
+                    setName (primitive, "in2", source.in2);
+                    primitive.set ("mode", blendText (source.blendMode));
+                    break;
+
+                case Type::morphology:
+                    primitive.set ("radius", lengthText (source.radius, "morphology"));
+
+                    if (source.dilate)
+                        primitive.set ("dilate", "true");
+
+                    break;
+
+                case Type::merge:
+                    // Nothing stacked is nothing, which is what a transparent flood is
+                    if (source.inputs.isEmpty())
+                    {
+                        primitive = Item ("flood");
+                        primitive.set ("color", colorText (Colors::transparentBlack));
+                    }
+
+                    break;
+
+                case Type::lighting:
+                    if (source.scale != 1.0f)
+                        primitive.set ("scale", numberText (source.scale));
+
+                    if (source.lightingConstant != 1.0f)
+                        primitive.set ("constant", numberText (source.lightingConstant));
+
+                    if (source.specular)
+                    {
+                        primitive.set ("specular", "true");
+                        primitive.set ("exponent", numberText (source.specularExponent));
+                    }
+
+                    if (source.color != Colors::white)
+                        primitive.set ("color", colorText (source.color));
+
+                    if (source.light == FilterGraph::Light::point)
+                    {
+                        primitive.set ("position", pointText ({ source.lightPosition[0] + region.getX(), source.lightPosition[1] + region.getY() }));
+                        primitive.set ("height", numberText (source.lightPosition[2]));
+                    }
+                    else
+                    {
+                        primitive.set ("azimuth", numberText (source.lightAzimuth));
+                        primitive.set ("elevation", numberText (source.lightElevation));
+                    }
+
+                    break;
+
+                case Type::displacement:
+                    setName (primitive, "in2", source.in2);
+                    primitive.set ("scale", numberText (source.scale));
+                    primitive.set ("xChannel", channels[static_cast<size_t> (source.xChannel)]);
+                    primitive.set ("yChannel", channels[static_cast<size_t> (source.yChannel)]);
+                    break;
+
+                case Type::dropShadow:
+                    primitive.set ("offset", pointText (source.offset));
+                    primitive.set ("deviation", lengthText (source.deviation, "shadow"));
+                    primitive.set ("color", colorText (source.color));
+                    break;
+            }
+
+            setName (primitive, "result", source.result);
+            item.children.push_back (std::move (primitive));
+        }
+
+        return item;
+    }
+
+    //==============================================================================
     /* Moves what an element sets to the only element it holds, when that takes it all. */
     static bool fold (const Item& container, Item& child)
     {
@@ -1088,28 +1373,12 @@ private:
 
         state.dashOffset = element.strokeDashOffset.value_or (state.dashOffset);
 
-        // A blur becomes the feather of what is drawn, a blend its blend mode
+        // A filter ending by blending what it makes with what is behind the element sets how the element is blended
         auto blend = element.blendMode;
-        bool hasBlur = false;
 
-        if (element.filterUrl)
-        {
-            if (const auto filter = data.filtersById[*element.filterUrl])
-            {
-                for (const auto& primitive : filter->primitives)
-                {
-                    if (const auto* blur = dynamic_cast<const SVGFEGaussianBlur*> (primitive.get()))
-                    {
-                        state.feather = jmax (state.feather, blur->stdDeviation * 2.0f);
-                        hasBlur = true;
-                    }
-                    else if (const auto* blendPrimitive = dynamic_cast<const SVGFEBlend*> (primitive.get()))
-                    {
-                        blend = blendPrimitive->mode;
-                    }
-                }
-            }
-        }
+        if (const auto filter = getFilter (element))
+            if (const auto backdropBlend = filter->getBackdropBlend())
+                blend = backdropBlend;
 
         if (blend && *blend != state.blend)
         {
@@ -1176,6 +1445,13 @@ private:
         else if (fillPattern != nullptr)
         {
             isFillDefined = true;
+        }
+        else if (isFillDefined && ! element.fillUrl && element.fillOpacity)
+        {
+            // Without a fill of its own an element paints with the root fill, which its fill-opacity still applies to
+            state.fill = makeColor ("fill", data.rootFillColor.value_or (Colors::black).withMultipliedAlpha (*element.fillOpacity));
+            groupFill = state.fill;
+            setsFill = true;
         }
 
         if (element.noFill)
@@ -1293,17 +1569,9 @@ private:
             if (element.strokeDashOffset)
                 write (container, inner.cascade, "dashOffset", { "dashOffset", numberText (state.dashOffset), {}, true });
 
-            if (hasBlur)
-                write (container, inner.cascade, "feather", { "feather", numberText (state.feather), {}, true });
-
             if (isText)
                 writeTextStyle (container, inner.cascade, element);
         }
-
-        const auto writeFeather = [&] (Item& item, Cascade& cascade)
-        {
-            write (item, cascade, "feather", { "feather", numberText (state.feather), {}, hasBlur });
-        };
 
         const auto writeShapeFill = [&] (Item& shape, Cascade& cascade, Value fill, bool strokes)
         {
@@ -1372,7 +1640,6 @@ private:
                             shape.set (properties[i], markers[i]);
                 }
 
-                writeFeather (shape, cascade);
                 content.push_back (std::move (shape));
             }
         }
@@ -1454,7 +1721,6 @@ private:
                 if (drawsStroke)
                     writeStroke (shape, cascade, strokeStyle);
 
-                writeFeather (shape, cascade);
                 content.push_back (std::move (shape));
             }
         }
@@ -1474,7 +1740,6 @@ private:
                 writeTextStyle (text, cascade, element);
                 writePaint (text, cascade, "fill", fill, color);
                 writePaint (text, cascade, "stroke", makeNone ("stroke", true), color);
-                writeFeather (text, cascade);
                 content.push_back (std::move (text));
             }
         }
@@ -1489,7 +1754,9 @@ private:
                 content.push_back (std::move (image));
 
                 if (! element.image || ! element.image->isValid())
-                    warn ("The image '" + element.imageHref->substring (0, 48) + "' could not be loaded: Drawable doesn't paint it");
+                    warn ("The image '" + shortened (*element.imageHref) + "' could not be loaded: Drawable doesn't paint it");
+                else if (element.imageHref->startsWithIgnoreCase ("http:") || element.imageHref->startsWithIgnoreCase ("https:"))
+                    warn ("The image '" + shortened (*element.imageHref) + "' is not a file: give it to the drawing with DrawingStyle::setImageResolver");
             }
         }
 
@@ -1556,8 +1823,7 @@ private:
                             || (slot == "cap" && element.strokeCap.has_value())
                             || (slot == "join" && element.strokeJoin.has_value())
                             || (slot == "dash" && ownStroke.dashIsExplicit)
-                            || (slot == "dashOffset" && element.strokeDashOffset.has_value())
-                            || (slot == "feather" && hasBlur);
+                            || (slot == "dashOffset" && element.strokeDashOffset.has_value());
                     };
 
                     auto cascade = inner.cascade;
@@ -1584,6 +1850,17 @@ private:
             return;
 
         //==============================================================================
+        // A filter is given what the element draws, and what it makes of it is what gets clipped
+        if (auto filter = makeFilter (element))
+        {
+            Item layer ("layer");
+            layer.children.push_back (std::move (*filter));
+            std::move (content.begin(), content.end(), std::back_inserter (layer.children));
+
+            content.clear();
+            content.push_back (std::move (layer));
+        }
+
         // The clips and the viewport of the element go around what it draws, inside its transform
         if (! clips.empty())
         {

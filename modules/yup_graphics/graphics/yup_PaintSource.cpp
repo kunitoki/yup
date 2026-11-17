@@ -35,9 +35,21 @@ void PaintSource::markDirty() noexcept
 void PaintSource::releaseResources()
 {
     canvas = nullptr;
+    filtered = nullptr;
+    filterState.releaseResources();
     context = nullptr;
     shrinkStreak = 0;
     dirty = true;
+}
+
+//==============================================================================
+void PaintSource::setFilter (FilterGraph newFilter)
+{
+    if (filter == newFilter)
+        return;
+
+    filter = std::move (newFilter);
+    filtered = nullptr;
 }
 
 //==============================================================================
@@ -126,9 +138,20 @@ GpuTexture::Ptr PaintSource::rasterize (GraphicsContext& targetContext, const Af
             dirty = true;
             return nullptr;
         }
+
+        filtered = nullptr;
     }
 
-    return canvas->asTexture();
+    if (filter.isEmpty())
+        return canvas->asTexture();
+
+    if (filtered == nullptr)
+    {
+        const Size<float> texelsPerUnit (static_cast<float> (canvas->getWidth()) / contentWidth, static_cast<float> (canvas->getHeight()) / contentHeight);
+        filtered = filter.render (targetContext, canvas->asTexture(), texelsPerUnit, filterState);
+    }
+
+    return filtered;
 }
 
 } // namespace yup

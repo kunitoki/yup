@@ -36,6 +36,8 @@
     optionalDeps:       libpng libjpeg libwebp libgif libtiff
     appleFrameworks:    Metal
     searchpaths:        native
+    shaderDirectory:    graphics
+    shaderBundles:      FilterGraph
 
   END_YUP_MODULE_DECLARATION
 
@@ -228,16 +230,17 @@ class Context;
 #include "graphics/yup_ImageMesh.h"
 #include "graphics/yup_Graphics.h"
 #include "rhi/yup_GpuCanvas.h"
+#include "graphics/yup_FilterGraph.h"
 #include "graphics/yup_PaintSource.h"
 #include "expression/yup_GraphicsExpressionTypes.h"
 #include "expression/yup_ExpressionDrawing.h"
+#include "svg/yup_SVGFilter.h"
 #include "svg/yup_SVGElement.h"
 #include "svg/yup_SVGGradient.h"
 #include "svg/yup_SVGClipPath.h"
 #include "svg/yup_SVGMask.h"
 #include "svg/yup_SVGMarker.h"
 #include "svg/yup_SVGPattern.h"
-#include "svg/yup_SVGFilter.h"
 #include "svg/yup_SVGCssRule.h"
 #include "svg/yup_SVGDocument.h"
 #include "svg/yup_SVGCssParser.h"

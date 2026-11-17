@@ -39,7 +39,10 @@ struct YuiDiagnostic;
       and `dashOffset` for stroked shapes);
     - `let` (`name`, `value`): a local visible to the following siblings and their children;
     - `layer` (`opacity`, `blend`, `clip`, `clipPath`, `mask`, `maskMode`, `visible` and optional
-      `mask` and `clipPath` children): draws its children into a transparency layer;
+      `mask` and `clipPath` children): draws its children into a transparency layer. With a `filter`
+      child (`bounds`, `linearColors` and the primitives `blur`, `offset`, `flood`, `colorMatrix`,
+      `composite`, `blend`, `morphology`, `lighting`, `displacement` and `dropShadow`) it draws
+      them through a FilterGraph instead;
     - `clip` (`bounds`/`rect`, `path`/`clipPath`, `visible` and optional `clipPath` children
       holding the shapes to clip to): clips its children;
     - `group` (`transform`, `opacity`, `blend`, `visible`, `color` and paint properties): draws its
@@ -118,6 +121,20 @@ public:
     const std::vector<ComponentProperty>& getProperties() const noexcept;
 
     //==============================================================================
+    /** Finds the image a `source` names, or returns nothing for it to be loaded as usual. */
+    using ImageResolver = std::function<std::optional<Image> (const String& source)>;
+
+    /** Sets where the `image` elements look for their images first.
+
+        An `image` loads the file its `source` names, or the content of a `data:` source. A resolver
+        gives it images from anywhere else, such as the network or the memory. It is called while
+        painting, once for each source, and what it returns is kept.
+
+        @param newResolver The resolver, or nullptr to only load files and `data:` sources.
+    */
+    void setImageResolver (ImageResolver newResolver);
+
+    //==============================================================================
     /** Feeds the component's live state and paints the drawing elements in order. */
     void paint (Graphics& g, const ApplicationTheme& theme, const Component& component) override;
 
@@ -128,6 +145,7 @@ private:
     struct Slot;
     struct PaintContext;
     struct PatternSource;
+    struct FilterSource;
     class Compiler;
     class CompiledCache;
 
@@ -144,6 +162,8 @@ private:
     void applyClips (Graphics& g, const Node& node, Slot* slot, const PaintContext& context, int numRows);
     void drawNodes (Graphics& g, const std::vector<std::unique_ptr<Node>>& children, const PaintContext& context, int numRows);
     void drawNode (Graphics& g, const Node& node, const PaintContext& context, int numRows);
+    bool drawFilteredLayer (Graphics& g, const Node& node, const PaintContext& context, int numRows);
+    void drawFilteredContent (Graphics& g, const FilterSource& source);
 
     WeakReference<Component> targetComponent;
     ExpressionContext context;
@@ -152,6 +172,8 @@ private:
     std::unique_ptr<Slot[]> slots;
     std::vector<Rectangle<float>> levelBounds;
     std::vector<std::unique_ptr<PatternSource>> patternSources;
+    ImageResolver imageResolver;
+    std::map<const Node*, std::unique_ptr<FilterSource>> filterSources;
     const Font* paintFont = nullptr;
     uint32 paintSerial = 0;
     std::vector<var> propertyValues;
