@@ -68,6 +68,30 @@ protected:
         return state.getVar (outputIndex);
     }
 
+    template <class T>
+    T evaluateAs (DrawingScope& scope, const String& text)
+    {
+        scope.install();
+
+        auto compiled = CompiledExpression::compile (text, context);
+        EXPECT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+        if (compiled.failed())
+            return {};
+
+        const auto& program = compiled.getReference();
+        const auto output = program.getOutput<T> ("out");
+        EXPECT_TRUE (output.wasOk()) << output.getErrorMessage();
+        if (output.failed())
+            return {};
+
+        ExpressionState state (program);
+        auto inputs = scope.bindInputs (program);
+        scope.updateInputs (inputs, state);
+        state.evaluate();
+
+        return state.get (output.getReference());
+    }
+
     ApplicationTheme::Ptr theme;
     ApplicationTheme::Ptr oldTheme;
     ExpressionContext context;
@@ -421,7 +445,6 @@ TEST_F (DrawingScopeTest, BridgesFontAndFontArrayPropertiesAndThemeScope)
     customTheme->setDefaultMonospaceFont (Font().withHeight (13.0f));
 
     ThemePalette darkPalette;
-    darkPalette.setMode (ThemePalette::Mode::dark);
     darkPalette.setColor (ThemePalette::Role::accent, Color (0xff336699));
     customTheme->setPalette (darkPalette);
     customTheme->setColor (Identifier ("brandHighlight"), Color (0xffff8844));
@@ -447,7 +470,7 @@ TEST_F (DrawingScopeTest, BridgesFontAndFontArrayPropertiesAndThemeScope)
 
     // Font properties and font[] arrays bridge cleanly through VariantConverter<Font>.
     EXPECT_FLOAT_EQ (static_cast<float> (evaluate (scope, "out = headlineFont.height")), 22.0f);
-    const auto scaledFont = VariantConverter<Font>::fromVar (evaluate (scope, "out = headlineFont.withHeight (30)"));
+    const auto scaledFont = evaluateAs<Font> (scope, "out = headlineFont.withHeight (30)");
     EXPECT_FLOAT_EQ (scaledFont.getHeight(), 30.0f);
     EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = len (fontStack)")), 2.0);
     EXPECT_FLOAT_EQ (static_cast<float> (evaluate (scope, "out = fontStack[1].height")), 28.0f);
@@ -458,8 +481,8 @@ TEST_F (DrawingScopeTest, BridgesFontAndFontArrayPropertiesAndThemeScope)
     EXPECT_FLOAT_EQ (static_cast<float> (evaluate (scope, "out = theme.iconFont.height")), 19.0f);
     EXPECT_FLOAT_EQ (static_cast<float> (evaluate (scope, "out = theme.monospaceFont.height")), 13.0f);
     EXPECT_TRUE (static_cast<bool> (evaluate (scope, "out = theme.dark")));
-    EXPECT_EQ (VariantConverter<Color>::fromVar (evaluate (scope, "out = theme.accent")), Color (0xff336699));
-    EXPECT_EQ (VariantConverter<Color>::fromVar (evaluate (scope, "out = theme.brandHighlight")), Color (0xffff8844));
+    EXPECT_EQ (evaluateAs<Color> (scope, "out = theme.accent"), Color (0xff336699));
+    EXPECT_EQ (evaluateAs<Color> (scope, "out = theme.brandHighlight"), Color (0xffff8844));
     EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = theme.gridSnap * 2")), 16.0);
 
     // Expressions reading theme.* mark BoundInputs as palette/theme-dependent so StyleContext refreshes on theme changes.

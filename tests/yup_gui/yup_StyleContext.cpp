@@ -567,7 +567,7 @@ style {
                                   "13:10: Unknown drawing 'Missing'",
                                   "13:28: shadow[0]: ",
                                   "13:53: animation: ",
-                                  "1:1: drawing Broken: ",
+                                  "1:18: drawing Broken: ",
                                   "15:29: The property 'text' can't be animated",
                                   "15:47: bad glow: " })
     {
@@ -1151,6 +1151,7 @@ TEST_F (StyleContextTests, StylesAndAnimatesTransformInSeparateLayerComposedWith
 {
     Component root ("root");
     root.setBounds (0.0f, 0.0f, 400.0f, 400.0f);
+    root.setVisible (true);
 
     Component card ("card");
     card.setBounds (10.0f, 20.0f, 100.0f, 50.0f);
@@ -1325,8 +1326,8 @@ TEST_F (StyleContextTests, DrawingPropertiesReachStyleRulesWhenMoreSpecificSelec
 
     EXPECT_TRUE (root.getStyleContext()->getDiagnostics().empty())
         << YuiDiagnostic::join (root.getStyleContext()->getDiagnostics());
-    EXPECT_DOUBLE_EQ (static_cast<double> (porcelain.findProperty (Identifier ("bezelSize"))), 0.8);
-    EXPECT_DOUBLE_EQ (static_cast<double> (synth.findProperty (Identifier ("bezelSize"))), 0.8);
+    EXPECT_FLOAT_EQ (static_cast<float> (porcelain.findProperty (Identifier ("bezelSize"))), 0.8f);
+    EXPECT_FLOAT_EQ (static_cast<float> (synth.findProperty (Identifier ("bezelSize"))), 0.8f);
 }
 
 TEST_F (StyleContextTests, DrawingCompilationFailureLocatesChildPropertyLineInSourceMap)

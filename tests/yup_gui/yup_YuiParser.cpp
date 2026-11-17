@@ -485,7 +485,7 @@ TEST_F (YuiParserTest, ParsesPropertyDeclarationsInStyleRules)
 TEST_F (YuiParserTest, ReportsDeclarationErrors)
 {
     EXPECT_EQ (parseError ("tokens { glow: 1; }"), "1:10: Expected 'property'");
-    EXPECT_EQ (parseError ("tokens { property glow: size = 1; }"), "1:25: Unknown type 'size', expected one of number, integer, boolean, string, color, point, rectangle, font, drawing, any");
+    EXPECT_EQ (parseError ("tokens { property glow: size = 1; }"), "1:25: Unknown type 'size', expected one of number, integer, boolean, string, color, point, rectangle, transform, font, drawing, any");
     EXPECT_EQ (parseError ("tokens { property a: number; property a: color; }"), "1:39: 'a' is already declared");
     EXPECT_EQ (parseError ("component knob : Column { }"), "1:11: Type names start with an upper case letter");
     EXPECT_EQ (parseError ("component Knob { }"), "1:16: Expected ':'");
@@ -641,7 +641,8 @@ TEST_F (YuiParserTest, StripsCommentsInsideRawStyleValuesSelectorsAndExpressions
 
     auto arrayExpr = PropertyExpression::compile (comp, "[1, /* mid */ 2, // line\n 3]", ComponentProperty::Type::array);
     ASSERT_TRUE (arrayExpr.wasOk()) << arrayExpr.getErrorMessage();
-    const auto* evaluatedArray = arrayExpr.getReference()->evaluate().getArray();
+    const auto evaluated = arrayExpr.getReference()->evaluate();
+    const auto* evaluatedArray = evaluated.getArray();
     ASSERT_NE (evaluatedArray, nullptr);
     ASSERT_EQ (evaluatedArray->size(), 3);
     EXPECT_DOUBLE_EQ (static_cast<double> ((*evaluatedArray)[0]), 1.0);

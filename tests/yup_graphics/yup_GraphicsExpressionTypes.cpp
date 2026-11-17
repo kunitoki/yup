@@ -255,7 +255,9 @@ TEST_F (GraphicsExpressionTypesTests, ChainedPathMethodsFuseAndPreserveOpenConto
         "path().moveTo (bounds.left, bounds.top).lineTo (bounds.right, bounds.top).lineTo (bounds.right, bounds.bottom).close()",
         context);
     ASSERT_TRUE (compiled.wasOk());
-    EXPECT_EQ (1, compiled.getReference().getNumInstructions());
+
+    // The four reads of the bounds members, then the whole path chain as a single instruction
+    EXPECT_EQ (5, compiled.getReference().getNumInstructions());
 
     const auto triangle = evaluate<Path> ("path().moveTo (bounds.left, 0).lineTo (30, 0).lineTo (30, 40).close()");
     EXPECT_TRUE (triangle.isExplicitlyClosed());
@@ -269,7 +271,9 @@ TEST_F (GraphicsExpressionTypesTests, ChainedPathMethodsFuseAndPreserveOpenConto
     )",
                                                        context);
     ASSERT_TRUE (branched.wasOk());
-    EXPECT_EQ (2, branched.getReference().getNumInstructions());
+
+    // The read of bounds.left, then one fused chain for the shared curve and one for the closed branch
+    EXPECT_EQ (3, branched.getReference().getNumInstructions());
 
     ExpressionState state (branched.getReference());
     state.set (bounds, Rectangle<float> (0.0f, 0.0f, 30.0f, 40.0f));

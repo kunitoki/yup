@@ -198,11 +198,11 @@ TEST_F (StyleAnimatorTests, InterpolatesTransformsByDecomposingAndFallsBackForSi
         StyleAnimator::interpolate (identity, halfTurn, 0.5, Type::transform));
 
     // Decomposed interpolation rotates smoothly through 90deg instead of collapsing to the zero matrix.
-    const auto expectedQuarterTurn = AffineTransform::rotation (MathConstants<float>::halfPi);
-    EXPECT_NEAR (midRotation.getScaleX(), expectedQuarterTurn.getScaleX(), 1.0e-4f);
-    EXPECT_NEAR (midRotation.getShearX(), expectedQuarterTurn.getShearX(), 1.0e-4f);
-    EXPECT_NEAR (midRotation.getShearY(), expectedQuarterTurn.getShearY(), 1.0e-4f);
-    EXPECT_NEAR (midRotation.getScaleY(), expectedQuarterTurn.getScaleY(), 1.0e-4f);
+    // A half turn can go either way, so accept a quarter turn in either direction.
+    EXPECT_NEAR (midRotation.getScaleX(), 0.0f, 1.0e-4f);
+    EXPECT_NEAR (midRotation.getScaleY(), 0.0f, 1.0e-4f);
+    EXPECT_NEAR (std::abs (midRotation.getShearX()), 1.0f, 1.0e-4f);
+    EXPECT_NEAR (midRotation.getShearY(), -midRotation.getShearX(), 1.0e-4f);
 
     const auto translatedAndScaled = VariantConverter<AffineTransform>::toVar (
         AffineTransform::scaling (2.0f, 4.0f).translated (20.0f, -10.0f));

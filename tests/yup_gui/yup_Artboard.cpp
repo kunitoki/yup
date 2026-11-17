@@ -942,9 +942,9 @@ TEST_F (ArtboardSetFileNamedTests, SetFileWithoutNameLoadsDefaultArtboard)
 
 TEST_F (ArtboardSetFileNamedTests, SetFileWithNameLoadsNamedArtboard)
 {
-    artboard->setFile (artboardFile, "SliderInstance");
+    artboard->setFile (artboardFile, "Slider_instance");
 
-    EXPECT_EQ (String ("SliderInstance"), artboard->getViewModelName());
+    EXPECT_EQ (String ("Slider_instance"), artboard->getViewModelName());
 }
 
 TEST_F (ArtboardSetFileNamedTests, SetFileWithUnknownNameLeavesNothingLoaded)

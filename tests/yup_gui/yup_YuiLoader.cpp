@@ -173,7 +173,6 @@ TEST_F (YuiLoaderTests, ResolvesRelativeImageAndSvgAssetsAgainstTheLoadedYuiDire
 
     auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (16, 16);
-    auto factory = context->makeFactory();
     Graphics g (*context, *renderer);
     Component panel;
     panel.setBounds (0.0f, 0.0f, 16.0f, 16.0f);

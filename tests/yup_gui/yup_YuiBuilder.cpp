@@ -1221,11 +1221,11 @@ TEST_F (YuiBuilderTests, SupportsFontAndDrawingPropertiesPlusInstancePaletteAndD
 
         drawing RingDial {
             property ringSize: number = 4;
-            circle { radius: ringSize; stroke: palette.accent; }
+            circle { center: bounds.center; radius: ringSize; stroke: palette.accent; }
         }
 
         drawing DotDial {
-            circle { radius: 6; fill: palette.accent; }
+            circle { center: bounds.center; radius: 6; fill: palette.accent; }
         }
 
         component Badge : Label {

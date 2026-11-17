@@ -265,8 +265,7 @@ TEST_F (FilterEffectTests, StripsCommentsInDirectAndStylesheetFilters)
 
     EXPECT_TRUE (FilterEffect::parse ("blur(4px) /* unclosed").failed());
 
-    Slider knob;
-    knob.setComponentName ("knob");
+    Slider knob (Slider::Rotary, "knob");
     knob.addStyleClass (Identifier ("knob"));
     knob.setRange (0.0, 1.0);
     knob.setValue (0.5, dontSendNotification);
@@ -470,7 +469,7 @@ std::unique_ptr<GraphicsContext> FilterEffectGpuTests::gpuContext;
 TEST_F (FilterEffectGpuTests, RendersFilteredPixelsThroughStyleFilterLayer)
 {
     SolidPanel panel (Color (0xffff0000));
-    panel.setComponentName ("panel");
+    panel.setComponentID ("panel");
 
     attachStyle (panel, "style { #panel { filter: invert(100%); } }");
     const auto inverted = panel.snapshotToImage (*gpuContext, true);

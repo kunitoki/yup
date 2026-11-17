@@ -226,6 +226,8 @@ TEST_F (StyleSheetTests, ExpandsCommaSeparatedSelectorBlocksWithPerBranchSpecifi
     root.addChildComponent (specialSlider);
 
     root.setStyleSheet (sheet.getReference());
+    ASSERT_NE (root.getStyleContext(), nullptr);
+    root.getStyleContext()->restyleNow();
 
     // `.override` (100) beats the `Slider` branch (1), while the `#special` branch (10000) beats `.override`.
     EXPECT_NEAR (normalSlider.getOpacity(), 0.8f, 1.0e-5f);

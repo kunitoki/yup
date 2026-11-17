@@ -337,7 +337,8 @@ TEST_F (DrawingStyleTest, ReportsPropertyErrors)
 {
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"font\"/></drawing>"), String());
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"transform\"/></drawing>"), String());
-    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"font[]\"/></drawing>"), "drawing/property[0].type: 'font[]' can't be used in a drawing, use number, integer, boolean, string, color, point, rectangle, transform, font or an array of scalar types");
+    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"font[]\"/></drawing>"), String());
+    EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"any\"/></drawing>"), "drawing/property[0].type: 'any' can't be used in a drawing, use number, integer, boolean, string, color, point, rectangle, transform, font or an array of scalar types");
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"number[]\" value=\"1\"/></drawing>"), "drawing/property[0].value: an array property can't have a default");
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"color\" value=\"true\"/></drawing>"), "drawing/property[0].value: the type 'bool' doesn't match the property type 'color'");
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"integer\" value=\"0.5f\"/></drawing>"), "drawing/property[0].value: the type 'float' doesn't match the property type 'integer'");

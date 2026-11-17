@@ -425,6 +425,7 @@ TEST_F (ResizableDividerTests, HorizontalKeyboardUsesUpAndDown)
 TEST_F (ResizableDividerTests, LayoutComponentsSplitsVerticalArea)
 {
     Component leading, trailing;
+    divider.setAvailableExtent (206.0f);
     divider.setPosition (100.0f);
 
     divider.layoutComponents ({ 10.0f, 20.0f, 206.0f, 50.0f }, &leading, &trailing);

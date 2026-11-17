@@ -1256,6 +1256,7 @@ TEST_F (PopupMenuTest, StyleSheetStylesPopupOpenedOutsideStyledRoot)
 
     auto sheet = StyleSheet::parse (R"(
         palette Warm {
+            colors: "#14161a #1e222a #ff8844 #f0f4f8";
             surfaceRaised: #1e222a;
             accent: #ff8844;
             outline: #334455;

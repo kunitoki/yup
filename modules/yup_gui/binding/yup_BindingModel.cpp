@@ -157,7 +157,7 @@ void BindingModel::componentPropertyChanged (Component& component, const Identif
     if (property != pressedProperty || provider == nullptr)
         return;
 
-    const auto isPressed = component.isPressed();
+    const auto isPressed = static_cast<bool> (component.getProperty (pressedProperty));
 
     for (auto& entry : tracked)
     {

@@ -258,6 +258,7 @@ TEST_F (FilterGraphTests, LightingShadesTheSlopesOfTheAlpha)
     // Lit from the left, the left slope of the blurred square is brighter than the flat around it, and the right one darker
     FilterGraph::Primitive light { .type = FilterGraph::Type::lighting };
     light.scale = 8.0f;
+    light.color = Colors::white;
     light.lightAzimuth = MathConstants<float>::pi;
     light.lightElevation = MathConstants<float>::pi / 4.0f;
 

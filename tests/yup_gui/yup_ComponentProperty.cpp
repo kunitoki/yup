@@ -121,8 +121,10 @@ TEST_F (ComponentPropertyTest, TypeNamesIncludeArrays)
 
     EXPECT_TRUE (ComponentProperty::isExpressionType (Type::integer));
     EXPECT_TRUE (ComponentProperty::isExpressionType (Type::rectangle));
+    EXPECT_TRUE (ComponentProperty::isExpressionType (Type::transform));
+    EXPECT_TRUE (ComponentProperty::isExpressionType (Type::font));
     EXPECT_FALSE (ComponentProperty::isExpressionType (Type::array));
-    EXPECT_FALSE (ComponentProperty::isExpressionType (Type::font));
+    EXPECT_FALSE (ComponentProperty::isExpressionType (Type::drawing));
 }
 
 TEST_F (ComponentPropertyTest, StorageKeyFallsBackToName){

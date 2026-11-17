@@ -268,16 +268,19 @@ public:
     bool isValidCharacterIndex (int characterIndex) const;
 
     //==============================================================================
-    /** Converts the horizontal flags of a Justification into a HorizontalAlign value. */
+    /** Converts the horizontal flags of a Justification into a HorizontalAlign value, left when it has none. */
     static constexpr HorizontalAlign toHorizontalAlign (Justification justification) noexcept
     {
         if (justification.testFlags (Justification::left))
             return left;
 
+        if (justification.testFlags (Justification::horizontalCenter))
+            return center;
+
         if (justification.testFlags (Justification::right))
             return right;
 
-        return center;
+        return left;
     }
 
     /** Converts the vertical flags of a Justification into a VerticalAlign value. */

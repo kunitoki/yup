@@ -20,6 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
+#include <yup_gui/markup/yup_YuiHandler.h>
 
 #include <gtest/gtest.h>
 
@@ -55,6 +56,10 @@ TEST_F (YuiHandlerTests, ParsesSingleCallArrowParametersAndCallBlocks)
     EXPECT_EQ (block.getReference().calls[0].name, "action");
     EXPECT_EQ (block.getReference().calls[1].target, "bus");
     EXPECT_EQ (block.getReference().calls[1].name, "select");
+
+    const auto empty = YuiHandler::parse ("(a) => { }");
+    ASSERT_TRUE (empty.wasOk()) << empty.getErrorMessage();
+    EXPECT_TRUE (empty.getReference().calls.empty());
 }
 
 TEST_F (YuiHandlerTests, RejectsMalformedHandlerSyntax)
@@ -62,7 +67,7 @@ TEST_F (YuiHandlerTests, RejectsMalformedHandlerSyntax)
     EXPECT_TRUE (YuiHandler::parse ("").failed());
     EXPECT_TRUE (YuiHandler::parse ("notACall").failed());
     EXPECT_TRUE (YuiHandler::parse ("(a, a) => action (a)").failed());
-    EXPECT_TRUE (YuiHandler::parse ("(a) => {}").failed());
+    EXPECT_TRUE (YuiHandler::parse ("(a) => { notACall; }").failed());
     EXPECT_TRUE (YuiHandler::parse ("action (1) extra").failed());
 }
 
