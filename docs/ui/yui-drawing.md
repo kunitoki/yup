@@ -70,6 +70,8 @@ becomes a property of that element holding the expression text:
 | `circle { radius: r; ... }`     | `circle`, with `radius` = `r`                         |
 | `let r: bounds.width / 2;`      | `let`, with `name` = `r` and `value` = `bounds.width / 2` |
 | `repeat i in 0 .. 11 { ... }`   | `repeat`, with `name` = `i`, `from` = `0`, `to` = `11` |
+| `pattern Dots { ... }`          | `pattern`, with `name` = `Dots` (`marker` and a nested `drawing` alike) |
+| `use Leaf { ... }`              | `use`, with `drawing` = `Leaf`                        |
 
 The references below use the element and property names, which are the same in
 the text and in the tree.
@@ -86,7 +88,7 @@ the text and in the tree.
 | `path`    | `data`                                                       | A path from SVG path data or a `path()` value. |
 | `polygon` | `center`, `sides`, `radius`, `angle` (default `0`)           | A regular polygon.                 |
 | `star`    | `center`, `points`, `innerRadius`, `outerRadius`, `angle`    | A star, `angle` defaults to `0`.   |
-| `text`    | `bounds`, `text`                                             | A text label placed in `bounds`.   |
+| `text`    | `bounds` or `anchor`, `text`                                 | A text label fitted in `bounds`, or starting from the `anchor` point on its baseline. |
 | `image`   | `source`, `bounds` (default `bounds`)                        | A raster image from a file path or `data:image/...;base64,...` URI. |
 | `svg`     | `source` or `data`, `bounds` (default `bounds`)              | An SVG from a file path (`source`) or inline SVG XML (`data` or `source`). |
 
@@ -102,8 +104,9 @@ Every shape accepts these optional properties:
 
 | Property                            | Type          | Effect                                              |
 |-------------------------------------|---------------|-----------------------------------------------------|
-| `fill`, `fillGradient`              | color, gradient | Fills the shape.                                  |
-| `stroke`, `strokeGradient`          | color, gradient | Strokes the shape.                                |
+| `fill`, `fillGradient`, `fillPattern` | color, gradient, pattern name | Fills the shape.                    |
+| `stroke`, `strokeGradient`, `strokePattern` | color, gradient, pattern name | Strokes the shape.            |
+| `fillOpacity`, `strokeOpacity`      | float         | Fades the fill or the stroke only.                  |
 | `strokeWidth`, `strokeMiterLimit`   | float         | Stroke geometry.                                    |
 | `strokePosition`                    | enum          | `center`, `inside` or `outside`.                    |
 | `dash`, `dashOffset`                | dash, float   | Dashes the stroke (`dash (6, 3)`, `"6, 3"`, `4` or a `number[]` property) and shifts the pattern start. |
@@ -112,15 +115,32 @@ Every shape accepts these optional properties:
 | `blend`                             | enum          | Blend mode.                                         |
 | `transform`                         | transform     | Transforms the shape.                               |
 | `clip`, `clipPath`                  | rect, path    | Clips the shape.                                    |
+| `color`                             | color         | The color `currentColor` stands for in the other properties. |
+| `markerStart`, `markerMid`, `markerEnd` | marker name | Draws a [marker](#patterns-and-markers) at the vertices of a `path` or a `line`. |
 | `visible`                           | bool          | Skips the shape when false.                         |
 
 A shape with neither a fill nor a stroke is filled with the current fill color.
-`rect` adds `cornerRadius` and the per-corner `topLeftRadius`, `topRightRadius`,
-`bottomLeftRadius` and `bottomRightRadius`. `text` adds `font`, `justification`
-(default `center`) and a `stroke` that outlines the glyphs; without `font` it
-uses the theme's default font. Text is fitted in `bounds` at the font height, so
-size it from the geometry with `font: defaultFont.withHeight (bounds.height * 0.3)`.
-Bare enumeration values like `round` resolve to the property they are assigned to.
+`fill: none` and `stroke: none` remove a paint instead, including one
+[set by a group](#paint-set-by-groups). Bare enumeration values like `round`
+resolve to the property they are assigned to.
+
+`rect` adds `cornerRadius`, the per-corner `topLeftRadius`, `topRightRadius`,
+`bottomLeftRadius` and `bottomRightRadius`, and `cornerSize` for elliptical
+corners with a horizontal and a vertical radius (`cornerSize: size (8, 4)`).
+
+`text` adds `font`, `letterSpacing` and a `stroke` that outlines the glyphs;
+without `font` it uses the theme's default font. It is placed in one of two ways:
+
+- fitted in `bounds` at the font height, aligned by `justification` (default
+  `center`), so size it from the geometry with
+  `font: defaultFont.withHeight (bounds.height * 0.3)`;
+- starting from `anchor`, a point on its baseline, the way SVG places text.
+  `textAnchor` (`start` by default, `middle` or `end`) tells which part of the
+  text is on the point.
+
+```yui
+text { anchor: point (12, 20); textAnchor: middle; letterSpacing: 0.5; text: "yup"; fill: palette.text; }
+```
 
 ## Palette colors
 
@@ -150,7 +170,11 @@ overridden per component.
 | `layer`  | `opacity`, `blend`, `clip`, `clipPath`, `mask`, `maskMode`, `visible` (optional) | yes (+ `mask`) | Composites its children into a transparency layer with optional blend mode, clip and masks. |
 | `mask`   | `mode` (`alpha`, `invertedAlpha`, `luminance`, `invertedLuminance`), `visible` (optional) | yes | Draws a mask applied to the enclosing `layer`. |
 | `clip`   | `bounds`/`rect`, `path`/`clipPath`, `visible` (optional) | yes | Clips its children to a rectangle and/or path. |
-| `group`  | `transform`, `visible` (optional)  | yes      | Applies one transform to all its children.               |
+| `group`  | `transform`, `opacity`, `blend`, `color`, `visible` and [paint](#paint-set-by-groups) (optional) | yes | Applies a transform, an opacity, a blend mode and a paint to all its children. |
+| `viewport` | `bounds`, `viewBox`, `fitting`, `justification`, `visible` (optional) | yes | Draws its children in a [view box](#view-boxes-and-viewports) mapped into `bounds`, clipped to them. |
+| `drawing`, `use` | see [Reusing drawings](#reusing-drawings) | yes, no | Defines a drawing inside another, and paints a drawing by name. |
+| `pattern`, `marker` | see [Patterns and markers](#patterns-and-markers) | yes | Define a tile to paint shapes with, and a shape drawn at the vertices of others. |
+| `clipPath` | none                             | shapes   | Inside a `clip` or a `layer`: the shapes to [clip to](#clipping-to-shapes). |
 | `repeat` | `name`, `from`, `to`               | shapes   | Draws its shapes once per integer in `from .. to - 1`.   |
 
 - A `let` is visible to the elements after it in the same scope and in nested
@@ -163,15 +187,224 @@ overridden per component.
   and accepts a `mask` path/rect property and/or child `mask { ... }` blocks.
   Children without their own paint inherit the solid fill and stroke of the
   caller, gradients are not inherited.
+- `group` fades and blends its children one by one: overlapping children show
+  through each other at an `opacity` below 1. Use a `layer` to fade them as one image.
 - `repeat` exposes the current index as an integer `let` named by `name`. Integer
   division truncates, so write `i / 10.0` for a fraction. A `repeat` holds shapes
-  and `let`s only, it can't contain `layer`, `group`, `clip` or another `repeat`,
-  and its iteration count is capped at `4096` (constant ranges above `4096` fail
-  to compile).
+  and `let`s only, it can't contain a `layer`, a `group`, a `clip`, a `viewport`,
+  a `use`, a definition or another `repeat`, and its iteration count is capped at
+  `4096` (constant ranges above `4096` fail to compile).
 - In `.yui` documents, drawings can also read registered `BindingProvider` models
   directly (such as `params.cutoff`) in addition to component properties and
   `palette.<role>`.
 - Every element accepts an optional `id`, used in error messages.
+
+## View boxes and viewports
+
+A drawing normally works in the pixels of its component. With a `viewBox` it
+works in coordinates of its own instead, mapped into the bounds of the
+component, like the `viewBox` and `preserveAspectRatio` of an SVG:
+
+```yui
+drawing Icon {
+    viewBox: rect (0, 0, 24, 24);           // inside the drawing, `bounds` is this rectangle
+    fitting: scaleToFit;                    // the default, see the fittings of `image`
+    justification: center;                  // the default
+
+    circle { center: bounds.center; radius: 10; fill: palette.accent; }
+
+    viewport {
+        bounds: rect (14, 14, 8, 8);
+        viewBox: rect (0, 0, 100, 100);
+        fitting: scaleToFill;
+        rect { bounds: bounds; fill: palette.text; }
+    }
+}
+```
+
+- The drawing is not clipped to its `viewBox`: with `scaleToFill`, what falls
+  outside the component is clipped by the component as usual.
+- A `viewport` does the same for its children inside any rectangle, and clips
+  them to it. Without a `viewBox`, their `bounds` is the rectangle moved to the
+  origin. `bounds` defaults to the bounds around the viewport.
+- A `let` declared outside keeps reading the bounds it was declared in.
+
+## Paint set by groups
+
+A `group` can set the paint of the shapes inside it, so they only say what they
+do differently. The paint is inherited by the shapes written inside the group,
+and by nested groups:
+
+```yui
+group {
+    fill: palette.surface; stroke: palette.outline; strokeWidth: 2; color: palette.accent;
+
+    rect { bounds: rect (2, 2, 20, 20); }                    // filled and stroked by the group
+    circle { center: point (12, 12); radius: 5; fill: currentColor; stroke: none; }
+    path { data: "M 2 12 L 22 12"; fill: none; }             // only stroked
+
+    group { strokeWidth: 1; line { from: point (2, 2); to: point (22, 22); } }
+}
+```
+
+- A group sets `fill`, `fillGradient`, `fillPattern`, `fillOpacity`, `stroke`,
+  `strokeGradient`, `strokePattern`, `strokeOpacity`, `strokeWidth`,
+  `strokeMiterLimit`, `dash`, `dashOffset`, `cap`, `join`, `feather`, `font`,
+  `textAnchor`, `letterSpacing` and the three markers.
+- A fill of any kind replaces the inherited fill of any kind, and the same goes
+  for strokes. `fill: none`, `stroke: none` and `markerStart: none` remove them.
+- A shape with an inherited fill and a stroke of its own is filled and stroked.
+- `color` names a color for the group, read as `currentColor` by the paint of
+  the group and of everything inside it. A shape can set its own.
+- A paint can read `objectBounds`, the bounding box of the shape it paints, even
+  when a group sets it: `fillGradient: sky.mappedTo (objectBounds)` stretches one
+  gradient over every shape. It is not available to a `text` placed from an `anchor`.
+- Text is only stroked by a `stroke` color, and markers are only inherited by
+  `path` and `line` shapes outside a `repeat`.
+
+Nothing is inherited unless a group sets it, so drawings without paint on their
+groups work as before.
+
+## Reusing drawings
+
+A `drawing` written inside another is a definition: it paints nothing until a
+`use` paints it, as often as needed. It is the `<symbol>` and `<use>` of SVG:
+
+```yui
+drawing Toolbar {
+    drawing Leaf {
+        property tone: color = palette.accent;
+        viewBox: rect (0, 0, 10, 10);
+        path { data: "M 5 0 L 10 10 L 0 10 Z"; fill: tone; }
+        circle { center: point (5, 7); radius: 1; }           // painted with the paint of the use
+    }
+
+    use Leaf { bounds: rect (2, 2, 8, 8); fill: palette.text; }
+    use Leaf { bounds: rect (14, 2, 8, 8); tone: palette.outline; fill: none; stroke: palette.text; opacity: 0.5; }
+}
+```
+
+- `use` takes `bounds` (the bounds around it by default), `transform`,
+  `opacity`, `blend`, `visible`, `color`, the [paint a group sets](#paint-set-by-groups)
+  and the properties the drawing declares.
+- Inside the drawing, `bounds` is the `bounds` of the `use`, or its `viewBox`
+  mapped into them. The drawing is not clipped.
+- The drawing sees the `let`s and the definitions visible where it is written,
+  and the paint and the `currentColor` of where it is used.
+- A property the `use` doesn't set has its default: it is not looked up on the
+  component, and array properties can't be set.
+- A definition is visible to the elements after it, in its scope and in nested
+  ones. `use` also finds the other drawings of the document, or of the
+  stylesheet, by name; from C++, `DrawingStyle::create` takes a function finding
+  them. A drawing that ends up using itself fails to compile.
+
+## Patterns and markers
+
+A `pattern` is a tile, repeated to fill or stroke the shapes naming it with
+`fillPattern` or `strokePattern`. A `marker` is drawn at the vertices of the
+`path` and `line` shapes naming it with `markerStart`, `markerMid` or
+`markerEnd`:
+
+```yui
+drawing Chart {
+    pattern Dots {
+        tile: rect (0, 0, 4, 4);                              // where a tile is, in the coordinates of the shape
+        circle { center: bounds.center; radius: 1; fill: palette.accent; }
+    }
+
+    marker Arrow {
+        size: size (6, 6); ref: point (3, 3); viewBox: rect (0, 0, 6, 6);
+        path { data: "M 0 0 L 6 3 L 0 6 Z"; fill: palette.text; }
+    }
+
+    rect { bounds: bounds.reduced (4); fillPattern: Dots; }
+    path { data: "M 4 20 L 12 8 L 20 14"; fill: none; stroke: palette.text; strokeWidth: 2; markerMid: Arrow; markerEnd: Arrow; }
+}
+```
+
+| `pattern`       | Meaning                                                              |
+|-----------------|----------------------------------------------------------------------|
+| `tile`          | Required: the rectangle of one tile. Inside the pattern, `bounds` is the tile moved to the origin. |
+| `viewBox`, `fitting`, `justification` | Optional: the coordinates the tile is drawn in, mapped into it. |
+| `transform`     | Optional: transforms the tiles in the shape.                         |
+
+| `marker`        | Meaning                                                              |
+|-----------------|----------------------------------------------------------------------|
+| `size`          | The size of the marker, `size (3, 3)` by default.                    |
+| `ref`           | The point of the marker placed on the vertex, `point (0, 0)` by default. |
+| `viewBox`       | Optional: the coordinates the marker is drawn in, mapped into `size`. |
+| `orient`        | `auto` (the default) follows the direction of the path, `autoStartReverse` also turns the marker at the start around, an angle in radians is fixed. |
+| `units`         | `strokeWidth` (the default) scales the marker by the stroke width of the shape, `userSpace` doesn't. |
+
+- Both are definitions, like nested drawings: visible to the elements after
+  them, and painted with the paint of where they are written.
+- A tile is drawn once into an image and repeated. A tile reading the component
+  is drawn again on every paint. Its content is clipped to the tile.
+- `markerStart` is drawn at the first vertex of every sub-path, `markerEnd` at
+  the last one unless the sub-path is closed, `markerMid` at the others. A shape
+  inside a `repeat` can't have markers.
+
+## Clipping to shapes
+
+A `clip`, or a `layer`, clips to the shapes of the `clipPath` blocks inside it,
+which are not painted. It is the `<clipPath>` of SVG:
+
+```yui
+clip {
+    clipPath {
+        circle { center: point (12, 12); radius: 8; }
+        rect { bounds: rect (0, 0, 12, 24); transform: transform.rotation (10deg); }
+    }
+
+    rect { bounds: bounds; fill: palette.accent; }            // clipped to the circle and the rectangle together
+}
+```
+
+The outlines of the shapes of a `clipPath` are added up, and several `clipPath`
+blocks intersect. A `clipPath` holds shapes, `let`s and `repeat`s; a `text` has
+no outline to clip to.
+
+## Importing an SVG
+
+`YuiSvgImporter` writes an SVG as a drawing made of the elements above, so its
+shapes can then be bound to the component, animated or edited:
+
+```cpp
+const auto imported = YuiSvgImporter::importSvg (File ("logo.svg"));
+
+if (imported.wasOk())
+{
+    file.replaceWithText (imported.toText());                    // drawing Imported { ... }
+    auto style = DrawingStyle::create (component, imported.drawing);
+}
+```
+
+```yui
+drawing Imported {
+    viewBox: rect (0, 0, 24, 24);
+
+    let skyGradient: linearGradient (#4488ff, point (0, 0), #ffffff, point (0, 1));
+
+    group {
+        fill: #000000;                                           // SVG shapes are black unless they say otherwise
+
+        rect { bounds: rect (2, 2, 20, 20); cornerSize: size (4, 2); fillGradient: skyGradient.mappedTo (objectBounds); }
+        path { data: "M 2 12 L 22 12"; fill: none; stroke: #ff0000; strokeWidth: 1; }
+    }
+}
+```
+
+The drawing paints what a `Drawable` paints for the same SVG, see the
+[supported SVG features](../graphics/svg.md#supported-svg-features). The
+`warnings` of the result list what it paints differently, mainly:
+
+- a pattern is clipped to its tile and covers its shape, while `Drawable` lets
+  the content of a tile overflow and, with a `patternTransform`, may leave part
+  of the shape empty;
+- text is written with `defaultFont` unless `Options::fontExpression` returns
+  the font to use for a family, a size, a weight and a style.
+
+To show an SVG as it is, without editing it, the `svg` element is simpler.
 
 ## Properties
 
@@ -310,6 +543,10 @@ document with `YuiDocument`.
   of the component, so it can look soft on high-density displays.
 - Nested `repeat` blocks are not supported; pass a dynamic `number[]` array
   property (`repeat i in 0 .. len (lanes)`) to draw variable-length collections.
+- The tile of a `pattern` is an image: it is drawn at the size it has in the
+  component, and looks soft when the shape it fills is scaled up much further.
+- Text has no outline: it can't be part of a `clipPath`, and has no
+  `objectBounds` when placed from an `anchor`.
 
 ## See also
 

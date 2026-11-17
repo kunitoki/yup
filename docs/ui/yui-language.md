@@ -166,6 +166,12 @@ A `component` block also declares:
 to `to - 1`. Both only exist inside drawings, see
 [Scopes](yui-drawing.md#scopes).
 
+Inside a drawing, `drawing Name { ... }`, `pattern Name { ... }` and
+`marker Name { ... }` define a drawing, a tile and a marker for the elements
+after them, and `use Name { ... }` paints a drawing by name, see
+[Reusing drawings](yui-drawing.md#reusing-drawings) and
+[Patterns and markers](yui-drawing.md#patterns-and-markers).
+
 ## Bindings and handlers
 
 `name <=> id.property;` links a property both ways to another, or to a model

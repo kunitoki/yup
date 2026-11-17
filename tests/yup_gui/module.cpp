@@ -113,6 +113,7 @@
 #include "yup_YuiHandler.cpp"
 #include "yup_YuiLoader.cpp"
 #include "yup_YuiParser.cpp"
+#include "yup_YuiSvgImporter.cpp"
 #include "yup_YuiTreeDiff.cpp"
 #include "yup_YuiView.cpp"
 #include "yup_YuiWriter.cpp"

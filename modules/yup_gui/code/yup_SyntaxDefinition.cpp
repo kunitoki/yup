@@ -355,7 +355,7 @@ constexpr auto yuiDefinitionJson = R"json({
     "operators": ["<=>", "=>", "..", "&&", "||", "==", "!=", "<=", ">=", "?", ":", ";", ",", ".", "(", ")", "[", "]", "{", "}", "+", "-", "*", "/", "%", "<", ">", "!", "=", "#", "@"],
     "wordSets": {
         "keyword.constant": ["true", "false", "pi", "tau"],
-        "type.shape": ["rect", "circle", "ellipse", "arc", "line", "path", "polygon", "star", "text", "image", "svg", "layer", "group", "clip", "mask"],
+        "type.shape": ["rect", "circle", "ellipse", "arc", "line", "path", "polygon", "star", "text", "image", "svg", "layer", "group", "clip", "mask", "viewport", "clipPath"],
         "identifier.language": ["self", "parent", "root", "theme"],
         "identifier.builtin": ["sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sqrt", "pow", "exp", "log", "log2", "log10", "abs", "floor", "ceil", "round", "trunc", "sign", "fmod", "min", "max", "clamp", "lerp", "mix", "map", "smoothstep", "hypot", "deg", "rad", "len", "format", "rgb", "rgba", "hsl", "hsla", "polar", "linearGradient", "radialGradient", "angularGradient", "action"]
     },
@@ -366,7 +366,7 @@ constexpr auto yuiDefinitionJson = R"json({
             { "match": "\\.[A-Za-z_][\\w-]*(?=[^;{}()]*(?:\\{|,\\s*(?://.*)?$))", "scope": "type.selector" },
             { "match": ":[A-Za-z][\\w-]*(?=[^;{}()]*(?:\\{|,\\s*(?://.*)?$))", "scope": "type.selector" },
             { "match": "@[A-Za-z][\\w-]*", "scope": "keyword" },
-            { "match": "\\b(drawing|palette|component)(\\s+)([A-Za-z_]\\w*)", "scope": "whitespace", "captures": { "1": "keyword", "3": "type.class" } },
+            { "match": "\\b(drawing|palette|component|pattern|marker|use)(\\s+)([A-Za-z_]\\w*)", "scope": "whitespace", "captures": { "1": "keyword", "3": "type.class" } },
             { "match": "\\b(property)(\\s+)(?:(alias)(\\s+))?([A-Za-z_]\\w*)", "scope": "whitespace", "captures": { "1": "keyword", "3": "keyword", "5": "identifier.property" } },
             { "match": "\\b(signal)(\\s+)([A-Za-z_]\\w*)", "scope": "whitespace", "captures": { "1": "keyword", "3": "identifier.function" } },
             { "match": "(\\d+(?:\\.\\d+)?)(deg|rad|grad|turn|ms|px|s|%)(?![\\w(])", "scope": "number", "captures": { "2": "number.unit" } },

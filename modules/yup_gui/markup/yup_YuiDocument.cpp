@@ -98,7 +98,8 @@ bool isGrammarNodeType (const Identifier& type) noexcept
         "yui", "import", "tokens", "palette", "style", "rule", "keyframes", "keyframe",
         "declaration", "property", "alias", "signal", "argument", "component", "drawing",
         "let", "repeat", "group", "clip", "layer", "mask", "rect", "ellipse", "circle", "line",
-        "arc", "path", "polygon", "star", "text", "image", "svg", "bind", "changed"
+        "arc", "path", "polygon", "star", "text", "image", "svg", "bind", "changed",
+        "viewport", "use", "pattern", "marker", "clipPath"
     };
 
     return grammarTypes.contains (type.toString());
@@ -110,7 +111,8 @@ bool isStrictGrammarContainer (const Identifier& type) noexcept
         "import", "tokens", "palette", "style", "rule", "keyframes", "keyframe",
         "declaration", "property", "alias", "signal", "argument", "drawing",
         "let", "repeat", "group", "clip", "layer", "mask", "rect", "ellipse", "circle",
-        "line", "arc", "path", "polygon", "star", "text", "image", "svg", "bind", "changed"
+        "line", "arc", "path", "polygon", "star", "text", "image", "svg", "bind", "changed",
+        "viewport", "use", "pattern", "marker", "clipPath"
     };
 
     return strictContainers.contains (type.toString());
@@ -180,10 +182,13 @@ DataTreeSchema::Ptr YuiDocument::createSchema()
     yuiChildren.addArray (componentTypeNames);
 
     const StringArray drawingBodyChildren {
-        "let", "repeat", "group", "clip", "layer",
+        "let", "repeat", "group", "clip", "layer", "viewport", "use", "drawing", "pattern", "marker",
         "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "text", "image", "svg"
     };
-    StringArray layerChildren = drawingBodyChildren;
+    const StringArray clipPathChildren { "let", "repeat", "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star" };
+    StringArray clipChildren = drawingBodyChildren;
+    clipChildren.add ("clipPath");
+    StringArray layerChildren = clipChildren;
     layerChildren.add ("mask");
     StringArray drawingChildren { "property" };
     drawingChildren.addArray (drawingBodyChildren);
@@ -296,10 +301,25 @@ DataTreeSchema::Ptr YuiDocument::createSchema()
         nodeTypes->setProperty ("repeat", makeSchemaNode (props, drawingBodyChildren));
     }
 
-    for (const auto* containerType : { "group", "clip", "mask" })
+    for (const auto* containerType : { "group", "mask", "viewport" })
         nodeTypes->setProperty (containerType, makeSchemaNode (nullptr, drawingBodyChildren));
 
+    nodeTypes->setProperty ("clip", makeSchemaNode (nullptr, clipChildren));
     nodeTypes->setProperty ("layer", makeSchemaNode (nullptr, layerChildren));
+    nodeTypes->setProperty ("clipPath", makeSchemaNode (nullptr, clipPathChildren));
+
+    for (const auto* definitionType : { "pattern", "marker" })
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("name", makeSchemaProperty ("string", true));
+        nodeTypes->setProperty (definitionType, makeSchemaNode (props, drawingBodyChildren));
+    }
+
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("drawing", makeSchemaProperty ("string", true, "Name of the drawing to paint."));
+        nodeTypes->setProperty ("use", makeSchemaNode (props, {}, 0));
+    }
 
     for (const auto* leafType : { "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "text", "image", "svg" })
         nodeTypes->setProperty (leafType, makeSchemaNode (nullptr, {}, 0));

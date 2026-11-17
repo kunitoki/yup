@@ -108,6 +108,34 @@ TEST_F (YuiWriterTests, RoundTripsDrawings)
         drawing Empty {})yui");
 }
 
+TEST_F (YuiWriterTests, RoundTripsNamedBlocksInsideDrawings)
+{
+    expectRoundTrip (R"yui(
+        drawing Icon {
+            viewBox: rect (0, 0, 24, 24);
+            drawing Leaf { property tone: color = #00ff00; path { data: "M 5 0 L 10 10 L 0 10 Z"; fill: tone; } }
+            pattern Dots { tile: rect (0, 0, 4, 4); circle { center: point (2, 2); radius: 1; } }
+            marker Arrow { size: size (6, 6); ref: point (3, 3); path { data: "M 0 0 L 6 3 L 0 6 Z"; } }
+            group {
+                fill: #000000;
+                use Leaf { bounds: rect (2, 2, 8, 8); tone: #ff0000; }
+                line { from: point (0, 12); to: point (24, 12); stroke: currentColor; markerEnd: Arrow; }
+                clip { clipPath { circle { center: bounds.center; radius: 8; } } rect { bounds: bounds; fillPattern: Dots; } }
+                viewport { bounds: rect (0, 0, 8, 8); viewBox: rect (0, 0, 100, 100); }
+            }
+        })yui");
+
+    const auto document = parse ("drawing Icon { drawing Leaf {} use Leaf { bounds: bounds; } }");
+
+    EXPECT_EQ (YuiWriter::write (document),
+               "drawing Icon {\n"
+               "    drawing Leaf {}\n"
+               "    use Leaf {\n"
+               "        bounds: bounds;\n"
+               "    }\n"
+               "}\n");
+}
+
 TEST_F (YuiWriterTests, RoundTripsPalettesAndStyles)
 {
     expectRoundTrip (R"yui(

@@ -1359,6 +1359,39 @@ Path& Path::addRoundedRectangle (const Rectangle<float>& rect, float radius)
     return addRoundedRectangle (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), radius, radius, radius, radius);
 }
 
+Path& Path::addRoundedRectangle (const Rectangle<float>& rect, const Size<float>& cornerSize)
+{
+    const bool wasEmpty = isEmpty();
+
+    reservePathShapeSpace (*path, 9, 17);
+
+    const float x = rect.getX();
+    const float y = rect.getY();
+    const float width = jmax (0.0f, rect.getWidth());
+    const float height = jmax (0.0f, rect.getHeight());
+    const float radiusX = jlimit (0.0f, width * 0.5f, cornerSize.getWidth());
+    const float radiusY = jlimit (0.0f, height * 0.5f, cornerSize.getHeight());
+
+    constexpr float kappa = 0.5522847498f;
+    const float controlX = radiusX * kappa;
+    const float controlY = radiusY * kappa;
+
+    moveTo (x + radiusX, y);
+    lineTo (x + width - radiusX, y);
+    cubicTo (x + width - radiusX + controlX, y, x + width, y + radiusY - controlY, x + width, y + radiusY);
+    lineTo (x + width, y + height - radiusY);
+    cubicTo (x + width, y + height - radiusY + controlY, x + width - radiusX + controlX, y + height, x + width - radiusX, y + height);
+    lineTo (x + radiusX, y + height);
+    cubicTo (x + radiusX - controlX, y + height, x, y + height - radiusY + controlY, x, y + height - radiusY);
+    lineTo (x, y + radiusY);
+    cubicTo (x, y + radiusY - controlY, x + radiusX - controlX, y, x + radiusX, y);
+
+    if (wasEmpty)
+        simpleContourMutationID = path->getRawPathMutationID();
+
+    return *this;
+}
+
 //==============================================================================
 
 Path& Path::addEllipse (float x, float y, float width, float height)

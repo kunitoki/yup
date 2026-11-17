@@ -202,6 +202,21 @@ public:
         return copy;
     }
 
+    /** Returns a gradient with a Spread::Pad spread that draws like this one over an area.
+
+        Renderers only clamp gradients beyond their ends, so Graphics draws the Spread::Repeat and
+        Spread::Reflect spreads by repeating the color stops over the area being painted. The number
+        of repetitions is limited, so the gradient is clamped far away from its ends when the area is
+        much larger than the gradient.
+
+        Angular gradients, and gradients already covering the area, only change their spread.
+
+        @param area The area to cover, in drawing space.
+
+        @return A gradient with a Spread::Pad spread covering the area.
+    */
+    [[nodiscard]] ColorGradient withSpreadExpandedOver (const Rectangle<float>& area) const;
+
     //==============================================================================
     /** Gets the gradient transform.
 
@@ -512,7 +527,8 @@ public:
     {
         stops.emplace_back (color, x, y, jlimit (0.0f, 1.0f, delta));
 
-        std::sort (stops.begin(), stops.end(), [] (const ColorStop& a, const ColorStop& b)
+        // Stops sharing a delta keep the order they were added in, which is what makes a hard edge
+        std::stable_sort (stops.begin(), stops.end(), [] (const ColorStop& a, const ColorStop& b)
         {
             return a.delta < b.delta;
         });

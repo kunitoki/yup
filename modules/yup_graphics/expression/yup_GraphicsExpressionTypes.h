@@ -54,6 +54,28 @@ struct YUP_API StrokeDashPattern
 };
 
 //==============================================================================
+/** A paint drawn by a PaintSource and tiled over the shapes it fills or strokes, used by graphics expressions.
+
+    The source draws one tile, and the transform places the tiles in the coordinates of the drawing.
+    The source is not owned: it must outlive the programs evaluated with it, the drawings made from
+    them and their caches.
+
+    @see PaintSource, ExpressionDrawing
+
+    @tags{Graphics}
+*/
+struct YUP_API PatternPaint
+{
+    /** The source drawing one tile, or nullptr for no paint. */
+    PaintSource* source = nullptr;
+
+    /** Maps the content of the source into the coordinates of the drawing. */
+    AffineTransform transform;
+
+    bool operator== (const PatternPaint& other) const noexcept = default;
+};
+
+//==============================================================================
 /** Registers the graphics types with an ExpressionContext.
 
     The following types become available to expressions, all using `float` coordinates:
@@ -75,7 +97,8 @@ struct YUP_API StrokeDashPattern
       `#rgba`, `#rrggbb`, `#rrggbbaa`; members `r g b a hue
       saturation luminance` (floats in [0, 1]); methods `withAlpha withMultipliedAlpha brighter
       darker contrasting inverted mix`, `== !=`.
-    - `transform` (AffineTransform): `transform()` (identity), `transform.translation (x, y)`,
+    - `transform` (AffineTransform): `transform()` (identity), `transform (a, b, c, d, tx, ty)` (the
+      values of an SVG `matrix`), `transform.translation (x, y)`,
       `transform.rotation (radians)`, `transform.rotation (radians, cx, cy)`,
       `transform.scaling (factor)`, `transform.scaling (fx, fy)`, `transform.shearing (fx, fy)`;
       methods `translated rotated scaled followedBy inverted`, `== !=`.
@@ -92,16 +115,19 @@ struct YUP_API StrokeDashPattern
       `radialGradient (centerColor, center, edgeColor, edge)`, `radialGradient (centerColor, center,
       edgeColor, radius)`, `angularGradient (color1, center, color2, direction)`; methods
       `withStop (color, delta)` (adds a stop along the gradient, delta in [0, 1]) `withAlpha
-      withMultipliedAlpha withTransform`, `== !=`. Programs using gradients may allocate when evaluated.
+      withMultipliedAlpha withTransform withSpread (spread)` and `mappedTo (rect)`, which places a gradient
+      written for the unit square in a rectangle, `== !=`. Programs using gradients may allocate when evaluated.
+    - `pattern` (PatternPaint): `pattern()` (no paint), usually provided as an input; member `isEmpty`, `== !=`.
 
     The enumerations `cap` (`butt round square`), `join` (`miter round bevel`), `strokePosition`
     (`inside center outside`), `blend` (`srcOver screen overlay darken lighten colorDodge colorBurn
     hardLight softLight difference exclusion multiply hue saturation color luminosity additive`),
     `justification` (`left right horizontalCenter top bottom verticalCenter topLeft topRight bottomLeft
     bottomRight centerLeft centerTop center centerRight centerBottom`), `fitting` (`none scaleToFit
-    fitWidth fitHeight scaleToFill fill tile centerCrop centerInside stretchWidth stretchHeight`) and
-    `maskMode` (`alpha invertedAlpha luminance invertedLuminance`) map to StrokeCap, StrokeJoin,
-    StrokePosition, BlendMode, Justification::Flags, Fitting and LayerMaskMode.
+    fitWidth fitHeight scaleToFill fill tile centerCrop centerInside stretchWidth stretchHeight`),
+    `maskMode` (`alpha invertedAlpha luminance invertedLuminance`), `spread` (`pad reflect repeat`) and
+    `textAnchor` (`start middle end`) map to StrokeCap, StrokeJoin, StrokePosition, BlendMode,
+    Justification::Flags, Fitting, LayerMaskMode, ColorGradient::Spread and AnchoredText::Anchor.
 
     The function `polar (center, radius, angle)` returns the point at `radius` from `center`, with the
     angle in radians measured from the positive x axis towards the positive y axis (clockwise on screen).

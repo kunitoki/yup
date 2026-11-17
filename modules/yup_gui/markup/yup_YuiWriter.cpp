@@ -149,6 +149,14 @@ private:
             const auto header = "repeat " + text (element, "name") + " in " + text (element, "from") + " .. " + text (element, "to");
             writeElement (header, element, depth, { "name", "from", "to" }, &YuiTextWriter::writeBodyMember);
         }
+        else if (type == "use")
+        {
+            writeElement ("use " + text (element, "drawing"), element, depth, { "drawing" }, &YuiTextWriter::writeBodyMember);
+        }
+        else if ((type == "drawing" || type == "pattern" || type == "marker") && element.hasProperty ("name"))
+        {
+            writeElement (type + " " + text (element, "name"), element, depth, { "name" }, &YuiTextWriter::writeBodyMember);
+        }
         else if (type == "bind")
         {
             writeLine (depth, text (element, "property") + " <=> " + text (element, "target") + ";");

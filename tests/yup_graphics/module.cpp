@@ -30,6 +30,7 @@
 #endif
 
 #include "yup_AffineTransform.cpp"
+#include "yup_AnchoredText.cpp"
 #include "yup_Easing.cpp"
 #include "yup_BoundingBox.cpp"
 #include "yup_Color.cpp"
@@ -60,6 +61,7 @@
 #include "yup_MeshSurfaceMapper.cpp"
 #include "yup_PaintSource.cpp"
 #include "yup_Path.cpp"
+#include "yup_PathMarkers.cpp"
 #include "yup_Point.cpp"
 #include "yup_Quaternion.cpp"
 #include "yup_Rectangle.cpp"

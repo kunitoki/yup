@@ -16,10 +16,11 @@ visualizations, or any data-driven vector content.
 | `rect` | `Rectangle<float>` | `rect (x, y, w, h)`, `rect (point, size)` | `x y width height left top right bottom centerX centerY center position size topLeft ...`, `withX ... withCenter withSizeKeepingCenter translated scaled reduced enlarged contains intersects intersection unionWith largestFittingSquare transformed` |
 | `line` | `Line<float>` | `line (x1, y1, x2, y2)`, `line (point, point)` | `start end length`, `pointAt translated transformed reversed` |
 | `color` | `Color` | `#ff8800`, `#f80`, `#ff880080` (literals), `color (0xffff0000)`, `rgb`, `rgba` (0-255 ints or 0-1 floats), `hsl`, `hsla` | `r g b a hue saturation luminance` (0-1), `withAlpha withMultipliedAlpha brighter darker contrasting inverted mix` |
-| `transform` | `AffineTransform` | `transform ()`, `transform.translation`, `transform.rotation`, `transform.scaling`, `transform.shearing` | `translated rotated scaled followedBy inverted` |
+| `transform` | `AffineTransform` | `transform ()`, `transform (a, b, c, d, tx, ty)` (the values of an SVG `matrix`), `transform.translation`, `transform.rotation`, `transform.scaling`, `transform.shearing` | `translated rotated scaled followedBy inverted` |
 | `path` | `Path` | `path ()`, `path ("M 0 0 L 10 10 Z")` (SVG path data) | `bounds length isEmpty`, `pointAt` (0-1 along the path) `moveTo lineTo quadTo cubicTo close addRectangle addRoundedRectangle addEllipse addLine addArc addTriangle addPolygon addStar appendPath transformed scaledToFit withRoundedCorners withNonZeroWinding` |
 | `font` | `Font` | `font ()` (empty, usually provided as an input) | `height isEmpty`, `withHeight withAxisValue` |
-| `gradient` | `ColorGradient` | `linearGradient (color, point, color, point)`, `radialGradient (color, center, color, edge)` or `(color, center, color, radius)`, `angularGradient (color, center, color, direction)` | `withStop (color, delta)` (adds a stop between the ends), `withAlpha withMultipliedAlpha withTransform` |
+| `gradient` | `ColorGradient` | `linearGradient (color, point, color, point)`, `radialGradient (color, center, color, edge)` or `(color, center, color, radius)`, `angularGradient (color, center, color, direction)` | `withStop (color, delta)` (adds a stop between the ends), `withAlpha withMultipliedAlpha withTransform`, `withSpread (spread)`, `mappedTo (rect)` |
+| `pattern` | `PatternPaint` | `pattern ()` (no paint, usually provided as an input) | `isEmpty` |
 
 It also registers enumerations, whose values are used by name:
 
@@ -30,6 +31,8 @@ It also registers enumerations, whose values are used by name:
 | `strokePosition` | `inside center outside` |
 | `blend` | `srcOver screen overlay darken lighten colorDodge colorBurn hardLight softLight difference exclusion multiply hue saturation color luminosity additive` |
 | `justification` | `left right horizontalCenter top bottom verticalCenter topLeft topRight bottomLeft bottomRight centerLeft centerTop center centerRight centerBottom` |
+| `spread` | `pad reflect repeat` |
+| `textAnchor` | `start middle end` |
 
 Names shared by several enumerations (`round`, `center`) resolve to the type of
 the output they are assigned to, such as `strokeCap = round`.
@@ -39,6 +42,16 @@ functions that use these types. It also adds `polar (center, radius, angle)`,
 the point at `angle` radians from the positive x axis towards positive y, so
 `polar (bounds.center, 40, 135deg)` places a knob indicator, and
 `mix (a, b, t)` interpolates two points or two colors.
+
+A gradient is clamped beyond its ends unless `withSpread (repeat)` or
+`withSpread (reflect)` continues it. `mappedTo (rect)` places a gradient written
+for the unit square in a rectangle, so one gradient can follow the bounds of
+every shape it paints:
+
+```
+let sky = linearGradient (#48f, point (0, 0), #fff, point (0, 1));
+fillGradient = sky.mappedTo (rect (10, 10, 80, 40));
+```
 
 Paths are values: every method returns a modified copy, so they chain:
 
@@ -69,17 +82,20 @@ shape per row. Assign the outputs you need:
 
 | Output | Type | Meaning |
 |---|---|---|
-| `rect` | `rect` | Rectangle, rounded when `cornerRadius > 0`. `topLeftRadius`, `topRightRadius`, `bottomLeftRadius` and `bottomRightRadius` round single corners. |
+| `rect` | `rect` | Rectangle, rounded when `cornerRadius > 0`. `topLeftRadius`, `topRightRadius`, `bottomLeftRadius` and `bottomRightRadius` round single corners, and `cornerSize` (a `size`) rounds them all elliptically instead. |
 | `ellipse` | `rect` | Ellipse inscribed in the rectangle. |
 | `point` | `point` | Dot of `radius` (default 2). |
 | `line` | `line` | Line, drawn with `stroke` (or `fill`). |
 | `path` | `path` | Path, filled with its own winding rule. |
 | `vertex`, `series` | `point`, `int` | One vertex per row, connected into one polyline per `series` (default 0). Polylines are drawn after the other shapes, with the style of their first row. |
-| `label`, `labelRect` | `string`, `rect` | Text fitted in the rectangle, drawn when a font is passed to `draw` or assigned to `labelFont`. Assign both. |
+| `label`, `labelRect` | `string`, `rect` | Text fitted in the rectangle, drawn when a font is passed to `draw` or assigned to `labelFont`. Assign both, or `labelAnchor` instead of `labelRect`. |
+| `labelAnchor`, `labelTextAnchor` | `point`, `textAnchor` | Places the label from a point on its baseline, at the size of its font, instead of fitting it in `labelRect`. The text starts (default), is centered or ends at the point. |
 | `labelColor`, `labelStroke` | `color` | Label fill and stroke colors. |
-| `labelFont`, `labelJustification` | `font`, `justification` | Label font and placement (default `center`). |
+| `labelFont`, `labelJustification`, `labelLetterSpacing` | `font`, `justification`, `float` | Label font, placement in `labelRect` (default `center`) and extra space after every glyph. |
 | `fill`, `stroke` | `color` | Shapes are filled when a fill is set or no stroke is set, and stroked when a stroke is set. |
 | `fillGradient`, `strokeGradient` | `gradient` | Gradients used instead of `fill` and `stroke`. |
+| `fillPattern`, `strokePattern` | `pattern` | A `PaintSource` tiled over the shapes, used instead of `fill` and `stroke`. |
+| `fillOpacity`, `strokeOpacity` | `float` | Opacity of the fill or of the stroke alone. |
 | `strokeWidth`, `strokeMiterLimit`, `strokeCap`, `strokeJoin`, `strokePosition` | `float`, `float`, `cap`, `join`, `strokePosition` | Stroke style. |
 | `opacity`, `tint`, `feather`, `blend` | `float`, `color`, `float`, `blend` | Opacity (multiplies the current one), tint, edge blur and blend mode. |
 | `transform` | `transform` | Transforms the shapes of the row, before the transform of the `Graphics`. |
@@ -112,8 +128,9 @@ bars.getReference().draw (g, state, (int) data.size());
 ```
 
 `create` compiles the program and fails with a descriptive message when it has
-no shape output or assigns only one of `label` and `labelRect`. `draw`
-evaluates the rows in blocks and restores the `Graphics` state afterwards.
+no shape output, or when `label` isn't assigned together with either `labelRect`
+or `labelAnchor`. `draw` evaluates the rows in blocks and restores the `Graphics`
+state afterwards.
 
 Consecutive rows with the same style are merged into one path and drawn with a
 single call when that can't change the result: filled shapes that don't
@@ -121,6 +138,33 @@ overlap, or shapes only filled or only stroked with an opaque color. Feathered
 rows never merge, and overlapping shapes don't merge when drawn with gradients,
 opacity, blend modes, translucent tints or strokes off center. Prefer a shared
 color over per-row colors when many rows are drawn, so they merge.
+
+### Pattern paints
+
+A `pattern` value is a `PatternPaint`: a `PaintSource` drawing one tile, and the
+transform placing the tiles in the drawing. Provide it as an input and assign it
+to `fillPattern` or `strokePattern`. The source isn't owned, so keep it alive as
+long as the drawing and its cache:
+
+```cpp
+auto dots = context.addInput<PatternPaint> ("dots"); // after addGraphicsExpressionTypes
+
+auto drawing = ExpressionDrawing::create ("rect = bounds; fillPattern = dots", context);
+
+state.set (dots, PatternPaint { &dotsSource, AffineTransform::translation (4.0f, 4.0f) });
+```
+
+### Getting the outline
+
+`getOutline (state, numRows)` evaluates the rows and returns the shapes `draw`
+would paint as one `Path`, without drawing them: use it to clip to the shapes of
+a drawing, or to place content along them. Rows that are not visible are
+skipped, labels have no outline, and the `transform` of every row is applied
+unless the last argument is `false`:
+
+```cpp
+g.setClipPath (clipShapes.getReference().getOutline (state, numRows));
+```
 
 ### Caching shapes
 

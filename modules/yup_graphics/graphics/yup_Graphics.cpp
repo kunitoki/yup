@@ -226,8 +226,15 @@ rive::Mat2D toShaderTransform (const ColorGradient& gradient)
     return gradient.getTransform().toMat2D();
 }
 
-void setupGradientPaint (rive::Factory& factory, rive::RiveRenderPaint& paint, const ColorGradient& gradient, const AffineTransform& transform)
+// The renderer only clamps gradients, so the other spreads are expanded over the area being painted
+void setupGradientPaint (rive::Factory& factory, rive::RiveRenderPaint& paint, const ColorGradient& gradient, const AffineTransform& transform, const Rectangle<float>& paintedArea)
 {
+    if (gradient.getSpread() != ColorGradient::Spread::Pad)
+    {
+        setupGradientPaint (factory, paint, gradient.withSpreadExpandedOver (paintedArea), transform, paintedArea);
+        return;
+    }
+
     paint.shader (toColorGradient (factory, gradient, transform));
     paint.shaderTransform (toShaderTransform (gradient));
 }
@@ -1194,7 +1201,7 @@ void Graphics::fillPath (const Path& path)
 void Graphics::renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform)
 {
     rive::RiveRenderPaint paint;
-    if (! setupStrokePaint (paint, options, transform))
+    if (! setupStrokePaint (paint, options, transform, options.spreadsStrokeGradient() ? path.getBounds().enlarged (options.getStrokeWidth()) : Rectangle<float>()))
         return;
 
     renderer.save();
@@ -1207,7 +1214,7 @@ void Graphics::renderStrokePath (const Path& path, const RenderOptions& options,
 void Graphics::renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform)
 {
     rive::RiveRenderPaint paint;
-    if (! setupFillPaint (paint, options, transform))
+    if (! setupFillPaint (paint, options, transform, options.spreadsFillGradient() ? path.getBounds() : Rectangle<float>()))
         return;
 
     auto* renderPath = options.feather > 0.0f ? path.getClockwiseRenderPath() : path.getRenderPath();
@@ -1220,7 +1227,7 @@ void Graphics::renderFillPath (const Path& path, const RenderOptions& options, c
 }
 
 //==============================================================================
-bool Graphics::setupFillPaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, Point<float> imageOffset)
+bool Graphics::setupFillPaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, const Rectangle<float>& paintedArea, Point<float> imageOffset)
 {
     paint.style (rive::RenderPaintStyle::fill);
     setupPaintBlend (paint, options);
@@ -1231,12 +1238,12 @@ bool Graphics::setupFillPaint (rive::RiveRenderPaint& paint, const RenderOptions
     if (options.isFillColor())
         paint.color ((rive::ColorInt) options.getFillColor());
     else
-        setupGradientPaint (factory, paint, options.getFillColorGradient(), transform);
+        setupGradientPaint (factory, paint, options.getFillColorGradient(), transform, paintedArea);
 
     return true;
 }
 
-bool Graphics::setupStrokePaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, Point<float> imageOffset)
+bool Graphics::setupStrokePaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, const Rectangle<float>& paintedArea, Point<float> imageOffset)
 {
     paint.style (rive::RenderPaintStyle::stroke);
     setupPaintBlend (paint, options);
@@ -1251,7 +1258,7 @@ bool Graphics::setupStrokePaint (rive::RiveRenderPaint& paint, const RenderOptio
     if (options.isStrokeColor())
         paint.color ((rive::ColorInt) options.getStrokeColor());
     else
-        setupGradientPaint (factory, paint, options.getStrokeColorGradient(), transform);
+        setupGradientPaint (factory, paint, options.getStrokeColorGradient(), transform, paintedArea);
 
     return true;
 }
@@ -1448,7 +1455,7 @@ void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& r
 
     // Runs appended with their own color keep it, the others are filled with the current fill
     rive::RiveRenderPaint paint;
-    const bool hasFillPaint = setupFillPaint (paint, options, options.getTransform(), textOrigin (text, rect));
+    const bool hasFillPaint = setupFillPaint (paint, options, options.getTransform(), rect, textOrigin (text, rect));
     renderFittedText (text, rect, hasFillPaint ? std::addressof (paint) : nullptr, false);
 }
 
@@ -1478,7 +1485,7 @@ void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>&
     const auto& options = currentRenderOptions();
 
     rive::RiveRenderPaint paint;
-    if (! setupStrokePaint (paint, options, options.getTransform(), textOrigin (text, rect)))
+    if (! setupStrokePaint (paint, options, options.getTransform(), rect, textOrigin (text, rect)))
         return;
 
     renderFittedText (text, rect, std::addressof (paint), true);

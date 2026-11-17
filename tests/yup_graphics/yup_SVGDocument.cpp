@@ -367,6 +367,69 @@ TEST (SVGDocumentTests, RectElementHasPathSet)
     });
 }
 
+TEST (SVGDocumentTests, RectWithDifferentRadiiHasEllipticalCorners)
+{
+    auto doc = parse ("<svg><rect x=\"0\" y=\"0\" width=\"100\" height=\"60\" rx=\"20\" ry=\"5\" /></svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        ASSERT_EQ (1u, data.elements.size());
+        ASSERT_TRUE (data.elements[0]->path.has_value());
+
+        std::vector<Path::Segment> segments;
+        for (const auto& segment : *data.elements[0]->path)
+            segments.push_back (segment);
+
+        // The top edge is inset by rx on both sides, and the corner after it ends ry below
+        ASSERT_GE (segments.size(), 3u);
+        EXPECT_FLOAT_EQ (20.0f, segments[0].point.getX());
+        EXPECT_FLOAT_EQ (80.0f, segments[1].point.getX());
+        EXPECT_FLOAT_EQ (100.0f, segments[2].point.getX());
+        EXPECT_FLOAT_EQ (5.0f, segments[2].point.getY());
+    });
+}
+
+TEST (SVGDocumentTests, PrimitivesKeepTheirDeclaredGeometry)
+{
+    auto doc = parse ("<svg>"
+                      "<rect id=\"r\" x=\"10\" y=\"20\" width=\"80\" height=\"60\" rx=\"4\" />"
+                      "<circle id=\"c\" cx=\"50\" cy=\"40\" r=\"30\" />"
+                      "<ellipse id=\"e\" cx=\"50\" cy=\"40\" rx=\"30\" ry=\"10\" />"
+                      "<line id=\"l\" x1=\"1\" y1=\"2\" x2=\"3\" y2=\"4\" />"
+                      "<path id=\"p\" d=\"M 0 0 L 1 1\" />"
+                      "</svg>");
+    ASSERT_NE (nullptr, doc);
+
+    doc->visit ([] (const SVGData& data)
+    {
+        using Type = SVGElement::Primitive::Type;
+
+        const auto& rect = data.elementsById["r"]->primitive;
+        ASSERT_TRUE (rect.has_value());
+        EXPECT_EQ (Type::rect, rect->type);
+        EXPECT_EQ (Rectangle<float> (10.0f, 20.0f, 80.0f, 60.0f), rect->bounds);
+        EXPECT_EQ (Size<float> (4.0f, 4.0f), rect->cornerSize);
+
+        const auto& circle = data.elementsById["c"]->primitive;
+        ASSERT_TRUE (circle.has_value());
+        EXPECT_EQ (Type::ellipse, circle->type);
+        EXPECT_EQ (Rectangle<float> (20.0f, 10.0f, 60.0f, 60.0f), circle->bounds);
+
+        const auto& ellipse = data.elementsById["e"]->primitive;
+        ASSERT_TRUE (ellipse.has_value());
+        EXPECT_EQ (Type::ellipse, ellipse->type);
+        EXPECT_EQ (Rectangle<float> (20.0f, 30.0f, 60.0f, 20.0f), ellipse->bounds);
+
+        const auto& line = data.elementsById["l"]->primitive;
+        ASSERT_TRUE (line.has_value());
+        EXPECT_EQ (Type::line, line->type);
+        EXPECT_EQ (Line<float> (1.0f, 2.0f, 3.0f, 4.0f), line->line);
+
+        EXPECT_FALSE (data.elementsById["p"]->primitive.has_value());
+    });
+}
+
 TEST (SVGDocumentTests, CircleElementHasPathSet)
 {
     auto doc = parse ("<svg><circle cx=\"50\" cy=\"50\" r=\"30\" /></svg>");

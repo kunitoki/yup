@@ -179,6 +179,36 @@ TEST (PathTests, AddRoundedRectangleZeroRadiusMatchesRectangle)
     expectPointNear ((*rounded.begin()).point, Point<float> (0.0f, 0.0f));
 }
 
+TEST (PathTests, AddRoundedRectangleWithCornerSizeRoundsCornersElliptically)
+{
+    Path p;
+    p.addRoundedRectangle (Rectangle<float> (10.0f, 20.0f, 100.0f, 60.0f), Size<float> (16.0f, 4.0f));
+
+    expectRectNear (p.getBounds(), Rectangle<float> (10.0f, 20.0f, 100.0f, 60.0f));
+
+    std::vector<Path::Segment> segments;
+    for (const auto& segment : p)
+        segments.push_back (segment);
+
+    ASSERT_EQ (segments.size(), static_cast<size_t> (9));
+
+    // The top edge is inset by the horizontal radius, the right edge by the vertical one
+    expectPointNear (segments[0].point, Point<float> (26.0f, 20.0f));
+    expectPointNear (segments[1].point, Point<float> (94.0f, 20.0f));
+    expectPointNear (segments[2].point, Point<float> (110.0f, 24.0f));
+    expectPointNear (segments[3].point, Point<float> (110.0f, 76.0f));
+}
+
+TEST (PathTests, AddRoundedRectangleWithCornerSizeLimitsEachRadiusToItsHalfDimension)
+{
+    Path p;
+    p.addRoundedRectangle (Rectangle<float> (0.0f, 0.0f, 100.0f, 20.0f), Size<float> (80.0f, 80.0f));
+
+    // The corners meet in the middle of every edge
+    expectPointNear ((*p.begin()).point, Point<float> (50.0f, 0.0f));
+    expectRectNear (p.getBounds(), Rectangle<float> (0.0f, 0.0f, 100.0f, 20.0f));
+}
+
 TEST (PathTests, AddRoundedRectangleClampsRadiusToHalfSmallestDimension)
 {
     // Request a radius far larger than the rectangle; it must clamp to half the

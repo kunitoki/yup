@@ -73,6 +73,20 @@ auto sidebar = area.removeFromLeft (120.0f);
 Non-mutating variants (`withTrimmedTop`, `reducedLeft`, …) return a new
 rectangle without changing the original.
 
+### Fitting into an area
+
+`getTransformToFit` returns the transform that scales and places a rectangle
+into a target area with a `Fitting` and a `Justification`. Draw content in the
+coordinates of the rectangle under that transform to fit it:
+
+```cpp
+const Rectangle<float> artwork (0.0f, 0.0f, 24.0f, 24.0f);
+
+const auto savedState = g.saveState();
+g.addTransform (artwork.getTransformToFit (getLocalBounds().to<float>(), Fitting::scaleToFit, Justification::center));
+g.fillPath (icon); // drawn in the 24 x 24 artwork coordinates
+```
+
 ## EdgeSpacing
 
 `EdgeSpacing<ValueType>` holds independent `left`, `top`, `right` and `bottom`
@@ -135,7 +149,12 @@ g.fillRect (bounds);
 
 Gradients support a `Spread` mode - `Pad` (clamp to endpoints), `Repeat`
 (tile), or `Reflect` (mirrored tile) - and any number of intermediate stops for
-multi-color gradients.
+multi-color gradients. Linear and radial gradients are repeated or reflected
+over the shape being painted, up to a few dozen times:
+
+```cpp
+g.setFillColorGradient (gradient.withSpread (ColorGradient::Spread::Reflect));
+```
 
 An `Angular` (sweep) gradient turns clockwise around the first stop position,
 starting in the direction of the last stop position, and its deltas span one
@@ -181,6 +200,7 @@ Shape helpers add whole primitives to a path:
 Path shapes;
 shapes.addRectangle (0, 0, 100, 50);
 shapes.addRoundedRectangle (0, 60, 100, 50, 8.0f);
+shapes.addRoundedRectangle ({ 0, 60, 100, 50 }, Size<float> (16.0f, 4.0f)); // elliptical corners
 shapes.addEllipse (0, 120, 100, 50);
 shapes.addArc (arcBounds, 0.0f, MathConstants<float>::pi, true);
 ```

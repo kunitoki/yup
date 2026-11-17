@@ -39,17 +39,31 @@ struct YuiDiagnostic;
       and `dashOffset` for stroked shapes);
     - `let` (`name`, `value`): a local visible to the following siblings and their children;
     - `layer` (`opacity`, `blend`, `clip`, `clipPath`, `mask`, `maskMode`, `visible` and optional
-      `mask` children): draws its children into a transparency layer;
-    - `clip` (`bounds`/`rect`, `path`/`clipPath`, `visible`): clips its children;
-    - `group` (`transform`, `visible`): draws its children under a transform;
+      `mask` and `clipPath` children): draws its children into a transparency layer;
+    - `clip` (`bounds`/`rect`, `path`/`clipPath`, `visible` and optional `clipPath` children
+      holding the shapes to clip to): clips its children;
+    - `group` (`transform`, `opacity`, `blend`, `visible`, `color` and paint properties): draws its
+      children under a transform, with its paint properties as the defaults of the shapes inside it;
+    - `viewport` (`bounds`, `viewBox`, `fitting`, `justification`, `visible`): draws its children
+      in the coordinates of a view box fitted in a rectangle, which it clips them to;
     - `repeat` (`name`, `from`, `to`): draws its shapes once for every int from `from` up to,
       but not including, `to`, exposed to them under `name`;
+    - `drawing`, `pattern` and `marker` (`name`): definitions visible to the elements after them,
+      a drawing painted by `use`, a tile painting shapes through `fillPattern` and `strokePattern`,
+      and content drawn at the vertices of shapes through `markerStart`, `markerMid` and `markerEnd`;
+    - `use` (`drawing`, `bounds`, `transform`, `opacity`, `blend`, `visible`, `color`, paint
+      properties and the properties of the drawing): paints a drawing defined inside this one, or
+      found by name through the DrawingResolver;
     - `property` (`name`, `type`, `value`), only at the top of the drawing: an input of the
       drawing, visible to every element.
 
+    The root accepts `viewBox`, `fitting` and `justification` to draw its elements in the coordinates
+    of a view box fitted in the bounds of the component.
+
     Every property value is an expression. It resolves the component's reflected properties
-    by name (see DrawingScope), the component's local bounds as `bounds`, the theme's default
-    font as `defaultFont`, and the lets in scope. Names starting with `_` are reserved.
+    by name (see DrawingScope), the bounds its element is drawn in as `bounds` (the component's
+    local bounds, a view box or the bounds given to a `use`), the theme's default font as
+    `defaultFont`, and the lets in scope. Names starting with `_` are reserved.
 
     @code
     auto style = DrawingStyle::create (slider, drawing);
@@ -61,7 +75,7 @@ struct YuiDiagnostic;
     as long as their components resolve every name the drawing reads to the same type.
     The style is bound to the component it was created for: install it on that component only.
 
-    @see DrawingScope, ComponentStyle, ExpressionDrawing
+    @see DrawingScope, ComponentStyle, ExpressionDrawing, YuiSvgImporter
 
     @tags{UI}
 */
@@ -72,6 +86,12 @@ public:
     /** A pointer to a DrawingStyle object. */
     using Ptr = ReferenceCountedObjectPtr<DrawingStyle>;
 
+    /** Finds the drawing a `use` element refers to by name, when it isn't defined inside the drawing being compiled.
+
+        Return the tree of the drawing, with a root of type `drawing`, or an invalid tree for an unknown name.
+    */
+    using DrawingResolver = std::function<DataTree (const String& name)>;
+
     //==============================================================================
     /** Compiles a drawing tree for a component (or reuses an equivalent compilation).
 
@@ -79,13 +99,16 @@ public:
         @param drawing            The drawing tree, with a root of type `drawing`.
         @param componentResolver  Optional resolver for named components and models referenced by expressions.
         @param failure            Optional diagnostic populated with the offending child element and property on failure.
+        @param drawingResolver    Optional resolver for the drawings `use` elements refer to by name. It is only
+                                  called while creating the style.
 
         @return A style on success, or a failure whose message starts with the path of the offending element.
     */
     static ResultValue<DrawingStyle::Ptr> create (Component& target,
                                                   const DataTree& drawing,
                                                   DrawingScope::ComponentResolver componentResolver = nullptr,
-                                                  YuiDiagnostic* failure = nullptr);
+                                                  YuiDiagnostic* failure = nullptr,
+                                                  const DrawingResolver& drawingResolver = nullptr);
 
     /** Destructor. */
     ~DrawingStyle() override;
@@ -103,6 +126,8 @@ private:
     struct Node;
     struct Compiled;
     struct Slot;
+    struct PaintContext;
+    struct PatternSource;
     class Compiler;
     class CompiledCache;
 
@@ -111,15 +136,24 @@ private:
     DrawingStyle (Component& target, DrawingScope::ComponentResolver componentResolver);
 
     void instantiate (std::shared_ptr<const Compiled> compiledToUse);
-    Slot* prepare (const Node& node, Rectangle<float> bounds, const Font& font);
-    void drawNodes (Graphics& g, const std::vector<std::unique_ptr<Node>>& children, Rectangle<float> bounds, const Font& font, int numRows);
-    void drawNode (Graphics& g, const Node& node, Rectangle<float> bounds, const Font& font, int numRows);
+    Slot* prepare (const Node& node, const PaintContext& context);
+    PatternSource& preparePattern (int index, const PaintContext& context);
+    void drawPattern (Graphics& g, const PatternSource& source);
+    void drawMarkers (Graphics& g, const Node& node, Slot& slot, const PaintContext& context);
+    Path collectOutline (const std::vector<std::unique_ptr<Node>>& shapes, const PaintContext& context, int numRows);
+    void applyClips (Graphics& g, const Node& node, Slot* slot, const PaintContext& context, int numRows);
+    void drawNodes (Graphics& g, const std::vector<std::unique_ptr<Node>>& children, const PaintContext& context, int numRows);
+    void drawNode (Graphics& g, const Node& node, const PaintContext& context, int numRows);
 
     WeakReference<Component> targetComponent;
     ExpressionContext context;
     DrawingScope scope;
     std::shared_ptr<const Compiled> compiled;
     std::unique_ptr<Slot[]> slots;
+    std::vector<Rectangle<float>> levelBounds;
+    std::vector<std::unique_ptr<PatternSource>> patternSources;
+    const Font* paintFont = nullptr;
+    uint32 paintSerial = 0;
     std::vector<var> propertyValues;
     std::vector<DrawingScope::ArrayInput> propertyArrays;
     std::vector<DrawingScope::Dependency> dependencies;

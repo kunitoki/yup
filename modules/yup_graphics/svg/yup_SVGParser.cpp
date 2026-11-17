@@ -304,6 +304,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         auto path = Path();
         path.addCenteredEllipse (cx, cy, rx, ry);
         e->path = std::move (path);
+        e->primitive = SVGElement::Primitive { SVGElement::Primitive::Type::ellipse, { cx - rx, cy - ry, rx * 2.0f, ry * 2.0f }, {}, {} };
 
         YUP_DRAWABLE_LOG ("Parsed ellipse - id: " << element.getStringAttribute ("id", "none")
                                                   << " cx: " << cx << " cy: " << cy
@@ -322,6 +323,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         auto path = Path();
         path.addCenteredEllipse (cx, cy, r, r);
         e->path = std::move (path);
+        e->primitive = SVGElement::Primitive { SVGElement::Primitive::Type::ellipse, { cx - r, cy - r, r * 2.0f, r * 2.0f }, {}, {} };
 
         YUP_DRAWABLE_LOG ("Parsed circle - id: " << element.getStringAttribute ("id", "none")
                                                  << " cx: " << cx << " cy: " << cy
@@ -347,7 +349,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
                 rx = ry;
             if (ry == 0.0f)
                 ry = rx;
-            path.addRoundedRectangle (x, y, width, height, rx, ry, rx, ry);
+            path.addRoundedRectangle ({ x, y, width, height }, Size<float> (rx, ry));
         }
         else
         {
@@ -355,6 +357,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         }
 
         e->path = std::move (path);
+        e->primitive = SVGElement::Primitive { SVGElement::Primitive::Type::rect, { x, y, width, height }, { rx, ry }, {} };
 
         YUP_DRAWABLE_LOG ("Parsed rect - id: " << element.getStringAttribute ("id", "none")
                                                << " x: " << x << " y: " << y
@@ -376,6 +379,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         path.startNewSubPath (x1, y1);
         path.lineTo (x2, y2);
         e->path = std::move (path);
+        e->primitive = SVGElement::Primitive { SVGElement::Primitive::Type::line, {}, {}, { x1, y1, x2, y2 } };
 
         YUP_DRAWABLE_LOG ("Parsed line - id: " << element.getStringAttribute ("id", "none")
                                                << " x1: " << x1 << " y1: " << y1
@@ -1638,7 +1642,7 @@ void SVGParser::parseClipPath (const XmlElement& element)
                     rx = ry;
                 if (ry == 0.0f)
                     ry = rx;
-                path.addRoundedRectangle (x, y, width, height, rx, ry, rx, ry);
+                path.addRoundedRectangle ({ x, y, width, height }, Size<float> (rx, ry));
             }
             else
             {

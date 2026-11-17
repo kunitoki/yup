@@ -1187,7 +1187,11 @@ YuiBuilder::ApplyOutcome YuiBuilder::applyProperty (Component& component, const 
             }
 
             YuiDiagnostic failure;
-            auto created = DrawingStyle::create (component, found->second, resolverFor (scope), &failure);
+            auto created = DrawingStyle::create (component, found->second, resolverFor (scope), &failure, [this] (const String& drawingName)
+            {
+                const auto used = drawings.find (drawingName);
+                return used != drawings.end() ? used->second : DataTree();
+            });
             if (created.failed())
             {
                 diagnostics.push_back ({

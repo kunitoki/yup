@@ -200,6 +200,7 @@ class DeferredReplayer;
 #include "styling/yup_StyleContext.h"
 #include "markup/yup_YuiParser.h"
 #include "markup/yup_YuiWriter.h"
+#include "markup/yup_YuiSvgImporter.h"
 #include "markup/yup_YuiTreeDiff.h"
 #include "markup/yup_YuiBuilder.h"
 #include "markup/yup_YuiDocument.h"

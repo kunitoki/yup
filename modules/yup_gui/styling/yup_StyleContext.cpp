@@ -1103,7 +1103,10 @@ const DrawingStyle* StyleContext::installDrawing (Component& component, Componen
     }
 
     YuiDiagnostic failure;
-    auto created = DrawingStyle::create (component, drawing, componentResolver, &failure);
+    auto created = DrawingStyle::create (component, drawing, componentResolver, &failure, [this] (const String& drawingName)
+    {
+        return styleSheet != nullptr ? styleSheet->findDrawing (drawingName) : DataTree();
+    });
 
     if (created.failed())
     {

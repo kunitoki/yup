@@ -365,6 +365,17 @@ public:
     */
     Path& addRoundedRectangle (const Rectangle<float>& rect, float radius);
 
+    /** Adds a rectangle with elliptical corners to the path.
+
+        Every corner is a quarter of an ellipse with the given horizontal and vertical radii, which
+        are limited to half the width and half the height of the rectangle. The rounded rectangle
+        is added as a closed sub-path.
+
+        @param rect The rectangle to which rounded corners are to be added.
+        @param cornerSize The horizontal and vertical radii of the corners.
+    */
+    Path& addRoundedRectangle (const Rectangle<float>& rect, const Size<float>& cornerSize);
+
     //==============================================================================
     /** Adds an ellipse to the path.
 

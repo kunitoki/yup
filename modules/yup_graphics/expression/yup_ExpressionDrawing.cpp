@@ -31,8 +31,10 @@ struct ExpressionDrawing::Fields
     Field<int> series;
     Field<Color> fill, stroke, tint, labelColor, labelStroke;
     Field<ColorGradient> fillGradient, strokeGradient;
-    Field<float> strokeWidth, strokeMiterLimit, strokeDashOffset, opacity, feather, radius;
+    Field<PatternPaint> fillPattern, strokePattern;
+    Field<float> strokeWidth, strokeMiterLimit, strokeDashOffset, opacity, fillOpacity, strokeOpacity, feather, radius;
     Field<float> cornerRadius, topLeftRadius, topRightRadius, bottomLeftRadius, bottomRightRadius;
+    Field<Size<float>> cornerSize;
     Field<StrokeDashPattern> strokeDash;
     Field<StrokeCap> strokeCap;
     Field<StrokeJoin> strokeJoin;
@@ -40,12 +42,14 @@ struct ExpressionDrawing::Fields
     Field<BlendMode> blend;
     Field<AffineTransform> transform;
     Field<Rectangle<float>> rect, ellipse, clip, labelRect;
-    Field<Point<float>> point, vertex;
+    Field<Point<float>> point, vertex, labelAnchor;
     Field<Line<float>> line;
     Field<Path> path, clipPath;
     Field<String> label;
     Field<Font> labelFont;
     Field<Justification::Flags> labelJustification;
+    Field<AnchoredText::Anchor> labelTextAnchor;
+    Field<float> labelLetterSpacing;
 };
 
 /* The values of an output for the rows of a drawing, kept by a Cache. */
@@ -97,11 +101,15 @@ void forEachDrawingField (F&& f, Values&&... fields)
     f ("labelStroke", fields.labelStroke...);
     f ("fillGradient", fields.fillGradient...);
     f ("strokeGradient", fields.strokeGradient...);
+    f ("fillPattern", fields.fillPattern...);
+    f ("strokePattern", fields.strokePattern...);
     f ("strokeWidth", fields.strokeWidth...);
     f ("strokeMiterLimit", fields.strokeMiterLimit...);
     f ("strokeDash", fields.strokeDash...);
     f ("strokeDashOffset", fields.strokeDashOffset...);
     f ("opacity", fields.opacity...);
+    f ("fillOpacity", fields.fillOpacity...);
+    f ("strokeOpacity", fields.strokeOpacity...);
     f ("feather", fields.feather...);
     f ("radius", fields.radius...);
     f ("cornerRadius", fields.cornerRadius...);
@@ -109,6 +117,7 @@ void forEachDrawingField (F&& f, Values&&... fields)
     f ("topRightRadius", fields.topRightRadius...);
     f ("bottomLeftRadius", fields.bottomLeftRadius...);
     f ("bottomRightRadius", fields.bottomRightRadius...);
+    f ("cornerSize", fields.cornerSize...);
     f ("strokeCap", fields.strokeCap...);
     f ("strokeJoin", fields.strokeJoin...);
     f ("strokePosition", fields.strokePosition...);
@@ -126,6 +135,25 @@ void forEachDrawingField (F&& f, Values&&... fields)
     f ("label", fields.label...);
     f ("labelFont", fields.labelFont...);
     f ("labelJustification", fields.labelJustification...);
+    f ("labelAnchor", fields.labelAnchor...);
+    f ("labelTextAnchor", fields.labelTextAnchor...);
+    f ("labelLetterSpacing", fields.labelLetterSpacing...);
+}
+
+/* Paints with an opacity of its own, on top of the one of the Graphics. */
+template <class Paint>
+void paintWithDrawingOpacity (Graphics& g, const std::optional<float>& opacity, Paint&& paint)
+{
+    if (! opacity || *opacity >= 1.0f)
+    {
+        paint();
+        return;
+    }
+
+    const auto previous = g.getOpacity();
+    g.setOpacity (previous * jmax (0.0f, *opacity));
+    paint();
+    g.setOpacity (previous);
 }
 
 template <class T>
@@ -169,7 +197,8 @@ struct ExpressionDrawing::DrawBuffers
         bool shouldStroke = false;
         std::optional<Color> fill, stroke, tint;
         std::optional<ColorGradient> fillGradient, strokeGradient;
-        std::optional<float> strokeWidth, miterLimit, strokeDashOffset, opacity, feather;
+        std::optional<PatternPaint> fillPattern, strokePattern;
+        std::optional<float> strokeWidth, miterLimit, strokeDashOffset, opacity, fillOpacity, strokeOpacity, feather;
         std::optional<StrokeDashPattern> strokeDash;
         std::optional<StrokeCap> cap;
         std::optional<StrokeJoin> join;
@@ -181,9 +210,9 @@ struct ExpressionDrawing::DrawBuffers
 
         bool operator== (const Style& other) const = default;
 
-        bool hasFill() const noexcept { return fill.has_value() || fillGradient.has_value(); }
+        bool hasFill() const noexcept { return fill.has_value() || fillGradient.has_value() || fillPattern.has_value(); }
 
-        bool hasStroke() const noexcept { return stroke.has_value() || strokeGradient.has_value(); }
+        bool hasStroke() const noexcept { return stroke.has_value() || strokeGradient.has_value() || strokePattern.has_value(); }
 
         bool hasDash() const noexcept { return strokeDash.has_value() && ! strokeDash->isEmpty(); }
 
@@ -193,13 +222,16 @@ struct ExpressionDrawing::DrawBuffers
 
         bool canMergeOverlapping() const noexcept
         {
-            if (shouldFill == shouldStroke || fillGradient || strokeGradient)
+            if (shouldFill == shouldStroke || fillGradient || strokeGradient || fillPattern || strokePattern)
                 return false;
 
             if (shouldStroke && hasDash())
                 return false;
 
             if ((opacity && *opacity < 1.0f) || (blend && *blend != BlendMode::SrcOver) || (tint && ! tint->isOpaque()))
+                return false;
+
+            if ((fillOpacity && *fillOpacity < 1.0f) || (strokeOpacity && *strokeOpacity < 1.0f))
                 return false;
 
             if (strokePosition && *strokePosition != StrokePosition::Center)
@@ -209,9 +241,11 @@ struct ExpressionDrawing::DrawBuffers
             return color.has_value() && color->isOpaque();
         }
 
+        // A pattern stays on the Graphics until its state is restored, so it has to be
         bool changesGraphicsState() const noexcept
         {
-            return clip.has_value() || clipPath.has_value() || transform.has_value() || opacity.has_value();
+            return clip.has_value() || clipPath.has_value() || transform.has_value() || opacity.has_value()
+                || fillPattern.has_value() || strokePattern.has_value();
         }
 
         void apply (Graphics& g) const
@@ -241,6 +275,15 @@ struct ExpressionDrawing::DrawBuffers
             if (strokeGradient)
                 g.setStrokeColorGradient (*strokeGradient);
 
+            // Patterns are set after the transform they are rasterized for, and replace the colors
+            constexpr ImageSampling tiled { ImageWrap::Repeat, ImageWrap::Repeat, ImageFilter::Linear };
+
+            if (fillPattern)
+                g.setFillSource (*fillPattern->source, fillPattern->transform, tiled);
+
+            if (strokePattern)
+                g.setStrokeSource (*strokePattern->source, strokePattern->transform, tiled);
+
             if (strokeWidth)
                 g.setStrokeWidth (*strokeWidth);
 
@@ -269,6 +312,14 @@ struct ExpressionDrawing::DrawBuffers
 
     struct Settings
     {
+        // The settings to collect outlines with: shapes merge freely, as they are never drawn
+        Settings() noexcept
+            : canMerge (true)
+            , canMergeOverlapping (true)
+            , hasLabelFont (false)
+        {
+        }
+
         Settings (const Graphics& g, bool drawsLabels) noexcept
             : canMerge (g.getFeather() <= 0.0f)
             , canMergeOverlapping (g.getOpacity() >= 1.0f
@@ -284,20 +335,45 @@ struct ExpressionDrawing::DrawBuffers
         bool canMerge, canMergeOverlapping, hasLabelFont;
     };
 
-    /* A label, filled and stroked like the shapes of its row. */
+    /* A label, filled and stroked like the shapes of its row: fitted in an area, or placed from a point on its baseline. */
     struct Text
     {
         String text;
         Rectangle<float> area;
+        std::optional<Point<float>> anchorPoint;
+        AnchoredText::Anchor anchor = AnchoredText::Anchor::start;
+        float letterSpacing = 0.0f;
         std::optional<Color> fill, stroke;
         std::optional<Font> font;
         Justification justification = Justification::center;
-        mutable std::shared_ptr<StyledText> cachedStyledText;
-        mutable Font cachedFont;
+        mutable std::shared_ptr<StyledText> fittedText;
+        mutable AnchoredText anchoredText;
+        mutable Font shapedFont;
+        mutable bool isShaped = false;
 
         bool changesColors() const noexcept { return fill.has_value() || stroke.has_value(); }
 
-        void draw (Graphics& g, const Font* defaultFont) const
+        void shape (const Font& textFont) const
+        {
+            shapedFont = textFont;
+            isShaped = true;
+
+            if (anchorPoint)
+            {
+                anchoredText = AnchoredText (text, textFont, *anchorPoint, anchor, letterSpacing);
+                return;
+            }
+
+            fittedText = std::make_shared<StyledText>();
+
+            auto modifier = fittedText->startUpdate();
+            modifier.setMaxSize (area.getSize());
+            modifier.appendText (text, textFont, -1.0f, letterSpacing);
+            modifier.setHorizontalAlign (StyledText::toHorizontalAlign (justification));
+            modifier.setVerticalAlign (StyledText::toVerticalAlign (justification));
+        }
+
+        void draw (Graphics& g, const Font* defaultFont, const std::optional<float>& fillOpacity, const std::optional<float>& strokeOpacity) const
         {
             if (text.isEmpty())
                 return;
@@ -306,20 +382,14 @@ struct ExpressionDrawing::DrawBuffers
             if (textFont == nullptr || textFont->isEmpty())
                 return;
 
-            if (cachedStyledText == nullptr || cachedFont != *textFont)
-            {
-                auto shaped = std::make_shared<StyledText>();
-                {
-                    auto modifier = shaped->startUpdate();
-                    modifier.setMaxSize (area.getSize());
-                    modifier.appendText (text, *textFont);
-                    modifier.setHorizontalAlign (StyledText::toHorizontalAlign (justification));
-                    modifier.setVerticalAlign (StyledText::toVerticalAlign (justification));
-                }
+            if (! isShaped || shapedFont != *textFont)
+                shape (*textFont);
 
-                cachedFont = *textFont;
-                cachedStyledText = std::move (shaped);
-            }
+            if (anchorPoint && anchoredText.isEmpty())
+                return;
+
+            const auto& shaped = anchorPoint ? anchoredText.getStyledText() : *fittedText;
+            const auto shapedArea = anchorPoint ? anchoredText.getBounds() : area;
 
             if (fill)
                 g.setFillColor (*fill);
@@ -328,10 +398,10 @@ struct ExpressionDrawing::DrawBuffers
                 g.setStrokeColor (*stroke);
 
             if (fill || ! stroke)
-                g.fillFittedText (*cachedStyledText, area);
+                paintWithDrawingOpacity (g, fillOpacity, [&] { g.fillFittedText (shaped, shapedArea); });
 
             if (stroke)
-                g.strokeFittedText (*cachedStyledText, area);
+                paintWithDrawingOpacity (g, strokeOpacity, [&] { g.strokeFittedText (shaped, shapedArea); });
         }
     };
 
@@ -370,27 +440,59 @@ struct ExpressionDrawing::DrawBuffers
             if (path)
             {
                 if (style.shouldFill)
-                    g.fillPath (*path);
+                    paintWithDrawingOpacity (g, style.fillOpacity, [&] { g.fillPath (*path); });
 
                 if (style.shouldStroke)
-                    g.strokePath (dashedPath ? *dashedPath : *path);
+                    paintWithDrawingOpacity (g, style.strokeOpacity, [&] { g.strokePath (dashedPath ? *dashedPath : *path); });
             }
             else if (label)
             {
-                label->draw (g, labelFont);
+                label->draw (g, labelFont, style.fillOpacity, style.strokeOpacity);
             }
         }
     };
 
     DrawBuffers (const Settings& drawSettings, Graphics& graphics, const Font* font, std::vector<Operation>* recordedOperations)
         : settings (drawSettings)
-        , g (graphics)
+        , g (std::addressof (graphics))
         , labelFont (font)
         , recorded (recordedOperations)
     {
     }
 
+    /* Collects the shapes into a path instead of drawing them. */
+    DrawBuffers (Path& outlineToBuild, bool shouldApplyTransforms)
+        : outline (std::addressof (outlineToBuild))
+        , appliesTransforms (shouldApplyTransforms)
+    {
+    }
+
     void addRow (const Lanes& lanes, int lane);
+
+    /* Evaluates the rows of a state and adds them all. */
+    void addRows (const Outputs& outputs, ExpressionState& state, int numRows)
+    {
+        for (int startRow = 0; startRow < numRows;)
+        {
+            const auto numEvaluated = state.evaluateBlock (startRow, numRows - startRow);
+            if (numEvaluated <= 0)
+                break;
+
+            Lanes lanes {};
+
+            forEachDrawingField ([&state] (const char*, const auto& output, auto& values)
+            {
+                values = state.getLanes (output).data();
+            }, outputs, lanes);
+
+            for (int lane = 0; lane < numEvaluated; ++lane)
+                addRow (lanes, lane);
+
+            startRow += numEvaluated;
+        }
+
+        finish();
+    }
 
     void finish()
     {
@@ -401,7 +503,7 @@ struct ExpressionDrawing::DrawBuffers
             auto style = polyline.style;
             style.shouldFill = style.hasFill();
             style.shouldStroke = style.hasStroke() || ! style.hasFill();
-            emit (Operation (style, polyline.path));
+            emit (style, polyline.path);
         }
 
         polylines.clear();
@@ -442,18 +544,28 @@ private:
         if (batch.isEmpty())
             return;
 
-        emit (Operation (batchStyle, batch));
+        emit (batchStyle, batch);
 
         // A new path, as the renderer or the cache still reference the emitted one
         batch = Path();
+    }
+
+    void emit (const Style& style, const Path& shape)
+    {
+        if (outline == nullptr)
+            emit (Operation (style, shape));
+        else if (appliesTransforms && style.transform)
+            outline->appendPath (shape, *style.transform);
+        else
+            outline->appendPath (shape);
     }
 
     void emit (Operation operation)
     {
         if (recorded != nullptr)
             recorded->push_back (std::move (operation));
-        else
-            operation.draw (g, labelFont);
+        else if (g != nullptr)
+            operation.draw (*g, labelFont);
     }
 
     void addVertex (const Point<float>& vertex, const Style& style, int series)
@@ -489,9 +601,11 @@ private:
     }
 
     const Settings settings;
-    Graphics& g;
-    const Font* labelFont;
-    std::vector<Operation>* recorded;
+    Graphics* g = nullptr;
+    const Font* labelFont = nullptr;
+    std::vector<Operation>* recorded = nullptr;
+    Path* outline = nullptr;
+    bool appliesTransforms = true;
 
     Path batch;
     Style batchStyle;
@@ -523,11 +637,15 @@ void ExpressionDrawing::DrawBuffers::addRow (const Lanes& lanes, int lane)
     style.tint = getOptionalOutput (lanes.tint);
     style.fillGradient = getOptionalOutput (lanes.fillGradient);
     style.strokeGradient = getOptionalOutput (lanes.strokeGradient);
+    style.fillPattern = getOptionalOutput (lanes.fillPattern);
+    style.strokePattern = getOptionalOutput (lanes.strokePattern);
     style.strokeWidth = getOptionalOutput (lanes.strokeWidth);
     style.miterLimit = getOptionalOutput (lanes.strokeMiterLimit);
     style.strokeDash = getOptionalOutput (lanes.strokeDash);
     style.strokeDashOffset = getOptionalOutput (lanes.strokeDashOffset);
     style.opacity = getOptionalOutput (lanes.opacity);
+    style.fillOpacity = getOptionalOutput (lanes.fillOpacity);
+    style.strokeOpacity = getOptionalOutput (lanes.strokeOpacity);
     style.feather = getOptionalOutput (lanes.feather);
     style.cap = getOptionalOutput (lanes.strokeCap);
     style.join = getOptionalOutput (lanes.strokeJoin);
@@ -536,6 +654,14 @@ void ExpressionDrawing::DrawBuffers::addRow (const Lanes& lanes, int lane)
     style.transform = getOptionalOutput (lanes.transform);
     style.clip = getOptionalOutput (lanes.clip);
     style.clipPath = getOptionalOutput (lanes.clipPath);
+
+    // A pattern without a source paints nothing, like no pattern at all
+    if (style.fillPattern && style.fillPattern->source == nullptr)
+        style.fillPattern.reset();
+
+    if (style.strokePattern && style.strokePattern->source == nullptr)
+        style.strokePattern.reset();
+
     style.shouldFill = style.hasFill() || ! style.hasStroke();
     style.shouldStroke = style.hasStroke();
 
@@ -551,10 +677,14 @@ void ExpressionDrawing::DrawBuffers::addRow (const Lanes& lanes, int lane)
         };
 
         const bool isRounded = std::any_of (radii.begin(), radii.end(), [] (float value) { return value > 0.0f; });
+        const auto cornerSize = getOptionalOutput (lanes.cornerSize).value_or (Size<float>());
+        const bool isElliptical = cornerSize.getWidth() > 0.0f && cornerSize.getHeight() > 0.0f;
 
         addShape (style, ShapeKind::area, *r, true, [&] (Path& p)
         {
-            if (isRounded)
+            if (isElliptical)
+                p.addRoundedRectangle (*r, cornerSize);
+            else if (isRounded)
                 p.addRoundedRectangle (*r, radii[0], radii[1], radii[2], radii[3]);
             else
                 p.addRectangle (*r);
@@ -589,10 +719,13 @@ void ExpressionDrawing::DrawBuffers::addRow (const Lanes& lanes, int lane)
         {
             lineStyle.stroke = style.fill;
             lineStyle.strokeGradient = style.fillGradient;
+            lineStyle.strokePattern = style.fillPattern;
+            lineStyle.strokeOpacity = style.fillOpacity;
         }
 
         lineStyle.fill.reset();
         lineStyle.fillGradient.reset();
+        lineStyle.fillPattern.reset();
 
         // Lines are only stroked, so their bounds are never used for merging
         addShape (lineStyle, ShapeKind::line, {}, true, [&] (Path& p)
@@ -619,13 +752,23 @@ void ExpressionDrawing::DrawBuffers::addRow (const Lanes& lanes, int lane)
 
         Text text;
         text.text = lanes.label[lane];
-        text.area = lanes.labelRect[lane];
+        text.letterSpacing = getOptionalOutput (lanes.labelLetterSpacing).value_or (0.0f);
         text.fill = getOptionalOutput (lanes.labelColor);
         text.stroke = getOptionalOutput (lanes.labelStroke);
         text.font = getOptionalOutput (lanes.labelFont);
 
         if (const auto* justification = getDrawingOutput (lanes.labelJustification))
             text.justification = *justification;
+
+        if (const auto* anchorPoint = getDrawingOutput (lanes.labelAnchor))
+        {
+            text.anchorPoint = *anchorPoint;
+            text.anchor = getOptionalOutput (lanes.labelTextAnchor).value_or (AnchoredText::Anchor::start);
+        }
+        else
+        {
+            text.area = lanes.labelRect[lane];
+        }
 
         emit (Operation (style, std::move (text)));
     }
@@ -696,8 +839,10 @@ ResultValue<ExpressionDrawing> ExpressionDrawing::create (const CompiledExpressi
         findDrawingOutput (program, name, output);
     }, *found);
 
-    if (found->label.isValid() != found->labelRect.isValid())
-        return makeResultValueFail ("The outputs 'label' and 'labelRect' must be assigned together");
+    const int numLabelPlacements = (found->labelRect.isValid() ? 1 : 0) + (found->labelAnchor.isValid() ? 1 : 0);
+
+    if (numLabelPlacements != (found->label.isValid() ? 1 : 0))
+        return makeResultValueFail ("The output 'label' must be assigned together with either 'labelRect' or 'labelAnchor'");
 
     const bool hasShape = found->rect.isValid()
                        || found->ellipse.isValid()
@@ -724,28 +869,7 @@ void ExpressionDrawing::draw (Graphics& g, ExpressionState& state, int numRows, 
 
     if (cache == nullptr)
     {
-        DrawBuffers buffers (settings, g, labelFont, nullptr);
-
-        for (int startRow = 0; startRow < numRows;)
-        {
-            const auto numEvaluated = state.evaluateBlock (startRow, numRows - startRow);
-            if (numEvaluated <= 0)
-                break;
-
-            DrawBuffers::Lanes lanes {};
-
-            forEachDrawingField ([&state] (const char*, const auto& output, auto& values)
-            {
-                values = state.getLanes (output).data();
-            }, *outputs, lanes);
-
-            for (int lane = 0; lane < numEvaluated; ++lane)
-                buffers.addRow (lanes, lane);
-
-            startRow += numEvaluated;
-        }
-
-        buffers.finish();
+        DrawBuffers (settings, g, labelFont, nullptr).addRows (*outputs, state, numRows);
         return;
     }
 
@@ -802,6 +926,13 @@ void ExpressionDrawing::draw (Graphics& g, ExpressionState& state, int numRows, 
 
     for (const auto& operation : data.operations)
         operation.draw (g, labelFont);
+}
+
+Path ExpressionDrawing::getOutline (ExpressionState& state, int numRows, bool applyTransforms) const
+{
+    Path outline;
+    DrawBuffers (outline, applyTransforms).addRows (*outputs, state, numRows);
+    return outline;
 }
 
 } // namespace yup

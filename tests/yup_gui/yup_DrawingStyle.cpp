@@ -443,17 +443,293 @@ TEST_F (DrawingStyleTest, RejectsConstantRepeatExceedingMaximumCount)
 }
 
 //==============================================================================
+class DrawingStyleLanguageTest : public DrawingStyleTest
+{
+protected:
+    static DataTree parseYuiDrawing (const String& text, const String& name = {})
+    {
+        const auto parsed = YuiParser::parse (text);
+        EXPECT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+
+        for (const auto& block : parsed.document)
+            if (block.getType() == Identifier ("drawing") && (name.isEmpty() || block.getProperty ("name").toString() == name))
+                return block;
+
+        return {};
+    }
+
+    static String createYuiError (const String& text, const DrawingStyle::DrawingResolver& drawingResolver = nullptr)
+    {
+        Slider slider (Slider::RotaryVerticalDrag);
+        configure (slider);
+
+        auto style = DrawingStyle::create (slider, parseYuiDrawing (text), nullptr, nullptr, drawingResolver);
+        return style.failed() ? style.getErrorMessage() : String();
+    }
+};
+
+TEST_F (DrawingStyleLanguageTest, MapsAViewBoxToTheBoundsAndToViewports)
+{
+    EXPECT_EQ (createYuiError (R"yui(
+        drawing {
+            viewBox: rect (0, 0, 24, 24);
+            fitting: scaleToFill;
+            justification: topLeft;
+            circle { center: bounds.center; radius: bounds.width / 2; fill: trackColor; }
+            viewport { bounds: rect (0, 0, 8, 8); viewBox: rect (0, 0, 100, 100); fitting: fill;
+                       rect { bounds: bounds.reduced (10); fill: thumbColor; } }
+            viewport { rect { bounds: bounds; fill: thumbColor; } }
+        })yui"),
+               String());
+
+    EXPECT_EQ (createYuiError ("drawing { fitting: fill; }"), "drawing.fitting: needs a 'viewBox' to fit in the bounds");
+    EXPECT_TRUE (createYuiError ("drawing { viewBox: 4; }").startsWith ("drawing.viewBox: "));
+    EXPECT_EQ (createYuiError ("drawing { repeat i in 0 .. 2 { viewport {} } }"), "drawing/repeat[0]/viewport[0]: a 'viewport' can't be nested inside a repeat");
+}
+
+TEST_F (DrawingStyleLanguageTest, GroupsSetThePaintOfTheShapesInsideThem)
+{
+    EXPECT_EQ (createYuiError (R"yui(
+        drawing {
+            let accent: trackColor;
+            group {
+                color: accent; fill: currentColor; fillOpacity: 0.5; stroke: thumbColor; strokeWidth: 2; dash: "4, 2"; cap: round;
+                opacity: 0.8; blend: screen; font: defaultFont.withHeight (10); textAnchor: middle; letterSpacing: 1;
+
+                rect { bounds: bounds; }
+                circle { center: bounds.center; radius: 4; fill: none; }
+                group { stroke: none; fill: none; ellipse { bounds: bounds; } line { from: bounds.topLeft; to: bounds.bottomRight; } }
+                text { anchor: bounds.center; text: "a"; }
+                text { bounds: bounds; text: "b"; stroke: none; }
+                repeat i in 0 .. 3 { rect { bounds: rect (i * 4, 0, 2, 2); fillGradient: linearGradient (#f00, point (0, 0), #00f, point (1, 0)).mappedTo (objectBounds); } }
+            }
+        })yui"),
+               String());
+
+    EXPECT_TRUE (createYuiError ("drawing { group { fill: bounds; rect { bounds: bounds; } } }").startsWith ("drawing/group[0].fill: "));
+    EXPECT_TRUE (createYuiError ("drawing { group { color: bounds; } }").startsWith ("drawing/group[0].color: "));
+    EXPECT_TRUE (createYuiError ("drawing { rect { bounds: bounds; fill: currentColor; } }").startsWith ("drawing/rect[0].fill: "));
+    EXPECT_EQ (createYuiError ("drawing { layer { fill: #f00; } }"), "drawing/layer[0]: unknown property 'fill'");
+}
+
+TEST_F (DrawingStyleLanguageTest, ObjectBoundsIsOnlyReadByThePaintOfShapes)
+{
+    EXPECT_EQ (createYuiError (R"yui(
+        drawing {
+            let sky: linearGradient (#48f, point (0, 0), #fff, point (0, 1)).withSpread (reflect);
+            group {
+                fillGradient: sky.mappedTo (objectBounds);
+                rect { bounds: bounds; }
+                circle { center: bounds.center; radius: 4; }
+                arc { center: bounds.center; radius: 4; from: 0; to: pi; stroke: #fff; }
+                line { from: bounds.topLeft; to: bounds.bottomRight; }
+                path { data: "M 0 0 L 8 8"; fill: objectBounds.width > 4 ? #f00 : #00f; }
+                star { center: bounds.center; points: 5; innerRadius: 2; outerRadius: 4; }
+            }
+        })yui"),
+               String());
+
+    const String message ("'objectBounds' can only be read by the paint properties of a shape, or of the groups around it");
+
+    EXPECT_EQ (createYuiError ("drawing { let size: objectBounds; }"), "drawing/let[0].value: " + message);
+    EXPECT_EQ (createYuiError ("drawing { rect { bounds: objectBounds; } }"), "drawing/rect[0].bounds: " + message);
+    EXPECT_EQ (createYuiError ("drawing { layer { opacity: objectBounds.width; } }"), "drawing/layer[0].opacity: " + message);
+    EXPECT_EQ (createYuiError ("drawing { text { anchor: bounds.center; text: \"a\"; fill: objectBounds.width > 4 ? #f00 : #00f; } }"),
+               "drawing/text[0]: 'objectBounds' is not available to a text placed from an 'anchor'");
+}
+
+TEST_F (DrawingStyleLanguageTest, UsePaintsDrawingsDefinedInsideOrFoundByName)
+{
+    const String text (R"yui(
+        drawing Icon {
+            let accent: trackColor;
+            drawing Leaf {
+                property tone: color = accent;
+                property weight: number = 2;
+                viewBox: rect (0, 0, 10, 10);
+                path { data: "M 5 0 L 10 10 L 0 10 Z"; fill: tone; strokeWidth: weight; }
+            }
+            use Leaf { bounds: rect (0, 0, 8, 8); }
+            group { fill: #000; use Leaf { bounds: bounds.reduced (4); tone: thumbColor; weight: 3; transform: transform.rotation (pi / 2); opacity: 0.5; color: accent; } }
+            use Badge { bounds: rect (0, 0, 4, 4); }
+        }
+        drawing Badge { rect { bounds: bounds; fill: trackColor; } }
+        drawing Loop { use Loop {} }
+        drawing Lanes { property lanes: number[]; rect { bounds: bounds; } })yui");
+
+    const auto resolver = [&text] (const String& name)
+    {
+        return parseYuiDrawing (text, name);
+    };
+
+    EXPECT_EQ (createYuiError (text, resolver), String());
+    EXPECT_EQ (createYuiError (text), "Icon/use[1]: unknown drawing 'Badge'");
+
+    EXPECT_EQ (createYuiError ("drawing { use Leaf {} drawing Leaf {} }"), "drawing/use[0]: unknown drawing 'Leaf'");
+    EXPECT_EQ (createYuiError ("drawing { drawing Leaf {} use Leaf { nope: 1; } }"), "drawing/use[0]: unknown property 'nope'");
+    EXPECT_EQ (createYuiError ("drawing { drawing Leaf {} drawing Leaf {} }"), "drawing/drawing[1].name: the drawing 'Leaf' is already defined");
+    EXPECT_TRUE (createYuiError ("drawing { drawing Leaf { property tone: color; } use Leaf { tone: bounds; } }").startsWith ("drawing/use[0].tone: "));
+    EXPECT_TRUE (createYuiError ("drawing { drawing Leaf { rect { bounds: bounds; fill: bounds; } } use Leaf {} }").startsWith ("drawing/use[0]/Leaf/rect[0].fill: "));
+    EXPECT_EQ (createYuiError ("drawing { repeat i in 0 .. 2 { use Leaf {} } }"), "drawing/repeat[0]/use[0]: a 'use' can't be nested inside a repeat");
+
+    Slider slider (Slider::RotaryVerticalDrag);
+    configure (slider);
+
+    const auto loop = DrawingStyle::create (slider, parseYuiDrawing (text, "Loop"), nullptr, nullptr, resolver);
+    ASSERT_TRUE (loop.failed());
+    EXPECT_TRUE (loop.getErrorMessage().endsWith ("the drawing 'Loop' ends up using itself")) << loop.getErrorMessage();
+
+    const auto lanes = DrawingStyle::create (slider, parseYuiDrawing ("drawing { use Lanes {} }"), nullptr, nullptr, resolver);
+    ASSERT_TRUE (lanes.failed());
+    EXPECT_EQ (lanes.getErrorMessage(), "drawing/use[0]: the array property 'lanes' of the drawing can't be set by a 'use'");
+}
+
+TEST_F (DrawingStyleLanguageTest, DrawingsFoundByNameAreCompiledAgainWhenTheyChange)
+{
+    Slider first (Slider::RotaryVerticalDrag);
+    Slider second (Slider::RotaryVerticalDrag);
+    configure (first);
+    configure (second);
+
+    const auto user = parseYuiDrawing ("drawing { use Badge {} }");
+    auto badge = parseYuiDrawing ("drawing Badge { rect { bounds: bounds; fill: trackColor; } }");
+
+    const auto resolver = [&badge] (const String& name)
+    {
+        return name == "Badge" ? badge : DataTree();
+    };
+
+    ASSERT_TRUE (DrawingStyle::create (first, user, nullptr, nullptr, resolver).wasOk());
+
+    badge.getChild (0).beginTransaction().setProperty ("fill", "missingColor");
+
+    const auto edited = DrawingStyle::create (second, user, nullptr, nullptr, resolver);
+    ASSERT_TRUE (edited.failed());
+    EXPECT_TRUE (edited.getErrorMessage().contains ("missingColor"));
+}
+
+TEST_F (DrawingStyleLanguageTest, PatternsAndMarkersAreReferredToByName)
+{
+    EXPECT_EQ (createYuiError (R"yui(
+        drawing {
+            pattern Dots { tile: rect (0, 0, 4, 4); viewBox: rect (0, 0, 8, 8); fitting: fill; transform: transform.rotation (pi / 4);
+                           circle { center: bounds.center; radius: 2; fill: trackColor; } }
+            marker Arrow { size: size (6, 6); ref: point (3, 3); viewBox: rect (0, 0, 6, 6); orient: autoStartReverse; units: userSpace;
+                           path { data: "M 0 0 L 6 3 L 0 6 Z"; fill: thumbColor; } }
+            marker Dot { orient: 45deg; circle { center: bounds.center; radius: 1; } }
+
+            rect { bounds: bounds; fillPattern: Dots; strokePattern: Dots; strokeWidth: 2; }
+            path { data: "M 2 2 L 20 2 L 20 20"; fill: none; stroke: thumbColor; markerStart: Arrow; markerMid: Dot; markerEnd: Arrow; }
+            group { fillPattern: Dots; markerEnd: Arrow; stroke: thumbColor;
+                    line { from: bounds.topLeft; to: bounds.center; }
+                    line { from: bounds.center; to: bounds.bottomRight; markerEnd: none; }
+                    repeat i in 0 .. 3 { line { from: point (i, 0); to: point (i, 8); } } }
+        })yui"),
+               String());
+
+    EXPECT_EQ (createYuiError ("drawing { rect { bounds: bounds; fillPattern: Dots; } }"), "drawing/rect[0].fillPattern: unknown pattern 'Dots'");
+    EXPECT_EQ (createYuiError ("drawing { group { strokePattern: Dots; } }"), "drawing/group[0].strokePattern: unknown pattern 'Dots'");
+    EXPECT_EQ (createYuiError ("drawing { line { from: bounds.topLeft; to: bounds.center; markerEnd: Arrow; } }"), "drawing/line[0].markerEnd: unknown marker 'Arrow'");
+    EXPECT_EQ (createYuiError ("drawing { rect { bounds: bounds; markerEnd: Arrow; } }"), "drawing/rect[0]: unknown property 'markerEnd'");
+    EXPECT_EQ (createYuiError ("drawing { pattern Dots {} }"), "drawing/pattern[0]: missing the required property 'tile'");
+    EXPECT_EQ (createYuiError ("drawing { pattern Dots { tile: bounds; } pattern Dots { tile: bounds; } }"), "drawing/pattern[1].name: the pattern 'Dots' is already defined");
+    EXPECT_EQ (createYuiError ("drawing { marker Arrow { units: pixels; } }"), "drawing/marker[0].units: expected 'strokeWidth' or 'userSpace'");
+    EXPECT_EQ (createYuiError ("drawing { marker Arrow {} repeat i in 0 .. 2 { line { from: point (i, 0); to: point (i, 8); markerEnd: Arrow; } } }"),
+               "drawing/repeat[0]/line[0].markerEnd: a shape inside a repeat can't have markers");
+}
+
+TEST_F (DrawingStyleLanguageTest, ClipsToTheShapesOfAClipPath)
+{
+    EXPECT_EQ (createYuiError (R"yui(
+        drawing {
+            clip {
+                clipPath { circle { center: bounds.center; radius: 8; } rect { bounds: rect (0, 0, 12, 24); transform: transform.translation (2, 0); }
+                           repeat i in 0 .. 3 { ellipse { bounds: rect (i * 4, 0, 3, 3); } } }
+                clipPath { path { data: "M 0 0 L 24 0 L 24 24 Z"; } }
+                rect { bounds: bounds; fill: trackColor; }
+            }
+            layer { opacity: 0.5; clipPath { star { center: bounds.center; points: 5; innerRadius: 4; outerRadius: 8; } } rect { bounds: bounds; fill: thumbColor; } }
+        })yui"),
+               String());
+
+    EXPECT_EQ (createYuiError ("drawing { clipPath { rect { bounds: bounds; } } }"), "drawing/clipPath[0]: a 'clipPath' can only appear inside a 'clip' or a 'layer'");
+    EXPECT_EQ (createYuiError ("drawing { clip { clipPath { text { bounds: bounds; text: \"a\"; } } } }"), "drawing/clip[0]/clipPath[0]/text[0]: a 'text' has no outline to clip to");
+    EXPECT_EQ (createYuiError ("drawing { clip { clipPath { group {} } } }"), "drawing/clip[0]/clipPath[0]/group[0]: a 'group' has no outline to clip to");
+    EXPECT_EQ (createYuiError ("drawing { clip { clipPath { repeat i in 0 .. 2 { text { bounds: bounds; text: \"a\"; } } } } }"),
+               "drawing/clip[0]/clipPath[0]/repeat[0]/text[0]: a 'text' has no outline to clip to");
+}
+
+TEST_F (DrawingStyleLanguageTest, PlacesTextFromAnAnchorAndRoundsRectanglesElliptically)
+{
+    Slider slider (Slider::RotaryVerticalDrag);
+    configure (slider);
+
+    auto style = DrawingStyle::create (slider, parseYuiDrawing (R"yui(
+        drawing {
+            rect { bounds: bounds; cornerSize: size (12, 4); fill: trackColor; }
+            text { anchor: point (24, 30); text: format ("%.2f", value); textAnchor: middle; letterSpacing: 0.5; font: defaultFont.withHeight (12); fill: thumbColor; stroke: trackColor; }
+            text { anchor: bounds.center; text: "end"; textAnchor: end; }
+        })yui"));
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    EXPECT_NO_THROW (paintHeadless (*style.getReference(), slider));
+
+    EXPECT_EQ (createYuiError ("drawing { text { bounds: bounds; anchor: bounds.center; text: \"a\"; } }"), "drawing/text[0]: specify either 'bounds' or 'anchor', not both");
+    EXPECT_EQ (createYuiError ("drawing { text { text: \"a\"; } }"), "drawing/text[0]: missing the required property 'bounds'");
+    EXPECT_EQ (createYuiError ("drawing { text { bounds: bounds; text: \"a\"; textAnchor: middle; } }"), "drawing/text[0]: unknown property 'textAnchor'");
+    EXPECT_EQ (createYuiError ("drawing { text { anchor: bounds.center; text: \"a\"; justification: center; } }"), "drawing/text[0]: unknown property 'justification'");
+}
+
+TEST_F (DrawingStyleLanguageTest, PaintsEveryNewElementHeadless)
+{
+    Slider slider (Slider::RotaryVerticalDrag);
+    configure (slider);
+
+    auto style = DrawingStyle::create (slider, parseYuiDrawing (R"yui(
+        drawing {
+            viewBox: rect (0, 0, 24, 24);
+
+            drawing Leaf { property tone: color = #00ff00; viewBox: rect (0, 0, 10, 10); path { data: "M 5 0 L 10 10 L 0 10 Z"; fill: tone; } }
+            pattern Dots { tile: rect (0, 0, 4, 4); circle { center: bounds.center; radius: 1; fill: trackColor; } }
+            pattern Live { tile: rect (0, 0, 4, 4); rect { bounds: bounds.reduced (normalized); fill: thumbColor; } }
+            marker Arrow { size: size (3, 3); ref: point (1.5, 1.5); viewBox: rect (0, 0, 6, 6); path { data: "M 0 0 L 6 3 L 0 6 Z"; } }
+
+            group {
+                fill: #000; color: trackColor; strokeWidth: 2;
+
+                rect { bounds: rect (2, 2, 20, 20); cornerSize: size (4, 2); fillPattern: Dots; stroke: currentColor; strokePattern: Live; }
+                path { data: "M 2 12 L 12 12 L 22 20"; fill: none; stroke: currentColor; markerStart: Arrow; markerMid: Arrow; markerEnd: Arrow; transform: transform.translation (1, 0); opacity: 0.5; }
+                use Leaf { bounds: rect (14, 2, 8, 8); tone: thumbColor; }
+
+                clip {
+                    clipPath { circle { center: point (12, 12); radius: 8; } rect { bounds: rect (0, 0, 12, 24); } }
+                    layer { opacity: 0.5; mask: rect (0, 0, 12, 12); rect { bounds: bounds; fillGradient: linearGradient (#f00, point (0, 0), #00f, point (0.25, 0)).withSpread (repeat).mappedTo (objectBounds); } }
+                }
+
+                viewport { bounds: rect (0, 0, 8, 8); viewBox: rect (0, 0, 100, 100); fitting: scaleToFill; circle { center: bounds.center; radius: 40; } }
+                text { anchor: point (12, 20); textAnchor: middle; text: "yup"; }
+            }
+        })yui"));
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    EXPECT_NO_THROW (paintHeadless (*style.getReference(), slider));
+
+    slider.setValue (1.0, dontSendNotification);
+    EXPECT_NO_THROW (paintHeadless (*style.getReference(), slider));
+}
+
+//==============================================================================
 class DrawingStyleGpuTest : public DrawingStyleTest
 {
 protected:
     struct DrawnComponent : Component
     {
-        explicit DrawnComponent (const DataTree& drawing)
+        explicit DrawnComponent (const DataTree& drawing, const DrawingStyle::DrawingResolver& drawingResolver = nullptr)
         {
             setOpaque (false);
             setBounds (0.0f, 0.0f, 16.0f, 16.0f);
 
-            auto created = DrawingStyle::create (*this, drawing);
+            auto created = DrawingStyle::create (*this, drawing, nullptr, nullptr, drawingResolver);
             EXPECT_TRUE (created.wasOk()) << created.getErrorMessage();
 
             if (created.wasOk())
@@ -501,6 +777,13 @@ protected:
     {
         const auto image = component.snapshotToImage (*gpuContext);
         return image.isValid() ? image.getPixelColor (8, 8) : Color();
+    }
+
+    /** Draws a 16 x 16 component with a drawing and returns what it painted. */
+    static Image render (const String& text, const DrawingStyle::DrawingResolver& drawingResolver = nullptr)
+    {
+        DrawnComponent component (parseYui (text), drawingResolver);
+        return component.snapshotToImage (*gpuContext);
     }
 
     static std::unique_ptr<GraphicsContext> gpuContext;
@@ -635,4 +918,268 @@ TEST_F (DrawingStyleGpuTest, PaintsPlainAndCompositeComponentsWithoutCustomPaint
     EXPECT_EQ (centerColor (*scope), Color (0xff00ff00));
 }
 
+TEST_F (DrawingStyleGpuTest, ViewBoxMapsTheDrawingAndViewportsClipTheirChildren)
+{
+    // Four units across the 16 pixels of the component: the square covers the pixels 4 to 12
+    const auto mapped = render (R"yui(
+        drawing {
+            viewBox: rect (0, 0, 4, 4);
+            rect { bounds: rect (1, 1, 2, 2); fill: #ff0000; }
+        })yui");
+    ASSERT_TRUE (mapped.isValid());
+    EXPECT_EQ (mapped.getPixelColor (8, 8), Color (0xffff0000));
+    EXPECT_EQ (mapped.getPixelColor (2, 2).getAlpha(), 0);
+    EXPECT_EQ (mapped.getPixelColor (14, 8).getAlpha(), 0);
+
+    // The view box keeps its proportions: a 4 x 8 box is centered in the middle half of the component
+    const auto fitted = render (R"yui(
+        drawing {
+            viewBox: rect (0, 0, 4, 8);
+            rect { bounds: bounds; fill: #00ff00; }
+        })yui");
+    ASSERT_TRUE (fitted.isValid());
+    EXPECT_EQ (fitted.getPixelColor (8, 8), Color (0xff00ff00));
+    EXPECT_EQ (fitted.getPixelColor (2, 8).getAlpha(), 0);
+
+    // A viewport maps its own view box into its bounds, and clips what overflows them
+    const auto clipped = render (R"yui(
+        drawing {
+            viewport {
+                bounds: rect (8, 0, 8, 16); viewBox: rect (10, 10, 2, 4);
+                rect { bounds: rect (0, 0, 100, 100); fill: #0000ff; }
+            }
+        })yui");
+    ASSERT_TRUE (clipped.isValid());
+    EXPECT_EQ (clipped.getPixelColor (12, 8), Color (0xff0000ff));
+    EXPECT_EQ (clipped.getPixelColor (4, 8).getAlpha(), 0);
+}
+
+TEST_F (DrawingStyleGpuTest, LayersKeepTheirPlaceUnderAViewBox)
+{
+    const auto image = render (R"yui(
+        drawing {
+            viewBox: rect (10, 10, 4, 4);
+            layer {
+                opacity: 0.5;
+                rect { bounds: rect (12, 10, 2, 4); fill: #ff0000; }
+            }
+        })yui");
+    ASSERT_TRUE (image.isValid());
+
+    // The right half of the view box, half transparent
+    EXPECT_NEAR (image.getPixelColor (12, 8).getAlpha(), 128, 8);
+    EXPECT_EQ (image.getPixelColor (4, 8).getAlpha(), 0);
+}
+
+TEST_F (DrawingStyleGpuTest, GroupsHandTheirPaintDownToTheirShapes)
+{
+    const auto image = render (R"yui(
+        drawing {
+            group {
+                fill: #00ff00; color: #0000ff;
+                rect { bounds: rect (0, 0, 4, 16); }
+                rect { bounds: rect (4, 0, 4, 16); fill: currentColor; }
+                rect { bounds: rect (8, 0, 4, 16); fill: none; }
+                group { fill: #ff0000; rect { bounds: rect (12, 0, 4, 16); } }
+            }
+        })yui");
+    ASSERT_TRUE (image.isValid());
+
+    EXPECT_EQ (image.getPixelColor (2, 8), Color (0xff00ff00));
+    EXPECT_EQ (image.getPixelColor (6, 8), Color (0xff0000ff));
+    EXPECT_EQ (image.getPixelColor (10, 8).getAlpha(), 0);
+    EXPECT_EQ (image.getPixelColor (14, 8), Color (0xffff0000));
+
+    const auto faded = render (R"yui(
+        drawing {
+            group { fill: #ff0000; fillOpacity: 0.5; rect { bounds: bounds; } }
+        })yui");
+    ASSERT_TRUE (faded.isValid());
+    EXPECT_NEAR (faded.getPixelColor (8, 8).getAlpha(), 128, 8);
+}
+
+TEST_F (DrawingStyleGpuTest, GradientsFollowTheBoundsOfTheShapeAndRepeat)
+{
+    // Red to blue over a quarter of each shape, repeated: every shape starts red and ends blue
+    const auto image = render (R"yui(
+        drawing {
+            group {
+                fillGradient: linearGradient (#ff0000, point (0, 0), #0000ff, point (0.5, 0)).withSpread (repeat).mappedTo (objectBounds);
+                rect { bounds: rect (0, 0, 16, 8); }
+                rect { bounds: rect (8, 8, 8, 8); }
+            }
+        })yui");
+    ASSERT_TRUE (image.isValid());
+
+    const auto expectRed = [&image] (int x, int y)
+    {
+        EXPECT_GT (image.getPixelColor (x, y).getRed(), 180) << "at " << x << ", " << y;
+        EXPECT_LT (image.getPixelColor (x, y).getBlue(), 80) << "at " << x << ", " << y;
+    };
+
+    const auto expectBlue = [&image] (int x, int y)
+    {
+        EXPECT_GT (image.getPixelColor (x, y).getBlue(), 180) << "at " << x << ", " << y;
+        EXPECT_LT (image.getPixelColor (x, y).getRed(), 80) << "at " << x << ", " << y;
+    };
+
+    // The wide shape repeats every 8 pixels, the small one every 4
+    expectRed (0, 4);
+    expectBlue (7, 4);
+    expectRed (8, 4);
+    expectBlue (15, 4);
+    expectRed (8, 12);
+    expectBlue (11, 12);
+    expectRed (12, 12);
+}
+
+TEST_F (DrawingStyleGpuTest, UsePaintsADrawingInItsBoundsWithItsProperties)
+{
+    const String text (R"yui(
+        drawing {
+            drawing Swatch {
+                property tone: color = #ff0000;
+                viewBox: rect (0, 0, 2, 2);
+                rect { bounds: bounds; fill: tone; }
+            }
+
+            use Swatch { bounds: rect (0, 0, 8, 8); }
+            use Swatch { bounds: rect (8, 0, 8, 8); tone: #0000ff; }
+            group { fill: #00ff00; color: #ff00ff; use Plain { bounds: rect (0, 8, 8, 8); } }
+            use Plain { bounds: rect (0, 0, 8, 8); transform: transform.translation (8, 8); fill: #ffffff; color: #ffff00; }
+        }
+        drawing Plain { rect { bounds: bounds; } rect { bounds: rect (bounds.x, bounds.y, 2, 2); fill: currentColor; } })yui");
+
+    const auto resolver = [&text] (const String& name)
+    {
+        const auto parsed = YuiParser::parse (text);
+
+        for (const auto& block : parsed.document)
+            if (block.getProperty ("name").toString() == name)
+                return DataTree (block);
+
+        return DataTree();
+    };
+
+    DrawnComponent component (parseYui (text), resolver);
+    component.setProperty (Identifier ("tone"), VariantConverter<Color>::toVar (Color (0xffffffff)));
+
+    const auto image = component.snapshotToImage (*gpuContext);
+    ASSERT_TRUE (image.isValid());
+
+    // The default of the property rather than the value of the component, then the value set by the use
+    EXPECT_EQ (image.getPixelColor (4, 4), Color (0xffff0000));
+    EXPECT_EQ (image.getPixelColor (12, 4), Color (0xff0000ff));
+
+    // The fill and the color of the group around the use, then the ones of the use itself, moved by its transform
+    EXPECT_EQ (image.getPixelColor (4, 12), Color (0xff00ff00));
+    EXPECT_EQ (image.getPixelColor (1, 9), Color (0xffff00ff));
+    EXPECT_EQ (image.getPixelColor (12, 12), Color (0xffffffff));
+    EXPECT_EQ (image.getPixelColor (9, 9), Color (0xffffff00));
+}
+
+TEST_F (DrawingStyleGpuTest, PatternsTileTheShapesTheyPaint)
+{
+    const String stripes (R"yui(
+        drawing {
+            property shade: color = #ff0000;
+            pattern Stripes { tile: rect (2, 0, 8, 8); rect { bounds: rect (0, 0, 4, 8); fill: shade; } }
+            rect { bounds: rect (0, 0, 16, 8); fillPattern: Stripes; }
+            line { from: point (0, 12); to: point (16, 12); strokePattern: Stripes; strokeWidth: 4; }
+        })yui");
+
+    DrawnComponent component (parseYui (stripes));
+
+    // The tiles start two pixels in: four painted pixels, then four empty ones
+    const auto image = component.snapshotToImage (*gpuContext);
+    ASSERT_TRUE (image.isValid());
+
+    for (const auto y : { 4, 12 })
+    {
+        EXPECT_EQ (image.getPixelColor (4, y), Color (0xffff0000)) << "at y = " << y;
+        EXPECT_EQ (image.getPixelColor (8, y).getAlpha(), 0) << "at y = " << y;
+        EXPECT_EQ (image.getPixelColor (12, y), Color (0xffff0000)) << "at y = " << y;
+        EXPECT_EQ (image.getPixelColor (0, y).getAlpha(), 0) << "at y = " << y;
+    }
+
+    // The tile follows what its elements read
+    component.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xff0000ff)));
+    EXPECT_EQ (component.snapshotToImage (*gpuContext).getPixelColor (4, 4), Color (0xff0000ff));
+}
+
+TEST_F (DrawingStyleGpuTest, MarkersAreDrawnAtTheVerticesOfShapes)
+{
+    const auto image = render (R"yui(
+        drawing {
+            marker Square { size: size (4, 4); ref: point (2, 2); units: userSpace; rect { bounds: bounds; fill: #ff0000; } }
+            marker Bar { size: size (2, 6); ref: point (1, 3); units: userSpace; orient: 0; rect { bounds: bounds; fill: #00ff00; } }
+
+            path { data: "M 3 3 L 3 12 L 12 12"; fill: none; stroke: #0000ff; strokeWidth: 2; markerStart: Square; markerMid: Bar; markerEnd: Square; }
+        })yui");
+    ASSERT_TRUE (image.isValid());
+
+    // A square on the first and on the last vertex, an upright bar on the corner, the stroke in between
+    EXPECT_EQ (image.getPixelColor (3, 3), Color (0xffff0000));
+    EXPECT_EQ (image.getPixelColor (12, 12), Color (0xffff0000));
+    EXPECT_EQ (image.getPixelColor (3, 12), Color (0xff00ff00));
+    EXPECT_EQ (image.getPixelColor (3, 7), Color (0xff0000ff));
+    EXPECT_EQ (image.getPixelColor (8, 12), Color (0xff0000ff));
+    EXPECT_EQ (image.getPixelColor (10, 4).getAlpha(), 0);
+}
+
+TEST_F (DrawingStyleGpuTest, MarkersFollowTheDirectionAndTheStrokeWidthOfThePath)
+{
+    // A bar across the end of a vertical line: one unit long and three wide, scaled by the stroke width of two
+    const auto image = render (R"yui(
+        drawing {
+            marker Bar { size: size (1, 3); ref: point (0.5, 1.5); rect { bounds: bounds; fill: #ff0000; } }
+            line { from: point (8, 2); to: point (8, 8); stroke: #0000ff; strokeWidth: 2; markerEnd: Bar; }
+        })yui");
+    ASSERT_TRUE (image.isValid());
+
+    EXPECT_EQ (image.getPixelColor (6, 8), Color (0xffff0000));
+    EXPECT_EQ (image.getPixelColor (10, 8), Color (0xffff0000));
+    EXPECT_EQ (image.getPixelColor (8, 4), Color (0xff0000ff));
+    EXPECT_EQ (image.getPixelColor (8, 13).getAlpha(), 0);
+    EXPECT_EQ (image.getPixelColor (3, 8).getAlpha(), 0);
+}
+
+TEST_F (DrawingStyleGpuTest, ClipPathsClipToAllTheirShapes)
+{
+    const auto image = render (R"yui(
+        drawing {
+            clip {
+                clipPath {
+                    rect { bounds: rect (0, 0, 4, 16); }
+                    repeat i in 0 .. 2 { rect { bounds: rect (8 + i * 4, 0, 2, 16); } }
+                }
+                clipPath { rect { bounds: rect (0, 4, 16, 8); } }
+                rect { bounds: bounds; fill: #ff0000; }
+            }
+        })yui");
+    ASSERT_TRUE (image.isValid());
+
+    // The shapes of a clip path add up, and the clip paths intersect
+    EXPECT_EQ (image.getPixelColor (2, 8), Color (0xffff0000));
+    EXPECT_EQ (image.getPixelColor (9, 8), Color (0xffff0000));
+    EXPECT_EQ (image.getPixelColor (13, 8), Color (0xffff0000));
+    EXPECT_EQ (image.getPixelColor (6, 8).getAlpha(), 0);
+    EXPECT_EQ (image.getPixelColor (11, 8).getAlpha(), 0);
+    EXPECT_EQ (image.getPixelColor (2, 1).getAlpha(), 0);
+}
+
+TEST_F (DrawingStyleGpuTest, CornerSizeRoundsRectanglesElliptically)
+{
+    const auto image = render (R"yui(
+        drawing {
+            rect { bounds: bounds; cornerSize: size (8, 2); fill: #ff0000; }
+        })yui");
+    ASSERT_TRUE (image.isValid());
+
+    // The corners are eight pixels wide and two tall
+    EXPECT_EQ (image.getPixelColor (8, 1), Color (0xffff0000));
+    EXPECT_EQ (image.getPixelColor (0, 8), Color (0xffff0000));
+    EXPECT_EQ (image.getPixelColor (2, 2), Color (0xffff0000));
+    EXPECT_LT (image.getPixelColor (0, 0).getAlpha(), 64);
+}
 

@@ -1981,6 +1981,88 @@ public:
         return result;
     }
 
+    /** Returns the transform that fits this rectangle into a target area.
+
+        The rectangle is scaled as the fitting asks and then placed in the target area by the
+        justification, so content drawn in the coordinates of this rectangle ends up in the target area.
+        Fitting::none and Fitting::tile don't scale. The identity is returned when this rectangle or
+        the target area is empty.
+
+        @param target         The area to fit this rectangle into.
+        @param fitting        How the rectangle is scaled to the target area.
+        @param justification  Where the scaled rectangle is placed in the target area.
+
+        @return The transform mapping this rectangle into the target area.
+    */
+    [[nodiscard]] AffineTransform getTransformToFit (const Rectangle<float>& target, Fitting fitting, Justification justification = Justification::center) const noexcept
+    {
+        if (isEmpty() || target.isEmpty())
+            return {};
+
+        const auto width = static_cast<float> (getWidth());
+        const auto height = static_cast<float> (getHeight());
+
+        float scaleX = target.getWidth() / width;
+        float scaleY = target.getHeight() / height;
+
+        switch (fitting)
+        {
+            case Fitting::none:
+            case Fitting::tile:
+                scaleX = scaleY = 1.0f;
+                break;
+
+            case Fitting::scaleToFit:
+                scaleX = scaleY = jmin (scaleX, scaleY);
+                break;
+
+            case Fitting::fitWidth:
+                scaleY = scaleX;
+                break;
+
+            case Fitting::fitHeight:
+                scaleX = scaleY;
+                break;
+
+            case Fitting::scaleToFill:
+            case Fitting::centerCrop:
+                scaleX = scaleY = jmax (scaleX, scaleY);
+                break;
+
+            case Fitting::fill:
+                break;
+
+            case Fitting::centerInside:
+                scaleX = scaleY = jmin (1.0f, jmin (scaleX, scaleY));
+                break;
+
+            case Fitting::stretchWidth:
+                scaleY = 1.0f;
+                break;
+
+            case Fitting::stretchHeight:
+                scaleX = 1.0f;
+                break;
+        }
+
+        float offsetX = target.getX();
+        float offsetY = target.getY();
+
+        if (justification.testFlags (Justification::horizontalCenter))
+            offsetX += (target.getWidth() - width * scaleX) * 0.5f;
+        else if (justification.testFlags (Justification::right))
+            offsetX += target.getWidth() - width * scaleX;
+
+        if (justification.testFlags (Justification::verticalCenter))
+            offsetY += (target.getHeight() - height * scaleY) * 0.5f;
+        else if (justification.testFlags (Justification::bottom))
+            offsetY += target.getHeight() - height * scaleY;
+
+        return AffineTransform::translation (-static_cast<float> (getX()), -static_cast<float> (getY()))
+            .followedBy (AffineTransform::scaling (scaleX, scaleY))
+            .followedBy (AffineTransform::translation (offsetX, offsetY));
+    }
+
     //==============================================================================
     /** Converts the rectangle to a different type.
 

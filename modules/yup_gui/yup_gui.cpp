@@ -230,6 +230,7 @@
 #include "styling/yup_StyleContext.cpp"
 #include "markup/yup_YuiParser.cpp"
 #include "markup/yup_YuiWriter.cpp"
+#include "markup/yup_YuiSvgImporter.cpp"
 #include "markup/yup_YuiTreeDiff.cpp"
 #include "markup/yup_YuiHandler.h"
 #include "markup/yup_YuiHandler.cpp"

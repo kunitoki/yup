@@ -1053,3 +1053,65 @@ TEST_F (ColorGradientShapeTests, AngularWithTranslationMovesCenter)
     expectColorNear (gradient.getColorAt (100.0f, 50.0f), black);
     expectColorNear (gradient.getColorAt (50.0f, 100.0f), gradient.getColorAt (0.25f));
 }
+
+TEST_F (ColorGradientShapeTests, SpreadExpandedOverAnAreaDrawsTheSameColorsWithAPadSpread)
+{
+    const Rectangle<float> area (-250.0f, -40.0f, 600.0f, 80.0f);
+
+    for (const auto spread : { ColorGradient::Spread::Repeat, ColorGradient::Spread::Reflect })
+    {
+        const auto gradient = ColorGradient (black, 0.0f, 0.0f, white, 100.0f, 0.0f).withSpread (spread);
+        const auto expanded = gradient.withSpreadExpandedOver (area);
+
+        EXPECT_EQ (expanded.getSpread(), ColorGradient::Spread::Pad);
+        EXPECT_GT (expanded.getNumStops(), gradient.getNumStops());
+
+        for (const auto x : { -230.0f, -130.0f, -30.0f, 30.0f, 130.0f, 230.0f, 330.0f })
+            expectColorNear (expanded.getColorAt (x, 10.0f), gradient.getColorAt (x, 10.0f));
+    }
+}
+
+TEST_F (ColorGradientShapeTests, SpreadExpandedOverAnAreaFollowsRadialGradientsAndTransforms)
+{
+    const auto gradient = ColorGradient (black, 0.0f, 0.0f, white, 50.0f, 0.0f, ColorGradient::Radial)
+                              .withTransform (AffineTransform::translation (100.0f, 100.0f))
+                              .withSpread (ColorGradient::Spread::Reflect);
+
+    const auto expanded = gradient.withSpreadExpandedOver ({ 0.0f, 0.0f, 200.0f, 200.0f });
+
+    EXPECT_EQ (expanded.getSpread(), ColorGradient::Spread::Pad);
+
+    for (const auto distance : { 20.0f, 70.0f, 120.0f })
+        expectColorNear (expanded.getColorAt (100.0f + distance, 100.0f), gradient.getColorAt (100.0f + distance, 100.0f));
+}
+
+TEST_F (ColorGradientShapeTests, SpreadExpandedOverAnAreaKeepsTheStopsOfGradientsCoveringIt)
+{
+    const auto repeated = ColorGradient (black, 0.0f, 0.0f, white, 100.0f, 0.0f).withSpread (ColorGradient::Spread::Repeat);
+    const auto covering = repeated.withSpreadExpandedOver ({ 10.0f, 0.0f, 50.0f, 10.0f });
+
+    EXPECT_EQ (covering.getSpread(), ColorGradient::Spread::Pad);
+    EXPECT_EQ (covering.getNumStops(), repeated.getNumStops());
+
+    const auto angular = ColorGradient (black, 0.0f, 0.0f, white, 1.0f, 0.0f, ColorGradient::Angular).withSpread (ColorGradient::Spread::Repeat);
+    EXPECT_EQ (angular.withSpreadExpandedOver ({ -500.0f, -500.0f, 1000.0f, 1000.0f }).getNumStops(), angular.getNumStops());
+}
+
+TEST_F (ColorGradientShapeTests, StopsSharingADeltaKeepTheOrderTheyWereAddedIn)
+{
+    const Color red (0xffff0000);
+    const Color green (0xff00ff00);
+
+    ColorGradient gradient (black, 0.0f, 0.0f, white, 100.0f, 0.0f);
+    gradient.addColorStop (red, 0.5f);
+    gradient.addColorStop (green, 0.5f);
+    gradient.addColorStop (red, 1.0f);
+
+    // A hard edge from red to green in the middle, and the stop added at the end comes last
+    ASSERT_EQ (gradient.getNumStops(), 5u);
+    EXPECT_EQ (gradient.getStop (1).color, red);
+    EXPECT_EQ (gradient.getStop (2).color, green);
+    EXPECT_EQ (gradient.getStop (3).color, white);
+    EXPECT_EQ (gradient.getStop (4).color, red);
+}
+

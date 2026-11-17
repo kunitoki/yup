@@ -42,77 +42,6 @@ File resolveDrawingSourceFile (const String& path, const File& baseDirectory)
     return File::getCurrentWorkingDirectory().getChildFile (path);
 }
 
-Rectangle<float> computeDrawingFittedBounds (Rectangle<float> sourceBounds,
-                                             Rectangle<float> targetArea,
-                                             Fitting fitting,
-                                             Justification justification) noexcept
-{
-    if (sourceBounds.isEmpty() || targetArea.isEmpty())
-        return {};
-
-    float scaleX = targetArea.getWidth() / sourceBounds.getWidth();
-    float scaleY = targetArea.getHeight() / sourceBounds.getHeight();
-
-    switch (fitting)
-    {
-        case Fitting::none:
-        case Fitting::tile:
-            scaleX = 1.0f;
-            scaleY = 1.0f;
-            break;
-
-        case Fitting::scaleToFit:
-            scaleX = scaleY = jmin (scaleX, scaleY);
-            break;
-
-        case Fitting::fitWidth:
-            scaleY = scaleX;
-            break;
-
-        case Fitting::fitHeight:
-            scaleX = scaleY;
-            break;
-
-        case Fitting::scaleToFill:
-        case Fitting::centerCrop:
-            scaleX = scaleY = jmax (scaleX, scaleY);
-            break;
-
-        case Fitting::fill:
-            break;
-
-        case Fitting::centerInside:
-            scaleX = scaleY = jmin (1.0f, jmin (scaleX, scaleY));
-            break;
-
-        case Fitting::stretchWidth:
-            scaleY = 1.0f;
-            break;
-
-        case Fitting::stretchHeight:
-            scaleX = 1.0f;
-            break;
-    }
-
-    const float scaledWidth = sourceBounds.getWidth() * scaleX;
-    const float scaledHeight = sourceBounds.getHeight() * scaleY;
-
-    float x = targetArea.getX();
-    float y = targetArea.getY();
-
-    if (justification.testFlags (Justification::horizontalCenter))
-        x += (targetArea.getWidth() - scaledWidth) * 0.5f;
-    else if (justification.testFlags (Justification::right))
-        x += targetArea.getWidth() - scaledWidth;
-
-    if (justification.testFlags (Justification::verticalCenter))
-        y += (targetArea.getHeight() - scaledHeight) * 0.5f;
-    else if (justification.testFlags (Justification::bottom))
-        y += targetArea.getHeight() - scaledHeight;
-
-    return { x, y, scaledWidth, scaledHeight };
-}
-
 const Image& resolveDrawingImage (std::map<String, Image>& cache, const String& source, const File& baseDirectory)
 {
     const auto cacheKey = baseDirectory != File() ? (baseDirectory.getFullPathName() + "\n" + source) : source;
@@ -202,12 +131,20 @@ struct DrawingStyle::Node
         layer,
         group,
         clip,
-        mask
+        mask,
+        clipShapes,
+        pattern,
+        marker
     };
 
     const CompiledExpression& getProgram() const noexcept
     {
         return kind == Kind::shape ? drawing.getProgram() : program;
+    }
+
+    bool hasMarkers() const noexcept
+    {
+        return std::any_of (markers.begin(), markers.end(), [] (int marker) { return marker >= 0; });
     }
 
     Kind kind = Kind::shape;
@@ -216,13 +153,31 @@ struct DrawingStyle::Node
     int slot = -1;
     bool repeated = false;
     bool svgInlineOnly = false;
+
+    // Groups drawing their children in a rectangle of their own: the level of its bounds, and how it is mapped
+    int boundsLevel = -1;
+    bool mapsToArea = false;
+    bool clipsToArea = false;
+
+    // Patterns: the tile is only drawn again when the pattern itself changes
+    bool isStatic = true;
+
+    // Markers: how they follow the shape they are drawn on
+    bool reversesStart = false;
+    bool scalesWithStrokeWidth = true;
+
+    // Shapes: the markers drawn at their start, inner and end vertices
+    std::array<int, 3> markers { -1, -1, -1 };
+
     ExpressionOutput<int> start, end;
     ExpressionOutput<bool> visible;
-    ExpressionOutput<float> opacity;
+    ExpressionOutput<float> opacity, strokeWidth, angle;
     ExpressionOutput<BlendMode> blend;
     ExpressionOutput<Color> tint;
     ExpressionOutput<AffineTransform> transform;
-    ExpressionOutput<Rectangle<float>> area, clip;
+    ExpressionOutput<Rectangle<float>> area, clip, viewBox;
+    ExpressionOutput<Size<float>> size;
+    ExpressionOutput<Point<float>> reference;
     ExpressionOutput<Path> clipPath, maskPath;
     ExpressionOutput<LayerMaskMode> maskMode;
     ExpressionOutput<String> source;
@@ -230,6 +185,7 @@ struct DrawingStyle::Node
     ExpressionOutput<Justification::Flags> justification;
     std::vector<std::unique_ptr<Node>> children;
     std::vector<std::unique_ptr<Node>> masks;
+    std::vector<std::unique_ptr<Node>> clipShapes;
 
     /* An input of the program fed from a drawing property: its value, or whether it is set. */
     struct PropertyInput
@@ -239,16 +195,33 @@ struct DrawingStyle::Node
         bool isSet = false;
     };
 
+    /* An input of the program fed by the style: the bounds of a level, or a pattern. */
+    struct StyleInput
+    {
+        int input = -1;
+        int index = -1;
+    };
+
     std::vector<PropertyInput> properties;
+    std::vector<StyleInput> levels;
+    std::vector<StyleInput> patterns;
 };
 
 /* An immutable compiled drawing, shared by the styles of components resolving its symbols alike. */
 struct DrawingStyle::Compiled
 {
     std::vector<std::unique_ptr<Node>> nodes;
+    std::vector<std::unique_ptr<Node>> patterns;
+    std::vector<std::unique_ptr<Node>> markers;
     std::vector<const Node*> evaluated;
     std::map<String, const ExpressionType*> symbols;
     std::vector<ComponentProperty> properties;
+
+    /* The drawings found by name through the resolver, as they were when compiling. */
+    std::vector<std::pair<String, DataTree>> dependencies;
+
+    /* The rectangles `bounds` can be: the one of the component, then one per group with bounds of its own. */
+    int numLevels = 1;
 };
 
 /* The evaluation state of one evaluated node, per style instance. */
@@ -261,14 +234,44 @@ struct DrawingStyle::Slot
     std::map<String, std::shared_ptr<Drawable>> svgCache;
 };
 
+/* What the elements being painted share: the default font, and the area layers cover with the transform they are composited with. */
+struct DrawingStyle::PaintContext
+{
+    const Font& font;
+    Rectangle<float> layerArea;
+    AffineTransform layerTransform;
+};
+
+/* Draws the tile of a pattern for the shapes it paints. */
+struct DrawingStyle::PatternSource final : PaintSource
+{
+    PatternSource (DrawingStyle& ownerToUse, const Node& nodeToDraw)
+        : owner (ownerToUse)
+        , node (nodeToDraw)
+    {
+    }
+
+    Size<float> getContentSize() const override { return tile.getSize(); }
+
+    void paintContent (Graphics& g) override { owner.drawPattern (g, *this); }
+
+    DrawingStyle& owner;
+    const Node& node;
+    Rectangle<float> tile, contentBounds;
+    AffineTransform contentTransform;
+    PatternPaint paint;
+    uint32 preparedSerial = 0;
+};
+
 //==============================================================================
 /* Lowers a drawing tree into one program per element, failing with the path of the offending element. */
 class DrawingStyle::Compiler
 {
 public:
-    Compiler (ExpressionContext& contextToUse, const DrawingScope& drawingScopeToUse, Compiled& resultToBuild)
+    Compiler (ExpressionContext& contextToUse, const DrawingScope& drawingScopeToUse, const DrawingResolver& drawingResolverToUse, Compiled& resultToBuild)
         : context (contextToUse)
         , drawingScope (drawingScopeToUse)
+        , drawingResolver (drawingResolverToUse)
         , result (resultToBuild)
     {
     }
@@ -290,11 +293,12 @@ public:
             const auto name = drawing.getProperty ("name").toString();
             const auto path = name.isNotEmpty() ? name : String ("drawing");
 
-            checkElement (drawing, path, { "id", "name" }, true);
-
             Scope scope;
-            declareProperties (drawing, path, scope);
-            compileElements (drawing, path, std::move (scope), false, result.nodes, nullptr);
+            scope.symbols["objectBounds"] = objectBoundsSymbol;
+
+            expansions.push_back (drawing);
+            compileDrawing (drawing, path, std::move (scope), nullptr, result.nodes);
+            result.numLevels = numLevels;
         }
         catch (const Error& error)
         {
@@ -356,13 +360,35 @@ private:
         StringArray uses;
     };
 
-    /* The lets visible to an element: the statements declaring them under internal names, the
-       internal name of each visible name, and the names declared by the current scope itself. */
+    /* A paint property a group sets for its children: an expression, a pattern or a marker, or no paint at all. */
+    struct Inherited
+    {
+        Value value;
+        int definition = -1;
+        bool isNone = false;
+    };
+
+    struct Scope;
+
+    /* A pattern or a marker compiled where it is defined, or a drawing compiled where it is used. */
+    struct Definition
+    {
+        int index = -1;
+        DataTree drawing;
+        std::shared_ptr<const Scope> closure;
+    };
+
+    /* What is visible to an element: the statements declaring the lets under internal names, the
+       internal name of each visible name, the names declared by the current scope itself, the paint
+       set by the groups around it, the definitions it can refer to and the level of its `bounds`. */
     struct Scope
     {
         Statements lets;
         std::map<String, String> symbols;
         StringArray declared;
+        std::map<String, Inherited> inherited;
+        std::map<String, Definition> definitions;
+        int boundsLevel = 0;
 
         Scope enter() const
         {
@@ -372,15 +398,53 @@ private:
         }
     };
 
-    /* A shape: its geometry properties (`name=default` when optional), the statements drawing
-       it from the `_name` locals holding them, and the paint properties it adds (`property:output`). */
+    /* A shape: its geometry properties (`name=default` when optional), the statements drawing it
+       from the `_name` locals holding them or the path it draws, the paint properties it adds
+       (`property:output`), the bounding box of its geometry and whether markers follow it. */
     struct Shape
     {
         const char* type;
         StringArray geometry;
         String lowering;
+        String shapePath;
         StringArray paint;
+        String objectBounds;
+        bool acceptsMarkers = false;
     };
+
+    /* Where a drawing is painted by a `use`, which sets its properties. */
+    struct UseSite
+    {
+        const DataTree& element;
+        const String& path;
+        const Scope& scope;
+    };
+
+    /* Where the children of an element are: inside a repeat or a clip path only shapes are allowed. */
+    enum class Placement
+    {
+        normal,
+        repeat,
+        clipShapes
+    };
+
+    /* Where the elements a layer or a clip keeps apart from the ones it draws go. */
+    struct Sinks
+    {
+        Sinks (std::vector<std::unique_ptr<Node>>* masksToFill = nullptr, std::vector<std::unique_ptr<Node>>* clipShapesToFill = nullptr)
+            : masks (masksToFill)
+            , clipShapes (clipShapesToFill)
+        {
+        }
+
+        std::vector<std::unique_ptr<Node>>* masks;
+        std::vector<std::unique_ptr<Node>>* clipShapes;
+    };
+
+    static constexpr const char* objectBoundsSymbol = "_objectBounds";
+    static constexpr const char* levelPrefix = "_bounds";
+    static constexpr const char* patternPrefix = "_pattern";
+    static constexpr int maxUseDepth = 32;
 
     //==============================================================================
     [[noreturn]] static void fail (const String& message, const DataTree& element = {}, const Identifier& property = {})
@@ -388,19 +452,27 @@ private:
         throw Error { message, element, property };
     }
 
-    static const Shape* findShape (const String& type)
+    static const Shape* findShape (const String& type, bool isAnchoredText = false)
     {
+        static const StringArray fittedTextPaint { "font:labelFont", "justification:labelJustification", "stroke:labelStroke", "letterSpacing:labelLetterSpacing" };
+        static const StringArray anchoredTextPaint { "font:labelFont", "textAnchor:labelTextAnchor", "stroke:labelStroke", "letterSpacing:labelLetterSpacing" };
+
         static const std::vector<Shape> shapes {
-            { "rect", { "bounds" }, "rect = _bounds;", { "cornerRadius", "topLeftRadius", "topRightRadius", "bottomLeftRadius", "bottomRightRadius" } },
-            { "ellipse", { "bounds" }, "ellipse = _bounds;", {} },
-            { "circle", { "center", "radius" }, "point = _center; radius = _radius;", {} },
-            { "arc", { "center", "radius", "from", "to" }, "path = path().addArc (rect (_center.x - _radius, _center.y - _radius, _radius * 2, _radius * 2), _from, _to, true);", {} },
-            { "line", { "from", "to" }, "line = line (_from, _to);", {} },
-            { "path", { "data" }, "path = path (_data);", {} },
-            { "polygon", { "center", "sides", "radius", "angle=0" }, "path = path().addPolygon (_center, _sides, _radius, _angle);", {} },
-            { "star", { "center", "points", "innerRadius", "outerRadius", "angle=0" }, "path = path().addStar (_center, _points, _innerRadius, _outerRadius, _angle);", {} },
-            { "text", { "bounds", "text" }, "labelRect = _bounds; label = _text;", { "font:labelFont", "justification:labelJustification", "stroke:labelStroke" } }
+            { "rect", { "bounds" }, "rect = _bounds;", {}, { "cornerRadius", "topLeftRadius", "topRightRadius", "bottomLeftRadius", "bottomRightRadius", "cornerSize" }, "_bounds" },
+            { "ellipse", { "bounds" }, "ellipse = _bounds;", {}, {}, "_bounds" },
+            { "circle", { "center", "radius" }, "point = _center; radius = _radius;", {}, {}, "rect (_center.x - _radius, _center.y - _radius, _radius * 2, _radius * 2)" },
+            { "arc", { "center", "radius", "from", "to" }, {}, "path().addArc (rect (_center.x - _radius, _center.y - _radius, _radius * 2, _radius * 2), _from, _to, true)", {}, {} },
+            { "line", { "from", "to" }, "line = line (_from, _to);", {}, {}, "rect (min (_from.x, _to.x), min (_from.y, _to.y), abs (_to.x - _from.x), abs (_to.y - _from.y))", true },
+            { "path", { "data" }, {}, "path (_data)", {}, {}, true },
+            { "polygon", { "center", "sides", "radius", "angle=0" }, {}, "path().addPolygon (_center, _sides, _radius, _angle)", {}, {} },
+            { "star", { "center", "points", "innerRadius", "outerRadius", "angle=0" }, {}, "path().addStar (_center, _points, _innerRadius, _outerRadius, _angle)", {}, {} },
+            { "text", { "bounds", "text" }, "labelRect = _bounds; label = _text;", {}, fittedTextPaint, "_bounds" }
         };
+
+        static const Shape anchoredText { "text", { "anchor", "text" }, "labelAnchor = _anchor; label = _text;", {}, anchoredTextPaint, {} };
+
+        if (isAnchoredText)
+            return &anchoredText;
 
         for (const auto& shape : shapes)
             if (type == shape.type)
@@ -413,8 +485,76 @@ private:
     {
         static const StringArray paint { "fill", "fillGradient", "stroke", "strokeGradient", "strokeWidth", "strokeMiterLimit", "strokePosition",
                                          "dash:strokeDash", "dashOffset:strokeDashOffset", "cap:strokeCap",
-                                         "join:strokeJoin", "feather", "opacity", "blend", "tint", "transform", "clip", "clipPath", "visible" };
+                                         "join:strokeJoin", "feather", "opacity", "blend", "tint", "transform", "clip", "clipPath", "visible",
+                                         "fillPattern", "strokePattern", "fillOpacity", "strokeOpacity" };
         return paint;
+    }
+
+    /* The paint properties a group sets for the shapes inside it, with the output checking their values. */
+    static const StringArray& getInheritablePaint()
+    {
+        static const StringArray paint { "fill", "fillGradient", "fillPattern", "fillOpacity", "stroke", "strokeGradient", "strokePattern", "strokeOpacity",
+                                         "strokeWidth", "strokeMiterLimit", "dash:strokeDash", "dashOffset:strokeDashOffset", "cap:strokeCap", "join:strokeJoin",
+                                         "feather", "font:labelFont", "textAnchor:labelTextAnchor", "letterSpacing:labelLetterSpacing",
+                                         "markerStart", "markerMid", "markerEnd" };
+        return paint;
+    }
+
+    static void addPropertyNames (StringArray& names, const StringArray& table)
+    {
+        for (const auto& entry : table)
+            names.add (entry.upToFirstOccurrenceOf (":", false, false));
+    }
+
+    static bool isFillPaint (const String& property) noexcept
+    {
+        return property == "fill" || property == "fillGradient" || property == "fillPattern";
+    }
+
+    static bool isStrokePaint (const String& property) noexcept
+    {
+        return property == "stroke" || property == "strokeGradient" || property == "strokePattern";
+    }
+
+    static bool isPatternProperty (const String& property) noexcept
+    {
+        return property == "fillPattern" || property == "strokePattern";
+    }
+
+    static int getMarkerIndex (const String& property) noexcept
+    {
+        return property == "markerStart" ? 0 : (property == "markerMid" ? 1 : (property == "markerEnd" ? 2 : -1));
+    }
+
+    /* `none` removes a paint, a pattern or a marker, instead of being read as an expression. */
+    static bool isNone (const DataTree& element, const Identifier& property)
+    {
+        return element.getProperty (property).toString().trim() == "none";
+    }
+
+    static String wrapForOutput (const String& output, const String& value)
+    {
+        return output == "strokeDash" ? ("dash (" + value + ")") : value;
+    }
+
+    static String levelSymbol (int level)
+    {
+        return level == 0 ? String ("bounds") : levelPrefix + String (level);
+    }
+
+    /* Returns the number after the prefix of a name like `_bounds3`, or -1 for other names. */
+    static int parseIndexedName (const String& name, const char* prefix)
+    {
+        const auto number = name.fromFirstOccurrenceOf (prefix, false, false);
+        return name.startsWith (prefix) && number.isNotEmpty() && number.containsOnly ("0123456789") ? number.getIntValue() : -1;
+    }
+
+    static void eraseInherited (std::map<String, Inherited>& inherited, bool (*matches) (const String&) noexcept)
+    {
+        std::erase_if (inherited, [matches] (const auto& entry)
+        {
+            return matches (entry.first);
+        });
     }
 
     static String findPaintOutput (const StringArray& table, const String& property)
@@ -478,7 +618,7 @@ private:
     /* Parses a property as a single expression and returns it normalized and parenthesized, so
        it can be embedded in a program on one line without leaking comments or extra statements.
        References to lets are renamed to their internal names. */
-    static Value parseValue (const DataTree& element, const Identifier& property, const String& path, const Scope& scope)
+    static Value parseValue (const DataTree& element, const Identifier& property, const String& path, const Scope& scope, bool isShapePaint = false)
     {
         const auto label = path + "." + property.toString();
         const auto text = getRequired (element, property, path);
@@ -504,6 +644,9 @@ private:
             expression = expression.withRenamedSymbol (found->first, found->second);
             value.uses.add (found->second);
         }
+
+        if (! isShapePaint && value.uses.contains (objectBoundsSymbol))
+            fail (label + ": 'objectBounds' can only be read by the paint properties of a shape, or of the groups around it", element, property);
 
         value.text = "(" + expression.toString() + ")";
         return value;
@@ -618,17 +761,46 @@ private:
             if (! program.usesInput (i))
                 continue;
 
-            if (const auto found = propertyInputs.find (program.getInputName (i)); found != propertyInputs.end())
+            // The tile of a pattern is kept while its elements only read what the pattern itself sets
+            const auto name = program.getInputName (i);
+            bool keepsTile = false;
+
+            if (const auto found = propertyInputs.find (name); found != propertyInputs.end())
+            {
                 node.properties.push_back ({ i, found->second.property, found->second.isSet });
+            }
+            else if (const auto level = parseIndexedName (name, levelPrefix); level >= 0)
+            {
+                node.levels.push_back ({ i, level });
+                keepsTile = pattern != nullptr && level >= pattern->boundsLevel;
+            }
+            else if (const auto index = parseIndexedName (name, patternPrefix); index >= 0)
+            {
+                node.patterns.push_back ({ i, index });
+                keepsTile = result.patterns[(size_t) index]->isStatic;
+            }
+            else
+            {
+                keepsTile = name == "_index";
+            }
+
+            if (pattern != nullptr && ! keepsTile)
+                pattern->isStatic = false;
         }
     }
 
     /* The answers about the component decide whether another component can share the compilation, so
-       they are recorded. The property inputs are the drawing's own, the same for every component. */
+       they are recorded. The inputs fed by the style are the drawing's own, the same for every component. */
     const ExpressionType* resolveSymbol (const String& name)
     {
         if (const auto found = propertyInputs.find (name); found != propertyInputs.end())
             return found->second.type;
+
+        if (const auto level = parseIndexedName (name, levelPrefix); level > 0 && level < numLevels)
+            return context.getType<Rectangle<float>>();
+
+        if (const auto index = parseIndexedName (name, patternPrefix); isPositiveAndBelow (index, (int) result.patterns.size()))
+            return context.getType<PatternPaint>();
 
         const auto* type = drawingScope.resolveSymbol (name);
         result.symbols.emplace (name, type);
@@ -637,8 +809,9 @@ private:
 
     //==============================================================================
     /* Declares the properties of the drawing as lets of its root scope, visible to every element. Each
-       reads the property input when the component has a value for it, else the default. */
-    void declareProperties (const DataTree& drawing, const String& drawingPath, Scope& scope)
+       reads the property input when the component has a value for it, else the default. The properties
+       of a drawing painted by a `use` read what the `use` sets instead, else the default. */
+    void declareProperties (const DataTree& drawing, const String& drawingPath, Scope& scope, const UseSite* use)
     {
         int index = 0;
 
@@ -660,6 +833,12 @@ private:
             if (expressionType == nullptr)
                 fail (path + ".type: '" + typeName + "' can't be used in a drawing, use number, integer, boolean, string, color, point, rectangle, transform, font or an array of scalar types", element, "type");
 
+            if (use != nullptr)
+            {
+                declareUsedProperty (element, path, name, type, typeName, scope, *use);
+                continue;
+            }
+
             const auto property = (int) result.properties.size();
             const auto input = "_property_" + name;
 
@@ -679,7 +858,7 @@ private:
             auto fallback = element.hasProperty ("value") ? parseValue (element, "value", path, scope) : Value { getDefaultText (type), {} };
 
             if (element.hasProperty ("value"))
-                checkDefault (scope, fallback, type, typeName, path, element);
+                checkPropertyValue (scope, fallback, type, typeName, path + ".value", element, "value");
 
             // A number default can be any number, the property is a float
             if (type == ComponentProperty::Type::number)
@@ -690,6 +869,47 @@ private:
 
             declare (scope, name, { "(" + isSet + " ? " + input + " : " + fallback.text + ")", fallback.uses }, path, path + ".value", element, element.hasProperty ("value") ? Identifier ("value") : Identifier {});
         }
+    }
+
+    /* Declares a property of a drawing painted by a `use`: the value the `use` sets, read where the `use` is, or its default. */
+    void declareUsedProperty (const DataTree& element,
+                              const String& path,
+                              const String& name,
+                              ComponentProperty::Type type,
+                              const String& typeName,
+                              Scope& scope,
+                              const UseSite& use)
+    {
+        const Identifier argument (name);
+        const bool isSet = use.element.hasProperty (argument);
+
+        if (type == ComponentProperty::Type::array)
+            fail (use.path + ": the array property '" + name + "' of the drawing can't be set by a 'use'", use.element, isSet ? argument : Identifier ("drawing"));
+
+        Value value;
+
+        if (isSet)
+        {
+            value = parseValue (use.element, argument, use.path, use.scope);
+            checkPropertyValue (use.scope, value, type, typeName, use.path + "." + name, use.element, argument);
+        }
+        else if (element.hasProperty ("value"))
+        {
+            value = parseValue (element, "value", path, scope);
+            checkPropertyValue (scope, value, type, typeName, path + ".value", element, "value");
+        }
+        else
+        {
+            value = { getDefaultText (type), {} };
+        }
+
+        if (type == ComponentProperty::Type::number)
+            value.text = "float " + value.text;
+
+        if (isSet)
+            declare (scope, name, value, path, use.path + "." + name, use.element, argument);
+        else
+            declare (scope, name, value, path, path + ".value", element, element.hasProperty ("value") ? Identifier ("value") : Identifier {});
     }
 
     static String getDefaultText (ComponentProperty::Type type)
@@ -715,13 +935,19 @@ private:
         }
     }
 
-    /* Compiles the default on its own, failing when its type doesn't match the property. */
-    void checkDefault (const Scope& scope, const Value& fallback, ComponentProperty::Type type, const String& typeName, const String& path, const DataTree& element)
+    /* Compiles the value of a property on its own, failing when its type doesn't match the property. */
+    void checkPropertyValue (const Scope& scope,
+                             const Value& value,
+                             ComponentProperty::Type type,
+                             const String& typeName,
+                             const String& label,
+                             const DataTree& element,
+                             const Identifier& property)
     {
-        auto statements = selectLets (scope, fallback.uses);
-        statements.push_back ({ fallback.text + ";", path + ".value", element, "value" });
+        auto statements = selectLets (scope, value.uses);
+        statements.push_back ({ value.text + ";", label, element, property });
 
-        const auto program = compileStatements (statements, path, element, "value");
+        const auto program = compileStatements (statements, label, element, property);
         const ExpressionType* actual = nullptr;
 
         for (int i = 0; i < program.getNumOutputs(); ++i)
@@ -734,17 +960,46 @@ private:
         const auto isNumber = actual == context.getType<int>() || actual == context.getType<double>();
 
         if (actual != nullptr && actual != expected && ! (type == ComponentProperty::Type::number && isNumber))
-            fail (path + ".value: the type '" + actual->getName() + "' doesn't match the property type '" + typeName + "'", element, "value");
+            fail (label + ": the type '" + actual->getName() + "' doesn't match the property type '" + typeName + "'", element, property);
     }
 
     //==============================================================================
+    /* Compiles a drawing: its properties, then its elements, mapped from its view box when it has one. */
+    void compileDrawing (const DataTree& drawing, const String& path, Scope scope, const UseSite* use, std::vector<std::unique_ptr<Node>>& target)
+    {
+        checkElement (drawing, path, { "id", "name", "viewBox", "fitting", "justification" }, true);
+        declareProperties (drawing, path, scope, use);
+
+        if (! drawing.hasProperty ("viewBox"))
+        {
+            for (const auto* property : { "fitting", "justification" })
+                if (drawing.hasProperty (property))
+                    fail (path + "." + property + ": needs a 'viewBox' to fit in the bounds", drawing, property);
+
+            compileElements (drawing, path, std::move (scope), Placement::normal, target);
+            return;
+        }
+
+        auto node = std::make_unique<Node>();
+        node->kind = Node::Kind::group;
+        node->mapsToArea = true;
+        node->boundsLevel = numLevels++;
+
+        compileProperties (*node, drawing, path, scope, { "viewBox:_viewBox", "fitting:_fitting", "justification:_justification" }, { { "_area = (" + levelSymbol (scope.boundsLevel) + ");", path, drawing } });
+        compileElements (drawing, path, enterLevel (scope, node->boundsLevel), Placement::normal, node->children);
+
+        target.push_back (std::move (node));
+    }
+
     void compileElements (const DataTree& parent,
                           const String& parentPath,
                           Scope scope,
-                          bool insideRepeat,
+                          Placement placement,
                           std::vector<std::unique_ptr<Node>>& target,
-                          std::vector<std::unique_ptr<Node>>* layerMasks)
+                          Sinks sinks = {})
     {
+        static const StringArray containers { "layer", "group", "clip", "repeat", "viewport", "use", "drawing", "pattern", "marker" };
+
         std::map<String, int> counts;
 
         for (const auto& element : parent)
@@ -776,69 +1031,391 @@ private:
 
             if (type == "mask")
             {
-                if (layerMasks == nullptr)
+                if (sinks.masks == nullptr)
                     fail (path + ": a 'mask' can only appear inside a 'layer'", element);
 
-                layerMasks->push_back (compileMask (element, path, scope));
+                sinks.masks->push_back (compileMask (element, path, scope));
                 continue;
             }
 
-            if (insideRepeat && (type == "layer" || type == "group" || type == "clip" || type == "repeat"))
+            if (type == "clipPath")
+            {
+                if (sinks.clipShapes == nullptr)
+                    fail (path + ": a 'clipPath' can only appear inside a 'clip' or a 'layer'", element);
+
+                sinks.clipShapes->push_back (compileClipShapes (element, path, scope));
+                continue;
+            }
+
+            if (placement == Placement::repeat && containers.contains (type))
                 fail (path + ": a '" + type + "' can't be nested inside a repeat", element);
 
-            if (type == "layer")
+            if (placement == Placement::clipShapes && type != "repeat" && findShape (type) == nullptr)
+                fail (path + ": a '" + type + "' has no outline to clip to", element);
+
+            if (type == "drawing")
+                addDefinition (scope, "drawing", element, path, { -1, element, std::make_shared<Scope> (scope) });
+            else if (type == "pattern")
+                addDefinition (scope, "pattern", element, path, { compilePattern (element, path, scope), {}, nullptr });
+            else if (type == "marker")
+                addDefinition (scope, "marker", element, path, { compileMarker (element, path, scope), {}, nullptr });
+            else if (type == "layer")
                 target.push_back (compileLayer (element, path, scope));
             else if (type == "group")
-                target.push_back (compileContainer (element, path, scope, Node::Kind::group, { "transform", "visible" }));
+                target.push_back (compileGroup (element, path, scope));
+            else if (type == "viewport")
+                target.push_back (compileViewport (element, path, scope));
+            else if (type == "use")
+                target.push_back (compileUse (element, path, scope));
             else if (type == "clip")
                 target.push_back (compileClip (element, path, scope));
             else if (type == "repeat")
                 target.push_back (compileRepeat (element, path, scope));
             else if (type == "image")
-                target.push_back (compileMedia (element, path, scope, insideRepeat, Node::Kind::image));
+                target.push_back (compileMedia (element, path, scope, placement == Placement::repeat, Node::Kind::image));
             else if (type == "svg")
-                target.push_back (compileMedia (element, path, scope, insideRepeat, Node::Kind::svg));
+                target.push_back (compileMedia (element, path, scope, placement == Placement::repeat, Node::Kind::svg));
             else
-                target.push_back (compileShape (element, path, scope, insideRepeat));
+                target.push_back (compileShape (element, path, scope, placement == Placement::repeat));
         }
     }
 
-    std::unique_ptr<Node> compileContainer (const DataTree& element, const String& path, const Scope& scope, Node::Kind kind, const StringArray& properties)
+    //==============================================================================
+    /* Makes a drawing, a pattern or a marker visible by name to the elements after it. */
+    void addDefinition (Scope& scope, const char* kind, const DataTree& element, const String& path, Definition definition)
     {
-        auto allowed = properties;
-        allowed.add ("id");
-        checkElement (element, path, allowed, true);
+        const auto name = parseName (element, path);
+        const auto key = String (kind) + ":" + name;
 
-        auto node = std::make_unique<Node>();
-        node->kind = kind;
+        if (scope.declared.contains (key))
+            fail (path + ".name: the " + kind + " '" + name + "' is already defined", element, "name");
 
-        Statements assignments;
+        scope.declared.add (key);
+        scope.definitions[key] = std::move (definition);
+    }
+
+    static const Definition* findDefinition (const Scope& scope, const char* kind, const String& name)
+    {
+        const auto found = scope.definitions.find (String (kind) + ":" + name);
+        return found != scope.definitions.end() ? &found->second : nullptr;
+    }
+
+    /* Reads a property naming a pattern or a marker, and returns where it is in the result. */
+    int findDefinitionIndex (const DataTree& element, const Identifier& property, const String& path, const Scope& scope)
+    {
+        const auto* kind = isPatternProperty (property.toString()) ? "pattern" : "marker";
+        const auto name = element.getProperty (property).toString().trim();
+
+        if (const auto* definition = findDefinition (scope, kind, name))
+            return definition->index;
+
+        fail (path + "." + property.toString() + ": unknown " + kind + " '" + name + "'", element, property);
+    }
+
+    /* Returns the scope of the children of a group drawing them in bounds of its own. */
+    static Scope enterLevel (const Scope& scope, int level)
+    {
+        auto inner = scope.enter();
+        inner.boundsLevel = level;
+        inner.symbols["bounds"] = levelSymbol (level);
+        return inner;
+    }
+
+    /* Returns the scope the properties of an element are read in, where its `color` is `currentColor`. */
+    Scope enterElement (const DataTree& element, const String& path, const Scope& scope)
+    {
+        auto inner = scope.enter();
+
+        if (! element.hasProperty ("color"))
+            return inner;
+
+        declare (inner, "currentColor", parseValue (element, "color", path, scope), path, path + ".color", element, "color");
+
+        auto check = selectLets (inner, { inner.symbols["currentColor"] });
+        check.push_back ({ "_color = " + inner.symbols["currentColor"] + ";", path + ".color", element, "color" });
+        compileStatements (check, path + ".color", element, "color");
+
+        return inner;
+    }
+
+    /* Reads the paint a group sets for the shapes inside it, checking the values where they are written. */
+    void inheritPaint (const DataTree& element, const String& path, Scope& scope)
+    {
+        Statements checks;
         StringArray uses;
 
-        for (const auto& property : properties)
+        for (const auto& entry : getInheritablePaint())
         {
-            if (! element.hasProperty (property))
+            const auto property = entry.upToFirstOccurrenceOf (":", false, false);
+            const Identifier propId (property);
+
+            if (! element.hasProperty (propId))
                 continue;
 
+            if (isFillPaint (property))
+                eraseInherited (scope.inherited, isFillPaint);
+            else if (isStrokePaint (property))
+                eraseInherited (scope.inherited, isStrokePaint);
+
+            const bool namesDefinition = isPatternProperty (property) || getMarkerIndex (property) >= 0;
+
+            if (isNone (element, propId) && (getMarkerIndex (property) >= 0 || property == "fill" || property == "stroke"))
+            {
+                scope.inherited.erase (property);
+
+                if (property == "fill")
+                    scope.inherited[property].isNone = true;
+
+                continue;
+            }
+
+            if (namesDefinition)
+            {
+                scope.inherited[property] = { {}, findDefinitionIndex (element, propId, path, scope), false };
+                continue;
+            }
+
+            const auto output = entry.containsChar (':') ? entry.fromFirstOccurrenceOf (":", false, false) : property;
+            const auto value = parseValue (element, propId, path, scope, true);
+
+            checks.push_back ({ output + " = " + wrapForOutput (output, value.text) + ";", path + "." + property, element, propId });
+            uses.addArray (value.uses);
+            scope.inherited[property] = { value, -1, false };
+        }
+
+        if (checks.empty())
+            return;
+
+        auto statements = selectLets (scope, uses);
+
+        if (uses.contains (objectBoundsSymbol))
+            statements.push_back ({ String ("let ") + objectBoundsSymbol + " = rect (0, 0, 0, 0);", path, element });
+
+        statements.insert (statements.end(), checks.begin(), checks.end());
+        compileStatements (statements, path, element);
+    }
+
+    /* Compiles the properties of a group into its program: `property:output` entries, after the statements it always needs. */
+    void compileProperties (Node& node, const DataTree& element, const String& path, const Scope& scope, const StringArray& properties, Statements assignments = {})
+    {
+        StringArray uses;
+
+        for (const auto& entry : properties)
+        {
+            const auto property = entry.upToFirstOccurrenceOf (":", false, false);
             const Identifier propId (property);
+
+            if (! element.hasProperty (propId))
+                continue;
+
+            const auto output = entry.containsChar (':') ? entry.fromFirstOccurrenceOf (":", false, false) : property;
             const auto value = parseValue (element, propId, path, scope);
-            assignments.push_back ({ property + " = " + value.text + ";", path + "." + property, element, propId });
+
+            assignments.push_back ({ output + " = " + value.text + ";", path + "." + property, element, propId });
             uses.addArray (value.uses);
         }
 
-        if (! assignments.empty())
-        {
-            auto statements = selectLets (scope, uses);
-            statements.insert (statements.end(), assignments.begin(), assignments.end());
+        if (assignments.empty())
+            return;
 
-            node->program = compileStatements (statements, path, element);
-            node->visible = findOutput<bool> (node->program, "visible");
-            node->opacity = findOutput<float> (node->program, "opacity");
-            node->transform = findOutput<AffineTransform> (node->program, "transform");
-            addSlot (*node, false);
+        auto statements = selectLets (scope, uses);
+        statements.insert (statements.end(), assignments.begin(), assignments.end());
+
+        node.program = compileStatements (statements, path, element);
+        node.visible = findOutput<bool> (node.program, "visible");
+        node.opacity = findOutput<float> (node.program, "opacity");
+        node.blend = findOutput<BlendMode> (node.program, "blend");
+        node.transform = findOutput<AffineTransform> (node.program, "transform");
+        node.area = findOutput<Rectangle<float>> (node.program, "_area");
+        node.viewBox = findOutput<Rectangle<float>> (node.program, "_viewBox");
+        node.fitting = findOutput<Fitting> (node.program, "_fitting");
+        node.justification = findOutput<Justification::Flags> (node.program, "_justification");
+        node.size = findOutput<Size<float>> (node.program, "_size");
+        node.reference = findOutput<Point<float>> (node.program, "_reference");
+        node.angle = findOutput<float> (node.program, "_angle");
+        addSlot (node, false);
+    }
+
+    std::unique_ptr<Node> compileGroup (const DataTree& element, const String& path, const Scope& outerScope)
+    {
+        StringArray allowed { "id", "transform", "visible", "opacity", "blend", "color" };
+        addPropertyNames (allowed, getInheritablePaint());
+        checkElement (element, path, allowed, true);
+
+        auto scope = enterElement (element, path, outerScope);
+        inheritPaint (element, path, scope);
+
+        auto node = std::make_unique<Node>();
+        node->kind = Node::Kind::group;
+
+        compileProperties (*node, element, path, scope, { "transform", "visible", "opacity", "blend" });
+        compileElements (element, path, scope.enter(), Placement::normal, node->children);
+        return node;
+    }
+
+    std::unique_ptr<Node> compileViewport (const DataTree& element, const String& path, const Scope& scope)
+    {
+        checkElement (element, path, { "id", "bounds", "viewBox", "fitting", "justification", "visible" }, true);
+
+        auto node = std::make_unique<Node>();
+        node->kind = Node::Kind::group;
+        node->mapsToArea = true;
+        node->clipsToArea = true;
+        node->boundsLevel = numLevels++;
+
+        Statements defaults;
+        if (! element.hasProperty ("bounds"))
+            defaults.push_back ({ "_area = (" + levelSymbol (scope.boundsLevel) + ");", path, element });
+
+        compileProperties (*node, element, path, scope, { "bounds:_area", "viewBox:_viewBox", "fitting:_fitting", "justification:_justification", "visible" }, std::move (defaults));
+        compileElements (element, path, enterLevel (scope, node->boundsLevel), Placement::normal, node->children);
+        return node;
+    }
+
+    /* Paints a drawing found by name: it sees what was visible where it was defined, and the bounds, the paint and the color of where it is used. */
+    std::unique_ptr<Node> compileUse (const DataTree& element, const String& path, const Scope& outerScope)
+    {
+        const auto name = getRequired (element, "drawing", path).trim();
+
+        DataTree drawing;
+        std::shared_ptr<const Scope> closure;
+
+        if (const auto* definition = findDefinition (outerScope, "drawing", name))
+        {
+            drawing = definition->drawing;
+            closure = definition->closure;
+        }
+        else if (drawingResolver != nullptr)
+        {
+            drawing = drawingResolver (name);
         }
 
-        compileElements (element, path, scope.enter(), false, node->children, nullptr);
+        if (! drawing.isValid() || drawing.getType().toString() != "drawing")
+            fail (path + ": unknown drawing '" + name + "'", element, "drawing");
+
+        if (std::find (expansions.begin(), expansions.end(), drawing) != expansions.end() || (int) expansions.size() >= maxUseDepth)
+            fail (path + ": the drawing '" + name + "' ends up using itself", element, "drawing");
+
+        if (closure == nullptr && std::none_of (result.dependencies.begin(), result.dependencies.end(), [&name] (const auto& dependency) { return dependency.first == name; }))
+            result.dependencies.push_back ({ name, drawing.clone() });
+
+        StringArray allowed { "id", "drawing", "bounds", "transform", "visible", "opacity", "blend", "color" };
+        addPropertyNames (allowed, getInheritablePaint());
+
+        for (const auto& child : drawing)
+            if (child.getType().toString() == "property")
+                allowed.add (child.getProperty ("name").toString());
+
+        checkElement (element, path, allowed, false);
+
+        auto scope = enterElement (element, path, outerScope);
+        inheritPaint (element, path, scope);
+
+        auto node = std::make_unique<Node>();
+        node->kind = Node::Kind::group;
+        node->boundsLevel = numLevels++;
+
+        Statements defaults;
+        if (! element.hasProperty ("bounds"))
+            defaults.push_back ({ "_area = (" + levelSymbol (outerScope.boundsLevel) + ");", path, element });
+
+        compileProperties (*node, element, path, scope, { "bounds:_area", "transform", "visible", "opacity", "blend" }, std::move (defaults));
+
+        Scope body;
+        body.lets = scope.lets;
+        body.inherited = scope.inherited;
+
+        if (closure != nullptr)
+        {
+            body.symbols = closure->symbols;
+            body.definitions = closure->definitions;
+        }
+
+        body = enterLevel (body, node->boundsLevel);
+        body.symbols["objectBounds"] = objectBoundsSymbol;
+
+        if (const auto color = scope.symbols.find ("currentColor"); color != scope.symbols.end())
+            body.symbols["currentColor"] = color->second;
+
+        const UseSite site { element, path, scope };
+
+        expansions.push_back (drawing);
+        compileDrawing (drawing, path + "/" + name, std::move (body), &site, node->children);
+        expansions.pop_back();
+
+        return node;
+    }
+
+    /* Compiles a pattern where it is defined, and returns where it is in the result. */
+    int compilePattern (const DataTree& element, const String& path, const Scope& scope)
+    {
+        checkElement (element, path, { "id", "name", "tile", "viewBox", "fitting", "justification", "transform" }, true);
+        getRequired (element, "tile", path);
+
+        auto node = std::make_unique<Node>();
+        node->kind = Node::Kind::pattern;
+        node->boundsLevel = numLevels++;
+
+        compileProperties (*node, element, path, scope, { "tile:_area", "viewBox:_viewBox", "fitting:_fitting", "justification:_justification", "transform" });
+
+        {
+            const ScopedValueSetter<Node*> compiling (pattern, node.get());
+            compileElements (element, path, enterLevel (scope, node->boundsLevel), Placement::normal, node->children);
+        }
+
+        result.patterns.push_back (std::move (node));
+        return (int) result.patterns.size() - 1;
+    }
+
+    /* Compiles a marker where it is defined, and returns where it is in the result. */
+    int compileMarker (const DataTree& element, const String& path, const Scope& scope)
+    {
+        checkElement (element, path, { "id", "name", "size", "ref", "viewBox", "orient", "units" }, true);
+
+        auto node = std::make_unique<Node>();
+        node->kind = Node::Kind::marker;
+        node->boundsLevel = numLevels++;
+
+        StringArray properties { "size:_size", "ref:_reference", "viewBox:_viewBox" };
+        Statements defaults;
+
+        if (! element.hasProperty ("size"))
+            defaults.push_back ({ "_size = (size (3, 3));", path, element });
+
+        if (! element.hasProperty ("ref"))
+            defaults.push_back ({ "_reference = (point (0, 0));", path, element });
+
+        // A marker follows the direction of the path unless it is given an angle
+        if (const auto orient = element.getProperty ("orient").toString().trim(); orient == "autoStartReverse")
+            node->reversesStart = true;
+        else if (orient.isNotEmpty() && orient != "auto")
+            properties.add ("orient:_angle");
+
+        if (const auto units = element.getProperty ("units").toString().trim(); units == "userSpace")
+            node->scalesWithStrokeWidth = false;
+        else if (units.isNotEmpty() && units != "strokeWidth")
+            fail (path + ".units: expected 'strokeWidth' or 'userSpace'", element, "units");
+
+        compileProperties (*node, element, path, scope, properties, std::move (defaults));
+        compileElements (element, path, enterLevel (scope, node->boundsLevel), Placement::normal, node->children);
+
+        result.markers.push_back (std::move (node));
+        return (int) result.markers.size() - 1;
+    }
+
+    /* Compiles the shapes a clip is made of: only their geometry is used. */
+    std::unique_ptr<Node> compileClipShapes (const DataTree& element, const String& path, const Scope& scope)
+    {
+        checkElement (element, path, { "id" }, true);
+
+        auto node = std::make_unique<Node>();
+        node->kind = Node::Kind::clipShapes;
+
+        auto inner = scope.enter();
+        inner.inherited.clear();
+
+        const ScopedValueSetter<bool> collecting (collectsOutlines, true);
+        compileElements (element, path, std::move (inner), Placement::clipShapes, node->children);
         return node;
     }
 
@@ -888,7 +1465,7 @@ private:
             addSlot (*node, false);
         }
 
-        compileElements (element, path, scope.enter(), false, node->children, &node->masks);
+        compileElements (element, path, scope.enter(), Placement::normal, node->children, { &node->masks, &node->clipShapes });
         return node;
     }
 
@@ -937,7 +1514,7 @@ private:
             addSlot (*node, false);
         }
 
-        compileElements (element, path, scope.enter(), false, node->children, nullptr);
+        compileElements (element, path, scope.enter(), Placement::normal, node->children, { nullptr, &node->clipShapes });
         return node;
     }
 
@@ -984,7 +1561,7 @@ private:
             addSlot (*node, false);
         }
 
-        compileElements (element, path, scope.enter(), false, node->children, nullptr);
+        compileElements (element, path, scope.enter(), Placement::normal, node->children);
         return node;
     }
 
@@ -1032,7 +1609,7 @@ private:
         }
         else
         {
-            own.push_back ({ "_area = (bounds);", path, element });
+            own.push_back ({ "_area = (" + levelSymbol (scope.boundsLevel) + ");", path, element });
         }
 
         {
@@ -1126,29 +1703,41 @@ private:
 
         auto inner = scope.enter();
         declare (inner, name, { "int " + from.text + " + _index", from.uses }, path, path + ".from", element, "from");
-        compileElements (element, path, std::move (inner), true, node->children, nullptr);
+        compileElements (element, path, std::move (inner), Placement::repeat, node->children);
         return node;
     }
 
-    std::unique_ptr<Node> compileShape (const DataTree& element, const String& path, const Scope& scope, bool repeated)
+    std::unique_ptr<Node> compileShape (const DataTree& element, const String& path, const Scope& outerScope, bool repeated)
     {
         const auto type = element.getType().toString();
-        const auto* shape = findShape (type);
+        const bool isText = type == "text";
+        const auto* shape = findShape (type, isText && element.hasProperty ("anchor"));
 
         if (shape == nullptr)
             fail (path + ": unknown element '" + type + "'", element);
 
-        StringArray allowed { "id" };
+        if (isText && collectsOutlines)
+            fail (path + ": a 'text' has no outline to clip to", element);
+
+        if (isText && element.hasProperty ("anchor") && element.hasProperty ("bounds"))
+            fail (path + ": specify either 'bounds' or 'anchor', not both", element, "anchor");
+
+        StringArray allowed { "id", "color" };
         for (const auto& entry : shape->geometry)
             allowed.add (entry.upToFirstOccurrenceOf ("=", false, false));
-        for (const auto& entry : shape->paint)
-            allowed.add (entry.upToFirstOccurrenceOf (":", false, false));
-        for (const auto& entry : getCommonPaint())
-            allowed.add (entry.upToFirstOccurrenceOf (":", false, false));
+
+        addPropertyNames (allowed, shape->paint);
+        addPropertyNames (allowed, getCommonPaint());
+
+        if (shape->acceptsMarkers)
+            allowed.addArray ({ "markerStart", "markerMid", "markerEnd" });
 
         checkElement (element, path, allowed, false);
 
-        Statements own;
+        std::optional<Scope> colored;
+        const auto& scope = element.hasProperty ("color") ? colored.emplace (enterElement (element, path, outerScope)) : outerScope;
+
+        Statements own, paint;
         StringArray geometry, uses;
 
         for (const auto& entry : shape->geometry)
@@ -1164,27 +1753,141 @@ private:
             uses.addArray (value.uses);
         }
 
-        own.push_back ({ shape->lowering, path, element });
+        // The paint of the shape itself comes first, then the paint the groups around it set and it doesn't
+        auto inherited = scope.inherited;
+        std::array<int, 3> markers { -1, -1, -1 };
+        bool hasFill = false, hasStroke = false;
+
+        const auto addPaint = [&] (const String& property, const String& output, const String& value, const DataTree& origin, const Identifier& originProperty)
+        {
+            paint.push_back ({ output + " = " + value + ";", path + "." + property, origin, originProperty });
+            hasFill = hasFill || isFillPaint (property);
+            hasStroke = hasStroke || (isText ? output == "labelStroke" : isStrokePaint (property));
+        };
+
+        const auto findOutputOf = [&] (const String& property)
+        {
+            const auto output = findPaintOutput (shape->paint, property);
+            return output.isNotEmpty() ? output : findPaintOutput (getCommonPaint(), property);
+        };
 
         for (int i = 0; i < element.getNumProperties(); ++i)
         {
             const auto propId = element.getPropertyName (i);
             const auto property = propId.toString();
-            if (property == "id" || geometry.contains (property))
+            if (property == "id" || property == "color" || geometry.contains (property))
                 continue;
 
-            auto output = findPaintOutput (shape->paint, property);
-            if (output.isEmpty())
-                output = findPaintOutput (getCommonPaint(), property);
+            if (isFillPaint (property))
+                eraseInherited (inherited, isFillPaint);
+            else if (isStrokePaint (property))
+                eraseInherited (inherited, isStrokePaint);
+            else
+                inherited.erase (property);
 
-            const auto value = parseValue (element, propId, path, scope);
-            const auto rhs = output == "strokeDash" ? ("dash (" + value.text + ")") : value.text;
-            own.push_back ({ output + " = " + rhs + ";", path + "." + property, element, propId });
+            if (const auto marker = getMarkerIndex (property); marker >= 0)
+            {
+                if (repeated)
+                    fail (path + "." + property + ": a shape inside a repeat can't have markers", element, propId);
+
+                if (! isNone (element, propId))
+                    markers[(size_t) marker] = findDefinitionIndex (element, propId, path, scope);
+
+                continue;
+            }
+
+            if (isNone (element, propId) && (property == "fill" || property == "stroke"))
+            {
+                if (property == "fill")
+                    inherited[property].isNone = true;
+
+                continue;
+            }
+
+            if (isPatternProperty (property))
+            {
+                const auto symbol = patternPrefix + String (findDefinitionIndex (element, propId, path, scope));
+                addPaint (property, property, symbol, element, propId);
+                uses.add (symbol);
+                continue;
+            }
+
+            const auto output = findOutputOf (property);
+            const auto value = parseValue (element, propId, path, scope, true);
+
+            addPaint (property, output, wrapForOutput (output, value.text), element, propId);
             uses.addArray (value.uses);
+        }
+
+        bool fillIsNone = false;
+
+        for (const auto& entry : getInheritablePaint())
+        {
+            const auto property = entry.upToFirstOccurrenceOf (":", false, false);
+            const auto found = inherited.find (property);
+
+            if (found == inherited.end())
+                continue;
+
+            if (found->second.isNone)
+            {
+                fillIsNone = true;
+                continue;
+            }
+
+            if (const auto marker = getMarkerIndex (property); marker >= 0)
+            {
+                if (shape->acceptsMarkers && ! repeated && ! collectsOutlines)
+                    markers[(size_t) marker] = found->second.definition;
+
+                continue;
+            }
+
+            // Text is only stroked with a color
+            const auto output = findOutputOf (property);
+            if (output.isEmpty() || (isText && isStrokePaint (property) && property != "stroke"))
+                continue;
+
+            if (isPatternProperty (property))
+            {
+                const auto symbol = patternPrefix + String (found->second.definition);
+                addPaint (property, output, symbol, element, {});
+                uses.add (symbol);
+                continue;
+            }
+
+            addPaint (property, output, wrapForOutput (output, found->second.value.text), element, {});
+            uses.addArray (found->second.value.uses);
+        }
+
+        // A shape without a paint is filled with the color of the Graphics, so no fill at all has to be one drawing nothing
+        if (fillIsNone && ! hasFill && ! hasStroke)
+            paint.push_back ({ "fill = #00000000;", path, element });
+
+        const bool usesObjectBounds = uses.contains (objectBoundsSymbol);
+
+        if (usesObjectBounds && shape->objectBounds.isEmpty() && shape->shapePath.isEmpty())
+            fail (path + ": 'objectBounds' is not available to a text placed from an 'anchor'", element);
+
+        if (shape->shapePath.isEmpty())
+        {
+            if (usesObjectBounds)
+                own.push_back ({ String ("let ") + objectBoundsSymbol + " = " + shape->objectBounds + ";", path, element });
+
+            own.push_back ({ shape->lowering, path, element });
+        }
+        else if (usesObjectBounds)
+        {
+            own.push_back ({ "let _shape = " + shape->shapePath + "; let " + objectBoundsSymbol + " = _shape.bounds; path = _shape;", path, element });
+        }
+        else
+        {
+            own.push_back ({ "path = " + shape->shapePath + ";", path, element });
         }
 
         auto statements = selectLets (scope, uses);
         statements.insert (statements.end(), own.begin(), own.end());
+        statements.insert (statements.end(), paint.begin(), paint.end());
 
         auto created = ExpressionDrawing::create (compileStatements (statements, path, element));
         if (created.failed())
@@ -1192,15 +1895,33 @@ private:
 
         auto node = std::make_unique<Node>();
         node->drawing = std::move (created.getReference());
+        node->markers = markers;
+
+        if (node->hasMarkers())
+        {
+            const auto& program = node->drawing.getProgram();
+            node->visible = findOutput<bool> (program, "visible");
+            node->opacity = findOutput<float> (program, "opacity");
+            node->strokeWidth = findOutput<float> (program, "strokeWidth");
+            node->transform = findOutput<AffineTransform> (program, "transform");
+            node->clip = findOutput<Rectangle<float>> (program, "clip");
+            node->clipPath = findOutput<Path> (program, "clipPath");
+        }
+
         addSlot (*node, repeated);
         return node;
     }
 
     ExpressionContext& context;
     const DrawingScope& drawingScope;
+    const DrawingResolver& drawingResolver;
     Compiled& result;
     std::map<String, PropertyInput> propertyInputs;
+    std::vector<DataTree> expansions;
+    Node* pattern = nullptr;
+    bool collectsOutlines = false;
     int numSymbols = 0;
+    int numLevels = 1;
 };
 
 //==============================================================================
@@ -1224,6 +1945,11 @@ struct DrawingBaseContext
         context.declareOutput<Justification::Flags> ("_justification");
         context.declareOutput<Path> ("_maskPath");
         context.declareOutput<LayerMaskMode> ("_maskMode");
+        context.declareOutput<Rectangle<float>> ("_viewBox");
+        context.declareOutput<Size<float>> ("_size");
+        context.declareOutput<Point<float>> ("_reference");
+        context.declareOutput<float> ("_angle");
+        context.declareOutput<Color> ("_color");
         context.addFunction ("_toMaskPath", [] (const Path& p) { return p; });
         context.addFunction ("_toMaskPath", [] (const Rectangle<float>& r)
         {
@@ -1258,8 +1984,9 @@ public:
         return cache;
     }
 
-    /* Returns a compilation whose symbols resolve in the scope to the types they had when compiled, if any. */
-    std::shared_ptr<const Compiled> find (const DataTree& drawing, const DrawingScope& scope)
+    /* Returns a compilation whose symbols resolve in the scope to the types they had when compiled, and
+       whose drawings found by name are still the same, if any. */
+    std::shared_ptr<const Compiled> find (const DataTree& drawing, const DrawingScope& scope, const DrawingResolver& drawingResolver)
     {
         for (auto it = entries.begin(); it != entries.end();)
         {
@@ -1274,6 +2001,10 @@ public:
                 && std::all_of (candidate->symbols.begin(), candidate->symbols.end(), [&] (const auto& symbol)
                 {
                     return scope.resolveSymbol (symbol.first) == symbol.second;
+                })
+                && std::all_of (candidate->dependencies.begin(), candidate->dependencies.end(), [&] (const auto& dependency)
+                {
+                    return drawingResolver != nullptr && drawingResolver (dependency.first).isEquivalentTo (dependency.second);
                 }))
             {
                 return candidate;
@@ -1320,18 +2051,19 @@ DrawingStyle::~DrawingStyle() = default;
 ResultValue<DrawingStyle::Ptr> DrawingStyle::create (Component& target,
                                                      const DataTree& drawing,
                                                      DrawingScope::ComponentResolver componentResolver,
-                                                     YuiDiagnostic* failure)
+                                                     YuiDiagnostic* failure,
+                                                     const DrawingResolver& drawingResolver)
 {
     DrawingStyle::Ptr style (new DrawingStyle (target, std::move (componentResolver)));
 
     auto& cache = CompiledCache::getInstance();
-    auto compiled = cache.find (drawing, style->scope);
+    auto compiled = cache.find (drawing, style->scope, drawingResolver);
 
     if (compiled == nullptr)
     {
         auto result = std::make_shared<Compiled>();
 
-        if (const auto compiledResult = Compiler (style->context, style->scope, *result).compile (drawing, failure); compiledResult.failed())
+        if (const auto compiledResult = Compiler (style->context, style->scope, drawingResolver, *result).compile (drawing, failure); compiledResult.failed())
             return makeResultValueFail (compiledResult.getErrorMessage());
 
         cache.add (drawing, result);
@@ -1348,6 +2080,10 @@ void DrawingStyle::instantiate (std::shared_ptr<const Compiled> compiledToUse)
     slots = std::make_unique<Slot[]> (compiled->evaluated.size());
     propertyValues.resize (compiled->properties.size());
     propertyArrays.resize (compiled->properties.size());
+    levelBounds.resize ((size_t) compiled->numLevels);
+
+    for (const auto& pattern : compiled->patterns)
+        patternSources.push_back (std::make_unique<PatternSource> (*this, *pattern));
 
     for (size_t i = 0; i < compiled->evaluated.size(); ++i)
     {
@@ -1412,10 +2148,17 @@ void DrawingStyle::paint (Graphics& g, const ApplicationTheme& theme, const Comp
     for (size_t i = 0; i < propertyValues.size(); ++i)
         propertyValues[i] = component.findProperty (compiled->properties[i].name);
 
-    drawNodes (g, compiled->nodes, component.getLocalBounds(), theme.getDefaultFont(), 1);
+    const auto font = theme.getDefaultFont();
+    const auto bounds = component.getLocalBounds();
+
+    ++paintSerial;
+    levelBounds.front() = bounds;
+
+    const ScopedValueSetter<const Font*> painting (paintFont, std::addressof (font));
+    drawNodes (g, compiled->nodes, { font, bounds, g.getTransform() }, 1);
 }
 
-DrawingStyle::Slot* DrawingStyle::prepare (const Node& node, Rectangle<float> bounds, const Font& font)
+DrawingStyle::Slot* DrawingStyle::prepare (const Node& node, const PaintContext& context)
 {
     if (node.slot < 0)
         return nullptr;
@@ -1423,9 +2166,15 @@ DrawingStyle::Slot* DrawingStyle::prepare (const Node& node, Rectangle<float> bo
     auto& slot = slots[(size_t) node.slot];
     const auto& base = getDrawingBaseContext();
 
-    slot.state->set (base.bounds, bounds);
-    slot.state->set (base.font, font);
+    slot.state->set (base.bounds, levelBounds.front());
+    slot.state->set (base.font, context.font);
     scope.updateInputs (slot.inputs, *slot.state);
+
+    for (const auto& input : node.levels)
+        slot.state->set (ExpressionInput<Rectangle<float>> { input.input }, levelBounds[(size_t) input.index]);
+
+    for (const auto& input : node.patterns)
+        slot.state->set (ExpressionInput<PatternPaint> { input.input }, preparePattern (input.index, context).paint);
 
     for (const auto& input : node.properties)
     {
@@ -1441,19 +2190,173 @@ DrawingStyle::Slot* DrawingStyle::prepare (const Node& node, Rectangle<float> bo
     return &slot;
 }
 
-void DrawingStyle::drawNodes (Graphics& g, const std::vector<std::unique_ptr<Node>>& children, Rectangle<float> bounds, const Font& font, int numRows)
+/* Evaluates a pattern once per paint: where its tiles are, and whether the tile has to be drawn again. */
+DrawingStyle::PatternSource& DrawingStyle::preparePattern (int index, const PaintContext& context)
 {
-    for (const auto& node : children)
-        drawNode (g, *node, bounds, font, numRows);
+    auto& source = *patternSources[(size_t) index];
+
+    if (source.preparedSerial == paintSerial)
+        return source;
+
+    source.preparedSerial = paintSerial;
+
+    const auto& node = source.node;
+    auto& state = *prepare (node, context)->state;
+    state.evaluate();
+
+    const auto tile = state.get (node.area);
+    const auto contentBounds = node.viewBox.isValid() ? state.get (node.viewBox) : tile.withZeroPosition();
+    AffineTransform contentTransform;
+
+    if (node.viewBox.isValid())
+    {
+        contentTransform = contentBounds.getTransformToFit (tile.withZeroPosition(),
+                                                           node.fitting.isValid() ? state.get (node.fitting) : Fitting::scaleToFit,
+                                                           Justification (node.justification.isValid() ? state.get (node.justification) : Justification::center));
+    }
+
+    if (! node.isStatic || tile != source.tile || contentBounds != source.contentBounds || contentTransform != source.contentTransform)
+        source.markDirty();
+
+    source.tile = tile;
+    source.contentBounds = contentBounds;
+    source.contentTransform = contentTransform;
+    source.paint = { std::addressof (source),
+                     AffineTransform::translation (tile.getX(), tile.getY())
+                         .followedBy (node.transform.isValid() ? state.get (node.transform) : AffineTransform()) };
+
+    return source;
 }
 
-void DrawingStyle::drawNode (Graphics& g, const Node& node, Rectangle<float> bounds, const Font& font, int numRows)
+void DrawingStyle::drawPattern (Graphics& g, const PatternSource& source)
 {
-    auto* slot = prepare (node, bounds, font);
+    if (paintFont == nullptr)
+        return;
+
+    const auto savedState = g.saveState();
+    const PaintContext context { *paintFont, source.tile.withZeroPosition(), g.getTransform() };
+
+    g.setTransform (source.contentTransform.followedBy (g.getTransform()));
+    levelBounds[(size_t) source.node.boundsLevel] = source.contentBounds;
+
+    drawNodes (g, source.node.children, context, 1);
+}
+
+/* Draws the markers of a shape at its vertices, with the transform, the clip and the opacity of the shape. */
+void DrawingStyle::drawMarkers (Graphics& g, const Node& node, Slot& slot, const PaintContext& context)
+{
+    auto& state = *slot.state;
+    state.evaluate();
+
+    if (node.visible.isValid() && ! state.get (node.visible))
+        return;
+
+    const PathMarkers placements (node.drawing.getOutline (state, 1, false));
+    const std::array<Span<const PathMarkers::Placement>, 3> vertices { placements.getStarts(), placements.getMids(), placements.getEnds() };
+
+    const auto savedState = g.saveState();
+    const auto strokeWidth = node.strokeWidth.isValid() ? state.get (node.strokeWidth) : g.getStrokeWidth();
+
+    if (node.clip.isValid())
+        g.setClipPath (state.get (node.clip));
+
+    if (node.clipPath.isValid())
+        g.setClipPath (state.get (node.clipPath));
+
+    if (node.transform.isValid())
+        g.setTransform (state.get (node.transform).followedBy (g.getTransform()));
+
+    if (node.opacity.isValid())
+        g.setOpacity (g.getOpacity() * jlimit (0.0f, 1.0f, state.get (node.opacity)));
+
+    for (size_t i = 0; i < vertices.size(); ++i)
+    {
+        if (node.markers[i] < 0 || vertices[i].empty())
+            continue;
+
+        const auto& marker = *compiled->markers[(size_t) node.markers[i]];
+        auto& markerState = *prepare (marker, context)->state;
+        markerState.evaluate();
+
+        PathMarkers::Shape shape;
+        shape.reference = markerState.get (marker.reference);
+        shape.size = markerState.get (marker.size);
+        shape.scalesWithStrokeWidth = marker.scalesWithStrokeWidth;
+
+        if (marker.viewBox.isValid())
+            shape.viewBox = markerState.get (marker.viewBox);
+
+        if (marker.angle.isValid())
+            shape.angle = markerState.get (marker.angle);
+
+        levelBounds[(size_t) marker.boundsLevel] = shape.viewBox.value_or (Rectangle<float> (Point<float>(), shape.size));
+
+        for (auto placement : vertices[i])
+        {
+            if (i == 0 && marker.reversesStart)
+                placement.angle += MathConstants<float>::pi;
+
+            const auto markerSavedState = g.saveState();
+            g.setTransform (PathMarkers::getTransform (placement, shape, strokeWidth).followedBy (g.getTransform()));
+            drawNodes (g, marker.children, context, 1);
+        }
+    }
+}
+
+/* Returns the geometry of shapes, to clip to. */
+Path DrawingStyle::collectOutline (const std::vector<std::unique_ptr<Node>>& shapes, const PaintContext& context, int numRows)
+{
+    Path outline;
+
+    for (const auto& shape : shapes)
+    {
+        auto* slot = prepare (*shape, context);
+
+        if (shape->kind == Node::Kind::shape)
+        {
+            outline.appendPath (shape->drawing.getOutline (*slot->state, numRows));
+            continue;
+        }
+
+        slot->state->evaluate();
+
+        const auto count = jlimit<int64> (0, maxRepeatCount, (int64) slot->state->get (shape->end) - slot->state->get (shape->start));
+        if (count > 0)
+            outline.appendPath (collectOutline (shape->children, context, (int) count));
+    }
+
+    return outline;
+}
+
+void DrawingStyle::applyClips (Graphics& g, const Node& node, Slot* slot, const PaintContext& context, int numRows)
+{
+    if (slot != nullptr && node.clip.isValid())
+        g.setClipPath (slot->state->get (node.clip));
+
+    if (slot != nullptr && node.clipPath.isValid())
+        g.setClipPath (slot->state->get (node.clipPath));
+
+    for (const auto& shapes : node.clipShapes)
+        g.setClipPath (collectOutline (shapes->children, context, numRows));
+}
+
+void DrawingStyle::drawNodes (Graphics& g, const std::vector<std::unique_ptr<Node>>& children, const PaintContext& context, int numRows)
+{
+    for (const auto& node : children)
+        drawNode (g, *node, context, numRows);
+}
+
+void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& context, int numRows)
+{
+    auto* slot = prepare (node, context);
 
     if (node.kind == Node::Kind::shape)
     {
-        node.drawing.draw (g, *slot->state, numRows, &font, &slot->cache);
+        node.drawing.draw (g, *slot->state, numRows, &context.font, &slot->cache);
+
+        if (node.hasMarkers())
+            drawMarkers (g, node, *slot, context);
+
         return;
     }
 
@@ -1541,7 +2444,7 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, Rectangle<float> bou
                     }
                     else
                     {
-                        const auto destBounds = computeDrawingFittedBounds (sourceBounds, targetArea, fitting, justification);
+                        const auto destBounds = sourceBounds.transformed (sourceBounds.getTransformToFit (targetArea, fitting, justification));
                         if (destBounds.isEmpty())
                             continue;
 
@@ -1574,19 +2477,58 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, Rectangle<float> bou
             const auto count = jlimit<int64> (0, maxRepeatCount, (int64) slot->state->get (node.end) - slot->state->get (node.start));
 
             if (count > 0)
-                drawNodes (g, node.children, bounds, font, (int) count);
+                drawNodes (g, node.children, context, (int) count);
 
             break;
         }
 
         case Node::Kind::group:
         {
+            const auto opacity = (slot != nullptr && node.opacity.isValid()) ? jlimit (0.0f, 1.0f, slot->state->get (node.opacity)) : 1.0f;
+
+            if (opacity <= 0.0f)
+                break;
+
             const auto savedState = g.saveState();
 
-            if (node.transform.isValid())
+            if (opacity < 1.0f)
+                g.setOpacity (g.getOpacity() * opacity);
+
+            if (slot != nullptr && node.blend.isValid())
+                g.setBlendMode (slot->state->get (node.blend));
+
+            if (slot != nullptr && node.transform.isValid())
                 g.setTransform (slot->state->get (node.transform).followedBy (g.getTransform()));
 
-            drawNodes (g, node.children, bounds, font, numRows);
+            if (node.boundsLevel >= 0)
+            {
+                // The children are drawn in bounds of their own: the area itself, or a view box mapped to it
+                const auto area = slot->state->get (node.area);
+                auto childBounds = area;
+
+                if (node.mapsToArea)
+                {
+                    childBounds = node.viewBox.isValid() ? slot->state->get (node.viewBox) : area.withZeroPosition();
+
+                    if (area.isEmpty() || childBounds.isEmpty())
+                        break;
+
+                    if (node.clipsToArea)
+                        g.setClipPath (area);
+
+                    const auto mapping = node.viewBox.isValid()
+                                           ? childBounds.getTransformToFit (area,
+                                                                            node.fitting.isValid() ? slot->state->get (node.fitting) : Fitting::scaleToFit,
+                                                                            Justification (node.justification.isValid() ? slot->state->get (node.justification) : Justification::center))
+                                           : AffineTransform::translation (area.getX(), area.getY());
+
+                    g.setTransform (mapping.followedBy (g.getTransform()));
+                }
+
+                levelBounds[(size_t) node.boundsLevel] = childBounds;
+            }
+
+            drawNodes (g, node.children, context, numRows);
             break;
         }
 
@@ -1594,16 +2536,8 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, Rectangle<float> bou
         {
             const auto savedState = g.saveState();
 
-            if (slot != nullptr)
-            {
-                if (node.clip.isValid())
-                    g.setClipPath (slot->state->get (node.clip));
-
-                if (node.clipPath.isValid())
-                    g.setClipPath (slot->state->get (node.clipPath));
-            }
-
-            drawNodes (g, node.children, bounds, font, numRows);
+            applyClips (g, node, slot, context, numRows);
+            drawNodes (g, node.children, context, numRows);
             break;
         }
 
@@ -1615,104 +2549,95 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, Rectangle<float> bou
                 break;
 
             const bool hasBlend = slot != nullptr && node.blend.isValid() && slot->state->get (node.blend) != BlendMode::SrcOver;
-            const bool hasClip = slot != nullptr && (node.clip.isValid() || node.clipPath.isValid());
             const bool hasMaskPath = slot != nullptr && node.maskPath.isValid();
             const bool hasMasks = hasMaskPath || ! node.masks.empty();
 
+            const auto savedState = g.saveState();
+            applyClips (g, node, slot, context, numRows);
+
             if (opacity >= 1.0f && ! hasBlend && ! hasMasks)
             {
-                if (hasClip)
-                {
-                    const auto savedState = g.saveState();
-
-                    if (node.clip.isValid())
-                        g.setClipPath (slot->state->get (node.clip));
-
-                    if (node.clipPath.isValid())
-                        g.setClipPath (slot->state->get (node.clipPath));
-
-                    drawNodes (g, node.children, bounds, font, numRows);
-                }
-                else
-                {
-                    drawNodes (g, node.children, bounds, font, numRows);
-                }
-
+                drawNodes (g, node.children, context, numRows);
                 break;
             }
 
-            std::optional<Graphics::SavedState> parentSaved;
-            if (hasBlend || hasClip)
+            if (hasBlend)
+                g.setBlendMode (slot->state->get (node.blend));
+
+            // The layer covers the area of the drawing, where it keeps its resolution, and its
+            // children are drawn into it under the transforms of the groups around them
+            const auto layerOrigin = AffineTransform::translation (-context.layerArea.getX(), -context.layerArea.getY());
+            const auto childTransform = g.getTransform().followedBy (context.layerTransform.inverted()).followedBy (layerOrigin);
+            const PaintContext layerContext { context.font, context.layerArea.withZeroPosition(), {} };
+            bool wasDrawn = false;
+
             {
-                parentSaved.emplace (g.saveState());
+                const auto layerSavedState = g.saveState();
+                g.setTransform (context.layerTransform);
 
-                if (slot != nullptr && node.clip.isValid())
-                    g.setClipPath (slot->state->get (node.clip));
+                auto layer = g.beginTransparencyLayer (context.layerArea, opacity, hasMasks);
+                if (layer.isValid())
+                {
+                    // The layer starts from the default paint, shapes without one inherit the caller's
+                    auto& layerGraphics = layer.getGraphics();
+                    layerGraphics.setFillColor (g.getFillColor());
+                    layerGraphics.setStrokeColor (g.getStrokeColor());
+                    layerGraphics.setStrokeWidth (g.getStrokeWidth());
+                    layerGraphics.setStrokeJoin (g.getStrokeJoin());
+                    layerGraphics.setStrokeCap (g.getStrokeCap());
+                    layerGraphics.setStrokePosition (g.getStrokePosition());
+                    layerGraphics.setTransform (childTransform);
 
-                if (slot != nullptr && node.clipPath.isValid())
-                    g.setClipPath (slot->state->get (node.clipPath));
+                    drawNodes (layerGraphics, node.children, layerContext, numRows);
 
-                if (hasBlend)
-                    g.setBlendMode (slot->state->get (node.blend));
+                    const auto defaultMaskMode = (slot != nullptr && node.maskMode.isValid())
+                                                   ? slot->state->get (node.maskMode)
+                                                   : LayerMaskMode::Alpha;
+
+                    if (hasMaskPath)
+                    {
+                        if (auto* maskGraphics = layer.addMask (defaultMaskMode))
+                        {
+                            maskGraphics->setTransform (childTransform);
+                            maskGraphics->setFillColor (Color (0xffffffff));
+                            maskGraphics->fillPath (slot->state->get (node.maskPath));
+                        }
+                    }
+
+                    for (const auto& maskNode : node.masks)
+                    {
+                        auto* maskSlot = prepare (*maskNode, context);
+                        if (maskSlot != nullptr)
+                        {
+                            maskSlot->state->evaluate();
+
+                            if (maskNode->visible.isValid() && ! maskSlot->state->get (maskNode->visible))
+                                continue;
+                        }
+
+                        const auto mode = (maskSlot != nullptr && maskNode->maskMode.isValid())
+                                            ? maskSlot->state->get (maskNode->maskMode)
+                                            : defaultMaskMode;
+
+                        if (auto* maskGraphics = layer.addMask (mode))
+                        {
+                            maskGraphics->setTransform (childTransform);
+                            maskGraphics->setFillColor (Color (0xffffffff));
+                            drawNodes (*maskGraphics, maskNode->children, layerContext, numRows);
+                        }
+                    }
+
+                    layer.commit();
+                    wasDrawn = true;
+                }
             }
 
-            // The bounds start at the origin, so the layer-local coordinates are the component's
-            auto layer = g.beginTransparencyLayer (bounds, opacity, hasMasks);
-            if (layer.isValid())
+            if (! wasDrawn)
             {
-                // The layer starts from the default paint, shapes without one inherit the caller's
-                auto& layerGraphics = layer.getGraphics();
-                layerGraphics.setFillColor (g.getFillColor());
-                layerGraphics.setStrokeColor (g.getStrokeColor());
-                layerGraphics.setStrokeWidth (g.getStrokeWidth());
-                layerGraphics.setStrokeJoin (g.getStrokeJoin());
-                layerGraphics.setStrokeCap (g.getStrokeCap());
-                layerGraphics.setStrokePosition (g.getStrokePosition());
-
-                drawNodes (layerGraphics, node.children, bounds, font, numRows);
-
-                const auto defaultMaskMode = (slot != nullptr && node.maskMode.isValid())
-                                               ? slot->state->get (node.maskMode)
-                                               : LayerMaskMode::Alpha;
-
-                if (hasMaskPath)
-                {
-                    if (auto* maskGraphics = layer.addMask (defaultMaskMode))
-                    {
-                        maskGraphics->setFillColor (Color (0xffffffff));
-                        maskGraphics->fillPath (slot->state->get (node.maskPath));
-                    }
-                }
-
-                for (const auto& maskNode : node.masks)
-                {
-                    auto* maskSlot = prepare (*maskNode, bounds, font);
-                    if (maskSlot != nullptr)
-                    {
-                        maskSlot->state->evaluate();
-
-                        if (maskNode->visible.isValid() && ! maskSlot->state->get (maskNode->visible))
-                            continue;
-                    }
-
-                    const auto mode = (maskSlot != nullptr && maskNode->maskMode.isValid())
-                                        ? maskSlot->state->get (maskNode->maskMode)
-                                        : defaultMaskMode;
-
-                    if (auto* maskGraphics = layer.addMask (mode))
-                    {
-                        maskGraphics->setFillColor (Color (0xffffffff));
-                        drawNodes (*maskGraphics, maskNode->children, bounds, font, numRows);
-                    }
-                }
-
-                layer.commit();
-                break;
+                g.setOpacity (g.getOpacity() * opacity);
+                drawNodes (g, node.children, context, numRows);
             }
 
-            const auto savedState = g.saveState();
-            g.setOpacity (g.getOpacity() * opacity);
-            drawNodes (g, node.children, bounds, font, numRows);
             break;
         }
 
@@ -1720,6 +2645,9 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, Rectangle<float> bou
         case Node::Kind::image:
         case Node::Kind::svg:
         case Node::Kind::mask:
+        case Node::Kind::clipShapes:
+        case Node::Kind::pattern:
+        case Node::Kind::marker:
             break;
     }
 }

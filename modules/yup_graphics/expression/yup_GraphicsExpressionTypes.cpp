@@ -76,6 +76,7 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
     using T = AffineTransform;
     using G = ColorGradient;
     using D = StrokeDashPattern;
+    using PP = PatternPaint;
 
     // All types are registered before any function, as signatures reference each other
     auto point = context.addType<P> ("point");
@@ -88,6 +89,7 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
     auto dash = context.addType<D> ("dash");
     auto font = context.addType<Font> ("font");
     auto gradient = context.addType<G> ("gradient");
+    auto pattern = context.addType<PP> ("pattern");
 
     context.addEnum<StrokeCap> ("cap", { { "butt", StrokeCap::Butt }, { "round", StrokeCap::Round }, { "square", StrokeCap::Square } });
     context.addEnum<StrokeJoin> ("join", { { "miter", StrokeJoin::Miter }, { "round", StrokeJoin::Round }, { "bevel", StrokeJoin::Bevel } });
@@ -149,6 +151,18 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
                                              { "stretchWidth", Fitting::stretchWidth },
                                              { "stretchHeight", Fitting::stretchHeight },
                                          });
+
+    context.addEnum<G::Spread> ("spread", {
+                                              { "pad", G::Spread::Pad },
+                                              { "reflect", G::Spread::Reflect },
+                                              { "repeat", G::Spread::Repeat },
+                                          });
+
+    context.addEnum<AnchoredText::Anchor> ("textAnchor", {
+                                                             { "start", AnchoredText::Anchor::start },
+                                                             { "middle", AnchoredText::Anchor::middle },
+                                                             { "end", AnchoredText::Anchor::end },
+                                                         });
 
     context.addEnum<LayerMaskMode> ("maskMode", {
                                                     { "alpha", LayerMaskMode::Alpha },
@@ -277,6 +291,7 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
 
     transform
         .constructor ([] { return T(); })
+        .constructor ([] (float a, float b, float c, float d, float tx, float ty) { return T (a, c, tx, b, d, ty); })
         .constructor ("transform.translation", [] (float x, float y) { return T::translation (x, y); })
         .constructor ("transform.rotation", [] (float radians) { return T::rotation (radians); })
         .constructor ("transform.rotation", [] (float radians, float cx, float cy) { return T::rotation (radians, cx, cy); })
@@ -390,6 +405,16 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
         .method ("withAlpha", [] (const G& gr, float a) { return gr.withAlpha (jlimit (0.0f, 1.0f, a)); })
         .method ("withMultipliedAlpha", [] (const G& gr, float a) { return gr.withMultipliedAlpha (jlimit (0.0f, 1.0f, a)); })
         .method ("withTransform", [] (const G& gr, const T& t) { return gr.withTransform (t); })
+        .method ("withSpread", [] (const G& gr, G::Spread spread) { return gr.withSpread (spread); })
+        .method ("mappedTo", [] (const G& gr, const R& area)
+        {
+            return gr.withTransform (gr.getTransform().followedBy (T::scaling (area.getWidth(), area.getHeight()).translated (area.getX(), area.getY())));
+        })
+        .equality();
+
+    pattern
+        .constructor ([] { return PP(); })
+        .member ("isEmpty", [] (const PP& p) { return p.source == nullptr; })
         .equality();
 
     context.addFunction ("polar", [] (const P& center, float radius, float angle) { return center.getPointOnCircumference (radius, angle); });

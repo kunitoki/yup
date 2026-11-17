@@ -1565,6 +1565,56 @@ TEST_F (GraphicsGpuPixelTests, SingleStopGradientFillsWithItsColor)
     }
 }
 
+TEST_F (GraphicsGpuPixelTests, RepeatedAndReflectedGradientsContinueBeyondTheirEnds)
+{
+    const auto renderWithSpread = [] (ColorGradient::Spread spread)
+    {
+        return render ([spread] (Graphics& g)
+        {
+            g.setFillColorGradient (ColorGradient (Color (0xffff0000), 0.0f, 0.0f, Color (0xff0000ff), 16.0f, 0.0f).withSpread (spread));
+            g.fillRect (0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size));
+        });
+    };
+
+    const auto expectRed = [] (const std::vector<uint8>& pixels, int x)
+    {
+        EXPECT_GT (channelAt (pixels, x, 32, 0), 180) << "at x = " << x;
+        EXPECT_LT (channelAt (pixels, x, 32, 2), 80) << "at x = " << x;
+    };
+
+    const auto expectBlue = [] (const std::vector<uint8>& pixels, int x)
+    {
+        EXPECT_GT (channelAt (pixels, x, 32, 2), 180) << "at x = " << x;
+        EXPECT_LT (channelAt (pixels, x, 32, 0), 80) << "at x = " << x;
+    };
+
+    // A padded gradient stays blue after its first 16 pixels
+    const auto padded = renderWithSpread (ColorGradient::Spread::Pad);
+    ASSERT_EQ (padded.size(), static_cast<std::size_t> (size * size * 4));
+    expectRed (padded, 2);
+    expectBlue (padded, 18);
+
+    // A repeated one starts over every 16 pixels
+    const auto repeated = renderWithSpread (ColorGradient::Spread::Repeat);
+    ASSERT_EQ (repeated.size(), static_cast<std::size_t> (size * size * 4));
+
+    for (const auto x : { 2, 18, 50 })
+        expectRed (repeated, x);
+
+    for (const auto x : { 13, 29, 61 })
+        expectBlue (repeated, x);
+
+    // A reflected one goes back and forth
+    const auto reflected = renderWithSpread (ColorGradient::Spread::Reflect);
+    ASSERT_EQ (reflected.size(), static_cast<std::size_t> (size * size * 4));
+
+    for (const auto x : { 2, 29, 34 })
+        expectRed (reflected, x);
+
+    for (const auto x : { 13, 18, 45 })
+        expectBlue (reflected, x);
+}
+
 TEST_F (GraphicsGpuPixelTests, ClipStrokeUnderADegenerateTransformClipsEverything)
 {
     const auto pixels = render ([] (Graphics& g)
@@ -1954,6 +2004,62 @@ TEST_F (GraphicsGpuPixelTests, ImageBackedGraphicsReadsItsPixelsBack)
     EXPECT_LT (bytes[0], 50);
     EXPECT_GT (bytes[2], 200);
     EXPECT_GT (bytes[3], 200);
+}
+
+TEST_F (GraphicsGpuPixelTests, FittedDrawableKeepsMarkersPatternsAndSymbolsInPlace)
+{
+    // A 128 x 128 picture drawn at half its size: what a transform of its own places has to be scaled along with the rest
+    const auto renderFitted = [] (const char* svg)
+    {
+        Drawable drawable;
+        EXPECT_TRUE (drawable.parseSVG (svg));
+
+        return render ([&drawable] (Graphics& g)
+        {
+            drawable.paint (g, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) }, Fitting::scaleToFit, Justification::center);
+        });
+    };
+
+    // A red square marker centered on the end of a line, at (96, 96) in the picture
+    const auto marker = renderFitted (
+        "<svg viewBox=\"0 0 128 128\">"
+        "<defs><marker id=\"m\" markerWidth=\"16\" markerHeight=\"16\" refX=\"8\" refY=\"8\" markerUnits=\"userSpaceOnUse\">"
+        "<rect width=\"16\" height=\"16\" fill=\"#ff0000\"/></marker></defs>"
+        "<path d=\"M 16 96 L 96 96\" fill=\"none\" stroke=\"#0000ff\" stroke-width=\"2\" marker-end=\"url(#m)\"/>"
+        "</svg>");
+    ASSERT_EQ (marker.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (channelAt (marker, 50, 45, 0), 200);
+    EXPECT_LT (channelAt (marker, 50, 45, 2), 50);
+    EXPECT_GT (alphaAt (marker, 50, 45), 200);
+    EXPECT_LT (alphaAt (marker, 58, 45), 50);
+
+    // Green stripes 16 wide, repeating every 32
+    const auto pattern = renderFitted (
+        "<svg viewBox=\"0 0 128 128\">"
+        "<defs><pattern id=\"p\" width=\"32\" height=\"32\" patternUnits=\"userSpaceOnUse\">"
+        "<rect width=\"16\" height=\"32\" fill=\"#00ff00\"/></pattern></defs>"
+        "<rect width=\"128\" height=\"64\" fill=\"url(#p)\"/>"
+        "</svg>");
+    ASSERT_EQ (pattern.size(), static_cast<std::size_t> (size * size * 4));
+
+    for (const auto x : { 4, 20, 36, 52 })
+        EXPECT_GT (channelAt (pattern, x, 10, 1), 200) << "at x = " << x;
+
+    for (const auto x : { 12, 28, 44, 60 })
+        EXPECT_LT (alphaAt (pattern, x, 10), 50) << "at x = " << x;
+
+    // A symbol of 8 x 8 used at (64, 64), 32 x 32 large
+    const auto symbol = renderFitted (
+        "<svg viewBox=\"0 0 128 128\">"
+        "<defs><symbol id=\"s\" viewBox=\"0 0 8 8\"><rect width=\"8\" height=\"8\" fill=\"#ff00ff\"/></symbol></defs>"
+        "<use href=\"#s\" x=\"64\" y=\"64\" width=\"32\" height=\"32\"/>"
+        "</svg>");
+    ASSERT_EQ (symbol.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (channelAt (symbol, 40, 40, 0), 200);
+    EXPECT_GT (channelAt (symbol, 40, 40, 2), 200);
+    EXPECT_LT (channelAt (symbol, 40, 40, 1), 50);
+    EXPECT_LT (alphaAt (symbol, 26, 40), 50);
+    EXPECT_LT (alphaAt (symbol, 54, 40), 50);
 }
 
 //==============================================================================

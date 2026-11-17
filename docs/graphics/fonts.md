@@ -186,6 +186,20 @@ g.fillFittedText (styledText, textBounds);
 g.strokeFittedText (styledText, textBounds);
 ```
 
+### Text anchored on its baseline
+
+`AnchoredText` lays out a single line from a point on its baseline, the way SVG
+text is placed, instead of fitting it in a rectangle. The text starts, is
+centered or ends at the point, and keeps the size of its font:
+
+```cpp
+const AnchoredText title ("Volume", font, { 120.0f, 40.0f }, AnchoredText::Anchor::middle);
+
+g.fillFittedText (title.getStyledText(), title.getBounds());
+```
+
+An optional last argument adds letter spacing.
+
 ## Color emoji
 
 Characters missing from a text's font are shaped with a process-wide fallback font, so emoji

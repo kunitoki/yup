@@ -87,6 +87,58 @@ TEST_F (YuiParserTest, ParsesDrawingBlocksIntoTrees)
     EXPECT_EQ (repeat.getChild (0).getProperty ("from").toString(), "polar (bounds.center, r, i / 10.0)");
 }
 
+TEST_F (YuiParserTest, ParsesNamedBlocksInsideDrawings)
+{
+    const auto result = YuiParser::parse (R"yui(
+        drawing Icon {
+            viewBox: rect (0, 0, 24, 24);
+            drawing Leaf { path { data: "M 5 0 L 10 10 L 0 10 Z"; } }
+            pattern Dots { tile: rect (0, 0, 4, 4); circle { center: point (2, 2); radius: 1; } }
+            marker Arrow { size: size (6, 6); orient: auto; }
+            group {
+                fill: none;
+                use Leaf { bounds: rect (2, 2, 8, 8); fill: #00ff00; }
+                clip { clipPath { circle { center: bounds.center; radius: 8; } } }
+            }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.diagnostics.front().toString();
+
+    const auto drawing = result.document.getChild (0);
+    EXPECT_EQ (drawing.getProperty ("viewBox").toString(), "rect (0, 0, 24, 24)");
+    ASSERT_EQ (drawing.getNumChildren(), 4);
+
+    const auto leaf = drawing.getChild (0);
+    EXPECT_EQ (leaf.getType(), Identifier ("drawing"));
+    EXPECT_EQ (leaf.getProperty ("name").toString(), "Leaf");
+    EXPECT_EQ (leaf.getNumChildren(), 1);
+
+    const auto dots = drawing.getChild (1);
+    EXPECT_EQ (dots.getType(), Identifier ("pattern"));
+    EXPECT_EQ (dots.getProperty ("name").toString(), "Dots");
+    EXPECT_EQ (dots.getProperty ("tile").toString(), "rect (0, 0, 4, 4)");
+
+    const auto arrow = drawing.getChild (2);
+    EXPECT_EQ (arrow.getType(), Identifier ("marker"));
+    EXPECT_EQ (arrow.getProperty ("name").toString(), "Arrow");
+    EXPECT_EQ (arrow.getProperty ("orient").toString(), "auto");
+
+    const auto group = drawing.getChild (3);
+    EXPECT_EQ (group.getProperty ("fill").toString(), "none");
+    ASSERT_EQ (group.getNumChildren(), 2);
+
+    const auto use = group.getChild (0);
+    EXPECT_EQ (use.getType(), Identifier ("use"));
+    EXPECT_EQ (use.getProperty ("drawing").toString(), "Leaf");
+    EXPECT_EQ (use.getProperty ("fill").toString(), "#00ff00");
+    EXPECT_EQ (group.getChild (1).getChild (0).getType(), Identifier ("clipPath"));
+
+    // Outside of a drawing these are ordinary names, and a name is expected after them inside one
+    EXPECT_TRUE (parseError ("Column { use Leaf { } }").isNotEmpty());
+    EXPECT_TRUE (parseError ("drawing { pattern { tile: bounds; } }").isEmpty());
+    EXPECT_TRUE (parseError ("drawing { use: 1; }").isEmpty());
+}
+
 TEST_F (YuiParserTest, KeepsValuesAsWritten)
 {
     const auto result = YuiParser::parse ("drawing { text { text: format (\"%.2f; }\", value) ; } }");

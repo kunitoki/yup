@@ -948,6 +948,16 @@ private:
             return strokeGradient;
         }
 
+        bool spreadsFillGradient() const noexcept
+        {
+            return ! fillImage.has_value() && ! isCurrentFillColor && fillGradient.getSpread() != ColorGradient::Spread::Pad;
+        }
+
+        bool spreadsStrokeGradient() const noexcept
+        {
+            return ! strokeImage.has_value() && ! isCurrentStrokeColor && strokeGradient.getSpread() != ColorGradient::Spread::Pad;
+        }
+
         float getStrokeWidth() const noexcept
         {
             return strokeWidth;
@@ -1019,8 +1029,8 @@ private:
 
     void clipPath (rive::RawPath& path);
 
-    bool setupFillPaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, Point<float> imageOffset = {});
-    bool setupStrokePaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, Point<float> imageOffset = {});
+    bool setupFillPaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, const Rectangle<float>& paintedArea, Point<float> imageOffset = {});
+    bool setupStrokePaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, const Rectangle<float>& paintedArea, Point<float> imageOffset = {});
     void setupPaintBlend (rive::RiveRenderPaint& paint, const RenderOptions& options);
     bool setupImagePaint (rive::RiveRenderPaint& paint, const ImagePaint& imagePaint, Point<float> imageOffset);
     void applyModulation (const RenderOptions& options);

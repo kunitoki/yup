@@ -216,8 +216,26 @@ private:
                              ? DataTree ("drawing")
                              : DataTree ("drawing", { { "name", parseIdentifier ("Expected the name of the drawing") } });
 
+        // The elements of a drawing can be named blocks, see parseBody
+        const ScopedValueSetter<bool> scope (insideDrawing, true);
+
         parseBody (drawing);
         return drawing;
+    }
+
+    // After `drawing`, `pattern`, `marker` or `use` inside a drawing: the name it defines or refers to, then its body
+    DataTree parseNamedDrawingBlock (const String& type)
+    {
+        const auto name = parseIdentifier ("Expected a name after '" + type + "'");
+
+        DataTree block (Identifier (type), { { type == "use" ? Identifier ("drawing") : Identifier ("name"), name } });
+        parseBody (block);
+        return block;
+    }
+
+    static bool isNamedDrawingBlock (const String& name)
+    {
+        return name == "drawing" || name == "pattern" || name == "marker" || name == "use";
     }
 
     DataTree parsePalette()
@@ -668,6 +686,10 @@ private:
             {
                 transaction.addChild (mark (parseRepeat(), start));
             }
+            else if (insideDrawing && isNamedDrawingBlock (name) && lookingAtIdentifier())
+            {
+                transaction.addChild (mark (parseNamedDrawingBlock (name), start));
+            }
             else if (lookingAt ("{"))
             {
                 DataTree child { Identifier (name) };
@@ -878,6 +900,12 @@ private:
         return std::strncmp (text + position, token, std::strlen (token)) == 0;
     }
 
+    bool lookingAtIdentifier()
+    {
+        skipWhitespace();
+        return isIdentifierStart (text[position]);
+    }
+
     bool isAtEnd()
     {
         skipWhitespace();
@@ -925,6 +953,7 @@ private:
     std::vector<int> lineStarts;
     std::vector<YuiDiagnostic> positions;
     int position = 0;
+    bool insideDrawing = false;
 };
 
 //==============================================================================

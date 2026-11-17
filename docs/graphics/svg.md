@@ -148,8 +148,30 @@ For direct access to the parsed model - elements, gradients, and bounds - an
 need `Drawable`; reach for `SVGDocument` when building custom SVG tooling.
 ```
 
+## Editing an SVG as a drawing
+
+A `Drawable` paints an SVG as it is. To bind its shapes to the properties of a
+component, animate them or edit them, `YuiSvgImporter` (in `yup_gui`) writes the
+SVG as a [`.yui` drawing](../ui/yui-drawing.md#importing-an-svg) made of native
+shapes, painting what the `Drawable` paints:
+
+```cpp
+const auto imported = YuiSvgImporter::importSvg (File ("logo.svg"));
+
+if (imported.wasOk())
+    File ("logo.yui").replaceWithText (imported.toText());
+
+for (const auto& warning : imported.warnings)
+    DBG (warning);                                // what the drawing paints differently
+```
+
+Groups keep their structure and set the paint their shapes share, gradients
+become named values, and `<use>`, patterns, markers, clip paths, masks, nested
+`<svg>` elements, images and text become the matching elements of the drawing.
+
 ## See also
 
+- [Data-driven drawing](../ui/yui-drawing.md) - the drawing language an SVG is imported into.
 - [The Graphics class](graphics-class.md) - the context `Drawable` paints into.
 - [Images](../imaging/index.md) - how SVG `<image>` hrefs become `Image` objects.
 - [Fonts & text layout](fonts.md) - how SVG `<text>` resolves fonts.

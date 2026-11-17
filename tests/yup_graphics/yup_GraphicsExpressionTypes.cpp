@@ -315,8 +315,36 @@ TEST_F (GraphicsExpressionTypesTests, GradientOperations)
     )"));
 }
 
+TEST_F (GraphicsExpressionTypesTests, GradientSpreadAndMapping)
+{
+    const auto reflected = evaluate<ColorGradient> ("linearGradient (#f00, point (0, 0), #00f, point (1, 0)).withSpread (reflect)");
+    EXPECT_EQ (ColorGradient::Spread::Reflect, reflected.getSpread());
+    EXPECT_EQ (ColorGradient::Spread::Repeat, evaluate<ColorGradient> ("linearGradient (#f00, point (0, 0), #00f, point (1, 0)).withSpread (spread.repeat)").getSpread());
+
+    // A gradient written for the unit square, placed in a rectangle on top of its own transform
+    const auto mapped = evaluate<ColorGradient> ("linearGradient (#f00, point (0, 0), #00f, point (1, 0)).withTransform (transform.scaling (0.5, 1)).mappedTo (rect (10, 20, 200, 40))");
+    EXPECT_EQ (Color (0xffff0000), mapped.getColorAt (10.0f, 30.0f));
+    EXPECT_EQ (Color (0xff0000ff), mapped.getColorAt (110.0f, 30.0f));
+}
+
+TEST_F (GraphicsExpressionTypesTests, TransformFromMatrixValues)
+{
+    // The values of an SVG matrix: x' = a x + c y + tx, y' = b x + d y + ty
+    EXPECT_EQ (Point<float> (17.0f, 30.0f), evaluate<Point<float>> ("point (1, 2).transformed (transform (1, 2, 3, 4, 10, 20))"));
+    EXPECT_EQ (AffineTransform::translation (5.0f, 6.0f), evaluate<AffineTransform> ("transform (1, 0, 0, 1, 5, 6)"));
+}
+
+TEST_F (GraphicsExpressionTypesTests, PatternIsEmptyWithoutASource)
+{
+    EXPECT_EQ (context.findType ("pattern"), context.getType<PatternPaint>());
+    EXPECT_TRUE (evaluate<bool> ("pattern().isEmpty && pattern() == pattern()"));
+}
+
 TEST_F (GraphicsExpressionTypesTests, Enumerations)
 {
+    EXPECT_EQ (AnchoredText::Anchor::middle, evaluate<AnchoredText::Anchor> ("middle"));
+    EXPECT_EQ (ColorGradient::Spread::Pad, evaluate<ColorGradient::Spread> ("pad"));
+
     EXPECT_EQ (StrokeCap::Square, evaluate<StrokeCap> ("square"));
     EXPECT_EQ (StrokeJoin::Bevel, evaluate<StrokeJoin> ("bevel"));
     EXPECT_EQ (StrokePosition::Outside, evaluate<StrokePosition> ("outside"));

@@ -38,7 +38,24 @@ struct SVGElement : public ReferenceCountedObject
     std::optional<AffineTransform> transform;
     std::optional<AffineTransform> localTransform; // own transform for <use> elements
 
+    /** The primitive a rect, circle, ellipse or line element was declared as, which its path is built from. */
+    struct Primitive
+    {
+        enum class Type
+        {
+            rect,
+            ellipse,
+            line
+        };
+
+        Type type = Type::rect;
+        Rectangle<float> bounds; // The rectangle, or the box a circle or an ellipse is inscribed in
+        Size<float> cornerSize;  // The horizontal and vertical corner radii of a rectangle
+        Line<float> line;        // The ends of a line
+    };
+
     std::optional<Path> path;
+    std::optional<Primitive> primitive;
     std::optional<String> reference;
 
     std::optional<Color> fillColor;
@@ -100,20 +117,37 @@ struct SVGElement : public ReferenceCountedObject
 
     std::vector<SVGElement::Ptr> children;
 
-private:
-    struct MarkerPlacement
-    {
-        Point<float> position;
-        float tangentAngle = 0.0f;
-    };
+    /** Returns the point on its baseline a text element starts from, or nothing for other elements.
 
+        It is the text position, replaced and moved by the first values of the position lists.
+    */
+    std::optional<Point<float>> getTextOrigin() const
+    {
+        if (! textPosition)
+            return std::nullopt;
+
+        auto origin = *textPosition;
+
+        if (textX && ! textX->isEmpty())
+            origin.setX (textX->getFirst());
+
+        if (textY && ! textY->isEmpty())
+            origin.setY (textY->getFirst());
+
+        if (textDx && ! textDx->isEmpty())
+            origin.setX (origin.getX() + textDx->getFirst());
+
+        if (textDy && ! textDy->isEmpty())
+            origin.setY (origin.getY() + textDy->getFirst());
+
+        return origin;
+    }
+
+private:
     std::optional<Rectangle<float>> preparedPathBounds;
     std::optional<Path> preparedDashedPath;
-    std::vector<MarkerPlacement> preparedMarkerStarts;
-    std::vector<MarkerPlacement> preparedMarkerMids;
-    std::vector<MarkerPlacement> preparedMarkerEnds;
-    std::shared_ptr<StyledText> preparedText;
-    std::optional<Rectangle<float>> preparedTextBounds;
+    PathMarkers preparedMarkers;
+    AnchoredText preparedText;
     std::optional<Rectangle<float>> preparedImageBounds;
     std::optional<ColorGradient> preparedFillGradient;
     std::optional<ColorGradient> preparedStrokeGradient;
