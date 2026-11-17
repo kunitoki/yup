@@ -37,26 +37,69 @@ bool isHexDigit (yup_wchar c)
     return isDigit (c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
-bool matchesAt (const String& text, StringRef pattern, int pos)
+/** String indexing is linear on UTF-8, so a scanned line is decoded once and then indexed in constant time. */
+class LineText
 {
-    if (pos + pattern.length() > text.length())
-        return false;
-
-    for (int i = 0; i < pattern.length(); ++i)
+public:
+    explicit LineText (const String& lineText)
+        : text (lineText)
     {
-        if (text[(pos) + (i)] != pattern[(i)])
+        characters.reserve (text.getCharPointer().sizeInBytes() / sizeof (String::CharPointerType::CharType));
+
+        for (auto p = text.getCharPointer(); ! p.isEmpty();)
+            characters.push_back (p.getAndAdvance());
+
+        characters.push_back (0);
+    }
+
+    const String& getString() const noexcept
+    {
+        return text;
+    }
+
+    int length() const noexcept
+    {
+        return static_cast<int> (characters.size()) - 1;
+    }
+
+    /** Returns the character at an index, or the terminating null at the end of the line. */
+    yup_wchar operator[] (int index) const noexcept
+    {
+        return characters[static_cast<size_t> (index)];
+    }
+
+    String substring (int start, int end) const
+    {
+        if (end <= start)
+            return {};
+
+        return String (CharPointer_UTF32 (characters.data() + start), CharPointer_UTF32 (characters.data() + end));
+    }
+
+private:
+    const String text;
+    std::vector<yup_wchar> characters;
+};
+
+bool matchesAt (const LineText& text, StringRef pattern, int pos)
+{
+    for (auto p = pattern.text; ! p.isEmpty(); ++pos)
+    {
+        if (pos >= text.length() || text[pos] != p.getAndAdvance())
             return false;
     }
 
     return true;
 }
 
-int findPattern (const String& text, StringRef pattern, int from)
+int findPattern (const LineText& text, StringRef pattern, int from)
 {
     if (pattern.isEmpty())
         return -1;
 
-    for (int i = jmax (0, from); i + pattern.length() <= text.length(); ++i)
+    const int lastStart = text.length() - pattern.length();
+
+    for (int i = jmax (0, from); i <= lastStart; ++i)
     {
         if (matchesAt (text, pattern, i))
             return i;
@@ -65,9 +108,11 @@ int findPattern (const String& text, StringRef pattern, int from)
     return -1;
 }
 
-int findUnescaped (const String& text, StringRef close, int from, yup_wchar escapeCharacter)
+int findUnescaped (const LineText& text, StringRef close, int from, yup_wchar escapeCharacter)
 {
-    for (int i = jmax (0, from); i + close.length() <= text.length(); ++i)
+    const int lastStart = text.length() - close.length();
+
+    for (int i = jmax (0, from); i <= lastStart; ++i)
     {
         if (escapeCharacter != 0 && text[(i)] == escapeCharacter)
         {
@@ -82,7 +127,7 @@ int findUnescaped (const String& text, StringRef close, int from, yup_wchar esca
     return -1;
 }
 
-int parseRawStringDelimiter (const String& text, int quotePos)
+int parseRawStringDelimiter (const LineText& text, int quotePos)
 {
     const int length = text.length();
     const int delimiterStart = quotePos + 1;
@@ -104,7 +149,7 @@ int parseRawStringDelimiter (const String& text, int quotePos)
     return -1;
 }
 
-int findRawStringClose (const String& text, StringRef delimiter, int from)
+int findRawStringClose (const LineText& text, StringRef delimiter, int from)
 {
     const int length = text.length();
     const int closingLength = 1 + delimiter.length() + 1;
@@ -193,7 +238,7 @@ class RuleMatcher
 {
 public:
     RuleMatcher (const SyntaxDefinition& definition,
-                 const String& text,
+                 const LineText& text,
                  std::vector<StateFrame>& stack,
                  std::unordered_map<String, CodeRegex>& expandedRules)
         : definition (definition)
@@ -220,7 +265,7 @@ public:
             return false;
 
         if (! subject.has_value())
-            subject.emplace (text);
+            subject.emplace (text.getString());
 
         const auto& state = definition.getState (stateIndex);
 
@@ -324,7 +369,7 @@ private:
     }
 
     const SyntaxDefinition& definition;
-    const String& text;
+    const LineText& text;
     std::vector<StateFrame>& stack;
     std::unordered_map<String, CodeRegex>& expandedRules;
     const int rootState;
@@ -414,7 +459,7 @@ void injectToken (const SyntaxDefinition& definition,
 }
 
 /** Applies the injected states of the definition to the plain comment, string, ... tokens of a line. */
-void applyInjections (const SyntaxDefinition& definition, const String& text, std::vector<Token>& tokens)
+void applyInjections (const SyntaxDefinition& definition, const LineText& text, std::vector<Token>& tokens)
 {
     if (text.length() > maxRegexLineLength)
         return;
@@ -427,7 +472,7 @@ void applyInjections (const SyntaxDefinition& definition, const String& text, st
     if (std::none_of (tokens.begin(), tokens.end(), [&] (const Token& token) { return injectedState (token) >= 0; }))
         return;
 
-    const CodeRegex::Subject subject (text);
+    const CodeRegex::Subject subject (text.getString());
 
     std::vector<Token> injected;
     injected.reserve (tokens.size() * 2);
@@ -446,7 +491,7 @@ void applyInjections (const SyntaxDefinition& definition, const String& text, st
 //==============================================================================
 
 uint8_t scanLine (const SyntaxDefinition& definition,
-                  const String& text,
+                  const LineText& text,
                   uint8_t stateBefore,
                   const String& continuationRawStringDelimiter,
                   std::vector<Token>& tokens,
@@ -986,7 +1031,7 @@ void CodeTokeniser::codeDocumentChanged (CodeDocument& document, const CodeDocum
                                                ? cache[i - 1]->rawStringDelimiter
                                                : String();
 
-        const auto lineText = document.getLine (i);
+        const LineText lineText (document.getLine (i));
         auto stack = i == 0 ? std::vector<StateFrame>() : cache[i - 1]->stackAfter;
         RuleMatcher rules (*definition, lineText, stack, expandedRules);
 
@@ -1034,7 +1079,7 @@ const CodeTokeniser::TokenCache& CodeTokeniser::tokenize (const CodeDocument& do
                                                ? cache[line - 1]->rawStringDelimiter
                                                : String();
 
-        const auto lineText = document.getLine (line);
+        const LineText lineText (document.getLine (line));
 
         TokenCache newCache;
         newCache.stateBefore = stateBefore;

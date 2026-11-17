@@ -1612,12 +1612,13 @@ void CodeEditor::shapeWindow (Range<int> window)
     for (int line = windowFirstLine; line <= windowLastLine; ++line)
     {
         const auto lineText = document->getLine (line);
+        const int lineLength = lineText.length();
         const auto tokens = getLineTokens (line);
 
         auto appendRun = [&] (int start, int end, Color color)
         {
-            start = jlimit (0, lineText.length(), start);
-            end = jlimit (start, lineText.length(), end);
+            start = jlimit (0, lineLength, start);
+            end = jlimit (start, lineLength, end);
 
             const auto runText = lineText.substring (start, end);
             if (runText.isNotEmpty())
@@ -1626,7 +1627,7 @@ void CodeEditor::shapeWindow (Range<int> window)
 
         const bool tokensTileLine = ! tokens.empty()
                                  && tokens.front().start == 0
-                                 && tokens.back().end == lineText.length();
+                                 && tokens.back().end == lineLength;
 
         if (tokensTileLine)
         {
