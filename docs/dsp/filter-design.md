@@ -102,6 +102,11 @@ FilterDesigner<double>::designLinkwitzRiley4 (low, high, 2000.0, 48000.0);
 // 2 biquads per output, -6 dB at the crossover
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/dsp/filter-design_linkwitz-riley_light.jpg#gh-light-mode-only" alt="The low and high outputs of a fourth order Linkwitz-Riley crossover at 2 kHz, and their flat sum" width="560">
+  <img class="dark-only rounded" src="../_static/images/dsp/filter-design_linkwitz-riley_dark.jpg#gh-dark-mode-only" alt="The low and high outputs of a fourth order Linkwitz-Riley crossover at 2 kHz, and their flat sum" width="560">
+</p>
+
 `designLinkwitzRiley2` / `designLinkwitzRiley4` / `designLinkwitzRiley8` cover
 the common orders (the generic overload accepts even orders `2..16`).
 

@@ -5,6 +5,10 @@ high-level entry point for vector artwork; the underlying parsed model is an
 `SVGDocument`, and fitting/positioning reuses the shared `Fitting` and
 `Justification` enums.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_svg_tiger.jpg" alt="An SVG painted by a Drawable, in the graphics example" width="560">
+</p>
+
 ## Drawable
 
 A `Drawable` holds a parsed SVG document and knows how to render it. Parse once,
@@ -66,6 +70,14 @@ drawable.paint (g,
 | `centerInside`  | Like `scaleToFit`, but never upscales beyond original size.     |
 | `stretchWidth`  | Stretch horizontally, preserve vertical size.                   |
 | `stretchHeight` | Stretch vertically, preserve horizontal size.                   |
+
+An SVG whose root element has a `preserveAspectRatio` attribute is fitted the
+way it asks for, whatever `fitting` and `justification` are passed.
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/svg_fitting_light.jpg#gh-light-mode-only" alt="An SVG badge painted into a wide area with each fitting mode" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/svg_fitting_dark.jpg#gh-dark-mode-only" alt="An SVG badge painted into a wide area with each fitting mode" width="560">
+</p>
 
 ### Querying bounds
 

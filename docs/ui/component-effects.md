@@ -11,6 +11,10 @@ enables visual effects such as blurs, edge detection, pixelation, colour
 adjustments, and custom GLSL pipelines without modifying the component's
 `paint()` code.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_component_effects.jpg" alt="A component drawn through a shader effect, in the graphics example" width="560">
+</p>
+
 Effects are reference-counted and can be shared across multiple components.
 When a component has an active effect, the rendering path automatically:
 
@@ -147,6 +151,11 @@ myCard.setComponentEffect (new yup::DropShadowEffect (yup::Color (0x66000000), 8
 if (auto ops = yup::FilterEffect::parse ("hue-rotate(90deg) brightness(115%)"); ops.wasOk())
     myCard.setComponentEffect (new yup::FilterEffect (ops.getValue()));
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-effects_built-in_light.jpg#gh-light-mode-only" alt="A component drawn as is, blurred, with a drop shadow, with a glow and in grayscale" width="560">
+  <img class="dark-only rounded" src="../_static/images/ui/component-effects_built-in_dark.jpg#gh-dark-mode-only" alt="A component drawn as is, blurred, with a drop shadow, with a glow and in grayscale" width="560">
+</p>
 
 ### Using Effects from `.yui` Stylesheets
 

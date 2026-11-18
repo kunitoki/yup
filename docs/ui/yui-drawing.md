@@ -8,6 +8,16 @@ font, and the roles of the component's palette (`palette.accent`, ...). Because
 the drawing reads the live component, it follows the component's state without
 any paint code.
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/yui-drawing_fluted-knob_light.jpg#gh-light-mode-only" alt="Three glossy black knobs at different values, each one a slider painted by the FlutedKnob drawing" width="560">
+  <img class="dark-only rounded" src="../_static/images/ui/yui-drawing_fluted-knob_dark.jpg#gh-dark-mode-only" alt="Three glossy black knobs at different values, each one a slider painted by the FlutedKnob drawing" width="560">
+</p>
+
+These knobs are sliders painted by one drawing of the `YuiDrawing` graphics
+example, [`flutedknob.yui`](https://github.com/kunitoki/yup/blob/main/examples/graphics/data/yui/flutedknob.yui):
+gradients, feathered shadows, clipped notches and a repeated scale that follow
+the value, with no image and no paint code.
+
 ```cpp
 #include <yup_gui/yup_gui.h>
 ```
@@ -41,20 +51,27 @@ drawing Knob {
                    to: polar (bounds.center, r * 0.7, lerp (a0, a1, i / 10.0));
                    stroke: trackColor; strokeWidth: 1; }
         }
-    }
-
-    group {
-        transform: transform.rotation (av + 90deg, bounds.center.x, bounds.center.y);
-        rect { bounds: rect (bounds.center.x - 1, 4, 2, r * 0.5); fill: thumbColor; }
+        group {
+            transform: transform.rotation (av, bounds.center.x, bounds.center.y);
+            line { id: needle; from: polar (bounds.center, r * 0.5, 0); to: polar (bounds.center, r - 2, 0);
+                   stroke: thumbColor; strokeWidth: 3; cap: round; }
+        }
     }
 
     text { bounds: bounds.reduced (r * 0.5); text: format ("%.2f", value); fill: thumbColor; }
 }
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/yui-drawing_knob_light.jpg#gh-light-mode-only" alt="Sliders painted by the Knob drawing at different values, the last one disabled" width="480">
+  <img class="dark-only rounded" src="../_static/images/ui/yui-drawing_knob_dark.jpg#gh-dark-mode-only" alt="Sliders painted by the Knob drawing at different values, the last one disabled" width="480">
+</p>
+
 Elements are painted in document order, so later shapes draw on top. Each shape
 has its own style: the well is filled, the arcs are stroked in different colors
-and the ticks are repeated eleven times.
+and the ticks are repeated eleven times. The needle is drawn along the x axis and
+turned by its group; it has the width and the round cap of the value arc and ends
+on its radius, so the two join into one shape.
 
 Angles are in radians, measured clockwise from the positive x axis (`deg`
 converts degrees), the same convention for `arc` and `polar`.
@@ -97,6 +114,11 @@ children. `image` and `svg` also accept `fitting` (`scaleToFit` by default, or
 `none`, `fitWidth`, `fitHeight`, `scaleToFill`, `fill`, `centerCrop`,
 `centerInside`, `stretchWidth`, `stretchHeight`, `tile`) and `justification`
 (`center` by default).
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/yui-drawing_shapes_light.jpg#gh-light-mode-only" alt="The shapes of a drawing: rect, ellipse, circle, arc, line, path, polygon and star" width="560">
+  <img class="dark-only rounded" src="../_static/images/ui/yui-drawing_shapes_dark.jpg#gh-dark-mode-only" alt="The shapes of a drawing: rect, ellipse, circle, arc, line, path, polygon and star" width="560">
+</p>
 
 ## Paint properties
 

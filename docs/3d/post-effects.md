@@ -16,6 +16,11 @@ works on both tiers:
 - The glow strength depends somewhat on the resolution of the view: the same
   intensity looks a little different at different sizes.
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/3d/post-effects_effects_light.jpg#gh-light-mode-only" alt="A scene without post effects, with bloom and with depth of field" width="560">
+  <img class="dark-only rounded" src="../_static/images/3d/post-effects_effects_dark.jpg#gh-dark-mode-only" alt="A scene without post effects, with bloom and with depth of field" width="560">
+</p>
+
 ## Depth of field
 
 **Depth of field** blurs what lies in front of or behind the distance the camera

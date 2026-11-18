@@ -97,6 +97,11 @@ cases.
 `gaussian`, `tukey`, `bartlett`, `welch`, `flattop`, `cosine`, `lanczos`,
 `nuttall`, `blackmanNuttall`, and `rakshitUllah`.
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/dsp/math_windows_light.jpg#gh-light-mode-only" alt="The hann, hamming, blackman, kaiser and flattop windows" width="560">
+  <img class="dark-only rounded" src="../_static/images/dsp/math_windows_dark.jpg#gh-dark-mode-only" alt="The hann, hamming, blackman, kaiser and flattop windows" width="560">
+</p>
+
 Several windows take a shape parameter — Kaiser `beta`, Gaussian `sigma`,
 Tukey `alpha`, and Rakshit-Ullah `r` — passed as the trailing `parameter`
 argument (default `8` in the dispatch APIs, but each named method has its own

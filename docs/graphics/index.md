@@ -4,6 +4,10 @@ The graphics stack renders 2D vector content and GPU-accelerated scenes across
 Metal, Direct3D, OpenGL / OpenGL ES, WebGL and WebGPU (WASM / Emscripten), and Vulkan.
 It is built on the open source [Rive](https://rive.app/) renderer.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_advanced_vectors.jpg" alt="Vector paths drawn and edited in the graphics example" width="560">
+</p>
+
 **Modules covered:** `yup_rhi`, `yup_graphics`, `yup_shading`, `yup_animation`.
 
 ## In this area

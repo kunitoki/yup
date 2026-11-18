@@ -57,6 +57,16 @@ TEST_F (RbjFilterTests, DefaultConstruction)
     EXPECT_FLOAT_EQ (filter.getGain(), 0.0f);
 }
 
+TEST_F (RbjFilterTests, ConstructionWithAMode)
+{
+    RbjFilterFloat filter (FilterMode::highpass);
+    EXPECT_EQ (filter.getMode(), FilterMode::highpass);
+
+    filter.prepare (sampleRate, blockSize);
+    EXPECT_LT (filter.getMagnitudeResponse (100.0f), 0.1f);
+    EXPECT_GT (filter.getMagnitudeResponse (10000.0f), 0.7f);
+}
+
 TEST_F (RbjFilterTests, ParameterInitialization)
 {
     filterFloat.setParameters (FilterMode::peak, 2000.0f, 1.5f, 6.0f, sampleRate);

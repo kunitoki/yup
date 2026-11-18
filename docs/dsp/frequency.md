@@ -4,6 +4,10 @@ The frequency-domain layer of `yup_dsp` covers FFT processing, the realtime
 spectrum-analyzer sample collection model, and the low-level Ooura FFT
 implementation the module can fall back on.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_spectrum.jpg" alt="A spectrum analyzer, in the graphics example" width="560">
+</p>
+
 ## FFTProcessor
 
 `FFTProcessor<SampleType>` is a multi-backend FFT engine with a unified

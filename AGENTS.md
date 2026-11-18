@@ -78,6 +78,24 @@ Mirror the structure of an existing test, e.g. `tests/yup_dsp/yup_KMeterState.cp
 - Keep helpers and constants inside the fixture rather than at file scope - unity builds make file-scope names clash.
 - Never use C/C++ macros such as `M_PI`; use the YUP alternatives.
 
+## Documentation Images
+
+The figures of `docs/` are code: `examples/docsimg` renders them into `docs/_static/images` with `just docs_images` (macOS; it builds, so the Hard Rules apply). Never screenshot or hand-edit them.
+
+- One figure per image, with the id `<section>/<page>_<figure>` (`graphics/drawing_circle`): `f.paint` or `f.component` in the section file of `examples/docsimg/source`, a `.yui` file of `examples/docsimg/figures` for the YUI pages.
+- A figure is the page snippet and little else (about 15 lines). The runner does the background, padding, both color modes, 2x capture and file names; use `role()`, `font()` and `labelled()` for colors, fonts and variants.
+- At most 560 logical px wide (the docs column is 800-900 px), embedded at that width right after the snippet it shows:
+
+```html
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_circle_light.jpg#gh-light-mode-only" alt="A filled circle" width="320">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_circle_dark.jpg#gh-dark-mode-only" alt="A filled circle" width="320">
+</p>
+```
+
+- `just docs_images "ui/tabs*"` renders a subset. Look at the JPGs before embedding them, and delete those of a figure you remove or rename.
+- `just docs` builds the pages into `build/docs`.
+
 ## Platform Guards
 
 `YUP_WINDOWS`, `YUP_MAC`, `YUP_IOS`, `YUP_LINUX`, `YUP_ANDROID`, `YUP_WASM` (any WebAssembly), `YUP_EMSCRIPTEN` (Emscripten only), `YUP_DESKTOP`, `YUP_MOBILE`.

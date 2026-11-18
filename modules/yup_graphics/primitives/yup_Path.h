@@ -221,12 +221,12 @@ public:
 
     /** Draws a quadratic Bezier curve to specified coordinates with one control point.
 
-        This method draws a quadratic Bezier curve from the current point to the point (x, y),
-        using the given point p as the control point. The current point is then set to (x, y).
+        This method draws a quadratic Bezier curve from the current point to the point p,
+        using (x1, y1) as the control point. The current point is then set to p.
 
-        @param p The control point.
-        @param x1 The x-coordinate of the endpoint.
-        @param y1 The y-coordinate of the endpoint.
+        @param p The endpoint.
+        @param x1 The x-coordinate of the control point.
+        @param y1 The y-coordinate of the control point.
     */
     Path& quadTo (const Point<float>& p, float x1, float y1);
 

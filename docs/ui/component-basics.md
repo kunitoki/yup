@@ -325,8 +325,8 @@ from `yup_graphics`.
 ```cpp
 void MyComponent::paint (Graphics& g) override
 {
-    g.setFillColor (Colors::cornflowerBlue);
-    g.fillRoundedRectangle (getLocalBounds(), 8.0f);
+    g.setFillColor (Colors::cornflowerblue);
+    g.fillRoundedRect (getLocalBounds(), 8.0f);
 }
 ```
 
@@ -340,7 +340,8 @@ void MyComponent::paintOverChildren (Graphics& g) override
 {
     // Draw a border or overlay that sits above all children.
     g.setStrokeColor (Colors::black);
-    g.drawRoundedRectangle (getLocalBounds().reduced (0.5f), 8.0f, 1.0f);
+    g.setStrokeWidth (1.0f);
+    g.strokeRoundedRect (getLocalBounds().reduced (0.5f), 8.0f);
 }
 ```
 
@@ -437,12 +438,17 @@ previous frame.
 
 ```cpp
 comp.setTransform (AffineTransform::rotation (0.785f));
-comp.setTransform (AffineTransform::scale (2.0f));
+comp.setTransform (AffineTransform::scaling (2.0f));
 comp.setTransform (AffineTransform::translation (50, 50));
 
 AffineTransform t = comp.getTransform();
 bool isXformed = comp.isTransformed(); // true if transform is not identity
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-basics_transform_light.jpg#gh-light-mode-only" alt="A component rotated, scaled and translated from where it was placed" width="560">
+  <img class="dark-only rounded" src="../_static/images/ui/component-basics_transform_dark.jpg#gh-dark-mode-only" alt="A component rotated, scaled and translated from where it was placed" width="560">
+</p>
 
 Transforms are applied in the component's local coordinates, before its position
 in the parent, and they compose down the hierarchy: a transformed parent carries
@@ -509,6 +515,11 @@ comp.lowerBelow (&otherComp);
 comp.raiseBy (1);               // move up by 1 position
 comp.lowerBy (2);               // move down by 2 positions
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-basics_z-order_light.jpg#gh-light-mode-only" alt="Three overlapping components as added, with the first brought to the front and with the last sent to the back" width="560">
+  <img class="dark-only rounded" src="../_static/images/ui/component-basics_z-order_dark.jpg#gh-dark-mode-only" alt="Three overlapping components as added, with the first brought to the front and with the last sent to the back" width="560">
+</p>
 
 A component that changes position in this list is told its old and new index:
 
@@ -669,9 +680,9 @@ void mouseUp (const MouseEvent& e) override
 ### Mouse cursor
 
 ```cpp
-comp.setMouseCursor (MouseCursor::PointingHandCursor);
+comp.setMouseCursor (MouseCursor::Hand);
 // or override:
-virtual MouseCursor getMouseCursor() const override;
+MouseCursor getMouseCursor() const override;
 ```
 
 ### Keyboard focus

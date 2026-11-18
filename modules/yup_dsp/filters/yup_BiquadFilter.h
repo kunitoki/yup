@@ -43,10 +43,14 @@ public:
         setParameters (FilterMode::lowpass, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), static_cast<CoeffType> (0.0), 44100.0);
     }
 
-    /** Constructor with optional initial parameters */
+    /** Constructor with an initial mode.
+
+        The coefficients are computed by prepare() or by the first parameter change: a subclass
+        designs them, which can't be asked for while the filter is being constructed.
+    */
     explicit BiquadFilter (FilterModeType mode)
+        : filterMode (resolveFilterMode (mode, this->getSupportedModes()))
     {
-        setParameters (mode, static_cast<CoeffType> (1000.0), static_cast<CoeffType> (0.707), static_cast<CoeffType> (0.0), 44100.0);
     }
 
     //==============================================================================

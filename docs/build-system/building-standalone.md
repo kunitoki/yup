@@ -29,15 +29,15 @@ public:
         : DocumentWindow (yup::ComponentNative::Options(), {})
     {
         setTitle ("My Application");
-        setSize (800, 600);
-        centreWithSize (getWidth(), getHeight());
+        centreWithSize ({ 800, 600 });
         setVisible (true);
-        takeFocus();
+        toFront (true);
     }
 
     void paint (yup::Graphics& g) override
     {
-        g.fillAll (yup::Colours::black);
+        g.setFillColor (yup::Colors::black);
+        g.fillAll();
     }
 
     void userTriedToCloseWindow() override
@@ -54,12 +54,12 @@ class MyApplication : public yup::YUPApplication
 public:
     MyApplication() = default;
 
-    const yup::String getApplicationName() override
+    yup::String getApplicationName() override
     {
         return "My Application";
     }
 
-    const yup::String getApplicationVersion() override
+    yup::String getApplicationVersion() override
     {
         return "1.2.3";
     }

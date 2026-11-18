@@ -19,7 +19,6 @@ Column {
     Row {
         id: header;
         preferredHeight: 36;
-        align: center;
         gap: spacing;
 
         Label      { text: "SYNTH"; flexGrow: 1; }
@@ -28,6 +27,7 @@ Column {
 
     Grid {
         columns: "repeat(4, minmax(72px, 1fr))";
+        rows: 1;
         gap: spacing;
         flexGrow: 1;
 
@@ -38,6 +38,11 @@ Column {
     }
 }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/yui-layout_synth_light.jpg#gh-light-mode-only" alt="A column holding a header row and a grid of four rotary sliders" width="480">
+  <img class="dark-only rounded" src="../_static/images/ui/yui-layout_synth_dark.jpg#gh-dark-mode-only" alt="A column holding a header row and a grid of four rotary sliders" width="480">
+</p>
 
 ## Containers
 
@@ -64,6 +69,11 @@ component LabeledKnob : Column {
     Label  { text: root.label; justification: center; preferredHeight: 18; }
 }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/yui-documents_composite_light.jpg#gh-light-mode-only" alt="Three instances of a composite component made of a rotary slider and a label" width="480">
+  <img class="dark-only rounded" src="../_static/images/ui/yui-documents_composite_dark.jpg#gh-dark-mode-only" alt="Three instances of a composite component made of a rotary slider and a label" width="480">
+</p>
 
 ### Shared container properties
 

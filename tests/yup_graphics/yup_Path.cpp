@@ -107,6 +107,17 @@ TEST (PathTests, AddRectangle)
     EXPECT_FALSE (p.getBounds().isEmpty());
 }
 
+TEST (PathTests, AddRectangleClosesItsContour)
+{
+    Path p;
+    p.addRectangle (10.0f, 20.0f, 30.0f, 40.0f);
+
+    // An open contour is stroked with caps at its ends, leaving the first corner without a join
+    EXPECT_TRUE (p.isExplicitlyClosed());
+    EXPECT_EQ (5, p.size());
+    EXPECT_NEAR (140.0f, p.getLength(), 1.0e-3f);
+}
+
 TEST (PathTests, AddRoundedRectangle)
 {
     Path p;

@@ -211,6 +211,11 @@ style {
 }
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/yui-styles_stylesheet_light.jpg#gh-light-mode-only" alt="Widgets under the theme palette, and in a panel a rule gives another palette to, with a class coloring the primary buttons" width="480">
+  <img class="dark-only rounded" src="../_static/images/ui/yui-styles_stylesheet_dark.jpg#gh-dark-mode-only" alt="Widgets under the theme palette, and in a panel a rule gives another palette to, with a class coloring the primary buttons" width="480">
+</p>
+
 The roles are `background`, `surface`, `surfaceRaised`, `outline`, `text`,
 `textMuted`, `accent` and `onAccent`; `palette.dark` is true for a dark palette.
 
@@ -326,6 +331,11 @@ style {
     .card:disabled { filter: grayscale(100%) opacity(60%); effect: customHalftone; }
 }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/yui-styles_shadows_light.jpg#gh-light-mode-only" alt="Buttons given a shadow, a glow and a filter by a stylesheet" width="480">
+  <img class="dark-only rounded" src="../_static/images/ui/yui-styles_shadows_dark.jpg#gh-dark-mode-only" alt="Buttons given a shadow, a glow and a filter by a stylesheet" width="480">
+</p>
 
 - `shadow:` takes comma-separated layers, each `x y [blur [spread]] color`
   like CSS, or `none`. Each layer offsets, spreads and feathers the component's

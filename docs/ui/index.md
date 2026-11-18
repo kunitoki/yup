@@ -3,6 +3,10 @@
 The GUI layer: components, windowing, event handling, layout, and widgets that
 paint through the [graphics](../graphics/index.md) stack.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_widgets.jpg" alt="The widgets of the default theme, in the graphics example" width="560">
+</p>
+
 **Modules covered:** `yup_gui`, `yup_events`, `yup_audio_gui`.
 
 ```{warning}

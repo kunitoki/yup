@@ -4,6 +4,10 @@ The audio-first stack: device I/O, MIDI, file formats, DSP, an audio graph,
 processors, and CLAP / VST3 plugin hosting and client wrappers - all in one
 framework.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_audio_graph.jpg" alt="The node editor of the audio graph example" width="560">
+</p>
+
 **Modules covered:** `yup_audio_basics`, `yup_audio_devices`, `yup_audio_formats`,
 `yup_audio_graph`, `yup_audio_processors`, `yup_dsp`, `yup_audio_plugin_client`,
 `yup_audio_plugin_host`.

@@ -127,6 +127,11 @@ state.set (bounds, getLocalBounds().to<float>());
 bars.getReference().draw (g, state, (int) data.size());
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/expressions_bars_light.jpg#gh-light-mode-only" alt="Bars drawn from an array by one expression, their height and color following the values" width="480">
+  <img class="dark-only rounded" src="../_static/images/graphics/expressions_bars_dark.jpg#gh-dark-mode-only" alt="Bars drawn from an array by one expression, their height and color following the values" width="480">
+</p>
+
 `create` compiles the program and fails with a descriptive message when it has
 no shape output, or when `label` isn't assigned together with either `labelRect`
 or `labelAnchor`. `draw` evaluates the rows in blocks and restores the `Graphics`

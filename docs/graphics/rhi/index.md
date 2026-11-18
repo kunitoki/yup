@@ -6,6 +6,10 @@ abstraction, giving you direct control over pipelines, render passes, buffers,
 and textures while remaining portable across Metal, Direct3D, OpenGL / OpenGL ES,
 WebGL2, WebGPU, and Vulkan.
 
+<p align="center">
+  <img class="rounded" src="../../_static/images/yup_rhi_fluid.jpg" alt="A fluid simulation running on RHI render passes, in the graphics example" width="560">
+</p>
+
 Use the RHI when you need custom GPU work that the 2D `Graphics` API does not
 express - 3D geometry, post-process effects, compute passes for DSP or simulation,
 or offscreen render-to-texture pipelines. For GPU compute without any window or

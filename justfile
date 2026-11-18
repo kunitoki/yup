@@ -237,3 +237,14 @@ update_emscripten_examples DEMOPATH="../yup-demos/demos":
   @just update_emscripten_example Widgets widgets {{DEMOPATH}}
   @just update_emscripten_example YuiDrawing yui-drawing {{DEMOPATH}}
   @just update_emscripten_example YdspSynths ydsp-synths {{DEMOPATH}}
+
+[doc("render the documentation figures of examples/docsimg into docs/_static/images (FIGURE is a wildcard on their ids)")]
+[macos]
+docs_images FIGURE="*" CONFIG="Release":
+  @[ build/mac/examples/docsimg/example_docsimg.xcodeproj/project.pbxproj -nt examples/docsimg/CMakeLists.txt ] || cmake -G Xcode -B build/mac
+  cmake --build build/mac --config {{CONFIG}} --target example_docsimg -- -quiet
+  build/mac/examples/docsimg/{{CONFIG}}/example_docsimg.app/Contents/MacOS/example_docsimg --out docs/_static/images --figure "{{FIGURE}}"
+
+[doc("build the documentation into build/docs")]
+docs:
+  uv run --with-requirements docs/requirements.txt python -m sphinx -b html -q docs build/docs

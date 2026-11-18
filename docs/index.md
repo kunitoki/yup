@@ -6,6 +6,10 @@ combines permissively licensed JUCE7-derived foundations with modern GPU-native
 rendering through the open source [Rive](https://rive.app/) renderer and YUP's
 own graphics, GUI, DSP, audio graph, and plugin layers.
 
+<p align="center">
+  <img class="rounded" src="_static/images/yup_retrace_plugin.jpg" alt="RETRACE, the spectral synthesizer plugin of the examples, built with YUP" width="560">
+</p>
+
 ```{warning}
 YUP is under active early-stage development. APIs may change while the framework
 is being shaped. This documentation tracks the current state of the code in the

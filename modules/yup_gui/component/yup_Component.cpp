@@ -2512,12 +2512,16 @@ GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool in
     return renderSnapshot();
 }
 
-Image Component::snapshotToImage (GraphicsContext& ctx, bool includeEffects)
+Image Component::snapshotToImage (GraphicsContext& ctx, bool includeEffects, float scale)
 {
+    jassert (scale > 0.0f);
+    if (scale <= 0.0f)
+        return {};
+
     Image result;
     const auto takeSnapshot = [&]
     {
-        auto canvas = renderSnapshotOffscreen (ctx, includeEffects, 1.0f);
+        auto canvas = renderSnapshotOffscreen (ctx, includeEffects, scale);
         if (canvas == nullptr)
             return;
 

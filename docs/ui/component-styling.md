@@ -4,6 +4,10 @@ YUP separates appearance from logic via `ComponentStyle`, colors, and properties
 These cascade: a component inherits values from its parent and from the global
 `ApplicationTheme`.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_themes.jpg" alt="One interface under a custom palette, in the themes demo of the graphics example" width="560">
+</p>
+
 ```cpp
 #include <yup_gui/yup_gui.h>
 ```
@@ -38,9 +42,14 @@ nested `Style` struct.
 ### Setting per-component colors
 
 ```cpp
-comp.setColor ("background", Colors::darkSlateBlue);
+comp.setColor ("background", Colors::darkslateblue);
 comp.setColor ("border", std::nullopt); // remove override → inherit
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-styling_colors_light.jpg#gh-light-mode-only" alt="A button with the colors of the theme and one with colors of its own" width="480">
+  <img class="dark-only rounded" src="../_static/images/ui/component-styling_colors_dark.jpg#gh-dark-mode-only" alt="A button with the colors of the theme and one with colors of its own" width="480">
+</p>
 
 ### Reading colors
 
@@ -61,7 +70,7 @@ Theme defaults affect all components that haven't overridden the color locally:
 
 ```cpp
 auto theme = ApplicationTheme::getGlobalTheme();
-theme->setColor (TextButton::Style::backgroundColorId, Colors::cornflowerBlue);
+theme->setColor (TextButton::Style::backgroundColorId, Colors::cornflowerblue);
 ```
 
 Theme-level color resolution via `theme->findColor(component, id)`:
@@ -262,7 +271,7 @@ auto customButtonStyle = ComponentStyle::createStyle<TextButton> (
                            .value_or (Colors::gray);
 
         g.setFillColor (bgColor);
-        g.fillRoundedRectangle (b.getLocalBounds(), 6.0f);
+        g.fillRoundedRect (b.getLocalBounds(), 6.0f);
 
         // Draw text, border, etc.
     });
@@ -396,6 +405,11 @@ matter), text is always readable against the background, and missing colors are
 derived, so a single source color still gives a complete palette. Palettes are
 dark by default, pass `ThemePalette::Mode::light` for a light one.
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-styling_palette-roles_light.jpg#gh-light-mode-only" alt="The colors of the roles of the default palette" width="560">
+  <img class="dark-only rounded" src="../_static/images/ui/component-styling_palette-roles_dark.jpg#gh-dark-mode-only" alt="The colors of the roles of the default palette" width="560">
+</p>
+
 ```cpp
 // From colors
 ThemePalette palette (std::vector<Color> { Color (0xff100b00), Color (0xff85cb33), Color (0xffefffc8) });
@@ -442,6 +456,11 @@ editor.setPalette (ThemePalette::fromString ("https://coolors.co/0b132b-1c2541-3
 editor.setPalette (std::nullopt);
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-styling_component-palettes_light.jpg#gh-light-mode-only" alt="The same widgets under the theme palette and under two component palettes" width="560">
+  <img class="dark-only rounded" src="../_static/images/ui/component-styling_component-palettes_dark.jpg#gh-dark-mode-only" alt="The same widgets under the theme palette and under two component palettes" width="560">
+</p>
+
 This is how several plugin editors in one process, which share the global theme,
 can each wear their own palette. `ApplicationTheme::getPalette (component)` returns
 the palette a component is drawn with, and `Component::findPalette()` the closest
@@ -458,9 +477,15 @@ available as `YUP_ICON_*` macros:
 ```cpp
 #include <yup_gui/themes/theme_v1/yup_ThemeVersion1_Icons.h>
 
-String iconText = YUP_ICON_GEAR;        // ⚙
-String checkmark = YUP_ICON_CIRCLE_CHECK; // ✅
+// The macros are UTF-8 literals, which a String only takes through fromUTF8
+String iconText  = String::fromUTF8 (YUP_ICON_GEAR);         // ⚙
+String checkmark = String::fromUTF8 (YUP_ICON_CIRCLE_CHECK); // ✅
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-styling_icons_light.jpg#gh-light-mode-only" alt="Some glyphs of the icon font" width="560">
+  <img class="dark-only rounded" src="../_static/images/ui/component-styling_icons_dark.jpg#gh-dark-mode-only" alt="Some glyphs of the icon font" width="560">
+</p>
 
 To draw an icon, obtain the theme's icon font and draw the glyph as text:
 
@@ -468,10 +493,11 @@ To draw an icon, obtain the theme's icon font and draw the glyph as text:
 void MyButton::paint (Graphics& g) override
 {
     auto theme = ApplicationTheme::getGlobalTheme();
-    g.setFont (theme->getDefaultIconFont());
+    const auto iconFont = theme->getDefaultIconFont().withHeight (16.0f);
+
     g.setFillColor (findColor (TextButton::Style::textColorId)
                         .value_or (Colors::white));
-    g.drawText (YUP_ICON_GEAR, getLocalBounds(), Justification::centred);
+    g.fillFittedText (String::fromUTF8 (YUP_ICON_GEAR), iconFont, getLocalBounds(), Justification::center);
 }
 ```
 
@@ -494,22 +520,21 @@ public:
         button.setBounds (getLocalBounds().reduced (20));
     }
 
-private:
-    TextButton button;
-
     static inline auto kCustomStyle = ComponentStyle::createStyle<TextButton> (
         [] (Graphics& g, const ApplicationTheme& theme, const TextButton& b)
         {
             auto bgColor = b.findColor (TextButton::Style::backgroundColorId)
-                               .value_or (Colors::darkSlateBlue);
+                               .value_or (Colors::darkslateblue);
 
             g.setFillColor (bgColor);
-            g.fillRoundedRectangle (b.getLocalBounds(), 12.0f);
+            g.fillRoundedRect (b.getLocalBounds(), 12.0f);
 
-            g.setFont (theme.getDefaultFont());
             g.setFillColor (Colors::white);
-            g.drawText (b.getTitle(), b.getLocalBounds(), Justification::centred);
+            g.fillFittedText (b.getTitle(), theme.getDefaultFont().withHeight (14.0f), b.getLocalBounds(), Justification::center);
         });
+
+private:
+    TextButton button;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StyledPanel)
 };

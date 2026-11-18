@@ -10,6 +10,10 @@ The filter layer is split into two halves:
   automatically: RBJ, Zoelzer, state-variable, Butterworth, Linkwitz-Riley,
   direct FIR, analog-model, and comb filters.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_dsp_filter.jpg" alt="The response of a filter, in the filter demo of the graphics example" width="560">
+</p>
+
 The general pattern is: call `prepare (sampleRate, maximumBlockSize)` once
 during initialization, then either `processSample` or `processBlock` from the
 audio thread. Setter methods are `noexcept`, compare against the current value
@@ -121,6 +125,11 @@ eq.setParameters (yup::FilterMode::peak, 1000.f, 1.0f, 6.0, 48000.0);
 eq.setQ (1.4);          // parameter-only setters: setFrequency, setGain, setMode
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/dsp/filters_rbj-modes_light.jpg#gh-light-mode-only" alt="The magnitude responses of the RBJ lowpass, highpass, bandpass, peak and bandstop filters at 1 kHz" width="560">
+  <img class="dark-only rounded" src="../_static/images/dsp/filters_rbj-modes_dark.jpg#gh-dark-mode-only" alt="The magnitude responses of the RBJ lowpass, highpass, bandpass, peak and bandstop filters at 1 kHz" width="560">
+</p>
+
 ### Zoelzer biquads — ZoelzerFilter
 
 `ZoelzerFilter` is API-identical to `RbjFilter` but designs coefficients with
@@ -184,6 +193,11 @@ bw.setParameters (yup::FilterMode::lowpass, 4, 1000.f, 0.0f, 48000.0);
 bw.processBlock (in, out, numSamples);
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/dsp/filters_butterworth-orders_light.jpg#gh-light-mode-only" alt="The magnitude responses of Butterworth lowpass filters of order 2, 4 and 8 at 1 kHz" width="560">
+  <img class="dark-only rounded" src="../_static/images/dsp/filters_butterworth-orders_dark.jpg#gh-dark-mode-only" alt="The magnitude responses of Butterworth lowpass filters of order 2, 4 and 8 at 1 kHz" width="560">
+</p>
+
 ### LinkwitzRileyFilter
 
 `LinkwitzRileyFilter<SampleType, CoeffType, Order>` is the "Butterworth
@@ -192,6 +206,10 @@ squared" crossover: it cascades two Butterworth filters of order `Order/2`
 phase-aligned low-pass and high-pass outputs. `Order` is a template parameter
 (even, `≥ 2`); use the aliases `LinkwitzRiley2Filter`, `LinkwitzRiley4Filter`
 (2 stages), `LinkwitzRiley8Filter`.
+
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_dsp_crossover.jpg" alt="The bands of a Linkwitz-Riley crossover, in the graphics example" width="560">
+</p>
 
 ```cpp
 LinkwitzRiley4Filter<float> xover;

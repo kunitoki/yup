@@ -913,9 +913,9 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getComponentEffect", &Component::getComponentEffect)
 
         // Snapshots
-        .def ("snapshotToImage", &Component::snapshotToImage, "ctx"_a, "includeEffects"_a = true,
-              "Renders the subtree offscreen and reads the pixels back. Returns an invalid Image\n"
-              "when the context has no GPU or the component has no size.")
+        .def ("snapshotToImage", &Component::snapshotToImage, "ctx"_a, "includeEffects"_a = true, "scale"_a = 1.0f,
+              "Renders the subtree offscreen, at scale pixels per logical unit, and reads the pixels\n"
+              "back. Returns an invalid Image when the context has no GPU or the component has no size.")
         .def ("snapshotToTexture", &Component::snapshotToTexture, "ctx"_a, "includeEffects"_a = true,
               "Like snapshotToImage, but returns the GPU texture without reading pixels back.")
     ;

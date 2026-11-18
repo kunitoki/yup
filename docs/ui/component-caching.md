@@ -106,7 +106,7 @@ public:
     void resized() override
     {
         background.setBounds (getLocalBounds());
-        spinner.centerInParent();
+        spinner.setBounds (getLocalBounds().withSizeKeepingCenter (32.0f, 32.0f));
     }
 
 private:

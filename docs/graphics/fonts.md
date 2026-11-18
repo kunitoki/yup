@@ -92,6 +92,11 @@ auto custom = font.withAxisValues ({
 });
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/fonts_variable-axes_light.jpg#gh-light-mode-only" alt="The weight and width axes of a variable font" width="480">
+  <img class="dark-only rounded" src="../_static/images/graphics/fonts_variable-axes_dark.jpg#gh-dark-mode-only" alt="The weight and width axes of a variable font" width="480">
+</p>
+
 Each axis has a 4-character OpenType tag (e.g. `"wght"`, `"wdth"`, `"slnt"`,
 `"ital"`). `resetAxisValue(tag)` / `resetAllAxisValues()` restore the default
 values.
@@ -155,6 +160,11 @@ StyledText text;
 }
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/fonts_styled-text_light.jpg#gh-light-mode-only" alt="Styled text with bold and colored runs, wrapped and centered" width="320">
+  <img class="dark-only rounded" src="../_static/images/graphics/fonts_styled-text_dark.jpg#gh-dark-mode-only" alt="Styled text with bold and colored runs, wrapped and centered" width="320">
+</p>
+
 Key layout controls set via the `TextModifier`:
 
 | Property              | Values                | Description                                          |
@@ -203,6 +213,11 @@ const AnchoredText title ("Volume", font, { 120.0f, 40.0f }, AnchoredText::Ancho
 g.fillFittedText (title.getStyledText(), title.getBounds());
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/fonts_anchored-text_light.jpg#gh-light-mode-only" alt="Lines of text starting at, centered on and ending at a point of their baseline" width="480">
+  <img class="dark-only rounded" src="../_static/images/graphics/fonts_anchored-text_dark.jpg#gh-dark-mode-only" alt="Lines of text starting at, centered on and ending at a point of their baseline" width="480">
+</p>
+
 An optional last argument adds letter spacing.
 
 ## Color emoji
@@ -211,6 +226,11 @@ Characters missing from a text's font are shaped with a process-wide fallback fo
 show up in any text - `StyledText`, labels, text editors and Rive artboard text - with no
 extra code. Color glyphs (COLR layers, SBIX and CBDT bitmaps) keep their own colors when the
 text is filled; stroking text leaves them out.
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/fonts_color-emoji_light.jpg#gh-light-mode-only" alt="Color emoji drawn inside a line of text" width="480">
+  <img class="dark-only rounded" src="../_static/images/graphics/fonts_color-emoji_dark.jpg#gh-dark-mode-only" alt="Color emoji drawn inside a line of text" width="480">
+</p>
 
 By default the fallback is the system color emoji font, loaded on first use: Apple Color
 Emoji on macOS and iOS, Segoe UI Emoji on Windows, Noto Color Emoji on Linux and Android.

@@ -40,6 +40,11 @@ table.applyKaiserWindow (9.0);                 // optional Kaiser windowing, bet
 double v = table (tap, delta);   // fractional-phase access; negative taps mirrored
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/dsp/resampling_sinc-table_light.jpg#gh-light-mode-only" alt="The kernel of a sinc table, as configured and after its Kaiser window" width="480">
+  <img class="dark-only rounded" src="../_static/images/dsp/resampling_sinc-table_dark.jpg#gh-dark-mode-only" alt="The kernel of a sinc table, as configured and after its Kaiser window" width="480">
+</p>
+
 `configure` sets the cutoff to `sampleRate/2` (correct for integer-factor
 upsampling); `configureWithCutoff` takes an explicit cutoff in
 `(0, sampleRate/2]` (correct for downsampling, where the anti-aliasing cutoff

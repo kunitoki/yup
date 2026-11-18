@@ -483,6 +483,11 @@ lfo.skip (numSamples);               // advance by one block
 lfo.processBlock (out, numSamples);  // or audio-rate
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/dsp/oscillators_lfo-shapes_light.jpg#gh-light-mode-only" alt="Two cycles of the sine, triangle, sawtooth and square shapes of the LFO" width="560">
+  <img class="dark-only rounded" src="../_static/images/dsp/oscillators_lfo-shapes_dark.jpg#gh-dark-mode-only" alt="Two cycles of the sine, triangle, sawtooth and square shapes of the LFO" width="560">
+</p>
+
 Sample-and-hold draws from a seeded linear congruential generator every time the
 phase wraps, so `setSeed()` plus `reset()` makes a modulation reproducible. Smooth
 random runs a Catmull-Rom spline through draws from a second seeded stream, scaled

@@ -1282,7 +1282,7 @@ Path& Path::addRectangle (float x, float y, float width, float height)
     lineTo (x + width, y);
     lineTo (x + width, y + height);
     lineTo (x, y + height);
-    lineTo (x, y);
+    close();
 
     if (wasEmpty)
         simpleContourMutationID = path->getRawPathMutationID();

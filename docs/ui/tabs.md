@@ -82,6 +82,11 @@ in sync with the bar, like `TabComponent`.
 A tab is sized for its text in the bold font of the selected tab, so tabs keep
 their width when the selection changes.
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/tabs_variants_light.jpg#gh-light-mode-only" alt="A pill tab bar as long as its tabs, one filling its width, and an underlined one" width="480">
+  <img class="dark-only rounded" src="../_static/images/ui/tabs_variants_dark.jpg#gh-dark-mode-only" alt="A pill tab bar as long as its tabs, one filling its width, and an underlined one" width="480">
+</p>
+
 ## Tabs that do not fit
 
 `setOverflow` chooses what happens when the tabs are longer than the bar:

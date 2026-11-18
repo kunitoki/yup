@@ -58,11 +58,16 @@ holds properties, written `name: value;`, and child elements, written
 
 ```yui
 Column {
-    gap: 4;                                  // a property
-    Slider { id: knob; value: 0.5; }         // a child element
-    Label  { text: format ("%.2f", knob.value); }
+    gap: 4;                                                             // a property
+    Slider { id: knob; value: 0.5; flexGrow: 1; }                       // a child element
+    Label  { text: format ("%.2f", knob.value); preferredHeight: 20; }
 }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/yui-language_elements_light.jpg#gh-light-mode-only" alt="A slider above a label showing its value" width="360">
+  <img class="dark-only rounded" src="../_static/images/ui/yui-language_elements_dark.jpg#gh-dark-mode-only" alt="A slider above a label showing its value" width="360">
+</p>
 
 A property can be set once per element. Inside a `drawing` the children are
 shapes and scopes (`circle`, `layer`, ...); in the instance tree and in

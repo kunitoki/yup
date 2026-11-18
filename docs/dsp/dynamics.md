@@ -9,6 +9,11 @@ nonlinearities, and level / loudness measurement for meters and analyzers.
 Three clippers are provided. The hard and soft ones are stateless;
 `HardClipper` is built on the IIR antialiasing machinery (see below).
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/dsp/dynamics_clippers_light.jpg#gh-light-mode-only" alt="The output of the blunter, soft and hard clippers for inputs from -2 to 2" width="480">
+  <img class="dark-only rounded" src="../_static/images/dsp/dynamics_clippers_dark.jpg#gh-dark-mode-only" alt="The output of the blunter, soft and hard clippers for inputs from -2 to 2" width="480">
+</p>
+
 ### BlunterClipper
 
 `BlunterClipper` is a quadratic bounded soft clipper (from Lorenzo Fiestas,

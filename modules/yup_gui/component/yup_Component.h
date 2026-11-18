@@ -2052,10 +2052,13 @@ public:
         @param includeEffects When true and a component effect is active, the effect is
                               applied to the snapshot. When false, the raw subtree
                               rendering is captured.
+        @param scale          The number of pixels rendered per logical unit: the image is
+                              the component size multiplied by it, so 2 gives a snapshot
+                              that stays sharp on high-DPI displays.
         @return An Image containing the rendered snapshot, or an empty Image on failure.
         @see snapshotToTexture
      */
-    Image snapshotToImage (GraphicsContext& ctx, bool includeEffects = true);
+    Image snapshotToImage (GraphicsContext& ctx, bool includeEffects = true, float scale = 1.0f);
 
     /** Creates a GPU texture snapshot of this component's current appearance,
         including all visible children.

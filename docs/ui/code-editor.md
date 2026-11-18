@@ -13,6 +13,10 @@ pieces:
   editing, a line-number gutter, find/replace, bracket matching, breakpoints
   and a minimap.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_code_editor.jpg" alt="The code editor, in the graphics example" width="560">
+</p>
+
 ## CodeDocument
 
 `CodeDocument` stores text as a list of lines (without trailing newlines) and

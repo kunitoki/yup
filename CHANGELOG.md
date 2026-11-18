@@ -52,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added `Rectangle::getTransformToFit` (fitting one rectangle into another with a `Fitting` and a `Justification`), `Path::addRoundedRectangle` with elliptical corners, `PathMarkers` (where markers go along a path and how they are placed) and `AnchoredText` (text placed from a point on its baseline), shared by `Drawable` and drawings.
 - `Path::createCopy` keeps the fill rule, and appending many shapes to one `Path` no longer reallocates its storage for every shape.
 - `ColorGradient` and `ColorGradient::ColorStop` support `==` and `!=`.
+- Fixed `Path::addRectangle` leaving its contour open, so a rectangle drawn with a wide stroke (`Graphics::strokeRect`) had no join at its first corner.
 - Added `VariantConverter` specialisations for `Color` (converting to and from the ARGB `int64` a `var` stores it as), `Point<float>` and `Rectangle<float>` (as `var` arrays of their components), so `getPropertyAs<Color>` and expression bindings can read color, point and rectangle properties.
 - **Breaking:** `Font` equality also compares the height, so fonts differing only in height compare different.
 - **Breaking:** `Font::withAxisValue` and `Font::withAxisValues` return the font unchanged, instead of an empty font, for an axis the font does not have or an index out of range, so text styled for a variable font still draws with a font lacking the axis. Check for an axis with `Font::getAxisDescription`.
@@ -88,11 +89,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `CodeEditor` semantic tokens (`setSemanticTokens`) drawn over the syntax highlighting.
 - `CodeTokeniser` scans a line in linear time instead of quadratic, so long lines (e.g. long string literals) no longer stall `CodeEditor` scrolling.
 - Added `ResizableDivider`, a draggable bar splitting a leading and a trailing pane, with pixel or percent limits, resize policies, snap positions, collapsing, double click reset and keyboard nudging.
+- `Component::snapshotToImage` takes a `scale`, the pixels rendered per logical unit, so a snapshot can be taken at high-DPI resolution.
+
+### DSP
+
+- Fixed `RbjFilter` and `ZoelzerFilter` aborting with a pure virtual call when constructed with a mode other than `lowpass`.
 
 ### Build System
 
 - Added the `yup_add_test_runner()` CMake helper and a reusable GoogleTest runner (`yup::runGoogleTests`, the `YUP_IMPLEMENT_GTEST_MAIN()` macro and the `yup::getGoogleTestChildProcessEntryPoint()` hook) shipped as source under `cmake/tools/test_runner`, so test executables share the entry point instead of inlining it. The tests' `main.cpp` now reduces to `YUP_IMPLEMENT_GTEST_MAIN()`.
 - Added the `yup_add_yui_resources()` CMake function, which embeds `.yui` files and generates a lookup function by import path for `YuiLoader::loadResource`.
+- Added the `docsimg` example and the `just docs_images` recipe, which render the figures of the documentation into `docs/_static/images` in both color modes, and `just docs` to build the pages locally.
 
 ---
 

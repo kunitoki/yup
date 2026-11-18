@@ -64,6 +64,11 @@ g.setStrokeMiterLimit (4.0f);
 g.setStrokePosition (StrokePosition::Inside); // inside, centered on, or outside the edge
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_stroke-position_light.jpg#gh-light-mode-only" alt="A stroke inside, centered on and outside the edge of a rectangle" width="480">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_stroke-position_dark.jpg#gh-dark-mode-only" alt="A stroke inside, centered on and outside the edge of a rectangle" width="480">
+</p>
+
 An image paint fills or strokes any shape or text with an image. The transform
 maps image pixels to drawing coordinates, and `ImageSampling` chooses how the
 image repeats (`Clamp`, `Repeat`, `Mirror` on each axis) and how it is filtered
@@ -75,6 +80,11 @@ g.setFillImage (pattern,
                 { ImageWrap::Repeat, ImageWrap::Repeat, ImageFilter::Linear });
 g.fillRoundedRect (area, 8.0f);
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_image-paint_light.jpg#gh-light-mode-only" alt="An image used as a fill, clamped, repeated and mirrored" width="480">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_image-paint_dark.jpg#gh-dark-mode-only" alt="An image used as a fill, clamped, repeated and mirrored" width="480">
+</p>
 
 The image's GPU texture is made when the paint is set and kept by the image, so
 reuse the same `Image` from frame to frame instead of a fresh copy.
@@ -189,6 +199,11 @@ g.setBlendMode (BlendMode::Multiply); // compositing mode
 g.setFeather (2.0f);                  // soft edge falloff
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_modulation_light.jpg#gh-light-mode-only" alt="A shape and an image as drawn, with opacity, with a tint and with a feather" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_modulation_dark.jpg#gh-dark-mode-only" alt="A shape and an image as drawn, with opacity, with a tint and with a feather" width="560">
+</p>
+
 `BlendMode::Additive` adds the source to what is already drawn, for glows and
 light effects. `setAdditiveAmount` scales it from 0 (like `SrcOver`) to 1 (fully
 additive, the default). Opacity, tint, blend mode and additive amount apply to
@@ -237,6 +252,11 @@ path. Without a `StrokeType`, the current stroke settings are used, and
 g.setClipStroke (outline, StrokeType (12.0f, StrokeJoin::Round).withPosition (StrokePosition::Inside));
 g.drawImage (photo, bounds);
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_clip-stroke_light.jpg#gh-light-mode-only" alt="An image revealed along the stroke of a wave" width="320">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_clip-stroke_dark.jpg#gh-dark-mode-only" alt="An image revealed along the stroke of a wave" width="320">
+</p>
 
 ## Drawing operations
 
@@ -312,6 +332,11 @@ mesh.setVertex (index, newPosition);
 g.drawImageMesh (photo, mesh);
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_image-mesh_light.jpg#gh-light-mode-only" alt="An image warped by moving the vertices of its mesh" width="320">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_image-mesh_dark.jpg#gh-dark-mode-only" alt="An image warped by moving the vertices of its mesh" width="320">
+</p>
+
 `drawImageMeshInstanced` draws the same mesh many times in one call, each copy
 with its own transform, opacity, additive amount and texture coordinate offset
 and scale, for example to pick a cell of a sprite sheet:
@@ -358,6 +383,11 @@ if (layer.isValid())
 }
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_layer_light.jpg#gh-light-mode-only" alt="Two overlapping circles faded one by one, showing their overlap, and faded together in a layer" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_layer_dark.jpg#gh-dark-mode-only" alt="Two overlapping circles faded one by one, showing their overlap, and faded together in a layer" width="400">
+</p>
+
 Inside the layer, coordinates are layer-local: the target area's top-left is
 `(0, 0)`.
 
@@ -382,6 +412,11 @@ if (layer.isValid())
     layer.commit();
 }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_layer-mask_light.jpg#gh-light-mode-only" alt="An image fading out through a gradient mask" width="320">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_layer-mask_dark.jpg#gh-dark-mode-only" alt="An image fading out through a gradient mask" width="320">
+</p>
 
 `enableMasking` renders the layer in a GPU mode that can apply masks, which every
 backend supports but which is not the default elsewhere. Without it, or where the

@@ -507,6 +507,30 @@ TEST_F (ComponentEffectGpuTest, SnapshotRendersToImage)
     EXPECT_EQ (rawData.size(), 128u * 128u * 4u);
 }
 
+TEST_F (ComponentEffectGpuTest, SnapshotScaleMultipliesTheImageSize)
+{
+    auto comp = makeComp ("test", 64, 32);
+
+    const auto image = comp->snapshotToImage (*gpuContext, true, 2.0f);
+    ASSERT_TRUE (image.isValid());
+    EXPECT_EQ (image.getWidth(), 128);
+    EXPECT_EQ (image.getHeight(), 64);
+
+    // The drawing is scaled with the canvas, so it reaches the far corner
+    EXPECT_GT (image.getPixelColor (124, 60).getAlpha(), 0);
+}
+
+TEST_F (ComponentEffectGpuTest, SnapshotScaleIsKeptThroughAnEffect)
+{
+    auto comp = makeComp ("test", 64, 32);
+    comp->setComponentEffect (ReferenceCountedObjectPtr<CountingEffect> (new CountingEffect()));
+
+    const auto image = comp->snapshotToImage (*gpuContext, true, 2.0f);
+    ASSERT_TRUE (image.isValid());
+    EXPECT_EQ (image.getWidth(), 128);
+    EXPECT_EQ (image.getHeight(), 64);
+}
+
 TEST_F (ComponentEffectGpuTest, SnapshotWithEffectsAppliesEffect)
 {
     if (! gpuContext)

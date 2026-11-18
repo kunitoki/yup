@@ -6,6 +6,10 @@ magnitude spectrogram, an optional log-spaced filter bank, a spectral-flux
 onset detection function, and a generic peak picker with optional
 sample-accurate refinement.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_waveform_onsets.jpg" alt="Onsets detected over a waveform, in the graphics example" width="560">
+</p>
+
 The pipeline, in order:
 
 ```mermaid
@@ -33,6 +37,10 @@ yup::Spectrogram spec;
 spec.prepare (params, 44100.0f);
 spec.processOffline (samples, numSamples);
 ```
+
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_spectrogram.jpg" alt="A spectrogram, in the spectrum analyzer of the graphics example" width="560">
+</p>
 
 `processOffline` zero-pads at the edges and emits `getMagnitudeData()`.
 When `computeLGD` is enabled it also computes the **Local Group Delay** (the

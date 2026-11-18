@@ -9,10 +9,15 @@ for the life of the UI.
 Row {
     gap: 12;
 
-    Slider { id: gain; value: 0.25; }
-    Label  { id: readout; text: gain.value; }
+    Slider { id: gain; value: 0.25; flexGrow: 1; }
+    Label  { id: readout; text: format ("%.2f", gain.value); preferredWidth: 48; }
 }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/yui-reactivity_binding_light.jpg#gh-light-mode-only" alt="A slider next to a label following its value" width="360">
+  <img class="dark-only rounded" src="../_static/images/ui/yui-reactivity_binding_dark.jpg#gh-dark-mode-only" alt="A slider next to a label following its value" width="360">
+</p>
 
 The label follows the slider with no listener and no glue code: the expression
 `gain.value` reads a property of another element, so it is re-evaluated each

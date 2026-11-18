@@ -4,6 +4,10 @@ Build 3D worlds out of entities, load glTF 2.0 assets into them, and show them
 in a component, rendered through the [RHI](../graphics/rhi/index.md) on every
 backend.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_deferred_renderer.jpg" alt="A glTF scene drawn by the renderer, in the graphics example" width="560">
+</p>
+
 **Modules covered:** `yup_3d` (with the `tinygltf` third-party module) and
 `yup_renderer`.
 

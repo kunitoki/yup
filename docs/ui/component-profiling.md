@@ -3,6 +3,10 @@
 This guide explains how to use YUP's built-in paint profiling system to measure
 the rendering cost of individual components and identify bottlenecks in your UI.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_component_profiler.jpg" alt="Paint times measured per component, in the paint profiler demo of the graphics example" width="560">
+</p>
+
 ```cpp
 #include <yup_gui/yup_gui.h>
 ```

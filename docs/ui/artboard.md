@@ -11,6 +11,10 @@ classes cooperate:
 - `ArtboardViewModelInstance` — a live set of values for that schema, bound to
   an artboard to drive its data bindings.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_rive_artboard.jpg" alt="A Rive artboard, in the graphics example" width="560">
+</p>
+
 ## Loading a file
 
 `ArtboardFile::load` returns a `ResultValue`, so failures carry a message

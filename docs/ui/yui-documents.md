@@ -192,6 +192,11 @@ classes add to the block's, and children are added after the block's own:
 LabeledKnob { label: "RESO"; class: accent; value <=> params.resonance; }
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/yui-documents_composite_light.jpg#gh-light-mode-only" alt="Three instances of a composite component made of a rotary slider and a label" width="480">
+  <img class="dark-only rounded" src="../_static/images/ui/yui-documents_composite_dark.jpg#gh-dark-mode-only" alt="Three instances of a composite component made of a rotary slider and a label" width="480">
+</p>
+
 `document.findTypeInfo ("LabeledKnob")` returns the declared type, to list its
 properties and signals from C++.
 

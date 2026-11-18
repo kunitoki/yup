@@ -10,6 +10,10 @@ WebAssembly backend (used on `YUP_WASM`/emscripten targets) that emits a
 portable wasm module instantiated and run by the browser's native
 `WebAssembly` engine.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_dsp_jit.jpg" alt="A synthesizer written in YDSP, in the graphics example" width="560">
+</p>
+
 YDSP borrows two ideas:
 
 - From **Faust**: a block-diagram *composition algebra* (`:` sequential,
