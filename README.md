@@ -29,6 +29,7 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 
 ## Try It
 
+- Create an app/plugin from the template: [https://github.com/kunitoki/yup-template](https://github.com/kunitoki/yup-template)
 - Explore the example apps: [graphics](./examples/graphics), [audio graph](./examples/audiograph), [plugin](./examples/plugin), [console](./examples/console).
 - Read the build guides: [standalone applications](./docs/build-system/building-standalone.md), [audio plugins](./docs/build-system/building-plugins.md), [module format](./docs/build-system/module-format.md).
 

@@ -2,6 +2,10 @@
 
 This guide explains how to create audio plugins using the YUP framework. YUP supports multiple plugin formats including CLAP, VST3, and more.
 
+```{tip}
+Starting a new project? Create it from the [YUP template](https://github.com/kunitoki/yup-template), which builds an application and an audio plugin from one source tree with tests, packaging and CI already set up - see [Getting Started](../getting-started/index.md).
+```
+
 ## Basic Plugin Structure
 
 A basic YUP plugin consists of the following components:

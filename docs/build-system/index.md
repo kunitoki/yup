@@ -1,7 +1,10 @@
 # Build System
 
 YUP is CMake-first. Use it as a standalone repository or bring it into your own
-application or plugin project with `FetchContent`.
+application or plugin project with `FetchContent`. To start a new project with
+everything already wired up, create it from the
+[YUP template](https://github.com/kunitoki/yup-template) - see
+[Getting Started](../getting-started/index.md).
 
 ## In this area
 

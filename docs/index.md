@@ -34,9 +34,11 @@ concept guides, walkthroughs, and reference material.
 
 ## Quick links
 
-- Example apps: [graphics](https://github.com/kunitoki/yup/tree/main/examples/graphics), [audio graph](https://github.com/kunitoki/yup/tree/main/examples/audiograph), [plugin](https://github.com/kunitoki/yup/tree/main/examples/plugin), [console](https://github.com/kunitoki/yup/tree/main/examples/console).
+- [Project template](https://github.com/kunitoki/yup-template) - create your own application and plugin repository with *Use this template*.
+com/kunitoki/yup/tree/main/examples/console).
 - [Building standalone applications](build-system/building-standalone.md)
 - [Building audio plugins](build-system/building-plugins.md)
+- Example apps: [graphics](https://github.com/kunitoki/yup/tree/main/examples/graphics), [audio graph](https://github.com/kunitoki/yup/tree/main/examples/audiograph), [plugin](https://github.com/kunitoki/yup/tree/main/examples/plugin), [console](https://github.
 
 ## External resources
 
