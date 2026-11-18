@@ -210,7 +210,7 @@ Font TabButton::getFont (bool forSelectedTab) const
 {
     auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
-    if (forSelectedTab && font.getAxisDescription ("wght").has_value())
+    if (forSelectedTab)
         font = font.withAxisValue ("wght", tabButtonSelectedWeight);
 
     return font;

@@ -461,30 +461,16 @@ void Font::setAxisValue (StringRef tagName, float value)
 
 Font Font::withAxisValue (int index, float value) const
 {
-    if (font == nullptr || ! isPositiveAndBelow (index, getNumAxis()))
-        return {};
-
-    auto axis = getAxisDescription (index);
-    if (! axis.has_value())
-        return {};
-
-    return Font (font->makeAtCoord ({ axisTagFromString (axis->tagName),
-                                      jlimit (axis->minimumValue, axis->maximumValue, value) }),
-                 height);
+    Font result (*this);
+    result.setAxisValue (index, value);
+    return result;
 }
 
 Font Font::withAxisValue (StringRef tagName, float value) const
 {
-    if (font == nullptr)
-        return {};
-
-    auto axis = getAxisDescription (tagName);
-    if (! axis.has_value())
-        return {};
-
-    return Font (font->makeAtCoord ({ axisTagFromString (tagName),
-                                      jlimit (axis->minimumValue, axis->maximumValue, value) }),
-                 height);
+    Font result (*this);
+    result.setAxisValue (tagName, value);
+    return result;
 }
 
 void Font::setAxisValues (std::initializer_list<AxisOption> axisOptions)
@@ -515,26 +501,9 @@ void Font::setAxisValues (std::initializer_list<AxisOption> axisOptions)
 
 Font Font::withAxisValues (std::initializer_list<AxisOption> axisOptions) const
 {
-    if (font == nullptr || axisOptions.size() == 0)
-        return {};
-
-    std::vector<rive::Font::Coord> coords;
-    coords.reserve (axisOptions.size());
-
-    for (const auto& option : axisOptions)
-    {
-        auto axis = getAxisDescription (StringRef (option.tagName));
-        if (! axis.has_value())
-            continue;
-
-        coords.push_back ({ axisTagFromString (option.tagName),
-                            jlimit (axis->minimumValue, axis->maximumValue, option.value) });
-    }
-
-    if (coords.empty())
-        return {};
-
-    return Font (font->makeAtCoords (coords), height);
+    Font result (*this);
+    result.setAxisValues (axisOptions);
+    return result;
 }
 
 void Font::resetAxisValue (int index)
@@ -589,7 +558,7 @@ void Font::resetAllAxisValues()
 Font Font::withFeature (Feature feature) const
 {
     if (font == nullptr)
-        return {};
+        return *this;
 
     std::vector<rive::Font::Feature> realFeatures;
     realFeatures.push_back (rive::Font::Feature { feature.tag, feature.value });
@@ -600,7 +569,7 @@ Font Font::withFeature (Feature feature) const
 Font Font::withFeatures (std::initializer_list<Feature> features) const
 {
     if (font == nullptr)
-        return {};
+        return *this;
 
     std::vector<rive::Font::Feature> realFeatures;
     realFeatures.reserve (features.size());

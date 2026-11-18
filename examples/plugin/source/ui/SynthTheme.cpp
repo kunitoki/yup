@@ -306,15 +306,13 @@ yup::Font captionFont (float height)
 {
     // Roboto Flex condenses mostly through XTRA (counter width), wdth alone only narrows by a few percent
     const auto& font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
-    const auto variant = font.withAxisValues ({ { "wdth", 75.0f }, { "XTRA", 380.0f }, { "wght", 600.0f } });
-    return (variant != yup::Font() ? variant : font).withHeight (height);
+    return font.withAxisValues ({ { "wdth", 75.0f }, { "XTRA", 380.0f }, { "wght", 600.0f } }).withHeight (height);
 }
 
 yup::Font valueFont (float height)
 {
     const auto& font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
-    const auto variant = font.withAxisValues ({ { "wdth", 80.0f }, { "XTRA", 400.0f } });
-    return (variant != yup::Font() ? variant : font).withHeight (height);
+    return font.withAxisValues ({ { "wdth", 80.0f }, { "XTRA", 400.0f } }).withHeight (height);
 }
 
 float textWidth (const yup::String& text, const yup::Font& font)

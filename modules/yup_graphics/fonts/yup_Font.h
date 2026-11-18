@@ -240,8 +240,8 @@ public:
 
         @param index The index of the axis, from 0 to getNumAxis() - 1.
         @param value The new value of the axis, limited to the axis range.
-        @return A font with the axis set and the other settings kept, or an empty font when
-                the index is out of range.
+        @return A font with the axis set and the other settings kept, or this font unchanged
+                when the index is out of range.
     */
     Font withAxisValue (int index, float value) const;
 
@@ -272,8 +272,8 @@ public:
 
         @param tagName The four letter tag of the axis, like "wght".
         @param value   The new value of the axis, limited to the axis range.
-        @return A font with the axis set and the other settings kept, or an empty font when
-                the font has no such axis.
+        @return A font with the axis set and the other settings kept, or this font unchanged
+                when it has no such axis.
     */
     Font withAxisValue (StringRef tagName, float value) const;
 
@@ -319,8 +319,8 @@ public:
         Tags the font has no axis for are ignored.
 
         @param axisOptions The axes to set and their values, limited to their axis range.
-        @return A font with the axes set and the other settings kept, or an empty font when
-                none of the axes exist.
+        @return A font with the axes set and the other settings kept, or this font unchanged
+                when none of the axes exist.
     */
     Font withAxisValues (std::initializer_list<AxisOption> axisOptions) const;
 
@@ -359,19 +359,21 @@ public:
 
     /** Returns a copy of the font with an OpenType feature set.
 
-        Features set before are kept, as are the height and axis values.
+        Features set before are kept, as are the height and axis values. A feature the font
+        lacks is not applied to its text.
 
         @param feature The feature and its value.
-        @return A font with the feature set, or an empty font when this font is empty.
+        @return A font with the feature set, or this font unchanged when it is empty.
     */
     Font withFeature (Feature feature) const;
 
     /** Returns a copy of the font with several OpenType features set.
 
-        Features set before are kept, as are the height and axis values.
+        Features set before are kept, as are the height and axis values. Features the font
+        lacks are not applied to its text.
 
         @param features The features and their values.
-        @return A font with the features set, or an empty font when this font is empty.
+        @return A font with the features set, or this font unchanged when it is empty.
     */
     Font withFeatures (std::initializer_list<Feature> features) const;
 

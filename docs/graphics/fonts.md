@@ -96,6 +96,11 @@ Each axis has a 4-character OpenType tag (e.g. `"wght"`, `"wdth"`, `"slnt"`,
 `"ital"`). `resetAxisValue(tag)` / `resetAllAxisValues()` restore the default
 values.
 
+Axes the font does not have are ignored: `withAxisValue` and `withAxisValues`
+return the font unchanged, so text styled for a variable font still draws with a
+font lacking the axis (a system font without `"slnt"`, for example). Use
+`getAxisDescription (tag)` to check whether an axis exists.
+
 ### OpenType features
 
 ```cpp
@@ -107,7 +112,7 @@ auto withFeatures  = font.withFeatures ({
 ```
 
 Features are keyed by 4-character tag; a value of `1` enables the feature,
-`0` disables it.
+`0` disables it. A feature the font lacks is not applied to its text.
 
 ## Themed font access
 
