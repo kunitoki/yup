@@ -74,6 +74,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <compare>
 #include <concepts>
 #include <condition_variable>
 #include <cstddef>

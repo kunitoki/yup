@@ -115,6 +115,7 @@
 #include "yup_URL.cpp"
 #include "yup_Uuid.cpp"
 #include "yup_Variant.cpp"
+#include "yup_VariantBenchmark.cpp"
 #include "yup_WaitableTimer.cpp"
 #include "yup_Watchdog.cpp"
 #include "yup_WebInputStream.cpp"

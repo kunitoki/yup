@@ -54,666 +54,102 @@ enum VariantStreamMarkers
 };
 
 //==============================================================================
-struct var::VariantType
+struct var::MethodHolder final : public ReferenceCountedObject
 {
-    struct VoidTag
+    explicit MethodHolder (NativeFunction&& f) noexcept
+        : function (std::move (f))
     {
-    };
-
-    struct UndefinedTag
-    {
-    };
-
-    struct IntTag
-    {
-    };
-
-    struct Int64Tag
-    {
-    };
-
-    struct DoubleTag
-    {
-    };
-
-    struct BoolTag
-    {
-    };
-
-    struct StringTag
-    {
-    };
-
-    struct ObjectTag
-    {
-    };
-
-    struct ArrayTag
-    {
-    };
-
-    struct BinaryTag
-    {
-    };
-
-    struct MethodTag
-    {
-    };
-
-    // members =====================================================================
-    bool isVoid = false;
-    bool isUndefined = false;
-    bool isInt = false;
-    bool isInt64 = false;
-    bool isBool = false;
-    bool isDouble = false;
-    bool isString = false;
-    bool isObject = false;
-    bool isArray = false;
-    bool isBinary = false;
-    bool isMethod = false;
-    bool isComparable = false;
-
-    int (*toInt) (const ValueUnion&) = defaultToInt;
-    int64 (*toInt64) (const ValueUnion&) = defaultToInt64;
-    double (*toDouble) (const ValueUnion&) = defaultToDouble;
-    String (*toString) (const ValueUnion&) = defaultToString;
-    bool (*toBool) (const ValueUnion&) = defaultToBool;
-    ReferenceCountedObject* (*toObject) (const ValueUnion&) = defaultToObject;
-    Array<var>* (*toArray) (const ValueUnion&) = defaultToArray;
-    MemoryBlock* (*toBinary) (const ValueUnion&) = defaultToBinary;
-    var (*clone) (const var&) = defaultClone;
-    void (*cleanUp) (ValueUnion&) = defaultCleanUp;
-    void (*createCopy) (ValueUnion&, const ValueUnion&) = defaultCreateCopy;
-
-    bool (*equals) (const ValueUnion&, const ValueUnion&, const VariantType&) = nullptr;
-    void (*writeToStream) (const ValueUnion&, OutputStream&) = nullptr;
-
-    // defaults ====================================================================
-    static int defaultToInt (const ValueUnion&) { return 0; }
-
-    static int64 defaultToInt64 (const ValueUnion&) { return 0; }
-
-    static double defaultToDouble (const ValueUnion&) { return 0; }
-
-    static String defaultToString (const ValueUnion&) { return {}; }
-
-    static bool defaultToBool (const ValueUnion&) { return false; }
-
-    static ReferenceCountedObject* defaultToObject (const ValueUnion&) { return nullptr; }
-
-    static Array<var>* defaultToArray (const ValueUnion&) { return nullptr; }
-
-    static MemoryBlock* defaultToBinary (const ValueUnion&) { return nullptr; }
-
-    static var defaultClone (const var& other) { return other; }
-
-    static void defaultCleanUp (ValueUnion&) {}
-
-    static void defaultCreateCopy (ValueUnion& dest, const ValueUnion& source) { dest = source; }
-
-    // void ========================================================================
-    static bool voidEquals (const ValueUnion&, const ValueUnion&, const VariantType& otherType) noexcept
-    {
-        return otherType.isVoid || otherType.isUndefined;
+        incReferenceCount();
     }
 
-    static void voidWriteToStream (const ValueUnion&, OutputStream& output)
-    {
-        output.writeCompressedInt (0);
-    }
-
-    constexpr explicit VariantType (VoidTag) noexcept
-        : isVoid (true)
-        , isComparable (true)
-        , equals (voidEquals)
-        , writeToStream (voidWriteToStream)
-    {
-    }
-
-    // undefined ===================================================================
-    static String undefinedToString (const ValueUnion&) { return "undefined"; }
-
-    static bool undefinedEquals (const ValueUnion&, const ValueUnion&, const VariantType& otherType) noexcept
-    {
-        return otherType.isVoid || otherType.isUndefined;
-    }
-
-    static void undefinedWriteToStream (const ValueUnion&, OutputStream& output)
-    {
-        output.writeCompressedInt (1);
-        output.writeByte (varMarker_Undefined);
-    }
-
-    constexpr explicit VariantType (UndefinedTag) noexcept
-        : isUndefined (true)
-        , toString (undefinedToString)
-        , equals (undefinedEquals)
-        , writeToStream (undefinedWriteToStream)
-    {
-    }
-
-    // int =========================================================================
-    static int intToInt (const ValueUnion& data) noexcept { return data.intValue; }
-
-    static int64 intToInt64 (const ValueUnion& data) noexcept { return (int64) data.intValue; }
-
-    static double intToDouble (const ValueUnion& data) noexcept { return (double) data.intValue; }
-
-    static String intToString (const ValueUnion& data) { return String (data.intValue); }
-
-    static bool intToBool (const ValueUnion& data) noexcept { return data.intValue != 0; }
-
-    static bool intEquals (const ValueUnion& data, const ValueUnion& otherData, const VariantType& otherType) noexcept
-    {
-        if (otherType.isDouble || otherType.isInt64 || otherType.isString)
-            return otherType.equals (otherData, data, VariantType { IntTag {} });
-
-        return otherType.toInt (otherData) == data.intValue;
-    }
-
-    static void intWriteToStream (const ValueUnion& data, OutputStream& output)
-    {
-        output.writeCompressedInt (5);
-        output.writeByte (varMarker_Int);
-        output.writeInt (data.intValue);
-    }
-
-    constexpr explicit VariantType (IntTag) noexcept
-        : isInt (true)
-        , isComparable (true)
-        , toInt (intToInt)
-        , toInt64 (intToInt64)
-        , toDouble (intToDouble)
-        , toString (intToString)
-        , toBool (intToBool)
-        , equals (intEquals)
-        , writeToStream (intWriteToStream)
-    {
-    }
-
-    // int64 =======================================================================
-    static int int64ToInt (const ValueUnion& data) noexcept { return (int) data.int64Value; }
-
-    static int64 int64ToInt64 (const ValueUnion& data) noexcept { return data.int64Value; }
-
-    static double int64ToDouble (const ValueUnion& data) noexcept { return (double) data.int64Value; }
-
-    static String int64ToString (const ValueUnion& data) { return String (data.int64Value); }
-
-    static bool int64ToBool (const ValueUnion& data) noexcept { return data.int64Value != 0; }
-
-    static bool int64Equals (const ValueUnion& data, const ValueUnion& otherData, const VariantType& otherType) noexcept
-    {
-        if (otherType.isDouble || otherType.isString)
-            return otherType.equals (otherData, data, VariantType { Int64Tag {} });
-
-        return otherType.toInt64 (otherData) == data.int64Value;
-    }
-
-    static void int64WriteToStream (const ValueUnion& data, OutputStream& output)
-    {
-        output.writeCompressedInt (9);
-        output.writeByte (varMarker_Int64);
-        output.writeInt64 (data.int64Value);
-    }
-
-    constexpr explicit VariantType (Int64Tag) noexcept
-        : isInt64 (true)
-        , isComparable (true)
-        , toInt (int64ToInt)
-        , toInt64 (int64ToInt64)
-        , toDouble (int64ToDouble)
-        , toString (int64ToString)
-        , toBool (int64ToBool)
-        , equals (int64Equals)
-        , writeToStream (int64WriteToStream)
-    {
-    }
-
-    // double ======================================================================
-    static int doubleToInt (const ValueUnion& data) noexcept { return (int) data.doubleValue; }
-
-    static int64 doubleToInt64 (const ValueUnion& data) noexcept { return (int64) data.doubleValue; }
-
-    static double doubleToDouble (const ValueUnion& data) noexcept { return data.doubleValue; }
-
-    static String doubleToString (const ValueUnion& data) { return serialiseDouble (data.doubleValue); }
-
-    static bool doubleToBool (const ValueUnion& data) noexcept { return ! exactlyEqual (data.doubleValue, 0.0); }
-
-    static bool doubleEquals (const ValueUnion& data, const ValueUnion& otherData, const VariantType& otherType) noexcept
-    {
-        return std::abs (otherType.toDouble (otherData) - data.doubleValue) < std::numeric_limits<double>::epsilon();
-    }
-
-    static void doubleWriteToStream (const ValueUnion& data, OutputStream& output)
-    {
-        output.writeCompressedInt (9);
-        output.writeByte (varMarker_Double);
-        output.writeDouble (data.doubleValue);
-    }
-
-    constexpr explicit VariantType (DoubleTag) noexcept
-        : isDouble (true)
-        , isComparable (true)
-        , toInt (doubleToInt)
-        , toInt64 (doubleToInt64)
-        , toDouble (doubleToDouble)
-        , toString (doubleToString)
-        , toBool (doubleToBool)
-        , equals (doubleEquals)
-        , writeToStream (doubleWriteToStream)
-    {
-    }
-
-    // bool ========================================================================
-    static int boolToInt (const ValueUnion& data) noexcept { return data.boolValue ? 1 : 0; }
-
-    static int64 boolToInt64 (const ValueUnion& data) noexcept { return data.boolValue ? 1 : 0; }
-
-    static double boolToDouble (const ValueUnion& data) noexcept { return data.boolValue ? 1.0 : 0.0; }
-
-    static String boolToString (const ValueUnion& data) { return String::charToString (data.boolValue ? (yup_wchar) '1' : (yup_wchar) '0'); }
-
-    static bool boolToBool (const ValueUnion& data) noexcept { return data.boolValue; }
-
-    static bool boolEquals (const ValueUnion& data, const ValueUnion& otherData, const VariantType& otherType) noexcept
-    {
-        return otherType.toBool (otherData) == data.boolValue;
-    }
-
-    static void boolWriteToStream (const ValueUnion& data, OutputStream& output)
-    {
-        output.writeCompressedInt (1);
-        output.writeByte (data.boolValue ? (char) varMarker_BoolTrue : (char) varMarker_BoolFalse);
-    }
-
-    constexpr explicit VariantType (BoolTag) noexcept
-        : isBool (true)
-        , isComparable (true)
-        , toInt (boolToInt)
-        , toInt64 (boolToInt64)
-        , toDouble (boolToDouble)
-        , toString (boolToString)
-        , toBool (boolToBool)
-        , equals (boolEquals)
-        , writeToStream (boolWriteToStream)
-    {
-    }
-
-    // string ======================================================================
-    static const String* getString (const ValueUnion& data) noexcept { return unalignedPointerCast<const String*> (data.stringValue); }
-
-    static String* getString (ValueUnion& data) noexcept { return unalignedPointerCast<String*> (data.stringValue); }
-
-    static int stringToInt (const ValueUnion& data) noexcept { return getString (data)->getIntValue(); }
-
-    static int64 stringToInt64 (const ValueUnion& data) noexcept { return getString (data)->getLargeIntValue(); }
-
-    static double stringToDouble (const ValueUnion& data) noexcept { return getString (data)->getDoubleValue(); }
-
-    static String stringToString (const ValueUnion& data) { return *getString (data); }
-
-    static bool stringToBool (const ValueUnion& data) noexcept
-    {
-        return getString (data)->getIntValue() != 0
-            || getString (data)->trim().equalsIgnoreCase ("true")
-            || getString (data)->trim().equalsIgnoreCase ("yes");
-    }
-
-    static void stringCleanUp (ValueUnion& data) noexcept { getString (data)->~String(); }
-
-    static void stringCreateCopy (ValueUnion& dest, const ValueUnion& source) { new (dest.stringValue) String (*getString (source)); }
-
-    static bool stringEquals (const ValueUnion& data, const ValueUnion& otherData, const VariantType& otherType) noexcept
-    {
-        return otherType.toString (otherData) == *getString (data);
-    }
-
-    static void stringWriteToStream (const ValueUnion& data, OutputStream& output)
-    {
-        auto* s = getString (data);
-        const size_t len = s->getNumBytesAsUTF8() + 1;
-        HeapBlock<char> temp (len);
-        s->copyToUTF8 (temp, len);
-        output.writeCompressedInt ((int) (len + 1));
-        output.writeByte (varMarker_String);
-        output.write (temp, len);
-    }
-
-    constexpr explicit VariantType (StringTag) noexcept
-        : isString (true)
-        , isComparable (true)
-        , toInt (stringToInt)
-        , toInt64 (stringToInt64)
-        , toDouble (stringToDouble)
-        , toString (stringToString)
-        , toBool (stringToBool)
-        , cleanUp (stringCleanUp)
-        , createCopy (stringCreateCopy)
-        , equals (stringEquals)
-        , writeToStream (stringWriteToStream)
-    {
-    }
-
-    // object ======================================================================
-    static String objectToString (const ValueUnion& data)
-    {
-        return "Object 0x" + String::toHexString ((int) (pointer_sized_int) data.objectValue);
-    }
-
-    static bool objectToBool (const ValueUnion& data) noexcept { return data.objectValue != nullptr; }
-
-    static ReferenceCountedObject* objectToObject (const ValueUnion& data) noexcept { return data.objectValue; }
-
-    static var objectClone (const var& original)
-    {
-        if (auto d = original.getDynamicObject())
-            return d->clone();
-
-        jassertfalse; // can only clone DynamicObjects!
-        return {};
-    }
-
-    static void objectCleanUp (ValueUnion& data) noexcept
-    {
-        if (data.objectValue != nullptr)
-            data.objectValue->decReferenceCount();
-    }
-
-    static void objectCreateCopy (ValueUnion& dest, const ValueUnion& source)
-    {
-        dest.objectValue = source.objectValue;
-        if (dest.objectValue != nullptr)
-            dest.objectValue->incReferenceCount();
-    }
-
-    static bool objectEquals (const ValueUnion& data, const ValueUnion& otherData, const VariantType& otherType) noexcept
-    {
-        return otherType.toObject (otherData) == data.objectValue;
-    }
-
-    static void objectWriteToStream (const ValueUnion&, OutputStream& output)
-    {
-        jassertfalse; // Can't write an object to a stream!
-        output.writeCompressedInt (0);
-    }
-
-    constexpr explicit VariantType (ObjectTag) noexcept
-        : isObject (true)
-        , toString (objectToString)
-        , toBool (objectToBool)
-        , toObject (objectToObject)
-        , clone (objectClone)
-        , cleanUp (objectCleanUp)
-        , createCopy (objectCreateCopy)
-        , equals (objectEquals)
-        , writeToStream (objectWriteToStream)
-    {
-    }
-
-    // array =======================================================================
-    static String arrayToString (const ValueUnion&) { return "[Array]"; }
-
-    static ReferenceCountedObject* arrayToObject (const ValueUnion&) noexcept { return nullptr; }
-
-    static Array<var>* arrayToArray (const ValueUnion& data) noexcept
-    {
-        if (auto* a = dynamic_cast<RefCountedArray*> (data.objectValue))
-            return &(a->array);
-
-        return nullptr;
-    }
-
-    static bool arrayEquals (const ValueUnion& data, const ValueUnion& otherData, const VariantType& otherType) noexcept
-    {
-        auto* thisArray = arrayToArray (data);
-        auto* otherArray = otherType.toArray (otherData);
-        return thisArray == otherArray || (thisArray != nullptr && otherArray != nullptr && *otherArray == *thisArray);
-    }
-
-    static var arrayClone (const var& original)
-    {
-        Array<var> arrayCopy;
-
-        if (auto* array = arrayToArray (original.value))
-        {
-            arrayCopy.ensureStorageAllocated (array->size());
-
-            for (auto& i : *array)
-                arrayCopy.add (i.clone());
-        }
-
-        return var (arrayCopy);
-    }
-
-    static void arrayWriteToStream (const ValueUnion& data, OutputStream& output)
-    {
-        if (auto* array = arrayToArray (data))
-        {
-            MemoryOutputStream buffer (512);
-            buffer.writeCompressedInt (array->size());
-
-            for (auto& i : *array)
-                i.writeToStream (buffer);
-
-            output.writeCompressedInt (1 + (int) buffer.getDataSize());
-            output.writeByte (varMarker_Array);
-            output << buffer;
-        }
-    }
-
-    struct RefCountedArray final : public ReferenceCountedObject
-    {
-        RefCountedArray (const Array<var>& a)
-            : array (a)
-        {
-            incReferenceCount();
-        }
-
-        RefCountedArray (Array<var>&& a)
-            : array (std::move (a))
-        {
-            incReferenceCount();
-        }
-
-        Array<var> array;
-    };
-
-    constexpr explicit VariantType (ArrayTag) noexcept
-        : isObject (true)
-        , isArray (true)
-        , toString (arrayToString)
-        , toBool (objectToBool)
-        , toObject (arrayToObject)
-        , toArray (arrayToArray)
-        , clone (arrayClone)
-        , cleanUp (objectCleanUp)
-        , createCopy (objectCreateCopy)
-        , equals (arrayEquals)
-        , writeToStream (arrayWriteToStream)
-    {
-    }
-
-    // binary ======================================================================
-    static void binaryCleanUp (ValueUnion& data) noexcept { delete data.binaryValue; }
-
-    static void binaryCreateCopy (ValueUnion& dest, const ValueUnion& source) { dest.binaryValue = new MemoryBlock (*source.binaryValue); }
-
-    static String binaryToString (const ValueUnion& data) { return data.binaryValue->toBase64Encoding(); }
-
-    static MemoryBlock* binaryToBinary (const ValueUnion& data) noexcept { return data.binaryValue; }
-
-    static bool binaryEquals (const ValueUnion& data, const ValueUnion& otherData, const VariantType& otherType) noexcept
-    {
-        const MemoryBlock* const otherBlock = otherType.toBinary (otherData);
-        return otherBlock != nullptr && *otherBlock == *data.binaryValue;
-    }
-
-    static void binaryWriteToStream (const ValueUnion& data, OutputStream& output)
-    {
-        output.writeCompressedInt (1 + (int) data.binaryValue->getSize());
-        output.writeByte (varMarker_Binary);
-        output << *data.binaryValue;
-    }
-
-    constexpr explicit VariantType (BinaryTag) noexcept
-        : isBinary (true)
-        , toString (binaryToString)
-        , toBinary (binaryToBinary)
-        , cleanUp (binaryCleanUp)
-        , createCopy (binaryCreateCopy)
-        , equals (binaryEquals)
-        , writeToStream (binaryWriteToStream)
-    {
-    }
-
-    // method ======================================================================
-    static void methodCleanUp (ValueUnion& data) noexcept
-    {
-        if (data.methodValue != nullptr)
-            delete data.methodValue;
-    }
-
-    static void methodCreateCopy (ValueUnion& dest, const ValueUnion& source) { dest.methodValue = new NativeFunction (*source.methodValue); }
-
-    static String methodToString (const ValueUnion&) { return "Method"; }
-
-    static bool methodToBool (const ValueUnion& data) noexcept { return data.methodValue != nullptr; }
-
-    static bool methodEquals (const ValueUnion& data, const ValueUnion& otherData, const VariantType& otherType) noexcept
-    {
-        return otherType.isMethod && otherData.methodValue == data.methodValue;
-    }
-
-    static void methodWriteToStream (const ValueUnion&, OutputStream& output)
-    {
-        jassertfalse; // Can't write a method to a stream!
-        output.writeCompressedInt (0);
-    }
-
-    constexpr explicit VariantType (MethodTag) noexcept
-        : isMethod (true)
-        , toString (methodToString)
-        , toBool (methodToBool)
-        , cleanUp (methodCleanUp)
-        , createCopy (methodCreateCopy)
-        , equals (methodEquals)
-        , writeToStream (methodWriteToStream)
-    {
-    }
-};
-
-struct var::Instance
-{
-    static constexpr VariantType attributesVoid { VariantType::VoidTag {} };
-    static constexpr VariantType attributesUndefined { VariantType::UndefinedTag {} };
-    static constexpr VariantType attributesInt { VariantType::IntTag {} };
-    static constexpr VariantType attributesInt64 { VariantType::Int64Tag {} };
-    static constexpr VariantType attributesBool { VariantType::BoolTag {} };
-    static constexpr VariantType attributesDouble { VariantType::DoubleTag {} };
-    static constexpr VariantType attributesMethod { VariantType::MethodTag {} };
-    static constexpr VariantType attributesArray { VariantType::ArrayTag {} };
-    static constexpr VariantType attributesString { VariantType::StringTag {} };
-    static constexpr VariantType attributesBinary { VariantType::BinaryTag {} };
-    static constexpr VariantType attributesObject { VariantType::ObjectTag {} };
+    NativeFunction function;
 };
 
 //==============================================================================
-var::var() noexcept
-    : type (&Instance::attributesVoid)
+inline const String* var::getString() const noexcept
 {
+    return unalignedPointerCast<const String*> (value.stringValue);
 }
 
-var::var (const VariantType& t) noexcept
-    : type (&t)
+MemoryBlock* var::copyBinary (const MemoryBlock& source)
 {
+    return new MemoryBlock (source);
 }
 
-var::~var() noexcept { type->cleanUp (value); }
+void var::deleteBinary (MemoryBlock* block) noexcept
+{
+    delete block;
+}
 
 //==============================================================================
-var::var (const var& valueToCopy)
-    : type (valueToCopy.type)
-{
-    type->createCopy (value, valueToCopy.value);
-}
-
-var::var (const int v) noexcept
-    : type (&Instance::attributesInt)
-{
-    value.intValue = v;
-}
-
-var::var (const int64 v) noexcept
-    : type (&Instance::attributesInt64)
-{
-    value.int64Value = v;
-}
-
-var::var (const bool v) noexcept
-    : type (&Instance::attributesBool)
-{
-    value.boolValue = v;
-}
-
-var::var (const double v) noexcept
-    : type (&Instance::attributesDouble)
-{
-    value.doubleValue = v;
-}
-
 var::var (NativeFunction m) noexcept
-    : type (&Instance::attributesMethod)
+    : type (Type::method)
 {
-    value.methodValue = new NativeFunction (m);
+    value.objectValue = new MethodHolder (std::move (m));
 }
 
 var::var (const Array<var>& v)
-    : type (&Instance::attributesArray)
+    : type (Type::array)
 {
-    value.objectValue = new VariantType::RefCountedArray (v);
+    value.objectValue = new RefCountedArray (v);
+}
+
+var::var (Array<var>&& v)
+    : type (Type::array)
+{
+    value.objectValue = new RefCountedArray (std::move (v));
 }
 
 var::var (const String& v)
-    : type (&Instance::attributesString)
+    : type (Type::string)
 {
     new (value.stringValue) String (v);
 }
 
+var::var (String&& v)
+    : type (Type::string)
+{
+    new (value.stringValue) String (std::move (v));
+}
+
 var::var (StringRef v)
-    : type (&Instance::attributesString)
+    : type (Type::string)
 {
     new (value.stringValue) String (v);
 }
 
 var::var (const char* const v)
-    : type (&Instance::attributesString)
+    : type (Type::string)
 {
     new (value.stringValue) String (v);
 }
 
 var::var (const wchar_t* const v)
-    : type (&Instance::attributesString)
+    : type (Type::string)
 {
     new (value.stringValue) String (v);
 }
 
 var::var (const void* v, size_t sz)
-    : type (&Instance::attributesBinary)
+    : type (Type::binary)
 {
     value.binaryValue = new MemoryBlock (v, sz);
 }
 
 var::var (const MemoryBlock& v)
-    : type (&Instance::attributesBinary)
+    : type (Type::binary)
 {
     value.binaryValue = new MemoryBlock (v);
 }
 
+var::var (MemoryBlock&& v)
+    : type (Type::binary)
+{
+    value.binaryValue = new MemoryBlock (std::move (v));
+}
+
 var::var (const StringArray& v)
-    : type (&Instance::attributesArray)
+    : type (Type::array)
 {
     Array<var> strings;
     strings.ensureStorageAllocated (v.size());
@@ -721,11 +157,12 @@ var::var (const StringArray& v)
     for (auto& i : v)
         strings.add (var (i));
 
-    value.objectValue = new VariantType::RefCountedArray (strings);
+    value.objectValue = new RefCountedArray (std::move (strings));
 }
 
 var::var (ReferenceCountedObject* const object)
-    : type (&Instance::attributesObject)
+    : type (Type::object)
+    , flags (dynamic_cast<DynamicObject*> (object) != nullptr ? dynamicObjectFlag : (uint8) 0)
 {
     value.objectValue = object;
 
@@ -734,7 +171,8 @@ var::var (ReferenceCountedObject* const object)
 }
 
 var::var (std::unique_ptr<DynamicObject> object)
-    : type (&Instance::attributesObject)
+    : type (Type::object)
+    , flags (object != nullptr ? dynamicObjectFlag : (uint8) 0)
 {
     value.objectValue = object.release();
 
@@ -742,253 +180,287 @@ var::var (std::unique_ptr<DynamicObject> object)
         value.objectValue->incReferenceCount();
 }
 
-var var::undefined() noexcept { return var (Instance::attributesUndefined); }
+//==============================================================================
+var& var::operator= (const char* const v) { return *this = var (v); }
+
+var& var::operator= (const wchar_t* const v) { return *this = var (v); }
+
+var& var::operator= (const String& v) { return *this = var (v); }
+
+var& var::operator= (String&& v) { return *this = var (std::move (v)); }
+
+var& var::operator= (StringRef v) { return *this = var (v); }
+
+var& var::operator= (const MemoryBlock& v) { return *this = var (v); }
+
+var& var::operator= (MemoryBlock&& v) { return *this = var (std::move (v)); }
+
+var& var::operator= (const Array<var>& v) { return *this = var (v); }
+
+var& var::operator= (Array<var>&& v) { return *this = var (std::move (v)); }
+
+var& var::operator= (ReferenceCountedObject* v) { return *this = var (v); }
+
+var& var::operator= (std::unique_ptr<DynamicObject> v) { return *this = var (std::move (v)); }
+
+var& var::operator= (NativeFunction v) { return *this = var (std::move (v)); }
 
 //==============================================================================
-bool var::isVoid() const noexcept { return type->isVoid; }
+var var::array (std::initializer_list<var> items)
+{
+    return var (Array<var> (items));
+}
 
-bool var::isUndefined() const noexcept { return type->isUndefined; }
+var var::object (std::initializer_list<std::pair<Identifier, var>> properties)
+{
+    auto result = std::make_unique<DynamicObject>();
 
-bool var::isInt() const noexcept { return type->isInt; }
+    for (const auto& [name, propertyValue] : properties)
+        result->setProperty (name, propertyValue);
 
-bool var::isInt64() const noexcept { return type->isInt64; }
-
-bool var::isBool() const noexcept { return type->isBool; }
-
-bool var::isDouble() const noexcept { return type->isDouble; }
-
-bool var::isString() const noexcept { return type->isString; }
-
-bool var::isObject() const noexcept { return type->isObject; }
-
-bool var::isArray() const noexcept { return type->isArray; }
-
-bool var::isBinaryData() const noexcept { return type->isBinary; }
-
-bool var::isMethod() const noexcept { return type->isMethod; }
-
-var::operator int() const noexcept { return type->toInt (value); }
-
-var::operator int64() const noexcept { return type->toInt64 (value); }
-
-var::operator bool() const noexcept { return type->toBool (value); }
-
-var::operator float() const noexcept { return (float) type->toDouble (value); }
-
-var::operator double() const noexcept { return type->toDouble (value); }
-
-String var::toString() const { return type->toString (value); }
-
-var::operator String() const { return type->toString (value); }
-
-ReferenceCountedObject* var::getObject() const noexcept { return type->toObject (value); }
-
-Array<var>* var::getArray() const noexcept { return type->toArray (value); }
-
-MemoryBlock* var::getBinaryData() const noexcept { return type->toBinary (value); }
-
-DynamicObject* var::getDynamicObject() const noexcept { return dynamic_cast<DynamicObject*> (getObject()); }
+    return var (std::move (result));
+}
 
 //==============================================================================
-void var::swapWith (var& other) noexcept
+int var::convertToInt() const noexcept
 {
-    std::swap (type, other.type);
-    std::swap (value, other.value);
+    switch (type)
+    {
+        case Type::int_:
+            return value.intValue;
+        case Type::int64_:
+            return (int) value.int64Value;
+        case Type::boolean:
+            return value.boolValue ? 1 : 0;
+        case Type::double_:
+            return (int) value.doubleValue;
+        case Type::string:
+            return getString()->getIntValue();
+        default:
+            return 0;
+    }
 }
 
-var& var::operator= (const var& v)
+int64 var::convertToInt64() const noexcept
 {
-    type->cleanUp (value);
-    type = v.type;
-    type->createCopy (value, v.value);
-    return *this;
+    switch (type)
+    {
+        case Type::int_:
+            return (int64) value.intValue;
+        case Type::int64_:
+            return value.int64Value;
+        case Type::boolean:
+            return value.boolValue ? 1 : 0;
+        case Type::double_:
+            return (int64) value.doubleValue;
+        case Type::string:
+            return getString()->getLargeIntValue();
+        default:
+            return 0;
+    }
 }
 
-var& var::operator= (const int v)
+double var::convertToDouble() const noexcept
 {
-    type->cleanUp (value);
-    type = &Instance::attributesInt;
-    value.intValue = v;
-    return *this;
+    switch (type)
+    {
+        case Type::int_:
+            return (double) value.intValue;
+        case Type::int64_:
+            return (double) value.int64Value;
+        case Type::boolean:
+            return value.boolValue ? 1.0 : 0.0;
+        case Type::double_:
+            return value.doubleValue;
+        case Type::string:
+            return getString()->getDoubleValue();
+        default:
+            return 0.0;
+    }
 }
 
-var& var::operator= (const int64 v)
+bool var::convertToBool() const noexcept
 {
-    type->cleanUp (value);
-    type = &Instance::attributesInt64;
-    value.int64Value = v;
-    return *this;
+    switch (type)
+    {
+        case Type::int_:
+            return value.intValue != 0;
+        case Type::int64_:
+            return value.int64Value != 0;
+        case Type::boolean:
+            return value.boolValue;
+        case Type::double_:
+            return ! exactlyEqual (value.doubleValue, 0.0);
+
+        case Type::string:
+        {
+            if (getString()->getIntValue() != 0)
+                return true;
+
+            const auto trimmed = getString()->trim();
+            return trimmed.equalsIgnoreCase ("true") || trimmed.equalsIgnoreCase ("yes");
+        }
+
+        case Type::object:
+        case Type::array:
+        case Type::method:
+            return value.objectValue != nullptr;
+
+        default:
+            return false;
+    }
 }
 
-var& var::operator= (const bool v)
+String var::toString() const
 {
-    type->cleanUp (value);
-    type = &Instance::attributesBool;
-    value.boolValue = v;
-    return *this;
-}
-
-var& var::operator= (const double v)
-{
-    type->cleanUp (value);
-    type = &Instance::attributesDouble;
-    value.doubleValue = v;
-    return *this;
-}
-
-var& var::operator= (const char* const v)
-{
-    type->cleanUp (value);
-    type = &Instance::attributesString;
-    new (value.stringValue) String (v);
-    return *this;
-}
-
-var& var::operator= (const wchar_t* const v)
-{
-    type->cleanUp (value);
-    type = &Instance::attributesString;
-    new (value.stringValue) String (v);
-    return *this;
-}
-
-var& var::operator= (const String& v)
-{
-    type->cleanUp (value);
-    type = &Instance::attributesString;
-    new (value.stringValue) String (v);
-    return *this;
-}
-
-var& var::operator= (StringRef v)
-{
-    type->cleanUp (value);
-    type = &Instance::attributesString;
-    new (value.stringValue) String (v);
-    return *this;
-}
-
-var& var::operator= (const MemoryBlock& v)
-{
-    type->cleanUp (value);
-    type = &Instance::attributesBinary;
-    value.binaryValue = new MemoryBlock (v);
-    return *this;
-}
-
-var& var::operator= (const Array<var>& v)
-{
-    var v2 (v);
-    swapWith (v2);
-    return *this;
-}
-
-var& var::operator= (ReferenceCountedObject* v)
-{
-    var v2 (v);
-    swapWith (v2);
-    return *this;
-}
-
-var& var::operator= (std::unique_ptr<DynamicObject> v)
-{
-    var v2 (std::move (v));
-    swapWith (v2);
-    return *this;
-}
-
-var& var::operator= (NativeFunction v)
-{
-    var v2 (v);
-    swapWith (v2);
-    return *this;
-}
-
-var::var (var&& other) noexcept
-    : type (other.type)
-    , value (other.value)
-{
-    other.type = &Instance::attributesVoid;
-}
-
-var& var::operator= (var&& other) noexcept
-{
-    swapWith (other);
-    return *this;
-}
-
-var::var (String&& v)
-    : type (&Instance::attributesString)
-{
-    new (value.stringValue) String (std::move (v));
-}
-
-var::var (MemoryBlock&& v)
-    : type (&Instance::attributesBinary)
-{
-    value.binaryValue = new MemoryBlock (std::move (v));
-}
-
-var::var (Array<var>&& v)
-    : type (&Instance::attributesArray)
-{
-    value.objectValue = new VariantType::RefCountedArray (std::move (v));
-}
-
-var& var::operator= (String&& v)
-{
-    type->cleanUp (value);
-    type = &Instance::attributesString;
-    new (value.stringValue) String (std::move (v));
-    return *this;
+    switch (type)
+    {
+        case Type::undefined:
+            return "undefined";
+        case Type::int_:
+            return String (value.intValue);
+        case Type::int64_:
+            return String (value.int64Value);
+        case Type::boolean:
+            return String::charToString (value.boolValue ? (yup_wchar) '1' : (yup_wchar) '0');
+        case Type::double_:
+            return serialiseDouble (value.doubleValue);
+        case Type::string:
+            return *getString();
+        case Type::object:
+            return "Object 0x" + String::toHexString ((int) (pointer_sized_int) value.objectValue);
+        case Type::array:
+            return "[Array]";
+        case Type::binary:
+            return value.binaryValue->toBase64Encoding();
+        case Type::method:
+            return "Method";
+        default:
+            return {};
+    }
 }
 
 //==============================================================================
 bool var::equals (const var& other) const noexcept
 {
-    return type->equals (value, other.value, *other.type);
-}
+    // Same-type integers are the common case, keep them clear of the heavier paths below
+    if (type == other.type)
+    {
+        if (type == Type::int_)
+            return value.intValue == other.value.intValue;
 
-bool var::equalsWithSameType (const var& other) const noexcept
-{
-    return hasSameTypeAs (other) && equals (other);
-}
+        if (type == Type::int64_)
+            return value.int64Value == other.value.int64Value;
+    }
 
-bool var::hasSameTypeAs (const var& other) const noexcept
-{
-    return type == other.type;
+    switch (type)
+    {
+        case Type::void_:
+        case Type::undefined:
+            return other.type == Type::void_ || other.type == Type::undefined;
+
+        case Type::int_:
+            if (other.type == Type::int64_)
+                return (int64) value.intValue == other.value.int64Value;
+
+            // Defers to the wider type, so that e.g. var (1).equals (var (1.0)) compares as doubles
+            if (other.type == Type::double_ || other.type == Type::string)
+                return other.equals (*this);
+
+            return (int) other == value.intValue;
+
+        case Type::int64_:
+            if (other.type == Type::double_ || other.type == Type::string)
+                return other.equals (*this);
+
+            return (int64) other == value.int64Value;
+
+        case Type::boolean:
+            return (bool) other == value.boolValue;
+
+        case Type::double_:
+            return std::abs ((double) other - value.doubleValue) < std::numeric_limits<double>::epsilon();
+
+        case Type::string:
+            return other.type == Type::string ? *other.getString() == *getString()
+                                              : other.toString() == *getString();
+
+        case Type::object:
+            return other.getObject() == value.objectValue;
+
+        case Type::array:
+        {
+            const auto* thisArray = getArray();
+            const auto* otherArray = other.getArray();
+            return otherArray != nullptr && (otherArray == thisArray || *otherArray == *thisArray);
+        }
+
+        case Type::binary:
+            return other.type == Type::binary && *other.value.binaryValue == *value.binaryValue;
+
+        case Type::method:
+            return other.type == Type::method && other.value.objectValue == value.objectValue;
+    }
+
+    return false;
 }
 
 bool canCompare (const var& v1, const var& v2)
 {
-    return v1.type->isComparable && v2.type->isComparable;
+    return v1.isComparable() && v2.isComparable();
 }
 
-static int compare (const var& v1, const var& v2)
+std::partial_ordering var::compare (const var& v1, const var& v2)
 {
-    if (v1.isString() && v2.isString())
-        return v1.toString().compare (v2.toString());
+    if (! canCompare (v1, v2))
+        return std::partial_ordering::unordered;
 
-    auto diff = static_cast<double> (v1) - static_cast<double> (v2);
-    return exactlyEqual (diff, 0.0) ? 0 : (diff < 0 ? -1 : 1);
+    if (v1.isString() && v2.isString())
+        return v1.toString().compare (v2.toString()) <=> 0;
+
+    const auto diff = static_cast<double> (v1) - static_cast<double> (v2);
+
+    if (exactlyEqual (diff, 0.0))
+        return std::partial_ordering::equivalent;
+
+    return diff < 0 ? std::partial_ordering::less : std::partial_ordering::greater;
 }
 
 bool operator== (const var& v1, const var& v2) { return v1.equals (v2); }
 
 bool operator!= (const var& v1, const var& v2) { return ! v1.equals (v2); }
 
-bool operator< (const var& v1, const var& v2) { return canCompare (v1, v2) && compare (v1, v2) < 0; }
-
-bool operator> (const var& v1, const var& v2) { return canCompare (v1, v2) && compare (v1, v2) > 0; }
-
-bool operator<= (const var& v1, const var& v2) { return canCompare (v1, v2) && compare (v1, v2) <= 0; }
-
-bool operator>= (const var& v1, const var& v2) { return canCompare (v1, v2) && compare (v1, v2) >= 0; }
-
 //==============================================================================
 var var::clone() const noexcept
 {
-    return type->clone (*this);
+    switch (type)
+    {
+        case Type::object:
+            if (auto* d = getDynamicObject())
+                return d->clone();
+
+            jassertfalse; // can only clone DynamicObjects!
+            return {};
+
+        case Type::array:
+        {
+            const auto& source = *getArray();
+
+            Array<var> arrayCopy;
+            arrayCopy.ensureStorageAllocated (source.size());
+
+            for (const auto& i : source)
+                arrayCopy.add (i.clone());
+
+            return var (std::move (arrayCopy));
+        }
+
+        case Type::method:
+            return var (getNativeFunction());
+
+        default:
+            return *this;
+    }
 }
 
 //==============================================================================
@@ -1047,7 +519,7 @@ bool var::hasMethod (const Identifier& methodName) const noexcept
 
 var::NativeFunction var::getNativeFunction() const
 {
-    return isMethod() && (value.methodValue != nullptr) ? *value.methodValue : nullptr;
+    return isMethod() ? static_cast<MethodHolder*> (value.objectValue)->function : nullptr;
 }
 
 var var::invoke (const Identifier& method, const var* arguments, int numArguments) const
@@ -1131,15 +603,20 @@ Array<var>* var::convertToArray()
     Array<var> tempVar;
 
     if (! isVoid())
-        tempVar.add (*this);
+        tempVar.add (std::move (*this));
 
-    *this = tempVar;
+    *this = var (std::move (tempVar));
     return getArray();
 }
 
 void var::append (const var& n)
 {
     convertToArray()->add (n);
+}
+
+void var::append (var&& n)
+{
+    convertToArray()->add (std::move (n));
 }
 
 void var::remove (const int index)
@@ -1169,7 +646,75 @@ int var::indexOf (const var& n) const
 //==============================================================================
 void var::writeToStream (OutputStream& output) const
 {
-    type->writeToStream (value, output);
+    switch (type)
+    {
+        case Type::void_:
+            output.writeCompressedInt (0);
+            break;
+
+        case Type::undefined:
+            output.writeCompressedInt (1);
+            output.writeByte (varMarker_Undefined);
+            break;
+
+        case Type::int_:
+            output.writeCompressedInt (5);
+            output.writeByte (varMarker_Int);
+            output.writeInt (value.intValue);
+            break;
+
+        case Type::int64_:
+            output.writeCompressedInt (9);
+            output.writeByte (varMarker_Int64);
+            output.writeInt64 (value.int64Value);
+            break;
+
+        case Type::boolean:
+            output.writeCompressedInt (1);
+            output.writeByte (value.boolValue ? (char) varMarker_BoolTrue : (char) varMarker_BoolFalse);
+            break;
+
+        case Type::double_:
+            output.writeCompressedInt (9);
+            output.writeByte (varMarker_Double);
+            output.writeDouble (value.doubleValue);
+            break;
+
+        case Type::string:
+            // Marker plus the UTF-8 bytes including the terminator
+            output.writeCompressedInt ((int) getString()->getNumBytesAsUTF8() + 2);
+            output.writeByte (varMarker_String);
+            output.writeString (*getString());
+            break;
+
+        case Type::array:
+        {
+            const auto& array = *getArray();
+
+            MemoryOutputStream buffer (512);
+            buffer.writeCompressedInt (array.size());
+
+            for (const auto& i : array)
+                i.writeToStream (buffer);
+
+            output.writeCompressedInt (1 + (int) buffer.getDataSize());
+            output.writeByte (varMarker_Array);
+            output << buffer;
+            break;
+        }
+
+        case Type::binary:
+            output.writeCompressedInt (1 + (int) value.binaryValue->getSize());
+            output.writeByte (varMarker_Binary);
+            output << *value.binaryValue;
+            break;
+
+        case Type::object:
+        case Type::method:
+            jassertfalse; // Can't write an object or a method to a stream!
+            output.writeCompressedInt (0);
+            break;
+    }
 }
 
 static var readVarFromStream (InputStream& input, int depth)
