@@ -45,6 +45,17 @@ constexpr float surfaceMinDelta = 0.04f;
 constexpr float surfaceMaxDelta = 0.25f;
 constexpr float surfaceIdealDelta = 0.10f;
 
+constexpr std::pair<const char*, ThemePalette::Role> roleNames[] = {
+    { "background", ThemePalette::Role::background },
+    { "surface", ThemePalette::Role::surface },
+    { "surfaceRaised", ThemePalette::Role::surfaceRaised },
+    { "outline", ThemePalette::Role::outline },
+    { "text", ThemePalette::Role::text },
+    { "textMuted", ThemePalette::Role::textMuted },
+    { "accent", ThemePalette::Role::accent },
+    { "onAccent", ThemePalette::Role::onAccent }
+};
+
 double linearizeChannel (float value)
 {
     return value <= 0.04045f ? value / 12.92 : std::pow ((value + 0.055) / 1.055, 2.4);
@@ -317,18 +328,17 @@ ResultValue<ThemePalette> ThemePalette::fromString (const String& text, Mode mod
 
 std::optional<ThemePalette::Role> ThemePalette::getRoleFromName (const String& name)
 {
-    static constexpr std::pair<const char*, Role> roleNames[] = {
-        { "background", Role::background },
-        { "surface", Role::surface },
-        { "surfaceRaised", Role::surfaceRaised },
-        { "outline", Role::outline },
-        { "text", Role::text },
-        { "textMuted", Role::textMuted },
-        { "accent", Role::accent },
-        { "onAccent", Role::onAccent }
-    };
-
     return detail::findNamed (roleNames, name);
+}
+
+StringArray ThemePalette::getRoleNames()
+{
+    StringArray names;
+
+    for (const auto& entry : roleNames)
+        names.add (entry.first);
+
+    return names;
 }
 
 //==============================================================================

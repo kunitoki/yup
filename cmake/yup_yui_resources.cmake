@@ -28,11 +28,42 @@
 # returns the bytes of a file by its "/" normalized path relative to BASE_DIR
 # (the current source directory by default), as written by `import`, or nullptr.
 # The files are embedded when configuring, and editing one configures again.
+#
+# VERIFY checks the files with `yup_yui_tool verify` when configuring, which
+# fails with the errors found. The tool is built for the host the first time,
+# into the build tree, so the option costs a build of yup_gui. VERIFY_MODELS
+# is the JSON file declaring the models the files bind to (see `--models`).
+
+function (_yup_build_yui_tool output_variable)
+    get_property (tool_executable GLOBAL PROPERTY YUP_YUI_TOOL_EXECUTABLE)
+
+    if (NOT tool_executable)
+        set (tool_executable_name "yup_yui_tool")
+        if (CMAKE_HOST_WIN32)
+            string (APPEND tool_executable_name ".exe")
+        endif()
+
+        set (tool_executable "${CMAKE_BINARY_DIR}/_yup_host_tools/bin/${tool_executable_name}")
+
+        _yup_message (STATUS "Building host yup_yui_tool")
+        _yup_execute_process_or_fail ("${CMAKE_COMMAND}"
+            "-DSOURCE_DIR=${CMAKE_CURRENT_FUNCTION_LIST_DIR}/tools/yui_tool"
+            "-DBUILD_DIR=${CMAKE_BINARY_DIR}/_yup_host_tools/yui_tool"
+            "-DEXECUTABLE_NAME=${tool_executable_name}"
+            "-DOUTPUT=${tool_executable}"
+            -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/tools/yup_build_host_tool.cmake")
+
+        set_property (GLOBAL PROPERTY YUP_YUI_TOOL_EXECUTABLE "${tool_executable}")
+    endif()
+
+    set (${output_variable} "${tool_executable}" PARENT_SCOPE)
+endfunction()
 
 function (yup_add_yui_resources library_name)
-    set (one_value_args BASE_DIR NAMESPACE)
+    set (options VERIFY)
+    set (one_value_args BASE_DIR NAMESPACE VERIFY_MODELS)
     set (multi_value_args FILES)
-    cmake_parse_arguments (YUP_ARG "" "${one_value_args}" "${multi_value_args}" ${ARGN})
+    cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     if (NOT YUP_ARG_FILES)
         _yup_message (FATAL_ERROR "yup_add_yui_resources: FILES argument is required")
@@ -73,6 +104,19 @@ function (yup_add_yui_resources library_name)
     endforeach()
 
     set_property (DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${resource_files})
+
+    if (YUP_ARG_VERIFY)
+        set (verify_arguments "")
+
+        if (YUP_ARG_VERIFY_MODELS)
+            get_filename_component (models_path "${YUP_ARG_VERIFY_MODELS}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+            set_property (DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${models_path}")
+            list (APPEND verify_arguments --models "${models_path}")
+        endif()
+
+        _yup_build_yui_tool (yui_tool)
+        _yup_execute_process_or_fail ("${yui_tool}" verify ${verify_arguments} ${resource_files})
+    endif()
 
     yup_add_embedded_binary_resources (${library_name}
         OUT_DIR "${library_name}"

@@ -34,7 +34,7 @@ sample-accurate events and statically bounded loops.
   the `process = …` algebra form), event handlers, `func` declarations, bounded
   `for` loops, state arrays, metadata and annotations
 - **Editing conveniences**: comment toggling, bracket matching and
-  auto-closing, block folding and indentation rules
+  auto-closing, and indentation rules
 - **Patch Player panel** in the Activity Bar: transport controls, the workspace
   patch list, audio/MIDI device selects, sample rate, block size and a test note
 - **Playback** of `.ydsp` and `.ydsp-project` patches through
@@ -133,7 +133,7 @@ set of real patches to test highlighting against lives in
 ```
 vscode-ydsp/
 ├── package.json                      # extension manifest
-├── language-configuration.json       # YDSP comments, brackets, folding, indentation
+├── language-configuration.json       # YDSP comments, brackets, indentation
 ├── language-configuration-project.json # the same for `.ydsp-project` (`#` comments, off-side folding)
 ├── images/ydsp-icon.png              # file icon for `.ydsp` patches
 ├── images/ydsp-project-icon.png      # file icon for `.ydsp-project` manifests

@@ -95,10 +95,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Fixed `RbjFilter` and `ZoelzerFilter` aborting with a pure virtual call when constructed with a mode other than `lowpass`.
 
+### Python Bindings
+
+- Bound the `.yui` runtime: `YuiDocument`, `YuiLoader`, `YuiView`, `YuiParser`, `YuiWriter`, `YuiSvgImporter` and `YuiDiagnostic`, `StyleSheet` with the style classes and stylesheet of a `Component`, the reflection types (`ComponentTypeInfo`, `ComponentProperty`, `ComponentSignal`, `ComponentTypeRegistry`, `Component.getTypeInfo()`), and `BindingProvider`, which a Python class can subclass to be the model of a document, with `DataTreeBindingProvider`. Actions, import resolvers and resource finders are Python functions.
+
 ### Build System
 
 - Added the `yup_add_test_runner()` CMake helper and a reusable GoogleTest runner (`yup::runGoogleTests`, the `YUP_IMPLEMENT_GTEST_MAIN()` macro and the `yup::getGoogleTestChildProcessEntryPoint()` hook) shipped as source under `cmake/tools/test_runner`, so test executables share the entry point instead of inlining it. The tests' `main.cpp` now reduces to `YUP_IMPLEMENT_GTEST_MAIN()`.
-- Added the `yup_add_yui_resources()` CMake function, which embeds `.yui` files and generates a lookup function by import path for `YuiLoader::loadResource`.
+- Added the `yup_add_yui_resources()` CMake function, which embeds `.yui` files and generates a lookup function by import path for `YuiLoader::loadResource`. With `VERIFY` (and `VERIFY_MODELS`) the files are checked while configuring, failing on errors.
+- Added `yup_yui_tool` (`cmake/tools/yui_tool`, `just yui_tool`), a command line tool for `.yui` files that needs no display: `verify` and `lint` report problems as text or JSON, with `--models` declaring the application models a document binds to, `schema` dumps the registered component types, their properties, signals and the palette roles (`ThemePalette::getRoleNames`), `render` draws a document, or a drawing, a component or a palette it declares, into a PNG (macOS and Windows), and `import-svg` writes an SVG as a drawing. Built for the web (`just yui_tool_wasm`) it is one module for every platform, which runs the commands on files given in memory and shows an interface live in a canvas: the `vscode-yui` extension (`just vscode_yui`) builds highlighting, diagnostics, completions and a live preview for VS Code on it.
+- Added the `YUP_ENABLE_EMSCRIPTEN_THREADS` CMake option, ON by default. Turned off, Emscripten targets are built without threads and shared memory, so they run in pages that can't be cross-origin isolated, such as the webview of an editor. Audio needs threads there, so a target using `yup_audio_devices` is then refused while configuring.
 - Added the `docsimg` example and the `just docs_images` recipe, which render the figures of the documentation into `docs/_static/images` in both color modes, and `just docs` to build the pages locally.
 
 ---

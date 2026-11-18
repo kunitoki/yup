@@ -257,6 +257,23 @@ TEST_F (ThemePaletteTests, SetColorOverridesDerivedRole)
     EXPECT_NE (original, palette);
 }
 
+TEST_F (ThemePaletteTests, RoleNamesListEveryRoleInEnumOrder)
+{
+    const auto names = ThemePalette::getRoleNames();
+
+    ASSERT_EQ (static_cast<int> (Role::numRoles), names.size());
+
+    for (int index = 0; index < names.size(); ++index)
+    {
+        const auto role = ThemePalette::getRoleFromName (names[index]);
+
+        ASSERT_TRUE (role.has_value()) << names[index];
+        EXPECT_EQ (index, static_cast<int> (*role));
+    }
+
+    EXPECT_FALSE (ThemePalette::getRoleFromName ("Accent").has_value());
+}
+
 TEST_F (ThemePaletteTests, EqualityComparesRolesAndMode)
 {
     EXPECT_EQ (ThemePalette (frostedColors()), ThemePalette (frostedColors()));

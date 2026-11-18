@@ -331,6 +331,45 @@ endfunction()
 
 #==============================================================================
 
+# Tells whether one of the targets is target_name or links it, directly or through the targets it links.
+function (_yup_target_list_links target_list target_name output_variable)
+    set (visited_targets "")
+    set (pending_targets ${target_list})
+
+    while (pending_targets)
+        list (POP_FRONT pending_targets linked_target)
+        if (NOT TARGET "${linked_target}")
+            continue()
+        endif()
+
+        get_target_property (aliased_target "${linked_target}" ALIASED_TARGET)
+        if (aliased_target)
+            set (linked_target "${aliased_target}")
+        endif()
+
+        if ("${linked_target}" STREQUAL "${target_name}")
+            set (${output_variable} ON PARENT_SCOPE)
+            return()
+        endif()
+
+        if ("${linked_target}" IN_LIST visited_targets)
+            continue()
+        endif()
+        list (APPEND visited_targets "${linked_target}")
+
+        foreach (link_property IN ITEMS INTERFACE_LINK_LIBRARIES LINK_LIBRARIES)
+            get_target_property (target_libraries "${linked_target}" ${link_property})
+            if (target_libraries)
+                list (APPEND pending_targets ${target_libraries})
+            endif()
+        endforeach()
+    endwhile()
+
+    set (${output_variable} OFF PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
 function (_yup_resolve_variable_paths input_list output_list)
     set (resolved_list "")
 

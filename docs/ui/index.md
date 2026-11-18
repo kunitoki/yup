@@ -54,6 +54,9 @@ windowing, widgets, and theming are still to come.
   composite components, handlers, actions and models.
 - [Hot reloading `.yui` files](yui-hot-reload.md) - `YuiLoader`, watching
   files while developing and embedding them with `yup_add_yui_resources`.
+- [Tools for `.yui` files](yui-tooling.md) - checking files from the command
+  line and while configuring a build, the schema, importing SVGs and the VS Code
+  extension.
 - [Component effects (shaders)](component-effects.md) — apply GPU shader
   effects to `Component` subtrees.
 - [Component caching](component-caching.md) — `setCachedToTexture`
@@ -110,6 +113,7 @@ yui-styles
 yui-reactivity
 yui-documents
 yui-hot-reload
+yui-tooling
 component-effects
 component-3d
 component-caching

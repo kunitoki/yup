@@ -4,6 +4,10 @@ alias c := clean
 default:
   @just --list
 
+#==================================================================================================
+# Global commands
+#==================================================================================================
+
 [confirm("Are you sure you want to clean the build/{{PLATFORM}} folder? [y/N]")]
 [doc("clean single platform build artifacts")]
 clean PLATFORM="mac":
@@ -14,9 +18,17 @@ clean PLATFORM="mac":
 cleanall:
   rm -Rf build/*
 
+#==================================================================================================
+# Generic operations
+#==================================================================================================
+
 [doc("build project using cmake")]
 build PLATFORM="mac" CONFIG="Debug" TARGET="yup_tests":
   cmake --build build/{{PLATFORM}} --config {{CONFIG}} --target {{TARGET}}
+
+[doc("generate and open project using Ninja multi config")]
+ninja PROFILING="OFF" VULKAN="OFF":
+  cmake -G "Ninja Multi-Config" -B build/ninja -DYUP_ENABLE_PROFILING={{PROFILING}} -DYUP_ENABLE_VULKAN={{VULKAN}}
 
 [doc("execute unit tests using cmake and ctest (MODULE selects a single module, e.g. yup_core)")]
 [macos]
@@ -25,15 +37,15 @@ test CONFIG="Debug" GTEST_FILTER="*" MODULE="":
   cmake --build build/mac --target yup_tests --config {{CONFIG}}
   GTEST_FILTER="{{GTEST_FILTER}}" ctest --test-dir build/mac/tests -C {{CONFIG}} --output-on-failure -R "^{{MODULE}}"
 
+#==================================================================================================
+# Platform configuration
+#==================================================================================================
+
 [doc("generate and open project in macOS using Xcode")]
 [macos]
 mac PROFILING="OFF":
   cmake -G Xcode -B build/mac -DYUP_ENABLE_PROFILING={{PROFILING}}
   -open build/mac/yup.xcodeproj
-
-[doc("generate and open project using Ninja multi config")]
-ninja PROFILING="OFF" VULKAN="OFF":
-  cmake -G "Ninja Multi-Config" -B build/ninja -DYUP_ENABLE_PROFILING={{PROFILING}} -DYUP_ENABLE_VULKAN={{VULKAN}}
 
 [doc("generate and open project in Windows using Visual Studio")]
 [windows]
@@ -80,6 +92,10 @@ emscripten CONFIG="Debug" TARGET="yup_tests":
   emcmake cmake -G "Ninja Multi-Config" -B build/emscripten
   @just build emscripten {{CONFIG}} {{TARGET}}
 
+#==================================================================================================
+# Emscripten specific
+#==================================================================================================
+
 [doc("run Debug tests for WASM (MODULE selects a single module, e.g. yup_core)")]
 emscripten_test_debug GTEST_FILTER="*" MODULE="":
   @just build emscripten Debug
@@ -94,6 +110,10 @@ emscripten_test_release GTEST_FILTER="*" MODULE="":
 emscripten_serve INTERFACE="localhost":
   #uv run python -m http.server -d .
   uv run python tools/serve.py -i {{INTERFACE}} -p 8000 -d .
+
+#==================================================================================================
+# Python operations
+#==================================================================================================
 
 [doc("generate python wheel for yup_python bindings")]
 [working-directory: 'python']
@@ -120,6 +140,10 @@ python_test *TEST_OPTS:
   uv sync --group test
   uv run --group test python -m pytest -s {{TEST_OPTS}}
 
+#==================================================================================================
+# YSL and 3D tooling
+#==================================================================================================
+
 [doc("compile and invoke yup_shader_bundler tool")]
 [working-directory: 'cmake/tools/shader_bundler']
 shader_bundler *COMPILE_ARGS:
@@ -127,17 +151,21 @@ shader_bundler *COMPILE_ARGS:
   cmake --build build --config Release -j4
   build/yup_shader_bundler {{COMPILE_ARGS}}
 
-[doc("time the Scene3D demo target frames on the GPU: ACTION is run, record (the baseline) or compare (with it)")]
-[macos]
-perf ACTION="run" CONFIG="Release" FILTER="SceneRendererBenchmarkTests.DISABLED_DemoTargetFrameTimes":
-  uv run python tools/perf.py --just "{{just_executable()}}" {{ACTION}} {{CONFIG}} "{{FILTER}}"
-
 [doc("fit the yup_renderer GGX area light tables into modules/yup_renderer/core/yup_LtcTables.inc")]
 [working-directory: 'cmake/tools/ltc_fitter']
 ltc_tables:
   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
   cmake --build build --config Release -j4
   build/yup_ltc_fitter --output "{{justfile_directory()}}/modules/yup_renderer/core/yup_LtcTables.inc"
+
+[doc("time the Scene3D demo target frames on the GPU: ACTION is run, record (the baseline) or compare (with it)")]
+[macos]
+perf_3d ACTION="run" CONFIG="Release" FILTER="SceneRendererBenchmarkTests.DISABLED_DemoTargetFrameTimes":
+  uv run python tools/perf.py --just "{{just_executable()}}" {{ACTION}} {{CONFIG}} "{{FILTER}}"
+
+#==================================================================================================
+# YDSP tooling
+#==================================================================================================
 
 [doc("compile and invoke yup_dsp_compiler tool")]
 [working-directory: 'cmake/tools/ydsp_compiler']
@@ -148,7 +176,7 @@ dsp_compiler *COMPILE_ARGS:
 
 [doc("build and install the YDSP VSCode extension")]
 [working-directory: 'modules/yup_dsp_jit/tools/vscode-ydsp']
-vscode:
+vscode_ydsp:
   @just dsp_compiler --help
   sh tools/package-server.sh
   npm install
@@ -156,6 +184,50 @@ vscode:
   npx --yes @vscode/vsce package -o vscode-ydsp.vsix
   npx --yes @vscode/vsce ls --tree
   code --install-extension vscode-ydsp.vsix --force
+
+#==================================================================================================
+# YUI tooling
+#==================================================================================================
+
+[doc("compile and invoke yup_yui_tool tool")]
+[working-directory: 'cmake/tools/yui_tool']
+yui_tool *COMPILE_ARGS:
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
+  cmake --build build --config Release -j4
+  build/yup_yui_tool {{COMPILE_ARGS}}
+
+[doc("compile yup_yui_tool and run its command line tests")]
+[working-directory: 'cmake/tools/yui_tool']
+yui_tool_test:
+  @just yui_tool --help
+  uv run python tests/test_cli.py build/yup_yui_tool
+
+[doc("compile yup_yui_tool for the web, as the YUI VSCode extension runs it (needs the Emscripten SDK activated)")]
+[working-directory: 'cmake/tools/yui_tool']
+yui_tool_wasm CONFIG="Release":
+  emcmake cmake -G Ninja -S . -B build_wasm -DCMAKE_BUILD_TYPE={{CONFIG}}
+  cmake --build build_wasm
+
+[doc("compile yup_yui_tool for the web and run its tests")]
+[working-directory: 'cmake/tools/yui_tool']
+yui_tool_wasm_test:
+  @just yui_tool_wasm
+  node --test tests/test_web.js
+
+[doc("build and install the YUI VSCode extension (needs the Emscripten SDK activated)")]
+[working-directory: 'modules/yup_gui/tools/vscode-yui']
+vscode_yui:
+  @just yui_tool_wasm
+  sh tools/package-tool.sh
+  npm install
+  npm run compile
+  npx --yes @vscode/vsce package -o vscode-yui.vsix
+  npx --yes @vscode/vsce ls --tree
+  code --install-extension vscode-yui.vsix --force
+
+#==================================================================================================
+# Developer tooling
+#==================================================================================================
 
 [doc("fetch missing coverage lines for a pull request")]
 fetch_coverage PR:

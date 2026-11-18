@@ -2546,6 +2546,416 @@ void registerYupGuiBindings (py::module_& m)
     textEditorStyle.attr ("cornerRadiusId") = TextEditor::Style::cornerRadiusId;
     textEditorStyle.attr ("outlineWidthId") = TextEditor::Style::outlineWidthId;
     textEditorStyle.attr ("focusedOutlineWidthId") = TextEditor::Style::focusedOutlineWidthId;
+
+    // ============================================================================================ yup::ComponentProperty
+
+    py::class_<ComponentProperty> classComponentProperty (m, "ComponentProperty");
+
+    py::enum_<ComponentProperty::Type> (classComponentProperty, "Type")
+        .value ("number", ComponentProperty::Type::number)
+        .value ("integer", ComponentProperty::Type::integer)
+        .value ("boolean", ComponentProperty::Type::boolean)
+        .value ("string", ComponentProperty::Type::string)
+        .value ("color", ComponentProperty::Type::color)
+        .value ("point", ComponentProperty::Type::point)
+        .value ("rectangle", ComponentProperty::Type::rectangle)
+        .value ("transform", ComponentProperty::Type::transform)
+        .value ("enumeration", ComponentProperty::Type::enumeration)
+        .value ("font", ComponentProperty::Type::font)
+        .value ("drawing", ComponentProperty::Type::drawing)
+        .value ("array", ComponentProperty::Type::array)
+        .value ("any", ComponentProperty::Type::any);
+
+    py::enum_<ComponentProperty::LayoutEffect> (classComponentProperty, "LayoutEffect")
+        .value ("none", ComponentProperty::LayoutEffect::none)
+        .value ("own", ComponentProperty::LayoutEffect::own)
+        .value ("parent", ComponentProperty::LayoutEffect::parent);
+
+    // The getter and setter are not exposed: Component.getProperty and setProperty go through them.
+    classComponentProperty
+        .def_readonly ("name", &ComponentProperty::name, "The name of the property, as used in .yui files.")
+        .def_readonly ("storageId", &ComponentProperty::storageId, "The store key of a store-backed property, null when the name is the key.")
+        .def_readonly ("type", &ComponentProperty::type, "The value type of the property.")
+        .def_readonly ("elementType", &ComponentProperty::elementType, "The type of the elements of an array property.")
+        .def_readonly ("defaultValue", &ComponentProperty::defaultValue)
+        .def_readonly ("isState", &ComponentProperty::isState, "True when this boolean property doubles as a pseudo-class.")
+        .def_readonly ("isStyleable", &ComponentProperty::isStyleable, "True when a stylesheet may set this property.")
+        .def_readonly ("isInherited", &ComponentProperty::isInherited, "True when a store-backed value also applies to the descendants.")
+        .def_readonly ("layoutEffect", &ComponentProperty::layoutEffect, "Which layout needs updating when this property changes.")
+        .def_readonly ("enumValues", &ComponentProperty::enumValues, "The allowed values of an enumeration property.")
+        .def_readonly ("description", &ComponentProperty::description)
+        .def ("isStateBacked", &ComponentProperty::isStateBacked, "Returns true when the property is backed by a component getter.")
+        .def ("isStoreBacked", &ComponentProperty::isStoreBacked, "Returns true when the property is kept in the component's property store.")
+        .def ("isReadOnly", &ComponentProperty::isReadOnly, "Returns true when the property can be read but not written.")
+        .def ("getStorageKey", &ComponentProperty::getStorageKey, "Returns the key a store-backed value is stored under: storageId, or name when unset.");
+
+    // ============================================================================================ yup::ComponentSignal
+
+    py::class_<ComponentSignal> classComponentSignal (m, "ComponentSignal");
+
+    py::class_<ComponentSignal::Argument> (classComponentSignal, "Argument")
+        .def_readonly ("name", &ComponentSignal::Argument::name)
+        .def_readonly ("type", &ComponentSignal::Argument::type)
+        .def_readonly ("elementType", &ComponentSignal::Argument::elementType);
+
+    // connect is not exposed: handlers are attached from .yui, or through the widget's own callback.
+    classComponentSignal
+        .def_readonly ("name", &ComponentSignal::name, "The name of the signal, as used in .yui files.")
+        .def_readonly ("description", &ComponentSignal::description)
+        .def_readonly ("arguments", &ComponentSignal::arguments, "The arguments the signal is emitted with, in order.");
+
+    // ============================================================================================ yup::ComponentTypeInfo
+
+    // A type info is owned by its widget class, or by the document declaring a composite type, so
+    // Python only borrows it. Its properties and signals are plain descriptors, handed out as copies.
+    py::class_<ComponentTypeInfo> classComponentTypeInfo (m, "ComponentTypeInfo");
+
+    classComponentTypeInfo
+        .def ("getTypeName", &ComponentTypeInfo::getTypeName)
+        .def ("getBaseTypeInfo", &ComponentTypeInfo::getBaseTypeInfo, py::return_value_policy::reference,
+              "Returns the type info of the base type, or None for the root type.")
+        .def ("getOwnProperties", &ComponentTypeInfo::getOwnProperties, py::return_value_policy::copy,
+              "Returns the properties declared directly on this type, not the inherited ones.")
+        .def ("findProperty", &ComponentTypeInfo::findProperty, "name"_a, py::return_value_policy::copy,
+              "Finds a property by name, walking up the base chain, or returns None.")
+        .def ("hasProperty", &ComponentTypeInfo::hasProperty, "name"_a)
+        .def ("getAllProperties", &ComponentTypeInfo::getAllProperties, py::return_value_policy::copy,
+              "Returns every property visible on this type, the derived declarations overriding the base ones.")
+        .def ("isSubtypeOf", py::overload_cast<const ComponentTypeInfo&> (&ComponentTypeInfo::isSubtypeOf, py::const_), "other"_a)
+        .def ("isSubtypeOf", py::overload_cast<const Identifier&> (&ComponentTypeInfo::isSubtypeOf, py::const_), "otherTypeName"_a,
+              "Returns true when this type is, or derives from, the given type.")
+        .def ("getOwnSignals", &ComponentTypeInfo::getOwnSignals, py::return_value_policy::copy,
+              "Returns the signals declared directly on this type, not the inherited ones.")
+        .def ("findSignal", &ComponentTypeInfo::findSignal, "signalName"_a, py::return_value_policy::copy,
+              "Finds a signal by name, walking up the base chain, or returns None.")
+        .def ("hasSignal", &ComponentTypeInfo::hasSignal, "signalName"_a)
+        .def ("hasFactory", &ComponentTypeInfo::hasFactory)
+        .def ("createInstance", &ComponentTypeInfo::createInstance,
+              "Creates a new component of this type, owned by the caller, or returns None when the type has no factory.");
+
+    // ============================================================================================ yup::ComponentTypeRegistry
+
+    // registerType is not bound: the registry keeps a pointer to a type info that must outlive it.
+    py::class_<ComponentTypeRegistry> classComponentTypeRegistry (m, "ComponentTypeRegistry");
+
+    classComponentTypeRegistry
+        .def_static ("getInstance", &ComponentTypeRegistry::getInstance, py::return_value_policy::reference)
+        .def ("findType", &ComponentTypeRegistry::findType, "typeName"_a, py::return_value_policy::reference,
+              "Finds a registered type info by name, or returns None.")
+        .def ("getRegisteredTypes", &ComponentTypeRegistry::getRegisteredTypes, py::return_value_policy::reference,
+              "Returns all registered type infos, sorted by type name.");
+
+    m.def ("registerBuiltInComponentTypes", &registerBuiltInComponentTypes,
+           "Registers the type infos of the built-in components into the ComponentTypeRegistry.");
+
+    // ============================================================================================ yup::StyleSheet
+
+    py::class_<StyleSheet, ReferenceCountedObjectPtr<StyleSheet>> classStyleSheet (m, "StyleSheet");
+
+    classStyleSheet
+        .def_static ("parse", [] (const String& text) -> StyleSheet::Ptr
+        {
+            auto sheet = StyleSheet::parse (text);
+            if (sheet.failed())
+                throw py::value_error (sheet.getErrorMessage().toRawUTF8());
+
+            return sheet.getValue();
+        }, "text"_a, "Parses .yui text and builds a stylesheet from it, raising ValueError with the first problem when it can't.")
+        .def ("getPaletteNames", &StyleSheet::getPaletteNames, "Returns the names of the palettes the sheet declares.")
+        .def ("findDrawing", &StyleSheet::findDrawing, "name"_a, "Returns the drawing declared under a name, or an invalid tree.")
+        .def ("watchesProperty", &StyleSheet::watchesProperty, "name"_a,
+              "Returns true when some selector reads a property, so changing it restyles.");
+
+    // ============================================================================================ yup::Component reflection and styling
+
+    classComponent
+        // The type info of a widget class is static. One given with setTypeInfo belongs to whoever built
+        // the component, a .yui document for instance, so it keeps the component alive instead.
+        .def ("getTypeInfo", [] (py::object self)
+        {
+            const auto& component = self.cast<const Component&>();
+            const auto& typeInfo = component.getTypeInfo();
+
+            return &typeInfo == &component.getDefaultTypeInfo()
+                     ? py::cast (typeInfo, py::return_value_policy::reference)
+                     : py::cast (typeInfo, py::return_value_policy::reference_internal, self);
+        }, "Returns the reflected type info of this component.")
+        .def ("addStyleClass", &Component::addStyleClass, "styleClass"_a)
+        .def ("removeStyleClass", &Component::removeStyleClass, "styleClass"_a)
+        .def ("hasStyleClass", &Component::hasStyleClass, "styleClass"_a)
+        .def ("setStyleClasses", [] (Component& self, const std::vector<Identifier>& newStyleClasses)
+        {
+            Array<Identifier> styleClasses;
+            for (const auto& styleClass : newStyleClasses)
+                styleClasses.add (styleClass);
+
+            self.setStyleClasses (styleClasses);
+        }, "newStyleClasses"_a, "Replaces every style class of this component.")
+        .def ("getStyleClasses", [] (const Component& self)
+        {
+            const auto& styleClasses = self.getStyleClasses();
+            return std::vector<Identifier> (styleClasses.begin(), styleClasses.end());
+        }, "Returns the style classes of this component, in the order they were added.")
+        .def ("setStyleSheet", &Component::setStyleSheet, "newStyleSheet"_a,
+              "Attaches a stylesheet to this component and everything inside it; pass None to detach it.")
+        .def ("getStyleSheet", &Component::getStyleSheet);
+
+    // ============================================================================================ yup::YuiDiagnostic
+
+    py::class_<YuiDiagnostic> classYuiDiagnostic (m, "YuiDiagnostic");
+
+    py::enum_<YuiDiagnostic::Severity> (classYuiDiagnostic, "Severity")
+        .value ("error", YuiDiagnostic::Severity::error)
+        .value ("warning", YuiDiagnostic::Severity::warning);
+
+    classYuiDiagnostic
+        .def_readonly ("message", &YuiDiagnostic::message)
+        .def_readonly ("property", &YuiDiagnostic::property, "The property the problem is about, null when it is about the whole element.")
+        .def_readonly ("source", &YuiDiagnostic::source, "The imported file the problem is in, empty for the main text.")
+        .def_readonly ("line", &YuiDiagnostic::line, "The 1-based line of the problem, 0 when the position is unknown.")
+        .def_readonly ("column", &YuiDiagnostic::column, "The 1-based column of the problem, counted in characters.")
+        .def_readonly ("severity", &YuiDiagnostic::severity)
+        .def ("isError", &YuiDiagnostic::isError)
+        .def ("isWarning", &YuiDiagnostic::isWarning)
+        .def ("toString", &YuiDiagnostic::toString, "Returns the diagnostic as source:line:column: message, omitting the unknown parts.")
+        .def_static ("join", &YuiDiagnostic::join, "diagnostics"_a, "separator"_a = "\n",
+                     "Returns the diagnostics as strings, joined by a separator.")
+        .def ("__str__", &YuiDiagnostic::toString)
+        .def ("__repr__", [] (const YuiDiagnostic& self)
+        {
+            String result;
+            result
+                << "<" << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name(), 1)
+                << " \"" << self.toString() << "\">";
+            return result;
+        });
+
+    // ============================================================================================ yup::YuiParser
+
+    py::class_<YuiParser> classYuiParser (m, "YuiParser");
+
+    // The source map is not exposed: YuiDocument already locates its diagnostics with it.
+    py::class_<YuiParser::ParseResult> (classYuiParser, "ParseResult")
+        .def_readonly ("document", &YuiParser::ParseResult::document, "The document, invalid when the text has errors.")
+        .def_readonly ("diagnostics", &YuiParser::ParseResult::diagnostics, "The problems found, empty when the text was parsed.")
+        .def ("wasOk", &YuiParser::ParseResult::wasOk);
+
+    classYuiParser
+        .def_static ("parse", py::overload_cast<const String&> (&YuiParser::parse), "text"_a,
+                     "Parses .yui text, stopping at the first error. Imports are kept as import elements.")
+        .def_static ("parse", py::overload_cast<const String&, const YuiParser::ImportResolver&> (&YuiParser::parse), "text"_a, "resolveImport"_a,
+                     "Parses .yui text along with the files it imports. resolveImport is called with each\n"
+                     "imported path and returns its text, or None when it can't be found.");
+
+    // ============================================================================================ yup::YuiWriter
+
+    py::class_<YuiWriter> (m, "YuiWriter")
+        .def_static ("write", &YuiWriter::write, "tree"_a, "Writes a document, or a single element of one, as .yui text.");
+
+    // ============================================================================================ yup::YuiSvgImporter
+
+    py::class_<YuiSvgImporter> classYuiSvgImporter (m, "YuiSvgImporter");
+
+    py::class_<YuiSvgImporter::Options> (classYuiSvgImporter, "Options")
+        .def (py::init<>())
+        .def_readwrite ("name", &YuiSvgImporter::Options::name, "The name of the drawing: letters, digits and _, starting with a letter.")
+        .def_readwrite ("fontExpression", &YuiSvgImporter::Options::fontExpression,
+                        "Called with the family, size, weight and italic flag of a text, returns the expression giving its font.")
+        .def_readwrite ("colorProperties", &YuiSvgImporter::Options::colorProperties,
+                        "Declares every color the SVG is painted with as a color property of the drawing.");
+
+    py::class_<YuiSvgImporter::ImportResult> (classYuiSvgImporter, "ImportResult")
+        .def_readonly ("drawing", &YuiSvgImporter::ImportResult::drawing, "The drawing element, invalid when the SVG can't be read.")
+        .def_readonly ("warnings", &YuiSvgImporter::ImportResult::warnings, "What is not painted exactly as a Drawable paints it.")
+        .def ("wasOk", &YuiSvgImporter::ImportResult::wasOk)
+        .def ("toText", &YuiSvgImporter::ImportResult::toText, "Returns the drawing as .yui text, empty when the SVG wasn't read.");
+
+    // The SVGDocument overload is not bound, as SVGDocument isn't either. The text is taken as a
+    // StringRef because a String converts to both a StringRef and a File.
+    classYuiSvgImporter
+        .def_static ("importSvg", [] (StringRef svgText, const YuiSvgImporter::Options& options)
+        {
+            return YuiSvgImporter::importSvg (svgText, options);
+        }, "svgText"_a, "options"_a = YuiSvgImporter::Options(), "Parses and converts the text of an SVG.")
+        .def_static ("importSvg", [] (const File& svgFile, const YuiSvgImporter::Options& options)
+        {
+            return YuiSvgImporter::importSvg (svgFile, options);
+        }, "svgFile"_a, "options"_a = YuiSvgImporter::Options(), "Parses and converts an SVG file.");
+
+    // ============================================================================================ yup::BindingProvider
+
+    py::class_<BindingProvider, PyBindingProvider<>> classBindingProvider (m, "BindingProvider");
+
+    py::class_<BindingProvider::Property> (classBindingProvider, "Property")
+        .def (py::init<>())
+        .def (py::init ([] (const Identifier& name, ComponentProperty::Type type, ComponentProperty::Type elementType)
+        {
+            return BindingProvider::Property { name, type, elementType };
+        }), "name"_a, "type"_a = ComponentProperty::Type::any, "elementType"_a = ComponentProperty::Type::any)
+        .def_readwrite ("name", &BindingProvider::Property::name, "The name the value is bound with, as in params.cutoff.")
+        .def_readwrite ("type", &BindingProvider::Property::type, "The type of the value, which decides how expressions read it.")
+        .def_readwrite ("elementType", &BindingProvider::Property::elementType, "The type of the elements, when the value is an array.");
+
+    classBindingProvider
+        .def (py::init<>())
+        .def ("getProperties", &BindingProvider::getProperties,
+              "Returns the values the provider exposes; a Python subclass must override it.")
+        .def ("findProperty", &BindingProvider::findProperty, "name"_a,
+              "Finds a single exposed property by name, or returns None.")
+        .def ("getValue", &BindingProvider::getValue, "name"_a,
+              "Returns the current value of a property; a Python subclass must override it.")
+        .def ("setValue", &BindingProvider::setValue, "name"_a, "value"_a,
+              "Changes the value of a property; a Python subclass must override it, and report the change with notifyValueChanged.")
+        .def ("beginGesture", &BindingProvider::beginGesture, "name"_a,
+              "Called when a continuous edit of a property starts, for example when a knob is pressed.")
+        .def ("endGesture", &BindingProvider::endGesture, "name"_a)
+        .def ("notifyValueChanged", &PyBindingProvider<>::notifyValueChanged, "name"_a,
+              "Tells the bound interfaces that a value changed. Call it for every change, whoever made it.");
+
+    // ============================================================================================ yup::DataTreeBindingProvider
+
+    py::class_<DataTreeBindingProvider, BindingProvider> classDataTreeBindingProvider (m, "DataTreeBindingProvider");
+
+    classDataTreeBindingProvider
+        // The provider only holds a raw pointer to the undo manager, which has to outlive it
+        .def (py::init<DataTree, UndoManager*>(), "tree"_a, "undoManager"_a = nullptr, py::keep_alive<1, 3>())
+        .def ("getTree", &DataTreeBindingProvider::getTree);
+
+    // ============================================================================================ yup::YuiDocument
+
+    // The components of a document are created in C++, and Component's polymorphic_type_hook only
+    // downcasts the types registered with registerComponentType: resolving the bound class of the
+    // dynamic type here is what makes a Slider written in markup reach Python as a Slider.
+    const auto toBorrowedComponent = [] (Component* component) -> py::object
+    {
+        if (component == nullptr)
+            return py::none();
+
+        if (const auto* typeInfo = py::detail::get_type_info (typeid (*component)))
+        {
+            return py::reinterpret_steal<py::object> (py::detail::type_caster_generic::cast (
+                dynamic_cast<const void*> (component), py::return_value_policy::reference, py::handle(), typeInfo, nullptr, nullptr));
+        }
+
+        return py::cast (component, py::return_value_policy::reference);
+    };
+
+    py::class_<YuiDocument> classYuiDocument (m, "YuiDocument");
+
+    classYuiDocument
+        .def (py::init<>())
+        .def ("loadFromString", &YuiDocument::loadFromString, "text"_a, "resolveImport"_a = nullptr,
+              "Parses .yui text and loads the interface it describes. resolveImport is called with each\n"
+              "imported path and returns its text, or None when it can't be found.")
+        .def ("load", [] (YuiDocument& self, const DataTree& document)
+        {
+            return self.load (document);
+        }, "document"_a, "Loads the interface of a document already parsed by YuiParser.")
+        .def ("clear", &YuiDocument::clear, "Destroys the interface. Actions and models are kept.")
+        .def ("setBaseDirectory", &YuiDocument::setBaseDirectory, "directory"_a)
+        .def ("getBaseDirectory", &YuiDocument::getBaseDirectory)
+
+        // The document only holds a raw pointer to the undo manager, which has to outlive it
+        .def ("setUndoManager", &YuiDocument::setUndoManager, "undoManagerToUse"_a, py::keep_alive<1, 2>(),
+              "Records each successful load as a transaction of an undo manager, or stops when None.")
+        .def ("getTree", &YuiDocument::getTree)
+
+        // The document owns its components: Python borrows them, and keeps the document alive meanwhile
+        .def ("getRoot", [toBorrowedComponent] (const YuiDocument& self)
+        {
+            return toBorrowedComponent (self.getRoot());
+        }, py::keep_alive<0, 1>(), "Returns the root component, or None if nothing is loaded.")
+        .def ("findById", [toBorrowedComponent] (const YuiDocument& self, const String& id)
+        {
+            return toBorrowedComponent (self.findById (id));
+        }, "id"_a, py::keep_alive<0, 1>(), "Returns the component with the given id, or None.")
+        .def ("findTypeInfo", &YuiDocument::findTypeInfo, "typeName"_a, py::return_value_policy::reference_internal,
+              "Returns the type info of a type declared by the document or registered, or None.")
+        .def ("setAction", [] (YuiDocument& self, const String& name, std::function<void (py::list)> action)
+        {
+            if (! action)
+            {
+                self.setAction (name, nullptr);
+                return;
+            }
+
+            self.setAction (name, [action = std::move (action)] (const Array<var>& arguments)
+            {
+                py::gil_scoped_acquire gil;
+
+                py::list values;
+                for (const auto& argument : arguments)
+                    values.append (argument);
+
+                action (std::move (values));
+            });
+        }, "name"_a, "action"_a,
+              "Registers the function run by action (\"name\", ...) handlers, called with the list of the\n"
+              "values of the call, or removes it when None.")
+
+        // The document only holds a reference to the provider, which has to outlive it
+        .def ("setModel", &YuiDocument::setModel, "name"_a, "provider"_a, py::keep_alive<1, 3>(),
+              "Makes the values of a provider available as name.property. Set models before loading.")
+        .def ("removeModel", &YuiDocument::removeModel, "name"_a)
+        .def ("getDiagnostics", &YuiDocument::getDiagnostics, py::return_value_policy::copy,
+              "Returns the problems met by the last load, and by the styling or bindings of its interface since.")
+        .def ("getStyleSheet", &YuiDocument::getStyleSheet,
+              "Returns the stylesheet built from the document, or None when it declares no style.");
+
+    // ============================================================================================ yup::YuiLoader
+
+    py::class_<YuiLoader> classYuiLoader (m, "YuiLoader");
+
+    classYuiLoader
+        // The loader only holds a reference to its document, which has to outlive it
+        .def (py::init<YuiDocument&>(), "documentToLoad"_a, py::keep_alive<1, 2>())
+        .def ("loadFile", &YuiLoader::loadFile, "file"_a, "Loads a .yui file, whose imports are paths relative to its folder.")
+
+        // The loader reads the bytes as soon as the finder returns, and may call it again on a later
+        // reload: they are copied out of the Python object, and kept until the next lookup.
+        .def ("loadResource", [] (YuiLoader& self, const String& path, std::function<std::optional<std::string> (const String&)> findResource)
+        {
+            if (! findResource)
+                return self.loadResource (path, nullptr);
+
+            return self.loadResource (path, [findResource = std::move (findResource), found = std::make_shared<std::string>()] (const char* resourcePath, std::size_t& size) -> const uint8*
+            {
+                auto bytes = findResource (String::fromUTF8 (resourcePath));
+                if (! bytes.has_value())
+                    return nullptr;
+
+                *found = std::move (*bytes);
+                size = found->size();
+
+                return reinterpret_cast<const uint8*> (found->data());
+            });
+        }, "path"_a, "findResource"_a,
+              "Loads an embedded .yui file. findResource is called with the path of the file and of each\n"
+              "of its imports, and returns their bytes, or None when they can't be found.")
+        .def ("reloadFromString", &YuiLoader::reloadFromString, "text"_a,
+              "Loads text in place of the main text of the current source, importing from the source.")
+        .def ("reload", &YuiLoader::reload, "Loads the current source again.")
+        .def ("setOverride", &YuiLoader::setOverride, "path"_a, "text"_a,
+              "Uses a text in place of a file of the current source, until another source is loaded.")
+        .def ("clearOverrides", &YuiLoader::clearOverrides)
+        .def ("getLoadedText", &YuiLoader::getLoadedText, "path"_a,
+              "Returns the text a file had in the last load, or None when the last load didn't use it.")
+        .def ("getFile", &YuiLoader::getFile)
+        .def ("setWatching", &YuiLoader::setWatching, "shouldWatch"_a,
+              "Starts or stops reloading the document when the files it was loaded from change.")
+        .def ("isWatching", &YuiLoader::isWatching)
+        .def_readwrite ("onLoad", &YuiLoader::onLoad, "Called with the result of each load, including the reloads started by watching.");
+
+    // ============================================================================================ yup::YuiView
+
+    py::class_<YuiView, Component, PyComponent<YuiView>, py::smart_holder> classYuiView (m, "YuiView");
+
+    classYuiView
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+        .def ("getDocument", &YuiView::getDocument, py::return_value_policy::reference_internal,
+              "Returns the document whose interface the view shows, which lives as long as the view.")
+        .def ("getLoader", &YuiView::getLoader, py::return_value_policy::reference_internal,
+              "Returns the loader filling the document, which lives as long as the view.");
 }
 
 } // namespace Bindings

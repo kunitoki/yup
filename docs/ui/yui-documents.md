@@ -355,6 +355,10 @@ two-value slider, not its range.
 - [Data-driven drawing](yui-drawing.md) - drawings and their properties.
 - [Component Layout](component-layout.md) - the `Row`, `Column`, `Grid` and
   `Stack` containers and their item properties.
+- [Tools for `.yui` files](yui-tooling.md) - checking and previewing documents
+  outside the application.
+- [`.yui` interfaces from Python](../scripting/python-yui.md) - documents,
+  actions and models from the Python bindings.
 
 The `YuiDrawing` graphics example edits a complete UI built this way, split
 across `ui.yui`, `components.yui`, four knob drawings (`knob.yui`,

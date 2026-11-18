@@ -112,6 +112,10 @@ embedded copies in release builds:
 
 where `YUI_SOURCE_DIR` is a compile definition set to the folder of the files.
 
+Adding `VERIFY` to `yup_add_yui_resources` checks the embedded files while
+configuring, so an invalid one fails the build instead of shipping. See
+[Tools for `.yui` files](yui-tooling.md).
+
 The `YuiDrawing` graphics example loads its files this way in a `YuiView`,
 watches them, and shows them in editable tabs after every load; a tab edited
 overrides its file.
@@ -121,3 +125,4 @@ overrides its file.
 - [Complete UIs in `.yui`](yui-documents.md) - documents and what a reload
   keeps.
 - [CMake API](../build-system/cmake-api.md) - `yup_add_yui_resources`.
+- [Tools for `.yui` files](yui-tooling.md) - checking files before they ship.

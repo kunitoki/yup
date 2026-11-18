@@ -106,6 +106,10 @@ Maximum number of test runners linked at the same time with Ninja generators, to
 
 Debug information of the Emscripten Debug test runners, passed as `EMSCRIPTEN_DEBUG_INFO` to `yup_standalone_app`. `NAMES` by default, for fast links with function names in stack traces; set `FULL` to debug the runners with DWARF and source maps in a browser.
 
+### `YUP_ENABLE_EMSCRIPTEN_THREADS`
+
+Builds Emscripten targets with threads and shared memory. ON by default. A page only runs such a build when it is cross-origin isolated, which a page embedded by another one often can't be: the webview of an editor, or an `iframe` on a site that doesn't send the isolation headers. Set it to OFF for an interface that must run there. Timers and rendering then run on the main thread, a `Thread` can't be started, and a target using `yup_audio_devices` is refused while configuring, because audio is played by a worklet running on its own thread.
+
 ### `YUP_BUILD_BENCHMARKS`
 
 Controls whether targets are added for benchmark projects. OFF by default.
@@ -337,7 +341,7 @@ These arguments only affect the Emscripten build and are ignored elsewhere.
 |---|---|---|---|
 | `INITIAL_MEMORY` | integer | `65536000` | Initial WASM heap size in bytes (`-sINITIAL_MEMORY`). |
 | `MAXIMUM_MEMORY` | integer | *(unset)* | Maximum WASM heap size in bytes (`-sMAXIMUM_MEMORY`). Only applied when set; use with `ALLOW_MEMORY_GROWTH` to cap unbounded growth. |
-| `PTHREAD_POOL_SIZE` | integer | `8` | Size of the pthread pool (`-sPTHREAD_POOL_SIZE`). |
+| `PTHREAD_POOL_SIZE` | integer | `8` | Size of the pthread pool (`-sPTHREAD_POOL_SIZE`). Unused without `YUP_ENABLE_EMSCRIPTEN_THREADS`. |
 | `STACK_SIZE` | integer | `2097152` | Stack size in bytes (`-sSTACK_SIZE`). |
 | `EMSCRIPTEN_DEBUG_INFO` | FULL\|NAMES | `FULL` | Debug information of Debug links. `FULL` keeps DWARF and writes a source map (`-gsource-map -g`), `NAMES` keeps only function names (`-g2`) for much faster links, still enough for readable stack traces. |
 | `CUSTOM_SHELL` | path | *(built-in)* | Custom Emscripten shell HTML (`--shell-file`). |
@@ -507,6 +511,7 @@ and embeds it through this function. See
 yup_add_yui_resources(<library_name>
     [BASE_DIR  <dir>]
     [NAMESPACE <namespace>]
+    [VERIFY [VERIFY_MODELS <file>]]
     FILES      <path>...)
 ```
 
@@ -529,6 +534,14 @@ unknown path. Targets produced by `yup_add_yui_resources` can be passed in
 `MODULES` of both `yup_standalone_app` and `yup_audio_plugin`. Editing an
 embedded file configures the project again on the next build.
 
+With `VERIFY`, the files are checked with
+[`yup_yui_tool verify`](../ui/yui-tooling.md) while configuring, and an invalid
+file fails the configuration with its errors, so a broken interface never
+reaches a release build. The tool is built for the host into the build tree the
+first time it is needed. It links `yup_gui`, so that first configuration takes
+as long as building the module. Files binding to the models of the application
+(`value <=> params.cutoff`) need `VERIFY_MODELS`, the JSON file declaring them.
+
 #### Arguments
 
 | Key | Type | Default | Description |
@@ -536,6 +549,8 @@ embedded file configures the project again on the next build.
 | `<library_name>` | string | *(required)* | Name of the generated `OBJECT` library target, also used for the header and function names. |
 | `BASE_DIR` | path | current source dir | Folder the lookup paths are relative to. |
 | `NAMESPACE` | string | `yup` | C++ namespace wrapping the function. |
+| `VERIFY` | flag | off | Check the files when configuring, failing on errors. |
+| `VERIFY_MODELS` | path | *(none)* | With `VERIFY`, the JSON file declaring the models the files bind to. |
 | `FILES` | list | *(required)* | The `.yui` files, relative to the current source dir or absolute. |
 
 #### Example
@@ -543,6 +558,7 @@ embedded file configures the project again on the next build.
 ```cmake
 yup_add_yui_resources (MyAppUi
     BASE_DIR "${CMAKE_CURRENT_LIST_DIR}/ui"
+    VERIFY
     FILES ui/ui.yui ui/parts/style.yui)
 
 yup_standalone_app (

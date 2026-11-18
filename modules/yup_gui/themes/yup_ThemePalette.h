@@ -119,6 +119,12 @@ public:
     */
     static std::optional<Role> getRoleFromName (const String& name);
 
+    /** Returns the name of every role, in the order of the Role enum, as getRoleFromName() reads them.
+
+        Tools list the roles with it, for example to complete `palette.` in a `.yui` file.
+    */
+    static StringArray getRoleNames();
+
     //==============================================================================
     /** Returns the color assigned to a role. */
     Color getColor (Role role) const;

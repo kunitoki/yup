@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- File icons showing the current YUP icon in a color for each file type: blue for
+  `.ydsp` patches and orange for `.ydsp-project` manifests, so the two are told
+  apart in the explorer and on the editor tabs. They are written by
+  `tools/make_file_icons.py` at the root of the repository.
 - Patch Player sidebar view in the YDSP Activity Bar container, split into a
   **Performance** tab (keyboard icon: transport and the workspace patch list) and
   a **Settings** tab (gear icon: device selects, sample rate, block size, test
