@@ -57,6 +57,8 @@ String demangleClassName (StringRef className)
         name = String::fromUTF8 (demangledName).replace ("class ", "");
     }
 
+    name = name.replace ("struct ", "").replace ("union ", "").replace ("enum ", "");
+
 #else
     int status = -1;
     char* demangledName = abi::__cxa_demangle (name.toUTF8(), nullptr, nullptr, &status);

@@ -758,22 +758,6 @@ TEST_F (TransparencyLayerTests, InvalidLayerTakesNoMask)
 // Pixel tests on a real GPU, reading back what was drawn
 //==============================================================================
 
-#ifndef YUP_GRAPHICS_TESTS_GPU_PIXEL_HOST
-namespace
-{
-
-/** No GPU context for the pixel tests on this platform, so they skip. */
-class GraphicsGpuPixelTestHost
-{
-public:
-    GraphicsContext* getContext() const noexcept { return nullptr; }
-
-    void makeCurrent() {}
-};
-
-} // namespace
-#endif
-
 /** Draws with the platform's GPU context: Metal on macOS, OpenGL on Linux, see native/. */
 class GraphicsGpuPixelTests : public ::testing::Test
 {

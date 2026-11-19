@@ -27,6 +27,8 @@
 #include "native/yup_GraphicsGpuPixelTestHost_linux.cpp"
 #elif YUP_MAC
 #include "native/yup_GraphicsGpuPixelTestHost_mac.cpp"
+#else
+#include "native/yup_GraphicsGpuPixelTestHost_generic.cpp"
 #endif
 
 #include "yup_AffineTransform.cpp"
