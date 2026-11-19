@@ -1370,4 +1370,31 @@ TEST_F (YuiBuilderTests, LiveDataTreeMutationsPatchBuiltComponentsWithoutManualR
     EXPECT_EQ (builder.findById<Slider> ("knob"), knob);
 }
 
+TEST_F (YuiBuilderTests, LoadsFontFilesRelativeToTheBaseDirectory)
+{
+    YuiBuilder builder;
+    builder.setBaseDirectory (File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts"));
 
+    const auto result = builder.build (parse (R"yui(
+        component Titled : Component {
+            property title: font = font ("YupColrTest.ttf", 14);
+        }
+
+        Row {
+            Titled { id: plain; }
+            Titled { id: large; title: font ("YupColrTest.ttf", 20); }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    const auto titleOf = [&] (const String& id) { return VariantConverter<Font>::fromVar (builder.findById (id)->findProperty (Identifier ("title"))); };
+
+    const auto plain = titleOf ("plain");
+    EXPECT_FALSE (plain.isEmpty());
+    EXPECT_FLOAT_EQ (plain.getHeight(), 14.0f);
+
+    const auto large = titleOf ("large");
+    EXPECT_EQ (large.getFont().get(), plain.getFont().get());
+    EXPECT_FLOAT_EQ (large.getHeight(), 20.0f);
+}

@@ -1460,6 +1460,9 @@ public:
         Returns the descriptor getter result for state-backed properties, the explicit stored
         value for store-backed properties, or an undefined var when unset.
 
+        `enabled` is read as it was given with setEnabled(), whatever the parents: a component
+        inside a disabled parent is disabled in effect, which findProperty() and isEnabled() tell.
+
         @param name The property name to read.
     */
     var getProperty (const Identifier& name) const;
@@ -1476,7 +1479,8 @@ public:
 
         Color properties fall back to the theme colors, including those derived from the closest
         palette, as ApplicationTheme::findColor() does. State-backed properties resolve only on
-        the owning component.
+        the owning component, apart from `enabled`, which is false inside a disabled parent as
+        isEnabled() is.
 
         @param name The property name to find.
     */

@@ -49,7 +49,7 @@ TEST_F (ComponentTypeRegistryTest, RegistersAllBuiltInTypes)
 {
     auto& registry = ComponentTypeRegistry::getInstance();
 
-    for (const char* name : { "Component", "Button", "Layout", "Label", "Slider", "TextButton", "ToggleButton", "SwitchButton", "ComboBox", "TextEditor", "ProgressBar", "ScrollBar", "ResizableDivider", "ListBox", "Viewport", "TabComponent", "FlexBox", "Row", "Column", "Grid", "Stack" })
+    for (const char* name : { "Component", "Button", "Layout", "Label", "Slider", "TextButton", "ToggleButton", "SwitchButton", "ComboBox", "TextEditor", "ProgressBar", "ScrollBar", "ResizableDivider", "JoystickComponent", "ListBox", "Viewport", "TabComponent", "FlexBox", "Row", "Column", "Grid", "Stack" })
         EXPECT_NE (registry.findType (Identifier (name)), nullptr) << name;
 }
 

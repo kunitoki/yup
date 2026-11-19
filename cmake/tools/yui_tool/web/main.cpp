@@ -92,6 +92,16 @@ public:
             if (modelsFile.existsAsFile() && session->models.load (modelsFile.getFullPathName()))
                 session->models.attachTo (session->view.getDocument());
 
+            session->models.onValueChanged = [] (const String& model, const String& property, const var& value)
+            {
+                // clang-format off
+                EM_ASM ({
+                    if (Module.yuiPreviewModelChanged)
+                        Module.yuiPreviewModelChanged (UTF8ToString ($0), UTF8ToString ($1), JSON.parse (UTF8ToString ($2)));
+                }, model.toRawUTF8(), property.toRawUTF8(), JSON::toString (value, true).toRawUTF8());
+                // clang-format on
+            };
+
             addAndMakeVisible (session->view);
             resized();
         }
@@ -123,6 +133,7 @@ public:
         report->setProperty ("height", declaredSize.getHeight());
         report->setProperty ("defaultWidth", shown.defaultSize.getWidth());
         report->setProperty ("defaultHeight", shown.defaultSize.getHeight());
+        report->setProperty ("models", session->models.toJson());
 
         repaint();
 
@@ -151,6 +162,18 @@ public:
 
     // The page owns the window
     void userTriedToCloseWindow() override {}
+
+    /** Changes a value of the models of the interface shown. */
+    bool setModelValue (const String& model, const String& property, const var& value)
+    {
+        return session != nullptr && session->models.setValue (model, property, value);
+    }
+
+    /** Returns the current values of the models of the interface shown. */
+    var getModels() const
+    {
+        return session != nullptr ? session->models.toJson() : var (new DynamicObject());
+    }
 
 private:
     // The models outlive the document they are set on
@@ -310,6 +333,25 @@ extern "C"
                              { String::fromUTF8 (drawing), String::fromUTF8 (palette), String::fromUTF8 (hostType) },
                              models.isNotEmpty() ? getFilesFolder().getChildFile (models) : File(),
                              lightTheme != 0);
+    }
+
+    // Changes a value of a model of the interface shown, given as JSON. Values the interface changes itself are
+    // reported to Module.yuiPreviewModelChanged (model, property, value)
+    int EMSCRIPTEN_KEEPALIVE yuiPreviewSetModelValue (const char* model, const char* property, const char* valueJson)
+    {
+        if (previewWindow == nullptr)
+            return 0;
+
+        const auto value = JSON::fromString (String::fromUTF8 (valueJson));
+        return previewWindow->setModelValue (String::fromUTF8 (model), String::fromUTF8 (property), value) ? 1 : 0;
+    }
+
+    // Returns the current values of the models as JSON, in the shape of the models file
+    const char* EMSCRIPTEN_KEEPALIVE yuiPreviewModels()
+    {
+        static std::string text;
+        text = previewWindow != nullptr ? JSON::toString (previewWindow->getModels(), true).toStdString() : std::string ("{}");
+        return text.c_str();
     }
 }
 

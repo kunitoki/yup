@@ -257,6 +257,26 @@ TEST_F (ThemePaletteTests, SetColorOverridesDerivedRole)
     EXPECT_NE (original, palette);
 }
 
+TEST_F (ThemePaletteTests, CustomColorsAreNamedNextToRoles)
+{
+    ThemePalette palette (frostedColors());
+    const ThemePalette original (frostedColors());
+
+    palette.setCustomColor ("meterHot", Colors::red);
+    palette.setCustomColor ("accent", Colors::blue);
+
+    EXPECT_EQ (std::optional<Color> (Colors::red), palette.findCustomColor ("meterHot"));
+    EXPECT_FALSE (palette.findCustomColor ("accent").has_value());
+    EXPECT_EQ (Colors::blue, palette.getColor (Role::accent));
+    EXPECT_EQ (StringArray ("meterHot"), palette.getCustomColorNames());
+    EXPECT_NE (original, palette);
+
+    EXPECT_FALSE (ThemePalette::isValidCustomColorName ("dark"));
+    EXPECT_FALSE (ThemePalette::isValidCustomColorName ("accent"));
+    EXPECT_FALSE (ThemePalette::isValidCustomColorName ("2tone"));
+    EXPECT_FALSE (ThemePalette::isValidCustomColorName ("wood.dark"));
+}
+
 TEST_F (ThemePaletteTests, RoleNamesListEveryRoleInEnumOrder)
 {
     const auto names = ThemePalette::getRoleNames();

@@ -52,6 +52,45 @@ const ExpressionContext& getPropertyExpressionBaseContext()
     return context;
 }
 
+// A font file is loaded once, and again when it changes. A file that can't be loaded gives the theme font
+Font loadFontFile (const String& path, const File& baseDirectory)
+{
+    const auto folder = baseDirectory != File() ? baseDirectory : File::getCurrentWorkingDirectory();
+    const auto file = File::isAbsolutePath (path) ? File (path) : folder.getChildFile (path);
+    const auto modified = file.getLastModificationTime();
+
+    static std::mutex mutex;
+    static std::map<String, std::pair<Time, Font>> cache;
+
+    const std::scoped_lock lock (mutex);
+    const auto [entry, isNew] = cache.try_emplace (file.getFullPathName());
+
+    if (isNew || entry->second.first != modified)
+    {
+        auto loaded = Font::loadFontFromFile (file);
+        entry->second = { modified, loaded.wasOk() ? loaded.getValue() : Font() };
+    }
+
+    if (! entry->second.second.isEmpty())
+        return entry->second.second;
+
+    const auto theme = ApplicationTheme::getGlobalTheme();
+    return theme != nullptr ? theme->getDefaultFont() : Font();
+}
+
+void addFontFiles (ExpressionContext& context, const File& baseDirectory)
+{
+    context.addFunction ("font", [baseDirectory] (const String& path)
+    {
+        return loadFontFile (path, baseDirectory);
+    });
+
+    context.addFunction ("font", [baseDirectory] (const String& path, float height)
+    {
+        return loadFontFile (path, baseDirectory).withHeight (height);
+    });
+}
+
 // Types that aren't bridged are compiled as numbers, which is what an untyped value falls back to
 void declareValueOutput (ExpressionContext& context, ComponentProperty::Type type)
 {
@@ -139,13 +178,18 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Co
                                                                               const String& text,
                                                                               std::optional<ComponentProperty::Type> type,
                                                                               DrawingScope::ComponentResolver resolver,
-                                                                              Component* locals)
+                                                                              Component* locals,
+                                                                              const File& baseDirectory)
 {
     if (text.trimStart().startsWithChar ('['))
-        return compileArrayLiteral (component, text, type, std::move (resolver), locals);
+        return compileArrayLiteral (component, text, type, std::move (resolver), locals, baseDirectory);
 
     std::unique_ptr<PropertyExpression> expression (new PropertyExpression (getPropertyExpressionBaseContext()));
     expression->source = text;
+
+    // Adding functions copies the shared declarations, so only the texts that can load a font pay for it
+    if (text.contains ("font"))
+        addFontFiles (expression->context, baseDirectory);
 
     const bool hasFixedScalarType = type.has_value()
                                  && *type != ComponentProperty::Type::array
@@ -215,7 +259,8 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compileArra
                                                                                           const String& text,
                                                                                           std::optional<ComponentProperty::Type> type,
                                                                                           DrawingScope::ComponentResolver resolver,
-                                                                                          Component* locals)
+                                                                                          Component* locals,
+                                                                                          const File& baseDirectory)
 {
     if (type.has_value() && *type != ComponentProperty::Type::array && *type != ComponentProperty::Type::any)
         return makeResultValueFail ("An array can't be the value of this property");
@@ -262,7 +307,7 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compileArra
 
     for (const auto& elementText : elementTexts)
     {
-        auto element = compile (component, elementText, std::nullopt, resolver, locals);
+        auto element = compile (component, elementText, std::nullopt, resolver, locals, baseDirectory);
 
         if (element.failed())
             return makeResultValueFail (element.getErrorMessage());

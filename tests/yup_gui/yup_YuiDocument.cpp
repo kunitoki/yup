@@ -411,6 +411,68 @@ TEST_F (YuiDocumentTests, BindingsFollowTheEnabledStateOfAnAncestor)
     EXPECT_EQ (label->getText(), "on");
 }
 
+TEST_F (YuiDocumentTests, BoundEnabledHoldsUnderAnAncestorEnabledByALaterSibling)
+{
+    DataTree params ("params");
+    {
+        auto transaction = params.beginTransaction();
+        transaction.setProperty ("power", true);
+        transaction.setProperty ("section", false);
+    }
+    DataTreeBindingProvider provider (params);
+
+    YuiDocument document;
+    document.setModel ("params", provider);
+
+    const auto result = document.loadFromString (R"yui(
+        Component {
+            Component {
+                id: deck;
+                enabled: power.checked;
+
+                Component {
+                    id: section;
+                    enabled: params.section;
+
+                    Slider { id: knob; }
+                }
+            }
+
+            ToggleButton { id: power; checked <=> params.power; }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+
+    auto* deck = document.findById ("deck");
+    auto* section = document.findById ("section");
+    auto* knob = document.findById ("knob");
+    ASSERT_NE (deck, nullptr);
+    ASSERT_NE (section, nullptr);
+    ASSERT_NE (knob, nullptr);
+
+    EXPECT_TRUE (deck->isEnabled());
+    EXPECT_FALSE (section->isEnabled());
+    EXPECT_FALSE (knob->isEnabled());
+
+    params.beginTransaction().setProperty ("section", true);
+    EXPECT_TRUE (section->isEnabled());
+    EXPECT_TRUE (knob->isEnabled());
+
+    params.beginTransaction().setProperty ("power", false);
+    EXPECT_FALSE (deck->isEnabled());
+    EXPECT_FALSE (knob->isEnabled());
+
+    {
+        auto transaction = params.beginTransaction();
+        transaction.setProperty ("section", false);
+        transaction.setProperty ("power", true);
+    }
+    EXPECT_TRUE (deck->isEnabled());
+    EXPECT_FALSE (section->isEnabled());
+    EXPECT_FALSE (knob->isEnabled());
+}
+
 TEST_F (YuiDocumentTests, UndoesTheGesturesMadeOnACompositeLinkedToAModel)
 {
     DataTree params ("params");

@@ -219,6 +219,34 @@ style {
 The roles are `background`, `surface`, `surfaceRaised`, `outline`, `text`,
 `textMuted`, `accent` and `onAccent`; `palette.dark` is true for a dark palette.
 
+Any other name declares a custom color of the palette, for the colors a skin
+needs beyond the roles. Names are made of letters, digits and `_`, and don't
+start with a digit. Read them as `palette.<name>`:
+
+```yui
+palette Walnut {
+    colors: "#1b1b1b #3086c6 #d9dbd4";
+    wood: #1e0e06;
+    needle: #f4f4f0;
+}
+
+palette Maple {
+    colors: "#ece9e1 #3086c6 #23241f";
+    mode: light;
+    wood: #a8784a;
+    needle: #b3261e;
+}
+
+style {
+    #panel                { palette: Walnut; }
+    #panel[scheme=light]  { palette: Maple; }
+}
+```
+
+Give every palette a skin switches between the same custom colors: a name the
+palette lacks reads as a transparent color. In C++ they are set with
+`ThemePalette::setCustomColor`.
+
 ## Drawings
 
 `drawing: Name;` paints the matched components with a [drawing](yui-drawing.md)

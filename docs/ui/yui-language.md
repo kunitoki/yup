@@ -151,6 +151,25 @@ reads a zero value. `point` and `rectangle` values are written `point (x, y)`
 and `rect (x, y, w, h)` and are stored as arrays of their components, so `<=>`
 links and transitions see them change element by element.
 
+A `font` value can load a font file (TTF or OTF) with `font ("path")` or
+`font ("path", height)`. A relative path is resolved against the folder of
+the `.yui` file, and a file that can't be loaded gives the theme's default
+font. Declare the font on a component and read it from its drawing by name:
+
+```yui
+component Title : Component {
+    property titleFont: font = font ("fonts/Inter.ttf", 18);
+    drawing: TitleText;
+}
+
+Title { titleFont: font ("fonts/Inter.ttf").withAxisValue ("wght", 700).withHeight (24); }
+```
+
+Font files load in component property values (instances, `component`
+defaults, `tokens`, bindings), not in the property defaults at the top of a
+`drawing`. A document loaded from embedded resources has no folder, so its
+relative paths resolve against the working directory.
+
 | Where | Declares |
 |---|---|
 | At the top of a `drawing` | An input the component, its parents or a stylesheet set ([Properties](yui-drawing.md#properties)) |

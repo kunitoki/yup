@@ -310,6 +310,24 @@ TEST_F (BindingGraphTests, LinksAStoreBackedPropertyThroughAChain)
     EXPECT_FLOAT_EQ (static_cast<float> (first.getValue()), 2.0f);
 }
 
+TEST_F (BindingGraphTests, ALinkOnEnabledMovesWhatWasGivenNotTheStateOfAParent)
+{
+    Component parent, child, model;
+    parent.addChildComponent (child);
+    model.setProperty ("on", true);
+
+    graph.link (child, Identifier ("enabled"), model, Identifier ("on"));
+
+    parent.setEnabled (false);
+    EXPECT_TRUE (static_cast<bool> (model.getProperty ("on")));
+
+    model.setProperty ("on", false);
+    parent.setEnabled (true);
+
+    EXPECT_FALSE (child.isEnabled());
+    EXPECT_FALSE (static_cast<bool> (model.getProperty ("on")));
+}
+
 TEST_F (BindingGraphTests, RemovesTheLinksOfADeletedComponent)
 {
     Slider target { Slider::LinearHorizontal };

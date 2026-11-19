@@ -52,10 +52,22 @@ struct BindingGraph::Binding
             component->setProperty (property, value);
     }
 
+    void rememberValue()
+    {
+        if (const auto* component = target.get())
+            valueLeft = component->getProperty (property);
+    }
+
+    bool wasOverwritten (const Component& component) const
+    {
+        return component.getProperty (property) != valueLeft;
+    }
+
     WeakReference<Component> target;
     Identifier property;
     std::unique_ptr<PropertyExpression> expression;
     std::vector<DrawingScope::Dependency> dependencies;
+    var valueLeft;
     uint64 flushEpoch = 0;
     int evaluations = 0;
 };
@@ -89,7 +101,7 @@ Result BindingGraph::bind (Component& target,
                            DrawingScope::ComponentResolver resolver,
                            bool* isLive)
 {
-    auto compiled = PropertyExpression::compile (target, text, type, std::move (resolver));
+    auto compiled = PropertyExpression::compile (target, text, type, std::move (resolver), nullptr, baseDirectory);
 
     if (compiled.failed())
         return Result::fail (compiled.getErrorMessage());
@@ -165,9 +177,9 @@ void BindingGraph::link (Component& target, const Identifier& property, Componen
     observer.observe (source);
     links.push_back (newLink);
 
-    const auto value = source.findProperty (sourceProperty);
+    const auto value = readLinked (source, sourceProperty);
 
-    if (! value.isVoid() && target.findProperty (property) != value)
+    if (! value.isVoid() && readLinked (target, property) != value)
     {
         const ScopedValueSetter<bool> syncing (newLink->isSyncing, true);
         target.setProperty (property, value);
@@ -244,7 +256,9 @@ void BindingGraph::handlePropertyChanged (Component& component, const Identifier
 
         if (binding != writingBinding && binding->target.get() == &component && binding->property == property)
         {
-            removeBinding (index);
+            if (binding->wasOverwritten (component))
+                removeBinding (index);
+
             break;
         }
     }
@@ -327,6 +341,13 @@ void BindingGraph::removeLink (int index)
     observer.unobserve (*removed->second);
 }
 
+var BindingGraph::readLinked (const Component& component, const Identifier& property)
+{
+    const auto given = component.getProperty (property);
+
+    return given.isVoid() ? component.findProperty (property) : given;
+}
+
 void BindingGraph::syncLinks (Component& component, const Identifier& property)
 {
     for (size_t index = 0; index < links.size(); ++index)
@@ -341,9 +362,9 @@ void BindingGraph::syncLinks (Component& component, const Identifier& property)
         auto& other = isFirst ? *current->second : *current->first;
         const auto& otherProperty = isFirst ? current->secondProperty : current->firstProperty;
 
-        const auto value = component.findProperty (property);
+        const auto value = readLinked (component, property);
 
-        if (value.isVoid() || other.findProperty (otherProperty) == value)
+        if (value.isVoid() || readLinked (other, otherProperty) == value)
             continue;
 
         const ScopedValueSetter<bool> syncing (current->isSyncing, true);
@@ -425,6 +446,10 @@ void BindingGraph::flush()
 
         const ScopedValueSetter<Binding*> writing (writingBinding, binding);
         binding->evaluate();
+
+        // What the write set off may have removed the binding
+        if (writingBinding == binding)
+            binding->rememberValue();
     }
 
     dirty.clear();

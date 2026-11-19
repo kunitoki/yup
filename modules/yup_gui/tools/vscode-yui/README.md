@@ -49,7 +49,7 @@ comments, so a formatter would drop them.
 | Setting | Default | Description |
 |---|---|---|
 | `yui.lint.enabled` | `true` | Report problems while editing. |
-| `yui.lint.models` | empty | Path to a JSON file declaring the application models, absolute or relative to the workspace folder of the linted document. |
+| `yui.lint.models` | empty | Path to a JSON file declaring the application models, absolute or relative to the workspace folder of the linted document. When empty, a document uses `<document>.models.json` next to it. Documents are linted again when their models file is created, edited or deleted. |
 | `yui.preview.size` | `auto` | The size of the preview: `auto`, `panel` or `<width>x<height>` in logical pixels, such as `640x400`. See [Preview](#preview). |
 | `yui.preview.theme` | `auto` | The theme the preview is shown with: `auto` follows the VSCode color theme, `light` and `dark` set it. |
 

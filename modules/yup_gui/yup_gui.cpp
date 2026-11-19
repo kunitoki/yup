@@ -267,6 +267,7 @@
 #include "widgets/yup_ImageComponent.cpp"
 #include "widgets/yup_ResizableCorner.cpp"
 #include "widgets/yup_ResizableDivider.cpp"
+#include "widgets/yup_JoystickComponent.cpp"
 #include "widgets/yup_ListBoxItem.cpp"
 #include "widgets/yup_ListBox.cpp"
 #include "widgets/yup_TreeViewItem.cpp"

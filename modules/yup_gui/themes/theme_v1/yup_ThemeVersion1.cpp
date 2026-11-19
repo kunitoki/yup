@@ -1122,6 +1122,43 @@ void paintResizableCorner (Graphics& g, const ApplicationTheme& theme, const Res
 
 //==============================================================================
 
+void paintJoystickComponent (Graphics& g, const ApplicationTheme& theme, const JoystickComponent& joystick)
+{
+    const auto bounds = joystick.getLocalBounds();
+    const auto& palette = theme.getPalette (joystick);
+    const auto thumb = joystick.getThumbPosition();
+
+    if (joystick.getGrabMode() == JoystickComponent::GrabMode::anywhere)
+    {
+        if (const auto backgroundColor = theme.findColor (joystick, JoystickComponent::Style::backgroundColorId); backgroundColor && ! backgroundColor->isTransparent())
+        {
+            g.setFillColor (*backgroundColor);
+            g.fillRoundedRect (bounds, 4.0f);
+        }
+
+        g.setStrokeColor (theme.findColor (joystick, JoystickComponent::Style::guideColorId).value_or (palette.getColor (PaletteRole::textMuted).withAlpha (0.35f)));
+        g.setStrokeWidth (1.0f);
+        g.strokeLine (bounds.getX(), thumb.getY(), bounds.getRight(), thumb.getY());
+        g.strokeLine (thumb.getX(), bounds.getY(), thumb.getX(), bounds.getBottom());
+
+        const auto outlineColor = joystick.hasKeyboardFocus() ? palette.getColor (PaletteRole::accent) : theme.findColor (joystick, JoystickComponent::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
+        g.setStrokeColor (outlineColor);
+        g.strokeRoundedRect (bounds.reduced (0.5f), 4.0f);
+    }
+
+    Color thumbColor;
+    if (joystick.isDragging())
+        thumbColor = theme.findColor (joystick, JoystickComponent::Style::thumbDownColorId).value_or (palette.getColor (PaletteRole::accent));
+    else if (joystick.isHovered())
+        thumbColor = theme.findColor (joystick, JoystickComponent::Style::thumbOverColorId).value_or (palette.getColor (PaletteRole::accent).withAlpha (0.85f));
+    else
+        thumbColor = theme.findColor (joystick, JoystickComponent::Style::thumbColorId).value_or (palette.getColor (PaletteRole::text));
+
+    const auto size = joystick.getThumbSize();
+    g.setFillColor (thumbColor);
+    g.fillEllipse (Rectangle<float> (0.0f, 0.0f, size, size).withCenter (thumb));
+}
+
 void paintResizableDivider (Graphics& g, const ApplicationTheme& theme, const ResizableDivider& divider)
 {
     const auto bounds = divider.getLocalBounds();
@@ -2599,6 +2636,13 @@ void mapPaletteThemeVersion1 (const ThemePalette& palette, ApplicationTheme& the
     set (ResizableDivider::Style::draggingColorId, accent);
     set (ResizableDivider::Style::gripColorId, textMuted.withAlpha (0.65f));
 
+    set (JoystickComponent::Style::backgroundColorId, surface);
+    set (JoystickComponent::Style::outlineColorId, outline);
+    set (JoystickComponent::Style::guideColorId, textMuted.withAlpha (0.35f));
+    set (JoystickComponent::Style::thumbColorId, text);
+    set (JoystickComponent::Style::thumbOverColorId, accent.withAlpha (0.85f));
+    set (JoystickComponent::Style::thumbDownColorId, accent);
+
     set (ListBox::Style::backgroundColorId, surface);
     set (ListBox::Style::outlineColorId, outline);
     set (ListBox::Style::rowBackgroundColorId, Colors::transparentBlack);
@@ -2739,6 +2783,7 @@ ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
     theme->setComponentStyle<ProgressBar> (ComponentStyle::createStyle<ProgressBar> (paintProgressBar));
     theme->setComponentStyle<ResizableCorner> (ComponentStyle::createStyle<ResizableCorner> (paintResizableCorner));
     theme->setComponentStyle<ResizableDivider> (ComponentStyle::createStyle<ResizableDivider> (paintResizableDivider));
+    theme->setComponentStyle<JoystickComponent> (ComponentStyle::createStyle<JoystickComponent> (paintJoystickComponent));
 
     theme->setComponentStyle<ListBox> (ComponentStyle::createStyle<ListBox> (paintListBox));
 

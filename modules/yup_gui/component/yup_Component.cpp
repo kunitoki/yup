@@ -1952,7 +1952,7 @@ const ComponentTypeInfo& Component::getClassTypeInfo()
                                  .readOnly (ComponentIds::id, &Component::getComponentID)
                                  .property (ComponentIds::title, &Component::getTitle, &Component::setTitle)
                                  .styleableProperty (ComponentIds::visible, &Component::isVisible, &Component::setVisible, true)
-                                 .styleableProperty (ComponentIds::enabled, &Component::isEnabled, &Component::setEnabled, true)
+                                 .styleableProperty (ComponentIds::enabled, [] (const Component& c) { return ! c.flags.isDisabled; }, &Component::setEnabled, true)
                                  .styleableProperty (ComponentIds::opacity, &Component::getOpacity, &Component::setOpacity, 1.0)
                                  .styleableProperty (ComponentIds::transform, &Component::getTransform, &Component::setTransform, VariantConverter<AffineTransform>::toVar (AffineTransform()))
                                  .property (ComponentIds::x, &Component::getX, [] (Component& c, float v) { c.setBounds (v, c.getY(), c.getWidth(), c.getHeight()); })
@@ -2119,6 +2119,9 @@ var Component::findProperty (const Identifier& name) const
     if (name == ComponentIds::transform)
         return VariantConverter<AffineTransform>::toVar (getCombinedTransform());
 
+    if (name == ComponentIds::enabled)
+        return isEnabled();
+
     const auto resolved = resolveProperty (name);
 
     if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
@@ -2166,7 +2169,7 @@ Component::PropertySource Component::findPropertySource (const Identifier& name)
     {
         source.layer = PropertySource::Layer::stateBacked;
         source.component = this;
-        source.value = resolved.descriptor->getter (*this);
+        source.value = name == ComponentIds::enabled ? var (isEnabled()) : resolved.descriptor->getter (*this);
         return source;
     }
 

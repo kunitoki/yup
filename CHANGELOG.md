@@ -88,8 +88,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `CodeEditor` completion popup (`setCompletionProvider`, Ctrl+Space and trigger characters) with fuzzy filtering.
 - `CodeEditor` semantic tokens (`setSemanticTokens`) drawn over the syntax highlighting.
 - `CodeTokeniser` scans a line in linear time instead of quadratic, so long lines (e.g. long string literals) no longer stall `CodeEditor` scrolling.
+- Added `JoystickComponent`, an XY pad with a `NormalisableRange` per axis, snap back, double click reset, keyboard nudging and a thumb-only grab mode for overlapping nodes, also available in `.yui` files.
 - Added `ResizableDivider`, a draggable bar splitting a leading and a trailing pane, with pixel or percent limits, resize policies, snap positions, collapsing, double click reset and keyboard nudging.
 - `Component::snapshotToImage` takes a `scale`, the pixels rendered per logical unit, so a snapshot can be taken at high-DPI resolution.
+- `ThemePalette` holds named custom colors next to its roles (`setCustomColor`, `findCustomColor`, `getCustomColorNames`), declared in `.yui` `palette` blocks and read by drawings and styles as `palette.<name>`, so a skin with its own materials can switch palettes without hardcoded colors.
 
 ### DSP
 

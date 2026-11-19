@@ -261,6 +261,7 @@ private:
             invalid,
             paletteDark,
             paletteRole,
+            paletteColor,
             themeDefaultFont,
             themeIconFont,
             themeMonospaceFont,
@@ -288,6 +289,7 @@ private:
         {
             return kind == Kind::paletteDark
                 || kind == Kind::paletteRole
+                || kind == Kind::paletteColor
                 || kind == Kind::themeDefaultFont
                 || kind == Kind::themeIconFont
                 || kind == Kind::themeMonospaceFont

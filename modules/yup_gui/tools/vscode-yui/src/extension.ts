@@ -391,6 +391,14 @@ class YuiSession {
         }
     }
 
+    /** Lints again the open documents using a models file that was created, changed or deleted. */
+    modelsChanged (file: string): void {
+        for (const document of vscode.workspace.textDocuments) {
+            if (isYuiDocument (document) && this.wantedModelsPath (document).file === file)
+                this.lintSoon (document);
+        }
+    }
+
     lintSoon (document: vscode.TextDocument): void {
         const key = document.uri.toString ();
         const pending = this.timers.get (key);
@@ -528,25 +536,32 @@ class YuiSession {
         this.lintedUris.set (key, Array.from (grouped.keys ()));
     }
 
-    modelsPath (document: vscode.TextDocument): string | undefined {
-        const configured = vscode.workspace.getConfiguration ("yui.lint").get<string> ("models");
+    // The models file a document asks for, whether it exists or not
+    private wantedModelsPath (document: vscode.TextDocument): { file: string; configured: boolean } {
+        const configured = vscode.workspace.getConfiguration ("yui.lint").get<string> ("models")?.trim () ?? "";
 
-        if (configured === undefined || configured.trim ().length === 0)
+        // Without a setting, a document uses the models next to it, named after it
+        if (configured.length === 0)
+            return { file: path.join (path.dirname (document.uri.fsPath), path.basename (document.uri.fsPath, ".yui") + ".models.json"), configured: false };
+
+        if (path.isAbsolute (configured))
+            return { file: configured, configured: true };
+
+        const folder = vscode.workspace.getWorkspaceFolder (document.uri);
+        const base = folder === undefined ? path.dirname (document.uri.fsPath) : folder.uri.fsPath;
+        return { file: path.resolve (base, configured), configured: true };
+    }
+
+    modelsPath (document: vscode.TextDocument): string | undefined {
+        if (document.uri.scheme !== "file")
             return undefined;
 
-        const value = configured.trim ();
-        let resolved = value;
-
-        if (! path.isAbsolute (value)) {
-            const folder = vscode.workspace.getWorkspaceFolder (document.uri);
-            const base = folder === undefined ? path.dirname (document.uri.fsPath) : folder.uri.fsPath;
-            resolved = path.resolve (base, value);
-        }
+        const { file: resolved, configured } = this.wantedModelsPath (document);
 
         if (fs.existsSync (resolved))
             return resolved;
 
-        if (! this.reportedModels.has (resolved)) {
+        if (configured && ! this.reportedModels.has (resolved)) {
             this.reportedModels.add (resolved);
             this.log (`models file not found, continuing without it: ${resolved}`);
         }
@@ -709,12 +724,24 @@ export function activate (context: vscode.ExtensionContext): void {
 
     context.subscriptions.push (output, diagnostics, session, preview);
 
+    const modelsWatcher = vscode.workspace.createFileSystemWatcher ("**/*.json");
+    const modelsChanged = (uri: vscode.Uri) => session.modelsChanged (uri.fsPath);
+
     context.subscriptions.push (
+        modelsWatcher,
+        modelsWatcher.onDidCreate (modelsChanged),
+        modelsWatcher.onDidChange (modelsChanged),
+        modelsWatcher.onDidDelete (modelsChanged),
         vscode.workspace.onDidOpenTextDocument (document => void session.lint (document)),
         vscode.workspace.onDidSaveTextDocument (document => void session.lint (document)),
         vscode.workspace.onDidChangeTextDocument (event => {
-            if (event.contentChanges.length > 0 && isYuiDocument (event.document))
+            if (event.contentChanges.length === 0)
+                return;
+
+            if (isYuiDocument (event.document))
                 session.lintSoon (event.document);
+            else if (event.document.uri.scheme === "file")
+                session.modelsChanged (event.document.uri.fsPath);
         }),
         vscode.workspace.onDidCloseTextDocument (document => session.forget (document)),
         vscode.workspace.onDidChangeConfiguration (event => session.configurationChanged (event)),

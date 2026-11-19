@@ -46,8 +46,9 @@ namespace yup
 
     A binding is dropped as soon as something else writes its property, whether from code or
     from the user interacting with the widget: an explicit value always wins over a binding.
-    Bindings are also dropped when the component they write to, or any component they read
-    from, is deleted.
+    A change the property only inherits writes nothing and leaves the binding in place, as when
+    a parent is disabled around a component whose `enabled` is bound. Bindings are also dropped
+    when the component they write to, or any component they read from, is deleted.
 
     Two properties can also be linked with @ref link, which keeps them equal in both
     directions, as `.yui` does for `value <=> model.cutoff`.
@@ -97,6 +98,13 @@ public:
         @returns True if there was a binding to remove.
     */
     bool unbind (Component& target, const Identifier& property);
+
+    /** Sets the folder the relative paths of later bound expressions resolve against, such as
+        the file of `font ("fonts/Inter.ttf", 14)` (see PropertyExpression::compile).
+
+        @param directory  The folder, usually the one of the `.yui` file, or File() for the working directory.
+    */
+    void setBaseDirectory (const File& directory) { baseDirectory = directory; }
 
     /** Removes every binding and every link. */
     void clear();
@@ -195,6 +203,12 @@ private:
     void removeBinding (int index);
     void removeLink (int index);
     void syncLinks (Component& component, const Identifier& property);
+
+    /** Returns what a component was given for a property, or what it shows for one it was given
+        nothing for. A link moves this rather than the value in effect, which for `enabled`
+        depends on the parents.
+    */
+    static var readLinked (const Component& component, const Identifier& property);
     void invalidate (const Component& component, const Identifier& property);
     void markDirty (Binding& binding);
     void flush();
@@ -206,6 +220,7 @@ private:
     DependencyObserver observer;
     Binding* writingBinding = nullptr;
     StringArray diagnostics;
+    File baseDirectory;
     uint64 currentFlushEpoch = 0;
     bool isFlushing = false;
 

@@ -5151,6 +5151,21 @@ TEST_F (ComponentPropertySourceTests, StateBackedPropertiesComeFromTheComponentI
     EXPECT_FLOAT_EQ (static_cast<float> (source.value), 32.0f);
 }
 
+TEST_F (ComponentPropertySourceTests, EnabledIsReadAsGivenOnTheComponentAndInEffectThroughTheCascade)
+{
+    parent.setEnabled (false);
+
+    EXPECT_TRUE (static_cast<bool> (child.getProperty ("enabled")));
+    EXPECT_FALSE (static_cast<bool> (child.findProperty ("enabled")));
+    EXPECT_FALSE (static_cast<bool> (child.findPropertySource ("enabled").value));
+
+    parent.setEnabled (true);
+    child.setProperty ("enabled", false);
+
+    EXPECT_FALSE (static_cast<bool> (child.getProperty ("enabled")));
+    EXPECT_FALSE (static_cast<bool> (child.findProperty ("enabled")));
+}
+
 TEST_F (ComponentPropertySourceTests, TransformIsAlwaysStateBacked)
 {
     EXPECT_EQ (child.findPropertySource ("transform").layer, Component::PropertySource::Layer::stateBacked);

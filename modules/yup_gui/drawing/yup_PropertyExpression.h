@@ -61,6 +61,11 @@ public:
         @param resolver   The resolver for references to other named components or models, or nothing.
         @param locals     Values read by their bare name before the properties of the component, or
                           nullptr. Not owned, it must outlive the expression (see DrawingScope::setLocals).
+        @param baseDirectory  The folder relative file paths resolve against, usually the one of the
+                              `.yui` file, or File() for the working directory. It is where
+                              `font ("fonts/Inter.ttf")` and `font ("fonts/Inter.ttf", 14)` load
+                              their font file from; a file that can't be loaded gives the default
+                              font of the theme.
 
         @returns The compiled expression, or the error of the first type tried.
     */
@@ -68,7 +73,8 @@ public:
                                                                      const String& text,
                                                                      std::optional<ComponentProperty::Type> type,
                                                                      DrawingScope::ComponentResolver resolver = nullptr,
-                                                                     Component* locals = nullptr);
+                                                                     Component* locals = nullptr,
+                                                                     const File& baseDirectory = {});
 
     /** Splits an array literal such as `[1, gain.value, [2, 3]]` into the texts of its elements.
 
@@ -116,7 +122,8 @@ private:
                                                                                  const String& text,
                                                                                  std::optional<ComponentProperty::Type> type,
                                                                                  DrawingScope::ComponentResolver resolver,
-                                                                                 Component* locals);
+                                                                                 Component* locals,
+                                                                                 const File& baseDirectory);
 
     String source;
     ComponentProperty::Type type = ComponentProperty::Type::number;

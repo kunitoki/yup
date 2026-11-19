@@ -97,6 +97,19 @@ TEST_F (StyleSheetTests, ReadsPalettesWithRoleOverrides)
     EXPECT_EQ (sheet->findPalette ("Missing"), nullptr);
 }
 
+TEST_F (StyleSheetTests, ReadsPalettesWithCustomColors)
+{
+    auto sheet = build (DataTree ("style",
+                                  { DataTree ("palette", { { "name", "Ember" }, { "colors", "#100b00-#85cb33" }, { "meterHot", "#f20707" } }) }));
+
+    ASSERT_NE (sheet, nullptr);
+
+    const auto* palette = sheet->findPalette ("Ember");
+    ASSERT_NE (palette, nullptr);
+    EXPECT_EQ (palette->findCustomColor ("meterHot"), std::optional<Color> (Color (0xfff20707)));
+    EXPECT_FALSE (palette->findCustomColor ("missing").has_value());
+}
+
 TEST_F (StyleSheetTests, ReadsKeyframesSortedByPosition)
 {
     auto sheet = build (DataTree ("style",
@@ -154,7 +167,7 @@ TEST_F (StyleSheetTests, FailsForInvalidInput)
 
     EXPECT_TRUE (StyleSheet::fromTree (DataTree ("style", { DataTree ("rule", { { "selector", "Slider" } }, { DataTree ("declaration", { { "name", "opacity" } }) }) })).failed());
 
-    EXPECT_TRUE (StyleSheet::fromTree (DataTree ("style", { DataTree ("palette", { { "name", "Bad" }, { "colors", "#100b00-#85cb33-#efffc8-#a5cbc3-#3b341f" }, { "notARole", "#ff0000" } }) })).failed());
+    EXPECT_TRUE (StyleSheet::fromTree (DataTree ("style", { DataTree ("palette", { { "name", "Bad" }, { "colors", "#100b00-#85cb33-#efffc8-#a5cbc3-#3b341f" }, { "dark", "#ff0000" } }) })).failed());
 }
 
 TEST_F (StyleSheetTests, ReportsTheElementOfTheFirstProblem)
@@ -169,7 +182,7 @@ TEST_F (StyleSheetTests, ReportsTheElementOfTheFirstProblem)
         return parsed.sourceMap.locate (failure).toString();
     };
 
-    EXPECT_EQ (locate ("palette P {\n  colors: \"#100b00-#85cb33\";\n  notARole: #ff0000;\n}"), "3:3: The palette 'P' sets the unknown role 'notARole'");
+    EXPECT_EQ (locate ("palette P {\n  colors: \"#100b00-#85cb33\";\n  dark: #ff0000;\n}"), "3:3: The palette 'P' can't name a color 'dark'");
     EXPECT_EQ (locate ("palette P {\n  colors: \"nope\";\n}"), "2:3: The palette 'P' is invalid: No valid colors found");
     EXPECT_EQ (locate ("palette P { colors: \"\"; }"), "1:1: The palette 'P' needs colors");
     EXPECT_EQ (locate ("style {\n  Slider::before { opacity: 1; }\n}"), "2:3: Pseudo-elements are not supported in selector 'Slider::before'");

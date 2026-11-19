@@ -110,10 +110,100 @@ export function previewPage (nonce: string, module: PreviewModule | undefined): 
         outline: 1px solid var(--vscode-focusBorder);
         outline-offset: -1px;
     }
+    #toolbar button.on {
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+    }
+    #main {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+    }
     #viewport {
         flex: 1;
         position: relative;
-        min-height: 0;
+        min-width: 0;
+    }
+    #models {
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        width: 280px;
+        border-left: 1px solid var(--vscode-editorWidget-border, transparent);
+        background: var(--vscode-editorWidget-background);
+    }
+    #modelsHeader {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--vscode-editorWidget-border, transparent);
+    }
+    #modelsHeader span {
+        flex: 1;
+        overflow: hidden;
+        opacity: 0.7;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    #modelsBody {
+        flex: 1;
+        overflow: auto;
+        padding: 0 8px 8px;
+    }
+    #modelsBody h3 {
+        margin: 10px 0 4px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        opacity: 0.7;
+    }
+    #modelsBody p {
+        opacity: 0.8;
+    }
+    .property {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-bottom: 6px;
+    }
+    .property.modified > label::after {
+        content: " *";
+        color: var(--vscode-editorWarning-foreground);
+    }
+    .property .control {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .property input[type=range] {
+        flex: 1;
+        min-width: 0;
+        height: auto;
+        padding: 0;
+        border: none;
+        background: transparent;
+    }
+    .property input[type=number] {
+        width: 72px;
+    }
+    .property input[type=text], .property textarea {
+        flex: 1;
+        width: 100%;
+    }
+    .property input[type=checkbox] {
+        width: auto;
+        height: auto;
+    }
+    .property textarea {
+        box-sizing: border-box;
+        min-height: 40px;
+        resize: vertical;
+        border: 1px solid var(--vscode-input-border, transparent);
+        background: var(--vscode-input-background);
+        color: var(--vscode-input-foreground);
+        font-family: var(--vscode-editor-font-family);
+        font-size: 11px;
     }
     #content {
         position: absolute;
@@ -174,12 +264,23 @@ export function previewPage (nonce: string, module: PreviewModule | undefined): 
     <label title="Auto follows the color theme of the editor"><span>Theme</span><select id="theme"><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
     <label title="Fit shrinks the interface to fit the panel when it is larger"><span>Zoom</span><select id="zoom">${zooms}</select></label>
     <button id="refresh" title="Show the document again">Refresh</button>
+    <button id="modelsToggle" title="Show the values of the models the interface binds to, to fake them">Models</button>
 </div>
-<div id="viewport">
-    <div id="content">
-        <div id="stage" class="idle"><canvas id="canvas" tabindex="-1"></canvas></div>
-        <p id="note" hidden></p>
-        <pre id="problems" hidden></pre>
+<div id="main">
+    <div id="viewport">
+        <div id="content">
+            <div id="stage" class="idle"><canvas id="canvas" tabindex="-1"></canvas></div>
+            <p id="note" hidden></p>
+            <pre id="problems" hidden></pre>
+        </div>
+    </div>
+    <div id="models" hidden>
+        <div id="modelsHeader">
+            <span id="modelsFile"></span>
+            <button id="modelsReset" title="Go back to the values of the models file">Reset</button>
+            <button id="modelsSave" title="Write these values to the models file">Save</button>
+        </div>
+        <div id="modelsBody"></div>
     </div>
 </div>
 <script nonce="${nonce}">
@@ -310,6 +411,7 @@ export function previewPage (nonce: string, module: PreviewModule | undefined): 
             },
             onAbort: reason => fail (reason),
             yuiPreviewShown: outcome => { report = outcome; },
+            yuiPreviewModelChanged: (model, property, value) => modelChanged (model, property, value),
             yuiPreviewReady: () => {
                 tool = options;
 
@@ -408,7 +510,256 @@ export function previewPage (nonce: string, module: PreviewModule | undefined): 
         showText (note, report.status === "nothing" ? "Nothing to preview: " + report.message + "." : "");
         showText (problems, lines.concat (errors.map (named)).join ("\\n"));
         layout ();
+
+        liveValues = report.models || {};
+        fileValues = message.modelsValues !== null && typeof message.modelsValues === "object" ? message.modelsValues : null;
+        modelsFile.textContent = message.modelsFile || "";
+        modelsFile.title = message.modelsFile || "";
+        buildModels ();
     }
+
+    // ------------------------------------------------------------ models
+
+    // The values the interface sees, the ones of the file and the controls showing them, by model and property
+    let liveValues = {};
+    let fileValues = null;
+    let modelsSignature;
+    const controls = new Map ();
+    const modelsPanel = element ("models");
+    const modelsBody = element ("modelsBody");
+    const modelsFile = element ("modelsFile");
+    const modelsToggle = element ("modelsToggle");
+
+    const kindOf = value => Array.isArray (value) ? "array" : (value === null ? "json" : (["number", "boolean", "string"].includes (typeof value) ? typeof value : "json"));
+    const keyOf = (model, property) => model + "\\u0000" + property;
+    const isMeta = name => name.startsWith ("$");
+    const rounded = value => Math.round (value * 1e6) / 1e6;
+
+    // Arrays of plain values stay on one line, so long series remain readable
+    function formatJson (value, indent) {
+        const inner = indent + "    ";
+
+        if (Array.isArray (value)) {
+            if (value.every (item => item === null || typeof item !== "object"))
+                return "[" + value.map (item => formatJson (item, inner)).join (", ") + "]";
+
+            return value.length === 0 ? "[]" : "[\\n" + value.map (item => inner + formatJson (item, inner)).join (",\\n") + "\\n" + indent + "]";
+        }
+
+        if (value !== null && typeof value === "object") {
+            const entries = Object.entries (value);
+            return entries.length === 0 ? "{}" : "{\\n" + entries.map (([name, item]) => inner + JSON.stringify (name) + ": " + formatJson (item, inner)).join (",\\n") + "\\n" + indent + "}";
+        }
+
+        return typeof value === "number" ? String (rounded (value)) : JSON.stringify (value);
+    }
+
+    function send (model, property, value) {
+        if (tool === undefined)
+            return;
+
+        liveValues[model][property] = value;
+        tool.ccall ("yuiPreviewSetModelValue", "number", ["string", "string", "string"], [model, property, JSON.stringify (value)]);
+        markModified (model, property);
+    }
+
+    function markModified (model, property) {
+        const control = controls.get (keyOf (model, property));
+        const original = fileValues !== null && fileValues[model] !== undefined ? fileValues[model][property] : undefined;
+
+        if (control !== undefined)
+            control.row.classList.toggle ("modified", formatJson (liveValues[model][property], "") !== formatJson (original, ""));
+    }
+
+    function modelChanged (model, property, value) {
+        if (liveValues[model] === undefined)
+            return;
+
+        liveValues[model][property] = value;
+        controls.get (keyOf (model, property))?.update (value);
+        markModified (model, property);
+    }
+
+    // The range of a number, from "$ranges" in the file ([minimum, maximum, step]) or else guessed from its value
+    function rangeOf (model, property, value) {
+        const declared = fileValues !== null && fileValues["$ranges"] && fileValues["$ranges"][model] ? fileValues["$ranges"][model][property] : undefined;
+
+        if (Array.isArray (declared) && declared.length >= 2)
+            return { minimum: declared[0], maximum: declared[1], step: declared[2] > 0 ? declared[2] : "any" };
+
+        const whole = Number.isInteger (value) && Math.abs (value) > 1;
+        return { minimum: Math.min (0, value * 2), maximum: Math.max (1, value * 2), step: whole ? 1 : "any" };
+    }
+
+    function numberControl (model, property, value, control) {
+        const range = rangeOf (model, property, value);
+        const slider = document.createElement ("input");
+        const field = document.createElement ("input");
+
+        slider.type = "range";
+        field.type = "number";
+
+        for (const input of [slider, field]) {
+            input.min = String (range.minimum);
+            input.max = String (range.maximum);
+            input.step = range.step === "any" ? String ((range.maximum - range.minimum) / 1000) : String (range.step);
+        }
+
+        field.step = String (range.step);
+        slider.addEventListener ("input", () => {
+            field.value = String (rounded (Number (slider.value)));
+            send (model, property, Number (slider.value));
+        });
+        field.addEventListener ("change", () => {
+            const typed = Number (field.value);
+
+            if (field.value.trim ().length > 0 && Number.isFinite (typed)) {
+                slider.value = String (typed);
+                send (model, property, typed);
+            }
+        });
+
+        control.append (slider, field);
+        return value => {
+            slider.value = String (value);
+
+            if (document.activeElement !== field)
+                field.value = String (rounded (value));
+        };
+    }
+
+    function textControl (model, property, kind, control) {
+        const field = document.createElement (kind === "string" ? "input" : "textarea");
+
+        if (kind === "string")
+            field.type = "text";
+
+        field.spellcheck = false;
+        field.addEventListener ("change", () => {
+            if (kind === "string") {
+                send (model, property, field.value);
+                return;
+            }
+
+            try {
+                send (model, property, JSON.parse (field.value));
+                field.style.outline = "";
+            }
+            catch {
+                field.style.outline = "1px solid var(--vscode-inputValidation-errorBorder)";
+            }
+        });
+
+        control.append (field);
+        return value => {
+            if (document.activeElement !== field)
+                field.value = kind === "string" ? String (value) : formatJson (value, "");
+        };
+    }
+
+    function booleanControl (model, property, control) {
+        const box = document.createElement ("input");
+        box.type = "checkbox";
+        box.addEventListener ("change", () => send (model, property, box.checked));
+
+        control.append (box);
+        return value => { box.checked = value === true; };
+    }
+
+    function buildModels () {
+        const signature = JSON.stringify (Object.entries (liveValues).map (([model, properties]) =>
+            [model, Object.entries (properties).map (([property, value]) => [property, kindOf (value)])])) + JSON.stringify (fileValues && fileValues["$ranges"]);
+
+        if (signature === modelsSignature) {
+            for (const [model, properties] of Object.entries (liveValues)) {
+                for (const [property, value] of Object.entries (properties)) {
+                    controls.get (keyOf (model, property))?.update (value);
+                    markModified (model, property);
+                }
+            }
+
+            return;
+        }
+
+        modelsSignature = signature;
+        controls.clear ();
+        modelsBody.replaceChildren ();
+
+        if (Object.keys (liveValues).length === 0) {
+            const hint = document.createElement ("p");
+            hint.textContent = "No models. Name a models file with the setting yui.lint.models, or put one next to the document named <document>.models.json.";
+            modelsBody.append (hint);
+            return;
+        }
+
+        for (const [model, properties] of Object.entries (liveValues)) {
+            const heading = document.createElement ("h3");
+            heading.textContent = model;
+            modelsBody.append (heading);
+
+            for (const [property, value] of Object.entries (properties)) {
+                const row = document.createElement ("div");
+                const label = document.createElement ("label");
+                const control = document.createElement ("div");
+                const kind = kindOf (value);
+
+                row.className = "property";
+                label.textContent = property;
+                control.className = "control";
+                row.append (label, control);
+                modelsBody.append (row);
+
+                const update = kind === "number" ? numberControl (model, property, value, control)
+                    : kind === "boolean" ? booleanControl (model, property, control)
+                    : textControl (model, property, kind, control);
+
+                controls.set (keyOf (model, property), { row: row, update: update });
+                update (value);
+                markModified (model, property);
+            }
+        }
+    }
+
+    function showModels (open) {
+        modelsPanel.hidden = ! open;
+        modelsToggle.classList.toggle ("on", open);
+        vscode.setState (Object.assign ({}, vscode.getState () || {}, { modelsOpen: open }));
+        resized ();
+    }
+
+    modelsToggle.addEventListener ("click", () => showModels (modelsPanel.hidden));
+
+    element ("modelsReset").addEventListener ("click", () => {
+        if (fileValues === null)
+            return;
+
+        for (const [model, properties] of Object.entries (fileValues)) {
+            if (isMeta (model) || liveValues[model] === undefined || properties === null || typeof properties !== "object")
+                continue;
+
+            for (const [property, value] of Object.entries (properties)) {
+                send (model, property, value);
+                controls.get (keyOf (model, property))?.update (value);
+                markModified (model, property);
+            }
+        }
+    });
+
+    element ("modelsSave").addEventListener ("click", () => {
+        if (fileValues === null || tool === undefined)
+            return;
+
+        // What the tool does not read, as the ranges, is kept as the file has it
+        const saved = {};
+
+        for (const [name, value] of Object.entries (fileValues)) {
+            if (isMeta (name))
+                saved[name] = value;
+        }
+
+        Object.assign (saved, JSON.parse (tool.ccall ("yuiPreviewModels", "string", [], [])));
+        vscode.postMessage ({ type: "saveModels", text: formatJson (saved, "") + "\\n" });
+    });
 
     // ------------------------------------------------------------ messages
 
@@ -450,7 +801,7 @@ export function previewPage (nonce: string, module: PreviewModule | undefined): 
     }
 
     new ResizeObserver (resized).observe (viewport);
-    resized ();
+    showModels ((vscode.getState () || {}).modelsOpen === true);
 
     if (module !== null)
         start ();

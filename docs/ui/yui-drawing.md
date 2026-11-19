@@ -179,6 +179,13 @@ circle { center: bounds.center; radius: 4; fill: enabled ? palette.accent : mute
 rect { bounds: bounds; stroke: palette.outline.withAlpha (palette.dark ? 0.6 : 0.3); }
 ```
 
+`palette.<name>` reads a custom color the palette declares (see
+[Palettes](yui-styles.md#palettes)), transparent when it doesn't:
+
+```yui
+rect { bounds: bounds; fillGradient: linearGradient (palette.wood, point (0, 0), palette.wood.darker (0.04), point (0, bounds.height)); }
+```
+
 Palette colors follow palette switches and component palettes on the next
 paint. Prefer the component's own color properties (`thumbColor`, ...) where
 one exists: they come from the same palette through the theme, but can still be

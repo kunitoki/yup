@@ -31,20 +31,40 @@
 
     They belong to the application, which sets them with YuiDocument::setModel, so their
     properties are declared to the tool in a JSON file: an object with a member for each model,
-    itself an object giving each property a sample value.
+    itself an object giving each property a sample value. Members whose name starts with `$` are
+    left to the editors.
+
+    The values stay live: the preview changes them with setValue, reads them back with toJson,
+    and hears about the ones the interface writes through onValueChanged.
 */
-class YuiToolModels
+class YuiToolModels : private yup::DataTreeListener
 {
 public:
+    YuiToolModels() = default;
+    ~YuiToolModels() override;
+
     /** Reads the models of a file given on the command line, printing why when it can't. */
     bool load (const yup::String& path);
 
     /** Sets the models on a document, which they must outlive. */
     void attachTo (yup::YuiDocument& document) const;
 
+    /** Changes the value of a property of a model, returning false when neither exists. */
+    bool setValue (const yup::String& model, const yup::String& property, const yup::var& value);
+
+    /** Returns the current values, in the shape of the file they were loaded from. */
+    yup::var toJson() const;
+
+    /** Called with the model, the property and the value when the interface changes a value. */
+    std::function<void (const yup::String&, const yup::String&, const yup::var&)> onValueChanged;
+
 private:
+    void propertyChanged (yup::DataTree& tree, const yup::Identifier& property) override;
+
     yup::StringArray names;
+    std::vector<yup::DataTree> trees;
     std::vector<std::unique_ptr<yup::DataTreeBindingProvider>> providers;
+    bool isSettingValue = false;
 };
 
 //==============================================================================

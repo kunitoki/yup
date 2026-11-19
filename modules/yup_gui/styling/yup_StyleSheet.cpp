@@ -337,13 +337,14 @@ std::optional<YuiDiagnostic> readPalette (const DataTree& element, std::map<Stri
         if (propertyText == "name" || propertyText == "colors" || propertyText == "mode")
             continue;
 
-        const auto role = ThemePalette::getRoleFromName (propertyText);
-
-        if (! role.has_value())
-            return YuiDiagnostic { .message = "The palette '" + name + "' sets the unknown role '" + propertyText + "'", .element = element, .property = propertyName };
-
         const auto color = Color::fromString (element.getProperty (propertyName).toString());
-        result.setColor (*role, color);
+
+        if (const auto role = ThemePalette::getRoleFromName (propertyText))
+            result.setColor (*role, color);
+        else if (ThemePalette::isValidCustomColorName (propertyText))
+            result.setCustomColor (propertyText, color);
+        else
+            return YuiDiagnostic { .message = "The palette '" + name + "' can't name a color '" + propertyText + "'", .element = element, .property = propertyName };
     }
 
     palettes.insert_or_assign (name, std::move (result));

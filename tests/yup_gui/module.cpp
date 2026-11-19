@@ -79,6 +79,7 @@
 #include "yup_ProgressBar.cpp"
 #include "yup_ResizableCorner.cpp"
 #include "yup_ResizableDivider.cpp"
+#include "yup_JoystickComponent.cpp"
 #include "yup_ScrollBar.cpp"
 #include "yup_Slider.cpp"
 #include "yup_StackLayout.cpp"

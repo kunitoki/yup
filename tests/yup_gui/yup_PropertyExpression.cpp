@@ -218,3 +218,35 @@ TEST_F (PropertyExpressionTests, KeepsEvaluatingAfterItsComponentIsDestroyed)
     ASSERT_EQ (after.getArray()->size(), 2);
     EXPECT_DOUBLE_EQ (static_cast<double> ((*after.getArray())[1]), 40.0);
 }
+
+TEST_F (PropertyExpressionTests, LoadsFontFilesRelativeToTheBaseDirectory)
+{
+    Component component;
+    const auto fonts = File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts");
+
+    auto sized = PropertyExpression::compile (component, "font (\"YupColrTest.ttf\", 18)", ComponentProperty::Type::font, nullptr, nullptr, fonts);
+    ASSERT_TRUE (sized.wasOk()) << sized.getErrorMessage();
+
+    const auto font = VariantConverter<Font>::fromVar (sized.getReference()->evaluate());
+    EXPECT_FALSE (font.isEmpty());
+    EXPECT_FLOAT_EQ (font.getHeight(), 18.0f);
+
+    auto inferred = PropertyExpression::compile (component, "font (\"YupColrTest.ttf\").withHeight (9)", std::nullopt, nullptr, nullptr, fonts);
+    ASSERT_TRUE (inferred.wasOk()) << inferred.getErrorMessage();
+    EXPECT_EQ (inferred.getReference()->getType(), ComponentProperty::Type::font);
+    EXPECT_EQ (VariantConverter<Font>::fromVar (inferred.getReference()->evaluate()).getFont().get(), font.getFont().get());
+}
+
+TEST_F (PropertyExpressionTests, FontFileThatCannotBeLoadedGivesTheThemeFont)
+{
+    const auto fonts = File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts");
+    const auto themeFont = Font::loadFontFromFile (fonts.getChildFile ("YupColrTest.ttf"));
+    ASSERT_TRUE (themeFont.wasOk()) << themeFont.getErrorMessage();
+    theme->setDefaultFont (themeFont.getValue());
+
+    Component component;
+    const auto font = VariantConverter<Font>::fromVar (evaluate (component, "font (\"missing.ttf\", 11)", ComponentProperty::Type::font));
+
+    EXPECT_EQ (font.getFont().get(), themeFont.getValue().getFont().get());
+    EXPECT_FLOAT_EQ (font.getHeight(), 11.0f);
+}

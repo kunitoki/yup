@@ -52,6 +52,7 @@ void registerBuiltInComponentTypes()
         registry.registerType (TabComponent::getClassTypeInfo());
         registry.registerType (ResizableCorner::getClassTypeInfo());
         registry.registerType (ResizableDivider::getClassTypeInfo());
+        registry.registerType (JoystickComponent::getClassTypeInfo());
         registry.registerType (CodeEditor::getClassTypeInfo());
         registry.registerType (DocumentWindow::getClassTypeInfo());
         registry.registerType (LayoutComponent::getClassTypeInfo());
@@ -1437,7 +1438,7 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
                 if (const auto declared = emitted->arguments[argIndex].type; ComponentProperty::isExpressionType (declared))
                     type = declared;
 
-            auto compiled = PropertyExpression::compile (component, call.arguments[i].toString(), type, resolverFor (scope), locals.get());
+            auto compiled = PropertyExpression::compile (component, call.arguments[i].toString(), type, resolverFor (scope), locals.get(), baseDirectory);
 
             if (compiled.failed())
                 return fail (compiled.getErrorMessage());

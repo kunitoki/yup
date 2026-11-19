@@ -102,6 +102,9 @@ DrawingScope::ParsedInput DrawingScope::parse (const String& symbol, int index)
         if (const auto role = ThemePalette::getRoleFromName (roleName))
             return { .index = index, .kind = ParsedInput::Kind::paletteRole, .paletteRole = *role };
 
+        if (ThemePalette::isValidCustomColorName (roleName))
+            return { .index = index, .kind = ParsedInput::Kind::paletteColor, .property = Identifier (roleName) };
+
         return { .index = index, .kind = ParsedInput::Kind::invalid };
     }
 
@@ -230,6 +233,7 @@ DrawingScope::ResolvedProperty DrawingScope::resolve (const ParsedInput& input) 
         case ParsedInput::Kind::invalid:
         case ParsedInput::Kind::paletteDark:
         case ParsedInput::Kind::paletteRole:
+        case ParsedInput::Kind::paletteColor:
         case ParsedInput::Kind::themeDefaultFont:
         case ParsedInput::Kind::themeIconFont:
         case ParsedInput::Kind::themeMonospaceFont:
@@ -253,6 +257,7 @@ const ExpressionType* DrawingScope::resolveSymbol (const String& symbol) const
             return context.getType<bool>();
 
         case ParsedInput::Kind::paletteRole:
+        case ParsedInput::Kind::paletteColor:
         case ParsedInput::Kind::themePaletteRole:
             return context.getType<Color>();
 
@@ -357,6 +362,12 @@ void DrawingScope::updateInputs (BoundInputs& bound, ExpressionState& state) con
         if (input.kind == ParsedInput::Kind::paletteRole)
         {
             state.set (ExpressionInput<Color> { input.index }, palette->getColor (input.paletteRole));
+            continue;
+        }
+
+        if (input.kind == ParsedInput::Kind::paletteColor)
+        {
+            state.set (ExpressionInput<Color> { input.index }, palette->findCustomColor (input.property.toString()).value_or (Color (0x00000000)));
             continue;
         }
 

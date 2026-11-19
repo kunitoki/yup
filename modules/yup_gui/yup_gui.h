@@ -235,6 +235,7 @@ class DeferredReplayer;
 #include "widgets/yup_ImageComponent.h"
 #include "widgets/yup_ResizableCorner.h"
 #include "widgets/yup_ResizableDivider.h"
+#include "widgets/yup_JoystickComponent.h"
 #include "widgets/yup_ListBoxItem.h"
 #include "widgets/yup_ListBox.h"
 #include "widgets/yup_TreeViewItem.h"

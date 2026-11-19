@@ -228,6 +228,28 @@ TEST_F (StyleContextTests, StateBackedPropertiesAreAppliedAndRestored)
     EXPECT_FLOAT_EQ (root.getOpacity(), 1.0f);
 }
 
+TEST_F (StyleContextTests, AStyledEnabledStateHoldsWhenADisabledParentIsEnabledAgain)
+{
+    Component root ("root");
+    Component child ("child");
+    root.addChildComponent (child);
+    root.setEnabled (false);
+
+    root.setStyleSheet (build (DataTree ("style", { rule (".off", { declaration ("enabled", "false") }) })));
+    child.addStyleClass (Identifier ("off"));
+    restyle (root);
+
+    root.setEnabled (true);
+    restyle (root);
+
+    EXPECT_FALSE (child.isEnabled());
+
+    child.removeStyleClass (Identifier ("off"));
+    restyle (root);
+
+    EXPECT_TRUE (child.isEnabled());
+}
+
 TEST_F (StyleContextTests, ScopesPaletteDeclarationsToTheSubtree)
 {
     Component root ("root");

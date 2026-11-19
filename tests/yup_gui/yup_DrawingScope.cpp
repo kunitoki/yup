@@ -187,14 +187,30 @@ TEST_F (DrawingScopeTest, ResolvesRolesOfTheEffectivePalette)
     EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = palette.dark ? 1 : 0")), 0.0);
 }
 
-TEST_F (DrawingScopeTest, UnknownPaletteRoleFailsToCompile)
+TEST_F (DrawingScopeTest, ResolvesCustomColorsOfTheEffectivePalette)
+{
+    Component parent;
+    Slider slider (Slider::LinearHorizontal);
+    parent.addChildComponent (slider);
+
+    ThemePalette parentPalette;
+    parentPalette.setCustomColor ("meterHot", Color (0xff336699));
+    parent.setPalette (parentPalette);
+
+    DrawingScope scope (slider, context);
+
+    EXPECT_NEAR (static_cast<double> (evaluate (scope, "out = palette.meterHot.b")), 0x99 / 255.0, 1.0e-4);
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (scope, "out = palette.missing.a")), 0.0);
+}
+
+TEST_F (DrawingScopeTest, InvalidPaletteNameFailsToCompile)
 {
     Slider slider (Slider::LinearHorizontal);
 
     DrawingScope scope (slider, context);
     scope.install();
 
-    auto compiled = CompiledExpression::compile ("out = palette.notARole", context);
+    auto compiled = CompiledExpression::compile ("out = palette.2tone", context);
     EXPECT_TRUE (compiled.failed());
 }
 

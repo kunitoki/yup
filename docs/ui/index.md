@@ -95,6 +95,8 @@ windowing, widgets, and theming are still to come.
 - [Resizable divider](resizable-divider.md) - `ResizableDivider`, a draggable
   bar splitting two panes, with limits, resize policies, snapping, collapsing
   and keyboard control.
+- [Joystick](joystick.md) - `JoystickComponent`, an XY pad moving a thumb over
+  two ranged axes, with overlapping thumb-only joysticks for graph nodes.
 
 ```{toctree}
 :hidden:
@@ -127,4 +129,5 @@ tree-view
 tabs
 file-chooser
 resizable-divider
+joystick
 ```

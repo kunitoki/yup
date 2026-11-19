@@ -77,6 +77,10 @@ auto* readout = document.findById<Label> ("readout");
 readout->setProperty ("text", "muted");    // the binding on text is gone
 ```
 
+A change the property only inherits is not a write. A component whose `enabled`
+is bound keeps its binding, and the state the binding gave it, when a parent is
+disabled and enabled again around it.
+
 Bindings are also dropped when the component they write to, or any component
 they read from, is deleted.
 

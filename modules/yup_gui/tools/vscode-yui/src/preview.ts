@@ -101,13 +101,14 @@ export class YuiPreview {
     private typingTimer: NodeJS.Timeout | undefined;
     private zoom = "fit";
     private shown: string | undefined;
+    private modelsFile: string | undefined;
     private ready = false;
     private sequence = 0;
 
     constructor (private readonly host: PreviewHost, private readonly toolScript: string | undefined) {
         this.disposables.push (
             vscode.workspace.onDidSaveTextDocument (document => {
-                if (document.languageId === "yui")
+                if (document.languageId === "yui" || document.uri.fsPath === this.modelsFile)
                     void this.render ();
             }),
             vscode.workspace.onDidChangeTextDocument (event => {
@@ -216,6 +217,38 @@ export class YuiPreview {
         else if (record["type"] === "option" && typeof name === "string" && typeof value === "string") {
             void this.optionChosen (name, value);
         }
+        else if (record["type"] === "saveModels" && typeof record["text"] === "string") {
+            void this.saveModels (record["text"]);
+        }
+    }
+
+    // The values set in the models panel replace those of the models file, which shows them again
+    private async saveModels (text: string): Promise<void> {
+        const file = this.modelsFile;
+
+        if (file === undefined)
+            return;
+
+        try {
+            const uri = vscode.Uri.file (file);
+            const open = vscode.workspace.textDocuments.find (document => document.uri.fsPath === file);
+
+            if (open !== undefined) {
+                const edit = new vscode.WorkspaceEdit ();
+                edit.replace (uri, new vscode.Range (open.positionAt (0), open.positionAt (open.getText ().length)), text);
+                await vscode.workspace.applyEdit (edit);
+                await open.save ();
+            }
+            else {
+                await vscode.workspace.fs.writeFile (uri, Buffer.from (text, "utf8"));
+            }
+        }
+        catch (error) {
+            this.host.log (`the models could not be saved to ${file}: ${error instanceof Error ? error.message : String (error)}`);
+            return;
+        }
+
+        await this.render ();
     }
 
     private renderSoon (): void {
@@ -310,10 +343,24 @@ export class YuiPreview {
             return;
         }
 
-        const collected = await collectDocumentFiles (document, this.host.modelsPath (document));
+        const modelsFile = this.host.modelsPath (document);
+        const collected = await collectDocumentFiles (document, modelsFile);
 
         if (sequence !== this.sequence)
             return;
+
+        this.modelsFile = modelsFile;
+
+        // The values of the file, which the models panel resets to
+        const modelsData = collected.files.find (file => file.path === collected.models);
+        let modelsValues: unknown = null;
+
+        try {
+            modelsValues = modelsData === undefined ? null : JSON.parse (Buffer.from (modelsData.data).toString ("utf8"));
+        }
+        catch {
+            modelsValues = null;
+        }
 
         // The page keeps the files it was given, so only those that changed are sent again
         const changed = collected.files.filter (file => {
@@ -334,6 +381,8 @@ export class YuiPreview {
             type: "show",
             main: collected.main,
             models: collected.models,
+            modelsFile: modelsFile === undefined ? "" : path.basename (modelsFile),
+            modelsValues,
             files,
             drawing: target.drawing,
             palette: target.palette,

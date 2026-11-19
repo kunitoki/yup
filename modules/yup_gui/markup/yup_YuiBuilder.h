@@ -101,7 +101,11 @@ public:
 
     //==============================================================================
     /** Sets the base directory used to resolve relative asset paths (such as `Image.source`). */
-    void setBaseDirectory (const File& directory) { baseDirectory = directory; }
+    void setBaseDirectory (const File& directory)
+    {
+        baseDirectory = directory;
+        bindings.setBaseDirectory (directory);
+    }
 
     /** Returns the base directory used to resolve relative asset paths. */
     const File& getBaseDirectory() const noexcept { return baseDirectory; }
