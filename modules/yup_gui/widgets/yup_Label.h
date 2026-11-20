@@ -36,7 +36,13 @@ class YUP_API Label : public Component
 public:
     //==============================================================================
     /** Creates an empty label. */
-    Label (StringRef componentID = {});
+    Label();
+
+    /** Creates an empty label.
+    
+        @param componentID  Identifier for this component.
+    */
+    explicit Label (StringRef componentID);
 
     //==============================================================================
     /** Returns the label's current text.
@@ -48,12 +54,11 @@ public:
     /** Changes the label's text.
 
         @param newText          The new text to display
-        @param notification     Whether to trigger a change notification
+        @param notification     Whether property listeners are told that `text` changed
     */
     void setText (String newText, NotificationType notification = sendNotification);
 
     //==============================================================================
-
     /** Returns the current font.
 
         @returns The font used to display the text
@@ -70,7 +75,6 @@ public:
     void resetFont();
 
     //==============================================================================
-
     /** Returns the stroke width used for the text outline.
 
         @returns The width of the text outline
@@ -84,34 +88,47 @@ public:
     void setStrokeWidth (float newWidth);
 
     //==============================================================================
+    /** Returns the justification used for the text.
 
+        @returns The current text justification
+    */
     Justification getJustification() const { return justification; }
 
+    /** Sets the justification for the text.
+
+        @param newJustification    The new justification to use
+    */
     void setJustification (Justification newJustification);
 
     //==============================================================================
-
+    /** Style identifiers for customizing the appearance of the Label. */
     struct Style
     {
-        //! Colors
-        static const Identifier textFillColorId;
-        static const Identifier textStrokeColorId;
-        static const Identifier backgroundColorId;
-        static const Identifier outlineColorId;
+        static const Identifier textFillColorId;       /**< Text fill color */
+        static const Identifier textStrokeColorId;     /**< Text stroke color */
+        static const Identifier backgroundColorId;     /**< Background color */
+        static const Identifier outlineColorId;        /**< Outline color */
 
-        //! Metrics
-        static const Identifier textHeightProportionMetricId;
+        static const Identifier textHeightProportionId; /**< Text height proportion */
     };
 
     //==============================================================================
+    /** Returns the static type info describing the Label type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
+    /** @internal */
+    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
     void resized() override;
-
     /** @internal */
-    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
+    void styleChanged() override;
 
 private:
     void prepareText();
@@ -122,7 +139,11 @@ private:
     float strokeWidth = 0.0f;
     Justification justification { Justification::left };
     std::optional<Font> font;
+    Font preparedFont;
+    Size<float> preparedSize { -1.0f, -1.0f };
+    Justification preparedJustification { Justification::left };
     bool needsUpdate = true;
+    bool textDirty = true;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Label)
 };

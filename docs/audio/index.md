@@ -1,314 +1,142 @@
 # Audio
 
-The audio-first stack: device I/O, MIDI, file formats, DSP, an audio graph,
-processors, and CLAP / VST3 plugin hosting and client wrappers - all in one
-framework.
+YUP is audio-first: device I/O, MIDI 1.0 and 2.0, audio files, synthesis, an
+audio processor model, a realtime audio graph, plugin hosting and plugin
+wrappers all ship in the same framework, on desktop, mobile and the web.
 
-**Modules covered:** `yup_audio_basics`, `yup_audio_devices`, `yup_audio_formats`,
-`yup_audio_graph`, `yup_audio_processors`, `yup_dsp`, `yup_audio_plugin_client`,
-`yup_audio_plugin_host`.
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_audio_graph.jpg" alt="The node editor of the audio graph example" width="640">
+</p>
 
-```{warning}
-**Work in progress.** This area is still being written. Concept guides for the
-audio graph, processors, and the plugin model are still to come. The DSP
-building blocks now have their own dedicated
-[DSP](../dsp/index.md) area.
+**Modules covered:** `yup_audio_basics`, `yup_audio_devices`,
+`yup_audio_formats`, `yup_audio_processors`, `yup_audio_graph`,
+`yup_audio_plugin_host`, `yup_audio_plugin_client`, `yup_audio_gui`. Signal
+processing building blocks (filters, FFTs, oscillators, dynamics) live in the
+[DSP](dsp/index.md) area.
+
+## How the pieces fit
+
+```mermaid
+flowchart LR
+    devices["Audio & MIDI devices<br/>yup_audio_devices"] --> callback["Audio callback"]
+    callback --> sources["Audio sources<br/>yup_audio_basics"]
+    callback --> audioGraph["Audio graph<br/>yup_audio_graph"]
+    audioGraph --> processors["Audio processors<br/>yup_audio_processors"]
+    audioGraph --> hosted["Hosted plugins<br/>yup_audio_plugin_host"]
+    processors --> client["Plugin formats<br/>yup_audio_plugin_client"]
+    files["Audio files<br/>yup_audio_formats"] --> sources
 ```
 
-## Topics
+- **[Buffers](buffers.md)** and **[MIDI](midi.md)** types from
+  `yup_audio_basics` are the data every other layer passes around.
+- An **[audio device](devices.md)** calls your callback on the audio thread for
+  every block. The callback can play **[audio sources](sources.md)** - files,
+  mixers, transports - or run a **[graph](audio-graph.md)** of processors.
+- An **[audio processor](processors.md)** is the unit of processing with buses,
+  parameters, state and an editor. The same class becomes a plugin in every
+  **[format](plugin-client.md)**, runs as a standalone app, or is a node in a
+  graph next to **[hosted plugins](plugin-hosting.md)**.
+- **[Audio GUI](audio-gui.md)** components display and control all of it.
 
-- **Audio basics** - buffers, sample formats, and the audio process load
-  measurer (`yup_audio_basics`).
-- **Devices & MIDI** - audio device management and MIDI I/O, including UMP
-  (`yup_audio_devices`).
-- **Formats** - reading and writing audio files (`yup_audio_formats`).
-- **DSP** - filters, filter designers, crossovers, FFTs, and spectral
-  analysis, documented in the dedicated [DSP](../dsp/index.md) area
-  (`yup_dsp`).
-- **Audio graph** - node-based audio processing and editing (`yup_audio_graph`).
-- **Processors** - the `AudioProcessor` model (`yup_audio_processors`), including
-  [reactive parameter updates](#reactive-parameter-updates) for editors.
-- **Plugins** - hosting third-party plugins (`yup_audio_plugin_host`) and
-  wrapping your own as CLAP / VST3 (`yup_audio_plugin_client`).
+## Where to start
 
-## Scanning plugins
+| You want to | Start with |
+| --- | --- |
+| Play or generate sound in an application | [Audio and MIDI devices](devices.md), then [Audio sources](sources.md) |
+| Load, play or record audio files | [Audio files](audio-files.md) |
+| Build a synthesizer | [Synthesizers](synthesizers.md), [MIDI](midi.md) |
+| Write a CLAP, VST3, AU, LV2 or AAX plugin | [Audio processors](processors.md), [Writing plugins](plugin-client.md) |
+| Load third-party plugins in your app | [Plugin hosting](plugin-hosting.md) |
+| Route processors and plugins together | [Audio graph](audio-graph.md) |
+| Process audio in the frequency domain | [Spectral processing](spectral.md) |
+| Support MPE controllers or MIDI 2.0 | [MPE](mpe.md), [UMP and MIDI 2.0](ump.md) |
+| Show meters, waveforms, spectra or a keyboard | [Audio GUI](audio-gui.md) |
+| Run in the browser | [Web audio](web.md) |
 
-`AudioPluginScanner` discovers plugins with the formats you register
-(`VST3Format`, `CLAPFormat`, `AUFormat`, `LV2Format`). The in-process scan only
-reads static metadata (VST3 `moduleinfo.json`, CLAP descriptors, the AU
-registry, LV2 manifests) and never runs plugin code, so channel counts may be
-estimates.
+## The audio thread
 
-Give the scanner an `AudioPluginDatabase` to cache results in SQLite. Later
-scans only open new or changed files, return cached descriptions and failures
-for the rest, and skip blacklisted files:
+Audio callbacks, `processBlock` and `getNextAudioBlock` run on the realtime
+audio thread: they must not lock, allocate, do I/O or wait for other threads.
+Each page states which calls are realtime-safe. The general rules, and the
+lock-free patterns to talk to the UI, are in
+[Multithreading: the audio thread](../core/multithreading/index.md#the-audio-thread).
 
-```cpp
-auto database = std::make_shared<yup::AudioPluginDatabase>();
+## Pages
 
-if (database->open (appDataDir.getChildFile ("plugins.db")).wasOk())
-    scanner.setDatabase (database);
+**[Fundamentals](fundamentals.md)**
 
-auto result = scanner.scanDefaults(); // discovered, failedPaths, blacklistedPaths
-```
+- [Audio buffers](buffers.md) - `AudioBuffer`, channel layouts and sample
+  format conversion.
+- [Audio utilities](utilities.md) - decibels, smoothing, ADSR, reverb, IIR
+  filters, interpolators and CPU load measurement.
+- [MIDI](midi.md) - messages, buffers, sequences, MIDI files, keyboard state
+  and microtuning.
+- [UMP and MIDI 2.0](ump.md) - Universal MIDI Packets and conversion to and
+  from MIDI 1.0.
+- [MPE](mpe.md) - MIDI Polyphonic Expression zones, instruments and
+  synthesizers.
 
-If the process dies while scanning a file, that file is blacklisted the next
-time the database is opened. It is scanned again once it changes on disk or
-after `clearBlacklist()`. Call `setScanVersion()` with a higher number to
-rescan everything else.
+**[Playback and I/O](playback-and-io.md)**
 
-### Out-of-process scanning
+- [Audio and MIDI devices](devices.md) - `AudioDeviceManager`, audio
+  callbacks, backends per platform and MIDI ports.
+- [Audio sources](sources.md) - pull-based playback, transports and mixing.
+- [Audio files](audio-files.md) - reading and writing WAV, FLAC, MP3, Ogg
+  Vorbis, Opus and platform codecs.
+- [Synthesizers](synthesizers.md) - polyphonic voices driven by MIDI.
+- [Web audio](web.md) - the AudioWorklet device, Web MIDI and browser rules.
 
-To get exact channel and MIDI port counts, plugins must be opened, which can
-crash or hang the host. `setOutOfProcessScanning()` opens them in worker
-processes instead, usually the host application relaunched with a special
-command line. A plugin that crashes or exceeds the timeout only kills its
-worker; the file is reported in `failedPaths` and blacklisted in the database:
+**[Processors and plugins](processors-and-plugins.md)**
 
-```cpp
-// At startup, before creating any window
-void initialise (const yup::String& commandLine) override
-{
-    auto worker = std::make_unique<yup::AudioPluginScannerWorker>();
-    worker->addFormat (std::make_unique<yup::VST3Format>());
-    worker->addFormat (std::make_unique<yup::CLAPFormat>());
+- [Audio processors](processors.md) - the processor model, parameters, state
+  and editors.
+- [Spectral processing](spectral.md) - frequency-domain processors.
+- [Writing plugins](plugin-client.md) - one processor as CLAP, VST3, AU, AUv3,
+  LV2, AAX and standalone.
+- [Plugin hosting](plugin-hosting.md) - scanning, loading and sandboxing
+  third-party plugins.
+- [Audio graph](audio-graph.md) - realtime routing of processors and plugins.
 
-    if (worker->initialiseFromCommandLine (commandLine))
-    {
-        scannerWorker = std::move (worker); // this process is now a scanner worker
-        return;
-    }
+**[DSP](dsp/index.md)**
 
-    // ... normal startup
-}
+- [DSP](dsp/index.md) - filters, oscillators, envelopes, dynamics, FFTs,
+  resampling, time-stretching and YDSP, the JIT-compiled DSP language.
 
-// Where the scanner is set up
-yup::AudioPluginScanner::OutOfProcessOptions options;
-options.executable = yup::File::getSpecialLocation (yup::File::currentExecutableFile);
-options.timeoutMs = 60000; // per file
-scanner.setOutOfProcessScanning (options);
-```
+**[YDSP](ydsp/index.md)**
 
-Files are scanned in-process with the metadata-only scan when the worker
-executable cannot be launched. Registry based formats (AUv2) are always
-scanned in-process.
+- [YDSP](ydsp/index.md) - a realtime audio DSP language JIT-compiled to native
+  code while the application runs.
 
-## Running plugins out of process
+**User interface**
 
-`RemoteAudioPluginInstance` runs a plugin in its own `AudioPluginBridgeServer`
-process, so a crash or a hang can't take the host down. It behaves like any
-other `AudioPluginInstance`. Audio, MIDI and parameter changes go through
-shared memory with a synchronous hand-off, so no latency is added. As with
-scanning, the server is usually the host application relaunched with a
-special command line:
+- [Audio GUI](audio-gui.md) - device settings, meters, waveforms, spectrum
+  displays, keyboards and the graph editor.
 
-```cpp
-// At startup, before creating any window
-auto server = std::make_unique<yup::AudioPluginBridgeServer>();
-server->addFormat (std::make_unique<yup::VST3Format>());
-server->addFormat (std::make_unique<yup::CLAPFormat>());
+## Examples
 
-if (server->initialiseFromCommandLine (commandLine))
-{
-    bridgeServer = std::move (server); // this process now hosts a single plugin
-    return;
-}
-
-// Loading a plugin sandboxed
-yup::RemoteAudioPluginInstance::Options options;
-options.executable = yup::File::getSpecialLocation (yup::File::currentExecutableFile);
-
-auto result = yup::RemoteAudioPluginInstance::load (description, hostContext, options);
-if (result.failed())
-    return; // result.getErrorMessage()
-
-auto instance = std::move (result.getReference());
-instance->onCrashed = [&] { /* tell the user, offer instance->reload() */ };
-```
-
-When the server crashes or misses a block deadline, the instance outputs
-silence and `onCrashed` is called on the message thread. `reload()` starts a
-new server, restores the last saved or loaded state, and prepares the plugin
-again.
-
-Current limitations:
-
-- Only single precision processing is supported.
-- Parameter metadata changes made after loading are not reflected.
-- MIDI controller mappings are not exposed.
-- The plugin editor opens in a separate window owned by the server: call `showEditor()` /
-  `hideEditor()` instead of embedding `createEditor()`, which only returns a placeholder.
-  Pass a component of the host window to `showEditor()` to make the editor behave as its child:
-  on macOS and Windows it stays above the host while the host or the editor is active, on X11 it
-  is transient for the host window (Wayland has no equivalent). `isEditorShowing()` and
-  `onEditorClosed` track the window when the user closes it.
-
-`AudioPluginDatabase::setRunSandboxed()` stores a per-plugin preference, and
-`setDefaultRunSandboxed()` sets the default for plugins without one. Read the
-result with `shouldRunSandboxed()` to choose between the format's
-`createInstance` and `RemoteAudioPluginInstance::load`.
-
-## Microtuning
-
-`TuningMap` (`yup_audio_basics`) maps MIDI notes to frequencies under any
-tuning, ready to feed a synthesizer voice with `noteToPitch (note)`. It starts
-as 12 tone equal temperament with A4 = 440 Hz, and reads the common tuning file
-formats:
-
-- **Scala** `.scl` scales with `loadScale()`, and `.kbm` key maps, which lay the
-  scale out on the keys and set the reference pitch, with `loadKeyMap()`.
-- **AnaMark** `.tun` / `.msf` tunings with `loadTuning()`. All format versions
-  are read, including the version 2 `[Functional Tuning]` formulas and
-  `[Mapping]`. A file holding several scales gives the one assigned to the MIDI
-  channel passed in.
-
-An AnaMark tuning sets every note's frequency and replaces the scale and key
-map until the next `loadScale()` or `loadKeyMap()`. Each loader has a
-`FromString` variant for tunings kept in memory, e.g. inside a preset. A load
-that fails returns a failed `Result` and leaves the current tuning in place.
-
-```cpp
-yup::TuningMap tuning;
-
-if (auto result = tuning.loadTuning (file); result.failed())
-    showError (result.getErrorMessage());
-
-const auto frequency = tuning.noteToPitch (60); // negative if the key is unmapped
-```
-
-Loading allocates, so load on the message thread and hand the audio thread a
-copy of the frequencies rather than calling the loaders while it plays.
-
-## MIDI device disconnection
-
-`MidiInput` and `MidiOutput` report when the device behind them goes away, for
-example when a USB controller is unplugged. Add a `ump::DisconnectionListener`
-with `addDisconnectionListener`; its `disconnected()` is called once, on the
-message thread, and `isDisconnected()` returns true from then on. A disconnected
-device never delivers or sends again, so open a new one when the device returns.
-Don't destroy the device from inside `disconnected()`.
-
-Disconnections are reported by CoreMIDI (macOS, iOS), Windows, ALSA (Linux) and
-Web MIDI. On Windows they arrive with the system's device-change notification,
-about half a second after the device goes away. Android doesn't report them yet,
-so listeners are never called there.
-
-`AudioDeviceManager` uses this for its enabled MIDI inputs: an input whose device
-disappears is closed, and it is opened again when the device comes back.
-
-## Web MIDI (WASM)
-
-On Emscripten builds, MIDI I/O is backed by the browser's
-[Web MIDI API](https://www.w3.org/TR/webmidi/) (`yup_Midi_wasm.cpp`). A few
-behaviors differ from desktop platforms:
-
-- **Permission is asynchronous.** `requestMIDIAccess()` is a browser prompt, so
-  call `MidiInput::getAvailableDevices()` (or `MidiOutput::getAvailableDevices()`)
-  once early in startup to trigger it. Until the user grants access, device
-  lists are empty and `openDevice()` returns an empty object; once granted, the
-  lists populate and `MidiDeviceListConnection` listeners fire.
-- **SysEx is enabled.** The backend requests `{ sysex: true }`, so incoming and
-  outgoing system exclusive messages are not masked by the browser (the prompt
-  is the slightly stronger "MIDI + SysEx" permission).
-- **Devices are MIDI 1.0.** Web MIDI exposes MIDI 1.0 byte streams only. Ports
-  are reported with `PacketProtocol::MIDI_1_0`; opening an input with a
-  `MIDI_2_0` protocol and an `ump::Receiver` converts the stream to UMP on the
-  way in, and `ump::View` / `ump::Packets` are converted to MIDI 1.0 bytes on
-  the way out. `createNewDevice()` is unsupported (the Web MIDI API cannot
-  create virtual ports) and returns an empty object.
-- **Threading.** Incoming messages arrive on the browser main thread. Sending
-  (`sendMessageNow`) is thread-safe: calls from other threads are proxied to the
-  main thread synchronously.
-- **Environment.** Web MIDI requires a secure context (HTTPS or `localhost`)
-  and a browser that supports the API; on other WASM targets MIDI remains
-  unimplemented and all queries return empty results.
-
-## Web Audio activation (Emscripten)
-
-Browser autoplay policy initially suspends the Web Audio context. Applications
-using the default Emscripten standalone shell show a hint over the canvas after
-startup; click the canvas once to resume the shared audio worklet. The shell's
-top-right `audio` and `midi` indicators show the current browser permission and
-runtime state. This activation is provided by the shell and audio-device
-backend, so individual examples do not need their own browser-specific button.
-
-## Microphone input (Emscripten)
-
-Opening the audio worklet device with input channels asks the browser for
-microphone access and feeds the microphone to those inputs, with echo
-cancellation, noise suppression and automatic gain turned off. Access needs a
-secure context (HTTPS or `localhost`). Until the user allows it, or if they
-deny it, the inputs are silent. A mono microphone feeds both channels of a
-stereo input.
-
-## Audio thread rules on the web
-
-The audio callback runs on the browser's audio worklet, which cannot block.
-Whenever the audio callback has to wait - a `CriticalSection` or `std::mutex`
-held by another thread, or a `malloc` / `free` racing one on another thread -
-the page aborts with
-`Assertion failed: emscripten_is_main_browser_thread()`. It only happens under
-contention, so it shows up as an occasional crash. In the audio callback:
-
-- Share state with the UI through atomics, or guard it with `AudioLockType`
-  (a spin lock on the web) - for example the device manager's
-  `getAudioCallbackLock()`.
-- Size every buffer in `audioDeviceAboutToStart`, never in the callback.
-- Don't post messages (`triggerAsyncUpdate`, `callAsync`, change broadcasts),
-  as queuing them locks and allocates. Set a flag and poll it from the UI.
-
-## Reactive parameter updates
-
-An editor that refreshes its controls by reading every parameter each frame does
-O(all parameters) work even when nothing moved. `yup_audio_processors` offers a
-reactive path instead: parameters report their own changes, and the editor
-refreshes just the controls bound to them.
-
-The pieces are:
-
-- **`ParameterChangeQueue`** - a lock-free set of changed parameter indices,
-  owned by every `AudioProcessorBase`. Each parameter added with `addParameter()`
-  marks itself from `setValue()` whenever its value actually changes, from any
-  thread, so host automation, UI edits and preset loads are all reported, whether
-  or not audio is running. Shared parameters mark each owning processor's queue
-  using that processor's index. Marking uses one lock-free atomic OR per owner
-  and coalesces: a parameter changed many times between two refreshes is reported
-  once. Draining scans one word per 32 parameters, then visits the changed indices.
-- **`AudioProcessorEditor::startParameterListening()`** - starts a message-thread
-  timer that drains the queue and notifies the attachments bound to the changed
-  parameters in every listening editor. Editors share one message-thread
-  dispatcher, so draining from one does not consume another editor's notifications.
-  Pass a rate of zero to drive `dispatchPendingParameterChanges()` yourself,
-  for example from a test.
-- **`AudioParameterAttachment`** - binds one control's parameter to a callback
-  (typically the control's existing refresh-from-parameter). The editor fires the
-  callback, on the message thread, when that parameter changes. This is the
-  parameter-to-control direction; the reverse stays with gestures. Callbacks may
-  remove or rebind attachments, including themselves.
-
-Create, rebind and destroy attachments, and start, stop and dispatch editor
-listening, on the message thread. The processor must outlive its editors, and
-the editor must outlive its attachments. Parameter registration and processor
-destruction must not overlap parameter writes, including writes through other
-owners of shared parameters. Register parameters before starting those writers.
-Queue growth preserves pending changes; explicit `resize()` clears them.
-
-The queue has a single consumer. While editors are listening, leave draining to
-their shared dispatcher rather than calling `readChanges()` directly.
-
-The processor needs no code at all. In the editor:
-
-```cpp
-MyEditor::MyEditor (MyProcessor& p) : processor (p)
-{
-    startParameterListening (processor); // 60 Hz by default
-
-    gainAttachment = std::make_unique<yup::AudioParameterAttachment> (
-        *this, processor.getParameters()[gainIndex],
-        [this] { gainKnob.syncFromParameter(); });
-}
-```
+- [audiograph](https://github.com/kunitoki/yup/tree/main/examples/audiograph) -
+  a modular host with a node editor, plugin scanning and hosting.
+- [plugin](https://github.com/kunitoki/yup/tree/main/examples/plugin) - the
+  Retrace plugin, built in every format and as a standalone app.
+- [graphics](https://github.com/kunitoki/yup/tree/main/examples/graphics) -
+  includes audio demos: file playback, a spectrum analyzer, filters, a
+  crossover, convolution and YDSP synths, each opening an audio device.
 
 ## Related
 
-- [Building audio plugins](../build-system/building-plugins.md)
+- [Building audio plugins](../build-system/building-plugins.md) - CMake
+  targets, formats and installation.
+- [Multithreading](../core/multithreading/index.md) - threads, locks and the
+  message thread.
+
+```{toctree}
+:hidden:
+:maxdepth: 2
+
+fundamentals
+playback-and-io
+processors-and-plugins
+dsp/index
+ydsp/index
+audio-gui
+```

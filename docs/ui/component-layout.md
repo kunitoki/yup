@@ -9,6 +9,10 @@ or holds a reference beyond the call.
 If you know CSS flexbox and CSS grid, you know these. The rest of this page is
 about how they are spelled in C++ and where YUP deliberately differs.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_flex_grid_layouts.jpg" alt="FlexBox and Grid layouts, in the layout demo of the graphics example" width="640">
+</p>
+
 ## The shape of a layout
 
 A container is a plain value you fill in and hand a rectangle:
@@ -26,6 +30,11 @@ void MyComponent::resized()
     box.performLayout (getLocalBounds());
 }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_flex-row_light.jpg#gh-light-mode-only" alt="A row with a sidebar of a fixed width and a content area taking the space left" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_flex-row_dark.jpg#gh-dark-mode-only" alt="A row with a sidebar of a fixed width and a content area taking the space left" width="640">
+</p>
 
 Nothing is retained, so rebuilding the container on every `resized()` is the
 normal thing to do. If a layout is expensive to describe, keep the container as
@@ -104,6 +113,11 @@ which is rarely what you meant and is not stable across relayouts.
 auto to fill the line. An item with an explicit cross size keeps it and sits at
 the cross start.
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_align_light.jpg#gh-light-mode-only" alt="Items of different heights aligned at the start, at the end, at the center and stretched" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_align_dark.jpg#gh-dark-mode-only" alt="Items of different heights aligned at the start, at the end, at the center and stretched" width="640">
+</p>
+
 In a single-line (`Wrap::noWrap`) container the line spans the container's
 whole cross size and `alignContent` does not apply at all — that is what makes
 the default stretch actually fill. `alignContent` does apply to a wrapping
@@ -111,6 +125,11 @@ container, even one that happens to produce a single line.
 
 `spaceAround` puts a half share at each edge and a full share between;
 `spaceEvenly` puts an equal share everywhere including the edges.
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_justify_light.jpg#gh-light-mode-only" alt="Three items justified with each JustifyContent value" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_justify_dark.jpg#gh-dark-mode-only" alt="Three items justified with each JustifyContent value" width="640">
+</p>
 
 ### Auto margins
 
@@ -123,6 +142,11 @@ box.items.add (yup::FlexItem (editMenu));
 // everything below is pushed to the right-hand end
 box.items.add (yup::FlexItem (settings).withAutoMargins (true, false, false, false));
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_auto-margins_light.jpg#gh-light-mode-only" alt="A toolbar whose last item is pushed to the right by an auto margin" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_auto-margins_dark.jpg#gh-dark-mode-only" alt="A toolbar whose last item is pushed to the right by an auto margin" width="640">
+</p>
 
 Auto margins on both sides center an item. On the cross axis an auto margin
 positions the item within its line and suppresses stretching, since an item
@@ -144,6 +168,11 @@ grid.items.add (yup::GridItem (body).withColumn (1).withRow (1));
 grid.performLayout (getLocalBounds());
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_grid_light.jpg#gh-light-mode-only" alt="A grid with a header spanning two columns and a body in the second column of the second row" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_grid_dark.jpg#gh-dark-mode-only" alt="A grid with a header spanning two columns and a body in the second column of the second row" width="640">
+</p>
+
 ### Tracks
 
 A track is a min/max pair, exactly as in CSS. The familiar single-value forms
@@ -162,6 +191,11 @@ Percentages resolve against the container's **full** size, so two 25% columns
 in a 300px grid are 75px wide whatever the gap is. Fractional tracks divide up
 what is left **after** the fixed tracks and the gaps, so a gapped `fr` grid
 fits its container exactly.
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_grid-tracks_light.jpg#gh-light-mode-only" alt="Grid columns sized in pixels, in fractions of the space left and in percent" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_grid-tracks_dark.jpg#gh-dark-mode-only" alt="Grid columns sized in pixels, in fractions of the space left and in percent" width="640">
+</p>
 
 `minmax (px (100), fr (1))` is the combination `fr` alone cannot express: take
 a share of the leftover, but never drop below 100px. When the shares would come
@@ -198,6 +232,11 @@ grid.items.add (yup::GridItem (headerBar).withArea ("header"));
 grid.items.add (yup::GridItem (sidebar).withArea ("side"));
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_grid-areas_light.jpg#gh-light-mode-only" alt="Items placed in the named areas of a grid" width="560">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_grid-areas_dark.jpg#gh-dark-mode-only" alt="Items placed in the named areas of a grid" width="560">
+</p>
+
 `setTemplateAreas` returns a `Result`: it fails if the rows have different cell
 counts or if a name does not form a solid rectangle. A `.` marks a cell that
 belongs to no area, and auto-placed items are free to use it.
@@ -206,6 +245,85 @@ Lines can also be named individually with `setColumnLineName` /
 `setRowLineName` and used through `GridItem::withColumnStart` /
 `withRowStart`. An unknown name is ignored and the item falls back to its
 numeric placement.
+
+## Layout components
+
+`FlexBox`, `Grid` and `StackLayout` are algorithms you run yourself, usually
+from `resized()`. The layout *components* wrap them, so a container positions
+its children on its own and markup can describe a layout without any C++:
+
+| Component | Markup name | Algorithm |
+|---|---|---|
+| `FlexBoxComponent` | `FlexBox` | `FlexBox` |
+| `RowComponent` | `Row` | `FlexBox`, direction `row` |
+| `ColumnComponent` | `Column` | `FlexBox`, direction `column` |
+| `GridComponent` | `Grid` | `Grid` |
+| `StackComponent` | `Stack` | `StackLayout` |
+
+```cpp
+auto row = std::make_unique<RowComponent>();
+row->setGap (8.0f);
+row->setPadding (EdgeSpacing<float> (12.0f));
+
+row->addAndMakeVisible (sidebar);
+row->addAndMakeVisible (editor);
+
+sidebar.setProperty (Identifier ("preferredWidth"), 180.0);
+editor.setProperty (Identifier ("flexGrow"), 1.0);
+```
+
+A layout component lays its children out again when it is resized, when a child
+is added, removed, shown or hidden, and when a stylesheet restyles it, so the
+same layout can be written in `.yui` or in a stylesheet:
+
+```
+Row {
+    gap: 8;
+    padding: 12;
+
+    Component { id: sidebar; preferredWidth: 180; }
+    Component { id: editor; flexGrow: 1; }
+}
+```
+
+Invisible children are skipped entirely, rather than laid out and hidden.
+
+### Container properties
+
+`padding` and `gap` come from `LayoutComponent`. `padding` takes a number, or a
+string of 1, 2 or 4 values in CSS order (`"8"`, `"8 16"`, `"4 8 4 8"`).
+
+- `FlexBox`, `Row` and `Column`: `direction` (`row`, `rowReverse`, `column`,
+  `columnReverse`), `wrap` (`noWrap`, `wrap`, `wrapReverse`), `justify`
+  (`start`, `end`, `center`, `spaceBetween`, `spaceAround`, `spaceEvenly`) and
+  `align` (`start`, `end`, `center`, `stretch`, `baseline`).
+- `Grid`: `columns` and `rows`, either a track count (`3` means three `1fr`
+  tracks) or a track list (`"1fr 80px 25% auto"`, `"minmax(80px, 1fr)"`,
+  `"fit-content(120px)"`, `"repeat(3, 1fr)"`, `"repeat(auto-fill, 100px)"`),
+  `areas`, one row of area names per comma separated group
+  (`"head head, side main"`), and `justify` / `align`.
+- `Stack`: `justify` and `align` (`stretch`, `start`, `center`, `end`).
+
+### Item properties
+
+Every `Component` carries the layout item properties, so any widget can be
+placed in any container. They are never inherited from a parent, and setting
+one asks the parent to lay out again.
+
+| Property | Used by | Meaning |
+|---|---|---|
+| `flexGrow`, `flexShrink`, `flexBasis` | FlexBox | Flexible sizing, `flexBasis` negative for auto |
+| `order` | FlexBox | Layout order within the container |
+| `alignSelf`, `justifySelf` | all | `auto`, `start`, `end`, `center`, `stretch`, `baseline` |
+| `margin` | all | A number, or 1, 2 or 4 values as for `padding` |
+| `preferredWidth`, `preferredHeight` | all | The size the container gives the item, negative for auto |
+| `minWidth`, `maxWidth`, `minHeight`, `maxHeight` | FlexBox, Grid | Size clamps, negative for none |
+| `gridArea` | Grid | The named area the item occupies |
+| `gridColumn`, `gridRow` | Grid | 0-based placement, negative to auto-place |
+| `gridColumnSpan`, `gridRowSpan` | Grid | How many tracks the item spans |
+
+`preferredWidth` and `preferredHeight` are separate from `width` and `height`,
+which report the component's live bounds and are overwritten by the layout.
 
 ## What is not CSS
 

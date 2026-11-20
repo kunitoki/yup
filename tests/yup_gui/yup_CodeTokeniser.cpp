@@ -42,6 +42,31 @@ String tokenText (const CodeDocument& document, int line, const CodeTokeniser::T
     return document.getLine (line).substring (token.start, token.end);
 }
 
+// Injections split strings, comments and directives into finer scopes: this joins adjacent tokens of a type back.
+std::vector<String> joinedRunsOfType (const CodeDocument& document, int line, Span<const CodeTokeniser::Token> tokens, SyntaxDefinition::TokenType type)
+{
+    std::vector<String> runs;
+    int lastEnd = -1;
+
+    for (const auto& token : tokens)
+    {
+        if (token.type != type)
+        {
+            lastEnd = -1;
+            continue;
+        }
+
+        if (token.start == lastEnd)
+            runs.back() += tokenText (document, line, token);
+        else
+            runs.push_back (tokenText (document, line, token));
+
+        lastEnd = token.end;
+    }
+
+    return runs;
+}
+
 } // namespace
 
 // ==============================================================================
@@ -99,9 +124,19 @@ TEST (CodeTokeniserTests, PreprocessorDirectiveConsumesLine)
 
     const auto tokens = tokeniser.getTokens (document, 0);
 
-    ASSERT_EQ (1u, tokens.size());
+    ASSERT_FALSE (tokens.empty());
     EXPECT_EQ (SyntaxDefinition::TokenType::preprocessor, tokens[0].type);
-    EXPECT_EQ (String ("#include <vector>"), tokenText (document, 0, tokens[0]));
+    EXPECT_EQ (0, tokens.front().start);
+    EXPECT_EQ (17, tokens.back().end);
+
+    for (const auto& token : tokens)
+    {
+        EXPECT_NE (SyntaxDefinition::TokenType::identifier, token.type);
+        EXPECT_NE (SyntaxDefinition::TokenType::operator_, token.type);
+
+        if (tokenText (document, 0, token) == "<vector>")
+            EXPECT_EQ (Identifier ("string.include"), token.scope);
+    }
 }
 
 TEST (CodeTokeniserTests, StringTokensHandleEscapes)
@@ -114,9 +149,9 @@ TEST (CodeTokeniserTests, StringTokensHandleEscapes)
 
     const auto tokens = tokeniser.getTokens (document, 0);
 
-    const auto* stringToken = findTokenOfType (tokens, SyntaxDefinition::TokenType::string);
-    ASSERT_NE (nullptr, stringToken);
-    EXPECT_EQ (String ("\"say \\\"hi\\\"\""), tokenText (document, 0, *stringToken));
+    const auto strings = joinedRunsOfType (document, 0, tokens, SyntaxDefinition::TokenType::string);
+    ASSERT_EQ (1u, strings.size());
+    EXPECT_EQ (String ("\"say \\\"hi\\\"\""), strings[0]);
 }
 
 TEST (CodeTokeniserTests, NumberVariants)
@@ -482,10 +517,7 @@ TEST (CodeTokeniserTests, CppPrefixedStringLiterals)
 
     const auto tokens = tokeniser.getTokens (document, 0);
 
-    std::vector<String> stringTexts;
-    for (const auto& token : tokens)
-        if (token.type == SyntaxDefinition::TokenType::string)
-            stringTexts.push_back (tokenText (document, 0, token));
+    const auto stringTexts = joinedRunsOfType (document, 0, tokens, SyntaxDefinition::TokenType::string);
 
     ASSERT_EQ (4u, stringTexts.size());
     EXPECT_EQ (String ("L\"wide\""), stringTexts[0]);
@@ -504,10 +536,7 @@ TEST (CodeTokeniserTests, CppPrefixedCharacterLiterals)
 
     const auto tokens = tokeniser.getTokens (document, 0);
 
-    std::vector<String> stringTexts;
-    for (const auto& token : tokens)
-        if (token.type == SyntaxDefinition::TokenType::string)
-            stringTexts.push_back (tokenText (document, 0, token));
+    const auto stringTexts = joinedRunsOfType (document, 0, tokens, SyntaxDefinition::TokenType::string);
 
     ASSERT_EQ (3u, stringTexts.size());
     EXPECT_EQ (String ("L'a'"), stringTexts[0]);
@@ -566,10 +595,7 @@ TEST (CodeTokeniserTests, PythonFStringTokenizes)
 
     const auto tokens = tokeniser.getTokens (document, 0);
 
-    std::vector<String> stringTexts;
-    for (const auto& token : tokens)
-        if (token.type == SyntaxDefinition::TokenType::string)
-            stringTexts.push_back (tokenText (document, 0, token));
+    const auto stringTexts = joinedRunsOfType (document, 0, tokens, SyntaxDefinition::TokenType::string);
 
     ASSERT_EQ (2u, stringTexts.size());
     EXPECT_EQ (String ("f\"hello {value}\""), stringTexts[0]);
@@ -706,9 +732,9 @@ TEST (CodeTokeniserTests, CharLiteralWithEscapedQuote)
     tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("cpp"));
 
     const auto tokens = tokeniser.getTokens (document, 0);
-    const auto* stringToken = findTokenOfType (tokens, SyntaxDefinition::TokenType::string);
-    ASSERT_NE (nullptr, stringToken);
-    EXPECT_EQ (String ("'\\''"), tokenText (document, 0, *stringToken));
+    const auto strings = joinedRunsOfType (document, 0, tokens, SyntaxDefinition::TokenType::string);
+    ASSERT_EQ (1u, strings.size());
+    EXPECT_EQ (String ("'\\''"), strings[0]);
 }
 
 TEST (CodeTokeniserTests, BlockCommentDoesNotNest)
@@ -762,8 +788,12 @@ TEST (CodeTokeniserTests, PreprocessorOnlyAtLineStart)
     EXPECT_NE (nullptr, findTokenOfType (line0, SyntaxDefinition::TokenType::operator_));
 
     const auto line1 = tokeniser.getTokens (document, 1);
-    ASSERT_EQ (1u, line1.size());
+    ASSERT_FALSE (line1.empty());
     EXPECT_EQ (SyntaxDefinition::TokenType::preprocessor, line1[0].type);
+    EXPECT_EQ (12, line1.back().end);
+
+    for (const auto& token : line1)
+        EXPECT_NE (SyntaxDefinition::TokenType::operator_, token.type);
 }
 
 TEST (CodeTokeniserTests, HashInsideStringIsNotPreprocessor)
@@ -973,6 +1003,31 @@ TEST (CodeTokeniserTests, TokeniserDestructionRemovesListener)
     EXPECT_EQ (String ("float a;"), document.getText());
 }
 
+TEST (CodeTokeniserTests, InsertedLinesShiftCacheAndPropagateState)
+{
+    CodeDocument document;
+    document.setText ("int a;\nint b;\nint c;");
+
+    CodeTokeniser tokeniser;
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("cpp"));
+
+    for (int line = 0; line < document.getNumLines(); ++line)
+        tokeniser.getTokens (document, line);
+
+    document.insertText (CodeDocument::Position (document, 1, 0), "x;\n/*\n");
+
+    ASSERT_EQ (5, document.getNumLines());
+    EXPECT_NE (nullptr, findTokenOfType (tokeniser.getTokens (document, 0), SyntaxDefinition::TokenType::type));
+    EXPECT_EQ (nullptr, findTokenOfType (tokeniser.getTokens (document, 3), SyntaxDefinition::TokenType::type));
+    EXPECT_NE (nullptr, findTokenOfType (tokeniser.getTokens (document, 4), SyntaxDefinition::TokenType::comment));
+
+    document.removeRange (CodeDocument::Position (document, 1, 0), CodeDocument::Position (document, 3, 0));
+
+    ASSERT_EQ (3, document.getNumLines());
+    EXPECT_NE (nullptr, findTokenOfType (tokeniser.getTokens (document, 2), SyntaxDefinition::TokenType::type));
+    EXPECT_EQ (nullptr, findTokenOfType (tokeniser.getTokens (document, 2), SyntaxDefinition::TokenType::comment));
+}
+
 TEST (CodeTokeniserTests, SwitchingDefinitionInvalidatesCache)
 {
     CodeDocument document;
@@ -1003,8 +1058,10 @@ TEST (CodeTokeniserTests, SetTextRetokenizesFromScratch)
     document.setText ("#define X\nint a;");
 
     const auto line0 = tokeniser.getTokens (document, 0);
-    ASSERT_EQ (1u, line0.size());
+    ASSERT_FALSE (line0.empty());
     EXPECT_EQ (SyntaxDefinition::TokenType::preprocessor, line0[0].type);
+    EXPECT_EQ (Identifier ("identifier.macro"), line0.back().scope);
+    EXPECT_EQ (9, line0.back().end);
 }
 
 // ==============================================================================
@@ -1074,8 +1131,10 @@ TEST (CodeTokeniserTests, EscapedTripleQuoteDoesNotClosePythonString)
     tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("python"));
 
     const auto line0 = tokeniser.getTokens (document, 0);
-    ASSERT_EQ (1u, line0.size());
-    EXPECT_EQ (SyntaxDefinition::TokenType::string, line0[0].type);
+    ASSERT_EQ (1u, joinedRunsOfType (document, 0, line0, SyntaxDefinition::TokenType::string).size());
+
+    for (const auto& token : line0)
+        EXPECT_EQ (SyntaxDefinition::TokenType::string, token.type);
 
     // The escaped quote on line 0 does not close the triple-quoted string.
     const auto line1 = tokeniser.getTokens (document, 1);
@@ -1249,9 +1308,9 @@ TEST (CodeTokeniserTests, PythonPrefixedStringWithEscapedQuote)
     const auto tokens = tokeniser.getTokens (document, 0);
 
     // The escaped quote inside the prefixed single-line string must not close it early.
-    const auto* stringToken = findTokenOfType (tokens, SyntaxDefinition::TokenType::string);
-    ASSERT_NE (nullptr, stringToken);
-    EXPECT_EQ (String ("f\"a\\\"b\""), tokenText (document, 0, *stringToken));
+    const auto strings = joinedRunsOfType (document, 0, tokens, SyntaxDefinition::TokenType::string);
+    ASSERT_EQ (1u, strings.size());
+    EXPECT_EQ (String ("f\"a\\\"b\""), strings[0]);
 }
 
 // ==============================================================================
@@ -1340,4 +1399,359 @@ TEST (CodeTokeniserTests, ReloadingSyntaxDefinitionInPlacePropagatesStateChange)
     const auto line2 = tokeniser.getTokens (document, 2);
     ASSERT_EQ (1u, line2.size());
     EXPECT_EQ (SyntaxDefinition::TokenType::string, line2[0].type);
+}
+
+// ==============================================================================
+// Rule states
+// ==============================================================================
+
+class CodeTokeniserRuleTests : public ::testing::Test
+{
+protected:
+    void load (const char* json)
+    {
+        const auto result = definition.loadFromData (json);
+        ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+        tokeniser.setSyntaxDefinition (definition);
+    }
+
+    String scopeOf (int line, StringRef text)
+    {
+        const auto lineText = document.getLine (line);
+        for (const auto& token : tokeniser.getTokens (document, line))
+        {
+            if (lineText.substring (token.start, token.end) == text)
+                return token.scope.toString();
+        }
+
+        return "<missing>";
+    }
+
+    CodeDocument document;
+    SyntaxDefinition definition;
+    CodeTokeniser tokeniser;
+};
+
+TEST_F (CodeTokeniserRuleTests, RootRulesRunBeforeBuiltInLexer)
+{
+    load (R"json({
+        "name": "Test",
+        "keywords": ["def"],
+        "states": { "root": { "rules": [
+            { "match": "@[A-Za-z_.]+", "scope": "preprocessor.decorator" },
+            { "match": "(def)(\\s+)([A-Za-z_]\\w*)", "captures": { "1": "keyword", "3": "entity.name.function" } }
+        ] } }
+    })json");
+
+    document.setText ("@app.route\ndef handler(x): return 1");
+
+    EXPECT_EQ (String ("preprocessor.decorator"), scopeOf (0, "@app.route"));
+    EXPECT_EQ (String ("keyword"), scopeOf (1, "def"));
+    EXPECT_EQ (String ("entity.name.function"), scopeOf (1, "handler"));
+    EXPECT_EQ (String ("number"), scopeOf (1, "1"));
+
+    const auto tokens = tokeniser.getTokens (document, 1);
+    ASSERT_FALSE (tokens.empty());
+    EXPECT_EQ (SyntaxDefinition::TokenType::keyword, tokens[0].type);
+    EXPECT_EQ (SyntaxDefinition::TokenType::other, tokens[2].type);
+}
+
+TEST_F (CodeTokeniserRuleTests, BuiltInTokensCarryTheirTypeScope)
+{
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("cpp"));
+    document.setText ("int x = 1; // done");
+
+    for (const auto& token : tokeniser.getTokens (document, 0))
+        EXPECT_EQ (Identifier (SyntaxDefinition::tokenTypeToString (token.type)), token.scope);
+}
+
+TEST_F (CodeTokeniserRuleTests, WordSetsScopeIdentifiers)
+{
+    load (R"json({ "name": "Test", "keywords": ["len"], "wordSets": { "support.function": ["print", "len"] } })json");
+    document.setText ("print len value");
+
+    EXPECT_EQ (String ("support.function"), scopeOf (0, "print"));
+    EXPECT_EQ (String ("support.function"), scopeOf (0, "len"));
+    EXPECT_EQ (String ("identifier"), scopeOf (0, "value"));
+}
+
+TEST_F (CodeTokeniserRuleTests, PushedStateSpansLinesUntilPoppedByCapturedDelimiter)
+{
+    load (R"json({
+        "name": "Test",
+        "states": {
+            "root": { "rules": [ { "match": "<<([A-Z]+)", "scope": "string.heredoc", "push": "heredoc" } ] },
+            "heredoc": { "scope": "string.heredoc", "rules": [ { "match": "^$1$", "scope": "string.heredoc", "pop": true } ] }
+        }
+    })json");
+
+    document.setText ("cat <<END\nEND x\nEND\nafter");
+
+    EXPECT_EQ (String ("string.heredoc"), scopeOf (0, "<<END"));
+
+    const auto body = tokeniser.getTokens (document, 1);
+    ASSERT_EQ (1u, body.size());
+    EXPECT_EQ (String ("string.heredoc"), body[0].scope.toString());
+
+    EXPECT_EQ (String ("string.heredoc"), scopeOf (2, "END"));
+    EXPECT_EQ (String ("identifier"), scopeOf (3, "after"));
+}
+
+TEST_F (CodeTokeniserRuleTests, ZeroWidthRuleCanPopAtEndOfLine)
+{
+    load (R"json({
+        "name": "Test",
+        "states": {
+            "root": { "rules": [ { "match": "#", "scope": "preprocessor", "push": "directive" } ] },
+            "directive": { "scope": "preprocessor", "rules": [
+                { "match": "//.*", "scope": "comment" },
+                { "match": "$", "pop": true }
+            ] }
+        }
+    })json");
+
+    document.setText ("#define X // note\nnext");
+
+    EXPECT_EQ (String ("comment"), scopeOf (0, "// note"));
+    EXPECT_EQ (String ("identifier"), scopeOf (1, "next"));
+}
+
+TEST_F (CodeTokeniserRuleTests, EditingPushLineRetokenizesFollowingLines)
+{
+    load (R"json({
+        "name": "Test",
+        "states": {
+            "root": { "rules": [ { "match": "<<<", "scope": "string", "push": "block" } ] },
+            "block": { "scope": "string", "rules": [ { "match": ">>>", "scope": "string", "pop": true } ] }
+        }
+    })json");
+
+    document.setText ("a\nword\n>>>");
+    EXPECT_EQ (String ("identifier"), scopeOf (1, "word"));
+
+    document.insertText (CodeDocument::Position (document, 0, 0), "<<<");
+    EXPECT_EQ (String ("string"), tokeniser.getTokens (document, 1)[0].scope.toString());
+
+    document.removeRange (CodeDocument::Position (document, 0, 0), CodeDocument::Position (document, 0, 3));
+    EXPECT_EQ (String ("identifier"), scopeOf (1, "word"));
+}
+
+TEST_F (CodeTokeniserRuleTests, BuiltInPythonScopesDecoratorsAndDefinitionNames)
+{
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("python"));
+    document.setText ("    @functools.cache\n    def compute(x):\nclass Widget(Base):");
+
+    EXPECT_EQ (String ("preprocessor.decorator"), scopeOf (0, "@functools.cache"));
+    EXPECT_EQ (String ("keyword"), scopeOf (1, "def"));
+    EXPECT_EQ (String ("identifier.function"), scopeOf (1, "compute"));
+    EXPECT_EQ (String ("keyword"), scopeOf (2, "class"));
+    EXPECT_EQ (String ("type.class"), scopeOf (2, "Widget"));
+}
+
+TEST_F (CodeTokeniserRuleTests, BuiltInXmlScopesTagsAndAttributes)
+{
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("xml"));
+    document.setText ("<svg:rect width=\"10\" data-id='a'/></svg:rect>");
+
+    EXPECT_EQ (String ("keyword.tag"), scopeOf (0, "svg:rect"));
+    EXPECT_EQ (String ("type.attribute"), scopeOf (0, "width"));
+    EXPECT_EQ (String ("type.attribute"), scopeOf (0, "data-id"));
+    EXPECT_EQ (String ("string"), scopeOf (0, "\"10\""));
+    EXPECT_EQ (String ("operator"), scopeOf (0, "</"));
+}
+
+TEST_F (CodeTokeniserRuleTests, InjectionsSplitStringAndCommentTokens)
+{
+    load (R"json({
+        "name": "Test",
+        "lineComment": "//",
+        "strings": { "delimiters": ["\""], "escape": "\\" },
+        "states": {
+            "escapes": { "rules": [ { "match": "\\\\.", "scope": "string.escape" } ] },
+            "notes": { "rules": [ { "match": "TODO", "scope": "comment.todo" } ] }
+        },
+        "injections": { "string": "escapes", "comment": "notes" }
+    })json");
+
+    document.setText ("\"a\\nb\" // TODO later");
+
+    EXPECT_EQ (String ("string"), scopeOf (0, "\"a"));
+    EXPECT_EQ (String ("string.escape"), scopeOf (0, "\\n"));
+    EXPECT_EQ (String ("string"), scopeOf (0, "b\""));
+    EXPECT_EQ (String ("comment"), scopeOf (0, "// "));
+    EXPECT_EQ (String ("comment.todo"), scopeOf (0, "TODO"));
+    EXPECT_EQ (String ("comment"), scopeOf (0, " later"));
+}
+
+TEST_F (CodeTokeniserRuleTests, InjectionsRejectUnknownTokenTypesAndStates)
+{
+    SyntaxDefinition bad;
+    EXPECT_TRUE (bad.loadFromData (R"json({ "name": "Test", "states": { "s": { "rules": [] } }, "injections": { "bogus": "s" } })json").failed());
+
+    SyntaxDefinition missing;
+    EXPECT_TRUE (missing.loadFromData (R"json({ "name": "Test", "injections": { "string": "nowhere" } })json").failed());
+}
+
+TEST_F (CodeTokeniserRuleTests, SkipWordsLeavesKnownWordsToTheLexer)
+{
+    load (R"json({
+        "name": "Test",
+        "keywords": ["if"],
+        "states": { "root": { "rules": [
+            { "match": "[A-Za-z_]\\w*(?=\\s*\\()", "scope": "identifier.function", "skipWords": true }
+        ] } }
+    })json");
+
+    document.setText ("if (x) call (y)");
+
+    EXPECT_EQ (String ("keyword"), scopeOf (0, "if"));
+    EXPECT_EQ (String ("identifier.function"), scopeOf (0, "call"));
+}
+
+TEST_F (CodeTokeniserRuleTests, BuiltInCppRawStringsAreNotInjected)
+{
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("cpp"));
+    document.setText ("R\"(a\\n%d)\"");
+
+    EXPECT_EQ (String ("string.raw"), scopeOf (0, "R\"(a\\n%d)\""));
+}
+
+TEST_F (CodeTokeniserRuleTests, BuiltInCppScopes)
+{
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("cpp"));
+    document.setText ("#include <vector>\n"
+                      "namespace yup { class YUP_API Widget; }\n"
+                      "if (ptr->size() > MAX_SIZE) return std::max (a, b); // TODO: fix\n"
+                      "auto s = \"x=%d\\n\"; obj.member = nullptr;\n"
+                      "[[nodiscard]] Widget make();\n"
+                      "/// @param x the value");
+
+    EXPECT_EQ (String ("string.include"), scopeOf (0, "<vector>"));
+    EXPECT_EQ (String ("type.namespace"), scopeOf (1, "yup"));
+    EXPECT_EQ (String ("identifier.macro"), scopeOf (1, "YUP_API"));
+    EXPECT_EQ (String ("type.class"), scopeOf (1, "Widget"));
+    EXPECT_EQ (String ("keyword.control"), scopeOf (2, "if"));
+    EXPECT_EQ (String ("identifier.function"), scopeOf (2, "size"));
+    EXPECT_EQ (String ("identifier.constant"), scopeOf (2, "MAX_SIZE"));
+    EXPECT_EQ (String ("keyword.control"), scopeOf (2, "return"));
+    EXPECT_EQ (String ("type.namespace"), scopeOf (2, "std"));
+    EXPECT_EQ (String ("identifier.function"), scopeOf (2, "max"));
+    EXPECT_EQ (String ("comment.todo"), scopeOf (2, "TODO:"));
+    EXPECT_EQ (String ("string.format"), scopeOf (3, "%d"));
+    EXPECT_EQ (String ("string.escape"), scopeOf (3, "\\n"));
+    EXPECT_EQ (String ("identifier.member"), scopeOf (3, "member"));
+    EXPECT_EQ (String ("keyword.constant"), scopeOf (3, "nullptr"));
+    EXPECT_EQ (String ("keyword.attribute"), scopeOf (4, "[[nodiscard]]"));
+    EXPECT_EQ (String ("type.class"), scopeOf (4, "Widget"));
+    EXPECT_EQ (String ("identifier.function"), scopeOf (4, "make"));
+    EXPECT_EQ (String ("comment.doc.tag"), scopeOf (5, "@param"));
+}
+
+TEST_F (CodeTokeniserRuleTests, BuiltInGlslScopes)
+{
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("glsl"));
+    document.setText ("uniform sampler2D tex; gl_FragColor = texture (tex, uv).rgba;");
+
+    EXPECT_EQ (String ("keyword"), scopeOf (0, "uniform"));
+    EXPECT_EQ (String ("type"), scopeOf (0, "sampler2D"));
+    EXPECT_EQ (String ("identifier.builtin"), scopeOf (0, "gl_FragColor"));
+    EXPECT_EQ (String ("identifier.builtin"), scopeOf (0, "texture"));
+    EXPECT_EQ (String ("identifier.member"), scopeOf (0, "rgba"));
+}
+
+TEST_F (CodeTokeniserRuleTests, BuiltInPythonScopes)
+{
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("python"));
+    document.setText ("async def run(self, items):\n"
+                      "    print(f\"{name!r} {{x}} \\t\", None, ValueError)\n"
+                      "MAX_COUNT = 1_000  # TODO\n"
+                      "self.value.strip()");
+
+    EXPECT_EQ (String ("keyword.control"), scopeOf (0, "async"));
+    EXPECT_EQ (String ("identifier.function"), scopeOf (0, "run"));
+    EXPECT_EQ (String ("identifier.language"), scopeOf (0, "self"));
+    EXPECT_EQ (String ("identifier.builtin"), scopeOf (1, "print"));
+    EXPECT_EQ (String ("string.interpolation"), scopeOf (1, "{name!r}"));
+    EXPECT_EQ (String ("string.escape"), scopeOf (1, "{{"));
+    EXPECT_EQ (String ("string.escape"), scopeOf (1, "\\t"));
+    EXPECT_EQ (String ("keyword.constant"), scopeOf (1, "None"));
+    EXPECT_EQ (String ("type.exception"), scopeOf (1, "ValueError"));
+    EXPECT_EQ (String ("identifier.constant"), scopeOf (2, "MAX_COUNT"));
+    EXPECT_EQ (String ("number"), scopeOf (2, "1_000"));
+    EXPECT_EQ (String ("comment.todo"), scopeOf (2, "TODO"));
+    EXPECT_EQ (String ("identifier.member"), scopeOf (3, "value"));
+    EXPECT_EQ (String ("identifier.function"), scopeOf (3, "strip"));
+}
+
+TEST_F (CodeTokeniserRuleTests, BuiltInYuiScopes)
+{
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("yui"));
+    document.setText ("component LabeledKnob : Column {\n"
+                      "    property label: string = \"VALUE\";\n"
+                      "    width: 150ms; fill: #ff8800;\n"
+                      "    .knob:hover { color: rgba(0, 0, 0, 0.5); }\n"
+                      "    ComboBox:hover:enabled,\n"
+                      "    .open { cursor: hand; }\n"
+                      "    tint: palette.accent.darker (0.1),\n");
+
+    EXPECT_EQ (String ("keyword"), scopeOf (0, "component"));
+    EXPECT_EQ (String ("type.class"), scopeOf (0, "LabeledKnob"));
+    EXPECT_EQ (String ("type.class"), scopeOf (0, "Column"));
+    EXPECT_EQ (String ("keyword"), scopeOf (1, "property"));
+    EXPECT_EQ (String ("identifier.property"), scopeOf (1, "label"));
+    EXPECT_EQ (String ("type"), scopeOf (1, "string"));
+    EXPECT_EQ (String ("identifier.property"), scopeOf (2, "width"));
+    EXPECT_EQ (String ("number"), scopeOf (2, "150"));
+    EXPECT_EQ (String ("number.unit"), scopeOf (2, "ms"));
+    EXPECT_EQ (String ("identifier.property"), scopeOf (2, "fill"));
+    EXPECT_EQ (String ("number.color"), scopeOf (2, "#ff8800"));
+    EXPECT_EQ (String ("type.selector"), scopeOf (3, ".knob"));
+    EXPECT_EQ (String ("type.selector"), scopeOf (3, ":hover"));
+    EXPECT_EQ (String ("identifier.property"), scopeOf (3, "color"));
+    EXPECT_EQ (String ("identifier.builtin"), scopeOf (3, "rgba"));
+    EXPECT_EQ (String ("type.class"), scopeOf (4, "ComboBox"));
+    EXPECT_EQ (String ("type.selector"), scopeOf (4, ":hover"));
+    EXPECT_EQ (String ("type.selector"), scopeOf (4, ":enabled"));
+    EXPECT_EQ (String ("type.selector"), scopeOf (5, ".open"));
+    EXPECT_EQ (String ("identifier.property"), scopeOf (6, "tint"));
+    EXPECT_EQ (String ("identifier.function"), scopeOf (6, "darker"));
+}
+
+TEST_F (CodeTokeniserRuleTests, BuiltInYdspScopes)
+{
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("ydsp"));
+    document.setText ("import fx.Delay as fx;\n"
+                      "input parameter float gain = 1.0 [[ name: \"Gain\",\n"
+                      "    min: 0.0 ]];\n"
+                      "processor Voice { out = sin (in * 2.0); }");
+
+    EXPECT_EQ (String ("keyword"), scopeOf (0, "import"));
+    EXPECT_EQ (String ("type.namespace"), scopeOf (0, "fx.Delay"));
+    EXPECT_EQ (String ("keyword"), scopeOf (1, "parameter"));
+    EXPECT_EQ (String ("type"), scopeOf (1, "float"));
+    EXPECT_EQ (String ("operator"), scopeOf (1, "[["));
+    EXPECT_EQ (String ("identifier.property"), scopeOf (1, "name"));
+    EXPECT_EQ (String ("string"), scopeOf (1, "\"Gain\""));
+    EXPECT_EQ (String ("identifier.property"), scopeOf (2, "min"));
+    EXPECT_EQ (String ("operator"), scopeOf (2, "]]"));
+    EXPECT_EQ (String ("type.class"), scopeOf (3, "Voice"));
+    EXPECT_EQ (String ("identifier.language"), scopeOf (3, "out"));
+    EXPECT_EQ (String ("identifier.builtin"), scopeOf (3, "sin"));
+    EXPECT_EQ (String ("identifier.language"), scopeOf (3, "in"));
+}
+
+TEST_F (CodeTokeniserRuleTests, BuiltInXmlScopesDeclarationsEntitiesAndCdata)
+{
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("xml"));
+    document.setText ("<!DOCTYPE note SYSTEM \"n.dtd\">\n"
+                      "<a>Tom &amp; Jerry<![CDATA[x < y]]></a>");
+
+    EXPECT_EQ (String ("keyword"), scopeOf (0, "DOCTYPE"));
+    EXPECT_EQ (String ("keyword"), scopeOf (0, "SYSTEM"));
+    EXPECT_EQ (String ("string"), scopeOf (0, "\"n.dtd\""));
+    EXPECT_EQ (String ("identifier.text"), scopeOf (1, "Tom"));
+    EXPECT_EQ (String ("string.escape"), scopeOf (1, "&amp;"));
+    EXPECT_EQ (String ("keyword"), scopeOf (1, "<![CDATA["));
+    EXPECT_EQ (String ("keyword"), scopeOf (1, "]]>"));
+    EXPECT_EQ (String ("keyword.tag"), scopeOf (1, "a"));
 }

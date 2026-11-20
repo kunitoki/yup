@@ -13,7 +13,7 @@ Two parts of that surface are deliberately not covered:
   from a test means calling into Python while the component is being torn down.
 """
 
-METRIC_ID = "componentTests_metric"
+PROPERTY_ID = "componentTests_property"
 
 
 def bounds_tuple(bounds):
@@ -69,41 +69,51 @@ def test_paint_profiling_can_be_disabled():
 
 
 # ==============================================================================
-# Style metrics
+# Reflected properties
 # ==============================================================================
 
-def test_metric_is_unset_by_default():
+def test_property_is_unset_by_default():
     component = yup.Component()
 
-    assert component.getMetric(yup.Identifier(METRIC_ID)) is None
-    assert component.findMetric(yup.Identifier(METRIC_ID)) is None
+    assert component.getProperty(yup.Identifier(PROPERTY_ID)) is None
+    assert component.findProperty(yup.Identifier(PROPERTY_ID)) is None
+    assert not component.hasProperty(yup.Identifier(PROPERTY_ID))
 
 
-def test_metric_round_trip():
+def test_property_round_trip():
     component = yup.Component()
-    component.setMetric(yup.Identifier(METRIC_ID), 4.0)
+    component.setProperty(yup.Identifier(PROPERTY_ID), 4.0)
 
-    assert component.getMetric(yup.Identifier(METRIC_ID)) == 4.0
-    assert component.findMetric(yup.Identifier(METRIC_ID)) == 4.0
+    assert component.getProperty(yup.Identifier(PROPERTY_ID)) == 4.0
+    assert component.findProperty(yup.Identifier(PROPERTY_ID)) == 4.0
+    assert component.hasProperty(yup.Identifier(PROPERTY_ID))
 
 
-def test_metric_override_can_be_removed():
+def test_property_can_be_removed():
     component = yup.Component()
-    component.setMetric(yup.Identifier(METRIC_ID), 4.0)
-    component.setMetric(yup.Identifier(METRIC_ID), None)
+    component.setProperty(yup.Identifier(PROPERTY_ID), 4.0)
+    component.removeProperty(yup.Identifier(PROPERTY_ID))
 
-    assert component.getMetric(yup.Identifier(METRIC_ID)) is None
+    assert component.getProperty(yup.Identifier(PROPERTY_ID)) is None
+    assert not component.hasProperty(yup.Identifier(PROPERTY_ID))
 
 
-def test_find_metric_walks_up_to_the_parent():
+def test_find_property_walks_up_to_the_parent():
     parent = yup.Component()
-    parent.setMetric(yup.Identifier(METRIC_ID), 6.0)
+    parent.setProperty(yup.Identifier(PROPERTY_ID), 6.0)
 
     child = yup.Component()
     parent.addChildComponent(child)
 
-    assert child.getMetric(yup.Identifier(METRIC_ID)) is None
-    assert child.findMetric(yup.Identifier(METRIC_ID)) == 6.0
+    assert child.getProperty(yup.Identifier(PROPERTY_ID)) is None
+    assert child.findProperty(yup.Identifier(PROPERTY_ID)) == 6.0
+
+
+def test_type_introspection():
+    component = yup.Component()
+
+    assert component.getTypeName() == "Component"
+    assert len(list(component.getPropertyNames())) > 0
 
 
 # ==============================================================================

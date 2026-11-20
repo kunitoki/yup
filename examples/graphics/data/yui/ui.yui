@@ -1,0 +1,87 @@
+// The UI: the files below are merged in order, then the root component is built.
+import "palette.yui";
+import "knob.yui";
+import "haloknob.yui";
+import "flutedknob.yui";
+import "brushedknob.yui";
+import "scope.yui";
+import "components.yui";
+import "style.yui";
+
+// Tokens are typed values that every component reads by their name. They are properties of
+// the root, so changing one updates everything that reads it.
+tokens {
+    property spacing: number = 10;
+    property rowHeight: number = 30;
+}
+
+// The root is a grid: a header across the top, a mode selector paired with a live filter
+// scope, two rows of two knobs, and a summary at the bottom. The mode and knobs are linked
+// both ways to 'params', a DataTree model owned by the demo, so they keep their values when
+// the UI is rebuilt and every change is one undo step. Each knob has its own look: a class
+// on the knob picks its drawing, palette and effects in the stylesheet.
+Grid {
+    id: panel;
+    class: panel;
+    columns: "1fr 1fr";
+    rows: format ("%.0fpx %.0fpx 1fr 1fr %.0fpx", rowHeight, rowHeight + 200, rowHeight);
+    areas: "head head, bar bar, cutoff resonance, drive mix, foot foot";
+    padding: spacing;
+    gap: spacing;
+
+    Row {
+        gridArea: "head";
+        gap: spacing;
+
+        Image { id: brand; class: brand; source: "../logo_black.png"; preferredWidth: 26; fitting: scaleToFit; }
+        Label { class: title; text: "Filter"; flexGrow: 1; textHeightProportion: 0.7; }
+        ComboBox {
+            id: mode;
+            enabled: power.checked;
+            preferredWidth: 118;
+            items: ["Lowpass", "Bandpass", "Highpass", "Notch"];
+            selectedIndex <=> params.mode;
+            onSelectedItemChanged: action ("mode", self.text);
+        }
+        ToggleButton { id: power; text: "Enabled"; checked: true; preferredWidth: 88; }
+        TextButton { text: "Undo"; preferredWidth: 72; onClick: action ("undo"); }
+        TextButton { text: "Reset"; preferredWidth: 72; onClick: action ("reset"); }
+    }
+
+    Row {
+        gridArea: "bar";
+        gap: spacing;
+
+        FilterDisplay {
+            id: scope;
+            enabled: power.checked;
+            flexGrow: 1;
+            mode: mode.selectedIndex;
+            cutoff: params.cutoff;
+            resonance: params.resonance;
+            mix: params.mix;
+        }
+    }
+
+    LabeledKnob { id: cutoff; enabled: power.checked; gridArea: "cutoff"; label: "CUTOFF";
+                  value <=> params.cutoff; onChanged: action ("changed", "Cutoff", value); }
+
+    LabeledKnob { id: resonance; enabled: power.checked; class: halo; gridArea: "resonance"; label: "RESO";
+                  value <=> params.resonance; onChanged: action ("changed", "Resonance", value); }
+
+    LabeledKnob { id: drive; enabled: power.checked; class: fluted; gridArea: "drive"; label: "DRIVE";
+                  value <=> params.drive; onChanged: action ("changed", "Drive", value); }
+
+    LabeledKnob { id: mix; enabled: power.checked; class: brushed; gridArea: "mix"; label: "MIX";
+                  value <=> params.mix; onChanged: action ("changed", "Mix", value); }
+
+    Label {
+        gridArea: "foot";
+        class: readout;
+        enabled: power.checked;
+        justification: center;
+        textHeightProportion: 0.75;
+        text: mode.text + format ("   cutoff %.0f%%   resonance %.0f%%   ", params.cutoff * 100, params.resonance * 100)
+              + format ("drive %.0f%%   mix %.0f%%", params.drive * 100, params.mix * 100);
+    }
+}

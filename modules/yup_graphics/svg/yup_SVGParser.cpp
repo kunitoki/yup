@@ -22,6 +22,21 @@
 namespace yup
 {
 
+namespace
+{
+
+// A presentation property is an attribute of its element, unless the style of the element sets it
+String getPresentationProperty (const XmlElement& element, StringRef name)
+{
+    for (const auto& declaration : StringArray::fromTokens (element.getStringAttribute ("style"), ";", ""))
+        if (declaration.upToFirstOccurrenceOf (":", false, false).trim() == name)
+            return declaration.fromFirstOccurrenceOf (":", false, false).trim();
+
+    return element.getStringAttribute (name);
+}
+
+} // namespace
+
 //==============================================================================
 
 SVGParser::SVGParser (SVGDocument& doc)
@@ -242,9 +257,6 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
 
         currentTransform = parseTransform (element, currentTransform, *e);
         parseStyle (element, currentTransform, *e);
-
-        if (e->fillRule && *e->fillRule == "evenodd")
-            e->path->setUsingNonZeroWinding (false);
     }
     else if (element.hasTagName ("g"))
     {
@@ -304,6 +316,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         auto path = Path();
         path.addCenteredEllipse (cx, cy, rx, ry);
         e->path = std::move (path);
+        e->primitive = SVGElement::Primitive { SVGElement::Primitive::Type::ellipse, { cx - rx, cy - ry, rx * 2.0f, ry * 2.0f }, {}, {} };
 
         YUP_DRAWABLE_LOG ("Parsed ellipse - id: " << element.getStringAttribute ("id", "none")
                                                   << " cx: " << cx << " cy: " << cy
@@ -322,6 +335,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         auto path = Path();
         path.addCenteredEllipse (cx, cy, r, r);
         e->path = std::move (path);
+        e->primitive = SVGElement::Primitive { SVGElement::Primitive::Type::ellipse, { cx - r, cy - r, r * 2.0f, r * 2.0f }, {}, {} };
 
         YUP_DRAWABLE_LOG ("Parsed circle - id: " << element.getStringAttribute ("id", "none")
                                                  << " cx: " << cx << " cy: " << cy
@@ -347,7 +361,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
                 rx = ry;
             if (ry == 0.0f)
                 ry = rx;
-            path.addRoundedRectangle (x, y, width, height, rx, ry, rx, ry);
+            path.addRoundedRectangle ({ x, y, width, height }, Size<float> (rx, ry));
         }
         else
         {
@@ -355,6 +369,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         }
 
         e->path = std::move (path);
+        e->primitive = SVGElement::Primitive { SVGElement::Primitive::Type::rect, { x, y, width, height }, { rx, ry }, {} };
 
         YUP_DRAWABLE_LOG ("Parsed rect - id: " << element.getStringAttribute ("id", "none")
                                                << " x: " << x << " y: " << y
@@ -376,6 +391,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
         path.startNewSubPath (x1, y1);
         path.lineTo (x2, y2);
         e->path = std::move (path);
+        e->primitive = SVGElement::Primitive { SVGElement::Primitive::Type::line, {}, {}, { x1, y1, x2, y2 } };
 
         YUP_DRAWABLE_LOG ("Parsed line - id: " << element.getStringAttribute ("id", "none")
                                                << " x1: " << x1 << " y1: " << y1
@@ -658,6 +674,10 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
     if (! e->strokeMiterLimit)
         e->strokeMiterLimit = 4.0f;
 
+    // The fill rule can come from the elements around this one, so it is only known here
+    if (e->path && e->fillRule)
+        e->path->setUsingNonZeroWinding (*e->fillRule != "evenodd");
+
     for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
     {
         if (child->isTextElement())
@@ -836,9 +856,18 @@ void SVGParser::parseStyle (const XmlElement& element, const AffineTransform& cu
     if (filter.isNotEmpty())
     {
         if (filter == "none")
+        {
             e.filterUrl.reset();
+            e.filter = nullptr;
+        }
         else if (auto filterUrl = extractUrlId (filter); filterUrl.isNotEmpty())
+        {
             e.filterUrl = filterUrl;
+        }
+        else
+        {
+            e.filter = parseFilterFunctions (filter);
+        }
     }
 
     String mask = element.getStringAttribute ("mask");
@@ -1433,6 +1462,24 @@ void SVGParser::parseFilter (const XmlElement& element)
 
     YUP_DRAWABLE_LOG ("parseFilter - id: " << id);
 
+    if (element.getStringAttribute ("filterUnits") == "userSpaceOnUse")
+        filter->units = SVGFilter::UserSpaceOnUse;
+
+    if (element.getStringAttribute ("primitiveUnits") == "objectBoundingBox")
+        filter->primitiveUnits = SVGFilter::ObjectBoundingBox;
+
+    // A fraction of the bounding box can be written as a percentage, like a part of the viewport
+    const bool usesBounds = filter->units == SVGFilter::ObjectBoundingBox;
+    const float viewportWidth = usesBounds ? 1.0f : (data.viewBox.isEmpty() ? 100.0f : data.viewBox.getWidth());
+    const float viewportHeight = usesBounds ? 1.0f : (data.viewBox.isEmpty() ? 100.0f : data.viewBox.getHeight());
+
+    filter->region = { parseLengthAttribute (element, "x", -0.1f * viewportWidth, 12.0f, viewportWidth),
+                       parseLengthAttribute (element, "y", -0.1f * viewportHeight, 12.0f, viewportHeight),
+                       parseLengthAttribute (element, "width", 1.2f * viewportWidth, 12.0f, viewportWidth),
+                       parseLengthAttribute (element, "height", 1.2f * viewportHeight, 12.0f, viewportHeight) };
+
+    filter->linearColors = getPresentationProperty (element, "color-interpolation-filters") != "sRGB";
+
     for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
     {
         if (child->hasTagName ("feBlend"))
@@ -1440,7 +1487,7 @@ void SVGParser::parseFilter (const XmlElement& element)
         else if (child->hasTagName ("feGaussianBlur"))
             parseFEGaussianBlur (*child, *filter);
         else
-            YUP_DRAWABLE_LOG ("Unsupported filter primitive ignored - filter: " << id << " tag: " << child->getTagNameWithoutNamespace());
+            parseFEPrimitive (*child, *filter);
     }
 
     data.filters.push_back (filter);
@@ -1473,14 +1520,8 @@ void SVGParser::parseFEBlend (const XmlElement& element, SVGFilter& filter)
 
 void SVGParser::parseFEGaussianBlur (const XmlElement& element, SVGFilter& filter)
 {
-    const auto stdDeviationString = element.getStringAttribute ("stdDeviation");
-    if (stdDeviationString.isEmpty())
-    {
-        YUP_DRAWABLE_LOG ("GaussianBlur primitive missing stdDeviation - filter: " << filter.id);
-        return;
-    }
-
-    const auto values = StringArray::fromTokens (stdDeviationString, " ,", "");
+    // Without a deviation the blur leaves its input as it is, and later primitives can still read its result
+    const auto values = StringArray::fromTokens (element.getStringAttribute ("stdDeviation"), " ,", "");
     float stdDeviation = 0.0f;
 
     if (values.size() >= 2)
@@ -1494,15 +1535,328 @@ void SVGParser::parseFEGaussianBlur (const XmlElement& element, SVGFilter& filte
         stdDeviation = parseUnit (values[0]);
     }
 
-    if (stdDeviation <= 0.0f)
-        return;
-
     SVGFEGaussianBlur::Ptr blur = new SVGFEGaussianBlur;
     blur->in = element.getStringAttribute ("in");
     blur->result = element.getStringAttribute ("result");
-    blur->stdDeviation = stdDeviation;
+    blur->stdDeviation = jmax (0.0f, stdDeviation);
 
     filter.primitives.push_back (std::move (blur));
+}
+
+//==============================================================================
+
+void SVGParser::parseFEPrimitive (const XmlElement& element, SVGFilter& filter)
+{
+    using Type = FilterGraph::Type;
+
+    const auto tag = element.getTagNameWithoutNamespace();
+    if (! tag.startsWith ("fe"))
+        return;
+
+    const auto getNumbers = [&element] (StringRef name)
+    {
+        return parseLengthList (element.getStringAttribute (name), 12.0f, 1.0f);
+    };
+
+    const auto getColor = [&element] (StringRef colorName, StringRef opacityName, Color fallback)
+    {
+        const auto color = getPresentationProperty (element, colorName);
+        const auto opacity = opacityName.isEmpty() ? String() : getPresentationProperty (element, opacityName);
+        const auto parsed = color.isNotEmpty() ? Color::fromString (color) : fallback;
+
+        return opacity.isNotEmpty() ? parsed.withMultipliedAlpha (jlimit (0.0f, 1.0f, opacity.getFloatValue())) : parsed;
+    };
+
+    SVGFEPrimitive::Ptr parsed = new SVGFEPrimitive;
+    auto& primitive = parsed->primitive;
+
+    if (tag == "feOffset")
+    {
+        primitive.type = Type::offset;
+        primitive.offset = { element.getFloatAttribute ("dx"), element.getFloatAttribute ("dy") };
+    }
+    else if (tag == "feFlood")
+    {
+        primitive.type = Type::flood;
+        primitive.color = getColor ("flood-color", "flood-opacity", Colors::black);
+    }
+    else if (tag == "feColorMatrix")
+    {
+        primitive.type = Type::colorMatrix;
+
+        const auto type = element.getStringAttribute ("type");
+        const auto values = getNumbers ("values");
+
+        if (type == "saturate")
+            primitive.matrix = FilterGraph::saturationMatrix (values.isEmpty() ? 1.0f : values[0]);
+        else if (type == "hueRotate")
+            primitive.matrix = FilterGraph::hueRotationMatrix (degreesToRadians (values.isEmpty() ? 0.0f : values[0]));
+        else if (type == "luminanceToAlpha")
+            primitive.matrix = FilterGraph::luminanceToAlphaMatrix();
+        else if (values.size() == static_cast<int> (primitive.matrix.size()))
+            std::copy (values.begin(), values.end(), primitive.matrix.begin());
+    }
+    else if (tag == "feComposite")
+    {
+        static const StringArray operators { "over", "in", "out", "atop", "xor", "lighter", "arithmetic" };
+
+        primitive.type = Type::composite;
+        primitive.compositeOperator = static_cast<FilterGraph::CompositeOperator> (jmax (0, operators.indexOf (element.getStringAttribute ("operator"))));
+        primitive.coefficients = { element.getFloatAttribute ("k1"), element.getFloatAttribute ("k2"), element.getFloatAttribute ("k3"), element.getFloatAttribute ("k4") };
+    }
+    else if (tag == "feMorphology")
+    {
+        primitive.type = Type::morphology;
+        primitive.dilate = element.getStringAttribute ("operator") == "dilate";
+
+        if (const auto radius = getNumbers ("radius"); ! radius.isEmpty())
+            primitive.radius = { radius[0], radius.size() > 1 ? radius[1] : radius[0] };
+    }
+    else if (tag == "feMerge")
+    {
+        primitive.type = Type::merge;
+
+        for (auto* node = element.getFirstChildElement(); node != nullptr; node = node->getNextElement())
+            if (node->hasTagName ("feMergeNode"))
+                primitive.inputs.add (node->getStringAttribute ("in"));
+    }
+    else if (tag == "feDiffuseLighting" || tag == "feSpecularLighting")
+    {
+        primitive.type = Type::lighting;
+        primitive.specular = tag == "feSpecularLighting";
+        primitive.scale = element.getFloatAttribute ("surfaceScale", 1.0f);
+        primitive.lightingConstant = element.getFloatAttribute (primitive.specular ? "specularConstant" : "diffuseConstant", 1.0f);
+        primitive.specularExponent = element.getFloatAttribute ("specularExponent", 1.0f);
+        primitive.color = getColor ("lighting-color", {}, Colors::white);
+
+        for (auto* light = element.getFirstChildElement(); light != nullptr; light = light->getNextElement())
+        {
+            if (light->hasTagName ("feDistantLight"))
+            {
+                primitive.lightAzimuth = degreesToRadians (light->getFloatAttribute ("azimuth"));
+                primitive.lightElevation = degreesToRadians (light->getFloatAttribute ("elevation"));
+            }
+            else if (light->hasTagName ("fePointLight") || light->hasTagName ("feSpotLight"))
+            {
+                // A spot light is lit as the point light it is at
+                primitive.light = FilterGraph::Light::point;
+                primitive.lightPosition = { light->getFloatAttribute ("x"), light->getFloatAttribute ("y"), light->getFloatAttribute ("z") };
+            }
+        }
+    }
+    else if (tag == "feDisplacementMap")
+    {
+        const auto getChannel = [&element] (StringRef name)
+        {
+            static const StringArray channels { "R", "G", "B", "A" };
+
+            const int index = channels.indexOf (element.getStringAttribute (name));
+            return index >= 0 ? static_cast<FilterGraph::Channel> (index) : FilterGraph::Channel::alpha;
+        };
+
+        primitive.type = Type::displacement;
+        primitive.scale = element.getFloatAttribute ("scale");
+        primitive.xChannel = getChannel ("xChannelSelector");
+        primitive.yChannel = getChannel ("yChannelSelector");
+    }
+    else if (tag == "feDropShadow")
+    {
+        const auto deviation = getNumbers ("stdDeviation");
+
+        primitive.type = Type::dropShadow;
+        primitive.offset = { element.getFloatAttribute ("dx", 2.0f), element.getFloatAttribute ("dy", 2.0f) };
+        primitive.deviation = deviation.isEmpty() ? Point<float> (2.0f, 2.0f) : Point<float> (deviation[0], deviation.size() > 1 ? deviation[1] : deviation[0]);
+        primitive.color = getColor ("flood-color", "flood-opacity", Colors::black);
+    }
+    else if (tag == "feTurbulence" || tag == "feImage")
+    {
+        // What can't be made is left out: transparent black
+        YUP_DRAWABLE_LOG ("Unsupported filter primitive left empty - filter: " << filter.id << " tag: " << tag);
+
+        primitive.type = Type::flood;
+        primitive.color = Colors::transparentBlack;
+    }
+    else
+    {
+        // Any other primitive leaves its input as it is, so the ones after it still have what they read
+        YUP_DRAWABLE_LOG ("Unsupported filter primitive passed through - filter: " << filter.id << " tag: " << tag);
+    }
+
+    parsed->in = element.getStringAttribute ("in");
+    parsed->result = element.getStringAttribute ("result");
+    primitive.in2 = element.getStringAttribute ("in2");
+
+    filter.primitives.push_back (std::move (parsed));
+}
+
+//==============================================================================
+
+SVGFilter::Ptr SVGParser::parseFilterFunctions (const String& value)
+{
+    using Type = FilterGraph::Type;
+
+    // The functions of CSS filter the sRGB colors of the bounding box, with the room around it they need
+    SVGFilter::Ptr filter = new SVGFilter;
+    filter->region = { 0.0f, 0.0f, 1.0f, 1.0f };
+    filter->linearColors = false;
+
+    const auto add = [&filter] (FilterGraph::Primitive primitive)
+    {
+        SVGFEPrimitive::Ptr parsed = new SVGFEPrimitive;
+        parsed->primitive = std::move (primitive);
+        filter->primitives.push_back (std::move (parsed));
+    };
+
+    // Scales the colors and adds to them, leaving the alpha as it is
+    const auto addColorScale = [&add] (float scale, float added)
+    {
+        FilterGraph::Primitive primitive { .type = Type::colorMatrix };
+
+        for (const size_t row : { size_t (0), size_t (1), size_t (2) })
+        {
+            primitive.matrix[row * 6] = scale;
+            primitive.matrix[row * 5 + 4] = added;
+        }
+
+        add (std::move (primitive));
+    };
+
+    // CSS writes the alpha of a color as a part of 1, which Color::fromString reads as a part of 255
+    const auto parseColor = [] (const String& text)
+    {
+        const auto channels = StringArray::fromTokens (text.fromFirstOccurrenceOf ("(", false, false).upToLastOccurrenceOf (")", false, false), ",", "");
+        if (channels.size() != 4)
+            return Color::fromString (text);
+
+        const auto alpha = channels[3].trim();
+        const auto opaque = Color::fromString (text.substring (0, 3) + "(" + channels[0] + "," + channels[1] + "," + channels[2] + ")");
+
+        return opaque.withAlpha (jlimit (0.0f, 1.0f, alpha.getFloatValue() * (alpha.endsWithChar ('%') ? 0.01f : 1.0f)));
+    };
+
+    for (auto text = value.trim(); text.isNotEmpty();)
+    {
+        // The arguments end where their brackets do, as a color can have brackets of its own
+        const int open = text.indexOfChar ('(');
+        int close = open;
+
+        for (int depth = 0; open > 0 && close < text.length(); ++close)
+        {
+            if (text[close] == '(')
+                ++depth;
+            else if (text[close] == ')' && --depth == 0)
+                break;
+        }
+
+        if (open <= 0 || close >= text.length())
+            break;
+
+        const auto name = text.substring (0, open).trim().toLowerCase();
+        const auto arguments = text.substring (open + 1, close).trim();
+        text = text.substring (close + 1).trim();
+
+        // A number, or a percentage of one
+        const float amount = arguments.isEmpty() ? 1.0f : arguments.getFloatValue() * (arguments.endsWithChar ('%') ? 0.01f : 1.0f);
+
+        if (name == "blur")
+        {
+            const float deviation = jmax (0.0f, parseUnit (arguments));
+
+            add ({ .type = Type::blur, .deviation = { deviation, deviation } });
+            filter->margin += deviation * 3.0f;
+        }
+        else if (name == "drop-shadow")
+        {
+            // Two or three lengths, and a color before or after them
+            Array<float> lengths;
+            Color color = Colors::black;
+            String token;
+            int depth = 0;
+
+            const auto addToken = [&]
+            {
+                if (token.isEmpty())
+                    return;
+
+                if (String ("+-.0123456789").containsChar (token[0]))
+                    lengths.add (parseUnit (token));
+                else
+                    color = parseColor (token);
+
+                token.clear();
+            };
+
+            for (const auto character : arguments)
+            {
+                depth += character == '(' ? 1 : (character == ')' ? -1 : 0);
+
+                if (depth == 0 && CharacterFunctions::isWhitespace (character))
+                    addToken();
+                else
+                    token << String::charToString (character);
+            }
+
+            addToken();
+
+            const Point<float> offset (lengths.size() > 0 ? lengths[0] : 0.0f, lengths.size() > 1 ? lengths[1] : 0.0f);
+            const float deviation = lengths.size() > 2 ? jmax (0.0f, lengths[2]) : 0.0f;
+
+            add ({ .type = Type::dropShadow, .deviation = { deviation, deviation }, .offset = offset, .color = color });
+            filter->margin += jmax (std::abs (offset.getX()), std::abs (offset.getY())) + deviation * 3.0f;
+        }
+        else if (name == "brightness")
+        {
+            addColorScale (jmax (0.0f, amount), 0.0f);
+        }
+        else if (name == "contrast")
+        {
+            addColorScale (jmax (0.0f, amount), 0.5f - 0.5f * jmax (0.0f, amount));
+        }
+        else if (name == "invert")
+        {
+            addColorScale (1.0f - 2.0f * jlimit (0.0f, 1.0f, amount), jlimit (0.0f, 1.0f, amount));
+        }
+        else if (name == "opacity")
+        {
+            FilterGraph::Primitive primitive { .type = Type::colorMatrix };
+            primitive.matrix[18] = jlimit (0.0f, 1.0f, amount);
+            add (std::move (primitive));
+        }
+        else if (name == "grayscale")
+        {
+            add ({ .type = Type::colorMatrix, .matrix = FilterGraph::saturationMatrix (1.0f - jlimit (0.0f, 1.0f, amount)) });
+        }
+        else if (name == "saturate")
+        {
+            add ({ .type = Type::colorMatrix, .matrix = FilterGraph::saturationMatrix (jmax (0.0f, amount)) });
+        }
+        else if (name == "sepia")
+        {
+            const float t = 1.0f - jlimit (0.0f, 1.0f, amount);
+
+            add ({ .type = Type::colorMatrix,
+                   .matrix = { 0.393f + 0.607f * t, 0.769f - 0.769f * t, 0.189f - 0.189f * t, 0.0f, 0.0f,
+                               0.349f - 0.349f * t, 0.686f + 0.314f * t, 0.168f - 0.168f * t, 0.0f, 0.0f,
+                               0.272f - 0.272f * t, 0.534f - 0.534f * t, 0.131f + 0.869f * t, 0.0f, 0.0f,
+                               0.0f, 0.0f, 0.0f, 1.0f, 0.0f } });
+        }
+        else if (name == "hue-rotate")
+        {
+            const float angle = arguments.getFloatValue();
+            const float radians = arguments.endsWith ("rad") ? angle
+                                : arguments.endsWith ("turn") ? angle * MathConstants<float>::twoPi
+                                : arguments.endsWith ("grad") ? angle * MathConstants<float>::pi / 200.0f
+                                                              : degreesToRadians (angle);
+
+            add ({ .type = Type::colorMatrix, .matrix = FilterGraph::hueRotationMatrix (radians) });
+        }
+        else
+        {
+            YUP_DRAWABLE_LOG ("Unsupported CSS filter function ignored: " << name);
+        }
+    }
+
+    return filter->primitives.empty() ? nullptr : filter;
 }
 
 //==============================================================================
@@ -1535,6 +1889,10 @@ SVGFilter::Ptr SVGParser::resolveFilter (SVGFilter::Ptr filter, int depth) const
     SVGFilter::Ptr resolvedFilter = new SVGFilter;
     resolvedFilter->id = filter->id;
     resolvedFilter->href = filter->href;
+    resolvedFilter->units = filter->units;
+    resolvedFilter->primitiveUnits = filter->primitiveUnits;
+    resolvedFilter->region = filter->region;
+    resolvedFilter->linearColors = filter->linearColors;
 
     if (! filter->primitives.empty())
         resolvedFilter->primitives = filter->primitives;
@@ -1638,7 +1996,7 @@ void SVGParser::parseClipPath (const XmlElement& element)
                     rx = ry;
                 if (ry == 0.0f)
                     ry = rx;
-                path.addRoundedRectangle (x, y, width, height, rx, ry, rx, ry);
+                path.addRoundedRectangle ({ x, y, width, height }, Size<float> (rx, ry));
             }
             else
             {

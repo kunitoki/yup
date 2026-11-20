@@ -43,6 +43,7 @@ namespace yup
 class YUP_API TabComponent
     : public Component
     , private TabBar::Listener
+    , private ComponentListener
 {
 public:
     //==============================================================================
@@ -57,7 +58,13 @@ public:
 
     //==============================================================================
     /** Creates an empty tab component. */
-    TabComponent (StringRef componentID = {});
+    TabComponent();
+
+    /** Creates an empty tab component.
+    
+        @param componentID  An identifier for this component.
+    */
+    explicit TabComponent (StringRef componentID);
 
     /** Destructor. */
     ~TabComponent() override;
@@ -122,8 +129,14 @@ public:
     float getTabBarThickness() const noexcept { return tabBarThickness; }
 
     //==============================================================================
+    /** Returns the type info describing the properties of this class. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    //==============================================================================
     /** @internal */
     void resized() override;
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
 private:
     struct Page
@@ -139,6 +152,8 @@ private:
 
     void tabSelectionChanged (TabBar& bar, const Identifier& tabId) override;
     void tabRemoved (TabBar& bar, const Identifier& tabId) override;
+
+    void componentPropertyChanged (Component& component, const Identifier& name) override;
 
     TabBar tabBar;
     std::vector<Page> pages;

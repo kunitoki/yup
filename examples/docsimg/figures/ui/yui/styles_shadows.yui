@@ -1,0 +1,16 @@
+// size: 480 120
+style {
+    TextButton { cornerRadius: 8; }
+    .shadow    { shadow: 0 4 12 #00000060; }
+    .glow      { glow: 10 2 palette.accent.withAlpha (0.4); }
+    .filter    { filter: invert(100%); }
+}
+
+Row {
+    padding: 14;
+    gap: 28;
+
+    TextButton { text: "shadow"; class: shadow; flexGrow: 1; }
+    TextButton { text: "glow";   class: glow;   flexGrow: 1; }
+    TextButton { text: "filter"; class: filter; flexGrow: 1; }
+}

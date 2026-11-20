@@ -275,6 +275,12 @@ public:
     /** Get legend background color */
     const Color& getLegendBackgroundColor() const { return legendBackgroundColor; }
 
+    /** Set the color of the legend text, also used with a lower alpha for the legend border. */
+    void setLegendTextColor (const Color& color);
+
+    /** Get legend text color */
+    const Color& getLegendTextColor() const { return legendTextColor; }
+
     //==============================================================================
     // Coordinate transformations
 
@@ -348,6 +354,7 @@ private:
     bool showLegend { true };
     Point<float> legendPosition { 0.8f, 0.1f };
     Color legendBackgroundColor { Color (0x80000000) };
+    Color legendTextColor { Colors::white };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CartesianPlane)
 };

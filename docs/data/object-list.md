@@ -138,6 +138,13 @@ jassert (obj->getX() == 200.0f);
 jassert (components.objects.size() == 0);
 ```
 
+```{note}
+The list follows a transaction when it ends. However many children the transaction
+added, removed or moved, the objects are created, deleted and put in order once,
+and `objectOrderChanged()` is called once. A child added and removed in the same
+transaction gets no object.
+```
+
 ```{important}
 Always call `rebuildObjects()` once after construction and `freeObjects()` in
 your subclass destructor. Objects are owned by the list; do not delete them

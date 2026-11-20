@@ -194,6 +194,92 @@ TEST (CodeEditorTest, TabInsertsSpaces)
     EXPECT_EQ (String ("x  "), editor.getText());
 }
 
+TEST (CodeEditorTest, TabIndentsFullySelectedLine)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("abc\ndef");
+    editor.setSelection (Range<int> (0, 3));
+    editor.keyDown (KeyPress (KeyPress::tabKey), {});
+
+    EXPECT_EQ (String ("    abc\ndef"), editor.getText());
+    EXPECT_EQ (Range<int> (0, 7), editor.getSelection());
+}
+
+TEST (CodeEditorTest, TabIndentsAllLinesTouchedBySelection)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("abc\ndef\n\nghi\njkl");
+    editor.setSelection (Range<int> (0, 10)); // "abc" .. "g" of "ghi"
+    editor.keyDown (KeyPress (KeyPress::tabKey), {});
+
+    EXPECT_EQ (String ("    abc\n    def\n\n    ghi\njkl"), editor.getText());
+    EXPECT_EQ (Range<int> (0, 22), editor.getSelection());
+}
+
+TEST (CodeEditorTest, TabSkipsLineWhereSelectionEndsAtColumnZero)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("abc\ndef\nghi");
+    editor.setSelection (Range<int> (0, 8));
+    editor.keyDown (KeyPress (KeyPress::tabKey), {});
+
+    EXPECT_EQ (String ("    abc\n    def\nghi"), editor.getText());
+    EXPECT_EQ (Range<int> (0, 16), editor.getSelection());
+}
+
+TEST (CodeEditorTest, ShiftTabOutdentsSelectedLines)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("      abc\n\tdef\n  ghi\njkl");
+    editor.setSelection (Range<int> (2, 18));
+    editor.keyDown (KeyPress (KeyPress::tabKey, KeyModifiers (KeyModifiers::shiftMask)), {});
+
+    EXPECT_EQ (String ("  abc\ndef\nghi\njkl"), editor.getText());
+    EXPECT_EQ (Range<int> (0, 11), editor.getSelection());
+}
+
+TEST (CodeEditorTest, ShiftTabWithoutSelectionOutdentsCaretLine)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("x\n        abc");
+    editor.setCaretPosition (12);
+    editor.keyDown (KeyPress (KeyPress::tabKey, KeyModifiers (KeyModifiers::shiftMask)), {});
+
+    EXPECT_EQ (String ("x\n    abc"), editor.getText());
+    EXPECT_EQ (8, editor.getCaretPosition());
+    EXPECT_FALSE (editor.hasSelection());
+}
+
+TEST (CodeEditorTest, IndentIsUndoneInOneStepRestoringSelection)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("abc\ndef");
+    editor.setSelection (Range<int> (1, 6));
+    editor.keyDown (KeyPress (KeyPress::tabKey), {});
+
+    ASSERT_EQ (String ("    abc\n    def"), editor.getText());
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("abc\ndef"), editor.getText());
+    EXPECT_EQ (Range<int> (1, 6), editor.getSelection());
+
+    EXPECT_TRUE (editor.redo());
+    EXPECT_EQ (String ("    abc\n    def"), editor.getText());
+    EXPECT_EQ (Range<int> (5, 14), editor.getSelection());
+}
+
 // ==============================================================================
 // Caret movement and selection
 // ==============================================================================
@@ -364,6 +450,142 @@ TEST (CodeEditorTest, UndoAndRedo)
 
     EXPECT_TRUE (editor.redo());
     EXPECT_EQ (String ("hello world"), editor.getText());
+}
+
+TEST (CodeEditorTest, UndoRestoresSelectionReplacedByTyping)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("hello world");
+    editor.setSelection (Range<int> (6, 11));
+    editor.insertText ("there");
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("hello world"), editor.getText());
+    EXPECT_EQ (Range<int> (6, 11), editor.getSelection());
+    EXPECT_EQ (11, editor.getCaretPosition());
+
+    EXPECT_TRUE (editor.redo());
+    EXPECT_EQ (String ("hello there"), editor.getText());
+    EXPECT_EQ (11, editor.getCaretPosition());
+    EXPECT_FALSE (editor.hasSelection());
+}
+
+TEST (CodeEditorTest, UndoRestoresCaretBeforeDeletion)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("abc\ndef");
+    editor.setCaretPosition (2);
+
+    editor.keyDown (KeyPress (KeyPress::deleteKey), {});
+    ASSERT_EQ (String ("ab\ndef"), editor.getText());
+
+    editor.setCaretPosition (6);
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("abc\ndef"), editor.getText());
+    EXPECT_EQ (2, editor.getCaretPosition());
+}
+
+TEST (CodeEditorTest, UndoKeepsSelectionAnchorDirection)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("abcdef");
+    editor.setCaretPosition (4);
+    editor.keyDown (KeyPress (KeyPress::leftKey, KeyModifiers (KeyModifiers::shiftMask)), {});
+    editor.keyDown (KeyPress (KeyPress::leftKey, KeyModifiers (KeyModifiers::shiftMask)), {});
+    ASSERT_EQ (Range<int> (2, 4), editor.getSelection());
+    ASSERT_EQ (2, editor.getCaretPosition());
+
+    editor.insertText ("X");
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (Range<int> (2, 4), editor.getSelection());
+    EXPECT_EQ (2, editor.getCaretPosition());
+}
+
+TEST (CodeEditorTest, TypingIsUndoneWordByWord)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    for (const auto character : String ("hello world"))
+        editor.textInput (String::charToString (character));
+
+    ASSERT_EQ (String ("hello world"), editor.getText());
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("hello"), editor.getText());
+    EXPECT_EQ (5, editor.getCaretPosition());
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String(), editor.getText());
+}
+
+TEST (CodeEditorTest, CaretMoveStartsNewUndoStep)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.textInput ("a");
+    editor.textInput ("b");
+    editor.keyDown (KeyPress (KeyPress::leftKey), {});
+    editor.textInput ("X");
+
+    ASSERT_EQ (String ("aXb"), editor.getText());
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("ab"), editor.getText());
+    EXPECT_EQ (1, editor.getCaretPosition());
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String(), editor.getText());
+}
+
+TEST (CodeEditorTest, ConsecutiveBackspacesAreUndoneTogether)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("abcd");
+    editor.setCaretPosition (4);
+
+    for (int i = 0; i < 3; ++i)
+        editor.keyDown (KeyPress (KeyPress::backspaceKey), {});
+
+    ASSERT_EQ (String ("a"), editor.getText());
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("abcd"), editor.getText());
+    EXPECT_EQ (4, editor.getCaretPosition());
+    EXPECT_FALSE (editor.canUndo());
+}
+
+TEST (CodeEditorTest, CommandsAreSeparateUndoSteps)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.textInput ("a");
+    editor.insertText ("bc");
+    editor.textInput ("d");
+    editor.keyDown (KeyPress (KeyPress::enterKey), {});
+
+    ASSERT_EQ (String ("abcd\n"), editor.getText());
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("abcd"), editor.getText());
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("abc"), editor.getText());
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("a"), editor.getText());
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String(), editor.getText());
 }
 
 TEST (CodeEditorTest, ControlZUndoes)
@@ -633,6 +855,213 @@ TEST (CodeEditorTest, BracketMatchReturnsNulloptForNonBracket)
     EXPECT_FALSE (editor.getBracketMatch (3).has_value());
 }
 
+TEST (CodeEditorTest, BracketMatchSpansLinesInBothDirections)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("{\n  [x]\n}");
+
+    EXPECT_EQ (Range<int> (0, 8), editor.getBracketMatch (0).value_or (Range<int>()));
+    EXPECT_EQ (Range<int> (0, 8), editor.getBracketMatch (8).value_or (Range<int>()));
+    EXPECT_EQ (Range<int> (4, 6), editor.getBracketMatch (6).value_or (Range<int>()));
+}
+
+TEST (CodeEditorTest, BracketMatchUsesDefinitionPairs)
+{
+    SyntaxDefinition definition;
+    ASSERT_TRUE (definition.loadFromData (R"({ "name": "Angles", "brackets": ["<>"] })").wasOk());
+
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setSyntaxDefinition (definition);
+    editor.setText ("<a(b)>");
+
+    EXPECT_EQ (Range<int> (0, 5), editor.getBracketMatch (0).value_or (Range<int>()));
+    EXPECT_FALSE (editor.getBracketMatch (2).has_value());
+}
+
+TEST (CodeEditorTest, CrlfDocumentKeepsIndicesAndLineEndings)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("foo\r\nbar foo");
+
+    const auto matches = editor.findAll ("foo");
+    ASSERT_EQ (2u, matches.size());
+    EXPECT_EQ (Range<int> (8, 11), matches[1]);
+
+    editor.setSelection ({ 2, 6 });
+    EXPECT_EQ (String ("o\nba"), editor.getSelectedText());
+
+    editor.setCaretPosition (11);
+    editor.insertText ("!");
+    EXPECT_EQ (String ("foo\r\nbar foo!"), editor.getText());
+}
+
+TEST (CodeEditorTest, FindAllMatchesAcrossLinesWhenSearchContainsNewLine)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("a;\nb;\na;\nb;");
+
+    const auto matches = editor.findAll ("a;\nb");
+    ASSERT_EQ (2u, matches.size());
+    EXPECT_EQ (Range<int> (6, 10), matches[1]);
+}
+
+// ==============================================================================
+// Line commands
+// ==============================================================================
+
+TEST (CodeEditorTest, ToggleLineCommentCommentsAndUncommentsAtMinimumIndent)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setSyntaxDefinition ("cpp");
+
+    editor.setText ("  a;\n\n    b;");
+    editor.setSelection ({ 0, 11 });
+    editor.toggleLineComment();
+
+    EXPECT_EQ (String ("  // a;\n\n  //   b;"), editor.getText());
+    EXPECT_EQ (Range<int> (0, 17), editor.getSelection());
+
+    editor.keyDown (KeyPress (KeyPress::slashKey, KeyModifiers (KeyModifiers::controlMask)), {});
+    EXPECT_EQ (String ("  a;\n\n    b;"), editor.getText());
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("  // a;\n\n  //   b;"), editor.getText());
+}
+
+TEST (CodeEditorTest, ToggleLineCommentUncommentsOnlyWhenAllLinesAreCommented)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setSyntaxDefinition ("python");
+
+    editor.setText ("# a\nb");
+    editor.selectAll();
+    editor.toggleLineComment();
+
+    EXPECT_EQ (String ("# # a\n# b"), editor.getText());
+}
+
+TEST (CodeEditorTest, ToggleBlockCommentWrapsAndUnwrapsSelection)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setSyntaxDefinition ("cpp");
+
+    editor.setText ("f (x, y);");
+    editor.setSelection ({ 3, 4 });
+    editor.toggleBlockComment();
+
+    EXPECT_EQ (String ("f (/* x */, y);"), editor.getText());
+    EXPECT_EQ (Range<int> (3, 10), editor.getSelection());
+
+    editor.toggleBlockComment();
+    EXPECT_EQ (String ("f (x, y);"), editor.getText());
+    EXPECT_EQ (Range<int> (3, 4), editor.getSelection());
+}
+
+TEST (CodeEditorTest, ToggleBlockCommentWithoutSelectionUsesLineText)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setSyntaxDefinition ("cpp");
+
+    editor.setText ("    call();");
+    editor.setCaretPosition (6);
+    editor.keyDown (KeyPress (KeyPress::textAKey, KeyModifiers (KeyModifiers::altMask | KeyModifiers::shiftMask)), {});
+
+    EXPECT_EQ (String ("    /* call(); */"), editor.getText());
+}
+
+TEST (CodeEditorTest, MoveSelectedLinesUpAndDown)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("a\nbb\ncc\nd");
+    editor.setSelection ({ 3, 6 });
+    editor.keyDown (KeyPress (KeyPress::upKey, KeyModifiers (KeyModifiers::altMask)), {});
+
+    EXPECT_EQ (String ("bb\ncc\na\nd"), editor.getText());
+    EXPECT_EQ (Range<int> (1, 4), editor.getSelection());
+
+    editor.moveSelectedLines (true);
+    EXPECT_EQ (String ("bb\ncc\na\nd"), editor.getText());
+
+    editor.keyDown (KeyPress (KeyPress::downKey, KeyModifiers (KeyModifiers::altMask)), {});
+    editor.moveSelectedLines (false);
+
+    EXPECT_EQ (String ("a\nd\nbb\ncc"), editor.getText());
+    EXPECT_EQ (Range<int> (5, 8), editor.getSelection());
+
+    editor.moveSelectedLines (false);
+    EXPECT_EQ (String ("a\nd\nbb\ncc"), editor.getText());
+}
+
+TEST (CodeEditorTest, DuplicateSelectedLines)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("ab\ncd");
+    editor.setCaretPosition (1);
+    editor.keyDown (KeyPress (KeyPress::downKey, KeyModifiers (KeyModifiers::altMask | KeyModifiers::shiftMask)), {});
+
+    EXPECT_EQ (String ("ab\nab\ncd"), editor.getText());
+    EXPECT_EQ (4, editor.getCaretPosition());
+
+    editor.duplicateSelectedLines (false);
+    EXPECT_EQ (String ("ab\nab\nab\ncd"), editor.getText());
+    EXPECT_EQ (4, editor.getCaretPosition());
+}
+
+TEST (CodeEditorTest, DeleteSelectedLines)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("one\ntwo\nthree");
+    editor.setCaretPosition (6);
+    editor.keyDown (KeyPress (KeyPress::textKKey, KeyModifiers (KeyModifiers::controlMask | KeyModifiers::shiftMask)), {});
+
+    EXPECT_EQ (String ("one\nthree"), editor.getText());
+    EXPECT_EQ (6, editor.getCaretPosition());
+
+    editor.setCaretPosition (8);
+    editor.deleteSelectedLines();
+    EXPECT_EQ (String ("one"), editor.getText());
+    EXPECT_EQ (3, editor.getCaretPosition());
+
+    editor.deleteSelectedLines();
+    EXPECT_EQ (String(), editor.getText());
+}
+
+TEST (CodeEditorTest, InsertLineAboveAndBelowKeepsIndent)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("  ab");
+    editor.setCaretPosition (3);
+    editor.keyDown (KeyPress (KeyPress::enterKey, KeyModifiers (KeyModifiers::controlMask)), {});
+
+    EXPECT_EQ (String ("  ab\n  "), editor.getText());
+    EXPECT_EQ (7, editor.getCaretPosition());
+
+    editor.setCaretPosition (3);
+    editor.keyDown (KeyPress (KeyPress::enterKey, KeyModifiers (KeyModifiers::controlMask | KeyModifiers::shiftMask)), {});
+
+    EXPECT_EQ (String ("  \n  ab\n  "), editor.getText());
+    EXPECT_EQ (2, editor.getCaretPosition());
+}
+
 // ==============================================================================
 // Auto-indent
 // ==============================================================================
@@ -647,6 +1076,156 @@ TEST (CodeEditorTest, EnterIndentsNewLine)
     editor.keyDown (KeyPress (KeyPress::enterKey), {});
 
     EXPECT_EQ (String ("    if (x)\n    "), editor.getText());
+}
+
+TEST (CodeEditorTest, TypingOpenerInsertsClosingPair)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.textInput ("f");
+    editor.textInput ("(");
+
+    EXPECT_EQ (String ("f()"), editor.getText());
+    EXPECT_EQ (2, editor.getCaretPosition());
+
+    editor.textInput ("x");
+    editor.textInput (")");
+
+    EXPECT_EQ (String ("f(x)"), editor.getText());
+    EXPECT_EQ (4, editor.getCaretPosition());
+}
+
+TEST (CodeEditorTest, AutoClosingIsSkippedBeforeWordsAndForQuotesAfterWords)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("x");
+    editor.setCaretPosition (0);
+    editor.textInput ("(");
+    EXPECT_EQ (String ("(x"), editor.getText());
+
+    editor.setSyntaxDefinition ("python");
+    editor.setText ("don");
+    editor.setCaretPosition (3);
+    editor.textInput ("'");
+    EXPECT_EQ (String ("don'"), editor.getText());
+}
+
+TEST (CodeEditorTest, AutoClosingCanBeDisabled)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setAutoClosingEnabled (false);
+
+    editor.textInput ("[");
+
+    EXPECT_FALSE (editor.isAutoClosingEnabled());
+    EXPECT_EQ (String ("["), editor.getText());
+}
+
+TEST (CodeEditorTest, TypingOpenerWrapsSelection)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setSyntaxDefinition ("python");
+    editor.setText ("a value");
+    editor.setSelection ({ 2, 7 });
+    editor.textInput ("\"");
+
+    EXPECT_EQ (String ("a \"value\""), editor.getText());
+    EXPECT_EQ (Range<int> (3, 8), editor.getSelection());
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("a value"), editor.getText());
+}
+
+TEST (CodeEditorTest, BackspaceRemovesEmptyPair)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("f()");
+    editor.setCaretPosition (2);
+    editor.keyDown (KeyPress (KeyPress::backspaceKey), {});
+
+    EXPECT_EQ (String ("f"), editor.getText());
+    EXPECT_EQ (1, editor.getCaretPosition());
+}
+
+TEST (CodeEditorTest, EnterBetweenBracketsIndentsAndSplitsPair)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("  if (x) {}");
+    editor.setCaretPosition (10);
+    editor.keyDown (KeyPress (KeyPress::enterKey), {});
+
+    EXPECT_EQ (String ("  if (x) {\n      \n  }"), editor.getText());
+    EXPECT_EQ (17, editor.getCaretPosition());
+}
+
+TEST (CodeEditorTest, EnterAfterIncreaseIndentPatternIndents)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setSyntaxDefinition ("python");
+
+    editor.setText ("def f():  # note");
+    editor.setCaretPosition (16);
+    editor.keyDown (KeyPress (KeyPress::enterKey), {});
+
+    EXPECT_EQ (String ("def f():  # note\n    "), editor.getText());
+}
+
+TEST (CodeEditorTest, IndentUsingTabsInsertsTabs)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setIndentUsingTabs (true);
+
+    editor.setText ("{");
+    editor.setCaretPosition (1);
+    editor.keyDown (KeyPress (KeyPress::enterKey), {});
+    editor.keyDown (KeyPress (KeyPress::tabKey), {});
+
+    EXPECT_TRUE (editor.isIndentUsingTabs());
+    EXPECT_EQ (String ("{\n\t\t"), editor.getText());
+}
+
+TEST (CodeEditorTest, TypingCloserOnBlankLineAlignsWithOpener)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setAutoClosingEnabled (false);
+
+    editor.setText ("  {\n      ");
+    editor.setCaretPosition (10);
+    editor.textInput ("}");
+
+    EXPECT_EQ (String ("  {\n  }"), editor.getText());
+    EXPECT_EQ (7, editor.getCaretPosition());
+}
+
+TEST (CodeEditorTest, SmartHomeTogglesBetweenIndentAndLineStart)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    editor.setText ("    code");
+    editor.setCaretPosition (8);
+
+    editor.keyDown (KeyPress (KeyPress::homeKey), {});
+    EXPECT_EQ (4, editor.getCaretPosition());
+
+    editor.keyDown (KeyPress (KeyPress::homeKey), {});
+    EXPECT_EQ (0, editor.getCaretPosition());
+
+    editor.keyDown (KeyPress (KeyPress::homeKey), {});
+    EXPECT_EQ (4, editor.getCaretPosition());
 }
 
 // ==============================================================================
@@ -674,6 +1253,32 @@ TEST (CodeEditorTest, BreakpointLifecycle)
     editor.clearBreakpoints();
     EXPECT_FALSE (editor.getBreakpoint (0));
     EXPECT_FALSE (editor.getBreakpoint (2));
+}
+
+TEST (CodeEditorTest, MarkersFollowInsertedAndRemovedLines)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("a\nb\nc\nd");
+
+    editor.setBreakpoint (2, true);
+    editor.setErrorLine (3, true);
+    editor.setBreakpoint (0, true);
+
+    document.insertText (CodeDocument::Position (document, 1, 0), "x\ny\n");
+    EXPECT_TRUE (editor.getBreakpoint (0));
+    EXPECT_TRUE (editor.getBreakpoint (4));
+    EXPECT_FALSE (editor.getBreakpoint (2));
+    EXPECT_TRUE (editor.isErrorLine (5));
+
+    document.removeRange (CodeDocument::Position (document, 1, 0), CodeDocument::Position (document, 3, 0));
+    EXPECT_TRUE (editor.getBreakpoint (2));
+    EXPECT_TRUE (editor.isErrorLine (3));
+
+    // Joining the marked line into the previous one collapses the marker onto it
+    document.removeRange (CodeDocument::Position (document, 2, 1), CodeDocument::Position (document, 3, 1));
+    EXPECT_TRUE (editor.isErrorLine (2));
+    EXPECT_EQ (1u, editor.getErrorLines().size());
 }
 
 TEST (CodeEditorTest, GutterBreakpointsCanBeToggled)
@@ -769,6 +1374,428 @@ TEST (CodeEditorTest, SetDocumentClearsErrorLines)
     editor.setDocument (second);
     EXPECT_FALSE (editor.isErrorLine (1));
     EXPECT_TRUE (editor.getErrorLines().empty());
+}
+
+TEST (CodeEditorTest, DiagnosticRangeIsClampedAndExpandsEmptyRanges)
+{
+    CodeEditor editor;
+    editor.setText ("int value = 1;\nfoo");
+
+    CodeEditor::Diagnostic diagnostic;
+    diagnostic.line = 0;
+    diagnostic.column = 4;
+    diagnostic.endLine = 0;
+    diagnostic.endColumn = 9;
+    EXPECT_EQ (Range<int> (4, 9), editor.getDiagnosticRange (diagnostic));
+
+    // Empty ranges cover the word at their start
+    diagnostic.endColumn = 4;
+    EXPECT_EQ (Range<int> (4, 9), editor.getDiagnosticRange (diagnostic));
+
+    // ...or the character there when it is not a word
+    diagnostic.column = diagnostic.endColumn = 10;
+    EXPECT_EQ (Range<int> (10, 11), editor.getDiagnosticRange (diagnostic));
+
+    // ...or the previous character at the end of a line
+    diagnostic.line = diagnostic.endLine = 1;
+    diagnostic.column = diagnostic.endColumn = 3;
+    EXPECT_EQ (Range<int> (17, 18), editor.getDiagnosticRange (diagnostic));
+
+    // Out of range positions are clamped
+    diagnostic.line = 0;
+    diagnostic.column = 100;
+    diagnostic.endLine = 50;
+    diagnostic.endColumn = 50;
+    EXPECT_EQ (Range<int> (14, 18), editor.getDiagnosticRange (diagnostic));
+}
+
+TEST (CodeEditorTest, DiagnosticsAtPositionAreSortedBySeverity)
+{
+    CodeEditor editor;
+    editor.setText ("alpha beta");
+
+    CodeEditor::Diagnostic warning;
+    warning.column = 0;
+    warning.endColumn = 10;
+    warning.severity = CodeEditor::Diagnostic::Severity::warning;
+    warning.message = "long line";
+
+    CodeEditor::Diagnostic error;
+    error.column = 6;
+    error.endColumn = 10;
+    error.message = "unknown beta";
+
+    editor.setDiagnostics ({ warning, error });
+
+    const auto atBeta = editor.getDiagnosticsAt (7);
+    ASSERT_EQ (2u, atBeta.size());
+    EXPECT_EQ (String ("unknown beta"), atBeta[0].message);
+    EXPECT_EQ (String ("long line"), atBeta[1].message);
+
+    EXPECT_EQ (1u, editor.getDiagnosticsAt (2).size());
+    EXPECT_EQ (2u, editor.getDiagnosticsAt (10).size());
+
+    editor.clearDiagnostics();
+    EXPECT_TRUE (editor.getDiagnostics().empty());
+}
+
+TEST (CodeEditorTest, DiagnosticsFollowInsertedAndRemovedLines)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("a\nb\nc");
+
+    CodeEditor::Diagnostic diagnostic;
+    diagnostic.line = diagnostic.endLine = 2;
+    diagnostic.endColumn = 1;
+    editor.addDiagnostic (diagnostic);
+
+    document.insertText (CodeDocument::Position (document, 0, 0), "x\ny\n");
+    ASSERT_EQ (1u, editor.getDiagnostics().size());
+    EXPECT_EQ (4, editor.getDiagnostics()[0].line);
+    EXPECT_EQ (4, editor.getDiagnostics()[0].endLine);
+
+    document.removeRange (CodeDocument::Position (document, 0, 0), CodeDocument::Position (document, 2, 0));
+    EXPECT_EQ (2, editor.getDiagnostics()[0].line);
+}
+
+TEST (CodeEditorTest, ErrorLinesAreDiagnosticsAndClearedWithThem)
+{
+    CodeEditor editor;
+    editor.setText ("one\ntwo");
+
+    editor.setErrorLine (1, true);
+    ASSERT_EQ (1u, editor.getDiagnostics().size());
+    EXPECT_TRUE (editor.getDiagnostics()[0].highlightLine);
+
+    CodeEditor::Diagnostic diagnostic;
+    diagnostic.endColumn = 3;
+    editor.addDiagnostic (diagnostic);
+
+    editor.clearErrorLines();
+    ASSERT_EQ (1u, editor.getDiagnostics().size());
+    EXPECT_FALSE (editor.getDiagnostics()[0].highlightLine);
+
+    editor.setErrorLine (0, true);
+    editor.clearDiagnostics();
+    EXPECT_FALSE (editor.isErrorLine (0));
+}
+
+TEST (CodeEditorTest, HoverTextCombinesDiagnosticsAndProvider)
+{
+    CodeEditor editor;
+    editor.setText ("alpha beta");
+
+    CodeEditor::Diagnostic diagnostic;
+    diagnostic.column = 6;
+    diagnostic.endColumn = 10;
+    diagnostic.message = "unknown name";
+    diagnostic.source = "lint";
+    editor.addDiagnostic (diagnostic);
+
+    EXPECT_EQ (String ("lint: unknown name"), editor.getHoverText (7));
+    EXPECT_TRUE (editor.getHoverText (2).isEmpty());
+    EXPECT_TRUE (editor.getHoverText (10).isEmpty());
+
+    editor.setHoverProvider ([] (const CodeEditor& e, int index)
+    {
+        return index < 5 ? String ("word ") + e.getText().substring (0, 5) : String();
+    });
+
+    EXPECT_EQ (String ("word alpha"), editor.getHoverText (2));
+    EXPECT_EQ (String ("lint: unknown name"), editor.getHoverText (7));
+
+    editor.setHoverProvider ([] (const CodeEditor&, int)
+    {
+        return String ("doc");
+    });
+
+    EXPECT_EQ (String ("lint: unknown name\n\ndoc"), editor.getHoverText (7));
+}
+
+TEST (CodeEditorTest, HoverPopupShowsAndHides)
+{
+    CodeEditor editor;
+    editor.setText ("alpha beta");
+    editor.setSize (400, 200);
+
+    editor.showHover (2);
+    EXPECT_FALSE (editor.isHoverVisible());
+
+    editor.setHoverProvider ([] (const CodeEditor&, int)
+    {
+        return String ("info");
+    });
+
+    editor.showHover (2);
+    EXPECT_TRUE (editor.isHoverVisible());
+
+    editor.keyDown (KeyPress (KeyPress::rightKey), {});
+    EXPECT_FALSE (editor.isHoverVisible());
+
+    editor.showHover (2);
+    editor.insertText ("x");
+    EXPECT_FALSE (editor.isHoverVisible());
+
+    editor.showHover (2);
+    editor.hideHover();
+    EXPECT_FALSE (editor.isHoverVisible());
+}
+
+namespace
+{
+
+CodeEditor::CompletionProvider makeTestCompletionProvider()
+{
+    return [] (const CodeEditor&, int)
+    {
+        return std::vector<CodeEditor::CompletionItem> {
+            { "println", {}, "fn" },
+            { "print", "print()", "fn" },
+            { "sprint", {}, {} },
+            { "value", {}, {} }
+        };
+    };
+}
+
+} // namespace
+
+TEST (CodeEditorTest, CompletionsOpenWithCtrlSpaceAndFilterByWordBeforeCaret)
+{
+    CodeEditor editor;
+    editor.setSize (400, 200);
+    editor.setText ("pri");
+    editor.setCaretPosition (3);
+
+    EXPECT_TRUE (editor.keyDown (KeyPress (KeyPress::spaceKey, KeyModifiers::controlMask), {}));
+    EXPECT_FALSE (editor.isCompletionVisible());
+
+    editor.setCompletionProvider (makeTestCompletionProvider());
+    editor.keyDown (KeyPress (KeyPress::spaceKey, KeyModifiers::controlMask), {});
+
+    ASSERT_TRUE (editor.isCompletionVisible());
+    ASSERT_EQ (3u, editor.getVisibleCompletions().size());
+    EXPECT_EQ (String ("println"), editor.getVisibleCompletions()[0].label);
+    EXPECT_EQ (String ("print"), editor.getVisibleCompletions()[1].label);
+    EXPECT_EQ (String ("sprint"), editor.getVisibleCompletions()[2].label);
+
+    editor.textInput ("n");
+    ASSERT_EQ (3u, editor.getVisibleCompletions().size());
+
+    editor.textInput ("t");
+    editor.textInput ("l");
+    ASSERT_EQ (1u, editor.getVisibleCompletions().size());
+    EXPECT_EQ (String ("println"), editor.getVisibleCompletions()[0].label);
+
+    editor.textInput ("z");
+    EXPECT_FALSE (editor.isCompletionVisible());
+}
+
+TEST (CodeEditorTest, CompletionSelectionWrapsAndEnterAccepts)
+{
+    CodeEditor editor;
+    editor.setSize (400, 200);
+    editor.setCompletionProvider (makeTestCompletionProvider());
+    editor.setText ("x = pr");
+    editor.setCaretPosition (6);
+    editor.showCompletions();
+
+    ASSERT_TRUE (editor.isCompletionVisible());
+    EXPECT_EQ (0, editor.getSelectedCompletionIndex());
+
+    EXPECT_TRUE (editor.keyDown (KeyPress (KeyPress::upKey), {}));
+    EXPECT_EQ (2, editor.getSelectedCompletionIndex());
+
+    EXPECT_TRUE (editor.keyDown (KeyPress (KeyPress::downKey), {}));
+    EXPECT_EQ (0, editor.getSelectedCompletionIndex());
+
+    EXPECT_TRUE (editor.keyDown (KeyPress (KeyPress::downKey), {}));
+    EXPECT_TRUE (editor.keyDown (KeyPress (KeyPress::enterKey), {}));
+
+    EXPECT_FALSE (editor.isCompletionVisible());
+    EXPECT_EQ (String ("x = print()"), editor.getText());
+    EXPECT_EQ (11, editor.getCaretPosition());
+
+    editor.undo();
+    EXPECT_EQ (String ("x = pr"), editor.getText());
+}
+
+TEST (CodeEditorTest, CompletionTriggerCharacterOpensPopup)
+{
+    CodeEditor editor;
+    editor.setSize (400, 200);
+    editor.setCompletionProvider (makeTestCompletionProvider());
+    editor.setText ("object");
+    editor.setCaretPosition (6);
+
+    editor.textInput (".");
+    EXPECT_FALSE (editor.isCompletionVisible());
+
+    editor.setCompletionTriggerCharacters (".");
+    editor.textInput (".");
+    ASSERT_TRUE (editor.isCompletionVisible());
+    EXPECT_EQ (4u, editor.getVisibleCompletions().size());
+
+    editor.textInput ("v");
+    ASSERT_EQ (1u, editor.getVisibleCompletions().size());
+
+    EXPECT_TRUE (editor.keyDown (KeyPress (KeyPress::tabKey), {}));
+    EXPECT_EQ (String ("object..value"), editor.getText());
+}
+
+TEST (CodeEditorTest, CompletionClosesOnEscapeCaretMovesAndBackspacePastWordStart)
+{
+    CodeEditor editor;
+    editor.setSize (400, 200);
+    editor.setCompletionProvider (makeTestCompletionProvider());
+    editor.setText ("a p");
+    editor.setCaretPosition (3);
+
+    editor.showCompletions();
+    ASSERT_TRUE (editor.isCompletionVisible());
+    EXPECT_TRUE (editor.keyDown (KeyPress (KeyPress::escapeKey), {}));
+    EXPECT_FALSE (editor.isCompletionVisible());
+    EXPECT_EQ (String ("a p"), editor.getText());
+
+    editor.showCompletions();
+    editor.keyDown (KeyPress (KeyPress::leftKey), {});
+    EXPECT_FALSE (editor.isCompletionVisible());
+    EXPECT_EQ (2, editor.getCaretPosition());
+
+    editor.setCaretPosition (3);
+    editor.showCompletions();
+    editor.keyDown (KeyPress (KeyPress::backspaceKey), {});
+    EXPECT_TRUE (editor.isCompletionVisible());
+
+    editor.keyDown (KeyPress (KeyPress::backspaceKey), {});
+    EXPECT_FALSE (editor.isCompletionVisible());
+}
+
+TEST (CodeEditorTest, CompletionIsNotShownWhenReadOnly)
+{
+    CodeEditor editor;
+    editor.setCompletionProvider (makeTestCompletionProvider());
+    editor.setReadOnly (true);
+
+    editor.showCompletions();
+    EXPECT_FALSE (editor.isCompletionVisible());
+    EXPECT_FALSE (editor.acceptCompletion());
+}
+
+TEST (CodeEditorTest, SemanticTokensOverlayLineTokens)
+{
+    CodeEditor editor;
+    editor.setText ("int foo = bar;\nnext");
+    editor.setSemanticTokens ({
+        { 1, 0, 4, Identifier ("variable") },
+        { 0, 4, 3, Identifier ("entity.name.function") },
+        { 0, 10, 99, Identifier ("variable.parameter") }
+    });
+
+    ASSERT_EQ (3u, editor.getSemanticTokens().size());
+    EXPECT_EQ (0, editor.getSemanticTokens()[0].line);
+
+    const auto tokens = editor.getLineTokens (0);
+    ASSERT_EQ (4u, tokens.size());
+    EXPECT_EQ (0, tokens[0].start);
+    EXPECT_EQ (4, tokens[0].end);
+    EXPECT_EQ (4, tokens[1].start);
+    EXPECT_EQ (7, tokens[1].end);
+    EXPECT_EQ (Identifier ("entity.name.function"), tokens[1].scope);
+    EXPECT_EQ (7, tokens[2].start);
+    EXPECT_EQ (10, tokens[2].end);
+    EXPECT_EQ (10, tokens[3].start);
+    EXPECT_EQ (14, tokens[3].end);
+    EXPECT_EQ (Identifier ("variable.parameter"), tokens[3].scope);
+
+    EXPECT_TRUE (editor.getLineTokens (5).empty());
+}
+
+TEST (CodeEditorTest, SemanticTokensSplitSyntaxTokens)
+{
+    CodeEditor editor;
+    editor.setSyntaxDefinition ("cpp");
+    editor.setText ("int value;");
+    editor.setSemanticTokens ({ { 0, 4, 5, Identifier ("identifier.member") } });
+
+    const auto tokens = editor.getLineTokens (0);
+    ASSERT_FALSE (tokens.empty());
+    EXPECT_EQ (0, tokens.front().start);
+    EXPECT_EQ (10, tokens.back().end);
+
+    for (size_t i = 1; i < tokens.size(); ++i)
+        EXPECT_EQ (tokens[i - 1].end, tokens[i].start);
+
+    const auto found = std::find_if (tokens.begin(), tokens.end(), [] (const CodeTokeniser::Token& token)
+    {
+        return token.start == 4;
+    });
+
+    ASSERT_NE (found, tokens.end());
+    EXPECT_EQ (5, found->end - found->start);
+    EXPECT_EQ (Identifier ("identifier.member"), found->scope);
+    EXPECT_EQ (SyntaxDefinition::TokenType::identifier, found->type);
+}
+
+TEST (CodeEditorTest, SemanticTokensFollowLineEditsAndDropEditedLines)
+{
+    CodeEditor editor;
+    editor.setText ("aaa\nbbb\nccc");
+    editor.setSemanticTokens ({
+        { 0, 0, 3, Identifier ("variable") },
+        { 1, 0, 3, Identifier ("variable") },
+        { 2, 0, 3, Identifier ("variable") }
+    });
+
+    editor.setCaretPosition (4);
+    editor.insertText ("x\ny");
+
+    ASSERT_EQ (2u, editor.getSemanticTokens().size());
+    EXPECT_EQ (0, editor.getSemanticTokens()[0].line);
+    EXPECT_EQ (3, editor.getSemanticTokens()[1].line);
+
+    editor.clearSemanticTokens();
+    EXPECT_TRUE (editor.getSemanticTokens().empty());
+
+    editor.setSemanticTokens ({ { 0, 0, 3, Identifier ("variable") } });
+    CodeDocument other;
+    editor.setDocument (other);
+    EXPECT_TRUE (editor.getSemanticTokens().empty());
+}
+
+TEST (CodeEditorTest, DiagnosticGeometryCoversUnderlinesAndGutter)
+{
+    CodeEditor editor;
+    editor.setText ("int value = 1;\nint other = 2;");
+    editor.setSize (400, 200);
+
+    CodeEditor::Diagnostic hint;
+    hint.column = 4;
+    hint.endColumn = 9;
+    hint.severity = CodeEditor::Diagnostic::Severity::hint;
+
+    CodeEditor::Diagnostic error;
+    error.line = error.endLine = 1;
+    error.column = 4;
+    error.endColumn = 9;
+
+    editor.setDiagnostics ({ error, hint });
+    editor.setErrorLine (1, true);
+
+    const auto underlines = editor.getDiagnosticUnderlineAreas();
+    ASSERT_EQ (2u, underlines.size());
+    EXPECT_EQ (CodeEditor::Diagnostic::Severity::hint, underlines[0].severity);
+    EXPECT_EQ (CodeEditor::Diagnostic::Severity::error, underlines[1].severity);
+    EXPECT_GT (underlines[1].area.getY(), underlines[0].area.getY());
+
+    // Hints and error lines have no gutter marker
+    const auto gutter = editor.getDiagnosticGutterMarkers();
+    ASSERT_EQ (1u, gutter.size());
+    EXPECT_EQ (CodeEditor::Diagnostic::Severity::error, gutter[0].severity);
+    EXPECT_LT (gutter[0].area.getRight(), editor.getTextArea().getX());
+
+    editor.setLineNumbersVisible (false);
+    EXPECT_TRUE (editor.getDiagnosticGutterMarkers().empty());
 }
 
 TEST (CodeEditorTest, MinimapVisibility)
@@ -970,6 +1997,117 @@ TEST (CodeEditorTest, ReplaceAllWithEmptyReplacementDeletesMatches)
 
     EXPECT_TRUE (editor.undo());
     EXPECT_EQ (String ("aXbXc"), editor.getText());
+}
+
+TEST (CodeEditorTest, FindAllWithRegexMatchesPatternPerLine)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("a1 b22\nC333");
+
+    CodeEditor::SearchOptions options;
+    options.regex = true;
+    options.caseSensitive = true;
+
+    const auto matches = editor.findAll ("[a-z]\\d+", options);
+    ASSERT_EQ (2u, matches.size());
+    EXPECT_EQ (Range<int> (0, 2), matches[0]);
+    EXPECT_EQ (Range<int> (3, 6), matches[1]);
+
+    options.caseSensitive = false;
+    EXPECT_EQ (3u, editor.findAll ("[a-z]\\d+", options).size());
+}
+
+TEST (CodeEditorTest, FindAllWithInvalidRegexReturnsNothing)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("abc");
+
+    CodeEditor::SearchOptions options;
+    options.regex = true;
+
+    EXPECT_TRUE (editor.findAll ("(abc", options).empty());
+    EXPECT_FALSE (editor.findNext ("(abc", options));
+}
+
+TEST (CodeEditorTest, FindAllWithRegexSkipsEmptyMatches)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("ab");
+
+    CodeEditor::SearchOptions options;
+    options.regex = true;
+
+    EXPECT_EQ (1u, editor.findAll ("x*b", options).size());
+    EXPECT_TRUE (editor.findAll ("x*", options).empty());
+}
+
+TEST (CodeEditorTest, RegexWholeWordUsesWordBoundaries)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("cat concat cats");
+
+    CodeEditor::SearchOptions options;
+    options.regex = true;
+    options.wholeWord = true;
+
+    const auto matches = editor.findAll ("ca[a-z]", options);
+    ASSERT_EQ (1u, matches.size());
+    EXPECT_EQ (Range<int> (0, 3), matches[0]);
+}
+
+TEST (CodeEditorTest, RegexReplaceAllExpandsCaptureGroups)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("foo = 1\nbar = 22");
+
+    CodeEditor::SearchOptions options;
+    options.regex = true;
+
+    EXPECT_EQ (2, editor.replaceAll ("(\\w+) = (\\d+)", "$2 => $1 ($0) $$", options));
+    EXPECT_EQ (String ("1 => foo (foo = 1) $\n22 => bar (bar = 22) $"), editor.getText());
+
+    EXPECT_TRUE (editor.undo());
+    EXPECT_EQ (String ("foo = 1\nbar = 22"), editor.getText());
+}
+
+TEST (CodeEditorTest, RegexReplaceNextReplacesSelectedMatchOnly)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("x1 x2");
+
+    CodeEditor::SearchOptions options;
+    options.regex = true;
+
+    editor.setSelection (Range<int> (0, 1));
+    EXPECT_EQ (0, editor.replaceNext ("x(\\d)", "y$1", options));
+
+    editor.setSelection (Range<int> (0, 2));
+    EXPECT_EQ (1, editor.replaceNext ("x(\\d)", "y$1", options));
+    EXPECT_EQ (String ("y1 x2"), editor.getText());
+    EXPECT_EQ (Range<int> (3, 5), editor.getSelection());
+}
+
+TEST (CodeEditorTest, SearchHighlightsFollowDocumentEdits)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("foo bar");
+
+    editor.highlightSearchMatches ("foo");
+    EXPECT_EQ (1u, editor.getSearchMatches().size());
+
+    editor.setCaretPosition (7);
+    editor.insertText (" foo");
+    EXPECT_EQ (2u, editor.getSearchMatches().size());
+
+    editor.clearSearchHighlights();
+    EXPECT_TRUE (editor.getSearchMatches().empty());
 }
 
 // ==============================================================================
@@ -1508,6 +2646,130 @@ TEST (CodeEditorTest, GetSearchMatchAreasReturnsRectanglesForMatches)
     EXPECT_FALSE (editor.getSearchMatchAreas().empty());
 }
 
+TEST (CodeEditorTest, WordOccurrencesMatchWholeWordsOfWordAtCaret)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("foo bar foo foobar\nfoo");
+    editor.setSize (400, 200);
+    editor.setCaretPosition (1);
+
+    const auto occurrences = editor.getWordOccurrences();
+
+    ASSERT_EQ (3u, occurrences.size());
+    EXPECT_EQ (Range<int> (0, 3), occurrences[0]);
+    EXPECT_EQ (Range<int> (8, 11), occurrences[1]);
+    EXPECT_EQ (Range<int> (19, 22), occurrences[2]);
+    EXPECT_EQ (3u, editor.getWordOccurrenceAreas().size());
+}
+
+TEST (CodeEditorTest, WordOccurrencesUseSelectionOnlyWhenItIsOneWord)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("foo bar foo");
+    editor.setSize (400, 200);
+
+    editor.setSelection (Range<int> (0, 2));
+    EXPECT_TRUE (editor.getWordOccurrences().empty());
+
+    editor.setSelection (Range<int> (0, 7));
+    EXPECT_TRUE (editor.getWordOccurrences().empty());
+
+    editor.setSelection (Range<int> (8, 11));
+    EXPECT_EQ (2u, editor.getWordOccurrences().size());
+}
+
+TEST (CodeEditorTest, WordOccurrenceAreasAreEmptyForUniqueWordOrWhenDisabled)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("foo bar foo");
+    editor.setSize (400, 200);
+
+    editor.setCaretPosition (5);
+    EXPECT_EQ (1u, editor.getWordOccurrences().size());
+    EXPECT_TRUE (editor.getWordOccurrenceAreas().empty());
+
+    editor.setCaretPosition (1);
+    editor.setOccurrenceHighlightingEnabled (false);
+    EXPECT_TRUE (editor.getWordOccurrences().empty());
+    EXPECT_TRUE (editor.getWordOccurrenceAreas().empty());
+}
+
+TEST (CodeEditorTest, BracketMatchAreasCoverBothBrackets)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("f(x)");
+    editor.setSize (400, 200);
+
+    editor.setCaretPosition (1);
+    const auto areas = editor.getBracketMatchAreas();
+
+    ASSERT_EQ (2u, areas.size());
+    EXPECT_LT (areas[0].getX(), areas[1].getX());
+
+    editor.setCaretPosition (0);
+    EXPECT_TRUE (editor.getBracketMatchAreas().empty());
+}
+
+TEST (CodeEditorTest, IndentGuidesFollowIndentLevelsAndBlankLines)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("a\n    b\n\n        c\nd");
+    editor.setSize (400, 200);
+
+    const auto guides = editor.getIndentGuideAreas();
+
+    ASSERT_EQ (4u, guides.size());
+    EXPECT_FLOAT_EQ (guides[0].getX(), guides[1].getX());
+    EXPECT_FLOAT_EQ (guides[1].getX(), guides[2].getX());
+    EXPECT_LT (guides[2].getX(), guides[3].getX());
+    EXPECT_LT (guides[0].getY(), guides[1].getY());
+
+    editor.setIndentGuidesVisible (false);
+    EXPECT_TRUE (editor.getIndentGuideAreas().empty());
+}
+
+TEST (CodeEditorTest, WhitespaceMarkersAreRenderedOnlyWhenEnabled)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("a b\tc");
+    editor.setSize (400, 200);
+
+    EXPECT_TRUE (editor.getWhitespaceMarkers().empty());
+
+    editor.setWhitespaceVisible (true);
+    const auto markers = editor.getWhitespaceMarkers();
+
+    ASSERT_EQ (2u, markers.size());
+    EXPECT_FALSE (markers[0].isTab);
+    EXPECT_TRUE (markers[1].isTab);
+}
+
+TEST (CodeEditorTest, HorizontalScrollBarAppearsForLongLines)
+{
+    CodeDocument shortDocument;
+    CodeEditor shortEditor (shortDocument);
+    shortEditor.setText ("short");
+    shortEditor.setSize (200, 200);
+    shortEditor.setScrollOffset ({ 0.0f, 0.0f });
+
+    CodeDocument longDocument;
+    CodeEditor longEditor (longDocument);
+    longEditor.setText (String::repeatedString ("long ", 100));
+    longEditor.setSize (200, 200);
+    longEditor.setScrollOffset ({ 0.0f, 0.0f });
+
+    EXPECT_LT (longEditor.getTextArea().getHeight(), shortEditor.getTextArea().getHeight());
+
+    longEditor.setScrollOffset ({ 100.0f, 0.0f });
+    EXPECT_FLOAT_EQ (100.0f, longEditor.getScrollOffset().getX());
+}
+
 // ==============================================================================
 // Syntax highlighting shaping
 // ==============================================================================
@@ -2032,6 +3294,39 @@ TEST (CodeEditorTest, MouseDownInTextAreaMovesCaretAndClearsSelection)
     EXPECT_FALSE (editor.hasSelection());
 }
 
+TEST (CodeEditorTest, MouseDownOnEmptyLastLineMovesCaretThere)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("hello\nworld\n");
+    editor.setSize (400, 200);
+    editor.setLineNumbersVisible (false);
+
+    const auto textArea = editor.getTextArea();
+    const auto lineHeight = editor.getLineHeight();
+
+    editor.mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (textArea.getX() + 30.0f, textArea.getY() + lineHeight * 2.5f)));
+    EXPECT_EQ (12, editor.getCaretPosition());
+
+    editor.setCaretPosition (0);
+    editor.mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (textArea.getX() + 30.0f, textArea.getY() + lineHeight * 6.0f)));
+    EXPECT_EQ (12, editor.getCaretPosition());
+}
+
+TEST (CodeEditorTest, MouseDownOnEmptyMiddleLineMovesCaretThere)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("hello\n\nworld");
+    editor.setSize (400, 200);
+    editor.setLineNumbersVisible (false);
+
+    const auto textArea = editor.getTextArea();
+    editor.mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (textArea.getX() + 30.0f, textArea.getY() + editor.getLineHeight() * 1.5f)));
+
+    EXPECT_EQ (6, editor.getCaretPosition());
+}
+
 TEST (CodeEditorTest, MouseDragExtendsSelectionWhileDragging)
 {
     CodeDocument document;
@@ -2095,6 +3390,82 @@ TEST (CodeEditorTest, MouseDoubleClickSelectsWord)
     editor.mouseDoubleClick (event);
 
     EXPECT_TRUE (editor.hasSelection());
+}
+
+TEST (CodeEditorTest, ThirdClickAfterDoubleClickSelectsLine)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("hello world\nnext");
+    editor.setSize (400, 200);
+    editor.setLineNumbersVisible (false);
+
+    const auto textArea = editor.getTextArea();
+    MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (textArea.getX() + 2.0f, textArea.getY() + 5.0f));
+
+    editor.mouseDoubleClick (event);
+    EXPECT_EQ (Range<int> (0, 5), editor.getSelection());
+
+    editor.mouseDoubleClick (event);
+    EXPECT_EQ (Range<int> (0, 12), editor.getSelection());
+}
+
+TEST (CodeEditorTest, SelectLineIncludesLineBreak)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("ab\ncd");
+
+    editor.selectLine (0);
+    EXPECT_EQ (Range<int> (0, 3), editor.getSelection());
+
+    editor.selectLine (5);
+    EXPECT_EQ (Range<int> (3, 5), editor.getSelection());
+}
+
+TEST (CodeEditorTest, VerticalMovesKeepPreferredColumn)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("abcdef\nab\nabcdef");
+    editor.setCaretPosition (5);
+
+    editor.keyDown (KeyPress (KeyPress::downKey), {});
+    EXPECT_EQ (9, editor.getCaretPosition());
+
+    editor.keyDown (KeyPress (KeyPress::downKey), {});
+    EXPECT_EQ (15, editor.getCaretPosition());
+
+    editor.keyDown (KeyPress (KeyPress::leftKey), {});
+    editor.keyDown (KeyPress (KeyPress::upKey), {});
+    editor.keyDown (KeyPress (KeyPress::upKey), {});
+    EXPECT_EQ (4, editor.getCaretPosition());
+}
+
+TEST (CodeEditorTest, PageDownAndUpMoveByVisibleLines)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    String text;
+    for (int i = 0; i < 100; ++i)
+        text << "line " << i << "\n";
+
+    editor.setText (text);
+    editor.setSize (400, 200);
+
+    editor.keyDown (KeyPress (KeyPress::pageDownKey), {});
+    const int lineAfterPageDown = document.indexToPosition (editor.getCaretPosition()).getLineNumber();
+
+    EXPECT_GT (lineAfterPageDown, 1);
+    EXPECT_GT (editor.getScrollOffset().getY(), 0.0f);
+
+    editor.keyDown (KeyPress (KeyPress::pageDownKey, KeyModifiers (KeyModifiers::shiftMask)), {});
+    EXPECT_TRUE (editor.hasSelection());
+
+    editor.keyDown (KeyPress (KeyPress::pageUpKey), {});
+    editor.keyDown (KeyPress (KeyPress::pageUpKey), {});
+    EXPECT_EQ (0, editor.getCaretPosition());
 }
 
 TEST (CodeEditorTest, MouseWheelScrollsContent)

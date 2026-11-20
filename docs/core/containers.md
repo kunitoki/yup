@@ -117,8 +117,10 @@ fifo.finishedWrite (size1 + size2);
 ```
 
 ```{seealso}
-See the [Multithreading](../multithreading/index.md) area for the threading and
-synchronization types that pair with these containers.
+See [Synchronization](multithreading/synchronization.md) for the locks that
+pair with these containers, and
+[the audio thread](multithreading/index.md#the-audio-thread) for lock-free
+`AbstractFifo` usage.
 ```
 
 ## Utilities
@@ -147,4 +149,4 @@ synchronization types that pair with these containers.
 
 - [Memory](memory.md) - ownership models behind the containers.
 - [Strings & text](strings-and-text.md) - `StringArray`, `StringPairArray`.
-- [Multithreading](../multithreading/index.md) - lock-free usage patterns.
+- [Multithreading](multithreading/index.md) - lock-free usage patterns.

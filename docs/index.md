@@ -6,6 +6,10 @@ combines permissively licensed JUCE7-derived foundations with modern GPU-native
 rendering through the open source [Rive](https://rive.app/) renderer and YUP's
 own graphics, GUI, DSP, audio graph, and plugin layers.
 
+<p align="center">
+  <img class="rounded" src="_static/images/yup_retrace_plugin.jpg" alt="RETRACE, the spectral synthesizer plugin of the examples, built with YUP" width="640">
+</p>
+
 ```{warning}
 YUP is under active early-stage development. APIs may change while the framework
 is being shaped. This documentation tracks the current state of the code in the
@@ -20,23 +24,24 @@ concept guides, walkthroughs, and reference material.
 - [Getting Started](getting-started/index.md) - install YUP, build the examples, and create your first project.
 - [All modules and their usage](modules.md) - the full module list, grouped by area, with dependencies.
 - [Build System](build-system/index.md) - the CMake API, module format, and packaging.
-- [Core](core/index.md) - core utilities, files, strings, memory, and SIMD.
-- [Multithreading](multithreading/index.md) - threads, the message manager, and thread-safe patterns.
+- [Core](core/index.md) - core utilities, files, strings, memory, SIMD, and multithreading.
 - [Data](data/index.md) - the `DataTree` model and serialization.
-- [Graphics](graphics/index.md) - the graphics context, 2D drawing, the **RHI** GPU layer, shaders, fonts, SVG, and animation.
+- [Graphics](graphics/index.md) - the graphics context, 2D drawing, the **RHI** GPU layer, shaders, fonts, SVG, and the GPU backends.
 - [Imaging](imaging/index.md) - bitmap images: pixels, loading, saving, and drawing.
 - [UI](ui/index.md) - components, windowing, events, layout, and widgets.
+- [Animation](animation/index.md) - loading, playing and exporting Lottie animations.
 - [3D](3d/index.md) - entity trees, glTF loading, and PBR scenes in a component.
-- [DSP](dsp/index.md) - filters, filter design, FFTs, dynamics, metering, onset detection, convolution, resampling, and time-stretching.
 - [Audio](audio/index.md) - audio devices, formats, DSP, the audio graph, processors, and plugin hosting/client wrappers.
+  - [DSP](audio/dsp/index.md) - filters, filter design, FFTs, dynamics, metering, onset detection, convolution, resampling, and time-stretching.
 - [AI](ai/index.md) - the AI and LLM infrastructure.
 - [Scripting](scripting/index.md) - the Python bindings layer.
 
 ## Quick links
 
-- Example apps: [graphics](https://github.com/kunitoki/yup/tree/main/examples/graphics), [audio graph](https://github.com/kunitoki/yup/tree/main/examples/audiograph), [plugin](https://github.com/kunitoki/yup/tree/main/examples/plugin), [console](https://github.com/kunitoki/yup/tree/main/examples/console).
+- [Project template](https://github.com/kunitoki/yup-template) - create your own application and plugin repository with *Use this template*.
 - [Building standalone applications](build-system/building-standalone.md)
 - [Building audio plugins](build-system/building-plugins.md)
+- Example apps: [graphics](https://github.com/kunitoki/yup/tree/main/examples/graphics), [audio graph](https://github.com/kunitoki/yup/tree/main/examples/audiograph), [plugin](https://github.com/kunitoki/yup/tree/main/examples/plugin), [console](https://github.com/kunitoki/yup/tree/main/examples/console).
 
 ## External resources
 
@@ -51,13 +56,13 @@ getting-started/index
 modules
 build-system/index
 core/index
-multithreading/index
 data/index
 graphics/index
 imaging/index
 ui/index
+animation/index
 3d/index
-dsp/index
 audio/index
+ai/index
 scripting/index
 ```

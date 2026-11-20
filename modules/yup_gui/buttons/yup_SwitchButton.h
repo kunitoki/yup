@@ -62,7 +62,7 @@ public:
 
         @param shouldBeVertical whether the switch should be vertical
     */
-    void setVertical (bool shouldBeVertical) noexcept;
+    void setVertical (bool shouldBeVertical);
 
     /** Returns whether the switch is oriented vertically.
 
@@ -91,7 +91,17 @@ public:
         static const Identifier switchColorId;
         static const Identifier switchOffBackgroundColorId;
         static const Identifier switchOnBackgroundColorId;
+
+        static const Identifier cornerRadiusId; /**< Corner radius, unset for a pill */
+        static const Identifier thumbInsetId;   /**< Inset of the handle inside its slot, 4 by default */
     };
+
+    //==============================================================================
+    /** Returns the static type info describing the SwitchButton type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
     /** @internal */

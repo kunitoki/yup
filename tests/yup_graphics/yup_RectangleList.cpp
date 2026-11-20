@@ -551,3 +551,20 @@ TEST (RectangleListTests, MergeRecursiveScenario)
     // Should merge into fewer rectangles
     EXPECT_LT (list.getNumRectangles(), 3);
 }
+
+TEST (RectangleListTests, EqualityAndInequalityOperators)
+{
+    RectangleList<float> first;
+    RectangleList<float> second;
+    EXPECT_EQ (first, second);
+    EXPECT_FALSE (first != second);
+
+    first.addWithoutMerge ({ 10.0f, 20.0f, 30.0f, 40.0f });
+    EXPECT_NE (first, second);
+
+    second.addWithoutMerge ({ 10.0f, 20.0f, 30.0f, 40.0f });
+    EXPECT_EQ (first, second);
+
+    second.addWithoutMerge ({ 60.0f, 20.0f, 10.0f, 10.0f });
+    EXPECT_NE (first, second);
+}

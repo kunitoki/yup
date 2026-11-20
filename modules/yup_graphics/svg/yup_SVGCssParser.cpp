@@ -280,11 +280,18 @@ void SVGCssParser::applyStyleProperty (StringRef propertyRef, StringRef valueRef
             map.set ("filter", [] (const String& v, SVGElement& el)
             {
                 if (v == "none")
+                {
                     el.filterUrl.reset();
+                    el.filter = nullptr;
+                }
                 else if (auto url = SVGParser::extractUrlId (v); url.isNotEmpty())
+                {
                     el.filterUrl = url;
+                }
                 else
-                    YUP_DRAWABLE_LOG ("CSS filter currently only supports url(...) - value: " << v);
+                {
+                    el.filter = SVGParser::parseFilterFunctions (v);
+                }
             });
 
             // Markers

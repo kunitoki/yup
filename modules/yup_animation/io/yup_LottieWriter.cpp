@@ -653,7 +653,7 @@ var LottieWriter::serializeMarkers (const std::vector<AnimationMarker>& markers)
     return var (arr);
 }
 
-var LottieWriter::serializeEasing (const AnimationEasing& easing)
+var LottieWriter::serializeEasing (const Easing& easing)
 {
     DynamicObject* out = new DynamicObject();
     DynamicObject* in = new DynamicObject();

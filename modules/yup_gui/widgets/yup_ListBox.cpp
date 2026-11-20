@@ -99,6 +99,57 @@ constexpr double listBoxMaxFrameGapSeconds = 1.0 / 15.0;
 } // namespace
 
 //==============================================================================
+
+namespace
+{
+
+struct ListBoxIds
+{
+    static inline const Identifier items { "items" };
+    static inline const Identifier selectedRow { "selectedRow" };
+};
+
+} // namespace
+
+//==============================================================================
+
+const Identifier ListBox::Style::backgroundColorId { "listBoxBackground" };
+const Identifier ListBox::Style::outlineColorId { "listBoxOutline" };
+const Identifier ListBox::Style::rowBackgroundColorId { "rowBackground" };
+const Identifier ListBox::Style::selectedRowBackgroundColorId { "selectedRowBackground" };
+const Identifier ListBox::Style::hoveredRowBackgroundColorId { "hoveredRowBackground" };
+const Identifier ListBox::Style::refreshIndicatorColorId { "listBoxRefreshIndicator" };
+const Identifier ListBox::Style::refreshIndicatorSizeId { "listBoxRefreshIndicatorSize" };
+
+//==============================================================================
+
+const ComponentTypeInfo& ListBox::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<ListBox> (Identifier ("ListBox"))
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("outlineColor", Style::outlineColorId)
+                                 .color ("rowBackgroundColor", Style::rowBackgroundColorId)
+                                 .color ("selectedRowBackgroundColor", Style::selectedRowBackgroundColorId)
+                                 .color ("hoveredRowBackgroundColor", Style::hoveredRowBackgroundColorId)
+                                 .color ("refreshIndicatorColor", Style::refreshIndicatorColorId)
+                                 .number ("refreshIndicatorSize", Style::refreshIndicatorSizeId, static_cast<double> (listBoxDefaultRefreshIndicatorSize), "The size of the pull-to-refresh indicator along the scroll axis.")
+                                 .property (ListBoxIds::items, &ListBox::getItems, &ListBox::setItems, {}, "The text of each row, shown by a model the list owns.")
+                                 .property (ListBoxIds::selectedRow, &ListBox::getSelectedRow, [] (ListBox& listBox, int row)
+                                 {
+                                     if (row < 0)
+                                         listBox.deselectAllRows();
+                                     else
+                                         listBox.selectRow (row);
+                                 }, {}, "The index of the selected row, or -1 when nothing is selected.")
+                                 .signal ("onSelectionChanged", &ListBox::onSelectionChanged, "Emitted when the selected rows change")
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
+
+//==============================================================================
 float ListBoxModel::getRowSize (int rowIndex)
 {
     ignoreUnused (rowIndex);
@@ -313,10 +364,28 @@ ListBox::~ListBox()
 }
 
 //==============================================================================
+struct ListBox::ItemsModel : public ListBoxModel
+{
+    int getNumRows() override
+    {
+        return items.size();
+    }
+
+    String getRowText (int rowIndex) override
+    {
+        return items[rowIndex];
+    }
+
+    StringArray items;
+};
+
 void ListBox::setModel (ListBoxModel* newModel)
 {
     if (model == newModel)
         return;
+
+    const bool hadOwnedItems = itemsModel != nullptr && model == itemsModel.get() && ! itemsModel->items.isEmpty();
+    const auto previousSelectedRow = getSelectedRow();
 
     destroyAllRows();
 
@@ -334,11 +403,52 @@ void ListBox::setModel (ListBoxModel* newModel)
 
     updateLayout();
     dispatchPendingNotifications();
+
+    const BailOutChecker bailOutChecker (this);
+
+    if (hadOwnedItems && newModel != itemsModel.get())
+    {
+        notifyPropertyChanged (ListBoxIds::items);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    if (getSelectedRow() != previousSelectedRow)
+        notifyPropertyChanged (ListBoxIds::selectedRow);
 }
 
 ListBoxModel* ListBox::getModel() const noexcept
 {
     return model;
+}
+
+//==============================================================================
+
+void ListBox::setItems (const StringArray& newItems)
+{
+    if (itemsModel != nullptr && model == itemsModel.get() && itemsModel->items == newItems)
+        return;
+
+    if (itemsModel == nullptr)
+        itemsModel = std::make_unique<ItemsModel>();
+
+    const bool switchingToItemsModel = model != itemsModel.get();
+    itemsModel->items = newItems;
+
+    if (! switchingToItemsModel)
+        model = nullptr;
+
+    setModel (itemsModel.get());
+
+    notifyPropertyChanged (ListBoxIds::items);
+}
+
+StringArray ListBox::getItems() const
+{
+    if (itemsModel == nullptr || model != itemsModel.get())
+        return {};
+
+    return itemsModel->items;
 }
 
 //==============================================================================
@@ -409,9 +519,7 @@ void ListBox::selectRow (int rowIndex, bool scrollToShowRow, NotificationType no
         return;
 
     updateRowStates();
-
-    if (notification != dontSendNotification)
-        notifySelectionChanged();
+    notifySelectionChanged (notification);
 }
 
 void ListBox::deselectRow (int rowIndex, NotificationType notification)
@@ -425,9 +533,7 @@ void ListBox::deselectRow (int rowIndex, NotificationType notification)
         selectionAnchor = selectedRows.isEmpty() ? -1 : selectedRows.getLast();
 
     updateRowStates();
-
-    if (notification != dontSendNotification)
-        notifySelectionChanged();
+    notifySelectionChanged (notification);
 }
 
 void ListBox::deselectAllRows (NotificationType notification)
@@ -438,9 +544,7 @@ void ListBox::deselectAllRows (NotificationType notification)
     selectedRows.clear();
     selectionAnchor = -1;
     updateRowStates();
-
-    if (notification != dontSendNotification)
-        notifySelectionChanged();
+    notifySelectionChanged (notification);
 }
 
 Array<int> ListBox::getSelectedRows() const
@@ -467,6 +571,10 @@ void ListBox::setSelectedRows (const Array<int>& rows, NotificationType notifica
     }
 
     std::sort (newRows.begin(), newRows.end());
+
+    if (newRows == selectedRows)
+        return;
+
     selectedRows = std::move (newRows);
 
     selectionAnchor = selectedRows.isEmpty() ? -1 : selectedRows.getLast();
@@ -475,9 +583,7 @@ void ListBox::setSelectedRows (const Array<int>& rows, NotificationType notifica
         setCurrentRow (selectedRows.getLast(), notification);
 
     updateRowStates();
-
-    if (notification != dontSendNotification)
-        notifySelectionChanged();
+    notifySelectionChanged (notification);
 }
 
 bool ListBox::isRowSelected (int rowIndex) const
@@ -565,6 +671,7 @@ void ListBox::rowsInserted (int startRow, int count)
     startRow = jlimit (0, numRows, startRow);
 
     const auto anchorRow = visibleRowRange.isEmpty() ? -1 : visibleRowRange.getStart();
+    const auto previousSelectedRow = getSelectedRow();
     const auto anchorStart = anchorRow >= 0 ? rowStarts[static_cast<size_t> (anchorRow)] : 0.0f;
     const auto mapping = [startRow, count] (int row)
     {
@@ -589,6 +696,10 @@ void ListBox::rowsInserted (int startRow, int count)
 
     updateLayout();
     updateRowStates();
+
+    if (getSelectedRow() != previousSelectedRow)
+        notifyPropertyChanged (ListBoxIds::selectedRow);
+
     dispatchPendingNotifications();
 }
 
@@ -603,6 +714,7 @@ void ListBox::rowsRemoved (int startRow, int count)
     if (count <= 0)
         return;
 
+    const auto previousSelectedRow = getSelectedRow();
     const auto endRow = startRow + count;
     const auto anchorRow = visibleRowRange.isEmpty() ? -1 : visibleRowRange.getStart();
     const auto anchorStart = anchorRow >= 0 ? rowStarts[static_cast<size_t> (anchorRow)] : 0.0f;
@@ -636,6 +748,8 @@ void ListBox::rowsRemoved (int startRow, int count)
 
     if (removedSelectedRows)
         notifySelectionChanged();
+    else if (getSelectedRow() != previousSelectedRow)
+        notifyPropertyChanged (ListBoxIds::selectedRow);
 
     dispatchPendingNotifications();
 }
@@ -647,6 +761,7 @@ void ListBox::rowMoved (int fromRow, int toRow)
     if (model == nullptr || fromRow == toRow || ! isPositiveAndBelow (fromRow, numRows) || ! isPositiveAndBelow (toRow, numRows))
         return;
 
+    const auto previousSelectedRow = getSelectedRow();
     const auto mapping = [fromRow, toRow] (int row)
     {
         if (row == fromRow)
@@ -670,6 +785,10 @@ void ListBox::rowMoved (int fromRow, int toRow)
 
     updateLayout();
     updateRowStates();
+
+    if (getSelectedRow() != previousSelectedRow)
+        notifyPropertyChanged (ListBoxIds::selectedRow);
+
     dispatchPendingNotifications();
 }
 
@@ -849,13 +968,7 @@ float ListBox::getPullToRefreshProgress() const noexcept
 
 float ListBox::getRefreshIndicatorSize() const
 {
-    if (auto theme = ApplicationTheme::getGlobalTheme())
-    {
-        if (auto size = theme->findMetric (*this, Style::refreshIndicatorSizeId))
-            return jmax (1.0f, *size);
-    }
-
-    return listBoxDefaultRefreshIndicatorSize;
+    return jmax (1.0f, findPropertyAs<float> (Identifier ("refreshIndicatorSize")));
 }
 
 void ListBox::setEndReachedThreshold (float viewportFraction)
@@ -1700,12 +1813,18 @@ void ListBox::navigateTo (int rowIndex, const KeyModifiers& modifiers)
     scrollToRow (rowIndex);
 }
 
-void ListBox::notifySelectionChanged()
+void ListBox::notifySelectionChanged (NotificationType notification)
 {
+    const BailOutChecker bailOutChecker (this);
+
+    notifyPropertyChanged (ListBoxIds::selectedRow);
+    if (bailOutChecker.shouldBailOut() || notification == dontSendNotification)
+        return;
+
     if (onSelectionChanged)
         onSelectionChanged();
 
-    if (model != nullptr)
+    if (! bailOutChecker.shouldBailOut() && model != nullptr)
         model->selectedRowsChanged (selectedRows);
 }
 

@@ -5,6 +5,10 @@ horizontally, from a `ListBoxModel` you provide. Only the visible rows have
 components, and they are recycled as the list scrolls, so a list of a million
 rows costs the same as a list of twenty.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_list_box.jpg" alt="List boxes, in the graphics example" width="640">
+</p>
+
 ```cpp
 class FruitModel : public yup::ListBoxModel
 {
@@ -20,6 +24,11 @@ yup::ListBox list;
 list.setModel (&model);
 addAndMakeVisible (list);
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/list-box_rows_light.jpg#gh-light-mode-only" alt="A list box showing six rows, the second one selected" width="400">
+  <img class="dark-only rounded" src="../_static/images/ui/list-box_rows_dark.jpg#gh-dark-mode-only" alt="A list box showing six rows, the second one selected" width="400">
+</p>
 
 The list never owns its model: keep the model alive for as long as the list
 uses it, or call `setModel (nullptr)` first.
@@ -207,4 +216,5 @@ frame times.
 
 The theme paints the list through `ListBox::Style` colors (see
 [component styling](component-styling.md)), and the pull-to-refresh indicator
-size is the `ListBox::Style::refreshIndicatorSizeId` metric.
+size is the `ListBox::Style::refreshIndicatorSizeId` property (reflected as
+`refreshIndicatorSize`).

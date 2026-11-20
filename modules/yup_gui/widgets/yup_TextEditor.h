@@ -49,7 +49,10 @@ class YUP_API TextEditor : public Component
 public:
     //==============================================================================
     /** Creates a text editor with an optional component ID. */
-    TextEditor (StringRef componentID = {});
+    TextEditor();
+
+    /** Creates a text editor with an optional component ID. */
+    explicit TextEditor (StringRef componentID);
 
     //==============================================================================
     /** Returns the editor's current text.
@@ -291,15 +294,31 @@ public:
     /** Color identifiers used by the text editor. */
     struct Style
     {
-        static const Identifier backgroundColorId;
-        static const Identifier textColorId;
-        static const Identifier caretColorId;
-        static const Identifier selectionColorId;
-        static const Identifier outlineColorId;
-        static const Identifier focusedOutlineColorId;
+        static const Identifier backgroundColorId;     /**< The background color of the text editor. */
+        static const Identifier textColorId;           /**< The color of the text. */
+        static const Identifier caretColorId;          /**< The color of the caret. */
+        static const Identifier selectionColorId;      /**< The color of the text selection. */
+        static const Identifier outlineColorId;        /**< The color of the outline. */
+        static const Identifier focusedOutlineColorId; /**< The color of the outline when focused. */
+
+        static const Identifier cornerRadiusId;        /**< Corner radius, 4 by default */
+        static const Identifier outlineWidthId;        /**< Outline width, 1 by default */
+        static const Identifier focusedOutlineWidthId; /**< Outline width with keyboard focus, 2 by default */
     };
 
     //==============================================================================
+    /** Returns the static type info describing the TextEditor type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
+    /** @internal */
+    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
+    /** @internal */
+    Rectangle<float> getTextInputRect() const override;
+
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
@@ -325,21 +344,12 @@ public:
     /** @internal */
     void textInput (const String& text) override;
 
-    /** @internal */
-    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
-
-    //==============================================================================
-    /** @internal
-        Returns the rectangle where text input is being edited.
-        This is used to position on-screen keyboards appropriately.
-    */
-    Rectangle<float> getTextInputRect() const override;
-
 private:
     //==============================================================================
     void updateStyledTextIfNeeded();
     Font getEffectiveFont() const;
     void updateCaretPosition();
+    void sendTextChanged (NotificationType notification);
     void ensureCaretVisible();
     void blinkCaret();
     int getGlyphIndexAtPosition (const Point<float>& position) const;

@@ -124,6 +124,32 @@ static bool isEncodingStreamKindSupported (AppleCoreAudioFormat::StreamKind kind
     return false;
 }
 
+static AppleCoreAudioFormat::StreamKind getEncodingStreamKindForStream (OutputStream* stream)
+{
+    using StreamKind = AppleCoreAudioFormat::StreamKind;
+
+    const auto* fileStream = dynamic_cast<FileOutputStream*> (stream);
+    if (fileStream == nullptr)
+        return StreamKind::kAacAdts;
+
+    const auto extension = fileStream->getFile().getFileExtension().toLowerCase();
+
+    if (extension == ".mp4")
+        return StreamKind::kMp4;
+    if (extension == ".m4a")
+        return StreamKind::kM4a;
+    if (extension == ".m4b")
+        return StreamKind::kM4b;
+    if (extension == ".caf")
+        return StreamKind::kCaf;
+    if (extension == ".3gp")
+        return StreamKind::k3gp;
+    if (extension == ".3g2")
+        return StreamKind::k3gp2;
+
+    return StreamKind::kAacAdts;
+}
+
 struct CoreAudioFormatMetadata
 {
     static uint32 chunkName (const char* const name) noexcept
@@ -861,16 +887,14 @@ AppleCoreAudioFormatWriter::AppleCoreAudioFormatWriter (OutputStream* destStream
     if (destStream == nullptr || numberOfChannels < 1 || sampleRate <= 0.0)
         return;
 
-    AudioFileTypeID fileType = kAudioFileAAC_ADTSType;
-    if (streamKind != AppleCoreAudioFormat::StreamKind::kNone)
-    {
-        if (! isEncodingStreamKindSupported (streamKind))
-            return;
+    const auto encodingKind = streamKind != AppleCoreAudioFormat::StreamKind::kNone
+                                ? streamKind
+                                : getEncodingStreamKindForStream (destStream);
 
-        const auto kindType = toAudioFileTypeID (streamKind);
-        if (kindType != 0)
-            fileType = kindType;
-    }
+    if (! isEncodingStreamKindSupported (encodingKind))
+        return;
+
+    const AudioFileTypeID fileType = toAudioFileTypeID (encodingKind);
 
     fileFormat = {};
     fileFormat.mSampleRate = sampleRate;
@@ -1072,7 +1096,7 @@ Array<String> AppleCoreAudioFormat::getFileExtensions (Mode handleMode) const
     }
     else
     {
-        return { ".aiff", ".aif", ".aifc", ".sd2", ".au", ".snd", ".mp4", ".mp2", ".mp1", ".ac3", ".aac", ".m4a", ".m4b", ".caf", ".3gp", ".3g2", ".amr" };
+        return { ".aac", ".mp4", ".m4a", ".m4b", ".caf", ".3gp", ".3g2" };
     }
 }
 

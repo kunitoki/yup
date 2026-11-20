@@ -318,6 +318,11 @@ bool TreeViewItem::isInterestedInDragSource (const DragAndDropSourceDetails& det
     return false;
 }
 
+bool TreeViewItem::canContainDroppedItems() const
+{
+    return mightContainSubItems();
+}
+
 void TreeViewItem::itemDropped (const DragAndDropSourceDetails& details, int insertIndex)
 {
     ignoreUnused (details, insertIndex);

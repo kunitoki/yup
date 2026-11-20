@@ -6,6 +6,10 @@ stays a child of the `SceneComponent` that draws the scene, which renders it to
 a texture, puts the texture in a material, and maps input from its own points
 onto the mesh.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_3d_components.jpg" alt="Components shown on the screen of a 3D model, in the graphics example" width="640">
+</p>
+
 This page covers the scene side. The input hooks and `MeshSurfaceMapper` are
 described in [Components in 3D](../ui/component-3d.md); the Scene 3D demo
 (`examples/graphics/source/examples/Scene3D.h`) uses this pattern for the LCD

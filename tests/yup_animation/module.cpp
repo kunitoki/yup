@@ -19,7 +19,6 @@
   ==============================================================================
 */
 
-#include "yup_AnimationEasing.cpp"
 #include "yup_AnimationProperty.cpp"
 #include "yup_AnimationRenderResources.cpp"
 #include "yup_AnimationTransform.cpp"

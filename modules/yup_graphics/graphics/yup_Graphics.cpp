@@ -226,37 +226,20 @@ rive::Mat2D toShaderTransform (const ColorGradient& gradient)
     return gradient.getTransform().toMat2D();
 }
 
-void setupGradientPaint (rive::Factory& factory, rive::RiveRenderPaint& paint, const ColorGradient& gradient, const AffineTransform& transform)
+// The renderer only clamps gradients, so the other spreads are expanded over the area being painted
+void setupGradientPaint (rive::Factory& factory, rive::RiveRenderPaint& paint, const ColorGradient& gradient, const AffineTransform& transform, const Rectangle<float>& paintedArea)
 {
+    if (gradient.getSpread() != ColorGradient::Spread::Pad)
+    {
+        setupGradientPaint (factory, paint, gradient.withSpreadExpandedOver (paintedArea), transform, paintedArea);
+        return;
+    }
+
     paint.shader (toColorGradient (factory, gradient, transform));
     paint.shaderTransform (toShaderTransform (gradient));
 }
 
 //==============================================================================
-StyledText::HorizontalAlign toHorizontalAlign (Justification justification)
-{
-    if (justification.testFlags (Justification::left))
-        return StyledText::left;
-    else if (justification.testFlags (Justification::right))
-        return StyledText::right;
-    else if (justification.testFlags (Justification::horizontalCenter))
-        return StyledText::center;
-    else
-        return StyledText::center;
-}
-
-StyledText::VerticalAlign toVerticalAlign (Justification justification)
-{
-    if (justification.testFlags (Justification::top))
-        return StyledText::top;
-    else if (justification.testFlags (Justification::bottom))
-        return StyledText::bottom;
-    else if (justification.testFlags (Justification::verticalCenter))
-        return StyledText::middle;
-    else
-        return StyledText::middle;
-}
-
 // Text paths are drawn relative to the top-left of their shaped lines, not the drawing's origin.
 Point<float> textOrigin (const StyledText& text, const Rectangle<float>& rect)
 {
@@ -284,14 +267,10 @@ std::unique_ptr<rive::Renderer> makeOffscreenRenderer (GraphicsContext& context,
 
 //==============================================================================
 // Feathered fills are only rendered with the clockwise fill rule, which matches the
-// path's own fill rule once its filled area is resolved into clockwise outlines. The
-// outline is copied, as it may be a cached polygon whose fill rule must not change.
+// path's own fill rule once its filled area is resolved into clockwise outlines.
 rive::rcp<rive::RiveRenderPath> toClockwiseFillPath (const Path& path)
 {
-    auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
-    renderPath->fillRule (rive::FillRule::clockwise);
-    renderPath->addRenderPath (path.createFillPolygon().getRenderPath(), {});
-    return renderPath;
+    return rive::ref_rcp (path.getClockwiseRenderPath());
 }
 
 // The area a stroke clip keeps. Inside and outside bands are made like the renderer makes them:
@@ -384,6 +363,7 @@ Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer, float sc
     , renderer (renderer)
     , contextScale (scale)
 {
+    renderOptions.reserve (8);
     renderOptions.emplace_back();
 
     currentRenderOptions().scale = scale;
@@ -551,24 +531,29 @@ rive::Renderer* Graphics::getRenderer()
 //==============================================================================
 Graphics::RenderOptions& Graphics::currentRenderOptions()
 {
-    jassert (! renderOptions.empty());
+    jassert (renderOptionsDepth > 0 && renderOptionsDepth <= renderOptions.size());
 
-    return renderOptions.back();
+    return renderOptions[renderOptionsDepth - 1];
 }
 
 const Graphics::RenderOptions& Graphics::currentRenderOptions() const
 {
-    jassert (! renderOptions.empty());
+    jassert (renderOptionsDepth > 0 && renderOptionsDepth <= renderOptions.size());
 
-    return renderOptions.back();
+    return renderOptions[renderOptionsDepth - 1];
 }
 
 //==============================================================================
 Graphics::SavedState Graphics::saveState()
 {
-    jassert (! renderOptions.empty());
+    jassert (renderOptionsDepth > 0 && renderOptionsDepth <= renderOptions.size());
 
-    renderOptions.emplace_back (renderOptions.back());
+    if (renderOptionsDepth < renderOptions.size())
+        renderOptions[renderOptionsDepth] = renderOptions[renderOptionsDepth - 1];
+    else
+        renderOptions.emplace_back (renderOptions[renderOptionsDepth - 1]);
+
+    ++renderOptionsDepth;
 
     renderer.save();
 
@@ -577,9 +562,13 @@ Graphics::SavedState Graphics::saveState()
 
 void Graphics::restoreState()
 {
+    jassert (renderOptionsDepth > 1);
+
     renderer.restore();
 
-    renderOptions.pop_back();
+    --renderOptionsDepth;
+    renderOptions[renderOptionsDepth].fillImage.reset();
+    renderOptions[renderOptionsDepth].strokeImage.reset();
 }
 
 //==============================================================================
@@ -670,7 +659,7 @@ bool Graphics::TransparencyLayer::commit()
 
         if (! std::exchange (atBaseState, true))
         {
-            for (std::size_t i = 1; i < graphics->renderOptions.size(); ++i)
+            for (std::size_t i = 1; i < graphics->renderOptionsDepth; ++i)
                 graphics->renderer.restore();
 
             graphics->renderer.restore();
@@ -740,9 +729,9 @@ Color Graphics::getStrokeColor() const
 }
 
 //==============================================================================
-void Graphics::setFillColorGradient (ColorGradient gradient)
+void Graphics::setFillColorGradient (const ColorGradient& gradient)
 {
-    currentRenderOptions().fillGradient = std::move (gradient);
+    currentRenderOptions().fillGradient = gradient;
     currentRenderOptions().isCurrentFillColor = false;
     currentRenderOptions().fillImage.reset();
 }
@@ -768,9 +757,9 @@ void Graphics::setFillTexture (const GpuTexture::Ptr& texture, const AffineTrans
 }
 
 //==============================================================================
-void Graphics::setStrokeColorGradient (ColorGradient gradient)
+void Graphics::setStrokeColorGradient (const ColorGradient& gradient)
 {
-    currentRenderOptions().strokeGradient = std::move (gradient);
+    currentRenderOptions().strokeGradient = gradient;
     currentRenderOptions().isCurrentStrokeColor = false;
     currentRenderOptions().strokeImage.reset();
 }
@@ -817,6 +806,27 @@ Graphics::ImagePaint Graphics::makeTexturePaint (const GpuTexture::Ptr& texture,
 
     // Graphics is a friend of GpuTexture - may access private getOrAdoptGpuTexture()
     return { texture->getOrAdoptGpuTexture(), { static_cast<float> (texture->getWidth()), static_cast<float> (texture->getHeight()) }, textureTransform, sampling };
+}
+
+//==============================================================================
+void Graphics::copyPaint (const Graphics& other)
+{
+    const auto& from = other.currentRenderOptions();
+    auto& to = currentRenderOptions();
+
+    to.fillColor = from.fillColor;
+    to.fillGradient = from.fillGradient;
+    to.fillImage = from.fillImage;
+    to.isCurrentFillColor = from.isCurrentFillColor;
+    to.strokeColor = from.strokeColor;
+    to.strokeGradient = from.strokeGradient;
+    to.strokeImage = from.strokeImage;
+    to.isCurrentStrokeColor = from.isCurrentStrokeColor;
+    to.strokeWidth = from.strokeWidth;
+    to.strokePosition = from.strokePosition;
+    to.join = from.join;
+    to.cap = from.cap;
+    to.feather = from.feather;
 }
 
 //==============================================================================
@@ -1212,7 +1222,7 @@ void Graphics::fillPath (const Path& path)
 void Graphics::renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform)
 {
     rive::RiveRenderPaint paint;
-    if (! setupStrokePaint (paint, options, transform))
+    if (! setupStrokePaint (paint, options, transform, options.spreadsStrokeGradient() ? path.getBounds().enlarged (options.getStrokeWidth()) : Rectangle<float>()))
         return;
 
     renderer.save();
@@ -1225,20 +1235,20 @@ void Graphics::renderStrokePath (const Path& path, const RenderOptions& options,
 void Graphics::renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform)
 {
     rive::RiveRenderPaint paint;
-    if (! setupFillPaint (paint, options, transform))
+    if (! setupFillPaint (paint, options, transform, options.spreadsFillGradient() ? path.getBounds() : Rectangle<float>()))
         return;
 
-    const auto renderPath = options.feather > 0.0f ? toClockwiseFillPath (path) : rive::ref_rcp (path.getRenderPath());
+    auto* renderPath = options.feather > 0.0f ? path.getClockwiseRenderPath() : path.getRenderPath();
 
     renderer.save();
     renderer.transform (transform.toMat2D());
     applyModulation (options);
-    renderer.drawPath (renderPath.get(), std::addressof (paint));
+    renderer.drawPath (renderPath, std::addressof (paint));
     renderer.restore();
 }
 
 //==============================================================================
-bool Graphics::setupFillPaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, Point<float> imageOffset)
+bool Graphics::setupFillPaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, const Rectangle<float>& paintedArea, Point<float> imageOffset)
 {
     paint.style (rive::RenderPaintStyle::fill);
     setupPaintBlend (paint, options);
@@ -1249,12 +1259,12 @@ bool Graphics::setupFillPaint (rive::RiveRenderPaint& paint, const RenderOptions
     if (options.isFillColor())
         paint.color ((rive::ColorInt) options.getFillColor());
     else
-        setupGradientPaint (factory, paint, options.getFillColorGradient(), transform);
+        setupGradientPaint (factory, paint, options.getFillColorGradient(), transform, paintedArea);
 
     return true;
 }
 
-bool Graphics::setupStrokePaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, Point<float> imageOffset)
+bool Graphics::setupStrokePaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, const Rectangle<float>& paintedArea, Point<float> imageOffset)
 {
     paint.style (rive::RenderPaintStyle::stroke);
     setupPaintBlend (paint, options);
@@ -1269,7 +1279,7 @@ bool Graphics::setupStrokePaint (rive::RiveRenderPaint& paint, const RenderOptio
     if (options.isStrokeColor())
         paint.color ((rive::ColorInt) options.getStrokeColor());
     else
-        setupGradientPaint (factory, paint, options.getStrokeColorGradient(), transform);
+        setupGradientPaint (factory, paint, options.getStrokeColorGradient(), transform, paintedArea);
 
     return true;
 }
@@ -1414,6 +1424,21 @@ void Graphics::drawTexture (const GpuTexture::Ptr& texture, const Rectangle<floa
     renderTexture (texture->getOrAdoptGpuTexture(), targetArea);
 }
 
+bool Graphics::drawSource (PaintSource& source, const Rectangle<float>& targetArea)
+{
+    const auto contentSize = source.getContentSize();
+    if (targetArea.isEmpty() || ! (contentSize.getWidth() > 0.0f) || ! (contentSize.getHeight() > 0.0f))
+        return false;
+
+    const auto sourceTransform = AffineTransform::scaling (targetArea.getWidth() / contentSize.getWidth(),
+                                                           targetArea.getHeight() / contentSize.getHeight())
+                                     .translated (targetArea.getX(), targetArea.getY());
+
+    const auto texture = source.rasterize (context, sourceTransform.followedBy (currentRenderOptions().getTransform()));
+
+    return texture != nullptr && renderTexture (texture->getOrAdoptGpuTexture(), targetArea);
+}
+
 bool Graphics::renderTexture (rive::rcp<rive::gpu::Texture> texture, const Rectangle<float>& targetArea)
 {
     auto renderContext = context.getRenderContext();
@@ -1466,7 +1491,7 @@ void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& r
 
     // Runs appended with their own color keep it, the others are filled with the current fill
     rive::RiveRenderPaint paint;
-    const bool hasFillPaint = setupFillPaint (paint, options, options.getTransform(), textOrigin (text, rect));
+    const bool hasFillPaint = setupFillPaint (paint, options, options.getTransform(), rect, textOrigin (text, rect));
     renderFittedText (text, rect, hasFillPaint ? std::addressof (paint) : nullptr, false);
 }
 
@@ -1480,8 +1505,8 @@ void Graphics::fillFittedText (const String& text, const Font& font, const Recta
         auto modifier = styledText.startUpdate();
         modifier.setMaxSize (rect.getSize());
         modifier.appendText (text, font);
-        modifier.setHorizontalAlign (toHorizontalAlign (justification));
-        modifier.setVerticalAlign (toVerticalAlign (justification));
+        modifier.setHorizontalAlign (StyledText::toHorizontalAlign (justification));
+        modifier.setVerticalAlign (StyledText::toVerticalAlign (justification));
     }
 
     fillFittedText (styledText, rect);
@@ -1496,7 +1521,7 @@ void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>&
     const auto& options = currentRenderOptions();
 
     rive::RiveRenderPaint paint;
-    if (! setupStrokePaint (paint, options, options.getTransform(), textOrigin (text, rect)))
+    if (! setupStrokePaint (paint, options, options.getTransform(), rect, textOrigin (text, rect)))
         return;
 
     renderFittedText (text, rect, std::addressof (paint), true);
@@ -1512,8 +1537,8 @@ void Graphics::strokeFittedText (const String& text, const Font& font, const Rec
         auto modifier = styledText.startUpdate();
         modifier.setMaxSize (rect.getSize());
         modifier.appendText (text, font);
-        modifier.setHorizontalAlign (toHorizontalAlign (justification));
-        modifier.setVerticalAlign (toVerticalAlign (justification));
+        modifier.setHorizontalAlign (StyledText::toHorizontalAlign (justification));
+        modifier.setVerticalAlign (StyledText::toVerticalAlign (justification));
     }
 
     strokeFittedText (styledText, rect);

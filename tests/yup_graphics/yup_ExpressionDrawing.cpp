@@ -42,6 +42,25 @@ protected:
         return drawing.failed() ? drawing.getErrorMessage() : String();
     }
 
+    static Font loadTestFont (float height = 14.0f)
+    {
+        const auto fontFile =
+#if YUP_EMSCRIPTEN
+            File ("/")
+#else
+            File (__FILE__)
+                .getParentDirectory()
+                .getParentDirectory()
+#endif
+                .getChildFile ("data")
+                .getChildFile ("fonts")
+                .getChildFile ("Linefont-VariableFont_wdth,wght.ttf");
+
+        auto loaded = Font::loadFontFromFile (fontFile);
+        EXPECT_TRUE (loaded.wasOk());
+        return loaded.wasOk() ? loaded.getValue().withHeight (height) : Font();
+    }
+
     ExpressionContext context;
     ExpressionArray<float> values;
     ExpressionInput<int> row;
@@ -61,7 +80,8 @@ TEST_F (ExpressionDrawingTests, ConvertsOutputsToExpectedTypes)
 TEST_F (ExpressionDrawingTests, ReportsInvalidDrawings)
 {
     EXPECT_TRUE (createError ("fill = rgb (255, 0, 0)").contains ("assigns no shape"));
-    EXPECT_TRUE (createError ("label = \"a\"").contains ("'label' and 'labelRect'"));
+    EXPECT_TRUE (createError ("label = \"a\"").contains ("'labelRect' or 'labelAnchor'"));
+    EXPECT_TRUE (createError ("label = \"a\"; labelRect = rect (0, 0, 1, 1); labelAnchor = point (0, 0)").contains ("'labelRect' or 'labelAnchor'"));
     EXPECT_TRUE (createError ("rect = 1").contains ("Cannot convert 'int' to 'rect'"));
     EXPECT_TRUE (createError ("path = rect (0, 0, 1, 1)").contains ("Cannot convert 'rect' to 'path'"));
     EXPECT_TRUE (createError ("rect = rect (0, 0").isNotEmpty());
@@ -378,3 +398,253 @@ TEST_F (ExpressionDrawingTests, CacheRebuildsWhenGradientsChange)
     EXPECT_TRUE (draw());
     EXPECT_FALSE (draw());
 }
+
+TEST_F (ExpressionDrawingTests, CacheReusesShapedLabelsAndUpdatesWhenDefaultFontChanges)
+{
+    auto graphicsContext = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    ASSERT_NE (graphicsContext, nullptr);
+    auto renderer = graphicsContext->makeRenderer (200, 200);
+    ASSERT_NE (renderer, nullptr);
+    Graphics g (*graphicsContext, *renderer);
+
+    const auto smallFont = loadTestFont (12.0f);
+    const auto largeFont = smallFont.withHeight (22.0f);
+    ASSERT_FALSE (smallFont.isEmpty());
+
+    auto drawing = ExpressionDrawing::create (R"(
+        label = string (values[row], 1);
+        labelRect = rect (row * 40, 10, 36, 24);
+        labelColor = rgb (255, 255, 255);
+        labelStroke = rgb (0, 0, 0);
+        labelJustification = right;
+    )", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    std::vector<float> data { 1.5f, 3.0f };
+
+    ExpressionState state (drawing.getReference().getProgram());
+    state.bindArray (values, data.data(), (int) data.size());
+    state.bindRowIndex (row);
+
+    ExpressionDrawing::Cache cache;
+
+    drawing.getReference().draw (g, state, (int) data.size(), &smallFont, &cache);
+    EXPECT_TRUE (cache.wasRebuilt());
+
+    drawing.getReference().draw (g, state, (int) data.size(), &smallFont, &cache);
+    EXPECT_FALSE (cache.wasRebuilt());
+
+    drawing.getReference().draw (g, state, (int) data.size(), &largeFont, &cache);
+    EXPECT_FALSE (cache.wasRebuilt());
+}
+
+TEST_F (ExpressionDrawingTests, OutlineCollectsTheShapesOfTheVisibleRows)
+{
+    auto drawing = ExpressionDrawing::create (R"(
+        rect = rect (row * 20, 0, 10, 10);
+        transform = transform.translation (0, 5);
+        visible = row != 1;
+    )", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    ExpressionState state (drawing.getReference().getProgram());
+    state.bindRowIndex (row);
+
+    EXPECT_EQ (drawing.getReference().getOutline (state, 3).getBounds(), Rectangle<float> (0.0f, 5.0f, 50.0f, 10.0f));
+    EXPECT_EQ (drawing.getReference().getOutline (state, 3, false).getBounds(), Rectangle<float> (0.0f, 0.0f, 50.0f, 10.0f));
+    EXPECT_EQ (drawing.getReference().getOutline (state, 2).getBounds(), Rectangle<float> (0.0f, 5.0f, 10.0f, 10.0f));
+    EXPECT_TRUE (drawing.getReference().getOutline (state, 0).isEmpty());
+}
+
+TEST_F (ExpressionDrawingTests, OutlineJoinsTheVerticesOfASeriesAndSkipsLabels)
+{
+    auto drawing = ExpressionDrawing::create (R"(
+        vertex = point (row * 10, row * row);
+        label = "a";
+        labelRect = rect (100, 100, 50, 50);
+    )", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    ExpressionState state (drawing.getReference().getProgram());
+    state.bindRowIndex (row);
+
+    EXPECT_EQ (drawing.getReference().getOutline (state, 4).getBounds(), Rectangle<float> (0.0f, 0.0f, 30.0f, 9.0f));
+}
+
+TEST_F (ExpressionDrawingTests, RoundsRectanglesWithEllipticalCorners)
+{
+    auto drawing = ExpressionDrawing::create ("rect = rect (0, 0, 100, 60); cornerSize = size (20, 5); cornerRadius = 30", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    ExpressionState state (drawing.getReference().getProgram());
+    const auto outline = drawing.getReference().getOutline (state);
+
+    // The corner size replaces the corner radius: the top edge starts after the horizontal radius
+    ASSERT_FALSE (outline.isEmpty());
+    EXPECT_EQ ((*outline.begin()).point, Point<float> (20.0f, 0.0f));
+}
+
+TEST_F (ExpressionDrawingTests, DrawsLabelsPlacedFromAPointOnTheirBaseline)
+{
+    auto graphicsContext = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    ASSERT_NE (graphicsContext, nullptr);
+    auto renderer = graphicsContext->makeRenderer (200, 200);
+    ASSERT_NE (renderer, nullptr);
+    Graphics g (*graphicsContext, *renderer);
+
+    const auto font = loadTestFont();
+    ASSERT_FALSE (font.isEmpty());
+
+    auto drawing = ExpressionDrawing::create (R"(
+        label = string (row);
+        labelAnchor = point (100, 20 + row * 20);
+        labelTextAnchor = row == 0 ? textAnchor.start : (row == 1 ? textAnchor.middle : textAnchor.end);
+        labelLetterSpacing = 2;
+        fillOpacity = 0.5;
+        labelStroke = rgb (0, 0, 0);
+        strokeOpacity = 0.5;
+    )", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    ExpressionState state (drawing.getReference().getProgram());
+    state.bindRowIndex (row);
+
+    ExpressionDrawing::Cache cache;
+
+    drawing.getReference().draw (g, state, 3, &font, &cache);
+    EXPECT_TRUE (cache.wasRebuilt());
+
+    drawing.getReference().draw (g, state, 3, &font, &cache);
+    EXPECT_FALSE (cache.wasRebuilt());
+    EXPECT_FLOAT_EQ (g.getOpacity(), 1.0f);
+}
+
+#ifdef YUP_GRAPHICS_TESTS_GPU_PIXEL_HOST
+//==============================================================================
+/** Draws with the platform's GPU context, through GraphicsGpuPixelTestHost (see native/). */
+class ExpressionDrawingGpuTests : public ExpressionDrawingTests
+{
+protected:
+    /** A 16 x 16 tile, opaque red in its left half and empty in its right half. */
+    struct HalfRedSource : PaintSource
+    {
+        Size<float> getContentSize() const override { return { 16.0f, 16.0f }; }
+
+        void paintContent (Graphics& g) override
+        {
+            g.setFillColor (Colors::red);
+            g.fillRect (0.0f, 0.0f, 8.0f, 16.0f);
+        }
+    };
+
+    static void SetUpTestSuite()
+    {
+        host = std::make_unique<GraphicsGpuPixelTestHost>();
+        gpuContext = host->getContext();
+    }
+
+    static void TearDownTestSuite()
+    {
+        gpuContext = nullptr;
+        host.reset();
+    }
+
+    void SetUp() override
+    {
+        ExpressionDrawingTests::SetUp();
+
+        if (gpuContext == nullptr)
+            GTEST_SKIP() << "No GPU graphics context available";
+
+        host->makeCurrent();
+    }
+
+    /** Compiles a drawing, draws one row of it and returns the RGBA pixels of the canvas. */
+    std::vector<uint8> render (StringRef text, const std::function<void (ExpressionState&)>& setInputs = nullptr)
+    {
+        auto drawing = ExpressionDrawing::create (text, context);
+        EXPECT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+        auto canvas = GpuCanvas::create (*gpuContext, size, size);
+        if (drawing.failed() || canvas == nullptr)
+            return {};
+
+        ExpressionState state (drawing.getReference().getProgram());
+        if (setInputs != nullptr)
+            setInputs (state);
+
+        drawing.getReference().draw (canvas->beginDraw(), state);
+
+        std::vector<uint8> pixels (static_cast<std::size_t> (size * size * 4));
+        if (! canvas->commit() || ! canvas->readPixels (pixels.data(), pixels.size()))
+            return {};
+
+        return pixels;
+    }
+
+    static int alphaAt (const std::vector<uint8>& pixels, int x, int y)
+    {
+        return pixels[static_cast<std::size_t> ((y * size + x) * 4 + 3)];
+    }
+
+    static constexpr int size = 64;
+    static std::unique_ptr<GraphicsGpuPixelTestHost> host;
+    static GraphicsContext* gpuContext;
+};
+
+std::unique_ptr<GraphicsGpuPixelTestHost> ExpressionDrawingGpuTests::host;
+GraphicsContext* ExpressionDrawingGpuTests::gpuContext = nullptr;
+
+TEST_F (ExpressionDrawingGpuTests, FillPatternTilesItsSourceOverTheShape)
+{
+    HalfRedSource source;
+
+    addGraphicsExpressionTypes (context);
+    const auto tiles = context.addInput<PatternPaint> ("tiles");
+
+    const auto pixels = render ("rect = rect (0, 0, 64, 32); fillPattern = tiles", [&] (ExpressionState& state)
+    {
+        state.set (tiles, PatternPaint { std::addressof (source), AffineTransform::translation (4.0f, 0.0f) });
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    // The tiles start four pixels in: red for eight pixels, then empty for eight
+    for (const auto x : { 6, 22, 38 })
+        EXPECT_GT (alphaAt (pixels, x, 16), 200) << "at x = " << x;
+
+    for (const auto x : { 16, 32, 48 })
+        EXPECT_LT (alphaAt (pixels, x, 16), 50) << "at x = " << x;
+
+    EXPECT_LT (alphaAt (pixels, 6, 48), 50);
+
+    source.releaseResources();
+}
+
+TEST_F (ExpressionDrawingGpuTests, PatternWithoutASourceLeavesTheFillColor)
+{
+    addGraphicsExpressionTypes (context);
+
+    const auto pixels = render ("rect = rect (0, 0, 64, 64); fill = #ff0000; fillPattern = pattern()");
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 32, 32), 200);
+}
+
+TEST_F (ExpressionDrawingGpuTests, FillAndStrokeOpacityFadeTheirOwnPaint)
+{
+    const auto pixels = render (R"(
+        rect = rect (16, 16, 32, 32);
+        fill = #ff0000;
+        fillOpacity = 0.5;
+        stroke = #0000ff;
+        strokeWidth = 8;
+        strokeOpacity = 0.25;
+    )");
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    // Half opaque inside, a quarter opaque on the outer half of the stroke
+    EXPECT_NEAR (alphaAt (pixels, 32, 32), 128, 12);
+    EXPECT_NEAR (alphaAt (pixels, 14, 32), 64, 12);
+    EXPECT_LT (alphaAt (pixels, 4, 32), 10);
+}
+#endif

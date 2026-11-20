@@ -48,6 +48,27 @@ void activateAndOrderWindowFront (NSWindow* window)
     [window makeKeyAndOrderFront:nil];
 }
 
+bool isSystemFrontmostApplication()
+{
+    NSRunningApplication* frontmost = [[NSWorkspace sharedWorkspace] frontmostApplication];
+    return frontmost != nil && [frontmost processIdentifier] == [[NSProcessInfo processInfo] processIdentifier];
+}
+
+void replayApplicationActivatedEvent()
+{
+    NSEvent* activationEvent = [NSEvent otherEventWithType:NSEventTypeAppKitDefined
+                                                  location:NSZeroPoint
+                                             modifierFlags:0
+                                                 timestamp:0.0
+                                              windowNumber:0
+                                                   context:nil
+                                                   subtype:NSEventSubtypeApplicationActivated
+                                                     data1:0
+                                                     data2:0];
+
+    [NSApp postEvent:activationEvent atStart:YES];
+}
+
 } // namespace
 
 //==============================================================================
@@ -83,6 +104,15 @@ void activateAppWindowOnLaunch (void* nativeWindow)
 
         if ([NSApp isActive] && [NSApp keyWindow] != nil)
             return;
+
+        if (! [NSApp isActive] && isSystemFrontmostApplication())
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "MAC: launch activation was missed by AppKit, replaying it");
+
+            replayApplicationActivatedEvent();
+            [strongWindow makeKeyAndOrderFront:nil];
+            return;
+        }
 
         YUP_MODULE_DBG (GUI_WINDOWING, "MAC: launch activation was dropped, retrying window activation");
 

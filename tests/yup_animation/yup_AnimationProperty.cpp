@@ -41,8 +41,8 @@ TEST_F (AnimationPropertyTests, StaticFloatReturnsConstantValue)
 TEST_F (AnimationPropertyTests, AnimatedFloatInterpolatesCorrectly)
 {
     auto prop = FloatProperty::Builder {}
-                    .keyframe (0.0f, 0.0f, AnimationEasing::linear())
-                    .keyframe (10.0f, 100.0f, AnimationEasing::linear())
+                    .keyframe (0.0f, 0.0f, Easing::linear())
+                    .keyframe (10.0f, 100.0f, Easing::linear())
                     .build();
 
     EXPECT_TRUE (prop.isAnimated());
@@ -54,8 +54,8 @@ TEST_F (AnimationPropertyTests, AnimatedFloatInterpolatesCorrectly)
 TEST_F (AnimationPropertyTests, ExplicitEndValueControlsCurrentInterval)
 {
     auto prop = FloatProperty::Builder {}
-                    .keyframe (0.0f, 0.0f, 20.0f, AnimationEasing::linear())
-                    .keyframe (10.0f, 100.0f, AnimationEasing::linear())
+                    .keyframe (0.0f, 0.0f, 20.0f, Easing::linear())
+                    .keyframe (10.0f, 100.0f, Easing::linear())
                     .build();
 
     EXPECT_NEAR (prop.getValueAt (5.0f), 10.0f, 0.001f);
@@ -65,8 +65,8 @@ TEST_F (AnimationPropertyTests, ExplicitEndValueControlsCurrentInterval)
 TEST_F (AnimationPropertyTests, ClampsBelowFirstKeyframe)
 {
     auto prop = FloatProperty::Builder {}
-                    .keyframe (5.0f, 10.0f, AnimationEasing::linear())
-                    .keyframe (10.0f, 20.0f, AnimationEasing::linear())
+                    .keyframe (5.0f, 10.0f, Easing::linear())
+                    .keyframe (10.0f, 20.0f, Easing::linear())
                     .build();
 
     EXPECT_NEAR (prop.getValueAt (0.0f), 10.0f, 0.001f);
@@ -76,8 +76,8 @@ TEST_F (AnimationPropertyTests, ClampsBelowFirstKeyframe)
 TEST_F (AnimationPropertyTests, ClampsAboveLastKeyframe)
 {
     auto prop = FloatProperty::Builder {}
-                    .keyframe (0.0f, 10.0f, AnimationEasing::linear())
-                    .keyframe (5.0f, 20.0f, AnimationEasing::linear())
+                    .keyframe (0.0f, 10.0f, Easing::linear())
+                    .keyframe (5.0f, 20.0f, Easing::linear())
                     .build();
 
     EXPECT_NEAR (prop.getValueAt (10.0f), 20.0f, 0.001f);
@@ -87,7 +87,7 @@ TEST_F (AnimationPropertyTests, ClampsAboveLastKeyframe)
 TEST_F (AnimationPropertyTests, SingleKeyframeReturnsConstant)
 {
     auto prop = FloatProperty::Builder {}
-                    .keyframe (0.0f, 7.0f, AnimationEasing::linear())
+                    .keyframe (0.0f, 7.0f, Easing::linear())
                     .build();
 
     EXPECT_NEAR (prop.getValueAt (0.0f), 7.0f, 0.001f);
@@ -97,8 +97,8 @@ TEST_F (AnimationPropertyTests, SingleKeyframeReturnsConstant)
 TEST_F (AnimationPropertyTests, ColorPropertyInterpolatesPerChannel)
 {
     auto prop = ColorProperty::Builder {}
-                    .keyframe (0.0f, Color::fromRGBA (0, 0, 0, 255), AnimationEasing::linear())
-                    .keyframe (10.0f, Color::fromRGBA (255, 255, 255, 255), AnimationEasing::linear())
+                    .keyframe (0.0f, Color::fromRGBA (0, 0, 0, 255), Easing::linear())
+                    .keyframe (10.0f, Color::fromRGBA (255, 255, 255, 255), Easing::linear())
                     .build();
 
     const Color mid = prop.getValueAt (5.0f);
@@ -110,8 +110,8 @@ TEST_F (AnimationPropertyTests, ColorPropertyInterpolatesPerChannel)
 TEST_F (AnimationPropertyTests, Vec2PropertyInterpolatesBothAxes)
 {
     auto prop = Vec2Property::Builder {}
-                    .keyframe (0.0f, Point<float> (0.0f, 0.0f), AnimationEasing::linear())
-                    .keyframe (10.0f, Point<float> (100.0f, 200.0f), AnimationEasing::linear())
+                    .keyframe (0.0f, Point<float> (0.0f, 0.0f), Easing::linear())
+                    .keyframe (10.0f, Point<float> (100.0f, 200.0f), Easing::linear())
                     .build();
 
     const auto mid = prop.getValueAt (5.0f);
@@ -122,8 +122,8 @@ TEST_F (AnimationPropertyTests, Vec2PropertyInterpolatesBothAxes)
 TEST_F (AnimationPropertyTests, HoldEasingSnapsToStartValue)
 {
     auto prop = FloatProperty::Builder {}
-                    .keyframe (0.0f, 0.0f, AnimationEasing::hold())
-                    .keyframe (10.0f, 100.0f, AnimationEasing::linear())
+                    .keyframe (0.0f, 0.0f, Easing::hold())
+                    .keyframe (10.0f, 100.0f, Easing::linear())
                     .build();
 
     // With hold easing, value should not change until the next keyframe
@@ -153,8 +153,8 @@ TEST_F (AnimationPropertyTests, StaticSizePropertyReturnsConstant)
 TEST_F (AnimationPropertyTests, AnimatedSizePropertyInterpolatesBothDimensions)
 {
     auto prop = SizeProperty::Builder {}
-                    .keyframe (0.0f, Size<float> (0.0f, 0.0f), AnimationEasing::linear())
-                    .keyframe (10.0f, Size<float> (100.0f, 200.0f), AnimationEasing::linear())
+                    .keyframe (0.0f, Size<float> (0.0f, 0.0f), Easing::linear())
+                    .keyframe (10.0f, Size<float> (100.0f, 200.0f), Easing::linear())
                     .build();
 
     const auto mid = prop.getValueAt (5.0f);
@@ -175,9 +175,9 @@ TEST_F (AnimationPropertyTests, GetStaticValueReturnsStoredValue)
 TEST_F (AnimationPropertyTests, GetKeyframesReturnsKeyframeList)
 {
     auto prop = FloatProperty::Builder {}
-                    .keyframe (0.0f, 0.0f, AnimationEasing::linear())
-                    .keyframe (5.0f, 50.0f, AnimationEasing::linear())
-                    .keyframe (10.0f, 100.0f, AnimationEasing::linear())
+                    .keyframe (0.0f, 0.0f, Easing::linear())
+                    .keyframe (5.0f, 50.0f, Easing::linear())
+                    .keyframe (10.0f, 100.0f, Easing::linear())
                     .build();
 
     EXPECT_TRUE (prop.isAnimated());
@@ -191,10 +191,10 @@ TEST_F (AnimationPropertyTests, GetKeyframesReturnsKeyframeList)
 TEST_F (AnimationPropertyTests, MultipleKeyframesInterpolatesCorrectInterval)
 {
     auto prop = FloatProperty::Builder {}
-                    .keyframe (0.0f, 0.0f, AnimationEasing::linear())
-                    .keyframe (10.0f, 10.0f, AnimationEasing::linear())
-                    .keyframe (20.0f, 30.0f, AnimationEasing::linear())
-                    .keyframe (30.0f, 60.0f, AnimationEasing::linear())
+                    .keyframe (0.0f, 0.0f, Easing::linear())
+                    .keyframe (10.0f, 10.0f, Easing::linear())
+                    .keyframe (20.0f, 30.0f, Easing::linear())
+                    .keyframe (30.0f, 60.0f, Easing::linear())
                     .build();
 
     // Between 10 and 20 (linear: 10 + 50% * (30 - 10) = 20)
@@ -238,10 +238,10 @@ TEST_F (AnimationPropertyTests, EmptyKeyframeListReturnsDefaultValue)
 TEST_F (AnimationPropertyTests, NonFiniteKeyframeFramesAreDropped)
 {
     auto prop = FloatProperty::Builder {}
-                    .keyframe (std::numeric_limits<float>::quiet_NaN(), 3.0f, AnimationEasing::linear())
-                    .keyframe (0.0f, 10.0f, AnimationEasing::linear())
-                    .keyframe (std::numeric_limits<float>::infinity(), 5.0f, AnimationEasing::linear())
-                    .keyframe (10.0f, 20.0f, AnimationEasing::linear())
+                    .keyframe (std::numeric_limits<float>::quiet_NaN(), 3.0f, Easing::linear())
+                    .keyframe (0.0f, 10.0f, Easing::linear())
+                    .keyframe (std::numeric_limits<float>::infinity(), 5.0f, Easing::linear())
+                    .keyframe (10.0f, 20.0f, Easing::linear())
                     .build();
 
     EXPECT_EQ (prop.getKeyframes().size(), 2u);
@@ -251,8 +251,8 @@ TEST_F (AnimationPropertyTests, NonFiniteKeyframeFramesAreDropped)
 TEST_F (AnimationPropertyTests, NaNFrameReturnsFirstKeyframe)
 {
     auto prop = FloatProperty::Builder {}
-                    .keyframe (0.0f, 10.0f, AnimationEasing::linear())
-                    .keyframe (10.0f, 20.0f, AnimationEasing::linear())
+                    .keyframe (0.0f, 10.0f, Easing::linear())
+                    .keyframe (10.0f, 20.0f, Easing::linear())
                     .build();
 
     EXPECT_NEAR (prop.getValueAt (std::numeric_limits<float>::quiet_NaN()), 10.0f, 0.001f);

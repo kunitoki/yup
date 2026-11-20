@@ -27,7 +27,7 @@ namespace yup
 
     Construct once and reuse. Call setVisible(true) to open; the panel's Close
     button and the native close button both hide rather than destroy the window.
-    Staged changes are silently discarded on close.
+    The panel applies changes immediately, so closing the window keeps them.
 */
 class YUP_API AudioDeviceManagerWindow : public DocumentWindow
 {

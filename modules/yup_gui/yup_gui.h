@@ -39,6 +39,9 @@
     iosFrameworks:        CoreMotion
     iosSimFrameworks:     CoreMotion
     linuxLibs:            X11
+    shaderDirectory:      effects
+    shaderBundles:        ComponentBlurEffect
+                          ComponentColorMatrixEffect
 
   END_YUP_MODULE_DECLARATION
 
@@ -135,6 +138,8 @@ class DeferredReplayer;
 
 //==============================================================================
 
+#include <array>
+#include <atomic>
 #include <optional>
 #include <tuple>
 #include <unordered_map>
@@ -160,14 +165,47 @@ class DeferredReplayer;
 #include "mouse/yup_KineticScroller.h"
 #include "clipboard/yup_SystemClipboard.h"
 #include "desktop/yup_Screen.h"
+#include "desktop/yup_DesktopInputFilter.h"
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
 #include "effects/yup_ComponentEffect.h"
+#include "effects/yup_BlurEffect.h"
+#include "effects/yup_DropShadowEffect.h"
+#include "effects/yup_GlowEffect.h"
+#include "effects/yup_ColorMatrixEffect.h"
+#include "effects/yup_FilterEffect.h"
+#include "effects/yup_ComponentEffectRegistry.h"
 #include "themes/yup_ThemePalette.h"
 #include "component/yup_ComponentStyle.h"
 #include "component/yup_ComponentPaintMetrics.h"
 #include "component/yup_ComponentListener.h"
+#include "component/yup_ComponentProperty.h"
+#include "component/yup_ComponentSignal.h"
 #include "component/yup_Component.h"
+#include "component/yup_ComponentTypeInfo.h"
+#include "component/yup_ComponentTypeRegistry.h"
+#include "drawing/yup_DrawingScope.h"
+#include "drawing/yup_PropertyExpression.h"
+#include "drawing/yup_DrawingStyle.h"
+#include "binding/yup_BindingProvider.h"
+#include "binding/yup_DataTreeBindingProvider.h"
+#include "binding/yup_BindingModel.h"
+#include "binding/yup_DependencyObserver.h"
+#include "binding/yup_BindingGraph.h"
+#include "markup/yup_YuiDiagnostic.h"
+#include "styling/yup_StyleState.h"
+#include "styling/yup_StyleAnimator.h"
+#include "styling/yup_StyleSelector.h"
+#include "styling/yup_StyleSheet.h"
+#include "styling/yup_StyleContext.h"
+#include "markup/yup_YuiParser.h"
+#include "markup/yup_YuiWriter.h"
+#include "markup/yup_YuiSvgImporter.h"
+#include "markup/yup_YuiTreeDiff.h"
+#include "markup/yup_YuiBuilder.h"
+#include "markup/yup_YuiDocument.h"
+#include "markup/yup_YuiLoader.h"
+#include "markup/yup_YuiView.h"
 #include "dragdrop/yup_DragAndDropData.h"
 #include "dragdrop/yup_DragAndDropTarget.h"
 #include "dragdrop/yup_NativeDragAndDrop.h"
@@ -180,6 +218,7 @@ class DeferredReplayer;
 #include "buttons/yup_ToggleButton.h"
 #include "buttons/yup_SwitchButton.h"
 #include "buttons/yup_ImageButton.h"
+#include "code/yup_CodeRegex.h"
 #include "code/yup_SyntaxDefinition.h"
 #include "code/yup_CodeDocument.h"
 #include "code/yup_CodeTokeniser.h"
@@ -187,12 +226,16 @@ class DeferredReplayer;
 #include "code/yup_CodeEditor.h"
 #include "widgets/yup_TextEditor.h"
 #include "widgets/yup_Label.h"
+#include "code/yup_CodeFindBar.h"
 #include "widgets/yup_Slider.h"
 #include "widgets/yup_ComboBox.h"
 #include "widgets/yup_ScrollBar.h"
 #include "widgets/yup_Viewport.h"
 #include "widgets/yup_ProgressBar.h"
+#include "widgets/yup_ImageComponent.h"
 #include "widgets/yup_ResizableCorner.h"
+#include "widgets/yup_ResizableDivider.h"
+#include "widgets/yup_JoystickComponent.h"
 #include "widgets/yup_ListBoxItem.h"
 #include "widgets/yup_ListBox.h"
 #include "widgets/yup_TreeViewItem.h"
@@ -217,6 +260,12 @@ class DeferredReplayer;
 #include "layout/yup_FlexBox.h"
 #include "layout/yup_GridItem.h"
 #include "layout/yup_Grid.h"
+#include "layout/yup_StackLayout.h"
+#include "layout/yup_LayoutComponent.h"
+#include "layout/yup_FlexBoxComponent.h"
+#include "layout/yup_GridComponent.h"
+#include "layout/yup_StackComponent.h"
+#include "layout/yup_WindowComponent.h"
 
 //==============================================================================
 

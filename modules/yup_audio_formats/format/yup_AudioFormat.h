@@ -107,7 +107,9 @@ public:
         The writer will encode audio data according to the format's specifications and write it
         to the provided output stream.
 
-        @param streamToWriteTo     The output stream where audio data will be written
+        @param streamToWriteTo     The output stream where audio data will be written. The writer
+                                   takes ownership of the stream if successful, otherwise the
+                                   caller keeps ownership and must delete it
         @param sampleRate          The sample rate of the audio data (e.g., 44100, 48000)
         @param numberOfChannels    The number of audio channels (1 for mono, 2 for stereo, etc.)
         @param bitsPerSample       The bit depth for each sample (e.g., 16, 24, 32)

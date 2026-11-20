@@ -1,0 +1,155 @@
+// A small but complete YUI document, kept here to try the grammar and the
+// snippets by hand. It uses no imports and no application models, so linting
+// it reports no problems.
+
+tokens {
+    property spacing: number = 10;
+    property rowHeight: number = 28;
+}
+
+palette Midnight {
+    mode: dark;
+    colors: #252628, #78c8ff, #8a8d92, #d9dbde, #2c2d30;
+
+    background: #252628;
+    surface: #292a2d;
+    surfaceRaised: #2c2d30;
+    outline: #45484c;
+    text: #d9dbde;
+    textMuted: #8a8d92;
+    accent: #78c8ff;
+    onAccent: #0b1a26;
+}
+
+drawing DemoKnob {
+    property bezelSize: number = 0.8;
+    property label: string = "KNOB";
+    property value: number = 0;
+
+    let size: min (bounds.width, bounds.height);
+    let c: bounds.center;
+    let r: size * 0.38;
+
+    let a0: 135deg;
+    let sweep: 270deg;
+    let av: a0 + sweep * value;
+
+    let scale: enabled ? palette.text : palette.text.withAlpha (0.5);
+    let labelBox: rect (0, 0, r * 0.8, r * 0.18);
+
+    repeat i in 0 .. 21 {
+        let major: i % 5 == 0;
+        circle { center: polar (c, r, a0 + sweep * i / 20.0);
+                 radius: major ? r * 0.03 : r * 0.015;
+                 fill: major ? scale : scale.withAlpha (0.8); }
+    }
+
+    circle { id: bezel; center: c; radius: r * bezelSize;
+             fillGradient: linearGradient (palette.accent.brighter (0.08), c.translated (0, -r),
+                                           palette.accent.darker (0.05), c.translated (0, r));
+             stroke: palette.accent.darker (0.15); strokeWidth: max (1.0, r * 0.012); strokePosition: inside; }
+
+    line { id: pointer; from: polar (c, r * 0.4, av); to: polar (c, r * 0.68, av);
+           stroke: palette.text; strokeWidth: max (1.5, r * 0.03); cap: round; }
+
+    text { id: name; bounds: labelBox.withCenter (polar (c, r * 1.12, 90deg));
+           text: label; font: defaultFont.withHeight (r * 0.12); fill: scale; }
+}
+
+// A knob with its readout, declared once and used for every parameter.
+component LabeledKnob : Column {
+    property label: string = "VALUE";
+    property alias value <=> knob.value;
+    signal onChanged (value: number);
+
+    class: labeled;
+    gap: 2;
+
+    Slider {
+        id: knob;
+        class: knob;
+        sliderType: rotaryVerticalDrag;
+        minimum: 0;
+        maximum: 1;
+        flexGrow: 1;
+        label: root.label;
+        value: root.value;
+        onValueChanged: (v) => root.onChanged (v);
+    }
+
+    Label {
+        id: readout;
+        text: format ("%.0f %%", root.value * 100);
+        justification: center;
+        textHeightProportion: 0.8;
+        preferredHeight: rowHeight;
+        opacity: knob.pressed ? 1 : 0.65;
+    }
+}
+
+style {
+    #panel {
+        palette: Midnight;
+    }
+
+    .labeled {
+        cornerRadius: 10;
+        shadow: 0 3 10 #00000024;
+    }
+
+    .knob {
+        drawing: DemoKnob;
+        cursor: resizeUpDown;
+        trackColor: palette.accent;
+        backgroundColor: palette.surfaceRaised;
+        thumbColor: palette.text;
+        textColor: palette.textMuted;
+        bezelSize: 0.8;
+        transition: bezelSize 150ms easeOut, trackColor 200ms;
+    }
+
+    .knob:hover:enabled {
+        trackColor: palette.accent.brighter (0.1);
+    }
+
+    .knob:pressed {
+        animation: breathe 0.8s easeInOut infinite alternate;
+    }
+
+    @keyframes breathe {
+        from { bezelSize: 0.8; }
+        to { bezelSize: 0.86; }
+    }
+}
+
+Column {
+    id: panel;
+    padding: spacing;
+    gap: spacing;
+
+    Row {
+        gap: spacing;
+        preferredHeight: rowHeight;
+
+        Label { text: "Filter"; flexGrow: 1; textHeightProportion: 0.7; }
+        ToggleButton { id: power; text: "Enabled"; checked: true; preferredWidth: 88; }
+        TextButton { text: "Reset"; preferredWidth: 72; onClick: action ("reset"); }
+    }
+
+    Row {
+        gap: spacing;
+        flexGrow: 1;
+
+        LabeledKnob { id: cutoff; label: "CUTOFF"; flexGrow: 1; enabled: power.checked;
+                      onChanged: action ("changed", "Cutoff", value); }
+
+        LabeledKnob { id: resonance; label: "RESO"; flexGrow: 1; enabled: power.checked;
+                      onChanged: action ("changed", "Resonance", value); }
+    }
+
+    Label {
+        text: format ("cutoff %.0f%%   resonance %.0f%%", cutoff.value * 100, resonance.value * 100);
+        justification: center;
+        preferredHeight: rowHeight;
+    }
+}

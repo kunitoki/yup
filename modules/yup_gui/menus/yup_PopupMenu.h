@@ -283,7 +283,7 @@ public:
     std::function<void (int selectedItemID)> onItemSelected;
 
     //==============================================================================
-    // Color identifiers for theming
+    // Color and style identifiers for theming
     struct Style
     {
         static inline const Identifier menuBackground { "menuBackground" };
@@ -293,7 +293,25 @@ public:
         static inline const Identifier menuItemBackground { "menuItemBackground" };
         static inline const Identifier menuItemBackgroundHighlighted { "menuItemBackgroundHighlighted" };
         static inline const Identifier menuItemBackgroundActiveSubmenu { "menuItemBackgroundActiveSubmenu" };
+
+        static inline const Identifier cornerRadiusId { "popupMenuCornerRadius" };
+        static inline const Identifier outlineWidthId { "popupMenuOutlineWidth" };
+        static inline const Identifier itemCornerRadiusId { "popupMenuItemCornerRadius" };
+        static inline const Identifier itemHeightId { "popupMenuItemHeight" };
+        static inline const Identifier verticalPaddingId { "popupMenuVerticalPadding" };
     };
+
+    /** Returns the static type description for PopupMenu. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** Returns true if this menu is currently shown as a submenu of another PopupMenu. */
+    [[nodiscard]] bool isSubmenu() const noexcept { return parentMenu != nullptr; }
+
+    /** Returns the originating parent PopupMenu when shown as a submenu, or nullptr for a root menu. */
+    [[nodiscard]] PopupMenu* getParentMenu() const noexcept { return static_cast<PopupMenu*> (parentMenu.get()); }
+
+    /** @internal */
+    void refreshSubmenuStyle();
 
     //==============================================================================
     /** Returns true if the submenu contains the given position.
@@ -334,6 +352,10 @@ public:
 
     //==============================================================================
     /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+    /** @internal */
+    void layoutPropertyChanged() override;
+    /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
     void mouseDown (const MouseEvent& event) override;
@@ -356,7 +378,14 @@ private:
     PopupMenu (const Options& options = {});
 
     void showCustom (const Options& options, bool isSubmenu, std::function<void (int)> callback);
-    void inheritColors (const Component& source);
+    void applyPopupStyling (bool isSubmenu);
+    void inheritFromTarget (const Component& source);
+    void inheritFromParentMenu (const PopupMenu& parent);
+    void clearInheritedStyle();
+    void detachStyledPopup();
+    float getResolvedItemHeight() const;
+    float getResolvedVerticalPadding() const;
+    float getItemHeight (const Item& item) const;
     int getItemIndexAt (Point<float> position) const;
     void dismiss (int itemID);
     void setSelectedItemIndex (int index, bool fromMouse);
@@ -427,6 +456,19 @@ private:
     PopupMenu::Ptr currentSubmenu;
     int submenuItemIndex = -1;
     bool isShowingSubmenu = false;
+
+    struct InheritedStyle
+    {
+        Array<Identifier> properties;
+        std::optional<float> previousOpacity;
+        bool palette = false;
+        bool style = false;
+        bool effect = false;
+        bool visualStyle = false;
+    };
+
+    InheritedStyle inheritedStyle;
+    WeakReference<Component> styledContextRoot;
 
     // Scrolling support
     Range<int> visibleItemRange;

@@ -27,9 +27,13 @@
 #include "native/yup_GraphicsGpuPixelTestHost_linux.cpp"
 #elif YUP_MAC
 #include "native/yup_GraphicsGpuPixelTestHost_mac.cpp"
+#else
+#include "native/yup_GraphicsGpuPixelTestHost_generic.cpp"
 #endif
 
 #include "yup_AffineTransform.cpp"
+#include "yup_AnchoredText.cpp"
+#include "yup_Easing.cpp"
 #include "yup_BoundingBox.cpp"
 #include "yup_Color.cpp"
 #include "yup_ColorGradient.cpp"
@@ -37,6 +41,7 @@
 #include "yup_Drawable.cpp"
 #include "yup_EdgeSpacing.cpp"
 #include "yup_ExpressionDrawing.cpp"
+#include "yup_FilterGraph.cpp"
 #include "yup_Font.cpp"
 #include "yup_Graphics.cpp"
 #include "yup_GraphicsContext.cpp"
@@ -59,6 +64,7 @@
 #include "yup_MeshSurfaceMapper.cpp"
 #include "yup_PaintSource.cpp"
 #include "yup_Path.cpp"
+#include "yup_PathMarkers.cpp"
 #include "yup_Point.cpp"
 #include "yup_Quaternion.cpp"
 #include "yup_Rectangle.cpp"

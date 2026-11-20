@@ -1,0 +1,91 @@
+// A small knob with a brushed metal cap in a glossy black ring, a pointer on the ring and a
+// scale of ticks around it. The metal is one smooth sheen turning around its center, bright
+// above and below and darkest on the left, with no outline: the ring shows where its edges
+// catch the light, cool on the left and warm on the right, and along its crest.
+// The colors come from the slider properties the stylesheet sets: backgroundColor (the ring),
+// trackColor (the scale), thumbColor (the pointer) and textColor (the label). 'scaleColor'
+// lights the scale up to the value, 'metalColor' is the brightest tone of the cap, and
+// 'sheenAngle' turns its sheen, so the stylesheet can make the light move on hover.
+drawing BrushedKnob {
+    property metalColor: color = #b2afae;
+    property scaleColor: color = palette.accent;
+    property sheenAngle: number = 0;
+
+    let size: min (bounds.width, bounds.height);
+    let c: bounds.center;
+    let r: size * 0.4;                  // the outer radius of the scale
+    let knobRadius: r * 0.77;
+    let capRadius: knobRadius * 0.77;
+
+    let a0: 135deg;
+    let sweep: 270deg;
+    let av: a0 + sweep * normalized;
+
+    let lit: enabled ? scaleColor : textColor.withAlpha (0.5);
+    let ink: enabled ? textColor : textColor.withAlpha (0.5);
+
+    // The light an edge catches, by where it is around the knob: cool on the left, warm on the
+    // right, almost none above and below
+    let cool: #8ea0d8;
+    let warm: #c9a583;
+    let rim: angularGradient (cool.withAlpha (0.75), c, cool.withAlpha (0.75), c.translated (-1, 0))
+                 .withStop (cool.withAlpha (0.75), 0.1).withStop (cool.withAlpha (0.2), 0.2).withStop (warm.withAlpha (0.04), 0.3)
+                 .withStop (warm.withAlpha (0.6), 0.4).withStop (warm.withAlpha (0.7), 0.52).withStop (warm.withAlpha (0.15), 0.62)
+                 .withStop (warm.withAlpha (0.02), 0.75).withStop (cool.withAlpha (0.15), 0.9);
+
+    // The scale: 31 ticks, a longer and thicker one every 5
+    repeat i in 0 .. 31 {
+        let a: a0 + sweep * i / 30.0;
+        let major: i % 5 == 0;
+
+        line { from: polar (c, r * 0.88, a); to: polar (c, r * (major ? 1.0 : 0.96), a);
+               stroke: i / 30.0 <= normalized + 0.0001 ? lit : trackColor;
+               strokeWidth: max (1.0, r * (major ? 0.022 : 0.012)); }
+    }
+
+    text { id: name; bounds: rect (0, 0, r * 0.6, r * 0.16).withCenter (polar (c, r * 1.07, 90deg));
+           text: parent.label; font: defaultFont.withHeight (r * 0.1); fill: ink; }
+
+    // A long soft shadow below, and a tight one around the ring
+    circle { id: ambient; center: c.translated (0, knobRadius * 0.22); radius: knobRadius * 0.97;
+             fill: rgba (0, 0, 0, 0.6); feather: knobRadius * 0.32; }
+
+    circle { id: contact; center: c.translated (0, knobRadius * 0.05); radius: knobRadius;
+             fill: rgba (0, 0, 0, 0.6); feather: knobRadius * 0.07; }
+
+    // The ring: a black tube lit from above, its edge catching the light, a soft streak on its crest
+    circle { id: ring; center: c; radius: knobRadius;
+             fillGradient: linearGradient (backgroundColor.brighter (0.025), c.translated (0, -knobRadius),
+                                           backgroundColor.darker (0.02), c.translated (0, knobRadius));
+             stroke: rgba (0, 0, 0, 0.6); strokeWidth: max (1.0, knobRadius * 0.02); strokePosition: inside; }
+
+    circle { id: ringRim; center: c; radius: knobRadius * 0.975;
+             strokeGradient: rim.withMultipliedAlpha (0.55); strokeWidth: max (1.0, knobRadius * 0.02); strokePosition: inside; }
+
+    arc { id: crest; center: c; radius: knobRadius * 0.885; from: 205deg; to: 280deg;
+          stroke: rgba (255, 255, 255, 0.1); strokeWidth: knobRadius * 0.05; cap: round; feather: knobRadius * 0.05; }
+
+    // The wall around the cap
+    circle { id: wall; center: c; radius: capRadius * 1.035; fill: rgba (0, 0, 0, 0.85); }
+
+    // The cap: the tones of the metal around its center, starting on the right
+    circle { id: metal; center: c; radius: capRadius;
+             fillGradient: angularGradient (metalColor.darker (0.42), c, metalColor.darker (0.42), polar (c, capRadius, sheenAngle))
+                               .withStop (metalColor.darker (0.36), 0.06).withStop (metalColor.darker (0.15), 0.125)
+                               .withStop (metalColor.darker (0.015), 0.2).withStop (metalColor.darker (0.15), 0.29)
+                               .withStop (metalColor.darker (0.32), 0.375).withStop (metalColor.darker (0.5), 0.44)
+                               .withStop (metalColor.darker (0.575), 0.47).withStop (metalColor.darker (0.56), 0.5)
+                               .withStop (metalColor.darker (0.39), 0.58).withStop (metalColor.darker (0.13), 0.65)
+                               .withStop (metalColor, 0.71).withStop (metalColor.darker (0.19), 0.79)
+                               .withStop (metalColor.darker (0.32), 0.875);
+             stroke: rgba (0, 0, 0, 0.3); strokeWidth: max (1.0, capRadius * 0.02); strokePosition: inside; }
+
+    // A disabled cap loses its sheen under a dull veil
+    circle { id: veil; center: c; radius: capRadius; fill: metalColor.darker (0.42).withAlpha (enabled ? 0.0 : 0.7); }
+
+    circle { id: hub; center: c; radius: capRadius * 0.03; fill: rgba (0, 0, 0, 0.35); feather: capRadius * 0.08; }
+
+    // The pointer, across the ring
+    line { id: pointer; from: polar (c, capRadius * 1.07, av); to: polar (c, knobRadius * 0.95, av);
+           stroke: enabled ? thumbColor : ink; strokeWidth: max (1.5, knobRadius * 0.06); cap: round; }
+}

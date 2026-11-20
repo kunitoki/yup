@@ -35,21 +35,29 @@ namespace yup
     | `rect`                | `rect`           | A rectangle, rounded by `cornerRadius` (`float`) when assigned.|
     | `topLeftRadius`...    | `float`          | Per corner radii of `rect` (`topLeftRadius`, `topRightRadius`, |
     |                       |                  | `bottomLeftRadius`, `bottomRightRadius`), default cornerRadius.|
+    | `cornerSize`          | `size`           | Elliptical corners of `rect`, instead of the corner radii.     |
     | `ellipse`             | `rect`           | An ellipse fitting the rectangle.                              |
     | `point`               | `point`          | A circle of `radius` (`float`, default 2) centered on it.      |
     | `line`                | `line`           | A stroked line.                                                |
     | `path`                | `path`           | A path, filled with its own winding rule.                      |
     | `vertex`              | `point`          | A vertex of the polyline of the row `series` (`int`, default 0)|
-    | `label`               | `string`         | Text fitted in `labelRect` (`rect`).                           |
+    | `label`               | `string`         | Text fitted in `labelRect` (`rect`), or starting at            |
+    |                       |                  | `labelAnchor` (`point`) on its baseline.                       |
     | `fill`                | `color`          | Fills the shapes of the row.                                   |
     | `fillGradient`        | `gradient`       | Fills the shapes with a gradient, instead of `fill`.           |
     | `stroke`              | `color`          | Strokes the shapes of the row.                                 |
     | `strokeGradient`      | `gradient`       | Strokes the shapes with a gradient, instead of `stroke`.       |
+    | `fillPattern`         | `pattern`        | Fills the shapes with a tiled PaintSource, instead of `fill`.  |
+    | `strokePattern`       | `pattern`        | Strokes the shapes with a tiled PaintSource.                   |
+    | `fillOpacity`         | `float`          | Opacity of the fill alone.                                     |
+    | `strokeOpacity`       | `float`          | Opacity of the stroke alone.                                   |
     | `strokeWidth`         | `float`          | Stroke width.                                                  |
     | `strokeCap`           | `cap`            | `butt`, `round` or `square` line ends.                         |
     | `strokeJoin`          | `join`           | `miter`, `round` or `bevel` corners.                           |
     | `strokeMiterLimit`    | `float`          | Longest miter join, in stroke widths.                          |
     | `strokePosition`      | `strokePosition` | Stroke `inside`, `center` or `outside` the shapes.             |
+    | `strokeDash`          | `dash`           | Alternating stroke dash and gap lengths.                       |
+    | `strokeDashOffset`    | `float`          | Phase offset into `strokeDash`.                                |
     | `opacity`             | `float`          | Multiplies the opacity of the Graphics.                        |
     | `feather`             | `float`          | Blurs the edges of the shapes (glows and shadows).             |
     | `blend`               | `blend`          | Blend mode (`multiply`, `screen`, `additive`...).              |
@@ -61,9 +69,13 @@ namespace yup
     | `labelStroke`         | `color`          | Strokes the label with `strokeWidth`.                          |
     | `labelFont`           | `font`           | Font of the label, instead of the one passed to draw.          |
     | `labelJustification`  | `justification`  | Placement of the label in `labelRect`, default `center`.       |
+    | `labelTextAnchor`     | `textAnchor`     | Part of the label on `labelAnchor`: `start`, `middle` or `end`.|
+    | `labelLetterSpacing`  | `float`          | Extra space after every glyph of the label.                    |
 
-    Shapes are filled with `fill` (or `fillGradient`) and stroked with `stroke` (or `strokeGradient`)
-    when assigned; when neither is assigned they are filled with the current fill color of the Graphics.
+    Shapes are filled with `fill` (or `fillGradient`, or `fillPattern`) and stroked with `stroke` (or
+    `strokeGradient`, or `strokePattern`) when assigned; when neither is assigned they are filled with the
+    current fill color of the Graphics. A pattern is a PatternPaint, normally provided as an input, whose
+    PaintSource has to outlive the drawing and its cache.
     Lines are stroked with the stroke paint, or the fill paint when it is the only one assigned. Each
     `series` draws one polyline joining its visible rows in order, with the style of its first visible
     row: stroked with the stroke paint (or the current stroke color) and filled with the fill paint when
@@ -124,7 +136,7 @@ public:
     /** Compiles a drawing program against a context.
 
         Fails when the program doesn't compile, when an output has an unexpected type, when no shape
-        output is assigned or when `label` and `labelRect` are not assigned together.
+        output is assigned or when `label` is not assigned together with either `labelRect` or `labelAnchor`.
     */
     static ResultValue<ExpressionDrawing> create (StringRef text, const ExpressionContext& context);
 
@@ -186,6 +198,19 @@ public:
         draw are reused as long as the outputs don't change (see Cache).
     */
     void draw (Graphics& g, ExpressionState& state, int numRows = 1, const Font* labelFont = nullptr, Cache* cache = nullptr) const;
+
+    /** Evaluates rows 0 to numRows - 1 and returns their geometry, without drawing it.
+
+        The path holds the rectangles, ellipses, points, lines, paths and polylines draw would paint,
+        in the same order and skipping the rows that are not visible. Labels have no outline. Use it to
+        clip to the shapes of a drawing, or to place content along them.
+
+        @param state            A state created from getProgram().
+        @param numRows          The number of rows to evaluate.
+        @param applyTransforms  Applies the `transform` of every row to its shapes. Pass false to get the
+                                shapes as they are before being transformed.
+    */
+    Path getOutline (ExpressionState& state, int numRows = 1, bool applyTransforms = true) const;
 
 private:
     template <template <class> class Field>

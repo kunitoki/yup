@@ -34,6 +34,7 @@ struct CompiledExpression::Program
     struct Instruction
     {
         ExpressionThunk thunk = nullptr;
+        ExpressionThunk inPlaceThunk = nullptr;
         std::shared_ptr<const void> state;
         int output = -1;
         std::vector<int> inputs;
@@ -132,6 +133,28 @@ struct ExpressionFusedThunks
     std::vector<ComparisonThunks> comparisons;
 };
 
+struct FusedInPlaceChain
+{
+    struct Step
+    {
+        ExpressionThunk inPlaceThunk = nullptr;
+        std::shared_ptr<const void> state;
+        int argOffset = 0;
+    };
+
+    const ExpressionType* type = nullptr;
+    std::vector<Step> steps;
+
+    static void thunk (const void* rawState, void* output, const void* const* args, int numRows)
+    {
+        const auto& chain = *static_cast<const FusedInPlaceChain*> (rawState);
+        chain.type->clone (output, args[0], numRows);
+
+        for (const auto& step : chain.steps)
+            step.inPlaceThunk (step.state.get(), output, args + step.argOffset, numRows);
+    }
+};
+
 } // namespace
 
 //==============================================================================
@@ -182,6 +205,9 @@ struct ExpressionCompiler
         removeUnusedCode();
 
         if (fuseInstructions())
+            removeUnusedCode();
+
+        if (fuseInPlaceChains())
             removeUnusedCode();
     }
 
@@ -325,10 +351,13 @@ struct ExpressionCompiler
         {
             for (auto length = name.length(); length > 0; length = name.substring (0, length).lastIndexOfChar ('.'))
             {
-                if (auto value = (this->*lookup) (name.substring (0, length), e))
+                const auto isWholeName = length == name.length();
+
+                if (auto value = (this->*lookup) (isWholeName ? name : name.substring (0, length), e))
                 {
-                    for (const auto& member : StringArray::fromTokens (name.substring (length + 1), ".", {}))
-                        *value = compileMember (*value, member, e);
+                    if (! isWholeName)
+                        for (const auto& member : StringArray::fromTokens (name.substring (length + 1), ".", {}))
+                            *value = compileMember (*value, member, e);
 
                     return *value;
                 }
@@ -383,7 +412,7 @@ struct ExpressionCompiler
 
                 case ExpressionContext::SymbolKind::constant:
                 {
-                    const auto& constant = context.constants[(size_t) symbol->index];
+                    const auto& constant = context.getDeclarations().constants[(size_t) symbol->index];
                     return Value { addRegister (constant.type, constant.value), constant.type };
                 }
 
@@ -406,13 +435,15 @@ struct ExpressionCompiler
 
     std::optional<Value> findEnumValue (const String& name, const Expression& e)
     {
-        if (const auto it = context.enumValues.find (name); it != context.enumValues.end())
+        const auto& enumValues = context.getDeclarations().enumValues;
+
+        if (const auto it = enumValues.find (name); it != enumValues.end())
         {
             const auto& indices = it->second;
 
             const auto expected = std::find_if (indices.begin(), indices.end(), [this] (int index)
             {
-                return context.constants[(size_t) index].type == expectedType;
+                return context.getDeclarations().constants[(size_t) index].type == expectedType;
             });
 
             if (indices.size() > 1 && expected == indices.end())
@@ -420,12 +451,12 @@ struct ExpressionCompiler
                 StringArray candidates;
 
                 for (const auto index : indices)
-                    candidates.add (context.constants[(size_t) index].type->getName() + "." + name);
+                    candidates.add (context.getDeclarations().constants[(size_t) index].type->getName() + "." + name);
 
                 fail (e, "'" + name + "' is ambiguous, use one of " + candidates.joinIntoString (", "));
             }
 
-            const auto& constant = context.constants[(size_t) (expected != indices.end() ? *expected : indices.front())];
+            const auto& constant = context.getDeclarations().constants[(size_t) (expected != indices.end() ? *expected : indices.front())];
             return Value { addRegister (constant.type, constant.value), constant.type };
         }
 
@@ -446,7 +477,7 @@ struct ExpressionCompiler
         if (const auto it = namedExpressionValues.find (index); it != namedExpressionValues.end())
             return it->second;
 
-        const auto& [name, body] = context.expressions[(size_t) index];
+        const auto& [name, body] = context.getDeclarations().expressions[(size_t) index];
 
         if (std::find (namedExpressionStack.begin(), namedExpressionStack.end(), index) != namedExpressionStack.end())
             fail (e, "The sub-expression '" + name + "' references itself");
@@ -624,31 +655,41 @@ struct ExpressionCompiler
         int numBest = 0;
     };
 
-    std::vector<const ExpressionFunction*> findFunctions (const String& name) const
+    template <class Callback>
+    void forEachFunction (const String& name, Callback&& callback) const
     {
-        std::vector<const ExpressionFunction*> result;
+        const std::vector<ExpressionFunction>* custom = nullptr;
+        const auto& functions = context.getDeclarations().functions;
 
-        if (const auto it = context.functions.find (name); it != context.functions.end())
-            for (const auto& function : it->second)
-                result.push_back (&function);
+        if (const auto it = functions.find (name); it != functions.end())
+        {
+            custom = &it->second;
 
-        const auto numCustom = result.size();
+            for (const auto& function : *custom)
+                callback (function);
+        }
+
         const auto& builtins = ExpressionContext::getBuiltinFunctions();
 
         if (const auto it = builtins.find (name); it != builtins.end())
         {
             for (const auto& function : it->second)
             {
-                const auto isReplaced = std::any_of (result.begin(), result.begin() + (std::ptrdiff_t) numCustom, [&] (const auto* custom)
+                const auto isReplaced = custom != nullptr && std::any_of (custom->begin(), custom->end(), [&] (const auto& c)
                 {
-                    return custom->hasSameSignature (function);
+                    return c.hasSameSignature (function);
                 });
 
                 if (! isReplaced)
-                    result.push_back (&function);
+                    callback (function);
             }
         }
+    }
 
+    std::vector<const ExpressionFunction*> findFunctions (const String& name) const
+    {
+        std::vector<const ExpressionFunction*> result;
+        forEachFunction (name, [&] (const auto& function) { result.push_back (&function); });
         return result;
     }
 
@@ -657,26 +698,26 @@ struct ExpressionCompiler
         Overload result;
         auto bestCost = std::numeric_limits<int>::max();
 
-        for (const auto* function : findFunctions (name))
+        forEachFunction (name, [&] (const ExpressionFunction& function)
         {
-            if (function->parameterTypes.size() != args.size())
-                continue;
+            if (function.parameterTypes.size() != args.size())
+                return;
 
             auto cost = 0;
 
             for (size_t i = 0; i < args.size() && cost >= 0; ++i)
             {
-                const auto argumentCost = conversionCost (args[i], function->parameterTypes[i]);
+                const auto argumentCost = conversionCost (args[i], function.parameterTypes[i]);
                 cost = argumentCost < 0 ? -1 : cost + argumentCost;
             }
 
             if (cost < 0 || cost > bestCost)
-                continue;
+                return;
 
             result.numBest = cost == bestCost ? result.numBest + 1 : 1;
-            result.function = cost == bestCost ? result.function : function;
+            result.function = cost == bestCost ? result.function : &function;
             bestCost = cost;
-        }
+        });
 
         return result;
     }
@@ -811,11 +852,16 @@ struct ExpressionCompiler
 
     const ExpressionFunction* findConversion (const ExpressionType* from, const ExpressionType* to) const
     {
-        for (const auto* function : findFunctions ("@convert"))
-            if (function->parameterTypes.size() == 1 && function->parameterTypes[0] == from && function->resultType == to)
-                return function;
+        static const String convertName ("@convert");
+        const ExpressionFunction* result = nullptr;
 
-        return nullptr;
+        forEachFunction (convertName, [&] (const ExpressionFunction& function)
+        {
+            if (result == nullptr && function.parameterTypes.size() == 1 && function.parameterTypes[0] == from && function.resultType == to)
+                result = &function;
+        });
+
+        return result;
     }
 
     Value convert (const Value& value, const ExpressionType* target, const Expression& e)
@@ -841,26 +887,34 @@ struct ExpressionCompiler
         for (size_t i = 0; i < args.size(); ++i)
             args[i] = convert (args[i], function.parameterTypes[i], e);
 
-        return emit (function.thunk, function.state, function.resultType, args, function.isPure);
+        return emit (function.thunk, function.state, function.resultType, args, function.isPure, function.inPlaceThunk);
     }
 
-    Value emit (ExpressionThunk thunk, std::shared_ptr<const void> state, const ExpressionType* resultType, const std::vector<Value>& args, bool isPure)
+    Value emit (ExpressionThunk thunk,
+                std::shared_ptr<const void> state,
+                const ExpressionType* resultType,
+                const std::vector<Value>& args,
+                bool isPure,
+                ExpressionThunk inPlaceThunk = nullptr)
     {
-        std::vector<int> inputs;
-        std::vector<const void*> constants;
-
-        for (const auto& arg : args)
+        if (isPure && std::all_of (args.begin(), args.end(), [this] (const auto& arg) { return getConstant (arg) != nullptr; }))
         {
-            inputs.push_back (arg.reg);
-            constants.push_back (getConstant (arg));
-        }
+            std::vector<const void*> constants;
+            constants.reserve (args.size());
 
-        if (isPure && std::find (constants.begin(), constants.end(), nullptr) == constants.end())
-        {
+            for (const auto& arg : args)
+                constants.push_back (getConstant (arg));
+
             auto box = resultType->createValue();
             thunk (state.get(), box.get(), constants.data(), 1);
             return { addRegister (resultType, std::move (box)), resultType };
         }
+
+        std::vector<int> inputs;
+        inputs.reserve (args.size());
+
+        for (const auto& arg : args)
+            inputs.push_back (arg.reg);
 
         if (isPure)
         {
@@ -872,7 +926,7 @@ struct ExpressionCompiler
         }
 
         const auto output = addRegister (resultType);
-        program.code.push_back ({ thunk, std::move (state), output, std::move (inputs), isPure });
+        program.code.push_back ({ thunk, inPlaceThunk, std::move (state), output, std::move (inputs), isPure });
         return { output, resultType };
     }
 
@@ -981,6 +1035,77 @@ struct ExpressionCompiler
         {
             if (fuseArithmetic (instruction, fused, findSingleUseProducer) || fuseCompareSelect (instruction, fused, findSingleUseProducer))
                 hasFused = true;
+        }
+
+        return hasFused;
+    }
+
+    bool fuseInPlaceChains()
+    {
+        std::vector<int> uses (program.registers.size(), 0);
+        std::vector<int> producers (program.registers.size(), -1);
+
+        for (const auto& output : program.outputs)
+            uses[(size_t) output.reg] += 2;
+
+        for (size_t i = 0; i < program.code.size(); ++i)
+        {
+            producers[(size_t) program.code[i].output] = (int) i;
+
+            for (auto reg : program.code[i].inputs)
+                ++uses[(size_t) reg];
+        }
+
+        bool hasFused = false;
+
+        for (size_t i = program.code.size(); i-- > 0;)
+        {
+            auto& tail = program.code[i];
+            if (tail.inPlaceThunk == nullptr || ! tail.isPure || tail.inputs.empty())
+                continue;
+
+            std::vector<Program::Instruction*> chain { &tail };
+
+            while (true)
+            {
+                const auto seedReg = chain.back()->inputs[0];
+                const auto prodIdx = producers[(size_t) seedReg];
+                if (prodIdx < 0 || uses[(size_t) seedReg] != 1)
+                    break;
+
+                auto& prev = program.code[(size_t) prodIdx];
+                if (prev.inPlaceThunk == nullptr || ! prev.isPure || prev.inputs.empty())
+                    break;
+
+                chain.push_back (&prev);
+            }
+
+            if (chain.size() < 2)
+                continue;
+
+            std::reverse (chain.begin(), chain.end());
+
+            auto fusedState = std::make_shared<FusedInPlaceChain>();
+            fusedState->type = program.registers[(size_t) tail.output].type;
+            fusedState->steps.reserve (chain.size());
+
+            std::vector<int> fusedInputs { chain.front()->inputs[0] };
+
+            for (auto* step : chain)
+            {
+                const int argOffset = (int) fusedInputs.size();
+                fusedInputs.insert (fusedInputs.end(), step->inputs.begin() + 1, step->inputs.end());
+                fusedState->steps.push_back ({ step->inPlaceThunk, step->state, argOffset });
+
+                if (step != &tail)
+                    step->inPlaceThunk = nullptr;
+            }
+
+            tail.thunk = &FusedInPlaceChain::thunk;
+            tail.inPlaceThunk = nullptr;
+            tail.state = std::move (fusedState);
+            tail.inputs = std::move (fusedInputs);
+            hasFused = true;
         }
 
         return hasFused;

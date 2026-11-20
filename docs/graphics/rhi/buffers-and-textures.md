@@ -30,6 +30,11 @@ pass.setIndexBuffer (GpuIndexFormat::uint16, ibo);
 pass.drawIndexed ((uint32_t) std::size (indices));
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/graphics/rhi/buffers-and-textures_triangle_light.jpg#gh-light-mode-only" alt="A triangle drawn from a vertex buffer holding a position and a color per vertex" width="560">
+  <img class="dark-only rounded" src="../../_static/images/graphics/rhi/buffers-and-textures_triangle_dark.jpg#gh-dark-mode-only" alt="A triangle drawn from a vertex buffer holding a position and a color per vertex" width="560">
+</p>
+
 | Method              | Description                                        |
 | ------------------- | -------------------------------------------------- |
 | `getType()`         | The buffer usage type.                             |

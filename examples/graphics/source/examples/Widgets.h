@@ -140,6 +140,20 @@ private:
         };
         panel.addAndMakeVisible (slider.get());
 
+        // Joystick that springs back to the center on release
+        joystick = std::make_unique<yup::JoystickComponent> ("joystick");
+        joystick->setRange (yup::JoystickComponent::Axis::x, { -1.0, 1.0 });
+        joystick->setRange (yup::JoystickComponent::Axis::y, { -1.0, 1.0 });
+        joystick->setDefaultValue (yup::JoystickComponent::Axis::x, 0.0);
+        joystick->setDefaultValue (yup::JoystickComponent::Axis::y, 0.0);
+        joystick->resetToDefaults (yup::dontSendNotification);
+        joystick->setSnapBack (true);
+        joystick->onValueChanged = [this] (double x, double y)
+        {
+            updateStatus ("Joystick: x " + yup::String (x, 2) + ", y " + yup::String (y, 2));
+        };
+        panel.addAndMakeVisible (joystick.get());
+
         // TextEditor
         textEditor = std::make_unique<yup::TextEditor> ("textEditor");
         textEditor->setText ("Type some text here...", yup::dontSendNotification);
@@ -310,7 +324,7 @@ private:
 
     /** Lays the widgets out inside the panel bounds, so they fit whatever size the panel gets.
 
-        Rows keep a fixed height and only the text editor and the slider/logo row absorb the
+        Rows keep a fixed height and only the text editor and the slider/joystick/logo row absorb the
         space that is left, which keeps every widget inside the panel (and so inside the
         transformed shape the handles control).
     */
@@ -385,12 +399,13 @@ private:
 
         imageButtonLabel->setBounds (area.removeFromBottom (labelHeight));
 
-        // The rotary slider and the logo are square: take the largest pair of squares that fits
-        const auto squareSize = yup::jmax (0.0f, yup::jmin (area.getHeight(), (area.getWidth() - spacing) * 0.5f));
-        auto squaresRow = area.withSizeKeepingCenter (squareSize * 2.0f + spacing, squareSize);
+        // The rotary slider, the joystick and the logo are square: take the largest three squares that fit
+        const auto squareSize = yup::jmax (0.0f, yup::jmin (area.getHeight(), (area.getWidth() - spacing * 2.0f) / 3.0f));
+        auto squaresRow = area.withSizeKeepingCenter (squareSize * 3.0f + spacing * 2.0f, squareSize);
 
         slider->setBounds (squaresRow.removeFromLeft (squareSize));
         imageButton->setBounds (squaresRow.removeFromRight (squareSize));
+        joystick->setBounds (squaresRow.withSizeKeepingCenter (squareSize, squareSize));
     }
 
     void paint (yup::Graphics& g) override
@@ -620,6 +635,7 @@ private:
     */
     std::unique_ptr<yup::Label> contentLabel;
     std::unique_ptr<yup::Slider> slider;
+    std::unique_ptr<yup::JoystickComponent> joystick;
     std::unique_ptr<yup::TextEditor> textEditor;
     std::unique_ptr<yup::ProgressBar> progressBar;
     std::unique_ptr<yup::Label> progressBarLabel;

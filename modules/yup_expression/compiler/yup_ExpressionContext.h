@@ -105,6 +105,15 @@ public:
     template <class F>
     ExpressionTypeBuilder& conversion (F&& function);
 
+    /** Overrides how an independent copy of T is created before an in-place method (`T& (T&, ...)`) mutates it.
+
+        Value types default to copy assignment; handle types whose copy assignment shares underlying
+        storage (such as `Path`) supply a deep-copy function here so shared locals remain immutable
+        while single-use method chains mutate a single instance in place.
+    */
+    template <class F>
+    ExpressionTypeBuilder& clone (F&& function);
+
     /** Declares the component members used for swizzling.
 
         With components `x` and `y` (both registered as members), `p.yx` is compiled as
@@ -141,6 +150,10 @@ private:
     precision included) and `%%`, other conversions are copied as text.
 
     A context is only needed while compiling: compiled programs keep what they use alive.
+
+    Copies are cheap: they share the registered types, and the constants, functions and other
+    declarations until one of the copies declares more. Register a library of types once in a
+    prototype and copy it for each program needing its own outputs or symbol resolver.
 
     @code
     ExpressionContext context;
@@ -256,6 +269,17 @@ public:
         return addInput<ExpressionArrayView<T>> (name);
     }
 
+    /** Registers the type of arrays with elements of type T, returning it (or the one already registered).
+
+        Array types are registered by addArray, register one ahead when a symbol resolver returns it.
+        Returns nullptr when T is neither built-in nor registered.
+    */
+    template <class T>
+    const ExpressionType* addArrayType()
+    {
+        return resolveType<ExpressionArrayView<T>>();
+    }
+
     /** Declares an input of a type known at runtime, returning its index or -1 if the name is already used. */
     int addInput (const String& name, const ExpressionType& type);
 
@@ -272,7 +296,11 @@ public:
     int findInput (StringRef name) const;
 
     //==============================================================================
-    /** Declares a named constant, folded into the programs using it. */
+    /** Declares a named constant, folded into the programs using it.
+
+        Declaring again a constant of the same name and type replaces its value, so a library of
+        constants can be registered more than once on the same context.
+    */
     template <class T>
     void addConstant (const String& name, const T& value)
     {
@@ -392,6 +420,17 @@ private:
 
     using FunctionMap = std::unordered_map<String, std::vector<ExpressionFunction>>;
 
+    /* Registering a library of types declares many symbols and functions, and contexts are often
+       copied from such a prototype, so copies share them until one of the copies declares more. */
+    struct Declarations
+    {
+        std::vector<Constant> constants;
+        std::vector<std::pair<String, Expression>> expressions;
+        std::unordered_map<String, Symbol> symbols;
+        std::unordered_map<String, std::vector<int>> enumValues;
+        FunctionMap functions;
+    };
+
     template <class T>
     struct ArrayElement
     {
@@ -437,14 +476,13 @@ private:
 
     static const FunctionMap& getBuiltinFunctions();
 
+    const Declarations& getDeclarations() const;
+    Declarations& editDeclarations();
+
     std::vector<std::shared_ptr<ExpressionType>> types;
     std::vector<Variable> inputs;
     std::vector<Variable> outputs;
-    std::vector<Constant> constants;
-    std::vector<std::pair<String, Expression>> expressions;
-    std::unordered_map<String, Symbol> symbols;
-    std::unordered_map<String, std::vector<int>> enumValues;
-    FunctionMap functions;
+    std::shared_ptr<Declarations> declarations;
     SymbolResolver symbolResolver;
 };
 
@@ -490,6 +528,24 @@ template <class F>
 ExpressionTypeBuilder<T>& ExpressionTypeBuilder<T>::conversion (F&& function)
 {
     context.addFunction ("@convert", std::forward<F> (function));
+    return *this;
+}
+
+template <class T>
+template <class F>
+ExpressionTypeBuilder<T>& ExpressionTypeBuilder<T>::clone (F&& function)
+{
+    using Cloner = std::decay_t<F>;
+    type.cloneState = std::make_shared<Cloner> (std::forward<F> (function));
+    type.cloneFunction = [] (const void* state, void* destination, const void* source, int count)
+    {
+        const auto& cloner = *static_cast<const Cloner*> (state);
+        auto* d = static_cast<T*> (destination);
+        const auto* s = static_cast<const T*> (source);
+
+        for (int i = 0; i < count; ++i)
+            d[i] = cloner (s[i]);
+    };
     return *this;
 }
 

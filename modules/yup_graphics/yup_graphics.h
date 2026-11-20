@@ -36,6 +36,8 @@
     optionalDeps:       libpng libjpeg libwebp libgif libtiff
     appleFrameworks:    Metal
     searchpaths:        native
+    shaderDirectory:    graphics
+    shaderBundles:      FilterGraph
 
   END_YUP_MODULE_DECLARATION
 
@@ -206,7 +208,9 @@ class Context;
 #include "graphics/yup_ImageSampling.h"
 #include "graphics/yup_LayerMaskMode.h"
 #include "primitives/yup_Path.h"
+#include "primitives/yup_PathMarkers.h"
 #include "primitives/yup_CubicBezier.h"
+#include "primitives/yup_Easing.h"
 #include "meshes/yup_MeshSurfaceMapper.h"
 #include "fonts/yup_Font.h"
 #include "imaging/yup_ImagePixelData.h"
@@ -217,6 +221,7 @@ class Context;
 #include "imaging/yup_ImageFormatWriter.h"
 #include "imaging/yup_ImageFormatManager.h"
 #include "fonts/yup_StyledText.h"
+#include "fonts/yup_AnchoredText.h"
 #include "graphics/yup_ColorGradient.h"
 #include "graphics/yup_Colors.h"
 #include "graphics/yup_StrokeType.h"
@@ -225,16 +230,17 @@ class Context;
 #include "graphics/yup_ImageMesh.h"
 #include "graphics/yup_Graphics.h"
 #include "rhi/yup_GpuCanvas.h"
+#include "graphics/yup_FilterGraph.h"
 #include "graphics/yup_PaintSource.h"
 #include "expression/yup_GraphicsExpressionTypes.h"
 #include "expression/yup_ExpressionDrawing.h"
+#include "svg/yup_SVGFilter.h"
 #include "svg/yup_SVGElement.h"
 #include "svg/yup_SVGGradient.h"
 #include "svg/yup_SVGClipPath.h"
 #include "svg/yup_SVGMask.h"
 #include "svg/yup_SVGMarker.h"
 #include "svg/yup_SVGPattern.h"
-#include "svg/yup_SVGFilter.h"
 #include "svg/yup_SVGCssRule.h"
 #include "svg/yup_SVGDocument.h"
 #include "svg/yup_SVGCssParser.h"

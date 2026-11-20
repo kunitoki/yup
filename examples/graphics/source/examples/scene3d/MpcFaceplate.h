@@ -250,15 +250,7 @@ private:
 
     static yup::Font getFont (float height, float weight, float width = 100.0f)
     {
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (height);
-
-        if (font.getAxisDescription ("wght").has_value())
-            font = font.withAxisValue ("wght", weight);
-
-        if (font.getAxisDescription ("wdth").has_value())
-            font = font.withAxisValue ("wdth", width);
-
-        return font;
+        return yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (height).withAxisValues ({ { "wght", weight }, { "wdth", width } });
     }
 
     static void paintText (yup::Graphics& g, const yup::String& text, const yup::Font& font, yup::Color color, yup::Rectangle<float> area, yup::Justification justification)

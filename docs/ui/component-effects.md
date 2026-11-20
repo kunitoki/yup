@@ -11,6 +11,10 @@ enables visual effects such as blurs, edge detection, pixelation, colour
 adjustments, and custom GLSL pipelines without modifying the component's
 `paint()` code.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_component_effects.jpg" alt="A component drawn through a shader effect, in the graphics example" width="640">
+</p>
+
 Effects are reference-counted and can be shared across multiple components.
 When a component has an active effect, the rendering path automatically:
 
@@ -126,9 +130,75 @@ myComponent.setComponentEffect (nullptr);
 
 ---
 
-## Built-in Effect Patterns
+## Built-in Effects in `yup_gui`
 
-The [graphics example](../../examples/graphics/) demonstrates several reusable
+`yup_gui` ships ready-to-use `ComponentEffect` classes so common post-processing
+needs no custom GLSL:
+
+| Class | Purpose | Main parameters |
+|---|---|---|
+| `BlurEffect` | Two-pass separable Gaussian blur | `radius` in logical points |
+| `DropShadowEffect` | Blurred alpha-silhouette shadow behind the sharp subtree | `color`, `radius`, `offset` in logical points |
+| `GlowEffect` | Additive tinted bloom composited with the sharp subtree | `radius`, `intensity` (`0..1`), `color` |
+| `ColorMatrixEffect` | 4x5 RGBA color-matrix transform with CSS/SVG presets | `Matrix`, or `grayscale`, `sepia`, `invert`, `saturate`, `brightness`, `contrast`, `hueRotate`, `opacity` |
+| `FilterEffect` | Ordered chain of CSS `<filter-function>` operations | `blur`, `brightness`, `contrast`, `drop-shadow`, `grayscale`, `hue-rotate`, `invert`, `opacity`, `saturate`, `sepia` |
+
+```cpp
+// Attach a built-in C++ effect directly:
+myCard.setComponentEffect (new yup::DropShadowEffect (yup::Color (0x66000000), 8.0f, { 0.0f, 4.0f }));
+
+// Or parse a CSS filter chain in C++:
+if (auto ops = yup::FilterEffect::parse ("hue-rotate(90deg) brightness(115%)"); ops.wasOk())
+    myCard.setComponentEffect (new yup::FilterEffect (ops.getValue()));
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-effects_built-in_light.jpg#gh-light-mode-only" alt="A component drawn as is, blurred, with a drop shadow, with a glow and in grayscale" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-effects_built-in_dark.jpg#gh-dark-mode-only" alt="A component drawn as is, blurred, with a drop shadow, with a glow and in grayscale" width="640">
+</p>
+
+### Using Effects from `.yui` Stylesheets
+
+Stylesheets separate built-in CSS filter chains from application-defined effects:
+
+- **`filter:`** configures an internal `FilterEffect` layer directly from CSS
+  `<filter-function>` syntax, supports live `.yui` expressions for scalar and
+  color arguments, automatically expands the component's paint margin for
+  `blur(...)` and `drop-shadow(...)` outsets, and animates smoothly through
+  `transition:` and `@keyframes`.
+- **`effect:`** looks up a custom effect factory by name in
+  `ComponentEffectRegistry` and calls `setComponentEffect`, so both `filter:`
+  and a custom `effect:` can be active on the same component:
+
+```cpp
+yup::ComponentEffectRegistry::getInstance().registerEffect ("crtScan", []
+{
+    return yup::ComponentEffect::Ptr (new CrtScanEffect());
+});
+```
+
+```yui
+style {
+    .screen {
+        effect: crtScan;
+        filter: contrast(110%) saturate(120%);
+        transition: filter 200ms easeOut;
+    }
+
+    .screen:disabled {
+        filter: grayscale(100%) opacity(60%);
+    }
+}
+```
+
+See [Stylesheets in `.yui`](yui/styles.md#shadows-glows-filters-effects-and-cursors)
+for full syntax and animation rules.
+
+---
+
+## Custom Effect Examples
+
+The [graphics example](https://github.com/kunitoki/yup/tree/main/examples/graphics) demonstrates several reusable
 effect patterns implemented as `ComponentEffect` subclasses. Each lives in
 `examples/graphics/source/examples/ComponentEffects.h`, with its fragment shader
 precompiled from `examples/graphics/data/shaders/effect_*.frag`:
@@ -249,5 +319,5 @@ this way.
 - [RHI pipelines](../graphics/rhi/pipelines.md) — `GpuPipeline` and
   `GpuRenderPass` details
 - [Graphics `drawTexture`](../graphics/graphics-class.md)
-- [`SpinningCubeDemo`](../../examples/graphics/) — full blur post-process
+- [`SpinningCubeDemo`](https://github.com/kunitoki/yup/tree/main/examples/graphics) — full blur post-process
   example with live shader editing

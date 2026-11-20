@@ -36,6 +36,14 @@ SpectralBridge::~SpectralBridge() = default;
 void SpectralBridge::setSpectralProcessor (std::shared_ptr<SpectralProcessor> processor)
 {
     spectralProcessor = std::move (processor);
+    spectralParameterOffset = static_cast<int> (getParameters().size());
+
+    const auto numSpectralParameters = spectralProcessor != nullptr ? spectralProcessor->getParameters().size() : 0;
+    pendingSpectralValues.assign (numSpectralParameters, std::numeric_limits<float>::quiet_NaN());
+    hasPendingSpectralValues = false;
+
+    spectralParams.clear();
+    spectralParams.reserve (static_cast<int> (numSpectralParameters));
 
     if (spectralProcessor != nullptr)
     {
@@ -151,8 +159,6 @@ void SpectralBridge::prepareToPlay (const AudioSpec& spec)
         const auto spectralSpec = SpectralSpec (getSampleRate(), getSamplesPerBlock(), static_cast<int> (channelState.size()), fftSize);
         spectralProcessor->prepareToPlay (spectralSpec);
     }
-
-    spectralParams.reserve (512);
 }
 
 void SpectralBridge::releaseResources()
@@ -163,11 +169,6 @@ void SpectralBridge::releaseResources()
     window = {};
     colaCompensation = {};
     spectralBuffer = {};
-
-    fftSize = 1024;
-    hopSize = 256;
-    numBins = 0;
-    overlapFactor = 4;
 
     if (spectralProcessor != nullptr)
         spectralProcessor->releaseResources();
@@ -244,6 +245,7 @@ void SpectralBridge::processBlock (AudioProcessContext<float>& context)
         st.samplesWritten = blockEnd;
     }
 
+    collectSpectralParameterChanges (context.params);
     processAvailableFrames (context);
 
     for (int ch = 0; ch < numChannels; ++ch)
@@ -282,24 +284,40 @@ void SpectralBridge::setPresetName (int, StringRef) {}
 
 bool SpectralBridge::supportsDataTreeState() const noexcept { return true; }
 
-Result SpectralBridge::loadStateFromDataTree (const DataTree&)
+Result SpectralBridge::loadStateFromDataTree (const DataTree& state)
 {
+    if (state.getType() != Identifier ("SpectralBridgeState"))
+        return Result::fail ("State is not a SpectralBridge state");
+
+    for (const auto& child : state)
+    {
+        if (auto parameter = getParameterByID (child.getProperty ("id").toString()))
+            parameter->setValue (static_cast<float> (child.getProperty ("value", parameter->getValue())));
+    }
+
+    updateHostDisplay (ChangeDetails().withParameterValuesChanged (true));
     return Result::ok();
 }
 
-Result SpectralBridge::saveStateIntoDataTree (DataTree&)
+Result SpectralBridge::saveStateIntoDataTree (DataTree& state)
 {
+    state = DataTree ("SpectralBridgeState");
+    auto transaction = state.beginTransaction();
+
+    for (const auto& parameter : getParameters())
+        transaction.addChild (DataTree ("Parameter", { { "id", parameter->getID() }, { "value", parameter->getValue() } }));
+
     return Result::ok();
 }
 
 //==============================================================================
 void SpectralBridge::allocateResources()
 {
-    const int inputRingSize = fftSize + getSamplesPerBlock() + hopSize;
-    const int outputRingSize = fftSize * 2 + getSamplesPerBlock() * 2 + hopSize;
-
     numBins = fftSize / 2 + 1;
     hopSize = fftSize / overlapFactor;
+
+    const int inputRingSize = fftSize + getSamplesPerBlock() + hopSize;
+    const int outputRingSize = fftSize * 2 + getSamplesPerBlock() * 2 + hopSize;
 
     fft.setSize (fftSize);
     fft.setScaling (FFTProcessor<float>::FFTScaling::asymmetric);
@@ -372,8 +390,6 @@ void SpectralBridge::reconfigureIfPrepared()
         const auto spectralSpec = SpectralSpec (getSampleRate(), getSamplesPerBlock(), static_cast<int> (channelState.size()), fftSize);
         spectralProcessor->prepareToPlay (spectralSpec);
     }
-
-    spectralParams.reserve (512);
 }
 
 void SpectralBridge::processAvailableFrames (AudioProcessContext<float>& context)
@@ -381,8 +397,6 @@ void SpectralBridge::processAvailableFrames (AudioProcessContext<float>& context
     ScopedNoDenormals noDenormals;
 
     const int numChannels = jmin (context.audio.getNumChannels(), static_cast<int> (channelState.size()));
-
-    spectralParams.clear();
 
     auto& st0 = channelState[0];
 
@@ -412,9 +426,13 @@ void SpectralBridge::processAvailableFrames (AudioProcessContext<float>& context
 
         if (spectralProcessor != nullptr)
         {
+            fillSpectralParameterChanges();
+
             SpectralProcessContext<float> spectralCtx { spectralBuffer, spectralParams };
             spectralProcessor->processBlock (spectralCtx);
         }
+
+        spectralParams.clear();
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
@@ -442,6 +460,41 @@ void SpectralBridge::processAvailableFrames (AudioProcessContext<float>& context
         for (auto& st : channelState)
             st.nextFrameStart = nextFrameStart;
     }
+}
+
+void SpectralBridge::collectSpectralParameterChanges (const ParameterChangeBuffer& changes) noexcept
+{
+    const int numSpectralParameters = static_cast<int> (pendingSpectralValues.size());
+
+    for (const auto& change : changes)
+    {
+        const int spectralIndex = change.parameterIndex - spectralParameterOffset;
+        if (spectralIndex < 0 || spectralIndex >= numSpectralParameters)
+            continue;
+
+        pendingSpectralValues[static_cast<size_t> (spectralIndex)] = change.normalizedValue;
+        hasPendingSpectralValues = true;
+    }
+}
+
+void SpectralBridge::fillSpectralParameterChanges() noexcept
+{
+    spectralParams.clear();
+
+    if (! hasPendingSpectralValues)
+        return;
+
+    for (size_t index = 0; index < pendingSpectralValues.size(); ++index)
+    {
+        auto& value = pendingSpectralValues[index];
+        if (std::isnan (value))
+            continue;
+
+        spectralParams.addChange (static_cast<int> (index), value, 0);
+        value = std::numeric_limits<float>::quiet_NaN();
+    }
+
+    hasPendingSpectralValues = false;
 }
 
 } // namespace yup

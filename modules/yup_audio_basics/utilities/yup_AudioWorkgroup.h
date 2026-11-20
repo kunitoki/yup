@@ -116,45 +116,44 @@ private:
 
     You can use this class to join a real-time worker thread to a workgroup.
     Rather than constructing instances of this class directly, you should use
-    functions like AudioProcessor::audioWorkgroupContextChanged() and
     AudioIODevice::getWorkgroup() to fetch an engaged workgroup from the system.
 
     The class contains a single method, join(). Call this from your real-time
-    thread to with register this workgroup.
+    thread to register it with this workgroup.
 
     Here's an example of how you might use this class:
 
     @code
     Constructor()
     {
-        startRealtimeThread (RealtimeThreadOptions{}.withApproximateAudioProcessingTime (samplesPerFrame, sampleRate));
+        startRealtimeThread (Thread::RealtimeOptions{}.withApproximateAudioProcessingTime (samplesPerFrame, sampleRate));
         or
-        startRealtimeThread (RealtimeThreadOptions{}.withProcessingTimeMs (10));
+        startRealtimeThread (Thread::RealtimeOptions{}.withMaximumProcessingTimeMs (10));
     }
 
-    void Thread::run() override
+    void run() override
     {
         WorkgroupToken token;
 
-        getWorkgroup().join (token);
+        workgroup.join (token); // workgroup was fetched from AudioIODevice::getWorkgroup()
 
         while (wait (-1) && ! threadShouldExit())
         {
-            // If the workgroup has changed, rejoin the workgroup with the same token.
+            // If the device changed, rejoin its new workgroup with the same token.
             if (workgroupChanged())
-                getWorkgroup().join (token);
+                workgroup.join (token);
 
             // Perform the work here
         }
     }
 
-    void AudioProcessor::processBlock()
+    void audioDeviceIOCallbackWithContext (...) override
     {
         workerThread->notify();
     }
     @endcode
 
-    @see Thread, AudioProcessor, WorkgroupToken
+    @see Thread, AudioIODevice, WorkgroupToken
 
     @tags{Audio}
 */

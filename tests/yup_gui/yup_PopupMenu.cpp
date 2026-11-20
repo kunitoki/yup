@@ -1207,4 +1207,239 @@ TEST_F (PopupMenuTest, StyleIdentifiersContainAllStyleIds)
     EXPECT_NE (id, PopupMenu::Style::menuItemBackgroundHighlighted);
     EXPECT_NE (id, PopupMenu::Style::menuItemText);
     EXPECT_NE (id, PopupMenu::Style::menuItemTextDisabled);
+    EXPECT_FALSE (PopupMenu::Style::cornerRadiusId.isNull());
+    EXPECT_FALSE (PopupMenu::Style::outlineWidthId.isNull());
+    EXPECT_FALSE (PopupMenu::Style::itemCornerRadiusId.isNull());
+    EXPECT_FALSE (PopupMenu::Style::itemHeightId.isNull());
+    EXPECT_FALSE (PopupMenu::Style::verticalPaddingId.isNull());
+}
+
+TEST_F (PopupMenuTest, TypeInfoExposesStyleablePropertiesAndSignal)
+{
+    const auto& info = PopupMenu::getClassTypeInfo();
+
+    EXPECT_EQ (Identifier ("PopupMenu"), info.getTypeName());
+    EXPECT_FALSE (info.hasFactory());
+
+    for (const auto* propName : { "backgroundColor",
+                                  "borderColor",
+                                  "itemTextColor",
+                                  "itemTextDisabledColor",
+                                  "itemBackgroundColor",
+                                  "itemHighlightedBackgroundColor",
+                                  "itemActiveSubmenuBackgroundColor",
+                                  "cornerRadius",
+                                  "outlineWidth",
+                                  "itemCornerRadius",
+                                  "itemHeight",
+                                  "verticalPadding" })
+    {
+        const auto* prop = info.findProperty (Identifier (propName));
+        ASSERT_NE (nullptr, prop) << propName;
+        EXPECT_TRUE (prop->isStyleable) << propName;
+    }
+
+    EXPECT_EQ (ComponentProperty::LayoutEffect::own, info.findProperty ("itemHeight")->layoutEffect);
+    EXPECT_EQ (ComponentProperty::LayoutEffect::own, info.findProperty ("verticalPadding")->layoutEffect);
+    EXPECT_NE (nullptr, info.findSignal ("onItemSelected"));
+}
+
+TEST_F (PopupMenuTest, StyleSheetStylesPopupOpenedOutsideStyledRoot)
+{
+    Component styledPanel ("panel");
+    styledPanel.setBounds (20, 20, 400, 300);
+    parentComponent->addAndMakeVisible (styledPanel);
+
+    ComboBox combo ("filterCombo");
+    combo.setBounds (10, 10, 160, 28);
+    styledPanel.addAndMakeVisible (combo);
+
+    auto sheet = StyleSheet::parse (R"(
+        palette Warm {
+            colors: "#14161a #1e222a #ff8844 #f0f4f8";
+            surfaceRaised: #1e222a;
+            accent: #ff8844;
+            outline: #334455;
+            text: #f0f4f8;
+        }
+        style {
+            :root {
+                palette: Warm;
+            }
+            PopupMenu {
+                backgroundColor: palette.surfaceRaised;
+                itemTextColor: palette.text;
+                cornerRadius: 10;
+                itemCornerRadius: 6;
+                itemHeight: 30;
+                verticalPadding: 8;
+            }
+            ComboBox > PopupMenu {
+                borderColor: palette.accent;
+            }
+        }
+    )");
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+    styledPanel.setStyleSheet (sheet.getReference());
+    styledPanel.getStyleContext()->restyleNow();
+
+    auto menu = PopupMenu::create (PopupMenu::Options()
+                                       .withParentComponent (parentComponent.get())
+                                       .withRelativePosition (&combo));
+    menu->addItem (kPopupTestText1, kPopupTestId1);
+    menu->addItem (kPopupTestText2, kPopupTestId2);
+    menu->show();
+
+    EXPECT_EQ (parentComponent.get(), menu->getParentComponent());
+    EXPECT_EQ (Color (0xff1e222a), menu->findColor (PopupMenu::Style::menuBackground));
+    EXPECT_EQ (Color (0xfff0f4f8), menu->findColor (PopupMenu::Style::menuItemText));
+    EXPECT_EQ (Color (0xffff8844), menu->findColor (PopupMenu::Style::menuBorder));
+    EXPECT_FLOAT_EQ (10.0f, menu->findPropertyAs<float> ("cornerRadius"));
+    EXPECT_FLOAT_EQ (6.0f, menu->findPropertyAs<float> ("itemCornerRadius"));
+    EXPECT_FLOAT_EQ (30.0f, menu->findPropertyAs<float> ("itemHeight"));
+    EXPECT_FLOAT_EQ (8.0f, menu->findPropertyAs<float> ("verticalPadding"));
+    EXPECT_FLOAT_EQ (76.0f, menu->getHeight());
+
+    const auto& firstItem = **menu->begin();
+    EXPECT_FLOAT_EQ (8.0f, firstItem.area.getY());
+    EXPECT_FLOAT_EQ (30.0f, firstItem.area.getHeight());
+
+    PopupMenu::dismissAllPopups();
+}
+
+TEST_F (PopupMenuTest, SubmenuAndNestedSubmenuInheritStyleFromParentPopupMenu)
+{
+    auto sheet = StyleSheet::parse (R"(
+        style {
+            PopupMenu {
+                backgroundColor: #aa0000;
+                itemHeight: 18;
+                cornerRadius: 3;
+            }
+            #contextMenu {
+                backgroundColor: #123456;
+                borderColor: #654321;
+                itemTextColor: #ddeeff;
+                cornerRadius: 12;
+                itemCornerRadius: 5;
+                itemHeight: 28;
+                verticalPadding: 6;
+                shadow: 0 4 12 #00000080;
+                filter: brightness(1.1);
+            }
+        }
+    )");
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+    parentComponent->setStyleSheet (sheet.getReference());
+    parentComponent->getStyleContext()->restyleNow();
+
+    auto nestedSubMenu = PopupMenu::create();
+    nestedSubMenu->setColor (PopupMenu::Style::menuItemText, Color (0xff00ff88));
+    nestedSubMenu->addItem ("Deep Item", 30);
+
+    auto subMenu = PopupMenu::create();
+    subMenu->addSubMenu ("Deep Menu", nestedSubMenu);
+    subMenu->addItem (kPopupTestText2, kPopupTestId2);
+
+    auto menu = PopupMenu::create (PopupMenu::Options()
+                                       .withParentComponent (parentComponent.get())
+                                       .withRelativePosition (targetComponent.get()));
+    menu->setComponentID ("contextMenu");
+    menu->addSubMenu (kSubMenuText, subMenu);
+    menu->show();
+
+    menu->keyDown (KeyPress (KeyPress::downKey), {});
+    menu->keyDown (KeyPress (KeyPress::rightKey), {});
+
+    ASSERT_TRUE (subMenu->isVisible());
+    EXPECT_TRUE (subMenu->isSubmenu());
+    EXPECT_EQ (menu.get(), subMenu->getParentMenu());
+    EXPECT_EQ (Color (0xff123456), subMenu->findColor (PopupMenu::Style::menuBackground));
+    EXPECT_EQ (Color (0xff654321), subMenu->findColor (PopupMenu::Style::menuBorder));
+    EXPECT_EQ (Color (0xffddeeff), subMenu->findColor (PopupMenu::Style::menuItemText));
+    EXPECT_FLOAT_EQ (12.0f, subMenu->findPropertyAs<float> ("cornerRadius"));
+    EXPECT_FLOAT_EQ (5.0f, subMenu->findPropertyAs<float> ("itemCornerRadius"));
+    EXPECT_FLOAT_EQ (28.0f, subMenu->findPropertyAs<float> ("itemHeight"));
+    EXPECT_FLOAT_EQ (6.0f, subMenu->findPropertyAs<float> ("verticalPadding"));
+    EXPECT_FLOAT_EQ (68.0f, subMenu->getHeight());
+
+    ASSERT_NE (nullptr, subMenu->getStyleState());
+    EXPECT_EQ (1, static_cast<int> (subMenu->getStyleState()->getShadows().size()));
+    EXPECT_NE (nullptr, subMenu->getStyleState()->getFilterEffect());
+
+    // Open the nested submenu and check multi-level inheritance plus explicit override preservation
+    subMenu->keyDown (KeyPress (KeyPress::rightKey), {});
+
+    ASSERT_TRUE (nestedSubMenu->isVisible());
+    EXPECT_TRUE (nestedSubMenu->isSubmenu());
+    EXPECT_EQ (subMenu.get(), nestedSubMenu->getParentMenu());
+    EXPECT_EQ (Color (0xff123456), nestedSubMenu->findColor (PopupMenu::Style::menuBackground));
+    EXPECT_EQ (Color (0xff00ff88), nestedSubMenu->findColor (PopupMenu::Style::menuItemText));
+    EXPECT_FLOAT_EQ (12.0f, nestedSubMenu->findPropertyAs<float> ("cornerRadius"));
+    EXPECT_FLOAT_EQ (28.0f, nestedSubMenu->findPropertyAs<float> ("itemHeight"));
+    EXPECT_FLOAT_EQ (40.0f, nestedSubMenu->getHeight());
+
+    PopupMenu::dismissAllPopups();
+
+    EXPECT_FALSE (subMenu->isSubmenu());
+    EXPECT_EQ (nullptr, subMenu->getParentMenu());
+    EXPECT_FALSE (nestedSubMenu->isSubmenu());
+    EXPECT_EQ (nullptr, nestedSubMenu->getParentMenu());
+}
+
+TEST_F (PopupMenuTest, QualifiedDeclarationsAndLiveRestylePropagateToPopupAndSubmenu)
+{
+    Component toolbar ("toolbar");
+    toolbar.addStyleClass ("toolbar");
+    toolbar.setBounds (0, 0, 400, 60);
+    parentComponent->addAndMakeVisible (toolbar);
+
+    Component trigger ("trigger");
+    trigger.setBounds (10, 10, 80, 24);
+    toolbar.addAndMakeVisible (trigger);
+
+    auto sheet = StyleSheet::parse (R"(
+        style {
+            .toolbar {
+                PopupMenu.backgroundColor: #224466;
+                PopupMenu.itemHeight: 26;
+            }
+            .toolbar.compact {
+                PopupMenu.backgroundColor: #335577;
+                PopupMenu.itemHeight: 20;
+            }
+        }
+    )");
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+    parentComponent->setStyleSheet (sheet.getReference());
+    parentComponent->getStyleContext()->restyleNow();
+
+    auto subMenu = PopupMenu::create();
+    subMenu->addItem (kPopupTestText2, kPopupTestId2);
+
+    auto menu = PopupMenu::create (PopupMenu::Options()
+                                       .withParentComponent (parentComponent.get())
+                                       .withRelativePosition (&trigger));
+    menu->addSubMenu (kSubMenuText, subMenu);
+    menu->show();
+
+    menu->keyDown (KeyPress (KeyPress::downKey), {});
+    menu->keyDown (KeyPress (KeyPress::rightKey), {});
+    ASSERT_TRUE (subMenu->isVisible());
+
+    EXPECT_EQ (Color (0xff224466), menu->findColor (PopupMenu::Style::menuBackground));
+    EXPECT_EQ (Color (0xff224466), subMenu->findColor (PopupMenu::Style::menuBackground));
+    EXPECT_FLOAT_EQ (26.0f, menu->findPropertyAs<float> ("itemHeight"));
+    EXPECT_FLOAT_EQ (26.0f, subMenu->findPropertyAs<float> ("itemHeight"));
+
+    toolbar.addStyleClass ("compact");
+    parentComponent->getStyleContext()->restyleNow();
+
+    EXPECT_EQ (Color (0xff335577), menu->findColor (PopupMenu::Style::menuBackground));
+    EXPECT_EQ (Color (0xff335577), subMenu->findColor (PopupMenu::Style::menuBackground));
+    EXPECT_FLOAT_EQ (20.0f, menu->findPropertyAs<float> ("itemHeight"));
+    EXPECT_FLOAT_EQ (20.0f, subMenu->findPropertyAs<float> ("itemHeight"));
+    EXPECT_FLOAT_EQ (28.0f, subMenu->getHeight());
+
+    PopupMenu::dismissAllPopups();
 }

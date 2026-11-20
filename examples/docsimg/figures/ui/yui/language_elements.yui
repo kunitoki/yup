@@ -1,0 +1,6 @@
+// size: 360 160
+Column {
+    gap: 4;
+    Slider { id: knob; value: 0.5; flexGrow: 1; }
+    Label  { text: format ("%.2f", knob.value); preferredHeight: 20; }
+}

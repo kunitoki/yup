@@ -30,6 +30,29 @@ const Identifier TextButton::Style::textColorId = "textButtonText";
 const Identifier TextButton::Style::textPressedColorId = "textButtonTextPressed";
 const Identifier TextButton::Style::outlineColorId = "textButtonOutline";
 const Identifier TextButton::Style::outlineFocusedColorId = "textButtonOutlineFocused";
+const Identifier TextButton::Style::cornerRadiusId = "textButtonCornerRadius";
+const Identifier TextButton::Style::outlineWidthId = "textButtonOutlineWidth";
+const Identifier TextButton::Style::focusedOutlineWidthId = "textButtonFocusedOutlineWidth";
+
+//==============================================================================
+
+const ComponentTypeInfo& TextButton::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<TextButton> (Identifier ("TextButton"), Button::getClassTypeInfo())
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("backgroundPressedColor", Style::backgroundPressedColorId)
+                                 .color ("textColor", Style::textColorId)
+                                 .color ("textPressedColor", Style::textPressedColorId)
+                                 .color ("outlineColor", Style::outlineColorId)
+                                 .color ("outlineFocusedColor", Style::outlineFocusedColorId)
+                                 .number ("cornerRadius", Style::cornerRadiusId, 4.0, "The corner radius.")
+                                 .number ("outlineWidth", Style::outlineWidthId, 1.0, "The outline width.")
+                                 .number ("focusedOutlineWidth", Style::focusedOutlineWidthId, 2.0, "The outline width when focused.")
+                                 .property (textPropertyId, &TextButton::getButtonText, &TextButton::setButtonText)
+                                 .build();
+
+    return info;
+}
 
 //==============================================================================
 
@@ -49,6 +72,7 @@ void TextButton::setButtonText (StringRef newButtonText)
         buttonText = newButtonText;
 
         updateTextLayout();
+        notifyPropertyChanged (textPropertyId);
     }
 }
 

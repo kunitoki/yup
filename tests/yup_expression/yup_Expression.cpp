@@ -198,6 +198,21 @@ TEST_F (ExpressionTests, ParsesExpressionsEmbeddedInText)
     EXPECT_EQ (arguments.indexOfChar (')'), offset);
 }
 
+TEST_F (ExpressionTests, EmbeddedExpressionsStopAtRanges)
+{
+    const String text ("i in 0 .. n.count {");
+
+    int offset = text.indexOfChar ('0');
+    ASSERT_TRUE (Expression::parseExpression (text, offset).wasOk());
+    EXPECT_EQ (text.indexOf (".."), offset);
+
+    offset += 2;
+    const auto end = Expression::parseExpression (text, offset);
+    ASSERT_TRUE (end.wasOk());
+    EXPECT_EQ (String ("n.count"), end.getValue().toString());
+    EXPECT_EQ (text.indexOfChar ('{'), offset);
+}
+
 TEST_F (ExpressionTests, EmbeddedParseErrorsReportOffsets)
 {
     const String text ("a: 1;\nb: 2 +* 3");

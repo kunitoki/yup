@@ -2028,8 +2028,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getSelectionRectangles", &StyledText::getSelectionRectangles, "startIndex"_a, "endIndex"_a)
         .def ("isValidCharacterIndex", &StyledText::isValidCharacterIndex, "characterIndex"_a)
 
-        .def_static ("horizontalAlignFromJustification", &StyledText::horizontalAlignFromJustification)
-        .def_static ("verticalAlignFromJustification", &StyledText::verticalAlignFromJustification)
+        .def_static ("toHorizontalAlign", &StyledText::toHorizontalAlign)
+        .def_static ("toVerticalAlign", &StyledText::toVerticalAlign)
 
         .def ("__repr__", [] (const StyledText& self)
         {
@@ -2517,6 +2517,30 @@ void registerYupGraphicsBindings (py::module_& m)
             return left;
         }, "t"_a, "Subdivides in place: this curve becomes the [t, 1] portion and the returned\n"
                    "CubicBezier is the [0, t] portion.");
+
+    // ============================================================================================ yup::Easing
+
+    py::class_<Easing> classEasing (m, "Easing");
+
+    classEasing
+        .def (py::init<>())
+        .def (py::init<float, float, float, float>(), "x1"_a, "y1"_a, "x2"_a, "y2"_a)
+        .def_static ("linear", &Easing::linear)
+        .def_static ("easeIn", &Easing::easeIn)
+        .def_static ("easeOut", &Easing::easeOut)
+        .def_static ("easeInOut", &Easing::easeInOut)
+        .def_static ("hold", &Easing::hold)
+        .def_static ("fromTangents", &Easing::fromTangents, "outTangent"_a, "inTangent"_a)
+        .def ("evaluate", &Easing::evaluate, "t"_a)
+        .def ("isLinear", &Easing::isLinear)
+        .def ("isHold", &Easing::isHold)
+        .def ("getCurve", &Easing::getCurve)
+        .def ("getX1", &Easing::getX1)
+        .def ("getY1", &Easing::getY1)
+        .def ("getX2", &Easing::getX2)
+        .def ("getY2", &Easing::getY2)
+        .def (py::self == py::self)
+        .def (py::self != py::self);
 
     // ============================================================================================ yup::Drawable
 

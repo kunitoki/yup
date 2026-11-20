@@ -15,10 +15,13 @@ API-surface documentation for the Python bindings are still to come.
 - **Embedding** - driving YUP from a Python host.
 - [**GPU rendering from Python**](python-rhi.md) - what differs between the
   `yup_rhi` C++ API and its Python bindings.
+- [**`.yui` interfaces from Python**](python-yui.md) - loading documents,
+  actions, models written in Python and what differs from the C++ API.
 
 ```{toctree}
 :hidden:
 :maxdepth: 2
 
 python-rhi
+python-yui
 ```

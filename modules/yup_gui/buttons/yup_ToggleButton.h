@@ -84,7 +84,18 @@ public:
         static const Identifier textToggledColorId;
         static const Identifier borderColorId;
         static const Identifier borderToggledColorId;
+
+        static const Identifier cornerRadiusId;        /**< Corner radius, 4 by default */
+        static const Identifier outlineWidthId;        /**< Border width, 1 by default */
+        static const Identifier focusedOutlineWidthId; /**< Border width with keyboard focus, 2 by default */
     };
+
+    //==============================================================================
+    /** Returns the static type info describing the ToggleButton type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
     /** @internal */

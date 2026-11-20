@@ -136,31 +136,26 @@ public:
     /** Style identifiers for theming. */
     struct Style
     {
-        static inline const Identifier textColorId { "listBoxItemText" };
-        static inline const Identifier textColorSelectedId { "listBoxItemTextSelected" };
-        static inline const Identifier backgroundColorId { "listBoxItemBackground" };
-        static inline const Identifier backgroundColorSelectedId { "listBoxItemBackgroundSelected" };
-        static inline const Identifier backgroundColorHoveredId { "listBoxItemBackgroundHovered" };
+        static const Identifier textColorId;               /**< The identifier for the text color. */
+        static const Identifier textColorSelectedId;       /**< The identifier for the selected text color. */
+        static const Identifier backgroundColorId;         /**< The identifier for the background color. */
+        static const Identifier backgroundColorSelectedId; /**< The identifier for the selected background color. */
+        static const Identifier backgroundColorHoveredId;  /**< The identifier for the hovered background color. */
     };
 
     //==============================================================================
-    /** Returns the calculated text bounds for rendering.
+    /** Returns the static type info describing the ListBoxItem type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
 
-        This is used by the theme for rendering.
-
-        @return The text bounds
-    */
-    Rectangle<float> getTextBoundsForRendering() const { return textBounds; }
-
-    /** Returns the calculated icon bounds for rendering.
-
-        This is used by the theme for rendering.
-
-        @return The icon bounds
-    */
-    Rectangle<float> getIconBoundsForRendering() const { return iconBounds; }
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
+    /** @internal */
+    Rectangle<float> getTextBoundsForRendering() const { return textBounds; }
+    /** @internal*/
+    Rectangle<float> getIconBoundsForRendering() const { return iconBounds; }
+
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
@@ -170,7 +165,6 @@ private:
     //==============================================================================
     void calculateLayout();
 
-    //==============================================================================
     String text;
     std::shared_ptr<Drawable> iconDrawable;
     Image iconImage;

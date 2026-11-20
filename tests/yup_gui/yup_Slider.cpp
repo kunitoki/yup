@@ -449,6 +449,86 @@ TEST_F (SliderTest, EdgeCasesNegativeRange)
     EXPECT_DOUBLE_EQ (-50.0, slider->getValue());
 }
 
+TEST_F (SliderTest, RangePropertiesKeepTheRangeValid)
+{
+    slider->setProperty (Identifier ("minimum"), 20.0);
+    EXPECT_DOUBLE_EQ (20.0, slider->getRange().start);
+    EXPECT_DOUBLE_EQ (21.0, slider->getRange().end);
+
+    slider->setProperty (Identifier ("maximum"), 20000.0);
+    EXPECT_DOUBLE_EQ (20.0, slider->getRange().start);
+    EXPECT_DOUBLE_EQ (20000.0, slider->getRange().end);
+
+    slider->setProperty (Identifier ("maximum"), 10.0);
+    EXPECT_DOUBLE_EQ (-19970.0, slider->getRange().start);
+    EXPECT_DOUBLE_EQ (10.0, slider->getRange().end);
+
+    EXPECT_DOUBLE_EQ (-19970.0, static_cast<double> (slider->getProperty (Identifier ("minimum"))));
+    EXPECT_DOUBLE_EQ (10.0, static_cast<double> (slider->getProperty (Identifier ("maximum"))));
+
+    slider->setProperty (Identifier ("minimum"), -100.0);
+    EXPECT_DOUBLE_EQ (-100.0, slider->getRange().start);
+    EXPECT_DOUBLE_EQ (10.0, slider->getRange().end);
+}
+
+TEST_F (SliderTest, RangePropertiesIgnoreInvalidValues)
+{
+    slider->setProperty (Identifier ("minimum"), std::numeric_limits<double>::infinity());
+    slider->setProperty (Identifier ("maximum"), std::numeric_limits<double>::quiet_NaN());
+    EXPECT_DOUBLE_EQ (0.0, slider->getRange().start);
+    EXPECT_DOUBLE_EQ (1.0, slider->getRange().end);
+
+    slider->setProperty (Identifier ("skew"), 0.0);
+    slider->setProperty (Identifier ("interval"), -1.0);
+    EXPECT_DOUBLE_EQ (1.0, slider->getSkewFactor());
+    EXPECT_DOUBLE_EQ (0.0, slider->getInterval());
+
+    slider->setProperty (Identifier ("skew"), 0.5);
+    slider->setProperty (Identifier ("interval"), 0.25);
+    slider->setProperty (Identifier ("defaultValue"), 0.5);
+    EXPECT_DOUBLE_EQ (0.5, slider->getSkewFactor());
+    EXPECT_DOUBLE_EQ (0.25, slider->getInterval());
+    EXPECT_DOUBLE_EQ (0.5, slider->getDefaultValue());
+}
+
+TEST_F (SliderTest, NotifiesRangePropertyChanges)
+{
+    struct RangeListener : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override { names.add (name.toString()); }
+
+        StringArray names;
+    };
+
+    RangeListener listener;
+    slider->addComponentListener (&listener);
+
+    slider->setRange (0.0, 10.0);
+    EXPECT_TRUE (listener.names.contains ("maximum"));
+    EXPECT_FALSE (listener.names.contains ("minimum"));
+
+    listener.names.clear();
+    slider->setSkewFactor (0.5);
+    EXPECT_TRUE (listener.names.contains ("skew"));
+
+    listener.names.clear();
+    slider->setRange (5.0, 10.0, 0.5);
+    EXPECT_TRUE (listener.names.contains ("minimum"));
+    EXPECT_TRUE (listener.names.contains ("interval"));
+    EXPECT_FALSE (listener.names.contains ("maximum"));
+
+    listener.names.clear();
+    slider->setSkewFactorFromMidpoint (6.0);
+    EXPECT_TRUE (listener.names.contains ("skew"));
+
+    listener.names.clear();
+    slider->setDefaultValue (7.0);
+    slider->setDefaultValue (7.0);
+    EXPECT_EQ (listener.names, StringArray ("defaultValue"));
+
+    slider->removeComponentListener (&listener);
+}
+
 TEST_F (SliderTest, EdgeCasesStepSnapping)
 {
     slider->setRange (0.0, 1.0, 0.01);

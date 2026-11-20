@@ -201,14 +201,6 @@ private:
             refreshCacheFromDataTree();
     }
 
-    void treeRedirected (DataTree& tree) override
-    {
-        cleanupBinding();
-        dataTree = tree;
-        setupBinding();
-        refresh();
-    }
-
     //==============================================================================
     void refreshCacheFromDataTree()
     {

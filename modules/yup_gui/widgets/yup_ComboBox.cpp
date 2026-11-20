@@ -24,13 +24,61 @@ namespace yup
 
 //==============================================================================
 
+namespace
+{
+
+struct ComboBoxIds
+{
+    static inline const Identifier items { "items" };
+    static inline const Identifier selectedId { "selectedId" };
+    static inline const Identifier selectedIndex { "selectedIndex" };
+    static inline const Identifier text { "text" };
+    static inline const Identifier open { "open" };
+};
+
+} // namespace
+
+//==============================================================================
+
 const Identifier ComboBox::Style::backgroundColorId = "comboBoxBackground";
 const Identifier ComboBox::Style::textColorId = "comboBoxText";
 const Identifier ComboBox::Style::borderColorId = "comboBoxBorder";
 const Identifier ComboBox::Style::arrowColorId = "comboBoxArrow";
 const Identifier ComboBox::Style::focusedBorderColorId = "comboBoxFocusedBorder";
+const Identifier ComboBox::Style::cornerRadiusId = "comboBoxCornerRadius";
+const Identifier ComboBox::Style::outlineWidthId = "comboBoxOutlineWidth";
+const Identifier ComboBox::Style::focusedOutlineWidthId = "comboBoxFocusedOutlineWidth";
 
 //==============================================================================
+
+const ComponentTypeInfo& ComboBox::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<ComboBox> (Identifier ("ComboBox"))
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("textColor", Style::textColorId)
+                                 .color ("borderColor", Style::borderColorId)
+                                 .color ("arrowColor", Style::arrowColorId)
+                                 .color ("focusedBorderColor", Style::focusedBorderColorId)
+                                 .number ("cornerRadius", Style::cornerRadiusId, 4.0, "The corner radius.")
+                                 .number ("outlineWidth", Style::outlineWidthId, 1.0, "The outline width.")
+                                 .number ("focusedOutlineWidth", Style::focusedOutlineWidthId, 2.0, "The outline width when focused.")
+                                 .property (ComboBoxIds::items, &ComboBox::getItems, [] (ComboBox& c, const StringArray& v) { c.setItems (v); }, {}, "The texts of the items, numbered from 1 in order.")
+                                 .property (ComboBoxIds::selectedId, &ComboBox::getSelectedId, [] (ComboBox& c, int v) { c.setSelectedId (v); })
+                                 .property (ComboBoxIds::selectedIndex, &ComboBox::getSelectedItemIndex, [] (ComboBox& c, int v) { c.setSelectedItemIndex (v); })
+                                 .readOnly (ComboBoxIds::text, &ComboBox::getText)
+                                 .state (ComboBoxIds::open, &ComboBox::isPopupShown)
+                                 .signal ("onSelectedItemChanged", &ComboBox::onSelectedItemChanged, "Emitted when another item is selected")
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
+
+ComboBox::ComboBox()
+    : ComboBox (StringRef {})
+{
+}
 
 ComboBox::ComboBox (StringRef componentID)
     : Component (componentID)
@@ -45,8 +93,27 @@ ComboBox::~ComboBox() = default;
 
 void ComboBox::addItem (String newItemText, int newItemId)
 {
+    const auto previousText = getText();
+    const auto previousIndex = getSelectedItemIndex();
+
     items.add ({ newItemText, newItemId, false });
     updateDisplayText();
+
+    const BailOutChecker bailOutChecker (this);
+
+    notifyPropertyChanged (ComboBoxIds::items);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    if (getSelectedItemIndex() != previousIndex)
+    {
+        notifyPropertyChanged (ComboBoxIds::selectedIndex);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    if (getText() != previousText)
+        notifyPropertyChanged (ComboBoxIds::text);
 }
 
 void ComboBox::addItemList (const StringArray& itemsToAdd, int firstItemId)
@@ -60,15 +127,85 @@ void ComboBox::addSeparator()
     items.add ({ {}, 0, true });
 }
 
+void ComboBox::setItems (const StringArray& newItems, NotificationType notification)
+{
+    const auto previousId = selectedItemId;
+    const auto previousText = getText();
+
+    items.clear();
+
+    for (int i = 0; i < newItems.size(); ++i)
+        items.add ({ newItems[i], i + 1, false });
+
+    if (previousId > newItems.size())
+        selectedItemId = 0;
+
+    updateDisplayText();
+
+    const BailOutChecker bailOutChecker (this);
+
+    notifyPropertyChanged (ComboBoxIds::items);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    if (selectedItemId != previousId)
+        sendSelectionChanged (notification);
+    else if (getText() != previousText)
+        notifyPropertyChanged (ComboBoxIds::text);
+
+    if (! bailOutChecker.shouldBailOut())
+        repaint();
+}
+
+StringArray ComboBox::getItems() const
+{
+    StringArray result;
+
+    for (const auto& item : items)
+        if (! item.isSeparator)
+            result.add (item.text);
+
+    return result;
+}
+
 //==============================================================================
 
 void ComboBox::clear()
 {
+    const bool hadItems = ! getItems().isEmpty();
+    const auto previousId = selectedItemId;
+    const auto previousIndex = getSelectedItemIndex();
+    const auto previousText = getText();
+
     items.clear();
-
     selectedItemId = 0;
-
     updateDisplayText();
+
+    const BailOutChecker bailOutChecker (this);
+
+    if (hadItems)
+    {
+        notifyPropertyChanged (ComboBoxIds::items);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    if (selectedItemId != previousId)
+    {
+        notifyPropertyChanged (ComboBoxIds::selectedId);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    if (getSelectedItemIndex() != previousIndex)
+    {
+        notifyPropertyChanged (ComboBoxIds::selectedIndex);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    if (getText() != previousText)
+        notifyPropertyChanged (ComboBoxIds::text);
 }
 
 //==============================================================================
@@ -90,10 +227,24 @@ int ComboBox::getItemId (int index) const
 
 void ComboBox::changeItemText (int index, String newText)
 {
-    if (isPositiveAndBelow (index, items.size()))
+    if (isPositiveAndBelow (index, items.size()) && items.getReference (index).text != newText)
     {
+        const auto previousText = getText();
+
         items.getReference (index).text = newText;
         updateDisplayText();
+
+        const BailOutChecker bailOutChecker (this);
+
+        if (! items.getReference (index).isSeparator)
+        {
+            notifyPropertyChanged (ComboBoxIds::items);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
+        if (getText() != previousText)
+            notifyPropertyChanged (ComboBoxIds::text);
     }
 }
 
@@ -157,26 +308,49 @@ void ComboBox::setSelectedId (int newItemId, NotificationType notification)
             selectedItemId = newItemId;
             updateDisplayText();
 
-            sendChangeNotification (notification, [this]
-            {
-                selectedItemChanged();
-
-                if (onSelectedItemChanged)
-                    onSelectedItemChanged();
-            });
+            sendSelectionChanged (notification);
 
             repaint();
         }
     }
 }
 
+void ComboBox::sendSelectionChanged (NotificationType notification)
+{
+    const BailOutChecker bailOutChecker (this);
+
+    notifyPropertyChanged (ComboBoxIds::selectedId);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    notifyPropertyChanged (ComboBoxIds::selectedIndex);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    notifyPropertyChanged (ComboBoxIds::text);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    sendChangeNotification (notification, [this]
+    {
+        selectedItemChanged();
+
+        if (onSelectedItemChanged)
+            onSelectedItemChanged();
+    });
+}
+
 void ComboBox::setTextWhenNothingSelected (String newPlaceholderText)
 {
     if (textWhenNothingSelected != newPlaceholderText)
     {
+        const auto previousText = getText();
         textWhenNothingSelected = newPlaceholderText;
 
         updateDisplayText();
+
+        if (getText() != previousText)
+            notifyPropertyChanged (ComboBoxIds::text);
     }
 }
 
@@ -263,8 +437,21 @@ void ComboBox::showPopup()
             popupMenu->addItem (item.text, item.itemId, true, isTicked);
     }
 
-    popupMenu->show ([this] (int selectedItemID)
+    WeakReference<Component> self = this;
+    auto wasOpened = std::make_shared<bool> (false);
+
+    popupMenu->show ([this, self, wasOpened] (int selectedItemID)
     {
+        if (self.get() == nullptr)
+            return;
+
+        if (*wasOpened)
+        {
+            notifyPropertyChanged (ComboBoxIds::open);
+            if (self.get() == nullptr)
+                return;
+        }
+
         if (selectedItemID != 0)
         {
             setSelectedId (selectedItemID);
@@ -273,7 +460,6 @@ void ComboBox::showPopup()
         {
             ignoreMouseDownAfterPopupDismissal = true;
 
-            WeakReference<Component> self = this;
             MessageManager::callAsync ([this, self]
             {
                 if (self.get() != nullptr)
@@ -281,9 +467,15 @@ void ComboBox::showPopup()
             });
         }
 
-        if (getWantsKeyboardFocus())
+        if (self.get() != nullptr && getWantsKeyboardFocus())
             takeKeyboardFocus();
     });
+
+    if (self.get() != nullptr && isPopupShown())
+    {
+        *wasOpened = true;
+        notifyPropertyChanged (ComboBoxIds::open);
+    }
 }
 
 void ComboBox::hidePopup()

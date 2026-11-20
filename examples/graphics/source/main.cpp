@@ -385,6 +385,9 @@ private:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Widgets
 #include "examples/Widgets.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_YuiDrawing
+#include "examples/YuiDrawing.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_YdspSynths && YUP_MODULE_AVAILABLE_yup_dsp_jit
 #include "examples/YdspSynths.h"
 #endif
@@ -662,6 +665,9 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Widgets
         addDemo ("Widgets", "Widgets", [] { return std::make_unique<WidgetsDemo>(); });
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_YuiDrawing
+        addDemo ("YuiDrawing", "YUI Drawing", [] { return std::make_unique<YuiDrawingDemo>(); });
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_YdspSynths && YUP_MODULE_AVAILABLE_yup_dsp_jit
         addDemo ("YdspSynths", "YDSP Synths", [] { return std::make_unique<YdspSynthDemo>(); });
 #endif
@@ -714,6 +720,7 @@ public:
 
         selectComponent (initialIndex);
 
+        updateWindowTitle();
         startTimerHz (1);
     }
 
@@ -997,11 +1004,11 @@ struct Application : yup::YUPApplication, yup::Timer
         if (const auto exitAfterArg = args.getIntValueForOption ("--exit", 0); exitAfterArg > 0)
             exitAfter = exitAfterArg;
 
+        window = std::make_unique<CustomWindow> (initialDemo);
+
         yup::MessageManager::callAsync ([this, initialDemo, exitAfter]
         {
             yup::Process::makeForegroundProcess();
-
-            window = std::make_unique<CustomWindow> (initialDemo);
 
 #if YUP_MOBILE
             window->centreWithSize ({ 720, 1280 });
@@ -1010,6 +1017,7 @@ struct Application : yup::YUPApplication, yup::Timer
 #endif
 
             window->setVisible (true);
+            window->toFront (true);
 
             if (exitAfter.has_value())
                 startTimer (*exitAfter);

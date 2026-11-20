@@ -34,3 +34,10 @@ html.dark {
 html.dark[data-accent-color="blue"] {
   --accent-a11: #9cc2ff;
 }
+
+/* Figures are embedded with a fixed pixel width that suits the desktop content
+   column; on narrow screens they must shrink instead of overflowing. */
+article img {
+    max-width: 100%;
+    height: auto;
+}

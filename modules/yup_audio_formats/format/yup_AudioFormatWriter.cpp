@@ -184,14 +184,15 @@ public:
 
     ~ThreadedWriterHelper() override
     {
-        flushAllData();
+        while (fifo.getNumReady() > 0 && ! failed)
+            writeNextChunk();
     }
 
     bool write (const float* const* data, int numSamples)
     {
         const ScopedLock sl (lock);
 
-        if (hasFinished || ! writer)
+        if (hasFinished || failed || ! writer)
             return false;
 
         const auto scope = fifo.write (numSamples);
@@ -236,18 +237,30 @@ public:
 
     bool isRunning() const
     {
-        const ScopedLock sl (lock);
-        return ! hasFinished || fifo.getNumReady() > 0;
+        if (failed)
+            return false;
+
+        return ! hasFinished || fifo.getNumReady() > 0 || writing;
     }
 
     int useTimeSlice() override
     {
-        const int numReady = fifo.getNumReady();
+        if (failed)
+            return -1;
 
-        if (numReady == 0)
+        if (fifo.getNumReady() == 0)
             return hasFinished ? -1 : 10;
 
-        const auto numToWrite = jmin (numReady, tempBuffer.getNumSamples());
+        writeNextChunk();
+        return failed ? -1 : 0;
+    }
+
+private:
+    void writeNextChunk()
+    {
+        writing = true;
+
+        const auto numToWrite = jmin (fifo.getNumReady(), tempBuffer.getNumSamples());
         const auto scope = fifo.read (numToWrite);
 
         const int numChannels = tempBuffer.getNumChannels();
@@ -280,59 +293,20 @@ public:
                                             tempBuffer.getNumChannels(),
                                             numToWrite))
         {
-            hasFinished = true;
-            return -1;
+            failed = true;
         }
 
-        return 0;
-    }
-
-private:
-    void flushAllData()
-    {
-        while (fifo.getNumReady() > 0 && writer != nullptr)
-        {
-            const auto numToWrite = jmin (fifo.getNumReady(), tempBuffer.getNumSamples());
-            const auto scope = fifo.read (numToWrite);
-
-            const int numChannels = tempBuffer.getNumChannels();
-            const int bufferSize = (int) fifoBuffer.size() / numChannels;
-
-            int offset = 0;
-
-            if (scope.blockSize1 > 0)
-            {
-                for (int ch = 0; ch < numChannels; ++ch)
-                {
-                    FloatVectorOperations::copy (tempBuffer.getWritePointer (ch),
-                                                 fifoBuffer.data() + (scope.startIndex1 + ch * bufferSize),
-                                                 scope.blockSize1);
-                }
-                offset = scope.blockSize1;
-            }
-
-            if (scope.blockSize2 > 0)
-            {
-                for (int ch = 0; ch < numChannels; ++ch)
-                {
-                    FloatVectorOperations::copy (tempBuffer.getWritePointer (ch) + offset,
-                                                 fifoBuffer.data() + (scope.startIndex2 + ch * bufferSize),
-                                                 scope.blockSize2);
-                }
-            }
-
-            writer->writeFromFloatArrays (tempBuffer.getArrayOfReadPointers(),
-                                          tempBuffer.getNumChannels(),
-                                          numToWrite);
-        }
+        writing = false;
     }
 
     std::unique_ptr<AudioFormatWriter> writer;
     AbstractFifo fifo;
     AudioBuffer<float> tempBuffer;
     std::vector<float> fifoBuffer;
-    mutable CriticalSection lock;
-    bool hasFinished = false;
+    CriticalSection lock;
+    std::atomic<bool> hasFinished { false };
+    std::atomic<bool> failed { false };
+    std::atomic<bool> writing { false };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThreadedWriterHelper)
 };
@@ -340,7 +314,8 @@ private:
 AudioFormatWriter::ThreadedWriter::ThreadedWriter (std::unique_ptr<AudioFormatWriter> writer,
                                                    TimeSliceThread& backgroundThread,
                                                    int numSamplesToBuffer)
-    : helper (std::make_unique<ThreadedWriterHelper> (std::move (writer), numSamplesToBuffer))
+    : timeSliceThread (backgroundThread)
+    , helper (std::make_unique<ThreadedWriterHelper> (std::move (writer), numSamplesToBuffer))
 {
     backgroundThread.addTimeSliceClient (helper.get());
 }
@@ -348,7 +323,7 @@ AudioFormatWriter::ThreadedWriter::ThreadedWriter (std::unique_ptr<AudioFormatWr
 AudioFormatWriter::ThreadedWriter::~ThreadedWriter()
 {
     helper->finish();
-    waitForThreadToFinish();
+    timeSliceThread.removeTimeSliceClient (helper.get());
 }
 
 bool AudioFormatWriter::ThreadedWriter::isThreadRunning() const
@@ -363,7 +338,10 @@ bool AudioFormatWriter::ThreadedWriter::write (const float* const* data, int num
 
 void AudioFormatWriter::ThreadedWriter::waitForThreadToFinish()
 {
-    while (helper->isRunning())
+    helper->finish();
+    timeSliceThread.notify();
+
+    while (helper->isRunning() && timeSliceThread.isThreadRunning())
         Thread::sleep (1);
 }
 

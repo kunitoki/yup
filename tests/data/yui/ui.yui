@@ -1,0 +1,5 @@
+import "parts/style.yui";
+
+Component {
+    Slider { id: knob; class: "knob"; }
+}

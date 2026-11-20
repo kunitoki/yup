@@ -293,6 +293,43 @@ TEST_F (WatchdogTests, DISABLED_DispatchEventsReturnsZeroWhenNoEvents)
     EXPECT_EQ (capturedEvents.size(), 0);
 }
 
+TEST_F (WatchdogTests, KeepsReportingTheChangesOfAWatchedFolder)
+{
+    auto watchdog = Watchdog::createInstance (std::chrono::milliseconds (50));
+    ASSERT_NE (watchdog, nullptr);
+
+    const auto file = testFolder.getChildFile ("watched.txt");
+    ASSERT_TRUE (file.replaceWithText ("first"));
+
+    watchdog->watchFolder (testFolder);
+
+    // Give the file system watcher time to start
+    Thread::sleep (300);
+
+    const auto waitForEvents = [&]
+    {
+        for (int i = 0; i < 100; ++i)
+        {
+            if (watchdog->dispatchEvents (nullptr) > 0)
+                return true;
+
+            Thread::sleep (50);
+        }
+
+        return false;
+    };
+
+    ASSERT_TRUE (file.replaceWithText ("second"));
+    EXPECT_TRUE (waitForEvents());
+
+    // What is left of the first change is not taken for the second one
+    Thread::sleep (300);
+    watchdog->dispatchEvents (nullptr);
+
+    ASSERT_TRUE (file.replaceWithText ("third"));
+    EXPECT_TRUE (waitForEvents());
+}
+
 TEST_F (WatchdogTests, WatchNonExistentFolder)
 {
     auto watchdog = Watchdog::createInstance (std::chrono::milliseconds (100));

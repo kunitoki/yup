@@ -93,7 +93,7 @@ flowchart LR
 
 ## Events & multithreading
 
-The event loop and messaging layer. See the [Multithreading](multithreading/index.md)
+The event loop and messaging layer. See the [Multithreading](core/multithreading/index.md)
 area; threading primitives themselves live in `yup_core`.
 
 ### yup_events

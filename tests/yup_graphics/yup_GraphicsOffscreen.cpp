@@ -758,22 +758,6 @@ TEST_F (TransparencyLayerTests, InvalidLayerTakesNoMask)
 // Pixel tests on a real GPU, reading back what was drawn
 //==============================================================================
 
-#ifndef YUP_GRAPHICS_TESTS_GPU_PIXEL_HOST
-namespace
-{
-
-/** No GPU context for the pixel tests on this platform, so they skip. */
-class GraphicsGpuPixelTestHost
-{
-public:
-    GraphicsContext* getContext() const noexcept { return nullptr; }
-
-    void makeCurrent() {}
-};
-
-} // namespace
-#endif
-
 /** Draws with the platform's GPU context: Metal on macOS, OpenGL on Linux, see native/. */
 class GraphicsGpuPixelTests : public ::testing::Test
 {
@@ -1565,6 +1549,56 @@ TEST_F (GraphicsGpuPixelTests, SingleStopGradientFillsWithItsColor)
     }
 }
 
+TEST_F (GraphicsGpuPixelTests, RepeatedAndReflectedGradientsContinueBeyondTheirEnds)
+{
+    const auto renderWithSpread = [] (ColorGradient::Spread spread)
+    {
+        return render ([spread] (Graphics& g)
+        {
+            g.setFillColorGradient (ColorGradient (Color (0xffff0000), 0.0f, 0.0f, Color (0xff0000ff), 16.0f, 0.0f).withSpread (spread));
+            g.fillRect (0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size));
+        });
+    };
+
+    const auto expectRed = [] (const std::vector<uint8>& pixels, int x)
+    {
+        EXPECT_GT (channelAt (pixels, x, 32, 0), 180) << "at x = " << x;
+        EXPECT_LT (channelAt (pixels, x, 32, 2), 80) << "at x = " << x;
+    };
+
+    const auto expectBlue = [] (const std::vector<uint8>& pixels, int x)
+    {
+        EXPECT_GT (channelAt (pixels, x, 32, 2), 180) << "at x = " << x;
+        EXPECT_LT (channelAt (pixels, x, 32, 0), 80) << "at x = " << x;
+    };
+
+    // A padded gradient stays blue after its first 16 pixels
+    const auto padded = renderWithSpread (ColorGradient::Spread::Pad);
+    ASSERT_EQ (padded.size(), static_cast<std::size_t> (size * size * 4));
+    expectRed (padded, 2);
+    expectBlue (padded, 18);
+
+    // A repeated one starts over every 16 pixels
+    const auto repeated = renderWithSpread (ColorGradient::Spread::Repeat);
+    ASSERT_EQ (repeated.size(), static_cast<std::size_t> (size * size * 4));
+
+    for (const auto x : { 2, 18, 50 })
+        expectRed (repeated, x);
+
+    for (const auto x : { 13, 29, 61 })
+        expectBlue (repeated, x);
+
+    // A reflected one goes back and forth
+    const auto reflected = renderWithSpread (ColorGradient::Spread::Reflect);
+    ASSERT_EQ (reflected.size(), static_cast<std::size_t> (size * size * 4));
+
+    for (const auto x : { 2, 29, 34 })
+        expectRed (reflected, x);
+
+    for (const auto x : { 13, 18, 45 })
+        expectBlue (reflected, x);
+}
+
 TEST_F (GraphicsGpuPixelTests, ClipStrokeUnderADegenerateTransformClipsEverything)
 {
     const auto pixels = render ([] (Graphics& g)
@@ -1954,6 +1988,143 @@ TEST_F (GraphicsGpuPixelTests, ImageBackedGraphicsReadsItsPixelsBack)
     EXPECT_LT (bytes[0], 50);
     EXPECT_GT (bytes[2], 200);
     EXPECT_GT (bytes[3], 200);
+}
+
+TEST_F (GraphicsGpuPixelTests, FittedDrawableKeepsMarkersPatternsAndSymbolsInPlace)
+{
+    // A 128 x 128 picture drawn at half its size: what a transform of its own places has to be scaled along with the rest
+    const auto renderFitted = [] (const char* svg)
+    {
+        Drawable drawable;
+        EXPECT_TRUE (drawable.parseSVG (svg));
+
+        return render ([&drawable] (Graphics& g)
+        {
+            drawable.paint (g, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) }, Fitting::scaleToFit, Justification::center);
+        });
+    };
+
+    // A red square marker centered on the end of a line, at (96, 96) in the picture
+    const auto marker = renderFitted (
+        "<svg viewBox=\"0 0 128 128\">"
+        "<defs><marker id=\"m\" markerWidth=\"16\" markerHeight=\"16\" refX=\"8\" refY=\"8\" markerUnits=\"userSpaceOnUse\">"
+        "<rect width=\"16\" height=\"16\" fill=\"#ff0000\"/></marker></defs>"
+        "<path d=\"M 16 96 L 96 96\" fill=\"none\" stroke=\"#0000ff\" stroke-width=\"2\" marker-end=\"url(#m)\"/>"
+        "</svg>");
+    ASSERT_EQ (marker.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (channelAt (marker, 50, 45, 0), 200);
+    EXPECT_LT (channelAt (marker, 50, 45, 2), 50);
+    EXPECT_GT (alphaAt (marker, 50, 45), 200);
+    EXPECT_LT (alphaAt (marker, 58, 45), 50);
+
+    // Green stripes 16 wide, repeating every 32
+    const auto pattern = renderFitted (
+        "<svg viewBox=\"0 0 128 128\">"
+        "<defs><pattern id=\"p\" width=\"32\" height=\"32\" patternUnits=\"userSpaceOnUse\">"
+        "<rect width=\"16\" height=\"32\" fill=\"#00ff00\"/></pattern></defs>"
+        "<rect width=\"128\" height=\"64\" fill=\"url(#p)\"/>"
+        "</svg>");
+    ASSERT_EQ (pattern.size(), static_cast<std::size_t> (size * size * 4));
+
+    for (const auto x : { 4, 20, 36, 52 })
+        EXPECT_GT (channelAt (pattern, x, 10, 1), 200) << "at x = " << x;
+
+    for (const auto x : { 12, 28, 44, 60 })
+        EXPECT_LT (alphaAt (pattern, x, 10), 50) << "at x = " << x;
+
+    // A symbol of 8 x 8 used at (64, 64), 32 x 32 large
+    const auto symbol = renderFitted (
+        "<svg viewBox=\"0 0 128 128\">"
+        "<defs><symbol id=\"s\" viewBox=\"0 0 8 8\"><rect width=\"8\" height=\"8\" fill=\"#ff00ff\"/></symbol></defs>"
+        "<use href=\"#s\" x=\"64\" y=\"64\" width=\"32\" height=\"32\"/>"
+        "</svg>");
+    ASSERT_EQ (symbol.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (channelAt (symbol, 40, 40, 0), 200);
+    EXPECT_GT (channelAt (symbol, 40, 40, 2), 200);
+    EXPECT_LT (channelAt (symbol, 40, 40, 1), 50);
+    EXPECT_LT (alphaAt (symbol, 26, 40), 50);
+    EXPECT_LT (alphaAt (symbol, 54, 40), 50);
+}
+
+TEST_F (GraphicsGpuPixelTests, DrawablePaintsElementsThroughTheirFilters)
+{
+    const auto renderSvg = [] (const String& body)
+    {
+        Drawable drawable;
+        EXPECT_TRUE (drawable.parseSVG ("<svg viewBox=\"0 0 64 64\">" + body + "</svg>"));
+
+        return render ([&drawable] (Graphics& g)
+        {
+            drawable.paint (g, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+        });
+    };
+
+    // An offset moves what the element paints, as far as the region of the filter reaches
+    const auto moved = renderSvg ("<defs><filter id=\"f\" x=\"-1\" y=\"-1\" width=\"3\" height=\"3\"><feOffset dx=\"16\"/></filter></defs>"
+                                  "<rect x=\"8\" y=\"8\" width=\"16\" height=\"16\" fill=\"#ff0000\" filter=\"url(#f)\"/>");
+    ASSERT_EQ (moved.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_LT (alphaAt (moved, 12, 16), 10);
+    EXPECT_GT (channelAt (moved, 32, 16, 0), 200);
+    EXPECT_GT (alphaAt (moved, 32, 16), 200);
+
+    // The element is filtered with the paint set around it, and what the filter makes gets its opacity
+    const auto faded = renderSvg ("<defs><filter id=\"f\"><feOffset/></filter></defs>"
+                                  "<g fill=\"#0000ff\"><rect x=\"8\" y=\"8\" width=\"32\" height=\"32\" opacity=\"0.5\" filter=\"url(#f)\"/></g>");
+    ASSERT_EQ (faded.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_LT (channelAt (faded, 24, 24, 0), 10);
+    EXPECT_NEAR (channelAt (faded, 24, 24, 2), 128, 10);
+    EXPECT_NEAR (alphaAt (faded, 24, 24), 128, 10);
+
+    // A blur spreads past the element, where a feather would thin it
+    const auto blurred = renderSvg ("<defs><filter id=\"f\" x=\"-0.5\" y=\"-0.5\" width=\"2\" height=\"2\" color-interpolation-filters=\"sRGB\">"
+                                    "<feGaussianBlur stdDeviation=\"3\"/></filter></defs>"
+                                    "<rect x=\"24\" y=\"24\" width=\"16\" height=\"16\" filter=\"url(#f)\"/>");
+    ASSERT_EQ (blurred.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (alphaAt (blurred, 32, 32), 200);
+    EXPECT_GT (alphaAt (blurred, 21, 32), 10);
+    EXPECT_LT (alphaAt (blurred, 21, 32), 128);
+    EXPECT_LT (alphaAt (blurred, 8, 32), 5);
+
+    // The functions of a CSS filter work on a group as a whole
+    const auto shadowed = renderSvg ("<g style=\"filter: drop-shadow(8px 8px 0px #0000ff)\">"
+                                     "<rect x=\"8\" y=\"8\" width=\"16\" height=\"16\" fill=\"#ff0000\"/></g>");
+    ASSERT_EQ (shadowed.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (channelAt (shadowed, 12, 12, 0), 200);
+    EXPECT_LT (channelAt (shadowed, 20, 20, 2), 10);
+    EXPECT_GT (channelAt (shadowed, 28, 28, 2), 200);
+    EXPECT_LT (alphaAt (shadowed, 40, 40), 10);
+}
+
+TEST_F (GraphicsGpuPixelTests, DrawableFiltersTurnedContentInFullAndBlendsWithWhatIsBehind)
+{
+    const auto renderSvg = [] (const String& body)
+    {
+        Drawable drawable;
+        EXPECT_TRUE (drawable.parseSVG ("<svg viewBox=\"0 0 64 64\">" + body + "</svg>"));
+
+        return render ([&drawable] (Graphics& g)
+        {
+            drawable.paint (g, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+        });
+    };
+
+    // The filter covers the box of the bar once turned: both of its ends are there
+    const auto turned = renderSvg ("<defs><filter id=\"f\" x=\"0\" y=\"0\" width=\"1\" height=\"1\"><feOffset/></filter></defs>"
+                                   "<g filter=\"url(#f)\"><rect x=\"16\" y=\"28\" width=\"32\" height=\"8\" fill=\"#ff0000\" transform=\"rotate(30 32 32)\"/></g>");
+    ASSERT_EQ (turned.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (alphaAt (turned, 32, 32), 200);
+    EXPECT_GT (alphaAt (turned, 45, 38), 200);
+    EXPECT_GT (alphaAt (turned, 18, 25), 200);
+
+    // A filter blending with the background multiplies the red square with the green one behind it
+    const auto blended = renderSvg ("<defs><filter id=\"f\"><feBlend mode=\"multiply\" in=\"SourceGraphic\" in2=\"BackgroundImage\"/></filter></defs>"
+                                    "<rect width=\"64\" height=\"64\" fill=\"#00ff00\"/>"
+                                    "<rect x=\"16\" y=\"16\" width=\"32\" height=\"32\" fill=\"#ff0000\" filter=\"url(#f)\"/>");
+    ASSERT_EQ (blended.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (channelAt (blended, 4, 4, 1), 200);
+    EXPECT_LT (channelAt (blended, 32, 32, 0), 10);
+    EXPECT_LT (channelAt (blended, 32, 32, 1), 10);
+    EXPECT_GT (alphaAt (blended, 32, 32), 200);
 }
 
 //==============================================================================

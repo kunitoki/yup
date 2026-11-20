@@ -359,6 +359,73 @@ TEST_F (CompiledExpressionTests, ColorLiteralsNeedAColorType)
     EXPECT_TRUE (compileError ("#ff8800").contains ("color literals need a 'color' type"));
 }
 
+TEST_F (CompiledExpressionTests, FusesInPlaceMethodChainsWithoutIntermediateClones)
+{
+    struct BufferHandle
+    {
+        std::shared_ptr<std::vector<float>> items = std::make_shared<std::vector<float>>();
+
+        BufferHandle& push (float value)
+        {
+            items->push_back (value);
+            return *this;
+        }
+
+        bool operator== (const BufferHandle& other) const noexcept { return items == other.items; }
+        bool operator!= (const BufferHandle& other) const noexcept { return items != other.items; }
+    };
+
+    int cloneCount = 0;
+
+    context.addType<BufferHandle> ("buf")
+        .clone ([&cloneCount] (const BufferHandle& source)
+        {
+            ++cloneCount;
+            BufferHandle copy;
+            *copy.items = *source.items;
+            return copy;
+        })
+        .constructor ([] { return BufferHandle(); })
+        .member ("size", [] (const BufferHandle& b) { return (int) b.items->size(); })
+        .method ("push", [] (BufferHandle& b, float value) -> BufferHandle& { return b.push (value); });
+
+    const auto y = context.addInput<float> ("y");
+
+    // 4-step chain from empty buf() fuses into 1 instruction with 1 clone from the empty constant seed
+    const auto chained = compile ("buf().push (x).push (1.0f).push (y).push (3.0f)");
+    EXPECT_EQ (1, chained.getNumInstructions());
+
+    cloneCount = 0;
+    ExpressionState chainedState (chained);
+    const auto chainedOut = chained.getOutput<BufferHandle> ("result").getValue();
+
+    chainedState.set (x, 10.0f);
+    chainedState.set (y, 20.0f);
+    chainedState.evaluate();
+    EXPECT_EQ (1, cloneCount);
+    EXPECT_EQ ((std::vector<float> { 10.0f, 1.0f, 20.0f, 3.0f }), *chainedState.get (chainedOut).items);
+
+    // Updating only a later step's input re-runs the fused chain cleanly from the seed without accumulating
+    chainedState.set (y, 99.0f);
+    chainedState.evaluate();
+    EXPECT_EQ (2, cloneCount);
+    EXPECT_EQ ((std::vector<float> { 10.0f, 1.0f, 99.0f, 3.0f }), *chainedState.get (chainedOut).items);
+
+    // Branching off a shared local leaves the shared local untouched and clones once per branch
+    const auto branched = compile ("let base = buf().push (x).push (2.0f); a = base; b = base.push (y).push (4.0f)");
+    EXPECT_EQ (2, branched.getNumInstructions());
+
+    cloneCount = 0;
+    ExpressionState branchedState (branched);
+    branchedState.set (x, 5.0f);
+    branchedState.set (y, 6.0f);
+    branchedState.evaluate();
+
+    EXPECT_EQ (2, cloneCount);
+    EXPECT_EQ ((std::vector<float> { 5.0f, 2.0f }), *branchedState.get (branched.getOutput<BufferHandle> ("a").getValue()).items);
+    EXPECT_EQ ((std::vector<float> { 5.0f, 2.0f, 6.0f, 4.0f }), *branchedState.get (branched.getOutput<BufferHandle> ("b").getValue()).items);
+}
+
 TEST_F (CompiledExpressionTests, ResolvesUnknownSymbolsLazily)
 {
     StringArray asked;

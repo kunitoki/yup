@@ -1271,6 +1271,8 @@ Path& Path::addLine (const Line<float>& line)
 
 Path& Path::addRectangle (float x, float y, float width, float height)
 {
+    const bool wasEmpty = isEmpty();
+
     width = jmax (0.0f, width);
     height = jmax (0.0f, height);
 
@@ -1280,7 +1282,10 @@ Path& Path::addRectangle (float x, float y, float width, float height)
     lineTo (x + width, y);
     lineTo (x + width, y + height);
     lineTo (x, y + height);
-    lineTo (x, y);
+    close();
+
+    if (wasEmpty)
+        simpleContourMutationID = path->getRawPathMutationID();
 
     return *this;
 }
@@ -1294,6 +1299,8 @@ Path& Path::addRectangle (const Rectangle<float>& rect)
 
 Path& Path::addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
+    const bool wasEmpty = isEmpty();
+
     reservePathShapeSpace (*path, 9, 17);
 
     width = jmax (0.0f, width);
@@ -1331,6 +1338,9 @@ Path& Path::addRoundedRectangle (float x, float y, float width, float height, fl
     // Top-left corner
     cubicTo (x, y + radiusTopLeft - radiusTopLeft * kappa, x + radiusTopLeft - radiusTopLeft * kappa, y, x + radiusTopLeft, y);
 
+    if (wasEmpty)
+        simpleContourMutationID = path->getRawPathMutationID();
+
     return *this;
 }
 
@@ -1349,10 +1359,45 @@ Path& Path::addRoundedRectangle (const Rectangle<float>& rect, float radius)
     return addRoundedRectangle (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), radius, radius, radius, radius);
 }
 
+Path& Path::addRoundedRectangle (const Rectangle<float>& rect, const Size<float>& cornerSize)
+{
+    const bool wasEmpty = isEmpty();
+
+    reservePathShapeSpace (*path, 9, 17);
+
+    const float x = rect.getX();
+    const float y = rect.getY();
+    const float width = jmax (0.0f, rect.getWidth());
+    const float height = jmax (0.0f, rect.getHeight());
+    const float radiusX = jlimit (0.0f, width * 0.5f, cornerSize.getWidth());
+    const float radiusY = jlimit (0.0f, height * 0.5f, cornerSize.getHeight());
+
+    constexpr float kappa = 0.5522847498f;
+    const float controlX = radiusX * kappa;
+    const float controlY = radiusY * kappa;
+
+    moveTo (x + radiusX, y);
+    lineTo (x + width - radiusX, y);
+    cubicTo (x + width - radiusX + controlX, y, x + width, y + radiusY - controlY, x + width, y + radiusY);
+    lineTo (x + width, y + height - radiusY);
+    cubicTo (x + width, y + height - radiusY + controlY, x + width - radiusX + controlX, y + height, x + width - radiusX, y + height);
+    lineTo (x + radiusX, y + height);
+    cubicTo (x + radiusX - controlX, y + height, x, y + height - radiusY + controlY, x, y + height - radiusY);
+    lineTo (x, y + radiusY);
+    cubicTo (x, y + radiusY - controlY, x + radiusX - controlX, y, x + radiusX, y);
+
+    if (wasEmpty)
+        simpleContourMutationID = path->getRawPathMutationID();
+
+    return *this;
+}
+
 //==============================================================================
 
 Path& Path::addEllipse (float x, float y, float width, float height)
 {
+    const bool wasEmpty = isEmpty();
+
     reservePathShapeSpace (*path, 6, 13);
 
     width = jmax (0.0f, width);
@@ -1372,6 +1417,9 @@ Path& Path::addEllipse (float x, float y, float width, float height)
     cubicTo (cx + dx, cy + ry, cx + rx, cy + dy, cx + rx, cy);
     close();
 
+    if (wasEmpty)
+        simpleContourMutationID = path->getRawPathMutationID();
+
     return *this;
 }
 
@@ -1384,6 +1432,8 @@ Path& Path::addEllipse (const Rectangle<float>& r)
 
 Path& Path::addCenteredEllipse (float centerX, float centerY, float radiusX, float radiusY)
 {
+    const bool wasEmpty = isEmpty();
+
     reservePathShapeSpace (*path, 6, 13);
 
     radiusX = jmax (0.0f, radiusX);
@@ -1402,6 +1452,9 @@ Path& Path::addCenteredEllipse (float centerX, float centerY, float radiusX, flo
     cubicTo (cx - rx, cy + dy, cx - dx, cy + ry, cx, cy + ry);
     cubicTo (cx + dx, cy + ry, cx + rx, cy + dy, cx + rx, cy);
     close();
+
+    if (wasEmpty)
+        simpleContourMutationID = path->getRawPathMutationID();
 
     return *this;
 }
@@ -1442,6 +1495,7 @@ Path& Path::addArc (const Rectangle<float>& rect,
 Path& Path::addCenteredArc (float centerX, float centerY, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
     const int segments = jlimit (2, 54, static_cast<int> (std::ceil (std::abs (toRadians - fromRadians) / 0.1f)));
+    reservePathShapeSpace (*path, segments + 2, segments + 2);
 
     const float delta = (toRadians - fromRadians) / segments;
     const float cosTheta = std::cos (rotationOfEllipse);
@@ -1911,6 +1965,10 @@ void Path::swapWithPath (Path& other) noexcept
 {
     path.swap (other.path);
     std::swap (fillPolygonMutationID, other.fillPolygonMutationID);
+    std::swap (simpleContourMutationID, other.simpleContourMutationID);
+    cachedClockwisePath.swap (other.cachedClockwisePath);
+    std::swap (cachedClockwiseMutationID, other.cachedClockwiseMutationID);
+    std::swap (cachedClockwiseNonZero, other.cachedClockwiseNonZero);
 }
 
 //==============================================================================
@@ -1918,26 +1976,54 @@ void Path::swapWithPath (Path& other) noexcept
 Path Path::createCopy() const
 {
     auto newPath = rive::make_rcp<rive::RiveRenderPath>();
-    newPath->addRenderPath (path.get(), {});
     newPath->fillRule (path->getFillRule());
-    return Path { std::move (newPath) };
+
+    if (path->getRawPath().empty())
+        return Path { std::move (newPath) };
+
+    const auto mutationID = path->getRawPathMutationID();
+    const bool wasSimple = simpleContourMutationID != 0 && simpleContourMutationID == mutationID;
+    const bool wasFillPolygon = fillPolygonMutationID != 0 && fillPolygonMutationID == mutationID;
+
+    const_cast<rive::RawPath&> (newPath->getRawPath()) = path->getRawPath();
+
+    Path copy { std::move (newPath) };
+    if (wasSimple)
+        copy.simpleContourMutationID = copy.path->getRawPathMutationID();
+    if (wasFillPolygon)
+        copy.fillPolygonMutationID = copy.path->getRawPathMutationID();
+
+    return copy;
 }
 
 //==============================================================================
 
 Path& Path::transform (const AffineTransform& t)
 {
+    const bool wasSimple = simpleContourMutationID != 0 && simpleContourMutationID == path->getRawPathMutationID();
+
     auto newPath = rive::make_rcp<rive::RiveRenderPath>();
     newPath->addRenderPath (path.get(), t.toMat2D());
     path = std::move (newPath);
+
+    if (wasSimple)
+        simpleContourMutationID = path->getRawPathMutationID();
+
     return *this;
 }
 
 Path Path::transformed (const AffineTransform& t) const
 {
+    const bool wasSimple = simpleContourMutationID != 0 && simpleContourMutationID == path->getRawPathMutationID();
+
     auto newPath = rive::make_rcp<rive::RiveRenderPath>();
     newPath->addRenderPath (path.get(), t.toMat2D());
-    return Path { std::move (newPath) };
+
+    Path result { std::move (newPath) };
+    if (wasSimple)
+        result.simpleContourMutationID = result.path->getRawPathMutationID();
+
+    return result;
 }
 
 //==============================================================================
@@ -2773,6 +2859,240 @@ Path Path::createFillPolygon() const
     auto result = fromClipperPaths (Clipper2Lib::Union (contours, toClipperFillRule (*this), clipperDecimalPrecision));
     result.fillPolygonMutationID = result.path->getRawPathMutationID();
     return result;
+}
+
+Path Path::createDashed (Span<const float> dashLengths, float dashOffset) const
+{
+    if (dashLengths.empty())
+        return *this;
+
+    Array<float> positiveDashes;
+    positiveDashes.ensureStorageAllocated (static_cast<int> (dashLengths.size()) * 2);
+
+    for (const float dash : dashLengths)
+    {
+        if (dash > 0.0f)
+            positiveDashes.add (dash);
+    }
+
+    if (positiveDashes.isEmpty())
+        return *this;
+
+    if ((positiveDashes.size() % 2) != 0)
+    {
+        const int originalSize = positiveDashes.size();
+        for (int i = 0; i < originalSize; ++i)
+            positiveDashes.add (positiveDashes[i]);
+    }
+
+    float totalPatternLength = 0.0f;
+    for (const float dash : positiveDashes)
+        totalPatternLength += dash;
+
+    if (! (totalPatternLength > 0.0f))
+        return *this;
+
+    Path result;
+    int dashIndex = 0;
+    float patternPosition = 0.0f;
+    bool inDashSubPath = false;
+
+    const auto advanceDashIndex = [&]
+    {
+        patternPosition = 0.0f;
+        dashIndex = (dashIndex + 1) % positiveDashes.size();
+
+        if ((dashIndex % 2) != 0)
+            inDashSubPath = false;
+    };
+
+    const auto resetDashPosition = [&]
+    {
+        dashIndex = 0;
+        inDashSubPath = false;
+        patternPosition = std::fmod (dashOffset, totalPatternLength);
+        if (patternPosition < 0.0f)
+            patternPosition += totalPatternLength;
+
+        while (patternPosition >= positiveDashes[dashIndex])
+        {
+            patternPosition -= positiveDashes[dashIndex];
+            dashIndex = (dashIndex + 1) % positiveDashes.size();
+        }
+    };
+
+    resetDashPosition();
+
+    const auto drawLineDash = [&] (Point<float> start, Point<float> end)
+    {
+        const float length = start.distanceTo (end);
+        if (! (length > 0.0f))
+            return;
+
+        const auto direction = (end - start) / length;
+        float distance = 0.0f;
+
+        while (distance < length)
+        {
+            const float remainingInDash = positiveDashes[dashIndex] - patternPosition;
+            if (! (remainingInDash > 0.0f))
+            {
+                advanceDashIndex();
+                continue;
+            }
+
+            const float remainingInLine = length - distance;
+            const bool finishesDash = remainingInDash <= remainingInLine;
+            const float step = finishesDash ? remainingInDash : remainingInLine;
+
+            if ((dashIndex % 2) == 0 && step > 0.0f)
+            {
+                const auto dashEnd = finishesDash ? (start + direction * (distance + step)) : end;
+
+                if (! inDashSubPath)
+                {
+                    result.startNewSubPath (start + direction * distance);
+                    inDashSubPath = true;
+                }
+
+                result.lineTo (dashEnd);
+            }
+
+            if (finishesDash)
+            {
+                const float nextDistance = distance + step;
+                advanceDashIndex();
+
+                if (nextDistance <= distance)
+                    break;
+
+                distance = nextDistance;
+            }
+            else
+            {
+                distance = length;
+                patternPosition += step;
+
+                if (patternPosition >= positiveDashes[dashIndex])
+                    advanceDashIndex();
+            }
+        }
+    };
+
+    Point<float> current;
+    Point<float> subPathStart;
+    bool hasCurrent = false;
+
+    for (const auto& segment : *this)
+    {
+        switch (segment.verb)
+        {
+            case Verb::MoveTo:
+                current = segment.point;
+                subPathStart = current;
+                hasCurrent = true;
+                resetDashPosition();
+                break;
+
+            case Verb::LineTo:
+                if (hasCurrent)
+                    drawLineDash (current, segment.point);
+                current = segment.point;
+                break;
+
+            case Verb::Close:
+                if (hasCurrent)
+                    drawLineDash (current, subPathStart);
+                current = subPathStart;
+                inDashSubPath = false;
+                break;
+
+            case Verb::QuadTo:
+                if (hasCurrent)
+                {
+                    const float controlLength = current.distanceTo (segment.controlPoint1) + segment.controlPoint1.distanceTo (segment.point);
+                    const int numSegments = estimateCurveSegments (controlLength);
+                    auto previous = current;
+
+                    for (int i = 1; i <= numSegments; ++i)
+                    {
+                        const auto next = evaluateClipperQuadratic (current,
+                                                                    segment.controlPoint1,
+                                                                    segment.point,
+                                                                    static_cast<float> (i) / static_cast<float> (numSegments));
+                        drawLineDash (previous, next);
+                        previous = next;
+                    }
+                }
+                current = segment.point;
+                break;
+
+            case Verb::CubicTo:
+                if (hasCurrent)
+                {
+                    const float controlLength = current.distanceTo (segment.controlPoint1)
+                                              + segment.controlPoint1.distanceTo (segment.controlPoint2)
+                                              + segment.controlPoint2.distanceTo (segment.point);
+                    const int numSegments = estimateCurveSegments (controlLength);
+                    auto previous = current;
+
+                    for (int i = 1; i <= numSegments; ++i)
+                    {
+                        const auto next = evaluateClipperCubic (current,
+                                                                segment.controlPoint1,
+                                                                segment.controlPoint2,
+                                                                segment.point,
+                                                                static_cast<float> (i) / static_cast<float> (numSegments));
+                        drawLineDash (previous, next);
+                        previous = next;
+                    }
+                }
+                current = segment.point;
+                break;
+        }
+    }
+
+    return result;
+}
+
+rive::RiveRenderPath* Path::getClockwiseRenderPath() const
+{
+    const uint64 mutationID = path->getRawPathMutationID();
+    const bool nonZero = isUsingNonZeroWinding();
+
+    if (cachedClockwisePath != nullptr
+        && cachedClockwiseMutationID == mutationID
+        && cachedClockwiseNonZero == nonZero)
+    {
+        return cachedClockwisePath.get();
+    }
+
+    auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
+    renderPath->fillRule (rive::FillRule::clockwise);
+
+    if (fillPolygonMutationID != 0 && fillPolygonMutationID == mutationID)
+    {
+        renderPath->addRenderPath (path.get(), {});
+    }
+    else if (simpleContourMutationID != 0 && simpleContourMutationID == mutationID)
+    {
+        if (! path->getRawPath().empty())
+        {
+            if (path->getCoarseArea() >= 0.0f)
+                renderPath->addRenderPath (path.get(), {});
+            else
+                renderPath->addRenderPathBackwards (path.get(), {});
+        }
+    }
+    else
+    {
+        renderPath->addRenderPath (createFillPolygon().getRenderPath(), {});
+    }
+
+    cachedClockwisePath = std::move (renderPath);
+    cachedClockwiseMutationID = mutationID;
+    cachedClockwiseNonZero = nonZero;
+    return cachedClockwisePath.get();
 }
 
 //==============================================================================

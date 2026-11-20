@@ -60,6 +60,14 @@ struct SVGData
     bool rootHasPreserveAspectRatio = false;
     Fitting rootPreserveAspectRatioFitting = Fitting::scaleToFit;
     Justification rootPreserveAspectRatioJustification = Justification::center;
+
+    /** Returns the bounding box of what an element paints, in the coordinates it paints in:
+        its shape, its image, what it refers to and what is inside it. Strokes and text are
+        left out. This is the box the `objectBoundingBox` units of its filter are parts of.
+
+        @param element An element of this document.
+    */
+    Rectangle<float> getContentBounds (const SVGElement& element) const;
 };
 
 //==============================================================================

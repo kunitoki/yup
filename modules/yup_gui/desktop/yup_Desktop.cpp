@@ -212,6 +212,129 @@ void Desktop::addPendingMouseListeners()
 
 //==============================================================================
 
+std::atomic<int> Desktop::installedInputFilterCount { 0 };
+
+void Desktop::addInputFilter (DesktopInputFilter* filter)
+{
+    if (filter == nullptr)
+        return;
+
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
+    if (std::find (inputFilters.begin(), inputFilters.end(), filter) != inputFilters.end())
+        return;
+
+    inputFilters.push_back (filter);
+    installedInputFilterCount.fetch_add (1, std::memory_order_release);
+}
+
+void Desktop::removeInputFilter (DesktopInputFilter* filter)
+{
+    if (filter == nullptr)
+        return;
+
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
+    const auto it = std::find (inputFilters.begin(), inputFilters.end(), filter);
+    if (it == inputFilters.end())
+        return;
+
+    inputFilters.erase (it);
+    installedInputFilterCount.fetch_sub (1, std::memory_order_release);
+}
+
+bool Desktop::hasInputFilters() noexcept
+{
+    return installedInputFilterCount.load (std::memory_order_acquire) > 0;
+}
+
+bool Desktop::filterMouseEvent (DesktopInputFilter::InputEventType type, Component& rootComponent, const MouseEvent& event)
+{
+    // A filter may remove itself while handling an event, so the list is copied before calling
+    const auto filters = inputFilters;
+
+    for (auto* filter : filters)
+    {
+        if (std::find (inputFilters.begin(), inputFilters.end(), filter) == inputFilters.end())
+            continue;
+
+        if (filter->mouseEventFiltered (type, rootComponent, event))
+            return true;
+    }
+
+    return false;
+}
+
+bool Desktop::filterMouseWheel (Component& rootComponent, const MouseEvent& event, const MouseWheelData& wheelData)
+{
+    const auto filters = inputFilters;
+
+    for (auto* filter : filters)
+    {
+        if (std::find (inputFilters.begin(), inputFilters.end(), filter) == inputFilters.end())
+            continue;
+
+        if (filter->mouseWheelFiltered (rootComponent, event, wheelData))
+            return true;
+    }
+
+    return false;
+}
+
+bool Desktop::filterKeyDown (Component& rootComponent, const KeyPress& keys, const Point<float>& position)
+{
+    const auto filters = inputFilters;
+
+    for (auto* filter : filters)
+    {
+        if (std::find (inputFilters.begin(), inputFilters.end(), filter) == inputFilters.end())
+            continue;
+
+        if (filter->keyDownFiltered (rootComponent, keys, position))
+            return true;
+    }
+
+    return false;
+}
+
+bool Desktop::filterKeyUp (Component& rootComponent, const KeyPress& keys, const Point<float>& position)
+{
+    const auto filters = inputFilters;
+
+    for (auto* filter : filters)
+    {
+        if (std::find (inputFilters.begin(), inputFilters.end(), filter) == inputFilters.end())
+            continue;
+
+        if (filter->keyUpFiltered (rootComponent, keys, position))
+            return true;
+    }
+
+    return false;
+}
+
+//==============================================================================
+
+std::vector<Component*> Desktop::getTopLevelComponents() const
+{
+    std::vector<Component*> roots;
+    roots.reserve (nativeComponents.size());
+
+    for (const auto& [userdata, nativeComponent] : nativeComponents)
+    {
+        ignoreUnused (userdata);
+
+        if (nativeComponent == nullptr || ! nativeComponent->isVisible())
+            continue;
+
+        roots.push_back (&nativeComponent->getComponent());
+    }
+
+    return roots;
+}
+
+//==============================================================================
+
 void Desktop::handleScreenConnected (int screenIndex)
 {
     updateScreens();

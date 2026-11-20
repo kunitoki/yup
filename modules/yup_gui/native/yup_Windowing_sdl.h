@@ -258,6 +258,8 @@ private:
 
     bool hasNativeKeyboardFocus() const;
 
+    bool isMouseEventFiltered (DesktopInputFilter::InputEventType type, const Point<float>& position, MouseEvent::Buttons buttons);
+
     void updateDesiredFrameRate();
     void updateEffectiveFrameRate (bool hasFocus);
 
@@ -289,6 +291,7 @@ private:
     WeakReference<SDLComponentNative>::Master masterReference;
 
     SDL_Window* window = nullptr;
+    void* nativeWindowHandle = nullptr;
     std::optional<float> aspectRatio;
     SDL_GLContext windowContext = nullptr;
     SDL_GLContext computeContext = nullptr;

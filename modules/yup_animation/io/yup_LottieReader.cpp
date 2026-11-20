@@ -1512,7 +1512,7 @@ void LottieReader::parseTransform (const var& ksObj, AnimationTransform& t, bool
                         else if (! endVal.isVoid() && ! endVal.isUndefined())
                             value = extractPoint (endVal);
 
-                        AnimationEasing easing = parseEasing (kf);
+                        Easing easing = parseEasing (kf);
 
                         SpatialPositionKeyframe spk;
                         spk.frame = frame;
@@ -1742,7 +1742,7 @@ AnimationProperty<T> LottieReader::parseProperty (const var& propObj,
             value = extractor (endVal);
         }
 
-        AnimationEasing easing = parseEasing (kf);
+        Easing easing = parseEasing (kf);
 
         previousValue = value;
         hasPreviousValue = true;
@@ -1766,10 +1766,10 @@ AnimationProperty<T> LottieReader::parseProperty (const var& propObj,
     return result;
 }
 
-AnimationEasing LottieReader::parseEasing (const var& kfObj)
+Easing LottieReader::parseEasing (const var& kfObj)
 {
     if (varInt (kfObj["h"]) == 1)
-        return AnimationEasing::hold();
+        return Easing::hold();
 
     const var& o = kfObj["o"];
     const var& i = kfObj["i"];
@@ -1797,15 +1797,15 @@ AnimationEasing LottieReader::parseEasing (const var& kfObj)
     if (namedInterpolator.isNotEmpty())
         return lookupInterpolator (namedInterpolator, ox, oy, ix, iy);
 
-    return AnimationEasing::fromLottieTangents ({ ox, oy }, { ix, iy });
+    return Easing::fromTangents ({ ox, oy }, { ix, iy });
 }
 
-AnimationEasing LottieReader::lookupInterpolator (const String& name, float ox, float oy, float ix, float iy)
+Easing LottieReader::lookupInterpolator (const String& name, float ox, float oy, float ix, float iy)
 {
     if (interpolatorCache.contains (name))
         return interpolatorCache[name];
 
-    AnimationEasing easing = AnimationEasing::fromLottieTangents ({ ox, oy }, { ix, iy });
+    Easing easing = Easing::fromTangents ({ ox, oy }, { ix, iy });
     interpolatorCache.set (name, easing);
     return easing;
 }

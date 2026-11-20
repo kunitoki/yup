@@ -277,6 +277,16 @@ public:
     */
     virtual bool isInterestedInDragSource (const DragAndDropSourceDetails& details) const;
 
+    /** Returns true if content can be dropped into this item, rather than only around it.
+
+        The default returns mightContainSubItems(), so an item without sub-items is only a place
+        to drop content before or after. Override it to return true for an item that can take
+        sub-items it does not have yet, such as an empty container.
+
+        @see isInterestedInDragSource, itemDropped
+    */
+    virtual bool canContainDroppedItems() const;
+
     /** Called when content is dropped among this item's sub-items.
 
         @param details      The drop

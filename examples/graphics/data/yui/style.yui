@@ -1,0 +1,166 @@
+// The stylesheet: it scopes the palette to the whole UI, picks the drawing for every
+// element of class 'knob', maps palette roles to the slider colors the drawing reads, sets
+// the properties the drawing declares, and colors the title and the readouts. The knobs
+// transition their bezel and track color, so the resting bezel size is declared too. Each
+// labeled knob sits on a card made of two shadow layers: a solid one in the raised surface
+// color over a soft drop shadow. The 'halo', 'fluted' and 'brushed' knobs swap in their own
+// drawing and a dark palette for their card, each with its own hover and press effect: the
+// halo glows brighter and pulses while dragged, the fluted knob brightens and sinks in, and
+// the light turns on the brushed metal while it glows in its accent color.
+style {
+    .panel {
+        palette: Porcelain;
+    }
+
+    .labeled {
+        cornerRadius: 10;
+        shadow: 0 0 palette.surfaceRaised, 0 3 10 #00000024;
+    }
+
+    .knob {
+        drawing: PorcelainKnob;
+        cursor: resizeUpDown;
+        trackColor: palette.accent;
+        backgroundColor: palette.surfaceRaised;
+        thumbColor: palette.text;
+        textColor: palette.textMuted;
+        bezelSize: 0.8;
+        transition: bezelSize 150ms easeOut, trackColor 200ms;
+    }
+
+    .knob:hover {
+        trackColor: palette.accent.darker (0.08);
+    }
+
+    .knob:pressed {
+        thumbColor: palette.accent.darker (0.4);
+        bezelSize: 0.84;
+    }
+
+    .halo {
+        palette: Midnight;
+    }
+
+    .halo .knob {
+        drawing: HaloKnob;
+        backgroundColor: palette.surfaceRaised;
+        trackColor: palette.outline;
+        thumbColor: palette.accent;
+        textColor: palette.textMuted;
+        haloGlow: 0.6;
+        transition: haloGlow 250ms easeOut;
+    }
+
+    .halo .knob:hover:enabled {
+        haloGlow: 1;
+    }
+
+    .halo .knob:pressed {
+        animation: breathe 0.8s easeInOut infinite alternate;
+    }
+
+    @keyframes breathe {
+        from { haloGlow: 1; }
+        to { haloGlow: 1.8; }
+    }
+
+    .fluted {
+        palette: Slate;
+    }
+
+    .fluted .knob {
+        drawing: FlutedKnob;
+        backgroundColor: #191b1c;
+        trackColor: palette.outline;
+        thumbColor: palette.text;
+        textColor: palette.textMuted;
+        shadowLift: 1;
+        filter: none;
+        transition: shadowLift 150ms easeOut, filter 200ms;
+    }
+
+    .fluted .knob:hover:enabled {
+        filter: brightness(125%);
+    }
+
+    .fluted .knob:pressed {
+        shadowLift: 0.4;
+    }
+
+    .brushed {
+        palette: Steel;
+    }
+
+    .brushed .knob {
+        drawing: BrushedKnob;
+        backgroundColor: #17191b;
+        trackColor: palette.outline;
+        thumbColor: palette.text;
+        textColor: palette.textMuted;
+        sheenAngle: 0;
+        transition: sheenAngle 400ms easeOut;
+    }
+
+    .brushed .knob:hover:enabled {
+        sheenAngle: 25deg;
+    }
+
+    .brushed .knob:pressed {
+        filter: drop-shadow(0 0 8 palette.accent.withAlpha (0.5));
+    }
+
+    TextButton, ComboBox {
+        cursor: hand;
+    }
+
+    ComboBox {
+        backgroundColor: palette.surfaceRaised;
+        textColor: palette.text;
+        borderColor: palette.outline;
+        arrowColor: palette.textMuted;
+        focusedBorderColor: palette.accent;
+        cornerRadius: 7;
+        transition: borderColor 150ms easeOut;
+    }
+
+    ComboBox:hover:enabled,
+    ComboBox:open {
+        borderColor: palette.accent;
+        arrowColor: palette.text;
+    }
+
+    PopupMenu {
+        backgroundColor: palette.surfaceRaised;
+        borderColor: palette.outline;
+        itemTextColor: palette.text;
+        itemTextDisabledColor: palette.textMuted;
+        itemHighlightedBackgroundColor: palette.accent.withAlpha (0.25);
+        itemActiveSubmenuBackgroundColor: palette.accent.withAlpha (0.16);
+        cornerRadius: 8;
+        itemCornerRadius: 5;
+        itemHeight: 26;
+        verticalPadding: 5;
+        shadow: 0 8 20 #00000055;
+    }
+
+    .scope {
+        palette: Midnight;
+        drawing: FilterScope;
+        cornerRadius: 10;
+        shadow: 0 3 10 #00000024;
+        badgeOffset: none;
+        transition: badgeOffset 200ms easeOut;
+    }
+
+    .scope:hover:enabled {
+        badgeOffset: transform.translation (2, -1);
+    }
+
+    .title {
+        textFillColor: palette.text;
+    }
+
+    .readout {
+        textFillColor: palette.textMuted;
+    }
+}

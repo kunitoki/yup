@@ -1015,6 +1015,7 @@ public:
     bool flush() override;
 
     bool isValid() const { return isOpen && sinkWriter != nullptr; }
+    void releaseOutputStream() noexcept { output.release(); }
 
 private:
     bool openWriter (OutputStream* stream,
@@ -1311,7 +1312,11 @@ std::unique_ptr<AudioFormatWriter> WindowsMediaAudioFormat::createWriterFor (Out
                                                                    metadataValues,
                                                                    qualityOptionIndex);
 
-    return writer->isValid() ? std::move (writer) : nullptr;
+    if (writer->isValid())
+        return writer;
+
+    writer->releaseOutputStream();
+    return nullptr;
 }
 
 Array<int> WindowsMediaAudioFormat::getPossibleBitDepths() const

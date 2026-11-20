@@ -1,0 +1,59 @@
+// A porcelain knob: a dotted scale, a lavender bezel and a soft cap with a pointer.
+// The colors come from the slider properties the stylesheet sets: trackColor (the bezel),
+// backgroundColor (the cap), thumbColor (the pointer) and textColor (the scale and labels).
+// The name under the cap is the 'label' of the LabeledKnob holding the slider.
+// The bezel and cap sizes are properties of the drawing, which the stylesheet can set.
+drawing PorcelainKnob {
+    property bezelSize: number = 0.8;   // the bezel radius, relative to the scale
+    property capSize: number = 0.64;    // the cap radius, relative to the scale
+
+    let size: min (bounds.width, bounds.height);
+    let c: bounds.center;
+    let r: size * 0.38;                 // the radius of the dotted scale
+
+    let a0: 135deg;
+    let sweep: 270deg;
+    let av: a0 + sweep * normalized;
+
+    let scale: enabled ? textColor : textColor.withAlpha (0.5);
+    let bezelRadius: r * bezelSize;
+    let capRadius: r * capSize;
+
+    // The scale: 31 dots, a larger one every 45 degrees
+    repeat i in 0 .. 31 {
+        let major: i % 5 == 0;
+        circle { center: polar (c, r, a0 + sweep * i / 30.0);
+                 radius: major ? r * 0.026 : r * 0.014;
+                 fill: major ? scale : scale.withAlpha (0.8); }
+    }
+
+    let labelFont: defaultFont.withHeight (r * 0.1);
+    let labelBox: rect (0, 0, r * 0.6, r * 0.16);
+
+    text { id: min; bounds: labelBox.withCenter (polar (c, r * 1.12, a0)); text: "MIN"; font: labelFont; fill: scale; }
+    text { id: med; bounds: labelBox.withCenter (polar (c, r * 1.2, 270deg)); text: "MED"; font: labelFont; fill: scale; }
+    text { id: max; bounds: labelBox.withCenter (polar (c, r * 1.12, a0 + sweep)); text: "MAX"; font: labelFont; fill: scale; }
+    text { id: name; bounds: labelBox.withCenter (polar (c, r * 1.05, 90deg)); text: parent.label; font: labelFont; fill: scale; }
+
+    // The bezel, lifted from the background by a faint shadow
+    circle { id: bezelShadow; center: c.translated (0, r * 0.03); radius: bezelRadius;
+             fill: rgba (0, 0, 0, 0.12); feather: r * 0.05; }
+
+    circle { id: bezel; center: c; radius: bezelRadius;
+             fillGradient: linearGradient (trackColor.brighter (0.08), c.translated (-bezelRadius * 0.5, -bezelRadius),
+                                           trackColor.darker (0.05), c.translated (bezelRadius * 0.5, bezelRadius));
+             stroke: trackColor.darker (0.15); strokeWidth: max (1.0, r * 0.012); strokePosition: inside; }
+
+    // The cap, casting a soft shadow down and to the right on the bezel
+    circle { id: capShadow; center: c.translated (r * 0.03, r * 0.06); radius: capRadius;
+             fill: rgba (30, 30, 50, 0.35); feather: r * 0.07; }
+
+    circle { id: cap; center: c; radius: capRadius;
+             fillGradient: radialGradient (backgroundColor.brighter (0.05), c.translated (-capRadius * 0.3, -capRadius * 0.35),
+                                           backgroundColor.darker (0.07), capRadius * 1.3);
+             stroke: backgroundColor.darker (0.1); strokeWidth: max (1.0, r * 0.012); strokePosition: inside; }
+
+    // The pointer, a short line near the edge of the cap
+    line { id: pointer; from: polar (c, capRadius * 0.68, av); to: polar (c, capRadius * 0.88, av);
+           stroke: enabled ? thumbColor : thumbColor.withAlpha (0.4); strokeWidth: max (1.5, r * 0.028); cap: round; }
+}

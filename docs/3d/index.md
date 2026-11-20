@@ -4,6 +4,10 @@ Build 3D worlds out of entities, load glTF 2.0 assets into them, and show them
 in a component, rendered through the [RHI](../graphics/rhi/index.md) on every
 backend.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_deferred_renderer.jpg" alt="A glTF scene drawn by the renderer, in the graphics example" width="640">
+</p>
+
 **Modules covered:** `yup_3d` (with the `tinygltf` third-party module) and
 `yup_renderer`.
 
@@ -53,13 +57,13 @@ components.
   shadow maps.
 - [Environment and indirect lighting](indirect-lighting.md) - environment maps,
   ambient occlusion, reflection probes, irradiance volumes and screen-space effects.
+- [Post effects and fog](post-effects.md) - bloom, depth of field, motion blur
+  and fog.
 - [Render settings](render-settings.md) - `RenderSettings` and frame statistics.
 - [Platform tiers](platform-tiers.md) - the raster and full tiers, temporal
   anti-aliasing and upscaling.
 - [Components in a scene](components-in-a-scene.md) - interactive components
   drawn on meshes, such as screens and panels.
-- [Post effects and fog](post-effects.md) - bloom, depth of field, motion blur
-  and fog.
 
 ```{toctree}
 :hidden:
@@ -70,8 +74,8 @@ meshes-and-gltf
 showing-a-scene
 lights-and-shadows
 indirect-lighting
+post-effects
 render-settings
 platform-tiers
-post-effects
 components-in-a-scene
 ```

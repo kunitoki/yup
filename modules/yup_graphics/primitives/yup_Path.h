@@ -221,12 +221,12 @@ public:
 
     /** Draws a quadratic Bezier curve to specified coordinates with one control point.
 
-        This method draws a quadratic Bezier curve from the current point to the point (x, y),
-        using the given point p as the control point. The current point is then set to (x, y).
+        This method draws a quadratic Bezier curve from the current point to the point p,
+        using (x1, y1) as the control point. The current point is then set to p.
 
-        @param p The control point.
-        @param x1 The x-coordinate of the endpoint.
-        @param y1 The y-coordinate of the endpoint.
+        @param p The endpoint.
+        @param x1 The x-coordinate of the control point.
+        @param y1 The y-coordinate of the control point.
     */
     Path& quadTo (const Point<float>& p, float x1, float y1);
 
@@ -364,6 +364,17 @@ public:
         @param rect The rectangle to which rounded corners are to be added.
     */
     Path& addRoundedRectangle (const Rectangle<float>& rect, float radius);
+
+    /** Adds a rectangle with elliptical corners to the path.
+
+        Every corner is a quarter of an ellipse with the given horizontal and vertical radii, which
+        are limited to half the width and half the height of the rectangle. The rounded rectangle
+        is added as a closed sub-path.
+
+        @param rect The rectangle to which rounded corners are to be added.
+        @param cornerSize The horizontal and vertical radii of the corners.
+    */
+    Path& addRoundedRectangle (const Rectangle<float>& rect, const Size<float>& cornerSize);
 
     //==============================================================================
     /** Adds an ellipse to the path.
@@ -644,6 +655,19 @@ public:
         @return A new Path with rounded corners applied.
     */
     Path withRoundedCorners (float cornerRadius) const;
+
+    /** Creates a dashed path from the contours of this path.
+
+        Odd-length dash patterns are repeated once to alternate dashes and gaps. Curves are
+        flattened along the path so dashes follow curved segments smoothly, and dash phase
+        resets at the start of each sub-path.
+
+        @param dashLengths Alternating dash and gap lengths. Empty or non-positive patterns return a copy of this path.
+        @param dashOffset  Phase offset into the dash pattern before the first segment begins.
+
+        @return A new Path made of open sub-paths for each visible dash segment.
+    */
+    [[nodiscard]] Path createDashed (Span<const float> dashLengths, float dashOffset = 0.0f) const;
 
     //==============================================================================
 
@@ -970,6 +994,8 @@ public:
     explicit Path (rive::rcp<rive::RiveRenderPath> newPath);
     /** @internal Returns the raw render path to use in the renderer. */
     rive::RiveRenderPath* getRenderPath() const;
+    /** @internal Returns a render path whose filled area winds clockwise, cached across draws. */
+    rive::RiveRenderPath* getClockwiseRenderPath() const;
     /** @internal */
     void appendPath (rive::rcp<rive::RiveRenderPath> other);
     /** @internal */
@@ -978,6 +1004,34 @@ public:
 private:
     rive::rcp<rive::RiveRenderPath> path;
     uint64 fillPolygonMutationID = 0;
+    uint64 simpleContourMutationID = 0;
+    mutable rive::rcp<rive::RiveRenderPath> cachedClockwisePath;
+    mutable uint64 cachedClockwiseMutationID = 0;
+    mutable bool cachedClockwiseNonZero = true;
 };
+
+//==============================================================================
+#ifndef DOXYGEN
+
+template <>
+struct VariantConverter<Path>
+{
+    static Path fromVar (const var& v)
+    {
+        if (! v.isString())
+            return {};
+
+        Path result;
+        result.fromString (v.toString());
+        return result;
+    }
+
+    static var toVar (const Path& path)
+    {
+        return var (path.toString());
+    }
+};
+
+#endif // DOXYGEN
 
 } // namespace yup

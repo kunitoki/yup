@@ -149,6 +149,21 @@ TEST_F (GraphicsExpressionTypesTests, ColorLiterals)
     EXPECT_TRUE (CompiledExpression::compile ("#ff8800", context).getReference().isConstant());
 }
 
+TEST_F (GraphicsExpressionTypesTests, NamedColorsAreFoldedConstants)
+{
+    EXPECT_EQ (Colors::transparentBlack, evaluate<Color> ("colors.transparentBlack"));
+    EXPECT_EQ (Colors::aliceblue, evaluate<Color> ("colors.aliceblue"));
+    EXPECT_EQ (Colors::red.darker (0.1f), evaluate<Color> ("colors.red.darker (0.1)"));
+    EXPECT_EQ (Colors::blue, evaluate<Color> ("bounds.width > 50 ? colors.blue : colors.red"));
+    EXPECT_TRUE (CompiledExpression::compile ("colors.tomato.withAlpha (0.5)", context).getReference().isConstant());
+
+    EXPECT_FALSE (compiles ("colors.notAColor"));
+    EXPECT_FALSE (compiles ("colors.grey"));
+
+    addGraphicsExpressionTypes (context);
+    EXPECT_EQ (Colors::white, evaluate<Color> ("colors.white"));
+}
+
 TEST_F (GraphicsExpressionTypesTests, PolarPoints)
 {
     const auto p = evaluate<Point<float>> ("polar (bounds.center, 10, 90deg)");
@@ -249,6 +264,44 @@ TEST_F (GraphicsExpressionTypesTests, PathMethodsDontModifyTheirSource)
     )"));
 }
 
+TEST_F (GraphicsExpressionTypesTests, ChainedPathMethodsFuseAndPreserveOpenContour)
+{
+    const auto compiled = CompiledExpression::compile (
+        "path().moveTo (bounds.left, bounds.top).lineTo (bounds.right, bounds.top).lineTo (bounds.right, bounds.bottom).close()",
+        context);
+    ASSERT_TRUE (compiled.wasOk());
+
+    // The four reads of the bounds members, then the whole path chain as a single instruction
+    EXPECT_EQ (5, compiled.getReference().getNumInstructions());
+
+    const auto triangle = evaluate<Path> ("path().moveTo (bounds.left, 0).lineTo (30, 0).lineTo (30, 40).close()");
+    EXPECT_TRUE (triangle.isExplicitlyClosed());
+    EXPECT_EQ (4, triangle.size());
+    EXPECT_NEAR (120.0f, triangle.getLength(), 1.0e-3f);
+
+    const auto branched = CompiledExpression::compile (R"(
+        let curve = path().moveTo (bounds.left, 0).lineTo (30, 0).lineTo (30, 40);
+        openOut = curve;
+        closedOut = curve.lineTo (0, 40).close()
+    )",
+                                                       context);
+    ASSERT_TRUE (branched.wasOk());
+
+    // The read of bounds.left, then one fused chain for the shared curve and one for the closed branch
+    EXPECT_EQ (3, branched.getReference().getNumInstructions());
+
+    ExpressionState state (branched.getReference());
+    state.set (bounds, Rectangle<float> (0.0f, 0.0f, 30.0f, 40.0f));
+    state.evaluate();
+
+    const auto& openPath = state.get (branched.getReference().getOutput<Path> ("openOut").getValue());
+    const auto& closedPath = state.get (branched.getReference().getOutput<Path> ("closedOut").getValue());
+    EXPECT_FALSE (openPath.isExplicitlyClosed());
+    EXPECT_NEAR (70.0f, openPath.getLength(), 1.0e-3f);
+    EXPECT_TRUE (closedPath.isExplicitlyClosed());
+    EXPECT_NEAR (140.0f, closedPath.getLength(), 1.0e-3f);
+}
+
 TEST_F (GraphicsExpressionTypesTests, GradientConstructors)
 {
     const auto linear = evaluate<ColorGradient> ("linearGradient (rgb (255, 0, 0), point (0, 0), rgb (0, 0, 255), bounds.bottomRight)");
@@ -281,8 +334,36 @@ TEST_F (GraphicsExpressionTypesTests, GradientOperations)
     )"));
 }
 
+TEST_F (GraphicsExpressionTypesTests, GradientSpreadAndMapping)
+{
+    const auto reflected = evaluate<ColorGradient> ("linearGradient (#f00, point (0, 0), #00f, point (1, 0)).withSpread (reflect)");
+    EXPECT_EQ (ColorGradient::Spread::Reflect, reflected.getSpread());
+    EXPECT_EQ (ColorGradient::Spread::Repeat, evaluate<ColorGradient> ("linearGradient (#f00, point (0, 0), #00f, point (1, 0)).withSpread (spread.repeat)").getSpread());
+
+    // A gradient written for the unit square, placed in a rectangle on top of its own transform
+    const auto mapped = evaluate<ColorGradient> ("linearGradient (#f00, point (0, 0), #00f, point (1, 0)).withTransform (transform.scaling (0.5, 1)).mappedTo (rect (10, 20, 200, 40))");
+    EXPECT_EQ (Color (0xffff0000), mapped.getColorAt (10.0f, 30.0f));
+    EXPECT_EQ (Color (0xff0000ff), mapped.getColorAt (110.0f, 30.0f));
+}
+
+TEST_F (GraphicsExpressionTypesTests, TransformFromMatrixValues)
+{
+    // The values of an SVG matrix: x' = a x + c y + tx, y' = b x + d y + ty
+    EXPECT_EQ (Point<float> (17.0f, 30.0f), evaluate<Point<float>> ("point (1, 2).transformed (transform (1, 2, 3, 4, 10, 20))"));
+    EXPECT_EQ (AffineTransform::translation (5.0f, 6.0f), evaluate<AffineTransform> ("transform (1, 0, 0, 1, 5, 6)"));
+}
+
+TEST_F (GraphicsExpressionTypesTests, PatternIsEmptyWithoutASource)
+{
+    EXPECT_EQ (context.findType ("pattern"), context.getType<PatternPaint>());
+    EXPECT_TRUE (evaluate<bool> ("pattern().isEmpty && pattern() == pattern()"));
+}
+
 TEST_F (GraphicsExpressionTypesTests, Enumerations)
 {
+    EXPECT_EQ (AnchoredText::Anchor::middle, evaluate<AnchoredText::Anchor> ("middle"));
+    EXPECT_EQ (ColorGradient::Spread::Pad, evaluate<ColorGradient::Spread> ("pad"));
+
     EXPECT_EQ (StrokeCap::Square, evaluate<StrokeCap> ("square"));
     EXPECT_EQ (StrokeJoin::Bevel, evaluate<StrokeJoin> ("bevel"));
     EXPECT_EQ (StrokePosition::Outside, evaluate<StrokePosition> ("outside"));

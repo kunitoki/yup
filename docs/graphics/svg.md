@@ -5,6 +5,10 @@ high-level entry point for vector artwork; the underlying parsed model is an
 `SVGDocument`, and fitting/positioning reuses the shared `Fitting` and
 `Justification` enums.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_svg_tiger.jpg" alt="An SVG painted by a Drawable, in the graphics example" width="640">
+</p>
+
 ## Drawable
 
 A `Drawable` holds a parsed SVG document and knows how to render it. Parse once,
@@ -66,6 +70,14 @@ drawable.paint (g,
 | `centerInside`  | Like `scaleToFit`, but never upscales beyond original size.     |
 | `stretchWidth`  | Stretch horizontally, preserve vertical size.                   |
 | `stretchHeight` | Stretch vertically, preserve horizontal size.                   |
+
+An SVG whose root element has a `preserveAspectRatio` attribute is fitted the
+way it asks for, whatever `fitting` and `justification` are passed.
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/svg_fitting_light.jpg#gh-light-mode-only" alt="An SVG badge painted into a wide area with each fitting mode" width="640">
+  <img class="dark-only rounded" src="../_static/images/graphics/svg_fitting_dark.jpg#gh-dark-mode-only" alt="An SVG badge painted into a wide area with each fitting mode" width="640">
+</p>
 
 ### Querying bounds
 
@@ -136,7 +148,12 @@ The parser handles a broad subset of SVG, including:
 - Linear and radial gradients (`SVGGradient`).
 - Clip paths (`SVGClipPath`) and masks (`SVGMask`).
 - Patterns (`SVGPattern`) for tiled fills.
-- Filters (`SVGFilter`).
+- Filters (`SVGFilter`), run on the GPU: `feGaussianBlur`, `feOffset`, `feFlood`,
+  `feColorMatrix`, `feComposite`, `feBlend`, `feMorphology`, `feMerge`,
+  `feDiffuseLighting` and `feSpecularLighting` (distant and point lights),
+  `feDisplacementMap`, `feDropShadow`, and the functions of a CSS `filter`
+  (`blur`, `drop-shadow`, `brightness`, `contrast`, `grayscale`, `hue-rotate`,
+  `invert`, `opacity`, `saturate`, `sepia`). See [filters](#filters).
 - Text elements (with the font resolver above).
 - Embedded and referenced images (with the image resolver above).
 - CSS styling via `<style>` rules (`SVGCssRule`).
@@ -148,8 +165,54 @@ For direct access to the parsed model - elements, gradients, and bounds - an
 need `Drawable`; reach for `SVGDocument` when building custom SVG tooling.
 ```
 
+## Filters
+
+An element with a `filter` is painted into an offscreen raster covering the
+region of the filter, at the resolution it has on screen. The primitives run on
+it as a [`FilterGraph`](graphics-class.md#filtered-content), and the result is
+painted with the opacity, the blend mode, the clip and the mask of the element.
+The raster is kept, so a filter only runs again when the SVG is painted larger.
+
+- The region (`x`, `y`, `width`, `height`, `filterUnits`), `primitiveUnits`,
+  the `in` / `in2` / `result` names and `color-interpolation-filters` are
+  honored. What a primitive puts outside the region is cut off, as in a browser.
+- `feTurbulence` and `feImage` make nothing (transparent black), and
+  `feComponentTransfer`, `feConvolveMatrix` and `feTile` leave their input as it
+  is. A spot light is lit as a point light, the `x`, `y`, `width` and `height`
+  of single primitives are ignored, and `FillPaint` and `StrokePaint` are empty.
+- `BackgroundImage` is empty too, except in a filter ending with an `feBlend`
+  of what it made and `BackgroundImage`: that blend becomes the blend mode the
+  element, or its filtered picture, is painted with.
+- Text has no bounding box for a filter to cover, so a filter on a `<text>`
+  alone is not run. Only the blend above applies to it.
+- A blur has one deviation: the largest of the two of `stdDeviation`.
+- Without a GPU the element is painted without its filter.
+
+## Editing an SVG as a drawing
+
+A `Drawable` paints an SVG as it is. To bind its shapes to the properties of a
+component, animate them or edit them, `YuiSvgImporter` (in `yup_gui`) writes the
+SVG as a [`.yui` drawing](../ui/yui/drawing.md#importing-an-svg) made of native
+shapes, painting what the `Drawable` paints:
+
+```cpp
+const auto imported = YuiSvgImporter::importSvg (File ("logo.svg"));
+
+if (imported.wasOk())
+    File ("logo.yui").replaceWithText (imported.toText());
+
+for (const auto& warning : imported.warnings)
+    DBG (warning);                                // what the drawing paints differently
+```
+
+Groups keep their structure and set the paint their shapes share, gradients
+become named values, and `<use>`, patterns, markers, clip paths, masks, filters,
+nested `<svg>` elements, images and text become the matching elements of the
+drawing.
+
 ## See also
 
+- [Data-driven drawing](../ui/yui/drawing.md) - the drawing language an SVG is imported into.
 - [The Graphics class](graphics-class.md) - the context `Drawable` paints into.
 - [Images](../imaging/index.md) - how SVG `<image>` hrefs become `Image` objects.
 - [Fonts & text layout](fonts.md) - how SVG `<text>` resolves fonts.

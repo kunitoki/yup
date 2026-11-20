@@ -1,0 +1,39 @@
+// size: 560 228
+import "../../../../graphics/data/yui/palette.yui";
+import "../../../../graphics/data/yui/flutedknob.yui";
+
+// The drawing reads the label from the parent of its slider
+component Dial : Column {
+    property label: string = "";
+    property alias value <=> knob.value;
+
+    Slider { id: knob; sliderType: rotaryVerticalDrag; flexGrow: 1; }
+}
+
+drawing Card {
+    rect { bounds: bounds; cornerRadius: 10; fill: palette.surfaceRaised; }
+}
+
+style {
+    .card {
+        palette: Slate;
+        drawing: Card;
+    }
+
+    Slider {
+        drawing: FlutedKnob;
+        backgroundColor: #191b1c;
+        trackColor: palette.outline;
+        thumbColor: palette.text;
+        textColor: palette.textMuted;
+    }
+}
+
+Row {
+    class: card;
+    padding: 8;
+
+    Dial { label: "CUTOFF"; value: 0.15; flexGrow: 1; }
+    Dial { label: "DRIVE";  value: 0.5;  flexGrow: 1; }
+    Dial { label: "MIX";    value: 0.85; flexGrow: 1; }
+}

@@ -47,12 +47,22 @@ When `includeEffects` is `true` and the component has a `ComponentEffect`:
 When `includeEffects` is `false`, the effect is skipped entirely and the raw
 subtree pixels are returned.
 
+### High-DPI snapshots
+
+The third parameter is the number of pixels rendered per logical unit. The
+default of `1` gives an image of the component's size; `2` renders the same
+content twice as large, so it stays sharp on high-DPI displays:
+
+```cpp
+auto retina = comp.snapshotToImage (ctx, true, 2.0f); // 2 * getWidth() by 2 * getHeight()
+```
+
 ### Constraints
 
 - Requires a **real GPU context** (OpenGL, Metal, etc.). Headless contexts
   cannot create `GpuCanvas` and will return an invalid `Image`.
-- The snapshot dimensions match the component's `getWidth()` × `getHeight()`.
-  A zero-sized component returns an invalid `Image`.
+- The snapshot dimensions match the component's `getWidth()` × `getHeight()`,
+  multiplied by `scale`. A zero-sized component returns an invalid `Image`.
 - The call blocks until GPU readback completes; it is intended for occasional
   use (e.g., a "save screenshot" button), not per-frame capture.
 

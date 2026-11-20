@@ -31,7 +31,7 @@ struct SVGGradientStop
 };
 
 /** A parsed SVG gradient (linear or radial). */
-struct SVGGradient : public ReferenceCountedObject
+struct YUP_API SVGGradient : public ReferenceCountedObject
 {
     using Ptr = ReferenceCountedObjectPtr<SVGGradient>;
 
@@ -69,6 +69,18 @@ struct SVGGradient : public ReferenceCountedObject
     bool hasFocal = false;
     bool hasUnits = false;
     bool hasSpreadMethod = false;
+
+    /** Converts the gradient to the ColorGradient it is drawn with.
+
+        The stops, the spread and the gradient transform are kept. A focal point is drawn as the center
+        of the gradient, and radial gradients scaled unevenly by their units only are drawn as circles.
+
+        @param objectBounds  The bounding box of the shape being painted, which gradients using
+                             ObjectBoundingBox units are placed in. Pass nullptr when there is none.
+
+        @return The gradient to draw, or an empty gradient when there are no stops.
+    */
+    ColorGradient toColorGradient (const Rectangle<float>* objectBounds = nullptr) const;
 };
 
 } // namespace yup

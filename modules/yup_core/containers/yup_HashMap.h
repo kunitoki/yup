@@ -78,7 +78,7 @@ struct DefaultHashFunctions
     static int generateHash (const Uuid& key, int upperLimit) noexcept { return generateHash (key.hash(), upperLimit); }
 
     /** Generates a simple hash from a Identifier. */
-    static int generateHash (const Identifier& key, int upperLimit) noexcept { return generateHash ((uint64) (*reinterpret_cast<uintptr_t*> (key.getCharPointer().getAddress())), upperLimit); }
+    static int generateHash (const Identifier& key, int upperLimit) noexcept { return generateHash ((uint64) (reinterpret_cast<uintptr_t> (key.getCharPointer().getAddress())), upperLimit); }
 };
 
 //==============================================================================

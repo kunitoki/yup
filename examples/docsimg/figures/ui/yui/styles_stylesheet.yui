@@ -1,0 +1,32 @@
+// size: 480 176
+palette Ember { colors: "#1b1b1e #ff8800 #f2efe9"; accent: #ff9a1f; }
+
+drawing Panel {
+    rect { bounds: bounds; cornerRadius: 8; fill: palette.background; stroke: palette.outline; strokePosition: inside; }
+}
+
+style {
+    .panel   { drawing: Panel; }
+    .ember   { palette: Ember; }
+    .primary { backgroundColor: palette.accent; textColor: palette.onAccent; }
+}
+
+Row {
+    gap: 16;
+
+    Column {
+        class: panel; padding: 12; gap: 8; flexGrow: 1;
+
+        TextButton { text: "Button"; flexGrow: 1; }
+        TextButton { text: "Primary"; class: primary; flexGrow: 1; }
+        Slider     { value: 0.6; flexGrow: 1; }
+    }
+
+    Column {
+        class: "panel ember"; padding: 12; gap: 8; flexGrow: 1;
+
+        TextButton { text: "Button"; flexGrow: 1; }
+        TextButton { text: "Primary"; class: primary; flexGrow: 1; }
+        Slider     { value: 0.6; flexGrow: 1; }
+    }
+}

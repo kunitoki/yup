@@ -92,18 +92,22 @@ public:
     virtual void processBlock (DomainProcessContext<double>& context) { ignoreUnused (context); }
 
     /**
-        Called by plugin wrappers when the processor is bypassed (single-precision).
+        Called by plugin wrappers instead of processBlock() while the processor is bypassed (single-precision).
 
-        The default implementation routes inputs to outputs, or clears extra outputs.
+        Wrappers copy the main inputs into the outputs before processing, so the default
+        implementation does nothing and the audio passes through unchanged. Override it to
+        crossfade or to keep the dry signal delayed by the reported latency.
 
         @param context  All per-block inputs.
     */
     virtual void processBlockBypassed (DomainProcessContext<float>& context) { ignoreUnused (context); }
 
     /**
-        Called by plugin wrappers when the processor is bypassed (double-precision).
+        Called by plugin wrappers instead of processBlock() while the processor is bypassed (double-precision).
 
-        The default implementation routes inputs to outputs, or clears extra outputs.
+        Wrappers copy the main inputs into the outputs before processing, so the default
+        implementation does nothing and the audio passes through unchanged. Override it to
+        crossfade or to keep the dry signal delayed by the reported latency.
 
         @param context  All per-block inputs.
     */

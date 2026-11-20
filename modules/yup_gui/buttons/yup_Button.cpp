@@ -24,11 +24,25 @@ namespace yup
 
 //==============================================================================
 
+const Identifier Button::textPropertyId ("text");
+const Identifier Button::checkedPropertyId ("checked");
+
+//==============================================================================
+
 Button::Button (StringRef componentID)
     : Component (componentID)
 {
     setMouseCursor (MouseCursor::Hand);
     setWantsKeyboardFocus (true);
+}
+
+const ComponentTypeInfo& Button::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<Button> (Identifier ("Button"))
+                                 .signal ("onClick", &Button::onClick, "Emitted when the button is clicked")
+                                 .build();
+
+    return info;
 }
 
 //==============================================================================

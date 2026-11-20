@@ -139,7 +139,7 @@ struct Expression::Parser
         , position (text)
         , lineStart (text)
     {
-        for (const auto* end = text + jlimit (0, (int) std::strlen (text), startOffset); position < end; ++position)
+        for (const auto* end = text + std::max (0, startOffset); position < end && *position != 0; ++position)
         {
             if (*position == '\n')
             {
@@ -318,7 +318,7 @@ private:
                 expect ("]");
                 result = make (Kind::index, ExpressionOperator::none, {}, {}, { result, index }, start);
             }
-            else if (match ("."))
+            else if (! isAtRange() && match ("."))
             {
                 const auto name = parseIdentifier ("Expected a member name after '.'");
 
@@ -679,6 +679,13 @@ private:
             fail ("Expected '" + String (token) + "'");
     }
 
+    // A `..` range belongs to the enclosing text, as in `repeat i in 0 .. 11`
+    bool isAtRange()
+    {
+        skipWhitespace();
+        return position[0] == '.' && position[1] == '.';
+    }
+
     bool isAtEnd()
     {
         skipWhitespace();
@@ -957,7 +964,17 @@ StringRef Expression::getOperatorSymbol (ExpressionOperator op) noexcept
 
 String Expression::getOperatorFunctionName (ExpressionOperator op)
 {
-    return "operator" + String (getOperatorSymbol (op));
+    static const auto names = []
+    {
+        std::array<String, (size_t) ExpressionOperator::logicalOr + 1> result;
+
+        for (size_t i = 0; i < result.size(); ++i)
+            result[i] = "operator" + String (getOperatorSymbol ((ExpressionOperator) i));
+
+        return result;
+    }();
+
+    return names[(size_t) op];
 }
 
 //==============================================================================

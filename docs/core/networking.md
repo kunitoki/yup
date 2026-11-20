@@ -90,7 +90,7 @@ if (pipe.createNewPipe ("my-app-pipe"))
 ```
 
 ```{seealso}
-`InterProcessLock` (in the [Multithreading](../multithreading/index.md) area)
+`InterProcessLock` (in the [Multithreading](multithreading/index.md) area)
 coordinates access across processes; `ChildProcess` launches and communicates
 with external programs.
 ```

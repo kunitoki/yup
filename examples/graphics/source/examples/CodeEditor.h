@@ -56,6 +56,7 @@ public:
         applyLanguage (languageCpp);
         applyScheme (schemeOneDark);
         editor.setGutterBreakpointsEnabled (true);
+        setupLanguageHooks();
         addAndMakeVisible (editor);
 
         setSize (640, 480);
@@ -89,6 +90,98 @@ private:
         schemeSolarizedLight
     };
 
+    static bool isIdentifierChar (yup::yup_wchar c)
+    {
+        return yup::CharacterFunctions::isLetterOrDigit (c) || c == '_';
+    }
+
+    static yup::Range<int> findIdentifierAt (const yup::String& text, int column)
+    {
+        int start = yup::jlimit (0, text.length(), column);
+        int end = start;
+
+        while (start > 0 && isIdentifierChar (text[start - 1]))
+            --start;
+
+        while (end < text.length() && isIdentifierChar (text[end]))
+            ++end;
+
+        return { start, end };
+    }
+
+    void setupLanguageHooks()
+    {
+        // Word based completion, like an editor without a language service.
+        editor.setCompletionTriggerCharacters (".");
+        editor.setCompletionProvider ([this] (const yup::CodeEditor&, int)
+        {
+            yup::StringArray words;
+            for (int line = 0; line < document.getNumLines(); ++line)
+                words.addTokens (document.getLine (line), " \t()[]{}.,;:<>\"'/\\+-*%=!&|^~#@?", "");
+
+            words.removeEmptyStrings();
+            words.removeDuplicates (false);
+            words.sort (true);
+
+            std::vector<yup::CodeEditor::CompletionItem> items;
+            for (const auto& word : words)
+            {
+                if (word.length() > 2 && ! yup::CharacterFunctions::isDigit (word[0]))
+                    items.push_back ({ word, {}, "word" });
+            }
+
+            return items;
+        });
+
+        editor.setHoverProvider ([this] (const yup::CodeEditor&, int characterIndex) -> yup::String
+        {
+            const auto position = document.indexToPosition (characterIndex);
+            const auto lineText = document.getLine (position.getLineNumber());
+            const auto range = findIdentifierAt (lineText, position.getColumnNumber());
+
+            if (range.isEmpty())
+                return {};
+
+            const auto word = lineText.substring (range.getStart(), range.getEnd());
+
+            int occurrences = 0;
+            for (int line = 0; line < document.getNumLines(); ++line)
+            {
+                const auto text = document.getLine (line);
+                for (int index = text.indexOf (word); index >= 0; index = text.indexOf (index + word.length(), word))
+                {
+                    const auto found = findIdentifierAt (text, index);
+                    occurrences += (found.getStart() == index && found.getLength() == word.length()) ? 1 : 0;
+                }
+            }
+
+            return word + " - " + yup::String (occurrences) + " occurrence(s), line " + yup::String (position.getLineNumber() + 1);
+        });
+    }
+
+    void updateDiagnostics()
+    {
+        std::vector<yup::CodeEditor::Diagnostic> diagnostics;
+
+        for (int line = 0; line < document.getNumLines(); ++line)
+        {
+            const auto column = document.getLine (line).indexOf ("TODO");
+            if (column < 0)
+                continue;
+
+            yup::CodeEditor::Diagnostic diagnostic;
+            diagnostic.severity = yup::CodeEditor::Diagnostic::Severity::information;
+            diagnostic.line = diagnostic.endLine = line;
+            diagnostic.column = column;
+            diagnostic.endColumn = column + 4;
+            diagnostic.message = "Unfinished work";
+            diagnostic.source = "demo";
+            diagnostics.push_back (diagnostic);
+        }
+
+        editor.setDiagnostics (std::move (diagnostics));
+    }
+
     void applyLanguage (int languageId)
     {
         switch (languageId)
@@ -116,6 +209,8 @@ private:
             default:
                 break;
         }
+
+        updateDiagnostics();
     }
 
     void applyScheme (int schemeId)
@@ -158,7 +253,7 @@ public:
     {
         int total = 0;
         for (const auto& value : values)
-            total += value;  // accumulate everything
+            total += value;  // TODO: guard against overflow
         return total;
     }
 
@@ -197,7 +292,7 @@ void main()
 import math
 
 def circle_area (radius):
-    """Compute the area of a circle."""
+    """Compute the area of a circle."""  # TODO: validate radius
     return math.pi * radius ** 2
 
 class Shape:

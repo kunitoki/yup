@@ -109,12 +109,50 @@ public:
     */
     static ResultValue<ThemePalette> fromString (const String& text, Mode mode = Mode::dark);
 
+    /** Returns the role with the given name, as spelled in the Role enum (for example `surfaceRaised`).
+
+        This is how data such as `.yui` drawings and styles refer to roles, for example `palette.accent`.
+
+        @param name  The role name, case sensitive.
+
+        @return The role, or std::nullopt if no role has that name.
+    */
+    static std::optional<Role> getRoleFromName (const String& name);
+
+    /** Returns the name of every role, in the order of the Role enum, as getRoleFromName() reads them.
+
+        Tools list the roles with it, for example to complete `palette.` in a `.yui` file.
+    */
+    static StringArray getRoleNames();
+
     //==============================================================================
     /** Returns the color assigned to a role. */
     Color getColor (Role role) const;
 
     /** Overrides the color assigned to a role. */
     void setColor (Role role, Color color);
+
+    //==============================================================================
+    /** Sets a named color the palette carries next to its roles.
+
+        Custom colors give a palette the colors its roles don't cover, such as the meter or wood
+        colors of a skin. They are not derived: each palette switched to must set the same names.
+        `.yui` drawings and styles read them like roles, for example `palette.meterHot`.
+
+        @param name   The color name: letters, digits and underscores, not starting with a digit.
+                      A role name sets the role instead, `dark` is reserved.
+        @param color  The color.
+    */
+    void setCustomColor (const String& name, Color color);
+
+    /** Returns the custom color with the given name, or std::nullopt if the palette has none. */
+    std::optional<Color> findCustomColor (const String& name) const;
+
+    /** Returns the names of the custom colors, sorted. */
+    StringArray getCustomColorNames() const;
+
+    /** Returns true if the name can be given to a custom color: an identifier that is not a role or `dark`. */
+    static bool isValidCustomColorName (const String& name);
 
     /** Returns whether this is a dark or a light palette. */
     Mode getMode() const;
@@ -123,16 +161,17 @@ public:
     const std::vector<Color>& getSourceColors() const;
 
     //==============================================================================
-    /** Returns true if both palettes have the same mode and role colors. */
+    /** Returns true if both palettes have the same mode, role and custom colors. */
     bool operator== (const ThemePalette& other) const;
 
-    /** Returns true if the palettes differ in mode or in any role color. */
+    /** Returns true if the palettes differ in mode, in any role color or in any custom color. */
     bool operator!= (const ThemePalette& other) const;
 
 private:
     void derive();
 
     std::array<Color, static_cast<std::size_t> (Role::numRoles)> roles;
+    std::map<String, Color> customColors;
     std::vector<Color> sourceColors;
     Mode mode = Mode::dark;
 };

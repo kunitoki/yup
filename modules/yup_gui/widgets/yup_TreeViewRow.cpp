@@ -22,6 +22,36 @@
 namespace yup
 {
 
+namespace
+{
+
+struct TreeViewRowIds
+{
+    static inline const Identifier depth { "depth" };
+    static inline const Identifier selected { "selected" };
+    static inline const Identifier hovered { "hovered" };
+    static inline const Identifier openFraction { "openFraction" };
+    static inline const Identifier itemHeight { "itemHeight" };
+    static inline const Identifier text { "text" };
+};
+
+} // namespace
+
+//==============================================================================
+const ComponentTypeInfo& TreeViewRow::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<TreeViewRow> (Identifier ("TreeViewRow"))
+                                 .readOnly (TreeViewRowIds::depth, &TreeViewRow::getDepth, 0, "The indentation depth of the row.")
+                                 .state (TreeViewRowIds::selected, &TreeViewRow::isItemSelected, false, "Whether the row's item is selected.")
+                                 .state (TreeViewRowIds::hovered, &TreeViewRow::isItemHovered, false, "Whether the mouse pointer is over the row's item.")
+                                 .readOnly (TreeViewRowIds::openFraction, &TreeViewRow::getOpenFraction, 0.0, "How open the row's item is, from 0 to 1.")
+                                 .readOnly (TreeViewRowIds::itemHeight, &TreeViewRow::getItemHeight, 0.0, "The full unclipped height of the row's item.")
+                                 .readOnly (TreeViewRowIds::text, &TreeViewRow::getItemText, String(), "The text displayed by the row's item.")
+                                 .build();
+
+    return info;
+}
+
 //==============================================================================
 /** The transparent area over the disclosure glyph: it takes presses, so toggling does not select the row. */
 class TreeViewRow::DisclosureButton final : public Component
@@ -168,6 +198,11 @@ void TreeViewRow::resized()
 //==============================================================================
 void TreeViewRow::update (TreeView& newOwnerView, TreeViewItem& newItem, int newDepth, bool shouldBeSelected)
 {
+    const auto oldDepth = depth;
+    const auto oldSelected = selected;
+    const auto oldHeight = itemHeight;
+    const auto oldText = itemText;
+
     ownerView = &newOwnerView;
     item = &newItem;
     depth = newDepth;
@@ -183,6 +218,18 @@ void TreeViewRow::update (TreeView& newOwnerView, TreeViewItem& newItem, int new
         addAndMakeVisible (*content);
 
     disclosureButton->toFront (false);
+
+    if (depth != oldDepth)
+        notifyPropertyChanged (TreeViewRowIds::depth);
+
+    if (selected != oldSelected)
+        notifyPropertyChanged (TreeViewRowIds::selected);
+
+    if (! approximatelyEqual (itemHeight, oldHeight))
+        notifyPropertyChanged (TreeViewRowIds::itemHeight);
+
+    if (itemText != oldText)
+        notifyPropertyChanged (TreeViewRowIds::text);
 
     resized();
     repaint();

@@ -27,9 +27,13 @@ namespace Colors
 
 //==============================================================================
 
-std::optional<Color> getNamedColor (StringRef colorName)
+Span<const NamedColor> getNamedColors() noexcept
 {
-    static const std::unordered_map<String, Color> namedColors = {
+    static const NamedColor namedColors[] = {
+        { "black", black },
+        { "white", white },
+        { "transparentBlack", transparentBlack },
+        { "transparentWhite", transparentWhite },
         { "aliceblue", aliceblue },
         { "antiquewhite", antiquewhite },
         { "aqua", aqua },
@@ -37,7 +41,6 @@ std::optional<Color> getNamedColor (StringRef colorName)
         { "azure", azure },
         { "beige", beige },
         { "bisque", bisque },
-        { "black", black },
         { "blanchedalmond", blanchedalmond },
         { "blue", blue },
         { "blueviolet", blueviolet },
@@ -55,7 +58,6 @@ std::optional<Color> getNamedColor (StringRef colorName)
         { "darkcyan", darkcyan },
         { "darkgoldenrod", darkgoldenrod },
         { "darkgray", darkgray },
-        { "darkgrey", darkgray },
         { "darkgreen", darkgreen },
         { "darkkhaki", darkkhaki },
         { "darkmagenta", darkmagenta },
@@ -67,13 +69,11 @@ std::optional<Color> getNamedColor (StringRef colorName)
         { "darkseagreen", darkseagreen },
         { "darkslateblue", darkslateblue },
         { "darkslategray", darkslategray },
-        { "darkslategrey", darkslategray },
         { "darkturquoise", darkturquoise },
         { "darkviolet", darkviolet },
         { "deeppink", deeppink },
         { "deepskyblue", deepskyblue },
         { "dimgray", dimgray },
-        { "dimgrey", dimgray },
         { "dodgerblue", dodgerblue },
         { "firebrick", firebrick },
         { "floralwhite", floralwhite },
@@ -84,7 +84,6 @@ std::optional<Color> getNamedColor (StringRef colorName)
         { "gold", gold },
         { "goldenrod", goldenrod },
         { "gray", gray },
-        { "grey", gray },
         { "green", green },
         { "greenyellow", greenyellow },
         { "honeydew", honeydew },
@@ -102,14 +101,12 @@ std::optional<Color> getNamedColor (StringRef colorName)
         { "lightcyan", lightcyan },
         { "lightgoldenrodyellow", lightgoldenrodyellow },
         { "lightgray", lightgray },
-        { "lightgrey", lightgray },
         { "lightgreen", lightgreen },
         { "lightpink", lightpink },
         { "lightsalmon", lightsalmon },
         { "lightseagreen", lightseagreen },
         { "lightskyblue", lightskyblue },
         { "lightslategray", lightslategray },
-        { "lightslategrey", lightslategray },
         { "lightsteelblue", lightsteelblue },
         { "lightyellow", lightyellow },
         { "lime", lime },
@@ -162,7 +159,6 @@ std::optional<Color> getNamedColor (StringRef colorName)
         { "skyblue", skyblue },
         { "slateblue", slateblue },
         { "slategray", slategray },
-        { "slategrey", slategray },
         { "snow", snow },
         { "springgreen", springgreen },
         { "steelblue", steelblue },
@@ -173,11 +169,33 @@ std::optional<Color> getNamedColor (StringRef colorName)
         { "turquoise", turquoise },
         { "violet", violet },
         { "wheat", wheat },
-        { "white", white },
         { "whitesmoke", whitesmoke },
         { "yellow", yellow },
         { "yellowgreen", yellowgreen },
     };
+
+    return namedColors;
+}
+
+std::optional<Color> getNamedColor (StringRef colorName)
+{
+    static const std::unordered_map<String, Color> namedColors = []
+    {
+        std::unordered_map<String, Color> result {
+            { "darkgrey", darkgray },
+            { "darkslategrey", darkslategray },
+            { "dimgrey", dimgray },
+            { "grey", gray },
+            { "lightgrey", lightgray },
+            { "lightslategrey", lightslategray },
+            { "slategrey", slategray },
+        };
+
+        for (const auto& named : getNamedColors())
+            result.emplace (String (named.name).toLowerCase(), named.color);
+
+        return result;
+    }();
 
     auto it = namedColors.find (String (colorName).toLowerCase());
     if (it != namedColors.end())

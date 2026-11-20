@@ -57,6 +57,11 @@ auto inset    = r.reduced (8.0f);                  // shrink by 8px on all sides
 auto smaller  = r.withSizeKeepingCenter (100, 40); // keep center, resize
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_rectangle_light.jpg#gh-light-mode-only" alt="A rectangle, the same reduced by 8 and resized around its center" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_rectangle_dark.jpg#gh-dark-mode-only" alt="A rectangle, the same reduced by 8 and resized around its center" width="560">
+</p>
+
 ### Slicing layout
 
 `removeFrom*` mutates the rectangle and returns the slice it removed - the
@@ -70,8 +75,32 @@ auto sidebar = area.removeFromLeft (120.0f);
 // `area` is now the remaining central region
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_slicing_light.jpg#gh-light-mode-only" alt="An area sliced into a header, a footer, a sidebar and the remaining area" width="480">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_slicing_dark.jpg#gh-dark-mode-only" alt="An area sliced into a header, a footer, a sidebar and the remaining area" width="480">
+</p>
+
 Non-mutating variants (`withTrimmedTop`, `reducedLeft`, …) return a new
 rectangle without changing the original.
+
+### Fitting into an area
+
+`getTransformToFit` returns the transform that scales and places a rectangle
+into a target area with a `Fitting` and a `Justification`. Draw content in the
+coordinates of the rectangle under that transform to fit it:
+
+```cpp
+const Rectangle<float> artwork (0.0f, 0.0f, 24.0f, 24.0f);
+
+const auto savedState = g.saveState();
+g.addTransform (artwork.getTransformToFit (getLocalBounds().to<float>(), Fitting::scaleToFit, Justification::center));
+g.fillPath (icon); // drawn in the 24 x 24 artwork coordinates
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_fitting_light.jpg#gh-light-mode-only" alt="A star fitted into an area, centered, on the left and stretched" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_fitting_dark.jpg#gh-dark-mode-only" alt="A star fitted into an area, centered, on the left and stretched" width="560">
+</p>
 
 ## EdgeSpacing
 
@@ -89,6 +118,11 @@ auto outer   = padding.addedTo (content);                 // back to the origina
 auto same = getLocalBounds().reduced (padding);
 auto grown = content.enlarged (padding);
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_edge-spacing_light.jpg#gh-light-mode-only" alt="The content area left inside a padding" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_edge-spacing_dark.jpg#gh-dark-mode-only" alt="The content area left inside a padding" width="400">
+</p>
 
 Construct it uniformly (`EdgeSpacing<float> (6.0f)`), per axis
 (`{ horizontal, vertical }`) or per edge (`{ left, top, right, bottom }`).
@@ -133,9 +167,24 @@ g.setFillColorGradient (gradient);
 g.fillRect (bounds);
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_gradients_light.jpg#gh-light-mode-only" alt="Linear, radial and angular gradients" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_gradients_dark.jpg#gh-dark-mode-only" alt="Linear, radial and angular gradients" width="560">
+</p>
+
 Gradients support a `Spread` mode - `Pad` (clamp to endpoints), `Repeat`
 (tile), or `Reflect` (mirrored tile) - and any number of intermediate stops for
-multi-color gradients.
+multi-color gradients. Linear and radial gradients are repeated or reflected
+over the shape being painted, up to a few dozen times:
+
+```cpp
+g.setFillColorGradient (gradient.withSpread (ColorGradient::Spread::Reflect));
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_gradient-spread_light.jpg#gh-light-mode-only" alt="A gradient padded, repeated and reflected beyond its end points" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_gradient-spread_dark.jpg#gh-dark-mode-only" alt="A gradient padded, repeated and reflected beyond its end points" width="560">
+</p>
 
 An `Angular` (sweep) gradient turns clockwise around the first stop position,
 starting in the direction of the last stop position, and its deltas span one
@@ -167,7 +216,7 @@ segments, or from higher-level shape helpers. Every builder method returns
 Path p;
 p.moveTo (10.0f, 10.0f)
  .lineTo (90.0f, 10.0f)
- .quadTo (90.0f, 90.0f, 50.0f, 90.0f)  // control point, end point
+ .quadTo (50.0f, 90.0f, 90.0f, 90.0f)  // end point, control point
  .cubicTo (10.0f, 90.0f, 10.0f, 50.0f, 10.0f, 10.0f)
  .close();
 
@@ -175,12 +224,18 @@ g.setFillColor (Colors::orange);
 g.fillPath (p);
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_path_light.jpg#gh-light-mode-only" alt="The path built from a line, a quadratic and a cubic curve" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_path_dark.jpg#gh-dark-mode-only" alt="The path built from a line, a quadratic and a cubic curve" width="400">
+</p>
+
 Shape helpers add whole primitives to a path:
 
 ```cpp
 Path shapes;
 shapes.addRectangle (0, 0, 100, 50);
 shapes.addRoundedRectangle (0, 60, 100, 50, 8.0f);
+shapes.addRoundedRectangle ({ 0, 60, 100, 50 }, Size<float> (16.0f, 4.0f)); // elliptical corners
 shapes.addEllipse (0, 120, 100, 50);
 shapes.addArc (arcBounds, 0.0f, MathConstants<float>::pi, true);
 ```
@@ -196,6 +251,11 @@ g.setFillColor (Colors::cyan);
 g.setFeather (4.0f);
 g.fillPath (outline);
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_stroke-polygon_light.jpg#gh-light-mode-only" alt="The outline of a stroked path filled with a feather" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_stroke-polygon_dark.jpg#gh-dark-mode-only" alt="The outline of a stroked path filled with a feather" width="400">
+</p>
 
 `createFillPolygon` returns the area a path fills, under its own fill rule, as
 simple non-overlapping contours: outer contours clockwise, holes counter-clockwise,
@@ -218,6 +278,11 @@ g.setStrokeType (stroke);
 g.strokePath (p);
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_stroke-types_light.jpg#gh-light-mode-only" alt="The joins and caps of a stroke" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_stroke-types_dark.jpg#gh-dark-mode-only" alt="The joins and caps of a stroke" width="560">
+</p>
+
 ## AffineTransform
 
 `AffineTransform` is a 2D affine matrix used to translate, scale, rotate, and
@@ -232,6 +297,11 @@ auto t = AffineTransform::translation (100.0f, 50.0f)
 auto movedPoint = myPoint.transformed (t);
 g.setTransform (t);   // applies to subsequent drawing
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_transform_light.jpg#gh-light-mode-only" alt="A square translated, rotated, scaled and sheared" width="640">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_transform_dark.jpg#gh-dark-mode-only" alt="A square translated, rotated, scaled and sheared" width="640">
+</p>
 
 ## Vector3
 
@@ -308,6 +378,11 @@ if (auto hit = ray.intersectTriangle (a, b, c, true))
 ```cpp
 g.setBlendMode (BlendMode::Multiply);
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_blend-modes_light.jpg#gh-light-mode-only" alt="A circle drawn over a gradient with each blend mode" width="640">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_blend-modes_dark.jpg#gh-dark-mode-only" alt="A circle drawn over a gradient with each blend mode" width="640">
+</p>
 
 ## See also
 

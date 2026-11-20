@@ -98,6 +98,39 @@ public:
     };
 
     //==============================================================================
+    /** The line ending written by getText(). */
+    enum class LineEnding
+    {
+        lf,  /**< Unix style `\n`. */
+        crlf /**< Windows style `\r\n`. */
+    };
+
+    //==============================================================================
+    /** Describes one change of the document as a block of lines replaced by another.
+
+        `numLinesRemoved` lines starting at `firstLine` were replaced by `numLinesInserted`
+        lines. Lines after the block keep their content and move by `getLineDelta()`.
+        An edit inside a single line reports one line removed and one inserted.
+    */
+    struct YUP_API Change
+    {
+        /** The first line (0-based) of the replaced block. */
+        int firstLine = 0;
+
+        /** The number of lines of the block before the change. */
+        int numLinesRemoved = 0;
+
+        /** The number of lines of the block after the change. */
+        int numLinesInserted = 0;
+
+        /** Returns the last changed line (inclusive) in the new document. */
+        int getLastChangedLine() const noexcept { return firstLine + jmax (1, numLinesInserted) - 1; }
+
+        /** Returns how far the lines after the block moved: positive when lines were added. */
+        int getLineDelta() const noexcept { return numLinesInserted - numLinesRemoved; }
+    };
+
+    //==============================================================================
     /** Receives callbacks when the document content changes.
 
         @see addListener, removeListener
@@ -110,11 +143,10 @@ public:
 
         /** Called when text is inserted, removed, replaced, undone or redone.
 
-            @param document        The document that changed.
-            @param firstChangedLine The first line (inclusive) affected by the change.
-            @param lastChangedLine  The last line (inclusive) affected by the change.
+            @param document The document that changed.
+            @param change   The replaced block of lines.
         */
-        virtual void codeDocumentChanged (CodeDocument& document, int firstChangedLine, int lastChangedLine) = 0;
+        virtual void codeDocumentChanged (CodeDocument& document, const Change& change) = 0;
     };
 
     //==============================================================================
@@ -150,18 +182,49 @@ public:
     */
     String getLine (int lineNumber) const;
 
-    /** Returns the full text of the document, lines joined with newlines. */
+    /** Returns the full text of the document, lines joined with the document line ending.
+
+        @see getLineEnding
+    */
     String getText() const;
 
-    /** Returns the total number of characters in the document, newlines included. */
+    /** Returns the text between two global character indices, lines joined with `\n`.
+
+        Indices are clamped to the document; the result is empty if start is not before end.
+
+        @param startIndex The global start index (inclusive).
+        @param endIndex   The global end index (exclusive).
+    */
+    String getTextBetween (int startIndex, int endIndex) const;
+
+    /** Returns the total number of characters in the document.
+
+        Every line break counts as one character, whatever the line ending, so this is
+        the range of the global character indices used by positions and selections.
+    */
     int getNumCharacters() const;
 
     /** Replaces the whole document with new text.
+
+        The line ending is detected from the first line break of the text (`\r\n` selects
+        LineEnding::crlf, anything else LineEnding::lf).
 
         @param newText     The new text.
         @param notification Whether to notify listeners.
     */
     void setText (StringRef newText, NotificationType notification = sendNotification);
+
+    /** Returns the line ending used by getText(). */
+    LineEnding getLineEnding() const noexcept { return lineEnding; }
+
+    /** Sets the line ending used by getText().
+
+        Lines never contain line break characters: a `\r` before a `\n` in inserted text
+        is dropped, so this only changes how the text is written back.
+
+        @param newLineEnding The line ending to use.
+    */
+    void setLineEnding (LineEnding newLineEnding) noexcept { lineEnding = newLineEnding; }
 
     //==============================================================================
     /** Returns the global character offset at which a line starts.
@@ -249,7 +312,7 @@ private:
     void ensureOffsetsBuilt() const;
 
     std::vector<String> lines;
-    String newLineChars = "\n";
+    LineEnding lineEnding = LineEnding::lf;
 
     mutable std::vector<int> lineStartOffsets;
     mutable bool offsetsDirty = true;

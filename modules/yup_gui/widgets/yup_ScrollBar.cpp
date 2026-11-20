@@ -22,6 +22,40 @@
 namespace yup
 {
 
+namespace
+{
+
+struct ScrollBarIds
+{
+    static inline const Identifier dragging { "dragging" };
+};
+
+} // namespace
+
+//==============================================================================
+const Identifier ScrollBar::Style::trackColorId { "scrollBarTrack" };
+const Identifier ScrollBar::Style::thumbColorId { "scrollBarThumb" };
+const Identifier ScrollBar::Style::thumbHoverColorId { "scrollBarThumbHover" };
+const Identifier ScrollBar::Style::thumbDraggingColorId { "scrollBarThumbDragging" };
+const Identifier ScrollBar::Style::thumbInsetId { "scrollBarThumbInset" };
+const Identifier ScrollBar::Style::cornerRadiusId { "scrollBarCornerRadius" };
+
+//==============================================================================
+const ComponentTypeInfo& ScrollBar::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<ScrollBar> (Identifier ("ScrollBar"))
+                                 .color ("trackColor", Style::trackColorId)
+                                 .color ("thumbColor", Style::thumbColorId)
+                                 .color ("thumbHoverColor", Style::thumbHoverColorId)
+                                 .color ("thumbDraggingColor", Style::thumbDraggingColorId)
+                                 .number ("thumbInset", Style::thumbInsetId, 3.0, "The inset of the thumb inside the bar.")
+                                 .number ("cornerRadius", Style::cornerRadiusId, {}, "The thumb corner radius, unset for a pill.")
+                                 .state (ScrollBarIds::dragging, &ScrollBar::isDragging)
+                                 .build();
+
+    return info;
+}
+
 //==============================================================================
 ScrollBar::ScrollBar (Orientation orientation)
     : orientation (orientation)
@@ -203,9 +237,13 @@ void ScrollBar::mouseDown (const MouseEvent& event)
     if (thumbBounds.contains (clickPos))
     {
         // Start dragging thumb
+        const bool wasDragging = isDraggingThumb;
         isDraggingThumb = true;
         dragStartPosition = clickPos;
         dragStartRangeStart = currentRangeStart;
+
+        if (! wasDragging)
+            notifyPropertyChanged (ScrollBarIds::dragging);
 
         repaint();
     }
@@ -229,6 +267,7 @@ void ScrollBar::mouseUp (const MouseEvent& event)
     if (isDraggingThumb)
     {
         isDraggingThumb = false;
+        notifyPropertyChanged (ScrollBarIds::dragging);
 
         repaint();
     }

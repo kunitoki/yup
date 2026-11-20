@@ -145,105 +145,102 @@ TEST_F (ApplicationThemeTest, FindColorUnregisteredIdDoesNotAffectOtherIds)
 
 // =============================================================================
 
-TEST_F (ApplicationThemeTest, FindMetricReturnsNulloptWhenMetricNotRegistered)
+TEST_F (ApplicationThemeTest, FindPropertyReturnsNulloptWhenPropertyNotRegistered)
 {
     auto c = Component ("testComponent");
 
-    auto result = ApplicationTheme::findComponentMetric (c, Identifier ("unknownMetric"));
+    auto result = ApplicationTheme::findComponentProperty (c, Identifier ("unknownProperty"));
     EXPECT_FALSE (result.has_value());
 }
 
-TEST_F (ApplicationThemeTest, FindMetricReturnsRegisteredValue)
+TEST_F (ApplicationThemeTest, FindPropertyReturnsRegisteredValue)
 {
     auto c = Component ("testComponent");
 
-    theme->setMetric (Identifier ("cornerRadius"), 8.0f);
+    theme->setProperty (Identifier ("cornerRadius"), 8.0);
 
-    auto result = ApplicationTheme::findComponentMetric (c, Identifier ("cornerRadius"));
+    auto result = ApplicationTheme::findComponentProperty (c, Identifier ("cornerRadius"));
     ASSERT_TRUE (result.has_value());
-    EXPECT_FLOAT_EQ (result.value(), 8.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (result.value()), 8.0f);
 }
 
-TEST_F (ApplicationThemeTest, SetMetricOverwritesExistingValue)
+TEST_F (ApplicationThemeTest, SetPropertyOverwritesExistingValue)
 {
     auto c = Component ("testComponent");
 
     const Identifier id ("borderWidth");
 
-    theme->setMetric (id, 1.0f);
-    theme->setMetric (id, 3.5f);
+    theme->setProperty (id, 1.0);
+    theme->setProperty (id, 3.5);
 
-    auto result = ApplicationTheme::findComponentMetric (c, id);
+    auto result = ApplicationTheme::findComponentProperty (c, id);
     ASSERT_TRUE (result.has_value());
-    EXPECT_FLOAT_EQ (result.value(), 3.5f);
+    EXPECT_FLOAT_EQ (static_cast<float> (result.value()), 3.5f);
 }
 
-TEST_F (ApplicationThemeTest, SetMetricsRegistersMultipleValues)
+TEST_F (ApplicationThemeTest, SetPropertiesRegistersMultipleValues)
 {
     auto c = Component ("testComponent");
 
     const Identifier idA ("smallSpacing");
     const Identifier idB ("largeSpacing");
 
-    theme->setMetrics ({ { idA, 4.0f }, { idB, 12.0f } });
+    theme->setProperties ({ { idA, 4.0 }, { idB, 12.0 } });
 
-    auto resultA = ApplicationTheme::findComponentMetric (c, idA);
-    auto resultB = ApplicationTheme::findComponentMetric (c, idB);
+    auto resultA = ApplicationTheme::findComponentProperty (c, idA);
+    auto resultB = ApplicationTheme::findComponentProperty (c, idB);
 
     ASSERT_TRUE (resultA.has_value());
-    EXPECT_FLOAT_EQ (resultA.value(), 4.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (resultA.value()), 4.0f);
     ASSERT_TRUE (resultB.has_value());
-    EXPECT_FLOAT_EQ (resultB.value(), 12.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (resultB.value()), 12.0f);
 }
 
-TEST_F (ApplicationThemeTest, ComponentMetricOverridesRegisteredMetric)
+TEST_F (ApplicationThemeTest, ComponentPropertyOverridesThemeDefault)
 {
     auto c = Component ("testComponent");
 
     const Identifier id ("cornerRadius");
 
-    theme->setMetric (id, 8.0f);
-    c.setMetric (id, 12.0f);
+    theme->setProperty (id, 8.0);
+    c.setProperty (id, 12.0);
 
-    auto result = ApplicationTheme::findComponentMetric (c, id);
-    ASSERT_TRUE (result.has_value());
-    EXPECT_FLOAT_EQ (result.value(), 12.0f);
+    // The component's own cascade prefers its stored value over the theme default.
+    EXPECT_FLOAT_EQ (static_cast<float> (c.findProperty (id)), 12.0f);
 
-    c.setMetric (id, std::nullopt);
-
-    result = ApplicationTheme::findComponentMetric (c, id);
-    ASSERT_TRUE (result.has_value());
-    EXPECT_FLOAT_EQ (result.value(), 8.0f);
+    // Clearing the component override falls back to the theme default.
+    c.removeProperty (id);
+    EXPECT_FLOAT_EQ (static_cast<float> (c.findProperty (id)), 8.0f);
 }
 
-TEST_F (ApplicationThemeTest, FindMetricUnregisteredIdDoesNotAffectOtherIds)
+TEST_F (ApplicationThemeTest, FindPropertyUnregisteredIdDoesNotAffectOtherIds)
 {
     auto c = Component ("testComponent");
 
     const Identifier registered ("spacing");
     const Identifier unregistered ("padding");
 
-    theme->setMetric (registered, 4.0f);
+    theme->setProperty (registered, 4.0);
 
-    EXPECT_TRUE (ApplicationTheme::findComponentMetric (c, registered).has_value());
-    EXPECT_FALSE (ApplicationTheme::findComponentMetric (c, unregistered).has_value());
+    EXPECT_TRUE (ApplicationTheme::findComponentProperty (c, registered).has_value());
+    EXPECT_FALSE (ApplicationTheme::findComponentProperty (c, unregistered).has_value());
 }
 
-TEST_F (ApplicationThemeTest, SetMetricAcceptsZeroAndNegativeValues)
+TEST_F (ApplicationThemeTest, SetPropertyAcceptsZeroAndNegativeValues)
 {
     auto c = Component ("testComponent");
 
-    theme->setMetric (Identifier ("zeroMetric"), 0.0f);
-    theme->setMetric (Identifier ("negativeMetric"), -2.5f);
+    theme->setProperty (Identifier ("zeroProperty"), 0.0);
+    theme->setProperty (Identifier ("negativeProperty"), -2.5);
 
-    auto zero = ApplicationTheme::findComponentMetric (c, Identifier ("zeroMetric"));
-    auto negative = ApplicationTheme::findComponentMetric (c, Identifier ("negativeMetric"));
+    auto zero = ApplicationTheme::findComponentProperty (c, Identifier ("zeroProperty"));
+    auto negative = ApplicationTheme::findComponentProperty (c, Identifier ("negativeProperty"));
 
     ASSERT_TRUE (zero.has_value());
-    EXPECT_FLOAT_EQ (zero.value(), 0.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (zero.value()), 0.0f);
 
     ASSERT_TRUE (negative.has_value());
-    EXPECT_FLOAT_EQ (negative.value(), -2.5f);
+    EXPECT_FLOAT_EQ (static_cast<float> (negative.value()), -2.5f);
 }
 
 // =============================================================================
@@ -300,35 +297,39 @@ TEST_F (ApplicationThemeTest, GetDefaultIconFontReturnsValid)
     EXPECT_TRUE (font.getHeight() >= 0.0f);
 }
 
-TEST_F (ApplicationThemeTest, FindMetricInstanceMethodReturnsRegisteredValue)
+TEST_F (ApplicationThemeTest, FindPropertyInstanceMethodReturnsRegisteredValue)
 {
     Component c ("testComponent");
 
-    theme->setMetric (Identifier ("myMetric"), 15.0f);
+    theme->setProperty (Identifier ("myProperty"), 15.0);
 
-    auto result = theme->findMetric (c, Identifier ("myMetric"));
+    auto result = theme->findProperty (c, Identifier ("myProperty"));
     ASSERT_TRUE (result.has_value());
-    EXPECT_FLOAT_EQ (15.0f, result.value());
+    EXPECT_FLOAT_EQ (15.0f, static_cast<float> (result.value()));
 }
 
-TEST_F (ApplicationThemeTest, FindMetricInstanceMethodReturnsNulloptForUnknown)
+TEST_F (ApplicationThemeTest, FindPropertyInstanceMethodReturnsNulloptForUnknown)
 {
     Component c ("testComponent");
 
-    auto result = theme->findMetric (c, Identifier ("unknownMetric"));
+    auto result = theme->findProperty (c, Identifier ("unknownProperty"));
     EXPECT_FALSE (result.has_value());
 }
 
-TEST_F (ApplicationThemeTest, FindMetricInstanceMethodRespectsComponentOverride)
+TEST_F (ApplicationThemeTest, FindPropertyInstanceMethodIgnoresComponentOverride)
 {
     Component c ("testComponent");
 
-    theme->setMetric (Identifier ("radius"), 10.0f);
-    c.setMetric (Identifier ("radius"), 25.0f);
+    theme->setProperty (Identifier ("radius"), 10.0);
+    c.setProperty (Identifier ("radius"), 25.0);
 
-    auto result = theme->findMetric (c, Identifier ("radius"));
+    // The theme lookup only sees its own defaults; the component store is not consulted here.
+    auto result = theme->findProperty (c, Identifier ("radius"));
     ASSERT_TRUE (result.has_value());
-    EXPECT_FLOAT_EQ (25.0f, result.value());
+    EXPECT_FLOAT_EQ (10.0f, static_cast<float> (result.value()));
+
+    // The component's own cascade, however, prefers its stored override.
+    EXPECT_FLOAT_EQ (25.0f, static_cast<float> (c.findProperty (Identifier ("radius"))));
 }
 
 TEST_F (ApplicationThemeTest, SetComponentStyleRegistersStyle)
@@ -545,3 +546,58 @@ TEST_F (ApplicationThemeTest, SetPaletteReplacesPreviousPaletteColors)
     theme->setPalette (ThemePalette (std::vector<Color> { Colors::white, Colors::black }, ThemePalette::Mode::light));
     EXPECT_FALSE (ApplicationTheme::findComponentColor (c, accentOnly).has_value());
 }
+
+TEST_F (ApplicationThemeTest, FindDefaultColorSkipsComponentOverridesAndUsesScopedPalette)
+{
+    Component parent ("parent");
+    Component child ("child");
+    parent.addChildComponent (child);
+
+    const Identifier id ("scopedColor");
+    theme->setPaletteMapping ([id] (const ThemePalette& palette, ApplicationTheme& t)
+    {
+        t.setPaletteColor (id, palette.getColor (ThemePalette::Role::accent));
+    });
+
+    ThemePalette scoped;
+    scoped.setColor (ThemePalette::Role::accent, Colors::cyan);
+    parent.setPalette (scoped);
+    child.setColor (id, Colors::red);
+
+    EXPECT_EQ (theme->findColor (child, id), Colors::red);
+    EXPECT_EQ (theme->findDefaultColor (child, id), Colors::cyan);
+
+    theme->setColor (id, Colors::yellow);
+    EXPECT_EQ (theme->findDefaultColor (child, id), Colors::yellow);
+}
+
+TEST_F (ApplicationThemeTest, ComponentPaletteCacheIsBoundedAcrossDistinctPalettes)
+{
+    const Identifier id ("accentId");
+    theme->setPaletteMapping ([id] (const ThemePalette& palette, ApplicationTheme& t)
+    {
+        t.setPaletteColor (id, palette.getColor (ThemePalette::Role::accent));
+    });
+
+    Component component ("target");
+    const size_t totalPalettes = ApplicationTheme::maxCachedComponentPalettes * 3;
+
+    for (size_t i = 0; i < totalPalettes; ++i)
+    {
+        const Color accent = Color::fromRGBA (static_cast<uint8> (i & 0xff),
+                                              static_cast<uint8> ((i * 7) & 0xff),
+                                              static_cast<uint8> ((i * 13) & 0xff),
+                                              255);
+
+        ThemePalette palette;
+        palette.setColor (ThemePalette::Role::accent, accent);
+        component.setPalette (palette);
+
+        EXPECT_EQ (theme->findColor (component, id), accent);
+        EXPECT_LE (theme->getNumCachedComponentPalettes(), ApplicationTheme::maxCachedComponentPalettes);
+    }
+
+    EXPECT_EQ (theme->getNumCachedComponentPalettes(), ApplicationTheme::maxCachedComponentPalettes);
+}
+
+

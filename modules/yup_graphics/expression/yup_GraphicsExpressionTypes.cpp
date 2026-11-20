@@ -41,15 +41,30 @@ Color makeExpressionColor (R r, G g, B b, A a) noexcept
     return Color (expressionColorByte (a), expressionColorByte (r), expressionColorByte (g), expressionColorByte (b));
 }
 
-template <class F>
-Path modifiedExpressionPath (const Path& source, F&& modify)
-{
-    auto result = source.createCopy();
-    modify (result);
-    return result;
-}
-
 } // namespace
+
+//==============================================================================
+StrokeDashPattern StrokeDashPattern::fromString (StringRef text)
+{
+    const auto trimmed = String (text).trim();
+    if (trimmed.isEmpty() || trimmed.equalsIgnoreCase ("none"))
+        return {};
+
+    auto tokens = StringArray::fromTokens (trimmed, " ,\t\r\n", "");
+    tokens.removeEmptyStrings (true);
+
+    Array<float> values;
+    values.ensureStorageAllocated (tokens.size());
+
+    for (const auto& token : tokens)
+    {
+        const float value = token.getFloatValue();
+        if (value > 0.0f)
+            values.add (value);
+    }
+
+    return StrokeDashPattern (std::move (values));
+}
 
 //==============================================================================
 void addGraphicsExpressionTypes (ExpressionContext& context)
@@ -60,6 +75,8 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
     using L = Line<float>;
     using T = AffineTransform;
     using G = ColorGradient;
+    using D = StrokeDashPattern;
+    using PP = PatternPaint;
 
     // All types are registered before any function, as signatures reference each other
     auto point = context.addType<P> ("point");
@@ -69,8 +86,10 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
     auto color = context.addType<Color> ("color");
     auto transform = context.addType<T> ("transform");
     auto path = context.addType<Path> ("path");
+    auto dash = context.addType<D> ("dash");
     auto font = context.addType<Font> ("font");
     auto gradient = context.addType<G> ("gradient");
+    auto pattern = context.addType<PP> ("pattern");
 
     context.addEnum<StrokeCap> ("cap", { { "butt", StrokeCap::Butt }, { "round", StrokeCap::Round }, { "square", StrokeCap::Square } });
     context.addEnum<StrokeJoin> ("join", { { "miter", StrokeJoin::Miter }, { "round", StrokeJoin::Round }, { "bevel", StrokeJoin::Bevel } });
@@ -118,6 +137,39 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
                                                                 { "centerRight", Justification::centerRight },
                                                                 { "centerBottom", Justification::centerBottom },
                                                             });
+
+    context.addEnum<Fitting> ("fitting", {
+                                             { "none", Fitting::none },
+                                             { "scaleToFit", Fitting::scaleToFit },
+                                             { "fitWidth", Fitting::fitWidth },
+                                             { "fitHeight", Fitting::fitHeight },
+                                             { "scaleToFill", Fitting::scaleToFill },
+                                             { "fill", Fitting::fill },
+                                             { "tile", Fitting::tile },
+                                             { "centerCrop", Fitting::centerCrop },
+                                             { "centerInside", Fitting::centerInside },
+                                             { "stretchWidth", Fitting::stretchWidth },
+                                             { "stretchHeight", Fitting::stretchHeight },
+                                         });
+
+    context.addEnum<G::Spread> ("spread", {
+                                              { "pad", G::Spread::Pad },
+                                              { "reflect", G::Spread::Reflect },
+                                              { "repeat", G::Spread::Repeat },
+                                          });
+
+    context.addEnum<AnchoredText::Anchor> ("textAnchor", {
+                                                             { "start", AnchoredText::Anchor::start },
+                                                             { "middle", AnchoredText::Anchor::middle },
+                                                             { "end", AnchoredText::Anchor::end },
+                                                         });
+
+    context.addEnum<LayerMaskMode> ("maskMode", {
+                                                    { "alpha", LayerMaskMode::Alpha },
+                                                    { "invertedAlpha", LayerMaskMode::InvertedAlpha },
+                                                    { "luminance", LayerMaskMode::Luminance },
+                                                    { "invertedLuminance", LayerMaskMode::InvertedLuminance },
+                                                });
 
     point
         .constructor ([] (float x, float y) { return P (x, y); })
@@ -237,8 +289,12 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
         .method ("mix", [] (const Color& c, const Color& o, float amount) { return c.mixedWith (o, jlimit (0.0f, 1.0f, amount), ColorSpace::RGB); })
         .equality();
 
+    for (const auto& named : Colors::getNamedColors())
+        context.addConstant ("colors." + String (named.name), named.color);
+
     transform
         .constructor ([] { return T(); })
+        .constructor ([] (float a, float b, float c, float d, float tx, float ty) { return T (a, c, tx, b, d, ty); })
         .constructor ("transform.translation", [] (float x, float y) { return T::translation (x, y); })
         .constructor ("transform.rotation", [] (float radians) { return T::rotation (radians); })
         .constructor ("transform.rotation", [] (float radians, float cx, float cy) { return T::rotation (radians, cx, cy); })
@@ -254,9 +310,11 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
         .method ("inverted", [] (const T& t) { return t.inverted(); })
         .equality();
 
-    // Paths are immutable values: every method returns a modified copy
+    // Paths keep value semantics on shared locals, while single-use builder chains fuse to mutate one Path in place
     path
+        .clone ([] (const Path& p) { return p.createCopy(); })
         .constructor ([] { return Path(); })
+        .constructor ([] (const Path& p) { return p; })
         .constructor ([] (const String& svgData)
         {
             Path result;
@@ -267,65 +325,61 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
         .member ("length", [] (const Path& p) { return p.getLength(); })
         .member ("isEmpty", [] (const Path& p) { return p.isEmpty(); })
         .method ("pointAt", [] (const Path& p, float normalizedPosition) { return p.getPointAlongPath (normalizedPosition); })
-        .method ("moveTo", [] (const Path& p, float x, float y) { return modifiedExpressionPath (p, [&] (Path& r) { r.moveTo (x, y); }); })
-        .method ("moveTo", [] (const Path& p, const P& target) { return modifiedExpressionPath (p, [&] (Path& r) { r.moveTo (target); }); })
-        .method ("lineTo", [] (const Path& p, float x, float y) { return modifiedExpressionPath (p, [&] (Path& r) { r.lineTo (x, y); }); })
-        .method ("lineTo", [] (const Path& p, const P& target) { return modifiedExpressionPath (p, [&] (Path& r) { r.lineTo (target); }); })
-        .method ("quadTo", [] (const Path& p, float x, float y, float controlX, float controlY)
+        .method ("moveTo", [] (Path& p, float x, float y) -> Path& { return p.moveTo (x, y); })
+        .method ("moveTo", [] (Path& p, const P& target) -> Path& { return p.moveTo (target); })
+        .method ("lineTo", [] (Path& p, float x, float y) -> Path& { return p.lineTo (x, y); })
+        .method ("lineTo", [] (Path& p, const P& target) -> Path& { return p.lineTo (target); })
+        .method ("quadTo", [] (Path& p, float x, float y, float controlX, float controlY) -> Path& { return p.quadTo (x, y, controlX, controlY); })
+        .method ("cubicTo", [] (Path& p, float x1, float y1, float x2, float y2, float x, float y) -> Path& { return p.cubicTo (x1, y1, x2, y2, x, y); })
+        .method ("close", [] (Path& p) -> Path& { return p.close(); })
+        .method ("addRectangle", [] (Path& p, const R& r) -> Path& { return p.addRectangle (r); })
+        .method ("addRoundedRectangle", [] (Path& p, const R& r, float radius) -> Path& { return p.addRoundedRectangle (r, radius); })
+        .method ("addEllipse", [] (Path& p, const R& r) -> Path& { return p.addEllipse (r); })
+        .method ("addLine", [] (Path& p, const L& l) -> Path& { return p.addLine (l); })
+        .method ("addArc", [] (Path& p, const R& r, float fromRadians, float toRadians, bool startAsNewSubPath) -> Path& { return p.addArc (r, fromRadians, toRadians, startAsNewSubPath); })
+        .method ("addTriangle", [] (Path& p, const P& a, const P& b, const P& c) -> Path&
         {
-            return modifiedExpressionPath (p, [&] (Path& r) { r.quadTo (x, y, controlX, controlY); });
+            p.addTriangle (a, b, c);
+            return p;
         })
-        .method ("cubicTo", [] (const Path& p, float x1, float y1, float x2, float y2, float x, float y)
+        .method ("addPolygon", [] (Path& p, const P& center, int numSides, float radius) -> Path& { return p.addPolygon (center, numSides, radius); })
+        .method ("addPolygon", [] (Path& p, const P& center, int numSides, float radius, float startAngle) -> Path& { return p.addPolygon (center, numSides, radius, startAngle); })
+        .method ("addStar", [] (Path& p, const P& center, int numPoints, float innerRadius, float outerRadius) -> Path& { return p.addStar (center, numPoints, innerRadius, outerRadius); })
+        .method ("addStar", [] (Path& p, const P& center, int numPoints, float innerRadius, float outerRadius, float startAngle) -> Path& { return p.addStar (center, numPoints, innerRadius, outerRadius, startAngle); })
+        .method ("appendPath", [] (Path& p, const Path& other) -> Path& { return p.appendPath (other); })
+        .method ("appendPath", [] (Path& p, const Path& other, const T& t) -> Path& { return p.appendPath (other, t); })
+        .method ("transformed", [] (Path& p, const T& t) -> Path& { return p.transform (t); })
+        .method ("scaledToFit", [] (Path& p, const R& r, bool preserveProportions) -> Path&
         {
-            return modifiedExpressionPath (p, [&] (Path& r) { r.cubicTo (x1, y1, x2, y2, x, y); });
-        })
-        .method ("close", [] (const Path& p) { return modifiedExpressionPath (p, [] (Path& r) { r.close(); }); })
-        .method ("addRectangle", [] (const Path& p, const R& r) { return modifiedExpressionPath (p, [&] (Path& o) { o.addRectangle (r); }); })
-        .method ("addRoundedRectangle", [] (const Path& p, const R& r, float radius)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addRoundedRectangle (r, radius); });
-        })
-        .method ("addEllipse", [] (const Path& p, const R& r) { return modifiedExpressionPath (p, [&] (Path& o) { o.addEllipse (r); }); })
-        .method ("addLine", [] (const Path& p, const L& l) { return modifiedExpressionPath (p, [&] (Path& o) { o.addLine (l); }); })
-        .method ("addArc", [] (const Path& p, const R& r, float fromRadians, float toRadians, bool startAsNewSubPath)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addArc (r, fromRadians, toRadians, startAsNewSubPath); });
-        })
-        .method ("addTriangle", [] (const Path& p, const P& a, const P& b, const P& c)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addTriangle (a, b, c); });
-        })
-        .method ("addPolygon", [] (const Path& p, const P& center, int numSides, float radius)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addPolygon (center, numSides, radius); });
-        })
-        .method ("addPolygon", [] (const Path& p, const P& center, int numSides, float radius, float startAngle)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addPolygon (center, numSides, radius, startAngle); });
-        })
-        .method ("addStar", [] (const Path& p, const P& center, int numPoints, float innerRadius, float outerRadius)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addStar (center, numPoints, innerRadius, outerRadius); });
-        })
-        .method ("addStar", [] (const Path& p, const P& center, int numPoints, float innerRadius, float outerRadius, float startAngle)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.addStar (center, numPoints, innerRadius, outerRadius, startAngle); });
-        })
-        .method ("appendPath", [] (const Path& p, const Path& other) { return modifiedExpressionPath (p, [&] (Path& o) { o.appendPath (other); }); })
-        .method ("appendPath", [] (const Path& p, const Path& other, const T& t)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.appendPath (other, t); });
-        })
-        .method ("transformed", [] (const Path& p, const T& t) { return modifiedExpressionPath (p, [&] (Path& o) { o.transform (t); }); })
-        .method ("scaledToFit", [] (const Path& p, const R& r, bool preserveProportions)
-        {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.scaleToFit (r.getX(), r.getY(), r.getWidth(), r.getHeight(), preserveProportions); });
+            p.scaleToFit (r.getX(), r.getY(), r.getWidth(), r.getHeight(), preserveProportions);
+            return p;
         })
         .method ("withRoundedCorners", [] (const Path& p, float radius) { return p.withRoundedCorners (radius); })
-        .method ("withNonZeroWinding", [] (const Path& p, bool nonZero)
+        .method ("withNonZeroWinding", [] (Path& p, bool nonZero) -> Path&
         {
-            return modifiedExpressionPath (p, [&] (Path& o) { o.setUsingNonZeroWinding (nonZero); });
-        });
+            p.setUsingNonZeroWinding (nonZero);
+            return p;
+        })
+        .method ("createDashed", [] (const Path& p, const D& d) { return p.createDashed (d.asSpan()); })
+        .method ("createDashed", [] (const Path& p, const D& d, float offset) { return p.createDashed (d.asSpan(), offset); });
+
+    context.addArrayType<float>();
+
+    dash
+        .constructor ([] { return D(); })
+        .constructor ([] (float a) { return D (Array<float> { a }); })
+        .constructor ([] (float a, float b) { return D (Array<float> { a, b }); })
+        .constructor ([] (float a, float b, float c, float d) { return D (Array<float> { a, b, c, d }); })
+        .constructor ([] (float a, float b, float c, float d, float e, float f) { return D (Array<float> { a, b, c, d, e, f }); })
+        .constructor ([] (const String& text) { return D::fromString (text); })
+        .constructor ([] (ExpressionArrayView<float> values) -> D
+        {
+            return (values.data != nullptr && values.size > 0) ? D (Array<float> (values.data, values.size)) : D();
+        })
+        .member ("isEmpty", [] (const D& d) { return d.isEmpty(); })
+        .equality();
+
+    context.addFunction ("dash", [] (const D& d) { return d; });
 
     font
         .constructor ([] { return Font(); })
@@ -346,15 +400,24 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
         {
             return G (c1, center, c2, direction, G::Angular);
         })
-        .method ("withStop", [] (const G& gr, const Color& c, float delta)
+        .method ("withStop", [] (G& gr, const Color& c, float delta) -> G&
         {
-            auto result = gr;
-            result.addColorStop (c, delta);
-            return result;
+            gr.addColorStop (c, delta);
+            return gr;
         })
         .method ("withAlpha", [] (const G& gr, float a) { return gr.withAlpha (jlimit (0.0f, 1.0f, a)); })
         .method ("withMultipliedAlpha", [] (const G& gr, float a) { return gr.withMultipliedAlpha (jlimit (0.0f, 1.0f, a)); })
         .method ("withTransform", [] (const G& gr, const T& t) { return gr.withTransform (t); })
+        .method ("withSpread", [] (const G& gr, G::Spread spread) { return gr.withSpread (spread); })
+        .method ("mappedTo", [] (const G& gr, const R& area)
+        {
+            return gr.withTransform (gr.getTransform().followedBy (T::scaling (area.getWidth(), area.getHeight()).translated (area.getX(), area.getY())));
+        })
+        .equality();
+
+    pattern
+        .constructor ([] { return PP(); })
+        .member ("isEmpty", [] (const PP& p) { return p.source == nullptr; })
         .equality();
 
     context.addFunction ("polar", [] (const P& center, float radius, float angle) { return center.getPointOnCircumference (radius, angle); });

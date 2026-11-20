@@ -21,6 +21,7 @@
 
 #include "yup_CachedValue.cpp"
 #include "yup_DataTree.cpp"
+#include "yup_DataTreeBenchmark.cpp"
 #include "yup_DataTreeObjectList.cpp"
 #include "yup_DataTreeQuery.cpp"
 #include "yup_DataTreeSchema.cpp"

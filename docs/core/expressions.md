@@ -208,6 +208,23 @@ auto value = program.getReference().getInput<float> ("knob.value"); // set it on
 The returned type must be a built-in or registered in the context. Resolved
 inputs belong to the program only, after the context's inputs.
 
+Copying a context is cheap: copies share the constants, functions and other
+declarations until one of them declares more. Register a library of types once
+in a prototype, then copy it for each program that needs its own outputs or
+resolver:
+
+```cpp
+static const ExpressionContext prototype = []
+{
+    ExpressionContext context;
+    addGraphicsExpressionTypes (context);
+    return context;
+}();
+
+ExpressionContext context (prototype);
+context.declareOutput<Color> ("fill");
+```
+
 ## Custom types
 
 Any copyable C++ type can be registered and used in programs:
@@ -229,6 +246,11 @@ Members can be read as `v.length` or `v.length()`. Use `equality()` to add `==`
 and `!=` for types with `operator==`. A constructor named after the type is
 called as `vec (3, 4)`; qualified constructors like
 `constructor ("vec.unit", ...)` are called as `vec.unit (...)`.
+
+`addArray<Vec>` registers the array type it needs. When a symbol resolver
+returns an array type instead, register it ahead of the compilation with
+`addArrayType<Vec>()`, since a program only sees the types the context held
+when it started compiling.
 
 ```
 let v = vec (3, 4);

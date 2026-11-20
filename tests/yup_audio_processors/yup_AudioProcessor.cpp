@@ -38,7 +38,7 @@ protected:
         {
         }
 
-        void prepareToPlay (const AudioSpec&) override {}
+        void prepareToPlay (const AudioSpec& spec) override { preparedChannels = spec.numChannels; }
 
         void releaseResources() override {}
 
@@ -67,6 +67,7 @@ protected:
         }
 
         int hostInfoChangedCount = 0;
+        int preparedChannels = 0;
         HostInfo lastHostInfo;
     };
 
@@ -127,6 +128,19 @@ protected:
 };
 
 //==============================================================================
+
+TEST_F (AudioProcessorTests, SetPlaybackConfigurationPreparesWithLayoutChannelCount)
+{
+    Processor mono (AudioBusLayout ({ AudioBus ("In", AudioBus::Type::Audio, AudioBus::Direction::Input, 1) },
+                                    { AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 1) }));
+    mono.setPlaybackConfiguration (48000.0f, 256);
+    EXPECT_EQ (1, mono.preparedChannels);
+
+    Processor surround (AudioBusLayout ({ AudioBus ("In", AudioBus::Type::Audio, AudioBus::Direction::Input, 2) },
+                                        { AudioBus ("Out", AudioBus::Type::Audio, AudioBus::Direction::Output, 6) }));
+    surround.setPlaybackConfiguration (48000.0f, 256);
+    EXPECT_EQ (6, surround.preparedChannels);
+}
 
 TEST_F (AudioProcessorTests, BypassParameterIsSteppedBooleanAndFound)
 {

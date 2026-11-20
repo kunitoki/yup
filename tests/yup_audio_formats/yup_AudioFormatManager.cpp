@@ -116,3 +116,44 @@ TEST_F (AudioFormatManagerTests, CreateWriterForUnsupportedFormat)
 
     tempFile.deleteFile();
 }
+
+TEST_F (AudioFormatManagerTests, CreateWriterForUnsupportedFormatDoesNotTouchExistingFile)
+{
+    manager->registerDefaultFormats();
+
+    File tempFile = File::createTempFile (".unsupported");
+    tempFile.replaceWithText ("keep me");
+
+    EXPECT_EQ (nullptr, manager->createWriterFor (tempFile, 44100, 2, 16));
+    EXPECT_EQ (String ("keep me"), tempFile.loadFileAsString());
+
+    tempFile.deleteFile();
+}
+
+TEST_F (AudioFormatManagerTests, CreateWriterForReplacesExistingFile)
+{
+    manager->registerDefaultFormats();
+
+    File tempFile = File::createTempFile (".wav");
+
+    const auto writeSilence = [&] (int numSamples)
+    {
+        AudioBuffer<float> buffer (2, numSamples);
+        buffer.clear();
+
+        auto writer = manager->createWriterFor (tempFile, 44100, 2, 16);
+        ASSERT_NE (nullptr, writer);
+        EXPECT_TRUE (writer->write (buffer.getArrayOfReadPointers(), numSamples));
+    };
+
+    writeSilence (4096);
+    writeSilence (100);
+
+    auto reader = manager->createReaderFor (tempFile);
+    ASSERT_NE (nullptr, reader);
+    EXPECT_EQ (100, reader->lengthInSamples);
+    EXPECT_LT (tempFile.getSize(), static_cast<int64> (4096 * 2 * 2));
+
+    reader.reset();
+    tempFile.deleteFile();
+}

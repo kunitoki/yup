@@ -73,6 +73,39 @@ TEST_F (ExpressionContextTests, DeclaresInputs)
     EXPECT_EQ (context.getInputType (2), context.getType<ExpressionArrayView<double>>());
 }
 
+TEST_F (ExpressionContextTests, RegistersArrayTypesAhead)
+{
+    struct Unregistered
+    {
+    };
+
+    const auto* type = context.addArrayType<int>();
+
+    ASSERT_NE (nullptr, type);
+    EXPECT_EQ (String ("int[]"), type->getName());
+    EXPECT_EQ (&ExpressionType::intType(), type->getElementType());
+    EXPECT_EQ (type, context.addArrayType<int>());
+    EXPECT_EQ (type, context.getType<ExpressionArrayView<int>>());
+    EXPECT_EQ (nullptr, context.addArrayType<Unregistered>());
+
+    context.setSymbolResolver ([type] (const String& name)
+    {
+        return name == "items" ? type : nullptr;
+    });
+
+    const auto program = compile ("count = len (items); last = items[count - 1];");
+    ASSERT_EQ (1, program.getNumInputs());
+
+    const int values[] = { 4, 5, 6 };
+
+    ExpressionState state (program);
+    state.bindArray (ExpressionArray<int> { program.findInput ("items") }, values, 3);
+    state.evaluate();
+
+    EXPECT_EQ (3, static_cast<int> (state.getVar (program.findOutput ("count"))));
+    EXPECT_EQ (6, static_cast<int> (state.getVar (program.findOutput ("last"))));
+}
+
 TEST_F (ExpressionContextTests, FindsTypes)
 {
     EXPECT_EQ (&ExpressionType::intType(), context.findType ("int"));
@@ -97,6 +130,17 @@ TEST_F (ExpressionContextTests, ConstantsAreFolded)
     state.evaluate();
     EXPECT_EQ (84, (int) state.getVar (0));
     EXPECT_EQ (String ("value!"), state.getVar (1).toString());
+}
+
+TEST_F (ExpressionContextTests, RedeclaringAConstantReplacesItsValue)
+{
+    context.addConstant ("answer", 42);
+    context.addConstant ("answer", 7);
+
+    const auto program = compile ("a = answer");
+    ExpressionState state (program);
+    state.evaluate();
+    EXPECT_EQ (7, (int) state.getVar (0));
 }
 
 TEST_F (ExpressionContextTests, NamedExpressionsAreInlined)
@@ -228,6 +272,37 @@ TEST_F (ExpressionContextTests, ProgramsOutliveTheirContext)
     EXPECT_TRUE (state.setVar ("v", 5).wasOk());
     state.evaluate();
     EXPECT_EQ (15, (int) state.getVar (0));
+}
+
+TEST_F (ExpressionContextTests, CopiesDeclareIndependently)
+{
+    context.addConstant ("base", 1);
+    context.addFunction ("scale", [] (int x) { return x * 2; });
+
+    ExpressionContext copy (context);
+    copy.addConstant ("extra", 10);
+    copy.addFunction ("scale", [] (int x) { return x * 3; });
+    copy.addInput<int> ("v");
+    context.addConstant ("other", 100);
+
+    const auto evaluateIn = [] (const ExpressionContext& source, StringRef text)
+    {
+        auto program = CompiledExpression::compile (text, source);
+        EXPECT_TRUE (program.wasOk());
+
+        ExpressionState state (program.wasOk() ? program.getValue() : CompiledExpression());
+        state.evaluate();
+        return (int) state.getVar (0);
+    };
+
+    EXPECT_EQ (2, (int) evaluate ("scale (base)"));
+    EXPECT_EQ (102, (int) evaluate ("scale (base) + other"));
+    EXPECT_EQ (-1, context.findInput ("v"));
+    EXPECT_TRUE (compileError ("extra").contains ("Unknown symbol 'extra'"));
+
+    EXPECT_EQ (13, evaluateIn (copy, "scale (base) + extra"));
+    EXPECT_EQ (0, copy.findInput ("v"));
+    EXPECT_TRUE (CompiledExpression::compile ("other", copy).failed());
 }
 
 //==============================================================================

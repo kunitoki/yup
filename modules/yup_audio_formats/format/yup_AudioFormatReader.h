@@ -93,6 +93,10 @@ public:
 
     /** Fills a section of an AudioBuffer from this reader.
 
+        When both the buffer and the reader have more than two channels, every channel is
+        read in order (extra buffer channels get copies) and the left/right flags are ignored.
+        Otherwise the flags select which of the reader's first two channels are used.
+
         @param buffer                   the buffer to fill
         @param startSampleInDestBuffer  the position in the buffer at which to start writing samples
         @param numSamples               the number of samples to read

@@ -1818,3 +1818,27 @@ TEST (RectangleTests, SmallestIntContainer)
     EXPECT_FLOAT_EQ (container2.getWidth(), 6.0f);
     EXPECT_FLOAT_EQ (container2.getHeight(), 4.0f);
 }
+
+TEST (RectangleTests, GetTransformToFitScalesAndJustifies)
+{
+    const Rectangle<float> source (10.0f, 20.0f, 100.0f, 50.0f);
+    const Rectangle<float> target (0.0f, 0.0f, 200.0f, 200.0f);
+
+    // Scaled by two to the width of the target, and centered in the height left over
+    EXPECT_EQ (source.transformed (source.getTransformToFit (target, Fitting::scaleToFit)), Rectangle<float> (0.0f, 50.0f, 200.0f, 100.0f));
+    EXPECT_EQ (source.transformed (source.getTransformToFit (target, Fitting::scaleToFit, Justification::bottomRight)), Rectangle<float> (0.0f, 100.0f, 200.0f, 100.0f));
+
+    // Scaled by four to the height of the target, overflowing its width
+    EXPECT_EQ (source.transformed (source.getTransformToFit (target, Fitting::scaleToFill, Justification::topLeft)), Rectangle<float> (0.0f, 0.0f, 400.0f, 200.0f));
+
+    EXPECT_EQ (source.transformed (source.getTransformToFit (target, Fitting::fill)), target);
+    EXPECT_EQ (source.transformed (source.getTransformToFit (target, Fitting::none, Justification::topLeft)), Rectangle<float> (0.0f, 0.0f, 100.0f, 50.0f));
+}
+
+TEST (RectangleTests, GetTransformToFitIsTheIdentityForEmptyRectangles)
+{
+    const Rectangle<float> area (10.0f, 20.0f, 100.0f, 50.0f);
+
+    EXPECT_TRUE (Rectangle<float>().getTransformToFit (area, Fitting::scaleToFit).isIdentity());
+    EXPECT_TRUE (area.getTransformToFit ({}, Fitting::scaleToFit).isIdentity());
+}

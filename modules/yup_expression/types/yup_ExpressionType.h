@@ -86,6 +86,7 @@ public:
         type->constructFunction = &Operations<T>::construct;
         type->destroyFunction = &Operations<T>::destroy;
         type->copyFunction = &Operations<T>::copy;
+        type->cloneFunction = &Operations<T>::clone;
         type->selectThunk = &Operations<T>::select;
 
         if constexpr (std::is_trivially_copyable_v<T>)
@@ -189,6 +190,12 @@ public:
         copyFunction (destination, destinationStride, source, sourceStride, count);
     }
 
+    /** Assigns @p count independent copies of @p source to @p destination before mutating @p destination in place. */
+    void clone (void* destination, const void* source, int count) const
+    {
+        cloneFunction (cloneState.get(), destination, source, count);
+    }
+
     /** Returns true if two values are known to be interchangeable.
 
         Trivially copyable values are compared bitwise (so `0.0` and `-0.0` differ), other values with
@@ -230,6 +237,15 @@ private:
 
             for (int i = 0; i < count; ++i)
                 *reinterpret_cast<T*> (d + (size_t) i * destinationStride) = *reinterpret_cast<const T*> (s + (size_t) i * sourceStride);
+        }
+
+        static void clone (const void*, void* destination, const void* source, int count)
+        {
+            auto* d = static_cast<T*> (destination);
+            const auto* s = static_cast<const T*> (source);
+
+            for (int i = 0; i < count; ++i)
+                d[i] = s[i];
         }
 
         static bool equalBytes (const void* a, const void* b)
@@ -289,6 +305,8 @@ private:
     void (*constructFunction) (void*, int) = nullptr;
     void (*destroyFunction) (void*, int) = nullptr;
     void (*copyFunction) (void*, size_t, const void*, size_t, int) = nullptr;
+    void (*cloneFunction) (const void*, void*, const void*, int) = nullptr;
+    std::shared_ptr<const void> cloneState;
     bool (*equalsFunction) (const void*, const void*) = nullptr;
     ExpressionThunk selectThunk = nullptr;
     ExpressionThunk indexThunk = nullptr;

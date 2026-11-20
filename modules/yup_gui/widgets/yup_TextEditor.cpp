@@ -24,14 +24,59 @@ namespace yup
 
 //==============================================================================
 
+namespace
+{
+
+struct TextEditorIds
+{
+    static inline const Identifier text { "text" };
+    static inline const Identifier readOnly { "readOnly" };
+    static inline const Identifier multiLine { "multiLine" };
+};
+
+} // namespace
+
+//==============================================================================
+
 const Identifier TextEditor::Style::backgroundColorId = "textEditorBackground";
 const Identifier TextEditor::Style::textColorId = "textEditorText";
 const Identifier TextEditor::Style::caretColorId = "textEditorCaret";
 const Identifier TextEditor::Style::selectionColorId = "textEditorSelection";
 const Identifier TextEditor::Style::outlineColorId = "textEditorOutline";
 const Identifier TextEditor::Style::focusedOutlineColorId = "textEditorFocusedOutline";
+const Identifier TextEditor::Style::cornerRadiusId = "textEditorCornerRadius";
+const Identifier TextEditor::Style::outlineWidthId = "textEditorOutlineWidth";
+const Identifier TextEditor::Style::focusedOutlineWidthId = "textEditorFocusedOutlineWidth";
 
 //==============================================================================
+
+const ComponentTypeInfo& TextEditor::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<TextEditor> (Identifier ("TextEditor"))
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("textColor", Style::textColorId)
+                                 .color ("caretColor", Style::caretColorId)
+                                 .color ("selectionColor", Style::selectionColorId)
+                                 .color ("outlineColor", Style::outlineColorId)
+                                 .color ("focusedOutlineColor", Style::focusedOutlineColorId)
+                                 .number ("cornerRadius", Style::cornerRadiusId, 4.0, "The corner radius.")
+                                 .number ("outlineWidth", Style::outlineWidthId, 1.0, "The outline width.")
+                                 .number ("focusedOutlineWidth", Style::focusedOutlineWidthId, 2.0, "The outline width when focused.")
+                                 .property (TextEditorIds::text, &TextEditor::getText, [] (TextEditor& e, const String& v) { e.setText (v); })
+                                 .property (TextEditorIds::readOnly, &TextEditor::isReadOnly, &TextEditor::setReadOnly)
+                                 .property (TextEditorIds::multiLine, &TextEditor::isMultiLine, &TextEditor::setMultiLine)
+                                 .signal ("onTextChange", &TextEditor::onTextChange, "Emitted when the text is edited")
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
+
+TextEditor::TextEditor()
+    : TextEditor (StringRef {})
+{
+}
 
 TextEditor::TextEditor (StringRef componentID)
     : Component (componentID)
@@ -40,7 +85,6 @@ TextEditor::TextEditor (StringRef componentID)
     setWantsKeyboardFocus (true);
     setMouseCursor (MouseCursor::Text);
 
-    // Start with empty text
     setText ("", dontSendNotification);
 }
 
@@ -62,15 +106,26 @@ void TextEditor::setText (String newText, NotificationType notification)
         selectionStart = selectionEnd = 0;
         needsUpdate = true;
 
-        sendChangeNotification (notification, [this]
-        {
-            if (onTextChange)
-                onTextChange();
-        });
+        sendTextChanged (notification);
 
         updateCaretPosition();
         repaint();
     }
+}
+
+void TextEditor::sendTextChanged (NotificationType notification)
+{
+    const BailOutChecker bailOutChecker (this);
+
+    notifyPropertyChanged (TextEditorIds::text);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    sendChangeNotification (notification, [this]
+    {
+        if (onTextChange)
+            onTextChange();
+    });
 }
 
 //==============================================================================
@@ -91,11 +146,7 @@ void TextEditor::insertText (const String& textToInsert, NotificationType notifi
     selectionStart = selectionEnd = caretPosition;
     needsUpdate = true;
 
-    sendChangeNotification (notification, [this]
-    {
-        if (onTextChange)
-            onTextChange();
-    });
+    sendTextChanged (notification);
 
     updateCaretPosition();
     repaint();
@@ -110,6 +161,7 @@ void TextEditor::setMultiLine (bool shouldBeMultiLine)
         multiLine = shouldBeMultiLine;
         needsUpdate = true;
         updateTextInputRectIfActive();
+        notifyPropertyChanged (TextEditorIds::multiLine);
         repaint();
     }
 }
@@ -139,6 +191,8 @@ void TextEditor::setReadOnly (bool shouldBeReadOnly)
             requestTextInput();
         else
             relinquishTextInput();
+
+        notifyPropertyChanged (TextEditorIds::readOnly);
     }
 }
 
@@ -212,11 +266,7 @@ void TextEditor::deleteSelectedText (NotificationType notification)
     caretPosition = selectionStart = selectionEnd = start;
     needsUpdate = true;
 
-    sendChangeNotification (notification, [this]
-    {
-        if (onTextChange)
-            onTextChange();
-    });
+    sendTextChanged (notification);
 
     updateCaretPosition();
     repaint();
@@ -855,11 +905,7 @@ void TextEditor::handleBackspace()
         selectionStart = selectionEnd = caretPosition;
         needsUpdate = true;
 
-        sendChangeNotification (sendNotification, [this]
-        {
-            if (onTextChange)
-                onTextChange();
-        });
+        sendTextChanged (sendNotification);
 
         updateCaretPosition();
         repaint();
@@ -880,11 +926,7 @@ void TextEditor::handleDelete()
         text = text.substring (0, caretPosition) + text.substring (caretPosition + 1);
         needsUpdate = true;
 
-        sendChangeNotification (sendNotification, [this]
-        {
-            if (onTextChange)
-                onTextChange();
-        });
+        sendTextChanged (sendNotification);
 
         updateCaretPosition();
         repaint();
@@ -1144,11 +1186,7 @@ void TextEditor::deleteWordBackward()
             caretPosition = selectionStart = selectionEnd = wordStart;
             needsUpdate = true;
 
-            sendChangeNotification (sendNotification, [this]
-            {
-                if (onTextChange)
-                    onTextChange();
-            });
+            sendTextChanged (sendNotification);
 
             updateCaretPosition();
             repaint();
@@ -1176,11 +1214,7 @@ void TextEditor::deleteWordForward()
             text = text.substring (0, caretPosition) + text.substring (wordEnd);
             needsUpdate = true;
 
-            sendChangeNotification (sendNotification, [this]
-            {
-                if (onTextChange)
-                    onTextChange();
-            });
+            sendTextChanged (sendNotification);
 
             updateCaretPosition();
             repaint();

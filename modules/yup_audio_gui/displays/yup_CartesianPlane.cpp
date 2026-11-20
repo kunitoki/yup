@@ -307,6 +307,12 @@ void CartesianPlane::setLegendBackgroundColor (const Color& color)
     repaint();
 }
 
+void CartesianPlane::setLegendTextColor (const Color& color)
+{
+    legendTextColor = color;
+    repaint();
+}
+
 //==============================================================================
 // Coordinate transformations
 
@@ -622,7 +628,7 @@ void CartesianPlane::drawLegend (Graphics& g, const Rectangle<float>& bounds)
     g.fillRoundedRect (legendBounds, 4.0f);
 
     // Draw legend border
-    g.setStrokeColor (Color (0x40FFFFFF));
+    g.setStrokeColor (legendTextColor.withAlpha (0.25f));
     g.setStrokeWidth (1.0f);
     g.strokeRoundedRect (legendBounds, 4.0f);
 
@@ -647,7 +653,7 @@ void CartesianPlane::drawLegend (Graphics& g, const Rectangle<float>& bounds)
             legendWidth - padding - 18 - padding,
             itemHeight);
 
-        g.setFillColor (Colors::white);
+        g.setFillColor (legendTextColor);
         g.fillFittedText (signal.name, font, textBounds, Justification::centerLeft);
 
         itemY += itemHeight + itemSpacing;

@@ -112,6 +112,12 @@ void registerYupDataModelBindings (py::module_& m)
         .def ("setEnabled", &UndoManager::setEnabled)
         .def ("isEnabled", &UndoManager::isEnabled);
 
+    // ============================================================================================ yup::DataTreeTransactionResult
+
+    py::enum_<DataTreeTransactionResult> (m, "DataTreeTransactionResult")
+        .value ("committed", DataTreeTransactionResult::committed)
+        .value ("aborted", DataTreeTransactionResult::aborted);
+
     // ============================================================================================ yup::DataTreeListener
 
     py::class_<DataTreeListener, PyDataTreeListener> classDataTreeListener (m, "DataTreeListener");
@@ -122,9 +128,10 @@ void registerYupDataModelBindings (py::module_& m)
         .def ("childAdded", &DataTreeListener::childAdded)
         .def ("childRemoved", &DataTreeListener::childRemoved)
         .def ("childMoved", &DataTreeListener::childMoved)
-        .def ("treeRedirected", &DataTreeListener::treeRedirected)
         .def ("parentChanged", &DataTreeListener::parentChanged)
-        .def ("ancestorChanged", &DataTreeListener::ancestorChanged);
+        .def ("ancestorChanged", &DataTreeListener::ancestorChanged)
+        .def ("transactionStarted", &DataTreeListener::transactionStarted)
+        .def ("transactionEnded", &DataTreeListener::transactionEnded);
 
     // ============================================================================================ yup::DataTree
 
@@ -146,7 +153,29 @@ void registerYupDataModelBindings (py::module_& m)
         .def ("removeChild", py::overload_cast<int> (&DataTree::Transaction::removeChild))
         .def ("removeAllChildren", &DataTree::Transaction::removeAllChildren)
         .def ("moveChild", &DataTree::Transaction::moveChild)
+        .def ("addChildren", [] (DataTree::Transaction& self, const std::vector<DataTree>& children, int index)
+    {
+        self.addChildren (children, index);
+    }, "children"_a, "index"_a = -1)
+        .def ("removeChildren", py::overload_cast<int, int> (&DataTree::Transaction::removeChildren))
+        .def ("removeChildren", [] (DataTree::Transaction& self, const std::vector<DataTree>& children)
+    {
+        self.removeChildren (children);
+    })
+        .def ("reorderChildren", [] (DataTree::Transaction& self, const std::vector<DataTree>& newOrder)
+    {
+        self.reorderChildren (newOrder);
+    })
         .def ("getEffectiveChildCount", &DataTree::Transaction::getEffectiveChildCount);
+
+    py::class_<DataTree::BatchTransaction> classDataTreeBatchTransaction (classDataTree, "BatchTransaction");
+
+    classDataTreeBatchTransaction
+        .def (py::init<UndoManager*>(), "undoManager"_a = nullptr)
+        .def ("edit", &DataTree::BatchTransaction::edit, py::return_value_policy::reference_internal)
+        .def ("commit", &DataTree::BatchTransaction::commit)
+        .def ("abort", &DataTree::BatchTransaction::abort)
+        .def ("isActive", &DataTree::BatchTransaction::isActive);
 
     py::class_<DataTree::ValidatedTransaction> classDataTreeValidatedTransaction (classDataTree, "ValidatedTransaction");
 
