@@ -39,6 +39,8 @@ namespace yup
     - Automatic object creation/destruction based on DataTree changes
     - Thread-safe operations when used with appropriate CriticalSectionType
     - Maintains object order matching the DataTree child order
+    - Follows a transaction when it ends: however many children it adds, removes or moves, the
+      objects are created, deleted and put in order once
     - Selective object creation based on DataTree content
     - Callback notifications for object lifecycle events
 
@@ -146,7 +148,10 @@ public:
             if (const auto& v = parent.getChild (i); isSuitableType (v))
             {
                 if (ObjectType* newObject = createNewObject (v))
+                {
                     objects.add (newObject);
+                    objectsByChild.emplace (v, newObject);
+                }
             }
         }
     }
@@ -318,62 +323,37 @@ public:
     /** Type alias for scoped locking of the arrayLock. */
     using ScopedLockType = typename CriticalSectionType::ScopedLockType;
 
-    //==============================================================================
-    /** @internal Comparison function used for sorting objects to match DataTree order. */
-    int compareElements (ObjectType* first, ObjectType* second) const
-    {
-        int index1 = parent.indexOf (first->getDataTree());
-        int index2 = parent.indexOf (second->getDataTree());
-        return index1 - index2;
-    }
-
 protected:
     //==============================================================================
-    void childAdded (DataTree&, DataTree& tree) override
+    void transactionStarted (DataTree& tree) override
     {
-        if (! isChildTree (tree))
+        if (tree == parent)
+            ++transactionDepth;
+    }
+
+    void transactionEnded (DataTree& tree, DataTree::TransactionResult) override
+    {
+        // A list created while a transaction is applied gets its end only
+        if (tree == parent && transactionDepth > 0 && --transactionDepth == 0)
+            updateObjects();
+    }
+
+    void childAdded (DataTree& newParent, DataTree& tree) override
+    {
+        if (parent != newParent)
             return;
 
-        const int index = parent.indexOf (tree);
-        jassert (index >= 0);
-
-        if (ObjectType* newObject = createNewObject (tree))
-        {
-            {
-                const ScopedLockType sl (arrayLock);
-
-                if (index == parent.getNumChildren() - 1)
-                    objects.add (newObject);
-                else
-                    objects.addSorted (*this, newObject);
-            }
-
-            newObjectAdded (newObject);
-        }
-        else
-        {
-            jassertfalse;
-        }
+        addedChildren.push_back (tree);
+        updateObjectsUnlessInTransaction();
     }
 
     void childRemoved (DataTree& exParent, DataTree& tree, int) override
     {
-        if (parent != exParent || ! isSuitableType (tree))
+        if (parent != exParent)
             return;
 
-        const int oldIndex = indexOf (tree);
-        if (oldIndex < 0)
-            return;
-
-        ObjectType* o;
-
-        {
-            const ScopedLockType sl (arrayLock);
-            o = objects.removeAndReturn (oldIndex);
-        }
-
-        objectRemoved (o);
-        deleteObject (o);
+        removedChildren.push_back (tree);
+        updateObjectsUnlessInTransaction();
     }
 
     void childMoved (DataTree& tree, DataTree&, int, int) override
@@ -381,21 +361,12 @@ protected:
         if (tree != parent)
             return;
 
-        {
-            const ScopedLockType sl (arrayLock);
-            sortArray();
-        }
-
-        objectOrderChanged();
+        childrenMoved = true;
+        updateObjectsUnlessInTransaction();
     }
 
     void propertyChanged (DataTree&, const Identifier&) override
     {
-    }
-
-    void treeRedirected (DataTree&) override
-    {
-        jassertfalse; // may need to add handling if this is hit
     }
 
     //==============================================================================
@@ -403,13 +374,10 @@ protected:
     {
         const ScopedLockType sl (arrayLock);
 
+        objectsByChild.clear();
+
         while (objects.size() > 0)
             deleteObject (objects.removeAndReturn (objects.size() - 1));
-    }
-
-    bool isChildTree (DataTree& v) const
-    {
-        return isSuitableType (v) && v.getParent() == parent;
     }
 
     int indexOf (const DataTree& v) const noexcept
@@ -423,13 +391,108 @@ protected:
         return -1;
     }
 
-    void sortArray()
-    {
-        objects.sort (*this);
-    }
-
     DataTree parent;
     Array<ObjectType*> objects;
+
+private:
+    //==============================================================================
+    void updateObjectsUnlessInTransaction()
+    {
+        // A child taken by another node, or given back by an undo, comes with no transaction of this one
+        if (transactionDepth == 0)
+            updateObjects();
+    }
+
+    /** Brings the objects in line with the children, for the changes noted since the last time. */
+    void updateObjects()
+    {
+        const auto added = std::exchange (addedChildren, {});
+        const auto removed = std::exchange (removedChildren, {});
+        const auto moved = std::exchange (childrenMoved, false);
+
+        Array<ObjectType*> removedObjects, addedObjects;
+
+        for (const auto& child : removed)
+        {
+            // Unless it was added back since
+            if (child.getParent() == parent)
+                continue;
+
+            if (const auto it = objectsByChild.find (child); it != objectsByChild.end())
+            {
+                removedObjects.add (it->second);
+                objectsByChild.erase (it);
+            }
+        }
+
+        for (const auto& child : added)
+        {
+            // Unless it was removed again since, or it has its object from an earlier addition
+            if (child.getParent() != parent || ! isSuitableType (child) || objectsByChild.count (child) != 0)
+                continue;
+
+            if (ObjectType* newObject = createNewObject (child))
+            {
+                objectsByChild.emplace (child, newObject);
+                addedObjects.add (newObject);
+            }
+            else
+            {
+                jassertfalse;
+            }
+        }
+
+        if (removedObjects.isEmpty() && addedObjects.isEmpty() && ! moved)
+            return;
+
+        Array<ObjectType*> ordered;
+        ordered.ensureStorageAllocated (static_cast<int> (objectsByChild.size()));
+
+        for (int i = 0; i < parent.getNumChildren(); ++i)
+        {
+            if (const auto it = objectsByChild.find (parent.getChild (i)); it != objectsByChild.end())
+                ordered.add (it->second);
+        }
+
+        // The order has changed when the objects that were there before and still are come in another order
+        const auto withoutAll = [] (const Array<ObjectType*>& source, const Array<ObjectType*>& excluded)
+        {
+            const std::unordered_set<ObjectType*> toSkip (excluded.begin(), excluded.end());
+            Array<ObjectType*> result;
+
+            for (auto* object : source)
+            {
+                if (toSkip.count (object) == 0)
+                    result.add (object);
+            }
+
+            return result;
+        };
+
+        const auto orderChanged = withoutAll (objects, removedObjects) != withoutAll (ordered, addedObjects);
+
+        {
+            const ScopedLockType sl (arrayLock);
+            objects.swapWith (ordered);
+        }
+
+        for (auto* object : removedObjects)
+        {
+            objectRemoved (object);
+            deleteObject (object);
+        }
+
+        for (auto* object : addedObjects)
+            newObjectAdded (object);
+
+        if (orderChanged)
+            objectOrderChanged();
+    }
+
+    std::unordered_map<DataTree, ObjectType*> objectsByChild;
+    std::vector<DataTree> addedChildren, removedChildren;
+    bool childrenMoved = false;
+    int transactionDepth = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DataTreeObjectList)
 };

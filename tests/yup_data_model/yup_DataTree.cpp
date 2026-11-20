@@ -23,6 +23,8 @@
 
 #include <yup_data_model/yup_data_model.h>
 
+#include "yup_DataTreeTestHelpers.h"
+
 #include <limits>
 
 using namespace yup;
@@ -604,11 +606,6 @@ public:
         ancestorChanges.push_back ({ tree, reparentedAncestor });
     }
 
-    void treeRedirected (DataTree&) override
-    {
-        ++redirections;
-    }
-
     struct PropertyChange
     {
         DataTree tree;
@@ -637,7 +634,6 @@ public:
     std::vector<ChildChange> childRemovals;
     std::vector<ParentChange> parentChanges;
     std::vector<AncestorChange> ancestorChanges;
-    int redirections = 0;
 
     void reset()
     {
@@ -646,7 +642,6 @@ public:
         childRemovals.clear();
         parentChanges.clear();
         ancestorChanges.clear();
-        redirections = 0;
     }
 };
 
@@ -1182,24 +1177,6 @@ TEST_F (DataTreeTests, TransactionRemoveAllThenSetPropertiesReplacesAtomically)
     EXPECT_EQ (second, tree.getPropertyName (1));
     EXPECT_EQ (var (1), tree.getProperty (first));
     EXPECT_EQ (var (2), tree.getProperty (second));
-}
-
-TEST_F (DataTreeTests, AssigningSameObjectDoesNotRedirect)
-{
-    TestListener listener;
-    tree.addListener (&listener);
-
-    DataTree handle (tree);
-    DataTree sameTree (tree);
-
-    handle = sameTree;
-    handle = DataTree (tree);
-    EXPECT_EQ (0, listener.redirections);
-
-    handle = DataTree ("Other");
-    EXPECT_EQ (1, listener.redirections);
-
-    tree.removeListener (&listener);
 }
 
 TEST_F (DataTreeTests, ParentDestructionNotifiesReferencedChildren)
@@ -4366,4 +4343,1775 @@ TEST_F (DataTreeTests, ValidatedTransactionGetTransactionModifiesState)
 
     EXPECT_EQ (1, tree.getNumChildren());
     EXPECT_EQ (child, tree.getChild (0));
+}
+
+//==============================================================================
+// Contract Tests
+//
+// What a transaction changes, which callbacks it sends and in which order, what a callback
+// can see, and what undo and redo make of it. The callbacks of the existing operations are
+// pinned here, so that reworking the internals cannot change them unnoticed.
+
+class DataTreeContractTests : public DataTreeContractHarness
+{
+protected:
+    static constexpr int numNodes = 8;
+    static constexpr int numSteps = 30;
+    static constexpr int64 numSeeds = 25;
+
+    /** Returns an edit committing one transaction on the named node. */
+    template <class Record>
+    static auto on (const char* name, Record record)
+    {
+        return [name, record] (World& world, UndoManager* undoManager)
+        {
+            auto transaction = world.find (name).beginTransaction (undoManager);
+            record (transaction, world);
+        };
+    }
+
+    static void rootAlone (World& world)
+    {
+        world.add ("root");
+    }
+
+    static void rootWithA (World& world)
+    {
+        World::set (world.add ("root"), "a", 1);
+    }
+
+    static void rootWithAAndB (World& world)
+    {
+        const auto root = world.add ("root");
+        World::set (root, "a", 1);
+        World::set (root, "b", 2);
+    }
+
+    static void rootWithB (World& world)
+    {
+        World::set (world.add ("root"), "b", 2);
+    }
+
+    static void rootAndOrphan (World& world)
+    {
+        world.add ("root");
+        world.add ("x");
+    }
+
+    static void rootWithChildAndOrphan (World& world)
+    {
+        world.add ("c1", world.add ("root"));
+        world.add ("x");
+    }
+
+    static void rootWithTwoChildren (World& world)
+    {
+        const auto root = world.add ("root");
+        world.add ("c1", root);
+        world.add ("c2", root);
+    }
+
+    static void rootWithTwoChildrenAndOrphan (World& world)
+    {
+        rootWithTwoChildren (world);
+        world.add ("x");
+    }
+
+    static void rootWithThreeChildren (World& world)
+    {
+        rootWithTwoChildren (world);
+        world.add ("c3", world.find ("root"));
+    }
+
+    static void rootWithGrandchild (World& world)
+    {
+        world.add ("g", world.add ("c1", world.add ("root")));
+    }
+
+    static void rootAndSubtree (World& world)
+    {
+        world.add ("root");
+        world.add ("h", world.add ("g", world.add ("x")));
+    }
+
+    static void rootAndOtherParent (World& world)
+    {
+        world.add ("root");
+
+        const auto other = world.add ("other");
+        world.add ("x", other);
+        world.add ("y", other);
+    }
+
+    static void rootWithChildAndOtherParent (World& world)
+    {
+        world.add ("c1", world.add ("root"));
+        world.add ("x", world.add ("other"));
+    }
+
+    static std::vector<DataTree> listed (const World& world, const StringArray& names)
+    {
+        std::vector<DataTree> trees;
+
+        for (const auto& name : names)
+            trees.push_back (world.find (name));
+
+        return trees;
+    }
+};
+
+//==============================================================================
+// Properties
+
+TEST_F (DataTreeContractTests, SetNewProperty)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.setProperty ("a", 1);
+    });
+
+    expectGolden (rootAlone, edit, { .commit = { "propertyChanged root a" }, .committed = "root{a=int:1}", .undo = { "propertyChanged root a" } });
+}
+
+TEST_F (DataTreeContractTests, SetPropertyToAnotherValue)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.setProperty ("a", 2);
+    });
+
+    expectGolden (rootWithA, edit, { .commit = { "propertyChanged root a" }, .committed = "root{a=int:2}", .undo = { "propertyChanged root a" } });
+}
+
+TEST_F (DataTreeContractTests, SetPropertyToItsValueDoesNothing)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.setProperty ("a", 1);
+    });
+
+    expectGolden (rootWithA, edit, { .committed = "root{a=int:1}", .undoable = false });
+}
+
+TEST_F (DataTreeContractTests, SetPropertyToTheSameNumberOfAnotherTypeChangesIt)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.setProperty ("a", 1.0);
+    });
+
+    expectGolden (rootWithA, edit, { .commit = { "propertyChanged root a" }, .committed = "root{a=double:1.000}", .undo = { "propertyChanged root a" } });
+}
+
+TEST_F (DataTreeContractTests, SetPropertyTwiceNotifiesOnce)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.setProperty ("a", 1);
+        transaction.setProperty ("a", 2);
+    });
+
+    expectGolden (rootAlone, edit, { .commit = { "propertyChanged root a" }, .committed = "root{a=int:2}", .undo = { "propertyChanged root a" } });
+}
+
+TEST_F (DataTreeContractTests, SetPropertyBackToItsValueStillNotifies)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.setProperty ("a", 2);
+        transaction.setProperty ("a", 1);
+    });
+
+    expectGolden (rootWithA, edit, { .commit = { "propertyChanged root a" }, .committed = "root{a=int:1}", .undo = { "propertyChanged root a" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveProperty)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.removeProperty ("a");
+    });
+
+    expectGolden (rootWithA, edit, { .commit = { "propertyChanged root a" }, .committed = "root", .undo = { "propertyChanged root a" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveMissingPropertyDoesNothing)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.removeProperty ("a");
+    });
+
+    expectGolden (rootAlone, edit, { .committed = "root", .undoable = false });
+}
+
+TEST_F (DataTreeContractTests, SetThenRemoveProperty)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.setProperty ("a", 1);
+        transaction.removeProperty ("a");
+    });
+
+    expectGolden (rootAlone, edit, { .commit = { "propertyChanged root a", "propertyChanged root a" }, .committed = "root", .undo = { "propertyChanged root a", "propertyChanged root a" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveThenSetProperty)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.removeProperty ("a");
+        transaction.setProperty ("a", 2);
+    });
+
+    expectGolden (rootWithA, edit, { .commit = { "propertyChanged root a", "propertyChanged root a" }, .committed = "root{a=int:2}", .undo = { "propertyChanged root a", "propertyChanged root a" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveAllProperties)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.removeAllProperties();
+    });
+
+    expectGolden (rootWithAAndB, edit, { .commit = { "propertyChanged root a", "propertyChanged root b" }, .committed = "root", .undo = { "propertyChanged root a", "propertyChanged root b" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveAllPropertiesOfANodeWithoutAnyDoesNothing)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.removeAllProperties();
+    });
+
+    expectGolden (rootAlone, edit, { .committed = "root", .undoable = false });
+}
+
+TEST_F (DataTreeContractTests, RemoveAllPropertiesThenSetNotifiesWhatChanged)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.removeAllProperties();
+        transaction.setProperty ("b", 2);
+        transaction.setProperty ("c", 3);
+    });
+
+    expectGolden (rootWithAAndB, edit, { .commit = { "propertyChanged root a", "propertyChanged root c" }, .committed = "root{b=int:2 c=int:3}", .undo = { "propertyChanged root c", "propertyChanged root a" } });
+}
+
+TEST_F (DataTreeContractTests, SetThenRemoveAllProperties)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.setProperty ("a", 1);
+        transaction.removeAllProperties();
+    });
+
+    expectGolden (rootWithB, edit, { .commit = { "propertyChanged root a", "propertyChanged root b", "propertyChanged root a" }, .committed = "root", .undo = { "propertyChanged root b", "propertyChanged root a", "propertyChanged root a" } });
+}
+
+TEST_F (DataTreeContractTests, ManyPropertyEditsInOneTransaction)
+{
+    constexpr int numProperties = 20;
+
+    const auto name = [] (int index)
+    {
+        return "p" + String (index);
+    };
+
+    const auto edit = on ("root", [&name] (DataTree::Transaction& transaction, const World&)
+    {
+        for (int i = 0; i < numProperties; ++i)
+            transaction.setProperty (name (i), i);
+
+        transaction.setProperty ("a", 2);
+        transaction.removeProperty ("a");
+        transaction.setProperty ("a", 3);
+        transaction.setProperty ("a", 4);
+        transaction.removeAllProperties();
+        transaction.setProperty (name (0), 0);
+        transaction.setProperty ("a", 5);
+        transaction.setProperty ("a", 6);
+    });
+
+    Expected expected;
+    expected.committed = "root{a=int:6 p0=int:0}";
+
+    for (int i = 0; i < numProperties; ++i)
+        expected.commit.add ("propertyChanged root " + name (i));
+
+    for (int i = 0; i < 3; ++i)
+        expected.commit.add ("propertyChanged root a");
+
+    // What is left of the first properties is replaced by the ones set after removeAllProperties()
+    for (int i = 1; i < numProperties; ++i)
+        expected.commit.add ("propertyChanged root " + name (i));
+
+    expected.commit.add ("propertyChanged root a");
+
+    expected.undo.add ("propertyChanged root a");
+
+    for (int i = 1; i < numProperties; ++i)
+        expected.undo.add ("propertyChanged root " + name (i));
+
+    for (int i = 0; i < 3; ++i)
+        expected.undo.add ("propertyChanged root a");
+
+    for (int i = numProperties; --i >= 0;)
+        expected.undo.add ("propertyChanged root " + name (i));
+
+    expectGolden (rootWithA, edit, expected);
+}
+
+//==============================================================================
+// Children
+
+TEST_F (DataTreeContractTests, AddChild)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.addChild (world.find ("x"));
+    });
+
+    expectGolden (rootWithChildAndOrphan, edit, { .commit = { "childAdded root x", "parentChanged x -" }, .committed = "root[c1 x]", .undo = { "childRemoved root x 1", "parentChanged x root" } });
+}
+
+TEST_F (DataTreeContractTests, AddChildAtAnIndex)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.addChild (world.find ("x"), 0);
+    });
+
+    expectGolden (rootWithChildAndOrphan, edit, { .commit = { "childAdded root x", "parentChanged x -" }, .committed = "root[x c1]", .undo = { "childRemoved root x 0", "parentChanged x root" } });
+}
+
+TEST_F (DataTreeContractTests, AddChildAtAnIndexOutOfRangeAppends)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.addChild (world.find ("x"), 9);
+    });
+
+    expectGolden (rootWithChildAndOrphan, edit, { .commit = { "childAdded root x", "parentChanged x -" }, .committed = "root[c1 x]", .undo = { "childRemoved root x 1", "parentChanged x root" } });
+}
+
+TEST_F (DataTreeContractTests, AddChildTellsItsDescendants)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.addChild (world.find ("x"));
+    });
+
+    expectGolden (rootAndSubtree, edit, { .commit = { "childAdded root x", "parentChanged x -", "ancestorChanged g x", "ancestorChanged h x" }, .committed = "root[x[g[h]]]", .undo = { "childRemoved root x 0", "parentChanged x root", "ancestorChanged g x", "ancestorChanged h x" } });
+}
+
+TEST_F (DataTreeContractTests, AddChildTakesItFromItsParent)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.addChild (world.find ("x"));
+    });
+
+    expectGolden (rootAndOtherParent, edit, { .commit = { "childRemoved other x 0", "childAdded root x", "parentChanged x other" }, .committed = "root[x] other[y]", .undo = { "childRemoved root x 0", "childAdded other x", "parentChanged x root" } });
+}
+
+TEST_F (DataTreeContractTests, AddChildIgnoresWhatCannotBecomeAChild)
+{
+    const auto edit = [] (World& world, UndoManager* undoManager)
+    {
+        {
+            auto transaction = world.find ("root").beginTransaction (undoManager);
+            transaction.addChild (DataTree());
+            transaction.addChild (world.find ("root"));
+            transaction.addChild (world.find ("c1")); // already a child
+            transaction.addChild (world.find ("g"));  // already a descendant
+        }
+
+        auto transaction = world.find ("g").beginTransaction (undoManager);
+        transaction.addChild (world.find ("c1"));
+        transaction.addChild (world.find ("root"));
+    };
+
+    expectGolden (rootWithGrandchild, edit, { .committed = "root[c1[g]]", .undoable = false });
+}
+
+TEST_F (DataTreeContractTests, AddChildThatWouldMakeACycleWhenAppliedIsRefused)
+{
+    // Both edits are valid when recorded, the second one no longer is once the first is applied
+    const auto edit = [] (World& world, UndoManager* undoManager)
+    {
+        auto first = world.find ("root").beginTransaction (undoManager);
+        auto second = world.find ("x").beginTransaction (undoManager);
+
+        first.addChild (world.find ("x"));
+        second.addChild (world.find ("root"));
+
+        first.commit();
+        second.commit();
+    };
+
+    expectGolden (rootAndOrphan, edit, { .commit = { "childAdded root x", "parentChanged x -" }, .committed = "root[x]", .undo = { "childRemoved root x 0", "parentChanged x root" } });
+}
+
+TEST_F (DataTreeContractTests, AddingAChildTwiceMovesIt)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.addChild (world.find ("x"));
+        transaction.addChild (world.find ("x"), 0);
+    });
+
+    expectGolden (rootWithChildAndOrphan, edit, { .commit = { "childAdded root x", "parentChanged x -", "childRemoved root x 1", "childAdded root x" }, .committed = "root[x c1]", .undo = { "childRemoved root x 0", "childAdded root x", "childRemoved root x 1", "parentChanged x root" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveChild)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.removeChild (world.find ("c1"));
+    });
+
+    expectGolden (rootWithTwoChildren, edit, { .commit = { "childRemoved root c1 0", "parentChanged c1 root" }, .committed = "root[c2] c1", .undo = { "childAdded root c1", "parentChanged c1 -" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveChildAtAnIndex)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.removeChild (1);
+    });
+
+    expectGolden (rootWithTwoChildren, edit, { .commit = { "childRemoved root c2 1", "parentChanged c2 root" }, .committed = "root[c1] c2", .undo = { "childAdded root c2", "parentChanged c2 -" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveChildTellsItsDescendants)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.removeChild (0);
+    });
+
+    expectGolden (rootWithGrandchild, edit, { .commit = { "childRemoved root c1 0", "parentChanged c1 root", "ancestorChanged g c1" }, .committed = "root c1[g]", .undo = { "childAdded root c1", "parentChanged c1 -", "ancestorChanged g c1" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveChildIgnoresInvalidTreesAndIndicesOutOfRange)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.removeChild (DataTree());
+        transaction.removeChild (5);
+        transaction.removeChild (-1);
+    });
+
+    // It still leaves an undo step, which does nothing
+    expectGolden (rootWithChildAndOrphan, edit, { .committed = "root[c1] x" });
+}
+
+TEST_F (DataTreeContractTests, RemoveChildIgnoresANodeThatIsNotAChild)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.removeChild (world.find ("x"));
+    });
+
+    // It still leaves an undo step, which does nothing
+    expectGolden (rootWithChildAndOtherParent, edit, { .committed = "root[c1] other[x]" });
+}
+
+TEST_F (DataTreeContractTests, RemovingAChildTwiceRemovesItOnce)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.removeChild (world.find ("c1"));
+        transaction.removeChild (world.find ("c1"));
+    });
+
+    expectGolden (rootWithTwoChildren, edit, { .commit = { "childRemoved root c1 0", "parentChanged c1 root" }, .committed = "root[c2] c1", .undo = { "childAdded root c1", "parentChanged c1 -" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveAllChildren)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.removeAllChildren();
+    });
+
+    expectGolden (rootWithThreeChildren, edit, { .commit = { "childRemoved root c3 2", "parentChanged c3 root", "childRemoved root c2 1", "parentChanged c2 root", "childRemoved root c1 0", "parentChanged c1 root" }, .committed = "root c1 c2 c3", .undo = { "childAdded root c1", "parentChanged c1 -", "childAdded root c2", "parentChanged c2 -", "childAdded root c3", "parentChanged c3 -" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveAllChildrenOfANodeWithoutAnyDoesNothing)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.removeAllChildren();
+    });
+
+    expectGolden (rootAlone, edit, { .committed = "root", .undoable = false });
+}
+
+TEST_F (DataTreeContractTests, MoveChildForward)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.moveChild (0, 2);
+    });
+
+    expectGolden (rootWithThreeChildren, edit, { .commit = { "childMoved root c1 0 2" }, .committed = "root[c2 c3 c1]", .undo = { "childMoved root c1 2 0" } });
+}
+
+TEST_F (DataTreeContractTests, MoveChildBackward)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.moveChild (2, 0);
+    });
+
+    expectGolden (rootWithThreeChildren, edit, { .commit = { "childMoved root c3 2 0" }, .committed = "root[c3 c1 c2]", .undo = { "childMoved root c3 0 2" } });
+}
+
+TEST_F (DataTreeContractTests, MoveChildToItsOwnIndexDoesNothing)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.moveChild (1, 1);
+    });
+
+    expectGolden (rootWithTwoChildren, edit, { .committed = "root[c1 c2]", .undoable = false });
+}
+
+TEST_F (DataTreeContractTests, MoveChildIgnoresIndicesOutOfRange)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.moveChild (0, 2);
+        transaction.moveChild (-1, 0);
+    });
+
+    // It still leaves an undo step, which does nothing
+    expectGolden (rootWithTwoChildren, edit, { .committed = "root[c1 c2]" });
+}
+
+TEST_F (DataTreeContractTests, ChildEditsApplyInTheOrderTheyWereMade)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.removeChild (0);
+        transaction.addChild (world.find ("x"), 0);
+        transaction.moveChild (0, 1);
+    });
+
+    expectGolden (rootWithTwoChildrenAndOrphan, edit, { .commit = { "childRemoved root c1 0", "parentChanged c1 root", "childAdded root x", "parentChanged x -", "childMoved root x 0 1" }, .committed = "root[c2 x] c1", .undo = { "childMoved root x 1 0", "childRemoved root x 0", "parentChanged x root", "childAdded root c1", "parentChanged c1 -" } });
+}
+
+TEST_F (DataTreeContractTests, EditsOfPropertiesAndChildrenApplyInTheOrderTheyWereMade)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.addChild (world.find ("x"));
+        transaction.setProperty ("a", 1);
+    });
+
+    expectGolden (rootAndOrphan, edit, { .commit = { "childAdded root x", "parentChanged x -", "propertyChanged root a" }, .committed = "root{a=int:1}[x]", .undo = { "propertyChanged root a", "childRemoved root x 0", "parentChanged x root" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveAllPropertiesOnlyTakesInThePropertyEditsMadeRightAfterIt)
+{
+    const auto build = [] (World& world)
+    {
+        rootWithAAndB (world);
+        world.add ("x");
+    };
+
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.removeAllProperties();
+        transaction.addChild (world.find ("x"));
+        transaction.setProperty ("b", 2);
+    });
+
+    // The child is added while the node has no property, as the edits say
+    expectGolden (build, edit, { .commit = { "propertyChanged root a", "propertyChanged root b", "childAdded root x", "parentChanged x -", "propertyChanged root b" }, .committed = "root{b=int:2}[x]", .undo = { "propertyChanged root b", "childRemoved root x 0", "parentChanged x root", "propertyChanged root a", "propertyChanged root b" } });
+}
+
+TEST_F (DataTreeContractTests, ASetRepeatedAfterAChildEditAppliesWhereTheFirstOneWasMade)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.setProperty ("a", 1);
+        transaction.addChild (world.find ("x"));
+        transaction.setProperty ("a", 2);
+    });
+
+    expectGolden (rootAndOrphan, edit, { .commit = { "propertyChanged root a", "childAdded root x", "parentChanged x -" }, .committed = "root{a=int:2}[x]", .undo = { "childRemoved root x 0", "parentChanged x root", "propertyChanged root a" } });
+}
+
+//==============================================================================
+// Several children at once
+
+TEST_F (DataTreeContractTests, AddChildren)
+{
+    const auto build = [] (World& world)
+    {
+        rootWithChildAndOrphan (world);
+        world.add ("y");
+    };
+
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.addChildren (listed (world, { "x", "y" }), 0);
+    });
+
+    expectGolden (build, edit, { .commit = { "childAdded root x", "parentChanged x -", "childAdded root y", "parentChanged y -" }, .committed = "root[x y c1]", .undo = { "childRemoved root y 1", "parentChanged y root", "childRemoved root x 0", "parentChanged x root" } });
+}
+
+TEST_F (DataTreeContractTests, AddChildrenTakesThemFromTheirParentsOneAtATime)
+{
+    const auto build = [] (World& world)
+    {
+        rootAndOtherParent (world);
+        world.add ("z");
+    };
+
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.addChildren (listed (world, { "x", "z" }));
+    });
+
+    expectGolden (build, edit, { .commit = { "childRemoved other x 0", "childAdded root x", "parentChanged x other", "childAdded root z", "parentChanged z -" }, .committed = "root[x z] other[y]", .undo = { "childRemoved root z 1", "parentChanged z root", "childRemoved root x 0", "childAdded other x", "parentChanged x root" } });
+}
+
+TEST_F (DataTreeContractTests, AddChildrenSkipsWhatAddChildIgnoresAndRepeats)
+{
+    const auto build = [] (World& world)
+    {
+        rootWithGrandchild (world);
+        world.add ("x");
+    };
+
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.addChildren (listed (world, { "missing", "root", "c1", "g", "x", "x" }));
+    });
+
+    expectGolden (build, edit, { .commit = { "childAdded root x", "parentChanged x -" }, .committed = "root[c1[g] x]", .undo = { "childRemoved root x 1", "parentChanged x root" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveChildrenInARange)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World&)
+    {
+        transaction.removeChildren (1, 5);
+    });
+
+    expectGolden (rootWithThreeChildren, edit, { .commit = { "childRemoved root c3 2", "parentChanged c3 root", "childRemoved root c2 1", "parentChanged c2 root" }, .committed = "root[c1] c2 c3", .undo = { "childAdded root c2", "parentChanged c2 -", "childAdded root c3", "parentChanged c3 -" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveChildrenGoFromTheLastToTheFirstWhateverTheirOrder)
+{
+    const auto build = [] (World& world)
+    {
+        rootWithThreeChildren (world);
+        world.add ("x");
+    };
+
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.removeChildren (listed (world, { "c1", "x", "c3", "c1", "missing" }));
+    });
+
+    expectGolden (build, edit, { .commit = { "childRemoved root c3 2", "parentChanged c3 root", "childRemoved root c1 0", "parentChanged c1 root" }, .committed = "root[c2] c1 c3 x", .undo = { "childAdded root c1", "parentChanged c1 -", "childAdded root c3", "parentChanged c3 -" } });
+}
+
+TEST_F (DataTreeContractTests, ReorderChildren)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.reorderChildren (listed (world, { "c3", "c2", "c1" }));
+    });
+
+    expectGolden (rootWithThreeChildren, edit, { .commit = { "childMoved root c3 2 0", "childMoved root c2 2 1" }, .committed = "root[c3 c2 c1]", .undo = { "childMoved root c2 1 2", "childMoved root c3 0 2" } });
+}
+
+TEST_F (DataTreeContractTests, ReorderChildrenOnlyMovesTheOnesOutOfPlace)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.reorderChildren (listed (world, { "c3", "c1", "c2" }));
+    });
+
+    expectGolden (rootWithThreeChildren, edit, { .commit = { "childMoved root c3 2 0" }, .committed = "root[c3 c1 c2]", .undo = { "childMoved root c3 0 2" } });
+}
+
+TEST_F (DataTreeContractTests, ReorderChildrenIgnoresAnythingButAllTheChildrenOnce)
+{
+    const auto build = [] (World& world)
+    {
+        rootWithThreeChildren (world);
+        world.add ("x");
+    };
+
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.reorderChildren (listed (world, { "c3", "c1" }));
+        transaction.reorderChildren (listed (world, { "c3", "c1", "c1" }));
+        transaction.reorderChildren (listed (world, { "c3", "c1", "x" }));
+        transaction.reorderChildren (listed (world, { "c3", "c1", "c2", "x" }));
+        transaction.reorderChildren (listed (world, { "c1", "c2", "c3" }));
+    });
+
+    // It still leaves an undo step, which does nothing
+    expectGolden (build, edit, { .committed = "root[c1 c2 c3] x" });
+}
+
+TEST_F (DataTreeContractTests, CallbacksOfAddChildrenSeeThemAllAdded)
+{
+    World world;
+    rootAndOrphan (world);
+    world.add ("y");
+
+    Recorder recorder;
+    recorder.watch (world);
+    recorder.observe = [&world]
+    {
+        return world.describe();
+    };
+
+    {
+        auto transaction = world.find ("root").beginTransaction();
+        transaction.addChildren (listed (world, { "x", "y" }));
+    }
+
+    expectLines ({ "childAdded root x | root[x y]",
+                   "parentChanged x - | root[x y]",
+                   "childAdded root y | root[x y]",
+                   "parentChanged y - | root[x y]" },
+                 recorder.take(),
+                 "callbacks of the commit");
+}
+
+TEST_F (DataTreeContractTests, EffectiveChildCountFollowsEditsOfSeveralChildren)
+{
+    World world;
+    rootWithTwoChildrenAndOrphan (world);
+    world.add ("y");
+
+    auto transaction = world.find ("root").beginTransaction();
+
+    transaction.addChildren (listed (world, { "x", "y", "x" }));
+    EXPECT_EQ (4, transaction.getEffectiveChildCount());
+
+    transaction.removeChildren (0, 3);
+    EXPECT_EQ (1, transaction.getEffectiveChildCount());
+
+    transaction.removeChildren (listed (world, { "x", "missing" }));
+    EXPECT_EQ (0, transaction.getEffectiveChildCount());
+
+    transaction.abort();
+}
+
+//==============================================================================
+// Edits recorded after one that turns out to do nothing
+
+TEST_F (DataTreeContractTests, AppendAfterARemovalThatRemovedNothingStillAppends)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.removeChild (7);
+        transaction.addChild (world.find ("x"));
+    });
+
+    expectGolden (rootWithTwoChildrenAndOrphan, edit, { .commit = { "childAdded root x", "parentChanged x -" }, .committed = "root[c1 c2 x]", .undo = { "childRemoved root x 2", "parentChanged x root" } });
+}
+
+TEST_F (DataTreeContractTests, AddChildrenAtAnIndexAfterARemovalThatRemovedNothingGoThere)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.removeChild (world.find ("x"));
+        transaction.addChildren (listed (world, { "x" }), 2);
+    });
+
+    expectGolden (rootWithTwoChildrenAndOrphan, edit, { .commit = { "childAdded root x", "parentChanged x -" }, .committed = "root[c1 c2 x]", .undo = { "childRemoved root x 2", "parentChanged x root" } });
+}
+
+TEST_F (DataTreeContractTests, RemoveAllChildrenAlsoRemovesTheOnesAddedInTheSameTransaction)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.addChild (world.find ("x"));
+        transaction.removeAllChildren();
+    });
+
+    expectGolden (rootAndOrphan, edit, { .commit = { "childAdded root x", "parentChanged x -", "childRemoved root x 0", "parentChanged x root" }, .committed = "root x", .undo = { "childAdded root x", "parentChanged x -", "childRemoved root x 0", "parentChanged x root" } });
+}
+
+//==============================================================================
+// Behavior that looks unintended, pinned as it is
+
+TEST_F (DataTreeContractTests, AddingBackAChildRemovedInTheSameTransactionIsIgnored)
+{
+    const auto edit = on ("root", [] (DataTree::Transaction& transaction, const World& world)
+    {
+        transaction.removeChild (world.find ("c1"));
+        transaction.addChild (world.find ("c1"));
+    });
+
+    expectGolden (rootWithTwoChildren, edit, { .commit = { "childRemoved root c1 0", "parentChanged c1 root" }, .committed = "root[c2] c1", .undo = { "childAdded root c1", "parentChanged c1 -" } });
+}
+
+TEST_F (DataTreeContractTests, EffectiveChildCountFollowsTheRecordedEdits)
+{
+    World world;
+    rootWithTwoChildrenAndOrphan (world);
+
+    const auto y = world.add ("y");
+    const auto z = world.add ("z");
+
+    auto transaction = world.find ("root").beginTransaction();
+    EXPECT_EQ (2, transaction.getEffectiveChildCount());
+
+    transaction.addChild (world.find ("x"));
+    EXPECT_EQ (3, transaction.getEffectiveChildCount());
+
+    transaction.removeChild (5);
+    EXPECT_EQ (2, transaction.getEffectiveChildCount());
+
+    transaction.removeChild (DataTree());
+    EXPECT_EQ (1, transaction.getEffectiveChildCount());
+
+    transaction.removeChild (y);
+    EXPECT_EQ (0, transaction.getEffectiveChildCount());
+
+    transaction.removeChild (0);
+    EXPECT_EQ (0, transaction.getEffectiveChildCount());
+
+    transaction.addChild (y);
+    EXPECT_EQ (1, transaction.getEffectiveChildCount());
+
+    transaction.moveChild (0, 1);
+    EXPECT_EQ (1, transaction.getEffectiveChildCount());
+
+    transaction.removeAllChildren();
+    EXPECT_EQ (0, transaction.getEffectiveChildCount());
+
+    transaction.addChild (z);
+    EXPECT_EQ (1, transaction.getEffectiveChildCount());
+
+    transaction.abort();
+}
+
+//==============================================================================
+// What a callback can see
+
+TEST_F (DataTreeContractTests, CallbacksSeeOneChangeAtATime)
+{
+    World world;
+    rootAndOrphan (world);
+    world.add ("y");
+
+    Recorder recorder;
+    recorder.watch (world);
+    recorder.observe = [&world]
+    {
+        return world.describe();
+    };
+
+    const auto undoManager = makeUndoManager();
+
+    {
+        auto transaction = world.find ("root").beginTransaction (undoManager.get());
+        transaction.setProperty ("a", 1);
+        transaction.setProperty ("b", 2);
+        transaction.addChild (world.find ("x"));
+        transaction.addChild (world.find ("y"));
+    }
+
+    expectLines ({ "propertyChanged root a | root{a=int:1} x y",
+                   "propertyChanged root b | root{a=int:1 b=int:2} x y",
+                   "childAdded root x | root{a=int:1 b=int:2}[x] y",
+                   "parentChanged x - | root{a=int:1 b=int:2}[x] y",
+                   "childAdded root y | root{a=int:1 b=int:2}[x y]",
+                   "parentChanged y - | root{a=int:1 b=int:2}[x y]" },
+                 recorder.take(),
+                 "callbacks of the commit");
+
+    EXPECT_TRUE (undoManager->undo());
+
+    expectLines ({ "childRemoved root y 1 | root{a=int:1 b=int:2}[x] y",
+                   "parentChanged y root | root{a=int:1 b=int:2}[x] y",
+                   "childRemoved root x 0 | root{a=int:1 b=int:2} x y",
+                   "parentChanged x root | root{a=int:1 b=int:2} x y",
+                   "propertyChanged root b | root{a=int:1} x y",
+                   "propertyChanged root a | root x y" },
+                 recorder.take(),
+                 "callbacks of the undo");
+}
+
+TEST_F (DataTreeContractTests, CallbacksOfAChildTakenFromItsParentSeeItMoved)
+{
+    World world;
+    world.add ("root");
+    world.add ("x", world.add ("other"));
+
+    Recorder recorder;
+    recorder.watch (world);
+    recorder.observe = [&world]
+    {
+        return world.describe();
+    };
+
+    {
+        auto transaction = world.find ("root").beginTransaction();
+        transaction.addChild (world.find ("x"));
+    }
+
+    expectLines ({ "childRemoved other x 0 | root[x] other",
+                   "childAdded root x | root[x] other",
+                   "parentChanged x other | root[x] other" },
+                 recorder.take(),
+                 "callbacks of the commit");
+}
+
+TEST_F (DataTreeContractTests, CallbacksOfRemoveAllChildrenSeeThemAllGone)
+{
+    World world;
+    rootWithTwoChildren (world);
+
+    Recorder recorder;
+    recorder.watch (world);
+    recorder.observe = [&world]
+    {
+        return world.describe();
+    };
+
+    {
+        auto transaction = world.find ("root").beginTransaction();
+        transaction.removeAllChildren();
+    }
+
+    expectLines ({ "childRemoved root c2 1 | root c1 c2",
+                   "parentChanged c2 root | root c1 c2",
+                   "childRemoved root c1 0 | root c1 c2",
+                   "parentChanged c1 root | root c1 c2" },
+                 recorder.take(),
+                 "callbacks of the commit");
+}
+
+//==============================================================================
+// The start and the end of a transaction
+
+TEST_F (DataTreeContractTests, TransactionIsAnnouncedAroundItsChangesAlsoOnUndoAndRedo)
+{
+    World world;
+    rootAlone (world);
+
+    Recorder recorder;
+    recorder.watch (world);
+
+    const auto undoManager = makeUndoManager();
+    const StringArray expected { "transactionStarted root", "propertyChanged root a", "transactionEnded root committed" };
+
+    {
+        auto transaction = world.find ("root").beginTransaction (undoManager.get());
+        transaction.setProperty ("a", 1);
+    }
+
+    expectLines (expected, recorder.takeAll(), "callbacks of the commit");
+
+    EXPECT_TRUE (undoManager->undo());
+    expectLines (expected, recorder.takeAll(), "callbacks of the undo");
+
+    EXPECT_TRUE (undoManager->redo());
+    expectLines (expected, recorder.takeAll(), "callbacks of the redo");
+}
+
+TEST_F (DataTreeContractTests, TransactionIsAnnouncedToTheNodeItEditsOnly)
+{
+    World world;
+    rootAndOtherParent (world);
+
+    Recorder recorder;
+    recorder.watch (world);
+
+    {
+        auto transaction = world.find ("root").beginTransaction();
+        transaction.addChild (world.find ("x"));
+    }
+
+    expectLines ({ "transactionStarted root", "childRemoved other x 0", "childAdded root x", "parentChanged x other", "transactionEnded root committed" },
+                 recorder.takeAll(),
+                 "callbacks of the commit");
+}
+
+TEST_F (DataTreeContractTests, TransactionWhoseEditsDoNothingIsStillAnnounced)
+{
+    World world;
+    rootAlone (world);
+
+    Recorder recorder;
+    recorder.watch (world);
+
+    {
+        auto transaction = world.find ("root").beginTransaction();
+        transaction.removeChild (7);
+    }
+
+    expectLines ({ "transactionStarted root", "transactionEnded root committed" }, recorder.takeAll(), "callbacks of the commit");
+}
+
+TEST_F (DataTreeContractTests, TransactionThatIsAbortedIsAnnouncedWithoutAnyChange)
+{
+    World world;
+    rootAlone (world);
+
+    Recorder recorder;
+    recorder.watch (world);
+
+    {
+        auto transaction = world.find ("root").beginTransaction();
+        transaction.abort();
+        transaction.abort();
+    }
+
+    // Once, also when it had recorded nothing
+    expectLines ({ "transactionStarted root", "transactionEnded root aborted" }, recorder.takeAll(), "callbacks of the abort");
+    EXPECT_TRUE (recorder.problems.isEmpty()) << recorder.problems.joinIntoString ("\n");
+    EXPECT_EQ (0, recorder.numOpenTransactions);
+}
+
+TEST_F (DataTreeContractTests, ValidatedTransactionThatFailsIsAnnouncedAsAborted)
+{
+    const auto schema = DataTreeSchema::fromJsonSchemaString (R"({
+        "nodeTypes": {
+            "root": {
+                "properties": {
+                    "size": { "type": "number", "minimum": 1, "maximum": 10 }
+                }
+            }
+        }
+    })");
+
+    ASSERT_NE (nullptr, schema);
+
+    World world;
+    rootAlone (world);
+
+    Recorder recorder;
+    recorder.watch (world);
+
+    {
+        auto transaction = world.find ("root").beginValidatedTransaction (schema);
+        EXPECT_TRUE (transaction.setProperty ("size", 5).wasOk());
+        EXPECT_TRUE (transaction.setProperty ("size", 50).failed());
+    }
+
+    expectLines ({ "transactionStarted root", "transactionEnded root aborted" }, recorder.takeAll(), "callbacks of the failed transaction");
+    EXPECT_EQ (String ("root"), world.describe());
+
+    {
+        auto transaction = world.find ("root").beginValidatedTransaction (schema);
+        EXPECT_TRUE (transaction.setProperty ("size", 5).wasOk());
+    }
+
+    expectLines ({ "transactionStarted root", "propertyChanged root size", "transactionEnded root committed" }, recorder.takeAll(), "callbacks of the valid transaction");
+}
+
+TEST_F (DataTreeContractTests, TransactionCommittedFromACallbackIsAnnouncedInsideTheOuterOne)
+{
+    struct SetsAnotherProperty final : DataTree::Listener
+    {
+        void propertyChanged (DataTree& tree, const Identifier& property) override
+        {
+            if (property == Identifier ("a"))
+            {
+                auto transaction = tree.beginTransaction();
+                transaction.setProperty ("b", 2);
+            }
+        }
+    };
+
+    World world;
+    rootAlone (world);
+
+    Recorder recorder;
+    recorder.watch (world);
+
+    SetsAnotherProperty listener;
+    auto root = world.find ("root");
+    root.addListener (&listener);
+
+    {
+        auto transaction = root.beginTransaction();
+        transaction.setProperty ("a", 1);
+    }
+
+    root.removeListener (&listener);
+
+    expectLines ({ "transactionStarted root", "propertyChanged root a", "transactionStarted root", "propertyChanged root b", "transactionEnded root committed", "transactionEnded root committed" },
+                 recorder.takeAll(),
+                 "callbacks of the commit");
+
+    EXPECT_TRUE (recorder.problems.isEmpty()) << recorder.problems.joinIntoString ("\n");
+    EXPECT_EQ (0, recorder.numOpenTransactions);
+    EXPECT_EQ (String ("root{a=int:1 b=int:2}"), world.describe());
+}
+
+TEST_F (DataTreeContractTests, ListenerAddedDuringATransactionOnlyGetsItsEnd)
+{
+    struct AddsAListener final : DataTree::Listener
+    {
+        void propertyChanged (DataTree& tree, const Identifier&) override
+        {
+            late.watch (tree);
+        }
+
+        Recorder late;
+    };
+
+    World world;
+    rootAlone (world);
+
+    AddsAListener listener;
+    auto root = world.find ("root");
+    root.addListener (&listener);
+
+    {
+        auto transaction = root.beginTransaction();
+        transaction.setProperty ("a", 1);
+    }
+
+    root.removeListener (&listener);
+
+    expectLines ({ "transactionEnded root committed" }, listener.late.takeAll(), "callbacks");
+}
+
+//==============================================================================
+// Several nodes in one transaction
+
+TEST_F (DataTreeContractTests, BatchEditsItsNodesInOneTransactionAndOneUndoableAction)
+{
+    World world;
+    rootAndOrphan (world);
+
+    Recorder recorder;
+    recorder.watch (world);
+
+    const auto undoManager = makeUndoManager();
+
+    {
+        DataTree::BatchTransaction batch (undoManager.get());
+        batch.edit (world.find ("root")).setProperty ("a", 1);
+        batch.edit (world.find ("x")).setProperty ("a", 2);
+        batch.edit (world.find ("root")).setProperty ("b", 3);
+
+        EXPECT_TRUE (batch.isActive());
+        EXPECT_TRUE (recorder.takeAll().isEmpty());
+    }
+
+    expectLines ({ "transactionStarted root", "transactionStarted x", "propertyChanged root a", "propertyChanged root b", "propertyChanged x a", "transactionEnded x committed", "transactionEnded root committed" },
+                 recorder.takeAll(),
+                 "callbacks of the commit");
+
+    EXPECT_EQ (String ("root{a=int:1 b=int:3} x{a=int:2}"), world.describe());
+
+    EXPECT_TRUE (undoManager->undo());
+
+    expectLines ({ "transactionStarted root", "transactionStarted x", "propertyChanged x a", "propertyChanged root b", "propertyChanged root a", "transactionEnded x committed", "transactionEnded root committed" },
+                 recorder.takeAll(),
+                 "callbacks of the undo");
+
+    EXPECT_EQ (String ("root x"), world.describe());
+    EXPECT_FALSE (undoManager->canUndo());
+}
+
+TEST_F (DataTreeContractTests, BatchThatIsEmptyOrAbortedLeavesNothingBehind)
+{
+    World world;
+    rootAndOrphan (world);
+
+    Recorder recorder;
+    recorder.watch (world);
+
+    const auto undoManager = makeUndoManager();
+
+    {
+        DataTree::BatchTransaction batch (undoManager.get());
+        batch.edit (world.find ("root"));
+        batch.edit (DataTree()).setProperty ("a", 1);
+    }
+
+    EXPECT_TRUE (recorder.takeAll().isEmpty());
+
+    {
+        DataTree::BatchTransaction batch (undoManager.get());
+        batch.edit (world.find ("root")).setProperty ("a", 1);
+        batch.edit (world.find ("x")).addChild (DataTree ("child"));
+        batch.abort();
+
+        EXPECT_FALSE (batch.isActive());
+    }
+
+    // Aborting changes nothing, the listeners of both nodes are told about one aborted transaction
+    expectLines ({ "transactionStarted root", "transactionStarted x", "transactionEnded x aborted", "transactionEnded root aborted" }, recorder.takeAll(), "callbacks of the abort");
+    EXPECT_FALSE (undoManager->canUndo());
+    EXPECT_EQ (String ("root x"), world.describe());
+}
+
+TEST_F (DataTreeContractTests, BatchRefusesTheEditThatWouldMakeACycle)
+{
+    World world;
+    rootAndOrphan (world);
+
+    Recorder recorder;
+    recorder.watch (world);
+
+    {
+        DataTree::BatchTransaction batch;
+        batch.edit (world.find ("root")).addChild (world.find ("x"));
+        batch.edit (world.find ("x")).addChild (world.find ("root"));
+    }
+
+    expectLines ({ "childAdded root x", "parentChanged x -" }, recorder.take(), "callbacks of the commit");
+    EXPECT_EQ (String ("root[x]"), world.describe());
+    EXPECT_TRUE (world.findStructureProblems().isEmpty());
+}
+
+TEST_F (DataTreeContractTests, BatchLeavesOutATransactionCommittedOnItsOwn)
+{
+    World world;
+    rootAndOrphan (world);
+
+    Recorder recorder;
+    recorder.watch (world);
+
+    {
+        DataTree::BatchTransaction batch;
+        batch.edit (world.find ("x")).setProperty ("a", 1);
+
+        auto& transaction = batch.edit (world.find ("root"));
+        transaction.setProperty ("a", 2);
+        transaction.commit();
+
+        expectLines ({ "transactionStarted root", "propertyChanged root a", "transactionEnded root committed" }, recorder.takeAll(), "callbacks of the transaction");
+
+        batch.edit (world.find ("root")).setProperty ("b", 3);
+    }
+
+    expectLines ({ "transactionStarted x", "transactionStarted root", "propertyChanged x a", "propertyChanged root b", "transactionEnded root committed", "transactionEnded x committed" },
+                 recorder.takeAll(),
+                 "callbacks of the batch");
+}
+
+//==============================================================================
+// Side effects
+
+TEST_F (DataTreeContractTests, EmptyAndAbortedTransactionsLeaveNothingBehind)
+{
+    World world;
+    rootAlone (world);
+
+    Recorder recorder;
+    recorder.watch (world);
+
+    const auto undoManager = makeUndoManager();
+
+    {
+        auto transaction = world.find ("root").beginTransaction (undoManager.get());
+    }
+
+    EXPECT_TRUE (recorder.takeAll().isEmpty());
+
+    {
+        auto transaction = world.find ("root").beginTransaction (undoManager.get());
+        transaction.setProperty ("a", 1);
+        transaction.addChild (DataTree ("child"));
+        transaction.abort();
+
+        EXPECT_FALSE (transaction.isActive());
+    }
+
+    // Aborting changes nothing, the listeners are only told that it happened
+    expectLines ({ "transactionStarted root", "transactionEnded root aborted" }, recorder.takeAll(), "callbacks of the abort");
+    EXPECT_FALSE (undoManager->canUndo());
+    EXPECT_EQ (String ("root"), world.describe());
+}
+
+TEST_F (DataTreeContractTests, CommitWithoutAnUndoManagerReleasesTheRemovedNode)
+{
+    DataTree root ("root");
+    DataTree g ("g");
+
+    {
+        DataTree x ("x");
+
+        {
+            auto transaction = x.beginTransaction();
+            transaction.addChild (g);
+        }
+
+        auto transaction = root.beginTransaction();
+        transaction.addChild (x);
+    }
+
+    Recorder recorder;
+    recorder.watch (g);
+
+    {
+        auto transaction = root.beginTransaction();
+        transaction.removeChild (0);
+    }
+
+    // The node is destroyed with the commit, which is what orphans its child
+    expectLines ({ "ancestorChanged g x", "parentChanged g -" }, recorder.take(), "callbacks");
+    EXPECT_FALSE (g.getParent().isValid());
+}
+
+TEST_F (DataTreeContractTests, CommitWithAnUndoManagerKeepsTheRemovedNodeForUndo)
+{
+    DataTree root ("root");
+    DataTree g ("g");
+
+    {
+        DataTree x ("x");
+
+        {
+            auto transaction = x.beginTransaction();
+            transaction.addChild (g);
+        }
+
+        auto transaction = root.beginTransaction();
+        transaction.addChild (x);
+    }
+
+    Recorder recorder;
+    recorder.watch (g);
+
+    const auto undoManager = makeUndoManager();
+
+    {
+        auto transaction = root.beginTransaction (undoManager.get());
+        transaction.removeChild (0);
+    }
+
+    expectLines ({ "ancestorChanged g x" }, recorder.take(), "callbacks of the commit");
+    EXPECT_EQ (String ("x"), label (g.getParent()));
+
+    EXPECT_TRUE (undoManager->undo());
+
+    expectLines ({ "ancestorChanged g x" }, recorder.take(), "callbacks of the undo");
+    EXPECT_EQ (root, g.getParent().getParent());
+}
+
+TEST_F (DataTreeContractTests, AbortReleasesTheNodesItHeld)
+{
+    DataTree root ("root");
+    DataTree g ("g");
+
+    auto transaction = root.beginTransaction();
+
+    {
+        DataTree x ("x");
+
+        {
+            auto attach = x.beginTransaction();
+            attach.addChild (g);
+        }
+
+        transaction.addChild (x);
+    }
+
+    Recorder recorder;
+    recorder.watch (g);
+
+    EXPECT_TRUE (g.getParent().isValid());
+
+    transaction.abort();
+
+    // Only the pending edit held the node, so aborting destroys it, which orphans its child
+    expectLines ({ "parentChanged g -" }, recorder.take(), "callbacks");
+    EXPECT_FALSE (g.getParent().isValid());
+    EXPECT_EQ (0, root.getNumChildren());
+}
+
+//==============================================================================
+// The same rules over scripts of random edits, valid and not
+
+TEST_F (DataTreeContractTests, CallbacksReplayToTheTree)
+{
+    for (int64 seed = 1; seed <= numSeeds; ++seed)
+    {
+        World world;
+        buildRandomWorld (world, seed, numNodes);
+
+        Recorder recorder;
+        recorder.watch (world);
+
+        Mirror mirror (world);
+
+        for (const auto& step : makeScript (seed + 1000, numNodes, numSteps))
+        {
+            SCOPED_TRACE ("seed " + String (seed) + ", " + describeStep (step));
+
+            apply (world, step, nullptr);
+            expectConsistent (world, mirror, recorder);
+
+            if (HasFailure())
+                return;
+        }
+    }
+}
+
+TEST_F (DataTreeContractTests, OneLongPropertyTransactionEndsLikeManyShortOnes)
+{
+    static constexpr Op::Kind kinds[] = { Op::Kind::setProperty, Op::Kind::setProperty, Op::Kind::setProperty, Op::Kind::removeProperty, Op::Kind::removeAllProperties };
+
+    for (int64 seed = 1; seed <= numSeeds; ++seed)
+    {
+        SCOPED_TRACE ("seed " + String (seed));
+
+        World together;
+        buildRandomWorld (together, seed, numNodes);
+
+        World apart;
+        buildRandomWorld (apart, seed, numNodes);
+
+        Random random (seed + 3000);
+        Step step;
+
+        for (int i = 0; i < 120; ++i)
+        {
+            Op op;
+            op.kind = kinds[random.nextInt (5)];
+            op.property = random.nextInt (8);
+            op.value = random.nextInt (6);
+            step.ops.push_back (op);
+        }
+
+        apply (together, step, nullptr);
+
+        for (const auto& op : step.ops)
+            apply (apart, { step.target, { op } }, nullptr);
+
+        EXPECT_EQ (describeModel (apart.capture()).toStdString(), describeModel (together.capture()).toStdString());
+    }
+}
+
+TEST_F (DataTreeContractTests, EditsOfSeveralChildrenEqualTheSingleEditsTheyStandFor)
+{
+    for (int64 seed = 1; seed <= numSeeds; ++seed)
+    {
+        World together;
+        buildRandomWorld (together, seed, numNodes);
+
+        World apart;
+        buildRandomWorld (apart, seed, numNodes);
+
+        Recorder togetherRecorder;
+        togetherRecorder.watch (together);
+
+        Recorder apartRecorder;
+        apartRecorder.watch (apart);
+
+        Mirror mirror (together);
+
+        const auto expectSame = [&] (const char* what)
+        {
+            expectLines (apartRecorder.take(), togetherRecorder.take(), what);
+            EXPECT_EQ (describeModel (apart.capture()).toStdString(), describeModel (together.capture()).toStdString()) << what;
+            expectConsistent (together, mirror, togetherRecorder);
+        };
+
+        for (const auto& longStep : makeScript (seed + 1000, numNodes, numSteps))
+        {
+            // One edit per transaction, as the single edits are worked out from the children the node has
+            for (const auto& op : longStep.ops)
+            {
+                const Step step { longStep.target, { op } };
+                SCOPED_TRACE ("seed " + String (seed) + ", " + describeStep (step));
+
+                const auto togetherUndo = makeUndoManager();
+                const auto apartUndo = makeUndoManager();
+
+                apply (together, step, togetherUndo.get());
+                applyAsSingleEdits (apart, step, apartUndo.get());
+                expectSame ("commit");
+
+                EXPECT_EQ (apartUndo->canUndo(), togetherUndo->canUndo());
+
+                if (apartUndo->canUndo() && togetherUndo->canUndo())
+                {
+                    apartUndo->undo();
+                    togetherUndo->undo();
+                    expectSame ("undo");
+
+                    apartUndo->redo();
+                    togetherUndo->redo();
+                    expectSame ("redo");
+                }
+
+                if (HasFailure())
+                    return;
+            }
+        }
+    }
+}
+
+TEST_F (DataTreeContractTests, BatchEqualsItsTransactionsCommittedInOrder)
+{
+    for (int64 seed = 1; seed <= numSeeds; ++seed)
+    {
+        World batched;
+        buildRandomWorld (batched, seed, numNodes);
+
+        World sequential;
+        buildRandomWorld (sequential, seed, numNodes);
+
+        Recorder batchedRecorder;
+        batchedRecorder.watch (batched);
+
+        Recorder sequentialRecorder;
+        sequentialRecorder.watch (sequential);
+
+        Mirror mirror (batched);
+
+        // The changes have to match, and the batch has to start every transaction before them and end it after
+        const auto expectSame = [&] (const char* what)
+        {
+            const auto all = batchedRecorder.takeAll();
+            StringArray changes;
+            int firstChange = -1, lastChange = -1;
+
+            for (int i = 0; i < all.size(); ++i)
+            {
+                if (all[i].startsWith ("transaction"))
+                    continue;
+
+                changes.add (all[i]);
+                firstChange = firstChange < 0 ? i : firstChange;
+                lastChange = i;
+            }
+
+            EXPECT_EQ (changes.size(), lastChange - firstChange + (changes.isEmpty() ? 0 : 1)) << what << ": a transaction started or ended between the changes";
+            expectLines (sequentialRecorder.take(), changes, what);
+            EXPECT_EQ (describeModel (sequential.capture()).toStdString(), describeModel (batched.capture()).toStdString()) << what;
+            expectConsistent (batched, mirror, batchedRecorder);
+        };
+
+        const auto script = makeScript (seed + 1000, numNodes, numSteps);
+        Random random (seed + 4000);
+
+        for (size_t first = 0; first < script.size();)
+        {
+            const auto numParts = jmin (script.size() - first, static_cast<size_t> (1 + random.nextInt (4)));
+            const Script steps (script.begin() + static_cast<std::ptrdiff_t> (first), script.begin() + static_cast<std::ptrdiff_t> (first + numParts));
+            first += numParts;
+
+            SCOPED_TRACE ("seed " + String (seed) + ", batch starting with " + describeStep (steps.front()));
+
+            const auto batchedUndo = makeUndoManager();
+            const auto sequentialUndo = makeUndoManager();
+            const auto before = describeModel (batched.capture());
+
+            applyAsBatch (batched, steps, batchedUndo.get());
+            applyAsTransactions (sequential, steps, sequentialUndo.get());
+            expectSame ("commit");
+
+            EXPECT_EQ (sequentialUndo->canUndo(), batchedUndo->canUndo());
+
+            if (sequentialUndo->canUndo() && batchedUndo->canUndo())
+            {
+                sequentialUndo->undo();
+                batchedUndo->undo();
+                expectSame ("undo");
+                EXPECT_EQ (before.toStdString(), describeModel (batched.capture()).toStdString());
+                EXPECT_FALSE (batchedUndo->canUndo());
+
+                sequentialUndo->redo();
+                batchedUndo->redo();
+                expectSame ("redo");
+            }
+
+            if (HasFailure())
+                return;
+        }
+    }
+}
+
+TEST_F (DataTreeContractTests, UndoRestoresTheTreeAndRedoRepeatsTheCommit)
+{
+    for (int64 seed = 1; seed <= numSeeds; ++seed)
+    {
+        World world;
+        buildRandomWorld (world, seed, numNodes);
+
+        Recorder recorder;
+        recorder.watch (world);
+
+        Mirror mirror (world);
+
+        for (const auto& step : makeScript (seed + 1000, numNodes, numSteps))
+        {
+            SCOPED_TRACE ("seed " + String (seed) + ", " + describeStep (step));
+
+            const auto undoManager = makeUndoManager();
+            const auto before = describeModel (world.capture());
+
+            apply (world, step, undoManager.get());
+
+            const auto commit = recorder.take();
+            const auto after = describeModel (world.capture());
+            expectConsistent (world, mirror, recorder);
+
+            if (undoManager->canUndo())
+            {
+                EXPECT_TRUE (undoManager->undo());
+                EXPECT_EQ (before.toStdString(), describeModel (world.capture()).toStdString());
+                expectConsistent (world, mirror, recorder);
+                recorder.take();
+
+                EXPECT_TRUE (undoManager->redo());
+                EXPECT_EQ (after.toStdString(), describeModel (world.capture()).toStdString());
+                expectLines (commit, recorder.take(), "callbacks of the redo");
+                expectConsistent (world, mirror, recorder);
+            }
+            else
+            {
+                EXPECT_TRUE (commit.isEmpty());
+                EXPECT_EQ (before.toStdString(), after.toStdString());
+            }
+
+            if (HasFailure())
+                return;
+        }
+    }
+}
+
+TEST_F (DataTreeContractTests, UndoHistoryUnwindsToTheStartAndBack)
+{
+    for (int64 seed = 1; seed <= numSeeds; ++seed)
+    {
+        SCOPED_TRACE ("seed " + String (seed));
+
+        World world;
+        buildRandomWorld (world, seed, numNodes);
+
+        Recorder recorder;
+        recorder.watch (world);
+
+        Mirror mirror (world);
+
+        const auto undoManager = makeUndoManager();
+        const auto initial = describeModel (world.capture());
+
+        for (const auto& step : makeScript (seed + 1000, numNodes, numSteps))
+        {
+            undoManager->beginNewTransaction();
+            apply (world, step, undoManager.get());
+        }
+
+        const auto committed = describeModel (world.capture());
+
+        for (int i = 0; i <= numSteps && undoManager->undo(); ++i)
+        {
+        }
+
+        EXPECT_FALSE (undoManager->canUndo());
+        EXPECT_EQ (initial.toStdString(), describeModel (world.capture()).toStdString());
+        expectConsistent (world, mirror, recorder);
+
+        for (int i = 0; i <= numSteps && undoManager->redo(); ++i)
+        {
+        }
+
+        EXPECT_FALSE (undoManager->canRedo());
+        EXPECT_EQ (committed.toStdString(), describeModel (world.capture()).toStdString());
+        expectConsistent (world, mirror, recorder);
+
+        if (HasFailure())
+            return;
+    }
+}
+
+TEST_F (DataTreeContractTests, SameCallbacksAndDataWithAndWithoutAnUndoManager)
+{
+    for (int64 seed = 1; seed <= numSeeds; ++seed)
+    {
+        World plain;
+        buildRandomWorld (plain, seed, numNodes);
+
+        World undoable;
+        buildRandomWorld (undoable, seed, numNodes);
+
+        Recorder plainRecorder;
+        plainRecorder.watch (plain);
+
+        Recorder undoableRecorder;
+        undoableRecorder.watch (undoable);
+
+        const auto undoManager = makeUndoManager();
+
+        for (const auto& step : makeScript (seed + 1000, numNodes, numSteps))
+        {
+            SCOPED_TRACE ("seed " + String (seed) + ", " + describeStep (step));
+
+            apply (plain, step, nullptr);
+            apply (undoable, step, undoManager.get());
+
+            expectLines (plainRecorder.take(), undoableRecorder.take(), "callbacks");
+            EXPECT_EQ (describeModel (plain.capture()).toStdString(), describeModel (undoable.capture()).toStdString());
+
+            if (HasFailure())
+                return;
+        }
+    }
+}
+
+TEST_F (DataTreeContractTests, ListenersOnSomeNodesGetTheirShareOfTheCallbacks)
+{
+    for (int64 seed = 1; seed <= numSeeds; ++seed)
+    {
+        World everywhere;
+        buildRandomWorld (everywhere, seed, numNodes);
+
+        World somewhere;
+        buildRandomWorld (somewhere, seed, numNodes);
+
+        Recorder full;
+        full.watch (everywhere);
+
+        Recorder partial;
+        StringArray watched;
+        Random random (seed + 2000);
+
+        for (const auto& node : somewhere.nodes)
+        {
+            if (random.nextBool())
+            {
+                partial.watch (node);
+                watched.add (label (node));
+            }
+        }
+
+        for (const auto& step : makeScript (seed + 1000, numNodes, numSteps))
+        {
+            SCOPED_TRACE ("seed " + String (seed) + ", " + describeStep (step));
+
+            apply (everywhere, step, nullptr);
+            apply (somewhere, step, nullptr);
+
+            StringArray expected;
+
+            for (const auto& event : full.takeEvents())
+            {
+                if (watched.contains (event.receiver))
+                    expected.add (event.text);
+            }
+
+            expectLines (expected, partial.takeAll(), "callbacks");
+
+            if (HasFailure())
+                return;
+        }
+    }
 }

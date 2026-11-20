@@ -292,6 +292,47 @@ TEST_F (YuiBuilderTests, ReportsLinksToUnknownTargets)
     EXPECT_EQ (builder.getDiagnostics()[0].message, "Slider.value: unknown element 'model'");
 }
 
+TEST_F (YuiBuilderTests, TellsOnceAboutTheChangesOfATransaction)
+{
+    YuiBuilder builder;
+    auto document = parse ("Component { id: panel; Label { id: caption; } }");
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    int numMutations = 0;
+    builder.onTreeMutated = [&numMutations]
+    {
+        ++numMutations;
+    };
+
+    {
+        auto transaction = document.beginTransaction();
+        transaction.setProperty ("first", 1);
+        transaction.setProperty ("second", 2);
+        transaction.addChild (DataTree ("extra"));
+
+        EXPECT_EQ (0, numMutations);
+    }
+
+    EXPECT_EQ (1, numMutations);
+
+    {
+        DataTree::BatchTransaction batch;
+        batch.edit (document).setProperty ("first", 3);
+        batch.edit (document.getChild (0)).setProperty ("third", 4);
+    }
+
+    EXPECT_EQ (2, numMutations);
+
+    builder.setIgnoreTreeChanges (true);
+
+    {
+        auto transaction = document.beginTransaction();
+        transaction.setProperty ("first", 5);
+    }
+
+    EXPECT_EQ (2, numMutations);
+}
+
 TEST_F (YuiBuilderTests, RebuildingReplacesTheTree)
 {
     YuiBuilder builder;

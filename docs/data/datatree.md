@@ -137,9 +137,10 @@ public:
     void childAdded      (DataTree& parent, DataTree& child) override {}
     void childRemoved    (DataTree& parent, DataTree& child, int formerIndex) override {}
     void childMoved      (DataTree& parent, DataTree& child, int oldIndex, int newIndex) override {}
-    void treeRedirected  (DataTree& tree) override {}
     void parentChanged   (DataTree& child, DataTree& previousParent) override {}
     void ancestorChanged (DataTree& tree, DataTree& reparentedAncestor) override {}
+    void transactionStarted (DataTree& tree) override {}
+    void transactionEnded (DataTree& tree, DataTree::TransactionResult result) override {}
 };
 
 MyListener listener;
@@ -154,9 +155,10 @@ settings.removeListener (&listener);
 | `childAdded` | A child is inserted. |
 | `childRemoved` | A child is removed (with its former index). |
 | `childMoved` | A child changes position. |
-| `treeRedirected` | The node is repointed at different underlying data. |
 | `parentChanged` | This node was added to, removed from, or moved to another parent. `previousParent` is invalid if it had none; `child.getParent()` is the new parent. Both are invalid when the parent was destroyed while this node is still referenced. |
 | `ancestorChanged` | An ancestor of this node changed its parent. Sent to every descendant of the node that received `parentChanged`. |
+| `transactionStarted` | A transaction is about to apply its changes to this node, or was aborted. |
+| `transactionEnded` | The transaction has applied its changes to this node (`committed`), or applied nothing (`aborted`). |
 
 Notifications are delivered only to listeners registered on the affected node,
 they are not propagated up to its ancestors: to observe a child being reparented,
@@ -176,6 +178,44 @@ never throw from a callback.
 For typed, cached, auto-refreshing access to a single property, prefer a
 [`CachedValue`](cached-value.md) over manual listeners.
 ```
+
+### Following a transaction
+
+A committed transaction sends `transactionStarted` to the listeners of the node it
+edits, then the callbacks of its changes, then `transactionEnded` with
+`TransactionResult::committed`. Undoing and redoing it does the same. Use the pair
+to do expensive work once, when all the changes are in, or to time them:
+
+```cpp
+void transactionStarted (DataTree&) override { ++depth; }
+
+void childAdded (DataTree&, DataTree&) override
+{
+    needsRefresh = true;
+
+    if (depth == 0)
+        refresh();      // no transaction of this node around it, see below
+}
+
+void transactionEnded (DataTree&, DataTree::TransactionResult) override
+{
+    if (depth > 0 && --depth == 0 && std::exchange (needsRefresh, false))
+        refresh();
+}
+```
+
+An aborted transaction applies nothing. It sends the two callbacks one after the
+other when it is aborted, the second with `TransactionResult::aborted`, so that a
+listener can log it. This includes a
+[validated transaction](schema.md#validated-transactions) that failed.
+
+- Both are sent when the transaction is applied or aborted, never when it is
+  created: a transaction that is still open is not known to the listeners.
+- Count the transactions instead of keeping a flag, and do not go below zero.
+  They nest when a listener commits one from a callback, and a listener added
+  while a transaction is applied gets its end without its start.
+- Only the nodes a transaction edits are told. A node that loses a child to
+  another parent gets `childRemoved` with no transaction around it.
 
 ## See also
 

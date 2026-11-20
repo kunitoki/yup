@@ -250,6 +250,77 @@ class DataTreeListenerImpl(yup.DataTreeListener):
         treeType = tree.getType()
         return treeType if isinstance(treeType, str) else treeType.toString()
 
+def test_DataTree_transaction_edits_several_children():
+    def childTypes(tree):
+        return [DataTreeListenerImpl._typeName(tree.getChild(i)) for i in range(tree.getNumChildren())]
+
+    parent = yup.DataTree("Parent")
+    a, b, c = yup.DataTree("A"), yup.DataTree("B"), yup.DataTree("C")
+
+    transaction = parent.beginTransaction()
+    transaction.addChildren([a, b, c])
+    transaction.commit()
+    assert childTypes(parent) == ["A", "B", "C"]
+
+    transaction = parent.beginTransaction()
+    transaction.reorderChildren([c, a, b])
+    transaction.commit()
+    assert childTypes(parent) == ["C", "A", "B"]
+
+    transaction = parent.beginTransaction()
+    transaction.removeChildren([a, c])
+    transaction.commit()
+    assert childTypes(parent) == ["B"]
+
+    transaction = parent.beginTransaction()
+    transaction.addChildren([a, c], 0)
+    transaction.removeChildren(1, 2)
+    transaction.commit()
+    assert childTypes(parent) == ["A"]
+
+def test_DataTree_batch_transaction_is_announced_once():
+    class TransactionListener(yup.DataTreeListener):
+        def __init__(self):
+            super().__init__()
+            self.events = []
+
+        def transactionStarted(self, tree):
+            self.events.append("started " + DataTreeListenerImpl._typeName(tree))
+
+        def transactionEnded(self, tree, result):
+            ended = "ended " if result == yup.DataTreeTransactionResult.committed else "aborted "
+            self.events.append(ended + DataTreeListenerImpl._typeName(tree))
+
+        def propertyChanged(self, tree, property):
+            self.events.append("changed " + DataTreeListenerImpl._typeName(tree))
+
+    first = yup.DataTree("First")
+    second = yup.DataTree("Second")
+
+    listener = TransactionListener()
+    first.addListener(listener)
+    second.addListener(listener)
+
+    batch = yup.DataTree.BatchTransaction()
+    batch.edit(first).setProperty("value", 1)
+    batch.edit(second).setProperty("value", 2)
+    assert batch.isActive()
+    assert listener.events == []
+
+    batch.commit()
+    assert not batch.isActive()
+    assert listener.events == ["started First", "started Second", "changed First", "changed Second", "ended Second", "ended First"]
+    assert first.hasProperty("value") and second.hasProperty("value")
+
+    listener.events = []
+    transaction = first.beginTransaction()
+    transaction.setProperty("value", 3)
+    transaction.abort()
+    assert listener.events == ["started First", "aborted First"]
+
+    first.removeListener(listener)
+    second.removeListener(listener)
+
 def test_DataTree_listener():
     """Test DataTree listener notifications."""
     tree = yup.DataTree(yup.Identifier("Root"))

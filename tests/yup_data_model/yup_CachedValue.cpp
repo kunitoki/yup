@@ -382,7 +382,7 @@ TEST_F (CachedValueTests, PropertyChangeFromDifferentPropertyDoesNotAffectCache)
     EXPECT_EQ (123, cachedValue.get()); // Should remain unchanged
 }
 
-TEST_F (CachedValueTests, TreeRedirectionUpdatesBinding)
+TEST_F (CachedValueTests, RebindingToAnotherTreeUpdatesTheValue)
 {
     CachedValue<int> cachedValue (dataTree, kTestPropertyName);
     EXPECT_EQ (123, cachedValue.get());
@@ -395,8 +395,6 @@ TEST_F (CachedValueTests, TreeRedirectionUpdatesBinding)
         transaction.commit();
     }
 
-    // Redirect the tree (this would happen through DataTree internal mechanisms)
-    // For testing, we'll simulate by rebinding
     cachedValue.bind (newTree, kTestPropertyName);
 
     EXPECT_EQ (888, cachedValue.get());
@@ -898,4 +896,51 @@ TEST (CachedValueVariantConverterTests, StrictConversionFailureHandling)
     // Should now parse successfully and not use default
     EXPECT_FALSE (strictPointValue.isUsingDefault());
     EXPECT_EQ (StrictPoint (100, 200), strictPointValue.get());
+}
+
+TEST_F (CachedValueTests, StaysBoundWhenADescendantIsEditedOrQueried)
+{
+    CachedValue<int> cachedValue (dataTree, kTestPropertyName);
+
+    DataTree child ("Child");
+    DataTree grandchild ("Grandchild");
+
+    {
+        auto transaction = dataTree.beginTransaction();
+        transaction.addChild (child);
+    }
+
+    {
+        auto transaction = child.beginTransaction();
+        transaction.addChild (grandchild);
+    }
+
+    EXPECT_TRUE (grandchild.isAChildOf (dataTree));
+    EXPECT_EQ (dataTree, grandchild.getRoot());
+    EXPECT_EQ (2, grandchild.getDepth());
+
+    EXPECT_TRUE (cachedValue.isBound());
+    EXPECT_EQ (dataTree, cachedValue.getDataTree());
+
+    {
+        auto transaction = dataTree.beginTransaction();
+        transaction.setProperty (kTestPropertyName, 456);
+    }
+
+    EXPECT_EQ (456, cachedValue.get());
+}
+
+TEST_F (CachedValueTests, StaysBoundWhenOtherHandlesToItsTreeAreAssigned)
+{
+    CachedValue<int> cachedValue (dataTree, kTestPropertyName);
+
+    DataTree handle (dataTree);
+    handle = DataTree ("Other");
+
+    std::vector<DataTree> handles { DataTree ("First"), dataTree };
+    std::reverse (handles.begin(), handles.end());
+
+    EXPECT_TRUE (cachedValue.isBound());
+    EXPECT_EQ (dataTree, cachedValue.getDataTree());
+    EXPECT_EQ (123, cachedValue.get());
 }

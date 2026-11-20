@@ -35,7 +35,7 @@ else
 | Method | Description |
 | ------ | ----------- |
 | `commit()` | Applies all batched changes and notifies listeners. |
-| `abort()` | Discards all batched changes. |
+| `abort()` | Discards all batched changes. Listeners are [told it was aborted](datatree.md#following-a-transaction). |
 | `isActive()` | True until committed or aborted. |
 
 ## Property edits
@@ -69,11 +69,63 @@ DataTree a ("Child"), b ("Child");
 }
 ```
 
+### Several children at once
+
+On a node with many children, adding, removing or moving them one call at a time
+gets slow, as every call shifts the children after it. These edits do the same
+work in one go:
+
+```cpp
+auto tx = parent.beginTransaction();
+
+tx.addChildren (newRows, 0);        // insert them together at index 0 (-1 appends)
+tx.removeChildren (10, 100);        // remove 100 children, starting at index 10
+tx.removeChildren (selectedRows);   // remove these children
+tx.reorderChildren (sortedRows);    // all the children, in their new order
+```
+
+| Method | Equals |
+| ------ | ------ |
+| `addChildren (children, index)` | `addChild()` for each tree in order, the first one at `index`. The trees `addChild()` ignores are skipped, and so is a tree listed twice. |
+| `removeChildren (start, count)` | `removeChild (index)` from the last index of the range down to the first. |
+| `removeChildren (children)` | `removeChild()` on each listed child, from the last one in the node to the first, whatever the order they are listed in. |
+| `reorderChildren (newOrder)` | `moveChild()` bringing each child to its new index, from the first to the last. Ignored unless `newOrder` holds exactly the children of the node, each once. |
+
+Listeners get the callbacks of the calls on the right, in the same order, and undo
+works the same. The one difference is that the node is already in its final state
+when the callbacks arrive.
+
+```{note}
+`addChildren()` inserts together the children that have no parent yet. Children
+taken from another node are moved one at a time, as `addChild()` does.
+```
+
 ```{note}
 Batched edits within one transaction are applied in order on commit. Keeping
 related edits in a single transaction produces a single, coherent set of
 notifications (and a single undo step).
 ```
+
+## Editing several nodes together
+
+`DataTree::BatchTransaction` commits the edits of several nodes as one
+transaction:
+
+```cpp
+DataTree::BatchTransaction batch (&undoManager);
+
+for (const auto& row : selectedRows)
+    batch.edit (row).setProperty ("selected", false);
+
+// commits here, or call batch.commit() / batch.abort()
+```
+
+`edit()` returns the pending transaction of a node, the same one each time. The
+result is what committing those transactions one after the other would give, in
+the order the nodes were first edited, with two differences: the listeners of all
+the edited nodes are told about [one transaction](datatree.md#following-a-transaction),
+and the batch is a single undoable action. It is not faster than one transaction
+per node.
 
 ## Undo and redo
 

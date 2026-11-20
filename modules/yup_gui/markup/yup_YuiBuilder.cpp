@@ -227,13 +227,26 @@ struct YuiBuilder::TreeWatcher final : DataTreeListener
 
         watchedNodes.clear();
         watchedRoot = {};
+        transactionDepth = 0;
+        mutatedInTransaction = false;
+    }
+
+    void transactionStarted (DataTree&) override
+    {
+        ++transactionDepth;
+    }
+
+    void transactionEnded (DataTree&, DataTree::TransactionResult) override
+    {
+        // A node watched while a transaction is applied gets its end only
+        if (transactionDepth > 0 && --transactionDepth == 0 && std::exchange (mutatedInTransaction, false))
+            notifyMutation();
     }
 
     void propertyChanged (DataTree&, const Identifier&) override { handleMutation(); }
     void childAdded (DataTree&, DataTree&) override { handleMutation(); }
     void childRemoved (DataTree&, DataTree&, int) override { handleMutation(); }
     void childMoved (DataTree&, DataTree&, int, int) override { handleMutation(); }
-    void treeRedirected (DataTree&) override { handleMutation(); }
 
     void attachSubtree (DataTree node)
     {
@@ -252,6 +265,15 @@ struct YuiBuilder::TreeWatcher final : DataTreeListener
         if (owner.ignoreTreeChanges || ! watchedRoot.isValid())
             return;
 
+        // The changes of a transaction are told about once, when it ends
+        if (transactionDepth > 0)
+            mutatedInTransaction = true;
+        else
+            notifyMutation();
+    }
+
+    void notifyMutation()
+    {
         if (owner.onTreeMutated != nullptr)
         {
             owner.onTreeMutated();
@@ -265,6 +287,8 @@ struct YuiBuilder::TreeWatcher final : DataTreeListener
     YuiBuilder& owner;
     DataTree watchedRoot;
     std::vector<DataTree> watchedNodes;
+    int transactionDepth = 0;
+    bool mutatedInTransaction = false;
 };
 
 //==============================================================================
