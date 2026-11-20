@@ -93,7 +93,7 @@ jobs:
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
           -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
-    - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests
+    - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests --parallel 2
     - name: Run tests
       run: xvfb-run -a ctest --test-dir ${{ runner.workspace }}/build/tests -C ${{ matrix.config }} --output-on-failure
       env:
