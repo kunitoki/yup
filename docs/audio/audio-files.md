@@ -381,6 +381,6 @@ To support another format, derive from `AudioFormat` (name, extensions,
 - [Audio devices](devices.md) - open an audio device and record from it
 - [Audio buffers](buffers.md) - `AudioBuffer` and channel layouts
 - [MIDI](midi.md) - reading and writing MIDI files
-- [Resampling](../dsp/resampling.md) - converting the sample rate of loaded files
+- [Resampling](dsp/resampling.md) - converting the sample rate of loaded files
 - [Threads](../core/multithreading/threads.md) - `TimeSliceThread` for background reading and writing
 - [Audio](index.md) - overview of the audio modules

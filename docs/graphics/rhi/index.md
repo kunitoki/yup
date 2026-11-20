@@ -66,12 +66,6 @@ per-backend notes and how a window chooses one.
   and `GpuRenderOptions`.
 - [Pipelines & shaders](pipelines.md) - compiling pipelines, pipeline options,
   shader sources, binding maps, and the pipeline cache.
-- [Offline shader compilation](offline-shaders.md) - build `.ysl` shader bundles
-  ahead of time with `yup_add_shader_bundle` and the `yup_shader_bundler` tool.
-- [Shader bundle binary format](shader-bundle-format.md) - the RIFF `YSLB` container
-  specification (FourCCs, chunk layout, reflection blob, versioning).
-- [GLSL on the WebGPU target](wgsl-shaders.md) - what the GLSL→WGSL transpiler
-  translates, how it assigns bindings, and what WGSL can't express.
 - [Buffers & textures](buffers-and-textures.md) - `GpuBuffer` and `GpuTexture`.
 - [Offscreen targets & canvases](targets.md) - `GpuTarget`, `GpuCanvas`, and CPU
   readback.
@@ -79,6 +73,12 @@ per-backend notes and how a window chooses one.
   `GpuComputePass`, storage buffers and dispatching GPU work.
 - [Walkthrough: the spinning cube](spinning-cube.md) - an end-to-end custom 3D
   render with a post-process blur.
+- [Offline shader compilation](offline-shaders.md) - build `.ysl` shader bundles
+  ahead of time with `yup_add_shader_bundle` and the `yup_shader_bundler` tool.
+- [GLSL on the WebGPU target](wgsl-shaders.md) - what the GLSL→WGSL transpiler
+  translates, how it assigns bindings, and what WGSL can't express.
+- [Shader bundle binary format](shader-bundle-format.md) - the RIFF `YSLB` container
+  specification (FourCCs, chunk layout, reflection blob, versioning).
 
 ```{toctree}
 :hidden:
@@ -87,11 +87,11 @@ per-backend notes and how a window chooses one.
 concepts
 frames-and-passes
 pipelines
-offline-shaders
-shader-bundle-format
-wgsl-shaders
 buffers-and-textures
 targets
 compute-shaders
 spinning-cube
+offline-shaders
+wgsl-shaders
+shader-bundle-format
 ```

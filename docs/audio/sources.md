@@ -274,7 +274,7 @@ The ratio is the number of input samples consumed per output sample: `1.0`
 passes the input through, higher values speed it up, lower values slow it
 down. It can be changed while playing. The interpolation is simple and cheap;
 for higher quality conversion or time stretching see
-[Resampling](../dsp/resampling.md).
+[Resampling](dsp/resampling.md).
 
 ### BufferingAudioSource
 
@@ -319,7 +319,7 @@ reverb.setBypassed (false);
 
 `filter.makeInactive()` turns the filter off. Both are convenience wrappers
 around the basic processors; for a full set of filters and effects see the
-[DSP](../dsp/index.md) and [Filters](../dsp/filters.md) pages.
+[DSP](dsp/index.md) and [Filters](dsp/filters.md) pages.
 
 ## Threading summary
 
@@ -340,6 +340,6 @@ around the basic processors; for a full set of filters and effects see the
 - [Web audio](web.md) - playback rules in the browser
 - [Audio buffers](buffers.md) - `AudioBuffer` and channel layouts
 - [Audio processors](processors.md) - the full processing model for effects and instruments
-- [Resampling](../dsp/resampling.md) - high quality sample rate conversion and time stretching
+- [Resampling](dsp/resampling.md) - high quality sample rate conversion and time stretching
 - [Threads](../core/multithreading/threads.md) - `TimeSliceThread` for read-ahead
 - [Audio](index.md) - overview of the audio modules

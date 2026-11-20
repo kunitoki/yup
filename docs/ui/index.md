@@ -42,6 +42,43 @@ The core model: the tree, painting, input, layout and styling.
 - [Drag and drop](component-drag-and-drop.md) - drop targets, drag sources,
   payloads and the drag session, in one window or across several.
 
+## Widgets
+
+[Widgets](widgets.md) are the components that ship with the framework, beyond
+the buttons, sliders, labels and text editors covered by
+[component basics](component-basics.md).
+
+- [Artboards (Rive)](artboard.md) - `ArtboardFile`, `Artboard`, `ArtboardNode`
+  and ViewModel data binding.
+- [Code editor](code-editor.md) - `CodeDocument`, `SyntaxDefinition`,
+  `CodeTokeniser` and the syntax-highlighting `CodeEditor`.
+- [Joystick](joystick.md) - `JoystickComponent`, an XY pad moving a thumb over
+  two ranged axes, with overlapping thumb-only joysticks for graph nodes.
+- [List box](list-box.md) - `ListBox` and `ListBoxModel`, custom rows, change
+  notifications, touch scrolling and pull-to-refresh.
+- [MIDI keyboard](midi-keyboard.md) - `MidiKeyboardComponent`, multitouch
+  playing, scroll buttons and the available / visible key ranges.
+- [Resizable divider](resizable-divider.md) - `ResizableDivider`, a draggable
+  bar splitting two panes, with limits, resize policies, snapping, collapsing
+  and keyboard control.
+- [Tabs](tabs.md) - `TabBar`, `TabButton` and `TabComponent`: segmented
+  controls and tabbed pages with animated selection, reordering, overflow and
+  closable tabs.
+- [Tree view](tree-view.md) - `TreeView` and `TreeViewItem`, lazy loading,
+  custom content, drag and drop reordering, `DataTree` mirroring and saved
+  openness state.
+
+## Platform integration
+
+[Platform integration](platform-integration.md): cross-platform access to the
+services of the operating system.
+
+- [File chooser](file-chooser.md) - `FileChooser` for opening and saving files,
+  and how picks behave on the web.
+- [Toast notifications](toast-notifications.md) - the cross-platform
+  `ToastNotification` utility and its `ToastTemplate`, delivered by the
+  platform notification backend.
+
 ## YUI, the declarative UI language
 
 [YUI](yui/index.md) describes a whole interface - layout, stylesheet, drawings
@@ -69,51 +106,19 @@ you edit it.
 
 ## Rendering and performance
 
-What happens between `paint()` and the screen, and how to make it cheaper.
+[Rendering and performance](rendering.md): what happens between `paint()` and
+the screen, and how to make it cheaper.
 
-- [Component effects (shaders)](component-effects.md) - GPU shader effects
-  applied to a `Component` subtree.
+- [Component paint profiling](component-profiling.md) - measure and reduce the
+  cost of `Component::paint`.
 - [Component caching](component-caching.md) - `setCachedToTexture`, caching a
   subtree's paint output in a GPU texture.
 - [Component snapshots](component-snapshots.md) - `snapshotToImage` and
   `snapshotToTexture` for pixel capture.
+- [Component effects (shaders)](component-effects.md) - GPU shader effects
+  applied to a `Component` subtree.
 - [Components in 3D](component-3d.md) - live, interactive components on 3D
   geometry with `setManuallyComposited` and `MeshSurfaceMapper`.
-- [Component paint profiling](component-profiling.md) - measure and reduce the
-  cost of `Component::paint`.
-
-## Widgets
-
-The components that ship with the framework, beyond the buttons, sliders,
-labels and text editors covered by [component basics](component-basics.md).
-
-- [List box](list-box.md) - `ListBox` and `ListBoxModel`, custom rows, change
-  notifications, touch scrolling and pull-to-refresh.
-- [Tree view](tree-view.md) - `TreeView` and `TreeViewItem`, lazy loading,
-  custom content, drag and drop reordering, `DataTree` mirroring and saved
-  openness state.
-- [Tabs](tabs.md) - `TabBar`, `TabButton` and `TabComponent`: segmented
-  controls and tabbed pages with animated selection, reordering, overflow and
-  closable tabs.
-- [Resizable divider](resizable-divider.md) - `ResizableDivider`, a draggable
-  bar splitting two panes, with limits, resize policies, snapping, collapsing
-  and keyboard control.
-- [Joystick](joystick.md) - `JoystickComponent`, an XY pad moving a thumb over
-  two ranged axes, with overlapping thumb-only joysticks for graph nodes.
-- [Code editor](code-editor.md) - `CodeDocument`, `SyntaxDefinition`,
-  `CodeTokeniser` and the syntax-highlighting `CodeEditor`.
-- [MIDI keyboard](midi-keyboard.md) - `MidiKeyboardComponent`, multitouch
-  playing, scroll buttons and the available / visible key ranges.
-- [Artboards (Rive)](artboard.md) - `ArtboardFile`, `Artboard`, `ArtboardNode`
-  and ViewModel data binding.
-
-## Platform integration
-
-- [File chooser](file-chooser.md) - `FileChooser` for opening and saving files,
-  and how picks behave on the web.
-- [Toast notifications](toast-notifications.md) - the cross-platform
-  `ToastNotification` utility and its `ToastTemplate`, delivered by the
-  platform notification backend.
 
 ## Related areas
 
@@ -129,25 +134,13 @@ labels and text editors covered by [component basics](component-basics.md).
 :hidden:
 :maxdepth: 2
 
-component-basics
-component-layout
-component-styling
-gestures
-component-drag-and-drop
+Component Basics <component-basics>
+Layout <component-layout>
+Styling <component-styling>
+Gestures <gestures>
+Drag and Drop <component-drag-and-drop>
+widgets
+platform-integration
 yui/index
-component-effects
-component-caching
-component-snapshots
-component-3d
-component-profiling
-list-box
-tree-view
-tabs
-resizable-divider
-joystick
-code-editor
-midi-keyboard
-artboard
-file-chooser
-toast-notifications
+rendering
 ```

@@ -67,7 +67,7 @@ custom layout. They report the user's choices through callbacks such as
 
 `KMeterComponent` draws a K-System meter for one channel of a `KMeterState`, or
 for the loudest channel with a channel of `-1`. The state does the measuring (see
-[KMeterState](../dsp/dynamics.md#kmeterstate)): the audio thread pushes samples
+[KMeterState](dsp/dynamics.md#kmeterstate)): the audio thread pushes samples
 into it and the component reads the levels at its refresh rate.
 
 ```cpp
@@ -178,7 +178,7 @@ scrolling.
 
 `SpectrumAnalyzerComponent` draws the frequency spectrum of a signal on a
 logarithmic frequency axis. The audio thread pushes samples into a
-[SpectrumAnalyzerState](../dsp/frequency.md#spectrumanalyzerstate), and the
+[SpectrumAnalyzerState](dsp/frequency.md#spectrumanalyzerstate), and the
 component runs the FFT on the UI thread.
 
 <p align="center">
@@ -482,6 +482,6 @@ the audio callback may and may not do.
 - [Audio files](audio-files.md) - readers for the waveform view.
 - [MIDI](midi.md) - `MidiKeyboardState` and MIDI messages.
 - [MIDI keyboard](../ui/midi-keyboard.md) - the keyboard component in detail.
-- [Dynamics and metering](../dsp/dynamics.md) - `KMeterState` and level measurement.
-- [Frequency domain](../dsp/frequency.md) - FFT and `SpectrumAnalyzerState`.
+- [Dynamics and metering](dsp/dynamics.md) - `KMeterState` and level measurement.
+- [Frequency domain](dsp/frequency.md) - FFT and `SpectrumAnalyzerState`.
 - [YUI documents](../ui/yui/documents.md) - binding UI to models, including audio parameters.

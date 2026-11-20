@@ -28,11 +28,11 @@ concept guides, walkthroughs, and reference material.
 - [Data](data/index.md) - the `DataTree` model and serialization.
 - [Graphics](graphics/index.md) - the graphics context, 2D drawing, the **RHI** GPU layer, shaders, fonts, SVG, and the GPU backends.
 - [Imaging](imaging/index.md) - bitmap images: pixels, loading, saving, and drawing.
-- [Animation](animation/index.md) - loading, playing and exporting Lottie animations.
 - [UI](ui/index.md) - components, windowing, events, layout, and widgets.
+- [Animation](animation/index.md) - loading, playing and exporting Lottie animations.
 - [3D](3d/index.md) - entity trees, glTF loading, and PBR scenes in a component.
-- [DSP](dsp/index.md) - filters, filter design, FFTs, dynamics, metering, onset detection, convolution, resampling, and time-stretching.
 - [Audio](audio/index.md) - audio devices, formats, DSP, the audio graph, processors, and plugin hosting/client wrappers.
+  - [DSP](audio/dsp/index.md) - filters, filter design, FFTs, dynamics, metering, onset detection, convolution, resampling, and time-stretching.
 - [AI](ai/index.md) - the AI and LLM infrastructure.
 - [Scripting](scripting/index.md) - the Python bindings layer.
 
@@ -59,10 +59,9 @@ core/index
 data/index
 graphics/index
 imaging/index
-animation/index
 ui/index
+animation/index
 3d/index
-dsp/index
 audio/index
 ai/index
 scripting/index

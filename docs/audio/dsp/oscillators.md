@@ -484,8 +484,8 @@ lfo.processBlock (out, numSamples);  // or audio-rate
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/dsp/oscillators_lfo-shapes_light.jpg#gh-light-mode-only" alt="Two cycles of the sine, triangle, sawtooth and square shapes of the LFO" width="640">
-  <img class="dark-only rounded" src="../_static/images/dsp/oscillators_lfo-shapes_dark.jpg#gh-dark-mode-only" alt="Two cycles of the sine, triangle, sawtooth and square shapes of the LFO" width="640">
+  <img class="light-only rounded" src="../../_static/images/dsp/oscillators_lfo-shapes_light.jpg#gh-light-mode-only" alt="Two cycles of the sine, triangle, sawtooth and square shapes of the LFO" width="640">
+  <img class="dark-only rounded" src="../../_static/images/dsp/oscillators_lfo-shapes_dark.jpg#gh-dark-mode-only" alt="Two cycles of the sine, triangle, sawtooth and square shapes of the LFO" width="640">
 </p>
 
 Sample-and-hold draws from a seeded linear congruential generator every time the

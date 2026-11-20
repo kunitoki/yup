@@ -140,7 +140,7 @@ input and output channel counts). The spectral processor's bus layout is descrip
 | --- | --- | --- |
 | `setFFTSize` | 1024 | Power of two. Larger sizes give finer frequency resolution, more latency and more smearing in time |
 | `setOverlapFactor` | 4 | Frames per FFT size; the hop is `fftSize / overlapFactor`. Higher values are smoother and cost more CPU |
-| `setWindowType` | `WindowType::hann` | Analysis and synthesis window, see [Math, windowing and noise](../dsp/math.md) |
+| `setWindowType` | `WindowType::hann` | Analysis and synthesis window, see [Math, windowing and noise](dsp/math.md) |
 | `setWindowParameter` | 8.0 | Shape parameter of Kaiser (beta), Gaussian (sigma), Tukey (alpha) and Rakshit-Ullah windows |
 
 Call the setters from the message thread. On a prepared bridge they suspend processing,
@@ -181,5 +181,5 @@ only.
 - [Audio processors](processors.md) - lifecycle, parameters and state shared by spectral processors
 - [Writing plugins](plugin-client.md) - shipping the bridge as a plugin
 - [Audio buffers](buffers.md) - `AudioSpectralBuffer` and bin access
-- [Frequency domain](../dsp/frequency.md) - `FFTProcessor`, spectrum layouts and analysis
-- [Math, windowing and noise](../dsp/math.md) - window types for the STFT
+- [Frequency domain](dsp/frequency.md) - `FFTProcessor`, spectrum layouts and analysis
+- [Math, windowing and noise](dsp/math.md) - window types for the STFT

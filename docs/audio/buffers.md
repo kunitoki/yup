@@ -525,6 +525,6 @@ block has a cost. `hasBeenCleared()` and `setNotClear()` behave as in
   context.
 - [Audio files](audio-files.md) - reading and writing buffers to files.
 - [Spectral processing](spectral.md) - the processors that use `SpectralBuffer`.
-- [DSP](../dsp/index.md) - filters, FFTs and other processing on buffers.
+- [DSP](dsp/index.md) - filters, FFTs and other processing on buffers.
 - [Multithreading](../core/multithreading/index.md#the-audio-thread) - the rules of
   the audio thread.

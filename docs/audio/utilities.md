@@ -5,7 +5,7 @@ decibel conversion, parameter smoothing, a simple ADSR envelope, a reverb, IIR
 filters, interpolators for varispeed playback, a CPU load measurer for the audio
 callback, and audio workgroups for realtime threads on Apple platforms. They are
 lightweight and dependency-free. For richer and more configurable versions of some
-of them, see the [DSP](../dsp/index.md) documentation and
+of them, see the [DSP](dsp/index.md) documentation and
 [Choosing between yup_audio_basics and yup_dsp](#choosing-between-yup_audio_basics-and-yup_dsp).
 
 **Module:** `yup_audio_basics`
@@ -153,7 +153,7 @@ while a note is playing: if you change them before a release has finished, call
 `reset()` before the next `noteOn()`.
 
 For curved segments, loops and arbitrary breakpoints, use the yup_dsp
-[envelopes](../dsp/envelopes.md).
+[envelopes](dsp/envelopes.md).
 
 ## Reverb
 
@@ -246,7 +246,7 @@ called from another thread while the audio thread processes.
 that are only touched by the audio thread.
 
 For more filter types, higher orders, per-sample modulation and `double` precision,
-use the yup_dsp [filters](../dsp/filters.md).
+use the yup_dsp [filters](dsp/filters.md).
 
 ## Interpolators
 
@@ -289,7 +289,7 @@ channel and process consecutive blocks of the same stream with it. They are
 ```{note}
 These interpolators don't low-pass filter the input, so when `speedRatio` is above
 1 (downsampling) high frequencies can alias. For high-quality sample rate
-conversion and oversampling, use the yup_dsp [resampling](../dsp/resampling.md)
+conversion and oversampling, use the yup_dsp [resampling](dsp/resampling.md)
 classes. The [audio sources](sources.md) page covers `ResamplingAudioSource` for
 resampling a whole source.
 ```
@@ -405,11 +405,11 @@ to `AudioGraphProcessor::setAudioWorkgroup()` during setup.
 
 | Need | `yup_audio_basics` | `yup_dsp` |
 | --- | --- | --- |
-| Decibel conversion | `Decibels`, with a silence floor and string formatting | `dbToGain` / `gainToDb` in [math](../dsp/math.md), plain formulas |
+| Decibel conversion | `Decibels`, with a silence floor and string formatting | `dbToGain` / `gainToDb` in [math](dsp/math.md), plain formulas |
 | Parameter smoothing | `SmoothedValue` | No equivalent |
-| Envelopes | `ADSR`: four linear segments | `CurveEnvelope` and breakpoint curves in [envelopes](../dsp/envelopes.md) |
-| Filters | `IIRFilter`: one biquad, float, one channel | Many topologies, orders and designs in [filters](../dsp/filters.md) |
-| Resampling | Interpolators: cheap, no anti-aliasing | Band-limited resamplers and oversamplers in [resampling](../dsp/resampling.md) |
+| Envelopes | `ADSR`: four linear segments | `CurveEnvelope` and breakpoint curves in [envelopes](dsp/envelopes.md) |
+| Filters | `IIRFilter`: one biquad, float, one channel | Many topologies, orders and designs in [filters](dsp/filters.md) |
+| Resampling | Interpolators: cheap, no anti-aliasing | Band-limited resamplers and oversamplers in [resampling](dsp/resampling.md) |
 
 Pick the `yup_audio_basics` classes for simple, cheap processing with few
 dependencies, such as a gain stage, a basic synthesizer voice or a preview player.
@@ -423,5 +423,5 @@ Move to `yup_dsp` when you need sound quality or control beyond that.
 - [Audio processors](processors.md) - parameters and their smoothing.
 - [Synthesizers](synthesizers.md) - voices that use envelopes.
 - [Audio graph](audio-graph.md) - worker threads and workgroups.
-- [DSP](../dsp/index.md) - the richer processing library.
+- [DSP](dsp/index.md) - the richer processing library.
 - [Threads](../core/multithreading/threads.md#realtime-threads) - realtime threads.

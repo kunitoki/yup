@@ -28,8 +28,8 @@ editor, `curveForMidpoint()` turns a segment midpoint dragged to height `y` into
 the curve `c = (2 / k) ln (1 / y - 1)`.
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/dsp/envelopes_segment-curves_light.jpg#gh-light-mode-only" alt="A segment going from 0 to 1 with curve values from -1 to 1" width="560">
-  <img class="dark-only rounded" src="../_static/images/dsp/envelopes_segment-curves_dark.jpg#gh-dark-mode-only" alt="A segment going from 0 to 1 with curve values from -1 to 1" width="560">
+  <img class="light-only rounded" src="../../_static/images/dsp/envelopes_segment-curves_light.jpg#gh-light-mode-only" alt="A segment going from 0 to 1 with curve values from -1 to 1" width="560">
+  <img class="dark-only rounded" src="../../_static/images/dsp/envelopes_segment-curves_dark.jpg#gh-dark-mode-only" alt="A segment going from 0 to 1 with curve values from -1 to 1" width="560">
 </p>
 
 ```cpp
@@ -44,8 +44,8 @@ float level = curve.evaluate (0.1f);  // read the curve anywhere
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/dsp/envelopes_breakpoint-curve_light.jpg#gh-light-mode-only" alt="The curve built above: a fast attack, a decay to the sustain point and a release" width="560">
-  <img class="dark-only rounded" src="../_static/images/dsp/envelopes_breakpoint-curve_dark.jpg#gh-dark-mode-only" alt="The curve built above: a fast attack, a decay to the sustain point and a release" width="560">
+  <img class="light-only rounded" src="../../_static/images/dsp/envelopes_breakpoint-curve_light.jpg#gh-light-mode-only" alt="The curve built above: a fast attack, a decay to the sustain point and a release" width="560">
+  <img class="dark-only rounded" src="../../_static/images/dsp/envelopes_breakpoint-curve_dark.jpg#gh-dark-mode-only" alt="The curve built above: a fast attack, a decay to the sustain point and a release" width="560">
 </p>
 
 A curve can carry a sustain point (`setSustainIndex`) and a loop between two

@@ -10,8 +10,8 @@ Three clippers are provided. The hard and soft ones are stateless;
 `HardClipper` is built on the IIR antialiasing machinery (see below).
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/dsp/dynamics_clippers_light.jpg#gh-light-mode-only" alt="The output of the blunter, soft and hard clippers for inputs from -2 to 2" width="560">
-  <img class="dark-only rounded" src="../_static/images/dsp/dynamics_clippers_dark.jpg#gh-dark-mode-only" alt="The output of the blunter, soft and hard clippers for inputs from -2 to 2" width="560">
+  <img class="light-only rounded" src="../../_static/images/dsp/dynamics_clippers_light.jpg#gh-light-mode-only" alt="The output of the blunter, soft and hard clippers for inputs from -2 to 2" width="560">
+  <img class="dark-only rounded" src="../../_static/images/dsp/dynamics_clippers_dark.jpg#gh-dark-mode-only" alt="The output of the blunter, soft and hard clippers for inputs from -2 to 2" width="560">
 </p>
 
 ### BlunterClipper

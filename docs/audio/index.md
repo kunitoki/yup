@@ -12,7 +12,7 @@ wrappers all ship in the same framework, on desktop, mobile and the web.
 `yup_audio_formats`, `yup_audio_processors`, `yup_audio_graph`,
 `yup_audio_plugin_host`, `yup_audio_plugin_client`, `yup_audio_gui`. Signal
 processing building blocks (filters, FFTs, oscillators, dynamics) live in the
-[DSP](../dsp/index.md) area.
+[DSP](dsp/index.md) area.
 
 ## How the pieces fit
 
@@ -20,9 +20,9 @@ processing building blocks (filters, FFTs, oscillators, dynamics) live in the
 flowchart LR
     devices["Audio & MIDI devices<br/>yup_audio_devices"] --> callback["Audio callback"]
     callback --> sources["Audio sources<br/>yup_audio_basics"]
-    callback --> graph["Audio graph<br/>yup_audio_graph"]
-    graph --> processors["Audio processors<br/>yup_audio_processors"]
-    graph --> hosted["Hosted plugins<br/>yup_audio_plugin_host"]
+    callback --> audioGraph["Audio graph<br/>yup_audio_graph"]
+    audioGraph --> processors["Audio processors<br/>yup_audio_processors"]
+    audioGraph --> hosted["Hosted plugins<br/>yup_audio_plugin_host"]
     processors --> client["Plugin formats<br/>yup_audio_plugin_client"]
     files["Audio files<br/>yup_audio_formats"] --> sources
 ```
@@ -63,7 +63,7 @@ lock-free patterns to talk to the UI, are in
 
 ## Pages
 
-**Fundamentals**
+**[Fundamentals](fundamentals.md)**
 
 - [Audio buffers](buffers.md) - `AudioBuffer`, channel layouts and sample
   format conversion.
@@ -76,7 +76,7 @@ lock-free patterns to talk to the UI, are in
 - [MPE](mpe.md) - MIDI Polyphonic Expression zones, instruments and
   synthesizers.
 
-**Playback and I/O**
+**[Playback and I/O](playback-and-io.md)**
 
 - [Audio and MIDI devices](devices.md) - `AudioDeviceManager`, audio
   callbacks, backends per platform and MIDI ports.
@@ -86,7 +86,7 @@ lock-free patterns to talk to the UI, are in
 - [Synthesizers](synthesizers.md) - polyphonic voices driven by MIDI.
 - [Web audio](web.md) - the AudioWorklet device, Web MIDI and browser rules.
 
-**Processors and plugins**
+**[Processors and plugins](processors-and-plugins.md)**
 
 - [Audio processors](processors.md) - the processor model, parameters, state
   and editors.
@@ -96,6 +96,16 @@ lock-free patterns to talk to the UI, are in
 - [Plugin hosting](plugin-hosting.md) - scanning, loading and sandboxing
   third-party plugins.
 - [Audio graph](audio-graph.md) - realtime routing of processors and plugins.
+
+**[DSP](dsp/index.md)**
+
+- [DSP](dsp/index.md) - filters, oscillators, envelopes, dynamics, FFTs,
+  resampling, time-stretching and YDSP, the JIT-compiled DSP language.
+
+**[YDSP](ydsp/index.md)**
+
+- [YDSP](ydsp/index.md) - a realtime audio DSP language JIT-compiled to native
+  code while the application runs.
 
 **User interface**
 
@@ -114,7 +124,6 @@ lock-free patterns to talk to the UI, are in
 
 ## Related
 
-- [DSP](../dsp/index.md) - filters, oscillators, dynamics, FFTs and YDSP.
 - [Building audio plugins](../build-system/building-plugins.md) - CMake
   targets, formats and installation.
 - [Multithreading](../core/multithreading/index.md) - threads, locks and the
@@ -122,22 +131,12 @@ lock-free patterns to talk to the UI, are in
 
 ```{toctree}
 :hidden:
-:maxdepth: 1
+:maxdepth: 2
 
-buffers
-utilities
-midi
-ump
-mpe
-devices
-sources
-audio-files
-synthesizers
-web
-processors
-spectral
-plugin-client
-plugin-hosting
-audio-graph
+fundamentals
+playback-and-io
+processors-and-plugins
+dsp/index
+ydsp/index
 audio-gui
 ```

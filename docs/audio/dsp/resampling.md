@@ -41,8 +41,8 @@ double v = table (tap, delta);   // fractional-phase access; negative taps mirro
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/dsp/resampling_sinc-table_light.jpg#gh-light-mode-only" alt="The kernel of a sinc table, as configured and after its Kaiser window" width="560">
-  <img class="dark-only rounded" src="../_static/images/dsp/resampling_sinc-table_dark.jpg#gh-dark-mode-only" alt="The kernel of a sinc table, as configured and after its Kaiser window" width="560">
+  <img class="light-only rounded" src="../../_static/images/dsp/resampling_sinc-table_light.jpg#gh-light-mode-only" alt="The kernel of a sinc table, as configured and after its Kaiser window" width="560">
+  <img class="dark-only rounded" src="../../_static/images/dsp/resampling_sinc-table_dark.jpg#gh-dark-mode-only" alt="The kernel of a sinc table, as configured and after its Kaiser window" width="560">
 </p>
 
 `configure` sets the cutoff to `sampleRate/2` (correct for integer-factor

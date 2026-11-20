@@ -114,11 +114,11 @@ express.
 
 ## In this area
 
-- [Metal](metal.md) - the default on macOS and iOS.
 - [Direct3D](direct3d.md) - the default on Windows.
-- [Vulkan](vulkan.md) - the default on Android, optional elsewhere.
+- [Metal](metal.md) - the default on macOS and iOS.
 - [OpenGL and OpenGL ES](opengl.md) - the portable fallback, and WebGL2 in the
   browser.
+- [Vulkan](vulkan.md) - the default on Android, optional elsewhere.
 - [WebGPU](webgpu.md) - the modern web backend.
 - [Headless](headless.md) - the do-nothing device, for tests and CI with no
   GPU.
@@ -127,10 +127,10 @@ express.
 :hidden:
 :maxdepth: 1
 
-metal
 direct3d
-vulkan
+metal
 opengl
+vulkan
 webgpu
 headless
 ```

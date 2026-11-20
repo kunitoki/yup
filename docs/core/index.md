@@ -16,21 +16,23 @@ of the framework.
   `HashMap`, `SortedSet`, `Span`, `AbstractFifo`, and `ListenerList`.
 - [Memory](memory.md) - `HeapBlock`, `MemoryBlock`, `ReferenceCountedObject`,
   `WeakReference`, smart pointers, `Singleton`, leak detection, and `Atomic`.
-- [Files & streams](files-and-streams.md) - `File`, directory iteration,
-  `InputStream`/`OutputStream`, memory streams, ZIP, and GZIP.
 - [Results & error handling](results-and-errors.md) - `Result` and
   `ResultValue<T>` for fallible operations.
 - [Maths](maths.md) - `Range`, `NormalisableRange`, `Random`, `BigInteger`,
   and statistics helpers.
+- [Time](time.md) - `Time`, `RelativeTime`, and `PerformanceCounter`.
+- [Files & streams](files-and-streams.md) - `File`, directory iteration,
+  `InputStream`/`OutputStream`, memory streams, ZIP, and GZIP.
+- [Data formats](data-formats.md) - dynamic values and their text and binary
+  encodings:
+  - [Data interchange](data-interchange.md) - `var`, `DynamicObject`, and JSON.
+  - [XML](xml.md) - the `XmlElement` / `XmlDocument` DOM and parser.
+  - [Serialization](serialisation.md) - the `SerialisationTraits` framework,
+    `BinaryArchive`, and `var`/JSON conversion.
 - [Expressions](expressions.md) - a typed expression language compiled once
   and evaluated per row or in batches, with custom types.
-- [Time](time.md) - `Time`, `RelativeTime`, and `PerformanceCounter`.
 - [Multithreading](multithreading/index.md) - threads, thread pools,
   synchronization, the message thread, and cancellation.
-- [Data interchange](data-interchange.md) - `var`, `DynamicObject`, and JSON.
-- [XML](xml.md) - the `XmlElement` / `XmlDocument` DOM and parser.
-- [Serialization](serialisation.md) - the `SerialisationTraits` framework,
-  `BinaryArchive`, and `var`/JSON conversion.
 - [System & application](system-and-app.md) - `SystemStats`, `Uuid`,
   `ConsoleApplication`, runtime permissions, and platform macros.
 - [Networking](networking.md) - `URL`, `WebInputStream`, `Socket`, `IPAddress`,
@@ -54,15 +56,13 @@ of the framework.
 strings-and-text
 containers
 memory
-files-and-streams
 results-and-errors
 maths
-expressions
 time
+files-and-streams
+data-formats
+expressions
 multithreading/index
-data-interchange
-xml
-serialisation
 system-and-app
 networking
 ```

@@ -129,7 +129,7 @@ void addDspFigures (Figures& f)
     const Axis frequency { 20.0f, 20000.0f, "20 Hz", "20 kHz", true };
 
     //==============================================================================
-    // docs/dsp/filters.md
+    // docs/audio/dsp/filters.md
 
     f.paint ("dsp/filters_rbj-modes", { 560.0f, 228.0f }, [frequency] (Graphics& g, Rectangle<float> area)
     {
@@ -170,7 +170,7 @@ void addDspFigures (Figures& f)
     });
 
     //==============================================================================
-    // docs/dsp/filter-design.md
+    // docs/audio/dsp/filter-design.md
 
     f.paint ("dsp/filter-design_linkwitz-riley", { 560.0f, 210.0f }, [frequency] (Graphics& g, Rectangle<float> area)
     {
@@ -213,7 +213,7 @@ void addDspFigures (Figures& f)
     });
 
     //==============================================================================
-    // docs/dsp/resampling.md
+    // docs/audio/dsp/resampling.md
 
     f.paint ("dsp/resampling_sinc-table", { 480.0f, 200.0f }, [] (Graphics& g, Rectangle<float> area)
     {
@@ -247,7 +247,7 @@ void addDspFigures (Figures& f)
     });
 
     //==============================================================================
-    // docs/dsp/envelopes.md
+    // docs/audio/dsp/envelopes.md
 
     f.paint ("dsp/envelopes_breakpoint-curve", { 480.0f, 200.0f }, [] (Graphics& g, Rectangle<float> area)
     {
@@ -301,7 +301,7 @@ void addDspFigures (Figures& f)
     });
 
     //==============================================================================
-    // docs/dsp/oscillators.md
+    // docs/audio/dsp/oscillators.md
 
     f.paint ("dsp/oscillators_lfo-shapes", { 560.0f, 132.0f }, [] (Graphics& g, Rectangle<float> area)
     {
@@ -319,7 +319,7 @@ void addDspFigures (Figures& f)
     });
 
     //==============================================================================
-    // docs/dsp/dynamics.md
+    // docs/audio/dsp/dynamics.md
 
     f.paint ("dsp/dynamics_clippers", { 480.0f, 250.0f }, [] (Graphics& g, Rectangle<float> area)
     {
@@ -348,7 +348,7 @@ void addDspFigures (Figures& f)
     });
 
     //==============================================================================
-    // docs/dsp/math.md
+    // docs/audio/dsp/math.md
 
     f.paint ("dsp/math_windows", { 560.0f, 210.0f }, [] (Graphics& g, Rectangle<float> area)
     {

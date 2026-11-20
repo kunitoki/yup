@@ -15,7 +15,7 @@ the audio thread calls.
 
 ## Why a language
 
-The [`yup_dsp`](../index.md) classes are C++ building blocks you assemble by
+The [`yup_dsp`](../dsp/index.md) classes are C++ building blocks you assemble by
 hand, recompiling for every change. YDSP trades that for text the application
 compiles at runtime: a patch can be edited while it plays, shipped as a
 precompiled `.ydsb` bundle, and composed out of subgraphs with automatic delay
@@ -42,8 +42,8 @@ audio graph, next to filters, dynamics and oscillators written in C++.
 
 ## Related areas
 
-- [DSP](../index.md) - the C++ processing blocks YDSP patches sit next to.
-- [Audio graph](../../audio/audio-graph.md) and [processors](../../audio/processors.md) - what hosts a
+- [DSP](../dsp/index.md) - the C++ processing blocks YDSP patches sit next to.
+- [Audio graph](../audio-graph.md) and [processors](../processors.md) - what hosts a
   compiled patch.
 - [Code editor](../../ui/code-editor.md) - the `CodeEditor` component, which
   has a built-in YDSP `SyntaxDefinition`.

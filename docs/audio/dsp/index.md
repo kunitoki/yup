@@ -23,22 +23,19 @@ available in the build.
   `WhiteNoise` / `PinkNoise` generators.
 - [Frequency domain](frequency.md) - `FFTProcessor` (with FFTW3 / vDSP / PFFFT /
   Ooura backends), `SpectrumAnalyzerState`, and the low-level `OouraFFT8g`.
-- [Filter design](filter-design.md) - `FilterDesigner` and
-  `AnalogFilterDesigner` for Butterworth, Chebyshev and Bessel filters, plus
-  the analog prototype helpers (`AnalogPoles`, `AnalogSaturator`,
-  `AnalogFilterCoefficients`, `StateVariableCoefficients`).
 - [Filters](filters.md) - the processing primitives (`FirstOrder`, `Biquad`,
   cascades, coefficient structs) and the ready-to-use filter classes:
   first-order, RBJ biquad, Zoelzer, state-variable (Chamberlin and VA/TPT), Butterworth,
   Linkwitz-Riley crossovers, direct FIR, analog-mapped filters, and comb
   filters.
+- [Filter design](filter-design.md) - `FilterDesigner` and
+  `AnalogFilterDesigner` for Butterworth, Chebyshev and Bessel filters, plus
+  the analog prototype helpers (`AnalogPoles`, `AnalogSaturator`,
+  `AnalogFilterCoefficients`, `StateVariableCoefficients`).
 - [Dynamics & metering](dynamics.md) - `HardClipper`, `SoftClipper`,
   `BlunterClipper`, the `AaIirAntialiaser` oversampling helper,
   `LevelProcessor`, the K-weighted `LoudnessFilter`, and the
   `KMeterState` metering model.
-- [Onset detection](onsets.md) - `FilterBank`, `Spectrogram`, the
-  spectral flux ODFs (`SuperFluxODF`, `ComplexFluxODF`), `OnsetPeakPicker`,
-  and the end-to-end `OnsetDetector`.
 - [Convolution & delay](convolution-and-delay.md) - the `PartitionedConvolver`
   and the `FractionallyAddressedDelay` interpolation delay line.
 - [Resampling](resampling.md) - `HalfbandOversampler`, `SincOversampler`,
@@ -54,21 +51,24 @@ available in the build.
 - [Envelopes](envelopes.md) - `BreakpointCurve`, a fixed capacity multistage
   curve with shaped segments, sustain and loop markers, and `CurveEnvelope`,
   which plays it per sample.
+- [Onset detection](onsets.md) - `FilterBank`, `Spectrogram`, the
+  spectral flux ODFs (`SuperFluxODF`, `ComplexFluxODF`), `OnsetPeakPicker`,
+  and the end-to-end `OnsetDetector`.
 
 ## YDSP, the JIT-compiled DSP language
 
-[YDSP](ydsp/index.md) is a separate way to write the same kind of processing:
+[YDSP](../ydsp/index.md) is a separate way to write the same kind of processing:
 a realtime audio DSP language the `yup_dsp_jit` module compiles to native code
 while the application runs.
 
-- [Language reference](ydsp/language.md) - syntax, processors, the graph
+- [Language reference](../ydsp/language.md) - syntax, processors, the graph
   algebra, the type system, intrinsics, the realtime contract and the public
   C++ API.
-- [Optimization](ydsp/optimization.md) - fast-math and SLEEF accuracy tiers,
+- [Optimization](../ydsp/optimization.md) - fast-math and SLEEF accuracy tiers,
   vectorized transcendentals, the optimizer passes and the execution report.
-- [Compiler and player](ydsp/command-line.md) - the `yup_dsp_compiler` host
+- [Compiler and player](../ydsp/command-line.md) - the `yup_dsp_compiler` host
   tool, bundles, device playback, hot reload and editor diagnostics.
-- [Bundle format](ydsp/bundle-format.md) - the RIFF `YDSP` container that
+- [Bundle format](../ydsp/bundle-format.md) - the RIFF `YDSP` container that
   carries a patch's editable source closure, metadata and diagnostics.
 
 ## Key building blocks
@@ -104,12 +104,12 @@ callback, then pass values in via atomic or parameter-change mechanisms.
 
 ## Related areas
 
-- [Audio buffers](../audio/buffers.md) and [audio utilities](../audio/utilities.md) -
+- [Audio buffers](../buffers.md) and [audio utilities](../utilities.md) -
   `AudioBuffer` and the audio process load measurer that pair with the DSP
   processors.
-- [Audio processors](../audio/processors.md) - the `AudioProcessor` model that
+- [Audio processors](../processors.md) - the `AudioProcessor` model that
   hosts these DSP blocks inside plugins and the audio graph.
-- [Core](../core/index.md) - the math, containers, and `Random` used under the
+- [Core](../../core/index.md) - the math, containers, and `Random` used under the
   hood.
 
 ```{toctree}
@@ -118,14 +118,13 @@ callback, then pass values in via atomic or parameter-change mechanisms.
 
 math
 frequency
-filter-design
 filters
+filter-design
 dynamics
-onsets
 convolution-and-delay
 resampling
 time-stretching
 oscillators
 envelopes
-ydsp/index
+onsets
 ```

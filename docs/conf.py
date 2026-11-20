@@ -106,7 +106,7 @@ html_theme_options = {
         },
         {
             "title": "DSP",
-            "url": "dsp/index",
+            "url": "audio/dsp/index",
         },
         {
             "title": "Audio",

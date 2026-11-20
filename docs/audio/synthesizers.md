@@ -121,7 +121,7 @@ synth.renderNextBlock (buffer, midiMessages, 0, buffer.getNumSamples());
 
 For anything beyond a test tone, build the voice from the oscillators and
 envelopes of `yup_dsp` instead of hand-written loops; see
-[Oscillators](../dsp/oscillators.md) and [Envelopes](../dsp/envelopes.md).
+[Oscillators](dsp/oscillators.md) and [Envelopes](dsp/envelopes.md).
 
 ## The rendering contract
 
@@ -288,5 +288,5 @@ keeps unmapped keys from taking a voice. See the microtuning section of
 - [MPE](mpe.md) - per-note expression with `MPESynthesiser`.
 - [Processors](processors.md) - hosting a synthesizer in an `AudioProcessor`.
 - [MIDI Keyboard](../ui/midi-keyboard.md) - playing the synthesizer from the screen.
-- [Oscillators](../dsp/oscillators.md) - building blocks for voices.
-- [Envelopes](../dsp/envelopes.md) - amplitude and filter envelopes for voices.
+- [Oscillators](dsp/oscillators.md) - building blocks for voices.
+- [Envelopes](dsp/envelopes.md) - amplitude and filter envelopes for voices.
