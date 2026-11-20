@@ -240,6 +240,11 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertIn("accent", schema["paletteRoles"])
         self.assertEqual(len(schema["paletteRoles"]), 8)
 
+    def test_schema_lists_the_named_colors(self):
+        schema = json.loads(self.invoke("schema").stdout)
+        self.assertIn("transparentBlack", schema["namedColors"])
+        self.assertIn("aliceblue", schema["namedColors"])
+
     def test_schema_writes_to_a_file(self):
         result = self.invoke("schema", "--output", "schema.json")
         self.assertEqual(result.returncode, 0, result.stderr)

@@ -296,7 +296,11 @@ public:
     int findInput (StringRef name) const;
 
     //==============================================================================
-    /** Declares a named constant, folded into the programs using it. */
+    /** Declares a named constant, folded into the programs using it.
+
+        Declaring again a constant of the same name and type replaces its value, so a library of
+        constants can be registered more than once on the same context.
+    */
     template <class T>
     void addConstant (const String& name, const T& value)
     {

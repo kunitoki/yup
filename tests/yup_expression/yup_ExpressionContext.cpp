@@ -132,6 +132,17 @@ TEST_F (ExpressionContextTests, ConstantsAreFolded)
     EXPECT_EQ (String ("value!"), state.getVar (1).toString());
 }
 
+TEST_F (ExpressionContextTests, RedeclaringAConstantReplacesItsValue)
+{
+    context.addConstant ("answer", 42);
+    context.addConstant ("answer", 7);
+
+    const auto program = compile ("a = answer");
+    ExpressionState state (program);
+    state.evaluate();
+    EXPECT_EQ (7, (int) state.getVar (0));
+}
+
 TEST_F (ExpressionContextTests, NamedExpressionsAreInlined)
 {
     const auto x = context.addInput<float> ("x");

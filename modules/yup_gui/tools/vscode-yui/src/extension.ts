@@ -31,9 +31,9 @@ interface YuiType {
     signals: YuiSignal[];
 }
 
-/** The type and palette information reported by 'yup_yui_tool schema'. */
+/** The type, palette and named color information reported by 'yup_yui_tool schema'. */
 class YuiSchema {
-    constructor (private readonly types: Map<string, YuiType>, readonly paletteRoles: string[]) {
+    constructor (private readonly types: Map<string, YuiType>, readonly paletteRoles: string[], readonly namedColors: string[]) {
     }
 
     hasType (name: string): boolean {
@@ -205,7 +205,7 @@ function parseSchema (document: unknown): YuiSchema {
         });
     }
 
-    return new YuiSchema (types, asStringArray (root["paletteRoles"]));
+    return new YuiSchema (types, asStringArray (root["paletteRoles"]), asStringArray (root["namedColors"]));
 }
 
 interface YuiBlock {
@@ -604,6 +604,9 @@ class YuiCompletionProvider implements vscode.CompletionItemProvider {
             const roles = schema.paletteRoles.concat (["dark"]);
             return roles.map (role => new vscode.CompletionItem (role, vscode.CompletionItemKind.EnumMember));
         }
+
+        if (/(?:^|[^A-Za-z0-9_.])colors\.[A-Za-z_]*$/.test (line))
+            return schema.namedColors.map (name => new vscode.CompletionItem (name, vscode.CompletionItemKind.Color));
 
         const block = findEnclosingBlock (document.getText (), document.offsetAt (position));
 

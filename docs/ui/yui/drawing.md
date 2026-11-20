@@ -164,6 +164,16 @@ without `font` it uses the theme's default font. It is placed in one of two ways
 text { anchor: point (12, 20); textAnchor: middle; letterSpacing: 0.5; text: "yup"; fill: palette.text; }
 ```
 
+## Named colors
+
+`colors.<name>` is one of the `Colors` constants, spelled as in C++
+(`colors.transparentBlack`, `colors.aliceblue`). It is a constant folded when
+the drawing compiles, methods included:
+
+```yui
+rect { bounds: bounds; fill: colors.transparentBlack; stroke: colors.tomato.withAlpha (0.6); }
+```
+
 ## Palette colors
 
 `palette.<role>` reads a role of the palette the component is drawn with: the

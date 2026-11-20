@@ -207,6 +207,13 @@ int runYuiSchemaCommand (int argc, char** argv)
     schema->setProperty ("types", var (types));
     schema->setProperty ("paletteRoles", var (ThemePalette::getRoleNames()));
 
+    Array<var> namedColors;
+
+    for (const auto& named : Colors::getNamedColors())
+        namedColors.add (String (named.name));
+
+    schema->setProperty ("namedColors", var (namedColors));
+
     const auto text = JSON::toString (var (schema)) + "\n";
 
     if (output == File())

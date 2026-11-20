@@ -178,6 +178,19 @@ inline constexpr Color yellowgreen = Color (0xff9acd32);
 /** Return one of the named colors. */
 std::optional<Color> getNamedColor (StringRef colorName);
 
+/** A color of this namespace, with the name of its constant. */
+struct NamedColor
+{
+    StringRef name;
+    Color color;
+};
+
+/** Returns every color of this namespace, named as its constant (for example "transparentBlack").
+
+    The "grey" spellings that getNamedColor also accepts are not included.
+*/
+Span<const NamedColor> getNamedColors() noexcept;
+
 } // namespace Colors
 
 } // namespace yup

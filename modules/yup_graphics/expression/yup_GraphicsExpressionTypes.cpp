@@ -289,6 +289,9 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
         .method ("mix", [] (const Color& c, const Color& o, float amount) { return c.mixedWith (o, jlimit (0.0f, 1.0f, amount), ColorSpace::RGB); })
         .equality();
 
+    for (const auto& named : Colors::getNamedColors())
+        context.addConstant ("colors." + String (named.name), named.color);
+
     transform
         .constructor ([] { return T(); })
         .constructor ([] (float a, float b, float c, float d, float tx, float ty) { return T (a, c, tx, b, d, ty); })

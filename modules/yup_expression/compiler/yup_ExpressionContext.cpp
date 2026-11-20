@@ -418,6 +418,13 @@ int ExpressionContext::findInput (StringRef name) const
 
 void ExpressionContext::addConstant (const String& name, const ExpressionType& type, std::shared_ptr<void> value)
 {
+    if (const auto* symbol = findSymbol (name); symbol != nullptr && symbol->kind == SymbolKind::constant
+                                                && getDeclarations().constants[(size_t) symbol->index].type == &type)
+    {
+        editDeclarations().constants[(size_t) symbol->index].value = std::move (value);
+        return;
+    }
+
     if (addSymbol (name, SymbolKind::constant, (int) getDeclarations().constants.size()))
         editDeclarations().constants.push_back ({ &type, std::move (value) });
 }

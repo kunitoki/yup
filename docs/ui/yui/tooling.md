@@ -127,8 +127,8 @@ yup_yui_tool schema --output yui-schema.json
 ```
 
 writes every component type a `.yui` file can name, as registered in
-`ComponentTypeRegistry`, with the properties and signals it declares, and the
-palette roles. Editors build their completions from it:
+`ComponentTypeRegistry`, with the properties and signals it declares, the
+palette roles and the names of the `colors.` constants. Editors build their completions from it:
 
 ```json
 {
@@ -147,7 +147,8 @@ palette roles. Editors build their completions from it:
             ]
         }
     ],
-    "paletteRoles": ["background", "surface", "surfaceRaised", "outline", "text", "textMuted", "accent", "onAccent"]
+    "paletteRoles": ["background", "surface", "surfaceRaised", "outline", "text", "textMuted", "accent", "onAccent"],
+    "namedColors": ["black", "white", "transparentBlack", "transparentWhite", "aliceblue", "..."]
 }
 ```
 
@@ -279,7 +280,7 @@ support to VS Code:
 - syntax highlighting and snippets;
 - problems as you type, from `lint`, including those in imported files;
 - completions of component types, properties, signals, enumeration values,
-  palette roles and pseudo-classes, from `schema`;
+  palette roles, `colors.` names and pseudo-classes, from `schema`;
 - `YUI: Open Preview`, a panel beside the editor running the interface, a
   drawing, a palette or a component of the file;
 - the `YUI: Import SVG as Drawing` command.

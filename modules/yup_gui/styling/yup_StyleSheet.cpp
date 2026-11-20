@@ -337,7 +337,20 @@ std::optional<YuiDiagnostic> readPalette (const DataTree& element, StyleSheet::P
         if (propertyText == "name" || propertyText == "colors" || propertyText == "mode")
             continue;
 
-        const auto color = Color::fromString (element.getProperty (propertyName).toString());
+        const auto valueText = element.getProperty (propertyName).toString().trim();
+        auto color = Color::fromString (valueText);
+
+        if (valueText.startsWith ("colors."))
+        {
+            const auto colorName = valueText.substring (7);
+            const auto namedColors = Colors::getNamedColors();
+            const auto named = std::find_if (namedColors.begin(), namedColors.end(), [&] (const auto& c) { return colorName == c.name; });
+
+            if (named == namedColors.end())
+                return YuiDiagnostic { .message = "The palette '" + name + "' reads an unknown color '" + valueText + "'", .element = element, .property = propertyName };
+
+            color = named->color;
+        }
 
         if (const auto role = ThemePalette::getRoleFromName (propertyText))
             result.setColor (*role, color);

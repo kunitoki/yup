@@ -593,6 +593,23 @@ TEST (ColorTests, String_Operations)
     EXPECT_EQ (fromInvalid.getARGB(), 0); // Should return default/empty color
 }
 
+TEST (ColorTests, NamedColorsMatchTheirConstants)
+{
+    const auto namedColors = Colors::getNamedColors();
+    const auto find = [&] (StringRef name) { return std::find_if (namedColors.begin(), namedColors.end(), [&] (const auto& c) { return c.name == name; }); };
+
+    ASSERT_NE (find ("transparentBlack"), namedColors.end());
+    EXPECT_EQ (find ("transparentBlack")->color, Colors::transparentBlack);
+    EXPECT_EQ (find ("yellowgreen")->color, Colors::yellowgreen);
+    EXPECT_EQ (find ("grey"), namedColors.end());
+
+    for (const auto& named : namedColors)
+        EXPECT_EQ (Colors::getNamedColor (named.name), std::optional<Color> (named.color)) << String (named.name).toStdString();
+
+    EXPECT_EQ (Colors::getNamedColor ("grey"), std::optional<Color> (Colors::gray));
+    EXPECT_EQ (Colors::getNamedColor ("TransparentWhite"), std::optional<Color> (Colors::transparentWhite));
+}
+
 TEST (ColorTests, HexString_ZeroPadding)
 {
     // Test that hex string properly zero-pads all components

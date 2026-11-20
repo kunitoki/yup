@@ -37,6 +37,10 @@ It also registers enumerations, whose values are used by name:
 Names shared by several enumerations (`round`, `center`) resolve to the type of
 the output they are assigned to, such as `strokeCap = round`.
 
+Every `Colors` constant is a constant named `colors.<name>`, spelled as in C++:
+`colors.transparentBlack`, `colors.aliceblue`. It is folded when compiling, so
+`colors.red.darker (0.1)` costs no more than a `#` literal.
+
 All the types except `path` support `==` and `!=`. Call it before adding
 functions that use these types. It also adds `polar (center, radius, angle)`,
 the point at `angle` radians from the positive x axis towards positive y, so

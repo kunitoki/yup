@@ -110,6 +110,21 @@ TEST_F (StyleSheetTests, ReadsPalettesWithCustomColors)
     EXPECT_FALSE (palette->findCustomColor ("missing").has_value());
 }
 
+TEST_F (StyleSheetTests, ReadsPalettesWithNamedColors)
+{
+    auto sheet = build (DataTree ("style",
+                                  { DataTree ("palette", { { "name", "Ember" }, { "colors", "#100b00-#85cb33" }, { "accent", "colors.tomato" }, { "meterHot", "colors.transparentBlack" } }) }));
+
+    ASSERT_NE (sheet, nullptr);
+
+    const auto* palette = sheet->findPalette ("Ember");
+    ASSERT_NE (palette, nullptr);
+    EXPECT_EQ (palette->getColor (ThemePalette::Role::accent), Colors::tomato);
+    EXPECT_EQ (palette->findCustomColor ("meterHot"), std::optional<Color> (Colors::transparentBlack));
+
+    EXPECT_TRUE (StyleSheet::fromTree (DataTree ("style", { DataTree ("palette", { { "name", "Bad" }, { "colors", "#100b00-#85cb33" }, { "accent", "colors.notAColor" } }) })).failed());
+}
+
 TEST_F (StyleSheetTests, KeepsADarkAndALightVersionOfAPalette)
 {
     auto sheet = build (DataTree ("style",

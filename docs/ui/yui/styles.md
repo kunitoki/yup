@@ -194,6 +194,7 @@ palette Ember {
     colors: "#1b1b1e #ff8800 #f2efe9";   // any format ThemePalette::fromString accepts
     mode: dark;                           // or light, dark by default
     accent: #ff9a1f;                      // override single roles
+    onAccent: colors.white;               // or name one of the Colors constants
 }
 ```
 

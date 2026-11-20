@@ -117,7 +117,7 @@ with the [graphics types](../../graphics/expressions.md) available:
 |---|---|
 | Numbers, with units | `4`, `0.5`, `135deg`, `250ms`, `50%` |
 | Booleans and strings | `true`, `false`, `"CUTOFF"` |
-| Colors | `#ff8800`, `#ff880080`, `rgb (255, 136, 0)`, `palette.accent.darker (0.1)` |
+| Colors | `#ff8800`, `#ff880080`, `rgb (255, 136, 0)`, `colors.transparentBlack`, `palette.accent.darker (0.1)` |
 | Enumerations | `round`, `rotaryVerticalDrag`, `center` (a bare name the property knows) |
 | Graphics values | `bounds.center`, `rect (0, 0, 20, 20)`, `polar (bounds.center, r, a)` |
 | Arrays | `[0.25, 0.5]`, `["low", "high"]`, `lanes[0]`, `len (lanes)` |

@@ -149,6 +149,21 @@ TEST_F (GraphicsExpressionTypesTests, ColorLiterals)
     EXPECT_TRUE (CompiledExpression::compile ("#ff8800", context).getReference().isConstant());
 }
 
+TEST_F (GraphicsExpressionTypesTests, NamedColorsAreFoldedConstants)
+{
+    EXPECT_EQ (Colors::transparentBlack, evaluate<Color> ("colors.transparentBlack"));
+    EXPECT_EQ (Colors::aliceblue, evaluate<Color> ("colors.aliceblue"));
+    EXPECT_EQ (Colors::red.darker (0.1f), evaluate<Color> ("colors.red.darker (0.1)"));
+    EXPECT_EQ (Colors::blue, evaluate<Color> ("bounds.width > 50 ? colors.blue : colors.red"));
+    EXPECT_TRUE (CompiledExpression::compile ("colors.tomato.withAlpha (0.5)", context).getReference().isConstant());
+
+    EXPECT_FALSE (compiles ("colors.notAColor"));
+    EXPECT_FALSE (compiles ("colors.grey"));
+
+    addGraphicsExpressionTypes (context);
+    EXPECT_EQ (Colors::white, evaluate<Color> ("colors.white"));
+}
+
 TEST_F (GraphicsExpressionTypesTests, PolarPoints)
 {
     const auto p = evaluate<Point<float>> ("polar (bounds.center, 10, 90deg)");

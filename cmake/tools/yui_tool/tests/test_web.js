@@ -100,7 +100,7 @@ test ("the models a document binds to are declared by a file", () => {
     assert.deepEqual (lint ("--models", "models/models.json", "models/main.yui"), { code: 0, diagnostics: [] });
 });
 
-test ("the schema describes the component types and the palette roles", () => {
+test ("the schema describes the component types, the palette roles and the named colors", () => {
     const result = run ("schema");
     const schema = JSON.parse (result.stdout);
 
@@ -108,6 +108,7 @@ test ("the schema describes the component types and the palette roles", () => {
     assert.equal (schema.version, 1);
     assert.ok (schema.types.some (type => type.name === "Slider" && type.instantiable));
     assert.ok (schema.paletteRoles.includes ("accent"));
+    assert.ok (schema.namedColors.includes ("transparentBlack"));
 });
 
 test ("an SVG is imported as a drawing", () => {
