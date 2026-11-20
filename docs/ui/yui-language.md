@@ -125,9 +125,10 @@ with the [graphics types](../graphics/expressions.md) available:
 
 An expression reads the names around it: the properties of the component it
 is written on (bare or prefixed by `self.`), `parent.`, the elements with an
-`id`, `root` inside a `component` block, the document models and tokens, and
-`palette.` roles. In the instance tree, a value that reads anything is a
-[binding](yui-reactivity.md), kept up to date while what it reads changes.
+`id`, `root` inside a `component` block, the document models and tokens,
+`palette.` roles and the `theme.` ones. In the instance tree, a value that
+reads anything is a [binding](yui-reactivity.md), kept up to date while what it
+reads changes.
 
 The values of `style` and `palette` blocks are kept as written up to their `;`,
 because some aren't expressions (`transition: bezelSize 150ms easeOut;`,

@@ -110,6 +110,30 @@ TEST_F (StyleSheetTests, ReadsPalettesWithCustomColors)
     EXPECT_FALSE (palette->findCustomColor ("missing").has_value());
 }
 
+TEST_F (StyleSheetTests, KeepsADarkAndALightVersionOfAPalette)
+{
+    auto sheet = build (DataTree ("style",
+                                  { DataTree ("palette", { { "name", "Skin" }, { "colors", "#100b00-#85cb33" }, { "accent", "#ff0000" } }),
+                                    DataTree ("palette", { { "name", "Skin" }, { "colors", "#efffc8-#85cb33" }, { "mode", "light" }, { "accent", "#0000ff" } }),
+                                    DataTree ("palette", { { "name", "Plain" }, { "colors", "#efffc8-#85cb33" }, { "mode", "light" } }) }));
+
+    ASSERT_NE (sheet, nullptr);
+    EXPECT_EQ (sheet->getPaletteNames(), StringArray ({ "Plain", "Skin" }));
+
+    const auto* skin = sheet->findPaletteVersions ("Skin");
+    ASSERT_NE (skin, nullptr);
+    EXPECT_TRUE (skin->followsTheme());
+    EXPECT_EQ (skin->find (ThemePalette::Mode::dark)->getColor (ThemePalette::Role::accent), Color (0xffff0000));
+    EXPECT_EQ (skin->find (ThemePalette::Mode::light)->getColor (ThemePalette::Role::accent), Color (0xff0000ff));
+
+    // A palette declared once is the one of both modes
+    const auto* plain = sheet->findPaletteVersions ("Plain");
+    ASSERT_NE (plain, nullptr);
+    EXPECT_FALSE (plain->followsTheme());
+    EXPECT_EQ (plain->find (ThemePalette::Mode::dark), plain->find (ThemePalette::Mode::light));
+    EXPECT_EQ (plain->find (ThemePalette::Mode::dark)->getMode(), ThemePalette::Mode::light);
+}
+
 TEST_F (StyleSheetTests, ReadsKeyframesSortedByPosition)
 {
     auto sheet = build (DataTree ("style",
@@ -185,6 +209,7 @@ TEST_F (StyleSheetTests, ReportsTheElementOfTheFirstProblem)
     EXPECT_EQ (locate ("palette P {\n  colors: \"#100b00-#85cb33\";\n  dark: #ff0000;\n}"), "3:3: The palette 'P' can't name a color 'dark'");
     EXPECT_EQ (locate ("palette P {\n  colors: \"nope\";\n}"), "2:3: The palette 'P' is invalid: No valid colors found");
     EXPECT_EQ (locate ("palette P { colors: \"\"; }"), "1:1: The palette 'P' needs colors");
+    EXPECT_EQ (locate ("palette P { colors: \"#100b00-#85cb33\"; }\npalette P { colors: \"#efffc8-#85cb33\"; }"), "2:1: The palette 'P' already has a dark version");
     EXPECT_EQ (locate ("style {\n  Slider::before { opacity: 1; }\n}"), "2:3: Pseudo-elements are not supported in selector 'Slider::before'");
 
     YuiDiagnostic failure;

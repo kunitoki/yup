@@ -2038,6 +2038,9 @@ public:
 
         This improves performance for complex components whose content changes infrequently.
 
+        It is the `cached` property of the component, which a `.yui` document or a stylesheet
+        rule can set.
+
         @param shouldCache Whether to enable cached-to-texture rendering.
      */
     void setCachedToTexture (bool shouldCache);

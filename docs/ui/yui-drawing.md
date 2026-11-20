@@ -667,6 +667,42 @@ See [Stylesheets](yui-styles.md) for selectors, palettes, transitions and
 shadows, and [Complete UIs in `.yui`](yui-documents.md) for loading such a
 document with `YuiDocument`.
 
+## Caching a drawing
+
+A drawing is evaluated and painted every time the area of its component is
+repainted, also when it is something else that changed there: a meter running
+over a panel repaints the panel under it on every frame. `cached: true` keeps
+what the component paints in a texture, and paints the drawing again only when
+the component itself is repainted:
+
+```yui
+style {
+    .panel { drawing: Faceplate; cached: true; }
+}
+```
+
+`cached` is a property of every component, the `setCachedToTexture` of
+[component caching](component-caching.md), so an element can set it too
+(`Component { class: panel; cached: true; }`). The texture holds what the
+component paints, not its children.
+
+- It pays for a drawing that seldom changes where other things change often: a
+  panel behind meters and scopes, the knobs sitting still in an interface that
+  is painted continuously. The more the drawing costs (gradients, feathers,
+  clips, long `repeat`s), the more it saves.
+- It costs for a drawing that changes often: every change paints the drawing
+  into the texture, in a pass of its own, before the texture is drawn. A meter,
+  or knobs that all move together, are slower cached. It also takes the memory
+  of a texture the size of the component.
+- The drawing is painted again when its component is repainted: when one of
+  its properties changes, when it is resized, when it or a parent is enabled or
+  disabled or given a palette, and when a property the drawing reads from
+  another component changes. A value the drawing only inherits does not repaint
+  it: a property set on a parent, a color or a font of the theme. Leave such a
+  drawing uncached when those change while it is shown.
+- What the drawing paints outside the bounds of the component is cut, and the
+  texture is stretched when a `transform` scales the component up.
+
 ## Limitations
 
 - A semi-transparent or masked `layer` is rendered offscreen at the logical size

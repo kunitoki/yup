@@ -83,7 +83,7 @@ The toolbar of the panel controls the preview:
 |---|---|
 | **Show** | The interface of the document, or any drawing, palette or component it declares. A drawing adds **as**, the component type painting it: `Component` by default, `Slider` for a drawing reading the value of a slider. |
 | **Size** | `Auto`, `Panel`, a listed size or `Custom`. The two fields next to it show the size of the interface in logical pixels, and typing in them fixes it. |
-| **Theme** | `Auto` follows the VSCode color theme, `Light` and `Dark` set it. |
+| **Theme** | `Auto` follows the VSCode color theme, `Light` and `Dark` set it. It changes what the document takes from the theme: its palette where the document sets none, and the version of a palette declared for both modes. |
 | **Zoom** | `Fit` shows the interface at its size, shrunk to fit the panel when it is larger. A percentage shows it at that scale and scrolls. |
 | **Refresh** | Shows the document again, for a change the panel can't see, such as one of the models file. |
 

@@ -72,6 +72,83 @@ TEST_F (YuiDocumentTests, LoadsTheInterfaceAndAttachesItsStyleSheet)
     EXPECT_DOUBLE_EQ (static_cast<double> (knob->findProperty (Identifier ("trackWidth"))), 6.0);
 }
 
+TEST_F (YuiDocumentTests, CachesToTextureTheComponentsAnElementOrAStyleRuleAsksTo)
+{
+    YuiDocument document;
+    const auto result = document.loadFromString (R"yui(
+        style {
+            .heavy { cached: true; }
+        }
+
+        Component {
+            Component { id: panel; cached: true; }
+            Component { id: plate; class: "heavy"; }
+            Component { id: plain; }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+
+    auto* plate = document.findById ("plate");
+    ASSERT_NE (plate, nullptr);
+
+    EXPECT_TRUE (document.findById ("panel")->isCachedToTexture());
+    EXPECT_TRUE (plate->isCachedToTexture());
+    EXPECT_FALSE (document.findById ("plain")->isCachedToTexture());
+
+    plate->removeStyleClass (Identifier ("heavy"));
+    document.getRoot()->getStyleContext()->restyleNow();
+
+    EXPECT_FALSE (plate->isCachedToTexture());
+}
+
+TEST_F (YuiDocumentTests, APaletteWithADarkAndALightVersionFollowsTheTheme)
+{
+    theme->setPalette (ThemePalette ({}, ThemePalette::Mode::dark));
+
+    YuiDocument document;
+    const auto result = document.loadFromString (R"yui(
+        palette Skin { colors: "#101418 #ff8800 #f2efe9"; }
+        palette Skin { mode: light; colors: "#f4f1ea #0066ff #202020"; }
+
+        style {
+            #styled { palette: Skin; }
+        }
+
+        Component {
+            Component { id: styled; Label { id: inStyled; } }
+            Component { id: given; palette: Skin; Label { id: inGiven; } }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+
+    auto& context = *document.getRoot()->getStyleContext();
+    const auto* inStyled = document.findById ("inStyled");
+    const auto* inGiven = document.findById ("inGiven");
+    ASSERT_NE (inStyled, nullptr);
+    ASSERT_NE (inGiven, nullptr);
+
+    const auto backgroundOf = [this] (const Component& component)
+    {
+        return theme->getPalette (component).getColor (ThemePalette::Role::background);
+    };
+
+    context.refresh (0.0);
+    EXPECT_EQ (backgroundOf (*inStyled), Color (0xff101418));
+    EXPECT_EQ (backgroundOf (*inGiven), Color (0xff101418));
+
+    theme->setPalette (ThemePalette ({}, ThemePalette::Mode::light));
+    context.refresh (0.0);
+    EXPECT_EQ (backgroundOf (*inStyled), Color (0xfff4f1ea));
+    EXPECT_EQ (backgroundOf (*inGiven), Color (0xfff4f1ea));
+
+    theme->setPalette (ThemePalette ({}, ThemePalette::Mode::dark));
+    context.refresh (0.0);
+    EXPECT_EQ (backgroundOf (*inStyled), Color (0xff101418));
+    EXPECT_EQ (backgroundOf (*inGiven), Color (0xff101418));
+}
+
 TEST_F (YuiDocumentTests, LoadsTheImportedFiles)
 {
     YuiDocument document;

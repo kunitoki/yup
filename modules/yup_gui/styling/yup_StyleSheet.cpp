@@ -310,7 +310,7 @@ std::optional<YuiDiagnostic> readDeclarations (const DataTree& parent,
     return std::nullopt;
 }
 
-std::optional<YuiDiagnostic> readPalette (const DataTree& element, std::map<String, ThemePalette>& palettes)
+std::optional<YuiDiagnostic> readPalette (const DataTree& element, StyleSheet::Palettes& palettes)
 {
     const auto name = element.getProperty ("name").toString().trim();
     const auto colors = element.getProperty ("colors").toString().trim();
@@ -347,7 +347,13 @@ std::optional<YuiDiagnostic> readPalette (const DataTree& element, std::map<Stri
             return YuiDiagnostic { .message = "The palette '" + name + "' can't name a color '" + propertyText + "'", .element = element, .property = propertyName };
     }
 
-    palettes.insert_or_assign (name, std::move (result));
+    auto& versions = palettes[name];
+    auto& version = mode == ThemePalette::Mode::light ? versions.light : versions.dark;
+
+    if (version.has_value())
+        return YuiDiagnostic { .message = "The palette '" + name + "' already has a " + (mode == ThemePalette::Mode::light ? "light" : "dark") + " version", .element = element };
+
+    version = std::move (result);
     return std::nullopt;
 }
 
@@ -515,9 +521,27 @@ bool StyleSheet::isStyleElement (const DataTree& element) noexcept
         || type == tokens || type == component || type == keyframes;
 }
 
-std::optional<YuiDiagnostic> StyleSheet::readPaletteElement (const DataTree& element, std::map<String, ThemePalette>& palettes)
+std::optional<YuiDiagnostic> StyleSheet::readPaletteElement (const DataTree& element, Palettes& palettes)
 {
     return readPalette (element, palettes);
+}
+
+const ThemePalette* StyleSheet::PaletteVersions::find (ThemePalette::Mode mode) const noexcept
+{
+    const auto& wanted = mode == ThemePalette::Mode::light ? light : dark;
+    const auto& other = mode == ThemePalette::Mode::light ? dark : light;
+
+    if (wanted.has_value())
+        return std::addressof (*wanted);
+
+    return other.has_value() ? std::addressof (*other) : nullptr;
+}
+
+const ThemePalette* StyleSheet::PaletteVersions::findForTheme() const
+{
+    const auto theme = ApplicationTheme::getGlobalTheme();
+
+    return find (theme != nullptr ? theme->getPalette().getMode() : ThemePalette::Mode::dark);
 }
 
 //==============================================================================
@@ -532,6 +556,12 @@ const StyleSheet::KeyframeSequence* StyleSheet::findKeyframes (const Identifier&
 }
 
 const ThemePalette* StyleSheet::findPalette (const String& name) const
+{
+    const auto* versions = findPaletteVersions (name);
+    return versions != nullptr ? versions->findForTheme() : nullptr;
+}
+
+const StyleSheet::PaletteVersions* StyleSheet::findPaletteVersions (const String& name) const
 {
     const auto it = palettes.find (name);
     return it != palettes.end() ? &it->second : nullptr;

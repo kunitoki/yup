@@ -185,7 +185,9 @@ size of the image, in logical pixels, is the first of:
 is sharp on high density displays, and `--theme` is the mode of the default
 theme, `dark` or `light`. The image is filled behind the interface with the
 background of the palette its root is drawn with, the one of the theme unless
-the document sets another.
+the document sets another. A document that sets its own palette looks the same
+in both modes, unless the palette has a dark and a light version or the
+document reads `theme.dark` (see [Palettes](yui-styles.md#palettes)).
 
 A container gives no size to a child that asks for none: a `Row` in a `Column`
 needs a `preferredHeight` or a `flexGrow`, or it is laid out with no height
@@ -306,7 +308,10 @@ The toolbar of the preview chooses what it shows and how:
   sets, and otherwise at the size of the panel, `Panel` is always the size of
   the panel, both following it as it is resized, and a listed or typed size
   such as `640x400` is fixed;
-- **Theme**: light, dark, or the one of the editor;
+- **Theme**: the default theme in its light or dark mode, or the one matching
+  the editor. It changes what the document takes from the theme: its palette
+  where the document sets none, the version of a
+  [palette declared for both modes](yui-styles.md#palettes), and `theme.dark`;
 - **Zoom**: from 50% to 400%.
 
 The size and the theme are the two `yui.preview` settings, which the toolbar

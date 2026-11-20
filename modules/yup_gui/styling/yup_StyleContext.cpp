@@ -729,12 +729,18 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     // The palette is resolved first, so that the values of this component read the right roles
     if (paletteDecl != nullptr)
     {
-        const auto* palette = styleSheet != nullptr ? styleSheet->findPalette (paletteDecl->parsedName) : nullptr;
+        const auto* versions = styleSheet != nullptr ? styleSheet->findPaletteVersions (paletteDecl->parsedName) : nullptr;
 
-        if (palette == nullptr)
+        if (versions == nullptr)
+        {
             report ({ .message = "Unknown palette '" + paletteDecl->parsedName + "'", .element = paletteDecl->element });
+        }
         else
-            paletteChanged = state.setStylePalette (*palette);
+        {
+            paletteChanged = state.setStylePalette (*versions->findForTheme());
+
+            paletteDependent = versions->followsTheme();
+        }
     }
     else if (auto* owner = findPopupOwner (component);
              owner != nullptr && (component.getParentComponent() == nullptr || component.getParentComponent()->findPalette() == nullptr))

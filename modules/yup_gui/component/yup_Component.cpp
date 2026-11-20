@@ -39,6 +39,7 @@ struct ComponentIds
     static inline const Identifier height { "height" };
     static inline const Identifier bounds { "bounds" };
     static inline const Identifier transform { "transform" };
+    static inline const Identifier cached { "cached" };
     static inline const Identifier focused { "focused" };
     static inline const Identifier focusWithin { "focus-within" };
     static inline const Identifier hovered { "hovered" };
@@ -238,6 +239,8 @@ void Component::setEnabled (bool shouldBeEnabled)
 void Component::sendEnablementChanged()
 {
     const WeakReference<Component> self (this);
+
+    flags.cachedTextureStale = true;
 
     notifyPropertyChanged (ComponentIds::enabled);
     if (self == nullptr)
@@ -1955,6 +1958,7 @@ const ComponentTypeInfo& Component::getClassTypeInfo()
                                  .styleableProperty (ComponentIds::enabled, [] (const Component& c) { return ! c.flags.isDisabled; }, &Component::setEnabled, true)
                                  .styleableProperty (ComponentIds::opacity, &Component::getOpacity, &Component::setOpacity, 1.0)
                                  .styleableProperty (ComponentIds::transform, &Component::getTransform, &Component::setTransform, VariantConverter<AffineTransform>::toVar (AffineTransform()))
+                                 .styleableProperty (ComponentIds::cached, &Component::isCachedToTexture, &Component::setCachedToTexture, false, "Keeps what the component paints in a texture, painted again only when the component is repainted.")
                                  .property (ComponentIds::x, &Component::getX, [] (Component& c, float v) { c.setBounds (v, c.getY(), c.getWidth(), c.getHeight()); })
                                  .property (ComponentIds::y, &Component::getY, [] (Component& c, float v) { c.setBounds (c.getX(), v, c.getWidth(), c.getHeight()); })
                                  .property (ComponentIds::width, &Component::getWidth, [] (Component& c, float v) { c.setBounds (c.getX(), c.getY(), v, c.getHeight()); })
@@ -2416,6 +2420,8 @@ void Component::setCachedToTexture (bool shouldCache)
     flags.cachedToTexture = shouldCache;
     cachedTextureCanvas = nullptr;
     repaint();
+
+    notifyPropertyChanged (ComponentIds::cached);
 }
 
 bool Component::isCachedToTexture() const

@@ -247,6 +247,36 @@ Give every palette a skin switches between the same custom colors: a name the
 palette lacks reads as a transparent color. In C++ they are set with
 `ThemePalette::setCustomColor`.
 
+A palette set by a rule replaces the palette of the theme where it applies,
+whatever the theme is. For it to follow the theme, declare it twice under one
+name, once for each `mode`: the two blocks are the dark and the light version
+of one palette, and `palette: Name;` gives the one for the mode of the
+application theme, again when that changes.
+
+```yui
+palette Skin {
+    colors: "#1b1b1b #3086c6 #d9dbd4";      // mode: dark, the default
+    wood: #1e0e06;
+}
+
+palette Skin {
+    colors: "#ece9e1 #3086c6 #23241f";
+    mode: light;
+    wood: #a8784a;
+}
+
+style {
+    :root { palette: Skin; }                 // the dark Skin under a dark theme, the light one under a light theme
+}
+```
+
+A palette declared once is used under both themes, and a name can't be declared
+twice for the same mode. To choose between palettes any other way, give them
+their own names and select them with rules, as `#panel[scheme=light]` does
+above. `theme.dark`, true when the palette of the application theme is dark,
+can take part in the choice: `scheme: theme.dark == invert.checked ? "light" : "dark";`
+follows the theme until a toggle inverts it.
+
 ## Drawings
 
 `drawing: Name;` paints the matched components with a [drawing](yui-drawing.md)

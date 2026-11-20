@@ -863,6 +863,33 @@ TEST_F (DrawingStyleGpuTest, PropertiesReadTheComponentAndItsParentsOrTheirDefau
     EXPECT_EQ (centerColor (second).getAlpha(), 0);
 }
 
+TEST_F (DrawingStyleGpuTest, ACachedDrawingIsPaintedAgainWhenWhatItReadsChanges)
+{
+    const auto drawing = parseYui (R"yui(
+        drawing {
+            property shade: color = #ff0000;
+            rect { bounds: bounds; fill: enabled ? shade : #0000ff; }
+        })yui");
+
+    Component parent;
+    parent.setOpaque (false);
+    parent.setBounds (0.0f, 0.0f, 16.0f, 16.0f);
+
+    DrawnComponent child (drawing);
+    child.setProperty (Identifier ("cached"), true);
+    parent.addAndMakeVisible (child);
+
+    ASSERT_TRUE (child.isCachedToTexture());
+    EXPECT_EQ (centerColor (parent), Color (0xffff0000));
+
+    child.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xff00ff00)));
+    EXPECT_EQ (centerColor (parent), Color (0xff00ff00));
+
+    // The enabled state comes from the parent, which is the only one repainted
+    parent.setEnabled (false);
+    EXPECT_EQ (centerColor (parent), Color (0xff0000ff));
+}
+
 TEST_F (DrawingStyleGpuTest, ClipsShapesMasksLayersAndRendersInlineSvg)
 {
     const auto clipped = parseYui (R"yui(

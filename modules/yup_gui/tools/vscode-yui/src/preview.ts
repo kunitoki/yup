@@ -50,7 +50,9 @@ function declarationsOf (text: string, keyword: string): string[] {
     let match = pattern.exec (text);
 
     while (match !== null) {
-        names.push (match[1]);
+        if (! names.includes (match[1]))
+            names.push (match[1]);
+
         match = pattern.exec (text);
     }
 

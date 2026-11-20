@@ -651,6 +651,7 @@ void YuiDocument::attachStyleContext (Component& root)
     context.setComponentResolver (builder.getComponentResolver());
     context.onPaletteChanged = [this]
     {
+        builder.refreshThemePalettes();
         builder.getBindings().refreshPaletteBindings();
     };
     context.onDiagnostic = [this] (const YuiDiagnostic& diagnostic)

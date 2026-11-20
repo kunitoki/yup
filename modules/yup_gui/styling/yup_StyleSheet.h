@@ -166,6 +166,32 @@ public:
         std::vector<Keyframe> frames;
     };
 
+    /** The palettes declared under one name: a dark one, a light one, or both.
+
+        Two `palette` blocks sharing a name, one `mode: dark` and one `mode: light`, are the
+        two versions of one palette, and the mode of the application theme picks between them.
+    */
+    struct PaletteVersions
+    {
+        /** Returns the version for a mode, or the only one there is. */
+        const ThemePalette* find (ThemePalette::Mode mode) const noexcept;
+
+        /** Returns the version for the mode of the application theme, or the only one there is. */
+        const ThemePalette* findForTheme() const;
+
+        /** Returns true when there is a dark and a light version, so the palette follows the theme. */
+        bool followsTheme() const noexcept { return dark.has_value() && light.has_value(); }
+
+        /** The palette declared with `mode: dark`, or without a mode. */
+        std::optional<ThemePalette> dark;
+
+        /** The palette declared with `mode: light`. */
+        std::optional<ThemePalette> light;
+    };
+
+    /** The palettes of a document, by name. */
+    using Palettes = std::map<String, PaletteVersions>;
+
     //==============================================================================
     /** Builds a sheet from a parsed document.
 
@@ -191,8 +217,11 @@ public:
     /** Returns true when the element is a style, rule, palette, drawing or keyframes block. */
     static bool isStyleElement (const DataTree& element) noexcept;
 
-    /** Parses a `palette` element into @p palettes, returning a diagnostic if invalid. */
-    static std::optional<YuiDiagnostic> readPaletteElement (const DataTree& element, std::map<String, ThemePalette>& palettes);
+    /** Parses a `palette` element into @p palettes, returning a diagnostic if invalid.
+
+        A name can be declared once for each mode: a second palette of the same mode is invalid.
+    */
+    static std::optional<YuiDiagnostic> readPaletteElement (const DataTree& element, Palettes& palettes);
 
     //==============================================================================
     /** Returns the rules of the sheet, in source order. */
@@ -206,9 +235,18 @@ public:
 
     /** Returns the palette declared under a given name, or nullptr.
 
+        A palette declared for both modes gives the version for the mode of the application
+        theme, the one a `palette: Name;` declaration applies.
+
         @param name The palette name.
     */
     const ThemePalette* findPalette (const String& name) const;
+
+    /** Returns the dark and light versions declared under a given name, or nullptr.
+
+        @param name The palette name.
+    */
+    const PaletteVersions* findPaletteVersions (const String& name) const;
 
     /** Returns the names of the palettes the sheet declares. */
     StringArray getPaletteNames() const;
@@ -238,7 +276,7 @@ private:
     DataTree tree;
     std::vector<Rule> rules;
     std::vector<KeyframeSequence> keyframes;
-    std::map<String, ThemePalette> palettes;
+    Palettes palettes;
     std::map<String, DataTree> drawings;
     std::map<Identifier, ComponentProperty> declaredProperties;
     Array<Identifier> watchedProperties;

@@ -195,6 +195,12 @@ public:
     /** Returns the bindings keeping the built properties up to date. */
     BindingGraph& getBindings() noexcept { return bindings; }
 
+    /** Gives the components whose `palette` names one with a dark and a light version the
+        version for the mode of the application theme. Call it when that mode changes, as
+        YuiDocument does.
+    */
+    void refreshThemePalettes();
+
     /** Returns a resolver looking up components and models in the top-level document scope. */
     DrawingScope::ComponentResolver getComponentResolver() const;
 
@@ -306,7 +312,7 @@ private:
     AppliedValues applied;
     std::vector<std::unique_ptr<Scope>> scopes;
     std::map<Identifier, Composite> composites;
-    std::map<String, ThemePalette> palettes;
+    StyleSheet::Palettes palettes;
     std::map<String, DataTree> drawings;
     std::map<Identifier, ComponentProperty> declaredProperties;
     std::unique_ptr<ComponentTypeInfo> tokensInfo;

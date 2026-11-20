@@ -969,6 +969,28 @@ void YuiBuilder::applyTokens (Component& root, Scope& scope)
 
 //==============================================================================
 
+void YuiBuilder::refreshThemePalettes()
+{
+    for (const auto& record : components)
+    {
+        auto* component = record.component.get();
+        const auto values = applied.find (component);
+
+        if (values == applied.end())
+            continue;
+
+        const auto value = values->second.find (paletteProperty());
+
+        if (value == values->second.end())
+            continue;
+
+        const auto found = palettes.find (value->second.text.unquoted().trim());
+
+        if (found != palettes.end() && found->second.followsTheme())
+            component->setPalette (*found->second.findForTheme());
+    }
+}
+
 void YuiBuilder::applyValues (const AppliedValues& previous)
 {
     // Later values of a property override earlier ones, so the last text is the one applied
@@ -1154,7 +1176,7 @@ YuiBuilder::ApplyOutcome YuiBuilder::applyProperty (Component& component, const 
 
         if (const auto found = palettes.find (paletteName); found != palettes.end())
         {
-            component.setPalette (found->second);
+            component.setPalette (*found->second.findForTheme());
             return ApplyOutcome::constant;
         }
 

@@ -35,6 +35,8 @@ do:
 | `parent.width`     | a property of the parent component               |
 | `gain.value`       | a property of the element whose `id` is `gain`   |
 | `palette.accent`   | a role of the component's palette                |
+| `theme.accent`     | a role of the palette of the application theme   |
+| `theme.dark`       | true when that palette is a dark one             |
 
 Only properties that are reflected (see [component
 styling](component-styling.md)) can be read, including the read-only state
