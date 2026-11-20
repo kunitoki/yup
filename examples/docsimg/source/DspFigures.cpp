@@ -25,40 +25,8 @@
 
 #include <cmath>
 
-namespace
-{
-
 //==============================================================================
 
-struct Axis
-{
-    float getValue (float proportion) const
-    {
-        return logarithmic ? from * std::pow (to / from, proportion) : from + (to - from) * proportion;
-    }
-
-    float getProportion (float value) const
-    {
-        return logarithmic ? std::log (value / from) / std::log (to / from) : (value - from) / (to - from);
-    }
-
-    float from = 0.0f;
-    float to = 1.0f;
-    const char* fromLabel = "";
-    const char* toLabel = "";
-    bool logarithmic = false;
-};
-
-struct Trace
-{
-    const char* name;
-    std::function<float (float)> function;
-};
-
-/** Plots functions of the horizontal axis, named below when there are several of them.
-
-    @returns The area the axes span.
-*/
 yup::Rectangle<float> plot (yup::Graphics& g, yup::Rectangle<float> area, const Axis& x, const Axis& y, const std::vector<Trace>& traces)
 {
     static constexpr yup::Color colors[] = { yup::Color (0xff3b9cff), yup::Colors::tomato, yup::Colors::mediumseagreen, yup::Colors::orange, yup::Colors::mediumpurple };
@@ -136,6 +104,9 @@ yup::Rectangle<float> plot (yup::Graphics& g, yup::Rectangle<float> area, const 
 
     return area;
 }
+
+namespace
+{
 
 /** The magnitude response of a filter in decibels, as a function of the frequency. */
 template <class Filter>

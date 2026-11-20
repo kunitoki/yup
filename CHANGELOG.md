@@ -98,6 +98,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Component::snapshotToImage` takes a `scale`, the pixels rendered per logical unit, so a snapshot can be taken at high-DPI resolution.
 - `ThemePalette` holds named custom colors next to its roles (`setCustomColor`, `findCustomColor`, `getCustomColorNames`), declared in `.yui` `palette` blocks and read by drawings and styles as `palette.<name>`, so a skin with its own materials can switch palettes without hardcoded colors. Two `palette` blocks sharing a name, one for each `mode`, are the dark and the light version of one palette: `palette: Name;` gives the one for the mode of the application theme and follows it.
 
+### Audio
+
+- `SpectralBridge` forwards parameter changes to the spectral processor once per frame, saves and restores its parameter values, and keeps its FFT size and overlap across `releaseResources()`.
+- `AudioProcessor` and `SpectralProcessor` are prepared with the bus layout channel count instead of always 2.
+- `AudioFormatManager::createWriterFor` replaces an existing file instead of writing over it, and no longer leaks the stream or touches the file when no format handles the extension.
+- `AudioFormatWriter::ThreadedWriter` writes the data still queued when destroyed, even if its thread has stopped, and stops accepting data after a write failure.
+- `AudioFormatReader::read` into an `AudioBuffer` reads every channel when both sides have more than two.
+- `AppleCoreAudioFormat` picks the AAC container from the file extension and only claims AAC container extensions for writing.
+
 ### DSP
 
 - Fixed `RbjFilter` and `ZoelzerFilter` aborting with a pure virtual call when constructed with a mode other than `lowpass`.

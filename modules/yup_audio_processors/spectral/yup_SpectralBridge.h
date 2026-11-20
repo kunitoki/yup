@@ -63,7 +63,9 @@ public:
     /** Assigns the spectral processor to be applied in the frequency domain.
 
         The bridge takes shared ownership of the processor. Parameters from the
-        spectral processor are registered on the bridge so they are visible to hosts.
+        spectral processor are registered on the bridge so they are visible to hosts,
+        and their automation events are forwarded to the spectral processor with the
+        latest value of each parameter delivered to the next spectral frame.
 
         @param processor  The spectral processor, or nullptr to disable processing.
     */
@@ -75,8 +77,9 @@ public:
     //==============================================================================
     /** Sets the FFT size (must be a power of two).
 
-        The change takes effect on the next call to prepareToPlay(). The processor
-        latency is updated immediately for host discovery.
+        If the bridge is prepared, processing is suspended while the buffers are
+        reallocated and the spectral processor is prepared again, so call it from the
+        message thread. The processor latency is updated immediately.
 
         @param fftSize  The new FFT size.
     */
@@ -92,7 +95,7 @@ public:
         smoother time-varying effects at the cost of increased CPU usage.
         Common values: 4 (75% overlap), 2 (50% overlap).
 
-        The change takes effect on the next call to prepareToPlay().
+        If the bridge is prepared, it is reconfigured immediately like setFFTSize().
 
         @param overlapFactor  The overlap factor (must be >= 1).
     */
@@ -104,7 +107,7 @@ public:
     //==============================================================================
     /** Sets the window type used for both analysis and synthesis windowing.
 
-        The change takes effect on the next call to prepareToPlay(). The default
+        If the bridge is prepared, it is reconfigured immediately. The default
         is WindowType::hann, which provides good frequency selectivity and COLA
         properties with 75% overlap.
 
@@ -124,7 +127,7 @@ public:
         - Tukey: alpha (default 0.5, taper ratio 0..1)
         - RakshitUllah: r (default 1.0, controlling parameter)
 
-        The change takes effect on the next call to prepareToPlay().
+        If the bridge is prepared, it is reconfigured immediately.
 
         @param parameter  The window-specific parameter value.
     */
@@ -192,6 +195,8 @@ private:
     bool isPrepared() const;
     void reconfigureIfPrepared();
     void processAvailableFrames (AudioProcessContext<float>& context);
+    void collectSpectralParameterChanges (const ParameterChangeBuffer& changes) noexcept;
+    void fillSpectralParameterChanges() noexcept;
 
     //==============================================================================
     FFTProcessor<float> fft;
@@ -211,6 +216,9 @@ private:
     std::vector<ChannelState> channelState;
 
     ParameterChangeBuffer spectralParams;
+    std::vector<float> pendingSpectralValues;
+    bool hasPendingSpectralValues = false;
+    int spectralParameterOffset = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpectralBridge)
 };

@@ -132,6 +132,7 @@ public:
         This method determines which registered format should handle the file based on
         its extension, then creates a writer configured with the specified audio parameters.
         The format's capabilities are validated against the requested parameters.
+        If a registered format handles the file extension, an existing file is overwritten.
 
         @param file The destination file where audio data will be written. Parent directories must exist and be writable.
         @param sampleRate The sample rate for the output audio in Hz (e.g., 44100, 48000).

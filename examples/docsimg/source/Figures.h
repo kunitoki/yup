@@ -23,6 +23,7 @@
 
 #include <yup_gui/yup_gui.h>
 
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -116,6 +117,40 @@ private:
 void labelled (yup::Graphics& g, yup::Rectangle<float> area, std::initializer_list<const char*> names, int columns, const std::function<void (int, yup::Rectangle<float>)>& draw);
 
 //==============================================================================
+/** An axis of a plot, linear or logarithmic. */
+struct Axis
+{
+    float getValue (float proportion) const
+    {
+        return logarithmic ? from * std::pow (to / from, proportion) : from + (to - from) * proportion;
+    }
+
+    float getProportion (float value) const
+    {
+        return logarithmic ? std::log (value / from) / std::log (to / from) : (value - from) / (to - from);
+    }
+
+    float from = 0.0f;
+    float to = 1.0f;
+    const char* fromLabel = "";
+    const char* toLabel = "";
+    bool logarithmic = false;
+};
+
+/** A named function of the horizontal axis. */
+struct Trace
+{
+    const char* name;
+    std::function<float (float)> function;
+};
+
+/** Plots functions of the horizontal axis, named below when there are several of them.
+
+    @returns The area the axes span.
+*/
+yup::Rectangle<float> plot (yup::Graphics& g, yup::Rectangle<float> area, const Axis& x, const Axis& y, const std::vector<Trace>& traces);
+
+//==============================================================================
 /** Components shown in a grid, each with its name below. */
 struct Gallery : yup::Component
 {
@@ -175,5 +210,6 @@ void addImagingFigures (Figures& f);
 void addLayoutFigures (Figures& f);
 void addWidgetFigures (Figures& f);
 void addDspFigures (Figures& f);
+void addAudioFigures (Figures& f);
 void addRhiFigures (Figures& f);
 void addScene3DFigures (Figures& f);

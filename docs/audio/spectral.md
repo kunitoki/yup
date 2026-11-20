@@ -44,18 +44,18 @@ interface described in
 - `bins` - an `AudioSpectralBuffer` (`SpectralBuffer<float>`) holding one channel per audio
   channel. Each bin is a pair of real and imaginary values, from DC (bin 0) to Nyquist
   (bin `fftSize / 2`). Bin `k` is centered on `k * sampleRate / fftSize` Hz. Modify it in place.
-- `params` - a `ParameterChangeBuffer`. Sample offsets have no meaning in the frequency domain.
+- `params` - a `ParameterChangeBuffer` with the parameters that changed since the previous
+  frame. Indices refer to the spectral processor's own parameters, each changed parameter
+  appears once with its latest value, and every sample offset is 0.
 
 Access bins with `getBinRef (channel, bin)`, which offers `real()`, `imag()`, `set()`,
 `magnitude()` and `phase()`, or with `getWritePointer (channel)` for raw interleaved
 `[real, imag]` data and vector operations. See [Audio buffers](buffers.md) for the full
 `SpectralBuffer` API.
 
-```{note}
-`SpectralBridge` currently passes an empty `params` buffer. Read parameter values with
-`getValue()` at the start of each frame; host automation reaches them because the bridge
-registers the spectral processor's parameters as its own.
-```
+Most processors simply read `getValue()` at the start of each frame, as below; host
+automation reaches the parameters because the bridge registers them as its own. Use `params`
+to react only when something changed, for example to recompute a gain curve.
 
 ## Writing a spectral processor
 
@@ -145,19 +145,16 @@ input and output channel counts). The spectral processor's bus layout is descrip
 
 Call the setters from the message thread. On a prepared bridge they suspend processing,
 rebuild the buffers, prepare the spectral processor again and, for the FFT size, update the
-reported latency. The overlap-add is normalized for the chosen window and overlap, so an
+reported latency. The settings persist when the host releases and prepares the bridge again.
+The overlap-add is normalized for the chosen window and overlap, so an
 untouched spectrum passes the input through.
-
-```{warning}
-`releaseResources()` restores the default FFT size and overlap factor. Plugin wrappers release
-the processor before every prepare, so set them again in `prepareToPlay`, as shown below.
-```
 
 ## Shipping a spectral plugin
 
 To turn the bridge into a plugin, derive from it and return your subclass from the plugin
-entry point. The bridge has no editor and saves no state of its own, so override those methods
-when you need them:
+entry point. The bridge saves and restores the values of the spectral processor's parameters,
+so automatable settings round-trip with the host session. It has no editor, so override
+`hasEditor` and `createEditor` when you need one:
 
 ```cpp
 class BrickwallPlugin : public yup::SpectralBridge
@@ -171,19 +168,11 @@ public:
         setFFTSize (2048);
         setSpectralProcessor (std::make_shared<BrickwallFilter>());
     }
-
-    void prepareToPlay (const yup::AudioSpec& spec) override
-    {
-        setFFTSize (2048);
-        yup::SpectralBridge::prepareToPlay (spec);
-    }
-
-    yup::Result saveStateIntoDataTree (yup::DataTree& state) override;   // store parameter values
-    yup::Result loadStateFromDataTree (const yup::DataTree& state) override;
 };
 ```
 
-See [Audio processors](processors.md#state-and-presets) for the state methods and
+Override `saveStateIntoDataTree` and `loadStateFromDataTree` to store more than parameter
+values, see [Audio processors](processors.md#state-and-presets), and
 [Writing plugins](plugin-client.md) for the entry point. The bridge processes single precision
 only.
 

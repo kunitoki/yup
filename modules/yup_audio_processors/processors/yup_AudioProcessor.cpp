@@ -175,7 +175,8 @@ void AudioProcessor::setPlaybackConfiguration (float sampleRate, int samplesPerB
 
     AudioProcessorBase::setPlaybackConfiguration (sampleRate, samplesPerBlock);
 
-    prepareToPlay (AudioSpec (sampleRate, samplesPerBlock));
+    const auto numChannels = jmax (busLayout.getNumAudioInputChannels(), busLayout.getNumAudioOutputChannels());
+    prepareToPlay (AudioSpec (sampleRate, samplesPerBlock, numChannels));
 }
 
 } // namespace yup

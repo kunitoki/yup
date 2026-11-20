@@ -94,6 +94,16 @@ bool AudioFormatReader::read (AudioBuffer<float>* buffer,
         return false;
     }
 
+    if (numCh > 2 && numChannels > 2)
+    {
+        HeapBlock<float*> chans (numCh, false);
+
+        for (int ch = 0; ch < numCh; ++ch)
+            chans[ch] = buffer->getWritePointer (ch, startSampleInDestBuffer);
+
+        return read (chans.getData(), numCh, readerStartSample, numSamples, true);
+    }
+
     // Determine what we actually can and should read
     const bool canReadLeft = useReaderLeftChan;
     const bool canReadRight = useReaderRightChan && (numChannels >= 2);

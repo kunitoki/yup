@@ -658,10 +658,9 @@ public:
     void setNotClear() noexcept { isClear = false; }
 
     //==============================================================================
-    /** Fills all the samples in all channels by a value.
+    /** Fills all the samples in all channels with a value.
 
-        This method will do nothing if the buffer has been marked as cleared (i.e. the
-        hasBeenCleared method returns true.)
+        After this call hasBeenCleared() returns false.
     */
     void fill (Type value) noexcept
     {
@@ -955,12 +954,9 @@ public:
         @param numSamples           the number of samples to process
         @param startGain            the gain to apply to the first sample (this is multiplied with
                                     the source samples before they are added to this buffer)
-        @param endGain              The gain that would apply to the sample after the final sample.
-                                    The gain that applies to the final sample is
-                                    (numSamples - 1) / numSamples * (endGain - startGain). This
-                                    ensures a continuous ramp when supplying the same value in
-                                    endGain and startGain in subsequent blocks. The gain is linearly
-                                    interpolated between the first and last samples.
+        @param endGain              the gain to apply to the final sample. The gain is linearly
+                                    interpolated between the first and last samples, and a single
+                                    sample uses endGain.
     */
     void addFromWithRamp (int destChannel,
                           int destStartSample,
@@ -1113,12 +1109,9 @@ public:
         @param numSamples           the number of samples to process
         @param startGain            the gain to apply to the first sample (this is multiplied with
                                     the source samples before they are copied to this buffer)
-        @param endGain              The gain that would apply to the sample after the final sample.
-                                    The gain that applies to the final sample is
-                                    (numSamples - 1) / numSamples * (endGain - startGain). This
-                                    ensures a continuous ramp when supplying the same value in
-                                    endGain and startGain in subsequent blocks. The gain is linearly
-                                    interpolated between the first and last samples.
+        @param endGain              the gain to apply to the final sample. The gain is linearly
+                                    interpolated between the first and last samples, and a single
+                                    sample uses endGain.
 
         @see addFrom
     */

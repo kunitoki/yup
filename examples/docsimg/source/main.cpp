@@ -184,6 +184,7 @@ public:
         addLayoutFigures (figures);
         addWidgetFigures (figures);
         addDspFigures (figures);
+        addAudioFigures (figures);
         addRhiFigures (figures);
         addScene3DFigures (figures);
         addYuiFigures (figures);

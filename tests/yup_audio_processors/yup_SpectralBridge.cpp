@@ -52,7 +52,9 @@ public:
 
     void processBlock (SpectralProcessContext<float>& context) override
     {
-        ignoreUnused (context);
+        for (const auto& change : context.params)
+            receivedChanges.push_back (change);
+
         ++processCount;
     }
 
@@ -69,6 +71,7 @@ public:
     bool prepareCalled = false;
     bool releaseCalled = false;
     int processCount = 0;
+    std::vector<ParameterChange> receivedChanges;
 };
 
 //==============================================================================
@@ -257,11 +260,105 @@ TEST_F (SpectralBridgeTests, SupportsDataTreeState)
     EXPECT_TRUE (bridge->supportsDataTreeState());
 }
 
-TEST_F (SpectralBridgeTests, LoadAndSaveStateReturnOk)
+TEST_F (SpectralBridgeTests, SaveAndLoadStateRestoresParameterValues)
 {
-    DataTree tree;
-    EXPECT_TRUE (bridge->loadStateFromDataTree (tree).wasOk());
-    EXPECT_TRUE (bridge->saveStateIntoDataTree (tree).wasOk());
+    auto proc = std::make_shared<PassthroughSpectralProcessor>();
+    auto amount = AudioParameterBuilder().withID ("amount").withRange (0.0f, 1.0f).build();
+    proc->addParameter (amount);
+    bridge->setSpectralProcessor (proc);
+
+    amount->setValue (0.7f);
+
+    DataTree state;
+    ASSERT_TRUE (bridge->saveStateIntoDataTree (state).wasOk());
+
+    amount->setValue (0.1f);
+    ASSERT_TRUE (bridge->loadStateFromDataTree (state).wasOk());
+
+    EXPECT_FLOAT_EQ (0.7f, amount->getValue());
+}
+
+TEST_F (SpectralBridgeTests, LoadStateRejectsUnknownState)
+{
+    EXPECT_TRUE (bridge->loadStateFromDataTree (DataTree ("SomethingElse")).failed());
+}
+
+TEST_F (SpectralBridgeTests, ReleaseResourcesKeepsConfiguration)
+{
+    bridge->setFFTSize (2048);
+    bridge->setOverlapFactor (2);
+    bridge->prepareToPlay (AudioSpec (44100.0f, 512, 2));
+    bridge->releaseResources();
+
+    EXPECT_EQ (2048, bridge->getFFTSize());
+    EXPECT_EQ (2, bridge->getOverlapFactor());
+    EXPECT_EQ (2048, bridge->getLatencySamples());
+
+    bridge->prepareToPlay (AudioSpec (44100.0f, 512, 2));
+    EXPECT_EQ (2048, bridge->getFFTSize());
+}
+
+TEST_F (SpectralBridgeTests, ProcessBlockForwardsParameterChangesWithSpectralIndices)
+{
+    bridge->addParameter (AudioParameterBuilder().withID ("bridgeOnly").build());
+
+    auto proc = std::make_shared<PassthroughSpectralProcessor>();
+    proc->addParameter (AudioParameterBuilder().withID ("amount").withRange (0.0f, 1.0f).build());
+    bridge->setSpectralProcessor (proc);
+    bridge->setFFTSize (128);
+    bridge->prepareToPlay (AudioSpec (44100.0f, 128, 2));
+
+    AudioBuffer<float> audio (2, 128);
+    audio.clear();
+    MidiBuffer midi;
+    ParameterChangeBuffer params;
+    params.reserve (4);
+    params.addChange (0, 0.5f, 3);  // the bridge's own parameter, not forwarded
+    params.addChange (1, 0.25f, 10);
+
+    AudioProcessContext<float> context { audio, midi, params };
+    bridge->processBlock (context);
+
+    ASSERT_EQ (1u, proc->receivedChanges.size());
+    EXPECT_EQ (0, proc->receivedChanges[0].parameterIndex);
+    EXPECT_FLOAT_EQ (0.25f, proc->receivedChanges[0].normalizedValue);
+    EXPECT_EQ (0, proc->receivedChanges[0].sampleOffset);
+
+    params.clear();
+    bridge->processBlock (context);
+
+    EXPECT_EQ (1u, proc->receivedChanges.size());
+}
+
+TEST_F (SpectralBridgeTests, ParameterChangesBetweenFramesAreCoalescedIntoTheNextFrame)
+{
+    auto proc = std::make_shared<PassthroughSpectralProcessor>();
+    proc->addParameter (AudioParameterBuilder().withID ("amount").withRange (0.0f, 1.0f).build());
+    bridge->setSpectralProcessor (proc);
+    bridge->setFFTSize (256);
+    bridge->prepareToPlay (AudioSpec (44100.0f, 64, 2));
+
+    AudioBuffer<float> audio (2, 64);
+    MidiBuffer midi;
+    ParameterChangeBuffer params;
+    params.reserve (4);
+
+    for (int block = 0; block < 4; ++block)
+    {
+        audio.clear();
+        params.clear();
+        params.addChange (0, 0.1f * static_cast<float> (block + 1), 0);
+
+        AudioProcessContext<float> context { audio, midi, params };
+        bridge->processBlock (context);
+
+        if (block < 3)
+            EXPECT_EQ (0, proc->processCount);
+    }
+
+    EXPECT_EQ (1, proc->processCount);
+    ASSERT_EQ (1u, proc->receivedChanges.size());
+    EXPECT_FLOAT_EQ (0.4f, proc->receivedChanges[0].normalizedValue);
 }
 
 TEST_F (SpectralBridgeTests, ProcessBlockPassesAudioThrough)

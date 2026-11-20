@@ -48,10 +48,9 @@ namespace yup
     You can use this to increase or decrease the number of channels that an
     audio source uses, or to re-order those channels.
 
-    Call the reset() method before using it to set up a default mapping, and then
-    the setInputChannelMapping() and setOutputChannelMapping() methods to
+    Use the setInputChannelMapping() and setOutputChannelMapping() methods to
     create an appropriate mapping, otherwise no channels will be connected and
-    it'll produce silence.
+    it'll produce silence. clearAllMappings() removes every mapping.
 
     @see AudioSource
 

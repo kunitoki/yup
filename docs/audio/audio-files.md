@@ -49,7 +49,7 @@ formatManager.registerFormat (std::make_unique<yup::WaveAudioFormat>());
 | `Mp3AudioFormat` | `.mp3` | yes | only with `hmp3_library` | 16 | 1 or 2 |
 | `OggVorbisAudioFormat` | `.ogg` | yes | yes | 16 | 1 to 8 |
 | `OpusAudioFormat` | `.opus` | yes | yes | 32 | 1 or 2 |
-| `AppleCoreAudioFormat` (macOS, iOS) | All system types: `.aiff`, `.caf`, `.m4a`, `.aac`, `.mp3`, `.wav`, ... | yes | AAC only | - | - |
+| `AppleCoreAudioFormat` (macOS, iOS) | All system types: `.aiff`, `.caf`, `.m4a`, `.aac`, `.mp3`, `.wav`, ... | yes | AAC, in `.m4a`/`.mp4`/`.m4b`/`.caf`/`.3gp`/`.3g2` or `.aac` | - | - |
 | `WindowsMediaAudioFormat` (Windows) | `.m4a`, `.mp4`, `.aac`, `.wma`, `.wm`, `.wmv`, `.asf`, `.mp3` | yes | AAC, in `.m4a`/`.mp4` or `.aac` | 32 | 1 or 2 |
 
 Each format is enabled by a config flag, and only when the third-party library
@@ -119,8 +119,9 @@ The `AudioBuffer` overload is convenient for mono and stereo:
 reader->read (&buffer, 0, numSamples, 0, true, true);
 ```
 
-It reads at most the first two channels of the file. Use the pointer overload
-for multichannel files.
+When both the file and the buffer have more than two channels, every buffer
+channel is filled from the matching file channel. Otherwise it reads the first
+two channels of the file.
 
 ## Streaming a file
 
@@ -211,8 +212,6 @@ bool saveWave (yup::AudioFormatManager& formatManager,
                const yup::AudioBuffer<float>& buffer,
                double sampleRate)
 {
-    file.deleteFile(); // the writer appends to an existing file
-
     auto writer = formatManager.createWriterFor (file,
                                                  static_cast<int> (sampleRate),
                                                  buffer.getNumChannels(),
@@ -227,10 +226,9 @@ bool saveWave (yup::AudioFormatManager& formatManager,
 The full signature is
 `createWriterFor (file, sampleRate, numChannels, bitsPerSample, metadataValues = {}, qualityOptionIndex = 0)`.
 It returns null when no format handles the extension or the parameters are not
-supported, for example a bit depth the format can't write.
+supported, for example a bit depth the format can't write. An existing file is
+replaced; it is left untouched only when no format handles its extension.
 
-- **Delete first.** The output stream is opened at the end of an existing
-  file, so delete the file before writing to replace it.
 - **Finalize.** Headers and lengths are completed when the writer is destroyed.
   Reset the `unique_ptr` before reading the file back. `flush()` pushes
   buffered data to the stream.
@@ -294,9 +292,10 @@ metadata.set ("artist", "YUP");
 auto writer = formatManager.createWriterFor (outputFolder.getChildFile ("take3.ogg"), 48000, 2, 16, metadata, 6);
 ```
 
-On Apple platforms CoreAudio always encodes AAC. Registered through the
-manager it writes an ADTS stream, whatever the extension; to write a real
-`.m4a` or `.caf` container, create the format with a stream kind:
+On Apple platforms CoreAudio always encodes AAC. Through the manager, the
+file extension picks the container (`.m4a`, `.mp4`, `.m4b`, `.caf`, `.3gp`,
+`.3g2`, or an ADTS stream for `.aac`). When writing to another kind of stream,
+create the format with a stream kind:
 
 ```cpp
 yup::AppleCoreAudioFormat m4a (yup::AppleCoreAudioFormat::StreamKind::kM4a);
@@ -319,7 +318,6 @@ std::unique_ptr<yup::AudioFormatWriter::ThreadedWriter> recorder;
 void startRecording (const yup::File& file, double sampleRate)
 {
     writerThread.startThread();
-    file.deleteFile();
 
     auto writer = formatManager.createWriterFor (file, static_cast<int> (sampleRate), 2, 24);
     if (writer == nullptr)
@@ -354,8 +352,8 @@ constructed or half destroyed, and destroyed outside the lock.
 
 `write` copies into the FIFO under a short lock and returns false when the
 FIFO is full and the block is dropped; size the FIFO for a few hundred
-milliseconds. Keep the `TimeSliceThread` running until the recorder is
-destroyed, since its destructor waits for the FIFO to drain. The FIFO lock is
+milliseconds. Destroying the recorder writes whatever is still queued, even
+when the `TimeSliceThread` has stopped, then finalizes the file. The FIFO lock is
 a `CriticalSection`, which the audio thread must not wait on in the browser
 (see [Web audio](web.md)).
 

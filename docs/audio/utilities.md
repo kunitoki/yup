@@ -50,6 +50,11 @@ current value to a target over a fixed time, one sample at a time:
 linear value starts at 0 and a multiplicative one at 1, unless you pass an initial
 value to the constructor.
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/audio/utilities_smoothed-value_light.jpg#gh-light-mode-only" alt="Linear and multiplicative SmoothedValue ramps up and back down" width="560">
+  <img class="dark-only rounded" src="../_static/images/audio/utilities_smoothed-value_dark.jpg#gh-dark-mode-only" alt="Linear and multiplicative SmoothedValue ramps up and back down" width="560">
+</p>
+
 ```cpp
 class GainStage
 {
@@ -124,6 +129,11 @@ void render (yup::AudioBuffer<float>& buffer, int startSample, int numSamples)
         voiceFinished();
 }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/audio/utilities_adsr_light.jpg#gh-light-mode-only" alt="An ADSR envelope going through attack, decay, sustain and release" width="560">
+  <img class="dark-only rounded" src="../_static/images/audio/utilities_adsr_dark.jpg#gh-dark-mode-only" alt="An ADSR envelope going through attack, decay, sustain and release" width="560">
+</p>
 
 `ADSR::Parameters` holds `attack`, `decay` and `release` times in seconds and a
 linear `sustain` level from 0 to 1. The defaults are 0.1 s, 0.1 s, 1.0 and 0.1 s.

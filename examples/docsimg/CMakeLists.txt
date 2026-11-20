@@ -58,6 +58,7 @@ set (sources
     "${CMAKE_CURRENT_LIST_DIR}/source/LayoutFigures.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/source/WidgetFigures.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/source/DspFigures.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/source/AudioFigures.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/source/RhiFigures.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/source/Scene3DFigures.cpp")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})

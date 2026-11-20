@@ -86,6 +86,11 @@ meterState.pushSamples (channelPointers, numChannels, numSamples);
 meterState.processPendingAudio();
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/audio/audio-gui_meters_light.jpg#gh-light-mode-only" alt="Linear and segmented K-20 meters for a stereo signal" width="480">
+  <img class="dark-only rounded" src="../_static/images/audio/audio-gui_meters_dark.jpg#gh-dark-mode-only" alt="Linear and segmented K-20 meters for a stereo signal" width="480">
+</p>
+
 Call `meterState.prepare (sampleRate, numChannels)` when the device sample rate
 changes. The component can also:
 
@@ -287,6 +292,11 @@ std::vector<yup::Point<double>> response; // (frequency, decibels) pairs
 plot.updateSignalData (lowIndex, response);
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/audio/audio-gui_cartesian-plane_light.jpg#gh-light-mode-only" alt="Low and high crossover responses on a CartesianPlane" width="560">
+  <img class="dark-only rounded" src="../_static/images/audio/audio-gui_cartesian-plane_dark.jpg#gh-dark-mode-only" alt="Low and high crossover responses on a CartesianPlane" width="560">
+</p>
+
 `setMargins()` makes room for the labels, `setSignalVisible()` hides a signal,
 and `valueToX()`, `valueToY()`, `xToValue()`, `yToValue()` and `getPlotBounds()`
 convert between values and pixels, for example to drag a crossover point.
@@ -333,6 +343,11 @@ pitchWheel.onValueChanged = [this] (double value)
     sendMidi (yup::MidiMessage::pitchWheel (1, 8192 + static_cast<int> (value * 8191.0)));
 };
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/audio/audio-gui_wheels_light.jpg#gh-light-mode-only" alt="A ModWheelComponent and a PitchWheelComponent" width="280">
+  <img class="dark-only rounded" src="../_static/images/audio/audio-gui_wheels_dark.jpg#gh-dark-mode-only" alt="A ModWheelComponent and a PitchWheelComponent" width="280">
+</p>
 
 Here `sendMidi()` stands for your own way of passing messages to the audio
 thread. Double-clicking a wheel restores `setDefaultValue()`,
