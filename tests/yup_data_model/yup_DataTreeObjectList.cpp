@@ -23,6 +23,8 @@
 
 #include <yup_data_model/yup_data_model.h>
 
+#include "yup_DataTreeTestHelpers.h"
+
 using namespace yup;
 
 namespace
@@ -494,4 +496,225 @@ TEST_F (DataTreeObjectListTests, RangeBasedForLoopIntegration)
     {
         EXPECT_EQ (childNames[i], objectList.getObject (i)->getName());
     }
+}
+
+//==============================================================================
+// Contract Tests
+//
+// After every transaction a list holds one object per suitable child, in the order of the
+// children, and the objects of the children that stayed are the ones it had.
+
+class DataTreeObjectListContractTests : public DataTreeContractHarness
+{
+protected:
+    struct Item
+    {
+        explicit Item (const DataTree& treeToUse)
+            : tree (treeToUse)
+        {
+        }
+
+        DataTree getDataTree() const { return tree; }
+
+        DataTree tree;
+    };
+
+    struct ItemList final : DataTreeObjectList<Item>
+    {
+        explicit ItemList (const DataTree& parentTree)
+            : DataTreeObjectList<Item> (parentTree)
+        {
+            rebuildObjects();
+        }
+
+        ~ItemList() override
+        {
+            freeObjects();
+        }
+
+        // Every third node gets no object
+        bool isSuitableType (const DataTree& tree) const override
+        {
+            return tree.getType().toString().getTrailingIntValue() % 3 != 0;
+        }
+
+        Item* createNewObject (const DataTree& tree) override
+        {
+            ++numCreated;
+            return new Item (tree);
+        }
+
+        void deleteObject (Item* item) override
+        {
+            ++numDeleted;
+            delete item;
+        }
+
+        void newObjectAdded (Item* item) override { events.add ("added " + label (item->tree)); }
+
+        void objectRemoved (Item* item) override { events.add ("removed " + label (item->tree)); }
+
+        void objectOrderChanged() override { events.add ("reordered"); }
+
+        StringArray takeEvents() { return std::exchange (events, {}); }
+
+        /** Returns the object of each child by name, or what is wrong with the list. */
+        std::map<String, const Item*> findObjects (const DataTree& parentTree, StringArray& problems) const
+        {
+            std::map<String, const Item*> items;
+            int next = 0;
+
+            for (int i = 0; i < parentTree.getNumChildren(); ++i)
+            {
+                const auto child = parentTree.getChild (i);
+
+                if (! isSuitableType (child))
+                    continue;
+
+                if (next >= getNumObjects() || getObject (next)->tree != child)
+                    problems.add (label (parentTree) + ": no object for " + label (child) + " at " + String (next));
+                else
+                    items[label (child)] = getObject (next);
+
+                ++next;
+            }
+
+            if (next != getNumObjects() || numCreated - numDeleted != getNumObjects())
+                problems.add (label (parentTree) + ": " + String (getNumObjects()) + " objects, " + String (numCreated) + " created, " + String (numDeleted) + " deleted, for " + String (next) + " children");
+
+            return items;
+        }
+
+        int numCreated = 0, numDeleted = 0;
+        StringArray events;
+    };
+
+    static std::vector<DataTree> listed (const World& world, const StringArray& names)
+    {
+        std::vector<DataTree> trees;
+
+        for (const auto& name : names)
+            trees.push_back (world.find (name));
+
+        return trees;
+    }
+};
+
+TEST_F (DataTreeObjectListContractTests, ObjectsFollowTheChildrenThroughEditsUndoAndRedo)
+{
+    for (int64 seed = 1; seed <= 25; ++seed)
+    {
+        World world;
+        buildRandomWorld (world, seed, 8);
+
+        std::vector<std::unique_ptr<ItemList>> lists;
+
+        for (const auto& node : world.nodes)
+            lists.push_back (std::make_unique<ItemList> (node));
+
+        std::vector<std::map<String, const Item*>> previous (lists.size());
+
+        // The children with an object, those objects in their order, and the same object for a child that stayed
+        const auto expectObjectsInLine = [&] (const char* what)
+        {
+            StringArray problems;
+
+            for (size_t i = 0; i < lists.size(); ++i)
+            {
+                auto current = lists[i]->findObjects (world.nodes[i], problems);
+
+                for (const auto& [name, item] : current)
+                {
+                    if (const auto it = previous[i].find (name); it != previous[i].end() && it->second != item)
+                        problems.add (label (world.nodes[i]) + ": another object for " + name);
+                }
+
+                previous[i] = std::move (current);
+            }
+
+            EXPECT_TRUE (problems.isEmpty()) << what << "\n" << problems.joinIntoString ("\n");
+        };
+
+        expectObjectsInLine ("start");
+
+        for (const auto& step : makeScript (seed + 1000, 8, 30))
+        {
+            SCOPED_TRACE ("seed " + String (seed) + ", " + describeStep (step));
+
+            const auto undoManager = makeUndoManager();
+
+            apply (world, step, undoManager.get());
+            expectObjectsInLine ("commit");
+
+            if (undoManager->canUndo())
+            {
+                undoManager->undo();
+                expectObjectsInLine ("undo");
+
+                undoManager->redo();
+                expectObjectsInLine ("redo");
+            }
+
+            if (HasFailure())
+                return;
+        }
+    }
+}
+
+TEST_F (DataTreeObjectListContractTests, ObjectsAreUpdatedOnceWhenTheTransactionEnds)
+{
+    World world;
+    const auto root = world.add ("root");
+    world.add ("n1", root);
+    world.add ("n2", root);
+
+    for (const auto* name : { "n3", "n4", "n5", "n7" })
+        world.add (name);
+
+    ItemList list (root);
+    EXPECT_EQ (2, list.getNumObjects());
+
+    {
+        auto transaction = world.find ("root").beginTransaction();
+        transaction.addChildren (listed (world, { "n4", "n3", "n5" }), 0);
+        transaction.addChild (world.find ("n7"));
+        transaction.removeChild (world.find ("n7"));
+        transaction.moveChild (4, 0);
+        transaction.moveChild (3, 1);
+
+        EXPECT_TRUE (list.takeEvents().isEmpty());
+    }
+
+    // n3 gets no object, n7 came and went, and the two moves are one change of order
+    EXPECT_EQ (String ("root[n2 n5 n4 n3 n1] n7"), world.describe());
+    expectLines ({ "added n4", "added n5", "reordered" }, list.takeEvents(), "callbacks of the list");
+
+    StringArray problems;
+    list.findObjects (root, problems);
+    EXPECT_TRUE (problems.isEmpty()) << problems.joinIntoString ("\n");
+    EXPECT_EQ (4, list.numCreated);
+}
+
+TEST_F (DataTreeObjectListContractTests, ObjectsFollowAChildTakenByAnotherNode)
+{
+    World world;
+    const auto root = world.add ("root");
+    world.add ("n1", root);
+    world.add ("other");
+
+    ItemList list (root);
+    const auto undoManager = makeUndoManager();
+
+    {
+        auto transaction = world.find ("other").beginTransaction (undoManager.get());
+        transaction.addChild (world.find ("n1"));
+    }
+
+    expectLines ({ "removed n1" }, list.takeEvents(), "callbacks of the list");
+    EXPECT_EQ (0, list.getNumObjects());
+
+    EXPECT_TRUE (undoManager->undo());
+
+    expectLines ({ "added n1" }, list.takeEvents(), "callbacks of the list");
+    EXPECT_EQ (1, list.getNumObjects());
 }

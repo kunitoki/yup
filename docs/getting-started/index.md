@@ -2,6 +2,37 @@
 
 New to YUP? Start here.
 
+## Start from the template
+
+The quickest way to start a project is the
+[YUP template](https://github.com/kunitoki/yup-template): a working repository
+where one source tree builds a standalone application and an audio plugin (CLAP,
+VST3, AU, AUv3, LV2, AAX and standalone), with tests, benchmarks, installer
+packaging and CI for every platform already set up. Keep both targets, or turn
+one off with `-DBUILD_APP=OFF` / `-DBUILD_PLUGIN=OFF`.
+
+1. Click [Use this template](https://github.com/kunitoki/yup-template/generate)
+   on GitHub to create your own repository from it, rather than forking it.
+2. Clone your repository with its submodules, since YUP comes along as a git
+   submodule:
+
+   ```sh
+   git clone --recursive https://github.com/<you>/<your-project>.git
+   ```
+
+3. Set the project, product and company names at the top of `CMakeLists.txt`.
+4. Build it with the [`just`](https://github.com/casey/just) recipes (`just mac`,
+   `just win` or `just linux` to generate the project, then `just build`), or
+   with CMake directly:
+
+   ```sh
+   cmake -G "Ninja Multi-Config" -B build/ninja
+   cmake --build build/ninja --config Release --target <PROJECT_NAME>_all
+   ```
+
+The template [README](https://github.com/kunitoki/yup-template#readme) covers
+testing, packaging and every configuration option.
+
 ## Try the examples
 
 The repository ships with working example apps you can build immediately:

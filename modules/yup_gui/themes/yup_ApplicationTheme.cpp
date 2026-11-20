@@ -46,6 +46,12 @@ ApplicationTheme::Ptr& ApplicationTheme::getGlobalThemeInstance()
     return globalTheme;
 }
 
+uint32 ApplicationTheme::makeGeneration() noexcept
+{
+    static std::atomic<uint32> lastGeneration { 0 };
+    return ++lastGeneration;
+}
+
 //==============================================================================
 
 std::optional<Color> ApplicationTheme::findComponentColor (const Component& component, const Identifier& colorId)
@@ -60,6 +66,11 @@ std::optional<Color> ApplicationTheme::findColor (const Component& component, co
     if (auto color = component.findColor (colorId))
         return color;
 
+    return findDefaultColor (component, colorId);
+}
+
+std::optional<Color> ApplicationTheme::findDefaultColor (const Component& component, const Identifier& colorId) const
+{
     if (auto it = defaultColors.find (colorId); it != defaultColors.end())
         return it->second;
 
@@ -81,13 +92,23 @@ std::optional<Color> ApplicationTheme::findPaletteColor (const ThemePalette& com
         return candidate.first == componentPalette;
     });
 
-    // Mapped once per distinct palette, by running the palette mapping on a theme of its own.
+    // Mapped once per distinct palette with bounded LRU eviction so hot reloads never grow unboundedly.
     if (entry == componentPaletteColors.end())
     {
         ApplicationTheme mapped;
         mapped.paletteMapping = paletteMapping;
         mapped.setPalette (componentPalette);
-        entry = componentPaletteColors.emplace (componentPaletteColors.end(), componentPalette, std::move (mapped.paletteColors));
+
+        if (componentPaletteColors.size() >= maxCachedComponentPalettes)
+            componentPaletteColors.erase (componentPaletteColors.begin());
+
+        componentPaletteColors.emplace_back (componentPalette, std::move (mapped.paletteColors));
+        entry = std::prev (componentPaletteColors.end());
+    }
+    else if (std::next (entry) != componentPaletteColors.end())
+    {
+        std::rotate (entry, std::next (entry), componentPaletteColors.end());
+        entry = std::prev (componentPaletteColors.end());
     }
 
     if (auto it = entry->second.find (colorId); it != entry->second.end())
@@ -96,15 +117,24 @@ std::optional<Color> ApplicationTheme::findPaletteColor (const ThemePalette& com
     return std::nullopt;
 }
 
+size_t ApplicationTheme::getNumCachedComponentPalettes() const noexcept
+{
+    const SpinLock::ScopedLockType lock (componentPaletteColorsLock);
+    return componentPaletteColors.size();
+}
+
 void ApplicationTheme::setColor (const Identifier& colorId, const Color& color)
 {
     defaultColors.insert_or_assign (colorId, color);
+    paletteGeneration = makeGeneration();
 }
 
 void ApplicationTheme::setColors (std::initializer_list<std::pair<const Identifier&, const Color&>> colors)
 {
     for (const auto& entry : colors)
         defaultColors.insert_or_assign (entry.first, entry.second);
+
+    paletteGeneration = makeGeneration();
 }
 
 //==============================================================================
@@ -113,6 +143,7 @@ void ApplicationTheme::setPalette (const ThemePalette& newPalette)
 {
     palette = newPalette;
     paletteColors.clear();
+    paletteGeneration = makeGeneration();
 
     if (paletteMapping)
         paletteMapping (palette, *this);
@@ -147,33 +178,35 @@ void ApplicationTheme::setPaletteColor (const Identifier& colorId, const Color& 
 
 //==============================================================================
 
-std::optional<float> ApplicationTheme::findComponentMetric (const Component& component, const Identifier& metricId)
+std::optional<var> ApplicationTheme::findComponentProperty (const Component& component, const Identifier& id)
 {
     jassert (getGlobalThemeInstance() != nullptr);
 
-    return getGlobalThemeInstance()->findMetric (component, metricId);
+    return getGlobalThemeInstance()->findProperty (component, id);
 }
 
-std::optional<float> ApplicationTheme::findMetric (const Component& component, const Identifier& metricId) const
+std::optional<var> ApplicationTheme::findProperty (const Component& component, const Identifier& id) const
 {
-    if (auto metric = component.findMetric (metricId))
-        return metric;
+    ignoreUnused (component);
 
-    if (auto it = defaultMetrics.find (metricId); it != defaultMetrics.end())
+    if (auto it = defaultProperties.find (id); it != defaultProperties.end())
         return it->second;
 
     return std::nullopt;
 }
 
-void ApplicationTheme::setMetric (const Identifier& metricId, float value)
+void ApplicationTheme::setProperty (const Identifier& id, const var& value)
 {
-    defaultMetrics.insert_or_assign (metricId, value);
+    defaultProperties.insert_or_assign (id, value);
+    paletteGeneration = makeGeneration();
 }
 
-void ApplicationTheme::setMetrics (std::initializer_list<std::pair<const Identifier&, float>> metrics)
+void ApplicationTheme::setProperties (std::initializer_list<std::pair<const Identifier&, var>> properties)
 {
-    for (const auto& entry : metrics)
-        defaultMetrics.insert_or_assign (entry.first, entry.second);
+    for (const auto& entry : properties)
+        defaultProperties.insert_or_assign (entry.first, entry.second);
+
+    paletteGeneration = makeGeneration();
 }
 
 //==============================================================================
@@ -181,6 +214,7 @@ void ApplicationTheme::setMetrics (std::initializer_list<std::pair<const Identif
 void ApplicationTheme::setDefaultFont (Font font)
 {
     defaultFont = std::move (font);
+    paletteGeneration = makeGeneration();
 }
 
 const Font& ApplicationTheme::getDefaultFont() const
@@ -191,6 +225,7 @@ const Font& ApplicationTheme::getDefaultFont() const
 void ApplicationTheme::setDefaultIconFont (Font font)
 {
     defaultIconFont = std::move (font);
+    paletteGeneration = makeGeneration();
 }
 
 const Font& ApplicationTheme::getDefaultIconFont() const
@@ -201,6 +236,7 @@ const Font& ApplicationTheme::getDefaultIconFont() const
 void ApplicationTheme::setDefaultMonospaceFont (Font font)
 {
     defaultMonospaceFont = std::move (font);
+    paletteGeneration = makeGeneration();
 }
 
 const Font& ApplicationTheme::getDefaultMonospaceFont() const

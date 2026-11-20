@@ -59,11 +59,14 @@ class YUP_API TreeView : public Component
 {
 public:
     //==============================================================================
+    /** Creates an empty TreeView. */
+    TreeView();
+
     /** Creates an empty TreeView.
 
         @param componentID  Optional component identifier
     */
-    explicit TreeView (StringRef componentID = {});
+    explicit TreeView (StringRef componentID);
 
     /** Destructor. Deletes the root item. */
     ~TreeView() override;
@@ -263,13 +266,20 @@ public:
     */
     struct Style
     {
-        static inline const Identifier indentGuideColorId { "treeViewIndentGuide" };
-        static inline const Identifier disclosureColorId { "treeViewDisclosure" };
-        static inline const Identifier itemTextColorId { "treeViewItemText" };
-        static inline const Identifier itemTextSelectedColorId { "treeViewItemTextSelected" };
-        static inline const Identifier dropIndicatorColorId { "treeViewDropIndicator" };
-        static inline const Identifier itemHoveredColorId { "treeViewItemHovered" };
+        static const Identifier indentGuideColorId;
+        static const Identifier disclosureColorId;
+        static const Identifier itemTextColorId;
+        static const Identifier itemTextSelectedColorId;
+        static const Identifier dropIndicatorColorId;
+        static const Identifier itemHoveredColorId;
     };
+
+    //==============================================================================
+    /** Returns the static type info describing the TreeView type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
     /** @internal */

@@ -691,6 +691,7 @@ private:
     ValueType height = 0;
 };
 
+//==============================================================================
 /** Stream insertion operator
 
     Inserts the width and height of the Size object into the provided String object, formatting them as a comma-separated pair.
@@ -729,6 +730,32 @@ constexpr ValueType get (const Size<ValueType>& point) noexcept
     else
         static_assert (dependentFalse<I>);
 }
+
+//==============================================================================
+#ifndef DOXYGEN
+
+template <>
+struct VariantConverter<Size<float>>
+{
+    static Size<float> fromVar (const var& v)
+    {
+        const auto* values = v.getArray();
+
+        if (values == nullptr || values->size() < 2)
+            return {};
+
+        return { static_cast<float> (values->getReference (0)),
+                 static_cast<float> (values->getReference (1)) };
+    }
+
+    static var toVar (const Size<float>& size)
+    {
+        return var (Array<var> { static_cast<double> (size.getWidth()),
+                                 static_cast<double> (size.getHeight()) });
+    }
+};
+
+#endif // DOXYGEN
 
 } // namespace yup
 

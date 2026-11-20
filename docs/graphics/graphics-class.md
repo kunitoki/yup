@@ -64,6 +64,11 @@ g.setStrokeMiterLimit (4.0f);
 g.setStrokePosition (StrokePosition::Inside); // inside, centered on, or outside the edge
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_stroke-position_light.jpg#gh-light-mode-only" alt="A stroke inside, centered on and outside the edge of a rectangle" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_stroke-position_dark.jpg#gh-dark-mode-only" alt="A stroke inside, centered on and outside the edge of a rectangle" width="560">
+</p>
+
 An image paint fills or strokes any shape or text with an image. The transform
 maps image pixels to drawing coordinates, and `ImageSampling` chooses how the
 image repeats (`Clamp`, `Repeat`, `Mirror` on each axis) and how it is filtered
@@ -76,8 +81,111 @@ g.setFillImage (pattern,
 g.fillRoundedRect (area, 8.0f);
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_image-paint_light.jpg#gh-light-mode-only" alt="An image used as a fill, clamped, repeated and mirrored" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_image-paint_dark.jpg#gh-dark-mode-only" alt="An image used as a fill, clamped, repeated and mirrored" width="560">
+</p>
+
 The image's GPU texture is made when the paint is set and kept by the image, so
 reuse the same `Image` from frame to frame instead of a fresh copy.
+
+### Animated and texture paints
+
+`setFillTexture` / `setStrokeTexture` paint with a `GpuTexture` directly (for
+example `GpuCanvas::asTexture()`), with no CPU-side copy. The transform maps
+texture pixels like an image's.
+
+For animated content, subclass `PaintSource`: it draws its content into an
+offscreen canvas that is then sampled like an image. The content box spans
+`(0, 0)` to `getContentSize()`, and the paint transform maps it like image
+pixels.
+
+```cpp
+struct Waves : PaintSource
+{
+    Size<float> getContentSize() const override { return { 128.0f, 128.0f }; }
+
+    void paintContent (Graphics& g) override
+    {
+        g.setFillColor (Colors::navy);
+        g.fillAll();
+        // ... draw the waves at phase
+    }
+
+    float phase = 0.0f;
+};
+
+void refreshDisplay (double dt) override
+{
+    waves.phase += (float) dt;
+    waves.markDirty();
+    repaint();
+}
+
+void paint (Graphics& g) override
+{
+    g.setFillSource (waves, AffineTransform::scaling (0.5f), { ImageWrap::Repeat, ImageWrap::Repeat });
+    g.fillRoundedRect (getLocalBounds().to<float>(), 12.0f);
+}
+```
+
+- **Timing is up to you.** The content is drawn again only after `markDirty()`,
+  and at most once per frame however many shapes use it. Call `markDirty()`
+  between frames (in `refreshDisplay`, a timer or an event), not inside `paint`.
+- **Resolution is automatic.** It follows the on-screen size when the paint is
+  set: it grows at once and shrinks only after the source has been drawn smaller
+  for a while. Changing the transform after setting the paint only affects
+  sharpness.
+- Inside `paintContent`, compose with `addTransform` rather than `setTransform`,
+  which would drop the content scaling.
+- A source used as a paint inside its own `paintContent` draws nothing.
+- Call `releaseResources()` to free the offscreen canvas, and always before the
+  `GraphicsContext` goes away. Without a GPU, or with an empty content size,
+  the paint draws nothing.
+
+### Filtered content
+
+A `PaintSource` can also be drawn as a picture of its own, through a filter.
+`setFilter` gives it a `FilterGraph`: a list of primitives like the ones of an
+SVG `<filter>`, run on the GPU over the raster of the content. `drawSource`
+draws the result in a rectangle, with the current opacity, blend mode and clip:
+
+```cpp
+FilterGraph glow;
+glow.primitives.push_back ({ .type = FilterGraph::Type::blur, .result = "soft", .deviation = { 4.0f, 4.0f } });
+glow.primitives.push_back ({ .type = FilterGraph::Type::composite, .in = FilterGraph::sourceGraphic, .in2 = "soft" });
+
+badge.setFilter (glow);                                       // a PaintSource with a content box of 64 x 64
+
+if (! g.drawSource (badge, { 10.0f, 10.0f, 64.0f, 64.0f }))
+    paintBadge (g);                                           // no GPU: draw it without the filter
+```
+
+| Primitive      | What it makes                                                              |
+|----------------|----------------------------------------------------------------------------|
+| `blur`         | Its input blurred by `deviation`.                                          |
+| `offset`       | Its input moved by `offset`.                                               |
+| `flood`        | A fill of `color`.                                                         |
+| `colorMatrix`  | Its input with the colors multiplied by `matrix` (see `saturationMatrix`, `hueRotationMatrix`, `luminanceToAlphaMatrix`). |
+| `composite`    | `in` combined with `in2`: `over`, `in`, `out`, `atop`, `exclusiveOr`, `lighter` or `arithmetic`. |
+| `blend`        | `in` blended over `in2` with a `BlendMode`.                                |
+| `morphology`   | Its input thinned by `radius`, or fattened with `dilate`.                  |
+| `merge`        | Its `inputs` stacked, the last one on top.                                 |
+| `lighting`     | The alpha of its input lit as a height map, by a distant or a point light. |
+| `displacement` | `in` with its pixels moved by the colors of `in2`.                         |
+| `dropShadow`   | Its input over its blurred, moved and colored shadow.                      |
+
+- A primitive reads the result of the one before it, unless `in` (and `in2`)
+  name `FilterGraph::sourceGraphic`, `FilterGraph::sourceAlpha` or the `result`
+  of an earlier primitive. The result of the last one is what is drawn.
+- Lengths are in content units, and what a primitive moves out of the content
+  box is lost: leave room around the content for blurs and shadows.
+- The content is only drawn again after `markDirty()`, and the filter only runs
+  again when the content or the filter changes.
+- `Graphics::copyPaint` gives the Graphics of `paintContent` the fill and the
+  stroke of the one being drawn in, for content that carries on with them.
+
+`Drawable` paints the elements of an SVG having a `filter` this way.
 
 See [Primitives](primitives.md#stroke-types) for the stroke types and
 [gradients](primitives.md#colorgradient).
@@ -90,6 +198,11 @@ g.setTint (Colors::orange);           // multiplied into everything drawn after
 g.setBlendMode (BlendMode::Multiply); // compositing mode
 g.setFeather (2.0f);                  // soft edge falloff
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_modulation_light.jpg#gh-light-mode-only" alt="A shape and an image as drawn, with opacity, with a tint and with a feather" width="640">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_modulation_dark.jpg#gh-dark-mode-only" alt="A shape and an image as drawn, with opacity, with a tint and with a feather" width="640">
+</p>
 
 `BlendMode::Additive` adds the source to what is already drawn, for glows and
 light effects. `setAdditiveAmount` scales it from 0 (like `SrcOver`) to 1 (fully
@@ -139,6 +252,11 @@ path. Without a `StrokeType`, the current stroke settings are used, and
 g.setClipStroke (outline, StrokeType (12.0f, StrokeJoin::Round).withPosition (StrokePosition::Inside));
 g.drawImage (photo, bounds);
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_clip-stroke_light.jpg#gh-light-mode-only" alt="An image revealed along the stroke of a wave" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_clip-stroke_dark.jpg#gh-dark-mode-only" alt="An image revealed along the stroke of a wave" width="400">
+</p>
 
 ## Drawing operations
 
@@ -214,6 +332,11 @@ mesh.setVertex (index, newPosition);
 g.drawImageMesh (photo, mesh);
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_image-mesh_light.jpg#gh-light-mode-only" alt="An image warped by moving the vertices of its mesh" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_image-mesh_dark.jpg#gh-dark-mode-only" alt="An image warped by moving the vertices of its mesh" width="400">
+</p>
+
 `drawImageMeshInstanced` draws the same mesh many times in one call, each copy
 with its own transform, opacity, additive amount and texture coordinate offset
 and scale, for example to pick a cell of a sprite sheet:
@@ -260,6 +383,11 @@ if (layer.isValid())
 }
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_layer_light.jpg#gh-light-mode-only" alt="Two overlapping circles faded one by one, showing their overlap, and faded together in a layer" width="480">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_layer_dark.jpg#gh-dark-mode-only" alt="Two overlapping circles faded one by one, showing their overlap, and faded together in a layer" width="480">
+</p>
+
 Inside the layer, coordinates are layer-local: the target area's top-left is
 `(0, 0)`.
 
@@ -284,6 +412,11 @@ if (layer.isValid())
     layer.commit();
 }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_layer-mask_light.jpg#gh-light-mode-only" alt="An image fading out through a gradient mask" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_layer-mask_dark.jpg#gh-dark-mode-only" alt="An image fading out through a gradient mask" width="400">
+</p>
 
 `enableMasking` renders the layer in a GPU mode that can apply masks, which every
 backend supports but which is not the default elsewhere. Without it, or where the

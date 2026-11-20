@@ -50,6 +50,35 @@ using PaletteRole = ThemePalette::Role;
 constexpr float widgetCornerRadius = 4.0f;
 constexpr float defaultTextHeight = 14.0f;
 
+// The curated geometry: the defaults live in the widget descriptors
+struct CuratedGeometry
+{
+    static inline const Identifier cornerRadius { "cornerRadius" };
+    static inline const Identifier outlineWidth { "outlineWidth" };
+    static inline const Identifier focusedOutlineWidth { "focusedOutlineWidth" };
+    static inline const Identifier trackWidth { "trackWidth" };
+    static inline const Identifier thumbSize { "thumbSize" };
+    static inline const Identifier thumbInset { "thumbInset" };
+    static inline const Identifier rotaryInset { "rotaryInset" };
+    static inline const Identifier rotaryDialInset { "rotaryDialInset" };
+    static inline const Identifier rotaryDialOutlineWidth { "rotaryDialOutlineWidth" };
+    static inline const Identifier rotaryPointerInset { "rotaryPointerInset" };
+    static inline const Identifier rotaryPointerWidth { "rotaryPointerWidth" };
+    static inline const Identifier rotaryArcWidth { "rotaryArcWidth" };
+
+    static float getOutlineWidth (const Component& component, bool focused)
+    {
+        return component.findPropertyAs<float> (focused ? focusedOutlineWidth : outlineWidth);
+    }
+
+    // Unset, the corner radius makes a pill of the given size
+    static float getCornerRadius (const Component& component, float pillSize)
+    {
+        const auto radius = component.findProperty (cornerRadius);
+        return radius.isVoid() ? pillSize * 0.5f : VariantConverter<float>::fromVar (radius);
+    }
+};
+
 //==============================================================================
 
 struct SliderColors
@@ -80,24 +109,26 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 {
     const auto colors = getSliderColors (theme, slider);
 
-    auto bounds = sliderBounds.reduced (slider.proportionOfWidth (0.1f));
+    auto bounds = sliderBounds.reduced (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryInset)));
     const auto center = bounds.getCenter();
 
     const auto fromRadians = rotaryStartAngle;
     const auto toRadians = rotaryEndAngle;
     const auto toCurrentRadians = fromRadians + (toRadians - fromRadians) * sliderValue;
 
+    const auto arcWidth = slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryArcWidth));
+
     Path backgroundPath;
-    backgroundPath.addEllipse (bounds.reduced (slider.proportionOfWidth (0.105f)));
+    backgroundPath.addEllipse (bounds.reduced (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryDialInset))));
 
     g.setFillColor (colors.background);
     g.fillPath (backgroundPath);
 
     g.setStrokeColor (colors.background.darker (0.3f));
-    g.setStrokeWidth (slider.proportionOfWidth (0.0175f));
+    g.setStrokeWidth (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryDialOutlineWidth)));
     g.strokePath (backgroundPath);
 
-    const auto reducedBounds = bounds.reduced (slider.proportionOfWidth (0.175f));
+    const auto reducedBounds = bounds.reduced (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryPointerInset)));
     const auto pos = center.getPointOnCircumference (
         reducedBounds.getWidth() / 2.0f,
         reducedBounds.getHeight() / 2.0f,
@@ -108,7 +139,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 
     g.setStrokeCap (StrokeCap::Round);
     g.setStrokeColor (colors.text);
-    g.setStrokeWidth (slider.proportionOfWidth (0.03f));
+    g.setStrokeWidth (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryPointerWidth)));
     g.strokePath (foregroundLine);
 
     Path backgroundArc;
@@ -122,7 +153,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 
     g.setStrokeCap (StrokeCap::Round);
     g.setStrokeColor (colors.track);
-    g.setStrokeWidth (slider.proportionOfWidth (0.075f));
+    g.setStrokeWidth (arcWidth);
     g.strokePath (backgroundArc);
 
     Path foregroundArc;
@@ -140,7 +171,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 
     g.setStrokeCap (StrokeCap::Round);
     g.setStrokeColor (thumbColor);
-    g.setStrokeWidth (slider.proportionOfWidth (0.075f));
+    g.setStrokeWidth (arcWidth);
     g.strokePath (foregroundArc);
 
     /*
@@ -159,13 +190,15 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, Rectangle<float> thumbBounds, bool isHorizontal, float sliderValue, bool isMouseOver, bool isMouseDown)
 {
     const auto colors = getSliderColors (theme, slider);
+    const auto trackWidth = slider.findPropertyAs<float> (CuratedGeometry::trackWidth);
+    const auto trackRadius = trackWidth * 0.5f;
 
     // Draw track background
     g.setFillColor (colors.track);
     if (isHorizontal)
-        g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - 2.0f, sliderBounds.getWidth(), 4.0f, 2.0f);
+        g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - trackRadius, sliderBounds.getWidth(), trackWidth, trackRadius);
     else
-        g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f, sliderBounds.getY(), 4.0f, sliderBounds.getHeight(), 2.0f);
+        g.fillRoundedRect (sliderBounds.getCenterX() - trackRadius, sliderBounds.getY(), trackWidth, sliderBounds.getHeight(), trackRadius);
 
     // Draw value track
     g.setFillColor (isMouseDown ? colors.thumbDown : (isMouseOver ? colors.thumbOver : colors.thumb));
@@ -174,13 +207,13 @@ void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider
     if (sliderType == Slider::LinearBarHorizontal || sliderType == Slider::LinearBarVertical)
     {
         if (isHorizontal)
-            g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - 2.0f, sliderValue * sliderBounds.getWidth(), 4.0f, 2.0f);
+            g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - trackRadius, sliderValue * sliderBounds.getWidth(), trackWidth, trackRadius);
         else
-            g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f,
+            g.fillRoundedRect (sliderBounds.getCenterX() - trackRadius,
                                sliderBounds.getBottom() - (sliderValue * sliderBounds.getHeight()),
-                               4.0f,
+                               trackWidth,
                                sliderValue * sliderBounds.getHeight(),
-                               2.0f);
+                               trackRadius);
     }
     else
     {
@@ -201,13 +234,15 @@ void paintLinearSlider (Graphics& g, const ApplicationTheme& theme, const Slider
 void paintTwoValueSlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds, Rectangle<float> minThumbBounds, Rectangle<float> maxThumbBounds, bool isHorizontal, float minValue, float maxValue, bool isMouseOverMinThumb, bool isMouseOverMaxThumb, bool isMouseDown)
 {
     const auto colors = getSliderColors (theme, slider);
+    const auto trackWidth = slider.findPropertyAs<float> (CuratedGeometry::trackWidth);
+    const auto trackRadius = trackWidth * 0.5f;
 
     // Draw track background
     g.setFillColor (colors.background);
     if (isHorizontal)
-        g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - 2.0f, sliderBounds.getWidth(), 4.0f, 2.0f);
+        g.fillRoundedRect (sliderBounds.getX(), sliderBounds.getCenterY() - trackRadius, sliderBounds.getWidth(), trackWidth, trackRadius);
     else
-        g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f, sliderBounds.getY(), 4.0f, sliderBounds.getHeight(), 2.0f);
+        g.fillRoundedRect (sliderBounds.getCenterX() - trackRadius, sliderBounds.getY(), trackWidth, sliderBounds.getHeight(), trackRadius);
 
     // Draw selected range
     g.setFillColor (colors.track);
@@ -215,13 +250,13 @@ void paintTwoValueSlider (Graphics& g, const ApplicationTheme& theme, const Slid
     {
         const float startX = sliderBounds.getX() + (minValue * sliderBounds.getWidth());
         const float endX = sliderBounds.getX() + (maxValue * sliderBounds.getWidth());
-        g.fillRoundedRect (startX, sliderBounds.getCenterY() - 2.0f, endX - startX, 4.0f, 2.0f);
+        g.fillRoundedRect (startX, sliderBounds.getCenterY() - trackRadius, endX - startX, trackWidth, trackRadius);
     }
     else
     {
         const float startY = sliderBounds.getBottom() - (minValue * sliderBounds.getHeight());
         const float endY = sliderBounds.getBottom() - (maxValue * sliderBounds.getHeight());
-        g.fillRoundedRect (sliderBounds.getCenterX() - 2.0f, endY, 4.0f, startY - endY, 2.0f);
+        g.fillRoundedRect (sliderBounds.getCenterX() - trackRadius, endY, trackWidth, startY - endY, trackRadius);
     }
 
     // Draw min thumb
@@ -249,6 +284,8 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
     const auto sliderType = s.getSliderType();
     const bool isMouseOver = s.isMouseOver();
     const bool isMouseDown = false; // s.isMouseButtonDown();
+    const auto thumbSize = s.findPropertyAs<float> (CuratedGeometry::thumbSize);
+    const auto thumbRadius = thumbSize * 0.5f;
 
     switch (sliderType)
     {
@@ -274,13 +311,13 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 
             if (isHorizontal)
             {
-                const float thumbX = sliderBounds.getX() + (sliderValue * sliderBounds.getWidth()) - 8.0f;
-                thumbBounds = Rectangle<float> (thumbX, sliderBounds.getCenterY() - 8.0f, 16.0f, 16.0f);
+                const float thumbX = sliderBounds.getX() + (sliderValue * sliderBounds.getWidth()) - thumbRadius;
+                thumbBounds = Rectangle<float> (thumbX, sliderBounds.getCenterY() - thumbRadius, thumbSize, thumbSize);
             }
             else
             {
-                const float thumbY = sliderBounds.getBottom() - (sliderValue * sliderBounds.getHeight()) - 8.0f;
-                thumbBounds = Rectangle<float> (sliderBounds.getCenterX() - 8.0f, thumbY, 16.0f, 16.0f);
+                const float thumbY = sliderBounds.getBottom() - (sliderValue * sliderBounds.getHeight()) - thumbRadius;
+                thumbBounds = Rectangle<float> (sliderBounds.getCenterX() - thumbRadius, thumbY, thumbSize, thumbSize);
             }
 
             paintLinearSlider (g, theme, s, sliderBounds, thumbBounds, isHorizontal, sliderValue, isMouseOver, isMouseDown);
@@ -297,17 +334,17 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 
             if (isHorizontal)
             {
-                const float minThumbX = sliderBounds.getX() + (minNorm * sliderBounds.getWidth()) - 8.0f;
-                const float maxThumbX = sliderBounds.getX() + (maxNorm * sliderBounds.getWidth()) - 8.0f;
-                minThumbBounds = Rectangle<float> (minThumbX, sliderBounds.getCenterY() - 8.0f, 16.0f, 16.0f);
-                maxThumbBounds = Rectangle<float> (maxThumbX, sliderBounds.getCenterY() - 8.0f, 16.0f, 16.0f);
+                const float minThumbX = sliderBounds.getX() + (minNorm * sliderBounds.getWidth()) - thumbRadius;
+                const float maxThumbX = sliderBounds.getX() + (maxNorm * sliderBounds.getWidth()) - thumbRadius;
+                minThumbBounds = Rectangle<float> (minThumbX, sliderBounds.getCenterY() - thumbRadius, thumbSize, thumbSize);
+                maxThumbBounds = Rectangle<float> (maxThumbX, sliderBounds.getCenterY() - thumbRadius, thumbSize, thumbSize);
             }
             else
             {
-                const float minThumbY = sliderBounds.getBottom() - (minNorm * sliderBounds.getHeight()) - 8.0f;
-                const float maxThumbY = sliderBounds.getBottom() - (maxNorm * sliderBounds.getHeight()) - 8.0f;
-                minThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - 8.0f, minThumbY, 16.0f, 16.0f);
-                maxThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - 8.0f, maxThumbY, 16.0f, 16.0f);
+                const float minThumbY = sliderBounds.getBottom() - (minNorm * sliderBounds.getHeight()) - thumbRadius;
+                const float maxThumbY = sliderBounds.getBottom() - (maxNorm * sliderBounds.getHeight()) - thumbRadius;
+                minThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - thumbRadius, minThumbY, thumbSize, thumbSize);
+                maxThumbBounds = Rectangle<float> (sliderBounds.getCenterX() - thumbRadius, maxThumbY, thumbSize, thumbSize);
             }
 
             // For two-value sliders, check which thumb the mouse is over
@@ -334,7 +371,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     auto bounds = t.getLocalBounds();
     auto textBounds = t.getTextBounds();
     auto scrollOffset = t.getScrollOffset();
-    constexpr auto cornerRadius = widgetCornerRadius;
+    const auto cornerRadius = t.findPropertyAs<float> (CuratedGeometry::cornerRadius);
     const auto& palette = theme.getPalette (t);
 
     // Draw background
@@ -348,8 +385,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
                           : theme.findColor (t, TextEditor::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
     g.setStrokeColor (outlineColor);
 
-    float strokeWidth = t.hasKeyboardFocus() ? 2.0f : 1.0f;
-    g.setStrokeWidth (strokeWidth);
+    g.setStrokeWidth (CuratedGeometry::getOutlineWidth (t, t.hasKeyboardFocus()));
 
     g.strokeRoundedRect (bounds.reduced (1.0f), cornerRadius);
 
@@ -389,6 +425,23 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
 
 //==============================================================================
 
+static Color getCodeDiagnosticColor (const CodeEditorScheme& scheme, CodeEditor::Diagnostic::Severity severity)
+{
+    switch (severity)
+    {
+        case CodeEditor::Diagnostic::Severity::error:
+            return scheme.getColor (CodeEditorScheme::ColorId::diagnosticError).value_or (Color (0xfff14c4c));
+        case CodeEditor::Diagnostic::Severity::warning:
+            return scheme.getColor (CodeEditorScheme::ColorId::diagnosticWarning).value_or (Color (0xffcca700));
+        case CodeEditor::Diagnostic::Severity::information:
+            return scheme.getColor (CodeEditorScheme::ColorId::diagnosticInformation).value_or (Color (0xff3794ff));
+        case CodeEditor::Diagnostic::Severity::hint:
+            break;
+    }
+
+    return scheme.getColor (CodeEditorScheme::ColorId::diagnosticHint).value_or (Color (0x80d4d4d4));
+}
+
 void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEditor& editor)
 {
     ignoreUnused (theme);
@@ -414,11 +467,11 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
     }
 
     // Error lines
-    if (! editor.getErrorLines().empty())
+    if (const auto errorLines = editor.getErrorLines(); ! errorLines.empty())
     {
         g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::errorLine).value_or (Color (0x40e51400)));
 
-        for (const int line : editor.getErrorLines())
+        for (const int line : errorLines)
         {
             const float lineY = textArea.getY() + line * editor.getLineHeight() - scrollOffset.getY();
             g.fillRect (Rectangle<float> (textArea.getX(), lineY, textArea.getWidth(), editor.getLineHeight()));
@@ -464,6 +517,13 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
                 g.fillEllipse (Rectangle<float> (bounds.getX() + 5.0f, y + lineHeight * 0.5f - 4.0f, 8.0f, 8.0f));
             }
         }
+
+        // Diagnostic markers
+        for (const auto& marker : editor.getDiagnosticGutterMarkers())
+        {
+            g.setFillColor (getCodeDiagnosticColor (scheme, marker.severity));
+            g.fillRect (marker.area);
+        }
     }
 
     auto clipState = g.saveState();
@@ -484,6 +544,37 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
     for (const auto& rectangle : editor.getSearchMatchAreas())
         g.fillRect (rectangle);
 
+    // Indent guides
+    g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::indentGuide).value_or (Color (0x26d4d4d4)));
+
+    for (const auto& rectangle : editor.getIndentGuideAreas())
+        g.fillRect (rectangle);
+
+    // Word occurrences
+    g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::wordOccurrence).value_or (Color (0x1fd4d4d4)));
+
+    for (const auto& rectangle : editor.getWordOccurrenceAreas())
+        g.fillRect (rectangle);
+
+    // Bracket match
+    g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::bracketMatch).value_or (Color (0x40d4d4d4)));
+
+    for (const auto& rectangle : editor.getBracketMatchAreas())
+        g.fillRect (rectangle);
+
+    // Whitespace
+    g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::whitespace).value_or (Color (0x4dd4d4d4)));
+
+    for (const auto& marker : editor.getWhitespaceMarkers())
+    {
+        const auto center = marker.area.getCenter();
+
+        if (marker.isTab)
+            g.fillRect (Rectangle<float> (marker.area.getX() + 2.0f, center.getY() - 0.5f, jmax (1.0f, marker.area.getWidth() - 4.0f), 1.0f));
+        else
+            g.fillEllipse (Rectangle<float> (center.getX() - 1.0f, center.getY() - 1.0f, 2.0f, 2.0f));
+    }
+
     // Text
     const float windowY = editor.getWindowFirstLine() * editor.getLineHeight();
     const auto scrolledTextBounds = textArea.translated (-scrollOffset.getX(), windowY - scrollOffset.getY());
@@ -496,6 +587,28 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
         g.fillRect (editor.getCaretBounds());
     }
 
+    // Diagnostic squiggles
+    g.setStrokeWidth (1.0f);
+
+    for (const auto& marker : editor.getDiagnosticUnderlineAreas())
+    {
+        constexpr float step = 2.0f;
+        const float bottom = marker.area.getBottom() - 1.0f;
+
+        Path squiggle;
+        squiggle.moveTo (marker.area.getX(), bottom);
+
+        bool up = true;
+        for (float x = marker.area.getX() + step; x <= marker.area.getRight() + step * 0.5f; x += step)
+        {
+            squiggle.lineTo (x, up ? bottom - step : bottom);
+            up = ! up;
+        }
+
+        g.setStrokeColor (getCodeDiagnosticColor (scheme, marker.severity));
+        g.strokePath (squiggle);
+    }
+
     clipState.restore();
 }
 
@@ -504,7 +617,7 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
 void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButton& b)
 {
     auto bounds = b.getLocalBounds();
-    constexpr auto cornerRadius = widgetCornerRadius;
+    const auto cornerRadius = b.findPropertyAs<float> (CuratedGeometry::cornerRadius);
     const auto& palette = theme.getPalette (b);
 
     Color backgroundColor, textColor;
@@ -533,8 +646,7 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
                            : theme.findColor (b, TextButton::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
     g.setStrokeColor (outlineColor);
 
-    float strokeWidth = b.hasKeyboardFocus() ? 2.0f : 1.0f;
-    g.setStrokeWidth (strokeWidth);
+    g.setStrokeWidth (CuratedGeometry::getOutlineWidth (b, b.hasKeyboardFocus()));
 
     g.strokeRoundedRect (bounds.reduced (1.0f), cornerRadius);
 
@@ -548,7 +660,7 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
 void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const ToggleButton& b)
 {
     auto bounds = b.getLocalBounds();
-    constexpr auto cornerRadius = widgetCornerRadius;
+    const auto cornerRadius = b.findPropertyAs<float> (CuratedGeometry::cornerRadius);
     const auto& palette = theme.getPalette (b);
 
     // Get colors based on toggle state
@@ -581,7 +693,7 @@ void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const Toggle
 
     // Draw border
     g.setStrokeColor (borderColor);
-    g.setStrokeWidth (b.hasKeyboardFocus() ? 2.0f : 1.0f);
+    g.setStrokeWidth (CuratedGeometry::getOutlineWidth (b, b.hasKeyboardFocus()));
     g.strokeRoundedRect (bounds.reduced (0.5f), cornerRadius);
 
     // Draw text
@@ -597,7 +709,7 @@ void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const Toggle
 void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const SwitchButton& s)
 {
     auto bounds = s.getLocalBounds().reduced (4);
-    auto cornerSize = (s.isVertical() ? bounds.getWidth() : bounds.getHeight()) * 0.5f;
+    auto cornerSize = CuratedGeometry::getCornerRadius (s, s.isVertical() ? bounds.getWidth() : bounds.getHeight());
 
     // Draw shadow/outline
     g.setStrokeColor (Colors::black.withAlpha (0.1f));
@@ -614,7 +726,7 @@ void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const Switch
     g.fillRoundedRect (bounds, cornerSize);
 
     // Draw handle
-    auto circleBounds = s.getSwitchCircleBounds().reduced (4);
+    auto circleBounds = s.getSwitchCircleBounds().reduced (s.findPropertyAs<float> (CuratedGeometry::thumbInset));
     auto circleColor = theme.findColor (s, SwitchButton::Style::switchColorId).value_or (palette.getColor (PaletteRole::text));
 
     g.setFillColor (circleColor);
@@ -633,11 +745,12 @@ void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& 
     auto& styledText = c.getStyledText();
     const auto bounds = c.getLocalBounds();
     const auto& palette = theme.getPalette (c);
+    const auto cornerRadius = c.findPropertyAs<float> (CuratedGeometry::cornerRadius);
 
     // Draw background
     auto bgColor = theme.findColor (c, ComboBox::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surface));
     g.setFillColor (bgColor);
-    g.fillRoundedRect (bounds, widgetCornerRadius);
+    g.fillRoundedRect (bounds, cornerRadius);
 
     // Draw border
     const bool hasFocus = c.hasKeyboardFocus() || c.isPopupShown();
@@ -646,8 +759,8 @@ void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& 
                           : theme.findColor (c, ComboBox::Style::borderColorId).value_or (palette.getColor (PaletteRole::outline));
 
     g.setStrokeColor (outlineColor);
-    g.setStrokeWidth (hasFocus ? 2.0f : 1.0f);
-    g.strokeRoundedRect (bounds.reduced (0.5f), widgetCornerRadius);
+    g.setStrokeWidth (CuratedGeometry::getOutlineWidth (c, hasFocus));
+    g.strokeRoundedRect (bounds.reduced (0.5f), cornerRadius);
 
     // Calculate text and arrow areas
     auto arrowWidth = 20.0f;
@@ -721,9 +834,14 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu& p)
 {
     const auto localBounds = p.getLocalBounds();
+    const auto cornerRadius = p.findPropertyAs<float> (CuratedGeometry::cornerRadius);
+    const auto outlineWidth = p.findPropertyAs<float> (CuratedGeometry::outlineWidth);
+    const auto itemCornerRadius = p.findPropertyAs<float> ("itemCornerRadius");
+    const auto* styleState = p.getStyleState();
+    const bool hasStyledShadows = styleState != nullptr && (! styleState->getShadows().empty() || ! styleState->getGlows().empty());
 
-    // The drop shadow fills the paint margin the menu has around it inside a parent.
-    if (const auto paintBounds = p.getPaintBounds(); paintBounds != localBounds)
+    // The drop shadow fills the paint margin the menu has around it inside a parent unless style rules supply shadows or glows.
+    if (const auto paintBounds = p.getPaintBounds(); ! hasStyledShadows && paintBounds != localBounds)
     {
         const auto room = jmin (localBounds.getX() - paintBounds.getX(),
                                 localBounds.getY() - paintBounds.getY(),
@@ -732,11 +850,11 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
 
         g.setFillColor (Colors::black.withAlpha (0.6f));
         g.setFeather (room * 0.6f);
-        g.fillRoundedRect (localBounds.translated (0.0f, room * 0.25f), widgetCornerRadius);
+        g.fillRoundedRect (localBounds.translated (0.0f, room * 0.25f), cornerRadius);
 
         g.setFillColor (Colors::black.withAlpha (0.35f));
         g.setFeather (room * 0.2f);
-        g.fillRoundedRect (localBounds.translated (0.0f, 1.0f), widgetCornerRadius);
+        g.fillRoundedRect (localBounds.translated (0.0f, 1.0f), cornerRadius);
         g.setFeather (0.0f);
     }
 
@@ -745,12 +863,15 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
 
     // Draw menu background
     g.setFillColor (theme.findColor (p, PopupMenu::Style::menuBackground).value_or (palette.getColor (PaletteRole::surfaceRaised)));
-    g.fillRoundedRect (localBounds, widgetCornerRadius);
+    g.fillRoundedRect (localBounds, cornerRadius);
 
     // Draw border
-    g.setStrokeColor (borderColor);
-    g.setStrokeWidth (1.0f);
-    g.strokeRoundedRect (localBounds.reduced (0.5f), widgetCornerRadius);
+    if (outlineWidth > 0.0f && ! borderColor.isTransparent())
+    {
+        g.setStrokeColor (borderColor);
+        g.setStrokeWidth (outlineWidth);
+        g.strokeRoundedRect (localBounds.reduced (outlineWidth * 0.5f), cornerRadius);
+    }
 
     // Draw items
     bool anyItemIsTicked = false;
@@ -780,6 +901,15 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
 
         g.setOpacity (1.0f);
 
+        if (! item->isSeparator())
+        {
+            if (const auto itemBg = theme.findColor (p, PopupMenu::Style::menuItemBackground); itemBg && ! itemBg->isTransparent())
+            {
+                g.setFillColor (*itemBg);
+                g.fillRoundedRect (rect.reduced (2.0f, 1.0f), itemCornerRadius);
+            }
+        }
+
         // Draw hover background or active submenu background
         if (item->isHovered && ! item->isSeparator() && item->isEnabled)
         {
@@ -798,7 +928,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
             }
 
             g.setFillColor (highlightColor);
-            g.fillRoundedRect (rect.reduced (2.0f, 1.0f), 2.0f);
+            g.fillRoundedRect (rect.reduced (2.0f, 1.0f), itemCornerRadius);
         }
         // Also highlight active submenu items even when not hovered
         else if (! item->isSeparator() && item->isEnabled && p.isItemShowingSubmenu (itemIndex))
@@ -807,7 +937,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
                                           .value_or (palette.getColor (PaletteRole::accent).withAlpha (0.15f));
 
             g.setFillColor (activeSubmenuColor);
-            g.fillRoundedRect (rect.reduced (2.0f, 1.0f), 2.0f);
+            g.fillRoundedRect (rect.reduced (2.0f, 1.0f), itemCornerRadius);
         }
 
         if (item->isSeparator())
@@ -853,7 +983,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
             // Draw checkmark if ticked
             if (item->isTicked)
             {
-                auto checkRect = Rectangle<float> (rect.getX() + 4.0f, rect.getY() + 4.0f, 12.0f, 12.0f);
+                auto checkRect = Rectangle<float> (rect.getX() + 4.0f, rect.getCenterY() - 6.0f, 12.0f, 12.0f);
                 g.setStrokeColor (textColor);
                 g.setStrokeWidth (2.0f);
                 g.strokeLine (checkRect.getX() + 2.0f, checkRect.getCenterY(), checkRect.getCenterX(), checkRect.getBottom() - 2.0f);
@@ -884,7 +1014,8 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
             // Draw submenu arrow
             if (item->isSubMenu())
             {
-                auto arrowRect = Rectangle<float> (rect.getRight() - 16.0f, rect.getY() + 4.0f, 8.0f, rect.getHeight() - 8.0f);
+                const auto arrowHeight = jmin (12.0f, jmax (4.0f, rect.getHeight() - 8.0f));
+                auto arrowRect = Rectangle<float> (rect.getRight() - 16.0f, rect.getCenterY() - arrowHeight * 0.5f, 8.0f, arrowHeight);
                 g.setStrokeColor (textColor);
                 g.setStrokeWidth (1.5f);
                 g.strokeLine (arrowRect.getX() + 2.0f, arrowRect.getY() + 2.0f, arrowRect.getRight() - 2.0f, arrowRect.getCenterY());
@@ -945,8 +1076,8 @@ void paintScrollBar (Graphics& g, const ApplicationTheme& theme, const ScrollBar
         return;
 
     auto trackBounds = scrollBar.getTrackBoundsForRendering();
-    auto thumbBounds = scrollBar.getThumbBoundsForRendering().reduced (3);
-    auto cornerSize = scrollBar.getScrollBarWidth() * 0.5f;
+    auto thumbBounds = scrollBar.getThumbBoundsForRendering().reduced (scrollBar.findPropertyAs<float> (CuratedGeometry::thumbInset));
+    auto cornerSize = CuratedGeometry::getCornerRadius (scrollBar, scrollBar.getScrollBarWidth());
 
     // Draw track (optional, usually invisible on macOS)
     if (const auto trackColor = theme.findColor (scrollBar, ScrollBar::Style::trackColorId); trackColor && ! trackColor->isTransparent())
@@ -991,10 +1122,114 @@ void paintResizableCorner (Graphics& g, const ApplicationTheme& theme, const Res
 
 //==============================================================================
 
+void paintJoystickComponent (Graphics& g, const ApplicationTheme& theme, const JoystickComponent& joystick)
+{
+    const auto bounds = joystick.getLocalBounds();
+    const auto& palette = theme.getPalette (joystick);
+    const auto thumb = joystick.getThumbPosition();
+
+    if (joystick.getGrabMode() == JoystickComponent::GrabMode::anywhere)
+    {
+        if (const auto backgroundColor = theme.findColor (joystick, JoystickComponent::Style::backgroundColorId); backgroundColor && ! backgroundColor->isTransparent())
+        {
+            g.setFillColor (*backgroundColor);
+            g.fillRoundedRect (bounds, 4.0f);
+        }
+
+        g.setStrokeColor (theme.findColor (joystick, JoystickComponent::Style::guideColorId).value_or (palette.getColor (PaletteRole::textMuted).withAlpha (0.35f)));
+        g.setStrokeWidth (1.0f);
+        g.strokeLine (bounds.getX(), thumb.getY(), bounds.getRight(), thumb.getY());
+        g.strokeLine (thumb.getX(), bounds.getY(), thumb.getX(), bounds.getBottom());
+
+        const auto outlineColor = joystick.hasKeyboardFocus() ? palette.getColor (PaletteRole::accent) : theme.findColor (joystick, JoystickComponent::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
+        g.setStrokeColor (outlineColor);
+        g.strokeRoundedRect (bounds.reduced (0.5f), 4.0f);
+    }
+
+    Color thumbColor;
+    if (joystick.isDragging())
+        thumbColor = theme.findColor (joystick, JoystickComponent::Style::thumbDownColorId).value_or (palette.getColor (PaletteRole::accent));
+    else if (joystick.isHovered())
+        thumbColor = theme.findColor (joystick, JoystickComponent::Style::thumbOverColorId).value_or (palette.getColor (PaletteRole::accent).withAlpha (0.85f));
+    else
+        thumbColor = theme.findColor (joystick, JoystickComponent::Style::thumbColorId).value_or (palette.getColor (PaletteRole::text));
+
+    const auto size = joystick.getThumbSize();
+    g.setFillColor (thumbColor);
+    g.fillEllipse (Rectangle<float> (0.0f, 0.0f, size, size).withCenter (thumb));
+}
+
+void paintResizableDivider (Graphics& g, const ApplicationTheme& theme, const ResizableDivider& divider)
+{
+    const auto bounds = divider.getLocalBounds();
+    const auto& palette = theme.getPalette (divider);
+
+    if (const auto backgroundColor = theme.findColor (divider, ResizableDivider::Style::backgroundColorId); backgroundColor && ! backgroundColor->isTransparent())
+    {
+        g.setFillColor (*backgroundColor);
+        g.fillRect (bounds);
+    }
+
+    const bool isVertical = divider.getOrientation() == ResizableDivider::Orientation::vertical;
+    const bool isActive = divider.isDragging() || divider.isHovered() || divider.hasKeyboardFocus();
+    const auto crossExtent = isVertical ? bounds.getWidth() : bounds.getHeight();
+    const auto lineThickness = jmin (crossExtent, isActive ? divider.getActiveLineThickness() : divider.getLineThickness());
+
+    Color lineColor;
+    if (divider.isDragging())
+        lineColor = theme.findColor (divider, ResizableDivider::Style::draggingColorId).value_or (palette.getColor (PaletteRole::accent));
+    else if (isActive)
+        lineColor = theme.findColor (divider, ResizableDivider::Style::hoverColorId).value_or (palette.getColor (PaletteRole::accent).withAlpha (0.75f));
+    else
+        lineColor = theme.findColor (divider, ResizableDivider::Style::lineColorId).value_or (palette.getColor (PaletteRole::outline));
+
+    if (lineThickness > 0.0f)
+    {
+        const auto center = bounds.getCenter();
+
+        g.setFillColor (lineColor);
+        g.fillRect (isVertical ? Rectangle<float> (center.getX() - lineThickness * 0.5f, bounds.getY(), lineThickness, bounds.getHeight())
+                               : Rectangle<float> (bounds.getX(), center.getY() - lineThickness * 0.5f, bounds.getWidth(), lineThickness));
+    }
+
+    if (divider.getGripStyle() == ResizableDivider::GripStyle::none)
+        return;
+
+    const auto center = bounds.getCenter();
+    const auto mainExtent = isVertical ? bounds.getHeight() : bounds.getWidth();
+    const auto gripColor = theme.findColor (divider, ResizableDivider::Style::gripColorId)
+                               .value_or (palette.getColor (PaletteRole::textMuted).withAlpha (0.65f));
+
+    g.setFillColor (gripColor);
+
+    if (divider.getGripStyle() == ResizableDivider::GripStyle::pill)
+    {
+        const auto length = jmin (24.0f, mainExtent * 0.5f);
+        const auto width = jmin (4.0f, crossExtent);
+        auto pill = isVertical ? Rectangle<float> (0.0f, 0.0f, width, length) : Rectangle<float> (0.0f, 0.0f, length, width);
+
+        g.fillRoundedRect (pill.withCenter (center), width * 0.5f);
+        return;
+    }
+
+    const auto radius = jmin (1.5f, crossExtent * 0.5f);
+    const auto spacing = radius * 4.0f;
+
+    for (int i = -1; i <= 1; ++i)
+    {
+        const auto offset = spacing * static_cast<float> (i);
+        const auto dotCenter = isVertical ? center.translated (0.0f, offset) : center.translated (offset, 0.0f);
+
+        g.fillEllipse (Rectangle<float> (0.0f, 0.0f, radius * 2.0f, radius * 2.0f).withCenter (dotCenter));
+    }
+}
+
+//==============================================================================
+
 void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const ProgressBar& progressBar)
 {
     const auto bounds = progressBar.getLocalBounds();
-    const auto cornerSize = bounds.getHeight() * 0.5f;
+    const auto cornerSize = CuratedGeometry::getCornerRadius (progressBar, bounds.getHeight());
 
     // Get colors
     const auto backgroundColor = theme.findColor (progressBar, ProgressBar::Style::backgroundColorId)
@@ -1332,7 +1567,7 @@ void paintTabButton (Graphics& g, const ApplicationTheme& theme, const TabButton
     if (button.isButtonOver() && ! selected && button.isEnabled())
     {
         g.setFillColor (hoveredColor);
-        g.fillRoundedRect (button.getLocalBounds(), tabBarPillCornerRadius);
+        g.fillRoundedRect (button.getLocalBounds(), button.findPropertyAs<float> (CuratedGeometry::cornerRadius));
     }
 
     const auto textColor = (selected ? theme.findColor (button, TabButton::Style::textSelectedColorId).value_or (palette.getColor (PaletteRole::text))
@@ -2258,12 +2493,12 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
         if (height < 200)
             tickInterval = 10; // Fewer ticks for small meters
 
-        // Draw tick marks and labels
-        // Start from a nice round number
+        // Draw tick marks and collect the fully visible labels from the top
         const int startDb = static_cast<int> (std::ceil (rangeMin / tickInterval)) * tickInterval;
         const int endDb = static_cast<int> (std::floor (rangeMax / tickInterval)) * tickInterval;
+        std::vector<std::pair<int, Rectangle<float>>> labels;
 
-        for (int db = startDb; db <= endDb; db += tickInterval)
+        for (int db = endDb; db >= startDb; db -= tickInterval)
         {
             const float y = dbToY (static_cast<float> (db));
 
@@ -2274,31 +2509,31 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
             // Draw tick mark
             g.fillRect (bounds.getX(), y - 0.5f, 4.0f, 1.0f);
 
-            // Draw label for important values
-            bool shouldLabel = false;
+            // Label every 10dB, including the 0dB reference
+            if (db % 10 != 0)
+                continue;
 
-            // Always label 0dB (the reference)
-            if (db == 0)
-                shouldLabel = true;
-            // Label every 10dB
-            else if (db % 10 == 0)
-                shouldLabel = true;
-            // Label -20dB (important for K-20)
-            else if (db == -20)
-                shouldLabel = true;
+            const Rectangle<float> labelRect (bounds.getX() + 5.0f, y - 6.0f, 22.0f, 12.0f);
+            if (labelRect.getY() >= bounds.getY() && labelRect.getBottom() <= bounds.getBottom())
+                labels.emplace_back (db, labelRect);
+        }
 
-            if (shouldLabel)
-            {
-                const String label = (db > 0 ? "+" : "") + String (db);
-                const float labelHeight = 12.0f;
-                const Rectangle<float> labelRect (bounds.getX() + 5.0f, y - 6.0f, 22.0f, labelHeight);
+        // Always keep the lowest label, and skip the others that would overlap a kept one
+        float previousLabelBottom = bounds.getY();
 
-                // Only draw label if it's fully visible (not clipped at top or bottom)
-                if (labelRect.getY() >= bounds.getY() && labelRect.getBottom() <= bounds.getBottom())
-                {
-                    g.fillFittedText (label, font, labelRect, Justification::left);
-                }
-            }
+        for (std::size_t index = 0; index < labels.size(); ++index)
+        {
+            const auto& [db, labelRect] = labels[index];
+            const bool isLowest = index + 1 == labels.size();
+
+            if (labelRect.getY() < previousLabelBottom)
+                continue;
+
+            if (! isLowest && labelRect.getBottom() > labels.back().second.getY())
+                continue;
+
+            g.fillFittedText ((db > 0 ? "+" : "") + String (db), font, labelRect, Justification::left);
+            previousLabelBottom = labelRect.getBottom();
         }
     }
 
@@ -2394,6 +2629,19 @@ void mapPaletteThemeVersion1 (const ThemePalette& palette, ApplicationTheme& the
     set (ProgressBar::Style::foregroundColorId, accent);
 
     set (ResizableCorner::Style::lineColorId, textMuted.withAlpha (0.6f));
+
+    set (ResizableDivider::Style::backgroundColorId, Colors::transparentBlack);
+    set (ResizableDivider::Style::lineColorId, outline);
+    set (ResizableDivider::Style::hoverColorId, accent.withAlpha (0.75f));
+    set (ResizableDivider::Style::draggingColorId, accent);
+    set (ResizableDivider::Style::gripColorId, textMuted.withAlpha (0.65f));
+
+    set (JoystickComponent::Style::backgroundColorId, surface);
+    set (JoystickComponent::Style::outlineColorId, outline);
+    set (JoystickComponent::Style::guideColorId, textMuted.withAlpha (0.35f));
+    set (JoystickComponent::Style::thumbColorId, text);
+    set (JoystickComponent::Style::thumbOverColorId, accent.withAlpha (0.85f));
+    set (JoystickComponent::Style::thumbDownColorId, accent);
 
     set (ListBox::Style::backgroundColorId, surface);
     set (ListBox::Style::outlineColorId, outline);
@@ -2534,9 +2782,10 @@ ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
     theme->setComponentStyle<ScrollBar> (ComponentStyle::createStyle<ScrollBar> (paintScrollBar));
     theme->setComponentStyle<ProgressBar> (ComponentStyle::createStyle<ProgressBar> (paintProgressBar));
     theme->setComponentStyle<ResizableCorner> (ComponentStyle::createStyle<ResizableCorner> (paintResizableCorner));
+    theme->setComponentStyle<ResizableDivider> (ComponentStyle::createStyle<ResizableDivider> (paintResizableDivider));
+    theme->setComponentStyle<JoystickComponent> (ComponentStyle::createStyle<JoystickComponent> (paintJoystickComponent));
 
     theme->setComponentStyle<ListBox> (ComponentStyle::createStyle<ListBox> (paintListBox));
-    theme->setMetric (ListBox::Style::refreshIndicatorSizeId, 56.0f);
 
     theme->setComponentStyle<ListBoxItem> (ComponentStyle::createStyle<ListBoxItem> (paintListBoxItem));
 

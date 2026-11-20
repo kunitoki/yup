@@ -325,8 +325,8 @@ from `yup_graphics`.
 ```cpp
 void MyComponent::paint (Graphics& g) override
 {
-    g.setFillColor (Colors::cornflowerBlue);
-    g.fillRoundedRectangle (getLocalBounds(), 8.0f);
+    g.setFillColor (Colors::cornflowerblue);
+    g.fillRoundedRect (getLocalBounds(), 8.0f);
 }
 ```
 
@@ -340,7 +340,8 @@ void MyComponent::paintOverChildren (Graphics& g) override
 {
     // Draw a border or overlay that sits above all children.
     g.setStrokeColor (Colors::black);
-    g.drawRoundedRectangle (getLocalBounds().reduced (0.5f), 8.0f, 1.0f);
+    g.setStrokeWidth (1.0f);
+    g.strokeRoundedRect (getLocalBounds().reduced (0.5f), 8.0f);
 }
 ```
 
@@ -370,8 +371,9 @@ The older behaviour — collapsing every dirty rectangle into a single bounding 
 which repaints everything in between — remains available as a safe fallback:
 
 ```cpp
-ComponentNative::Options opts;
-opts.withRepaintMode (ComponentNative::RepaintMode::boundingBox);
+auto opts = ComponentNative::Options()
+                .withRepaintMode (ComponentNative::RepaintMode::boundingBox);
+
 rootComponent.addToDesktop (opts);
 ```
 
@@ -437,12 +439,17 @@ previous frame.
 
 ```cpp
 comp.setTransform (AffineTransform::rotation (0.785f));
-comp.setTransform (AffineTransform::scale (2.0f));
+comp.setTransform (AffineTransform::scaling (2.0f));
 comp.setTransform (AffineTransform::translation (50, 50));
 
 AffineTransform t = comp.getTransform();
 bool isXformed = comp.isTransformed(); // true if transform is not identity
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-basics_transform_light.jpg#gh-light-mode-only" alt="A component rotated, scaled and translated from where it was placed" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-basics_transform_dark.jpg#gh-dark-mode-only" alt="A component rotated, scaled and translated from where it was placed" width="640">
+</p>
 
 Transforms are applied in the component's local coordinates, before its position
 in the parent, and they compose down the hierarchy: a transformed parent carries
@@ -509,6 +516,11 @@ comp.lowerBelow (&otherComp);
 comp.raiseBy (1);               // move up by 1 position
 comp.lowerBy (2);               // move down by 2 positions
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-basics_z-order_light.jpg#gh-light-mode-only" alt="Three overlapping components as added, with the first brought to the front and with the last sent to the back" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-basics_z-order_dark.jpg#gh-dark-mode-only" alt="Three overlapping components as added, with the first brought to the front and with the last sent to the back" width="640">
+</p>
 
 A component that changes position in this list is told its old and new index:
 
@@ -669,9 +681,9 @@ void mouseUp (const MouseEvent& e) override
 ### Mouse cursor
 
 ```cpp
-comp.setMouseCursor (MouseCursor::PointingHandCursor);
+comp.setMouseCursor (MouseCursor::Hand);
 // or override:
-virtual MouseCursor getMouseCursor() const override;
+MouseCursor getMouseCursor() const override;
 ```
 
 ### Keyboard focus
@@ -792,7 +804,7 @@ is ignored when the object is registered as a listener.
 ---
 
 ```{seealso}
-- [Component styling](component-styling.md) — colors, metrics, and `ComponentStyle`
+- [Component styling](component-styling.md) — colors, properties, and `ComponentStyle`
 ```
 
 ---
@@ -867,13 +879,14 @@ Components are hosted inside a platform-native window:
 
 ```cpp
 // Place a top-level component on the screen
-ComponentNative::Options opts;
-opts.title       = "My Window";
-opts.width       = 800;
-opts.height      = 600;
-opts.resizable   = true;
-opts.dpiScale    = 2.0f;
+auto opts = ComponentNative::Options()
+                .withDecoration (true)
+                .withResizableWindow (true)
+                .withAllowedHighDensityDisplay (true)
+                .withVSync (true);
 
+rootComponent.setTitle ("My Window");
+rootComponent.setBounds ({ 0, 0, 800, 600 });
 rootComponent.addToDesktop (opts);
 
 // Remove from the desktop
@@ -997,7 +1010,7 @@ private:
 ## Related
 
 - [Drag and drop](component-drag-and-drop.md) — receiving external file/text drops
-- [Component styling](component-styling.md) — colors, metrics, and `ComponentStyle`
+- [Component styling](component-styling.md) — colors, properties, and `ComponentStyle`
 - [Component effects (shaders)](component-effects.md) — GPU post-processing
 - [Component caching](component-caching.md) — `setCachedToTexture` and `isCachedToTexture`
 - [Component snapshots](component-snapshots.md) — `snapshotToImage` and `snapshotToTexture`

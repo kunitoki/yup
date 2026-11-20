@@ -24,13 +24,64 @@ namespace yup
 
 //==============================================================================
 
-const Identifier Label::Style::textFillColorId { "Label_textFillColorId" };
-const Identifier Label::Style::textStrokeColorId { "Label_textStrokeColorId" };
-const Identifier Label::Style::backgroundColorId { "Label_backgroundColorId" };
-const Identifier Label::Style::outlineColorId { "Label_outlineColorId" };
-const Identifier Label::Style::textHeightProportionMetricId { "Label_textHeightProportionMetricId" };
+namespace
+{
+
+struct LabelIds
+{
+    static inline const Identifier text { "text" };
+    static inline const Identifier strokeWidth { "strokeWidth" };
+    static inline const Identifier justification { "justification" };
+};
+
+} // namespace
 
 //==============================================================================
+
+const Identifier Label::Style::textFillColorId { "labelTextFillColorId" };
+const Identifier Label::Style::textStrokeColorId { "labelTextStrokeColorId" };
+const Identifier Label::Style::backgroundColorId { "labelBackgroundColorId" };
+const Identifier Label::Style::outlineColorId { "labelOutlineColorId" };
+const Identifier Label::Style::textHeightProportionId { "labelTextHeightProportionId" };
+
+//==============================================================================
+
+const ComponentTypeInfo& Label::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<Label> (Identifier ("Label"))
+                                 .color ("textFillColor", Style::textFillColorId)
+                                 .color ("textStrokeColor", Style::textStrokeColorId)
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("outlineColor", Style::outlineColorId)
+                                 .number ("textHeightProportion", Style::textHeightProportionId, {}, "The height of the text as a proportion of the label height. Unset, the font keeps its own height.")
+                                 .property (LabelIds::text, &Label::getText, [] (Label& l, const String& v) { l.setText (v); })
+                                 .property (LabelIds::strokeWidth, &Label::getStrokeWidth, &Label::setStrokeWidth)
+                                 .enumeration<Justification::Flags> (
+                                     LabelIds::justification,
+                                     { { "left", Justification::left },
+                                       { "right", Justification::right },
+                                       { "topLeft", Justification::topLeft },
+                                       { "centerTop", Justification::centerTop },
+                                       { "topRight", Justification::topRight },
+                                       { "centerLeft", Justification::centerLeft },
+                                       { "center", Justification::center },
+                                       { "centerRight", Justification::centerRight },
+                                       { "bottomLeft", Justification::bottomLeft },
+                                       { "centerBottom", Justification::centerBottom },
+                                       { "bottomRight", Justification::bottomRight } },
+                                     [] (const Label& l) { return l.getJustification().getFlags(); },
+                                     [] (Label& l, Justification::Flags f) { l.setJustification (f); })
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
+
+Label::Label()
+    : Label (StringRef {})
+{
+}
 
 Label::Label (StringRef componentID)
     : Component (componentID)
@@ -47,15 +98,16 @@ String Label::getText() const
 
 void Label::setText (String newText, NotificationType notification)
 {
+    ignoreUnused (notification);
+
     if (text == newText)
         return;
 
     text = std::move (newText);
+    textDirty = true;
     invalidateCache();
 
-    if (notification != dontSendNotification)
-        // TODO: Send notification
-        ;
+    notifyPropertyChanged (LabelIds::text);
 }
 
 //==============================================================================
@@ -67,8 +119,7 @@ std::optional<Font> Label::getFont() const
 
 void Label::setFont (Font newFont)
 {
-    // Font equality ignores the height
-    if (font && *font == newFont && approximatelyEqual (font->getHeight(), newFont.getHeight()))
+    if (font && *font == newFont)
         return;
 
     font = std::move (newFont);
@@ -77,7 +128,11 @@ void Label::setFont (Font newFont)
 
 void Label::resetFont()
 {
+    if (! font.has_value())
+        return;
+
     font.reset();
+    invalidateCache();
 }
 
 //==============================================================================
@@ -88,6 +143,7 @@ void Label::setStrokeWidth (float newWidth)
         return;
 
     strokeWidth = newWidth;
+    notifyPropertyChanged (LabelIds::strokeWidth);
     repaint();
 }
 
@@ -97,7 +153,8 @@ void Label::setJustification (Justification newJustification)
         return;
 
     justification = newJustification;
-    repaint();
+    invalidateCache();
+    notifyPropertyChanged (LabelIds::justification);
 }
 
 //==============================================================================
@@ -120,6 +177,11 @@ void Label::resized()
     invalidateCache();
 }
 
+void Label::styleChanged()
+{
+    invalidateCache();
+}
+
 //==============================================================================
 
 void Label::prepareText()
@@ -129,12 +191,23 @@ void Label::prepareText()
 
     auto fontToUse = font.value_or (ApplicationTheme::getGlobalTheme()->getDefaultFont());
 
+    static const Identifier textHeightProportion ("textHeightProportion");
+    if (const auto proportion = findProperty (textHeightProportion); ! proportion.isVoid())
+        fontToUse = fontToUse.withHeight (static_cast<float> (getHeight()) * static_cast<float> (static_cast<double> (proportion)));
+
+    const auto currentSize = getSize();
+    if (! textDirty && fontToUse == preparedFont && currentSize == preparedSize && justification == preparedJustification)
+    {
+        needsUpdate = false;
+        return;
+    }
+
     auto setup = [&] (const Font& f)
     {
         auto modifier = styledText.startUpdate();
-        modifier.setMaxSize (getSize());
-        modifier.setHorizontalAlign (StyledText::horizontalAlignFromJustification (justification));
-        modifier.setVerticalAlign (StyledText::verticalAlignFromJustification (justification));
+        modifier.setMaxSize (currentSize);
+        modifier.setHorizontalAlign (StyledText::toHorizontalAlign (justification));
+        modifier.setVerticalAlign (StyledText::toVerticalAlign (justification));
         modifier.setOverflow (StyledText::visible);
         modifier.setWrap (StyledText::noWrap);
         modifier.clear();
@@ -146,12 +219,16 @@ void Label::prepareText()
 
     if (text.isNotEmpty())
     {
-        const float availableWidth = static_cast<float> (getWidth());
+        const float availableWidth = currentSize.getWidth();
         const float textWidth = styledText.getComputedTextBounds().getWidth();
         if (availableWidth > 0.0f && textWidth > availableWidth)
             setup (fontToUse.withHeight (fontToUse.getHeight() * (availableWidth / textWidth)));
     }
 
+    preparedFont = fontToUse;
+    preparedSize = currentSize;
+    preparedJustification = justification;
+    textDirty = false;
     needsUpdate = false;
 }
 

@@ -218,3 +218,54 @@ TEST_F (ToggleButtonTest, EmptyStringHandling)
     toggleButton->setButtonText ("");
     EXPECT_TRUE (toggleButton->getButtonText().isEmpty());
 }
+
+TEST_F (ToggleButtonTest, SetToggleStateUpdatesCheckedBindingsLinksAndStyles)
+{
+    ApplicationTheme::Ptr oldTheme = ApplicationTheme::getGlobalTheme();
+    ApplicationTheme::Ptr theme = new ApplicationTheme();
+    ApplicationTheme::setGlobalTheme (theme);
+
+    DataTree params ("params");
+    params.beginTransaction().setProperty ("bypass", false);
+    DataTreeBindingProvider provider (params);
+
+    YuiDocument document;
+    document.setModel ("params", provider);
+
+    const auto result = document.loadFromString (R"yui(
+        style {
+            ToggleButton:checked { opacity: 0.5; }
+            SwitchButton:checked { opacity: 0.25; }
+        }
+        Column {
+            ToggleButton { id: toggle; checked <=> params.bypass; }
+            SwitchButton { id: sw; }
+            Component { id: panel; enabled: toggle.checked; }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    auto* toggle = document.findById<ToggleButton> ("toggle");
+    auto* sw = document.findById<SwitchButton> ("sw");
+    auto* panel = document.findById ("panel");
+    ASSERT_NE (toggle, nullptr);
+    ASSERT_NE (sw, nullptr);
+    ASSERT_NE (panel, nullptr);
+
+    EXPECT_FALSE (panel->isEnabled());
+    EXPECT_FLOAT_EQ (toggle->getOpacity(), 1.0f);
+
+    toggle->setToggleState (true, dontSendNotification);
+    document.getRoot()->getStyleContext()->restyleNow();
+
+    EXPECT_TRUE (panel->isEnabled());
+    EXPECT_TRUE (static_cast<bool> (params.getProperty ("bypass")));
+    EXPECT_NEAR (toggle->getOpacity(), 0.5f, 0.01f);
+
+    sw->setToggleState (true, dontSendNotification);
+    document.getRoot()->getStyleContext()->restyleNow();
+    EXPECT_NEAR (sw->getOpacity(), 0.25f, 0.01f);
+
+    document.clear();
+    ApplicationTheme::setGlobalTheme (oldTheme.get());
+}

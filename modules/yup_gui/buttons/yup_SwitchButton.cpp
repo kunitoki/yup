@@ -24,9 +24,37 @@ namespace yup
 
 //==============================================================================
 
+namespace
+{
+
+const Identifier switchVerticalPropertyId ("vertical");
+
+} // namespace
+
+//==============================================================================
+
 const Identifier SwitchButton::Style::switchColorId = "switchButtonSwitch";
 const Identifier SwitchButton::Style::switchOffBackgroundColorId = "switchButtonOffBackground";
 const Identifier SwitchButton::Style::switchOnBackgroundColorId = "switchButtonOnBackground";
+const Identifier SwitchButton::Style::cornerRadiusId = "switchButtonCornerRadius";
+const Identifier SwitchButton::Style::thumbInsetId = "switchButtonThumbInset";
+
+//==============================================================================
+
+const ComponentTypeInfo& SwitchButton::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<SwitchButton> (Identifier ("SwitchButton"), Button::getClassTypeInfo())
+                                 .color ("switchColor", Style::switchColorId)
+                                 .color ("switchOffBackgroundColor", Style::switchOffBackgroundColorId)
+                                 .color ("switchOnBackgroundColor", Style::switchOnBackgroundColorId)
+                                 .number ("cornerRadius", Style::cornerRadiusId, {}, "The corner radius, unset for a pill.")
+                                 .number ("thumbInset", Style::thumbInsetId, 4.0, "The inset of the handle inside its slot.")
+                                 .state (checkedPropertyId, &SwitchButton::getToggleState, [] (SwitchButton& b, bool v) { b.setToggleState (v); })
+                                 .property (switchVerticalPropertyId, &SwitchButton::isVertical, &SwitchButton::setVertical)
+                                 .build();
+
+    return info;
+}
 
 //==============================================================================
 
@@ -47,21 +75,32 @@ void SwitchButton::setToggleState (bool shouldBeToggled, NotificationType notifi
 
         updateSwitchCirclePosition();
 
+        auto bailOutChecker = BailOutChecker (this);
+
+        notifyPropertyChanged (checkedPropertyId);
+        if (bailOutChecker.shouldBailOut())
+            return;
+
         sendChangeNotification (notification, [this]
         {
+            auto innerBailOut = BailOutChecker (this);
+
             toggleStateChanged();
+            if (innerBailOut.shouldBailOut())
+                return;
 
             if (onClick)
                 onClick();
         });
 
-        repaint();
+        if (! bailOutChecker.shouldBailOut())
+            repaint();
     }
 }
 
 //==============================================================================
 
-void SwitchButton::setVertical (bool shouldBeVertical) noexcept
+void SwitchButton::setVertical (bool shouldBeVertical)
 {
     if (isVerticalValue != shouldBeVertical)
     {
@@ -70,6 +109,8 @@ void SwitchButton::setVertical (bool shouldBeVertical) noexcept
         isAnimating = false;
 
         updateSwitchCirclePosition();
+        notifyPropertyChanged (switchVerticalPropertyId);
+        repaint();
     }
 }
 

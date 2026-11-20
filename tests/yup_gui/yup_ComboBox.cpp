@@ -530,3 +530,81 @@ TEST_F (ComboBoxTest, ShowPopupWithSeparatorDoesNotCrash)
 
     PopupMenu::dismissAllPopups();
 }
+
+TEST_F (ComboBoxTest, SetItemsNumbersTheItemsFromOne)
+{
+    comboBox->setItems ({ "low", "mid", "high" });
+
+    EXPECT_EQ (comboBox->getNumItems(), 3);
+    EXPECT_EQ (comboBox->getItemId (0), 1);
+    EXPECT_EQ (comboBox->getItemId (2), 3);
+    EXPECT_EQ (comboBox->getItemText (1), "mid");
+    EXPECT_EQ (comboBox->getItems().joinIntoString (","), "low,mid,high");
+}
+
+TEST_F (ComboBoxTest, SetItemsKeepsAStillValidSelection)
+{
+    comboBox->setItems ({ "low", "mid", "high" });
+    comboBox->setSelectedId (2);
+
+    int changes = 0;
+    comboBox->onSelectedItemChanged = [&changes]
+    {
+        ++changes;
+    };
+
+    comboBox->setItems ({ "one", "two", "three", "four" });
+    EXPECT_EQ (comboBox->getSelectedId(), 2);
+    EXPECT_EQ (comboBox->getText(), "two");
+    EXPECT_EQ (changes, 0);
+
+    comboBox->setItems ({ "only" });
+    EXPECT_EQ (comboBox->getSelectedId(), 0);
+    EXPECT_EQ (changes, 1);
+}
+
+TEST_F (ComboBoxTest, ReadsAndWritesItemsAsAnArrayProperty)
+{
+    comboBox->setProperty (Identifier ("items"), var (Array<var> { "low", "high" }));
+
+    EXPECT_EQ (comboBox->getNumItems(), 2);
+    EXPECT_EQ (comboBox->getItemText (0), "low");
+
+    const auto stored = comboBox->getProperty (Identifier ("items"));
+    const auto* items = stored.getArray();
+    ASSERT_NE (items, nullptr);
+    EXPECT_EQ (items->size(), 2);
+    EXPECT_EQ ((*items)[1].toString(), "high");
+
+    const auto* descriptor = comboBox->getTypeInfo().findProperty (Identifier ("items"));
+    ASSERT_NE (descriptor, nullptr);
+    EXPECT_EQ (descriptor->type, ComponentProperty::Type::array);
+    EXPECT_EQ (descriptor->elementType, ComponentProperty::Type::string);
+}
+
+TEST_F (ComboBoxTest, ReportsSelectionChangesToPropertyListeners)
+{
+    struct Listener : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& property) override
+        {
+            changed.add (property.toString());
+        }
+
+        StringArray changed;
+    };
+
+    Listener listener;
+    comboBox->addComponentListener (&listener);
+
+    comboBox->setItems ({ "low", "high" });
+    EXPECT_TRUE (listener.changed.contains ("items"));
+
+    listener.changed.clear();
+    comboBox->setSelectedId (2);
+    EXPECT_TRUE (listener.changed.contains ("selectedId"));
+    EXPECT_TRUE (listener.changed.contains ("selectedIndex"));
+    EXPECT_TRUE (listener.changed.contains ("text"));
+
+    comboBox->removeComponentListener (&listener);
+}

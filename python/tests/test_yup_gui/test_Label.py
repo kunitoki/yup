@@ -6,16 +6,16 @@ import yup
 # ==============================================================================
 
 def test_label_style_ids_are_exposed():
-    assert yup.Label.Style.textFillColorId == yup.Identifier("Label_textFillColorId")
-    assert yup.Label.Style.textStrokeColorId == yup.Identifier("Label_textStrokeColorId")
-    assert yup.Label.Style.backgroundColorId == yup.Identifier("Label_backgroundColorId")
-    assert yup.Label.Style.outlineColorId == yup.Identifier("Label_outlineColorId")
-    assert yup.Label.Style.textHeightProportionMetricId == yup.Identifier("Label_textHeightProportionMetricId")
+    assert yup.Label.Style.textFillColorId == yup.Identifier("labelTextFillColorId")
+    assert yup.Label.Style.textStrokeColorId == yup.Identifier("labelTextStrokeColorId")
+    assert yup.Label.Style.backgroundColorId == yup.Identifier("labelBackgroundColorId")
+    assert yup.Label.Style.outlineColorId == yup.Identifier("labelOutlineColorId")
+    assert yup.Label.Style.textHeightProportionId == yup.Identifier("labelTextHeightProportionId")
 
 
 def test_label_style_ids_are_valid_identifiers():
     # The ids are Identifiers, so they render as the strings the widget's theme style looks up.
-    assert str(yup.Label.Style.backgroundColorId) == "Label_backgroundColorId"
+    assert str(yup.Label.Style.backgroundColorId) == "labelBackgroundColorId"
     assert yup.Label.Style.backgroundColorId.isValid() is True
 
 

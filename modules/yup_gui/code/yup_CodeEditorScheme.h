@@ -69,6 +69,14 @@ public:
         static inline const Identifier minimapBackground { "minimapBackground" }; /**< The minimap background color. */
         static inline const Identifier minimapForeground { "minimapForeground" }; /**< The minimap code overview color. */
         static inline const Identifier minimapViewport { "minimapViewport" };     /**< The minimap viewport indicator color. */
+        static inline const Identifier bracketMatch { "bracketMatch" };           /**< The matching bracket pair highlight color. */
+        static inline const Identifier wordOccurrence { "wordOccurrence" };       /**< The highlight color of other occurrences of the word at the caret. */
+        static inline const Identifier indentGuide { "indentGuide" };             /**< The indent guide line color. */
+        static inline const Identifier whitespace { "whitespace" };               /**< The color of rendered whitespace markers. */
+        static inline const Identifier diagnosticError { "diagnosticError" };             /**< The underline and gutter color of error diagnostics. */
+        static inline const Identifier diagnosticWarning { "diagnosticWarning" };         /**< The underline and gutter color of warning diagnostics. */
+        static inline const Identifier diagnosticInformation { "diagnosticInformation" }; /**< The underline and gutter color of information diagnostics. */
+        static inline const Identifier diagnosticHint { "diagnosticHint" };               /**< The underline color of hint diagnostics. */
     };
 
     //==============================================================================
@@ -114,6 +122,16 @@ public:
         @returns The color, or std::nullopt when not set.
     */
     std::optional<Color> getColor (SyntaxDefinition::TokenType tokenType) const;
+
+    /** Returns the color used to draw a token scope, if the scheme provides one.
+
+        Dotted scopes fall back to their parents, so "keyword.control.flow" uses the
+        color of "keyword.control" or else "keyword" when it has none of its own.
+
+        @param scope The token scope (see CodeTokeniser::Token::scope).
+        @returns The color, or std::nullopt when neither the scope nor a parent is set.
+    */
+    std::optional<Color> getColorForScope (const Identifier& scope) const;
 
     //==============================================================================
     /** Returns the default scheme (the dark palette of a default-constructed scheme). */

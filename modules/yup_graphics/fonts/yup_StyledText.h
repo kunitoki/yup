@@ -268,11 +268,32 @@ public:
     bool isValidCharacterIndex (int characterIndex) const;
 
     //==============================================================================
-    /** Returns the horizontal alignment matching a Justification, left when it has none. */
-    static HorizontalAlign horizontalAlignFromJustification (Justification justification);
+    /** Converts the horizontal flags of a Justification into a HorizontalAlign value, left when it has none. */
+    static constexpr HorizontalAlign toHorizontalAlign (Justification justification) noexcept
+    {
+        if (justification.testFlags (Justification::left))
+            return left;
 
-    /** Returns the vertical alignment matching a Justification, middle when it has none. */
-    static VerticalAlign verticalAlignFromJustification (Justification justification);
+        if (justification.testFlags (Justification::horizontalCenter))
+            return center;
+
+        if (justification.testFlags (Justification::right))
+            return right;
+
+        return left;
+    }
+
+    /** Converts the vertical flags of a Justification into a VerticalAlign value. */
+    static constexpr VerticalAlign toVerticalAlign (Justification justification) noexcept
+    {
+        if (justification.testFlags (Justification::top))
+            return top;
+
+        if (justification.testFlags (Justification::bottom))
+            return bottom;
+
+        return middle;
+    }
 
     //==============================================================================
     /** @internal Returns the laid out lines, in visual order. */
@@ -305,7 +326,6 @@ private:
         rive::Font::ColorGlyphLayer layer;
         Image image;
 
-        // Built by Graphics on the first draw, with the factory that drew it
         mutable rive::Factory* preparedFactory = nullptr;
         mutable rive::rcp<rive::RenderPath> renderPath;
         mutable rive::rcp<rive::RenderPaint> renderPaint;
@@ -340,6 +360,7 @@ private:
     void setWrap (TextWrap value);
 
     void update();
+    void ensureGlyphLookup() const;
     int findParagraphNewlinePosition (int orderedLineIndex) const;
     int findParagraphNewlinePositionByIndex (int paragraphIndex) const;
     std::shared_ptr<const std::vector<ColorGlyphLayer>> findColorGlyphLayers (const rive::rcp<rive::Font>& font, rive::GlyphID glyphId);
@@ -351,12 +372,13 @@ private:
     rive::GlyphRun ellipsisRun;
     rive::StyledText styledTexts;
     std::vector<RenderStyle> styles;
+    rive::rcp<rive::RenderPath> spareDefaultPath;
     std::vector<RenderStyle*> renderStyles;
     std::vector<ColorGlyph> colorGlyphs;
-    rive::GlyphLookup glyphLookup;
     std::unordered_map<uint32_t, rive::rcp<rive::RenderPaint>> colorPaints;
 
-    std::unordered_map<const rive::Font*, std::unordered_map<rive::GlyphID, std::shared_ptr<const std::vector<ColorGlyphLayer>>>> colorGlyphLayerCache;
+    using GlyphLayerMap = std::unordered_map<rive::GlyphID, std::shared_ptr<const std::vector<ColorGlyphLayer>>>;
+    std::unordered_map<const rive::Font*, GlyphLayerMap> colorGlyphLayerCache;
 
     TextOrigin origin = TextOrigin::topOrigin;
     TextOverflow overflow = TextOverflow::visible;
@@ -371,6 +393,9 @@ private:
     std::vector<std::vector<float>> lineGlyphX;
     std::vector<float> lineEndX;
     float defaultLineHeight = 0.0f;
+
+    mutable rive::GlyphLookup glyphLookup;
+    mutable bool glyphLookupDirty = false;
 };
 
 } // namespace yup

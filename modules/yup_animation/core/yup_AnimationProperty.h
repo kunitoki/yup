@@ -93,7 +93,7 @@ struct AnimationKeyframe
     float frame = 0.0f;
     T value {};
     std::optional<T> endValue;
-    AnimationEasing easing;
+    Easing easing;
 };
 
 //==============================================================================
@@ -232,7 +232,7 @@ public:
     }
 
     /** Adds a keyframe. Switches to animated mode if not already. */
-    AnimationProperty& addKeyframe (float frame, T value, AnimationEasing easing = AnimationEasing::linear())
+    AnimationProperty& addKeyframe (float frame, T value, Easing easing = Easing::linear())
     {
         animated_ = true;
         keyframes_.push_back ({ frame, std::move (value), std::nullopt, easing });
@@ -241,7 +241,7 @@ public:
     }
 
     /** Adds a keyframe with an explicit interval end value. */
-    AnimationProperty& addKeyframe (float frame, T value, T endValue, AnimationEasing easing = AnimationEasing::linear())
+    AnimationProperty& addKeyframe (float frame, T value, T endValue, Easing easing = Easing::linear())
     {
         animated_ = true;
         keyframes_.push_back ({ frame, std::move (value), std::move (endValue), easing });
@@ -261,13 +261,13 @@ public:
     class Builder
     {
     public:
-        Builder& keyframe (float frame, T value, AnimationEasing easing = AnimationEasing::linear())
+        Builder& keyframe (float frame, T value, Easing easing = Easing::linear())
         {
             keyframes_.push_back ({ frame, std::move (value), std::nullopt, std::move (easing) });
             return *this;
         }
 
-        Builder& keyframe (float frame, T value, T endValue, AnimationEasing easing = AnimationEasing::linear())
+        Builder& keyframe (float frame, T value, T endValue, Easing easing = Easing::linear())
         {
             keyframes_.push_back ({ frame, std::move (value), std::move (endValue), std::move (easing) });
             return *this;

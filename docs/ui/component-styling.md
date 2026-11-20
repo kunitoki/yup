@@ -1,8 +1,12 @@
 # Component Styling
 
-YUP separates appearance from logic via `ComponentStyle`, colors, and metrics.
+YUP separates appearance from logic via `ComponentStyle`, colors, and properties.
 These cascade: a component inherits values from its parent and from the global
 `ApplicationTheme`.
+
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_themes.jpg" alt="One interface under a custom palette, in the themes demo of the graphics example" width="640">
+</p>
 
 ```cpp
 #include <yup_gui/yup_gui.h>
@@ -16,12 +20,15 @@ The styling system has three layers:
 
 | Layer | Scope | How to set |
 |---|---|---|
-| **Per-component** | This component only | `comp.setColor()`, `comp.setMetric()`, `comp.setStyle()` |
+| **Per-component** | This component only | `comp.setColor()`, `comp.setProperty()`, `comp.setStyle()` |
 | **Type-wide** | All instances of a widget type | `theme->setComponentStyle<T>(style)` |
-| **Theme defaults** | Fallback for all components | `theme->setColor()`, `theme->setMetric()` |
+| **Theme defaults** | Fallback for all components | `theme->setColor()`, `theme->setProperty()` |
 | **Palette** | Colors derived from a handful of source colors | `theme->setPalette()` |
+| **Stylesheet** | Components matching selectors in a subtree | `comp.setStyleSheet()` |
 
 Color resolution walks: component overrides → parent chain → theme defaults → palette.
+A [stylesheet](yui/styles.md) value sits right after the explicit value of each
+component on the way, so values set in C++ always win over it.
 If nothing is found, the paint function falls back to the palette roles.
 
 ---
@@ -35,9 +42,14 @@ nested `Style` struct.
 ### Setting per-component colors
 
 ```cpp
-comp.setColor ("background", Colors::darkSlateBlue);
+comp.setColor ("background", Colors::darkslateblue);
 comp.setColor ("border", std::nullopt); // remove override → inherit
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-styling_colors_light.jpg#gh-light-mode-only" alt="A button with the colors of the theme and one with colors of its own" width="560">
+  <img class="dark-only rounded" src="../_static/images/ui/component-styling_colors_dark.jpg#gh-dark-mode-only" alt="A button with the colors of the theme and one with colors of its own" width="560">
+</p>
 
 ### Reading colors
 
@@ -58,7 +70,7 @@ Theme defaults affect all components that haven't overridden the color locally:
 
 ```cpp
 auto theme = ApplicationTheme::getGlobalTheme();
-theme->setColor (TextButton::Style::backgroundColorId, Colors::cornflowerBlue);
+theme->setColor (TextButton::Style::backgroundColorId, Colors::cornflowerblue);
 ```
 
 Theme-level color resolution via `theme->findColor(component, id)`:
@@ -66,7 +78,7 @@ Theme-level color resolution via `theme->findColor(component, id)`:
 2. If not found, checks the colors set with `theme->setColor()`.
 3. If not found, checks the colors derived from the closest palette set on the component or a parent with `Component::setPalette()`, or else from the theme palette (see [Palettes](#palettes)).
 
-A `PopupMenu` opened relative to a component (`PopupMenu::Options::withRelativePosition()`, as a `ComboBox` opens its list) takes the palette and the `PopupMenu::Style` colors set on that component or its parents, unless the menu sets them itself, and its submenus take the menu's. Setting the menu colors on a panel styles every menu opened from inside it, even though the menu is added to a popup container higher up.
+A `PopupMenu` opened relative to a component (`PopupMenu::Options::withRelativePosition()`, as a `ComboBox` opens its list) is also styled by that component's `.yui` stylesheet context and takes the palette and `PopupMenu::Style` values set on that component or its parents unless the menu sets them itself. Submenus track their originating parent `PopupMenu` via a `WeakReference` and inherit its resolved style directly, even when mounted on a higher-level popup container or as desktop windows.
 
 ### Widget style IDs
 
@@ -74,21 +86,21 @@ Every themable widget exposes color IDs:
 
 | Widget | IDs (partial list) |
 |---|---|
-| `TextButton::Style` | `backgroundColorId`, `backgroundPressedColorId`, `textColorId`, `textPressedColorId`, `outlineColorId`, `outlineFocusedColorId` |
-| `ToggleButton::Style` | `backgroundColorId`, `backgroundToggledColorId`, `textColorId`, `textToggledColorId`, `borderColorId`, `borderToggledColorId` |
-| `SwitchButton::Style` | `switchColorId`, `switchOffBackgroundColorId`, `switchOnBackgroundColorId` |
-| `Slider::Style` | `backgroundColorId`, `trackColorId`, `thumbColorId`, `thumbOverColorId`, `thumbDownColorId`, `textColorId` |
-| `Label::Style` | `textFillColorId`, `textStrokeColorId`, `backgroundColorId`, `outlineColorId` |
-| `TextEditor::Style` | `backgroundColorId`, `textColorId`, `caretColorId`, `selectionColorId`, `outlineColorId`, `focusedOutlineColorId` |
-| `ComboBox::Style` | `backgroundColorId`, `textColorId`, `borderColorId`, `arrowColorId`, `focusedBorderColorId` |
-| `ScrollBar::Style` | `trackColorId`, `thumbColorId`, `thumbHoverColorId`, `thumbDraggingColorId` |
-| `ProgressBar::Style` | `backgroundColorId`, `foregroundColorId` |
-| `ListBox::Style` | `backgroundColorId`, `outlineColorId`, `rowBackgroundColorId`, `selectedRowBackgroundColorId`, `hoveredRowBackgroundColorId`, `refreshIndicatorColorId` (metric: `refreshIndicatorSizeId`) |
+| `TextButton::Style` | `backgroundColorId`, `backgroundPressedColorId`, `textColorId`, `textPressedColorId`, `outlineColorId`, `outlineFocusedColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
+| `ToggleButton::Style` | `backgroundColorId`, `backgroundToggledColorId`, `textColorId`, `textToggledColorId`, `borderColorId`, `borderToggledColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
+| `SwitchButton::Style` | `switchColorId`, `switchOffBackgroundColorId`, `switchOnBackgroundColorId` (curated geometry: `cornerRadiusId`, `thumbInsetId`) |
+| `Slider::Style` | `backgroundColorId`, `trackColorId`, `thumbColorId`, `thumbOverColorId`, `thumbDownColorId`, `textColorId` (curated geometry: `trackWidthId`, `thumbSizeId`, `rotaryInsetId`) |
+| `Label::Style` | `textFillColorId`, `textStrokeColorId`, `backgroundColorId`, `outlineColorId` (curated geometry: `textHeightProportionId`) |
+| `TextEditor::Style` | `backgroundColorId`, `textColorId`, `caretColorId`, `selectionColorId`, `outlineColorId`, `focusedOutlineColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
+| `ComboBox::Style` | `backgroundColorId`, `textColorId`, `borderColorId`, `arrowColorId`, `focusedBorderColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
+| `ScrollBar::Style` | `trackColorId`, `thumbColorId`, `thumbHoverColorId`, `thumbDraggingColorId` (curated geometry: `thumbInsetId`, `cornerRadiusId`) |
+| `ProgressBar::Style` | `backgroundColorId`, `foregroundColorId` (curated geometry: `cornerRadiusId`) |
+| `ListBox::Style` | `backgroundColorId`, `outlineColorId`, `rowBackgroundColorId`, `selectedRowBackgroundColorId`, `hoveredRowBackgroundColorId`, `refreshIndicatorColorId` (curated geometry: `refreshIndicatorSizeId`) |
 | `ListBoxItem::Style` | `textColorId`, `textColorSelectedId`, `backgroundColorId`, `backgroundColorSelectedId`, `backgroundColorHoveredId` |
 | `TreeView::Style` | `indentGuideColorId`, `disclosureColorId`, `itemTextColorId`, `itemTextSelectedColorId`, `dropIndicatorColorId`, `itemHoveredColorId` (the rows also use the `ListBox::Style` colors) |
 | `TabBar::Style` | `trackColorId`, `indicatorColorId`, `underlineColorId`, `focusOutlineColorId` |
 | `TabButton::Style` | `textColorId`, `textSelectedColorId`, `hoveredBackgroundColorId`, `closeButtonColorId` |
-| `PopupMenu::Style` | `menuBackground`, `menuBorder`, `menuItemText`, `menuItemTextDisabled`, `menuItemBackground`, `menuItemBackgroundHighlighted`, `menuItemBackgroundActiveSubmenu` |
+| `PopupMenu::Style` | `menuBackground`, `menuBorder`, `menuItemText`, `menuItemTextDisabled`, `menuItemBackground`, `menuItemBackgroundHighlighted`, `menuItemBackgroundActiveSubmenu` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `itemCornerRadiusId`, `itemHeightId`, `verticalPaddingId`) |
 | `DocumentWindow::Style` | `backgroundColorId` |
 | `MidiKeyboardComponent::Style` | `whiteKeyColorId`, `whiteKeyPressedColorId`, `whiteKeyShadowColorId`, `blackKeyColorId`, `blackKeyPressedColorId`, `blackKeyShadowColorId`, `keyOutlineColorId`, `scrollButtonBackgroundColorId`, `scrollButtonArrowColorId` |
 | `KMeterComponent::Style` | `backgroundColorId`, `greenZoneColorId`, `amberZoneColorId`, `redZoneColorId`, `averageLevelColorId`, `peakLevelColorId`, `peakLevelClipColorId`, `peakHoldColorId` |
@@ -100,34 +112,144 @@ Every themable widget exposes color IDs:
 
 ---
 
-## Component metrics
+## Component properties
 
-Metrics are numeric values (corner radius, padding, spacing) following the same
-cascading pattern as colors.
+Properties are named values describing a component: themeable colors and curated
+geometry (corner radius, spacing) plus reflected state such as a slider's `value`
+or a label's `text`. Store-backed properties (colors, geometry) cascade like
+colors; state-backed properties read and write the widget's own accessors and
+resolve only on the owning component. Values are `var`; use the typed
+`getPropertyAs<T>()` / `findPropertyAs<T>()` helpers when you need a concrete type.
 
-### Setting per-component metrics
-
-```cpp
-comp.setMetric ("corner-radius", 8.0f);
-comp.setMetric ("padding", std::nullopt); // remove override
-```
-
-### Reading metrics
+### Setting per-component properties
 
 ```cpp
-// Local only
-std::optional<float> r = comp.getMetric ("corner-radius");
-
-// Walk the parent chain only, use ApplicationTheme::findComponentMetric for the theme fallback
-std::optional<float> r = comp.findMetric ("corner-radius");
+comp.setProperty ("corner-radius", 8.0);
+comp.removeProperty ("corner-radius"); // remove a store-backed override
 ```
 
-### Setting theme-level metric defaults
+### Reading properties
+
+```cpp
+// Local only (descriptor getter for state-backed, stored value otherwise)
+var r = comp.getProperty ("corner-radius");
+float rf = comp.getPropertyAs<float> ("corner-radius");
+
+// Cascade: this component, the parent chain, the theme default, then the descriptor default
+var r = comp.findProperty ("corner-radius");
+
+// Color properties also fall back to the theme colors and the closest palette
+auto thumb = slider.findPropertyAs<yup::Color> ("thumbColor");
+
+bool present = comp.hasProperty ("corner-radius");
+```
+
+### Setting theme-level property defaults
 
 ```cpp
 auto theme = ApplicationTheme::getGlobalTheme();
-theme->setMetric ("corner-radius", 4.0f);
+theme->setProperty ("corner-radius", 4.0);
 ```
+
+### Curated widget geometry
+
+The default theme paints the corner radii, outline widths, slider tracks and
+thumbs and similar values from the curated geometry properties listed in the
+[widget style IDs](#widget-style-ids) (names and defaults in
+[Stylesheets](yui/styles.md#widget-geometry)). The descriptor default is the
+only place each value lives. Like colors they are keyed per widget type, so set
+them on the theme, on a container for the widgets inside it, or on one widget:
+
+```cpp
+theme->setProperty (TextButton::Style::cornerRadiusId, 8.0); // every text button
+panel.setProperty (Slider::Style::thumbSizeId, 12.0);        // the sliders in the panel
+button.setProperty ("cornerRadius", 0.0);                    // this button
+```
+
+### Binding a reflected property to a model
+
+State-backed properties (`value`, `text`, ...) reflect the widget's own model.
+`DataTreeBindingProvider`, `BindingModel` and `BindingGraph` two-way link one of
+them to a `DataTree` property, so the widget mirrors the document and writes
+edits back:
+
+```cpp
+DataTree state ("Filter");
+DataTreeBindingProvider provider (state);
+BindingModel model (provider);
+BindingGraph bindings;
+
+Slider cutoff (Slider::LinearHorizontal);
+bindings.link (cutoff, "value", model, "cutoff");
+model.trackGestures (cutoff, "cutoff");
+```
+
+On link establishment the model seeds the component when the property holds a
+value. Dragging the slider updates `state["cutoff"]`; a transaction that changes
+`state["cutoff"]` updates the slider. Pass an `UndoManager::Ptr` to
+`DataTreeBindingProvider` to make widget edits join the document's undo history:
+
+```cpp
+UndoManager::Ptr undo = new UndoManager();
+DataTreeBindingProvider provider (state, undo);
+```
+
+### Expressions over component properties
+
+`DrawingScope` exposes a component's reflected properties as symbols in a
+`yup_expression` program, so an expression can read the live widget by name. A
+bare name or `self.` refers to the bound component, `parent.` to its parent:
+
+```cpp
+ExpressionContext context;
+addGraphicsExpressionTypes (context);        // registers the point, color, ... types
+DrawingScope::addExpressionArrayTypes (context); // registers typed array views
+
+Slider slider (Slider::LinearHorizontal);
+slider.setValue (0.5);
+
+DrawingScope scope (slider, context);
+auto parsed = scope.parse ("out = value * 100");
+auto compiled = CompiledExpression::compile (parsed.getReference(), context);
+
+const auto& program = compiled.getReference();
+const auto inputs = scope.bindInputs (program);
+ExpressionState state (program);
+scope.updateInputs (inputs, state); // push the slider's live values
+state.evaluate();
+// state.getVar (program.findOutput ("out")) is 50 when value is 0.5
+```
+
+Number, integer, boolean, string, color, point, rectangle, transform, font and
+typed array properties are bridged. Parse through the scope to declare the symbols it reads,
+bind the resulting program's input indices once with `bindInputs`, and call
+`updateInputs` before each evaluation. The scope holds weak references to the
+resolved components, so a destroyed component simply feeds nothing. This is the
+foundation data-driven drawing, styling and bindings build on.
+
+### Painting a component from a drawing
+
+A *drawing* paints a component from a tree of independent shapes (`rect`,
+`circle`, `arc`, `line`, `text`, ...), each with its own style and with values
+written as expressions over the component's properties. `DrawingStyle` installs
+a drawing on a component like any other style:
+
+```yui
+drawing Knob {
+    circle { center: bounds.center; radius: bounds.width / 2 - 2; fill: backgroundColor; }
+    arc { center: bounds.center; radius: bounds.width / 2 - 6; from: 135deg;
+          to: lerp (135deg, 405deg, normalized); stroke: trackColor; strokeWidth: 3; }
+}
+```
+
+```cpp
+auto style = DrawingStyle::create (slider, drawing); // the parsed `drawing` tree
+if (style.wasOk())
+    slider.setStyle (style.getReference());
+```
+
+See [Data-driven drawing](yui/drawing.md) for the elements, the `let`, `layer`,
+`group` and `repeat` scopes, and error reporting.
 
 ---
 
@@ -149,7 +271,7 @@ auto customButtonStyle = ComponentStyle::createStyle<TextButton> (
                            .value_or (Colors::gray);
 
         g.setFillColor (bgColor);
-        g.fillRoundedRectangle (b.getLocalBounds(), 6.0f);
+        g.fillRoundedRect (b.getLocalBounds(), 6.0f);
 
         // Draw text, border, etc.
     });
@@ -185,7 +307,7 @@ comp.setStyle (nullptr); // revert to type-wide or default
 
 ### `styleChanged()` callback
 
-When a component's style changes (via `setStyle`, or when a color or metric
+When a component's style changes (via `setStyle`, or when a color or property
 override is set), the virtual `styleChanged()` method is called. Override it to
 repaint:
 
@@ -200,7 +322,7 @@ void MyButton::styleChanged() override
 
 ## `ApplicationTheme`
 
-The global theme singleton holds fonts, default colors/metrics, and
+The global theme singleton holds fonts, default colors and properties, and
 type→style mappings.
 
 ### Creating and setting the global theme
@@ -230,7 +352,7 @@ The built-in theme uses a 14 px default font. Buttons, combo boxes, labels, text
 editors, list rows and menus all draw their text at that height (smaller only
 when the widget is too short to fit it).
 
-### Batch color/metric registration
+### Batch color/property registration
 
 ```cpp
 theme->setColors ({
@@ -238,25 +360,28 @@ theme->setColors ({
     { Slider::Style::thumbColorId, Colors::orange },
 });
 
-theme->setMetrics ({
-    { "corner-radius", 8.0f },
-    { "padding", 4.0f },
+theme->setProperties ({
+    { "corner-radius", 8.0 },
+    { "padding", 4.0 },
 });
 ```
 
 ### Finding values through the theme
 
-Theme `findColor` and `findMetric` check the component's parent chain first,
-then fall back to theme defaults:
+Theme `findColor` checks the component's parent chain first, then falls back to
+theme defaults. Theme `findProperty` only holds the theme-wide property defaults;
+the component/parent cascade lives on `Component::findProperty`:
 
 ```cpp
-// These first call component.findColor/findMetric, then check theme defaults
+// findColor first calls component.findColor, then checks theme defaults
 auto c = theme->findColor (comp, "background");
-auto m = theme->findMetric (comp, "corner-radius");
+
+// findProperty returns the theme default for the id (component cascade is comp.findProperty)
+auto m = theme->findProperty (comp, "corner-radius");
 
 // Static convenience wrappers on the global theme:
 auto c = ApplicationTheme::findComponentColor (comp, "background");
-auto m = ApplicationTheme::findComponentMetric (comp, "corner-radius");
+auto m = ApplicationTheme::findComponentProperty (comp, "corner-radius");
 ```
 
 ---
@@ -280,6 +405,11 @@ matter), text is always readable against the background, and missing colors are
 derived, so a single source color still gives a complete palette. Palettes are
 dark by default, pass `ThemePalette::Mode::light` for a light one.
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-styling_palette-roles_light.jpg#gh-light-mode-only" alt="The colors of the roles of the default palette" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-styling_palette-roles_dark.jpg#gh-dark-mode-only" alt="The colors of the roles of the default palette" width="640">
+</p>
+
 ```cpp
 // From colors
 ThemePalette palette (std::vector<Color> { Color (0xff100b00), Color (0xff85cb33), Color (0xffefffc8) });
@@ -300,6 +430,10 @@ Switch the palette of the whole application at runtime, then repaint:
 ApplicationTheme::getGlobalTheme()->setPalette (result.getReference());
 topLevelComponent->repaint();
 ```
+
+Repainting the top-level component is enough: what the components below keep
+of their painting, such as a [texture cache](component-caching.md), is painted
+again with the new theme.
 
 A theme turns the palette roles into widget colors with a palette mapping
 (`theme->setPaletteMapping()`, which calls `theme->setPaletteColor()`); the
@@ -326,6 +460,11 @@ editor.setPalette (ThemePalette::fromString ("https://coolors.co/0b132b-1c2541-3
 editor.setPalette (std::nullopt);
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-styling_component-palettes_light.jpg#gh-light-mode-only" alt="The same widgets under the theme palette and under two component palettes" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-styling_component-palettes_dark.jpg#gh-dark-mode-only" alt="The same widgets under the theme palette and under two component palettes" width="640">
+</p>
+
 This is how several plugin editors in one process, which share the global theme,
 can each wear their own palette. `ApplicationTheme::getPalette (component)` returns
 the palette a component is drawn with, and `Component::findPalette()` the closest
@@ -342,9 +481,15 @@ available as `YUP_ICON_*` macros:
 ```cpp
 #include <yup_gui/themes/theme_v1/yup_ThemeVersion1_Icons.h>
 
-String iconText = YUP_ICON_GEAR;        // ⚙
-String checkmark = YUP_ICON_CIRCLE_CHECK; // ✅
+// The macros are UTF-8 literals, which a String only takes through fromUTF8
+String iconText  = String::fromUTF8 (YUP_ICON_GEAR);         // ⚙
+String checkmark = String::fromUTF8 (YUP_ICON_CIRCLE_CHECK); // ✅
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-styling_icons_light.jpg#gh-light-mode-only" alt="Some glyphs of the icon font" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-styling_icons_dark.jpg#gh-dark-mode-only" alt="Some glyphs of the icon font" width="640">
+</p>
 
 To draw an icon, obtain the theme's icon font and draw the glyph as text:
 
@@ -352,10 +497,11 @@ To draw an icon, obtain the theme's icon font and draw the glyph as text:
 void MyButton::paint (Graphics& g) override
 {
     auto theme = ApplicationTheme::getGlobalTheme();
-    g.setFont (theme->getDefaultIconFont());
+    const auto iconFont = theme->getDefaultIconFont().withHeight (16.0f);
+
     g.setFillColor (findColor (TextButton::Style::textColorId)
                         .value_or (Colors::white));
-    g.drawText (YUP_ICON_GEAR, getLocalBounds(), Justification::centred);
+    g.fillFittedText (String::fromUTF8 (YUP_ICON_GEAR), iconFont, getLocalBounds(), Justification::center);
 }
 ```
 
@@ -378,22 +524,21 @@ public:
         button.setBounds (getLocalBounds().reduced (20));
     }
 
-private:
-    TextButton button;
-
     static inline auto kCustomStyle = ComponentStyle::createStyle<TextButton> (
         [] (Graphics& g, const ApplicationTheme& theme, const TextButton& b)
         {
             auto bgColor = b.findColor (TextButton::Style::backgroundColorId)
-                               .value_or (Colors::darkSlateBlue);
+                               .value_or (Colors::darkslateblue);
 
             g.setFillColor (bgColor);
-            g.fillRoundedRectangle (b.getLocalBounds(), 12.0f);
+            g.fillRoundedRect (b.getLocalBounds(), 12.0f);
 
-            g.setFont (theme.getDefaultFont());
             g.setFillColor (Colors::white);
-            g.drawText (b.getTitle(), b.getLocalBounds(), Justification::centred);
+            g.fillFittedText (b.getTitle(), theme.getDefaultFont().withHeight (14.0f), b.getLocalBounds(), Justification::center);
         });
+
+private:
+    TextButton button;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StyledPanel)
 };
@@ -408,5 +553,9 @@ ApplicationTheme::setGlobalTheme (std::move (theme));
 
 ## Related
 
-- [Component basics](component-basics.md) — `setColor`, `setMetric`, `setStyle` APIs
+- [How YUI fits together](yui/architecture.md) - how properties, stylesheets,
+  drawings and bindings relate
+- [Stylesheets](yui/styles.md) - CSS-like rules setting properties on any
+  component tree
+- [Component basics](component-basics.md) — `setColor`, `setProperty`, `setStyle` APIs
 - [Component effects (shaders)](component-effects.md)

@@ -969,6 +969,40 @@ inline void batchTransformPoints (float* xs, float* ys, int numPoints, const Aff
     AffineTransformOperations::transformPoints (xs, ys, numPoints, transform.getScaleX(), transform.getShearX(), transform.getTranslateX(), transform.getShearY(), transform.getScaleY(), transform.getTranslateY());
 }
 
+//==============================================================================
+#ifndef DOXYGEN
+
+template <>
+struct VariantConverter<AffineTransform>
+{
+    static AffineTransform fromVar (const var& v)
+    {
+        const auto* values = v.getArray();
+
+        if (values == nullptr || values->size() < 6)
+            return {};
+
+        return { static_cast<float> (values->getReference (0)),
+                 static_cast<float> (values->getReference (1)),
+                 static_cast<float> (values->getReference (2)),
+                 static_cast<float> (values->getReference (3)),
+                 static_cast<float> (values->getReference (4)),
+                 static_cast<float> (values->getReference (5)) };
+    }
+
+    static var toVar (const AffineTransform& transform)
+    {
+        return var (Array<var> { static_cast<double> (transform.getScaleX()),
+                                 static_cast<double> (transform.getShearX()),
+                                 static_cast<double> (transform.getTranslateX()),
+                                 static_cast<double> (transform.getShearY()),
+                                 static_cast<double> (transform.getScaleY()),
+                                 static_cast<double> (transform.getTranslateY()) });
+    }
+};
+
+#endif // DOXYGEN
+
 } // namespace yup
 
 #ifndef DOXYGEN
@@ -988,4 +1022,4 @@ struct tuple_element<I, yup::AffineTransform>
 };
 
 } // namespace std
-#endif
+#endif // DOXYGEN

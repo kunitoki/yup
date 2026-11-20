@@ -56,7 +56,61 @@ Rectangle<float> tabBarSpan (Rectangle<float> area, float start, float length, b
                     : Rectangle<float> (start, area.getY(), length, area.getHeight());
 }
 
+struct TabBarIds
+{
+    static inline const Identifier orientation { "orientation" };
+    static inline const Identifier variant { "variant" };
+    static inline const Identifier layout { "layout" };
+    static inline const Identifier overflow { "overflow" };
+    static inline const Identifier flipped { "flipped" };
+    static inline const Identifier reorderable { "reorderable" };
+    static inline const Identifier overflowText { "overflowText" };
+    static inline const Identifier animationDuration { "animationDuration" };
+    static inline const Identifier selectedTab { "selectedTab" };
+};
+
 } // namespace
+
+//==============================================================================
+const ComponentTypeInfo& TabBar::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<TabBar> (Identifier ("TabBar"))
+                                 .color ("trackColor", Style::trackColorId)
+                                 .color ("indicatorColor", Style::indicatorColorId)
+                                 .color ("underlineColor", Style::underlineColorId)
+                                 .color ("focusOutlineColor", Style::focusOutlineColorId)
+                                 .enumeration (TabBarIds::orientation, { "horizontal", "vertical" }, &TabBar::getOrientation, &TabBar::setOrientation, "The direction the tabs are laid out in.")
+                                 .enumeration (TabBarIds::variant, { "pill", "underline" }, &TabBar::getVariant, &TabBar::setVariant, "How the selected tab is marked.")
+                                 .enumeration (TabBarIds::layout, { "natural", "fill" }, &TabBar::getLayout, &TabBar::setLayout, "How the length of the bar is shared between tabs.")
+                                 .enumeration (TabBarIds::overflow, { "menu", "scroll", "shrink" }, &TabBar::getOverflow, &TabBar::setOverflow, "What happens to tabs that do not fit in the bar.")
+                                 .property (TabBarIds::flipped, &TabBar::isFlipped, &TabBar::setFlipped, false, "Whether the underline sits on the opposite edge.")
+                                 .property (TabBarIds::reorderable, &TabBar::isReorderable, &TabBar::setReorderable, false, "Whether the user can drag tabs to reorder them.")
+                                 .property (TabBarIds::overflowText, &TabBar::getOverflowText, &TabBar::setOverflowText, String ("More"), "The text shown by the overflow button.")
+                                 .property (TabBarIds::animationDuration, &TabBar::getAnimationDuration, &TabBar::setAnimationDuration, 0.18, "How long tabs and the indicator take to slide, in seconds.")
+                                 .property (
+                                     TabBarIds::selectedTab,
+                                     [] (const TabBar& c) { return c.getSelectedTabId().toString(); },
+                                     [] (TabBar& c, const String& v) { c.setSelectedTab (v.isEmpty() ? Identifier() : Identifier (v)); },
+                                     String(),
+                                     "The id of the selected tab.")
+                                 .signal (ComponentSignal {
+                                     .name = Identifier ("onSelectionChanged"),
+                                     .connect = [] (Component& component, ComponentSignal::Handler handler)
+                                     {
+                                         if (auto* bar = dynamic_cast<TabBar*> (&component))
+                                         {
+                                             bar->onSelectionChanged = [handler = std::move (handler)] (const Identifier& tabId)
+                                             {
+                                                 handler ({ var (tabId.toString()) });
+                                             };
+                                         }
+                                     },
+                                     .description = "Emitted with the selected tab id when the selection changes.",
+                                     .arguments = { { Identifier ("tab"), ComponentProperty::Type::string } } })
+                                 .build();
+
+    return info;
+}
 
 //==============================================================================
 Rectangle<float> TabBar::Motion::getCurrent() const
@@ -83,6 +137,11 @@ void TabBar::Motion::retarget (Rectangle<float> target, bool animate)
 }
 
 //==============================================================================
+TabBar::TabBar()
+    : TabBar (StringRef {})
+{
+}
+
 TabBar::TabBar (StringRef componentID)
     : Component (componentID)
 {
@@ -298,6 +357,7 @@ void TabBar::setOrientation (Orientation newOrientation)
         tab.button->updateLayout();
 
     overflowTabButton->updateLayout();
+    notifyPropertyChanged (TabBarIds::orientation);
     updateLayout (false, true);
 }
 
@@ -307,6 +367,7 @@ void TabBar::setVariant (Variant newVariant)
         return;
 
     variant = newVariant;
+    notifyPropertyChanged (TabBarIds::variant);
     updateLayout (false, true);
 }
 
@@ -316,6 +377,7 @@ void TabBar::setLayout (Layout newLayout)
         return;
 
     layout = newLayout;
+    notifyPropertyChanged (TabBarIds::layout);
     updateLayout (true, true);
 }
 
@@ -326,6 +388,7 @@ void TabBar::setOverflow (Overflow newOverflow)
 
     overflow = newOverflow;
     scrollOffset = 0.0f;
+    notifyPropertyChanged (TabBarIds::overflow);
     updateLayout (true, true);
 }
 
@@ -335,12 +398,17 @@ void TabBar::setFlipped (bool shouldBeFlipped)
         return;
 
     flipped = shouldBeFlipped;
+    notifyPropertyChanged (TabBarIds::flipped);
     repaint();
 }
 
 void TabBar::setReorderable (bool shouldBeReorderable)
 {
+    if (reorderable == shouldBeReorderable)
+        return;
+
     reorderable = shouldBeReorderable;
+    notifyPropertyChanged (TabBarIds::reorderable);
 }
 
 void TabBar::setOverflowText (const String& newText)
@@ -349,12 +417,18 @@ void TabBar::setOverflowText (const String& newText)
         return;
 
     overflowText = newText;
+    notifyPropertyChanged (TabBarIds::overflowText);
     updateLayout (true, false);
 }
 
 void TabBar::setAnimationDuration (double newDurationSeconds)
 {
-    animationDuration = jmax (0.0, newDurationSeconds);
+    const auto clamped = jmax (0.0, newDurationSeconds);
+    if (approximatelyEqual (animationDuration, clamped))
+        return;
+
+    animationDuration = clamped;
+    notifyPropertyChanged (TabBarIds::animationDuration);
 }
 
 //==============================================================================
@@ -828,6 +902,8 @@ bool TabBar::isDragging (const TabButton& button) const noexcept
 //==============================================================================
 void TabBar::notifySelectionChanged (NotificationType notification)
 {
+    notifyPropertyChanged (TabBarIds::selectedTab);
+
     const auto tabId = selectedTabId;
 
     const BailOutChecker checker (this);

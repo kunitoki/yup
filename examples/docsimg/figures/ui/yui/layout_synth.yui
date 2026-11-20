@@ -1,0 +1,30 @@
+// size: 480 210
+tokens {
+    property spacing: number = 8;
+}
+
+Column {
+    padding: "12 16";
+    gap: spacing;
+
+    Row {
+        id: header;
+        preferredHeight: 36;
+        gap: spacing;
+
+        Label      { text: "SYNTH"; flexGrow: 1; }
+        TextButton { text: "Init"; preferredWidth: 72; }
+    }
+
+    Grid {
+        columns: "repeat(4, minmax(72px, 1fr))";
+        rows: 1;
+        gap: spacing;
+        flexGrow: 1;
+
+        Slider { id: cutoff; sliderType: rotaryVerticalDrag; }
+        Slider { id: res;    sliderType: rotaryVerticalDrag; }
+        Slider { id: env;    sliderType: rotaryVerticalDrag; }
+        Slider { id: drive;  sliderType: rotaryVerticalDrag; }
+    }
+}

@@ -298,6 +298,22 @@ public:
     ListBoxModel* getModel() const noexcept;
 
     //==============================================================================
+    /** Shows a plain list of texts, one row each.
+
+        A model owned by the list is installed, replacing any model set before, so the rows can be
+        filled without writing one: this is what the `items` property of `.yui` sets.
+
+        @param newItems  The text of each row, in order
+    */
+    void setItems (const StringArray& newItems);
+
+    /** Returns the texts shown by @ref setItems.
+
+        @return The texts of the rows, or an empty array when another model is set
+    */
+    StringArray getItems() const;
+
+    //==============================================================================
     /** Sets the selection mode.
 
         @param mode  The selection mode to use
@@ -769,16 +785,22 @@ public:
     /** Style identifiers for theming. */
     struct Style
     {
-        static inline const Identifier backgroundColorId { "listBoxBackground" };
-        static inline const Identifier outlineColorId { "listBoxOutline" };
-        static inline const Identifier rowBackgroundColorId { "rowBackground" };
-        static inline const Identifier selectedRowBackgroundColorId { "selectedRowBackground" };
-        static inline const Identifier hoveredRowBackgroundColorId { "hoveredRowBackground" };
-        static inline const Identifier refreshIndicatorColorId { "listBoxRefreshIndicator" };
+        static const Identifier backgroundColorId;            /**< The background color of the list box */
+        static const Identifier outlineColorId;               /**< The outline color of the list box */
+        static const Identifier rowBackgroundColorId;         /**< The background color of a row */
+        static const Identifier selectedRowBackgroundColorId; /**< The background color of a selected row */
+        static const Identifier hoveredRowBackgroundColorId;  /**< The background color of a hovered row */
+        static const Identifier refreshIndicatorColorId;      /**< The color of the refresh indicator */
 
-        /** Metric: the size of the pull-to-refresh indicator along the scroll axis. */
-        static inline const Identifier refreshIndicatorSizeId { "listBoxRefreshIndicatorSize" };
+        static const Identifier refreshIndicatorSizeId;       /**< The size of the refresh indicator */
     };
+
+    //==============================================================================
+    /** Returns the static type info describing the ListBox type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
     /** @internal */
@@ -860,7 +882,7 @@ private:
     void handleRowSelection (int rowIndex, bool shouldToggle, bool shouldExtend);
     void selectRange (int fromRow, int toRow);
     void navigateTo (int rowIndex, const KeyModifiers& modifiers);
-    void notifySelectionChanged();
+    void notifySelectionChanged (NotificationType notification = sendNotification);
     void updateHoveredRow (Point<float> position);
     void setHoveredRow (int newHoveredRow);
 
@@ -879,7 +901,10 @@ private:
     float getMinScrollOffset() const;
 
     //==============================================================================
+    struct ItemsModel;
+
     ListBoxModel* model = nullptr;
+    std::unique_ptr<ItemsModel> itemsModel;
     Orientation orientation = Orientation::vertical;
     SelectionMode selectionMode = SelectionMode::single;
 

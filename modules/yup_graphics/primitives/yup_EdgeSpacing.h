@@ -421,6 +421,38 @@ constexpr ValueType get (const EdgeSpacing<ValueType>& s) noexcept
 } // namespace yup
 
 #ifndef DOXYGEN
+
+namespace yup
+{
+
+/** Converts an EdgeSpacing to and from a var, as an array of left, top, right and bottom. */
+template <>
+struct VariantConverter<EdgeSpacing<float>>
+{
+    static EdgeSpacing<float> fromVar (const var& v)
+    {
+        const auto* values = v.getArray();
+
+        if (values == nullptr || values->size() < 4)
+            return {};
+
+        return { static_cast<float> (values->getReference (0)),
+                 static_cast<float> (values->getReference (1)),
+                 static_cast<float> (values->getReference (2)),
+                 static_cast<float> (values->getReference (3)) };
+    }
+
+    static var toVar (const EdgeSpacing<float>& spacing)
+    {
+        return var (Array<var> { static_cast<double> (spacing.getLeft()),
+                                 static_cast<double> (spacing.getTop()),
+                                 static_cast<double> (spacing.getRight()),
+                                 static_cast<double> (spacing.getBottom()) });
+    }
+};
+
+} // namespace yup
+
 namespace std
 {
 

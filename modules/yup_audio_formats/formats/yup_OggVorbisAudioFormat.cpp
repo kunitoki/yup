@@ -277,6 +277,7 @@ public:
     bool flush() override;
 
     bool isValid() const { return isOpen; }
+    void releaseOutputStream() noexcept { output.release(); }
 
 private:
     bool writePage (const ogg_page& page)
@@ -553,6 +554,7 @@ std::unique_ptr<AudioFormatWriter> OggVorbisAudioFormat::createWriterFor (Output
     if (writer->isValid())
         return writer;
 
+    writer->releaseOutputStream();
     return nullptr;
 }
 

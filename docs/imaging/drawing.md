@@ -12,6 +12,11 @@ g.drawImageAt (image, { x, y });        // natural size, top-left at the point
 g.drawImage (image, targetArea);         // scaled to fill a rectangle
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_image_light.jpg#gh-light-mode-only" alt="An image scaled into a square and stretched into a wide rectangle" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_image_dark.jpg#gh-dark-mode-only" alt="An image scaled into a square and stretched into a wide rectangle" width="400">
+</p>
+
 `drawImage` stretches the image to the target `Rectangle<float>`. To preserve
 aspect ratio, compute the target rectangle yourself (see the
 [Rectangle](../graphics/primitives.md#rectangle) helpers) or use a

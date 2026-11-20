@@ -101,29 +101,27 @@ std::unique_ptr<AudioFormatWriter> AudioFormatManager::createWriterFor (const Fi
                                                                         const StringPairArray& metadataValues,
                                                                         int qualityOptionIndex)
 {
-    // Try to create the output file
-    auto stream = file.createOutputStream();
-    if (stream == nullptr)
-        return nullptr;
-
-    // Try each format
     for (auto& format : formats)
     {
         if (! format->canHandleFile (file, AudioFormat::forWriting))
             continue;
 
-        if (auto writer = format->createWriterFor (stream.release(),
+        auto stream = file.createOutputStream();
+        if (stream == nullptr || ! stream->openedOk())
+            return nullptr;
+
+        stream->setPosition (0);
+        stream->truncate();
+
+        if (auto writer = format->createWriterFor (stream.get(),
                                                    sampleRate,
                                                    numChannels,
                                                    bitsPerSample,
                                                    metadataValues,
                                                    qualityOptionIndex))
         {
+            stream.release();
             return writer;
-        }
-        else
-        {
-            stream = file.createOutputStream();
         }
     }
 

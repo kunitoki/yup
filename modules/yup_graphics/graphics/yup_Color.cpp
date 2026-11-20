@@ -803,6 +803,24 @@ Color& Color::mixWith (Color other, float amount, ColorSpace space) noexcept
         return *this;
     }
 
+    if (space == ColorSpace::LinearRGB)
+    {
+        const auto linearA = srgbToLinear (*this);
+        const auto linearB = srgbToLinear (other);
+        const double t = static_cast<double> (clamped);
+
+        const float outA = getAlphaFloat() + (other.getAlphaFloat() - getAlphaFloat()) * clamped;
+        const float outR = static_cast<float> (compand (linearA[0] + (linearB[0] - linearA[0]) * t));
+        const float outG = static_cast<float> (compand (linearA[1] + (linearB[1] - linearA[1]) * t));
+        const float outB = static_cast<float> (compand (linearA[2] + (linearB[2] - linearA[2]) * t));
+
+        a = normalizedToComponent (outA);
+        r = normalizedToComponent (outR);
+        g = normalizedToComponent (outG);
+        b = normalizedToComponent (outB);
+        return *this;
+    }
+
     const auto mixed = spectralMix (srgbToLinear (*this), srgbToLinear (other), static_cast<double> (clamped));
     const float alpha = getAlphaFloat() + (other.getAlphaFloat() - getAlphaFloat()) * clamped;
 

@@ -442,6 +442,7 @@ private:                                         \
 
 //==============================================================================
 #if YUP_ANDROID && ! defined(DOXYGEN)
+#undef YUP_MODAL_LOOPS_PERMITTED
 #define YUP_MODAL_LOOPS_PERMITTED 0
 #elif ! defined(YUP_MODAL_LOOPS_PERMITTED)
 /** Some operating environments don't provide a modal loop mechanism, so this flag can be

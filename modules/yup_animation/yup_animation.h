@@ -54,7 +54,6 @@
 #include <algorithm>
 
 //==============================================================================
-#include "core/yup_AnimationEasing.h"
 #include "core/yup_AnimationProperty.h"
 #include "core/yup_AnimationTransform.h"
 #include "model/yup_AnimationPathData.h"

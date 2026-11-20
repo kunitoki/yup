@@ -929,4 +929,50 @@ struct PyTextEditor : PyComponent<Base>
     }
 };
 
+// ============================================================================================
+
+/** Trampoline for BindingProvider, so a Python subclass can be the model of a `.yui` document.
+
+    A provider is never owned by the document it is set on, so it needs no self life support:
+    YuiDocument.setModel keeps the Python object alive instead.
+*/
+template <class Base = yup::BindingProvider>
+struct PyBindingProvider : Base
+{
+    using Base::Base;
+
+    // Protected in BindingProvider, and what a Python subclass reports its changes with.
+    using Base::notifyValueChanged;
+
+    std::vector<yup::BindingProvider::Property> getProperties() const override
+    {
+        PYBIND11_OVERRIDE_PURE (std::vector<yup::BindingProvider::Property>, Base, getProperties);
+    }
+
+    std::optional<yup::BindingProvider::Property> findProperty (const yup::Identifier& name) const override
+    {
+        PYBIND11_OVERRIDE (std::optional<yup::BindingProvider::Property>, Base, findProperty, name);
+    }
+
+    yup::var getValue (const yup::Identifier& name) const override
+    {
+        PYBIND11_OVERRIDE_PURE (yup::var, Base, getValue, name);
+    }
+
+    void setValue (const yup::Identifier& name, const yup::var& value) override
+    {
+        PYBIND11_OVERRIDE_PURE (void, Base, setValue, name, value);
+    }
+
+    void beginGesture (const yup::Identifier& name) override
+    {
+        PYBIND11_OVERRIDE (void, Base, beginGesture, name);
+    }
+
+    void endGesture (const yup::Identifier& name) override
+    {
+        PYBIND11_OVERRIDE (void, Base, endGesture, name);
+    }
+};
+
 } // namespace yup::Bindings

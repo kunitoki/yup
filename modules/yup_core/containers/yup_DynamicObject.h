@@ -149,4 +149,11 @@ private:
     YUP_LEAK_DETECTOR (DynamicObject)
 };
 
+//==============================================================================
+// Defined here because the cast needs DynamicObject to be complete, the flag is resolved once on construction.
+inline DynamicObject* var::getDynamicObject() const noexcept
+{
+    return (flags & dynamicObjectFlag) != 0 ? static_cast<DynamicObject*> (value.objectValue) : nullptr;
+}
+
 } // namespace yup

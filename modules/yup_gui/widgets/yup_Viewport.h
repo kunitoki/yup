@@ -45,8 +45,15 @@ class YUP_API Viewport : public Component,
                          private ComponentListener
 {
 public:
+    //==============================================================================
     /** Creates an empty viewport with automatically hidden scrollbars. */
     Viewport();
+
+    /** Creates an empty viewport with automatically hidden scrollbars.
+    
+        @param ComponentID  The ID to assign to this viewport component.
+    */
+    explicit Viewport (StringRef ComponentID);
 
     /** Removes the viewed component and any registered listeners. */
     ~Viewport() override;
@@ -87,6 +94,9 @@ public:
     */
     void setScrollStep (float pixels);
 
+    /** Returns the wheel distance, in pixels, for each unit of wheel movement. */
+    float getScrollStep() const noexcept { return scrollStep; }
+
     /** Chooses which scrollbars may appear when the content exceeds the visible area.
 
         Both scrollbars are enabled by default and appear only when needed. A hidden scrollbar
@@ -108,9 +118,19 @@ public:
     ScrollBar& getHorizontalScrollBar() noexcept { return horizontalScrollBar; }
 
     //==============================================================================
+    /** Returns the type info describing the properties of this class. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    //==============================================================================
+    /** @internal */
     void resized() override;
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+    /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds) override;
+    /** @internal */
     bool mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
+    /** @internal */
     void gesturePan (const GestureEvent& event) override;
 
 private:

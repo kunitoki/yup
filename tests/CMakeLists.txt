@@ -60,6 +60,7 @@ set (target_console OFF)
 set (target_gtest_modules "")
 set (target_modules
     yup_core
+    yup_expression
     yup_simd
     yup_audio_basics
     yup_audio_devices
@@ -201,6 +202,24 @@ if (YUP_PLATFORM_MAC AND "yup_python" IN_LIST target_modules)
             ${python_standard_library})
 
     list (APPEND target_modules "${target_name}_python_stdlib_binary")
+endif()
+
+if ("yup_gui" IN_LIST target_modules)
+    set (yui_resources_dir "${CMAKE_CURRENT_LIST_DIR}/data/yui")
+
+    yup_add_yui_resources (YuiTestResources
+        BASE_DIR "${yui_resources_dir}"
+        FILES
+            "${yui_resources_dir}/ui.yui"
+            "${yui_resources_dir}/parts/style.yui")
+
+    yup_add_yui_resources (yui-nested-resources
+        BASE_DIR "${yui_resources_dir}"
+        FILES
+            "${yui_resources_dir}/parts/panel.yui"
+            "${yui_resources_dir}/parts/style.yui")
+
+    list (APPEND target_modules YuiTestResources yui-nested-resources)
 endif()
 
 # ==== Shared runtime: the linked modules are compiled once into a static library,

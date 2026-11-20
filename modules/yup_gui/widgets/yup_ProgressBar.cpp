@@ -22,11 +22,42 @@
 namespace yup
 {
 
+namespace
+{
+
+struct ProgressBarIds
+{
+    static inline const Identifier progress { "progress" };
+    static inline const Identifier indeterminate { "indeterminate" };
+};
+
+} // namespace
+
 //==============================================================================
 const Identifier ProgressBar::Style::backgroundColorId { "progressBarBackground" };
 const Identifier ProgressBar::Style::foregroundColorId { "progressBarForeground" };
+const Identifier ProgressBar::Style::cornerRadiusId { "progressBarCornerRadius" };
 
 //==============================================================================
+const ComponentTypeInfo& ProgressBar::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<ProgressBar> (Identifier ("ProgressBar"))
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("foregroundColor", Style::foregroundColorId)
+                                 .number ("cornerRadius", Style::cornerRadiusId, {}, "The corner radius, unset for a pill.")
+                                 .property (ProgressBarIds::progress, &ProgressBar::getProgress, [] (ProgressBar& p, double v) { p.setProgress (v); })
+                                 .readOnly (ProgressBarIds::indeterminate, &ProgressBar::isIndeterminate)
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
+ProgressBar::ProgressBar()
+    : ProgressBar (StringRef {})
+{
+}
+
 ProgressBar::ProgressBar (StringRef componentID)
     : Component (componentID)
 {
@@ -34,17 +65,17 @@ ProgressBar::ProgressBar (StringRef componentID)
     lastAnimationTime = Time::getCurrentTime();
 }
 
-ProgressBar::~ProgressBar()
-{
-}
+ProgressBar::~ProgressBar() = default;
 
 //==============================================================================
 void ProgressBar::setProgress (double newProgress, NotificationType notification)
 {
+    const bool wasIndeterminate = indeterminate.get();
+    const double oldProgress = currentProgress.get();
+
     // Check if entering indeterminate mode
     if (newProgress < 0.0)
     {
-        const bool wasIndeterminate = indeterminate.get();
         indeterminate.set (true);
         currentProgress.set (-1.0);
 
@@ -54,21 +85,51 @@ void ProgressBar::setProgress (double newProgress, NotificationType notification
             lastAnimationTime = Time::getCurrentTime();
         }
 
+        const BailOutChecker bailOutChecker (this);
+
+        if (! approximatelyEqual (oldProgress, -1.0))
+        {
+            notifyPropertyChanged (ProgressBarIds::progress);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
+        if (! wasIndeterminate)
+        {
+            notifyPropertyChanged (ProgressBarIds::indeterminate);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
         updateProgress (-1.0, notification);
         return;
     }
 
     // Normal progress mode - clamp to valid range
     newProgress = jlimit (0.0, 1.0, newProgress);
-
-    const bool wasIndeterminate = indeterminate.get();
     indeterminate.set (false);
-
-    const double oldProgress = currentProgress.get();
     currentProgress.set (newProgress);
 
-    if (wasIndeterminate || ! approximatelyEqual (oldProgress, newProgress))
+    const bool progressDidChange = ! approximatelyEqual (oldProgress, newProgress);
+
+    if (wasIndeterminate || progressDidChange)
     {
+        const BailOutChecker bailOutChecker (this);
+
+        if (progressDidChange)
+        {
+            notifyPropertyChanged (ProgressBarIds::progress);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
+        if (wasIndeterminate)
+        {
+            notifyPropertyChanged (ProgressBarIds::indeterminate);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
         updateProgress (newProgress, notification);
     }
 }

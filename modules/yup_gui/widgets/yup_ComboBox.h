@@ -36,10 +36,14 @@ class YUP_API ComboBox : public Component
 public:
     //==============================================================================
     /** Creates a ComboBox.
+    */
+    ComboBox();
+
+    /** Creates a ComboBox.
 
         @param componentID    The component identifier for this combo box
     */
-    ComboBox (StringRef componentID = {});
+    explicit ComboBox (StringRef componentID);
 
     //==============================================================================
     /** Destructor. */
@@ -62,6 +66,19 @@ public:
 
     /** Adds a separator line to the drop-down list. */
     void addSeparator();
+
+    /** Replaces every item with the given texts, numbered from 1 in the order they are given.
+
+        A selection whose ID is still in range is kept, otherwise the selection is cleared and
+        reported.
+
+        @param newItems      The texts of the items
+        @param notification  Whether to report a cleared selection
+    */
+    void setItems (const StringArray& newItems, NotificationType notification = sendNotification);
+
+    /** Returns the texts of the items, separators excluded. */
+    StringArray getItems() const;
 
     /** Removes all items from the list. */
     void clear();
@@ -153,17 +170,30 @@ public:
     std::function<void()> onSelectedItemChanged;
 
     //==============================================================================
+    /** Returns true if the popup menu is currently shown. */
+    bool isPopupShown() const;
+
+    //==============================================================================
+    /** Style identifiers for customizing the appearance of the ComboBox. */
     struct Style
     {
-        static const Identifier backgroundColorId;
-        static const Identifier textColorId;
-        static const Identifier borderColorId;
-        static const Identifier arrowColorId;
-        static const Identifier focusedBorderColorId;
+        static const Identifier backgroundColorId;     /**< Background color */
+        static const Identifier textColorId;           /**< Text color */
+        static const Identifier borderColorId;         /**< Border color */
+        static const Identifier arrowColorId;          /**< Arrow color */
+        static const Identifier focusedBorderColorId;  /**< Border color when focused */
+
+        static const Identifier cornerRadiusId;        /**< Corner radius, 4 by default */
+        static const Identifier outlineWidthId;        /**< Border width, 1 by default */
+        static const Identifier focusedOutlineWidthId; /**< Border width with focus or the popup open, 2 by default */
     };
 
-    /** */
-    bool isPopupShown() const;
+    //==============================================================================
+    /** Returns the static type info describing the ComboBox type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
     /** @internal */
@@ -191,6 +221,7 @@ private:
     void showPopup();
     void hidePopup();
     void updateDisplayText();
+    void sendSelectionChanged (NotificationType notification);
 
     Array<ComboBoxItem> items;
     int selectedItemId = 0;

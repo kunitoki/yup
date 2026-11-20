@@ -29,6 +29,11 @@ tree.setRootItemVisible (false);
 addAndMakeVisible (tree);
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/tree-view_tree_light.jpg#gh-light-mode-only" alt="A tree view with an open and selected item, its two sub-items and two closed items" width="400">
+  <img class="dark-only rounded" src="../_static/images/ui/tree-view_tree_dark.jpg#gh-dark-mode-only" alt="A tree view with an open and selected item, its two sub-items and two closed items" width="400">
+</p>
+
 ## Items
 
 An item owns its sub-items (`addSubItem`, `removeSubItem`, `moveSubItem`,

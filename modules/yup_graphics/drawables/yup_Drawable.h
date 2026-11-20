@@ -110,21 +110,30 @@ private:
                        std::optional<Array<float>> inheritedStrokeDashArray = std::nullopt,
                        float inheritedStrokeDashOffset = 0.0f,
                        int recursionDepth = 0);
-    void paintMarker (Graphics& g, const SVGData& data, const SVGMarker& marker, float strokeWidth, Point<float> position, float tangentAngle, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth);
+    void paintElementContent (Graphics& g,
+                              const SVGData& data,
+                              const SVGElement& element,
+                              bool hasParentFillEnabled,
+                              bool hasParentStrokeEnabled,
+                              Color currentColor,
+                              std::unordered_set<const SVGElement*>& visitingElements,
+                              const std::optional<Array<float>>& currentStrokeDashArray,
+                              float currentStrokeDashOffset,
+                              int recursionDepth);
+    bool paintThroughFilter (Graphics& g, const SVGData& data, const SVGElement& element, const SVGFilter& filter, const std::function<void (Graphics&)>& paintContent);
+    void paintMarker (Graphics& g, const SVGData& data, const SVGMarker& marker, float strokeWidth, const PathMarkers::Placement& placement, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth);
     void paintPatternFill (Graphics& g, const SVGData& data, const Path& shape, const SVGElement& element, const SVGPattern& pattern, Color currentColor, std::unordered_set<const SVGElement*>& visitingElements, int recursionDepth);
     void paintDebugElement (Graphics& g, const SVGElement& element);
     void renderTextElement (Graphics& g, const SVGElement& element);
     void renderImageElement (Graphics& g, const SVGElement& element);
     Path createDashedPath (const Path& source, const Array<float>& dashArray, float dashOffset) const;
-    AffineTransform calculateTransformForTarget (const Rectangle<float>& sourceBounds,
-                                                 const Rectangle<float>& targetArea,
-                                                 Fitting fitting,
-                                                 Justification justification) const;
     Font resolveFont (const SVGElement& element) const;
-    ColorGradient createColorGradientFromSVG (const SVGGradient& gradient,
-                                              const Rectangle<float>* objectBounds = nullptr) const;
+
+    struct FilteredElements;
 
     SVGDocument::Ptr document;
+    std::shared_ptr<FilteredElements> filteredElements;
+    const SVGElement* instance = nullptr;
 };
 
 } // namespace yup

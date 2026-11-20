@@ -1,0 +1,29 @@
+// size: 560 190
+drawing Shapes {
+    let label: defaultFont.withHeight (12);
+
+    rect    { bounds: rect (20, 4, 88, 48); cornerRadius: 8; fill: palette.accent; }
+    ellipse { bounds: rect (148, 4, 88, 48); fill: palette.accent; }
+    circle  { center: point (320, 28); radius: 24; fill: palette.accent; }
+    arc     { center: point (448, 42); radius: 30; from: 180deg; to: 360deg; stroke: palette.accent; strokeWidth: 6; cap: round; }
+
+    line    { from: point (24, 84); to: point (104, 116); stroke: palette.accent; strokeWidth: 4; cap: round; }
+    path    { data: "M 152 120 C 173 59, 211 146, 232 85"; stroke: palette.accent; strokeWidth: 4; }
+    polygon { center: point (320, 100); sides: 6; radius: 24; fill: palette.accent; }
+    star    { center: point (448, 100); points: 5; innerRadius: 10; outerRadius: 24; fill: palette.accent; }
+
+    text { bounds: rect (0, 54, 128, 16);    text: "rect";    font: label; fill: palette.textMuted; }
+    text { bounds: rect (128, 54, 128, 16);  text: "ellipse"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (256, 54, 128, 16);  text: "circle";  font: label; fill: palette.textMuted; }
+    text { bounds: rect (384, 54, 128, 16);  text: "arc";     font: label; fill: palette.textMuted; }
+    text { bounds: rect (0, 126, 128, 16);   text: "line";    font: label; fill: palette.textMuted; }
+    text { bounds: rect (128, 126, 128, 16); text: "path";    font: label; fill: palette.textMuted; }
+    text { bounds: rect (256, 126, 128, 16); text: "polygon"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (384, 126, 128, 16); text: "star";    font: label; fill: palette.textMuted; }
+}
+
+style {
+    .shapes { drawing: Shapes; }
+}
+
+Component { class: shapes; }

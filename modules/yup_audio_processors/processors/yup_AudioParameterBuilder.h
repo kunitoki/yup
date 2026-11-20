@@ -128,8 +128,8 @@ public:
 
         A bypass parameter is a stepped 0..1 toggle where values >= 0.5 mean bypassed.
         When a processor owns one, plugin wrappers expose it as the host bypass
-        control and keep calling processBlock(), so the processor is responsible for
-        implementing a click-free, latency-compensated bypass.
+        control and call processBlockBypassed() instead of processBlock() while it is
+        engaged. Override processBlockBypassed() for a click-free, latency-compensated bypass.
     */
     AudioParameterBuilder& withBypass (bool shouldBeBypass);
 

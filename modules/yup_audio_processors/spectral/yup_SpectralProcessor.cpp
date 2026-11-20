@@ -96,7 +96,8 @@ void SpectralProcessor::setPlaybackConfiguration (float sampleRate, int samplesP
 
     AudioProcessorBase::setPlaybackConfiguration (sampleRate, samplesPerBlock);
 
-    prepareToPlay (SpectralSpec (sampleRate, samplesPerBlock));
+    const auto numChannels = jmax (busLayout.getNumAudioInputChannels(), busLayout.getNumAudioOutputChannels());
+    prepareToPlay (SpectralSpec (sampleRate, samplesPerBlock, numChannels));
 }
 
 } // namespace yup

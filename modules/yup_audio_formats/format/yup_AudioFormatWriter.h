@@ -164,20 +164,31 @@ public:
                         TimeSliceThread& backgroundThread,
                         int numSamplesToBuffer);
 
-        /** Destructor. */
+        /** Destructor.
+
+            Unregisters from the background thread and writes any data still queued on the
+            calling thread, so it never waits for the background thread to run.
+        */
         ~ThreadedWriter();
 
-        /** Returns true if there's any data still to be written. */
+        /** Returns true until writing finished and all queued data has been written. */
         bool isThreadRunning() const;
 
-        /** Writes some samples to the FIFO. */
+        /** Writes some samples to the FIFO.
+
+            @returns false if the FIFO is full, writing finished or the writer failed.
+        */
         bool write (const float* const* data, int numSamples);
 
-        /** Tells the thread to finish writing and then stop. */
+        /** Stops accepting new data and waits until the queued data has been written.
+
+            Returns immediately when the background thread is not running.
+        */
         void waitForThreadToFinish();
 
     private:
         class ThreadedWriterHelper;
+        TimeSliceThread& timeSliceThread;
         std::unique_ptr<ThreadedWriterHelper> helper;
     };
 

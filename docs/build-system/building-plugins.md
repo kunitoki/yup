@@ -2,6 +2,14 @@
 
 This guide explains how to create audio plugins using the YUP framework. YUP supports multiple plugin formats including CLAP, VST3, and more.
 
+<p align="center">
+  <img class="rounded" src="../_static/images/yup_retrace_plugin.jpg" alt="RETRACE, the spectral synthesizer of the plugin example" width="640">
+</p>
+
+```{tip}
+Starting a new project? Create it from the [YUP template](https://github.com/kunitoki/yup-template), which builds an application and an audio plugin from one source tree with tests, packaging and CI already set up - see [Getting Started](../getting-started/index.md).
+```
+
 ## Basic Plugin Structure
 
 A basic YUP plugin consists of the following components:
@@ -19,6 +27,9 @@ class MyPluginProcessor : public yup::AudioProcessor
 {
 public:
     MyPluginProcessor()
+        : yup::AudioProcessor ("MyPlugin",
+                               yup::AudioBusLayout ({ yup::AudioBus ("main", yup::AudioBus::Audio, yup::AudioBus::Input, 2) },
+                                                    { yup::AudioBus ("main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
     {
         // Add parameters
         addParameter (gainParameter = yup::AudioParameterBuilder{}
@@ -29,11 +40,11 @@ public:
             .build());
     }
 
-    void prepareToPlay (double sampleRate, int samplesPerBlock) override
+    void prepareToPlay (const yup::AudioSpec& spec) override
     {
         // Initialize processing resources
 
-        gain = yup::AudioParameterHandle (*gainParameter, sampleRate);
+        gain = yup::AudioParameterHandle (*gainParameter, spec.sampleRate);
     }
 
     void releaseResources() override
@@ -41,8 +52,10 @@ public:
         // Clean up resources
     }
 
-    void processBlock (yup::AudioBuffer<float>& audioBuffer, yup::MidiBuffer& midiMessages) override
+    void processBlock (yup::AudioProcessContext<float>& context) override
     {
+        auto& audioBuffer = context.audio;
+
         if (gain.updateNextAudioBlock())
         {
             float currentGain = gain.getCurrentValue();
@@ -56,6 +69,13 @@ public:
         }
     }
 
+    // A single preset
+    int getCurrentPreset() const noexcept override { return 0; }
+    void setCurrentPreset (int index) noexcept override {}
+    int getNumPresets() const override { return 1; }
+    yup::String getPresetName (int index) const override { return "Default"; }
+    void setPresetName (int index, yup::StringRef newName) override {}
+
     bool hasEditor() const override { return true; }
     yup::AudioProcessorEditor* createEditor() override;
 
@@ -68,22 +88,26 @@ class MyPluginEditor : public yup::AudioProcessorEditor
 {
 public:
     MyPluginEditor (MyPluginProcessor& p)
-        : AudioProcessorEditor (&p)
-        , processor (p)
+        : processor (p)
     {
-        setSize (400, 300);
     }
+
+    // The wrapper gives the editor this size when it opens
+    bool isResizable() const override { return false; }
+    yup::Size<int> getPreferredSize() const override { return { 400, 300 }; }
 
     void paint (yup::Graphics& g) override
     {
-        g.fillAll (findColour (yup::ResizableWindow::backgroundColourId));
+        g.setFillColor (yup::ApplicationTheme::findComponentColor (*this, yup::DocumentWindow::Style::backgroundColorId)
+                            .value_or (yup::Colors::black));
+        g.fillAll();
     }
 
 private:
     MyPluginProcessor& processor;
 };
 
-yup::AudioProcessorEditor* MyPluginProcessor::createEditor() override
+yup::AudioProcessorEditor* MyPluginProcessor::createEditor()
 {
     return new MyPluginEditor (*this);
 }
@@ -429,6 +453,8 @@ and preset list are also readable as `retrace://` resources.
 
 ## Additional Resources
 
-- [CMake API Reference](CMake%20API.md) - Full reference of all CMake options and functions
+- [CMake API Reference](cmake-api.md) - Full reference of all CMake options and functions
+- [Audio processors](../audio/processors.md) - The processor model in depth: buses, parameters, state and editors
+- [Writing plugins](../audio/plugin-client.md) - How the format wrappers behave in hosts
 - [CLAP Documentation](https://cleveraudio.org/)
 - [VST3 Documentation](https://developer.steinberg.help/hub/display/VST)

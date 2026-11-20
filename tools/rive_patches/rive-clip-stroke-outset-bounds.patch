@@ -1,0 +1,20 @@
+A stroked or feathered clip covers its outset bounds, not the path's own bounds.
+
+- source/renderer/rive_renderer.cpp: clipPathImpl: test the path bounds outset by the stroke / feather for emptiness, so a straight line (no area of its own) clips to its stroke instead of clipping everything away. Image strokes of lines on backends without image paints for paths went through this clip and then asserted in clipAndPushDraw
+
+diff --git a/source/renderer/rive_renderer.cpp b/source/renderer/rive_renderer.cpp
+index f33b8c75c5a98aee86c116053deece96ae4748a3..150b23aff783db32d65e56aa12e79b4866651459 100644
+--- a/source/renderer/rive_renderer.cpp
++++ b/source/renderer/rive_renderer.cpp
+@@ -638,7 +638,10 @@ void RiveRenderer::clipPathImpl(
+ {
+   RIVE_PROF_SCOPE_L(3)
+   auto& renderState = m_renderStateStack.back();
+-  if (path->getBounds().isEmptyOrNaN())
++  const float boundsOutset =
++      RiveRenderPath::calculateBoundsOutset(stroke, feather);
++  if (path->getRawPath().empty() ||
++      path->getBounds().outset(boundsOutset, boundsOutset).isEmptyOrNaN())
+   {
+     if (boundsOut != nullptr)
+     {

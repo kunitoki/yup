@@ -24,6 +24,7 @@
 #include "yup_AudioFormatTools.h"
 
 #include <cmath>
+#include <cstring>
 #include <gtest/gtest.h>
 
 using namespace yup;
@@ -160,5 +161,49 @@ TEST_F (AppleCoreAudioFormatTests, WriteAndReadBackMemoryStream)
     const auto validation = validateAudioData (*reader);
     EXPECT_FALSE (validation.hasClippedSamples);
     EXPECT_FALSE (validation.hasExtremeValues);
+}
+
+TEST_F (AppleCoreAudioFormatTests, WritingExtensionsOnlyListAacContainers)
+{
+    const auto extensions = format->getFileExtensions (AudioFormat::forWriting);
+
+    EXPECT_TRUE (extensions.contains (".m4a"));
+    EXPECT_TRUE (extensions.contains (".caf"));
+    EXPECT_FALSE (extensions.contains (".aiff"));
+    EXPECT_FALSE (extensions.contains (".amr"));
+}
+
+TEST_F (AppleCoreAudioFormatTests, FileWriterPicksContainerFromExtension)
+{
+    const auto writeAndReadHeader = [this] (const String& extension)
+    {
+        auto file = File::createTempFile (extension);
+        auto stream = file.createOutputStream();
+
+        if (auto writer = format->createWriterFor (stream.get(), kTestSampleRate, kTestChannels, kTestBitsPerSample, {}, 0))
+        {
+            stream.release();
+
+            std::vector<float> left;
+            std::vector<float> right;
+            fillTestTone (left, right, kTestNumSamples, kTestSampleRate);
+
+            const float* channels[] = { left.data(), right.data() };
+            EXPECT_TRUE (writer->write (channels, kTestNumSamples));
+        }
+
+        MemoryBlock data;
+        file.loadFileAsData (data);
+        file.deleteFile();
+        return data;
+    };
+
+    const auto hasTagAt = [] (const MemoryBlock& data, size_t offset, const char* tag)
+    {
+        return data.getSize() >= offset + 4 && std::memcmp (static_cast<const char*> (data.getData()) + offset, tag, 4) == 0;
+    };
+
+    EXPECT_TRUE (hasTagAt (writeAndReadHeader (".m4a"), 4, "ftyp"));
+    EXPECT_TRUE (hasTagAt (writeAndReadHeader (".caf"), 0, "caff"));
 }
 #endif

@@ -461,30 +461,16 @@ void Font::setAxisValue (StringRef tagName, float value)
 
 Font Font::withAxisValue (int index, float value) const
 {
-    if (font == nullptr || ! isPositiveAndBelow (index, getNumAxis()))
-        return {};
-
-    auto axis = getAxisDescription (index);
-    if (! axis.has_value())
-        return {};
-
-    return Font (font->makeAtCoord ({ axisTagFromString (axis->tagName),
-                                      jlimit (axis->minimumValue, axis->maximumValue, value) }),
-                 height);
+    Font result (*this);
+    result.setAxisValue (index, value);
+    return result;
 }
 
 Font Font::withAxisValue (StringRef tagName, float value) const
 {
-    if (font == nullptr)
-        return {};
-
-    auto axis = getAxisDescription (tagName);
-    if (! axis.has_value())
-        return {};
-
-    return Font (font->makeAtCoord ({ axisTagFromString (tagName),
-                                      jlimit (axis->minimumValue, axis->maximumValue, value) }),
-                 height);
+    Font result (*this);
+    result.setAxisValue (tagName, value);
+    return result;
 }
 
 void Font::setAxisValues (std::initializer_list<AxisOption> axisOptions)
@@ -515,26 +501,9 @@ void Font::setAxisValues (std::initializer_list<AxisOption> axisOptions)
 
 Font Font::withAxisValues (std::initializer_list<AxisOption> axisOptions) const
 {
-    if (font == nullptr || axisOptions.size() == 0)
-        return {};
-
-    std::vector<rive::Font::Coord> coords;
-    coords.reserve (axisOptions.size());
-
-    for (const auto& option : axisOptions)
-    {
-        auto axis = getAxisDescription (StringRef (option.tagName));
-        if (! axis.has_value())
-            continue;
-
-        coords.push_back ({ axisTagFromString (option.tagName),
-                            jlimit (axis->minimumValue, axis->maximumValue, option.value) });
-    }
-
-    if (coords.empty())
-        return {};
-
-    return Font (font->makeAtCoords (coords), height);
+    Font result (*this);
+    result.setAxisValues (axisOptions);
+    return result;
 }
 
 void Font::resetAxisValue (int index)
@@ -589,7 +558,7 @@ void Font::resetAllAxisValues()
 Font Font::withFeature (Feature feature) const
 {
     if (font == nullptr)
-        return {};
+        return *this;
 
     std::vector<rive::Font::Feature> realFeatures;
     realFeatures.push_back (rive::Font::Feature { feature.tag, feature.value });
@@ -600,7 +569,7 @@ Font Font::withFeature (Feature feature) const
 Font Font::withFeatures (std::initializer_list<Feature> features) const
 {
     if (font == nullptr)
-        return {};
+        return *this;
 
     std::vector<rive::Font::Feature> realFeatures;
     realFeatures.reserve (features.size());
@@ -615,12 +584,12 @@ Font Font::withFeatures (std::initializer_list<Feature> features) const
 
 bool Font::operator== (const Font& other) const
 {
-    return font == other.font;
+    return font == other.font && exactlyEqual (height, other.height);
 }
 
 bool Font::operator!= (const Font& other) const
 {
-    return font != other.font;
+    return ! (*this == other);
 }
 
 //==============================================================================
@@ -628,6 +597,96 @@ bool Font::operator!= (const Font& other) const
 rive::rcp<rive::Font> Font::getFont() const
 {
     return font;
+}
+
+//==============================================================================
+
+namespace
+{
+
+struct FontTypefaceHolder;
+
+struct FontHolderRegistry
+{
+    std::mutex mutex;
+    std::unordered_map<const rive::Font*, FontTypefaceHolder*> holders;
+};
+
+const std::shared_ptr<FontHolderRegistry>& getFontHolderRegistry()
+{
+    static const auto registry = std::make_shared<FontHolderRegistry>();
+    return registry;
+}
+
+struct FontTypefaceHolder final : ReferenceCountedObject
+{
+    FontTypefaceHolder (rive::rcp<rive::Font> fontToHold, std::shared_ptr<FontHolderRegistry> registryToUse)
+        : font (std::move (fontToHold))
+        , registry (std::move (registryToUse))
+    {
+    }
+
+    ~FontTypefaceHolder() override
+    {
+        if (registry == nullptr || font == nullptr)
+            return;
+
+        const std::scoped_lock lock (registry->mutex);
+        if (const auto it = registry->holders.find (font.get()); it != registry->holders.end() && it->second == this)
+            registry->holders.erase (it);
+    }
+
+    rive::rcp<rive::Font> font;
+    std::shared_ptr<FontHolderRegistry> registry;
+};
+
+} // namespace
+
+Font VariantConverter<Font>::fromVar (const var& v)
+{
+    const auto* values = v.getArray();
+    if (values == nullptr || values->size() != 2)
+        return {};
+
+    const auto& heightVar = (*values)[1];
+    if (! (heightVar.isDouble() || heightVar.isInt() || heightVar.isInt64()))
+        return {};
+
+    const auto parsedHeight = static_cast<float> (heightVar);
+
+    if ((*values)[0].isVoid())
+        return Font().withHeight (parsedHeight);
+
+    if (const auto* holder = dynamic_cast<const FontTypefaceHolder*> ((*values)[0].getObject()))
+        return Font (holder->font, parsedHeight);
+
+    return {};
+}
+
+var VariantConverter<Font>::toVar (const Font& f)
+{
+    if (f.getFont() == nullptr)
+        return Array<var> { var(), static_cast<double> (f.getHeight()) };
+
+    const auto& registry = getFontHolderRegistry();
+    ReferenceCountedObjectPtr<FontTypefaceHolder> holder;
+
+    {
+        const std::scoped_lock lock (registry->mutex);
+        const auto* rawFont = f.getFont().get();
+
+        if (const auto it = registry->holders.find (rawFont); it != registry->holders.end() && it->second->getReferenceCount() > 0)
+        {
+            holder = it->second;
+        }
+        else
+        {
+            holder = new FontTypefaceHolder (f.getFont(), registry);
+            registry->holders[rawFont] = holder.get();
+        }
+    }
+
+    return Array<var> { var (holder.get()), static_cast<double> (f.getHeight()) };
 }
 
 } // namespace yup

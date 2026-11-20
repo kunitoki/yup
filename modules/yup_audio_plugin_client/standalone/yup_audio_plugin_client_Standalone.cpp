@@ -71,9 +71,6 @@ public:
         YUPApplication::getInstance()->systemRequestedQuit();
     }
 
-    /** Resizes the window to follow the content's preferred size, so an editor that
-        rescales itself grows or shrinks the window to fit it.
-    */
     void resizeToFitContent()
     {
         if (content == nullptr)

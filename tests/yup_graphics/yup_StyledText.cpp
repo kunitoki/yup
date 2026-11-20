@@ -320,91 +320,91 @@ TEST (StyledTextTests, SetWrapMultipleTimes)
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationLeft)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::left);
+    auto align = StyledText::toHorizontalAlign (Justification::left);
 
     EXPECT_EQ (StyledText::left, align);
 }
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationCenter)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::horizontalCenter);
+    auto align = StyledText::toHorizontalAlign (Justification::horizontalCenter);
 
     EXPECT_EQ (StyledText::center, align);
 }
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationRight)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::right);
+    auto align = StyledText::toHorizontalAlign (Justification::right);
 
     EXPECT_EQ (StyledText::right, align);
 }
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationCentered)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::center);
+    auto align = StyledText::toHorizontalAlign (Justification::center);
 
     EXPECT_EQ (StyledText::center, align);
 }
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationCenteredLeft)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::centerLeft);
+    auto align = StyledText::toHorizontalAlign (Justification::centerLeft);
 
     EXPECT_EQ (StyledText::left, align);
 }
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationCenteredRight)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::centerRight);
+    auto align = StyledText::toHorizontalAlign (Justification::centerRight);
 
     EXPECT_EQ (StyledText::right, align);
 }
 
 TEST (StyledTextTests, HorizontalAlignFromJustificationWithoutHorizontalFlagIsLeft)
 {
-    auto align = StyledText::horizontalAlignFromJustification (Justification::top);
+    auto align = StyledText::toHorizontalAlign (Justification::top);
 
     EXPECT_EQ (StyledText::left, align);
 }
 
 TEST (StyledTextTests, VerticalAlignFromJustificationTop)
 {
-    auto align = StyledText::verticalAlignFromJustification (Justification::top);
+    auto align = StyledText::toVerticalAlign (Justification::top);
 
     EXPECT_EQ (StyledText::top, align);
 }
 
 TEST (StyledTextTests, VerticalAlignFromJustificationMiddle)
 {
-    auto align = StyledText::verticalAlignFromJustification (Justification::verticalCenter);
+    auto align = StyledText::toVerticalAlign (Justification::verticalCenter);
 
     EXPECT_EQ (StyledText::middle, align);
 }
 
 TEST (StyledTextTests, VerticalAlignFromJustificationBottom)
 {
-    auto align = StyledText::verticalAlignFromJustification (Justification::bottom);
+    auto align = StyledText::toVerticalAlign (Justification::bottom);
 
     EXPECT_EQ (StyledText::bottom, align);
 }
 
 TEST (StyledTextTests, VerticalAlignFromJustificationCentered)
 {
-    auto align = StyledText::verticalAlignFromJustification (Justification::center);
+    auto align = StyledText::toVerticalAlign (Justification::center);
 
     EXPECT_EQ (StyledText::middle, align);
 }
 
 TEST (StyledTextTests, VerticalAlignFromJustificationCenteredTop)
 {
-    auto align = StyledText::verticalAlignFromJustification (Justification::centerTop);
+    auto align = StyledText::toVerticalAlign (Justification::centerTop);
 
     EXPECT_EQ (StyledText::top, align);
 }
 
 TEST (StyledTextTests, VerticalAlignFromJustificationCenteredBottom)
 {
-    auto align = StyledText::verticalAlignFromJustification (Justification::centerBottom);
+    auto align = StyledText::toVerticalAlign (Justification::centerBottom);
 
     EXPECT_EQ (StyledText::bottom, align);
 }
@@ -1737,3 +1737,63 @@ TEST_F (StyledTextLayoutTests, RepeatedColorGlyphsAreAllDrawnInColor)
     EXPECT_TRUE (first.getRenderStyles().empty());
     EXPECT_EQ (1, second.getNumColorGlyphs());
 }
+
+TEST_F (StyledTextLayoutTests, ClearAndAppendReusesDefaultRenderPathAndComputesLazyGlyphLookup)
+{
+    StyledText text;
+    shape (text, "hello");
+
+    ASSERT_EQ (1u, text.getRenderStyles().size());
+    const rive::RenderPath* firstPath = text.getRenderStyles()[0]->path.get();
+    ASSERT_NE (nullptr, firstPath);
+    EXPECT_TRUE (text.isValidCharacterIndex (0));
+    EXPECT_TRUE (text.isValidCharacterIndex (5));
+    EXPECT_FALSE (text.isValidCharacterIndex (6));
+
+    {
+        auto modifier = text.startUpdate();
+        modifier.clear();
+        modifier.appendText ("world!", loadStyledTextTestFont());
+    }
+
+    ASSERT_EQ (1u, text.getRenderStyles().size());
+    EXPECT_EQ (firstPath, text.getRenderStyles()[0]->path.get());
+    EXPECT_TRUE (text.isValidCharacterIndex (6));
+    EXPECT_FALSE (text.isValidCharacterIndex (7));
+
+    const auto startCaret = text.getCaretBounds (0);
+    const auto endCaret = text.getCaretBounds (6);
+    EXPECT_FALSE (startCaret.isEmpty());
+    EXPECT_GT (endCaret.getX(), startCaret.getX());
+}
+
+TEST_F (StyledTextLayoutTests, DetachesRenderPathWhenExternallyRetainedDuringClearOrUpdate)
+{
+    StyledText text;
+    shape (text, "hello");
+
+    ASSERT_EQ (1u, text.getRenderStyles().size());
+    rive::rcp<rive::RenderPath> inFlightClearPath = text.getRenderStyles()[0]->path;
+    ASSERT_NE (nullptr, inFlightClearPath.get());
+
+    {
+        auto modifier = text.startUpdate();
+        modifier.clear();
+        modifier.appendText ("resized", loadStyledTextTestFont());
+    }
+
+    ASSERT_EQ (1u, text.getRenderStyles().size());
+    EXPECT_NE (inFlightClearPath.get(), text.getRenderStyles()[0]->path.get());
+
+    rive::rcp<rive::RenderPath> inFlightUpdatePath = text.getRenderStyles()[0]->path;
+    ASSERT_NE (nullptr, inFlightUpdatePath.get());
+
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ 120.0f, 40.0f });
+    }
+
+    ASSERT_EQ (1u, text.getRenderStyles().size());
+    EXPECT_NE (inFlightUpdatePath.get(), text.getRenderStyles()[0]->path.get());
+}
+

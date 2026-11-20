@@ -1027,6 +1027,20 @@ public:
         };
         addRow ("Image", imageButton);
 
+        fillComboBox (patternCombo, animatedPatternNames);
+        bindComboBox (patternCombo, "Animated pattern", [this] (int id)
+        {
+            document.setProperty (paintNode, Ids::pattern, animatedPatternNames[id - 1]);
+        });
+        addRow ("Pattern", patternCombo);
+
+        setupSlider (speedSlider, -5.0, 5.0, 0.05, 1.0);
+        bindSlider (speedSlider, "Animation speed", [this] (double value)
+        {
+            document.setProperty (paintNode, Ids::speed, value);
+        });
+        addRow ("Speed", speedSlider);
+
         addImageSlider (imageXSlider, "X", -1000.0, 2000.0, 0.5, 0.0, Ids::x1);
         addImageSlider (imageYSlider, "Y", -1000.0, 2000.0, 0.5, 0.0, Ids::y1);
         addImageSlider (imageScaleSlider, "Scale", 0.01, 20.0, 0.01, 1.0, Ids::imageScale);
@@ -1098,14 +1112,18 @@ public:
         const bool visible = kind != "none";
         const bool gradient = isGradientKind (kind);
         const bool image = kind == "image";
+        const bool animated = kind == "animated";
 
         kindCombo.setSelectedId (indexOfName (paintKindNames, kind) + 1, yup::dontSendNotification);
 
         setRowVisible (stopsBar, gradient);
         setRowVisible (colorField, visible && ! image);
+        setRowVisible (imageButton, image);
+        setRowVisible (patternCombo, animated);
+        setRowVisible (speedSlider, animated);
 
-        for (auto* imageEditor : getImageEditors())
-            setRowVisible (*imageEditor, image);
+        for (auto* placementEditor : getPlacementEditors())
+            setRowVisible (*placementEditor, image || animated);
 
         // The image can be moved anywhere on the page or a page away from it
         const auto& root = document.getRoot();
@@ -1122,6 +1140,8 @@ public:
         wrapXCombo.setSelectedId (indexOfName (imageWrapNames, getString (paintNode, Ids::wrapX)) + 1, yup::dontSendNotification);
         wrapYCombo.setSelectedId (indexOfName (imageWrapNames, getString (paintNode, Ids::wrapY)) + 1, yup::dontSendNotification);
         filterCombo.setSelectedId (indexOfName (imageFilterNames, getString (paintNode, Ids::filter)) + 1, yup::dontSendNotification);
+        patternCombo.setSelectedId (indexOfName (animatedPatternNames, getString (paintNode, Ids::pattern)) + 1, yup::dontSendNotification);
+        speedSlider.setValue (getFloat (paintNode, Ids::speed), yup::dontSendNotification);
 
         if (gradient)
             stopsBar.setPaint (paintNode);
@@ -1153,9 +1173,10 @@ private:
         addRow (label, slider);
     }
 
-    std::array<yup::Component*, 10> getImageEditors()
+    /** The editors shared by image and animated paints. */
+    std::array<yup::Component*, 9> getPlacementEditors()
     {
-        return { &imageButton, &imageXSlider, &imageYSlider, &imageScaleSlider, &imageRotationSlider,
+        return { &imageXSlider, &imageYSlider, &imageScaleSlider, &imageRotationSlider,
                  &imageSkewXSlider, &imageSkewYSlider, &wrapXCombo, &wrapYCombo, &filterCombo };
     }
 
@@ -1213,6 +1234,8 @@ private:
     yup::ComboBox wrapXCombo;
     yup::ComboBox wrapYCombo;
     yup::ComboBox filterCombo;
+    yup::ComboBox patternCombo;
+    yup::Slider speedSlider { yup::Slider::LinearHorizontal };
     yup::FileChooser::Ptr fileChooser;
 };
 

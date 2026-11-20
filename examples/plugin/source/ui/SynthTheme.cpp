@@ -87,9 +87,9 @@ void applySectionColors (yup::Component& component)
 
 void applySectionPalettes (yup::Component& component, const SectionPalettes& sections)
 {
-    if (const auto section = component.getProperties().getVarPointer (sectionProperty); section != nullptr)
+    if (const auto section = component.getProperty (sectionProperty); ! section.isVoid())
     {
-        component.setPalette (sections[static_cast<std::size_t> (static_cast<int> (*section))]);
+        component.setPalette (sections[static_cast<std::size_t> (static_cast<int> (section))]);
         applySectionColors (component);
     }
 
@@ -118,7 +118,7 @@ void applyTheme (yup::Component& root, const yup::ThemePalette& base, const Sect
 
 void applySection (yup::Component& component, Section section)
 {
-    component.getProperties().set (sectionProperty, static_cast<int> (section));
+    component.setProperty (sectionProperty, static_cast<int> (section));
 }
 
 yup::Color role (const yup::Component& scope, yup::ThemePalette::Role paletteRole)
@@ -340,15 +340,13 @@ yup::Font captionFont (float height)
 {
     // Roboto Flex condenses mostly through XTRA (counter width), wdth alone only narrows by a few percent
     const auto& font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
-    const auto variant = font.withAxisValues ({ { "wdth", 75.0f }, { "XTRA", 380.0f }, { "wght", 600.0f } });
-    return (variant != yup::Font() ? variant : font).withHeight (height);
+    return font.withAxisValues ({ { "wdth", 75.0f }, { "XTRA", 380.0f }, { "wght", 600.0f } }).withHeight (height);
 }
 
 yup::Font valueFont (float height)
 {
     const auto& font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
-    const auto variant = font.withAxisValues ({ { "wdth", 80.0f }, { "XTRA", 400.0f } });
-    return (variant != yup::Font() ? variant : font).withHeight (height);
+    return font.withAxisValues ({ { "wdth", 80.0f }, { "XTRA", 400.0f } }).withHeight (height);
 }
 
 float textWidth (const yup::String& text, const yup::Font& font)

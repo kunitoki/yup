@@ -12,7 +12,7 @@ A bundle stores two kinds of payload:
   the transpiled source, the original Vulkan GLSL input source, and full
   `ShaderReflection`.
 
-Reference implementation: [`shading/yup_ShaderBundle.cpp`](shading/yup_ShaderBundle.cpp)
+Reference implementation: [`shading/yup_ShaderBundle.cpp`](https://github.com/kunitoki/yup/tree/main/modules/yup_shading/shading/yup_ShaderBundle.cpp)
 
 ---
 
@@ -238,7 +238,7 @@ The `REFL` chunk data is **not** RIFF; it is a `BinaryOutputArchive` blob produc
 by YUP's serialisation layer (`detail::doSave` / `detail::doLoad`) over the
 `ShaderReflection` struct. Its internal layout is owned by the archive format and
 the `SerialisationTraits<ShaderReflection>` specialisation in
-[`shading/yup_ShaderBundle.h`](shading/yup_ShaderBundle.h).
+[`shading/yup_ShaderBundle.h`](https://github.com/kunitoki/yup/tree/main/modules/yup_shading/shading/yup_ShaderBundle.h).
 
 Serialised reflection fields include:
 
@@ -296,7 +296,7 @@ Current format version: **`2`** (`kCurrentVersion`).
 ## 7. Enum Encodings
 
 Enums are serialised as their underlying `int32` ordinal (declaration order in
-[`shading/yup_ShaderTypes.h`](shading/yup_ShaderTypes.h)).
+[`shading/yup_ShaderTypes.h`](https://github.com/kunitoki/yup/tree/main/modules/yup_shading/shading/yup_ShaderTypes.h)).
 
 **`ShaderStage`**
 

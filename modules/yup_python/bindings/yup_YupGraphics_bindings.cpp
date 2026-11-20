@@ -2028,8 +2028,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getSelectionRectangles", &StyledText::getSelectionRectangles, "startIndex"_a, "endIndex"_a)
         .def ("isValidCharacterIndex", &StyledText::isValidCharacterIndex, "characterIndex"_a)
 
-        .def_static ("horizontalAlignFromJustification", &StyledText::horizontalAlignFromJustification)
-        .def_static ("verticalAlignFromJustification", &StyledText::verticalAlignFromJustification)
+        .def_static ("toHorizontalAlign", &StyledText::toHorizontalAlign)
+        .def_static ("toVerticalAlign", &StyledText::toVerticalAlign)
 
         .def ("__repr__", [] (const StyledText& self)
         {
@@ -2171,6 +2171,10 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("setFillColorGradient", &Graphics::setFillColorGradient)
         .def ("setFillImage", &Graphics::setFillImage, "image"_a, "imageTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
         .def ("setStrokeImage", &Graphics::setStrokeImage, "image"_a, "imageTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
+        .def ("setFillSource", &Graphics::setFillSource, "source"_a, "sourceTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
+        .def ("setStrokeSource", &Graphics::setStrokeSource, "source"_a, "sourceTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
+        .def ("setFillTexture", &Graphics::setFillTexture, "texture"_a, "textureTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
+        .def ("setStrokeTexture", &Graphics::setStrokeTexture, "texture"_a, "textureTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
         .def ("getFillColorGradient", &Graphics::getFillColorGradient)
         .def ("setStrokeColorGradient", &Graphics::setStrokeColorGradient)
         .def ("getStrokeColorGradient", &Graphics::getStrokeColorGradient)
@@ -2297,6 +2301,15 @@ void registerYupGraphicsBindings (py::module_& m)
                 << " " << self.getWidth() << "x" << self.getHeight() << ">";
             return result;
         });
+
+    // ============================================================================================ yup::PaintSource
+
+    py::class_<PaintSource, PyPaintSource, py::smart_holder> (m, "PaintSource")
+        .def (py::init<>())
+        .def ("getContentSize", &PaintSource::getContentSize)
+        .def ("paintContent", &PaintSource::paintContent, "g"_a)
+        .def ("markDirty", &PaintSource::markDirty)
+        .def ("releaseResources", &PaintSource::releaseResources);
 
     // ============================================================================================ yup::Colors
 
@@ -2504,6 +2517,30 @@ void registerYupGraphicsBindings (py::module_& m)
             return left;
         }, "t"_a, "Subdivides in place: this curve becomes the [t, 1] portion and the returned\n"
                    "CubicBezier is the [0, t] portion.");
+
+    // ============================================================================================ yup::Easing
+
+    py::class_<Easing> classEasing (m, "Easing");
+
+    classEasing
+        .def (py::init<>())
+        .def (py::init<float, float, float, float>(), "x1"_a, "y1"_a, "x2"_a, "y2"_a)
+        .def_static ("linear", &Easing::linear)
+        .def_static ("easeIn", &Easing::easeIn)
+        .def_static ("easeOut", &Easing::easeOut)
+        .def_static ("easeInOut", &Easing::easeInOut)
+        .def_static ("hold", &Easing::hold)
+        .def_static ("fromTangents", &Easing::fromTangents, "outTangent"_a, "inTangent"_a)
+        .def ("evaluate", &Easing::evaluate, "t"_a)
+        .def ("isLinear", &Easing::isLinear)
+        .def ("isHold", &Easing::isHold)
+        .def ("getCurve", &Easing::getCurve)
+        .def ("getX1", &Easing::getX1)
+        .def ("getY1", &Easing::getY1)
+        .def ("getX2", &Easing::getX2)
+        .def ("getY2", &Easing::getY2)
+        .def (py::self == py::self)
+        .def (py::self != py::self);
 
     // ============================================================================================ yup::Drawable
 

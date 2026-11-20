@@ -22,10 +22,36 @@
 namespace yup
 {
 
+namespace
+{
+
+struct ResizableCornerIds
+{
+    static inline const Identifier cornerSize { "cornerSize" };
+};
+
+} // namespace
+
 //==============================================================================
 const Identifier ResizableCorner::Style::lineColorId { "resizableCornerLine" };
 
 //==============================================================================
+const ComponentTypeInfo& ResizableCorner::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<ResizableCorner> (Identifier ("ResizableCorner"))
+                                 .color ("lineColor", Style::lineColorId)
+                                 .property (ResizableCornerIds::cornerSize, &ResizableCorner::getCornerSize, &ResizableCorner::setCornerSize, 16.0, "The side length of the square resize handle, in points.")
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
+ResizableCorner::ResizableCorner()
+    : ResizableCorner (StringRef {})
+{
+}
+
 ResizableCorner::ResizableCorner (StringRef componentID)
     : Component (componentID)
 {
@@ -33,14 +59,17 @@ ResizableCorner::ResizableCorner (StringRef componentID)
     setMouseCursor (MouseCursor::ResizeTopLeftRightBottom);
 }
 
-ResizableCorner::~ResizableCorner()
-{
-}
+ResizableCorner::~ResizableCorner() = default;
 
 //==============================================================================
 void ResizableCorner::setCornerSize (float newCornerSize)
 {
-    cornerSize = jmax (1.0f, newCornerSize);
+    const auto clamped = jmax (1.0f, newCornerSize);
+    if (approximatelyEqual (cornerSize, clamped))
+        return;
+
+    cornerSize = clamped;
+    notifyPropertyChanged (ResizableCornerIds::cornerSize);
     updatePosition();
 }
 

@@ -30,6 +30,30 @@ const Identifier ToggleButton::Style::textColorId = "toggleButtonText";
 const Identifier ToggleButton::Style::textToggledColorId = "toggleButtonTextToggled";
 const Identifier ToggleButton::Style::borderColorId = "toggleButtonBorder";
 const Identifier ToggleButton::Style::borderToggledColorId = "toggleButtonBorderToggled";
+const Identifier ToggleButton::Style::cornerRadiusId = "toggleButtonCornerRadius";
+const Identifier ToggleButton::Style::outlineWidthId = "toggleButtonOutlineWidth";
+const Identifier ToggleButton::Style::focusedOutlineWidthId = "toggleButtonFocusedOutlineWidth";
+
+//==============================================================================
+
+const ComponentTypeInfo& ToggleButton::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<ToggleButton> (Identifier ("ToggleButton"), Button::getClassTypeInfo())
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("backgroundToggledColor", Style::backgroundToggledColorId)
+                                 .color ("textColor", Style::textColorId)
+                                 .color ("textToggledColor", Style::textToggledColorId)
+                                 .color ("borderColor", Style::borderColorId)
+                                 .color ("borderToggledColor", Style::borderToggledColorId)
+                                 .number ("cornerRadius", Style::cornerRadiusId, 4.0, "The corner radius.")
+                                 .number ("outlineWidth", Style::outlineWidthId, 1.0, "The outline width.")
+                                 .number ("focusedOutlineWidth", Style::focusedOutlineWidthId, 2.0, "The outline width when focused.")
+                                 .state (checkedPropertyId, &ToggleButton::getToggleState, [] (ToggleButton& b, bool v) { b.setToggleState (v); })
+                                 .property (textPropertyId, &ToggleButton::getButtonText, &ToggleButton::setButtonText)
+                                 .build();
+
+    return info;
+}
 
 //==============================================================================
 
@@ -47,15 +71,26 @@ void ToggleButton::setToggleState (bool shouldBeToggled, NotificationType notifi
     {
         toggleState = shouldBeToggled;
 
+        auto bailOutChecker = BailOutChecker (this);
+
+        notifyPropertyChanged (checkedPropertyId);
+        if (bailOutChecker.shouldBailOut())
+            return;
+
         sendChangeNotification (notification, [this]
         {
+            auto innerBailOut = BailOutChecker (this);
+
             toggleStateChanged();
+            if (innerBailOut.shouldBailOut())
+                return;
 
             if (onClick)
                 onClick();
         });
 
-        repaint();
+        if (! bailOutChecker.shouldBailOut())
+            repaint();
     }
 }
 
@@ -64,6 +99,7 @@ void ToggleButton::setButtonText (String newText)
     if (buttonText != newText)
     {
         buttonText = newText;
+        notifyPropertyChanged (textPropertyId);
         resized();
     }
 }

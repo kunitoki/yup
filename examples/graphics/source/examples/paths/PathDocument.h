@@ -55,6 +55,8 @@ inline const yup::Identifier imageScale { "imageScale" };
 inline const yup::Identifier imageRotation { "imageRotation" };
 inline const yup::Identifier imageSkewX { "imageSkewX" };
 inline const yup::Identifier imageSkewY { "imageSkewY" };
+inline const yup::Identifier pattern { "pattern" };
+inline const yup::Identifier speed { "speed" };
 inline const yup::Identifier position { "position" };
 inline const yup::Identifier fillRule { "fillRule" };
 inline const yup::Identifier kind { "kind" };
@@ -108,7 +110,7 @@ inline constexpr const char* documentSchemaJson = R"({
     },
     "Fill": {
       "properties": {
-        "kind": { "type": "string", "default": "solid", "enum": ["none", "solid", "linear", "radial", "angular", "image"] },
+        "kind": { "type": "string", "default": "solid", "enum": ["none", "solid", "linear", "radial", "angular", "image", "animated"] },
         "color": { "type": "string", "default": "#4f8cffff" },
         "image": { "type": "string", "default": "" },
         "wrapX": { "type": "string", "default": "repeat", "enum": ["clamp", "repeat", "mirror"] },
@@ -118,6 +120,8 @@ inline constexpr const char* documentSchemaJson = R"({
         "imageRotation": { "type": "number", "default": 0, "minimum": -180, "maximum": 180 },
         "imageSkewX": { "type": "number", "default": 0, "minimum": -60, "maximum": 60 },
         "imageSkewY": { "type": "number", "default": 0, "minimum": -60, "maximum": 60 },
+        "pattern": { "type": "string", "default": "stripes", "enum": ["stripes", "rings", "dots"] },
+        "speed": { "type": "number", "default": 1, "minimum": -5, "maximum": 5 },
         "x1": { "type": "number", "default": 0 },
         "y1": { "type": "number", "default": 0 },
         "x2": { "type": "number", "default": 0 },
@@ -127,7 +131,7 @@ inline constexpr const char* documentSchemaJson = R"({
     },
     "Stroke": {
       "properties": {
-        "kind": { "type": "string", "default": "none", "enum": ["none", "solid", "linear", "radial", "angular", "image"] },
+        "kind": { "type": "string", "default": "none", "enum": ["none", "solid", "linear", "radial", "angular", "image", "animated"] },
         "color": { "type": "string", "default": "#ffffffff" },
         "image": { "type": "string", "default": "" },
         "wrapX": { "type": "string", "default": "repeat", "enum": ["clamp", "repeat", "mirror"] },
@@ -137,6 +141,8 @@ inline constexpr const char* documentSchemaJson = R"({
         "imageRotation": { "type": "number", "default": 0, "minimum": -180, "maximum": 180 },
         "imageSkewX": { "type": "number", "default": 0, "minimum": -60, "maximum": 60 },
         "imageSkewY": { "type": "number", "default": 0, "minimum": -60, "maximum": 60 },
+        "pattern": { "type": "string", "default": "stripes", "enum": ["stripes", "rings", "dots"] },
+        "speed": { "type": "number", "default": 1, "minimum": -5, "maximum": 5 },
         "x1": { "type": "number", "default": 0 },
         "y1": { "type": "number", "default": 0 },
         "x2": { "type": "number", "default": 0 },
@@ -185,7 +191,8 @@ inline constexpr const char* blendModeNames[] = {
     "plus-lighter"
 };
 
-inline constexpr const char* paintKindNames[] = { "none", "solid", "linear", "radial", "angular", "image" };
+inline constexpr const char* paintKindNames[] = { "none", "solid", "linear", "radial", "angular", "image", "animated" };
+inline constexpr const char* animatedPatternNames[] = { "stripes", "rings", "dots" };
 inline constexpr const char* imageWrapNames[] = { "clamp", "repeat", "mirror" };
 inline constexpr const char* imageFilterNames[] = { "smooth", "pixelated" };
 inline constexpr const char* strokePositionNames[] = { "inside", "center", "outside" };
@@ -249,8 +256,11 @@ inline yup::DataTree getStroke (const yup::DataTree& layer) { return layer.getCh
 
 inline bool isGradientKind (const yup::String& kind) { return kind == "linear" || kind == "radial" || kind == "angular"; }
 
-/** Gradients and image paints are placed with two on-canvas handles, see getPaintHandleEnd(). */
-inline bool hasPaintHandles (const yup::String& kind) { return isGradientKind (kind) || kind == "image"; }
+/** Image and animated paints share the placement properties: x1/y1, scale, rotation, skew, wrap and filter. */
+inline bool isPlacedKind (const yup::String& kind) { return kind == "image" || kind == "animated"; }
+
+/** Gradients, image and animated paints are placed with two on-canvas handles, see getPaintHandleEnd(). */
+inline bool hasPaintHandles (const yup::String& kind) { return isGradientKind (kind) || isPlacedKind (kind); }
 
 inline bool isPaintVisible (const yup::DataTree& paint) { return paint.isValid() && getString (paint, Ids::kind) != "none"; }
 
@@ -347,12 +357,6 @@ inline std::unordered_map<const void*, DecodedImage>& getDecodedPaintImages()
     return decodedImages;
 }
 
-/** Frees the decoded images and their GPU textures while the graphics context still exists. */
-inline void clearPaintImageCache()
-{
-    getDecodedPaintImages().clear();
-}
-
 /** The decoded image of an image paint, decoded once per distinct file.
 
     Returned by reference so the image keeps its GPU texture from frame to frame. The cache is
@@ -382,7 +386,191 @@ inline const yup::Image& getPaintImage (const yup::DataTree& paint)
     return entry.image;
 }
 
-/** Maps the image's pixels to the document: scaled, skewed, rotated, then moved to the x1/y1 handle. */
+//==============================================================================
+
+/** A seamless procedural tile drawn live by the "animated" paint kind. */
+class AnimatedPatternSource : public yup::PaintSource
+{
+public:
+    static constexpr float tileSize = 64.0f;
+
+    AnimatedPatternSource (int patternIndex, yup::Color patternColor, float cyclesPerSecond)
+        : pattern (patternIndex)
+        , color (patternColor)
+        , speed (cyclesPerSecond)
+    {
+    }
+
+    float getSpeed() const noexcept { return speed; }
+
+    void setTime (double seconds)
+    {
+        phase = static_cast<float> (seconds * speed - std::floor (seconds * speed));
+        markDirty();
+    }
+
+    yup::Size<float> getContentSize() const override { return { tileSize, tileSize }; }
+
+    void paintContent (yup::Graphics& g) override
+    {
+        g.setFillColor (color.darker (0.7f));
+        g.fillAll();
+
+        if (pattern == 0)
+            paintStripes (g);
+        else if (pattern == 1)
+            paintRings (g);
+        else
+            paintDots (g);
+    }
+
+private:
+    void paintStripes (yup::Graphics& g) const
+    {
+        // Diagonal bands with a period of half the tile, so they wrap across tile edges
+        constexpr float period = tileSize * 0.5f;
+        constexpr float band = period * 0.5f;
+
+        yup::Path stripes;
+        for (float start = phase * period - period; start < tileSize * 2.0f; start += period)
+        {
+            stripes.moveTo (start, 0.0f);
+            stripes.lineTo (start + band, 0.0f);
+            stripes.lineTo (start + band - tileSize, tileSize);
+            stripes.lineTo (start - tileSize, tileSize);
+            stripes.closeSubPath();
+        }
+
+        g.setFillColor (color);
+        g.fillPath (stripes);
+    }
+
+    void paintRings (yup::Graphics& g) const
+    {
+        constexpr int numRings = 3;
+        constexpr float maxRadius = tileSize * 0.5f - 3.0f;
+
+        g.setStrokeWidth (4.0f);
+        for (int i = 0; i < numRings; ++i)
+        {
+            const float t = std::fmod (phase + static_cast<float> (i) / numRings, 1.0f);
+            const float radius = t * maxRadius;
+
+            g.setStrokeColor (color.withMultipliedAlpha (1.0f - t));
+            g.strokeEllipse (tileSize * 0.5f - radius, tileSize * 0.5f - radius, radius * 2.0f, radius * 2.0f);
+        }
+    }
+
+    void paintDots (yup::Graphics& g) const
+    {
+        g.setFillColor (color);
+        for (int i = 0; i < 4; ++i)
+        {
+            const float offset = (i == 0 || i == 3) ? 0.0f : 0.5f;
+            const float pulse = 0.5f + 0.5f * std::sin (yup::MathConstants<float>::twoPi * (phase + offset));
+            const float radius = 4.0f + 8.0f * pulse;
+            const float cx = tileSize * ((i % 2) == 0 ? 0.25f : 0.75f);
+            const float cy = tileSize * (i < 2 ? 0.25f : 0.75f);
+
+            g.fillEllipse (cx - radius, cy - radius, radius * 2.0f, radius * 2.0f);
+        }
+    }
+
+    const int pattern;
+    const yup::Color color;
+    const float speed;
+    float phase = 0.0f;
+};
+
+struct AnimatedPaintCache
+{
+    struct Entry
+    {
+        std::unique_ptr<AnimatedPatternSource> source;
+        bool usedSinceLastFrame = true;
+    };
+
+    std::unordered_map<yup::String, Entry> entries;
+    double time = 0.0;
+};
+
+inline AnimatedPaintCache& getAnimatedPaintCache()
+{
+    static AnimatedPaintCache cache;
+    return cache;
+}
+
+/** The source of an animated paint, shared by paints with the same pattern, color and speed. */
+inline AnimatedPatternSource& getAnimatedPaintSource (const yup::DataTree& paint)
+{
+    auto& cache = getAnimatedPaintCache();
+
+    const auto pattern = getString (paint, Ids::pattern);
+    const auto color = getString (paint, Ids::color);
+    const float speed = getFloat (paint, Ids::speed);
+    const auto key = pattern + "|" + color + "|" + yup::String (speed);
+
+    auto& entry = cache.entries[key];
+    entry.usedSinceLastFrame = true;
+
+    if (entry.source == nullptr)
+    {
+        entry.source = std::make_unique<AnimatedPatternSource> (indexOfName (animatedPatternNames, pattern), yup::Color::fromString (color), speed);
+        entry.source->setTime (cache.time);
+    }
+
+    return *entry.source;
+}
+
+/** Advances the animated paints drawn in the last frame and drops the others.
+
+    @returns true when a source drawn in the last frame is moving, so the canvas needs a repaint.
+*/
+inline bool advanceAnimatedPaints (double elapsedSeconds)
+{
+    auto& cache = getAnimatedPaintCache();
+    cache.time += elapsedSeconds;
+
+    bool anyMoving = false;
+    for (auto it = cache.entries.begin(); it != cache.entries.end();)
+    {
+        if (! it->second.usedSinceLastFrame)
+        {
+            it = cache.entries.erase (it);
+            continue;
+        }
+
+        it->second.usedSinceLastFrame = false;
+
+        if (auto& source = *it->second.source; source.getSpeed() != 0.0f)
+        {
+            source.setTime (cache.time);
+            anyMoving = true;
+        }
+
+        ++it;
+    }
+
+    return anyMoving;
+}
+
+/** Frees the decoded images, the animated sources and their GPU resources while the graphics context still exists. */
+inline void clearPaintImageCache()
+{
+    getDecodedPaintImages().clear();
+    getAnimatedPaintCache().entries.clear();
+}
+
+/** Width of what a placed paint maps: the image's pixels or the animated tile. */
+inline float getPlacedContentWidth (const yup::DataTree& paint)
+{
+    if (getString (paint, Ids::kind) == "animated")
+        return AnimatedPatternSource::tileSize;
+
+    return static_cast<float> (getPaintImage (paint).getWidth());
+}
+
+/** Maps the image's pixels (or the animated tile) to the document: scaled, skewed, rotated, then moved to the x1/y1 handle. */
 inline yup::AffineTransform getPaintImageTransform (const yup::DataTree& paint)
 {
     const auto origin = getPoint (paint, Ids::x1, Ids::y1);
@@ -395,13 +583,13 @@ inline yup::AffineTransform getPaintImageTransform (const yup::DataTree& paint)
         .translated (origin.getX(), origin.getY());
 }
 
-/** The end handle of a paint: x2/y2 for gradients, the image's top-right corner for images. */
+/** The end handle of a paint: x2/y2 for gradients, the content's top-right corner for image and animated paints. */
 inline yup::Point<float> getPaintHandleEnd (const yup::DataTree& paint)
 {
-    if (getString (paint, Ids::kind) != "image")
+    if (! isPlacedKind (getString (paint, Ids::kind)))
         return getPoint (paint, Ids::x2, Ids::y2);
 
-    return yup::Point<float> (static_cast<float> (getPaintImage (paint).getWidth()), 0.0f).transformed (getPaintImageTransform (paint));
+    return yup::Point<float> (getPlacedContentWidth (paint), 0.0f).transformed (getPaintImageTransform (paint));
 }
 
 //==============================================================================
@@ -926,12 +1114,14 @@ public:
         if (newKind == oldKind)
             return;
 
-        if (newKind == "image")
+        if (isPlacedKind (newKind))
         {
-            // Start with the image spanning the layer's width
+            // Start with the content placed at the layer's corner, an image spanning the layer's width
             setPoint (paint, Ids::x1, Ids::y1, layerBounds.getTopLeft());
 
-            if (const auto& image = getPaintImage (paint); image.getWidth() > 0)
+            if (newKind == "animated")
+                setProperty (paint, Ids::imageScale, 1.0f);
+            else if (const auto& image = getPaintImage (paint); image.getWidth() > 0)
                 setProperty (paint, Ids::imageScale, yup::jlimit (0.01f, 20.0f, layerBounds.getWidth() / static_cast<float> (image.getWidth())));
 
             return;
@@ -964,24 +1154,24 @@ public:
         }
     }
 
-    /** Moves the end handle of a paint: x2/y2 for gradients, scale and rotation for images, keeping their skew. */
+    /** Moves the end handle of a paint: x2/y2 for gradients, scale and rotation for image and animated paints, keeping their skew. */
     void setPaintHandleEnd (yup::DataTree paint, yup::Point<float> end)
     {
-        if (getString (paint, Ids::kind) != "image")
+        if (! isPlacedKind (getString (paint, Ids::kind)))
         {
             setPoint (paint, Ids::x2, Ids::y2, end);
             return;
         }
 
-        const auto& image = getPaintImage (paint);
+        const float contentWidth = getPlacedContentWidth (paint);
         const auto edge = end - getPoint (paint, Ids::x1, Ids::y1);
         const float length = std::hypot (edge.getX(), edge.getY());
-        if (image.getWidth() <= 0 || length <= 0.0f)
+        if (contentWidth <= 0.0f || length <= 0.0f)
             return;
 
-        // The image's top edge is scaled, then sheared by the vertical skew, then rotated
+        // The content's top edge is scaled, then sheared by the vertical skew, then rotated
         const float skewY = std::tan (yup::degreesToRadians (getFloat (paint, Ids::imageSkewY)));
-        const float scale = length / (static_cast<float> (image.getWidth()) * std::sqrt (1.0f + skewY * skewY));
+        const float scale = length / (contentWidth * std::sqrt (1.0f + skewY * skewY));
         const float rotation = yup::radiansToDegrees (std::atan2 (edge.getY(), edge.getX()) - std::atan (skewY));
 
         setProperty (paint, Ids::imageScale, yup::jlimit (0.01f, 20.0f, scale));

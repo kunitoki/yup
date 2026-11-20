@@ -1467,6 +1467,31 @@ TEST_F (ComponentMockTest, TitleMethods)
     EXPECT_TRUE (mockComponent->getTitle().isEmpty());
 }
 
+TEST_F (ComponentMockTest, TitleChangesAreReportedOnce)
+{
+    struct Listener : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override
+        {
+            if (name == Identifier ("title"))
+                ++changes;
+        }
+
+        int changes = 0;
+    };
+
+    Listener listener;
+    mockComponent->addComponentListener (&listener);
+
+    mockComponent->setTitle ("Test Title");
+    EXPECT_EQ (listener.changes, 1);
+
+    mockComponent->setTitle ("Test Title");
+    EXPECT_EQ (listener.changes, 1);
+
+    mockComponent->removeComponentListener (&listener);
+}
+
 TEST_F (ComponentMockTest, KeyboardFocusMethods)
 {
     // Test default focus behavior
@@ -1532,8 +1557,8 @@ TEST_F (ComponentMockTest, ComponentProperties)
     auto& properties = mockComponent->getProperties();
     EXPECT_TRUE (properties.isEmpty());
 
-    // Test setting properties
-    properties.set ("testKey", "testValue");
+    // Test setting properties through the reflected property API
+    mockComponent->setProperty ("testKey", "testValue");
     EXPECT_EQ (properties["testKey"].toString(), "testValue");
 
     // Test const access
@@ -2418,32 +2443,28 @@ TEST_F (ComponentMockTest, CoordinateTransformationMethods)
     EXPECT_TRUE (true); // Methods completed without crashing
 }
 
-TEST_F (ComponentMockTest, MetricMethods)
+TEST_F (ComponentMockTest, PropertyMethods)
 {
-    Identifier metricId ("cornerRadius");
+    Identifier propertyId ("cornerRadius");
 
-    // Test setting metric
-    mockComponent->setMetric (metricId, 8.0f);
+    // Test setting a property
+    mockComponent->setProperty (propertyId, 8.0);
 
-    // Test getting metric
-    auto retrievedMetric = mockComponent->getMetric (metricId);
-    ASSERT_TRUE (retrievedMetric.has_value());
-    EXPECT_FLOAT_EQ (retrievedMetric.value(), 8.0f);
+    // Test getting a property
+    EXPECT_TRUE (mockComponent->hasProperty (propertyId));
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->getProperty (propertyId)), 8.0f);
 
-    // Test finding metric
-    auto foundMetric = mockComponent->findMetric (metricId);
-    ASSERT_TRUE (foundMetric.has_value());
-    EXPECT_FLOAT_EQ (foundMetric.value(), 8.0f);
+    // Test finding a property
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->findProperty (propertyId)), 8.0f);
 
-    // Test setting null metric (removing override)
-    mockComponent->setMetric (metricId, std::nullopt);
-    auto nullMetric = mockComponent->getMetric (metricId);
-    EXPECT_FALSE (nullMetric.has_value());
+    // Test removing the property
+    mockComponent->removeProperty (propertyId);
+    EXPECT_FALSE (mockComponent->hasProperty (propertyId));
+    EXPECT_TRUE (mockComponent->getProperty (propertyId).isVoid());
 
-    // Test finding non-existent metric (not in theme either)
-    Identifier nonExistentId ("nonExistentMetric");
-    auto notFoundMetric = mockComponent->findMetric (nonExistentId);
-    EXPECT_FALSE (notFoundMetric.has_value());
+    // Test finding a non-existent property (not in theme either)
+    Identifier nonExistentId ("nonExistentProperty");
+    EXPECT_TRUE (mockComponent->findProperty (nonExistentId).isVoid());
 }
 
 TEST_F (ComponentMockTest, SafeAreaChangedPropagatesToChildren)
@@ -2456,83 +2477,66 @@ TEST_F (ComponentMockTest, SafeAreaChangedPropagatesToChildren)
     ComponentHelper::triggerSafeAreaChanged (*mockComponent);
 }
 
-TEST_F (ComponentMockTest, MetricParentFallback)
+TEST_F (ComponentMockTest, PropertyParentFallback)
 {
     auto parent = std::make_unique<ComponentMock> ("parent");
     auto child = std::make_unique<ComponentMock> ("child");
 
     parent->addAndMakeVisible (*child);
 
-    Identifier metricId ("padding");
+    Identifier propertyId ("padding");
 
-    // Set metric on parent
-    parent->setMetric (metricId, 12.0f);
+    // Set property on parent
+    parent->setProperty (propertyId, 12.0);
 
-    // Child should find parent's metric via parent chain fallback
-    auto childMetric = child->findMetric (metricId);
-    ASSERT_TRUE (childMetric.has_value());
-    EXPECT_FLOAT_EQ (childMetric.value(), 12.0f);
+    // Child should find parent's property via parent chain fallback
+    EXPECT_FLOAT_EQ (static_cast<float> (child->findProperty (propertyId)), 12.0f);
 
     // Child override should take precedence
-    child->setMetric (metricId, 16.0f);
-    auto overriddenMetric = child->findMetric (metricId);
-    ASSERT_TRUE (overriddenMetric.has_value());
-    EXPECT_FLOAT_EQ (overriddenMetric.value(), 16.0f);
+    child->setProperty (propertyId, 16.0);
+    EXPECT_FLOAT_EQ (static_cast<float> (child->findProperty (propertyId)), 16.0f);
 
-    // Parent's metric should be unchanged
-    auto parentMetric = parent->getMetric (metricId);
-    ASSERT_TRUE (parentMetric.has_value());
-    EXPECT_FLOAT_EQ (parentMetric.value(), 12.0f);
+    // Parent's property should be unchanged
+    EXPECT_FLOAT_EQ (static_cast<float> (parent->getProperty (propertyId)), 12.0f);
 
     // Clearing child override falls back to parent
-    child->setMetric (metricId, std::nullopt);
-    auto fallbackMetric = child->findMetric (metricId);
-    ASSERT_TRUE (fallbackMetric.has_value());
-    EXPECT_FLOAT_EQ (fallbackMetric.value(), 12.0f);
+    child->removeProperty (propertyId);
+    EXPECT_FLOAT_EQ (static_cast<float> (child->findProperty (propertyId)), 12.0f);
 }
 
-TEST_F (ComponentMockTest, DISABLED_MetricThemeFallback)
+TEST_F (ComponentMockTest, DISABLED_PropertyThemeFallback)
 {
     // TODO - rewrite this with the new structure in mind, Component should not access to the global theme directly
-    Identifier metricId ("globalSpacing");
+    Identifier propertyId ("globalSpacing");
 
-    // Set a metric in the global theme
-    theme->setMetric (metricId, 20.0f);
+    // Set a property default in the global theme
+    theme->setProperty (propertyId, 20.0);
 
-    // Component should find it via findMetric -> theme fallback
-    auto metric = mockComponent->findMetric (metricId);
-    ASSERT_TRUE (metric.has_value());
-    EXPECT_FLOAT_EQ (metric.value(), 20.0f);
+    // Component should find it via findProperty -> theme fallback
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->findProperty (propertyId)), 20.0f);
 
     // Component override should take precedence over theme
-    mockComponent->setMetric (metricId, 24.0f);
-    auto overriddenMetric = mockComponent->findMetric (metricId);
-    ASSERT_TRUE (overriddenMetric.has_value());
-    EXPECT_FLOAT_EQ (overriddenMetric.value(), 24.0f);
+    mockComponent->setProperty (propertyId, 24.0);
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->findProperty (propertyId)), 24.0f);
 
     // Clearing override falls back to theme
-    mockComponent->setMetric (metricId, std::nullopt);
-    auto themeFallback = mockComponent->findMetric (metricId);
-    ASSERT_TRUE (themeFallback.has_value());
-    EXPECT_FLOAT_EQ (themeFallback.value(), 20.0f);
+    mockComponent->removeProperty (propertyId);
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->findProperty (propertyId)), 20.0f);
 }
 
-TEST_F (ComponentMockTest, MetricAcceptsZeroAndNegative)
+TEST_F (ComponentMockTest, PropertyAcceptsZeroAndNegative)
 {
-    Identifier zeroId ("zeroMetric");
-    Identifier negativeId ("negativeMetric");
+    Identifier zeroId ("zeroProperty");
+    Identifier negativeId ("negativeProperty");
 
-    mockComponent->setMetric (zeroId, 0.0f);
-    mockComponent->setMetric (negativeId, -2.5f);
+    mockComponent->setProperty (zeroId, 0.0);
+    mockComponent->setProperty (negativeId, -2.5);
 
-    auto zero = mockComponent->getMetric (zeroId);
-    auto negative = mockComponent->getMetric (negativeId);
+    EXPECT_TRUE (mockComponent->hasProperty (zeroId));
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->getProperty (zeroId)), 0.0f);
 
-    ASSERT_TRUE (zero.has_value());
-    EXPECT_FLOAT_EQ (zero.value(), 0.0f);
-
-    ASSERT_TRUE (negative.has_value());
-    EXPECT_FLOAT_EQ (negative.value(), -2.5f);
+    EXPECT_TRUE (mockComponent->hasProperty (negativeId));
+    EXPECT_FLOAT_EQ (static_cast<float> (mockComponent->getProperty (negativeId)), -2.5f);
 }
 
 
@@ -2645,6 +2649,60 @@ TEST_F (ComponentTest, EnablingAParentUpdatesTheCursorOfTheChildUnderPointer)
     EXPECT_EQ (MouseCursor::Hand, Desktop::getInstance()->getMouseCursor().getType());
 
     Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
+}
+
+TEST_F (ComponentTest, SetEnabledNotifiesTheDescendantsWhoseStateChanges)
+{
+    struct Recorder : ComponentListener
+    {
+        void componentPropertyChanged (Component& component, const Identifier& name) override
+        {
+            if (name == Identifier ("enabled"))
+                notified.add (component.getComponentID());
+        }
+
+        StringArray notified;
+    };
+
+    struct Counting : Component
+    {
+        Counting() : Component ("grandchild") {}
+
+        void enablementChanged() override { ++count; }
+
+        int count = 0;
+    };
+
+    Counting grandchild;
+    child->addChildComponent (grandchild);
+
+    Component disabledChild ("disabledChild");
+    parent->addChildComponent (disabledChild);
+    disabledChild.setEnabled (false);
+
+    Recorder recorder;
+    const std::vector<Component*> components { root.get(), parent.get(), child.get(), &grandchild, &disabledChild };
+
+    for (auto* component : components)
+        component->addComponentListener (&recorder);
+
+    root->setEnabled (false);
+    EXPECT_EQ (4, recorder.notified.size());
+    EXPECT_FALSE (recorder.notified.contains ("disabledChild"));
+    EXPECT_EQ (1, grandchild.count);
+
+    // Inside a disabled parent, the effective state of the subtree doesn't change
+    recorder.notified.clear();
+    child->setEnabled (false);
+    EXPECT_TRUE (recorder.notified.isEmpty());
+    EXPECT_EQ (1, grandchild.count);
+
+    root->setEnabled (true);
+    EXPECT_EQ (StringArray ({ "root", "parent" }), recorder.notified);
+    EXPECT_EQ (1, grandchild.count);
+
+    for (auto* component : components)
+        component->removeComponentListener (&recorder);
 }
 
 TEST_F (ComponentTest, CursorOfFocusedComponentAwayFromPointerLeavesTheDesktopAlone)
@@ -5066,4 +5124,79 @@ TEST_F (ComponentHeadlessRenderTest, OffscreenRenderingRunsInsideTheNativeGraphi
     EXPECT_EQ (comp.snapshotToTexture (*context), nullptr);
     EXPECT_EQ (comp.renderToTexture (*context), nullptr);
     EXPECT_EQ (0, comp.paintCount);
+}
+
+//==============================================================================
+
+class ComponentPropertySourceTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        parent.addAndMakeVisible (child);
+    }
+
+    Component parent { "sourceParent" };
+    Component child { "sourceChild" };
+};
+
+TEST_F (ComponentPropertySourceTests, StateBackedPropertiesComeFromTheComponentItself)
+{
+    child.setBounds ({ 0.0f, 0.0f, 32.0f, 16.0f });
+
+    const auto source = child.findPropertySource ("width");
+
+    EXPECT_EQ (source.layer, Component::PropertySource::Layer::stateBacked);
+    EXPECT_EQ (source.component, &child);
+    EXPECT_FLOAT_EQ (static_cast<float> (source.value), 32.0f);
+}
+
+TEST_F (ComponentPropertySourceTests, EnabledIsReadAsGivenOnTheComponentAndInEffectThroughTheCascade)
+{
+    parent.setEnabled (false);
+
+    EXPECT_TRUE (static_cast<bool> (child.getProperty ("enabled")));
+    EXPECT_FALSE (static_cast<bool> (child.findProperty ("enabled")));
+    EXPECT_FALSE (static_cast<bool> (child.findPropertySource ("enabled").value));
+
+    parent.setEnabled (true);
+    child.setProperty ("enabled", false);
+
+    EXPECT_FALSE (static_cast<bool> (child.getProperty ("enabled")));
+    EXPECT_FALSE (static_cast<bool> (child.findProperty ("enabled")));
+}
+
+TEST_F (ComponentPropertySourceTests, TransformIsAlwaysStateBacked)
+{
+    EXPECT_EQ (child.findPropertySource ("transform").layer, Component::PropertySource::Layer::stateBacked);
+}
+
+TEST_F (ComponentPropertySourceTests, AnExplicitValueIsReportedOnTheComponentHoldingIt)
+{
+    child.setProperty ("customThing", 7);
+
+    const auto source = child.findPropertySource ("customThing");
+
+    EXPECT_EQ (source.layer, Component::PropertySource::Layer::explicitly);
+    EXPECT_EQ (source.component, &child);
+    EXPECT_EQ (static_cast<int> (source.value), 7);
+}
+
+TEST_F (ComponentPropertySourceTests, AnInheritedValueIsReportedOnTheParentHoldingIt)
+{
+    parent.setProperty ("customThing", 7);
+
+    const auto source = child.findPropertySource ("customThing");
+
+    EXPECT_EQ (source.layer, Component::PropertySource::Layer::explicitly);
+    EXPECT_EQ (source.component, &parent);
+}
+
+TEST_F (ComponentPropertySourceTests, AnUnknownPropertyHasNoSource)
+{
+    const auto source = child.findPropertySource ("neverSetAnywhere");
+
+    EXPECT_EQ (source.layer, Component::PropertySource::Layer::unset);
+    EXPECT_EQ (source.component, nullptr);
+    EXPECT_TRUE (source.value.isVoid());
 }

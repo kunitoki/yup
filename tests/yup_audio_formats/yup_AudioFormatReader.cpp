@@ -98,6 +98,25 @@ TEST (AudioFormatReaderTests, ReadCopiesMonoSourceToAllDestinationChannels)
     }
 }
 
+TEST (AudioFormatReaderTests, ReadIntoBufferCopiesAllMultichannelSourceChannels)
+{
+    MockAudioFormatReader reader (4, 2);
+    for (int channel = 0; channel < 4; ++channel)
+        fillChannel (reader.buffer, channel, { static_cast<float> (channel + 1), -static_cast<float> (channel + 1) });
+
+    AudioBuffer<float> destination (4, 3);
+    destination.clear();
+
+    EXPECT_TRUE (reader.read (&destination, 1, 2, 0, true, true));
+
+    for (int channel = 0; channel < 4; ++channel)
+    {
+        EXPECT_FLOAT_EQ (0.0f, destination.getSample (channel, 0));
+        EXPECT_FLOAT_EQ (static_cast<float> (channel + 1), destination.getSample (channel, 1));
+        EXPECT_FLOAT_EQ (-static_cast<float> (channel + 1), destination.getSample (channel, 2));
+    }
+}
+
 TEST (AudioFormatReaderTests, ReadIntoChannelPointersCopiesSourceData)
 {
     MockAudioFormatReader reader (2, 4);

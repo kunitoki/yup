@@ -507,6 +507,30 @@ TEST_F (ComponentEffectGpuTest, SnapshotRendersToImage)
     EXPECT_EQ (rawData.size(), 128u * 128u * 4u);
 }
 
+TEST_F (ComponentEffectGpuTest, SnapshotScaleMultipliesTheImageSize)
+{
+    auto comp = makeComp ("test", 64, 32);
+
+    const auto image = comp->snapshotToImage (*gpuContext, true, 2.0f);
+    ASSERT_TRUE (image.isValid());
+    EXPECT_EQ (image.getWidth(), 128);
+    EXPECT_EQ (image.getHeight(), 64);
+
+    // The drawing is scaled with the canvas, so it reaches the far corner
+    EXPECT_GT (image.getPixelColor (124, 60).getAlpha(), 0);
+}
+
+TEST_F (ComponentEffectGpuTest, SnapshotScaleIsKeptThroughAnEffect)
+{
+    auto comp = makeComp ("test", 64, 32);
+    comp->setComponentEffect (ReferenceCountedObjectPtr<CountingEffect> (new CountingEffect()));
+
+    const auto image = comp->snapshotToImage (*gpuContext, true, 2.0f);
+    ASSERT_TRUE (image.isValid());
+    EXPECT_EQ (image.getWidth(), 128);
+    EXPECT_EQ (image.getHeight(), 64);
+}
+
 TEST_F (ComponentEffectGpuTest, SnapshotWithEffectsAppliesEffect)
 {
     if (! gpuContext)
@@ -1092,6 +1116,67 @@ TEST_F (ComponentEffectGpuTest, RenderToTextureIsReusedUntilTheSubtreeRepaints)
     ASSERT_NE (texture, nullptr);
     EXPECT_EQ (32, texture->getWidth());
     EXPECT_EQ (3, child.paintCount);
+}
+
+TEST_F (ComponentEffectGpuTest, WhatAComponentKeepsOfItsPaintingIsPaintedAgainWhenTheThemeChanges)
+{
+    const auto makeTheme = []
+    {
+        ApplicationTheme::Ptr theme (new ApplicationTheme());
+        theme->setPalette (ThemePalette ({}, ThemePalette::Mode::dark));
+        return theme;
+    };
+
+    const auto oldTheme = ApplicationTheme::getGlobalTheme();
+    const ErasedScopeGuard restoreTheme ([oldTheme]
+    {
+        ApplicationTheme::setGlobalTheme (oldTheme.get());
+    });
+
+    auto theme = makeTheme();
+    ApplicationTheme::setGlobalTheme (theme);
+
+    // A texture cache, an opaque component behind an effect and a subtree rendered to a texture
+    auto cached = makeComp ("cached", 64, 64);
+    cached->setVisible (true);
+    cached->setCachedToTexture (true);
+
+    FillComponent behindEffect ("behindEffect");
+    behindEffect.setBounds (0, 0, 64, 64);
+    behindEffect.setVisible (true);
+    behindEffect.setComponentEffect (new CountingEffect());
+
+    auto rendered = makeComp ("rendered", 64, 64);
+    rendered->setVisible (true);
+
+    const auto paintAll = [&]
+    {
+        triggerPaintOnCanvas (*cached, 64, 64);
+        triggerPaintOnCanvas (behindEffect, 64, 64);
+        EXPECT_NE (rendered->renderToTexture (*gpuContext), nullptr);
+    };
+
+    const auto expectPainted = [&] (int times)
+    {
+        EXPECT_EQ (cached->paintCount, times);
+        EXPECT_EQ (behindEffect.paintCount, times);
+        EXPECT_EQ (rendered->paintCount, times);
+    };
+
+    paintAll();
+    paintAll();
+    expectPainted (1);
+
+    theme->setPalette (ThemePalette ({}, ThemePalette::Mode::light));
+    paintAll();
+    paintAll();
+    expectPainted (2);
+
+    // Another theme, set up the way the first one was
+    ApplicationTheme::setGlobalTheme (makeTheme());
+    paintAll();
+    paintAll();
+    expectPainted (3);
 }
 
 TEST_F (ComponentEffectGpuTest, RenderToTextureAppliesTheEffect)

@@ -175,7 +175,7 @@ public:
     {
         if (sampleRate != getDefaultSampleRate() || bufferSizeSamples != getDefaultBufferSize())
         {
-            lastError = "Browser audio outputs only support 44.1 kHz sample rate and 128 samples buffer size.";
+            lastError = "Browser audio outputs only support the AudioContext sample rate and 128 samples buffer size.";
             return lastError;
         }
 

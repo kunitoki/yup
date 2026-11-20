@@ -66,7 +66,7 @@ private:
     static var serializeMask (const AnimationMask& mask);
     static var serializeAssets (const HashMap<String, AnimationAsset::Ptr>& assets);
     static var serializeMarkers (const std::vector<AnimationMarker>& markers);
-    static var serializeEasing (const AnimationEasing& easing);
+    static var serializeEasing (const Easing& easing);
     static var serializeColor (const Color& c);
     static var serializePoint (const Point<float>& p);
     static var serializeSize (const Size<float>& s);

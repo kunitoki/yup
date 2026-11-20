@@ -62,6 +62,10 @@ public:
         Returns std::nullopt for unrecognised values. */
     static std::optional<BlendMode> parseBlendMode (StringRef value);
 
+    /** Parses the functions of a CSS `filter` value (e.g. "blur(2px) drop-shadow(1px 1px 2px black)")
+        into the filter they stand for. Returns nullptr when the value has no known function. */
+    static SVGFilter::Ptr parseFilterFunctions (const String& value);
+
     static std::optional<Image> loadImageFromHref (const SVGDocument::ParseOptions& options,
                                                    const String& href);
     ///@}
@@ -82,6 +86,7 @@ private:
     void parseFilter (const XmlElement& element);
     void parseFEBlend (const XmlElement& element, SVGFilter& filter);
     void parseFEGaussianBlur (const XmlElement& element, SVGFilter& filter);
+    void parseFEPrimitive (const XmlElement& element, SVGFilter& filter);
     SVGFilter::Ptr getFilterById (const String& id) const;
     SVGFilter::Ptr resolveFilter (SVGFilter::Ptr filter, int depth = 0) const;
     void parseClipPath (const XmlElement& element);

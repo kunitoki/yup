@@ -107,6 +107,17 @@ TEST (PathTests, AddRectangle)
     EXPECT_FALSE (p.getBounds().isEmpty());
 }
 
+TEST (PathTests, AddRectangleClosesItsContour)
+{
+    Path p;
+    p.addRectangle (10.0f, 20.0f, 30.0f, 40.0f);
+
+    // An open contour is stroked with caps at its ends, leaving the first corner without a join
+    EXPECT_TRUE (p.isExplicitlyClosed());
+    EXPECT_EQ (5, p.size());
+    EXPECT_NEAR (140.0f, p.getLength(), 1.0e-3f);
+}
+
 TEST (PathTests, AddRoundedRectangle)
 {
     Path p;
@@ -177,6 +188,36 @@ TEST (PathTests, AddRoundedRectangleZeroRadiusMatchesRectangle)
 
     // With a zero radius the first point collapses onto the rectangle origin.
     expectPointNear ((*rounded.begin()).point, Point<float> (0.0f, 0.0f));
+}
+
+TEST (PathTests, AddRoundedRectangleWithCornerSizeRoundsCornersElliptically)
+{
+    Path p;
+    p.addRoundedRectangle (Rectangle<float> (10.0f, 20.0f, 100.0f, 60.0f), Size<float> (16.0f, 4.0f));
+
+    expectRectNear (p.getBounds(), Rectangle<float> (10.0f, 20.0f, 100.0f, 60.0f));
+
+    std::vector<Path::Segment> segments;
+    for (const auto& segment : p)
+        segments.push_back (segment);
+
+    ASSERT_EQ (segments.size(), static_cast<size_t> (9));
+
+    // The top edge is inset by the horizontal radius, the right edge by the vertical one
+    expectPointNear (segments[0].point, Point<float> (26.0f, 20.0f));
+    expectPointNear (segments[1].point, Point<float> (94.0f, 20.0f));
+    expectPointNear (segments[2].point, Point<float> (110.0f, 24.0f));
+    expectPointNear (segments[3].point, Point<float> (110.0f, 76.0f));
+}
+
+TEST (PathTests, AddRoundedRectangleWithCornerSizeLimitsEachRadiusToItsHalfDimension)
+{
+    Path p;
+    p.addRoundedRectangle (Rectangle<float> (0.0f, 0.0f, 100.0f, 20.0f), Size<float> (80.0f, 80.0f));
+
+    // The corners meet in the middle of every edge
+    expectPointNear ((*p.begin()).point, Point<float> (50.0f, 0.0f));
+    expectRectNear (p.getBounds(), Rectangle<float> (0.0f, 0.0f, 100.0f, 20.0f));
 }
 
 TEST (PathTests, AddRoundedRectangleClampsRadiusToHalfSmallestDimension)
@@ -856,6 +897,38 @@ TEST (PathTests, CreateCopyEmpty)
 
     EXPECT_EQ (p1.size(), p2.size());
     EXPECT_TRUE (p2.getBounds().isEmpty());
+}
+
+TEST (PathTests, CreateCopyKeepsFillRule)
+{
+    Path p1;
+    p1.addRectangle (0, 0, 10, 10);
+    p1.setUsingNonZeroWinding (false);
+
+    EXPECT_FALSE (p1.createCopy().isUsingNonZeroWinding());
+}
+
+TEST (PathTests, CreateCopyPreservesOpenContourAndClose)
+{
+    Path open;
+    open.moveTo (0.0f, 0.0f);
+    open.lineTo (30.0f, 0.0f);
+
+    Path extended = open.createCopy();
+    extended.lineTo (30.0f, 40.0f);
+
+    EXPECT_EQ (2, open.size());
+    EXPECT_FALSE (open.isExplicitlyClosed());
+    EXPECT_EQ (3, extended.size());
+    EXPECT_NEAR (70.0f, extended.getLength(), 1.0e-3f);
+
+    Path closed = extended.createCopy();
+    closed.close();
+
+    EXPECT_FALSE (extended.isExplicitlyClosed());
+    EXPECT_TRUE (closed.isExplicitlyClosed());
+    EXPECT_EQ (4, closed.size());
+    EXPECT_NEAR (120.0f, closed.getLength(), 1.0e-3f);
 }
 
 TEST (PathTests, IteratorPostfixIncrement)
@@ -2403,4 +2476,47 @@ TEST (PathTests, FillRulePreservedInCombinedPath_NonZero)
 
     const auto result = left.combinedWith (right, Path::BooleanOperation::Union);
     EXPECT_FALSE (result.isEmpty());
+}
+
+TEST (PathTests, GetClockwiseRenderPathCachesAndInvalidatesOnMutation)
+{
+    const Path empty;
+    const auto* emptyClockwise = empty.getClockwiseRenderPath();
+    ASSERT_NE (emptyClockwise, nullptr);
+    EXPECT_EQ (empty.getClockwiseRenderPath(), emptyClockwise);
+
+    Path ellipse;
+    ellipse.addEllipse (0.0f, 0.0f, 20.0f, 10.0f);
+    const auto* firstEllipse = ellipse.getClockwiseRenderPath();
+    ASSERT_NE (firstEllipse, nullptr);
+    EXPECT_EQ (ellipse.getClockwiseRenderPath(), firstEllipse);
+
+    const auto mirrored = ellipse.transformed (AffineTransform::scaling (-1.0f, 1.0f));
+    const auto* mirroredClockwise = mirrored.getClockwiseRenderPath();
+    ASSERT_NE (mirroredClockwise, nullptr);
+    EXPECT_EQ (mirrored.getClockwiseRenderPath(), mirroredClockwise);
+
+    Path rounded;
+    rounded.addRoundedRectangle (0.0f, 0.0f, 40.0f, 20.0f, 4.0f);
+    const auto* firstRounded = rounded.getClockwiseRenderPath();
+    ASSERT_NE (firstRounded, nullptr);
+    EXPECT_EQ (rounded.getClockwiseRenderPath(), firstRounded);
+
+    rounded.addRectangle (10.0f, 5.0f, 40.0f, 20.0f);
+    const auto* mutatedRounded = rounded.getClockwiseRenderPath();
+    ASSERT_NE (mutatedRounded, nullptr);
+    EXPECT_NE (mutatedRounded, firstRounded);
+    EXPECT_EQ (rounded.getClockwiseRenderPath(), mutatedRounded);
+
+    Path ring;
+    ring.addRectangle (0.0f, 0.0f, 20.0f, 20.0f);
+    ring.addRectangle (5.0f, 5.0f, 10.0f, 10.0f);
+    ring.setUsingNonZeroWinding (true);
+    const auto* nonZeroRing = ring.getClockwiseRenderPath();
+    ASSERT_NE (nonZeroRing, nullptr);
+
+    ring.setUsingNonZeroWinding (false);
+    const auto* evenOddRing = ring.getClockwiseRenderPath();
+    ASSERT_NE (evenOddRing, nullptr);
+    EXPECT_NE (evenOddRing, nonZeroRing);
 }

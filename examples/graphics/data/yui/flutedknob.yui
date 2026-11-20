@@ -1,0 +1,125 @@
+// A glossy black knob, lit like a studio photograph: a round base under a raised grip with
+// seven shallow notches that turns with the value, around a cap set in a groove. Nothing is
+// outlined: the shapes show where their edges catch the light, cool on the left and warm on
+// the right, and where they cast a shadow. The bevel of the base is lit from above.
+// The colors come from the slider properties the stylesheet sets: backgroundColor (the body),
+// trackColor (the scale), thumbColor (the pointer and the scale up to the value) and textColor
+// (the label). 'shadowLift' scales the drop shadow, so the knob can sink in when pressed.
+drawing FlutedKnob {
+    property shadowLift: number = 1;
+
+    let size: min (bounds.width, bounds.height);
+    let c: bounds.center;
+    let r: size * 0.38;                 // the outer radius of the scale
+    let knobRadius: r * 0.8;
+    let gripSize: 0.81;                 // the radius of the grip, relative to the base
+    let notchSize: 0.29;                // the notches are circles centered on the edge of the base
+    let gripRadius: knobRadius * gripSize;
+    let notchRadius: knobRadius * notchSize;
+    let capRadius: knobRadius * 0.51;
+
+    let a0: 135deg;
+    let sweep: 270deg;
+    let av: a0 + sweep * normalized;
+    let lobeAngle: 360deg / 7;
+
+    // Half the angle a notch takes from the edge of the grip, seen from the center of the knob
+    // and from the center of the notch
+    let notchAngle: acos ((gripSize * gripSize + 1 - notchSize * notchSize) / (2 * gripSize));
+    let notchArc: acos ((1 + notchSize * notchSize - gripSize * gripSize) / (2 * notchSize));
+
+    let lit: enabled ? thumbColor : textColor.withAlpha (0.5);
+    let ink: enabled ? textColor : textColor.withAlpha (0.5);
+
+    // The light an edge catches, by where it is around the knob: cool on the left, warm on the
+    // right, almost none above and below
+    let cool: #8ea0d8;
+    let warm: #c9a583;
+    let rim: angularGradient (cool.withAlpha (0.75), c, cool.withAlpha (0.75), c.translated (-1, 0))
+                 .withStop (cool.withAlpha (0.75), 0.1).withStop (cool.withAlpha (0.2), 0.2).withStop (warm.withAlpha (0.04), 0.3)
+                 .withStop (warm.withAlpha (0.6), 0.4).withStop (warm.withAlpha (0.7), 0.52).withStop (warm.withAlpha (0.15), 0.62)
+                 .withStop (warm.withAlpha (0.02), 0.75).withStop (cool.withAlpha (0.15), 0.9);
+    let rimWidth: max (1.0, knobRadius * 0.012);
+
+    circle { id: outerRing; center: c; radius: r * 1.18; stroke: trackColor.withAlpha (0.35); strokeWidth: 1; }
+
+    // The scale: 81 fine ticks, a longer one every 5
+    repeat i in 0 .. 81 {
+        let a: a0 + sweep * i / 80.0;
+
+        line { from: polar (c, r * 0.87, a); to: polar (c, r * (i % 5 == 0 ? 1.0 : 0.96), a);
+               stroke: i / 80.0 <= normalized + 0.0001 ? lit : trackColor; strokeWidth: max (1.0, r * 0.009); }
+    }
+
+    text { id: name; bounds: rect (0, 0, r * 0.6, r * 0.16).withCenter (polar (c, r * 1.07, 90deg));
+           text: parent.label; font: defaultFont.withHeight (r * 0.1); fill: ink; }
+
+    // A long soft shadow below that follows the lift, and a tight one around the base
+    circle { id: ambient; center: c.translated (0, knobRadius * 0.2 * shadowLift); radius: knobRadius * 0.97;
+             fill: rgba (0, 0, 0, 0.6); feather: knobRadius * (0.08 + 0.24 * shadowLift); }
+
+    circle { id: contact; center: c.translated (0, knobRadius * 0.04); radius: knobRadius;
+             fill: rgba (0, 0, 0, 0.6); feather: knobRadius * 0.07; }
+
+    // The base: a disc with a bevel lit from above, and a glint on its upper left edge
+    circle { id: base; center: c; radius: knobRadius;
+             fillGradient: linearGradient (backgroundColor.brighter (0.02), c.translated (0, -knobRadius),
+                                           backgroundColor.darker (0.015), c.translated (0, knobRadius));
+             stroke: rgba (0, 0, 0, 0.6); strokeWidth: max (1.0, knobRadius * 0.015); strokePosition: inside; }
+
+    circle { id: bevel; center: c; radius: knobRadius * 0.95; feather: knobRadius * 0.02;
+             strokeGradient: linearGradient (rgba (255, 255, 255, 0.2), c.translated (0, -knobRadius),
+                                             rgba (255, 255, 255, 0.0), c.translated (0, -knobRadius * 0.3));
+             strokeWidth: knobRadius * 0.07; }
+
+    arc { id: glint; center: c; radius: knobRadius * 0.955; from: 228deg; to: 258deg;
+          stroke: rgba (255, 255, 255, 0.45); strokeWidth: max (1.0, knobRadius * 0.012); cap: round;
+          feather: knobRadius * 0.012; }
+
+    // The grip, raised over the base where its shadow falls
+    circle { id: gripShadow; center: c.translated (0, knobRadius * 0.04); radius: gripRadius * 1.01;
+             fill: rgba (0, 0, 0, 0.6); feather: knobRadius * 0.07; }
+
+    circle { id: grip; center: c; radius: gripRadius;
+             fillGradient: linearGradient (backgroundColor.brighter (0.075), c.translated (0, -gripRadius),
+                                           backgroundColor.brighter (0.01), c.translated (0, gripRadius)); }
+
+    // Seven notches turning with the value, the pointer on the lobe between two of them. They
+    // are cut in the grip only, down to the shadowed base
+    let gripShape: path ().addEllipse (rect (c.x - gripRadius, c.y - gripRadius, gripRadius * 2, gripRadius * 2));
+
+    repeat i in 0 .. 7 {
+        circle { center: polar (c, knobRadius, av + lobeAngle * (i + 0.5)); radius: notchRadius;
+                 fill: backgroundColor.darker (0.045); clipPath: gripShape; }
+    }
+
+    // The outline of the grip catching the light: each notch, then the lobe after it
+    repeat i in 0 .. 7 {
+        let a: av + lobeAngle * (i + 0.5);
+
+        arc { center: polar (c, knobRadius, a); radius: notchRadius; from: a + 180deg - notchArc; to: a + 180deg + notchArc;
+              strokeGradient: rim; strokeWidth: rimWidth; cap: round; }
+
+        arc { center: c; radius: gripRadius; from: a + notchAngle; to: a + lobeAngle - notchAngle;
+              strokeGradient: rim; strokeWidth: rimWidth; cap: round; }
+    }
+
+    // The cap in its groove
+    circle { id: groove; center: c; radius: capRadius * 1.1; fill: backgroundColor.darker (0.055); }
+
+    circle { id: cap; center: c; radius: capRadius;
+             fillGradient: linearGradient (backgroundColor.brighter (0.065), c.translated (0, -capRadius),
+                                           backgroundColor.brighter (0.025), c.translated (0, capRadius));
+             strokeGradient: rim.withMultipliedAlpha (0.6); strokeWidth: rimWidth; strokePosition: inside; }
+
+    // The pointer: a silver line inlaid in a dark slot, on the lobe at the value
+    let pointerFrom: polar (c, knobRadius * 0.6, av);
+    let pointerTo: polar (c, knobRadius * 0.9, av);
+    let pointerWidth: max (1.5, knobRadius * 0.042);
+
+    line { id: slot; from: pointerFrom; to: pointerTo;
+           stroke: rgba (0, 0, 0, 0.6); strokeWidth: pointerWidth + knobRadius * 0.025; cap: round; }
+
+    line { id: pointer; from: pointerFrom; to: pointerTo;
+           strokeGradient: linearGradient (lit.darker (0.3), pointerFrom, lit, pointerTo); strokeWidth: pointerWidth; cap: round; }
+}

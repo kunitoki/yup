@@ -59,16 +59,6 @@ const Vertex quadVertices[] = {
     { { 1.0f, -1.0f }, { 1.0f, 1.0f } }   // Bottom-right
 };
 
-MTLClearColor MTLClearColorFromARGB (uint32_t argb)
-{
-    double a = ((argb >> 24) & 0xFF) / 255.0;
-    double r = ((argb >> 16) & 0xFF) / 255.0;
-    double g = ((argb >> 8) & 0xFF) / 255.0;
-    double b = ((argb >> 0) & 0xFF) / 255.0;
-
-    return MTLClearColorMake (r, g, b, a);
-}
-
 } // namespace
 
 //==============================================================================
@@ -222,6 +212,7 @@ public:
                                                                                               width:width
                                                                                              height:height
                                                                                           mipmapped:NO];
+        descriptor.storageMode = MTLStorageModePrivate;
         descriptor.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
         currentTexture = [gpu newTextureWithDescriptor:descriptor];
     }
@@ -239,23 +230,6 @@ public:
     {
         this->frameDescriptor = frameDescriptor;
         getRenderContext()->beginFrame (frameDescriptor);
-
-        if (frameDescriptor.loadAction == rive::gpu::LoadAction::clear)
-        {
-            id<MTLCommandBuffer> presentCommandBuffer = [queue commandBuffer];
-
-            MTLRenderPassDescriptor* passDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
-            passDescriptor.colorAttachments[0].texture = currentTexture;
-            passDescriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
-            passDescriptor.colorAttachments[0].clearColor = MTLClearColorFromARGB (frameDescriptor.clearColor);
-            passDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
-
-            id<MTLRenderCommandEncoder> encoder = [presentCommandBuffer renderCommandEncoderWithDescriptor:passDescriptor];
-            [encoder setRenderPipelineState:pipelineState];
-            [encoder endEncoding];
-
-            [presentCommandBuffer commit];
-        }
     }
 
     void end (void*) override

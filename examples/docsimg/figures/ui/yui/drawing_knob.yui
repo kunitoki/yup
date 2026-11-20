@@ -1,0 +1,44 @@
+// size: 480 147
+drawing Knob {
+    let r: bounds.width / 2 - 4;
+    let a0: 135deg;
+    let a1: 405deg;
+    let av: lerp (a0, a1, normalized);
+
+    circle { id: well; center: bounds.center; radius: r; fill: backgroundColor; }
+
+    layer {
+        opacity: enabled ? 1 : 0.4;
+
+        arc { id: track; center: bounds.center; radius: r - 2; from: a0; to: a1;
+              stroke: trackColor; strokeWidth: 3; cap: round; }
+        arc { id: value; center: bounds.center; radius: r - 2; from: a0; to: av;
+              stroke: thumbColor; strokeWidth: 3; cap: round; }
+
+        repeat i in 0 .. 11 {
+            line { from: polar (bounds.center, r * 0.6, lerp (a0, a1, i / 10.0));
+                   to: polar (bounds.center, r * 0.7, lerp (a0, a1, i / 10.0));
+                   stroke: trackColor; strokeWidth: 1; }
+        }
+        group {
+            transform: transform.rotation (av, bounds.center.x, bounds.center.y);
+            line { id: needle; from: polar (bounds.center, r * 0.5, 0); to: polar (bounds.center, r - 2, 0);
+                   stroke: thumbColor; strokeWidth: 3; cap: round; }
+        }
+    }
+
+    text { bounds: bounds.reduced (r * 0.5); text: format ("%.2f", value); fill: thumbColor; }
+}
+
+style {
+    Slider { drawing: Knob; }
+}
+
+Row {
+    gap: 12;
+
+    Slider { value: 0.15; flexGrow: 1; }
+    Slider { value: 0.5;  flexGrow: 1; }
+    Slider { value: 0.85; flexGrow: 1; }
+    Slider { value: 0.5;  flexGrow: 1; enabled: false; }
+}

@@ -136,7 +136,7 @@ public:
 
             Only used by macOS/iOS.
 
-            @see withMaximumProcessingTimeMs, AudioWorkgroup, ScopedWorkgroupToken
+            @see withMaximumProcessingTimeMs, AudioWorkgroup, WorkgroupToken
         */
         [[nodiscard]] RealtimeOptions withApproximateAudioProcessingTime (int samplesPerFrame, double sampleRate) const
         {

@@ -155,6 +155,7 @@ public:
     bool flush() override;
 
     bool isValid() const { return isOpen; }
+    void releaseOutputStream() noexcept { output.release(); }
 
 private:
     bool encodeAvailableInput();
@@ -511,6 +512,8 @@ std::unique_ptr<AudioFormatWriter> Mp3AudioFormat::createWriterFor (OutputStream
                                                           qualityOptionIndex);
     if (writer->isValid())
         return writer;
+
+    writer->releaseOutputStream();
 #else
     ignoreUnused (streamToWriteTo,
                   sampleRate,

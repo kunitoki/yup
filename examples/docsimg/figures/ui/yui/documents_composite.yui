@@ -1,0 +1,20 @@
+// size: 480 160
+component LabeledKnob : Column {
+    property label: string = "VALUE";
+    property alias value <=> dial.value;
+
+    align: stretch;
+    gap: 4;
+
+    Slider { id: dial; sliderType: rotaryVerticalDrag; flexGrow: 1; }
+    Label  { text: root.label; justification: center; preferredHeight: 18; }
+}
+
+Row {
+    justify: center;
+    gap: 24;
+
+    LabeledKnob { label: "CUTOFF";    value: 0.7; preferredWidth: 90; }
+    LabeledKnob { label: "RESONANCE"; value: 0.3; preferredWidth: 90; }
+    LabeledKnob { label: "DRIVE";     value: 0.5; preferredWidth: 90; }
+}

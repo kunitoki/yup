@@ -35,7 +35,7 @@ struct SpatialPositionKeyframe
     std::optional<Point<float>> endValue;
     Point<float> tangentIn {};  ///< "ti" - in tangent (relative to this keyframe)
     Point<float> tangentOut {}; ///< "to" - out tangent (relative to this keyframe)
-    AnimationEasing easing;
+    Easing easing;
 };
 
 //==============================================================================

@@ -257,17 +257,3 @@ every lamp draws the same `lampMesh`. `attachWith<T> (setup)` default-constructs
 the node and lets `setup` configure it. Build a prefab completely before using
 it: instances don't follow later changes. glTF assets are loaded as prefabs, see
 [Loading glTF](meshes-and-gltf.md#loading-gltf).
-
-## Upgrading from `EntityNode`
-
-| Before                                                 | Now                                                         |
-| ------------------------------------------------------ | ----------------------------------------------------------- |
-| `Entity::Ptr (new Entity ("a"))` + `addChild`          | `scene->createEntity ("a", parent)`                         |
-| `removeChild (child)` dropping the last reference      | `child.destroy()`                                           |
-| `entity->setPosition / setRotation / setScale`         | `entity.getOrAttach<TransformNode>().setPosition (...)`     |
-| `getNode<T>()`                                         | `get<T>()`                                                  |
-| `attach<T, N>()`, `attachAt<T>()`, slots               | One node per type, child entities for more                  |
-| `forEachNode (...)`                                    | `scene->view<T>()` or `entity.forEachAttachedNode (...)`    |
-| `scene->getRoot()->...`                                | `scene->getRoot()....`                                      |
-| `model.createEntity()`                                 | `model.instantiate (*scene, parent)`                        |
-| `setActiveCamera (entity, slot)`                       | `setActiveCamera (entity)`                                  |

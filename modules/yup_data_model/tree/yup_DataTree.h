@@ -28,6 +28,14 @@ class DataTree;
 class DataTreeSchema;
 
 //==============================================================================
+/** How a transaction ended, as told to DataTreeListener::transactionEnded(). */
+enum class DataTreeTransactionResult
+{
+    committed, /**< Its changes were applied, or taken back by an undo, or applied again by a redo. */
+    aborted    /**< It was aborted: nothing was applied. */
+};
+
+//==============================================================================
 /**
     Base class for objects that want to receive notifications about DataTree changes.
 
@@ -100,15 +108,6 @@ public:
     virtual void childMoved (DataTree& parent, DataTree& child, int oldIndex, int newIndex) {}
 
     /**
-        Called when the internal tree structure has been completely replaced.
-
-        This is a rare event that occurs during certain internal operations.
-
-        @param tree The DataTree whose structure was replaced
-    */
-    virtual void treeRedirected (DataTree& tree) {}
-
-    /**
         Called on the child's listeners after it was added to, removed from, or moved to another parent.
 
         When this is called, child.getParent() returns the new parent, or an invalid tree if the child
@@ -139,6 +138,43 @@ public:
         @see parentChanged
     */
     virtual void ancestorChanged (DataTree& tree, DataTree& reparentedAncestor) {}
+
+    /**
+        Called when a transaction is about to apply its changes to this node, or is aborted.
+
+        A committed transaction that recorded at least one edit of a node sends transactionStarted()
+        to the listeners of that node, then the callbacks of its changes, then transactionEnded().
+        Undoing and redoing it does the same. A listener can use the pair to put work off until all
+        the changes are in, or to time them.
+
+        An aborted transaction applies nothing, and sends the two one after the other when it is
+        aborted, so that it does not go unnoticed. Either way a transactionStarted() is always
+        followed by its transactionEnded(), which tells how the transaction ended.
+
+        Neither is sent when the transaction is created: an open transaction is not known to the
+        listeners until it is committed or aborted. Only the nodes a transaction edits are told. A
+        node that loses a child to another parent, or whose parent changes, gets its callbacks with
+        no transaction around them.
+
+        Transactions nest when a listener commits one from a callback, and a listener added while one
+        is being applied gets transactionEnded() without a transactionStarted(): count them, and do
+        not go below zero.
+
+        @param tree The DataTree the transaction edits
+
+        @see transactionEnded
+    */
+    virtual void transactionStarted (DataTree& tree) {}
+
+    /**
+        Called after a transaction has applied its changes to this node, or was aborted.
+
+        @param tree The DataTree the transaction edited
+        @param result Whether the changes were applied or the transaction was aborted
+
+        @see transactionStarted
+    */
+    virtual void transactionEnded (DataTree& tree, DataTreeTransactionResult result) {}
 };
 
 //==============================================================================
@@ -226,8 +262,11 @@ class YUP_API DataTree
         void sendChildMovedMessage (std::shared_ptr<DataObject> child, int oldIndex, int newIndex);
         void sendParentChangedMessage (std::shared_ptr<DataObject> previousParent);
         void sendAncestorChangedMessage (const std::shared_ptr<DataObject>& reparentedAncestor);
+        void sendTransactionStartedMessage();
+        void sendTransactionEndedMessage (DataTreeTransactionResult result);
 
         //==============================================================================
+        bool isDescendantOf (const DataObject& possibleAncestor) const;
         std::shared_ptr<DataObject> clone() const;
 
     private:
@@ -818,6 +857,11 @@ public:
     using Listener = DataTreeListener;
 
     /**
+        How a transaction ended, as told to Listener::transactionEnded().
+    */
+    using TransactionResult = DataTreeTransactionResult;
+
+    /**
         Adds a listener to receive notifications about changes to this DataTree.
 
         The listener will be called whenever this DataTree is modified through
@@ -882,6 +926,8 @@ public:
     bool isEquivalentTo (const DataTree& other) const;
 
     //==============================================================================
+    class BatchTransaction;
+
     /**
         RAII class for batching multiple DataTree mutations into a single atomic operation.
 
@@ -966,8 +1012,9 @@ public:
         /**
             Aborts the transaction, discarding all batched changes.
 
-            The DataTree remains unchanged and the transaction becomes inactive.
-            No listeners are notified.
+            The DataTree remains unchanged and the transaction becomes inactive. Its listeners get
+            no callback for a change, only transactionStarted() followed by transactionEnded()
+            with TransactionResult::aborted.
 
             @see commit(), isActive()
         */
@@ -1038,16 +1085,91 @@ public:
         void moveChild (int currentIndex, int newIndex);
 
         /**
+            Adds several children at once (batched until commit).
+
+            This equals calling addChild() for each tree in order, the first one at the given index and
+            each of the others right after the one before: same resulting tree, same callbacks in the
+            same order, same undo. The trees addChild() would ignore are skipped, and so is a tree
+            listed twice.
+
+            It is a single edit, though. Children that have no parent yet are inserted together, in a
+            time that does not depend on where they go, and the callbacks are sent once they are all
+            in place. Children taken from another parent are moved one at a time.
+
+            @param children The trees to add
+            @param index Position to insert the first one at, or -1 to append them at the end
+        */
+        void addChildren (Span<const DataTree> children, int index = -1);
+
+        /**
+            Removes a range of children at once (batched until commit).
+
+            This equals calling removeChild (index) from the last index of the range down to the first:
+            same resulting tree, same callbacks in the same order, same undo. The part of the range
+            that holds no children is ignored.
+
+            It is a single edit, though: the children are removed together, and the callbacks are
+            sent once they are all gone.
+
+            @param startIndex The index of the first child to remove
+            @param numChildren How many children to remove
+        */
+        void removeChildren (int startIndex, int numChildren);
+
+        /**
+            Removes several children at once (batched until commit).
+
+            This equals calling removeChild() on each listed child, from the last one in this node to
+            the first, whatever the order they are listed in: same resulting tree, same callbacks in
+            the same order, same undo. Trees that are not children of this node are ignored.
+
+            It is a single edit, though: the children are removed together, in a time that does not
+            depend on how many are listed, and the callbacks are sent once they are all gone.
+
+            @param children The children to remove
+        */
+        void removeChildren (Span<const DataTree> children);
+
+        /**
+            Puts the children in a new order (batched until commit).
+
+            This equals calling moveChild() to bring each child to its new index, from the first index
+            to the last: same resulting tree, same callbacks in the same order, same undo. It is a single
+            edit, though, taking a time that does not depend on how far the children move.
+
+            Nothing happens unless the trees are exactly the children the node has when the edit is
+            applied, each listed once.
+
+            @param newOrder All the children of this node, in the order they should end up in
+        */
+        void reorderChildren (Span<const DataTree> newOrder);
+
+        /**
             Returns the effective number of children taking pending operations into account.
         */
         int getEffectiveChildCount() const;
 
     private:
         friend class DataTree;
-        friend class TransactionAction;
+        friend class BatchTransaction;
 
         struct PropertyChange;
         struct ChildChange;
+
+        struct PropertyState
+        {
+            int pendingSet = -1; // Index of the pending set still in effect, if any
+            bool reset = false;  // True once the property was removed, alone or with all the others
+        };
+
+        PropertyState findPropertyState (const Identifier& name);
+        void indexPropertyChange (std::size_t index);
+        bool hasEffectiveProperties();
+        int getCommittedChildCount() const;
+        void recordChildChange (ChildChange&& change);
+        void noteChildrenRemoved (int numRemoved);
+        std::vector<UndoableAction::Ptr> takeActions();
+        void discard();
 
         /**
             Constructs a transaction for the specified DataTree.
@@ -1066,6 +1188,15 @@ public:
         std::vector<PropertyChange> propertyChanges;
         std::vector<ChildChange> childChanges;
         bool active = true;
+
+        // What the pending changes add up to, kept as they are recorded so that recording stays cheap
+        std::unordered_map<Identifier, int> propertyIndex;
+        bool hasPropertyIndex = false;
+        bool removedAllProperties = false;
+        bool removedAllChildren = false;
+        bool addedChildren = false;
+        int childCountDelta = 0;
+        int childCountFloor = 0;
 
         YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Transaction)
     };
@@ -1209,6 +1340,92 @@ public:
         YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ValidatedTransaction)
     };
 
+    //==============================================================================
+    /**
+        Commits the edits of several nodes as one transaction.
+
+        edit() hands out the pending Transaction of a node, the same one each time it is asked for
+        that node. Committing the batch equals committing those transactions one after the other, in
+        the order the nodes were first edited: same resulting trees, same callbacks of the changes in
+        the same order. What the batch adds is that the nodes share one transaction: transactionStarted()
+        reaches the listeners of every edited node before the first change, transactionEnded() after the
+        last one, and the whole batch is a single undoable action.
+
+        It is not faster than one transaction per node. Use it when listeners should see the edits
+        as one, or when they have to be undone together.
+
+        @code
+        DataTree::BatchTransaction batch (&undoManager);
+
+        for (const auto& row : selectedRows)
+            batch.edit (row).setProperty ("selected", false);
+
+        // Commits when it goes out of scope, unless aborted
+        @endcode
+
+        @see Transaction, DataTreeListener::transactionStarted
+    */
+    class YUP_API BatchTransaction
+    {
+    public:
+        /**
+            Creates a batch.
+
+            @param undoManager Optional UndoManager to make the batch undoable as a whole
+        */
+        explicit BatchTransaction (UndoManager* undoManager = nullptr);
+
+        /**
+            Destructor - commits the batch if it is still active.
+        */
+        ~BatchTransaction();
+
+        /**
+            Returns the pending transaction of a node, to record edits with.
+
+            The transaction belongs to the batch: it stays valid until the batch is destroyed and
+            is committed with it. Committing or aborting it directly takes the edits recorded so far
+            out of the batch.
+
+            @param node The node to edit
+
+            @return The transaction of that node, which ignores every edit when the node is invalid
+                    or the batch is no longer active
+        */
+        Transaction& edit (const DataTree& node);
+
+        /**
+            Commits the edits of all the nodes as one transaction.
+
+            @see abort(), isActive()
+        */
+        void commit();
+
+        /**
+            Discards the edits of all the nodes.
+
+            The listeners of the nodes it was asked to edit are told as for one aborted transaction.
+
+            @see commit(), isActive()
+        */
+        void abort();
+
+        /**
+            Checks if this batch can still take edits.
+
+            @return true if the batch hasn't been committed or aborted
+        */
+        bool isActive() const noexcept { return active; }
+
+    private:
+        UndoManager* undoManager;
+        std::vector<std::unique_ptr<Transaction>> transactions;
+        std::unordered_map<const DataObject*, std::size_t> transactionIndices;
+        bool active = true;
+
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BatchTransaction)
+    };
+
     /**
         Creates a new transaction for modifying this DataTree.
 
@@ -1274,11 +1491,16 @@ private:
     friend class PropertySetAction;
     friend class PropertyRemoveAction;
     friend class RemoveAllPropertiesAction;
+    friend class ReplacePropertiesAction;
     friend class AddChildAction;
     friend class RemoveChildAction;
     friend class RemoveAllChildrenAction;
     friend class MoveChildAction;
+    friend class AddChildrenAction;
+    friend class RemoveChildrenAction;
+    friend class ReorderChildrenAction;
     friend class CompoundAction;
+    friend struct std::hash<DataTree>;
 
     static DataTree readTreeFromBinaryStream (InputStream& input, int nestingDepth, bool& nestedTooDeeply);
 
@@ -1411,3 +1633,20 @@ DataTree DataTree::findDescendant (Predicate predicate) const
 }
 
 } // namespace yup
+
+#ifndef DOXYGEN
+namespace std
+{
+
+/** Hashes a DataTree by the node it refers to, matching its operator==. */
+template <>
+struct hash<yup::DataTree>
+{
+    size_t operator() (const yup::DataTree& tree) const noexcept
+    {
+        return hash<const void*>() (tree.object.get());
+    }
+};
+
+} // namespace std
+#endif

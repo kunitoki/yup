@@ -30,6 +30,11 @@ template <class T>
 class ComponentTestHelper;
 #endif
 
+class ComponentTypeInfo;
+class StyleContext;
+class StyleSheet;
+class StyleState;
+
 //==============================================================================
 
 /**
@@ -63,11 +68,54 @@ public:
 
     //==============================================================================
     /**
+        Returns the reflected type info for this component.
+
+        This is the type info given with @ref setTypeInfo, or the one of the component's class
+        returned by @ref getDefaultTypeInfo. It describes the properties, signals and factory
+        used by the stylesheet, `.yui` files and tooling.
+
+        @see ComponentTypeInfo, getClassTypeInfo, setTypeInfo
+    */
+    const ComponentTypeInfo& getTypeInfo() const;
+
+    /**
+        Gives this component its own type info, extending the one of its class.
+
+        A `.yui` composite such as `component LabeledKnob : Column` is a Column carrying the
+        extra properties and signals its declaration adds, described by such a type info.
+
+        @param newTypeInfo The type info to use, which must derive from @ref getDefaultTypeInfo
+                           and stay alive while it is set, or nullptr to use the default again.
+    */
+    void setTypeInfo (const ComponentTypeInfo* newTypeInfo);
+
+    /**
+        Returns the type info of the component's class, ignoring @ref setTypeInfo.
+
+        Widgets override this to return their own static type info. Unregistered subclasses
+        inherit the type info of their nearest registered base.
+    */
+    virtual const ComponentTypeInfo& getDefaultTypeInfo() const { return getClassTypeInfo(); }
+
+    /** Returns the static type info describing the Component base type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    //==============================================================================
+    /**
         Get the ID of the component.
 
         @return The ID of the component.
      */
     String getComponentID() const;
+
+    /**
+        Set the ID of the component.
+
+        The ID is matched by `#id` style selectors, so changing it restyles the component.
+
+        @param newComponentID The new ID of the component.
+     */
+    void setComponentID (StringRef newComponentID);
 
     //==============================================================================
     /**
@@ -85,12 +133,19 @@ public:
         mouse ups and exits, so an interaction started before it got disabled can finish,
         and shows the default mouse cursor rather than its own.
 
+        Changing the state repaints the component and, for the component and every descendant
+        whose isEnabled() changes as a result, reports the `enabled` property to the component
+        listeners and calls enablementChanged(). Nothing is reported inside a disabled parent.
+
         @param shouldBeEnabled True if the component should be enabled, false otherwise.
      */
     void setEnabled (bool shouldBeEnabled);
 
     /**
         Called when the enabled state of the component changes.
+
+        Called on the component and on every descendant whose isEnabled() changes as a result,
+        but not when the component sits inside a disabled parent, since nothing changes then.
      */
     virtual void enablementChanged();
 
@@ -656,9 +711,15 @@ public:
     AffineTransform getTransform() const;
 
     /**
+        Returns the effective transform applied to this component, combining any stylesheet
+        transform from StyleState with the explicit transform set via setTransform().
+     */
+    AffineTransform getCombinedTransform() const;
+
+    /**
         Check if the component is transformed.
 
-        @return True if the component is transformed, false otherwise.
+        @return True if the component has a non-identity explicit or style transform, false otherwise.
      */
     bool isTransformed() const;
 
@@ -813,8 +874,9 @@ public:
         component clears what it drew there.
 
         A component still paints inside its parent's area only. The margin is not painted
-        for components on the desktop, nor by components with a ComponentEffect or cached to
-        a texture, which render their bounds only.
+        for components on the desktop. Components with a ComponentEffect or cached to a
+        texture keep their content in their bounds, only their stylesheet `shadow:` layers
+        paint in the margin.
 
         @param left    How far the component may paint left of its bounds
         @param top     How far the component may paint above its bounds
@@ -857,6 +919,25 @@ public:
         @see setPaintMargin, getLocalBounds
      */
     Rectangle<float> getPaintBounds() const;
+
+    //==============================================================================
+    /** Keeps this component out of the layout performed by its parent.
+
+        A LayoutComponent positions every visible child it has. A component excluded from the
+        layout keeps the bounds it is given, so it can be laid over its siblings: this is what a
+        development tool overlay or a drag image added to a running interface needs.
+
+        @param shouldBeExcluded True to leave this component where it is put.
+
+        @see isExcludedFromParentLayout, LayoutComponent
+    */
+    void setExcludedFromParentLayout (bool shouldBeExcluded);
+
+    /** Returns true when the layout of the parent leaves this component alone.
+
+        @see setExcludedFromParentLayout
+    */
+    bool isExcludedFromParentLayout() const;
 
     //==============================================================================
     /** Enables or disables paint measurement suppression for this component.
@@ -1216,6 +1297,27 @@ public:
     */
     virtual void childBoundsChanged (Component* child);
 
+    /** Called on the parent when something changing how a direct child is laid out changes.
+
+        This happens when the child's visibility changes, or when one of its layout item properties
+        (`flexGrow`, `margin`, `gridArea`, ...) is set, removed or computed differently by a
+        stylesheet. Layout containers override it to lay their children out again.
+
+        @param child The direct child whose layout changed.
+
+        @see childrenChanged, layoutPropertyChanged, ComponentProperty::layoutEffect
+    */
+    virtual void childLayoutChanged (Component& child);
+
+    /** Called on a component when one of its own container layout properties changes.
+
+        Layout containers override this to lay their children out again without inspecting
+        unrelated visual property changes.
+
+        @see childLayoutChanged, ComponentProperty::layoutEffect
+    */
+    virtual void layoutPropertyChanged();
+
     /** Called on a child when its index amongst its parent's children changes.
 
         This is the z-order position reported by getIndexOfChildComponent(), so it changes
@@ -1312,18 +1414,152 @@ public:
 
     //==============================================================================
     /**
-        Get the properties of the component.
+        Returns the explicit property store of the component, for enumeration only.
 
-        @return The properties of the component.
-     */
-    NamedValueSet& getProperties();
+        The store holds the explicit, store-backed values set on this component (colors,
+        curated geometry and custom properties), keyed by storage id. All writes go through
+        setProperty() / setColor() so that change notifications always fire; the returned set
+        is therefore const.
 
-    /**
-        Get the properties of the component.
-
-        @return The properties of the component.
+        @return The explicit properties of the component.
      */
     const NamedValueSet& getProperties() const;
+
+    /**
+        Returns true when getProperty() would return a defined value for this component.
+
+        @param name The property name to test.
+    */
+    bool hasProperty (const Identifier& name) const;
+
+    /**
+        Sets a property on this component.
+
+        If the component's type declares a descriptor for @p name, the value is routed through
+        its setter (state-backed) or stored under its storage id (store-backed). Otherwise the
+        value is stored as a custom property keyed by @p name. On an actual change, listeners are
+        notified, the style is refreshed and the component repainted.
+
+        @param name  The property name (descriptor name or a custom name).
+        @param value The value to set.
+    */
+    void setProperty (const Identifier& name, const var& value);
+
+    /**
+        Removes an explicit, store-backed property value from this component.
+
+        State-backed descriptor properties cannot be removed and are ignored.
+
+        @param name The property name to remove.
+    */
+    void removeProperty (const Identifier& name);
+
+    /**
+        Reads a property value from this component only (no cascade).
+
+        Returns the descriptor getter result for state-backed properties, the explicit stored
+        value for store-backed properties, or an undefined var when unset.
+
+        `enabled` is read as it was given with setEnabled(), whatever the parents: a component
+        inside a disabled parent is disabled in effect, which findProperty() and isEnabled() tell.
+
+        @param name The property name to read.
+    */
+    var getProperty (const Identifier& name) const;
+
+    /** Reads a property from this component only, converted to @p T. */
+    template <class T>
+    T getPropertyAs (const Identifier& name) const
+    {
+        return VariantConverter<T>::fromVar (getProperty (name));
+    }
+
+    /** Finds a property value, cascading up the parent chain and falling back to the theme and
+        the descriptor default for store-backed properties.
+
+        Color properties fall back to the theme colors, including those derived from the closest
+        palette, as ApplicationTheme::findColor() does. State-backed properties resolve only on
+        the owning component, apart from `enabled`, which is false inside a disabled parent as
+        isEnabled() is.
+
+        @param name The property name to find.
+    */
+    var findProperty (const Identifier& name) const;
+
+    /** Finds a property with cascade, converted to @p T. */
+    template <class T>
+    T findPropertyAs (const Identifier& name) const
+    {
+        return VariantConverter<T>::fromVar (findProperty (name));
+    }
+
+    //==============================================================================
+    /** Where the value returned by findProperty() came from.
+
+        Development tools show this so that an edit goes to the right place: overwriting an
+        animated or stylesheet driven value on the component is undone the next time the style
+        recomputes, while a value inherited from an ancestor has to be edited on that ancestor.
+
+        @see findPropertySource
+    */
+    struct PropertySource
+    {
+        /** The layers a resolved value can come from, in resolution order. */
+        enum class Layer
+        {
+            unset,       /**< Nothing supplies the property, the returned value is undefined. */
+            stateBacked, /**< A getter on the component itself, such as the bounds or the title. */
+            explicitly,  /**< An explicit value set with setProperty() on `component`. */
+            styled,      /**< A stylesheet, animation or computed style value held by `component`. */
+            theme,       /**< The global ApplicationTheme, including palette derived colors. */
+            defaulted    /**< The default value from the property descriptor. */
+        };
+
+        /** The layer that supplied the value. */
+        Layer layer = Layer::unset;
+
+        /** The component the value came from, which is an ancestor for inherited properties, or
+            nullptr when the value came from the theme or the descriptor default. */
+        const Component* component = nullptr;
+
+        /** The descriptor of the resolved property, or nullptr when the property is not declared
+            by the component type. */
+        const ComponentProperty* descriptor = nullptr;
+
+        /** The key the value is stored under, which differs from the property name for properties
+            declared with a storage key. */
+        Identifier storageKey;
+
+        /** The resolved value, which is what findProperty() returns. */
+        var value;
+
+        /** Returns true when writing to this component with setProperty() takes effect durably. */
+        bool isLocallyEditable() const noexcept
+        {
+            return layer != Layer::styled;
+        }
+    };
+
+    /** Explains where findProperty() takes the value of @p name from.
+
+        Resolves exactly as findProperty() does and reports the layer and the supplying component
+        along with the value, without changing anything.
+
+        @param name The property name to resolve.
+
+        @return The resolved value together with its origin.
+    */
+    PropertySource findPropertySource (const Identifier& name) const;
+
+    /** Notifies listeners that a state-backed property changed internally.
+
+        Widgets call this from their own setters (Slider drag, toggle, text edit) so that the
+        single change path feeds bindings, pseudo-state selectors and attribute selectors. It
+        notifies ComponentListener::componentPropertyChanged() without touching the property store.
+
+        @param name The name of the property that changed.
+    */
+    void notifyPropertyChanged (const Identifier& name);
 
     //==============================================================================
     /**
@@ -1641,6 +1877,98 @@ public:
     virtual void styleChanged();
 
     //==============================================================================
+    /** Adds a style class to this component.
+
+        Style classes are the `.class` selectors of a stylesheet, the `class:` property of a
+        `.yui` instance, and are free to be set from C++ on hand-written UIs too.
+
+        @param styleClass The class to add.
+
+        @see removeStyleClass, hasStyleClass, setStyleClasses, StyleSheet
+    */
+    void addStyleClass (const Identifier& styleClass);
+
+    /** Removes a style class from this component.
+
+        @param styleClass The class to remove.
+    */
+    void removeStyleClass (const Identifier& styleClass);
+
+    /** Returns true if this component carries a style class.
+
+        @param styleClass The class to look for.
+    */
+    bool hasStyleClass (const Identifier& styleClass) const;
+
+    /** Replaces every style class of this component.
+
+        @param newStyleClasses The classes the component should carry.
+    */
+    void setStyleClasses (const Array<Identifier>& newStyleClasses);
+
+    /** Returns the style classes of this component, in the order they were added. */
+    const Array<Identifier>& getStyleClasses() const noexcept;
+
+    //==============================================================================
+    /** Returns true while the pointer is over this component or one of its children.
+
+        This follows the CSS semantics of `:hover`, so a container hovers while the pointer is
+        over anything inside it.
+    */
+    bool isHovered() const noexcept;
+
+    /** Returns true while a mouse button is held down on this component or one of its children.
+
+        This is what the `:pressed` and `:active` pseudo-classes match.
+    */
+    bool isPressed() const noexcept;
+
+    /** Returns true between the focus gain and the focus loss reported to this component.
+
+        This is what the `:focus` and `:focused` pseudo-classes match.
+    */
+    bool isFocused() const noexcept;
+
+    /** Returns true when this component or one of its children holds the keyboard focus.
+
+        This is what the `:focus-within` pseudo-class matches, while `:focus` matches
+        isFocused().
+    */
+    bool hasFocusWithin() const;
+
+    //==============================================================================
+    /** Attaches a stylesheet to this component and everything inside it.
+
+        The component becomes the root of a StyleContext that matches the sheet's rules against
+        the subtree, computes the values of the matched properties and keeps them up to date as
+        classes, states and properties change. It works for hand-written C++ trees as well as
+        for the ones built from a `.yui` file. Passing nullptr detaches the sheet and drops
+        everything it computed.
+
+        Nesting is allowed: the closest attached context up the parent chain styles a component.
+
+        @param newStyleSheet The sheet to attach, or nullptr to detach.
+
+        @see getStyleSheet, getStyleContext, StyleSheet, StyleContext
+    */
+    void setStyleSheet (ReferenceCountedObjectPtr<StyleSheet> newStyleSheet);
+
+    /** Returns the stylesheet attached to this component with setStyleSheet(), or nullptr. */
+    ReferenceCountedObjectPtr<StyleSheet> getStyleSheet() const;
+
+    /** Returns the style context rooted at this component, or nullptr when none is attached. */
+    StyleContext* getStyleContext() const noexcept;
+
+    /** Returns the closest style context attached to this component or one of its parents. */
+    StyleContext* findStyleContext() const noexcept;
+
+    /** Returns the values a stylesheet or an animation computed for this component, or nullptr.
+
+        @see StyleState
+    */
+    const StyleState* getStyleState() const noexcept;
+
+    //==============================================================================
     /** Set a color for the component.
 
         @param colorId The identifier of the color to set.
@@ -1687,38 +2015,6 @@ public:
     const ThemePalette* findPalette() const;
 
     //==============================================================================
-
-    /** Set a metric value for the component.
-
-        Metrics are numeric values like corner radius, padding, or spacing that
-        can be themed globally and overridden per-component, following the same
-        pattern as component colors.
-
-        @param metricId The identifier of the metric to set.
-        @param metric The metric value to set. Pass std::nullopt to remove the override.
-    */
-    void setMetric (const Identifier& metricId, const std::optional<float>& metric);
-
-    /** Get the metric override for this component (does not walk parents).
-
-        @param metricId The identifier of the metric to get.
-
-        @return The metric value, or std::nullopt if not set on this specific component.
-    */
-    std::optional<float> getMetric (const Identifier& metricId) const;
-
-    /** Find the metric value, walking up the parent hierarchy.
-
-        Checks this component first, then walks up the parent chain. If no override
-        is found, falls back to the value registered in the global ApplicationTheme.
-
-        @param metricId The identifier of the metric to find.
-
-        @return The metric value, or std::nullopt if not found anywhere.
-    */
-    std::optional<float> findMetric (const Identifier& metricId) const;
-
-    //==============================================================================
     /** Sets a component effect that is applied after the component and its children are rendered.
 
         The component subtree is first rendered to an offscreen GPU texture, then the effect's
@@ -1738,9 +2034,12 @@ public:
 
         When enabled, the component subtree is rendered once into an offscreen GPU texture that
         is reused across subsequent frames. The cache is automatically invalidated when the component
-        is repainted, resized, or its children change.
+        is repainted, resized, or its children change, and when the application theme changes.
 
         This improves performance for complex components whose content changes infrequently.
+
+        It is the `cached` property of the component, which a `.yui` document or a stylesheet
+        rule can set.
 
         @param shouldCache Whether to enable cached-to-texture rendering.
      */
@@ -1760,10 +2059,13 @@ public:
         @param includeEffects When true and a component effect is active, the effect is
                               applied to the snapshot. When false, the raw subtree
                               rendering is captured.
+        @param scale          The number of pixels rendered per logical unit: the image is
+                              the component size multiplied by it, so 2 gives a snapshot
+                              that stays sharp on high-DPI displays.
         @return An Image containing the rendered snapshot, or an empty Image on failure.
         @see snapshotToTexture
      */
-    Image snapshotToImage (GraphicsContext& ctx, bool includeEffects = true);
+    Image snapshotToImage (GraphicsContext& ctx, bool includeEffects = true, float scale = 1.0f);
 
     /** Creates a GPU texture snapshot of this component's current appearance,
         including all visible children.
@@ -1808,9 +2110,9 @@ public:
     /** Renders this component's subtree, including its effect, into a texture.
 
         The texture is owned by the component and reused across calls: it is rendered again
-        only when something in the subtree repainted, or the size or scale changed, since the
-        last call. This is meant to be called from the parent's paint() for a component marked
-        with setManuallyComposited().
+        only when something in the subtree repainted, or the size, the scale or the application
+        theme changed, since the last call. This is meant to be called from the parent's paint()
+        for a component marked with setManuallyComposited().
 
         The texture is sized in device pixels, i.e. the component size multiplied by @p scale.
         Pass g.getContextScale() to keep the result sharp on high-density displays, or a larger
@@ -1860,6 +2162,14 @@ public:
     };
 
 protected:
+    /** Tells the style context the component's styling may have changed, so it restyles it and its
+        descendants on the next frame.
+
+        Call it from a widget whose own state takes part in selectors, such as a toggle state read
+        by a `:checked` rule, after the state changed.
+    */
+    void markStyleDirty();
+
     /** @internal This is used by subclasses to simplify sending notifications. */
     template <class F>
     void sendChangeNotification (NotificationType notification, F&& function)
@@ -1882,10 +2192,24 @@ protected:
     }
 
 private:
+    struct ResolvedProperty;
+    ResolvedProperty resolveProperty (const Identifier& name) const;
+    ResolvedProperty resolveColorProperty (const Identifier& colorId) const;
+    const var* findStoredValue (const Identifier& storageKey, bool isInherited) const;
+    void applyStoredPropertyChange (const ResolvedProperty& resolved, const var* valueToWrite);
+    StyleState& getOrCreateStyleState();
+    void applyPositionChange (const Rectangle<float>& oldBounds, Point<int> nativePosition);
+    void notifyBoundsPropertiesChanged (const Rectangle<float>& oldBounds);
+    void setHoveredChain (bool isNowHovered);
+    void setPressedChain (bool isNowPressed);
+    void clearHoveredInSubtree();
+    void clearPressedInSubtree();
+    void sendEnablementChanged();
+    void sendPaletteChanged();
     void internalRefreshDisplay (double lastFrameTimeSeconds);
     void internalRepaint();
     void internalRepaint (const Rectangle<float>& rect);
-    void internalPaint (Graphics& g, const RectangleList<float>& repaintRegions, bool renderContinuous);
+    void internalPaint (Graphics& g, const RectangleList<float>& repaintRegions, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
     void internalMouseEnter (const MouseEvent& event);
     void internalMouseExit (const MouseEvent& event);
     void internalMouseDown (const MouseEvent& event);
@@ -1975,15 +2299,21 @@ private:
     void sendMoved();
     void sendResized();
     void sendChildBoundsChangedToParent();
+    void setStyleTransform (const AffineTransform& newTransform);
 
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
     AffineTransform getTransformToTopLevelComponent() const;
     Point<float> getTopLevelScreenOrigin() const;
-    void applyPaintState (Graphics& g, const RectangleList<float>& clipRegion) const;
-    void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous);
-    void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous);
+    void applyPaintState (Graphics& g, const RectangleList<float>& clipRegion, const RectangleList<float>* activeClipRegion = nullptr) const;
+    void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
+    void paintStyleShadows (Graphics& g) const;
+    void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
+    bool hasActiveEffect() const noexcept;
+    void applyActiveEffects (Graphics& g, GpuTexture::Ptr texture, Rectangle<float> bounds, float scale);
+    void releaseUnusedEffectCanvases() noexcept;
     GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt);
     std::optional<RectangleList<float>> takeEffectDirtyRegion (bool renderContinuous);
+    void invalidateCanvasesIfThemeChanged();
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
@@ -1992,6 +2322,7 @@ private:
 
     friend class ComponentNative;
     friend class SDLComponentNative;
+    friend class StyleContext;
     friend class WeakReference<Component>;
 
     template <class T>
@@ -2015,6 +2346,10 @@ private:
     ComponentListenerList componentListeners;
     ComponentStyle::Ptr style;
     std::unique_ptr<ThemePalette> palette;
+    std::unique_ptr<StyleState> styleState;
+    std::unique_ptr<StyleContext> styleContext;
+    Array<Identifier> styleClasses;
+    const ComponentTypeInfo* instanceTypeInfo = nullptr;
     NamedValueSet properties;
     MouseCursor mouseCursor;
     GestureType wantedGestures = GestureType::none;
@@ -2022,9 +2357,11 @@ private:
     std::optional<float> windowAspectRatio;
     GpuCanvas::Ptr cachedTextureCanvas;
     GpuCanvas::Ptr effectOffscreenCanvas;
+    GpuCanvas::Ptr filterIntermediateCanvas;
     RectangleList<float> effectDirtyRegion;
     static constexpr int maximumDirtyRectangles = 8;
     GpuCanvas::Ptr presentedCanvas;
+    uint32 canvasThemeGeneration = 0;
     float contentScale = 1.0f;
     uint8 opacity = 255;
     bool suppressChildBoundsChanged = false;
@@ -2045,11 +2382,16 @@ private:
         bool blockSelfMouseEvents : 1;
         bool blockChildrenMouseEvents : 1;
         bool paintProfilingDisabled : 1;
+        bool excludedFromParentLayout : 1;
         bool cachedToTexture : 1;
         bool cachedTextureStale : 1;
         bool paintAsOffscreenRoot : 1;
         bool manuallyComposited : 1;
         bool popupContainer : 1;
+        bool isHovered : 1;
+        bool isPressed : 1;
+        bool isFocused : 1;
+        bool isBeingDeleted : 1;
     };
 
     union

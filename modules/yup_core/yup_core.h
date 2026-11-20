@@ -361,7 +361,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "javascript/yup_JSONSerialisation.h"
 #include "javascript/yup_Javascript.h"
 #include "maths/yup_BigInteger.h"
-#include "maths/yup_Expression.h"
 #include "maths/yup_Random.h"
 #include "misc/yup_RuntimePermissions.h"
 #include "misc/yup_WindowsRegistry.h"

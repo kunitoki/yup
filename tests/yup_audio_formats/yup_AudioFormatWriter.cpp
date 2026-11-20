@@ -108,6 +108,24 @@ public:
     std::vector<std::vector<float>> writtenSamples;
 };
 
+class CountingAudioFormatWriter : public AudioFormatWriter
+{
+public:
+    explicit CountingAudioFormatWriter (std::atomic<int>& samplesWrittenToUse)
+        : AudioFormatWriter (nullptr, "CountingAudioFormatWriter", 44100.0, 2, 32)
+        , samplesWritten (samplesWrittenToUse)
+    {
+    }
+
+    bool write (const float* const*, int numSamples) override
+    {
+        samplesWritten += numSamples;
+        return true;
+    }
+
+    std::atomic<int>& samplesWritten;
+};
+
 static void fillWriterChannel (AudioBuffer<float>& buffer, int channel, std::initializer_list<float> values)
 {
     auto* data = buffer.getWritePointer (channel);
@@ -271,4 +289,46 @@ TEST (AudioFormatWriterTests, WriteHelperEncodesIntegerAndFloatFormats)
         EXPECT_EQ (std::bit_cast<uint64> (ByteOrder::swapIfBigEndian (values[0])), std::bit_cast<uint64> (destination[0]));
         EXPECT_EQ (std::bit_cast<uint64> (ByteOrder::swapIfBigEndian (values[1])), std::bit_cast<uint64> (destination[1]));
     }
+}
+TEST (AudioFormatWriterTests, ThreadedWriterWritesThroughRunningThread)
+{
+    std::atomic<int> samplesWritten { 0 };
+    TimeSliceThread thread ("ThreadedWriterTest");
+    thread.startThread();
+
+    {
+        AudioFormatWriter::ThreadedWriter writer (std::make_unique<CountingAudioFormatWriter> (samplesWritten), thread, 1024);
+
+        AudioBuffer<float> buffer (2, 256);
+        buffer.clear();
+
+        for (int block = 0; block < 3; ++block)
+            EXPECT_TRUE (writer.write (buffer.getArrayOfReadPointers(), 256));
+
+        writer.waitForThreadToFinish();
+
+        EXPECT_FALSE (writer.isThreadRunning());
+        EXPECT_EQ (768, samplesWritten.load());
+        EXPECT_FALSE (writer.write (buffer.getArrayOfReadPointers(), 256));
+    }
+
+    Thread::sleep (20);
+    thread.stopThread (1000);
+}
+
+TEST (AudioFormatWriterTests, ThreadedWriterFlushesQueuedDataWhenThreadIsNotRunning)
+{
+    std::atomic<int> samplesWritten { 0 };
+    TimeSliceThread thread ("ThreadedWriterTest");
+
+    {
+        AudioFormatWriter::ThreadedWriter writer (std::make_unique<CountingAudioFormatWriter> (samplesWritten), thread, 1024);
+
+        AudioBuffer<float> buffer (2, 100);
+        buffer.clear();
+        EXPECT_TRUE (writer.write (buffer.getArrayOfReadPointers(), 100));
+    }
+
+    EXPECT_EQ (100, samplesWritten.load());
+    EXPECT_EQ (0, thread.getNumClients());
 }

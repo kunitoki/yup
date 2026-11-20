@@ -114,8 +114,8 @@ TEST_F (AnimationTransformTests, AnimatedPositionChangesOverTime)
 {
     AnimationTransform t;
     t.position = Vec2Property::Builder {}
-                     .keyframe (0.0f, Point<float> (0.0f, 0.0f), AnimationEasing::linear())
-                     .keyframe (10.0f, Point<float> (100.0f, 0.0f), AnimationEasing::linear())
+                     .keyframe (0.0f, Point<float> (0.0f, 0.0f), Easing::linear())
+                     .keyframe (10.0f, Point<float> (100.0f, 0.0f), Easing::linear())
                      .build();
 
     EXPECT_FALSE (t.isStatic());
@@ -136,13 +136,13 @@ TEST_F (AnimationTransformTests, SpatialPositionUsesExplicitEndValue)
                                     Point<float> (20.0f, 0.0f),
                                     Point<float> {},
                                     Point<float> {},
-                                    AnimationEasing::linear() });
+                                    Easing::linear() });
     t.spatialKeyframes.push_back ({ 10.0f,
                                     Point<float> (100.0f, 0.0f),
                                     std::nullopt,
                                     Point<float> {},
                                     Point<float> {},
-                                    AnimationEasing::linear() });
+                                    Easing::linear() });
 
     EXPECT_NEAR (t.positionAt (5.0f).getX(), 10.0f, 0.001f);
     EXPECT_NEAR (t.positionAt (10.0f).getX(), 100.0f, 0.001f);
@@ -161,13 +161,13 @@ TEST_F (AnimationTransformTests, SpatialPositionFollowsCircularArc)
                                     Point<float> (radius, 0.0f),
                                     Point<float> (0.0f, -handle), // tangentIn
                                     Point<float> (handle, 0.0f),  // tangentOut
-                                    AnimationEasing::linear() });
+                                    Easing::linear() });
     t.spatialKeyframes.push_back ({ 30.0f,
                                     Point<float> (radius, 0.0f),
                                     std::nullopt,
                                     Point<float> {},
                                     Point<float> {},
-                                    AnimationEasing::linear() });
+                                    Easing::linear() });
 
     // Every point along the motion path must stay on the circle (distance == radius).
     for (float frame : { 5.0f, 10.0f, 15.0f, 20.0f, 25.0f })
@@ -183,8 +183,8 @@ TEST_F (AnimationTransformTests, AutoOrientAlignsWithMotionPath)
     AnimationTransform t;
     t.autoOrient = true;
     t.position = Vec2Property::Builder {}
-                     .keyframe (0.0f, Point<float> (0.0f, 0.0f), AnimationEasing::linear())
-                     .keyframe (10.0f, Point<float> (0.0f, 100.0f), AnimationEasing::linear())
+                     .keyframe (0.0f, Point<float> (0.0f, 0.0f), Easing::linear())
+                     .keyframe (10.0f, Point<float> (0.0f, 100.0f), Easing::linear())
                      .build();
 
     const auto transformed = Point<float> (1.0f, 0.0f).transformed (t.toAffineTransform (5.0f));
@@ -285,8 +285,8 @@ TEST_F (AnimationTransformTests, AnimatedScaleIsNotStatic)
 {
     AnimationTransform t;
     t.scale = SizeProperty::Builder {}
-                  .keyframe (0.0f, Size<float> (100.0f, 100.0f), AnimationEasing::linear())
-                  .keyframe (10.0f, Size<float> (200.0f, 200.0f), AnimationEasing::linear())
+                  .keyframe (0.0f, Size<float> (100.0f, 100.0f), Easing::linear())
+                  .keyframe (10.0f, Size<float> (200.0f, 200.0f), Easing::linear())
                   .build();
     EXPECT_FALSE (t.isStatic());
 }
@@ -295,8 +295,8 @@ TEST_F (AnimationTransformTests, AnimatedOpacityIsNotStatic)
 {
     AnimationTransform t;
     t.opacity = FloatProperty::Builder {}
-                    .keyframe (0.0f, 100.0f, AnimationEasing::linear())
-                    .keyframe (10.0f, 0.0f, AnimationEasing::linear())
+                    .keyframe (0.0f, 100.0f, Easing::linear())
+                    .keyframe (10.0f, 0.0f, Easing::linear())
                     .build();
     EXPECT_FALSE (t.isStatic());
 }
@@ -309,7 +309,7 @@ TEST_F (AnimationTransformTests, SpatialPositionWithSingleNaNKeyframeReturnsFirs
                                     std::nullopt,
                                     Point<float> {},
                                     Point<float> {},
-                                    AnimationEasing::linear() });
+                                    Easing::linear() });
 
     EXPECT_EQ (t.positionAt (5.0f), Point<float> (10.0f, 20.0f));
     EXPECT_EQ (t.positionAt (std::numeric_limits<float>::quiet_NaN()), Point<float> (10.0f, 20.0f));

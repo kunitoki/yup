@@ -2395,3 +2395,86 @@ TEST (ListBoxModelTests, ReuseOrCreateReusesAMatchingComponentAndReplacesAnyOthe
     EXPECT_EQ (&label, component.get());
     EXPECT_EQ (nullptr, dynamic_cast<ListBoxItem*> (component.get()));
 }
+
+TEST_F (ListBoxTests, SetItemsShowsTheTextsAsRows)
+{
+    listBox->setItems ({ "alpha", "beta", "gamma" });
+
+    ASSERT_NE (nullptr, listBox->getModel());
+    EXPECT_EQ (3, listBox->getModel()->getNumRows());
+    EXPECT_EQ ("beta", listBox->getModel()->getRowText (1));
+    EXPECT_EQ (StringArray ({ "alpha", "beta", "gamma" }), listBox->getItems());
+}
+
+TEST_F (ListBoxTests, SetItemsClearsTheSelectionAndGetItemsIsEmptyForOtherModels)
+{
+    listBox->setItems ({ "alpha", "beta" });
+    listBox->selectRow (1);
+    EXPECT_EQ (1, listBox->getSelectedRow());
+
+    listBox->setItems ({ "one", "two", "three" });
+    EXPECT_EQ (-1, listBox->getSelectedRow());
+
+    listBox->setModel (model.get());
+    EXPECT_TRUE (listBox->getItems().isEmpty());
+}
+
+TEST_F (ListBoxTests, ReadsAndWritesItemsAsAnArrayProperty)
+{
+    Array<var> values;
+    values.add ("alpha");
+    values.add ("beta");
+
+    listBox->setProperty (Identifier ("items"), var (values));
+
+    const auto stored = listBox->getProperty (Identifier ("items"));
+    ASSERT_TRUE (stored.isArray());
+    EXPECT_EQ (2, stored.size());
+    EXPECT_EQ ("beta", stored[1].toString());
+
+    const auto* property = listBox->getTypeInfo().findProperty (Identifier ("items"));
+    ASSERT_NE (nullptr, property);
+    EXPECT_EQ (ComponentProperty::Type::array, property->type);
+    EXPECT_EQ (ComponentProperty::Type::string, property->elementType);
+}
+
+TEST_F (ListBoxTests, ReadsAndWritesTheSelectedRowProperty)
+{
+    listBox->setItems ({ "alpha", "beta", "gamma" });
+
+    listBox->setProperty (Identifier ("selectedRow"), 2);
+    EXPECT_EQ (2, listBox->getSelectedRow());
+    EXPECT_EQ (2, static_cast<int> (listBox->getProperty (Identifier ("selectedRow"))));
+
+    listBox->setProperty (Identifier ("selectedRow"), -1);
+    EXPECT_EQ (-1, listBox->getSelectedRow());
+}
+
+TEST_F (ListBoxTests, ReportsSelectionChangesToPropertyListeners)
+{
+    class Listener : public ComponentListener
+    {
+    public:
+        void componentPropertyChanged (Component& component, const Identifier& name) override
+        {
+            ignoreUnused (component);
+            changed.add (name.toString());
+        }
+
+        StringArray changed;
+    };
+
+    Listener listener;
+    listBox->addComponentListener (&listener);
+    listBox->setItems ({ "alpha", "beta", "gamma" });
+
+    listener.changed.clear();
+    listBox->selectRow (1);
+    EXPECT_TRUE (listener.changed.contains ("selectedRow"));
+
+    listener.changed.clear();
+    listBox->selectRow (1);
+    EXPECT_FALSE (listener.changed.contains ("selectedRow"));
+
+    listBox->removeComponentListener (&listener);
+}

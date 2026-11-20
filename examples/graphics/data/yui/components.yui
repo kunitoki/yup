@@ -1,0 +1,32 @@
+// A composite component: a knob with its value readout, declared once and used for every
+// parameter. It is a Column with a typed property, an alias of the knob value and a signal.
+// Inside the block 'root' is the instance and the ids are private, so each instance has its
+// own 'knob' and 'readout'.
+component LabeledKnob : Column {
+    property label: string = "VALUE";
+    property alias value <=> knob.value;
+    signal onChanged (value: number);
+
+    class: labeled;
+    gap: 2;
+
+    Slider {
+        id: knob;
+        class: knob;
+        sliderType: rotaryVerticalDrag;
+        minimum: 0;
+        maximum: 1;
+        flexGrow: 1;
+        onValueChanged: root.onChanged (value);
+    }
+
+    Label {
+        id: readout;
+        class: readout;
+        text: format ("%.0f %%", knob.value * 100);
+        justification: center;
+        textHeightProportion: 0.8;
+        preferredHeight: rowHeight;
+        opacity: knob.pressed ? 1 : 0.65;
+    }
+}

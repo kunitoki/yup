@@ -26,9 +26,12 @@ function (_yup_emscripten_get_compile_settings enable_webgpu output_definitions 
         $<$<CONFIG:DEBUG>:-O0 -g>
         $<$<CONFIG:RELEASE>:-O3>
         -fexceptions
-        -pthread
         -msimd128
         -Wno-nontrivial-memcall)
+
+    if (YUP_ENABLE_EMSCRIPTEN_THREADS)
+        list (APPEND options -pthread)
+    endif()
 
     if (enable_webgpu)
         list (APPEND definitions RIVE_WEBGPU=2)
@@ -46,6 +49,14 @@ endfunction()
 function (_yup_platform_setup_standalone_app target_name)
     if (NOT "${target_console}" AND NOT "${target_static_library}")
         set_target_properties (${target_name} PROPERTIES SUFFIX ".html")
+    endif()
+
+    # Audio is played by an audio worklet running on its own thread
+    if (NOT YUP_ENABLE_EMSCRIPTEN_THREADS)
+        _yup_target_list_links ("${YUP_ARG_MODULES}" yup_audio_devices links_audio_devices)
+        if (links_audio_devices)
+            _yup_message (FATAL_ERROR "${target_name} - yup_audio_devices needs threads on emscripten: set YUP_ENABLE_EMSCRIPTEN_THREADS to ON or build without the module")
+        endif()
     endif()
 
     _yup_set_default (YUP_ARG_CUSTOM_SHELL "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/${YUP_PLATFORM}/shell.html")
@@ -71,13 +82,8 @@ function (_yup_platform_setup_standalone_app target_name)
         "$<$<CONFIG:DEBUG>:${debug_link_options}>"
         $<$<CONFIG:RELEASE>:-O2 -flto>
         -fexceptions
-        -pthread
-        -Wno-pthreads-mem-growth
         -sWASM=1
         -sWASM_BIGINT=1
-        -sWASM_WORKERS=1
-        -sAUDIO_WORKLET=1
-        -sSHARED_MEMORY=1
         -sALLOW_MEMORY_GROWTH=1
         -sASSERTIONS=1
         -sEXIT_RUNTIME=1
@@ -86,7 +92,6 @@ function (_yup_platform_setup_standalone_app target_name)
         -sSTACK_SIZE=${YUP_ARG_STACK_SIZE}
         -sINITIAL_MEMORY=${YUP_ARG_INITIAL_MEMORY}
         $<$<BOOL:${YUP_ARG_MAXIMUM_MEMORY}>:-sMAXIMUM_MEMORY=${YUP_ARG_MAXIMUM_MEMORY}>
-        -sPTHREAD_POOL_SIZE=${YUP_ARG_PTHREAD_POOL_SIZE}
         -sFORCE_FILESYSTEM=1
         -sNODERAWFS=$<IF:$<BOOL:${YUP_ARG_ENABLE_EMSCRIPTEN_NODERAWFS}>,1,0>
         -sWASMFS=1
@@ -94,6 +99,16 @@ function (_yup_platform_setup_standalone_app target_name)
         -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,wasmMemory
         -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
         --shell-file=${YUP_ARG_CUSTOM_SHELL})
+
+    if (YUP_ENABLE_EMSCRIPTEN_THREADS)
+        list (APPEND additional_link_options
+            -pthread
+            -Wno-pthreads-mem-growth
+            -sWASM_WORKERS=1
+            -sAUDIO_WORKLET=1
+            -sSHARED_MEMORY=1
+            -sPTHREAD_POOL_SIZE=${YUP_ARG_PTHREAD_POOL_SIZE})
+    endif()
 
     if (YUP_ARG_ENABLE_EMSCRIPTEN_GL_DEBUGGING)
         list (APPEND additional_link_options

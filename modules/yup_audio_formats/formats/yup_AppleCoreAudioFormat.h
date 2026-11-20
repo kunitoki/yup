@@ -86,9 +86,11 @@ public:
     /** Creates a reader for decoding CoreAudio-supported audio data. */
     std::unique_ptr<AudioFormatReader> createReaderFor (InputStream* sourceStream) override;
 
-    /** Creates a writer for encoding audio data.
+    /** Creates a writer that encodes AAC audio.
 
-        CoreAudio writing is not currently implemented.
+        The container comes from the StreamKind passed to the constructor. Without one, a
+        FileOutputStream picks it from the file extension (.m4a, .mp4, .m4b, .caf, .3gp or
+        .3g2), and any other stream gets a raw AAC ADTS stream. Metadata is not written.
     */
     std::unique_ptr<AudioFormatWriter> createWriterFor (OutputStream* streamToWriteTo,
                                                         double sampleRate,

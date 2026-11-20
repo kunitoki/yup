@@ -61,6 +61,7 @@ yup_standalone_app (
         yup::yup_data_model
         yup::yup_dsp
         yup::yup_events
+        yup::yup_expression
         yup::yup_graphics
         yup::yup_gui
         yup::yup_python

@@ -26,6 +26,27 @@ namespace yup
 namespace
 {
 
+struct ComponentIds
+{
+    static inline const Identifier id { "id" };
+    static inline const Identifier title { "title" };
+    static inline const Identifier visible { "visible" };
+    static inline const Identifier enabled { "enabled" };
+    static inline const Identifier opacity { "opacity" };
+    static inline const Identifier x { "x" };
+    static inline const Identifier y { "y" };
+    static inline const Identifier width { "width" };
+    static inline const Identifier height { "height" };
+    static inline const Identifier bounds { "bounds" };
+    static inline const Identifier transform { "transform" };
+    static inline const Identifier cached { "cached" };
+    static inline const Identifier focused { "focused" };
+    static inline const Identifier focusWithin { "focus-within" };
+    static inline const Identifier hovered { "hovered" };
+    static inline const Identifier pressed { "pressed" };
+    static inline const Identifier palette { "palette" };
+};
+
 /** Returns the axis-aligned bounding box of the corners of a rectangle mapped through @a mapPoint. */
 template <class MapPoint>
 Rectangle<float> getMappedBounds (const Rectangle<float>& bounds, MapPoint&& mapPoint)
@@ -129,7 +150,20 @@ Component::Component (StringRef componentID)
 
 Component::~Component()
 {
+    flags.isBeingDeleted = true;
+
     componentListeners.call (&ComponentListener::componentBeingDeleted, *this);
+
+    if (parentComponent != nullptr)
+    {
+        if (flags.isHovered)
+            parentComponent->setHoveredChain (false);
+
+        if (flags.isPressed)
+            parentComponent->setPressedChain (false);
+    }
+
+    styleContext.reset();
 
     if (flags.onDesktop)
         removeFromDesktop();
@@ -152,6 +186,16 @@ String Component::getComponentID() const
     return componentID;
 }
 
+void Component::setComponentID (StringRef newComponentID)
+{
+    if (componentID == newComponentID)
+        return;
+
+    componentID = newComponentID;
+
+    notifyPropertyChanged (ComponentIds::id);
+}
+
 //==============================================================================
 
 bool Component::isEnabled() const
@@ -165,6 +209,12 @@ void Component::setEnabled (bool shouldBeEnabled)
         return;
 
     flags.isDisabled = ! shouldBeEnabled;
+
+    // Inside a disabled parent the effective state of the subtree doesn't change
+    if (parentComponent != nullptr && ! parentComponent->isEnabled())
+        return;
+
+    repaint();
 
     //if (flags.onDesktop && native != nullptr)
     //    native->setEnabled (shouldBeEnabled);
@@ -183,7 +233,32 @@ void Component::setEnabled (bool shouldBeEnabled)
         }
     }
 
+    sendEnablementChanged();
+}
+
+void Component::sendEnablementChanged()
+{
+    const WeakReference<Component> self (this);
+
+    flags.cachedTextureStale = true;
+
+    notifyPropertyChanged (ComponentIds::enabled);
+    if (self == nullptr)
+        return;
+
     enablementChanged();
+    if (self == nullptr)
+        return;
+
+    // The descendants disabled on their own stay disabled, so they and their subtrees see no change
+    for (int i = 0; i < getNumChildComponents(); ++i)
+    {
+        if (auto* child = getChildComponent (i); child != nullptr && ! child->flags.isDisabled)
+            child->sendEnablementChanged();
+
+        if (self == nullptr)
+            return;
+    }
 }
 
 void Component::enablementChanged() {}
@@ -214,6 +289,17 @@ void Component::setVisible (bool shouldBeVisible)
 
     if (wasShowing != isShowing())
         internalVisibilityChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    if (parentComponent != nullptr)
+        parentComponent->childLayoutChanged (*this);
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    notifyPropertyChanged (ComponentIds::visible);
 
     if (bailOutChecker.shouldBailOut())
         return;
@@ -249,13 +335,67 @@ String Component::getTitle() const
 
 void Component::setTitle (const String& title)
 {
+    if (componentTitle == title)
+        return;
+
     componentTitle = title;
 
     if (flags.onDesktop && native != nullptr)
         native->setTitle (title);
+
+    notifyPropertyChanged (ComponentIds::title);
 }
 
 //==============================================================================
+
+void Component::applyPositionChange (const Rectangle<float>& oldBounds, Point<int> nativePosition)
+{
+    if (flags.onDesktop && native != nullptr)
+        native->setPosition (nativePosition);
+
+    const BailOutChecker bailOutChecker (this);
+
+    sendMoved();
+
+    if (! bailOutChecker.shouldBailOut())
+        notifyBoundsPropertiesChanged (oldBounds);
+}
+
+void Component::notifyBoundsPropertiesChanged (const Rectangle<float>& oldBounds)
+{
+    const BailOutChecker bailOutChecker (this);
+
+    if (oldBounds.getX() != boundsInParent.getX())
+    {
+        notifyPropertyChanged (ComponentIds::x);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    if (oldBounds.getY() != boundsInParent.getY())
+    {
+        notifyPropertyChanged (ComponentIds::y);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    if (oldBounds.getWidth() != boundsInParent.getWidth())
+    {
+        notifyPropertyChanged (ComponentIds::width);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    if (oldBounds.getHeight() != boundsInParent.getHeight())
+    {
+        notifyPropertyChanged (ComponentIds::height);
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    if (oldBounds != boundsInParent)
+        notifyPropertyChanged (ComponentIds::bounds);
+}
 
 Point<float> Component::getPosition() const
 {
@@ -264,12 +404,9 @@ Point<float> Component::getPosition() const
 
 void Component::setPosition (const Point<float>& newPosition)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setTopLeft (newPosition);
-
-    if (flags.onDesktop && native != nullptr)
-        native->setPosition (newPosition.to<int>());
-
-    sendMoved();
+    applyPositionChange (oldBounds, newPosition.to<int>());
 }
 
 float Component::getX() const
@@ -309,12 +446,9 @@ Point<float> Component::getTopLeft() const
 
 void Component::setTopLeft (const Point<float>& newTopLeft)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setTopLeft (newTopLeft);
-
-    if (flags.onDesktop && native != nullptr)
-        native->setPosition (newTopLeft.to<int>());
-
-    sendMoved();
+    applyPositionChange (oldBounds, newTopLeft.to<int>());
 }
 
 Point<float> Component::getBottomLeft() const
@@ -324,12 +458,9 @@ Point<float> Component::getBottomLeft() const
 
 void Component::setBottomLeft (const Point<float>& newBottomLeft)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setBottomLeft (newBottomLeft);
-
-    if (flags.onDesktop && native != nullptr)
-        native->setPosition (newBottomLeft.translated (0.0f, -getHeight()).to<int>());
-
-    sendMoved();
+    applyPositionChange (oldBounds, newBottomLeft.translated (0.0f, -getHeight()).to<int>());
 }
 
 Point<float> Component::getTopRight() const
@@ -339,12 +470,9 @@ Point<float> Component::getTopRight() const
 
 void Component::setTopRight (const Point<float>& newTopRight)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setTopRight (newTopRight);
-
-    if (flags.onDesktop && native != nullptr)
-        native->setPosition (newTopRight.translated (-getWidth(), 0.0f).to<int>());
-
-    sendMoved();
+    applyPositionChange (oldBounds, newTopRight.translated (-getWidth(), 0.0f).to<int>());
 }
 
 Point<float> Component::getBottomRight() const
@@ -354,12 +482,9 @@ Point<float> Component::getBottomRight() const
 
 void Component::setBottomRight (const Point<float>& newBottomRight)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setBottomRight (newBottomRight);
-
-    if (flags.onDesktop && native != nullptr)
-        native->setPosition (newBottomRight.translated (-getWidth(), -getHeight()).to<int>());
-
-    sendMoved();
+    applyPositionChange (oldBounds, newBottomRight.translated (-getWidth(), -getHeight()).to<int>());
 }
 
 Point<float> Component::getCenter() const
@@ -369,12 +494,9 @@ Point<float> Component::getCenter() const
 
 void Component::setCenter (const Point<float>& newCenter)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setCenter (newCenter);
-
-    if (flags.onDesktop && native != nullptr)
-        native->setPosition (newCenter.translated (-getWidth() / 2.0f, -getHeight() / 2.0f).to<int>());
-
-    sendMoved();
+    applyPositionChange (oldBounds, newCenter.translated (-getWidth() / 2.0f, -getHeight() / 2.0f).to<int>());
 }
 
 float Component::getCenterX() const
@@ -384,15 +506,9 @@ float Component::getCenterX() const
 
 void Component::setCenterX (float newCenterX)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setCenterX (newCenterX);
-
-    if (flags.onDesktop && native != nullptr)
-    {
-        auto newCenter = boundsInParent.getCenter();
-        native->setPosition (newCenter.translated (-getWidth() / 2.0f, 0.0f).to<int>());
-    }
-
-    sendMoved();
+    applyPositionChange (oldBounds, boundsInParent.getCenter().translated (-getWidth() / 2.0f, 0.0f).to<int>());
 }
 
 float Component::getCenterY() const
@@ -402,15 +518,9 @@ float Component::getCenterY() const
 
 void Component::setCenterY (float newCenterY)
 {
+    const auto oldBounds = boundsInParent;
     boundsInParent.setCenterY (newCenterY);
-
-    if (flags.onDesktop && native != nullptr)
-    {
-        auto newCenter = boundsInParent.getCenter();
-        native->setPosition (newCenter.translated (0.0f, -getHeight() / 2.0f).to<int>());
-    }
-
-    sendMoved();
+    applyPositionChange (oldBounds, boundsInParent.getCenter().translated (0.0f, -getHeight() / 2.0f).to<int>());
 }
 
 void Component::moved() {}
@@ -444,6 +554,7 @@ void Component::setSize (const Size<float>& newSize)
     if (boundsInParent.getSize() == newSize)
         return;
 
+    const auto oldBounds = boundsInParent;
     auto areaToRepaint = getPaintBounds();
     boundsInParent = boundsInParent.withSize (newSize);
     areaToRepaint = areaToRepaint.unionWith (getPaintBounds());
@@ -451,7 +562,17 @@ void Component::setSize (const Size<float>& newSize)
     if (flags.onDesktop && native != nullptr)
         native->setSize (newSize.to<int>());
 
+    const BailOutChecker bailOutChecker (this);
+
     sendResized();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    notifyBoundsPropertiesChanged (oldBounds);
+
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     repaint (areaToRepaint);
 }
@@ -486,6 +607,8 @@ void Component::setBounds (const Rectangle<float>& newBounds)
     if (newBounds == boundsInParent)
         return;
 
+    const auto oldBounds = boundsInParent;
+
     repaint();
 
     boundsInParent = newBounds;
@@ -512,6 +635,11 @@ void Component::setBounds (const Rectangle<float>& newBounds)
     suppressChildBoundsChanged = false;
 
     sendChildBoundsChangedToParent();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    notifyBoundsPropertiesChanged (oldBounds);
 }
 
 Rectangle<float> Component::getBounds() const
@@ -547,7 +675,7 @@ AffineTransform Component::getTransformToTopLevelComponent() const
     for (auto comp = this; comp != nullptr && ! comp->flags.onDesktop && ! comp->flags.paintAsOffscreenRoot; comp = comp->getParentComponent())
     {
         if (comp->isTransformed())
-            toTopLevel = toTopLevel.followedBy (comp->getTransform());
+            toTopLevel = toTopLevel.followedBy (comp->getCombinedTransform());
 
         toTopLevel = toTopLevel.translated (comp->getPosition());
     }
@@ -618,7 +746,30 @@ void Component::setTransform (const AffineTransform& newTransform)
     transform = newTransform;
     repaint();
 
+    const BailOutChecker bailOutChecker (this);
+
     transformChanged();
+
+    if (! bailOutChecker.shouldBailOut())
+        notifyPropertyChanged (ComponentIds::transform);
+}
+
+void Component::setStyleTransform (const AffineTransform& newTransform)
+{
+    const AffineTransform current = styleState != nullptr ? styleState->getStyleTransform() : AffineTransform();
+    if (current == newTransform)
+        return;
+
+    repaint();
+    getOrCreateStyleState().setStyleTransform (newTransform);
+    repaint();
+
+    const BailOutChecker bailOutChecker (this);
+
+    transformChanged();
+
+    if (! bailOutChecker.shouldBailOut())
+        notifyPropertyChanged (ComponentIds::transform);
 }
 
 AffineTransform Component::getTransform() const
@@ -626,9 +777,20 @@ AffineTransform Component::getTransform() const
     return transform;
 }
 
+AffineTransform Component::getCombinedTransform() const
+{
+    if (styleState == nullptr || ! styleState->hasStyleTransform())
+        return transform;
+
+    if (transform.isIdentity())
+        return styleState->getStyleTransform();
+
+    return styleState->getStyleTransform().followedBy (transform);
+}
+
 bool Component::isTransformed() const
 {
-    return ! transform.isIdentity();
+    return ! transform.isIdentity() || (styleState != nullptr && styleState->hasStyleTransform());
 }
 
 void Component::transformChanged()
@@ -697,8 +859,15 @@ void Component::setOpacity (float newOpacity)
 
     if (flags.onDesktop && native != nullptr)
         native->setOpacity (newOpacity);
+    else
+        repaint();
+
+    const BailOutChecker bailOutChecker (this);
 
     opacityChanged();
+
+    if (! bailOutChecker.shouldBailOut())
+        notifyPropertyChanged (ComponentIds::opacity);
 }
 
 float Component::getOpacity() const
@@ -761,6 +930,22 @@ EdgeSpacing<float> Component::getPaintMargin() const
 Rectangle<float> Component::getPaintBounds() const
 {
     return getLocalBounds().enlarged (paintMargin);
+}
+
+void Component::setExcludedFromParentLayout (bool shouldBeExcluded)
+{
+    if (flags.excludedFromParentLayout == shouldBeExcluded)
+        return;
+
+    flags.excludedFromParentLayout = shouldBeExcluded;
+
+    if (auto* parent = getParentComponent())
+        parent->childLayoutChanged (*this);
+}
+
+bool Component::isExcludedFromParentLayout() const
+{
+    return flags.excludedFromParentLayout;
 }
 
 void Component::setPaintProfilingDisabled (bool shouldBeDisabled)
@@ -1069,9 +1254,27 @@ void Component::removeChildComponent (int index)
     if (component->isShowing())
         repaint (component->getPaintBounds().translated (component->getPosition()));
 
+    auto* formerContext = component->styleContext == nullptr ? findStyleContext() : nullptr;
+
     component->parentComponent = nullptr;
 
     auto bailOutChecker = BailOutChecker (this);
+
+    if (formerContext != nullptr)
+    {
+        if (component->flags.isBeingDeleted)
+        {
+            formerContext->forgetComponent (*component);
+        }
+        else
+        {
+            auto childBailOutChecker = BailOutChecker (component);
+            formerContext->detachComponent (*component);
+
+            if (bailOutChecker.shouldBailOut() || childBailOutChecker.shouldBailOut())
+                return;
+        }
+    }
 
     if (getNativeComponent() != nullptr)
     {
@@ -1097,6 +1300,9 @@ void Component::removeAllChildren()
 
 void Component::internalHierarchyChanged()
 {
+    if (auto* context = findStyleContext())
+        context->markDirty (*this);
+
     parentHierarchyChanged();
 
     auto bailOutChecker = BailOutChecker (this);
@@ -1120,6 +1326,10 @@ void Component::internalHierarchyChanged()
 void Component::parentHierarchyChanged() {}
 
 void Component::childrenChanged() {}
+
+void Component::childLayoutChanged ([[maybe_unused]] Component& child) {}
+
+void Component::layoutPropertyChanged() {}
 
 void Component::indexInParentChildrenChanged ([[maybe_unused]] int oldIndex, [[maybe_unused]] int newIndex) {}
 
@@ -1317,11 +1527,6 @@ void Component::handleKeyboardFocusFromClick()
 
 //==============================================================================
 
-NamedValueSet& Component::getProperties()
-{
-    return properties;
-}
-
 const NamedValueSet& Component::getProperties() const
 {
     return properties;
@@ -1329,8 +1534,16 @@ const NamedValueSet& Component::getProperties() const
 
 //==============================================================================
 
-void Component::paint ([[maybe_unused]] Graphics& g)
+void Component::paint (Graphics& g)
 {
+    if (auto style = getStyle())
+    {
+        if (auto theme = ApplicationTheme::getGlobalTheme())
+            style->paint (g, *theme, *this);
+
+        return;
+    }
+
     jassert (! isOpaque()); // If your component is opaque, you need to paint it !
 }
 
@@ -1494,21 +1707,564 @@ ComponentStyle::Ptr Component::getStyle() const
 
 void Component::styleChanged() {}
 
+void Component::notifyPropertyChanged (const Identifier& name)
+{
+    const BailOutChecker bailOutChecker (this);
+
+    componentListeners.callChecked (bailOutChecker, &ComponentListener::componentPropertyChanged, *this, name);
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    if (auto* context = findStyleContext())
+        context->propertyChanged (*this, name);
+}
+
+//==============================================================================
+
+void Component::addStyleClass (const Identifier& styleClass)
+{
+    if (styleClasses.contains (styleClass))
+        return;
+
+    styleClasses.add (styleClass);
+
+    markStyleDirty();
+}
+
+void Component::removeStyleClass (const Identifier& styleClass)
+{
+    if (! styleClasses.contains (styleClass))
+        return;
+
+    styleClasses.removeAllInstancesOf (styleClass);
+
+    markStyleDirty();
+}
+
+bool Component::hasStyleClass (const Identifier& styleClass) const
+{
+    return styleClasses.contains (styleClass);
+}
+
+void Component::setStyleClasses (const Array<Identifier>& newStyleClasses)
+{
+    if (styleClasses == newStyleClasses)
+        return;
+
+    styleClasses = newStyleClasses;
+
+    markStyleDirty();
+}
+
+const Array<Identifier>& Component::getStyleClasses() const noexcept
+{
+    return styleClasses;
+}
+
+//==============================================================================
+
+bool Component::isHovered() const noexcept
+{
+    return flags.isHovered;
+}
+
+bool Component::isPressed() const noexcept
+{
+    return flags.isPressed;
+}
+
+bool Component::isFocused() const noexcept
+{
+    return flags.isFocused;
+}
+
+bool Component::hasFocusWithin() const
+{
+    if (flags.isFocused)
+        return true;
+
+    if (auto* nativeComponent = getNativeComponent())
+    {
+        auto* focused = nativeComponent->getFocusedComponent();
+        if (focused == nullptr || ! focused->isFocused())
+            return false;
+
+        for (auto* ancestor = focused->parentComponent; ancestor != nullptr; ancestor = ancestor->parentComponent)
+            if (ancestor == this)
+                return true;
+
+        return false;
+    }
+
+    for (const auto* child : children)
+        if (child->hasFocusWithin())
+            return true;
+
+    return false;
+}
+
+void Component::setHoveredChain (bool isNowHovered)
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (component->flags.isHovered == isNowHovered)
+            break;
+
+        component->flags.isHovered = isNowHovered;
+        component->notifyPropertyChanged (ComponentIds::hovered);
+    }
+}
+
+void Component::setPressedChain (bool isNowPressed)
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (component->flags.isPressed == isNowPressed)
+            break;
+
+        component->flags.isPressed = isNowPressed;
+        component->notifyPropertyChanged (ComponentIds::pressed);
+    }
+}
+
+void Component::clearHoveredInSubtree()
+{
+    if (! flags.isHovered)
+        return;
+
+    flags.isHovered = false;
+    notifyPropertyChanged (ComponentIds::hovered);
+
+    for (auto* child : children)
+        child->clearHoveredInSubtree();
+}
+
+void Component::clearPressedInSubtree()
+{
+    if (! flags.isPressed)
+        return;
+
+    flags.isPressed = false;
+    notifyPropertyChanged (ComponentIds::pressed);
+
+    for (auto* child : children)
+        child->clearPressedInSubtree();
+}
+
+//==============================================================================
+
+void Component::setStyleSheet (ReferenceCountedObjectPtr<StyleSheet> newStyleSheet)
+{
+    if (newStyleSheet == nullptr)
+    {
+        if (styleContext == nullptr)
+            return;
+
+        styleContext->detach();
+        styleContext.reset();
+        markStyleDirty();
+        return;
+    }
+
+    if (styleContext == nullptr)
+    {
+        if (parentComponent != nullptr)
+            if (auto* outerContext = parentComponent->findStyleContext())
+                outerContext->releaseSubtree (*this);
+
+        styleContext = std::make_unique<StyleContext> (*this, std::move (newStyleSheet));
+    }
+    else
+    {
+        styleContext->setStyleSheet (std::move (newStyleSheet));
+    }
+}
+
+ReferenceCountedObjectPtr<StyleSheet> Component::getStyleSheet() const
+{
+    return styleContext != nullptr ? styleContext->getStyleSheet() : nullptr;
+}
+
+StyleContext* Component::getStyleContext() const noexcept
+{
+    return styleContext.get();
+}
+
+StyleContext* Component::findStyleContext() const noexcept
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+        if (component->styleContext != nullptr)
+            return component->styleContext.get();
+
+    return nullptr;
+}
+
+const StyleState* Component::getStyleState() const noexcept
+{
+    return styleState.get();
+}
+
+StyleState& Component::getOrCreateStyleState()
+{
+    if (styleState == nullptr)
+        styleState = std::make_unique<StyleState>();
+
+    return *styleState;
+}
+
+void Component::markStyleDirty()
+{
+    if (auto* context = findStyleContext())
+        context->markDirty (*this);
+}
+
+//==============================================================================
+
+const ComponentTypeInfo& Component::getTypeInfo() const
+{
+    return instanceTypeInfo != nullptr ? *instanceTypeInfo : getDefaultTypeInfo();
+}
+
+void Component::setTypeInfo (const ComponentTypeInfo* newTypeInfo)
+{
+    jassert (newTypeInfo == nullptr || newTypeInfo->isSubtypeOf (getDefaultTypeInfo()));
+
+    if (instanceTypeInfo == newTypeInfo)
+        return;
+
+    instanceTypeInfo = newTypeInfo;
+
+    markStyleDirty();
+}
+
+const ComponentTypeInfo& Component::getClassTypeInfo()
+{
+    using Type = ComponentProperty::Type;
+    using LayoutEffect = ComponentProperty::LayoutEffect;
+    const auto& selfAlignments = detail::layoutSelfAlignmentNames();
+
+    static const auto info = ComponentTypeBuilder<Component> (Identifier ("Component"))
+                                 .factory ([]
+                                 {
+                                     // A plain component paints nothing, so a created one must not claim to be opaque
+                                     auto component = std::make_unique<Component>();
+                                     component->setOpaque (false);
+                                     return component;
+                                 })
+                                 .readOnly (ComponentIds::id, &Component::getComponentID)
+                                 .property (ComponentIds::title, &Component::getTitle, &Component::setTitle)
+                                 .styleableProperty (ComponentIds::visible, &Component::isVisible, &Component::setVisible, true)
+                                 .styleableProperty (ComponentIds::enabled, [] (const Component& c) { return ! c.flags.isDisabled; }, &Component::setEnabled, true)
+                                 .styleableProperty (ComponentIds::opacity, &Component::getOpacity, &Component::setOpacity, 1.0)
+                                 .styleableProperty (ComponentIds::transform, &Component::getTransform, &Component::setTransform, VariantConverter<AffineTransform>::toVar (AffineTransform()))
+                                 .styleableProperty (ComponentIds::cached, &Component::isCachedToTexture, &Component::setCachedToTexture, false, "Keeps what the component paints in a texture, painted again only when the component is repainted.")
+                                 .property (ComponentIds::x, &Component::getX, [] (Component& c, float v) { c.setBounds (v, c.getY(), c.getWidth(), c.getHeight()); })
+                                 .property (ComponentIds::y, &Component::getY, [] (Component& c, float v) { c.setBounds (c.getX(), v, c.getWidth(), c.getHeight()); })
+                                 .property (ComponentIds::width, &Component::getWidth, [] (Component& c, float v) { c.setBounds (c.getX(), c.getY(), v, c.getHeight()); })
+                                 .property (ComponentIds::height, &Component::getHeight, [] (Component& c, float v) { c.setBounds (c.getX(), c.getY(), c.getWidth(), v); })
+                                 .property (ComponentIds::bounds, &Component::getBounds, [] (Component& c, const Rectangle<float>& v) { c.setBounds (v); })
+                                 .state (ComponentIds::focused, &Component::isFocused, false)
+                                 .state (ComponentIds::hovered, &Component::isHovered, false)
+                                 .state (ComponentIds::pressed, &Component::isPressed, false)
+                                 .layoutProperty ("flexGrow", Type::number, 0.0, LayoutEffect::parent, "How much of the free space along the main axis the item takes.")
+                                 .layoutProperty ("flexShrink", Type::number, 1.0, LayoutEffect::parent, "How much the item shrinks when the main axis overflows.")
+                                 .layoutProperty ("flexBasis", Type::number, -1.0, LayoutEffect::parent, "The initial main size of the item, negative for automatic.")
+                                 .layoutProperty ("order", Type::integer, 0, LayoutEffect::parent, "The order of the item in a flex container.")
+                                 .layoutProperty ("alignSelf", Type::enumeration, "auto", LayoutEffect::parent, "The cross axis alignment of the item, overriding the container one.", selfAlignments)
+                                 .layoutProperty ("justifySelf", Type::enumeration, "auto", LayoutEffect::parent, "The horizontal alignment of the item in a grid or stack cell.", selfAlignments)
+                                 .layoutProperty ("margin", Type::any, 0.0, LayoutEffect::parent, "The outer spacing of the item: a number, or 1, 2 or 4 values (top right bottom left).")
+                                 .layoutProperty ("preferredWidth", Type::number, -1.0, LayoutEffect::parent, "The width the layout gives the item, negative for automatic.")
+                                 .layoutProperty ("preferredHeight", Type::number, -1.0, LayoutEffect::parent, "The height the layout gives the item, negative for automatic.")
+                                 .layoutProperty ("minWidth", Type::number, -1.0, LayoutEffect::parent, "The minimum width of the item, negative for none.")
+                                 .layoutProperty ("maxWidth", Type::number, -1.0, LayoutEffect::parent, "The maximum width of the item, negative for none.")
+                                 .layoutProperty ("minHeight", Type::number, -1.0, LayoutEffect::parent, "The minimum height of the item, negative for none.")
+                                 .layoutProperty ("maxHeight", Type::number, -1.0, LayoutEffect::parent, "The maximum height of the item, negative for none.")
+                                 .layoutProperty ("gridArea", Type::string, String(), LayoutEffect::parent, "The named grid area the item occupies.")
+                                 .layoutProperty ("gridColumn", Type::integer, -1, LayoutEffect::parent, "The zero based grid column of the item, negative for automatic placement.")
+                                 .layoutProperty ("gridRow", Type::integer, -1, LayoutEffect::parent, "The zero based grid row of the item, negative for automatic placement.")
+                                 .layoutProperty ("gridColumnSpan", Type::integer, 1, LayoutEffect::parent, "The number of grid columns the item spans.")
+                                 .layoutProperty ("gridRowSpan", Type::integer, 1, LayoutEffect::parent, "The number of grid rows the item spans.")
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
+
+struct Component::ResolvedProperty
+{
+    const ComponentProperty* descriptor = nullptr;
+    Identifier name;
+    Identifier storageKey;
+};
+
+Component::ResolvedProperty Component::resolveProperty (const Identifier& name) const
+{
+    const auto* descriptor = getTypeInfo().findProperty (name);
+    return { descriptor, name, descriptor != nullptr ? descriptor->getStorageKey() : name };
+}
+
+Component::ResolvedProperty Component::resolveColorProperty (const Identifier& colorId) const
+{
+    const auto& info = getTypeInfo();
+    const auto* descriptor = info.findPropertyByStorageKey (colorId);
+
+    if (descriptor == nullptr)
+    {
+        if (const auto* byName = info.findProperty (colorId); byName != nullptr && byName->type == ComponentProperty::Type::color)
+            descriptor = byName;
+    }
+
+    if (descriptor != nullptr)
+        return { descriptor, descriptor->name, descriptor->getStorageKey() };
+
+    return { nullptr, colorId, colorId };
+}
+
+const var* Component::findStoredValue (const Identifier& storageKey, bool isInherited) const
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (const auto* value = component->properties.getVarPointer (storageKey))
+            return value;
+
+        if (component->styleState != nullptr)
+            if (const auto* styled = component->styleState->getStyleValue (storageKey))
+                return styled;
+
+        if (! isInherited)
+            break;
+    }
+
+    return nullptr;
+}
+
+void Component::applyStoredPropertyChange (const ResolvedProperty& resolved, const var* valueToWrite)
+{
+    const bool changed = valueToWrite != nullptr
+                           ? properties.set (resolved.storageKey, *valueToWrite)
+                           : properties.remove (resolved.storageKey);
+
+    if (! changed)
+        return;
+
+    const BailOutChecker bailOutChecker (this);
+
+    if (resolved.descriptor != nullptr)
+    {
+        if (resolved.descriptor->layoutEffect == ComponentProperty::LayoutEffect::own)
+        {
+            layoutPropertyChanged();
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+        else if (resolved.descriptor->layoutEffect == ComponentProperty::LayoutEffect::parent && parentComponent != nullptr)
+        {
+            parentComponent->childLayoutChanged (*this);
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+    }
+
+    styleChanged();
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    notifyPropertyChanged (resolved.name);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    repaint();
+}
+
+void Component::setProperty (const Identifier& name, const var& value)
+{
+    const auto resolved = resolveProperty (name);
+
+    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
+    {
+        if (resolved.descriptor->setter != nullptr)
+            resolved.descriptor->setter (*this, value);
+        else
+            jassertfalse; // Trying to write a read-only property.
+
+        return;
+    }
+
+    applyStoredPropertyChange (resolved, &value);
+}
+
+void Component::removeProperty (const Identifier& name)
+{
+    const auto resolved = resolveProperty (name);
+
+    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
+        return; // State-backed properties cannot be removed.
+
+    applyStoredPropertyChange (resolved, nullptr);
+}
+
+var Component::getProperty (const Identifier& name) const
+{
+    const auto resolved = resolveProperty (name);
+
+    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
+        return resolved.descriptor->getter (*this);
+
+    if (const auto* value = properties.getVarPointer (resolved.storageKey))
+        return *value;
+
+    return {};
+}
+
+var Component::findProperty (const Identifier& name) const
+{
+    if (name == ComponentIds::transform)
+        return VariantConverter<AffineTransform>::toVar (getCombinedTransform());
+
+    if (name == ComponentIds::enabled)
+        return isEnabled();
+
+    const auto resolved = resolveProperty (name);
+
+    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
+        return resolved.descriptor->getter (*this);
+
+    const bool isInherited = resolved.descriptor == nullptr || resolved.descriptor->isInherited;
+    if (const auto* stored = findStoredValue (resolved.storageKey, isInherited))
+        return *stored;
+
+    if (auto theme = ApplicationTheme::getGlobalTheme())
+    {
+        // Theme colors are kept apart from the other defaults, together with the palette ones
+        if (resolved.descriptor != nullptr && resolved.descriptor->type == ComponentProperty::Type::color)
+            if (auto color = theme->findDefaultColor (*this, resolved.storageKey))
+                return VariantConverter<Color>::toVar (*color);
+
+        if (auto themed = theme->findProperty (*this, resolved.storageKey))
+            return *themed;
+    }
+
+    if (resolved.descriptor != nullptr)
+        return resolved.descriptor->defaultValue;
+
+    return {};
+}
+
+Component::PropertySource Component::findPropertySource (const Identifier& name) const
+{
+    PropertySource source;
+
+    if (name == ComponentIds::transform)
+    {
+        source.layer = PropertySource::Layer::stateBacked;
+        source.component = this;
+        source.storageKey = name;
+        source.value = VariantConverter<AffineTransform>::toVar (getCombinedTransform());
+        return source;
+    }
+
+    const auto resolved = resolveProperty (name);
+    source.descriptor = resolved.descriptor;
+    source.storageKey = resolved.storageKey;
+
+    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
+    {
+        source.layer = PropertySource::Layer::stateBacked;
+        source.component = this;
+        source.value = name == ComponentIds::enabled ? var (isEnabled()) : resolved.descriptor->getter (*this);
+        return source;
+    }
+
+    const bool isInherited = resolved.descriptor == nullptr || resolved.descriptor->isInherited;
+
+    for (const auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (const auto* value = component->properties.getVarPointer (resolved.storageKey))
+        {
+            source.layer = PropertySource::Layer::explicitly;
+            source.component = component;
+            source.value = *value;
+            return source;
+        }
+
+        if (component->styleState != nullptr)
+        {
+            if (const auto* styled = component->styleState->getStyleValue (resolved.storageKey))
+            {
+                source.layer = PropertySource::Layer::styled;
+                source.component = component;
+                source.value = *styled;
+                return source;
+            }
+        }
+
+        if (! isInherited)
+            break;
+    }
+
+    if (auto theme = ApplicationTheme::getGlobalTheme())
+    {
+        if (resolved.descriptor != nullptr && resolved.descriptor->type == ComponentProperty::Type::color)
+        {
+            if (auto color = theme->findDefaultColor (*this, resolved.storageKey))
+            {
+                source.layer = PropertySource::Layer::theme;
+                source.value = VariantConverter<Color>::toVar (*color);
+                return source;
+            }
+        }
+
+        if (auto themed = theme->findProperty (*this, resolved.storageKey))
+        {
+            source.layer = PropertySource::Layer::theme;
+            source.value = *themed;
+            return source;
+        }
+    }
+
+    if (resolved.descriptor != nullptr)
+    {
+        source.layer = PropertySource::Layer::defaulted;
+        source.value = resolved.descriptor->defaultValue;
+    }
+
+    return source;
+}
+
+bool Component::hasProperty (const Identifier& name) const
+{
+    const auto resolved = resolveProperty (name);
+
+    if (resolved.descriptor != nullptr && resolved.descriptor->isStateBacked())
+        return true;
+
+    return properties.contains (resolved.storageKey);
+}
+
 //==============================================================================
 
 void Component::setColor (const Identifier& colorId, const std::optional<Color>& color)
 {
-    if (color)
-        properties.set (colorId, static_cast<int64> (color->getARGB()));
-    else
-        properties.remove (colorId);
+    const auto resolved = resolveColorProperty (colorId);
 
-    styleChanged();
+    if (color.has_value())
+    {
+        const var encoded (static_cast<int64> (color->getARGB()));
+        applyStoredPropertyChange (resolved, &encoded);
+    }
+    else
+    {
+        applyStoredPropertyChange (resolved, nullptr);
+    }
 }
 
 std::optional<Color> Component::getColor (const Identifier& colorId) const
 {
-    if (auto color = properties.getVarPointer (colorId); color != nullptr && color->isInt64())
+    const auto resolved = resolveColorProperty (colorId);
+
+    if (const auto* color = properties.getVarPointer (resolved.storageKey); color != nullptr && color->isInt64())
         return Color (static_cast<uint32> (static_cast<int64> (*color)));
 
     return std::nullopt;
@@ -1516,11 +2272,11 @@ std::optional<Color> Component::getColor (const Identifier& colorId) const
 
 std::optional<Color> Component::findColor (const Identifier& colorId) const
 {
-    if (auto color = getColor (colorId))
-        return color;
+    const auto resolved = resolveColorProperty (colorId);
+    const bool isInherited = resolved.descriptor == nullptr || resolved.descriptor->isInherited;
 
-    if (parentComponent != nullptr)
-        return parentComponent->findColor (colorId);
+    if (const auto* stored = findStoredValue (resolved.storageKey, isInherited); stored != nullptr && stored->isInt64())
+        return Color (static_cast<uint32> (static_cast<int64> (*stored)));
 
     return std::nullopt;
 }
@@ -1531,8 +2287,39 @@ void Component::setPalette (std::optional<ThemePalette> newPalette)
 {
     palette = newPalette.has_value() ? std::make_unique<ThemePalette> (std::move (*newPalette)) : nullptr;
 
+    markStyleDirty();
+    sendPaletteChanged();
+}
+
+void Component::sendPaletteChanged()
+{
+    const BailOutChecker bailOutChecker (this);
+
     styleChanged();
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    notifyPropertyChanged (ComponentIds::palette);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
     repaint();
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (int i = 0; i < getNumChildComponents(); ++i)
+    {
+        auto* child = getChildComponent (i);
+        if (child == nullptr || child->palette != nullptr)
+            continue;
+
+        if (child->styleState != nullptr && child->styleState->getStylePalette() != nullptr)
+            continue;
+
+        child->sendPaletteChanged();
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
 }
 
 const ThemePalette* Component::getPalette() const
@@ -1543,41 +2330,16 @@ const ThemePalette* Component::getPalette() const
 const ThemePalette* Component::findPalette() const
 {
     for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
         if (component->palette != nullptr)
             return component->palette.get();
 
+        if (component->styleState != nullptr)
+            if (auto* stylePalette = component->styleState->getStylePalette())
+                return stylePalette;
+    }
+
     return nullptr;
-}
-
-//==============================================================================
-
-void Component::setMetric (const Identifier& metricId, const std::optional<float>& metric)
-{
-    if (metric)
-        properties.set (metricId, static_cast<double> (*metric));
-    else
-        properties.remove (metricId);
-
-    styleChanged();
-}
-
-std::optional<float> Component::getMetric (const Identifier& metricId) const
-{
-    if (auto value = properties.getVarPointer (metricId); value != nullptr && value->isDouble())
-        return static_cast<float> (static_cast<double> (*value));
-
-    return std::nullopt;
-}
-
-std::optional<float> Component::findMetric (const Identifier& metricId) const
-{
-    if (auto metric = getMetric (metricId))
-        return metric;
-
-    if (parentComponent != nullptr)
-        return parentComponent->findMetric (metricId);
-
-    return std::nullopt;
 }
 
 //==============================================================================
@@ -1585,16 +2347,69 @@ std::optional<float> Component::findMetric (const Identifier& metricId) const
 void Component::setComponentEffect (ComponentEffect::Ptr effect)
 {
     componentEffect = std::move (effect);
-
-    if (componentEffect == nullptr)
-        effectOffscreenCanvas = nullptr;
-
+    releaseUnusedEffectCanvases();
     repaint();
 }
 
 ComponentEffect::Ptr Component::getComponentEffect() const
 {
     return componentEffect;
+}
+
+bool Component::hasActiveEffect() const noexcept
+{
+    return componentEffect != nullptr || (styleState != nullptr && styleState->getFilterEffect() != nullptr);
+}
+
+void Component::releaseUnusedEffectCanvases() noexcept
+{
+    if (componentEffect == nullptr || styleState == nullptr || styleState->getFilterEffect() == nullptr)
+        filterIntermediateCanvas = nullptr;
+
+    if (! hasActiveEffect())
+        effectOffscreenCanvas = nullptr;
+}
+
+void Component::applyActiveEffects (Graphics& g, GpuTexture::Ptr texture, Rectangle<float> bounds, float scale)
+{
+    auto* filterEffect = styleState != nullptr ? styleState->getFilterEffect().get() : nullptr;
+
+    if (componentEffect != nullptr && filterEffect != nullptr && texture != nullptr)
+    {
+        const int width = texture->getWidth();
+        const int height = texture->getHeight();
+
+        if (filterIntermediateCanvas == nullptr
+            || filterIntermediateCanvas->getWidth() != width
+            || filterIntermediateCanvas->getHeight() != height)
+        {
+            filterIntermediateCanvas = GpuCanvas::create (g.getGraphicsContext(), width, height);
+        }
+
+        if (filterIntermediateCanvas != nullptr)
+        {
+            const Rectangle<float> localBounds (0.0f, 0.0f, bounds.getWidth(), bounds.getHeight());
+            auto& intermediateG = filterIntermediateCanvas->beginDraw ({}, scale);
+            intermediateG.setDrawingArea (localBounds);
+            componentEffect->apply (intermediateG, texture, localBounds);
+            filterIntermediateCanvas->commit();
+
+            if (auto postEffectTexture = filterIntermediateCanvas->asTexture())
+            {
+                filterEffect->apply (g, std::move (postEffectTexture), bounds);
+                return;
+            }
+        }
+    }
+    else
+    {
+        filterIntermediateCanvas = nullptr;
+    }
+
+    if (componentEffect != nullptr)
+        componentEffect->apply (g, std::move (texture), bounds);
+    else if (filterEffect != nullptr)
+        filterEffect->apply (g, std::move (texture), bounds);
 }
 
 void Component::setCachedToTexture (bool shouldCache)
@@ -1605,6 +2420,8 @@ void Component::setCachedToTexture (bool shouldCache)
     flags.cachedToTexture = shouldCache;
     cachedTextureCanvas = nullptr;
     repaint();
+
+    notifyPropertyChanged (ComponentIds::cached);
 }
 
 bool Component::isCachedToTexture() const
@@ -1644,6 +2461,8 @@ bool Component::isPopupContainer() const
 
 GpuTexture::Ptr Component::renderToTexture (GraphicsContext& ctx, float scale)
 {
+    invalidateCanvasesIfThemeChanged();
+
     const bool sizeChanged = ! hasPixelSize (presentedCanvas, getCanvasPixelSize (getSize(), scale));
 
     if (! subtreeDirty.exchange (false) && ! sizeChanged)
@@ -1668,7 +2487,7 @@ GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool in
 
     const auto renderSnapshot = [&] () -> GpuCanvas::Ptr
     {
-        const bool applyEffect = includeEffects && componentEffect != nullptr;
+        const bool applyEffect = includeEffects && hasActiveEffect();
 
         auto canvas = renderSubtreeOffscreen (ctx, getOpacity(), false, scale, applyEffect ? nullptr : std::move (reuseCanvas));
         if (canvas == nullptr)
@@ -1689,7 +2508,7 @@ GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool in
         auto& g = effectCanvas->beginDraw ({}, scale);
         auto localBounds = getLocalBounds();
         g.setDrawingArea (localBounds);
-        componentEffect->apply (g, texture, localBounds);
+        applyActiveEffects (g, texture, localBounds, scale);
 
         return effectCanvas;
     };
@@ -1704,12 +2523,16 @@ GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool in
     return renderSnapshot();
 }
 
-Image Component::snapshotToImage (GraphicsContext& ctx, bool includeEffects)
+Image Component::snapshotToImage (GraphicsContext& ctx, bool includeEffects, float scale)
 {
+    jassert (scale > 0.0f);
+    if (scale <= 0.0f)
+        return {};
+
     Image result;
     const auto takeSnapshot = [&]
     {
-        auto canvas = renderSnapshotOffscreen (ctx, includeEffects, 1.0f);
+        auto canvas = renderSnapshotOffscreen (ctx, includeEffects, scale);
         if (canvas == nullptr)
             return;
 
@@ -1768,6 +2591,9 @@ bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
 
 void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
 {
+    if (styleContext != nullptr)
+        styleContext->refresh (lastFrameTimeSeconds);
+
     refreshDisplay (lastFrameTimeSeconds);
 
     for (auto child : children)
@@ -1794,7 +2620,7 @@ void Component::internalRepaint (const Rectangle<float>& rect)
 
         // A warp can move pixels anywhere inside the component, so the whole of it is
         // presented again; what changed underneath is kept, so only that is repainted
-        if (component->componentEffect != nullptr)
+        if (component->hasActiveEffect())
         {
             component->effectDirtyRegion.add (dirtyArea);
             dirtyArea = component->getLocalBounds();
@@ -1805,7 +2631,7 @@ void Component::internalRepaint (const Rectangle<float>& rect)
         if (parent != nullptr && component->flags.manuallyComposited)
             dirtyArea = parent->getLocalBounds();
         else if (! component->flags.onDesktop)
-            dirtyArea = getTransformedBounds (dirtyArea, component->transform.translated (component->getPosition()));
+            dirtyArea = getTransformedBounds (dirtyArea, component->getCombinedTransform().translated (component->getPosition()));
 
         if (parent == nullptr)
         {
@@ -1819,10 +2645,13 @@ void Component::internalRepaint (const Rectangle<float>& rect)
 
 //==============================================================================
 
-void Component::paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous)
+void Component::paintChildrenAndOverChildren (Graphics& g,
+                                              const RectangleList<float>& clipRegion,
+                                              bool renderContinuous,
+                                              const RectangleList<float>* activeClipRegion)
 {
     for (auto child : children)
-        child->internalPaint (g, clipRegion, renderContinuous);
+        child->internalPaint (g, clipRegion, renderContinuous, activeClipRegion);
 
     paintOverChildren (g);
 }
@@ -1883,6 +2712,22 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
     return renderOffscreen();
 }
 
+void Component::invalidateCanvasesIfThemeChanged()
+{
+    const auto theme = ApplicationTheme::getGlobalTheme();
+    const auto generation = theme != nullptr ? theme->getPaletteGeneration() : 0;
+
+    if (std::exchange (canvasThemeGeneration, generation) == generation)
+        return;
+
+    // What the component keeps of its painting was painted with the theme as it was
+    flags.cachedTextureStale = true;
+    subtreeDirty = true;
+
+    if (hasActiveEffect())
+        effectDirtyRegion.add (getLocalBounds());
+}
+
 std::optional<RectangleList<float>> Component::takeEffectDirtyRegion (bool renderContinuous)
 {
     RectangleList<float> region;
@@ -1914,7 +2759,7 @@ std::optional<RectangleList<float>> Component::takeEffectDirtyRegion (bool rende
 
 //==============================================================================
 
-void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRegion) const
+void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRegion, const RectangleList<float>* activeClipRegion) const
 {
     const auto toTopLevel = getTransformToTopLevelComponent();
 
@@ -1922,7 +2767,7 @@ void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRe
     g.setDrawingArea ({});
     g.setTransform (AffineTransform::identity());
 
-    if (! flags.unclippedRendering)
+    if (! flags.unclippedRendering && (activeClipRegion == nullptr || *activeClipRegion != clipRegion))
         setClipRegion (g, clipRegion);
 
     // The translation goes in the drawing area and only the linear part in the transform, so an
@@ -1937,7 +2782,20 @@ void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRe
         g.setClipPath (getPaintBounds());
 }
 
-void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous)
+void Component::paintStyleShadows (Graphics& g) const
+{
+    if (styleState == nullptr || (styleState->getShadows().empty() && styleState->getGlows().empty()))
+        return;
+
+    static const Identifier cornerRadiusId ("cornerRadius");
+    styleState->paintShadows (g, getLocalBounds(), findPropertyAs<float> (cornerRadiusId));
+}
+
+void Component::paintSubtree (Graphics& g,
+                              const RectangleList<float>& clipRegion,
+                              float opacity,
+                              bool renderContinuous,
+                              const RectangleList<float>* activeClipRegion)
 {
     isRepainting.store (true, std::memory_order_relaxed);
 
@@ -1967,7 +2825,9 @@ void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegio
         const auto globalState = g.saveState();
 
         g.setOpacity (opacity);
-        applyPaintState (g, clipRegion);
+        applyPaintState (g, clipRegion, activeClipRegion);
+
+        const auto* subtreeActiveClip = flags.unclippedRendering ? activeClipRegion : &clipRegion;
 
         bool canSkipPaint = false;
         if (! flags.unclippedRendering && toTopLevel.isOnlyTranslation() && clipRegion.getNumRectangles() == 1)
@@ -1976,6 +2836,8 @@ void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegio
         if (! canSkipPaint)
         {
             const auto paintState = g.saveState();
+
+            paintStyleShadows (g);
 
             if (shouldMeasurePaint)
             {
@@ -1999,7 +2861,7 @@ void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegio
             const int64 childrenStartTicks = Time::getHighResolutionTicks();
 
             for (auto child : children)
-                child->internalPaint (g, clipRegion, renderContinuous);
+                child->internalPaint (g, clipRegion, renderContinuous, subtreeActiveClip);
 
             metrics.childrenTicks += Time::getHighResolutionTicks() - childrenStartTicks;
 
@@ -2016,14 +2878,17 @@ void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegio
         }
         else
         {
-            paintChildrenAndOverChildren (g, clipRegion, renderContinuous);
+            paintChildrenAndOverChildren (g, clipRegion, renderContinuous, subtreeActiveClip);
         }
     }
 }
 
 //==============================================================================
 
-void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintRegions, bool renderContinuous)
+void Component::internalPaint (Graphics& g,
+                               const RectangleList<float>& repaintRegions,
+                               bool renderContinuous,
+                               const RectangleList<float>* activeClipRegion)
 {
     if (! isVisible() || flags.manuallyComposited || getWidth() <= 0.0f || getHeight() <= 0.0f)
         return;
@@ -2045,8 +2910,10 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
     if (opacity <= 0.0f)
         return;
 
-    if (componentEffect != nullptr)
+    if (hasActiveEffect())
     {
+        invalidateCanvasesIfThemeChanged();
+
         auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(),
                                               1.0f,
                                               renderContinuous,
@@ -2061,9 +2928,10 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
         {
             const auto saved = g.saveState();
             g.setOpacity (opacity);
-            applyPaintState (g, boundsToRedraw);
+            applyPaintState (g, boundsToRedraw, activeClipRegion);
 
-            componentEffect->apply (g, texture, getLocalBounds());
+            paintStyleShadows (g);
+            applyActiveEffects (g, texture, getLocalBounds(), g.getContextScale());
         }
 
         effectOffscreenCanvas = canvas;
@@ -2076,6 +2944,8 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
 
     if (flags.cachedToTexture)
     {
+        invalidateCanvasesIfThemeChanged();
+
         const auto scale = g.getContextScale();
         const auto pixelSize = getCanvasPixelSize (getSize(), scale);
 
@@ -2109,7 +2979,8 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
         {
             const auto saved = g.saveState();
             g.setOpacity (opacity);
-            applyPaintState (g, boundsToRedraw);
+            applyPaintState (g, boundsToRedraw, activeClipRegion);
+            paintStyleShadows (g);
 
             if (cachedTextureCanvas != nullptr)
                 g.drawTexture (cachedTextureCanvas->asTexture(), getLocalBounds());
@@ -2119,11 +2990,11 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
 
         isRepainting.store (false, std::memory_order_relaxed);
 
-        paintChildrenAndOverChildren (g, boundsToRedraw, renderContinuous);
+        paintChildrenAndOverChildren (g, boundsToRedraw, renderContinuous, activeClipRegion);
         return;
     }
 
-    paintSubtree (g, boundsToRedraw, opacity, renderContinuous);
+    paintSubtree (g, boundsToRedraw, opacity, renderContinuous, activeClipRegion);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
     paintDebugOverlay (g, boundsToRedraw);
@@ -2154,6 +3025,8 @@ void Component::internalMouseEnter (const MouseEvent& event)
     if (! isVisible())
         return;
 
+    setHoveredChain (true);
+
     updateMouseCursor();
 
     if (! isEnabled())
@@ -2175,6 +3048,11 @@ void Component::internalMouseExit (const MouseEvent& event)
 {
     if (! isVisible())
         return;
+
+    clearHoveredInSubtree();
+
+    if (parentComponent != nullptr)
+        parentComponent->setHoveredChain (false);
 
     updateMouseCursor();
 
@@ -2199,6 +3077,8 @@ void Component::internalMouseDown (const MouseEvent& event)
 
     if (! isEnabled())
         return;
+
+    setPressedChain (true);
 
     auto bailOutChecker = BailOutChecker (this);
 
@@ -2265,6 +3145,8 @@ void Component::internalMouseUp (const MouseEvent& event)
 {
     if (! isVisible())
         return;
+
+    getTopLevelComponent()->clearPressedInSubtree();
 
     updateMouseCursor();
 
@@ -2428,9 +3310,15 @@ void Component::internalResized (int width, int height)
 
     if (newBounds != boundsInParent)
     {
+        const auto oldBounds = boundsInParent;
         boundsInParent = newBounds;
 
+        const BailOutChecker bailOutChecker (this);
+
         sendResized();
+
+        if (! bailOutChecker.shouldBailOut())
+            notifyBoundsPropertiesChanged (oldBounds);
     }
 }
 
@@ -2442,9 +3330,15 @@ void Component::internalMoved (int xpos, int ypos)
 
     if (newBounds != boundsInParent)
     {
+        const auto oldBounds = boundsInParent;
         boundsInParent = newBounds;
 
+        const BailOutChecker bailOutChecker (this);
+
         sendMoved();
+
+        if (! bailOutChecker.shouldBailOut())
+            notifyBoundsPropertiesChanged (oldBounds);
     }
 }
 
@@ -2452,6 +3346,24 @@ void Component::internalMoved (int xpos, int ypos)
 
 void Component::internalFocusChanged (bool gotFocus)
 {
+    const WeakReference<Component> self (this);
+
+    flags.isFocused = gotFocus;
+
+    notifyPropertyChanged (ComponentIds::focused);
+    if (self == nullptr)
+        return;
+
+    for (WeakReference<Component> component (this); component != nullptr;)
+    {
+        const WeakReference<Component> next (component->parentComponent);
+        component->notifyPropertyChanged (ComponentIds::focusWithin);
+        component = next;
+    }
+
+    if (self == nullptr)
+        return;
+
     if (gotFocus)
         focusGained();
     else
@@ -2628,17 +3540,18 @@ std::optional<Point<float>> Component::getChildPointFromLocal (const Component& 
     if (! child.isTransformed())
         return childPoint;
 
-    if (approximatelyEqual (child.transform.getDeterminant(), 0.0f))
+    const auto combined = child.getCombinedTransform();
+    if (approximatelyEqual (combined.getDeterminant(), 0.0f))
         return std::nullopt;
 
-    return childPoint.transformed (child.transform.inverted());
+    return childPoint.transformed (combined.inverted());
 }
 
 std::optional<Point<float>> Component::getLocalPointFromChild (const Component& child, Point<float> childPoint) const
 {
     jassert (child.parentComponent == this);
 
-    return childPoint.transformed (child.transform) + child.getPosition();
+    return childPoint.transformed (child.getCombinedTransform()) + child.getPosition();
 }
 
 std::optional<Point<float>> Component::getLocalPointFromParent (Point<float> parentPoint) const
@@ -2789,7 +3702,7 @@ AffineTransform Component::getTransformToScreen() const
     for (auto comp = this; comp->parentComponent != nullptr; comp = comp->parentComponent)
     {
         if (comp->isTransformed())
-            transform = transform.followedBy (comp->getTransform());
+            transform = transform.followedBy (comp->getCombinedTransform());
 
         transform = transform.translated (comp->getPosition());
     }

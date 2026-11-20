@@ -26,6 +26,7 @@ namespace yup
 class GraphicsContext;
 class GpuCanvas;
 class GpuTexture;
+class PaintSource;
 
 //==============================================================================
 /** A graphical interface for drawing operations within a defined rendering context.
@@ -211,6 +212,17 @@ public:
     [[nodiscard]] SavedState saveState();
 
     //==============================================================================
+    /** Takes the paint of another Graphics: its fill, its stroke and how it strokes, and its feather.
+
+        What is drawn afterwards is painted as it would be there, which is what a layer needs
+        to carry on with the paint set around it. The transform, the clip, the opacity, the
+        tint and the blend mode are left as they are.
+
+        @param other The Graphics to take the paint of.
+    */
+    void copyPaint (const Graphics& other);
+
+    //==============================================================================
     /** Sets the feather for subsequent drawing operations.
 
         @param feather The new feather level.
@@ -284,7 +296,7 @@ public:
 
         @param gradient The new color gradient to use for subsequent fill drawing operations.
     */
-    void setFillColorGradient (ColorGradient gradient);
+    void setFillColorGradient (const ColorGradient& gradient);
 
     /** Retrieves the current color gradient for fills.
 
@@ -306,6 +318,41 @@ public:
     */
     void setFillImage (const Image& image, const AffineTransform& imageTransform = {}, ImageSampling sampling = {});
 
+    /** Fills subsequent shapes and text with live-rendered content.
+
+        The source replaces the fill color or gradient until one of those is set
+        again. Its content is drawn now into an offscreen canvas, if stale, at a
+        resolution matching the current transform: changing the transform after
+        setting the paint only affects its sharpness. The source must outlive the
+        frame being drawn.
+
+        Nothing is painted when the source has an empty content size, no GPU is
+        available, or the source is set from within its own paintContent().
+
+        @param source          The content to paint with.
+        @param sourceTransform Maps content units to the drawing's coordinates. The
+                               identity places the content box at its natural size
+                               with its top-left corner at the origin.
+        @param sampling        How the content repeats and is filtered.
+
+        @see PaintSource
+    */
+    void setFillSource (PaintSource& source, const AffineTransform& sourceTransform = {}, ImageSampling sampling = {});
+
+    /** Fills subsequent shapes and text with a GPU texture.
+
+        The texture replaces the fill color or gradient until one of those is set
+        again, and is sampled as is, without any CPU copy. A null or invalid texture
+        paints nothing.
+
+        @param texture          The texture to paint with, e.g. GpuCanvas::asTexture().
+        @param textureTransform Maps texture pixels to the drawing's coordinates. The
+                                identity places the texture at its natural size with
+                                its top-left corner at the origin.
+        @param sampling         How the texture repeats and is filtered.
+    */
+    void setFillTexture (const GpuTexture::Ptr& texture, const AffineTransform& textureTransform = {}, ImageSampling sampling = {});
+
     //==============================================================================
     /** Sets the current drawing stroke color.
 
@@ -323,7 +370,7 @@ public:
 
         @param gradient The new color gradient to use for subsequent stroke drawing operations.
     */
-    void setStrokeColorGradient (ColorGradient gradient);
+    void setStrokeColorGradient (const ColorGradient& gradient);
 
     /** Retrieves the current color gradient for strokes.
 
@@ -344,6 +391,30 @@ public:
         @param sampling       How the image repeats and is filtered.
     */
     void setStrokeImage (const Image& image, const AffineTransform& imageTransform = {}, ImageSampling sampling = {});
+
+    /** Strokes subsequent shapes and text with live-rendered content.
+
+        Works like setFillSource(), for strokes.
+
+        @param source          The content to paint with.
+        @param sourceTransform Maps content units to the drawing's coordinates.
+        @param sampling        How the content repeats and is filtered.
+
+        @see PaintSource, setFillSource
+    */
+    void setStrokeSource (PaintSource& source, const AffineTransform& sourceTransform = {}, ImageSampling sampling = {});
+
+    /** Strokes subsequent shapes and text with a GPU texture.
+
+        Works like setFillTexture(), for strokes.
+
+        @param texture          The texture to paint with.
+        @param textureTransform Maps texture pixels to the drawing's coordinates.
+        @param sampling         How the texture repeats and is filtered.
+
+        @see setFillTexture
+    */
+    void setStrokeTexture (const GpuTexture::Ptr& texture, const AffineTransform& textureTransform = {}, ImageSampling sampling = {});
 
     //==============================================================================
     /** Sets the stroke type for subsequent drawing operations.
@@ -726,6 +797,21 @@ public:
     */
     void drawTexture (const GpuTexture::Ptr& texture, const Rectangle<float>& targetArea);
 
+    /** Draws the content of a PaintSource into a target rectangle, through its filter when it has one.
+
+        The content box of the source is stretched over the rectangle. Its raster is made
+        for the size the rectangle has on screen, and kept until the source is marked dirty.
+
+        @param source     The content to draw.
+        @param targetArea The destination rectangle in the current coordinate space.
+
+        @returns False when nothing was drawn: the source has an empty content size, no GPU
+                 is available, or the source is drawn from within its own paintContent().
+
+        @see PaintSource, PaintSource::setFilter
+    */
+    bool drawSource (PaintSource& source, const Rectangle<float>& targetArea);
+
     /** Draws an image mapped onto a triangle mesh.
 
         The mesh is drawn with the current transform, opacity, tint, blend mode and additive
@@ -831,16 +917,18 @@ public:
 
 private:
     // Holds the texture rather than the Image: copying an Image drops its GPU texture.
+    // The size is what the paint transform maps: pixels for images and textures, content units for sources.
     struct ImagePaint
     {
         rive::rcp<rive::gpu::Texture> texture;
-        int width = 0;
-        int height = 0;
+        Size<float> size;
         AffineTransform transform;
         ImageSampling sampling;
     };
 
     ImagePaint makeImagePaint (const Image& image, const AffineTransform& imageTransform, ImageSampling sampling);
+    ImagePaint makeSourcePaint (PaintSource& source, const AffineTransform& sourceTransform, ImageSampling sampling);
+    static ImagePaint makeTexturePaint (const GpuTexture::Ptr& texture, const AffineTransform& textureTransform, ImageSampling sampling);
 
     struct RenderOptions
     {
@@ -884,6 +972,16 @@ private:
         ColorGradient getStrokeColorGradient() const noexcept
         {
             return strokeGradient;
+        }
+
+        bool spreadsFillGradient() const noexcept
+        {
+            return ! fillImage.has_value() && ! isCurrentFillColor && fillGradient.getSpread() != ColorGradient::Spread::Pad;
+        }
+
+        bool spreadsStrokeGradient() const noexcept
+        {
+            return ! strokeImage.has_value() && ! isCurrentStrokeColor && strokeGradient.getSpread() != ColorGradient::Spread::Pad;
         }
 
         float getStrokeWidth() const noexcept
@@ -957,8 +1055,8 @@ private:
 
     void clipPath (rive::RawPath& path);
 
-    bool setupFillPaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, Point<float> imageOffset = {});
-    bool setupStrokePaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, Point<float> imageOffset = {});
+    bool setupFillPaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, const Rectangle<float>& paintedArea, Point<float> imageOffset = {});
+    bool setupStrokePaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, const Rectangle<float>& paintedArea, Point<float> imageOffset = {});
     void setupPaintBlend (rive::RiveRenderPaint& paint, const RenderOptions& options);
     bool setupImagePaint (rive::RiveRenderPaint& paint, const ImagePaint& imagePaint, Point<float> imageOffset);
     void applyModulation (const RenderOptions& options);
@@ -986,6 +1084,7 @@ private:
     bool committed = false;
 
     std::vector<RenderOptions> renderOptions;
+    std::size_t renderOptionsDepth = 1;
 };
 
 } // namespace yup

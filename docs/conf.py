@@ -101,8 +101,12 @@ html_theme_options = {
             "url": "imaging/index",
         },
         {
+            "title": "UI",
+            "url": "ui/index",
+        },
+        {
             "title": "DSP",
-            "url": "dsp/index",
+            "url": "audio/dsp/index",
         },
         {
             "title": "Audio",
@@ -110,3 +114,120 @@ html_theme_options = {
         }
     ]
 }
+
+
+# -- Syntax highlighting for the YUP languages ------------------------------
+# YUI and YDSP have no Pygments lexers of their own, so small permissive ones
+# are defined here. The YDSP keywords follow the compiler's lexer
+# (modules/yup_dsp_jit/language/yup_YdspLexer.cpp) and the VS Code grammar.
+
+def setup(app):
+    from pygments.lexer import RegexLexer, bygroups, words
+    from pygments.token import Comment, Keyword, Name, Number, Operator, Punctuation, String, Text
+
+    class YuiLexer (RegexLexer):
+        """A permissive lexer for the YUI declarative UI language."""
+
+        name = "YUI"
+        aliases = ["yui"]
+        filenames = ["*.yui"]
+
+        tokens = {
+            "root": [
+                (r"\s+", Text),
+                (r"//.*?$", Comment.Single),
+                (r"/\*", Comment.Multiline, "comment"),
+                (r'"(\\.|[^"\\])*"', String.Double),
+                (r"#[0-9a-fA-F]{3,8}\b", Number.Hex),
+                (words (("import", "component", "property", "alias", "style", "palette",
+                         "tokens", "drawing", "repeat", "in", "changed", "from", "to"),
+                        suffix=r"\b"), Keyword),
+                (words (("number", "string", "color", "font", "bool", "point", "rect", "size"),
+                        suffix=r"\b"), Keyword.Type),
+                (words (("true", "false", "root", "parent", "this"), suffix=r"\b"), Keyword.Constant),
+                (r"@[A-Za-z_][\w-]*", Name.Decorator),
+                (r"#[A-Za-z_][\w-]*", Name.Label),
+                (r"\.[A-Za-z_][\w-]*", Name.Class),
+                (r":[A-Za-z_][\w-]*(?=[\s{,>])", Name.Decorator),
+                (r"[A-Za-z_]\w*(?=\s*:)", Name.Attribute),
+                (r"[A-Za-z_]\w*(?=\s*\()", Name.Function),
+                (r"[A-Z]\w*", Name.Class),
+                (r"[A-Za-z_]\w*", Name),
+                (r"[0-9]+\.[0-9]+(?:[a-z%]+)?", Number.Float),
+                (r"[0-9]+(?:[a-z%]+)?", Number.Integer),
+                (r"<=>|=>|\.\.|[-+*/%<>=!&|~?]", Operator),
+                (r"[{}()\[\];:,.]", Punctuation),
+                (r".", Text),
+            ],
+            "comment": [
+                (r"[^*/]+", Comment.Multiline),
+                (r"/\*", Comment.Multiline, "#push"),
+                (r"\*/", Comment.Multiline, "#pop"),
+                (r"[*/]", Comment.Multiline),
+            ],
+        }
+
+    class YdspLexer (RegexLexer):
+        """A lexer for the YDSP JIT-compiled DSP language."""
+
+        name = "YDSP"
+        aliases = ["ydsp"]
+        filenames = ["*.ydsp"]
+
+        tokens = {
+            "root": [
+                (r"\s+", Text),
+                (r"//.*?$", Comment.Single),
+                (r"/\*", Comment.Multiline, "comment"),
+                (r"\[\[", Punctuation, "annotation"),
+                (r'"(\\.|[^"\\])*"', String.Double),
+                (r"(processor|graph|struct|node)(\s+)([A-Za-z_]\w*)",
+                 bygroups (Keyword.Declaration, Text, Name.Class)),
+                (r"(func)(\s+)([A-Za-z_]\w*)", bygroups (Keyword.Declaration, Text, Name.Function)),
+                (words (("if", "else", "for", "in", "match", "return", "emit"), suffix=r"\b"), Keyword),
+                (words (("processor", "graph", "node", "connection", "input", "output", "parameter",
+                         "stream", "state", "process", "block", "event", "func", "init", "struct",
+                         "import", "declare", "as", "let"), suffix=r"\b"), Keyword.Declaration),
+                (words (("bool", "float", "float32", "float64", "int", "int32", "int64"), suffix=r"\b"), Keyword.Type),
+                (words (("true", "false", "pi", "e", "inf", "nan", "sampleRate", "samplePeriod", "blockSize"),
+                        suffix=r"\b"), Keyword.Constant),
+                (words (("noteOn", "noteOff", "pitchBend", "pressure", "controlChange", "programChange", "slide"),
+                        prefix=r"(?<!\.)\b", suffix=r"\b"), Name.Builtin.Pseudo),
+                (words (("abs", "acos", "asin", "atan", "atan2", "ceil", "clamp", "cos", "cosh", "exp", "floor",
+                         "fma", "fmod", "lerp", "log", "log10", "max", "mem", "min", "pow", "rint", "select",
+                         "sign", "sin", "sinh", "smooth", "sqrt", "size", "tan", "tanh", "trace"),
+                        suffix=r"\b"), Name.Builtin),
+                (r"0[xX][0-9a-fA-F_]+", Number.Hex),
+                (r"0[bB][01_]+", Number.Bin),
+                (r"\d[\d_]*\.\d[\d_]*(?:[eE][+-]?\d+)?|\d[\d_]*[eE][+-]?\d+", Number.Float),
+                (r"\d[\d_]*", Number.Integer),
+                (r"[A-Za-z_]\w*(?=\s*\()", Name.Function),
+                (r"[A-Za-z_]\w*", Name),
+                (r"<:|:>|->|\.\.|&&|\|\||==|!=|<=|>=|[-+*/%!<>=~@'&|^]", Operator),
+                (r"[{}()\[\];:,.]", Punctuation),
+                (r".", Text),
+            ],
+            "annotation": [
+                (r"\s+", Text),
+                (r"\]\]", Punctuation, "#pop"),
+                (r'"(\\.|[^"\\])*"', String.Double),
+                (words (("name", "author", "version", "license", "description", "min", "max", "step", "unit",
+                         "style", "values", "init", "smoothing", "latency", "mode", "stealing", "priority",
+                         "role", "main"), suffix=r"\b"), Name.Attribute),
+                (words (("true", "false", "poly", "mono", "oldest", "newest", "none", "last", "low", "high",
+                         "voiceActivity"), suffix=r"\b"), Keyword.Constant),
+                (r"-?\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?", Number),
+                (r"[A-Za-z_]\w*", Name),
+                (r"[:,=()\[\]-]", Punctuation),
+                (r".", Text),
+            ],
+            "comment": [
+                (r"[^*/]+", Comment.Multiline),
+                (r"/\*", Comment.Multiline, "#push"),
+                (r"\*/", Comment.Multiline, "#pop"),
+                (r"[*/]", Comment.Multiline),
+            ],
+        }
+
+    app.add_lexer ("yui", YuiLexer)
+    app.add_lexer ("ydsp", YdspLexer)

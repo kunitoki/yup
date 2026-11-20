@@ -10,6 +10,10 @@ Pipelines support both **fullscreen post-process effects** and **custom geometry
 rendering** (indexed or non-indexed) with vertex buffers, culling, and
 depth/stencil state.
 
+<p align="center">
+  <img class="rounded" src="../../_static/images/yup_rhi_pbr.jpg" alt="Spheres shaded by custom PBR pipelines, in the graphics example" width="640">
+</p>
+
 ```{note}
 Compiling a pipeline requires a `GpuDevice` with GPU context available.
 Check `ctx.isGpuAvailable()` first.
@@ -70,6 +74,10 @@ GLSL→WGSL direct transpiler.
 auto result = GpuPipeline::compileFromGlsl (ctx, vertexGlsl, fragmentGlsl, options);
 #endif
 ```
+
+<p align="center">
+  <img class="rounded" src="../../_static/images/yup_shaders.jpg" alt="A fragment shader edited and recompiled while it runs, in the graphics example" width="640">
+</p>
 
 ### 3. From explicit shader sources (advanced)
 

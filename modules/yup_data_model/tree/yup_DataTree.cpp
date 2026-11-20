@@ -243,6 +243,71 @@ private:
 
 //==============================================================================
 
+class ReplacePropertiesAction : public UndoableAction
+{
+public:
+    ReplacePropertiesAction (std::shared_ptr<DataTree::DataObject> obj, NamedValueSet replacement)
+        : dataObject (std::move (obj))
+        , newProperties (std::move (replacement))
+    {
+    }
+
+    bool isValid() const override
+    {
+        return dataObject != nullptr;
+    }
+
+    bool perform (UndoableActionState state) override
+    {
+        if (dataObject == nullptr)
+            return false;
+
+        NamedValueSet previous;
+
+        if (state == UndoableActionState::Redo)
+        {
+            oldProperties = dataObject->properties;
+            previous = std::exchange (dataObject->properties, newProperties);
+        }
+        else
+        {
+            previous = std::exchange (dataObject->properties, oldProperties);
+        }
+
+        const auto& current = dataObject->properties;
+        yup::Array<Identifier> changedNames;
+
+        for (int i = 0; i < previous.size(); ++i)
+        {
+            const auto name = previous.getName (i);
+            const auto* nextValue = current.getVarPointer (name);
+
+            if (nextValue == nullptr || ! previous.getValueAt (i).equalsWithSameType (*nextValue))
+                changedNames.addIfNotAlreadyThere (name);
+        }
+
+        for (int i = 0; i < current.size(); ++i)
+        {
+            const auto name = current.getName (i);
+
+            if (! previous.contains (name))
+                changedNames.addIfNotAlreadyThere (name);
+        }
+
+        for (const auto& name : changedNames)
+            dataObject->sendPropertyChangeMessage (name);
+
+        return true;
+    }
+
+private:
+    std::shared_ptr<DataTree::DataObject> dataObject;
+    NamedValueSet newProperties;
+    NamedValueSet oldProperties;
+};
+
+//==============================================================================
+
 class AddChildAction : public UndoableAction
 {
 public:
@@ -265,6 +330,12 @@ public:
 
         if (state == UndoableActionState::Redo)
         {
+            attached = false;
+
+            // The tree may have changed since the edit was recorded
+            if (childObject == parentObject || parentObject->isDescendantOf (*childObject))
+                return false;
+
             auto currentParent = childObject->parent.lock();
             previousParent = currentParent;
             previousIndex = -1;
@@ -285,6 +356,7 @@ public:
 
             parentObject->children.insert (parentObject->children.begin() + actualIndex, childObject);
             childObject->parent = parentObject;
+            attached = true;
 
             if (currentParent != nullptr && previousIndex >= 0)
                 currentParent->sendChildRemovedMessage (childObject, previousIndex);
@@ -296,6 +368,9 @@ public:
         }
         else
         {
+            if (! attached)
+                return false;
+
             auto& parentChildren = parentObject->children;
             auto it = std::find (parentChildren.begin(), parentChildren.end(), childObject);
             if (it == parentChildren.end())
@@ -336,6 +411,7 @@ private:
     int index;
     std::weak_ptr<DataTree::DataObject> previousParent;
     int previousIndex = -1;
+    bool attached = false;
 };
 
 //==============================================================================
@@ -364,27 +440,34 @@ public:
 
         if (state == UndoableActionState::Redo)
         {
+            removed = false;
+
             if (childObject != nullptr)
             {
                 auto it = std::find (parentChildren.begin(), parentChildren.end(), childObject);
-                if (it != parentChildren.end())
-                    index = static_cast<int> (std::distance (parentChildren.begin(), it));
+                if (it == parentChildren.end())
+                    return false;
+
+                index = static_cast<int> (std::distance (parentChildren.begin(), it));
             }
-
-            if (! isPositiveAndBelow (index, static_cast<int> (parentObject->children.size())))
+            else if (isPositiveAndBelow (index, static_cast<int> (parentChildren.size())))
+            {
+                childObject = parentChildren[static_cast<size_t> (index)];
+            }
+            else
+            {
                 return false;
-
-            if (childObject == nullptr)
-                childObject = parentChildren[index];
+            }
 
             parentChildren.erase (parentChildren.begin() + index);
             childObject->parent.reset();
+            removed = true;
             parentObject->sendChildRemovedMessage (childObject, index);
             childObject->sendParentChangedMessage (parentObject);
         }
         else
         {
-            if (childObject == nullptr)
+            if (! removed)
                 return false;
 
             const int numChildren = static_cast<int> (parentChildren.size());
@@ -403,6 +486,7 @@ private:
     std::shared_ptr<DataTree::DataObject> parentObject;
     std::shared_ptr<DataTree::DataObject> childObject;
     int index;
+    bool removed = false;
 };
 
 //==============================================================================
@@ -522,42 +606,417 @@ private:
 
 //==============================================================================
 
-class CompoundAction : public UndoableAction
+class AddChildrenAction : public UndoableAction
 {
 public:
-    CompoundAction (std::shared_ptr<DataTree::DataObject> obj, std::vector<UndoableAction::Ptr>&& actions)
-        : dataObject (std::move (obj))
-        , individualActions (std::move (actions))
+    AddChildrenAction (std::shared_ptr<DataTree::DataObject> parent, std::vector<std::shared_ptr<DataTree::DataObject>> childrenToAdd, int idx)
+        : parentObject (std::move (parent))
+        , children (std::move (childrenToAdd))
+        , index (idx)
     {
     }
 
     bool isValid() const override
     {
-        return dataObject != nullptr && ! individualActions.empty();
+        return parentObject != nullptr && ! children.empty();
     }
 
     bool perform (UndoableActionState state) override
     {
-        if (dataObject == nullptr)
+        if (parentObject == nullptr)
             return false;
+
+        auto& siblings = parentObject->children;
 
         if (state == UndoableActionState::Redo)
         {
-            for (auto& action : individualActions)
-                action->perform (UndoableActionState::Redo);
+            steps.clear();
+            insertedAt = -1;
+
+            const int numSiblings = static_cast<int> (siblings.size());
+            const bool appending = ! isPositiveAndBelow (index, numSiblings);
+
+            if (! canInsertTogether())
+            {
+                // What addChild() does for each of them, one at a time
+                for (std::size_t i = 0; i < children.size(); ++i)
+                {
+                    steps.push_back (new AddChildAction (parentObject, children[i], appending ? -1 : index + static_cast<int> (i)));
+                    steps.back()->perform (UndoableActionState::Redo);
+                }
+
+                return true;
+            }
+
+            insertedAt = appending ? numSiblings : index;
+
+            siblings.insert (siblings.begin() + insertedAt, children.begin(), children.end());
+
+            for (const auto& child : children)
+                child->parent = parentObject;
+
+            for (const auto& child : children)
+            {
+                parentObject->sendChildAddedMessage (child);
+                child->sendParentChangedMessage (nullptr);
+            }
+
+            return true;
         }
-        else
+
+        if (insertedAt < 0)
         {
-            for (auto it = individualActions.rbegin(); it != individualActions.rend(); ++it)
+            for (auto it = steps.rbegin(); it != steps.rend(); ++it)
                 (*it)->perform (UndoableActionState::Undo);
+
+            return ! steps.empty();
+        }
+
+        const auto first = static_cast<std::size_t> (insertedAt);
+
+        if (first + children.size() > siblings.size() || ! std::equal (children.begin(), children.end(), siblings.begin() + insertedAt))
+            return false;
+
+        siblings.erase (siblings.begin() + insertedAt, siblings.begin() + insertedAt + static_cast<std::ptrdiff_t> (children.size()));
+
+        for (const auto& child : children)
+            child->parent.reset();
+
+        for (int i = static_cast<int> (children.size()); --i >= 0;)
+        {
+            const auto& child = children[static_cast<std::size_t> (i)];
+            parentObject->sendChildRemovedMessage (child, insertedAt + i);
+            child->sendParentChangedMessage (parentObject);
         }
 
         return true;
     }
 
 private:
-    std::shared_ptr<DataTree::DataObject> dataObject;
-    std::vector<UndoableAction::Ptr> individualActions;
+    bool canInsertTogether() const
+    {
+        for (const auto& child : children)
+        {
+            if (child == parentObject || ! child->parent.expired() || parentObject->isDescendantOf (*child))
+                return false;
+        }
+
+        return true;
+    }
+
+    std::shared_ptr<DataTree::DataObject> parentObject;
+    std::vector<std::shared_ptr<DataTree::DataObject>> children;
+    int index;
+    int insertedAt = -1;
+    std::vector<UndoableAction::Ptr> steps;
+};
+
+//==============================================================================
+
+class RemoveChildrenAction : public UndoableAction
+{
+public:
+    RemoveChildrenAction (std::shared_ptr<DataTree::DataObject> parent, int start, int count)
+        : parentObject (std::move (parent))
+        , startIndex (start)
+        , numChildren (count)
+    {
+    }
+
+    RemoveChildrenAction (std::shared_ptr<DataTree::DataObject> parent, const std::vector<std::shared_ptr<DataTree::DataObject>>& childrenToRemove)
+        : parentObject (std::move (parent))
+        , listed (childrenToRemove.begin(), childrenToRemove.end())
+    {
+    }
+
+    bool isValid() const override
+    {
+        return parentObject != nullptr;
+    }
+
+    bool perform (UndoableActionState state) override
+    {
+        if (parentObject == nullptr)
+            return false;
+
+        auto& siblings = parentObject->children;
+
+        if (state == UndoableActionState::Redo)
+        {
+            removed.clear();
+
+            const auto rangeStart = static_cast<int64> (startIndex);
+            const auto rangeEnd = rangeStart + numChildren;
+
+            for (std::size_t i = 0; i < siblings.size(); ++i)
+            {
+                const auto index = static_cast<int64> (i);
+
+                if ((index >= rangeStart && index < rangeEnd) || listed.count (siblings[i]) != 0)
+                    removed.push_back ({ static_cast<int> (i), siblings[i] });
+            }
+
+            if (removed.empty())
+                return false;
+
+            std::size_t numKept = 0, nextRemoved = 0;
+
+            for (std::size_t i = 0; i < siblings.size(); ++i)
+            {
+                if (nextRemoved < removed.size() && removed[nextRemoved].first == static_cast<int> (i))
+                    ++nextRemoved;
+                else
+                    siblings[numKept++] = std::move (siblings[i]);
+            }
+
+            siblings.resize (numKept);
+
+            for (const auto& entry : removed)
+                entry.second->parent.reset();
+
+            // From the back, so that each former index is the one the child had when it left
+            for (auto it = removed.rbegin(); it != removed.rend(); ++it)
+            {
+                parentObject->sendChildRemovedMessage (it->second, it->first);
+                it->second->sendParentChangedMessage (parentObject);
+            }
+
+            return true;
+        }
+
+        if (removed.empty())
+            return false;
+
+        std::vector<std::shared_ptr<DataTree::DataObject>> restored;
+        restored.reserve (siblings.size() + removed.size());
+
+        auto kept = siblings.begin();
+
+        for (const auto& entry : removed)
+        {
+            while (static_cast<int> (restored.size()) < entry.first && kept != siblings.end())
+                restored.push_back (std::move (*kept++));
+
+            restored.push_back (entry.second);
+        }
+
+        restored.insert (restored.end(), std::make_move_iterator (kept), std::make_move_iterator (siblings.end()));
+        siblings = std::move (restored);
+
+        for (const auto& entry : removed)
+            entry.second->parent = parentObject;
+
+        const auto restoredChildren = std::exchange (removed, {});
+
+        for (const auto& entry : restoredChildren)
+        {
+            parentObject->sendChildAddedMessage (entry.second);
+            entry.second->sendParentChangedMessage (nullptr);
+        }
+
+        return true;
+    }
+
+private:
+    std::shared_ptr<DataTree::DataObject> parentObject;
+    std::unordered_set<std::shared_ptr<DataTree::DataObject>> listed;
+    int startIndex = 0;
+    int numChildren = 0;
+    std::vector<std::pair<int, std::shared_ptr<DataTree::DataObject>>> removed;
+};
+
+//==============================================================================
+
+class ReorderChildrenAction : public UndoableAction
+{
+public:
+    ReorderChildrenAction (std::shared_ptr<DataTree::DataObject> parent, std::vector<std::shared_ptr<DataTree::DataObject>> orderToUse)
+        : parentObject (std::move (parent))
+        , newOrder (std::move (orderToUse))
+    {
+    }
+
+    bool isValid() const override
+    {
+        return parentObject != nullptr;
+    }
+
+    bool perform (UndoableActionState state) override
+    {
+        if (parentObject == nullptr)
+            return false;
+
+        auto& siblings = parentObject->children;
+
+        if (state == UndoableActionState::Redo)
+        {
+            previousOrder.clear();
+
+            if (siblings == newOrder || ! isPermutationOf (siblings))
+                return false;
+
+            previousOrder = std::exchange (siblings, newOrder);
+
+            for (const auto& move : findMoves())
+                parentObject->sendChildMovedMessage (move.child, move.from, move.to);
+
+            return true;
+        }
+
+        if (previousOrder.empty() || siblings != newOrder)
+            return false;
+
+        const auto moves = findMoves();
+        siblings = std::exchange (previousOrder, {});
+
+        for (auto it = moves.rbegin(); it != moves.rend(); ++it)
+            parentObject->sendChildMovedMessage (it->child, it->to, it->from);
+
+        return true;
+    }
+
+private:
+    struct Move
+    {
+        std::shared_ptr<DataTree::DataObject> child;
+        int from, to;
+    };
+
+    bool isPermutationOf (const std::vector<std::shared_ptr<DataTree::DataObject>>& siblings) const
+    {
+        if (siblings.size() != newOrder.size())
+            return false;
+
+        std::unordered_set<const DataTree::DataObject*> remaining;
+
+        for (const auto& sibling : siblings)
+            remaining.insert (sibling.get());
+
+        for (const auto& child : newOrder)
+        {
+            if (remaining.erase (child.get()) == 0)
+                return false;
+        }
+
+        return true;
+    }
+
+    /** Returns the moveChild() calls that turn the previous order into the new one, bringing each
+        child to its index from the first to the last. Nobody is told when nobody listens.
+    */
+    std::vector<Move> findMoves() const
+    {
+        std::vector<Move> moves;
+
+        if (parentObject->listeners.isEmpty())
+            return moves;
+
+        const auto numChildren = newOrder.size();
+        std::unordered_map<const DataTree::DataObject*, std::size_t> previousIndices;
+
+        for (std::size_t i = 0; i < numChildren; ++i)
+            previousIndices[previousOrder[i].get()] = i;
+
+        // Counts, in a binary indexed tree, the children already in place that came before a given index
+        std::vector<int> placed (numChildren + 1, 0);
+
+        for (std::size_t i = 0; i < numChildren; ++i)
+        {
+            const auto previousIndex = previousIndices[newOrder[i].get()];
+            int numPlacedBefore = 0;
+
+            for (auto node = previousIndex; node > 0; node -= node & (~node + 1))
+                numPlacedBefore += placed[node];
+
+            // Each child placed so far that came after this one has pushed it one index further
+            const auto from = static_cast<int> (previousIndex + i) - numPlacedBefore;
+
+            if (from != static_cast<int> (i))
+                moves.push_back ({ newOrder[i], from, static_cast<int> (i) });
+
+            for (auto node = previousIndex + 1; node <= numChildren; node += node & (~node + 1))
+                ++placed[node];
+        }
+
+        return moves;
+    }
+
+    std::shared_ptr<DataTree::DataObject> parentObject;
+    std::vector<std::shared_ptr<DataTree::DataObject>> newOrder;
+    std::vector<std::shared_ptr<DataTree::DataObject>> previousOrder;
+};
+
+//==============================================================================
+
+class CompoundAction : public UndoableAction
+{
+public:
+    /** The edits of one node, in the order they were recorded. The actions keep the node alive. */
+    struct NodeEdits
+    {
+        DataTree::DataObject* node = nullptr;
+        std::vector<UndoableAction::Ptr> actions;
+    };
+
+    explicit CompoundAction (NodeEdits editsOfOneNode)
+        : single (std::move (editsOfOneNode))
+    {
+    }
+
+    explicit CompoundAction (std::vector<NodeEdits> editsOfSeveralNodes)
+        : several (std::move (editsOfSeveralNodes))
+    {
+    }
+
+    bool isValid() const override
+    {
+        return single.node != nullptr || ! several.empty();
+    }
+
+    bool perform (UndoableActionState state) override
+    {
+        return several.empty() ? apply ({ &single, single.node != nullptr ? 1u : 0u }, state)
+                               : apply (several, state);
+    }
+
+    /** Applies the edits of the nodes in order, or takes them back in reverse, as one transaction. */
+    static bool apply (Span<NodeEdits> edits, UndoableActionState state)
+    {
+        if (edits.empty())
+            return false;
+
+        for (const auto& edit : edits)
+            edit.node->sendTransactionStartedMessage();
+
+        const ScopeGuard sendEnded { [&edits]
+        {
+            for (auto i = edits.size(); i-- > 0;)
+                edits[i].node->sendTransactionEndedMessage (DataTree::TransactionResult::committed);
+        } };
+
+        if (state == UndoableActionState::Redo)
+        {
+            for (const auto& edit : edits)
+            {
+                for (const auto& action : edit.actions)
+                    action->perform (UndoableActionState::Redo);
+            }
+        }
+        else
+        {
+            for (auto i = edits.size(); i-- > 0;)
+            {
+                for (auto action = edits[i].actions.rbegin(); action != edits[i].actions.rend(); ++action)
+                    (*action)->perform (UndoableActionState::Undo);
+            }
+        }
+
+        return true;
+    }
+
+private:
+    NodeEdits single;
+    std::vector<NodeEdits> several;
 };
 
 //==============================================================================
@@ -620,6 +1079,30 @@ void DataTree::DataObject::sendChildMovedMessage (std::shared_ptr<DataObject> ch
     });
 }
 
+void DataTree::DataObject::sendTransactionStartedMessage()
+{
+    if (listeners.isEmpty())
+        return;
+
+    DataTree treeObj (shared_from_this());
+    listeners.call ([&] (DataTree::Listener& l)
+    {
+        l.transactionStarted (treeObj);
+    });
+}
+
+void DataTree::DataObject::sendTransactionEndedMessage (DataTreeTransactionResult result)
+{
+    if (listeners.isEmpty())
+        return;
+
+    DataTree treeObj (shared_from_this());
+    listeners.call ([&] (DataTree::Listener& l)
+    {
+        l.transactionEnded (treeObj, result);
+    });
+}
+
 void DataTree::DataObject::sendParentChangedMessage (std::shared_ptr<DataObject> previousParent)
 {
     auto self = shared_from_this();
@@ -647,6 +1130,27 @@ void DataTree::DataObject::sendAncestorChangedMessage (const std::shared_ptr<Dat
     const auto currentChildren = children;
     for (const auto& child : currentChildren)
         child->sendAncestorChangedMessage (reparentedAncestor);
+}
+
+bool DataTree::DataObject::isDescendantOf (const DataObject& possibleAncestor) const
+{
+    // The slow walker ends the walk if the parents ever form a cycle
+    std::shared_ptr<const DataObject> slow = shared_from_this();
+    bool advanceSlow = false;
+
+    for (auto ancestor = parent.lock(); ancestor != nullptr; ancestor = ancestor->parent.lock())
+    {
+        if (ancestor.get() == &possibleAncestor)
+            return true;
+
+        if (ancestor == slow)
+            return false;
+
+        if (std::exchange (advanceSlow, ! advanceSlow))
+            slow = slow->parent.lock();
+    }
+
+    return false;
 }
 
 std::shared_ptr<DataTree::DataObject> DataTree::DataObject::clone() const
@@ -720,37 +1224,9 @@ DataTree::DataTree (DataTree&& other) noexcept
 
 DataTree::~DataTree() = default;
 
-DataTree& DataTree::operator= (const DataTree& other) noexcept
-{
-    if (this != &other && object != other.object)
-    {
-        if (auto oldObject = std::exchange (object, other.object))
-        {
-            oldObject->listeners.call ([this] (Listener& l)
-            {
-                l.treeRedirected (*this);
-            });
-        }
-    }
+DataTree& DataTree::operator= (const DataTree& other) noexcept = default;
 
-    return *this;
-}
-
-DataTree& DataTree::operator= (DataTree&& other) noexcept
-{
-    if (this != &other && object != other.object)
-    {
-        if (auto oldObject = std::exchange (object, other.object))
-        {
-            oldObject->listeners.call ([this] (Listener& l)
-            {
-                l.treeRedirected (*this);
-            });
-        }
-    }
-
-    return *this;
-}
+DataTree& DataTree::operator= (DataTree&& other) noexcept = default;
 
 DataTree::DataTree (std::shared_ptr<DataObject> objectToUse)
     : object (std::move (objectToUse))
@@ -1009,41 +1485,19 @@ DataTree DataTree::getRoot() const noexcept
     if (object == nullptr)
         return {};
 
-    DataTree root = *this;
-    while (auto parent = root.getParent())
-    {
-        if (! parent.isValid())
-            break;
+    auto root = object;
 
-        root = parent;
-    }
+    while (auto parent = root->parent.lock())
+        root = std::move (parent);
 
-    return root;
+    return DataTree (std::move (root));
 }
 
 bool DataTree::isAChildOf (const DataTree& possibleParent) const noexcept
 {
-    if (object == nullptr || possibleParent.object == nullptr)
-        return false;
-
-    std::unordered_set<const void*> visited;
-
-    auto parent = getParent();
-    while (parent.isValid())
-    {
-        const void* parentPtr = parent.object.get();
-        if (visited.find (parentPtr) != visited.end())
-            return false;
-
-        visited.insert (parentPtr);
-
-        if (parent == possibleParent)
-            return true;
-
-        parent = parent.getParent();
-    }
-
-    return false;
+    return object != nullptr
+        && possibleParent.object != nullptr
+        && object->isDescendantOf (*possibleParent.object);
 }
 
 int DataTree::getDepth() const noexcept
@@ -1052,12 +1506,9 @@ int DataTree::getDepth() const noexcept
         return 0;
 
     int depth = 0;
-    auto parent = getParent();
-    while (parent.isValid())
-    {
+
+    for (auto parent = object->parent.lock(); parent != nullptr; parent = parent->parent.lock())
         ++depth;
-        parent = parent.getParent();
-    }
 
     return depth;
 }
@@ -1365,13 +1816,19 @@ struct DataTree::Transaction::ChildChange
         Add,
         Remove,
         RemoveAll,
-        Move
+        Move,
+        AddMany,
+        RemoveRange,
+        RemoveMany,
+        Reorder
     };
 
     Type type;
     DataTree child;
     int oldIndex = -1;
     int newIndex = -1;
+    std::vector<std::shared_ptr<DataObject>> children;
+    std::size_t numPropertyChangesBefore = 0;
 };
 
 //==============================================================================
@@ -1393,6 +1850,13 @@ DataTree::Transaction::Transaction (Transaction&& other) noexcept
     , active (std::exchange (other.active, false))
     , propertyChanges (std::move (other.propertyChanges))
     , childChanges (std::move (other.childChanges))
+    , propertyIndex (std::move (other.propertyIndex))
+    , hasPropertyIndex (other.hasPropertyIndex)
+    , removedAllProperties (other.removedAllProperties)
+    , removedAllChildren (other.removedAllChildren)
+    , addedChildren (other.addedChildren)
+    , childCountDelta (other.childCountDelta)
+    , childCountFloor (other.childCountFloor)
 {
 }
 
@@ -1409,6 +1873,13 @@ DataTree::Transaction& DataTree::Transaction::operator= (Transaction&& other) no
         active = std::exchange (other.active, false);
         propertyChanges = std::move (other.propertyChanges);
         childChanges = std::move (other.childChanges);
+        propertyIndex = std::move (other.propertyIndex);
+        hasPropertyIndex = other.hasPropertyIndex;
+        removedAllProperties = other.removedAllProperties;
+        removedAllChildren = other.removedAllChildren;
+        addedChildren = other.addedChildren;
+        childCountDelta = other.childCountDelta;
+        childCountFloor = other.childCountFloor;
     }
 
     return *this;
@@ -1425,37 +1896,78 @@ void DataTree::Transaction::commit()
     if (! active || dataObject == nullptr)
         return;
 
-    // Always build individual actions and execute them
+    CompoundAction::NodeEdits edits { dataObject.get(), takeActions() };
+
+    if (edits.actions.empty())
+        return;
+
+    if (undoManager != nullptr)
+        undoManager->perform (new CompoundAction (std::move (edits)));
+    else
+        CompoundAction::apply ({ &edits, 1 }, UndoableActionState::Redo);
+}
+
+std::vector<UndoableAction::Ptr> DataTree::Transaction::takeActions()
+{
     std::vector<UndoableAction::Ptr> actions;
+    std::size_t nextProperty = 0;
 
-    // Create property actions that capture current state
-    for (const auto& change : propertyChanges)
+    // Property and child actions are created in the order their edits were made
+    const auto addPropertyActionsUpTo = [&] (std::size_t end)
     {
-        switch (change.type)
+        for (; nextProperty < end; ++nextProperty)
         {
-            case PropertyChange::Set:
-            {
-                actions.push_back (new PropertySetAction (dataObject, change.name, change.newValue, change.oldValue));
-                break;
-            }
+            const auto& change = propertyChanges[nextProperty];
 
-            case PropertyChange::Remove:
+            switch (change.type)
             {
-                actions.push_back (new PropertyRemoveAction (dataObject, change.name, change.oldValue));
-                break;
-            }
+                case PropertyChange::Set:
+                {
+                    actions.push_back (new PropertySetAction (dataObject, change.name, change.newValue, change.oldValue));
+                    break;
+                }
 
-            case PropertyChange::RemoveAll:
-            {
-                actions.push_back (new RemoveAllPropertiesAction (dataObject));
-                break;
+                case PropertyChange::Remove:
+                {
+                    actions.push_back (new PropertyRemoveAction (dataObject, change.name, change.oldValue));
+                    break;
+                }
+
+                case PropertyChange::RemoveAll:
+                {
+                    if (nextProperty + 1 >= end)
+                    {
+                        actions.push_back (new RemoveAllPropertiesAction (dataObject));
+                        break;
+                    }
+
+                    // The property changes made right after it replace the properties together with it
+                    NamedValueSet replacement;
+
+                    for (std::size_t j = nextProperty + 1; j < end; ++j)
+                    {
+                        const auto& subsequent = propertyChanges[j];
+
+                        if (subsequent.type == PropertyChange::Set)
+                            replacement.set (subsequent.name, subsequent.newValue);
+                        else if (subsequent.type == PropertyChange::Remove)
+                            replacement.remove (subsequent.name);
+                        else if (subsequent.type == PropertyChange::RemoveAll)
+                            replacement.clear();
+                    }
+
+                    actions.push_back (new ReplacePropertiesAction (dataObject, std::move (replacement)));
+                    nextProperty = end;
+                    return;
+                }
             }
         }
-    }
+    };
 
-    // Create child actions that capture current state
     for (const auto& change : childChanges)
     {
+        addPropertyActionsUpTo (change.numPropertyChangesBefore);
+
         switch (change.type)
         {
             case ChildChange::Add:
@@ -1481,21 +1993,37 @@ void DataTree::Transaction::commit()
                 actions.push_back (new MoveChildAction (dataObject, change.oldIndex, change.newIndex));
                 break;
             }
+
+            case ChildChange::AddMany:
+            {
+                actions.push_back (new AddChildrenAction (dataObject, change.children, change.newIndex));
+                break;
+            }
+
+            case ChildChange::RemoveRange:
+            {
+                actions.push_back (new RemoveChildrenAction (dataObject, change.oldIndex, change.newIndex));
+                break;
+            }
+
+            case ChildChange::RemoveMany:
+            {
+                actions.push_back (new RemoveChildrenAction (dataObject, change.children));
+                break;
+            }
+
+            case ChildChange::Reorder:
+            {
+                actions.push_back (new ReorderChildrenAction (dataObject, change.children));
+                break;
+            }
         }
     }
 
-    // If we have undo manager, use compound action for undo/redo
-    if (undoManager != nullptr && ! actions.empty())
-    {
-        undoManager->perform (new CompoundAction (dataObject, std::move (actions)));
-    }
-    else
-    {
-        for (auto& action : actions)
-            action->perform (UndoableActionState::Redo);
-    }
+    addPropertyActionsUpTo (propertyChanges.size());
 
     active = false;
+    return actions;
 }
 
 void DataTree::Transaction::abort()
@@ -1503,10 +2031,98 @@ void DataTree::Transaction::abort()
     if (! active)
         return;
 
-    // Simply mark as inactive - changes are not applied
+    discard();
+
+    // Nothing was applied, the listeners are only told how it ended
+    dataObject->sendTransactionStartedMessage();
+    dataObject->sendTransactionEndedMessage (TransactionResult::aborted);
+}
+
+void DataTree::Transaction::discard()
+{
     active = false;
     propertyChanges.clear();
     childChanges.clear();
+    propertyIndex.clear();
+}
+
+DataTree::Transaction::PropertyState DataTree::Transaction::findPropertyState (const Identifier& name)
+{
+    // A short list is scanned, a long one is indexed by name the first time it is looked up
+    constexpr std::size_t indexedFrom = 16;
+
+    if (! hasPropertyIndex && propertyChanges.size() >= indexedFrom)
+    {
+        hasPropertyIndex = true;
+
+        for (std::size_t i = 0; i < propertyChanges.size(); ++i)
+            indexPropertyChange (i);
+    }
+
+    PropertyState state;
+
+    if (hasPropertyIndex)
+    {
+        state.reset = removedAllProperties;
+
+        if (const auto it = propertyIndex.find (name); it != propertyIndex.end())
+        {
+            state.pendingSet = it->second;
+            state.reset = state.reset || it->second < 0;
+        }
+
+        return state;
+    }
+
+    for (std::size_t i = 0; i < propertyChanges.size(); ++i)
+    {
+        const auto& change = propertyChanges[i];
+
+        if (change.type == PropertyChange::RemoveAll)
+            state = { -1, true };
+        else if (change.name != name)
+            continue;
+        else if (change.type == PropertyChange::Remove)
+            state = { -1, true };
+        else
+            state.pendingSet = static_cast<int> (i);
+    }
+
+    return state;
+}
+
+void DataTree::Transaction::indexPropertyChange (std::size_t index)
+{
+    const auto& change = propertyChanges[index];
+
+    if (change.type == PropertyChange::RemoveAll)
+    {
+        propertyIndex.clear();
+        removedAllProperties = true;
+    }
+    else
+    {
+        propertyIndex[change.name] = change.type == PropertyChange::Set ? static_cast<int> (index) : -1;
+    }
+}
+
+bool DataTree::Transaction::hasEffectiveProperties()
+{
+    for (int i = 0; i < dataObject->properties.size(); ++i)
+    {
+        const auto state = findPropertyState (dataObject->properties.getName (i));
+
+        if (state.pendingSet >= 0 || ! state.reset)
+            return true;
+    }
+
+    for (const auto& change : propertyChanges)
+    {
+        if (change.type == PropertyChange::Set && findPropertyState (change.name).pendingSet >= 0)
+            return true;
+    }
+
+    return false;
 }
 
 void DataTree::Transaction::setProperty (const Identifier& name, const var& newValue)
@@ -1514,32 +2130,28 @@ void DataTree::Transaction::setProperty (const Identifier& name, const var& newV
     if (! active || dataObject == nullptr)
         return;
 
-    // Check if we already have a change for this property
-    for (auto& change : propertyChanges)
+    const auto state = findPropertyState (name);
+
+    if (state.pendingSet >= 0)
     {
-        if (change.name == name && change.type == PropertyChange::Set)
-        {
-            change.newValue = newValue;
-            return;
-        }
+        propertyChanges[static_cast<std::size_t> (state.pendingSet)].newValue = newValue;
+        return;
     }
 
-    // Get current value for undo purposes
-    var oldValue;
-    if (auto* value = dataObject->properties.getVarPointer (name))
-        oldValue = *value;
+    const var* effectiveValue = state.reset ? nullptr : dataObject->properties.getVarPointer (name);
 
-    // Skip if no change
-    if (oldValue == newValue)
+    if (effectiveValue != nullptr && effectiveValue->equalsWithSameType (newValue))
         return;
 
-    // Record the change
     PropertyChange change;
     change.type = PropertyChange::Set;
     change.name = name;
     change.newValue = newValue;
-    change.oldValue = oldValue;
+    change.oldValue = effectiveValue != nullptr ? *effectiveValue : var();
     propertyChanges.push_back (change);
+
+    if (hasPropertyIndex)
+        indexPropertyChange (propertyChanges.size() - 1);
 }
 
 void DataTree::Transaction::removeProperty (const Identifier& name)
@@ -1547,29 +2159,41 @@ void DataTree::Transaction::removeProperty (const Identifier& name)
     if (! active || dataObject == nullptr)
         return;
 
-    if (! dataObject->properties.contains (name))
+    const auto state = findPropertyState (name);
+
+    const var* effectiveValue = state.pendingSet >= 0 ? &propertyChanges[static_cast<std::size_t> (state.pendingSet)].newValue
+                              : state.reset           ? nullptr
+                                                      : dataObject->properties.getVarPointer (name);
+
+    if (effectiveValue == nullptr)
         return;
 
-    // Record the change
     PropertyChange change;
     change.type = PropertyChange::Remove;
     change.name = name;
-    change.oldValue = dataObject->properties[name];
+    change.oldValue = *effectiveValue;
     propertyChanges.push_back (change);
+
+    if (hasPropertyIndex)
+        indexPropertyChange (propertyChanges.size() - 1);
 }
 
 void DataTree::Transaction::removeAllProperties()
 {
-    if (! active || dataObject == nullptr)
+    if (! active || dataObject == nullptr || ! hasEffectiveProperties())
         return;
 
-    if (dataObject->properties.size() == 0)
-        return;
-
-    // Record the change
     PropertyChange change;
     change.type = PropertyChange::RemoveAll;
     propertyChanges.push_back (change);
+
+    if (hasPropertyIndex)
+        indexPropertyChange (propertyChanges.size() - 1);
+}
+
+int DataTree::Transaction::getCommittedChildCount() const
+{
+    return removedAllChildren ? 0 : static_cast<int> (dataObject->children.size());
 }
 
 void DataTree::Transaction::addChild (const DataTree& child, int index)
@@ -1582,27 +2206,17 @@ void DataTree::Transaction::addChild (const DataTree& child, int index)
     if (child.isAChildOf (thisTree) || child.object == dataObject || thisTree.isAChildOf (child))
         return;
 
-    // Calculate effective number of children including pending additions
-    int effectiveNumChildren = static_cast<int> (dataObject->children.size());
-    for (const auto& change : childChanges)
-    {
-        if (change.type == ChildChange::Add)
-            ++effectiveNumChildren;
-        else if (change.type == ChildChange::Remove)
-            --effectiveNumChildren;
-        else if (change.type == ChildChange::RemoveAll)
-            effectiveNumChildren = 0;
-    }
-
-    if (index < 0 || index > effectiveNumChildren)
-        index = effectiveNumChildren;
-
+    // The index is resolved when the edit is applied, as only then is the number of children known
     ChildChange change;
     change.type = ChildChange::Add;
     change.child = child;
     change.newIndex = index;
     change.oldIndex = -1;
-    childChanges.push_back (change);
+    recordChildChange (std::move (change));
+
+    addedChildren = true;
+    ++childCountDelta;
+    ++childCountFloor;
 }
 
 void DataTree::Transaction::removeChild (const DataTree& child)
@@ -1615,7 +2229,9 @@ void DataTree::Transaction::removeChild (const DataTree& child)
     change.child = child;
     change.oldIndex = -1;
     change.newIndex = -1;
-    childChanges.push_back (change);
+    recordChildChange (std::move (change));
+
+    noteChildrenRemoved (1);
 }
 
 void DataTree::Transaction::removeChild (int index)
@@ -1628,7 +2244,9 @@ void DataTree::Transaction::removeChild (int index)
     change.child = DataTree();
     change.oldIndex = index;
     change.newIndex = -1;
-    childChanges.push_back (change);
+    recordChildChange (std::move (change));
+
+    noteChildrenRemoved (1);
 }
 
 void DataTree::Transaction::removeAllChildren()
@@ -1636,13 +2254,19 @@ void DataTree::Transaction::removeAllChildren()
     if (! active || dataObject == nullptr)
         return;
 
-    if (dataObject->children.size() == 0)
+    // Nothing to remove, unless this transaction added children
+    if (dataObject->children.empty() && ! addedChildren)
         return;
 
     // Record the change
     ChildChange change;
     change.type = ChildChange::RemoveAll;
-    childChanges.push_back (change);
+    recordChildChange (std::move (change));
+
+    removedAllChildren = true;
+    addedChildren = false;
+    childCountDelta = 0;
+    childCountFloor = 0;
 }
 
 void DataTree::Transaction::moveChild (int currentIndex, int newIndex)
@@ -1656,7 +2280,103 @@ void DataTree::Transaction::moveChild (int currentIndex, int newIndex)
     change.child = DataTree(); // Will be resolved during commit
     change.oldIndex = currentIndex;
     change.newIndex = newIndex;
-    childChanges.push_back (change);
+    recordChildChange (std::move (change));
+}
+
+void DataTree::Transaction::addChildren (Span<const DataTree> children, int index)
+{
+    if (! active || dataObject == nullptr)
+        return;
+
+    ChildChange change;
+    change.type = ChildChange::AddMany;
+
+    std::unordered_set<const DataObject*> listed;
+
+    for (const auto& child : children)
+    {
+        // The trees addChild() ignores, and a tree counts once
+        if (child.object == nullptr
+            || child.object == dataObject
+            || child.object->isDescendantOf (*dataObject)
+            || dataObject->isDescendantOf (*child.object)
+            || ! listed.insert (child.object.get()).second)
+            continue;
+
+        change.children.push_back (child.object);
+    }
+
+    if (change.children.empty())
+        return;
+
+    const int numAdded = static_cast<int> (change.children.size());
+
+    change.newIndex = index;
+    recordChildChange (std::move (change));
+
+    addedChildren = true;
+    childCountDelta += numAdded;
+    childCountFloor += numAdded;
+}
+
+void DataTree::Transaction::removeChildren (int startIndex, int numChildren)
+{
+    if (! active || dataObject == nullptr || numChildren <= 0)
+        return;
+
+    ChildChange change;
+    change.type = ChildChange::RemoveRange;
+    change.oldIndex = startIndex;
+    change.newIndex = numChildren;
+    recordChildChange (std::move (change));
+
+    noteChildrenRemoved (numChildren);
+}
+
+void DataTree::Transaction::removeChildren (Span<const DataTree> children)
+{
+    if (! active || dataObject == nullptr || children.empty())
+        return;
+
+    ChildChange change;
+    change.type = ChildChange::RemoveMany;
+
+    for (const auto& child : children)
+    {
+        if (child.object != nullptr)
+            change.children.push_back (child.object);
+    }
+
+    recordChildChange (std::move (change));
+
+    // Every listed tree counts, as it does for removeChild()
+    noteChildrenRemoved (static_cast<int> (jmin (children.size(), static_cast<std::size_t> (std::numeric_limits<int>::max()))));
+}
+
+void DataTree::Transaction::reorderChildren (Span<const DataTree> newOrder)
+{
+    if (! active || dataObject == nullptr)
+        return;
+
+    ChildChange change;
+    change.type = ChildChange::Reorder;
+
+    for (const auto& child : newOrder)
+        change.children.push_back (child.object);
+
+    recordChildChange (std::move (change));
+}
+
+void DataTree::Transaction::recordChildChange (ChildChange&& change)
+{
+    change.numPropertyChangesBefore = propertyChanges.size();
+    childChanges.push_back (std::move (change));
+}
+
+void DataTree::Transaction::noteChildrenRemoved (int numRemoved)
+{
+    childCountDelta = static_cast<int> (jmax (static_cast<int64> (childCountDelta) - numRemoved, static_cast<int64> (std::numeric_limits<int>::min())));
+    childCountFloor = jmax (0, childCountFloor - numRemoved);
 }
 
 int DataTree::Transaction::getEffectiveChildCount() const
@@ -1664,31 +2384,94 @@ int DataTree::Transaction::getEffectiveChildCount() const
     if (dataObject == nullptr)
         return 0;
 
-    int count = static_cast<int> (dataObject->children.size());
+    // A removal counts whether or not it will find a child to remove, but never below the children added after it
+    return jmax (getCommittedChildCount() + childCountDelta, childCountFloor);
+}
 
-    for (const auto& change : childChanges)
+//==============================================================================
+
+DataTree::BatchTransaction::BatchTransaction (UndoManager* manager)
+    : undoManager (manager)
+{
+}
+
+DataTree::BatchTransaction::~BatchTransaction()
+{
+    if (active)
+        commit();
+}
+
+DataTree::Transaction& DataTree::BatchTransaction::edit (const DataTree& node)
+{
+    jassert (active); // The batch was already committed or aborted
+
+    // Edits of an invalid node, or made too late, go to a transaction that ignores them
+    const auto object = active ? node.object : nullptr;
+    const auto [it, isNew] = transactionIndices.try_emplace (object.get(), transactions.size());
+
+    // A transaction that was committed or aborted on its own makes room for a new one
+    if (! isNew && object != nullptr && ! transactions[it->second]->isActive())
+        it->second = transactions.size();
+
+    if (it->second == transactions.size())
+        transactions.push_back (std::unique_ptr<Transaction> (new Transaction (object)));
+
+    return *transactions[it->second];
+}
+
+void DataTree::BatchTransaction::commit()
+{
+    if (! active)
+        return;
+
+    active = false;
+
+    std::vector<CompoundAction::NodeEdits> edits;
+
+    for (const auto& transaction : transactions)
     {
-        switch (change.type)
-        {
-            case ChildChange::Add:
-                ++count;
-                break;
+        if (! transaction->isActive())
+            continue;
 
-            case ChildChange::Remove:
-                if (count > 0)
-                    --count;
-                break;
+        auto actions = transaction->takeActions();
 
-            case ChildChange::RemoveAll:
-                count = 0;
-                break;
-
-            case ChildChange::Move:
-                break; // No change in count
-        }
+        if (! actions.empty())
+            edits.push_back ({ transaction->dataObject.get(), std::move (actions) });
     }
 
-    return std::max (0, count);
+    if (edits.empty())
+        return;
+
+    if (undoManager != nullptr)
+        undoManager->perform (new CompoundAction (std::move (edits)));
+    else
+        CompoundAction::apply (edits, UndoableActionState::Redo);
+}
+
+void DataTree::BatchTransaction::abort()
+{
+    if (! active)
+        return;
+
+    active = false;
+
+    std::vector<std::shared_ptr<DataObject>> nodes;
+
+    for (const auto& transaction : transactions)
+    {
+        if (! transaction->isActive())
+            continue;
+
+        transaction->discard();
+        nodes.push_back (transaction->dataObject);
+    }
+
+    // Told as one transaction, the way a commit of the same nodes would be
+    for (const auto& node : nodes)
+        node->sendTransactionStartedMessage();
+
+    for (auto node = nodes.rbegin(); node != nodes.rend(); ++node)
+        (*node)->sendTransactionEndedMessage (TransactionResult::aborted);
 }
 
 //==============================================================================

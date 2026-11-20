@@ -133,17 +133,20 @@ private:
 
     bool parseNotifications (uint8_t* data, DWORD bytesOut, std::optional<File>& lastRenamedPath)
     {
-        std::vector<Watchdog::Event> localEvents;
-
-        uint8_t* rawData = data;
-
-        while (true)
+        // The last notification of the buffer has no next one
+        const auto next = [] (const FILE_NOTIFY_INFORMATION* fni) -> const FILE_NOTIFY_INFORMATION*
         {
-            const FILE_NOTIFY_INFORMATION* fni = reinterpret_cast<FILE_NOTIFY_INFORMATION*> (rawData);
+            if (fni->NextEntryOffset == 0)
+                return nullptr;
 
+            return reinterpret_cast<const FILE_NOTIFY_INFORMATION*> (reinterpret_cast<const uint8_t*> (fni) + fni->NextEntryOffset);
+        };
+
+        for (auto* fni = reinterpret_cast<const FILE_NOTIFY_INFORMATION*> (data); fni != nullptr; fni = next (fni))
+        {
             auto path = folder.getChildFile (String (fni->FileName, fni->FileNameLength / sizeof (wchar_t)));
             if (path.isHidden())
-                return true;
+                continue;
 
             auto event = Watchdog::EventType::undefined;
             switch (fni->Action)
@@ -191,11 +194,6 @@ private:
 
                 events.emplace_back (event, path, otherPath);
             }
-
-            if (fni->NextEntryOffset > 0)
-                rawData += fni->NextEntryOffset;
-            else
-                return false;
         }
 
         if (lastRenamedPath)

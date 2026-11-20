@@ -1353,3 +1353,47 @@ TEST_F (GraphicsTest, Drawing_Image_Meshes_Does_Not_Crash)
     EXPECT_NO_THROW (graphics->drawImageMesh (image, ImageMesh()));
     EXPECT_NO_THROW (graphics->drawImageMeshInstanced (image, mesh, {}));
 }
+
+TEST_F (GraphicsTest, SaveState_Reuses_Slots_Without_Leaking_Gradients_Or_Colors)
+{
+    graphics->setFillColor (Colors::red);
+    graphics->setStrokeColor (Colors::blue);
+    graphics->setOpacity (0.8f);
+
+    const ColorGradient fillGradient (Colors::white, 0.0f, 0.0f, Colors::black, 100.0f, 100.0f, ColorGradient::Linear);
+    const ColorGradient strokeGradient (Colors::yellow, 0.0f, 0.0f, Colors::green, 50.0f, 50.0f, ColorGradient::Radial);
+
+    {
+        const auto outer = graphics->saveState();
+        graphics->setFillColorGradient (fillGradient);
+        graphics->setStrokeColorGradient (strokeGradient);
+        graphics->setOpacity (0.5f);
+
+        {
+            const auto inner = graphics->saveState();
+            graphics->setFillColor (Colors::cyan);
+            EXPECT_EQ (graphics->getFillColor(), Colors::cyan);
+            EXPECT_EQ (graphics->getStrokeColorGradient().getStartColor(), Colors::yellow);
+            EXPECT_EQ (graphics->getStrokeColorGradient().getFinishColor(), Colors::green);
+            EXPECT_FLOAT_EQ (graphics->getOpacity(), 0.5f);
+        }
+
+        EXPECT_EQ (graphics->getFillColorGradient().getStartColor(), Colors::white);
+        EXPECT_EQ (graphics->getFillColorGradient().getFinishColor(), Colors::black);
+        EXPECT_EQ (graphics->getStrokeColorGradient().getStartColor(), Colors::yellow);
+        EXPECT_EQ (graphics->getStrokeColorGradient().getFinishColor(), Colors::green);
+        EXPECT_FLOAT_EQ (graphics->getOpacity(), 0.5f);
+    }
+
+    EXPECT_EQ (graphics->getFillColor(), Colors::red);
+    EXPECT_EQ (graphics->getStrokeColor(), Colors::blue);
+    EXPECT_FLOAT_EQ (graphics->getOpacity(), 0.8f);
+
+    // Re-entering previously used stack slots inherits current base state cleanly.
+    {
+        const auto reused = graphics->saveState();
+        EXPECT_EQ (graphics->getFillColor(), Colors::red);
+        EXPECT_EQ (graphics->getStrokeColor(), Colors::blue);
+        EXPECT_FLOAT_EQ (graphics->getOpacity(), 0.8f);
+    }
+}

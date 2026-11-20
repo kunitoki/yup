@@ -124,7 +124,8 @@ if (ready.get()) ...
 
 ```{note}
 Locks (`CriticalSection`, `SpinLock`, `ReadWriteLock`, …) and threads live in the
-[Multithreading](../multithreading/index.md) area. `Atomic` is documented here
+[Multithreading](multithreading/index.md) area - see
+[Synchronization](multithreading/synchronization.md). `Atomic` is documented here
 because it is a memory primitive.
 ```
 
@@ -147,5 +148,5 @@ Allocation-specific YDSP tests skip explicitly when instrumentation is disabled.
 ## See also
 
 - [Containers](containers.md) - ownership models applied to collections.
-- [Multithreading](../multithreading/index.md) - synchronization primitives.
+- [Multithreading](multithreading/index.md) - synchronization primitives.
 - [Files & streams](files-and-streams.md) - `MemoryBlock` I/O.

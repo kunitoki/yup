@@ -45,6 +45,17 @@ constexpr float surfaceMinDelta = 0.04f;
 constexpr float surfaceMaxDelta = 0.25f;
 constexpr float surfaceIdealDelta = 0.10f;
 
+constexpr std::pair<const char*, ThemePalette::Role> roleNames[] = {
+    { "background", ThemePalette::Role::background },
+    { "surface", ThemePalette::Role::surface },
+    { "surfaceRaised", ThemePalette::Role::surfaceRaised },
+    { "outline", ThemePalette::Role::outline },
+    { "text", ThemePalette::Role::text },
+    { "textMuted", ThemePalette::Role::textMuted },
+    { "accent", ThemePalette::Role::accent },
+    { "onAccent", ThemePalette::Role::onAccent }
+};
+
 double linearizeChannel (float value)
 {
     return value <= 0.04045f ? value / 12.92 : std::pow ((value + 0.055) / 1.055, 2.4);
@@ -315,6 +326,21 @@ ResultValue<ThemePalette> ThemePalette::fromString (const String& text, Mode mod
     return makeResultValueOk (ThemePalette (colors, mode));
 }
 
+std::optional<ThemePalette::Role> ThemePalette::getRoleFromName (const String& name)
+{
+    return detail::findNamed (roleNames, name);
+}
+
+StringArray ThemePalette::getRoleNames()
+{
+    StringArray names;
+
+    for (const auto& entry : roleNames)
+        names.add (entry.first);
+
+    return names;
+}
+
 //==============================================================================
 
 Color ThemePalette::getColor (Role role) const
@@ -335,6 +361,48 @@ void ThemePalette::setColor (Role role, Color color)
     roles[static_cast<std::size_t> (role)] = color;
 }
 
+void ThemePalette::setCustomColor (const String& name, Color color)
+{
+    if (const auto role = getRoleFromName (name))
+    {
+        setColor (*role, color);
+        return;
+    }
+
+    jassert (isValidCustomColorName (name));
+    if (! isValidCustomColorName (name))
+        return;
+
+    customColors.insert_or_assign (name, color);
+}
+
+std::optional<Color> ThemePalette::findCustomColor (const String& name) const
+{
+    if (const auto found = customColors.find (name); found != customColors.end())
+        return found->second;
+
+    return std::nullopt;
+}
+
+StringArray ThemePalette::getCustomColorNames() const
+{
+    StringArray names;
+
+    for (const auto& entry : customColors)
+        names.add (entry.first);
+
+    return names;
+}
+
+bool ThemePalette::isValidCustomColorName (const String& name)
+{
+    return name.isNotEmpty()
+        && ! CharacterFunctions::isDigit (name[0])
+        && name.containsOnly ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
+        && name != "dark"
+        && ! getRoleFromName (name).has_value();
+}
+
 ThemePalette::Mode ThemePalette::getMode() const
 {
     return mode;
@@ -349,7 +417,7 @@ const std::vector<Color>& ThemePalette::getSourceColors() const
 
 bool ThemePalette::operator== (const ThemePalette& other) const
 {
-    return mode == other.mode && roles == other.roles;
+    return mode == other.mode && roles == other.roles && customColors == other.customColors;
 }
 
 bool ThemePalette::operator!= (const ThemePalette& other) const

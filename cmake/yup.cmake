@@ -90,7 +90,7 @@ _yup_setup_platform()
 
 #==============================================================================
 
-# Graphics backends
+# Platform specific settings
 if (YUP_PLATFORM_ANDROID)
     set (yup_enable_vulkan_default ON)
 else()
@@ -99,6 +99,7 @@ endif()
 
 option (YUP_ENABLE_VULKAN "Build the Vulkan renderer backend (the loader is resolved at runtime, never linked)" ${yup_enable_vulkan_default})
 option (YUP_ANDROID_VALIDATION_LAYERS "Package the Khronos validation layer from the NDK into Android debug builds" OFF)
+option (YUP_ENABLE_EMSCRIPTEN_THREADS "Build Emscripten targets with threads and shared memory, which audio needs and only cross-origin isolated pages can run" ON)
 
 #==============================================================================
 
@@ -123,6 +124,7 @@ include (${CMAKE_CURRENT_LIST_DIR}/yup_embed_binary.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_bundle_resources.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_shader_bundler.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_dsp_compiler.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_yui_resources.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_python.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_test_runner.cmake)
 

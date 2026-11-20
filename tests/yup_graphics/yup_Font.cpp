@@ -542,12 +542,21 @@ TEST (FontTests, VariableFont_SetAxisValueIgnoresUnknownTag)
     EXPECT_EQ (original, font);
 }
 
-TEST (FontTests, VariableFont_WithAxisValueReturnsEmptyFontForUnknownTag)
+TEST (FontTests, VariableFont_WithAxisValueReturnsTheFontForUnknownTag)
 {
-    const auto font = loadTestFont();
+    const auto font = loadTestFont().withHeight (21.0f);
+    ASSERT_FALSE (font.isEmpty());
 
-    EXPECT_TRUE (font.withAxisValue ("xxxx", 1.0f).isEmpty());
-    EXPECT_FALSE (font.isEmpty());
+    EXPECT_EQ (font, font.withAxisValue ("xxxx", 1.0f));
+}
+
+TEST (FontTests, VariableFont_WithAxisValueReturnsTheFontForIndexOutOfRange)
+{
+    const auto font = loadTestFont().withHeight (21.0f);
+    ASSERT_FALSE (font.isEmpty());
+
+    EXPECT_EQ (font, font.withAxisValue (-1, 1.0f));
+    EXPECT_EQ (font, font.withAxisValue (font.getNumAxis(), 1.0f));
 }
 
 TEST (FontTests, VariableFont_SetAxisValuesSkipsUnknownTags)
@@ -589,13 +598,13 @@ TEST (FontTests, VariableFont_WithAxisValuesSkipsUnknownTags)
     EXPECT_FLOAT_EQ (wghtAxis->defaultValue, font.getAxisValue ("wght"));
 }
 
-TEST (FontTests, VariableFont_WithAxisValuesReturnsEmptyFontForOnlyUnknownTags)
+TEST (FontTests, VariableFont_WithAxisValuesReturnsTheFontForOnlyUnknownTags)
 {
-    const auto font = loadTestFont();
+    const auto font = loadTestFont().withHeight (21.0f);
+    ASSERT_FALSE (font.isEmpty());
 
-    EXPECT_TRUE (font.withAxisValues ({ { "xxxx", 1.0f },
-                                        { "yyyy", 2.0f } })
-                     .isEmpty());
+    EXPECT_EQ (font, font.withAxisValues ({ { "xxxx", 1.0f }, { "yyyy", 2.0f } }));
+    EXPECT_EQ (font, font.withAxisValues ({}));
 }
 
 // ==============================================================================
@@ -882,6 +891,15 @@ TEST (FontTests, WithFeatureKeepsTheHeight)
     EXPECT_FLOAT_EQ (20.0f, font.withFeatures ({ { "liga", 1 }, { "kern", 0 } }).getHeight());
 }
 
+TEST (FontTests, WithFeatureReturnsAFontForAFeatureTheFontLacks)
+{
+    const auto font = loadTestFont();
+    ASSERT_FALSE (font.isEmpty());
+
+    EXPECT_FALSE (font.withFeature ({ "zzzz", 1 }).isEmpty());
+    EXPECT_FALSE (font.withFeatures ({ { "zzzz", 1 }, { "yyyy", 1 } }).isEmpty());
+}
+
 TEST (FontTests, WithFeaturesReturnsEmptyFontForEmptyFont)
 {
     Font font;
@@ -964,7 +982,7 @@ TEST (FontTests, SameFontsAreEqual)
     EXPECT_FALSE (font1 != font2);
 }
 
-TEST (FontTests, HeightDoesNotAffectEquality)
+TEST (FontTests, HeightAffectsEquality)
 {
     Font font1;
     font1.setHeight (12.0f);
@@ -972,7 +990,10 @@ TEST (FontTests, HeightDoesNotAffectEquality)
     Font font2;
     font2.setHeight (24.0f);
 
-    // Fonts are equal if they wrap the same underlying rive::Font
+    EXPECT_FALSE (font1 == font2);
+    EXPECT_TRUE (font1 != font2);
+
+    font2.setHeight (12.0f);
     EXPECT_TRUE (font1 == font2);
 }
 
@@ -1067,6 +1088,17 @@ TEST (FontTests, WithAxisValuesEmptyList)
     Font newFont = font.withAxisValues ({});
 
     EXPECT_EQ (0, newFont.getNumAxis());
+}
+
+TEST (FontTests, WithOperationsKeepTheHeightOfAnEmptyFont)
+{
+    const auto font = Font().withHeight (20.0f);
+
+    EXPECT_EQ (font, font.withAxisValue (0, 600.0f));
+    EXPECT_EQ (font, font.withAxisValue ("wght", 700.0f));
+    EXPECT_EQ (font, font.withAxisValues ({ { "wght", 700.0f } }));
+    EXPECT_EQ (font, font.withFeature ({ "liga", 1 }));
+    EXPECT_EQ (font, font.withFeatures ({ { "liga", 1 }, { "kern", 0 } }));
 }
 
 TEST (FontTests, SetAxisValuesEmptyList)

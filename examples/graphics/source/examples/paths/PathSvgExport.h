@@ -65,6 +65,7 @@ inline yup::String getImageMimeType (const yup::String& base64Data)
     Some features have no SVG equivalent and are approximated:
     - feather is a gaussian blur filter, and tint a color matrix in the same filter;
     - image paints are patterns, which always tile, so clamped and mirrored images repeat;
+    - animated paints are not animated, they export as their solid color;
     - inside strokes are drawn twice as wide and clipped to the path, outside strokes are centered;
     - the additive amount is not exported, plus-lighter is always fully additive;
     - stroke clips become masks with a centered white stroke, and inverted masks are luminance
@@ -83,7 +84,7 @@ inline yup::String exportSvg (const yup::DataTree& document)
     {
         const auto kind = getString (paint, Ids::kind);
 
-        if (kind == "solid")
+        if (kind == "solid" || kind == "animated")
         {
             const auto color = getColor (paint, Ids::color);
             yup::String result;

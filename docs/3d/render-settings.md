@@ -14,6 +14,11 @@ scene->getRoot().attach<yup::ToneMappingNode> (yup::ToneMappingOperator::agx);
 scene->getRoot().attach<yup::ExposureNode> (1.2f);
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/3d/render-settings_tone-mapping_light.jpg#gh-light-mode-only" alt="A scene mapped with the reinhard, aces and agx tone mapping operators" width="640">
+  <img class="dark-only rounded" src="../_static/images/3d/render-settings_tone-mapping_dark.jpg#gh-dark-mode-only" alt="A scene mapped with the reinhard, aces and agx tone mapping operators" width="640">
+</p>
+
 | Setting          | Default     | What it does                                                                                   |
 | ---------------- | ----------- | ---------------------------------------------------------------------------------------------- |
 | `tier`           | `automatic` | `automatic`, `raster` or `full`, see [Platform tiers](platform-tiers.md).                        |

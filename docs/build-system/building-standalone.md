@@ -2,6 +2,10 @@
 
 This guide explains how to create standalone applications using the YUP framework. YUP provides a robust foundation for building cross-platform desktop applications with modern UI capabilities.
 
+```{tip}
+Starting a new project? Create it from the [YUP template](https://github.com/kunitoki/yup-template), which builds an application and an audio plugin from one source tree with tests, packaging and CI already set up - see [Getting Started](../getting-started/index.md).
+```
+
 ## Basic Application Structure
 
 A basic YUP application consists of the following components:
@@ -25,15 +29,15 @@ public:
         : DocumentWindow (yup::ComponentNative::Options(), {})
     {
         setTitle ("My Application");
-        setSize (800, 600);
-        centreWithSize (getWidth(), getHeight());
+        centreWithSize ({ 800, 600 });
         setVisible (true);
-        takeFocus();
+        toFront (true);
     }
 
     void paint (yup::Graphics& g) override
     {
-        g.fillAll (yup::Colours::black);
+        g.setFillColor (yup::Colors::black);
+        g.fillAll();
     }
 
     void userTriedToCloseWindow() override
@@ -50,12 +54,12 @@ class MyApplication : public yup::YUPApplication
 public:
     MyApplication() = default;
 
-    const yup::String getApplicationName() override
+    yup::String getApplicationName() override
     {
         return "My Application";
     }
 
-    const yup::String getApplicationVersion() override
+    yup::String getApplicationVersion() override
     {
         return "1.2.3";
     }
@@ -141,7 +145,7 @@ Embed asset bytes straight into the executable with
 (see the CMake API reference for the full argument list):
 
 ```cmake
-// In your CMakeLists.txt
+# In your CMakeLists.txt
 yup_add_embedded_binary_resources (
     "${target_name}_binary_data"
     OUT_DIR BinaryData

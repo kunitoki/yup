@@ -92,7 +92,7 @@ function (_yup_fetch_sdl)
             -Wno-gnu-folding-constant)
         set_target_properties (SDL3-static PROPERTIES
             XCODE_ATTRIBUTE_OTHER_LIBTOOLFLAGS "-no_warning_for_no_symbols")
-    elseif (YUP_PLATFORM_EMSCRIPTEN)
+    elseif (YUP_PLATFORM_EMSCRIPTEN AND YUP_ENABLE_EMSCRIPTEN_THREADS)
         target_compile_options (SDL3-static PRIVATE -pthread)
     endif()
 

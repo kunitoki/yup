@@ -251,12 +251,7 @@ public:
         brandLabel->setColor (yup::Label::Style::textFillColorId, paletteInkColor());
         brandLabel->setJustification (yup::Justification::centerLeft);
         brandLabel->setClickingGrabFocus (false);
-        {
-            auto brandFont = font.withHeight (21.0f);
-            if (brandFont.getAxisDescription ("wght").has_value())
-                brandFont = brandFont.withAxisValue ("wght", 700.0f);
-            brandLabel->setFont (brandFont);
-        }
+        brandLabel->setFont (font.withHeight (21.0f).withAxisValue ("wght", 700.0f));
         addAndMakeVisible (*brandLabel);
 
         synthCombo = std::make_unique<yup::ComboBox> ("Synth");

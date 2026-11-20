@@ -62,6 +62,13 @@ public:
     std::function<void()> onClick;
 
     //==============================================================================
+    /** Returns the static type info describing the Button base type. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
@@ -72,6 +79,10 @@ public:
     void mouseDown (const MouseEvent& event) override;
     /** @internal */
     void mouseUp (const MouseEvent& event) override;
+
+protected:
+    static const Identifier textPropertyId;
+    static const Identifier checkedPropertyId;
 
 private:
     bool isButtonCurrentlyOver = false;

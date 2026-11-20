@@ -21,7 +21,23 @@
 namespace yup
 {
 
+namespace
+{
+
+struct ViewportIds
+{
+    static inline const Identifier scrollStep { "scrollStep" };
+};
+
+} // namespace
+    
 Viewport::Viewport()
+    : Viewport (StringRef {})
+{
+}
+
+Viewport::Viewport (StringRef ComponentID)
+    : Component (ComponentID)
 {
     setOpaque (false);
     setWantedGestures (GestureType::pan);
@@ -53,6 +69,20 @@ Viewport::~Viewport()
     ownedComponent.reset();
 }
 
+const ComponentTypeInfo& Viewport::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<Viewport> (Identifier ("Viewport"))
+                                 .property (ViewportIds::scrollStep, &Viewport::getScrollStep, &Viewport::setScrollStep, 40.0, "How far one wheel or key step scrolls, in points.")
+                                 .childAttacher ([] (Component& parent, Component& child)
+                                 {
+                                     static_cast<Viewport&> (parent).setViewedComponent (&child);
+                                 })
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
 void Viewport::setViewedComponent (Component* component, bool deleteWhenNoLongerNeeded)
 {
     if (component == viewedComponent)
@@ -126,7 +156,12 @@ void Viewport::scrollToShow (Rectangle<float> area)
 
 void Viewport::setScrollStep (float pixels)
 {
-    scrollStep = jmax (0.0f, pixels);
+    const auto clamped = jmax (0.0f, pixels);
+    if (approximatelyEqual (scrollStep, clamped))
+        return;
+
+    scrollStep = clamped;
+    notifyPropertyChanged (ViewportIds::scrollStep);
 }
 
 void Viewport::setScrollBarsShown (bool showVertical, bool showHorizontal)

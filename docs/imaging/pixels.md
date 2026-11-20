@@ -62,6 +62,15 @@ image.fill (0xff000000);                       // by ARGB uint32
 image.clear();                                 // all bytes to zero
 ```
 
+Drawn larger than it is, an image blends its pixels with the default
+`ImageFilter::Linear` and keeps them sharp with `ImageFilter::Nearest`, see
+[image paints](../graphics/graphics-class.md#colors-gradients-and-strokes):
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/imaging/pixels_pixels_light.jpg#gh-light-mode-only" alt="An image written pixel by pixel, magnified with nearest and with linear filtering" width="560">
+  <img class="dark-only rounded" src="../_static/images/imaging/pixels_pixels_dark.jpg#gh-dark-mode-only" alt="An image written pixel by pixel, magnified with nearest and with linear filtering" width="560">
+</p>
+
 ```{note}
 Pixel coordinates are bounds-checked and throw `std::out_of_range` if outside
 the image. GPU-only images (see [drawing](drawing.md#wrap-an-existing-gpu-texture))

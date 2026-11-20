@@ -410,3 +410,34 @@ TEST_F (HashMapTests, PersistentMemoryLocationOfValues)
         }
     }
 }
+
+TEST_F (HashMapTests, IdentifierHashFollowsThePooledPointer)
+{
+    const yup::Identifier id ("preferredWidth");
+    const void* address = id.getCharPointer().getAddress();
+
+    for (const int limit : { 17, 101, 1024 })
+    {
+        EXPECT_EQ (yup::DefaultHashFunctions::generateHash (id, limit),
+                   yup::DefaultHashFunctions::generateHash (address, limit));
+    }
+}
+
+TEST_F (HashMapTests, IdentifierKeysSharingAPrefixStayDistinct)
+{
+    const yup::Identifier width ("preferredWidth");
+    const yup::Identifier height ("preferredHeight");
+
+    yup::HashMap<yup::Identifier, int> values;
+    values.set (width, 120);
+    values.set (height, 48);
+
+    EXPECT_EQ (values[width], 120);
+    EXPECT_EQ (values[height], 48);
+
+    values.remove (width);
+    EXPECT_FALSE (values.contains (width));
+    EXPECT_TRUE (values.contains (height));
+    EXPECT_EQ (values[height], 48);
+}
+
