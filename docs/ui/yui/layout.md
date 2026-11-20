@@ -1,7 +1,7 @@
 # Declarative layout in `.yui`
 
 Layout in `.yui` uses the five container components built on [`FlexBox`, `Grid`
-and `StackLayout`](component-layout.md): `Row`, `Column`, `FlexBox`, `Grid` and
+and `StackLayout`](../component-layout.md): `Row`, `Column`, `FlexBox`, `Grid` and
 `Stack`. Every `Component` carries the layout item properties (`flexGrow`,
 `preferredWidth`, `margin`, `gridArea`, ...), so any built-in widget or
 composite `component` can be placed inside any container without writing
@@ -40,8 +40,8 @@ Column {
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/yui-layout_synth_light.jpg#gh-light-mode-only" alt="A column holding a header row and a grid of four rotary sliders" width="480">
-  <img class="dark-only rounded" src="../_static/images/ui/yui-layout_synth_dark.jpg#gh-dark-mode-only" alt="A column holding a header row and a grid of four rotary sliders" width="480">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/layout_synth_light.jpg#gh-light-mode-only" alt="A column holding a header row and a grid of four rotary sliders" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/layout_synth_dark.jpg#gh-dark-mode-only" alt="A column holding a header row and a grid of four rotary sliders" width="560">
 </p>
 
 ## Containers
@@ -71,8 +71,8 @@ component LabeledKnob : Column {
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/yui-documents_composite_light.jpg#gh-light-mode-only" alt="Three instances of a composite component made of a rotary slider and a label" width="480">
-  <img class="dark-only rounded" src="../_static/images/ui/yui-documents_composite_dark.jpg#gh-dark-mode-only" alt="Three instances of a composite component made of a rotary slider and a label" width="480">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/documents_composite_light.jpg#gh-light-mode-only" alt="Three instances of a composite component made of a rotary slider and a label" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/documents_composite_dark.jpg#gh-dark-mode-only" alt="Three instances of a composite component made of a rotary slider and a label" width="560">
 </p>
 
 ### Shared container properties
@@ -164,9 +164,9 @@ native window or `YuiView`.
 
 ## See also
 
-- [Component Layout](component-layout.md) - the underlying C++ `FlexBox` and
+- [Component Layout](../component-layout.md) - the underlying C++ `FlexBox` and
   `Grid` algorithms and deliberate differences from browser CSS.
-- [Stylesheets](yui-styles.md) - styling layout properties and animating
+- [Stylesheets](styles.md) - styling layout properties and animating
   transforms.
-- [Complete UIs in `.yui`](yui-documents.md) - tokens, composite components and
+- [Complete UIs in `.yui`](documents.md) - tokens, composite components and
   live document updates.

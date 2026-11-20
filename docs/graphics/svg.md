@@ -6,7 +6,7 @@ high-level entry point for vector artwork; the underlying parsed model is an
 `Justification` enums.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_svg_tiger.jpg" alt="An SVG painted by a Drawable, in the graphics example" width="560">
+  <img class="rounded" src="../_static/images/yup_svg_tiger.jpg" alt="An SVG painted by a Drawable, in the graphics example" width="640">
 </p>
 
 ## Drawable
@@ -75,8 +75,8 @@ An SVG whose root element has a `preserveAspectRatio` attribute is fitted the
 way it asks for, whatever `fitting` and `justification` are passed.
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/svg_fitting_light.jpg#gh-light-mode-only" alt="An SVG badge painted into a wide area with each fitting mode" width="560">
-  <img class="dark-only rounded" src="../_static/images/graphics/svg_fitting_dark.jpg#gh-dark-mode-only" alt="An SVG badge painted into a wide area with each fitting mode" width="560">
+  <img class="light-only rounded" src="../_static/images/graphics/svg_fitting_light.jpg#gh-light-mode-only" alt="An SVG badge painted into a wide area with each fitting mode" width="640">
+  <img class="dark-only rounded" src="../_static/images/graphics/svg_fitting_dark.jpg#gh-dark-mode-only" alt="An SVG badge painted into a wide area with each fitting mode" width="640">
 </p>
 
 ### Querying bounds
@@ -192,7 +192,7 @@ The raster is kept, so a filter only runs again when the SVG is painted larger.
 
 A `Drawable` paints an SVG as it is. To bind its shapes to the properties of a
 component, animate them or edit them, `YuiSvgImporter` (in `yup_gui`) writes the
-SVG as a [`.yui` drawing](../ui/yui-drawing.md#importing-an-svg) made of native
+SVG as a [`.yui` drawing](../ui/yui/drawing.md#importing-an-svg) made of native
 shapes, painting what the `Drawable` paints:
 
 ```cpp
@@ -212,7 +212,7 @@ drawing.
 
 ## See also
 
-- [Data-driven drawing](../ui/yui-drawing.md) - the drawing language an SVG is imported into.
+- [Data-driven drawing](../ui/yui/drawing.md) - the drawing language an SVG is imported into.
 - [The Graphics class](graphics-class.md) - the context `Drawable` paints into.
 - [Images](../imaging/index.md) - how SVG `<image>` hrefs become `Image` objects.
 - [Fonts & text layout](fonts.md) - how SVG `<text>` resolves fonts.

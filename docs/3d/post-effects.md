@@ -17,8 +17,8 @@ works on both tiers:
   intensity looks a little different at different sizes.
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/3d/post-effects_effects_light.jpg#gh-light-mode-only" alt="A scene without post effects, with bloom and with depth of field" width="560">
-  <img class="dark-only rounded" src="../_static/images/3d/post-effects_effects_dark.jpg#gh-dark-mode-only" alt="A scene without post effects, with bloom and with depth of field" width="560">
+  <img class="light-only rounded" src="../_static/images/3d/post-effects_effects_light.jpg#gh-light-mode-only" alt="A scene without post effects, with bloom and with depth of field" width="640">
+  <img class="dark-only rounded" src="../_static/images/3d/post-effects_effects_dark.jpg#gh-dark-mode-only" alt="A scene without post effects, with bloom and with depth of field" width="640">
 </p>
 
 ## Depth of field

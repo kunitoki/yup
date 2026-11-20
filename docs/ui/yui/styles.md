@@ -19,7 +19,7 @@ style {
 
 ## Attaching a stylesheet
 
-A [`YuiDocument`](yui-documents.md) builds one stylesheet from the `palette`,
+A [`YuiDocument`](documents.md) builds one stylesheet from the `palette`,
 `drawing` and `style` blocks of its text and imports, and attaches it to its
 root, so nothing else is needed.
 
@@ -186,7 +186,7 @@ style { .knob { property glowAmount: number = 0; } }
 
 ## Palettes
 
-A `palette` block declares a [palette](component-styling.md#palettes) from a
+A `palette` block declares a [palette](../component-styling.md#palettes) from a
 few source colors, with the roles derived from them:
 
 ```yui
@@ -212,8 +212,8 @@ style {
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/yui-styles_stylesheet_light.jpg#gh-light-mode-only" alt="Widgets under the theme palette, and in a panel a rule gives another palette to, with a class coloring the primary buttons" width="480">
-  <img class="dark-only rounded" src="../_static/images/ui/yui-styles_stylesheet_dark.jpg#gh-dark-mode-only" alt="Widgets under the theme palette, and in a panel a rule gives another palette to, with a class coloring the primary buttons" width="480">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/styles_stylesheet_light.jpg#gh-light-mode-only" alt="Widgets under the theme palette, and in a panel a rule gives another palette to, with a class coloring the primary buttons" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/styles_stylesheet_dark.jpg#gh-dark-mode-only" alt="Widgets under the theme palette, and in a panel a rule gives another palette to, with a class coloring the primary buttons" width="560">
 </p>
 
 The roles are `background`, `surface`, `surfaceRaised`, `outline`, `text`,
@@ -279,7 +279,7 @@ follows the theme until a toggle inverts it.
 
 ## Drawings
 
-`drawing: Name;` paints the matched components with a [drawing](yui-drawing.md)
+`drawing: Name;` paints the matched components with a [drawing](drawing.md)
 declared in the document, and removes it when no rule selects it anymore. The
 properties a drawing declares can then be set like any other, typed by the
 drawing:
@@ -305,8 +305,8 @@ style {
 }
 ```
 
-See [Declarative layout in `.yui`](yui-layout.md) and
-[Layout components](component-layout.md#layout-components) for the containers
+See [Declarative layout in `.yui`](layout.md) and
+[Layout components](../component-layout.md#layout-components) for the containers
 and their properties.
 
 ## Transitions and animations
@@ -391,8 +391,8 @@ style {
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/yui-styles_shadows_light.jpg#gh-light-mode-only" alt="Buttons given a shadow, a glow and a filter by a stylesheet" width="480">
-  <img class="dark-only rounded" src="../_static/images/ui/yui-styles_shadows_dark.jpg#gh-dark-mode-only" alt="Buttons given a shadow, a glow and a filter by a stylesheet" width="480">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/styles_shadows_light.jpg#gh-light-mode-only" alt="Buttons given a shadow, a glow and a filter by a stylesheet" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/styles_shadows_dark.jpg#gh-dark-mode-only" alt="Buttons given a shadow, a glow and a filter by a stylesheet" width="560">
 </p>
 
 - `shadow:` takes comma-separated layers, each `x y [blur [spread]] color`
@@ -439,9 +439,9 @@ malformed declarations are reported as diagnostics.
 
 ## See also
 
-- [The `.yui` language](yui-language.md) - the syntax of every block.
-- [Data-driven drawing](yui-drawing.md) - the drawings a rule selects.
-- [How YUI fits together](yui-architecture.md) - where stylesheet values sit in
+- [The `.yui` language](language.md) - the syntax of every block.
+- [Data-driven drawing](drawing.md) - the drawings a rule selects.
+- [How YUI fits together](architecture.md) - where stylesheet values sit in
   the property cascade.
-- [Component styling](component-styling.md) - properties, the theme and
+- [Component styling](../component-styling.md) - properties, the theme and
   palettes from C++.

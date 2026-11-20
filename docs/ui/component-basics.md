@@ -371,8 +371,9 @@ The older behaviour — collapsing every dirty rectangle into a single bounding 
 which repaints everything in between — remains available as a safe fallback:
 
 ```cpp
-ComponentNative::Options opts;
-opts.withRepaintMode (ComponentNative::RepaintMode::boundingBox);
+auto opts = ComponentNative::Options()
+                .withRepaintMode (ComponentNative::RepaintMode::boundingBox);
+
 rootComponent.addToDesktop (opts);
 ```
 
@@ -446,8 +447,8 @@ bool isXformed = comp.isTransformed(); // true if transform is not identity
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-basics_transform_light.jpg#gh-light-mode-only" alt="A component rotated, scaled and translated from where it was placed" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/component-basics_transform_dark.jpg#gh-dark-mode-only" alt="A component rotated, scaled and translated from where it was placed" width="560">
+  <img class="light-only rounded" src="../_static/images/ui/component-basics_transform_light.jpg#gh-light-mode-only" alt="A component rotated, scaled and translated from where it was placed" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-basics_transform_dark.jpg#gh-dark-mode-only" alt="A component rotated, scaled and translated from where it was placed" width="640">
 </p>
 
 Transforms are applied in the component's local coordinates, before its position
@@ -517,8 +518,8 @@ comp.lowerBy (2);               // move down by 2 positions
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-basics_z-order_light.jpg#gh-light-mode-only" alt="Three overlapping components as added, with the first brought to the front and with the last sent to the back" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/component-basics_z-order_dark.jpg#gh-dark-mode-only" alt="Three overlapping components as added, with the first brought to the front and with the last sent to the back" width="560">
+  <img class="light-only rounded" src="../_static/images/ui/component-basics_z-order_light.jpg#gh-light-mode-only" alt="Three overlapping components as added, with the first brought to the front and with the last sent to the back" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-basics_z-order_dark.jpg#gh-dark-mode-only" alt="Three overlapping components as added, with the first brought to the front and with the last sent to the back" width="640">
 </p>
 
 A component that changes position in this list is told its old and new index:
@@ -878,13 +879,14 @@ Components are hosted inside a platform-native window:
 
 ```cpp
 // Place a top-level component on the screen
-ComponentNative::Options opts;
-opts.title       = "My Window";
-opts.width       = 800;
-opts.height      = 600;
-opts.resizable   = true;
-opts.dpiScale    = 2.0f;
+auto opts = ComponentNative::Options()
+                .withDecoration (true)
+                .withResizableWindow (true)
+                .withAllowedHighDensityDisplay (true)
+                .withVSync (true);
 
+rootComponent.setTitle ("My Window");
+rootComponent.setBounds ({ 0, 0, 800, 600 });
 rootComponent.addToDesktop (opts);
 
 // Remove from the desktop

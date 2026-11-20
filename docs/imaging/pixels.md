@@ -67,8 +67,8 @@ Drawn larger than it is, an image blends its pixels with the default
 [image paints](../graphics/graphics-class.md#colors-gradients-and-strokes):
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/imaging/pixels_pixels_light.jpg#gh-light-mode-only" alt="An image written pixel by pixel, magnified with nearest and with linear filtering" width="480">
-  <img class="dark-only rounded" src="../_static/images/imaging/pixels_pixels_dark.jpg#gh-dark-mode-only" alt="An image written pixel by pixel, magnified with nearest and with linear filtering" width="480">
+  <img class="light-only rounded" src="../_static/images/imaging/pixels_pixels_light.jpg#gh-light-mode-only" alt="An image written pixel by pixel, magnified with nearest and with linear filtering" width="560">
+  <img class="dark-only rounded" src="../_static/images/imaging/pixels_pixels_dark.jpg#gh-dark-mode-only" alt="An image written pixel by pixel, magnified with nearest and with linear filtering" width="560">
 </p>
 
 ```{note}

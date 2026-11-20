@@ -103,4 +103,4 @@ objects, combine either with a [DataTreeObjectList](object-list.md).
 
 - [DataTree](datatree.md) - properties and change notifications.
 - [Object lists](object-list.md) - objects that expose `CachedValue` members.
-- [Core: multithreading](../multithreading/index.md) - thread-safety context.
+- [Core: multithreading](../core/multithreading/index.md) - thread-safety context.

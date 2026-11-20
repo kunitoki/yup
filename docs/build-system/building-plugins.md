@@ -3,7 +3,7 @@
 This guide explains how to create audio plugins using the YUP framework. YUP supports multiple plugin formats including CLAP, VST3, and more.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_retrace_plugin.jpg" alt="RETRACE, the spectral synthesizer of the plugin example" width="560">
+  <img class="rounded" src="../_static/images/yup_retrace_plugin.jpg" alt="RETRACE, the spectral synthesizer of the plugin example" width="640">
 </p>
 
 ```{tip}
@@ -453,6 +453,8 @@ and preset list are also readable as `retrace://` resources.
 
 ## Additional Resources
 
-- [CMake API Reference](CMake%20API.md) - Full reference of all CMake options and functions
+- [CMake API Reference](cmake-api.md) - Full reference of all CMake options and functions
+- [Audio processors](../audio/processors.md) - The processor model in depth: buses, parameters, state and editors
+- [Writing plugins](../audio/plugin-client.md) - How the format wrappers behave in hosts
 - [CLAP Documentation](https://cleveraudio.org/)
 - [VST3 Documentation](https://developer.steinberg.help/hub/display/VST)

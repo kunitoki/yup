@@ -98,8 +98,8 @@ cases.
 `nuttall`, `blackmanNuttall`, and `rakshitUllah`.
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/dsp/math_windows_light.jpg#gh-light-mode-only" alt="The hann, hamming, blackman, kaiser and flattop windows" width="560">
-  <img class="dark-only rounded" src="../_static/images/dsp/math_windows_dark.jpg#gh-dark-mode-only" alt="The hann, hamming, blackman, kaiser and flattop windows" width="560">
+  <img class="light-only rounded" src="../_static/images/dsp/math_windows_light.jpg#gh-light-mode-only" alt="The hann, hamming, blackman, kaiser and flattop windows" width="640">
+  <img class="dark-only rounded" src="../_static/images/dsp/math_windows_dark.jpg#gh-dark-mode-only" alt="The hann, hamming, blackman, kaiser and flattop windows" width="640">
 </p>
 
 Several windows take a shape parameter — Kaiser `beta`, Gaussian `sigma`,

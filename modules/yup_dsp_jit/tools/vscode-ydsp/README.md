@@ -123,7 +123,7 @@ window closes.
 ## Language reference
 
 The full language specification lives in the YUP repository at
-[`docs/dsp/yup-dsp-language.md`](../../../../docs/dsp/yup-dsp-language.md). A rich
+[`docs/dsp/ydsp/language.md`](../../../../docs/dsp/ydsp/language.md). A rich
 set of real patches to test highlighting against lives in
 [`examples/graphics/data/synths/`](../../../../examples/graphics/data/synths/)
 (`*.ydsp`).

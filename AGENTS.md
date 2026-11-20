@@ -84,12 +84,12 @@ The figures of `docs/` are code: `examples/docsimg` renders them into `docs/_sta
 
 - One figure per image, with the id `<section>/<page>_<figure>` (`graphics/drawing_circle`): `f.paint` or `f.component` in the section file of `examples/docsimg/source`, a `.yui` file of `examples/docsimg/figures` for the YUI pages.
 - A figure is the page snippet and little else (about 15 lines). The runner does the background, padding, both color modes, 2x capture and file names; use `role()`, `font()` and `labelled()` for colors, fonts and variants.
-- At most 560 logical px wide (the docs column is 800-900 px), embedded at that width right after the snippet it shows:
+- At most 560 logical px wide; the 2x capture is embedded at up to 640 px (the docs column is 800-900 px), right after the snippet it shows. Common embed widths are 400, 480, 560 and 640; the CSS keeps them responsive on mobile:
 
 ```html
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_circle_light.jpg#gh-light-mode-only" alt="A filled circle" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_circle_dark.jpg#gh-dark-mode-only" alt="A filled circle" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_circle_light.jpg#gh-light-mode-only" alt="A filled circle" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_circle_dark.jpg#gh-dark-mode-only" alt="A filled circle" width="400">
 </p>
 ```
 

@@ -6,7 +6,7 @@ the gestures it handles and receives them through virtual callbacks, next to its
 callbacks.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_multitouch.jpg" alt="Touch trails following several fingers, in the graphics example" width="560">
+  <img class="rounded" src="../_static/images/yup_multitouch.jpg" alt="Touch trails following several fingers, in the graphics example" width="640">
 </p>
 
 ```cpp

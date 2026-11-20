@@ -101,5 +101,5 @@ rather than C macros like `M_PI`.
 
 ## See also
 
-- [Audio: DSP](../audio/index.md) - `NormalisableRange` maps audio parameters.
+- [Audio processors](../audio/processors.md#parameters) - `NormalisableRange` maps audio parameters.
 - [SIMD](index.md) - `yup_simd` for vectorized numeric work.

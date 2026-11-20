@@ -39,12 +39,12 @@ A file is a sequence of blocks, in any order:
 | Block | Holds | Guide |
 |---|---|---|
 | `import "path";` | The blocks of another file | [below](#imports) |
-| `drawing Name { ... }` | Shapes painting a component | [Data-driven drawing](yui-drawing.md) |
-| `palette Name { ... }` | A palette derived from source colors | [Stylesheets](yui-styles.md#palettes) |
-| `style { ... }` | Rules and `@keyframes` | [Stylesheets](yui-styles.md) |
-| `tokens { ... }` | Typed values shared by the document | [Tokens](yui-documents.md#tokens) |
-| `component Name : Base { ... }` | A new component type | [Composite components](yui-documents.md#composite-components) |
-| `Type { ... }` | The root component instance, at most one per document | [Complete UIs](yui-documents.md) |
+| `drawing Name { ... }` | Shapes painting a component | [Data-driven drawing](drawing.md) |
+| `palette Name { ... }` | A palette derived from source colors | [Stylesheets](styles.md#palettes) |
+| `style { ... }` | Rules and `@keyframes` | [Stylesheets](styles.md) |
+| `tokens { ... }` | Typed values shared by the document | [Tokens](documents.md#tokens) |
+| `component Name : Base { ... }` | A new component type | [Composite components](documents.md#composite-components) |
+| `Type { ... }` | The root component instance, at most one per document | [Complete UIs](documents.md) |
 
 Line comments (`// ...`) and block comments (`/* ... */`) can go anywhere
 whitespace can. Names are case sensitive: component types start with an
@@ -65,8 +65,8 @@ Column {
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/yui-language_elements_light.jpg#gh-light-mode-only" alt="A slider above a label showing its value" width="360">
-  <img class="dark-only rounded" src="../_static/images/ui/yui-language_elements_dark.jpg#gh-dark-mode-only" alt="A slider above a label showing its value" width="360">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/language_elements_light.jpg#gh-light-mode-only" alt="A slider above a label showing its value" width="440">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/language_elements_dark.jpg#gh-dark-mode-only" alt="A slider above a label showing its value" width="440">
 </p>
 
 A property can be set once per element. Inside a `drawing` the children are
@@ -110,8 +110,8 @@ value.
 
 ## Values
 
-A value is an expression of the [expression language](../core/expressions.md),
-with the [graphics types](../graphics/expressions.md) available:
+A value is an expression of the [expression language](../../core/expressions.md),
+with the [graphics types](../../graphics/expressions.md) available:
 
 | Kind | Examples |
 |---|---|
@@ -127,7 +127,7 @@ An expression reads the names around it: the properties of the component it
 is written on (bare or prefixed by `self.`), `parent.`, the elements with an
 `id`, `root` inside a `component` block, the document models and tokens,
 `palette.` roles and the `theme.` ones. In the instance tree, a value that
-reads anything is a [binding](yui-reactivity.md), kept up to date while what it
+reads anything is a [binding](reactivity.md), kept up to date while what it
 reads changes.
 
 The values of `style` and `palette` blocks are kept as written up to their `;`,
@@ -173,7 +173,7 @@ relative paths resolve against the working directory.
 
 | Where | Declares |
 |---|---|
-| At the top of a `drawing` | An input the component, its parents or a stylesheet set ([Properties](yui-drawing.md#properties)) |
+| At the top of a `drawing` | An input the component, its parents or a stylesheet set ([Properties](drawing.md#properties)) |
 | In `tokens` | A value of the document root, read by bare name everywhere |
 | In a `component` | A property of the new type, read inside as `root.name` |
 | In a style rule | A default for the components the rule matches |
@@ -189,19 +189,19 @@ A `component` block also declares:
 `let name: value;` names a value for the elements after it, and
 `repeat i in from .. to { ... }` draws its shapes once per integer from `from`
 to `to - 1`. Both only exist inside drawings, see
-[Scopes](yui-drawing.md#scopes).
+[Scopes](drawing.md#scopes).
 
 Inside a drawing, `drawing Name { ... }`, `pattern Name { ... }` and
 `marker Name { ... }` define a drawing, a tile and a marker for the elements
 after them, and `use Name { ... }` paints a drawing by name, see
-[Reusing drawings](yui-drawing.md#reusing-drawings) and
-[Patterns and markers](yui-drawing.md#patterns-and-markers).
+[Reusing drawings](drawing.md#reusing-drawings) and
+[Patterns and markers](drawing.md#patterns-and-markers).
 
 ## Bindings and handlers
 
 `name <=> id.property;` links a property both ways to another, or to a model
 property (`value <=> params.cutoff;`), see [Two-way
-bindings](yui-documents.md#two-way-bindings).
+bindings](documents.md#two-way-bindings).
 
 A property named after a signal is a handler: a call, either an action
 registered by the application or a signal of the enclosing component, or a
@@ -215,7 +215,7 @@ TextButton { onClick: { action ("save"); root.onDone (); } }
 Slider     { changed value: (v) => action ("log", v); }
 ```
 
-See [Handlers and actions](yui-documents.md#handlers-and-actions).
+See [Handlers and actions](documents.md#handlers-and-actions).
 
 ## Imports
 
@@ -224,7 +224,7 @@ imports resolve relative to the directory of the file importing them, and each
 resolved path is imported once, the first time it is met, so shared files can
 be imported from several places and cycles are harmless. `YuiLoader` resolves
 the normalized path from the folder of the main file, or by name among embedded
-resources (see [Hot reloading](yui-hot-reload.md)), while
+resources (see [Hot reloading](hot-reload.md)), while
 `YuiDocument::loadFromString` passes it to its import callback.
 
 ## Errors
@@ -261,13 +261,13 @@ files. Comments and the original layout are not preserved.
 
 ## See also
 
-- [Complete UIs in `.yui`](yui-documents.md) - loading documents, tokens,
+- [Complete UIs in `.yui`](documents.md) - loading documents, tokens,
   composite components, handlers and models.
-- [Stylesheets](yui-styles.md) - selectors, the cascade, palettes and
+- [Stylesheets](styles.md) - selectors, the cascade, palettes and
   transitions.
-- [Data-driven drawing](yui-drawing.md) - shapes, scopes and drawing
+- [Data-driven drawing](drawing.md) - shapes, scopes and drawing
   properties.
-- [Layout components](component-layout.md#layout-components) - `Row`,
+- [Layout components](../component-layout.md#layout-components) - `Row`,
   `Column`, `Grid`, `Stack` and the item properties.
-- [Hot reloading `.yui` files](yui-hot-reload.md) - loading files and
+- [Hot reloading `.yui` files](hot-reload.md) - loading files and
   resources, and watching them while developing.

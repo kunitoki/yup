@@ -79,7 +79,7 @@ if (auto* cutoff = document.findById ("cutoff"))
 
 ## Showing a document
 
-`YuiView` is a component owning a document and a [`YuiLoader`](yui-hot-reload.md)
+`YuiView` is a component owning a document and a [`YuiLoader`](hot-reload.md)
 filling it. After each load the root is its child, filling its bounds, so the
 interface follows the size and the enabled state of the view, and a root
 replaced by a reload takes the place of the previous one:
@@ -131,7 +131,7 @@ undoManager.undo(); // back to the previous document, keeping the components
 `UndoManager`.
 
 To load from files, reload when they change on disk, or load files embedded in
-the binary, use a `YuiLoader`, see [Hot reloading](yui-hot-reload.md).
+the binary, use a `YuiLoader`, see [Hot reloading](hot-reload.md).
 
 ## Tokens
 
@@ -193,8 +193,8 @@ LabeledKnob { label: "RESO"; class: accent; value <=> params.resonance; }
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/yui-documents_composite_light.jpg#gh-light-mode-only" alt="Three instances of a composite component made of a rotary slider and a label" width="480">
-  <img class="dark-only rounded" src="../_static/images/ui/yui-documents_composite_dark.jpg#gh-dark-mode-only" alt="Three instances of a composite component made of a rotary slider and a label" width="480">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/documents_composite_light.jpg#gh-light-mode-only" alt="Three instances of a composite component made of a rotary slider and a label" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/documents_composite_dark.jpg#gh-dark-mode-only" alt="Three instances of a composite component made of a rotary slider and a label" width="560">
 </p>
 
 `document.findTypeInfo ("LabeledKnob")` returns the declared type, to list its
@@ -268,7 +268,7 @@ Slider { value <=> fine.value; }
 ```
 
 Unlike the one-way bindings described in [Reactive
-bindings](yui-reactivity.md), a link is not broken when either property is
+bindings](reactivity.md), a link is not broken when either property is
 written: dragging either slider moves the other. It goes away with either
 component.
 
@@ -344,20 +344,20 @@ two-value slider, not its range.
 
 ## See also
 
-- [How YUI fits together](yui-architecture.md) - diagrams of the classes a
+- [How YUI fits together](architecture.md) - diagrams of the classes a
   document builds and how they relate.
-- [Reactive bindings](yui-reactivity.md) - how expression values stay up to
+- [Reactive bindings](reactivity.md) - how expression values stay up to
   date.
-- [Hot reloading `.yui` files](yui-hot-reload.md) - loading files and
+- [Hot reloading `.yui` files](hot-reload.md) - loading files and
   resources, and watching files while developing.
-- [The `.yui` language](yui-language.md) - the syntax of every block.
-- [Stylesheets](yui-styles.md) - selectors, palettes and transitions.
-- [Data-driven drawing](yui-drawing.md) - drawings and their properties.
-- [Component Layout](component-layout.md) - the `Row`, `Column`, `Grid` and
+- [The `.yui` language](language.md) - the syntax of every block.
+- [Stylesheets](styles.md) - selectors, palettes and transitions.
+- [Data-driven drawing](drawing.md) - drawings and their properties.
+- [Component Layout](../component-layout.md) - the `Row`, `Column`, `Grid` and
   `Stack` containers and their item properties.
-- [Tools for `.yui` files](yui-tooling.md) - checking and previewing documents
+- [Tools for `.yui` files](tooling.md) - checking and previewing documents
   outside the application.
-- [`.yui` interfaces from Python](../scripting/python-yui.md) - documents,
+- [`.yui` interfaces from Python](../../scripting/python-yui.md) - documents,
   actions and models from the Python bindings.
 
 The `YuiDrawing` graphics example edits a complete UI built this way, split

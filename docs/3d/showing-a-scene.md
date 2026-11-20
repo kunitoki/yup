@@ -26,7 +26,7 @@ private:
 ```
 
 <p align="center">
-  <img class="rounded" src="../_static/images/3d/showing-a-scene_coin.jpg" alt="A scene of three coins standing on a floor, drawn with the default light" width="560">
+  <img class="rounded" src="../_static/images/3d/showing-a-scene_coin.jpg" alt="A scene of three coins standing on a floor, drawn with the default light" width="640">
 </p>
 
 Cameras look down the -Z axis of their entity with +Y up, like glTF cameras.

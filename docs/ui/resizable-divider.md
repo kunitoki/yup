@@ -32,8 +32,8 @@ private:
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/resizable-divider_split_light.jpg#gh-light-mode-only" alt="A sidebar and a content pane split by a divider" width="480">
-  <img class="dark-only rounded" src="../_static/images/ui/resizable-divider_split_dark.jpg#gh-dark-mode-only" alt="A sidebar and a content pane split by a divider" width="480">
+  <img class="light-only rounded" src="../_static/images/ui/resizable-divider_split_light.jpg#gh-light-mode-only" alt="A sidebar and a content pane split by a divider" width="560">
+  <img class="dark-only rounded" src="../_static/images/ui/resizable-divider_split_dark.jpg#gh-dark-mode-only" alt="A sidebar and a content pane split by a divider" width="560">
 </p>
 
 `layoutComponents (area, leading, trailing)` splits `area` along the divider

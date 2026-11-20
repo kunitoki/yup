@@ -128,8 +128,8 @@ bars.getReference().draw (g, state, (int) data.size());
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/expressions_bars_light.jpg#gh-light-mode-only" alt="Bars drawn from an array by one expression, their height and color following the values" width="480">
-  <img class="dark-only rounded" src="../_static/images/graphics/expressions_bars_dark.jpg#gh-dark-mode-only" alt="Bars drawn from an array by one expression, their height and color following the values" width="480">
+  <img class="light-only rounded" src="../_static/images/graphics/expressions_bars_light.jpg#gh-light-mode-only" alt="Bars drawn from an array by one expression, their height and color following the values" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/expressions_bars_dark.jpg#gh-dark-mode-only" alt="Bars drawn from an array by one expression, their height and color following the values" width="560">
 </p>
 
 `create` compiles the program and fails with a descriptive message when it has

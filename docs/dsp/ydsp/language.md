@@ -11,7 +11,7 @@ portable wasm module instantiated and run by the browser's native
 `WebAssembly` engine.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_dsp_jit.jpg" alt="A synthesizer written in YDSP, in the graphics example" width="560">
+  <img class="rounded" src="../../_static/images/yup_dsp_jit.jpg" alt="A synthesizer written in YDSP, in the graphics example" width="640">
 </p>
 
 YDSP borrows two ideas:
@@ -2204,5 +2204,5 @@ The existing `compile()` and `compileBundle()` APIs continue to take YDSP
 source text.
 
 Use `compileProjectBundle()` to package a selected project entry point. See the
-[command-line compiler and player](ydsp-command-line.md) for bundle commands,
+[command-line compiler and player](command-line.md) for bundle commands,
 audio/MIDI device selection, hot reload, and the VS Code playback workflow.

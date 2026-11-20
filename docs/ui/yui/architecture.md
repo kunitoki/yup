@@ -408,13 +408,13 @@ flowchart LR
 
 ## See also
 
-- [Complete UIs in `.yui`](yui-documents.md) - the document API, tokens,
+- [Complete UIs in `.yui`](documents.md) - the document API, tokens,
   composites, handlers and models.
-- [Reactive bindings](yui-reactivity.md) - bindings and links in practice.
-- [The `.yui` language](yui-language.md) - the syntax of every block.
-- [Stylesheets](yui-styles.md) - selectors, the cascade and palettes in practice.
-- [Data-driven drawing](yui-drawing.md) - the drawing language and its scopes.
-- [Component styling](component-styling.md) - the property model, palettes and
+- [Reactive bindings](reactivity.md) - bindings and links in practice.
+- [The `.yui` language](language.md) - the syntax of every block.
+- [Stylesheets](styles.md) - selectors, the cascade and palettes in practice.
+- [Data-driven drawing](drawing.md) - the drawing language and its scopes.
+- [Component styling](../component-styling.md) - the property model, palettes and
   `ComponentStyle`.
-- [Component Layout](component-layout.md) - the layout algorithms behind the
+- [Component Layout](../component-layout.md) - the layout algorithms behind the
   containers.

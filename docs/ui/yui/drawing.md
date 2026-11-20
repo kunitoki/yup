@@ -9,8 +9,8 @@ the drawing reads the live component, it follows the component's state without
 any paint code.
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/yui-drawing_fluted-knob_light.jpg#gh-light-mode-only" alt="Three glossy black knobs at different values, each one a slider painted by the FlutedKnob drawing" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/yui-drawing_fluted-knob_dark.jpg#gh-dark-mode-only" alt="Three glossy black knobs at different values, each one a slider painted by the FlutedKnob drawing" width="560">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_fluted-knob_light.jpg#gh-light-mode-only" alt="Three glossy black knobs at different values, each one a slider painted by the FlutedKnob drawing" width="640">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_fluted-knob_dark.jpg#gh-dark-mode-only" alt="Three glossy black knobs at different values, each one a slider painted by the FlutedKnob drawing" width="640">
 </p>
 
 These knobs are sliders painted by one drawing of the `YuiDrawing` graphics
@@ -63,8 +63,8 @@ drawing Knob {
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/yui-drawing_knob_light.jpg#gh-light-mode-only" alt="Sliders painted by the Knob drawing at different values, the last one disabled" width="480">
-  <img class="dark-only rounded" src="../_static/images/ui/yui-drawing_knob_dark.jpg#gh-dark-mode-only" alt="Sliders painted by the Knob drawing at different values, the last one disabled" width="480">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_knob_light.jpg#gh-light-mode-only" alt="Sliders painted by the Knob drawing at different values, the last one disabled" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_knob_dark.jpg#gh-dark-mode-only" alt="Sliders painted by the Knob drawing at different values, the last one disabled" width="560">
 </p>
 
 Elements are painted in document order, so later shapes draw on top. Each shape
@@ -116,8 +116,8 @@ children. `image` and `svg` also accept `fitting` (`scaleToFit` by default, or
 (`center` by default).
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/yui-drawing_shapes_light.jpg#gh-light-mode-only" alt="The shapes of a drawing: rect, ellipse, circle, arc, line, path, polygon and star" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/yui-drawing_shapes_dark.jpg#gh-dark-mode-only" alt="The shapes of a drawing: rect, ellipse, circle, arc, line, path, polygon and star" width="560">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_shapes_light.jpg#gh-light-mode-only" alt="The shapes of a drawing: rect, ellipse, circle, arc, line, path, polygon and star" width="640">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_shapes_dark.jpg#gh-dark-mode-only" alt="The shapes of a drawing: rect, ellipse, circle, arc, line, path, polygon and star" width="640">
 </p>
 
 ## Paint properties
@@ -168,7 +168,7 @@ text { anchor: point (12, 20); textAnchor: middle; letterSpacing: 0.5; text: "yu
 
 `palette.<role>` reads a role of the palette the component is drawn with: the
 closest one set with `Component::setPalette()` on the component or a parent,
-or else the theme palette (see [Palettes](component-styling.md#palettes)).
+or else the theme palette (see [Palettes](../component-styling.md#palettes)).
 The roles are `background`, `surface`, `surfaceRaised`, `outline`, `text`,
 `textMuted`, `accent` and `onAccent`, and `palette.dark` is true for a dark
 palette.
@@ -180,7 +180,7 @@ rect { bounds: bounds; stroke: palette.outline.withAlpha (palette.dark ? 0.6 : 0
 ```
 
 `palette.<name>` reads a custom color the palette declares (see
-[Palettes](yui-styles.md#palettes)), transparent when it doesn't:
+[Palettes](styles.md#palettes)), transparent when it doesn't:
 
 ```yui
 rect { bounds: bounds; fillGradient: linearGradient (palette.wood, point (0, 0), palette.wood.darker (0.04), point (0, bounds.height)); }
@@ -478,7 +478,7 @@ drawing Imported {
 ```
 
 The drawing paints what a `Drawable` paints for the same SVG, see the
-[supported SVG features](../graphics/svg.md#supported-svg-features). The
+[supported SVG features](../../graphics/svg.md#supported-svg-features). The
 `warnings` of the result list what it paints differently, mainly:
 
 - a pattern is clipped to its tile and covers its shape, while `Drawable` lets
@@ -663,8 +663,8 @@ Component {
 }
 ```
 
-See [Stylesheets](yui-styles.md) for selectors, palettes, transitions and
-shadows, and [Complete UIs in `.yui`](yui-documents.md) for loading such a
+See [Stylesheets](styles.md) for selectors, palettes, transitions and
+shadows, and [Complete UIs in `.yui`](documents.md) for loading such a
 document with `YuiDocument`.
 
 ## Caching a drawing
@@ -682,7 +682,7 @@ style {
 ```
 
 `cached` is a property of every component, the `setCachedToTexture` of
-[component caching](component-caching.md), so an element can set it too
+[component caching](../component-caching.md), so an element can set it too
 (`Component { class: panel; cached: true; }`). The texture holds what the
 component paints, not its children.
 
@@ -697,9 +697,10 @@ component paints, not its children.
 - The drawing is painted again when its component is repainted: when one of
   its properties changes, when it is resized, when it or a parent is enabled or
   disabled or given a palette, and when a property the drawing reads from
-  another component changes. A value the drawing only inherits does not repaint
-  it: a property set on a parent, a color or a font of the theme. Leave such a
-  drawing uncached when those change while it is shown.
+  another component changes. It is also painted again when the application
+  theme changes. A property the drawing only inherits from a parent does not
+  repaint it: leave such a drawing uncached when that property changes while it
+  is shown.
 - What the drawing paints outside the bounds of the component is cut, and the
   texture is stretched when a `transform` scales the component up.
 
@@ -716,10 +717,10 @@ component paints, not its children.
 
 ## See also
 
-- [The `.yui` language](yui-language.md) - the syntax of every block.
-- [Stylesheets](yui-styles.md) - selecting drawings and setting their
+- [The `.yui` language](language.md) - the syntax of every block.
+- [Stylesheets](styles.md) - selecting drawings and setting their
   properties from rules.
-- [How YUI fits together](yui-architecture.md) - how drawings share their
+- [How YUI fits together](architecture.md) - how drawings share their
   compilation and where their values come from.
-- [Reactive bindings](yui-reactivity.md) - the same expressions keeping
+- [Reactive bindings](reactivity.md) - the same expressions keeping
   properties up to date.

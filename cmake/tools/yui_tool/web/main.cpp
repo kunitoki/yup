@@ -31,6 +31,7 @@
 
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <vector>
 
 using namespace yup;
@@ -72,20 +73,24 @@ public:
     /** Shows a target of a file and tells the page what the load gave.
 
         The document is reloaded in place, keeping the state of its components, for as long as the
-        file, the target, the models and the theme stay the same.
+        file, the target and the models stay the same. The theme is switched under it.
     */
     void show (const File& input, const YuiToolTarget& target, const File& modelsFile, bool lightTheme)
     {
         const auto modelsText = modelsFile.existsAsFile() ? modelsFile.loadFileAsString() : String();
-        const auto key = StringArray { input.getFullPathName(), target.drawing, target.palette, target.hostType, modelsText, lightTheme ? "light" : "dark" }
+        const auto key = StringArray { input.getFullPathName(), target.drawing, target.palette, target.hostType, modelsText }
                              .joinIntoString ("\n");
+
+        if (shownLight != lightTheme)
+        {
+            shownLight = lightTheme;
+            ApplicationTheme::getGlobalTheme()->setPalette (ThemePalette ({}, lightTheme ? ThemePalette::Mode::light : ThemePalette::Mode::dark));
+        }
 
         if (session == nullptr || key != sessionKey)
         {
             session.reset();
             sessionKey = key;
-
-            ApplicationTheme::getGlobalTheme()->setPalette (ThemePalette ({}, lightTheme ? ThemePalette::Mode::light : ThemePalette::Mode::dark));
 
             session = std::make_unique<Session>();
 
@@ -185,6 +190,7 @@ private:
 
     std::unique_ptr<Session> session;
     String sessionKey;
+    std::optional<bool> shownLight;
 };
 
 PreviewWindow* previewWindow = nullptr;

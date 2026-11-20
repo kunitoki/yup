@@ -1118,6 +1118,67 @@ TEST_F (ComponentEffectGpuTest, RenderToTextureIsReusedUntilTheSubtreeRepaints)
     EXPECT_EQ (3, child.paintCount);
 }
 
+TEST_F (ComponentEffectGpuTest, WhatAComponentKeepsOfItsPaintingIsPaintedAgainWhenTheThemeChanges)
+{
+    const auto makeTheme = []
+    {
+        ApplicationTheme::Ptr theme (new ApplicationTheme());
+        theme->setPalette (ThemePalette ({}, ThemePalette::Mode::dark));
+        return theme;
+    };
+
+    const auto oldTheme = ApplicationTheme::getGlobalTheme();
+    const ErasedScopeGuard restoreTheme ([oldTheme]
+    {
+        ApplicationTheme::setGlobalTheme (oldTheme.get());
+    });
+
+    auto theme = makeTheme();
+    ApplicationTheme::setGlobalTheme (theme);
+
+    // A texture cache, an opaque component behind an effect and a subtree rendered to a texture
+    auto cached = makeComp ("cached", 64, 64);
+    cached->setVisible (true);
+    cached->setCachedToTexture (true);
+
+    FillComponent behindEffect ("behindEffect");
+    behindEffect.setBounds (0, 0, 64, 64);
+    behindEffect.setVisible (true);
+    behindEffect.setComponentEffect (new CountingEffect());
+
+    auto rendered = makeComp ("rendered", 64, 64);
+    rendered->setVisible (true);
+
+    const auto paintAll = [&]
+    {
+        triggerPaintOnCanvas (*cached, 64, 64);
+        triggerPaintOnCanvas (behindEffect, 64, 64);
+        EXPECT_NE (rendered->renderToTexture (*gpuContext), nullptr);
+    };
+
+    const auto expectPainted = [&] (int times)
+    {
+        EXPECT_EQ (cached->paintCount, times);
+        EXPECT_EQ (behindEffect.paintCount, times);
+        EXPECT_EQ (rendered->paintCount, times);
+    };
+
+    paintAll();
+    paintAll();
+    expectPainted (1);
+
+    theme->setPalette (ThemePalette ({}, ThemePalette::Mode::light));
+    paintAll();
+    paintAll();
+    expectPainted (2);
+
+    // Another theme, set up the way the first one was
+    ApplicationTheme::setGlobalTheme (makeTheme());
+    paintAll();
+    paintAll();
+    expectPainted (3);
+}
+
 TEST_F (ComponentEffectGpuTest, RenderToTextureAppliesTheEffect)
 {
     if (! gpuContext)

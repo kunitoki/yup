@@ -93,8 +93,8 @@ auto custom = font.withAxisValues ({
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/fonts_variable-axes_light.jpg#gh-light-mode-only" alt="The weight and width axes of a variable font" width="480">
-  <img class="dark-only rounded" src="../_static/images/graphics/fonts_variable-axes_dark.jpg#gh-dark-mode-only" alt="The weight and width axes of a variable font" width="480">
+  <img class="light-only rounded" src="../_static/images/graphics/fonts_variable-axes_light.jpg#gh-light-mode-only" alt="The weight and width axes of a variable font" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/fonts_variable-axes_dark.jpg#gh-dark-mode-only" alt="The weight and width axes of a variable font" width="560">
 </p>
 
 Each axis has a 4-character OpenType tag (e.g. `"wght"`, `"wdth"`, `"slnt"`,
@@ -161,8 +161,8 @@ StyledText text;
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/fonts_styled-text_light.jpg#gh-light-mode-only" alt="Styled text with bold and colored runs, wrapped and centered" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/fonts_styled-text_dark.jpg#gh-dark-mode-only" alt="Styled text with bold and colored runs, wrapped and centered" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/fonts_styled-text_light.jpg#gh-light-mode-only" alt="Styled text with bold and colored runs, wrapped and centered" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/fonts_styled-text_dark.jpg#gh-dark-mode-only" alt="Styled text with bold and colored runs, wrapped and centered" width="400">
 </p>
 
 Key layout controls set via the `TextModifier`:
@@ -214,8 +214,8 @@ g.fillFittedText (title.getStyledText(), title.getBounds());
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/fonts_anchored-text_light.jpg#gh-light-mode-only" alt="Lines of text starting at, centered on and ending at a point of their baseline" width="480">
-  <img class="dark-only rounded" src="../_static/images/graphics/fonts_anchored-text_dark.jpg#gh-dark-mode-only" alt="Lines of text starting at, centered on and ending at a point of their baseline" width="480">
+  <img class="light-only rounded" src="../_static/images/graphics/fonts_anchored-text_light.jpg#gh-light-mode-only" alt="Lines of text starting at, centered on and ending at a point of their baseline" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/fonts_anchored-text_dark.jpg#gh-dark-mode-only" alt="Lines of text starting at, centered on and ending at a point of their baseline" width="560">
 </p>
 
 An optional last argument adds letter spacing.
@@ -228,8 +228,8 @@ extra code. Color glyphs (COLR layers, SBIX and CBDT bitmaps) keep their own col
 text is filled; stroking text leaves them out.
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/fonts_color-emoji_light.jpg#gh-light-mode-only" alt="Color emoji drawn inside a line of text" width="480">
-  <img class="dark-only rounded" src="../_static/images/graphics/fonts_color-emoji_dark.jpg#gh-dark-mode-only" alt="Color emoji drawn inside a line of text" width="480">
+  <img class="light-only rounded" src="../_static/images/graphics/fonts_color-emoji_light.jpg#gh-light-mode-only" alt="Color emoji drawn inside a line of text" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/fonts_color-emoji_dark.jpg#gh-dark-mode-only" alt="Color emoji drawn inside a line of text" width="560">
 </p>
 
 By default the fallback is the system color emoji font, loaded on first use: Apple Color

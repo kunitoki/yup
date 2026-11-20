@@ -10,7 +10,7 @@ If you know CSS flexbox and CSS grid, you know these. The rest of this page is
 about how they are spelled in C++ and where YUP deliberately differs.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_flex_grid_layouts.jpg" alt="FlexBox and Grid layouts, in the layout demo of the graphics example" width="560">
+  <img class="rounded" src="../_static/images/yup_flex_grid_layouts.jpg" alt="FlexBox and Grid layouts, in the layout demo of the graphics example" width="640">
 </p>
 
 ## The shape of a layout
@@ -32,8 +32,8 @@ void MyComponent::resized()
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-layout_flex-row_light.jpg#gh-light-mode-only" alt="A row with a sidebar of a fixed width and a content area taking the space left" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/component-layout_flex-row_dark.jpg#gh-dark-mode-only" alt="A row with a sidebar of a fixed width and a content area taking the space left" width="560">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_flex-row_light.jpg#gh-light-mode-only" alt="A row with a sidebar of a fixed width and a content area taking the space left" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_flex-row_dark.jpg#gh-dark-mode-only" alt="A row with a sidebar of a fixed width and a content area taking the space left" width="640">
 </p>
 
 Nothing is retained, so rebuilding the container on every `resized()` is the
@@ -114,8 +114,8 @@ auto to fill the line. An item with an explicit cross size keeps it and sits at
 the cross start.
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-layout_align_light.jpg#gh-light-mode-only" alt="Items of different heights aligned at the start, at the end, at the center and stretched" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/component-layout_align_dark.jpg#gh-dark-mode-only" alt="Items of different heights aligned at the start, at the end, at the center and stretched" width="560">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_align_light.jpg#gh-light-mode-only" alt="Items of different heights aligned at the start, at the end, at the center and stretched" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_align_dark.jpg#gh-dark-mode-only" alt="Items of different heights aligned at the start, at the end, at the center and stretched" width="640">
 </p>
 
 In a single-line (`Wrap::noWrap`) container the line spans the container's
@@ -127,8 +127,8 @@ container, even one that happens to produce a single line.
 `spaceEvenly` puts an equal share everywhere including the edges.
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-layout_justify_light.jpg#gh-light-mode-only" alt="Three items justified with each JustifyContent value" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/component-layout_justify_dark.jpg#gh-dark-mode-only" alt="Three items justified with each JustifyContent value" width="560">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_justify_light.jpg#gh-light-mode-only" alt="Three items justified with each JustifyContent value" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_justify_dark.jpg#gh-dark-mode-only" alt="Three items justified with each JustifyContent value" width="640">
 </p>
 
 ### Auto margins
@@ -144,8 +144,8 @@ box.items.add (yup::FlexItem (settings).withAutoMargins (true, false, false, fal
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-layout_auto-margins_light.jpg#gh-light-mode-only" alt="A toolbar whose last item is pushed to the right by an auto margin" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/component-layout_auto-margins_dark.jpg#gh-dark-mode-only" alt="A toolbar whose last item is pushed to the right by an auto margin" width="560">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_auto-margins_light.jpg#gh-light-mode-only" alt="A toolbar whose last item is pushed to the right by an auto margin" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_auto-margins_dark.jpg#gh-dark-mode-only" alt="A toolbar whose last item is pushed to the right by an auto margin" width="640">
 </p>
 
 Auto margins on both sides center an item. On the cross axis an auto margin
@@ -169,8 +169,8 @@ grid.performLayout (getLocalBounds());
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-layout_grid_light.jpg#gh-light-mode-only" alt="A grid with a header spanning two columns and a body in the second column of the second row" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/component-layout_grid_dark.jpg#gh-dark-mode-only" alt="A grid with a header spanning two columns and a body in the second column of the second row" width="560">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_grid_light.jpg#gh-light-mode-only" alt="A grid with a header spanning two columns and a body in the second column of the second row" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_grid_dark.jpg#gh-dark-mode-only" alt="A grid with a header spanning two columns and a body in the second column of the second row" width="640">
 </p>
 
 ### Tracks
@@ -193,8 +193,8 @@ what is left **after** the fixed tracks and the gaps, so a gapped `fr` grid
 fits its container exactly.
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-layout_grid-tracks_light.jpg#gh-light-mode-only" alt="Grid columns sized in pixels, in fractions of the space left and in percent" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/component-layout_grid-tracks_dark.jpg#gh-dark-mode-only" alt="Grid columns sized in pixels, in fractions of the space left and in percent" width="560">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_grid-tracks_light.jpg#gh-light-mode-only" alt="Grid columns sized in pixels, in fractions of the space left and in percent" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_grid-tracks_dark.jpg#gh-dark-mode-only" alt="Grid columns sized in pixels, in fractions of the space left and in percent" width="640">
 </p>
 
 `minmax (px (100), fr (1))` is the combination `fr` alone cannot express: take
@@ -233,8 +233,8 @@ grid.items.add (yup::GridItem (sidebar).withArea ("side"));
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-layout_grid-areas_light.jpg#gh-light-mode-only" alt="Items placed in the named areas of a grid" width="480">
-  <img class="dark-only rounded" src="../_static/images/ui/component-layout_grid-areas_dark.jpg#gh-dark-mode-only" alt="Items placed in the named areas of a grid" width="480">
+  <img class="light-only rounded" src="../_static/images/ui/component-layout_grid-areas_light.jpg#gh-light-mode-only" alt="Items placed in the named areas of a grid" width="560">
+  <img class="dark-only rounded" src="../_static/images/ui/component-layout_grid-areas_dark.jpg#gh-dark-mode-only" alt="Items placed in the named areas of a grid" width="560">
 </p>
 
 `setTemplateAreas` returns a `Result`: it fails if the rows have different cell

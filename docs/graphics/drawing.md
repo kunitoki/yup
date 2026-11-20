@@ -32,8 +32,8 @@ g.strokeRect (bounds.reduced (0.5f));  // inset by half-width for sharp pixels
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_rectangle_light.jpg#gh-light-mode-only" alt="A filled rectangle with a one pixel border" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_rectangle_dark.jpg#gh-dark-mode-only" alt="A filled rectangle with a one pixel border" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_rectangle_light.jpg#gh-light-mode-only" alt="A filled rectangle with a one pixel border" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_rectangle_dark.jpg#gh-dark-mode-only" alt="A filled rectangle with a one pixel border" width="400">
 </p>
 
 ## Draw a rounded button
@@ -62,8 +62,8 @@ g.fillRoundedRect (rect, 14.0f, 14.0f, 0.0f, 0.0f);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_rounded-button_light.jpg#gh-light-mode-only" alt="Rounded buttons in their normal and hover colors, and a shape with only its top corners rounded" width="480">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_rounded-button_dark.jpg#gh-dark-mode-only" alt="Rounded buttons in their normal and hover colors, and a shape with only its top corners rounded" width="480">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_rounded-button_light.jpg#gh-light-mode-only" alt="Rounded buttons in their normal and hover colors, and a shape with only its top corners rounded" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_rounded-button_dark.jpg#gh-dark-mode-only" alt="Rounded buttons in their normal and hover colors, and a shape with only its top corners rounded" width="560">
 </p>
 
 ## Draw a circle
@@ -78,8 +78,8 @@ g.fillEllipse (square);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_circle_light.jpg#gh-light-mode-only" alt="A filled circle" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_circle_dark.jpg#gh-dark-mode-only" alt="A filled circle" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_circle_light.jpg#gh-light-mode-only" alt="A filled circle" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_circle_dark.jpg#gh-dark-mode-only" alt="A filled circle" width="400">
 </p>
 
 ## Draw a line
@@ -96,8 +96,8 @@ g.strokeLine (Point<float>{ x1, y1 }, Point<float>{ x2, y2 });
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_line_light.jpg#gh-light-mode-only" alt="A two pixel wide line" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_line_dark.jpg#gh-dark-mode-only" alt="A two pixel wide line" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_line_light.jpg#gh-light-mode-only" alt="A two pixel wide line" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_line_dark.jpg#gh-dark-mode-only" alt="A two pixel wide line" width="400">
 </p>
 
 ## Draw text
@@ -114,8 +114,8 @@ g.fillFittedText ("Label", font, textBounds, Justification::center);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_text_light.jpg#gh-light-mode-only" alt="Text centered in its bounds" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_text_dark.jpg#gh-dark-mode-only" alt="Text centered in its bounds" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_text_light.jpg#gh-light-mode-only" alt="Text centered in its bounds" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_text_dark.jpg#gh-dark-mode-only" alt="Text centered in its bounds" width="400">
 </p>
 
 For outlined text, use `strokeFittedText`. For rich text (multiple fonts or
@@ -132,8 +132,8 @@ g.drawImage (screenshot, targetRect);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_image_light.jpg#gh-light-mode-only" alt="An image scaled into a square and stretched into a wide rectangle" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_image_dark.jpg#gh-dark-mode-only" alt="An image scaled into a square and stretched into a wide rectangle" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_image_light.jpg#gh-light-mode-only" alt="An image scaled into a square and stretched into a wide rectangle" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_image_dark.jpg#gh-dark-mode-only" alt="An image scaled into a square and stretched into a wide rectangle" width="400">
 </p>
 
 ## Draw a GPU-calculated texture
@@ -176,8 +176,8 @@ ColorGradient angular { ColorGradient::Angular, {
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_gradients_light.jpg#gh-light-mode-only" alt="Linear, radial and angular gradients" width="480">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_gradients_dark.jpg#gh-dark-mode-only" alt="Linear, radial and angular gradients" width="480">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_gradients_light.jpg#gh-light-mode-only" alt="Linear, radial and angular gradients" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_gradients_dark.jpg#gh-dark-mode-only" alt="Linear, radial and angular gradients" width="560">
 </p>
 
 ## Draw a custom path
@@ -194,8 +194,8 @@ g.strokePath (wave);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_path_light.jpg#gh-light-mode-only" alt="A sine wave stroked as a path" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_path_dark.jpg#gh-dark-mode-only" alt="A sine wave stroked as a path" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_path_light.jpg#gh-light-mode-only" alt="A sine wave stroked as a path" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_path_dark.jpg#gh-dark-mode-only" alt="A sine wave stroked as a path" width="400">
 </p>
 
 ## Layer drawings at group opacity
@@ -215,8 +215,8 @@ if (layer.isValid())
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_layer_light.jpg#gh-light-mode-only" alt="Two overlapping circles faded one by one, showing their overlap, and faded together in a layer" width="400">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_layer_dark.jpg#gh-dark-mode-only" alt="Two overlapping circles faded one by one, showing their overlap, and faded together in a layer" width="400">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_layer_light.jpg#gh-light-mode-only" alt="Two overlapping circles faded one by one, showing their overlap, and faded together in a layer" width="480">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_layer_dark.jpg#gh-dark-mode-only" alt="Two overlapping circles faded one by one, showing their overlap, and faded together in a layer" width="480">
 </p>
 
 ## Apply a clip
@@ -232,8 +232,8 @@ g.fillAll();                          // only fills inside roundedBounds
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_clip_light.jpg#gh-light-mode-only" alt="Drawing cut by a rounded clip path" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_clip_dark.jpg#gh-dark-mode-only" alt="Drawing cut by a rounded clip path" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_clip_light.jpg#gh-light-mode-only" alt="Drawing cut by a rounded clip path" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_clip_dark.jpg#gh-dark-mode-only" alt="Drawing cut by a rounded clip path" width="400">
 </p>
 
 ## Use a transform
@@ -249,8 +249,8 @@ g.fillPath (arrowShape);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_transform_light.jpg#gh-light-mode-only" alt="An arrow and its copy rotated a quarter turn around its tail" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_transform_dark.jpg#gh-dark-mode-only" alt="An arrow and its copy rotated a quarter turn around its tail" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_transform_light.jpg#gh-light-mode-only" alt="An arrow and its copy rotated a quarter turn around its tail" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_transform_dark.jpg#gh-dark-mode-only" alt="An arrow and its copy rotated a quarter turn around its tail" width="400">
 </p>
 
 ## Draw with a blend mode
@@ -266,8 +266,8 @@ g.fillAll();
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_blend-multiply_light.jpg#gh-light-mode-only" alt="A yellow band multiplied over colored stripes" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_blend-multiply_dark.jpg#gh-dark-mode-only" alt="A yellow band multiplied over colored stripes" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_blend-multiply_light.jpg#gh-light-mode-only" alt="A yellow band multiplied over colored stripes" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_blend-multiply_dark.jpg#gh-dark-mode-only" alt="A yellow band multiplied over colored stripes" width="400">
 </p>
 
 For a glow, add light instead of covering what is below:
@@ -283,8 +283,8 @@ g.fillEllipse (glowArea);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_blend-glow_light.jpg#gh-light-mode-only" alt="A feathered additive glow" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_blend-glow_dark.jpg#gh-dark-mode-only" alt="A feathered additive glow" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_blend-glow_light.jpg#gh-light-mode-only" alt="A feathered additive glow" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_blend-glow_dark.jpg#gh-dark-mode-only" alt="A feathered additive glow" width="400">
 </p>
 
 ## Render offscreen into an Image
@@ -317,8 +317,8 @@ auto sidebar = area.removeFromLeft (80.0f);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_slices_light.jpg#gh-light-mode-only" alt="An area sliced into a header, a footer, a sidebar and the remaining area" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_slices_dark.jpg#gh-dark-mode-only" alt="An area sliced into a header, a footer, a sidebar and the remaining area" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_slices_light.jpg#gh-light-mode-only" alt="An area sliced into a header, a footer, a sidebar and the remaining area" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_slices_dark.jpg#gh-dark-mode-only" alt="An area sliced into a header, a footer, a sidebar and the remaining area" width="400">
 </p>
 
 ## See also

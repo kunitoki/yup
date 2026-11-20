@@ -2,7 +2,7 @@
 
 The classes that load and drive `.yui` documents are bound more or less
 one-to-one with the C++ API described under
-[Complete UIs in `.yui`](../ui/yui-documents.md), so those pages remain the
+[Complete UIs in `.yui`](../ui/yui/documents.md), so those pages remain the
 reference for what each call means. This page covers only what is different in
 Python.
 
@@ -134,8 +134,8 @@ document or not: `addStyleClass`, `removeStyleClass`, `hasStyleClass`,
 
 ## See also
 
-- [Complete UIs in `.yui`](../ui/yui-documents.md) - documents, actions and
+- [Complete UIs in `.yui`](../ui/yui/documents.md) - documents, actions and
   models.
-- [Hot reloading `.yui` files](../ui/yui-hot-reload.md) - `YuiLoader`.
-- [Tools for `.yui` files](../ui/yui-tooling.md) - checking and previewing
+- [Hot reloading `.yui` files](../ui/yui/hot-reload.md) - `YuiLoader`.
+- [Tools for `.yui` files](../ui/yui/tooling.md) - checking and previewing
   files from the command line.

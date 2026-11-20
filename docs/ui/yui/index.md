@@ -1,0 +1,84 @@
+# YUI - the declarative UI language
+
+**YUI** is YUP's declarative interface language. A `.yui` file describes a
+component tree, how it is laid out, how it is painted and how its values are
+wired together, in text that an application loads at startup or reloads while
+it runs.
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_fluted-knob_light.jpg#gh-light-mode-only" alt="Three glossy black knobs at different values, each one a slider painted by the FlutedKnob drawing" width="640">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_fluted-knob_dark.jpg#gh-dark-mode-only" alt="Three glossy black knobs at different values, each one a slider painted by the FlutedKnob drawing" width="640">
+</p>
+
+**Modules covered:** `yup_gui` (the `Yui*` classes), with
+`yup_audio_gui` for parameter binding.
+
+Everything YUI does is also reachable from C++ - it builds the same
+[`Component`](../component-basics.md) tree, sets the same
+[properties](../component-styling.md) and paints with the same
+[`Graphics`](../../graphics/graphics-class.md) API. The language exists so that
+layout, look and wiring live in files you can edit without recompiling.
+
+## What a document is made of
+
+| Block | What it declares | Page |
+| --- | --- | --- |
+| `import` | Another `.yui` file merged into this one | [The `.yui` language](language.md#imports) |
+| `tokens` | Typed values shared by the whole document | [Complete UIs](documents.md#tokens) |
+| `palette` | Colors derived from a few source colors | [Stylesheets](styles.md#palettes) |
+| `style` | Selectors, the cascade, transitions and `@keyframes` | [Stylesheets](styles.md) |
+| `drawing` | Shapes painting a component from its properties | [Data-driven drawing](drawing.md) |
+| `component` | A new composite component type | [Complete UIs](documents.md#composite-components) |
+| `Type { ... }` | The root component instance | [Complete UIs](documents.md) |
+
+## In this area
+
+Start with the language, then pick the area you need.
+
+- [The `.yui` language](language.md) - the syntax of `.yui` files: blocks,
+  elements, values, declarations and imports.
+- [How YUI fits together](architecture.md) - diagrams of the classes behind
+  `.yui` documents, styling, drawings and bindings, and how data flows between
+  them.
+- [Declarative layout](layout.md) - `Row`, `Column`, `FlexBox`, `Grid`,
+  `Stack`, item sizing, base bounds and styled layouts.
+- [Stylesheets](styles.md) - selectors, the cascade, palettes, transitions,
+  shadows, glows, CSS filters and cursors for any component tree.
+- [Data-driven drawing](drawing.md) - paint components from a tree of shapes
+  whose values are expressions over the component's properties.
+- [Reactive bindings](reactivity.md) - properties computed from other
+  properties, re-evaluated whenever what they read changes.
+- [Complete UIs in `.yui`](documents.md) - `YuiDocument`, tokens, composite
+  components, handlers, actions and models.
+- [Hot reloading `.yui` files](hot-reload.md) - `YuiLoader`, watching files
+  while developing and embedding them with `yup_add_yui_resources`.
+- [Tools for `.yui` files](tooling.md) - checking files from the command line
+  and while configuring a build, the schema, importing SVGs and the VS Code
+  extension.
+
+## Related areas
+
+- [Component basics](../component-basics.md) - the `Component` tree a document
+  builds.
+- [Component styling](../component-styling.md) - the property and theme model a
+  stylesheet writes into.
+- [Component layout](../component-layout.md) - `FlexBox` and `Grid` from C++.
+- [Drawables & SVG](../../graphics/svg.md) - the SVG importer feeding
+  `drawing` blocks.
+- [Python bindings for YUI](../../scripting/python-yui.md) - loading and
+  driving documents from Python.
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+
+language
+architecture
+layout
+styles
+drawing
+reactivity
+documents
+hot-reload
+tooling
+```

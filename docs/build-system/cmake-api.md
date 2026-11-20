@@ -535,7 +535,7 @@ unknown path. Targets produced by `yup_add_yui_resources` can be passed in
 embedded file configures the project again on the next build.
 
 With `VERIFY`, the files are checked with
-[`yup_yui_tool verify`](../ui/yui-tooling.md) while configuring, and an invalid
+[`yup_yui_tool verify`](../ui/yui/tooling.md) while configuring, and an invalid
 file fails the configuration with its errors, so a broken interface never
 reaches a release build. The tool is built for the host into the build tree the
 first time it is needed. It links `yup_gui`, so that first configuration takes
@@ -573,7 +573,7 @@ yup::YuiLoader loader (document);
 loader.loadResource ("ui.yui", yup::MyAppUi_find); // imports "parts/style.yui"
 ```
 
-See [Hot reloading `.yui` files](../ui/yui-hot-reload.md).
+See [Hot reloading `.yui` files](../ui/yui/hot-reload.md).
 
 ---
 
@@ -663,7 +663,7 @@ Override with `PLUGIN_APPLE_ENTITLEMENTS` pointing to a custom `.plist` file.
 For local development, ad-hoc signing (`-`) is sufficient. For distribution (notarization, App
 Store), you must set:
 
-```cmake
+```text
 PLUGIN_CODESIGN_IDENTITY "Developer ID Application: Your Name (TEAMID)"
 PLUGIN_CODESIGN_TEAM "ABCDE12345"
 PLUGIN_HARDENED_RUNTIME ON

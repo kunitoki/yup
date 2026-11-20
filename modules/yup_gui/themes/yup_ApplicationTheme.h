@@ -199,10 +199,13 @@ public:
     */
     const ThemePalette& getPalette (const Component& component) const;
 
-    /** Returns a counter incremented every time the palette or its mapping changes.
+    /** Returns a number that changes every time the theme does: its palette or its mapping, its
+        colors, its properties or its fonts.
 
+        No two themes share a value, so it also tells when another theme became the global one.
         Stylesheets compare it between frames to restyle the components whose computed values read
-        palette roles, without listening to the theme.
+        palette roles, and components to paint again what they keep in a texture, without
+        listening to the theme.
 
         @see setPalette, setPaletteMapping
     */
@@ -320,6 +323,7 @@ public:
 private:
     static ApplicationTheme::Ptr& getGlobalThemeInstance();
     std::optional<Color> findPaletteColor (const ThemePalette& componentPalette, const Identifier& colorId) const;
+    static uint32 makeGeneration() noexcept;
 
     //==============================================================================
     std::unordered_map<std::type_index, ComponentStyle::Ptr> componentStyles;
@@ -327,7 +331,7 @@ private:
     std::unordered_map<Identifier, Color> paletteColors;
     ThemePalette palette;
     PaletteMapping paletteMapping;
-    uint32 paletteGeneration = 0;
+    uint32 paletteGeneration = makeGeneration();
     mutable std::vector<std::pair<ThemePalette, std::unordered_map<Identifier, Color>>> componentPaletteColors;
     mutable SpinLock componentPaletteColorsLock;
     std::unordered_map<Identifier, var> defaultProperties;

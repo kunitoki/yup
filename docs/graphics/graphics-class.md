@@ -65,8 +65,8 @@ g.setStrokePosition (StrokePosition::Inside); // inside, centered on, or outside
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_stroke-position_light.jpg#gh-light-mode-only" alt="A stroke inside, centered on and outside the edge of a rectangle" width="480">
-  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_stroke-position_dark.jpg#gh-dark-mode-only" alt="A stroke inside, centered on and outside the edge of a rectangle" width="480">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_stroke-position_light.jpg#gh-light-mode-only" alt="A stroke inside, centered on and outside the edge of a rectangle" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_stroke-position_dark.jpg#gh-dark-mode-only" alt="A stroke inside, centered on and outside the edge of a rectangle" width="560">
 </p>
 
 An image paint fills or strokes any shape or text with an image. The transform
@@ -82,8 +82,8 @@ g.fillRoundedRect (area, 8.0f);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_image-paint_light.jpg#gh-light-mode-only" alt="An image used as a fill, clamped, repeated and mirrored" width="480">
-  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_image-paint_dark.jpg#gh-dark-mode-only" alt="An image used as a fill, clamped, repeated and mirrored" width="480">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_image-paint_light.jpg#gh-light-mode-only" alt="An image used as a fill, clamped, repeated and mirrored" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_image-paint_dark.jpg#gh-dark-mode-only" alt="An image used as a fill, clamped, repeated and mirrored" width="560">
 </p>
 
 The image's GPU texture is made when the paint is set and kept by the image, so
@@ -200,8 +200,8 @@ g.setFeather (2.0f);                  // soft edge falloff
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_modulation_light.jpg#gh-light-mode-only" alt="A shape and an image as drawn, with opacity, with a tint and with a feather" width="560">
-  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_modulation_dark.jpg#gh-dark-mode-only" alt="A shape and an image as drawn, with opacity, with a tint and with a feather" width="560">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_modulation_light.jpg#gh-light-mode-only" alt="A shape and an image as drawn, with opacity, with a tint and with a feather" width="640">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_modulation_dark.jpg#gh-dark-mode-only" alt="A shape and an image as drawn, with opacity, with a tint and with a feather" width="640">
 </p>
 
 `BlendMode::Additive` adds the source to what is already drawn, for glows and
@@ -254,8 +254,8 @@ g.drawImage (photo, bounds);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_clip-stroke_light.jpg#gh-light-mode-only" alt="An image revealed along the stroke of a wave" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_clip-stroke_dark.jpg#gh-dark-mode-only" alt="An image revealed along the stroke of a wave" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_clip-stroke_light.jpg#gh-light-mode-only" alt="An image revealed along the stroke of a wave" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_clip-stroke_dark.jpg#gh-dark-mode-only" alt="An image revealed along the stroke of a wave" width="400">
 </p>
 
 ## Drawing operations
@@ -333,8 +333,8 @@ g.drawImageMesh (photo, mesh);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_image-mesh_light.jpg#gh-light-mode-only" alt="An image warped by moving the vertices of its mesh" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_image-mesh_dark.jpg#gh-dark-mode-only" alt="An image warped by moving the vertices of its mesh" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_image-mesh_light.jpg#gh-light-mode-only" alt="An image warped by moving the vertices of its mesh" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_image-mesh_dark.jpg#gh-dark-mode-only" alt="An image warped by moving the vertices of its mesh" width="400">
 </p>
 
 `drawImageMeshInstanced` draws the same mesh many times in one call, each copy
@@ -384,8 +384,8 @@ if (layer.isValid())
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_layer_light.jpg#gh-light-mode-only" alt="Two overlapping circles faded one by one, showing their overlap, and faded together in a layer" width="400">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_layer_dark.jpg#gh-dark-mode-only" alt="Two overlapping circles faded one by one, showing their overlap, and faded together in a layer" width="400">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_layer_light.jpg#gh-light-mode-only" alt="Two overlapping circles faded one by one, showing their overlap, and faded together in a layer" width="480">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_layer_dark.jpg#gh-dark-mode-only" alt="Two overlapping circles faded one by one, showing their overlap, and faded together in a layer" width="480">
 </p>
 
 Inside the layer, coordinates are layer-local: the target area's top-left is
@@ -414,8 +414,8 @@ if (layer.isValid())
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_layer-mask_light.jpg#gh-light-mode-only" alt="An image fading out through a gradient mask" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_layer-mask_dark.jpg#gh-dark-mode-only" alt="An image fading out through a gradient mask" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/graphics-class_layer-mask_light.jpg#gh-light-mode-only" alt="An image fading out through a gradient mask" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/graphics-class_layer-mask_dark.jpg#gh-dark-mode-only" alt="An image fading out through a gradient mask" width="400">
 </p>
 
 `enableMasking` renders the layer in a GPU mode that can apply masks, which every

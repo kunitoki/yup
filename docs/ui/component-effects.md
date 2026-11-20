@@ -12,7 +12,7 @@ adjustments, and custom GLSL pipelines without modifying the component's
 `paint()` code.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_component_effects.jpg" alt="A component drawn through a shader effect, in the graphics example" width="560">
+  <img class="rounded" src="../_static/images/yup_component_effects.jpg" alt="A component drawn through a shader effect, in the graphics example" width="640">
 </p>
 
 Effects are reference-counted and can be shared across multiple components.
@@ -153,8 +153,8 @@ if (auto ops = yup::FilterEffect::parse ("hue-rotate(90deg) brightness(115%)"); 
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-effects_built-in_light.jpg#gh-light-mode-only" alt="A component drawn as is, blurred, with a drop shadow, with a glow and in grayscale" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/component-effects_built-in_dark.jpg#gh-dark-mode-only" alt="A component drawn as is, blurred, with a drop shadow, with a glow and in grayscale" width="560">
+  <img class="light-only rounded" src="../_static/images/ui/component-effects_built-in_light.jpg#gh-light-mode-only" alt="A component drawn as is, blurred, with a drop shadow, with a glow and in grayscale" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-effects_built-in_dark.jpg#gh-dark-mode-only" alt="A component drawn as is, blurred, with a drop shadow, with a glow and in grayscale" width="640">
 </p>
 
 ### Using Effects from `.yui` Stylesheets
@@ -191,14 +191,14 @@ style {
 }
 ```
 
-See [Stylesheets in `.yui`](yui-styles.md#cursors-effects-filters-shadows-and-glow)
+See [Stylesheets in `.yui`](yui/styles.md#shadows-glows-filters-effects-and-cursors)
 for full syntax and animation rules.
 
 ---
 
 ## Custom Effect Examples
 
-The [graphics example](../../examples/graphics/) demonstrates several reusable
+The [graphics example](https://github.com/kunitoki/yup/tree/main/examples/graphics) demonstrates several reusable
 effect patterns implemented as `ComponentEffect` subclasses. Each lives in
 `examples/graphics/source/examples/ComponentEffects.h`, with its fragment shader
 precompiled from `examples/graphics/data/shaders/effect_*.frag`:
@@ -319,5 +319,5 @@ this way.
 - [RHI pipelines](../graphics/rhi/pipelines.md) — `GpuPipeline` and
   `GpuRenderPass` details
 - [Graphics `drawTexture`](../graphics/graphics-class.md)
-- [`SpinningCubeDemo`](../../examples/graphics/) — full blur post-process
+- [`SpinningCubeDemo`](https://github.com/kunitoki/yup/tree/main/examples/graphics) — full blur post-process
   example with live shader editing

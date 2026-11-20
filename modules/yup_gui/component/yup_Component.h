@@ -2034,7 +2034,7 @@ public:
 
         When enabled, the component subtree is rendered once into an offscreen GPU texture that
         is reused across subsequent frames. The cache is automatically invalidated when the component
-        is repainted, resized, or its children change.
+        is repainted, resized, or its children change, and when the application theme changes.
 
         This improves performance for complex components whose content changes infrequently.
 
@@ -2110,9 +2110,9 @@ public:
     /** Renders this component's subtree, including its effect, into a texture.
 
         The texture is owned by the component and reused across calls: it is rendered again
-        only when something in the subtree repainted, or the size or scale changed, since the
-        last call. This is meant to be called from the parent's paint() for a component marked
-        with setManuallyComposited().
+        only when something in the subtree repainted, or the size, the scale or the application
+        theme changed, since the last call. This is meant to be called from the parent's paint()
+        for a component marked with setManuallyComposited().
 
         The texture is sized in device pixels, i.e. the component size multiplied by @p scale.
         Pass g.getContextScale() to keep the result sharp on high-density displays, or a larger
@@ -2313,6 +2313,7 @@ private:
     void releaseUnusedEffectCanvases() noexcept;
     GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt);
     std::optional<RectangleList<float>> takeEffectDirtyRegion (bool renderContinuous);
+    void invalidateCanvasesIfThemeChanged();
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
@@ -2360,6 +2361,7 @@ private:
     RectangleList<float> effectDirtyRegion;
     static constexpr int maximumDirtyRectangles = 8;
     GpuCanvas::Ptr presentedCanvas;
+    uint32 canvasThemeGeneration = 0;
     float contentScale = 1.0f;
     uint8 opacity = 255;
     bool suppressChildBoundsChanged = false;

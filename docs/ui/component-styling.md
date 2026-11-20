@@ -5,7 +5,7 @@ These cascade: a component inherits values from its parent and from the global
 `ApplicationTheme`.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_themes.jpg" alt="One interface under a custom palette, in the themes demo of the graphics example" width="560">
+  <img class="rounded" src="../_static/images/yup_themes.jpg" alt="One interface under a custom palette, in the themes demo of the graphics example" width="640">
 </p>
 
 ```cpp
@@ -27,7 +27,7 @@ The styling system has three layers:
 | **Stylesheet** | Components matching selectors in a subtree | `comp.setStyleSheet()` |
 
 Color resolution walks: component overrides → parent chain → theme defaults → palette.
-A [stylesheet](yui-styles.md) value sits right after the explicit value of each
+A [stylesheet](yui/styles.md) value sits right after the explicit value of each
 component on the way, so values set in C++ always win over it.
 If nothing is found, the paint function falls back to the palette roles.
 
@@ -47,8 +47,8 @@ comp.setColor ("border", std::nullopt); // remove override → inherit
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-styling_colors_light.jpg#gh-light-mode-only" alt="A button with the colors of the theme and one with colors of its own" width="480">
-  <img class="dark-only rounded" src="../_static/images/ui/component-styling_colors_dark.jpg#gh-dark-mode-only" alt="A button with the colors of the theme and one with colors of its own" width="480">
+  <img class="light-only rounded" src="../_static/images/ui/component-styling_colors_light.jpg#gh-light-mode-only" alt="A button with the colors of the theme and one with colors of its own" width="560">
+  <img class="dark-only rounded" src="../_static/images/ui/component-styling_colors_dark.jpg#gh-dark-mode-only" alt="A button with the colors of the theme and one with colors of its own" width="560">
 </p>
 
 ### Reading colors
@@ -156,7 +156,7 @@ theme->setProperty ("corner-radius", 4.0);
 The default theme paints the corner radii, outline widths, slider tracks and
 thumbs and similar values from the curated geometry properties listed in the
 [widget style IDs](#widget-style-ids) (names and defaults in
-[Stylesheets](yui-styles.md#widget-geometry)). The descriptor default is the
+[Stylesheets](yui/styles.md#widget-geometry)). The descriptor default is the
 only place each value lives. Like colors they are keyed per widget type, so set
 them on the theme, on a container for the widgets inside it, or on one widget:
 
@@ -248,7 +248,7 @@ if (style.wasOk())
     slider.setStyle (style.getReference());
 ```
 
-See [Data-driven drawing](yui-drawing.md) for the elements, the `let`, `layer`,
+See [Data-driven drawing](yui/drawing.md) for the elements, the `let`, `layer`,
 `group` and `repeat` scopes, and error reporting.
 
 ---
@@ -406,8 +406,8 @@ derived, so a single source color still gives a complete palette. Palettes are
 dark by default, pass `ThemePalette::Mode::light` for a light one.
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-styling_palette-roles_light.jpg#gh-light-mode-only" alt="The colors of the roles of the default palette" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/component-styling_palette-roles_dark.jpg#gh-dark-mode-only" alt="The colors of the roles of the default palette" width="560">
+  <img class="light-only rounded" src="../_static/images/ui/component-styling_palette-roles_light.jpg#gh-light-mode-only" alt="The colors of the roles of the default palette" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-styling_palette-roles_dark.jpg#gh-dark-mode-only" alt="The colors of the roles of the default palette" width="640">
 </p>
 
 ```cpp
@@ -430,6 +430,10 @@ Switch the palette of the whole application at runtime, then repaint:
 ApplicationTheme::getGlobalTheme()->setPalette (result.getReference());
 topLevelComponent->repaint();
 ```
+
+Repainting the top-level component is enough: what the components below keep
+of their painting, such as a [texture cache](component-caching.md), is painted
+again with the new theme.
 
 A theme turns the palette roles into widget colors with a palette mapping
 (`theme->setPaletteMapping()`, which calls `theme->setPaletteColor()`); the
@@ -457,8 +461,8 @@ editor.setPalette (std::nullopt);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-styling_component-palettes_light.jpg#gh-light-mode-only" alt="The same widgets under the theme palette and under two component palettes" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/component-styling_component-palettes_dark.jpg#gh-dark-mode-only" alt="The same widgets under the theme palette and under two component palettes" width="560">
+  <img class="light-only rounded" src="../_static/images/ui/component-styling_component-palettes_light.jpg#gh-light-mode-only" alt="The same widgets under the theme palette and under two component palettes" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-styling_component-palettes_dark.jpg#gh-dark-mode-only" alt="The same widgets under the theme palette and under two component palettes" width="640">
 </p>
 
 This is how several plugin editors in one process, which share the global theme,
@@ -483,8 +487,8 @@ String checkmark = String::fromUTF8 (YUP_ICON_CIRCLE_CHECK); // ✅
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/component-styling_icons_light.jpg#gh-light-mode-only" alt="Some glyphs of the icon font" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/component-styling_icons_dark.jpg#gh-dark-mode-only" alt="Some glyphs of the icon font" width="560">
+  <img class="light-only rounded" src="../_static/images/ui/component-styling_icons_light.jpg#gh-light-mode-only" alt="Some glyphs of the icon font" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/component-styling_icons_dark.jpg#gh-dark-mode-only" alt="Some glyphs of the icon font" width="640">
 </p>
 
 To draw an icon, obtain the theme's icon font and draw the glyph as text:
@@ -549,9 +553,9 @@ ApplicationTheme::setGlobalTheme (std::move (theme));
 
 ## Related
 
-- [How YUI fits together](yui-architecture.md) - how properties, stylesheets,
+- [How YUI fits together](yui/architecture.md) - how properties, stylesheets,
   drawings and bindings relate
-- [Stylesheets](yui-styles.md) - CSS-like rules setting properties on any
+- [Stylesheets](yui/styles.md) - CSS-like rules setting properties on any
   component tree
 - [Component basics](component-basics.md) — `setColor`, `setProperty`, `setStyle` APIs
 - [Component effects (shaders)](component-effects.md)

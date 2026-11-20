@@ -118,7 +118,7 @@ yup_add_yui_resources (MyAppUi
 ```
 
 The tool is built for the host into the build tree the first time, which takes
-as long as building `yup_gui`. See the [CMake API](../build-system/cmake-api.md).
+as long as building `yup_gui`. See the [CMake API](../../build-system/cmake-api.md).
 
 ## The schema
 
@@ -187,7 +187,7 @@ theme, `dark` or `light`. The image is filled behind the interface with the
 background of the palette its root is drawn with, the one of the theme unless
 the document sets another. A document that sets its own palette looks the same
 in both modes, unless the palette has a dark and a light version or the
-document reads `theme.dark` (see [Palettes](yui-styles.md#palettes)).
+document reads `theme.dark` (see [Palettes](styles.md#palettes)).
 
 A container gives no size to a child that asks for none: a `Row` in a `Column`
 needs a `preferredHeight` or a `flexGrow`, or it is laid out with no height
@@ -241,7 +241,7 @@ without `--output`. `--name` is the name of the drawing (`Imported` by
 default), and `--color-properties` declares every color the SVG is painted with
 as a `color` property, so the component styled with the drawing can change
 them. What can't be painted exactly as the SVG is listed as warnings. This is
-`YuiSvgImporter`, described in [Data-driven drawing](yui-drawing.md).
+`YuiSvgImporter`, described in [Data-driven drawing](drawing.md).
 
 ## The tool for the web
 
@@ -268,7 +268,7 @@ into instead of starting a process:
 | `yuiPreviewShow (path, drawing, palette, type, models, light)` | Shows a file in the canvas, or a drawing, a palette or a component type of it, once the application called `yuiPreviewReady`. The outcome is given to `yuiPreviewShown`: the problems, and the size the interface asks for. |
 
 The module is built without threads (see `YUP_ENABLE_EMSCRIPTEN_THREADS` in the
-[CMake API](../build-system/cmake-api.md)), so it runs in pages that can't be
+[CMake API](../../build-system/cmake-api.md)), so it runs in pages that can't be
 cross-origin isolated, which the webview of an editor is.
 
 ## VS Code
@@ -297,8 +297,9 @@ the [models](#models) file of the workspace, `yui.preview.size` and
 Documents are checked and shown as they are in their editors, so what is typed
 counts before it is saved. The preview is live: the interface answers the mouse
 and the keyboard, plays its transitions, and keeps the state of its components
-while the document changes under it, as [hot reload](yui-hot-reload.md) does in
-an application. The problems of the document are listed under it.
+while the document changes under it, as [hot reload](hot-reload.md) does in
+an application, and while its theme is switched. The problems of the document
+are listed under it.
 
 The toolbar of the preview chooses what it shows and how:
 
@@ -311,7 +312,7 @@ The toolbar of the preview chooses what it shows and how:
 - **Theme**: the default theme in its light or dark mode, or the one matching
   the editor. It changes what the document takes from the theme: its palette
   where the document sets none, the version of a
-  [palette declared for both modes](yui-styles.md#palettes), and `theme.dark`;
+  [palette declared for both modes](styles.md#palettes), and `theme.dark`;
 - **Zoom**: from 50% to 400%.
 
 The size and the theme are the two `yui.preview` settings, which the toolbar
@@ -337,7 +338,7 @@ with Node, which loads the module and runs the commands the way an editor does.
 
 ## See also
 
-- [The `.yui` language](yui-language.md) - the syntax the tool checks.
-- [Complete UIs in `.yui`](yui-documents.md) - models, actions and diagnostics.
-- [Hot reloading `.yui` files](yui-hot-reload.md) - embedding files with
+- [The `.yui` language](language.md) - the syntax the tool checks.
+- [Complete UIs in `.yui`](documents.md) - models, actions and diagnostics.
+- [Hot reloading `.yui` files](hot-reload.md) - embedding files with
   `yup_add_yui_resources`.

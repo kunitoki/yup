@@ -100,8 +100,8 @@ spot.radius = 0.05f;            // sphere radius in world units
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/3d/lights-and-shadows_shadows_light.jpg#gh-light-mode-only" alt="A sun casting no shadows, hard shadows and, with a radius, soft shadows" width="560">
-  <img class="dark-only rounded" src="../_static/images/3d/lights-and-shadows_shadows_dark.jpg#gh-dark-mode-only" alt="A sun casting no shadows, hard shadows and, with a radius, soft shadows" width="560">
+  <img class="light-only rounded" src="../_static/images/3d/lights-and-shadows_shadows_light.jpg#gh-light-mode-only" alt="A sun casting no shadows, hard shadows and, with a radius, soft shadows" width="640">
+  <img class="dark-only rounded" src="../_static/images/3d/lights-and-shadows_shadows_dark.jpg#gh-dark-mode-only" alt="A sun casting no shadows, hard shadows and, with a radius, soft shadows" width="640">
 </p>
 
 **Soft shadows.** A light's `radius` (see [Area lights](#area-lights)) also sets

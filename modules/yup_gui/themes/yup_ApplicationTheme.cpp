@@ -46,6 +46,12 @@ ApplicationTheme::Ptr& ApplicationTheme::getGlobalThemeInstance()
     return globalTheme;
 }
 
+uint32 ApplicationTheme::makeGeneration() noexcept
+{
+    static std::atomic<uint32> lastGeneration { 0 };
+    return ++lastGeneration;
+}
+
 //==============================================================================
 
 std::optional<Color> ApplicationTheme::findComponentColor (const Component& component, const Identifier& colorId)
@@ -120,7 +126,7 @@ size_t ApplicationTheme::getNumCachedComponentPalettes() const noexcept
 void ApplicationTheme::setColor (const Identifier& colorId, const Color& color)
 {
     defaultColors.insert_or_assign (colorId, color);
-    ++paletteGeneration;
+    paletteGeneration = makeGeneration();
 }
 
 void ApplicationTheme::setColors (std::initializer_list<std::pair<const Identifier&, const Color&>> colors)
@@ -128,7 +134,7 @@ void ApplicationTheme::setColors (std::initializer_list<std::pair<const Identifi
     for (const auto& entry : colors)
         defaultColors.insert_or_assign (entry.first, entry.second);
 
-    ++paletteGeneration;
+    paletteGeneration = makeGeneration();
 }
 
 //==============================================================================
@@ -137,7 +143,7 @@ void ApplicationTheme::setPalette (const ThemePalette& newPalette)
 {
     palette = newPalette;
     paletteColors.clear();
-    ++paletteGeneration;
+    paletteGeneration = makeGeneration();
 
     if (paletteMapping)
         paletteMapping (palette, *this);
@@ -192,7 +198,7 @@ std::optional<var> ApplicationTheme::findProperty (const Component& component, c
 void ApplicationTheme::setProperty (const Identifier& id, const var& value)
 {
     defaultProperties.insert_or_assign (id, value);
-    ++paletteGeneration;
+    paletteGeneration = makeGeneration();
 }
 
 void ApplicationTheme::setProperties (std::initializer_list<std::pair<const Identifier&, var>> properties)
@@ -200,7 +206,7 @@ void ApplicationTheme::setProperties (std::initializer_list<std::pair<const Iden
     for (const auto& entry : properties)
         defaultProperties.insert_or_assign (entry.first, entry.second);
 
-    ++paletteGeneration;
+    paletteGeneration = makeGeneration();
 }
 
 //==============================================================================
@@ -208,7 +214,7 @@ void ApplicationTheme::setProperties (std::initializer_list<std::pair<const Iden
 void ApplicationTheme::setDefaultFont (Font font)
 {
     defaultFont = std::move (font);
-    ++paletteGeneration;
+    paletteGeneration = makeGeneration();
 }
 
 const Font& ApplicationTheme::getDefaultFont() const
@@ -219,7 +225,7 @@ const Font& ApplicationTheme::getDefaultFont() const
 void ApplicationTheme::setDefaultIconFont (Font font)
 {
     defaultIconFont = std::move (font);
-    ++paletteGeneration;
+    paletteGeneration = makeGeneration();
 }
 
 const Font& ApplicationTheme::getDefaultIconFont() const
@@ -230,7 +236,7 @@ const Font& ApplicationTheme::getDefaultIconFont() const
 void ApplicationTheme::setDefaultMonospaceFont (Font font)
 {
     defaultMonospaceFont = std::move (font);
-    ++paletteGeneration;
+    paletteGeneration = makeGeneration();
 }
 
 const Font& ApplicationTheme::getDefaultMonospaceFont() const

@@ -62,11 +62,13 @@ high-resolution millisecond timer.
 ```{seealso}
 For frame-level GPU/paint profiling, see
 [Component paint profiling](../ui/component-profiling.md). For real-time
-timers on a dedicated thread, see `HighResolutionTimer` in the
-[Multithreading](../multithreading/index.md) area.
+timers on a dedicated thread, see
+[`HighResolutionTimer`](multithreading/threads.md#precise-periodic-callbacks),
+and for periodic callbacks on the message thread see
+[`Timer`](multithreading/message-thread.md#timers).
 ```
 
 ## See also
 
 - [Maths](maths.md) - numeric helpers.
-- [Multithreading](../multithreading/index.md) - timers and scheduling.
+- [Multithreading](multithreading/index.md) - timers and scheduling.

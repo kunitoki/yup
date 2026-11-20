@@ -145,7 +145,7 @@ Embed asset bytes straight into the executable with
 (see the CMake API reference for the full argument list):
 
 ```cmake
-// In your CMakeLists.txt
+# In your CMakeLists.txt
 yup_add_embedded_binary_resources (
     "${target_name}_binary_data"
     OUT_DIR BinaryData

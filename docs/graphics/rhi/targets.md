@@ -152,8 +152,8 @@ if (canvas != nullptr)
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../../_static/images/graphics/rhi/targets_canvas_light.jpg#gh-light-mode-only" alt="A canvas drawn with the 2D API, then composited as a texture at its size, scaled down and stretched" width="560">
-  <img class="dark-only rounded" src="../../_static/images/graphics/rhi/targets_canvas_dark.jpg#gh-dark-mode-only" alt="A canvas drawn with the 2D API, then composited as a texture at its size, scaled down and stretched" width="560">
+  <img class="light-only rounded" src="../../_static/images/graphics/rhi/targets_canvas_light.jpg#gh-light-mode-only" alt="A canvas drawn with the 2D API, then composited as a texture at its size, scaled down and stretched" width="640">
+  <img class="dark-only rounded" src="../../_static/images/graphics/rhi/targets_canvas_dark.jpg#gh-dark-mode-only" alt="A canvas drawn with the 2D API, then composited as a texture at its size, scaled down and stretched" width="640">
 </p>
 
 `beginDraw (const GpuFrameDescriptor& frameDesc = {}, float scale = 1.0f)` opens (or reopens) a 2D

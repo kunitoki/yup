@@ -2461,6 +2461,8 @@ bool Component::isPopupContainer() const
 
 GpuTexture::Ptr Component::renderToTexture (GraphicsContext& ctx, float scale)
 {
+    invalidateCanvasesIfThemeChanged();
+
     const bool sizeChanged = ! hasPixelSize (presentedCanvas, getCanvasPixelSize (getSize(), scale));
 
     if (! subtreeDirty.exchange (false) && ! sizeChanged)
@@ -2710,6 +2712,22 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
     return renderOffscreen();
 }
 
+void Component::invalidateCanvasesIfThemeChanged()
+{
+    const auto theme = ApplicationTheme::getGlobalTheme();
+    const auto generation = theme != nullptr ? theme->getPaletteGeneration() : 0;
+
+    if (std::exchange (canvasThemeGeneration, generation) == generation)
+        return;
+
+    // What the component keeps of its painting was painted with the theme as it was
+    flags.cachedTextureStale = true;
+    subtreeDirty = true;
+
+    if (hasActiveEffect())
+        effectDirtyRegion.add (getLocalBounds());
+}
+
 std::optional<RectangleList<float>> Component::takeEffectDirtyRegion (bool renderContinuous)
 {
     RectangleList<float> region;
@@ -2894,6 +2912,8 @@ void Component::internalPaint (Graphics& g,
 
     if (hasActiveEffect())
     {
+        invalidateCanvasesIfThemeChanged();
+
         auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(),
                                               1.0f,
                                               renderContinuous,
@@ -2924,6 +2944,8 @@ void Component::internalPaint (Graphics& g,
 
     if (flags.cachedToTexture)
     {
+        invalidateCanvasesIfThemeChanged();
+
         const auto scale = g.getContextScale();
         const auto pixelSize = getCanvasPixelSize (getSize(), scale);
 

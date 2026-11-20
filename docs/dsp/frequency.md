@@ -5,7 +5,7 @@ spectrum-analyzer sample collection model, and the low-level Ooura FFT
 implementation the module can fall back on.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_spectrum.jpg" alt="A spectrum analyzer, in the graphics example" width="560">
+  <img class="rounded" src="../_static/images/yup_spectrum.jpg" alt="A spectrum analyzer, in the graphics example" width="640">
 </p>
 
 ## FFTProcessor

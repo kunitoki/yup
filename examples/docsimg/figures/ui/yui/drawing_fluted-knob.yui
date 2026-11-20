@@ -1,6 +1,6 @@
 // size: 560 228
-import "../../../graphics/data/yui/palette.yui";
-import "../../../graphics/data/yui/flutedknob.yui";
+import "../../../../graphics/data/yui/palette.yui";
+import "../../../../graphics/data/yui/flutedknob.yui";
 
 // The drawing reads the label from the parent of its slider
 component Dial : Column {

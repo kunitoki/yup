@@ -7,7 +7,7 @@ and textures while remaining portable across Metal, Direct3D, OpenGL / OpenGL ES
 WebGL2, WebGPU, and Vulkan.
 
 <p align="center">
-  <img class="rounded" src="../../_static/images/yup_rhi_fluid.jpg" alt="A fluid simulation running on RHI render passes, in the graphics example" width="560">
+  <img class="rounded" src="../../_static/images/yup_rhi_fluid.jpg" alt="A fluid simulation running on RHI render passes, in the graphics example" width="640">
 </p>
 
 Use the RHI when you need custom GPU work that the 2D `Graphics` API does not
@@ -49,33 +49,14 @@ graphics (e.g. audio DSP on the GPU), use `GpuDevice` directly — no
 - **`GpuCanvas`** - an offscreen surface that adds 2D `Graphics` drawing on top
   of a target.
 
-## Vulkan
+## Backends
 
-The Vulkan backend (`GpuPlatform::Vulkan`) runs the whole RHI: render pipelines
-and passes through Rive's ore layer, and native compute pipelines and passes.
-Things to know when targeting it:
-
-- **Shaders are SPIR-V.** `compileFromBundle` picks the bundle's `spirv`
-  variant, see [the `spirv` target](offline-shaders.md#the-spirv-target), and
-  `compileFromGlsl` compiles straight to SPIR-V. Compute pipelines need the shader
-  binding map to build their layout, which both of these provide. A hand-made
-  `GpuShaderSource` without a `bindingMap` is reflected when the pipeline is
-  compiled, which needs the shader transpiler (`YUP_ENABLE_SHADER_TRANSPILER`).
-- **One queue.** Rive, `GpuFrame`, offscreen readbacks and compute passes all
-  submit to a single queue, so work runs in the order it was submitted. Like on
-  Metal, a `GpuComputePass` submits its own command buffer when it finishes. A
-  pass begun with `GpuComputePass::begin (frame)` records into the frame's
-  command buffer instead and is submitted with it, as on Metal, so render passes
-  recorded after it in the same frame use its results.
-- **One frame counter.** Every submission takes a frame generation from the
-  device, and resources are released once the GPU is known to have finished with
-  them, so any number of `GpuFrame`s may be open at once.
-- **Storage buffers are host visible.** `GpuDevice::readBuffer` and
-  `updateBuffer` wait only for the last submission that used the buffer, then
-  map it directly.
-- **Device loss.** When the driver reports the device lost (a GPU reset or a
-  driver crash), `GpuDevice::isDeviceLost` turns true and the device stops
-  submitting work instead of hanging. Create a new device to render again.
+The RHI runs on Metal, Direct3D, Vulkan, OpenGL / OpenGL ES, WebGL2 and WebGPU.
+Compute pipelines and passes, storage buffers in fragment shaders, storage
+textures, frame timings and device-loss reporting are not available everywhere,
+and `GpuDevice` has a query for each. See
+[Graphics platforms](../platforms/index.md) for the capability table, the
+per-backend notes and how a window chooses one.
 
 ## In this area
 
@@ -94,6 +75,8 @@ Things to know when targeting it:
 - [Buffers & textures](buffers-and-textures.md) - `GpuBuffer` and `GpuTexture`.
 - [Offscreen targets & canvases](targets.md) - `GpuTarget`, `GpuCanvas`, and CPU
   readback.
+- [Compute shaders](compute-shaders.md) - `GpuComputePipeline`,
+  `GpuComputePass`, storage buffers and dispatching GPU work.
 - [Walkthrough: the spinning cube](spinning-cube.md) - an end-to-end custom 3D
   render with a post-process blur.
 
@@ -109,5 +92,6 @@ shader-bundle-format
 wgsl-shaders
 buffers-and-textures
 targets
+compute-shaders
 spinning-cube
 ```

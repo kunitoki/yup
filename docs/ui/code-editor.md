@@ -14,7 +14,7 @@ pieces:
   and a minimap.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_code_editor.jpg" alt="The code editor, in the graphics example" width="560">
+  <img class="rounded" src="../_static/images/yup_code_editor.jpg" alt="The code editor, in the graphics example" width="640">
 </p>
 
 ## CodeDocument

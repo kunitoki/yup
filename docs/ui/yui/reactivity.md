@@ -15,8 +15,8 @@ Row {
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/yui-reactivity_binding_light.jpg#gh-light-mode-only" alt="A slider next to a label following its value" width="360">
-  <img class="dark-only rounded" src="../_static/images/ui/yui-reactivity_binding_dark.jpg#gh-dark-mode-only" alt="A slider next to a label following its value" width="360">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/reactivity_binding_light.jpg#gh-light-mode-only" alt="A slider next to a label following its value" width="440">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/reactivity_binding_dark.jpg#gh-dark-mode-only" alt="A slider next to a label following its value" width="440">
 </p>
 
 The label follows the slider with no listener and no glue code: the expression
@@ -39,7 +39,7 @@ do:
 | `theme.dark`       | true when that palette is a dark one             |
 
 Only properties that are reflected (see [component
-styling](component-styling.md)) can be read, including the read-only state
+styling](../component-styling.md)) can be read, including the read-only state
 properties `hovered`, `pressed` and `focused`, which makes interaction states
 usable as plain values:
 
@@ -88,7 +88,7 @@ they read from, is deleted.
 
 A two-way binding, written `value <=> other.value;`, is a link rather than a
 binding: it keeps both properties equal whichever side is written, and is not
-broken by explicit values. See [Complete UIs in `.yui`](yui-documents.md).
+broken by explicit values. See [Complete UIs in `.yui`](documents.md).
 
 ## Using bindings from C++
 
@@ -108,11 +108,11 @@ tree.
 
 ## See also
 
-- [How YUI fits together](yui-architecture.md) - diagrams of the binding classes
+- [How YUI fits together](architecture.md) - diagrams of the binding classes
   and how a change propagates.
-- [Complete UIs in `.yui`](yui-documents.md) - tokens, composite components,
+- [Complete UIs in `.yui`](documents.md) - tokens, composite components,
   handlers, two-way bindings and models.
-- [Data-driven drawing](yui-drawing.md) - the expressions and the scope
+- [Data-driven drawing](drawing.md) - the expressions and the scope
   bindings share with drawings.
-- [Component styling](component-styling.md) - the reflected property model
+- [Component styling](../component-styling.md) - the reflected property model
   expressions read and write.

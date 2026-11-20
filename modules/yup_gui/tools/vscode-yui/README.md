@@ -75,7 +75,7 @@ palette) opens one panel beside the editor, where the tool runs the document
 whose editor is active. The interface is live: it answers the mouse and, once
 clicked, the keyboard, plays its transitions and animations, and follows the
 document as it is typed, keeping the state of its components the way
-[hot reload](../../../../docs/ui/yui-hot-reload.md) does in an application.
+[hot reload](../../../../docs/ui/yui/hot-reload.md) does in an application.
 
 The toolbar of the panel controls the preview:
 
@@ -83,7 +83,7 @@ The toolbar of the panel controls the preview:
 |---|---|
 | **Show** | The interface of the document, or any drawing, palette or component it declares. A drawing adds **as**, the component type painting it: `Component` by default, `Slider` for a drawing reading the value of a slider. |
 | **Size** | `Auto`, `Panel`, a listed size or `Custom`. The two fields next to it show the size of the interface in logical pixels, and typing in them fixes it. |
-| **Theme** | `Auto` follows the VSCode color theme, `Light` and `Dark` set it. It changes what the document takes from the theme: its palette where the document sets none, and the version of a palette declared for both modes. |
+| **Theme** | `Auto` follows the VSCode color theme, `Light` and `Dark` set it. It changes what the document takes from the theme: its palette where the document sets none, and the version of a palette declared for both modes. The interface keeps its state. |
 | **Zoom** | `Fit` shows the interface at its size, shrunk to fit the panel when it is larger. A percentage shows it at that scale and scrolls. |
 | **Refresh** | Shows the document again, for a change the panel can't see, such as one of the models file. |
 
@@ -149,11 +149,11 @@ The generated `tool/` directory is release output and is ignored by Git.
 ## Language reference
 
 The full language specification lives in the YUP repository at
-[`docs/ui/yui-language.md`](../../../../docs/ui/yui-language.md), with the
-[styles](../../../../docs/ui/yui-styles.md),
-[drawing](../../../../docs/ui/yui-drawing.md),
-[layout](../../../../docs/ui/yui-layout.md) and
-[documents](../../../../docs/ui/yui-documents.md) pages next to it. Real
+[`docs/ui/yui/language.md`](../../../../docs/ui/yui/language.md), with the
+[styles](../../../../docs/ui/yui/styles.md),
+[drawing](../../../../docs/ui/yui/drawing.md),
+[layout](../../../../docs/ui/yui/layout.md) and
+[documents](../../../../docs/ui/yui/documents.md) pages next to it. Real
 documents to test highlighting against live in
 [`examples/graphics/data/yui/`](../../../../examples/graphics/data/yui/).
 

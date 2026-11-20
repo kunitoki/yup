@@ -1,9 +1,9 @@
 # Hot reloading `.yui` files
 
-`YuiLoader` loads a [`YuiDocument`](yui-documents.md) from files on disk or
+`YuiLoader` loads a [`YuiDocument`](documents.md) from files on disk or
 from resources embedded in the binary, and reloads it when the files change.
 Since every load updates the interface in place (see
-[Reloading](yui-documents.md#reloading)), editing a `.yui` file while the
+[Reloading](documents.md#reloading)), editing a `.yui` file while the
 application runs shows the change immediately, keeping the components, their
 state and the application's pointers to them.
 
@@ -39,7 +39,7 @@ ui/
 `onLoad` is called after every load with its result, including the reloads
 started by watching. A failing load keeps the interface shown, so a typo while
 editing is reported and fixed without losing anything. A
-[`YuiView`](yui-documents.md#showing-a-document) owns a document and its
+[`YuiView`](documents.md#showing-a-document) owns a document and its
 loader, and shows the root after every load.
 
 ## Watching for changes
@@ -114,7 +114,7 @@ where `YUI_SOURCE_DIR` is a compile definition set to the folder of the files.
 
 Adding `VERIFY` to `yup_add_yui_resources` checks the embedded files while
 configuring, so an invalid one fails the build instead of shipping. See
-[Tools for `.yui` files](yui-tooling.md).
+[Tools for `.yui` files](tooling.md).
 
 The `YuiDrawing` graphics example loads its files this way in a `YuiView`,
 watches them, and shows them in editable tabs after every load; a tab edited
@@ -122,7 +122,7 @@ overrides its file.
 
 ## See also
 
-- [Complete UIs in `.yui`](yui-documents.md) - documents and what a reload
+- [Complete UIs in `.yui`](documents.md) - documents and what a reload
   keeps.
-- [CMake API](../build-system/cmake-api.md) - `yup_add_yui_resources`.
-- [Tools for `.yui` files](yui-tooling.md) - checking files before they ship.
+- [CMake API](../../build-system/cmake-api.md) - `yup_add_yui_resources`.
+- [Tools for `.yui` files](tooling.md) - checking files before they ship.

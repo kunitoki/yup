@@ -32,6 +32,7 @@ The cache is automatically invalidated (and re-rendered on the next frame) when:
 | `repaint()` | Any explicit or implicit repaint marks the cache stale; the next frame paints into the same texture. |
 | `setBounds()` | A new size makes the next frame allocate a texture of matching size. |
 | `setEnabled()` | Enabling or disabling the component, or one of its parents, paints it again in its new state. |
+| A theme change | Changing the palette, a color, a property or a font of the application theme, or making another theme the global one, paints the component again the next time it is shown. |
 | `setCachedToTexture(true)` | Enabling (or toggling) the flag clears any previous cache. |
 
 ```{tip}
@@ -79,7 +80,7 @@ style {
 }
 ```
 
-See [Caching a drawing](yui-drawing.md#caching-a-drawing) for when it pays.
+See [Caching a drawing](yui/drawing.md#caching-a-drawing) for when it pays.
 
 ### Interaction with component effects
 

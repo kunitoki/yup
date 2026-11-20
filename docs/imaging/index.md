@@ -5,7 +5,7 @@ storage, loading and saving through the pluggable format codecs, and drawing
 images (CPU- or GPU-backed) into a `Graphics` context.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_image_mesh.jpg" alt="An image warped on a mesh, in the graphics example" width="560">
+  <img class="rounded" src="../_static/images/yup_image_mesh.jpg" alt="An image warped on a mesh, in the graphics example" width="640">
 </p>
 
 **Module covered:** `yup_graphics` (the `imaging/` and `formats/` groups).

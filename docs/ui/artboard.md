@@ -12,7 +12,7 @@ classes cooperate:
   an artboard to drive its data bindings.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_rive_artboard.jpg" alt="A Rive artboard, in the graphics example" width="560">
+  <img class="rounded" src="../_static/images/yup_rive_artboard.jpg" alt="A Rive artboard, in the graphics example" width="640">
 </p>
 
 ## Loading a file

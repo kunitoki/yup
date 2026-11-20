@@ -16,8 +16,8 @@ addAndMakeVisible (keyboard);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/ui/midi-keyboard_keyboard_light.jpg#gh-light-mode-only" alt="A keyboard of three octaves holding a C major chord" width="560">
-  <img class="dark-only rounded" src="../_static/images/ui/midi-keyboard_keyboard_dark.jpg#gh-dark-mode-only" alt="A keyboard of three octaves holding a C major chord" width="560">
+  <img class="light-only rounded" src="../_static/images/ui/midi-keyboard_keyboard_light.jpg#gh-light-mode-only" alt="A keyboard of three octaves holding a C major chord" width="640">
+  <img class="dark-only rounded" src="../_static/images/ui/midi-keyboard_keyboard_dark.jpg#gh-dark-mode-only" alt="A keyboard of three octaves holding a C major chord" width="640">
 </p>
 
 ## Mouse and touch

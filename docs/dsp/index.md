@@ -54,14 +54,22 @@ available in the build.
 - [Envelopes](envelopes.md) - `BreakpointCurve`, a fixed capacity multistage
   curve with shaped segments, sustain and loop markers, and `CurveEnvelope`,
   which plays it per sample.
-- [YDSP language reference](yup-dsp-language.md) - the `yup_dsp_jit` module's
-  JIT-compiled DSP language: syntax, intrinsics, the graph algebra, the
-  realtime contract, and the public C++ API.
-- [YDSP optimization](ydsp-optimization.md) - fastMath and SLEEF accuracy
-  tiers, vectorized transcendentals, the optimizer passes and register-
-  allocation choices, and how to read the optimization report.
-- [YDSP bundle format](ydsp-bundle-format.md) - the RIFF `YDSP` container that
-  carries a patch's editable source closure, metadata, and diagnostics.
+
+## YDSP, the JIT-compiled DSP language
+
+[YDSP](ydsp/index.md) is a separate way to write the same kind of processing:
+a realtime audio DSP language the `yup_dsp_jit` module compiles to native code
+while the application runs.
+
+- [Language reference](ydsp/language.md) - syntax, processors, the graph
+  algebra, the type system, intrinsics, the realtime contract and the public
+  C++ API.
+- [Optimization](ydsp/optimization.md) - fast-math and SLEEF accuracy tiers,
+  vectorized transcendentals, the optimizer passes and the execution report.
+- [Compiler and player](ydsp/command-line.md) - the `yup_dsp_compiler` host
+  tool, bundles, device playback, hot reload and editor diagnostics.
+- [Bundle format](ydsp/bundle-format.md) - the RIFF `YDSP` container that
+  carries a patch's editable source closure, metadata and diagnostics.
 
 ## Key building blocks
 
@@ -96,9 +104,10 @@ callback, then pass values in via atomic or parameter-change mechanisms.
 
 ## Related areas
 
-- [Audio basics](../audio/index.md) - `AudioBuffer`, `ProcessSpec`, and the
-  audio process load measurer that pair with the DSP processors.
-- [Audio processors](../audio/index.md) - the `AudioProcessor` model that
+- [Audio buffers](../audio/buffers.md) and [audio utilities](../audio/utilities.md) -
+  `AudioBuffer` and the audio process load measurer that pair with the DSP
+  processors.
+- [Audio processors](../audio/processors.md) - the `AudioProcessor` model that
   hosts these DSP blocks inside plugins and the audio graph.
 - [Core](../core/index.md) - the math, containers, and `Random` used under the
   hood.
@@ -118,6 +127,5 @@ resampling
 time-stretching
 oscillators
 envelopes
-yup-dsp-language
-ydsp-bundle-format
+ydsp/index
 ```

@@ -7,7 +7,7 @@ a texture, puts the texture in a material, and maps input from its own points
 onto the mesh.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_3d_components.jpg" alt="Components shown on the screen of a 3D model, in the graphics example" width="560">
+  <img class="rounded" src="../_static/images/yup_3d_components.jpg" alt="Components shown on the screen of a 3D model, in the graphics example" width="640">
 </p>
 
 This page covers the scene side. The input hooks and `MeshSurfaceMapper` are

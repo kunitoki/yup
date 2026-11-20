@@ -58,8 +58,8 @@ auto smaller  = r.withSizeKeepingCenter (100, 40); // keep center, resize
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/primitives_rectangle_light.jpg#gh-light-mode-only" alt="A rectangle, the same reduced by 8 and resized around its center" width="480">
-  <img class="dark-only rounded" src="../_static/images/graphics/primitives_rectangle_dark.jpg#gh-dark-mode-only" alt="A rectangle, the same reduced by 8 and resized around its center" width="480">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_rectangle_light.jpg#gh-light-mode-only" alt="A rectangle, the same reduced by 8 and resized around its center" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_rectangle_dark.jpg#gh-dark-mode-only" alt="A rectangle, the same reduced by 8 and resized around its center" width="560">
 </p>
 
 ### Slicing layout
@@ -76,8 +76,8 @@ auto sidebar = area.removeFromLeft (120.0f);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/primitives_slicing_light.jpg#gh-light-mode-only" alt="An area sliced into a header, a footer, a sidebar and the remaining area" width="400">
-  <img class="dark-only rounded" src="../_static/images/graphics/primitives_slicing_dark.jpg#gh-dark-mode-only" alt="An area sliced into a header, a footer, a sidebar and the remaining area" width="400">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_slicing_light.jpg#gh-light-mode-only" alt="An area sliced into a header, a footer, a sidebar and the remaining area" width="480">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_slicing_dark.jpg#gh-dark-mode-only" alt="An area sliced into a header, a footer, a sidebar and the remaining area" width="480">
 </p>
 
 Non-mutating variants (`withTrimmedTop`, `reducedLeft`, …) return a new
@@ -98,8 +98,8 @@ g.fillPath (icon); // drawn in the 24 x 24 artwork coordinates
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/primitives_fitting_light.jpg#gh-light-mode-only" alt="A star fitted into an area, centered, on the left and stretched" width="480">
-  <img class="dark-only rounded" src="../_static/images/graphics/primitives_fitting_dark.jpg#gh-dark-mode-only" alt="A star fitted into an area, centered, on the left and stretched" width="480">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_fitting_light.jpg#gh-light-mode-only" alt="A star fitted into an area, centered, on the left and stretched" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_fitting_dark.jpg#gh-dark-mode-only" alt="A star fitted into an area, centered, on the left and stretched" width="560">
 </p>
 
 ## EdgeSpacing
@@ -120,8 +120,8 @@ auto grown = content.enlarged (padding);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/primitives_edge-spacing_light.jpg#gh-light-mode-only" alt="The content area left inside a padding" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/primitives_edge-spacing_dark.jpg#gh-dark-mode-only" alt="The content area left inside a padding" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_edge-spacing_light.jpg#gh-light-mode-only" alt="The content area left inside a padding" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_edge-spacing_dark.jpg#gh-dark-mode-only" alt="The content area left inside a padding" width="400">
 </p>
 
 Construct it uniformly (`EdgeSpacing<float> (6.0f)`), per axis
@@ -168,8 +168,8 @@ g.fillRect (bounds);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/drawing_gradients_light.jpg#gh-light-mode-only" alt="Linear, radial and angular gradients" width="480">
-  <img class="dark-only rounded" src="../_static/images/graphics/drawing_gradients_dark.jpg#gh-dark-mode-only" alt="Linear, radial and angular gradients" width="480">
+  <img class="light-only rounded" src="../_static/images/graphics/drawing_gradients_light.jpg#gh-light-mode-only" alt="Linear, radial and angular gradients" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/drawing_gradients_dark.jpg#gh-dark-mode-only" alt="Linear, radial and angular gradients" width="560">
 </p>
 
 Gradients support a `Spread` mode - `Pad` (clamp to endpoints), `Repeat`
@@ -182,8 +182,8 @@ g.setFillColorGradient (gradient.withSpread (ColorGradient::Spread::Reflect));
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/primitives_gradient-spread_light.jpg#gh-light-mode-only" alt="A gradient padded, repeated and reflected beyond its end points" width="480">
-  <img class="dark-only rounded" src="../_static/images/graphics/primitives_gradient-spread_dark.jpg#gh-dark-mode-only" alt="A gradient padded, repeated and reflected beyond its end points" width="480">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_gradient-spread_light.jpg#gh-light-mode-only" alt="A gradient padded, repeated and reflected beyond its end points" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_gradient-spread_dark.jpg#gh-dark-mode-only" alt="A gradient padded, repeated and reflected beyond its end points" width="560">
 </p>
 
 An `Angular` (sweep) gradient turns clockwise around the first stop position,
@@ -225,8 +225,8 @@ g.fillPath (p);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/primitives_path_light.jpg#gh-light-mode-only" alt="The path built from a line, a quadratic and a cubic curve" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/primitives_path_dark.jpg#gh-dark-mode-only" alt="The path built from a line, a quadratic and a cubic curve" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_path_light.jpg#gh-light-mode-only" alt="The path built from a line, a quadratic and a cubic curve" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_path_dark.jpg#gh-dark-mode-only" alt="The path built from a line, a quadratic and a cubic curve" width="400">
 </p>
 
 Shape helpers add whole primitives to a path:
@@ -253,8 +253,8 @@ g.fillPath (outline);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/primitives_stroke-polygon_light.jpg#gh-light-mode-only" alt="The outline of a stroked path filled with a feather" width="320">
-  <img class="dark-only rounded" src="../_static/images/graphics/primitives_stroke-polygon_dark.jpg#gh-dark-mode-only" alt="The outline of a stroked path filled with a feather" width="320">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_stroke-polygon_light.jpg#gh-light-mode-only" alt="The outline of a stroked path filled with a feather" width="400">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_stroke-polygon_dark.jpg#gh-dark-mode-only" alt="The outline of a stroked path filled with a feather" width="400">
 </p>
 
 `createFillPolygon` returns the area a path fills, under its own fill rule, as
@@ -279,8 +279,8 @@ g.strokePath (p);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/primitives_stroke-types_light.jpg#gh-light-mode-only" alt="The joins and caps of a stroke" width="480">
-  <img class="dark-only rounded" src="../_static/images/graphics/primitives_stroke-types_dark.jpg#gh-dark-mode-only" alt="The joins and caps of a stroke" width="480">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_stroke-types_light.jpg#gh-light-mode-only" alt="The joins and caps of a stroke" width="560">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_stroke-types_dark.jpg#gh-dark-mode-only" alt="The joins and caps of a stroke" width="560">
 </p>
 
 ## AffineTransform
@@ -299,8 +299,8 @@ g.setTransform (t);   // applies to subsequent drawing
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/primitives_transform_light.jpg#gh-light-mode-only" alt="A square translated, rotated, scaled and sheared" width="560">
-  <img class="dark-only rounded" src="../_static/images/graphics/primitives_transform_dark.jpg#gh-dark-mode-only" alt="A square translated, rotated, scaled and sheared" width="560">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_transform_light.jpg#gh-light-mode-only" alt="A square translated, rotated, scaled and sheared" width="640">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_transform_dark.jpg#gh-dark-mode-only" alt="A square translated, rotated, scaled and sheared" width="640">
 </p>
 
 ## Vector3
@@ -380,8 +380,8 @@ g.setBlendMode (BlendMode::Multiply);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/graphics/primitives_blend-modes_light.jpg#gh-light-mode-only" alt="A circle drawn over a gradient with each blend mode" width="560">
-  <img class="dark-only rounded" src="../_static/images/graphics/primitives_blend-modes_dark.jpg#gh-dark-mode-only" alt="A circle drawn over a gradient with each blend mode" width="560">
+  <img class="light-only rounded" src="../_static/images/graphics/primitives_blend-modes_light.jpg#gh-light-mode-only" alt="A circle drawn over a gradient with each blend mode" width="640">
+  <img class="dark-only rounded" src="../_static/images/graphics/primitives_blend-modes_dark.jpg#gh-dark-mode-only" alt="A circle drawn over a gradient with each blend mode" width="640">
 </p>
 
 ## See also

@@ -29,8 +29,8 @@ scene->getRoot().attach<yup::AmbientLightNode> (yup::Colors::black); // the envi
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/3d/indirect-lighting_environment_light.jpg#gh-light-mode-only" alt="The same scene under the flat ambient light and lit by an environment" width="560">
-  <img class="dark-only rounded" src="../_static/images/3d/indirect-lighting_environment_dark.jpg#gh-dark-mode-only" alt="The same scene under the flat ambient light and lit by an environment" width="560">
+  <img class="light-only rounded" src="../_static/images/3d/indirect-lighting_environment_light.jpg#gh-light-mode-only" alt="The same scene under the flat ambient light and lit by an environment" width="640">
+  <img class="dark-only rounded" src="../_static/images/3d/indirect-lighting_environment_dark.jpg#gh-dark-mode-only" alt="The same scene under the flat ambient light and lit by an environment" width="640">
 </p>
 
 Small bright lights such as a sun keep their energy at every roughness, so they

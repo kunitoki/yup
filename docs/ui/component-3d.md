@@ -6,7 +6,7 @@ drags, hover, mouse wheel, keyboard focus, text editing, popups and drag and dro
 keep working through the normal dispatch.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_3d_components.jpg" alt="Interactive components presented on 3D geometry, in the graphics example" width="560">
+  <img class="rounded" src="../_static/images/yup_3d_components.jpg" alt="Interactive components presented on 3D geometry, in the graphics example" width="640">
 </p>
 
 The idea is that the presented component stays **in the hierarchy**, as a child of

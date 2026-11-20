@@ -11,7 +11,7 @@ The filter layer is split into two halves:
   direct FIR, analog-model, and comb filters.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_dsp_filter.jpg" alt="The response of a filter, in the filter demo of the graphics example" width="560">
+  <img class="rounded" src="../_static/images/yup_dsp_filter.jpg" alt="The response of a filter, in the filter demo of the graphics example" width="640">
 </p>
 
 The general pattern is: call `prepare (sampleRate, maximumBlockSize)` once
@@ -126,8 +126,8 @@ eq.setQ (1.4);          // parameter-only setters: setFrequency, setGain, setMod
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/dsp/filters_rbj-modes_light.jpg#gh-light-mode-only" alt="The magnitude responses of the RBJ lowpass, highpass, bandpass, peak and bandstop filters at 1 kHz" width="560">
-  <img class="dark-only rounded" src="../_static/images/dsp/filters_rbj-modes_dark.jpg#gh-dark-mode-only" alt="The magnitude responses of the RBJ lowpass, highpass, bandpass, peak and bandstop filters at 1 kHz" width="560">
+  <img class="light-only rounded" src="../_static/images/dsp/filters_rbj-modes_light.jpg#gh-light-mode-only" alt="The magnitude responses of the RBJ lowpass, highpass, bandpass, peak and bandstop filters at 1 kHz" width="640">
+  <img class="dark-only rounded" src="../_static/images/dsp/filters_rbj-modes_dark.jpg#gh-dark-mode-only" alt="The magnitude responses of the RBJ lowpass, highpass, bandpass, peak and bandstop filters at 1 kHz" width="640">
 </p>
 
 ### Zoelzer biquads — ZoelzerFilter
@@ -194,8 +194,8 @@ bw.processBlock (in, out, numSamples);
 ```
 
 <p align="center">
-  <img class="light-only rounded" src="../_static/images/dsp/filters_butterworth-orders_light.jpg#gh-light-mode-only" alt="The magnitude responses of Butterworth lowpass filters of order 2, 4 and 8 at 1 kHz" width="560">
-  <img class="dark-only rounded" src="../_static/images/dsp/filters_butterworth-orders_dark.jpg#gh-dark-mode-only" alt="The magnitude responses of Butterworth lowpass filters of order 2, 4 and 8 at 1 kHz" width="560">
+  <img class="light-only rounded" src="../_static/images/dsp/filters_butterworth-orders_light.jpg#gh-light-mode-only" alt="The magnitude responses of Butterworth lowpass filters of order 2, 4 and 8 at 1 kHz" width="640">
+  <img class="dark-only rounded" src="../_static/images/dsp/filters_butterworth-orders_dark.jpg#gh-dark-mode-only" alt="The magnitude responses of Butterworth lowpass filters of order 2, 4 and 8 at 1 kHz" width="640">
 </p>
 
 ### LinkwitzRileyFilter
@@ -208,7 +208,7 @@ phase-aligned low-pass and high-pass outputs. `Order` is a template parameter
 (2 stages), `LinkwitzRiley8Filter`.
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_dsp_crossover.jpg" alt="The bands of a Linkwitz-Riley crossover, in the graphics example" width="560">
+  <img class="rounded" src="../_static/images/yup_dsp_crossover.jpg" alt="The bands of a Linkwitz-Riley crossover, in the graphics example" width="640">
 </p>
 
 ```cpp
