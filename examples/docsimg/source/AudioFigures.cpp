@@ -224,7 +224,8 @@ void addAudioFigures (Figures& f)
         plane->addHorizontalGridLine (0.0, role (Role::textMuted), 2.0f, true);
         plane->setXAxisLabels ({ 100.0, 1000.0, 10000.0 }, role (Role::textMuted));
         plane->setYAxisLabels ({ -48.0, -24.0, -12.0, 0.0, 12.0 }, role (Role::textMuted));
-        plane->setLegendBackgroundColor (Color (0xe01e2228)); // the legend text is always white
+        plane->setLegendBackgroundColor (role (Role::surfaceRaised).withAlpha (0.9f));
+        plane->setLegendTextColor (role (Role::text));
         plane->setLegendPosition ({ 0.3f, 0.6f });
         plane->setLegendVisible (true);
 

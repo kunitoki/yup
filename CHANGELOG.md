@@ -106,6 +106,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `AudioFormatWriter::ThreadedWriter` writes the data still queued when destroyed, even if its thread has stopped, and stops accepting data after a write failure.
 - `AudioFormatReader::read` into an `AudioBuffer` reads every channel when both sides have more than two.
 - `AppleCoreAudioFormat` picks the AAC container from the file extension and only claims AAC container extensions for writing.
+- `CartesianPlane` gains `setLegendTextColor`, so the legend is readable on light backgrounds.
+- `KMeterComponent` skips scale labels that would overlap, which crowded the compressed bottom of the segmented scale.
 
 ### DSP
 

@@ -298,7 +298,8 @@ plot.updateSignalData (lowIndex, response);
 </p>
 
 `setMargins()` makes room for the labels, `setSignalVisible()` hides a signal,
-and `valueToX()`, `valueToY()`, `xToValue()`, `yToValue()` and `getPlotBounds()`
+`setLegendPosition()`, `setLegendBackgroundColor()` and `setLegendTextColor()`
+place and color the legend, and `valueToX()`, `valueToY()`, `xToValue()`, `yToValue()` and `getPlotBounds()`
 convert between values and pixels, for example to drag a crossover point.
 
 ## MIDI keyboard and wheels

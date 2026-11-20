@@ -2493,12 +2493,12 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
         if (height < 200)
             tickInterval = 10; // Fewer ticks for small meters
 
-        // Draw tick marks and labels
-        // Start from a nice round number
+        // Draw tick marks and collect the fully visible labels from the top
         const int startDb = static_cast<int> (std::ceil (rangeMin / tickInterval)) * tickInterval;
         const int endDb = static_cast<int> (std::floor (rangeMax / tickInterval)) * tickInterval;
+        std::vector<std::pair<int, Rectangle<float>>> labels;
 
-        for (int db = startDb; db <= endDb; db += tickInterval)
+        for (int db = endDb; db >= startDb; db -= tickInterval)
         {
             const float y = dbToY (static_cast<float> (db));
 
@@ -2509,31 +2509,31 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
             // Draw tick mark
             g.fillRect (bounds.getX(), y - 0.5f, 4.0f, 1.0f);
 
-            // Draw label for important values
-            bool shouldLabel = false;
+            // Label every 10dB, including the 0dB reference
+            if (db % 10 != 0)
+                continue;
 
-            // Always label 0dB (the reference)
-            if (db == 0)
-                shouldLabel = true;
-            // Label every 10dB
-            else if (db % 10 == 0)
-                shouldLabel = true;
-            // Label -20dB (important for K-20)
-            else if (db == -20)
-                shouldLabel = true;
+            const Rectangle<float> labelRect (bounds.getX() + 5.0f, y - 6.0f, 22.0f, 12.0f);
+            if (labelRect.getY() >= bounds.getY() && labelRect.getBottom() <= bounds.getBottom())
+                labels.emplace_back (db, labelRect);
+        }
 
-            if (shouldLabel)
-            {
-                const String label = (db > 0 ? "+" : "") + String (db);
-                const float labelHeight = 12.0f;
-                const Rectangle<float> labelRect (bounds.getX() + 5.0f, y - 6.0f, 22.0f, labelHeight);
+        // Always keep the lowest label, and skip the others that would overlap a kept one
+        float previousLabelBottom = bounds.getY();
 
-                // Only draw label if it's fully visible (not clipped at top or bottom)
-                if (labelRect.getY() >= bounds.getY() && labelRect.getBottom() <= bounds.getBottom())
-                {
-                    g.fillFittedText (label, font, labelRect, Justification::left);
-                }
-            }
+        for (std::size_t index = 0; index < labels.size(); ++index)
+        {
+            const auto& [db, labelRect] = labels[index];
+            const bool isLowest = index + 1 == labels.size();
+
+            if (labelRect.getY() < previousLabelBottom)
+                continue;
+
+            if (! isLowest && labelRect.getBottom() > labels.back().second.getY())
+                continue;
+
+            g.fillFittedText ((db > 0 ? "+" : "") + String (db), font, labelRect, Justification::left);
+            previousLabelBottom = labelRect.getBottom();
         }
     }
 
