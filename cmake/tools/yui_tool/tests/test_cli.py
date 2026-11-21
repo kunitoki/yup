@@ -27,6 +27,32 @@ HALVES = ("drawing Fill {\n    property tone: color = #ff0000;\n    rect { bound
           "Component { width: 40; height: 20;\n"
           "    Component { id: left; x: 0; y: 0; width: 20; height: 20; }\n"
           "    Component { id: right; x: 20; y: 0; width: 20; height: 20; }\n}\n")
+INTERACTIVE = ('Column { width: 200; height: 120;\n'
+               '    ToggleButton { id: power; preferredHeight: 30; checked <=> model.power; }\n'
+               '    Slider { id: gain; preferredHeight: 30; value <=> model.gain; }\n'
+               '    TextButton { id: save; preferredHeight: 30; text: "Save"; onClick: action ("save", model.gain, "now"); }\n'
+               '}\n')
+REPEATED = ('Column { width: 200; height: 120;\n'
+            '    ToggleButton { id: wide; preferredHeight: 30; checked <=> seq.wide; }\n'
+            '    Row { id: steps; preferredHeight: 30;\n'
+            '        repeat i in 0 .. (seq.wide ? 4 : 2) { ToggleButton { checked <=> seq.steps[i]; onClick: action ("step", i); } }\n'
+            '    }\n'
+            '}\n')
+COVERED = ('Component { width: 100; height: 100;\n'
+           '    TextButton { id: under; x: 0; y: 0; width: 100; height: 100; onClick: action ("never"); }\n'
+           '    Component { id: cover; x: 0; y: 0; width: 100; height: 100; }\n'
+           '    TextButton { id: off; x: 0; y: 0; width: 100; height: 100; enabled: false; onClick: action ("never"); }\n'
+           '}\n')
+DRAWN = ('drawing Meter {\n'
+         '    rect { id: track; bounds: rect (2, 4, 20, 10); fill: #333333; }\n'
+         '    group { transform: transform.translation (10, 20);\n'
+         '        circle { id: dot; center: point (5, 5); radius: 3; fill: #00ff00; }\n    }\n'
+         '    repeat i in 0 .. 3 { rect { id: tick; bounds: rect (i * 10, 40, 4, 4); fill: #ffffff; } }\n'
+         '    text { id: caption; bounds: rect (0, 0, 60, 20); text: "Hi"; fill: #ffffff; justification: topLeft; }\n'
+         '    rect { bounds: bounds; fill: none; stroke: #ffffff; }\n'
+         '}\n\n'
+         'style {\n    #meter { drawing: Meter; }\n}\n\n'
+         'Component { width: 100; height: 80;\n    Component { id: meter; x: 20; y: 10; width: 60; height: 50; }\n}\n')
 SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#ff0000"/></svg>\n'
 
 
@@ -493,6 +519,34 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertTrue(self.call("yui_inspect", file="ui.yui", values={"model": {"level": 0.9}})[0])
         self.assertTrue(self.call("yui_check", file="ui.yui", models="missing.json")[0])
 
+    def test_mcp_lists_the_models_a_file_lacks(self):
+        self.write("ui.yui", 'component Knob : Slider {\n    property label: string = "x";\n    value <=> params.inner;\n}\n\n'
+                             'Column {\n'
+                             '    Slider { id: gain; value <=> params.cutoff; enabled: params.power && other.flag; }\n'
+                             '    Label { text: "Level " + seq.name; opacity: seq.level * 0.5; }\n'
+                             '    ToggleButton { checked <=> seq.on; onClick: action ("go", params.cutoff); }\n'
+                             '    Knob { label: params.title; }\n'
+                             '    Label { text: gain.valu; visible: seq.steps[2]; }\n'
+                             '}\n')
+
+        # With no models at all, every binding is told with a sample value of the type it feeds
+        found = json.loads(self.call("yui_check", file="ui.yui")[1])
+        self.assertEqual(found["missingModels"], {"params": {"cutoff": 0, "power": False, "inner": 0, "title": ""},
+                                                  "other": {"flag": False},
+                                                  "seq": {"name": "", "level": 0, "on": False, "steps": [False]}})
+
+        # What is left once they are added is not theirs to fix: here a property a component does not have
+        self.assertEqual(found["errorsWithMissingModels"], 1)
+
+        # What the models file declares is left out, and its values are kept
+        self.write("ui.models.json", json.dumps({"params": {"cutoff": 0.5, "power": True}, "seq": {"name": "A", "level": 1, "on": True, "steps": [True]}}))
+        found = json.loads(self.call("yui_check", file="ui.yui")[1])
+        self.assertEqual(found["missingModels"], {"params": {"inner": 0, "title": ""}, "other": {"flag": False}})
+
+        # A file lacking nothing says nothing of it
+        self.write("plain.yui", VALID)
+        self.assertNotIn("missingModels", json.loads(self.call("yui_check", file="plain.yui")[1]))
+
     def test_mcp_inspects_the_layout(self):
         self.write("ui.yui", NO_HEIGHT)
         failed, text, image = self.call("yui_inspect", file="ui.yui", size="200x100")
@@ -502,6 +556,33 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(layout["root"]["children"][0]["id"], "bar")
         self.assertEqual([warning["path"] for warning in layout["warnings"]], ["0"])
         self.assertEqual(layout["problems"], [])
+
+    def test_mcp_inspects_the_elements_of_drawings(self):
+        self.write("ui.yui", DRAWN)
+
+        meter = json.loads(self.call("yui_inspect", file="ui.yui")[1])["root"]["children"][0]
+        self.assertNotIn("drawing", meter)
+
+        # The elements with an id, where they land in the interface
+        meter = json.loads(self.call("yui_inspect", file="ui.yui", drawings=True)[1])["root"]["children"][0]
+        elements = {element["id"]: element for element in meter["drawing"]}
+        self.assertEqual(sorted(elements), ["caption", "dot", "tick", "track"])
+        self.assertEqual((elements["track"]["type"], elements["track"]["bounds"], elements["track"]["line"]), ("rect", [22, 14, 20, 10], 2))
+        self.assertEqual((elements["dot"]["bounds"], elements["dot"]["line"]), ([32, 32, 6, 6], 4))
+        self.assertNotIn("rows", elements["dot"])
+
+        # A component is described alone when asked, at the path it has in the interface
+        alone = json.loads(self.call("yui_inspect", file="ui.yui", element="meter", drawings=True)[1])
+        self.assertEqual((alone["root"]["id"], alone["root"]["path"], alone["root"]["bounds"]), ("meter", "0", [20, 10, 60, 50]))
+        self.assertEqual(len(alone["root"]["drawing"]), 4)
+        self.assertTrue(self.call("yui_inspect", file="ui.yui", element="nobody")[0])
+
+        # What is repeated covers all its copies, and a text tells where its glyphs are
+        self.assertEqual((elements["tick"]["bounds"], elements["tick"]["rows"]), ([20, 50, 24, 4], 3))
+        self.assertEqual(elements["caption"]["bounds"], [20, 10, 60, 20])
+        self.assertEqual(elements["caption"]["text"][:2], [20, 10])
+        self.assertTrue(0 < elements["caption"]["text"][2] < 60)
+        self.assertNotIn("text", elements["track"])
 
     def test_mcp_tells_why_a_tool_cant_answer(self):
         self.write("broken.yui", UNKNOWN_TYPE)
@@ -526,11 +607,49 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertIn("Slider", [entry["name"] for entry in described["types"]])
         self.assertIn("accent", described["paletteRoles"])
 
+        # A type is described by what it declares itself, with the bases declaring the rest
         slider = json.loads(self.call("yui_schema", type="Slider")[1])
         properties = {entry["name"]: entry for entry in slider["properties"]}
+        self.assertIn("value", properties)
+        self.assertNotIn("visible", properties)
+        self.assertEqual(slider["bases"], ["Component"])
+
+        slider = json.loads(self.call("yui_schema", type="Slider", inherited=True)[1])
+        properties = {entry["name"]: entry for entry in slider["properties"]}
         self.assertNotIn("from", properties["value"])
-        self.assertTrue(any(entry.get("from") == "Component" for entry in slider["properties"]))
+        self.assertEqual(properties["visible"]["from"], "Component")
         self.assertTrue(self.call("yui_schema", type="Slidr")[0])
+
+    def test_mcp_describes_drawings_styles_and_expressions(self):
+        self.assertEqual(json.loads(self.call("yui_schema")[1])["topics"], ["components", "drawing", "styles", "expressions"])
+        self.assertIn("types", json.loads(self.call("yui_schema", topic="components")[1]))
+
+        drawing = json.loads(self.call("yui_schema", topic="drawing")[1])
+        elements = {(entry["type"], entry.get("geometry", [""])[0]): entry for entry in drawing["elements"]}
+        self.assertEqual(elements[("rect", "bounds")]["role"], "shape")
+        self.assertIn("cornerRadius", elements[("rect", "bounds")]["properties"])
+        self.assertIn(("text", "anchor"), elements)
+        self.assertIn("rect", elements[("group", "")]["holds"])
+        self.assertNotIn("holds", elements[("rect", "bounds")])
+        self.assertIn("deviation", elements[("blur", "")]["properties"])
+        self.assertIn("blur", elements[("filter", "")]["holds"])
+        self.assertIn("fill", drawing["shapePaint"])
+
+        styles = json.loads(self.call("yui_schema", topic="styles")[1])
+        self.assertIn("transition", styles["declarations"])
+        self.assertIn("hover", styles["pseudoClasses"])
+        self.assertIn("accent", styles["paletteRoles"])
+
+        expressions = json.loads(self.call("yui_schema", topic="expressions")[1])
+        self.assertTrue(any(entry.startswith("clamp (") for entry in expressions["functions"]))
+        self.assertTrue(any(entry.startswith("withAlpha (") for entry in expressions["members"]["color"]))
+        self.assertFalse(any(entry.startswith(("operator", "@", "_", ".")) for entry in expressions["functions"]))
+        self.assertTrue(expressions["enumerations"])
+
+        # Each topic names the page explaining what it lists
+        self.assertTrue(all(topic["docs"].endswith(".md") for topic in (drawing, styles, expressions)))
+        self.assertTrue(self.call("yui_schema", topic="colors")[0])
+        self.assertTrue(self.call("yui_schema", topic="drawing", type="Slider")[0])
 
     def test_mcp_renders_an_image_in_the_states_asked(self):
         self.write("ui.yui", HOVER)
@@ -549,6 +668,86 @@ class YuiToolCliTests(unittest.TestCase):
         scaled = self.call("yui_render", file="ui.yui", size="8x8", scale=2)[2]
         self.assertEqual(tuple(int.from_bytes(scaled[offset:offset + 4], "big") for offset in (16, 20)), (16, 16))
         self.assertTrue(self.call("yui_render", file="ui.yui", scale=9)[0])
+
+    def test_mcp_plays_pointer_events_and_tells_what_they_did(self):
+        self.write("ui.yui", INTERACTIVE)
+        self.write("ui.models.json", json.dumps({"model": {"power": False, "gain": 0.25}}))
+
+        def play(*events):
+            failed, text, _ = self.call("yui_inspect", file="ui.yui", events=list(events))
+            self.assertFalse(failed, text)
+            return json.loads(text)
+
+        # A click goes where a pointer would, and what it changed in the models is told with the value before
+        told = play({"id": "power", "type": "click"})
+        self.assertEqual(told["changed"], {"model": {"power": [False, True]}})
+        self.assertEqual((told["events"][0]["received"]["id"], told["events"][0]["received"]["type"]), ("power", "ToggleButton"))
+        self.assertNotIn("warning", told["events"][0])
+        self.assertEqual(told["actions"], [])
+
+        told = play({"id": "gain", "type": "drag", "by": [60, 0]})
+        self.assertGreater(told["changed"]["model"]["gain"][1], 0.25)
+        self.assertEqual(told["changed"]["model"]["gain"][0], 0.25)
+
+        told = play({"id": "gain", "type": "drag", "at": [10, 15], "to": [190, 15]})
+        self.assertGreater(told["changed"]["model"]["gain"][1], 0.8)
+
+        self.assertIn("gain", play({"id": "gain", "type": "wheel", "delta": [0, 2]})["changed"]["model"])
+        self.assertEqual(play({"id": "gain", "type": "hover"})["changed"], {})
+
+        # The actions the interface calls are told in order, with their arguments, after the events before them
+        told = play({"path": "0", "type": "click"}, {"id": "save", "type": "click"}, {"id": "save", "type": "doubleClick"})
+        self.assertEqual(told["changed"], {"model": {"power": [False, True]}})
+        self.assertEqual([action["name"] for action in told["actions"]], ["save", "save", "save"])
+        self.assertEqual(told["actions"][0]["arguments"], [0.25, "now"])
+        self.assertEqual(len(told["events"]), 3)
+
+        for events in ("click", [{"id": "nobody", "type": "click"}], [{"id": "gain", "type": "shake"}], [{"id": "gain", "type": "drag"}],
+                       [{"type": "click"}], [{"id": "gain", "type": "wheel"}], [{"id": "gain", "type": "click", "at": [1]}]):
+            self.assertTrue(self.call("yui_inspect", file="ui.yui", events=events)[0], events)
+
+    def test_mcp_follows_a_repeat_of_components(self):
+        self.write("ui.yui", REPEATED)
+
+        # What the document binds to is found through the repeat, each element of a list as a list
+        self.assertEqual(json.loads(self.call("yui_check", file="ui.yui")[1])["missingModels"], {"seq": {"wide": False, "steps": [False]}})
+
+        self.write("ui.models.json", json.dumps({"seq": {"wide": False, "steps": [False, False, False, False]}}))
+
+        def steps(told):
+            return told["root"]["children"][1].get("children", [])
+
+        failed, text, _ = self.call("yui_inspect", file="ui.yui")
+        self.assertFalse(failed, text)
+        self.assertEqual(len(steps(json.loads(text))), 2)
+
+        # An event changing the range has the components made again, and the next event reaches the new ones
+        failed, text, _ = self.call("yui_inspect", file="ui.yui", events=[{"id": "wide", "type": "click"}, {"path": "1/3", "type": "click"}])
+        self.assertFalse(failed, text)
+        told = json.loads(text)
+
+        self.assertEqual(len(steps(told)), 4)
+        self.assertEqual(told["changed"], {"seq": {"wide": [False, True], "steps": {"3": [False, True]}}})
+        self.assertEqual([(action["name"], action["arguments"]) for action in told["actions"]], [("step", [3])])
+
+    def test_mcp_warns_when_an_event_does_not_reach_its_component(self):
+        self.write("ui.yui", COVERED)
+
+        failed, text, _ = self.call("yui_inspect", file="ui.yui", events=[{"id": "under", "type": "click"}, {"id": "off", "type": "click"}])
+        self.assertFalse(failed, text)
+        told = json.loads(text)
+
+        self.assertEqual(told["events"][0]["received"]["id"], "off")
+        self.assertIn("off", told["events"][0]["warning"])
+        self.assertIn("disabled", told["events"][1]["warning"])
+
+        # A button that is covered or disabled is not clicked
+        self.assertEqual(told["actions"], [])
+
+    def test_mcp_renders_what_the_pointer_left(self):
+        self.write("ui.yui", HOVER)
+        self.draw(file="ui.yui", size="8x8", events=[{"id": "panel", "type": "hover"}])
+        self.assertEqual(self.first_pixel(), (255, 0, 0))
 
     def draw(self, **arguments):
         """Calls yui_render: returns what it tells and its image, skipping where nothing can draw."""

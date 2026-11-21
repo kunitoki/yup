@@ -165,11 +165,20 @@ struct DrawingStyle::Node
     }
 
     Kind kind = Kind::shape;
+
+    // The element the node was compiled from: its path in the drawing, as problems tell it, its name and its id
+    String path;
+    String type;
+    String id;
+
     CompiledExpression program;
     ExpressionDrawing drawing;
     int slot = -1;
     bool repeated = false;
     bool svgInlineOnly = false;
+
+    // Repeats holding containers: they are drawn turn after turn, and this is where the index of the turn is kept
+    int loopLevel = -1;
 
     // Groups drawing their children in a rectangle of their own: the level of its bounds, and how it is mapped
     int boundsLevel = -1;
@@ -217,7 +226,7 @@ struct DrawingStyle::Node
         bool isSet = false;
     };
 
-    /* An input of the program fed by the style: the bounds of a level, or a pattern. */
+    /* An input of the program fed by the style: the bounds of a level, a pattern, or the index of a turn. */
     struct StyleInput
     {
         int input = -1;
@@ -227,6 +236,7 @@ struct DrawingStyle::Node
     std::vector<PropertyInput> properties;
     std::vector<StyleInput> levels;
     std::vector<StyleInput> patterns;
+    std::vector<StyleInput> loops;
 };
 
 /* An immutable compiled drawing, shared by the styles of components resolving its symbols alike. */
@@ -244,6 +254,9 @@ struct DrawingStyle::Compiled
 
     /* The rectangles `bounds` can be: the one of the component, then one per group with bounds of its own. */
     int numLevels = 1;
+
+    /* The repeats drawn turn after turn, each with an index of its own. */
+    int numLoops = 0;
 };
 
 /* The evaluation state of one evaluated node, per style instance. */
@@ -341,6 +354,7 @@ public:
             expansions.push_back (drawing);
             compileDrawing (drawing, path, std::move (scope), nullptr, result.nodes);
             result.numLevels = numLevels;
+            result.numLoops = numLoops;
         }
         catch (const Error& error)
         {
@@ -358,6 +372,49 @@ public:
 
         context.setSymbolResolver (nullptr);
         return outcome;
+    }
+
+    /* Lists the elements with the tables their properties are checked with. */
+    static std::vector<ElementDescription> describeElements()
+    {
+        std::vector<ElementDescription> elements;
+
+        for (const auto* type : { "rect", "ellipse", "circle", "arc", "line", "path", "polygon", "star", "text" })
+        {
+            const auto* shape = findShape (type);
+            elements.push_back ({ type, "shape", shape->geometry, getShapeProperties (*shape) });
+        }
+
+        {
+            const auto* anchored = findShape ("text", true);
+            elements.push_back ({ "text", "shape", anchored->geometry, getShapeProperties (*anchored) });
+        }
+
+        for (const auto& kind : getElementKinds())
+        {
+            auto properties = kind.properties;
+
+            if (std::strcmp (kind.type, "group") == 0 || std::strcmp (kind.type, "use") == 0)
+                addPropertyNames (properties, getInheritablePaint());
+
+            elements.push_back ({ kind.type, kind.role, {}, properties });
+        }
+
+        for (const auto& [type, primitive] : getFilterPrimitives())
+        {
+            auto properties = getFilterPrimitiveProperties();
+            properties.addArray (primitive.second);
+            elements.push_back ({ type, "filterPrimitive", {}, properties });
+        }
+
+        return elements;
+    }
+
+    static StringArray listShapePaint()
+    {
+        StringArray names;
+        addPropertyNames (names, getCommonPaint());
+        return names;
     }
 
 private:
@@ -462,11 +519,13 @@ private:
         const Scope& scope;
     };
 
-    /* Where the children of an element are: inside a repeat or a clip path only shapes are allowed. */
+    /* Where the children of an element are: only shapes are allowed inside a clip path and inside a repeat
+       running them as rows, and a repeat drawn turn after turn holds anything but layers and definitions. */
     enum class Placement
     {
         normal,
         repeat,
+        loop,
         clipShapes
     };
 
@@ -488,6 +547,7 @@ private:
     static constexpr const char* objectBoundsSymbol = "_objectBounds";
     static constexpr const char* levelPrefix = "_bounds";
     static constexpr const char* patternPrefix = "_pattern";
+    static constexpr const char* loopPrefix = "_loop";
     static constexpr int maxUseDepth = 32;
 
     //==============================================================================
@@ -548,6 +608,93 @@ private:
     {
         for (const auto& entry : table)
             names.add (entry.upToFirstOccurrenceOf (":", false, false));
+    }
+
+    /* An element that is not a shape: what it is for a tool listing it, and the properties it
+       takes. A group and a use also take the paint they hand down, and a use the properties of
+       the drawing it paints. */
+    struct ElementKind
+    {
+        const char* type;
+        const char* role;
+        StringArray properties;
+    };
+
+    static const std::vector<ElementKind>& getElementKinds()
+    {
+        static const StringArray media { "id", "bounds", "source", "fitting", "justification", "opacity", "blend", "tint", "transform", "clip", "clipPath", "visible" };
+
+        static const std::vector<ElementKind> kinds {
+            { "drawing", "container", { "id", "name", "viewBox", "fitting", "justification" } },
+            { "property", "declaration", { "id", "name", "type", "value" } },
+            { "let", "declaration", { "id", "name", "value" } },
+            { "repeat", "container", { "id", "name", "from", "to" } },
+            { "group", "container", { "id", "transform", "visible", "opacity", "blend", "color" } },
+            { "viewport", "container", { "id", "bounds", "viewBox", "fitting", "justification", "visible" } },
+            { "use", "container", { "id", "drawing", "bounds", "transform", "visible", "opacity", "blend", "color" } },
+            { "layer", "container", { "id", "opacity", "blend", "clip", "clipPath", "mask", "maskMode", "visible" } },
+            { "clip", "container", { "id", "bounds", "rect", "path", "clipPath", "visible" } },
+            { "mask", "container", { "id", "mode", "maskMode", "visible" } },
+            { "clipPath", "container", { "id" } },
+            { "pattern", "definition", { "id", "name", "tile", "viewBox", "fitting", "justification", "transform" } },
+            { "marker", "definition", { "id", "name", "size", "ref", "viewBox", "orient", "units" } },
+            { "filter", "filter", { "id", "bounds", "linearColors" } },
+            { "image", "media", media },
+            { "svg", "media", [] { auto properties = media; properties.add ("data"); return properties; }() }
+        };
+
+        return kinds;
+    }
+
+    static const StringArray& getElementProperties (const char* type)
+    {
+        const auto& kinds = getElementKinds();
+        const auto found = std::find_if (kinds.begin(), kinds.end(), [type] (const ElementKind& kind)
+        {
+            return std::strcmp (kind.type, type) == 0;
+        });
+
+        jassert (found != kinds.end());
+        return found->properties;
+    }
+
+    /* The primitives a filter is made of: what each does, and the properties it takes on top of
+       the ones they all take. */
+    static const std::map<String, std::pair<FilterGraph::Type, StringArray>>& getFilterPrimitives()
+    {
+        using Type = FilterGraph::Type;
+
+        static const std::map<String, std::pair<Type, StringArray>> kinds {
+            { "blur", { Type::blur, { "deviation" } } },
+            { "offset", { Type::offset, { "offset" } } },
+            { "flood", { Type::flood, { "color" } } },
+            { "colorMatrix", { Type::colorMatrix, { "saturate", "hueRotate", "luminanceToAlpha", "matrix" } } },
+            { "composite", { Type::composite, { "in2", "operator", "k1", "k2", "k3", "k4" } } },
+            { "blend", { Type::blend, { "in2", "mode" } } },
+            { "morphology", { Type::morphology, { "radius", "dilate" } } },
+            { "lighting", { Type::lighting, { "scale", "constant", "specular", "exponent", "color", "azimuth", "elevation", "position", "height" } } },
+            { "displacement", { Type::displacement, { "in2", "scale", "xChannel", "yChannel" } } },
+            { "dropShadow", { Type::dropShadow, { "offset", "deviation", "color" } } }
+        };
+
+        return kinds;
+    }
+
+    static StringArray getFilterPrimitiveProperties()
+    {
+        return { "id", "in", "result" };
+    }
+
+    /* The properties a shape takes on top of its geometry and of the paint every shape takes. */
+    static StringArray getShapeProperties (const Shape& shape)
+    {
+        StringArray properties { "id", "color" };
+        addPropertyNames (properties, shape.paint);
+
+        if (shape.acceptsMarkers)
+            properties.addArray ({ "markerStart", "markerMid", "markerEnd" });
+
+        return properties;
     }
 
     static bool isFillPaint (const String& property) noexcept
@@ -823,6 +970,12 @@ private:
                 node.patterns.push_back ({ i, index });
                 keepsTile = result.patterns[(size_t) index]->isStatic;
             }
+            else if (const auto loop = parseIndexedName (name, loopPrefix); loop >= 0)
+            {
+                // A pattern is never inside a repeat, so the turns its elements read are those of its own repeats
+                node.loops.push_back ({ i, loop });
+                keepsTile = true;
+            }
             else
             {
                 keepsTile = name == "_index";
@@ -846,6 +999,9 @@ private:
         if (const auto index = parseIndexedName (name, patternPrefix); isPositiveAndBelow (index, (int) result.patterns.size()))
             return context.getType<PatternPaint>();
 
+        if (const auto loop = parseIndexedName (name, loopPrefix); isPositiveAndBelow (loop, numLoops))
+            return context.getType<int>();
+
         const auto* type = drawingScope.resolveSymbol (name);
         result.symbols.emplace (name, type);
         return type;
@@ -866,7 +1022,7 @@ private:
 
             const auto path = elementPath (drawingPath, element, index++);
 
-            checkElement (element, path, { "id", "name", "type", "value" }, false);
+            checkElement (element, path, getElementProperties ("property"), false);
 
             const auto name = parseName (element, path);
             const auto typeName = getRequired (element, "type", path);
@@ -1011,7 +1167,7 @@ private:
     /* Compiles a drawing: its properties, then its elements, mapped from its view box when it has one. */
     void compileDrawing (const DataTree& drawing, const String& path, Scope scope, const UseSite* use, std::vector<std::unique_ptr<Node>>& target)
     {
-        checkElement (drawing, path, { "id", "name", "viewBox", "fitting", "justification" }, true);
+        checkElement (drawing, path, getElementProperties ("drawing"), true);
         declareProperties (drawing, path, scope, use);
 
         if (! drawing.hasProperty ("viewBox"))
@@ -1043,6 +1199,7 @@ private:
                           Sinks sinks = {})
     {
         static const StringArray containers { "layer", "group", "clip", "repeat", "viewport", "use", "drawing", "pattern", "marker" };
+        static const StringArray keptOutOfRepeats { "layer", "pattern", "marker" };
 
         std::map<String, int> counts;
 
@@ -1062,7 +1219,7 @@ private:
 
             if (type == "let")
             {
-                checkElement (element, path, { "id", "name", "value" }, false);
+                checkElement (element, path, getElementProperties ("let"), false);
 
                 const auto name = parseName (element, path);
                 declare (scope, name, parseValue (element, "value", path, scope), path, path + ".value", element, "value");
@@ -1103,36 +1260,61 @@ private:
                 continue;
             }
 
-            if (placement == Placement::repeat && containers.contains (type))
+            // What is drawn once and kept, or drawn apart, has no place where it would be drawn for each turn
+            const bool isKeptOut = (placement == Placement::repeat && containers.contains (type))
+                                || (placement == Placement::loop && type == "drawing")
+                                || (repeatDepth > 0 && keptOutOfRepeats.contains (type));
+
+            if (isKeptOut)
                 fail (path + ": a '" + type + "' can't be nested inside a repeat", element);
 
             if (placement == Placement::clipShapes && type != "repeat" && findShape (type) == nullptr)
                 fail (path + ": a '" + type + "' has no outline to clip to", element);
 
             if (type == "drawing")
+            {
                 addDefinition (scope, "drawing", element, path, { -1, element, std::make_shared<Scope> (scope) });
-            else if (type == "pattern")
+                continue;
+            }
+
+            if (type == "pattern")
+            {
                 addDefinition (scope, "pattern", element, path, { compilePattern (element, path, scope), {}, nullptr });
-            else if (type == "marker")
+                continue;
+            }
+
+            if (type == "marker")
+            {
                 addDefinition (scope, "marker", element, path, { compileMarker (element, path, scope), {}, nullptr });
-            else if (type == "layer")
-                target.push_back (compileLayer (element, path, scope));
+                continue;
+            }
+
+            std::unique_ptr<Node> node;
+
+            if (type == "layer")
+                node = compileLayer (element, path, scope);
             else if (type == "group")
-                target.push_back (compileGroup (element, path, scope));
+                node = compileGroup (element, path, scope);
             else if (type == "viewport")
-                target.push_back (compileViewport (element, path, scope));
+                node = compileViewport (element, path, scope);
             else if (type == "use")
-                target.push_back (compileUse (element, path, scope));
+                node = compileUse (element, path, scope);
             else if (type == "clip")
-                target.push_back (compileClip (element, path, scope));
+                node = compileClip (element, path, scope);
             else if (type == "repeat")
-                target.push_back (compileRepeat (element, path, scope));
+                node = compileRepeat (element, path, scope);
             else if (type == "image")
-                target.push_back (compileMedia (element, path, scope, placement == Placement::repeat, Node::Kind::image));
+                node = compileMedia (element, path, scope, placement == Placement::repeat, Node::Kind::image);
             else if (type == "svg")
-                target.push_back (compileMedia (element, path, scope, placement == Placement::repeat, Node::Kind::svg));
+                node = compileMedia (element, path, scope, placement == Placement::repeat, Node::Kind::svg);
             else
-                target.push_back (compileShape (element, path, scope, placement == Placement::repeat));
+                node = compileShape (element, path, scope, placement == Placement::repeat);
+
+            node->path = path;
+            node->type = type;
+            node->id = element.getProperty ("id").toString();
+
+            target.push_back (std::move (node));
         }
     }
 
@@ -1294,7 +1476,7 @@ private:
 
     std::unique_ptr<Node> compileGroup (const DataTree& element, const String& path, const Scope& outerScope)
     {
-        StringArray allowed { "id", "transform", "visible", "opacity", "blend", "color" };
+        auto allowed = getElementProperties ("group");
         addPropertyNames (allowed, getInheritablePaint());
         checkElement (element, path, allowed, true);
 
@@ -1311,7 +1493,7 @@ private:
 
     std::unique_ptr<Node> compileViewport (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, { "id", "bounds", "viewBox", "fitting", "justification", "visible" }, true);
+        checkElement (element, path, getElementProperties ("viewport"), true);
 
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::group;
@@ -1355,7 +1537,7 @@ private:
         if (closure == nullptr && std::none_of (result.dependencies.begin(), result.dependencies.end(), [&name] (const auto& dependency) { return dependency.first == name; }))
             result.dependencies.push_back ({ name, drawing.clone() });
 
-        StringArray allowed { "id", "drawing", "bounds", "transform", "visible", "opacity", "blend", "color" };
+        auto allowed = getElementProperties ("use");
         addPropertyNames (allowed, getInheritablePaint());
 
         for (const auto& child : drawing)
@@ -1405,7 +1587,7 @@ private:
     /* Compiles a pattern where it is defined, and returns where it is in the result. */
     int compilePattern (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, { "id", "name", "tile", "viewBox", "fitting", "justification", "transform" }, true);
+        checkElement (element, path, getElementProperties ("pattern"), true);
         getRequired (element, "tile", path);
 
         auto node = std::make_unique<Node>();
@@ -1426,7 +1608,7 @@ private:
     /* Compiles a marker where it is defined, and returns where it is in the result. */
     int compileMarker (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, { "id", "name", "size", "ref", "viewBox", "orient", "units" }, true);
+        checkElement (element, path, getElementProperties ("marker"), true);
 
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::marker;
@@ -1462,7 +1644,7 @@ private:
     /* Compiles the shapes a clip is made of: only their geometry is used. */
     std::unique_ptr<Node> compileClipShapes (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, { "id" }, true);
+        checkElement (element, path, getElementProperties ("clipPath"), true);
 
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::clipShapes;
@@ -1477,7 +1659,7 @@ private:
 
     std::unique_ptr<Node> compileLayer (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, { "id", "opacity", "blend", "clip", "clipPath", "mask", "maskMode", "visible" }, true);
+        checkElement (element, path, getElementProperties ("layer"), true);
 
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::layer;
@@ -1545,7 +1727,7 @@ private:
     /* Compiles the filter of a layer: where it is rendered, and its primitives in the order they run. */
     std::unique_ptr<Node> compileFilter (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, { "id", "bounds", "linearColors" }, true);
+        checkElement (element, path, getElementProperties ("filter"), true);
 
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::filter;
@@ -1575,24 +1757,12 @@ private:
     {
         using Type = FilterGraph::Type;
 
-        static const std::map<String, std::pair<Type, StringArray>> kinds {
-            { "blur", { Type::blur, { "deviation" } } },
-            { "offset", { Type::offset, { "offset" } } },
-            { "flood", { Type::flood, { "color" } } },
-            { "colorMatrix", { Type::colorMatrix, { "saturate", "hueRotate", "luminanceToAlpha", "matrix" } } },
-            { "composite", { Type::composite, { "in2", "operator", "k1", "k2", "k3", "k4" } } },
-            { "blend", { Type::blend, { "in2", "mode" } } },
-            { "morphology", { Type::morphology, { "radius", "dilate" } } },
-            { "lighting", { Type::lighting, { "scale", "constant", "specular", "exponent", "color", "azimuth", "elevation", "position", "height" } } },
-            { "displacement", { Type::displacement, { "in2", "scale", "xChannel", "yChannel" } } },
-            { "dropShadow", { Type::dropShadow, { "offset", "deviation", "color" } } }
-        };
-
+        const auto& kinds = getFilterPrimitives();
         const auto kind = kinds.find (element.getType().toString());
         if (kind == kinds.end())
             fail (path + ": a 'filter' is made of blur, offset, flood, colorMatrix, composite, blend, morphology, lighting, displacement and dropShadow", element);
 
-        StringArray allowed { "id", "in", "result" };
+        auto allowed = getFilterPrimitiveProperties();
         allowed.addArray (kind->second.second);
         checkElement (element, path, allowed, false);
 
@@ -1732,7 +1902,7 @@ private:
 
     std::unique_ptr<Node> compileClip (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, { "id", "bounds", "rect", "path", "clipPath", "visible" }, true);
+        checkElement (element, path, getElementProperties ("clip"), true);
 
         if (element.hasProperty ("bounds") && element.hasProperty ("rect"))
             fail (path + ": specify either 'bounds' or 'rect', not both", element, "rect");
@@ -1781,7 +1951,7 @@ private:
 
     std::unique_ptr<Node> compileMask (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, { "id", "mode", "maskMode", "visible" }, true);
+        checkElement (element, path, getElementProperties ("mask"), true);
 
         if (element.hasProperty ("mode") && element.hasProperty ("maskMode"))
             fail (path + ": specify either 'mode' or 'maskMode', not both", element, "maskMode");
@@ -1828,11 +1998,7 @@ private:
 
     std::unique_ptr<Node> compileMedia (const DataTree& element, const String& path, const Scope& scope, bool repeated, Node::Kind kind)
     {
-        StringArray allowed { "id", "bounds", "source", "fitting", "justification", "opacity", "blend", "tint", "transform", "clip", "clipPath", "visible" };
-        if (kind == Node::Kind::svg)
-            allowed.add ("data");
-
-        checkElement (element, path, allowed, false);
+        checkElement (element, path, getElementProperties (kind == Node::Kind::svg ? "svg" : "image"), false);
 
         Identifier sourceProp ("source");
         bool inlineOnly = false;
@@ -1924,7 +2090,7 @@ private:
 
     std::unique_ptr<Node> compileRepeat (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, { "id", "name", "from", "to" }, true);
+        checkElement (element, path, getElementProperties ("repeat"), true);
 
         const auto name = parseName (element, path);
         const auto from = parseValue (element, "from", path, scope);
@@ -1960,11 +2126,24 @@ private:
                 fail (path + ": repeat count (" + String (count) + ") exceeds the maximum of " + String (maxRepeatCount), element, "to");
         }
 
+        // A repeat of shapes runs them as the rows of their programs. One holding containers is drawn turn
+        // after turn instead, its index fed to the programs reading it
+        static const StringArray drawnByTurns { "group", "use", "viewport", "clip", "repeat" };
+        bool isLoop = false;
+
+        for (const auto& child : element)
+            isLoop = isLoop || (! collectsOutlines && drawnByTurns.contains (child.getType().toString()));
+
+        if (isLoop)
+            node->loopLevel = numLoops++;
+
         addSlot (*node, false);
 
         auto inner = scope.enter();
-        declare (inner, name, { "int " + from.text + " + _index", from.uses }, path, path + ".from", element, "from");
-        compileElements (element, path, std::move (inner), Placement::repeat, node->children);
+        declare (inner, name, { "int " + from.text + " + " + (isLoop ? loopPrefix + String (node->loopLevel) : String ("_index")), from.uses }, path, path + ".from", element, "from");
+
+        const ScopedValueSetter<int> repeating (repeatDepth, repeatDepth + 1);
+        compileElements (element, path, std::move (inner), isLoop ? Placement::loop : Placement::repeat, node->children);
         return node;
     }
 
@@ -1983,15 +2162,11 @@ private:
         if (isText && element.hasProperty ("anchor") && element.hasProperty ("bounds"))
             fail (path + ": specify either 'bounds' or 'anchor', not both", element, "anchor");
 
-        StringArray allowed { "id", "color" };
+        auto allowed = getShapeProperties (*shape);
         for (const auto& entry : shape->geometry)
             allowed.add (entry.upToFirstOccurrenceOf ("=", false, false));
 
-        addPropertyNames (allowed, shape->paint);
         addPropertyNames (allowed, getCommonPaint());
-
-        if (shape->acceptsMarkers)
-            allowed.addArray ({ "markerStart", "markerMid", "markerEnd" });
 
         checkElement (element, path, allowed, false);
 
@@ -2183,6 +2358,8 @@ private:
     bool collectsOutlines = false;
     int numSymbols = 0;
     int numLevels = 1;
+    int numLoops = 0;
+    int repeatDepth = 0;
 };
 
 //==============================================================================
@@ -2342,6 +2519,7 @@ void DrawingStyle::instantiate (std::shared_ptr<const Compiled> compiledToUse)
     propertyValues.resize (compiled->properties.size());
     propertyArrays.resize (compiled->properties.size());
     levelBounds.resize ((size_t) compiled->numLevels);
+    loopIndices.resize ((size_t) compiled->numLoops);
 
     for (const auto& pattern : compiled->patterns)
         patternSources.push_back (std::make_unique<PatternSource> (*this, *pattern));
@@ -2399,6 +2577,16 @@ void DrawingStyle::instantiate (std::shared_ptr<const Compiled> compiledToUse)
     }
 }
 
+std::vector<DrawingStyle::ElementDescription> DrawingStyle::getElementDescriptions()
+{
+    return Compiler::describeElements();
+}
+
+StringArray DrawingStyle::getShapePaintProperties()
+{
+    return Compiler::listShapePaint();
+}
+
 const std::vector<ComponentProperty>& DrawingStyle::getProperties() const noexcept
 {
     return compiled->properties;
@@ -2422,19 +2610,254 @@ void DrawingStyle::setImageResolver (ImageResolver newResolver)
         target->repaint();
 }
 
-void DrawingStyle::paint (Graphics& g, const ApplicationTheme& theme, const Component& component)
+/* Reads what the programs take from the component for a paint, and returns the bounds it is painted in. */
+Rectangle<float> DrawingStyle::readComponent (const Component& component)
 {
     for (size_t i = 0; i < propertyValues.size(); ++i)
         propertyValues[i] = component.findProperty (compiled->properties[i].name);
 
-    const auto font = theme.getDefaultFont();
     const auto bounds = component.getLocalBounds();
 
     ++paintSerial;
     levelBounds.front() = bounds;
 
+    return bounds;
+}
+
+void DrawingStyle::paint (Graphics& g, const ApplicationTheme& theme, const Component& component)
+{
+    const auto font = theme.getDefaultFont();
+    const auto bounds = readComponent (component);
+
     const ScopedValueSetter<const Font*> painting (paintFont, std::addressof (font));
     drawNodes (g, compiled->nodes, { font, bounds, g.getTransform() }, 1);
+}
+
+std::vector<DrawingStyle::ElementBounds> DrawingStyle::measureElements (const Component& component)
+{
+    const auto theme = ApplicationTheme::getGlobalTheme();
+    const auto font = theme != nullptr ? theme->getDefaultFont() : Font();
+    const auto bounds = readComponent (component);
+
+    std::vector<ElementBounds> measured;
+
+    const ScopedValueSetter<const Font*> painting (paintFont, std::addressof (font));
+    measureNodes (compiled->nodes, { font, bounds, {} }, {}, 1, measured);
+
+    return measured;
+}
+
+/* Evaluates the rectangle a group draws what it holds in, and makes it the bounds of what it holds. Returns false
+   when there is nothing to draw in. A group mapping what it holds gives the mapping, and the area it is clipped to. */
+bool DrawingStyle::enterGroupBounds (const Node& node, Slot& slot, AffineTransform& mapping, std::optional<Rectangle<float>>& clip)
+{
+    const auto area = slot.state->get (node.area);
+    auto childBounds = area;
+
+    if (node.mapsToArea)
+    {
+        childBounds = node.viewBox.isValid() ? slot.state->get (node.viewBox) : area.withZeroPosition();
+
+        if (area.isEmpty() || childBounds.isEmpty())
+            return false;
+
+        if (node.clipsToArea)
+            clip = area;
+
+        mapping = node.viewBox.isValid()
+                    ? childBounds.getTransformToFit (area,
+                                                     node.fitting.isValid() ? slot.state->get (node.fitting) : Fitting::scaleToFit,
+                                                     Justification (node.justification.isValid() ? slot.state->get (node.justification) : Justification::center))
+                    : AffineTransform::translation (area.getX(), area.getY());
+    }
+
+    levelBounds[(size_t) node.boundsLevel] = childBounds;
+    return true;
+}
+
+Rectangle<float> DrawingStyle::measureNodes (const std::vector<std::unique_ptr<Node>>& children,
+                                             const PaintContext& context,
+                                             const AffineTransform& transform,
+                                             int numRows,
+                                             std::vector<ElementBounds>& measured)
+{
+    Rectangle<float> covered;
+
+    for (const auto& node : children)
+    {
+        const auto bounds = measureNode (*node, context, transform, numRows, measured);
+
+        if (! bounds.isEmpty())
+            covered = covered.isEmpty() ? bounds : covered.unionWith (bounds);
+    }
+
+    return covered;
+}
+
+/* Follows drawNode without drawing: what an element is drawn under is what places it. */
+Rectangle<float> DrawingStyle::measureNode (const Node& node,
+                                            const PaintContext& context,
+                                            const AffineTransform& transform,
+                                            int numRows,
+                                            std::vector<ElementBounds>& measured)
+{
+    auto* slot = prepare (node, context);
+
+    // An element is told before what it holds, as it is painted
+    const auto index = measured.size();
+    measured.push_back ({ node.path, node.type, node.id, {}, {}, numRows });
+
+    if (node.kind == Node::Kind::shape)
+    {
+        auto bounds = node.drawing.getOutline (*slot->state, numRows).getBoundsTransformed (transform);
+        const auto glyphs = node.drawing.getLabelBounds (*slot->state, numRows, &context.font).transformed (transform);
+
+        if (bounds.isEmpty())
+            bounds = node.drawing.getLabelBounds (*slot->state, numRows, &context.font, false).transformed (transform);
+
+        measured[index].bounds = bounds;
+        measured[index].textBounds = glyphs;
+
+        return bounds;
+    }
+
+    if (node.kind == Node::Kind::image || node.kind == Node::Kind::svg)
+    {
+        Rectangle<float> bounds;
+
+        for (int startRow = 0; startRow < numRows;)
+        {
+            const auto numEvaluated = slot->state->evaluateBlock (startRow, numRows - startRow);
+            if (numEvaluated <= 0)
+                break;
+
+            const auto* visibleLanes = node.visible.isValid() ? slot->state->getLanes (node.visible).data() : nullptr;
+            const auto* areaLanes = slot->state->getLanes (node.area).data();
+            const auto* transformLanes = node.transform.isValid() ? slot->state->getLanes (node.transform).data() : nullptr;
+
+            for (int lane = 0; lane < numEvaluated; ++lane)
+            {
+                if ((visibleLanes != nullptr && ! visibleLanes[lane]) || areaLanes[lane].isEmpty())
+                    continue;
+
+                const auto area = areaLanes[lane].transformed (transformLanes != nullptr ? transformLanes[lane].followedBy (transform) : transform);
+                bounds = bounds.isEmpty() ? area : bounds.unionWith (area);
+            }
+
+            startRow += numEvaluated;
+        }
+
+        measured[index].bounds = bounds;
+        return bounds;
+    }
+
+    // What is not drawn is not told
+    const auto skip = [&measured, index]
+    {
+        measured.resize (index);
+        return Rectangle<float>();
+    };
+
+    if (slot != nullptr)
+    {
+        slot->state->evaluate();
+
+        if (node.visible.isValid() && ! slot->state->get (node.visible))
+            return skip();
+    }
+
+    Rectangle<float> bounds;
+
+    switch (node.kind)
+    {
+        case Node::Kind::repeat:
+        {
+            const auto count = getRepeatCount (node, *slot);
+
+            if (node.loopLevel < 0)
+            {
+                if (count > 0)
+                    bounds = measureNodes (node.children, context, transform, count, measured);
+
+                break;
+            }
+
+            const auto unite = [] (const Rectangle<float>& covered, const Rectangle<float>& added)
+            {
+                return covered.isEmpty() ? added : (added.isEmpty() ? covered : covered.unionWith (added));
+            };
+
+            const ScopedValueSetter<int> turns (numLoopTurns, numLoopTurns * jmax (1, count));
+            const auto first = static_cast<std::ptrdiff_t> (measured.size());
+
+            for (int turn = 0; turn < count; ++turn)
+            {
+                loopIndices[(size_t) node.loopLevel] = turn;
+
+                // An element is told once: what a turn draws is added to what the turns before it drew
+                std::vector<ElementBounds> drawn;
+                bounds = unite (bounds, measureNodes (node.children, context, transform, numRows, drawn));
+
+                for (auto& element : drawn)
+                {
+                    const auto known = std::find_if (measured.begin() + first, measured.end(), [&element] (const ElementBounds& other)
+                    {
+                        return other.path == element.path;
+                    });
+
+                    if (known == measured.end())
+                    {
+                        measured.push_back (std::move (element));
+                        continue;
+                    }
+
+                    known->bounds = unite (known->bounds, element.bounds);
+                    known->textBounds = unite (known->textBounds, element.textBounds);
+                    known->numRows += element.numRows;
+                }
+            }
+
+            break;
+        }
+
+        case Node::Kind::group:
+        {
+            auto childTransform = (slot != nullptr && node.transform.isValid()) ? slot->state->get (node.transform).followedBy (transform) : transform;
+
+            if (node.boundsLevel >= 0)
+            {
+                AffineTransform mapping;
+                std::optional<Rectangle<float>> clip;
+
+                if (! enterGroupBounds (node, *slot, mapping, clip))
+                    return skip();
+
+                childTransform = mapping.followedBy (childTransform);
+            }
+
+            bounds = measureNodes (node.children, context, childTransform, numRows, measured);
+            break;
+        }
+
+        case Node::Kind::clip:
+        case Node::Kind::layer:
+            bounds = measureNodes (node.children, context, transform, numRows, measured);
+            break;
+
+        case Node::Kind::shape:
+        case Node::Kind::image:
+        case Node::Kind::svg:
+        case Node::Kind::mask:
+        case Node::Kind::clipShapes:
+        case Node::Kind::pattern:
+        case Node::Kind::marker:
+        case Node::Kind::filter:
+        case Node::Kind::filterPrimitive:
+            return skip();
+    }
+
+    measured[index].bounds = bounds;
+    return bounds;
 }
 
 DrawingStyle::Slot* DrawingStyle::prepare (const Node& node, const PaintContext& context)
@@ -2451,6 +2874,9 @@ DrawingStyle::Slot* DrawingStyle::prepare (const Node& node, const PaintContext&
 
     for (const auto& input : node.levels)
         slot.state->set (ExpressionInput<Rectangle<float>> { input.input }, levelBounds[(size_t) input.index]);
+
+    for (const auto& input : node.loops)
+        slot.state->set (ExpressionInput<int> { input.input }, loopIndices[(size_t) input.index]);
 
     for (const auto& input : node.patterns)
         slot.state->set (ExpressionInput<PatternPaint> { input.input }, preparePattern (input.index, context).paint);
@@ -2518,6 +2944,8 @@ void DrawingStyle::drawPattern (Graphics& g, const PatternSource& source)
     g.setTransform (source.contentTransform.followedBy (g.getTransform()));
     levelBounds[(size_t) source.node.boundsLevel] = source.contentBounds;
 
+    // The repeats of a tile are its own, whatever is being drawn when the tile is asked for
+    const ScopedValueSetter<int> turns (numLoopTurns, 1);
     drawNodes (g, source.node.children, context, 1);
 }
 
@@ -2617,6 +3045,15 @@ void DrawingStyle::applyClips (Graphics& g, const Node& node, Slot* slot, const 
 
     for (const auto& shapes : node.clipShapes)
         g.setClipPath (collectOutline (shapes->children, context, numRows));
+}
+
+/* The turns a repeat runs. Those of a repeat drawn turn after turn count with the turns of the ones
+   around it, so that repeats inside one another run no more than a repeat does. */
+int DrawingStyle::getRepeatCount (const Node& node, const Slot& slot) const
+{
+    const auto limit = node.loopLevel >= 0 ? maxRepeatCount / numLoopTurns : maxRepeatCount;
+
+    return static_cast<int> (jlimit<int64> (0, limit, static_cast<int64> (slot.state->get (node.end)) - slot.state->get (node.start)));
 }
 
 void DrawingStyle::drawNodes (Graphics& g, const std::vector<std::unique_ptr<Node>>& children, const PaintContext& context, int numRows)
@@ -2753,10 +3190,24 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
     {
         case Node::Kind::repeat:
         {
-            const auto count = jlimit<int64> (0, maxRepeatCount, (int64) slot->state->get (node.end) - slot->state->get (node.start));
+            const auto count = getRepeatCount (node, *slot);
 
-            if (count > 0)
-                drawNodes (g, node.children, context, (int) count);
+            if (node.loopLevel < 0)
+            {
+                if (count > 0)
+                    drawNodes (g, node.children, context, count);
+
+                break;
+            }
+
+            // What holds containers is drawn turn after turn, each reading its index
+            const ScopedValueSetter<int> turns (numLoopTurns, numLoopTurns * jmax (1, count));
+
+            for (int turn = 0; turn < count; ++turn)
+            {
+                loopIndices[(size_t) node.loopLevel] = turn;
+                drawNodes (g, node.children, context, numRows);
+            }
 
             break;
         }
@@ -2782,29 +3233,17 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
             if (node.boundsLevel >= 0)
             {
                 // The children are drawn in bounds of their own: the area itself, or a view box mapped to it
-                const auto area = slot->state->get (node.area);
-                auto childBounds = area;
+                AffineTransform mapping;
+                std::optional<Rectangle<float>> clip;
+
+                if (! enterGroupBounds (node, *slot, mapping, clip))
+                    break;
+
+                if (clip.has_value())
+                    g.setClipPath (*clip);
 
                 if (node.mapsToArea)
-                {
-                    childBounds = node.viewBox.isValid() ? slot->state->get (node.viewBox) : area.withZeroPosition();
-
-                    if (area.isEmpty() || childBounds.isEmpty())
-                        break;
-
-                    if (node.clipsToArea)
-                        g.setClipPath (area);
-
-                    const auto mapping = node.viewBox.isValid()
-                                           ? childBounds.getTransformToFit (area,
-                                                                            node.fitting.isValid() ? slot->state->get (node.fitting) : Fitting::scaleToFit,
-                                                                            Justification (node.justification.isValid() ? slot->state->get (node.justification) : Justification::center))
-                                           : AffineTransform::translation (area.getX(), area.getY());
-
                     g.setTransform (mapping.followedBy (g.getTransform()));
-                }
-
-                levelBounds[(size_t) node.boundsLevel] = childBounds;
             }
 
             drawNodes (g, node.children, context, numRows);

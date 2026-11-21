@@ -410,6 +410,9 @@ comp.setPaintMargin (8.0f, 8.0f, 8.0f, 12.0f); // left, top, right, bottom
 auto area = comp.getPaintBounds();              // local bounds grown by the margin
 ```
 
+In a `.yui` document it is the `paintMargin` property, see
+[Styles](yui/styles.md).
+
 The margin is still clipped to the parent. Desktop components, and components
 with an effect or cached to a texture, paint within their bounds only. A
 `PopupMenu` shown inside a parent component uses it for its drop shadow.
@@ -598,6 +601,29 @@ bool MyList::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
     return true;
 }
 ```
+
+### Pointer events without a window
+
+A component on no window gets no pointer event. `PointerSimulator` stands for
+the pointer of a window showing a component: it finds what is under a
+position, enters and leaves components as it moves, and gives a press to what
+it is over until the release. Tools showing an interface with no window and
+tests use it:
+
+```cpp
+PointerSimulator pointer (panel); // the component a window would show, visible
+
+pointer.click (button.getBounds().getCenter());
+pointer.drag ({ 20.0f, 55.0f }, { 180.0f, 55.0f });
+pointer.wheel ({ 100.0f, 55.0f }, { 0.0f, 1.0f });
+
+auto* hovered = pointer.getComponentUnderPointer();
+```
+
+Positions are in the coordinates of the component given to the constructor,
+and each call returns the component that got the event. `moveTo`, `press` and
+`release` do one step at a time. Keyboard focus and popups need a window: a
+click gives no focus, and a menu it asks for does not open.
 
 ### Multitouch (any platform with touch hardware)
 

@@ -285,15 +285,19 @@ and `schema` give, as tools of the
 
 | Tool | Answers |
 |---|---|
-| `yui_check` | The problems of a file and of the files it imports. |
-| `yui_inspect` | The layout, as `inspect` prints it, with the problems. |
-| `yui_render` | A PNG of the interface, or of a drawing, a palette or a component of the file, with the problems. |
-| `yui_schema` | The component types and the palette roles, or the properties and signals of one type, those of its bases included. |
+| `yui_check` | The problems of a file and of the files it imports, and the models it binds to that its models file lacks. |
+| `yui_inspect` | The layout, as `inspect` prints it, with the problems. Also where the elements of drawings land, and what pointer events did. |
+| `yui_render` | A PNG of the interface, or of a drawing, a palette or a component of the file, with the problems. All of it, or a part drawn larger, under a grid, or next to a reference it is compared with. |
+| `yui_schema` | What a file can name: the component types, the properties and signals of one, the elements of drawings, what styles take, the functions of expressions. |
 | `yui_capture_preview` | A PNG of the live preview of VS Code as it is now, with the values of its models, a long list told by its length. Only the [extension](#vs-code) has it. |
 
 The tools taking a `file` also take what `render` takes, under the same names:
 `drawing`, `palette`, `as`, `size`, `theme`, `models`, and `scale` for those
-giving an image (1 by default, 4 at most). Two arguments are theirs alone:
+giving an image (1 by default, 4 at most). Without `models`, a `<name>.yui`
+file uses the `<name>.models.json` next to it when there is one. Answers are
+JSON on one line.
+
+### The state shown
 
 - `values` sets model values over those of the models file:
   `{ "params": { "cutoff": 0.9 } }`.
@@ -301,12 +305,154 @@ giving an image (1 by default, 4 at most). Two arguments are theirs alone:
   each named by its `id` or by the `path` `yui_inspect` gives it:
   `[{ "id": "play", "state": "hover" }]`. The focus can't be shown, as it
   needs a window.
+- `events` plays pointer events, see [below](#playing-pointer-events).
 
 `yui_inspect` and `yui_render` show the interface as it settles: its styles up
 to date with its size and its states, and their transitions at their end.
 
-Without `models`, a `<name>.yui` file uses the `<name>.models.json` next to it
-when there is one.
+### Looking closer
+
+`yui_render` draws a part of the interface in place of all of it:
+
+```json
+{ "file": "ui/main.yui", "region": [320, 80, 160, 100], "scale": 4, "grid": 20 }
+{ "file": "ui/main.yui", "element": "cutoff", "margin": 12, "scale": 8 }
+```
+
+- `region` is `[x, y, width, height]` in logical pixels of the interface.
+- `element` is the `id` of a component, or its `path`, drawn with a `margin`
+  around it (8 when not given). The answer tells the `region` that was drawn.
+- `scale` goes up to 8 for a part. An image is at most 4096 pixels a side.
+- `grid` draws lines that many logical pixels apart, each with the coordinate
+  of the interface it is at, so places and sizes are read off the image, a
+  part of the interface included.
+
+The interface is laid out at its size whatever part of it is drawn.
+
+### Comparing with a reference
+
+```json
+{ "file": "ui/main.yui", "reference": "design/main.png" }
+```
+
+`reference` names an image of what the interface is meant to look like. The
+image returned then holds three panels of the size of the render: the
+reference, the render, and their difference, where what differs goes from
+yellow to red as it differs more. They are side by side, or one above the
+other for an interface wider than tall. The answer adds:
+
+```json
+"comparison": {
+    "similarity": 0.953, "differentPixels": 0.081,
+    "reference": [1280, 800], "resized": false, "stretched": false,
+    "panels": ["reference", "render", "difference"], "arrangement": "column", "panel": [1280, 800],
+    "worst": [ { "region": [320, 80, 160, 100], "error": 0.31 } ]
+}
+```
+
+- `similarity` is 1 for two images that are the same. `differentPixels` is
+  the share of the pixels a person would see differ.
+- `worst` are the parts differing most, as regions to draw next with
+  `region` and a `scale`, where the reference is compared part for part.
+- A reference of another size is brought to the size of the render
+  (`resized`), and `stretched` tells one of other proportions.
+- An interface with no size of its own, and no `size` given, takes the size
+  of the reference.
+
+The comparison is pixel by pixel: sharp text one pixel off scores badly, and
+the difference panel tells that from a real difference better than the score.
+
+### Saving the image
+
+`output` names a `.png` file the image of `yui_render` or of
+`yui_capture_preview` is also written to. It must be inside the folder of the
+project, its folders are made and a file there is replaced. The image is still
+returned.
+
+### Playing pointer events
+
+```json
+"events": [ { "id": "play", "type": "click" },
+            { "id": "cutoff", "type": "drag", "by": [0, -40] },
+            { "id": "cutoff", "type": "wheel", "delta": [0, 1] } ]
+```
+
+`events` are played in order before `yui_inspect` tells the layout or
+`yui_render` draws. A `type` is `click`, `doubleClick`, `drag`, `wheel` or
+`hover`, on a component named by its `id` or its `path`. `at` is a point in
+the component, its middle when not given. A drag goes `by` a distance or `to`
+a point of the component, and a wheel turns by a `delta`.
+
+An event goes where a pointer at that place would, so the answer tells what
+it did:
+
+```json
+"events":  [ { "type": "click", "received": { "type": "ToggleButton", "id": "play", "path": "0/2" } } ],
+"changed": { "params": { "playing": [false, true] } },
+"actions": [ { "name": "started", "arguments": [] } ]
+```
+
+- `received` is the component that got the event. A `warning` tells when it
+  is not the one named: another one is over it, or it is disabled or hidden.
+- `changed` are the model values the events changed, each with the value
+  before and the one after. Of a list, the elements that changed.
+- `actions` are the `action ("name", ...)` the interface called, in order.
+- An event changing the range of a [`repeat` of
+  components](documents.md#repeating-components) has them made again before
+  the next event, which can be on one of the new ones by its `path`.
+
+The pointer stays where the last event left it, so the component under it is
+drawn hovered. There are no key events, and a popup does not open, as both
+need a window.
+
+### Inside the layout
+
+Two arguments of `yui_inspect`:
+
+- `element` describes one component, named by its `id` or its `path`, with
+  what it holds, in place of the whole interface.
+- `drawings: true` adds, to each component a drawing paints, the elements of
+  the drawing that have an `id`:
+
+```json
+"drawing": [ { "type": "arc", "id": "value", "line": 46, "bounds": [212, 96, 44, 44] },
+             { "type": "rect", "id": "tick", "line": 51, "bounds": [200, 150, 68, 4], "rows": 12 },
+             { "type": "text", "id": "caption", "line": 60, "bounds": [200, 160, 68, 16], "text": [222, 162, 24, 12] } ]
+```
+
+`bounds` are in the interface, under the transforms of the groups and the
+viewports around the element, so they can be given to `yui_render` as a
+`region`. An element inside a `repeat` covers all its copies and tells their
+number as `rows`. A `text` also tells the area its glyphs cover.
+
+### What a file can name
+
+`yui_schema` answers from the tables the files are checked with, so it can't
+tell what the tool does not accept:
+
+| Arguments | Answers |
+|---|---|
+| none | The component types and the palette roles. |
+| `type` | The properties and signals a type declares, with the `bases` declaring the others. `inherited: true` lists those too. |
+| `topic: "drawing"` | The elements of a drawing: the geometry and the properties of each, what it can hold, and the paint every shape takes. |
+| `topic: "styles"` | The declarations of a rule that are not properties, the pseudo-classes and the palette roles. |
+| `topic: "expressions"` | The functions, the members and methods of each type, and the values of the enumerations. |
+
+### The models a file lacks
+
+When a file binds to models, or to properties, that its models file does not
+declare, `yui_check` lists them ready to be added to that file:
+
+```json
+"missingModels": { "seq": { "tempo": 0, "running": false, "steps": [false] } },
+"errorsWithMissingModels": 0
+```
+
+Each has a sample value of the kind the file reads it as: a number, `false`,
+`""`, or a list of one of these. `errorsWithMissingModels` is how many errors
+the file still has once they are added, 0 when it then loads clean.
+
+### Serving the tools
 
 There are two ways to serve them. Both are listed in the `.mcp.json` at the root
 of the project, which Claude Code and GitHub Copilot read:

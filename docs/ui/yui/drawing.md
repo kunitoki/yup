@@ -214,7 +214,7 @@ overridden per component.
 | `drawing`, `use` | see [Reusing drawings](#reusing-drawings) | yes, no | Defines a drawing inside another, and paints a drawing by name. |
 | `pattern`, `marker` | see [Patterns and markers](#patterns-and-markers) | yes | Define a tile to paint shapes with, and a shape drawn at the vertices of others. |
 | `clipPath` | none                             | shapes   | Inside a `clip` or a `layer`: the shapes to [clip to](#clipping-to-shapes). |
-| `repeat` | `name`, `from`, `to`               | shapes   | Draws its shapes once per integer in `from .. to - 1`.   |
+| `repeat` | `name`, `from`, `to`               | yes      | Draws what it holds once per integer in `from .. to - 1`. |
 
 - A `let` is visible to the elements after it in the same scope and in nested
   scopes, never before it or outside its scope. It can shadow a component
@@ -229,10 +229,24 @@ overridden per component.
 - `group` fades and blends its children one by one: overlapping children show
   through each other at an `opacity` below 1. Use a `layer` to fade them as one image.
 - `repeat` exposes the current index as an integer `let` named by `name`. Integer
-  division truncates, so write `i / 10.0` for a fraction. A `repeat` holds shapes
-  and `let`s only, it can't contain a `layer`, a `group`, a `clip`, a `viewport`,
-  a `use`, a definition or another `repeat`, and its iteration count is capped at
-  `4096` (constant ranges above `4096` fail to compile).
+  division truncates, so write `i / 10.0` for a fraction. Its iteration count is
+  capped at `4096` (constant ranges above `4096` fail to compile).
+- A `repeat` holding only shapes and `let`s runs each shape for every index
+  before the next shape, as the rows of one program, which keeps long repeats
+  cheap. One holding a `group`, a `clip`, a `viewport`, a `use` or another
+  `repeat` is drawn turn after turn instead: everything it holds for the first
+  index, then for the second. The turns of repeats inside one another count
+  together towards the `4096`. A `repeat` can't hold a `layer`, a `pattern` or
+  a `marker`, however deep, nor define a `drawing`:
+
+  ```yui
+  repeat i in 0 .. 12 {
+      group {
+          transform: transform.rotation (rad (i * 30), bounds.center.x, bounds.center.y);
+          use Led { bounds: rect (bounds.center.x - 7, 8, 14, 14); on: i < lit; }
+      }
+  }
+  ```
 - In `.yui` documents, drawings can also read registered `BindingProvider` models
   directly (such as `params.cutoff`) in addition to component properties and
   `palette.<role>`.
@@ -299,7 +313,7 @@ group {
   when a group sets it: `fillGradient: sky.mappedTo (objectBounds)` stretches one
   gradient over every shape. It is not available to a `text` placed from an `anchor`.
 - Text is only stroked by a `stroke` color, and markers are only inherited by
-  `path` and `line` shapes outside a `repeat`.
+  `path` and `line` shapes that are not the rows of a `repeat`.
 
 Nothing is inherited unless a group sets it, so drawings without paint on their
 groups work as before.
@@ -381,7 +395,7 @@ drawing Chart {
   is drawn again on every paint. Its content is clipped to the tile.
 - `markerStart` is drawn at the first vertex of every sub-path, `markerEnd` at
   the last one unless the sub-path is closed, `markerMid` at the others. A shape
-  inside a `repeat` can't have markers.
+  run as a row of a `repeat` can't have markers.
 
 ## Clipping to shapes
 
@@ -718,8 +732,8 @@ component paints, not its children.
 
 - A semi-transparent or masked `layer` is rendered offscreen at the logical size
   of the component, so it can look soft on high-density displays.
-- Nested `repeat` blocks are not supported; pass a dynamic `number[]` array
-  property (`repeat i in 0 .. len (lanes)`) to draw variable-length collections.
+- A `repeat` can't hold a `layer`, a `pattern` or a `marker`: a glow inside
+  one is the `feather` of a shape, not a filter.
 - The tile of a `pattern` is an image: it is drawn at the size it has in the
   component, and looks soft when the shape it fills is scaled up much further.
 - Text has no outline: it can't be part of a `clipPath`, and has no

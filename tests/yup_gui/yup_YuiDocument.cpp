@@ -149,6 +149,55 @@ TEST_F (YuiDocumentTests, APaletteWithADarkAndALightVersionFollowsTheTheme)
     EXPECT_EQ (backgroundOf (*inGiven), Color (0xff101418));
 }
 
+TEST_F (YuiDocumentTests, ARepeatOfComponentsFollowsItsModelAndKeepsTheStyles)
+{
+    DataTree tree ("sequencer");
+    tree.beginTransaction().setProperty ("length", 2);
+
+    DataTreeBindingProvider sequencer (tree, nullptr);
+
+    YuiDocument document;
+    document.setModel ("seq", sequencer);
+
+    const auto result = document.loadFromString (R"yui(
+        style {
+            .step { opacity: 0.5; }
+        }
+
+        Row {
+            id: row;
+            repeat i in 0 .. seq.length { Label { class: step; text: format ("%d", i); } }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.findById ("row")->getNumChildComponents(), 2);
+
+    const auto sheet = document.getRoot()->getStyleSheet();
+
+    tree.beginTransaction().setProperty ("length", 3);
+    document.applyPendingChanges();
+
+    auto* row = document.findById ("row");
+    ASSERT_EQ (row->getNumChildComponents(), 3);
+    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+
+    // The document is as it was, so its stylesheet is kept and what it runs goes on
+    EXPECT_EQ (document.getRoot()->getStyleSheet(), sheet);
+
+    // The component added is styled as the others
+    row->getStyleContext()->restyleNow();
+    EXPECT_NEAR (row->getChildComponent (2)->getOpacity(), 0.5f, 0.01f);
+}
+
+TEST_F (YuiDocumentTests, ARepeatOfComponentsOnlyHoldsComponents)
+{
+    YuiDocument document;
+
+    EXPECT_TRUE (document.loadFromString ("Row { repeat i in 0 .. 2 { rect { } } }").failed());
+    EXPECT_TRUE (document.loadFromString ("Row { repeat i in 0 .. 2 { Label { } repeat j in 0 .. 2 { Label { } } } }").wasOk());
+}
+
 TEST_F (YuiDocumentTests, LoadsTheImportedFiles)
 {
     YuiDocument document;

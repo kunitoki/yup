@@ -1,8 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
+import { isInsideFolders, saveImage, withMember } from "./agentFiles";
 import { AgentBackend, AgentToolAnswer, AgentTools } from "./agentServer";
-import { collectDocumentFiles, realPathOf } from "./documentFiles";
+import { collectDocumentFiles, realPathOf, toolPathOf } from "./documentFiles";
 import { previewIsLight, YuiPreview } from "./preview";
 import { errorMessage, toolFilesFolder, YuiTool, YuiToolFile } from "./tool";
 
@@ -21,7 +22,12 @@ interface Listing extends AgentTools {
 interface Prepared {
     args: Record<string, unknown>;
     files: YuiToolFile[];
+
+    /** The file the image of the answer is written to, which the tool can't do as it has no disk. */
+    output?: string;
 }
+
+const maximumReferenceBytes = 32 * 1024 * 1024;
 
 // The tool capturing the preview looks at what is shown, and so never opens the panel
 const captureTool = "yui_capture_preview";
@@ -32,21 +38,17 @@ function failure (reason: string): AgentToolAnswer {
 
 // Whether a file is one of the workspace where it really is: a link leading out of it is not
 function isInWorkspace (file: string): boolean {
-    const real = (target: string) => {
-        try {
-            return fs.realpathSync (target);
-        }
-        catch {
-            return path.resolve (target);
-        }
-    };
+    return isInsideFolders (file, (vscode.workspace.workspaceFolders ?? []).map (folder => folder.uri.fsPath));
+}
 
-    const found = real (file);
-
-    return (vscode.workspace.workspaceFolders ?? []).some (folder => {
-        const relative = path.relative (real (folder.uri.fsPath), found);
-        return relative.length > 0 && ! relative.startsWith ("..") && ! path.isAbsolute (relative);
-    });
+async function readReference (file: string): Promise<Uint8Array | undefined> {
+    try {
+        const status = await fs.promises.stat (file);
+        return status.isFile () && status.size <= maximumReferenceBytes ? await fs.promises.readFile (file) : undefined;
+    }
+    catch {
+        return undefined;
+    }
 }
 
 // The paths the tool gives are those of its own files, which mean nothing to who reads its answer
@@ -67,7 +69,8 @@ function withRealPaths (text: string): string {
     };
 
     try {
-        return JSON.stringify (mapped (JSON.parse (text)), null, 2);
+        // An answer told on one line stays on one
+        return JSON.stringify (mapped (JSON.parse (text)), null, text.includes ("\n") ? 2 : undefined);
     }
     catch {
         // What is not JSON is a sentence, where a path ends at a space, a quote or the colon before a line number
@@ -112,7 +115,15 @@ export class YuiAgentBackend implements AgentBackend {
                 return failure ("the YUI tool stopped, see the YUI output channel");
 
             const parsed = JSON.parse (answer) as AgentToolAnswer;
-            return { text: withRealPaths (parsed.text), isError: parsed.isError === true, image: typeof parsed.image === "string" ? parsed.image : "" };
+            const image = typeof parsed.image === "string" ? parsed.image : "";
+            let text = withRealPaths (parsed.text);
+
+            if (prepared.output !== undefined && parsed.isError !== true && image.length > 0) {
+                await saveImage (prepared.output, image);
+                text = withMember (text, "output", prepared.output);
+            }
+
+            return { text, isError: parsed.isError === true, image };
         }
         catch (error) {
             this.host.log (`the agent tool ${name} failed: ${errorMessage (error)}`);
@@ -162,11 +173,25 @@ export class YuiAgentBackend implements AgentBackend {
 
     // Gives the tool the document a call names as it is in its editor, with the files it needs, and the call
     // the paths the tool knows them by. A call naming no file is passed on as it is
-    private async prepare (args: Record<string, unknown>): Promise<Prepared | string> {
+    private async prepare (given: Record<string, unknown>): Promise<Prepared | string> {
+        // The image is written here once the tool gave it, so the tool is not told about the file
+        const { output: givenOutput, ...args } = given;
+        let output: string | undefined;
+
+        if (givenOutput !== undefined) {
+            if (typeof givenOutput !== "string" || path.extname (givenOutput).toLowerCase () !== ".png")
+                return "'output' is the path of a .png file";
+
+            output = this.resolve (givenOutput)?.fsPath;
+
+            if (output === undefined)
+                return `'${givenOutput}' is not a file of the workspace`;
+        }
+
         const name = args["file"];
 
         if (typeof name !== "string" || name.length === 0)
-            return { args, files: [] };
+            return { args, files: [], output };
 
         const uri = this.resolve (name);
 
@@ -209,6 +234,23 @@ export class YuiAgentBackend implements AgentBackend {
         if (prepared["theme"] === undefined)
             prepared["theme"] = previewIsLight () ? "light" : "dark";
 
-        return { args: prepared, files: collected.files };
+        const givenReference = args["reference"];
+
+        if (typeof givenReference === "string" && givenReference.length > 0) {
+            const reference = this.resolve (givenReference)?.fsPath;
+
+            if (reference === undefined)
+                return `'${givenReference}' is not a file of the workspace`;
+
+            const data = await readReference (reference);
+
+            if (data === undefined)
+                return `can't read '${reference}'`;
+
+            collected.files.push ({ path: toolPathOf (reference), data });
+            prepared["reference"] = toolPathOf (reference);
+        }
+
+        return { args: prepared, files: collected.files, output };
     }
 }

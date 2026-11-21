@@ -75,6 +75,7 @@
 #include "yup_MouseWheelData.cpp"
 #include "yup_PaintProfileStats.cpp"
 #include "yup_PaintProfiler.cpp"
+#include "yup_PointerSimulator.cpp"
 #include "yup_PopupMenu.cpp"
 #include "yup_ProgressBar.cpp"
 #include "yup_ResizableCorner.cpp"

@@ -152,7 +152,7 @@
     "check": "tsc -p ./tsconfig.json",
     "compile": "npm run check && node esbuild.js",
     "watch": "node esbuild.js --watch",
-    "test": "node esbuild.js --test && node --test out-test/agentServer.test.js",
+    "test": "node esbuild.js --test && node --test out-test/agentServer.test.js out-test/agentFiles.test.js",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {

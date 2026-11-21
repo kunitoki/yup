@@ -127,7 +127,7 @@ Agent Tools** serves it tools of the
 |---|---|
 | `yui_check` | The problems of a document and of the files it imports. |
 | `yui_inspect` | Its layout as text: each component with its type, id, source line and bounds, and warnings for what has no size or lies outside the interface. |
-| `yui_render` | An image of the interface, or of a drawing, a palette or a component of the file, at a size and in a theme, with model values and `:hover` or `:pressed` states set. |
+| `yui_render` | An image of the interface, or of a drawing, a palette or a component of the file, at a size and in a theme, with model values and `:hover` or `:pressed` states set. Also a region or an element of it drawn larger, a grid of coordinates over it, and a comparison with a reference image. |
 | `yui_schema` | The component types, or the properties and signals of one. |
 | `yui_capture_preview` | An image of the preview panel as it is now, with the values of its models. |
 
@@ -145,10 +145,12 @@ the `.mcp.json` at its root, which Claude Code and GitHub Copilot read:
 - Documents are read as they are in their editors, so unsaved changes count.
 - The tools that draw run in the preview panel, which opens beside the editor
   when it is closed. What it shows is left alone.
-- The server only listens on this machine, only reads the files of the
-  workspace and writes none. A document importing a file outside the workspace
-  is checked without that file. The models of `yui.lint.models` are read
-  wherever they are.
+- The server only listens on this machine and only reads the files of the
+  workspace. A document importing a file outside the workspace is checked
+  without that file. The models of `yui.lint.models` are read wherever they
+  are.
+- It writes one kind of file: the `.png` a call that draws names as `output`,
+  inside the workspace.
 - Each window serves its own workspace on its own port. When the port set is
   taken, the command finds the next free one and writes it to the workspace
   settings and to `.mcp.json`.
@@ -215,6 +217,7 @@ vscode-yui/
 ├── src/extension.ts              # activation: diagnostics, completions, commands
 ├── src/agentServer.ts            # the server of the tools for agents
 ├── src/agentBackend.ts           # runs those tools on the documents of the editor
+├── src/agentFiles.ts             # what they read and write of the workspace
 ├── src/agentSetup.ts             # their settings, and the command setting a workspace up
 ├── src/documentFiles.ts          # a document with the files it names, as the tool is given them
 ├── src/tool.ts                   # runs the commands of the tool in a worker thread
@@ -225,6 +228,7 @@ vscode-yui/
 ├── snippets/yui.code-snippets    # code snippets
 ├── tools/package-tool.sh         # copies the tool built for the web into tool/
 ├── test/agentServer.test.ts      # tests of the server, run by `npm test`
+├── test/agentFiles.test.ts       # tests of what the tools read and write
 └── test/sample.yui               # a document to try the grammar on
 ```
 

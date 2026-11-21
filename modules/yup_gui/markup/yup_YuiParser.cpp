@@ -429,7 +429,15 @@ private:
     // After `name <=>`: the target of a two-way binding
     DataTree parseTwoWayBinding (const String& name)
     {
-        const auto target = parsePath ("Expected the property to bind to");
+        auto target = parsePath ("Expected the property to bind to");
+
+        // An element of a list, at an index that is an expression
+        if (match ("["))
+        {
+            target << "[" << parseExpressionText() << "]";
+            expect ("]");
+        }
+
         expect (";");
         return DataTree ("bind", { { "property", name }, { "target", target } });
     }

@@ -286,3 +286,13 @@ TEST_F (StyleSheetTests, ExpandsCommaSeparatedSelectorBlocksWithPerBranchSpecifi
     EXPECT_NEAR (normalSlider.getOpacity(), 0.8f, 1.0e-5f);
     EXPECT_NEAR (specialSlider.getOpacity(), 0.4f, 1.0e-5f);
 }
+
+TEST_F (StyleSheetTests, ListsTheDeclarationsThatAreNotProperties)
+{
+    const auto& names = StyleSheet::getDeclarationNames();
+
+    for (const auto* name : { "palette", "drawing", "transition", "animation", "cursor", "effect", "filter", "shadow", "glow" })
+        EXPECT_TRUE (names.contains (name)) << name;
+
+    EXPECT_EQ (names.size(), 9);
+}

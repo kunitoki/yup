@@ -212,6 +212,21 @@ public:
     */
     Path getOutline (ExpressionState& state, int numRows = 1, bool applyTransforms = true) const;
 
+    /** Evaluates rows 0 to numRows - 1 and returns the area their labels cover, without drawing them.
+
+        A label fitted in a rectangle covers the part of it its glyphs take, where its justification
+        places them, and a label placed from an anchor the rectangle its text is laid out in. The
+        `transform` of each row is applied to its label. Use it to know where a text lands.
+
+        @param state      A state created from getProgram().
+        @param numRows    The number of rows to evaluate.
+        @param labelFont  The font of the labels that assign none to `labelFont`. Labels with no font have no area.
+        @param ofGlyphs   Pass false for the rectangles the labels are fitted in, instead of the part their glyphs take.
+
+        @returns The area covering the labels of the visible rows, empty when there is none.
+    */
+    Rectangle<float> getLabelBounds (ExpressionState& state, int numRows = 1, const Font* labelFont = nullptr, bool ofGlyphs = true) const;
+
 private:
     template <template <class> class Field>
     struct Fields;

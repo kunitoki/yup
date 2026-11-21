@@ -49,5 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`yui_capture_preview`) of the `.yui` documents of a workspace, over the Model
   Context Protocol. It is off until the command is run, which sets
   `yui.mcp.enabled` and `yui.mcp.port` for the workspace and lists the server in
-  its `.mcp.json`. The server only listens on this machine.
+  its `.mcp.json`. The server only listens on this machine. A call naming a
+  `reference` image reads it, and one naming an `output` writes the image
+  there, both inside the workspace only.
 - The extension is bundled with esbuild, and needs VS Code 1.90 or later.

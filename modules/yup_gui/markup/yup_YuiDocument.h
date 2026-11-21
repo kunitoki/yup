@@ -133,6 +133,9 @@ public:
     /** Registers the function run by `action ("name", ...)` handlers (see YuiBuilder::setAction). */
     void setAction (const String& name, YuiBuilder::Action action);
 
+    /** Sets the function run by the handlers calling an action no function is registered for (see YuiBuilder::setFallbackAction). */
+    void setFallbackAction (YuiBuilder::FallbackAction action);
+
     /** Makes the values of a provider available as `name.property` (see YuiBuilder::setModel).
 
         Set models before loading: they are seen by the interfaces loaded afterwards.
@@ -141,6 +144,12 @@ public:
 
     /** Removes a model, dropping the bindings and links made to it. */
     void removeModel (const String& name);
+
+    /** Makes again, now, the components of the `repeat` blocks whose range changed (see YuiBuilder::applyPendingChanges).
+
+        The message loop does it by itself, a tool or a test with none calls this.
+    */
+    void applyPendingChanges();
 
     //==============================================================================
     /** Returns the problems met by the last load and by the styling or bindings of its interface since.
@@ -222,6 +231,7 @@ private:
     Result loadTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map);
     Result buildTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map);
     void handleLiveTreeMutation();
+    void handleRangeChange();
     void attachStyleContext (Component& root);
     Result fail (const String& message);
     void resetState();

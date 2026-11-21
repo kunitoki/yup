@@ -459,6 +459,82 @@ Result ExpressionContext::addExpression (const String& name, StringRef text)
 }
 
 //==============================================================================
+std::vector<ExpressionFunction> ExpressionContext::getFunctions() const
+{
+    std::vector<ExpressionFunction> result;
+    const auto& declared = getDeclarations().functions;
+
+    for (const auto& [name, overloads] : declared)
+        result.insert (result.end(), overloads.begin(), overloads.end());
+
+    // A built-in function declared again with the same signature was replaced
+    for (const auto& [name, overloads] : getBuiltinFunctions())
+    {
+        const auto replacing = declared.find (name);
+
+        for (const auto& builtin : overloads)
+        {
+            const auto isReplaced = replacing != declared.end()
+                                 && std::any_of (replacing->second.begin(), replacing->second.end(), [&builtin] (const ExpressionFunction& function)
+            {
+                return function.hasSameSignature (builtin);
+            });
+
+            if (! isReplaced)
+                result.push_back (builtin);
+        }
+    }
+
+    return result;
+}
+
+StringArray ExpressionContext::getConstantNames() const
+{
+    const auto& declared = getDeclarations();
+    std::vector<bool> isEnumValue (declared.constants.size());
+
+    for (const auto& [name, indices] : declared.enumValues)
+        for (const auto index : indices)
+            isEnumValue[static_cast<size_t> (index)] = true;
+
+    StringArray names;
+
+    for (const auto& [name, symbol] : declared.symbols)
+        if (symbol.kind == SymbolKind::constant && ! isEnumValue[static_cast<size_t> (symbol.index)])
+            names.add (name);
+
+    names.sort (false);
+    return names;
+}
+
+std::vector<std::pair<String, StringArray>> ExpressionContext::getEnumerations() const
+{
+    const auto& declared = getDeclarations();
+    std::map<String, std::vector<std::pair<int, String>>> valuesByType;
+
+    for (const auto& [name, indices] : declared.enumValues)
+        for (const auto index : indices)
+            valuesByType[declared.constants[static_cast<size_t> (index)].type->getName()].emplace_back (index, name);
+
+    std::vector<std::pair<String, StringArray>> result;
+
+    for (auto& [typeName, values] : valuesByType)
+    {
+        // The constants are in the order their values were declared
+        std::sort (values.begin(), values.end());
+
+        StringArray names;
+
+        for (const auto& [index, name] : values)
+            names.add (name);
+
+        result.emplace_back (typeName, std::move (names));
+    }
+
+    return result;
+}
+
+//==============================================================================
 void ExpressionContext::addFunction (ExpressionFunction function)
 {
     const bool hasValidTypes = function.resultType != nullptr

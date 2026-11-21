@@ -37,6 +37,7 @@ constexpr double maximumZoom = 8.0;
 constexpr int maximumImageSide = 4096;
 constexpr float defaultMargin = 8.0f;
 constexpr float minimumGridStep = 4.0f;
+constexpr int longestListTold = 16;
 
 const char* const checkTool = "yui_check";
 const char* const inspectTool = "yui_inspect";
@@ -106,6 +107,30 @@ var describeStates()
                          { "description", "Components to show in an interaction state, as their :hover and :pressed rules style them." } });
 }
 
+var describeEvents()
+{
+    const auto point = [] (const char* description)
+    {
+        return makeObject ({ { "type", "array" }, { "items", makeObject ({ { "type", "number" } }) }, { "minItems", 2 }, { "maxItems", 2 }, { "description", description } });
+    };
+
+    const auto event = makeObject ({ { "type", "object" },
+                                     { "properties", makeObject ({ { "id", describeText ("The id of the component.") },
+                                                                   { "path", describeText ("The path yui_inspect gives the component, for one with no id.") },
+                                                                   { "type", makeObject ({ { "type", "string" }, { "enum", var (StringArray { "click", "doubleClick", "drag", "wheel", "hover" }) } }) },
+                                                                   { "at", point ("Where in the component, as [x, y] from its top left. Its middle when not given.") },
+                                                                   { "by", point ("How far a drag goes, as [dx, dy].") },
+                                                                   { "to", point ("Where a drag ends, as [x, y] from the top left of the component.") },
+                                                                   { "delta", point ("How far a wheel turns, as [dx, dy].") } }) },
+                                     { "required", var (StringArray { "type" }) } });
+
+    return makeObject ({ { "type", "array" },
+                         { "items", event },
+                         { "description", "Pointer events played in order before the interface is told or drawn, each going where a pointer at that place would. "
+                                          "The answer tells the component that received each, the model values they changed with the ones before, and the "
+                                          "actions the interface called. The pointer stays where the last event left it." } });
+}
+
 //==============================================================================
 String describeProblems (const std::vector<YuiToolProblem>& problems)
 {
@@ -134,10 +159,11 @@ var listProblems (const std::vector<YuiToolProblem>& problems)
     return var (records);
 }
 
+// An answer is told on one line, where it takes a third of the room it takes spread over many
 YuiAgentResult succeed (const var& found)
 {
     YuiAgentResult result;
-    result.text = JSON::toString (found);
+    result.text = JSON::toString (found, true);
 
     return result;
 }
@@ -249,6 +275,23 @@ String findWhyNothingShows (const YuiToolView& view)
     return reason;
 }
 
+// The component an entry of a list names by its id or by its path
+Result findNamed (const var& entry, YuiToolView& view, const char* what, Component*& component)
+{
+    const auto id = entry["id"].toString();
+    const auto path = entry["path"].toString();
+
+    if (id.isEmpty() && ! entry.hasProperty ("path"))
+        return Result::fail (String (what) + " names its component by 'id' or by 'path'");
+
+    component = id.isNotEmpty() ? view.getDocument().findById (id) : findYuiToolComponent (view, path);
+
+    if (component == nullptr)
+        return Result::fail (id.isNotEmpty() ? "there is no component with the id '" + id + "'" : "there is no component at the path '" + path + "'");
+
+    return Result::ok();
+}
+
 Result applyStates (const var& arguments, YuiToolView& view)
 {
     const auto& given = arguments["states"];
@@ -259,18 +302,11 @@ Result applyStates (const var& arguments, YuiToolView& view)
 
     for (const auto& entry : *states)
     {
-        const auto id = entry["id"].toString();
-        const auto hasPath = entry.hasProperty ("path");
-        const auto path = entry["path"].toString();
         const auto state = entry["state"].toString();
+        Component* component = nullptr;
 
-        if (id.isEmpty() && ! hasPath)
-            return Result::fail ("a state names its component by 'id' or by 'path'");
-
-        auto* component = id.isNotEmpty() ? view.getDocument().findById (id) : findYuiToolComponent (view, path);
-
-        if (component == nullptr)
-            return Result::fail (id.isNotEmpty() ? "there is no component with the id '" + id + "'" : "there is no component at the path '" + path + "'");
+        if (const auto found = findNamed (entry, view, "a state", component); found.failed())
+            return found;
 
         if (state == "hover")
             component->setHovered (true);
@@ -281,6 +317,184 @@ Result applyStates (const var& arguments, YuiToolView& view)
     }
 
     return Result::ok();
+}
+
+//==============================================================================
+bool readPoint (const var& given, Point<float>& point)
+{
+    const auto* values = given.getArray();
+
+    if (values == nullptr || values->size() != 2)
+        return false;
+
+    point = { static_cast<float> ((*values)[0]), static_cast<float> ((*values)[1]) };
+    return true;
+}
+
+String nameComponent (const var& described)
+{
+    if (described.isVoid())
+        return "a component the document does not describe";
+
+    return described["type"].toString() + (described.hasProperty ("id") ? " '" + described["id"].toString() + "'" : " at the path '" + described["path"].toString() + "'");
+}
+
+// Why an event did not do what a pointer on the component named does, nothing when it did
+String findWhyNotReached (YuiToolView& view, const Component& named, const Component* received)
+{
+    if (received == nullptr)
+        return "nothing is under the pointer there: the component is hidden, has no size or lies outside the interface";
+
+    auto isInside = false;
+
+    for (const auto* component = received; component != nullptr && ! isInside; component = component->getParentComponent())
+        isInside = component == &named;
+
+    if (! isInside)
+        return "the event went to " + nameComponent (describeYuiToolComponent (view, *received)) + ", which is over the component there";
+
+    if (! received->isEnabled())
+        return "the component is disabled, so it ignores the pointer";
+
+    return {};
+}
+
+// Plays the pointer events a call asks for, in order, and tells what received each
+Result playEvents (const var& arguments, YuiToolView& view, PointerSimulator& pointer, Array<var>& played)
+{
+    const auto* events = arguments["events"].getArray();
+
+    if (events == nullptr)
+        return Result::fail ("'events' is a list of pointer events, each on a component");
+
+    for (const auto& entry : *events)
+    {
+        const auto type = entry["type"].toString();
+        Component* component = nullptr;
+
+        if (const auto found = findNamed (entry, view, "an event", component); found.failed())
+            return found;
+
+        // Where in the component, its middle when not told
+        const auto bounds = component->getBoundsRelativeToTopLevelComponent();
+        Point<float> at { bounds.getWidth() * 0.5f, bounds.getHeight() * 0.5f };
+
+        if (entry.hasProperty ("at") && ! readPoint (entry["at"], at))
+            return Result::fail ("'at' is [x, y] in logical pixels from the top left of the component");
+
+        const auto position = bounds.getTopLeft() + at;
+        Component* received = nullptr;
+
+        if (type == "click")
+        {
+            received = pointer.click (position);
+        }
+        else if (type == "doubleClick")
+        {
+            received = pointer.doubleClick (position);
+        }
+        else if (type == "hover")
+        {
+            received = pointer.moveTo (position);
+        }
+        else if (type == "drag")
+        {
+            Point<float> to, by;
+
+            if (readPoint (entry["to"], to))
+                received = pointer.drag (position, bounds.getTopLeft() + to);
+            else if (readPoint (entry["by"], by))
+                received = pointer.drag (position, position + by);
+            else
+                return Result::fail ("a drag tells where it goes: 'by' as [dx, dy], or 'to' as [x, y] in the component");
+        }
+        else if (type == "wheel")
+        {
+            Point<float> delta;
+
+            if (! readPoint (entry["delta"], delta))
+                return Result::fail ("a wheel event tells how far it turns as 'delta', [dx, dy]");
+
+            received = pointer.wheel (position, delta);
+        }
+        else
+        {
+            return Result::fail ("the 'type' of an event is click, doubleClick, drag, wheel or hover");
+        }
+
+        auto told = makeObject ({ { "type", type } });
+
+        if (received != nullptr)
+            told.getDynamicObject()->setProperty ("received", describeYuiToolComponent (view, *received));
+
+        if (const auto warning = findWhyNotReached (view, *component, received); warning.isNotEmpty())
+            told.getDynamicObject()->setProperty ("warning", warning);
+
+        played.add (told);
+
+        // What the event changed may be the range of a repeat, whose components the next event can be on
+        view.getDocument().applyPendingChanges();
+    }
+
+    return Result::ok();
+}
+
+// A value as it is told: a long list is the data of a meter, told by its length
+var summarize (const var& value)
+{
+    const auto* list = value.getArray();
+
+    return list != nullptr && list->size() > longestListTold ? var ("<" + String (list->size()) + " values>") : value;
+}
+
+// The values of the models the events changed, each with the one it had before
+var describeChanges (const var& before, const var& after)
+{
+    auto changes = makeObject ({});
+    const auto* models = after.getDynamicObject();
+
+    if (models == nullptr)
+        return changes;
+
+    for (const auto& model : models->getProperties())
+    {
+        const auto* properties = model.value.getDynamicObject();
+        auto changed = makeObject ({});
+
+        if (properties == nullptr)
+            continue;
+
+        for (const auto& property : properties->getProperties())
+        {
+            const auto& was = before[model.name][property.name];
+
+            if (was == property.value)
+                continue;
+
+            const auto* wasList = was.getArray();
+            const auto* isList = property.value.getArray();
+
+            if (wasList == nullptr || isList == nullptr || wasList->size() != isList->size())
+            {
+                changed.getDynamicObject()->setProperty (property.name, var (Array<var> { summarize (was), summarize (property.value) }));
+                continue;
+            }
+
+            // Of a list, the elements that changed are told by their index
+            auto elements = makeObject ({});
+
+            for (int index = 0; index < isList->size() && elements.getDynamicObject()->getProperties().size() < longestListTold; ++index)
+                if (! ((*wasList)[index] == (*isList)[index]))
+                    elements.getDynamicObject()->setProperty (Identifier (String (index)), var (Array<var> { (*wasList)[index], (*isList)[index] }));
+
+            changed.getDynamicObject()->setProperty (property.name, elements);
+        }
+
+        if (changed.getDynamicObject()->getProperties().size() > 0)
+            changes.getDynamicObject()->setProperty (model.name, changed);
+    }
+
+    return changes;
 }
 
 //==============================================================================
@@ -541,10 +755,19 @@ YuiAgentResult check (const var& arguments, const YuiAgentHost& host)
     for (const auto& problem : problems)
         numErrors += problem.isError ? 1 : 0;
 
-    return succeed (makeObject ({ { "file", file.getFullPathName() },
-                                  { "errors", numErrors },
-                                  { "warnings", static_cast<int> (problems.size()) - numErrors },
-                                  { "problems", listProblems (problems) } }));
+    auto found = makeObject ({ { "file", file.getFullPathName() },
+                               { "errors", numErrors },
+                               { "warnings", static_cast<int> (problems.size()) - numErrors },
+                               { "problems", listProblems (problems) } });
+
+    // What the models lack is told ready to be added to their file, with how many errors that leaves
+    if (const auto missing = numErrors > 0 ? findYuiToolMissingModels (file, models) : YuiToolMissingModels(); ! missing.models.isVoid())
+    {
+        found.getDynamicObject()->setProperty ("missingModels", missing.models);
+        found.getDynamicObject()->setProperty ("errorsWithMissingModels", missing.numErrorsLeft);
+    }
+
+    return succeed (found);
 }
 
 // How a call asks for its image, beyond what it shows
@@ -556,7 +779,15 @@ struct Drawn
     File output;
 };
 
-YuiAgentResult drawView (const var& arguments, const YuiAgentHost& host, YuiToolView& view, const YuiToolViewOptions& options, const Drawn& drawn)
+// Adds to an answer what the events of the call did
+void addPlayed (var& told, const var& played)
+{
+    if (const auto* done = played.getDynamicObject())
+        for (const auto& member : done->getProperties())
+            told.getDynamicObject()->setProperty (member.name, member.value);
+}
+
+YuiAgentResult drawView (const var& arguments, const YuiAgentHost& host, YuiToolView& view, const YuiToolViewOptions& options, const Drawn& drawn, const var& played)
 {
     Rectangle<float> region;
     bool isPart = false;
@@ -636,9 +867,10 @@ YuiAgentResult drawView (const var& arguments, const YuiAgentHost& host, YuiTool
 
     record->setProperty ("width", image.getWidth());
     record->setProperty ("height", image.getHeight());
+    addPlayed (told, played);
     record->setProperty ("problems", listProblems (view.findProblems()));
 
-    result.text = JSON::toString (told);
+    result.text = JSON::toString (told, true);
     return result;
 }
 
@@ -689,15 +921,58 @@ YuiAgentResult show (const var& arguments, const YuiAgentHost& host, bool draw)
 
     view.settle();
 
+    // The pointer stays where the last event left it until the interface is told or drawn
+    std::optional<PointerSimulator> pointer;
+    var played;
+
+    if (! arguments["events"].isVoid())
+    {
+        Array<var> events;
+        Array<var> actions;
+        const auto before = models.toJson().clone();
+
+        view.getDocument().setFallbackAction ([&actions] (const String& name, const Array<var>& given)
+        {
+            actions.add (makeObject ({ { "name", name }, { "arguments", var (given) } }));
+        });
+
+        pointer.emplace (*view.getComponent());
+
+        const auto done = playEvents (arguments, view, *pointer, events);
+
+        view.getDocument().setFallbackAction (nullptr);
+
+        if (done.failed())
+            return YuiAgentResult::fail (done.getErrorMessage());
+
+        view.settle();
+
+        played = makeObject ({ { "events", var (events) }, { "changed", describeChanges (before, models.toJson()) }, { "actions", var (actions) } });
+    }
+
     if (! draw)
     {
-        auto layout = describeYuiToolLayout (view);
+        const Component* only = nullptr;
+
+        if (const auto element = arguments["element"].toString(); element.isNotEmpty())
+        {
+            only = view.getDocument().findById (element);
+
+            if (only == nullptr)
+                only = findYuiToolComponent (view, element);
+
+            if (only == nullptr)
+                return YuiAgentResult::fail ("there is no component with the id or at the path '" + element + "'");
+        }
+
+        auto layout = describeYuiToolLayout (view, static_cast<bool> (arguments["drawings"]), only);
+        addPlayed (layout, played);
         layout.getDynamicObject()->setProperty ("problems", listProblems (view.findProblems()));
 
         return succeed (layout);
     }
 
-    return drawView (arguments, host, view, options, drawn);
+    return drawView (arguments, host, view, options, drawn, played);
 }
 
 YuiAgentResult describeSchema (const var& arguments)
@@ -706,12 +981,36 @@ YuiAgentResult describeSchema (const var& arguments)
 
     const auto types = ComponentTypeRegistry::getInstance().getRegisteredTypes();
     const auto typeName = arguments["type"].toString();
+    const auto topic = arguments["topic"].toString();
+
+    if (topic.isNotEmpty() && topic != "components")
+    {
+        if (typeName.isNotEmpty())
+            return YuiAgentResult::fail ("'type' names a component type, which the components topic describes");
+
+        const auto described = describeYuiToolSchemaTopic (topic);
+
+        return described.isVoid() ? YuiAgentResult::fail ("'topic' is components, drawing, styles or expressions") : succeed (described);
+    }
 
     if (typeName.isNotEmpty())
     {
         for (const auto* info : types)
-            if (info->getTypeName().toString() == typeName)
-                return succeed (describeYuiToolComponentType (*info, true));
+        {
+            if (info->getTypeName().toString() != typeName)
+                continue;
+
+            auto described = describeYuiToolComponentType (*info, static_cast<bool> (arguments["inherited"]));
+            StringArray bases;
+
+            for (const auto* base = info->getBaseTypeInfo(); base != nullptr; base = base->getBaseTypeInfo())
+                bases.add (base->getTypeName().toString());
+
+            // The types declaring the properties and signals left out, nearest first
+            described.getDynamicObject()->setProperty ("bases", var (bases));
+
+            return succeed (described);
+        }
 
         return YuiAgentResult::fail ("there is no component type '" + typeName + "': call the tool without a type for those there are");
     }
@@ -728,7 +1027,9 @@ YuiAgentResult describeSchema (const var& arguments)
         names.add (described);
     }
 
-    return succeed (makeObject ({ { "types", var (names) }, { "paletteRoles", var (ThemePalette::getRoleNames()) } }));
+    return succeed (makeObject ({ { "types", var (names) },
+                                  { "paletteRoles", var (ThemePalette::getRoleNames()) },
+                                  { "topics", var (StringArray { "components", "drawing", "styles", "expressions" }) } }));
 }
 
 } // namespace
@@ -759,6 +1060,7 @@ var getYuiAgentTools (bool withPreview)
     const auto theme = std::pair<Identifier, var> { "theme", makeObject ({ { "type", "string" }, { "enum", var (StringArray { "dark", "light" }) }, { "description", "Mode of the default theme, dark when not given." } }) };
     const auto values = std::pair<Identifier, var> { "values", makeObject ({ { "type", "object" }, { "description", "Model values to set over those of the models file, as { \"<model>\": { \"<property>\": <value> } }." } }) };
     const auto states = std::pair<Identifier, var> { "states", describeStates() };
+    const auto events = std::pair<Identifier, var> { "events", describeEvents() };
     const auto region = std::pair<Identifier, var> { "region", makeObject ({ { "type", "array" }, { "items", makeObject ({ { "type", "number" } }) }, { "minItems", 4 }, { "maxItems", 4 }, { "description", "Part of the interface to draw, as [x, y, width, height] in its logical pixels. With a scale, it looks closer." } }) };
     const auto element = std::pair<Identifier, var> { "element", describeText ("The id of a component, or the path yui_inspect gives it, to draw it alone with a margin around it.") };
     const auto margin = std::pair<Identifier, var> { "margin", describeNumber ("Logical pixels drawn around the element, 8 when not given.") };
@@ -770,7 +1072,8 @@ var getYuiAgentTools (bool withPreview)
 
     tools.add (describeTool (checkTool,
                              "Reports the problems of a .yui file and of the files it imports, as an application loading it meets them: "
-                             "each with its file, line, column, severity and message. Run it after every edit.",
+                             "each with its file, line, column, severity and message. Run it after every edit. When the file binds to models "
+                             "or properties its models file lacks, 'missingModels' lists them with sample values, ready to be added to that file.",
                              { fileArgument(), modelsArgument() },
                              { "file" }));
 
@@ -778,20 +1081,26 @@ var getYuiAgentTools (bool withPreview)
                              "Describes the layout of a .yui interface without drawing it: the tree of its components, each with its type, id, source line, "
                              "text and bounds as [x, y, width, height] in logical pixels from the top left of the interface. It warns about components "
                              "that have no size or lie outside the interface. Use it to check places and sizes, and where an image is of no use.",
-                             { fileArgument(), drawing, palette, host, size, theme, modelsArgument(), values, states },
+                             { fileArgument(), drawing, palette, host, size, theme, modelsArgument(), values, states, events,
+                               { "element", describeText ("The id of a component, or the path this tool gives it, to describe it alone with what it holds instead of the whole interface.") },
+                               { "drawings", makeObject ({ { "type", "boolean" }, { "description", "True to also tell, for each component a drawing paints, where the elements of the drawing that have an id land: "
+                                                                                                    "their bounds in the interface, how many times a repeat paints them, and for a text the area its glyphs cover." } }) } },
                              { "file" }));
 
     tools.add (describeTool (renderTool,
                              "Draws a .yui interface, or a drawing, a palette or a component the file declares, and returns the image as a PNG "
                              "with the problems of the document. Use it to see what the file looks like: all of it, or a region or an element of it "
                              "drawn larger, under a grid of coordinates, or next to a reference image it is compared with.",
-                             { fileArgument(), drawing, palette, host, size, scaleArgument(), region, element, margin, grid, reference, outputArgument(), theme, modelsArgument(), values, states },
+                             { fileArgument(), drawing, palette, host, size, scaleArgument(), region, element, margin, grid, reference, outputArgument(), theme, modelsArgument(), values, states, events },
                              { "file" }));
 
     tools.add (describeTool (schemaTool,
-                             "Tells what a .yui file can name. Without a type, the component types and the palette roles. "
-                             "With one, its properties and signals, those of its bases included.",
-                             { { "type", describeText ("Name of a component type, such as Slider.") } }));
+                             "Tells what a .yui file can name, as the code checking it knows it. Without arguments, the component types and the palette roles. "
+                             "With a type, the properties and signals it declares. With a topic, the elements of a drawing with their properties, what a "
+                             "style rule and a selector take, or the functions, members and enumerations of expressions.",
+                             { { "type", describeText ("Name of a component type, such as Slider.") },
+                               { "inherited", makeObject ({ { "type", "boolean" }, { "description", "True to also list the properties and signals a type inherits. They are left out when not given, as every type inherits about 40 of them from Component." } }) },
+                               { "topic", makeObject ({ { "type", "string" }, { "enum", var (StringArray { "components", "drawing", "styles", "expressions" }) }, { "description", "What to describe, components when not given." } }) } }));
 
     if (withPreview)
     {

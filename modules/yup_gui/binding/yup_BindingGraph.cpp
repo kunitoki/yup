@@ -99,9 +99,10 @@ Result BindingGraph::bind (Component& target,
                            const String& text,
                            std::optional<ComponentProperty::Type> type,
                            DrawingScope::ComponentResolver resolver,
-                           bool* isLive)
+                           bool* isLive,
+                           Component* locals)
 {
-    auto compiled = PropertyExpression::compile (target, text, type, std::move (resolver), nullptr, baseDirectory);
+    auto compiled = PropertyExpression::compile (target, text, type, std::move (resolver), locals, baseDirectory);
 
     if (compiled.failed())
         return Result::fail (compiled.getErrorMessage());
@@ -165,24 +166,25 @@ void BindingGraph::clear()
 
 //==============================================================================
 
-void BindingGraph::link (Component& target, const Identifier& property, Component& source, const Identifier& sourceProperty)
+void BindingGraph::link (Component& target, const Identifier& property, Component& source, const Identifier& sourceProperty, int sourceIndex)
 {
     auto newLink = std::make_shared<Link>();
     newLink->first = &target;
     newLink->firstProperty = property;
     newLink->second = &source;
     newLink->secondProperty = sourceProperty;
+    newLink->secondIndex = sourceIndex;
 
     observer.observe (target);
     observer.observe (source);
     links.push_back (newLink);
 
-    const auto value = readLinked (source, sourceProperty);
+    const auto value = readLinkSide (*newLink, false);
 
-    if (! value.isVoid() && readLinked (target, property) != value)
+    if (! value.isVoid() && readLinkSide (*newLink, true) != value)
     {
         const ScopedValueSetter<bool> syncing (newLink->isSyncing, true);
-        target.setProperty (property, value);
+        writeLinkSide (*newLink, true, value);
     }
 }
 
@@ -359,17 +361,50 @@ void BindingGraph::syncLinks (Component& component, const Identifier& property)
             continue;
 
         const auto isFirst = current->first == &component && current->firstProperty == property;
-        auto& other = isFirst ? *current->second : *current->first;
-        const auto& otherProperty = isFirst ? current->secondProperty : current->firstProperty;
+        const auto value = readLinkSide (*current, isFirst);
 
-        const auto value = readLinked (component, property);
-
-        if (value.isVoid() || readLinked (other, otherProperty) == value)
+        if (value.isVoid() || readLinkSide (*current, ! isFirst) == value)
             continue;
 
         const ScopedValueSetter<bool> syncing (current->isSyncing, true);
-        other.setProperty (otherProperty, value);
+        writeLinkSide (*current, ! isFirst, value);
     }
+}
+
+var BindingGraph::readLinkSide (const Link& link, bool isFirst)
+{
+    const auto value = readLinked (isFirst ? *link.first : *link.second, isFirst ? link.firstProperty : link.secondProperty);
+
+    if (isFirst || link.secondIndex < 0)
+        return value;
+
+    const auto* list = value.getArray();
+
+    return list != nullptr && isPositiveAndBelow (link.secondIndex, list->size()) ? list->getReference (link.secondIndex) : var();
+}
+
+void BindingGraph::writeLinkSide (const Link& link, bool isFirst, const var& value)
+{
+    auto& component = isFirst ? *link.first : *link.second;
+    const auto& property = isFirst ? link.firstProperty : link.secondProperty;
+
+    if (isFirst || link.secondIndex < 0)
+    {
+        component.setProperty (property, value);
+        return;
+    }
+
+    // An element is written by giving the list again with that element replaced
+    const auto current = readLinked (component, property);
+    const auto* list = current.getArray();
+
+    if (list == nullptr || ! isPositiveAndBelow (link.secondIndex, list->size()))
+        return;
+
+    Array<var> changed (*list);
+    changed.set (link.secondIndex, value);
+
+    component.setProperty (property, var (changed));
 }
 
 void BindingGraph::invalidate (const Component& component, const Identifier& property)

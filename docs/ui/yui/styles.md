@@ -436,8 +436,25 @@ style {
   `resizeUpDown`, `resizeTopLeftRightBottom`, `resizeBottomLeftRightTop` and
   `resizeAll`.
 
+A component that paints outside its bounds itself, as a drawing with a glow
+around a lamp does, asks for the room with `paintMargin`, on the component or
+in a rule: a number, or a string of 1, 2 or 4 values in the order `margin`
+takes them.
+
+```yui
+style {
+    .lamp { drawing: Lamp; paintMargin: 12; }
+    .meter { drawing: Meter; paintMargin: "0 24"; }
+}
+```
+
+Only what is painted changes: the bounds, the layout and the hit testing of
+the component stay the same, and what it paints is still clipped to its
+parent.
+
 The paint margin of the component grows automatically to hold its `shadow:`,
-`glow:` and `filter: drop-shadow(...)` layers. When no rule sets one of these
+`glow:` and `filter: drop-shadow(...)` layers, over the one `paintMargin`
+asks for. When no rule sets one of these
 declarations anymore, the component gets back the cursor, effect or paint margin
 it had before, unless the application changed it in between. Unknown names and
 malformed declarations are reported as diagnostics.

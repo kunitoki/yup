@@ -351,6 +351,29 @@ public:
     void addFunction (ExpressionFunction function);
 
     //==============================================================================
+    /** Returns the functions an expression of this context can call, the built-in ones included,
+        for a tool to list them.
+
+        Each has the name it is registered under: a plain name for a function called by name, a
+        name starting with `.` for a member or a method of the type of its first parameter,
+        `operator` followed by its symbol for an operator, and `@convert` for an implicit
+        conversion. The order is not specified.
+
+        @see ExpressionFunction::getSignature
+    */
+    std::vector<ExpressionFunction> getFunctions() const;
+
+    /** Returns the names of the constants declared with addConstant, sorted. The values of the
+        enumerations are not among them (see getEnumerations).
+    */
+    StringArray getConstantNames() const;
+
+    /** Returns the enumerations declared with addEnum: the name of each type with the names of
+        its values in the order they were declared, sorted by type name.
+    */
+    std::vector<std::pair<String, StringArray>> getEnumerations() const;
+
+    //==============================================================================
     /** Declares the expected type of an output: assigning the output converts the value implicitly. */
     template <class T>
     void declareOutput (const String& name)

@@ -390,3 +390,47 @@ TEST_F (BindingGraphTests, UpdatesPaletteDependentBindingsOnComponentAndThemePal
     ApplicationTheme::setGlobalTheme (oldTheme.get());
 }
 
+TEST_F (BindingGraphTests, LinkToAnElementOfAListKeepsItEqual)
+{
+    Component model;
+    ToggleButton second, fourth;
+
+    model.setProperty ("steps", var (Array<var> { false, true, false, false }));
+
+    graph.link (second, Identifier ("checked"), model, Identifier ("steps"), 1);
+    graph.link (fourth, Identifier ("checked"), model, Identifier ("steps"), 3);
+
+    // Each takes its element first
+    EXPECT_TRUE (second.getToggleState());
+    EXPECT_FALSE (fourth.getToggleState());
+
+    // A button writes its element, leaving the others as they are
+    fourth.setToggleState (true);
+    EXPECT_EQ (JSON::toString (model.getProperty ("steps"), true), String ("[false, true, false, true]"));
+
+    second.setToggleState (false);
+    EXPECT_EQ (JSON::toString (model.getProperty ("steps"), true), String ("[false, false, false, true]"));
+
+    // A new list reaches the buttons whose element changed
+    model.setProperty ("steps", var (Array<var> { true, true, true, false }));
+    EXPECT_TRUE (second.getToggleState());
+    EXPECT_FALSE (fourth.getToggleState());
+    EXPECT_EQ (JSON::toString (model.getProperty ("steps"), true), String ("[true, true, true, false]"));
+}
+
+TEST_F (BindingGraphTests, LinkToAnElementOutsideTheListDoesNothingUntilItIsThere)
+{
+    Component model;
+    ToggleButton button;
+
+    model.setProperty ("steps", var (Array<var> { true }));
+    graph.link (button, Identifier ("checked"), model, Identifier ("steps"), 2);
+    EXPECT_FALSE (button.getToggleState());
+
+    button.setToggleState (true);
+    EXPECT_EQ (JSON::toString (model.getProperty ("steps"), true), String ("[true]"));
+
+    model.setProperty ("steps", var (Array<var> { true, true, false }));
+    EXPECT_FALSE (button.getToggleState());
+    EXPECT_EQ (JSON::toString (model.getProperty ("steps"), true), String ("[true, true, false]"));
+}

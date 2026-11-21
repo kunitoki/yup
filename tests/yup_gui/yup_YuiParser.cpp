@@ -427,6 +427,40 @@ TEST_F (YuiParserTest, ParsesTwoWayBindings)
     EXPECT_EQ (parseError ("Column { value: 1; value <=> a.b; }"), "1:20: The property 'value' is already set");
 }
 
+TEST_F (YuiParserTest, ParsesATwoWayBindingToAnElementOfAList)
+{
+    const auto result = YuiParser::parse ("Row { ToggleButton { checked <=> seq.steps[i + 1]; } }");
+
+    ASSERT_TRUE (result.wasOk()) << result.diagnostics.front().toString();
+
+    const auto binding = result.document.getChildWithName ("Row").getChild (0).getChild (0);
+    EXPECT_EQ (binding.getProperty ("property").toString(), "checked");
+    EXPECT_EQ (binding.getProperty ("target").toString(), "seq.steps[i + 1]");
+
+    EXPECT_TRUE (parseError ("Row { ToggleButton { checked <=> seq.steps[2; } }").contains ("Expected ']'"));
+}
+
+TEST_F (YuiParserTest, ParsesARepeatOfComponents)
+{
+    const auto result = YuiParser::parse ("Row {\n"
+                                          "    repeat i in 0 .. len (seq.steps) {\n"
+                                          "        ToggleButton { text: i; }\n"
+                                          "        repeat j in 0 .. i { Label { } }\n"
+                                          "    }\n"
+                                          "}");
+
+    ASSERT_TRUE (result.wasOk()) << result.diagnostics.front().toString();
+
+    const auto repeat = result.document.getChildWithName ("Row").getChild (0);
+    EXPECT_EQ (repeat.getType().toString(), "repeat");
+    EXPECT_EQ (repeat.getProperty ("name").toString(), "i");
+    EXPECT_EQ (repeat.getProperty ("from").toString(), "0");
+    EXPECT_EQ (repeat.getProperty ("to").toString(), "len (seq.steps)");
+    ASSERT_EQ (repeat.getNumChildren(), 2);
+    EXPECT_EQ (repeat.getChild (0).getType().toString(), "ToggleButton");
+    EXPECT_EQ (repeat.getChild (1).getChild (0).getType().toString(), "Label");
+}
+
 TEST_F (YuiParserTest, ParsesHandlerArgumentsBlocksAndChangedHandlers)
 {
     const auto result = YuiParser::parse ("Column {\n"

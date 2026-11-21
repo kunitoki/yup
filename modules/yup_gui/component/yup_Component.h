@@ -2344,6 +2344,7 @@ private:
 
     friend class ComponentNative;
     friend class SDLComponentNative;
+    friend class PointerSimulator;
     friend class StyleContext;
     friend class WeakReference<Component>;
 

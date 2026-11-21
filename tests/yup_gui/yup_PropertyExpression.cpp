@@ -101,6 +101,31 @@ TEST_F (PropertyExpressionTests, ProbesTheTypeOfAValue)
     EXPECT_EQ (PropertyExpression::compile (slider, "[1]", std::nullopt).getReference()->getType(), ComponentProperty::Type::array);
 }
 
+TEST_F (PropertyExpressionTests, AnIntegerTakesANumberCutToAWholeOne)
+{
+    Slider slider { Slider::LinearHorizontal };
+    slider.setBounds (0, 0, 45, 20);
+
+    const auto integer = ComponentProperty::Type::integer;
+
+    // A number that is not whole is cut as `int (...)` cuts it, so the numbers of a model need no cast
+    EXPECT_TRUE (evaluate (slider, "2.75", integer).isInt());
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "2.75", integer)), 2);
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "-2.75", integer)), -2);
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "width / 10", integer)), 4);
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "width / 10", integer)), static_cast<int> (evaluate (slider, "int (width / 10)", integer)));
+
+    // Whole numbers are kept as they are, however large
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "7 / 2", integer)), 3);
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "16777217", integer)), 16777217);
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "true", integer)), 1);
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "1e12", integer)), std::numeric_limits<int>::max());
+
+    // What is not a number is still refused
+    EXPECT_FALSE (error (slider, "\"12\"", integer).isEmpty());
+    EXPECT_FALSE (error (slider, "point (1, 2)", integer).isEmpty());
+}
+
 TEST_F (PropertyExpressionTests, EvaluatesPointsAndRectangles)
 {
     Slider slider { Slider::LinearHorizontal };
@@ -249,4 +274,25 @@ TEST_F (PropertyExpressionTests, FontFileThatCannotBeLoadedGivesTheThemeFont)
 
     EXPECT_EQ (font.getFont().get(), themeFont.getValue().getFont().get());
     EXPECT_FLOAT_EQ (font.getHeight(), 11.0f);
+}
+
+TEST_F (PropertyExpressionTests, CreatesTheContextExpressionsAreCompiledWith)
+{
+    StringArray signatures;
+
+    for (const auto& function : PropertyExpression::createContext().getFunctions())
+        signatures.add (function.getSignature());
+
+    const auto hasFunction = [&signatures] (const String& start)
+    {
+        return std::any_of (signatures.begin(), signatures.end(), [&start] (const String& signature)
+        {
+            return signature.startsWith (start);
+        });
+    };
+
+    EXPECT_TRUE (hasFunction ("font (string"));
+    EXPECT_TRUE (hasFunction ("rect ("));
+    EXPECT_TRUE (hasFunction ("clamp ("));
+    EXPECT_TRUE (hasFunction (".withAlpha ("));
 }

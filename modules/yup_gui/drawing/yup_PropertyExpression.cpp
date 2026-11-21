@@ -91,9 +91,25 @@ void addFontFiles (ExpressionContext& context, const File& baseDirectory)
     });
 }
 
+// An integer takes any number, cut to a whole one as `int (...)` cuts it: the numbers of a model are never
+// integers by type. A double holds every integer as it is
+int cutToInteger (double value) noexcept
+{
+    if (std::isnan (value))
+        return 0;
+
+    return static_cast<int> (jlimit (static_cast<double> (std::numeric_limits<int>::min()), static_cast<double> (std::numeric_limits<int>::max()), value));
+}
+
 // Types that aren't bridged are compiled as numbers, which is what an untyped value falls back to
 void declareValueOutput (ExpressionContext& context, ComponentProperty::Type type)
 {
+    if (type == ComponentProperty::Type::integer)
+    {
+        context.declareOutput<double> (outputName);
+        return;
+    }
+
     if (! DrawingScope::withExpressionType (type, [&] (auto tag)
         {
             context.declareOutput<typename decltype (tag)::type> (outputName);
@@ -151,6 +167,9 @@ var readValueOutput (const CompiledExpression& program,
         return VariantConverter<float>::toVar (state.get (ExpressionOutput<float> { 0 }));
     }
 
+    if (type == ComponentProperty::Type::integer)
+        return cutToInteger (state.get (ExpressionOutput<double> { 0 }));
+
     var value;
 
     if (! DrawingScope::withExpressionType (type, [&] (auto tag)
@@ -172,6 +191,14 @@ var readValueOutput (const CompiledExpression& program,
 PropertyExpression::PropertyExpression (ExpressionContext contextToUse)
     : context (std::move (contextToUse))
 {
+}
+
+ExpressionContext PropertyExpression::createContext (const File& baseDirectory)
+{
+    auto context = getPropertyExpressionBaseContext();
+    addFontFiles (context, baseDirectory);
+
+    return context;
 }
 
 ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Component& component,

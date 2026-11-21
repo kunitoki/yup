@@ -106,7 +106,7 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
-    void mouseUp (const MouseEvent& event) override;
+    void clicked() override;
     /** @internal */
     void focusGained() override;
     /** @internal */

@@ -187,9 +187,11 @@ A `component` block also declares:
 ## Scopes in drawings
 
 `let name: value;` names a value for the elements after it, and
-`repeat i in from .. to { ... }` draws its shapes once per integer from `from`
-to `to - 1`. Both only exist inside drawings, see
-[Scopes](drawing.md#scopes).
+`repeat i in from .. to { ... }` draws what it holds once per integer from
+`from` to `to - 1`, see [Scopes](drawing.md#scopes). A `let` only exists
+inside drawings. A `repeat` among components makes the components it holds
+once per integer, see [Repeating
+components](documents.md#repeating-components).
 
 Inside a drawing, `drawing Name { ... }`, `pattern Name { ... }` and
 `marker Name { ... }` define a drawing, a tile and a marker for the elements
@@ -199,8 +201,9 @@ after them, and `use Name { ... }` paints a drawing by name, see
 
 ## Bindings and handlers
 
-`name <=> id.property;` links a property both ways to another, or to a model
-property (`value <=> params.cutoff;`), see [Two-way
+`name <=> id.property;` links a property both ways to another, to a model
+property (`value <=> params.cutoff;`) or to one element of a list
+(`checked <=> seq.steps[i];`), see [Two-way
 bindings](documents.md#two-way-bindings).
 
 A property named after a signal is a handler: a call, either an action

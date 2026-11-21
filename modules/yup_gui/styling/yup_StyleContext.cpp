@@ -28,6 +28,7 @@ namespace
 const Identifier styleContextTransformId { "transform" };
 const Identifier styleContextFilterPropertyId { "filter" };
 const Identifier styleContextFilterStorageId { "__styleFilter" };
+const Identifier styleContextPaintMarginId { "paintMargin" };
 
 Identifier resolveStyleStorageId (const ComponentProperty* descriptor, const Identifier& propertyName)
 {
@@ -452,6 +453,8 @@ void StyleContext::restyleNow()
 
     for (int pass = 0; pass < 4 && ! dirtyComponents.isEmpty(); ++pass)
     {
+        const LayoutComponent::ScopedLayoutBatch layouts;
+
         auto pending = std::move (dirtyComponents);
         dirtyComponents.clear();
 
@@ -1038,7 +1041,8 @@ void StyleContext::syncStateBacked (Component& component, ComponentCache& cache,
         return;
     }
 
-    if (storageId == styleContextFilterStorageId)
+    // The paint margin a rule sets is widened by what the shadows and the filter reach, so it is set with them
+    if (storageId == styleContextFilterStorageId || storageId == styleContextPaintMarginId)
     {
         syncStyledFilterAndMargins (component, cache);
         return;
@@ -1286,14 +1290,17 @@ bool StyleContext::syncStyledFilterAndMargins (Component& component, ComponentCa
     const bool hasShadows = activeState != nullptr && ! activeState->getShadows().empty();
     const bool hasGlows = activeState != nullptr && ! activeState->getGlows().empty();
     const bool hasFilterMargin = filterMargin != EdgeSpacing<float>();
+    const auto* styledMargin = activeState != nullptr ? activeState->getStyleValue (styleContextPaintMarginId) : nullptr;
 
-    if (! hasShadows && ! hasGlows && ! hasFilterMargin)
+    if (! hasShadows && ! hasGlows && ! hasFilterMargin && styledMargin == nullptr)
     {
         changed |= cache.paintMarginOverride.restore (component, getMargin, setMargin);
     }
     else
     {
-        const auto base = cache.paintMarginOverride.base (component, getMargin);
+        // A rule sets the margin in place of the one the component was given
+        const auto base = styledMargin != nullptr ? LayoutComponent::parseSpacing (*styledMargin)
+                                                  : cache.paintMarginOverride.base (component, getMargin);
         auto left = jmax (base.getLeft(), filterMargin.getLeft());
         auto top = jmax (base.getTop(), filterMargin.getTop());
         auto right = jmax (base.getRight(), filterMargin.getRight());
@@ -1761,9 +1768,13 @@ bool StyleContext::resetStyle (Component& component, ComponentCache* cache, bool
         restoreDrawing (component, *cache);
         if (component.styleState != nullptr)
         {
-            component.styleState->removeComputedValue (styleContextFilterStorageId);
-            if (! keepAnimatedValues)
-                component.styleState->removeAnimatedValue (styleContextFilterStorageId);
+            // What the effects read of the styled values goes before they are applied with none
+            for (const auto& storageId : { styleContextFilterStorageId, styleContextPaintMarginId })
+            {
+                component.styleState->removeComputedValue (storageId);
+                if (! keepAnimatedValues)
+                    component.styleState->removeAnimatedValue (storageId);
+            }
         }
         changed |= applyEffects (component, *cache, nullptr, nullptr, nullptr, nullptr, nullptr);
     }

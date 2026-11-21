@@ -117,6 +117,40 @@ public:
     ~DrawingStyle() override;
 
     //==============================================================================
+    /** An element a drawing is made of, as getElementDescriptions() lists them. */
+    struct ElementDescription
+    {
+        /** The name of the element, such as `rect`. */
+        String type;
+
+        /** What the element is: `shape`, `media`, `container`, `definition`, `declaration`,
+            `filter` or `filterPrimitive`.
+        */
+        String role;
+
+        /** The properties placing a shape, in the order they are written. One with a default
+            is followed by it, as `angle=0`. Empty for what is not a shape.
+        */
+        StringArray geometry;
+
+        /** The other properties the element takes. A shape takes those of
+            getShapePaintProperties() on top of them, and a `use` the properties its drawing
+            declares.
+        */
+        StringArray properties;
+    };
+
+    /** Returns the elements a drawing can hold with the properties of each, as they are checked
+        when a drawing is compiled, for a tool to list them.
+
+        A `text` is listed twice: fitted in its `bounds`, and placed at its `anchor`.
+    */
+    static std::vector<ElementDescription> getElementDescriptions();
+
+    /** Returns the paint properties every shape takes, such as `fill` and `stroke`. */
+    static StringArray getShapePaintProperties();
+
+    //==============================================================================
     /** Returns the properties the drawing declares, in declaration order. */
     const std::vector<ComponentProperty>& getProperties() const noexcept;
 
@@ -137,6 +171,47 @@ public:
     //==============================================================================
     /** Feeds the component's live state and paints the drawing elements in order. */
     void paint (Graphics& g, const ApplicationTheme& theme, const Component& component) override;
+
+    //==============================================================================
+    /** Where an element of the drawing lands in the component it paints, as measureElements() tells it. */
+    struct ElementBounds
+    {
+        /** The path of the element in the drawing, as the problems of a drawing tell it: `Knob/group[0]/arc#value`. */
+        String path;
+
+        /** The name of the element, such as `arc`. */
+        String type;
+
+        /** The id of the element, empty when it has none. */
+        String id;
+
+        /** The box of what the element paints, in the coordinates of the component: its geometry
+            under the transforms of the groups and the viewports around it, without the width of
+            its stroke. For a `text` fitted in a rectangle it is that rectangle, and for a container
+            the box of what it holds. Empty when it paints nothing.
+        */
+        Rectangle<float> bounds;
+
+        /** For a `text`, the area its glyphs cover. Empty for other elements. */
+        Rectangle<float> textBounds;
+
+        /** How many times the element is painted: more than once inside a `repeat`, where the
+            bounds cover them all.
+        */
+        int numRows = 1;
+    };
+
+    /** Evaluates the drawing for a component as paint() does, and returns where each of its
+        elements lands without drawing any.
+
+        The elements are told in the order they are painted, a container before what it holds.
+        Those not painted are left out: what a container that is not visible holds, and the masks,
+        clip shapes, patterns, markers and filters, which paint nothing of their own. Texts are
+        measured with the default font of the global theme.
+
+        @param component  The component the drawing paints, usually the one the style is set on.
+    */
+    std::vector<ElementBounds> measureElements (const Component& component);
 
 private:
     //==============================================================================
@@ -161,7 +236,12 @@ private:
     Path collectOutline (const std::vector<std::unique_ptr<Node>>& shapes, const PaintContext& context, int numRows);
     void applyClips (Graphics& g, const Node& node, Slot* slot, const PaintContext& context, int numRows);
     void drawNodes (Graphics& g, const std::vector<std::unique_ptr<Node>>& children, const PaintContext& context, int numRows);
+    Rectangle<float> readComponent (const Component& component);
+    bool enterGroupBounds (const Node& node, Slot& slot, AffineTransform& mapping, std::optional<Rectangle<float>>& clip);
+    Rectangle<float> measureNodes (const std::vector<std::unique_ptr<Node>>& children, const PaintContext& context, const AffineTransform& transform, int numRows, std::vector<ElementBounds>& measured);
+    Rectangle<float> measureNode (const Node& node, const PaintContext& context, const AffineTransform& transform, int numRows, std::vector<ElementBounds>& measured);
     void drawNode (Graphics& g, const Node& node, const PaintContext& context, int numRows);
+    int getRepeatCount (const Node& node, const Slot& slot) const;
     bool drawFilteredLayer (Graphics& g, const Node& node, const PaintContext& context, int numRows);
     void drawFilteredContent (Graphics& g, const FilterSource& source);
 
@@ -171,6 +251,8 @@ private:
     std::shared_ptr<const Compiled> compiled;
     std::unique_ptr<Slot[]> slots;
     std::vector<Rectangle<float>> levelBounds;
+    std::vector<int> loopIndices;
+    int numLoopTurns = 1;
     std::vector<std::unique_ptr<PatternSource>> patternSources;
     ImageResolver imageResolver;
     std::map<const Node*, std::unique_ptr<FilterSource>> filterSources;

@@ -373,19 +373,41 @@ struct ExpressionDrawing::DrawBuffers
             modifier.setVerticalAlign (StyledText::toVerticalAlign (justification));
         }
 
-        void draw (Graphics& g, const Font* defaultFont, const std::optional<float>& fillOpacity, const std::optional<float>& strokeOpacity) const
+        /* Lays the text out with its font, or the one given when it has none. Returns false when there is nothing to draw. */
+        bool prepare (const Font* defaultFont) const
         {
             if (text.isEmpty())
-                return;
+                return false;
 
             const auto* textFont = font.has_value() && ! font->isEmpty() ? &*font : defaultFont;
             if (textFont == nullptr || textFont->isEmpty())
-                return;
+                return false;
 
             if (! isShaped || shapedFont != *textFont)
                 shape (*textFont);
 
-            if (anchorPoint && anchoredText.isEmpty())
+            return ! (anchorPoint && anchoredText.isEmpty());
+        }
+
+        /* Where the text lands: the part of its area its glyphs take, or all of it. */
+        Rectangle<float> getBounds (const Font* defaultFont, bool ofGlyphs) const
+        {
+            if (! prepare (defaultFont))
+                return {};
+
+            if (anchorPoint)
+                return anchoredText.getBounds();
+
+            if (! ofGlyphs)
+                return area;
+
+            const auto offset = fittedText->getOffset (area);
+            return fittedText->getComputedTextBounds().translated (area.getX() + offset.getX(), area.getY() + offset.getY());
+        }
+
+        void draw (Graphics& g, const Font* defaultFont, const std::optional<float>& fillOpacity, const std::optional<float>& strokeOpacity) const
+        {
+            if (! prepare (defaultFont))
                 return;
 
             const auto& shaped = anchorPoint ? anchoredText.getStyledText() : *fittedText;
@@ -464,6 +486,14 @@ struct ExpressionDrawing::DrawBuffers
     DrawBuffers (Path& outlineToBuild, bool shouldApplyTransforms)
         : outline (std::addressof (outlineToBuild))
         , appliesTransforms (shouldApplyTransforms)
+    {
+    }
+
+    /* Collects the area the labels cover instead of drawing them. */
+    DrawBuffers (Rectangle<float>& labelBoundsToBuild, const Font* font, bool shouldMeasureGlyphs)
+        : labelFont (font)
+        , labelBounds (std::addressof (labelBoundsToBuild))
+        , measuresGlyphs (shouldMeasureGlyphs)
     {
     }
 
@@ -566,6 +596,21 @@ private:
             recorded->push_back (std::move (operation));
         else if (g != nullptr)
             operation.draw (*g, labelFont);
+        else if (labelBounds != nullptr && operation.label)
+            addLabelBounds (*operation.label, operation.style);
+    }
+
+    void addLabelBounds (const Text& label, const Style& style)
+    {
+        auto bounds = label.getBounds (labelFont, measuresGlyphs);
+
+        if (bounds.isEmpty())
+            return;
+
+        if (style.transform)
+            bounds = bounds.transformed (*style.transform);
+
+        *labelBounds = labelBounds->isEmpty() ? bounds : labelBounds->unionWith (bounds);
     }
 
     void addVertex (const Point<float>& vertex, const Style& style, int series)
@@ -606,6 +651,8 @@ private:
     std::vector<Operation>* recorded = nullptr;
     Path* outline = nullptr;
     bool appliesTransforms = true;
+    Rectangle<float>* labelBounds = nullptr;
+    bool measuresGlyphs = true;
 
     Path batch;
     Style batchStyle;
@@ -746,7 +793,7 @@ void ExpressionDrawing::DrawBuffers::addRow (const Lanes& lanes, int lane)
     if (const auto* v = getDrawingOutput (lanes.vertex))
         addVertex (*v, style, getOptionalOutput (lanes.series).value_or (0));
 
-    if (settings.hasLabelFont && lanes.label != nullptr)
+    if ((settings.hasLabelFont || labelBounds != nullptr) && lanes.label != nullptr)
     {
         flush();
 
@@ -933,6 +980,13 @@ Path ExpressionDrawing::getOutline (ExpressionState& state, int numRows, bool ap
     Path outline;
     DrawBuffers (outline, applyTransforms).addRows (*outputs, state, numRows);
     return outline;
+}
+
+Rectangle<float> ExpressionDrawing::getLabelBounds (ExpressionState& state, int numRows, const Font* labelFont, bool ofGlyphs) const
+{
+    Rectangle<float> bounds;
+    DrawBuffers (bounds, labelFont, ofGlyphs).addRows (*outputs, state, numRows);
+    return bounds;
 }
 
 } // namespace yup

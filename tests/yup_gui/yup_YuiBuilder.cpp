@@ -86,6 +86,26 @@ protected:
         StringArray gestures;
     };
 
+    // A column counting its layouts, which documents name once it is registered
+    struct CountingColumn : ColumnComponent
+    {
+        static const ComponentTypeInfo& getClassTypeInfo()
+        {
+            static const auto info = ComponentTypeBuilder<CountingColumn> (Identifier ("CountingColumn"), ColumnComponent::getClassTypeInfo()).build();
+            return info;
+        }
+
+        const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+        void performLayout (Rectangle<float> area) override
+        {
+            ++numLayouts;
+            ColumnComponent::performLayout (area);
+        }
+
+        static inline int numLayouts = 0;
+    };
+
     ApplicationTheme::Ptr theme;
     ApplicationTheme::Ptr oldTheme;
 };
@@ -511,6 +531,366 @@ TEST_F (YuiBuilderTests, FollowsTheInteractionStatesOfAnotherElement)
 
     ComponentTestHelper<Slider>::triggerMouseUp (*volume, MouseEvent {});
     EXPECT_NEAR (readout->getOpacity(), 0.5f, 0.01f);
+}
+
+TEST_F (YuiBuilderTests, RepeatsComponentsWithTheirIndex)
+{
+    YuiBuilder builder;
+
+    const auto result = builder.build (parse (R"yui(
+        Row {
+            id: row;
+            Label { id: first; text: "start"; }
+
+            repeat i in 0 .. 4 {
+                Label { text: format ("Step %d", i + 1); opacity: i / 4.0; }
+            }
+
+            Label { id: last; text: "end"; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* row = builder.findById ("row");
+    ASSERT_NE (row, nullptr);
+    ASSERT_EQ (row->getNumChildComponents(), 6);
+
+    // The components of a repeat stand where it is written, in the order of their index
+    EXPECT_EQ (row->getChildComponent (0), builder.findById ("first"));
+    EXPECT_EQ (row->getChildComponent (5), builder.findById ("last"));
+
+    for (int index = 0; index < 4; ++index)
+    {
+        auto* label = dynamic_cast<Label*> (row->getChildComponent (index + 1));
+        ASSERT_NE (label, nullptr);
+        EXPECT_EQ (label->getText(), "Step " + String (index + 1));
+        EXPECT_NEAR (label->getOpacity(), static_cast<float> (index) / 4.0f, 0.01f);
+    }
+}
+
+TEST_F (YuiBuilderTests, ARepeatInsideARepeatReadsTheIndexAroundIt)
+{
+    YuiBuilder builder;
+
+    const auto result = builder.build (parse (R"yui(
+        Column {
+            id: grid;
+
+            repeat r in 0 .. 3 {
+                repeat c in 0 .. r + 1 {
+                    Label { text: format ("%d:%d", r, c); }
+                }
+            }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* grid = builder.findById ("grid");
+    StringArray texts;
+
+    for (int index = 0; index < grid->getNumChildComponents(); ++index)
+        texts.add (dynamic_cast<Label*> (grid->getChildComponent (index))->getText());
+
+    EXPECT_EQ (texts, StringArray ({ "0:0", "1:0", "1:1", "2:0", "2:1", "2:2" }));
+}
+
+TEST_F (YuiBuilderTests, AnIdInsideARepeatIsLocalToEachOfItsTurns)
+{
+    YuiBuilder builder;
+    Array<var> received;
+
+    builder.setAction ("pick", [&] (const Array<var>& arguments)
+    {
+        received = arguments;
+    });
+
+    const auto result = builder.build (parse (R"yui(
+        Column {
+            id: list;
+            Label { id: title; text: "Gains"; }
+
+            repeat i in 0 .. 2 {
+                Row {
+                    Slider { id: knob; value: 0.25 + i * 0.5; }
+                    Label { text: title.text + format (" %.2f", knob.value); }
+                    TextButton { onClick: action ("pick", i, knob.value); }
+                }
+            }
+
+            Label { id: outside; text: format ("%.2f", knob.value); }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    // Inside a turn the id names the component of that turn, and the ids around the repeat are read too
+    auto* list = builder.findById ("list");
+    ASSERT_EQ (list->getNumChildComponents(), 4);
+
+    for (int index = 0; index < 2; ++index)
+    {
+        auto* row = list->getChildComponent (index + 1);
+        ASSERT_EQ (row->getNumChildComponents(), 3);
+        EXPECT_EQ (dynamic_cast<Label*> (row->getChildComponent (1))->getText(), index == 0 ? String ("Gains 0.25") : String ("Gains 0.75"));
+    }
+
+    // A handler reads the index and the ids of its turn
+    dynamic_cast<TextButton*> (list->getChildComponent (2)->getChildComponent (2))->onClick();
+    ASSERT_EQ (received.size(), 2);
+    EXPECT_EQ (static_cast<int> (received[0]), 1);
+    EXPECT_DOUBLE_EQ (static_cast<double> (received[1]), 0.75);
+
+    // Outside the repeat the id is unknown
+    EXPECT_EQ (builder.findById ("knob"), nullptr);
+    ASSERT_EQ (builder.getDiagnostics().size(), 1u);
+    EXPECT_TRUE (builder.getDiagnostics().front().message.contains ("knob")) << builder.getDiagnostics().front().message;
+}
+
+TEST_F (YuiBuilderTests, ARepeatFollowsTheModelItsRangeReads)
+{
+    DataTree tree ("sequencer");
+    tree.beginTransaction().setProperty ("length", 2);
+    tree.beginTransaction().setProperty ("steps", var (Array<var> { false, true, false, false }));
+
+    DataTreeBindingProvider sequencer (tree, nullptr);
+
+    YuiBuilder builder;
+    builder.setModel ("seq", sequencer);
+
+    const auto result = builder.build (parse (R"yui(
+        Row {
+            id: row;
+
+            repeat i in 0 .. seq.length {
+                ToggleButton { text: format ("%d", i + 1); checked <=> seq.steps[i]; }
+            }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* row = builder.findById ("row");
+    ASSERT_EQ (row->getNumChildComponents(), 2);
+
+    const auto button = [&] (int index)
+    {
+        return dynamic_cast<ToggleButton*> (builder.findById ("row")->getChildComponent (index));
+    };
+
+    // Each button is linked to its element of the list
+    EXPECT_FALSE (button (0)->getToggleState());
+    EXPECT_TRUE (button (1)->getToggleState());
+
+    button (0)->setToggleState (true);
+    EXPECT_EQ (JSON::toString (tree.getProperty ("steps"), true), String ("[true, true, false, false]"));
+
+    // A change of the range is applied once the change is over, and the components that stay are kept
+    auto* kept = button (1);
+    tree.beginTransaction().setProperty ("length", 4);
+    EXPECT_EQ (builder.findById ("row")->getNumChildComponents(), 2);
+
+    builder.applyPendingChanges();
+    ASSERT_EQ (builder.findById ("row")->getNumChildComponents(), 4);
+    EXPECT_EQ (button (1), kept);
+    EXPECT_TRUE (button (0)->getToggleState());
+    EXPECT_EQ (button (3)->getButtonText(), String ("4"));
+
+    button (3)->setToggleState (true);
+    EXPECT_EQ (JSON::toString (tree.getProperty ("steps"), true), String ("[true, true, false, true]"));
+
+    tree.beginTransaction().setProperty ("length", 1);
+    builder.applyPendingChanges();
+    EXPECT_EQ (builder.findById ("row")->getNumChildComponents(), 1);
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    // With nothing changed there is nothing to apply
+    builder.applyPendingChanges();
+    EXPECT_EQ (builder.findById ("row")->getNumChildComponents(), 1);
+}
+
+TEST_F (YuiBuilderTests, ARepeatIsHeldToWhatItCanHold)
+{
+    YuiBuilder builder;
+
+    // More components than a repeat makes are a problem, and only that many are made
+    const auto result = builder.build (parse (R"yui(
+        Column {
+            id: list;
+            repeat i in 0 .. 5000 { Component { } }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_EQ (builder.findById ("list")->getNumChildComponents(), 1024);
+    ASSERT_FALSE (builder.getDiagnostics().empty());
+    EXPECT_TRUE (builder.getDiagnostics().front().message.contains ("1024")) << builder.getDiagnostics().front().message;
+
+    // What is not a component has no place in it, and an unknown type is told as anywhere else
+    EXPECT_TRUE (builder.build (parse ("Column { repeat i in 0 .. 2 { Unknown { } } }")).failed());
+
+    ASSERT_TRUE (builder.build (parse ("Column { id: list; repeat i in 2 .. 0 { Label { } } }")).wasOk());
+    EXPECT_EQ (builder.findById ("list")->getNumChildComponents(), 0);
+}
+
+TEST_F (YuiBuilderTests, LaysAContainerOutOnceItsChildrenAreMade)
+{
+    ComponentTypeRegistry::getInstance().registerType (CountingColumn::getClassTypeInfo());
+    CountingColumn::numLayouts = 0;
+
+    YuiBuilder builder;
+
+    const auto result = builder.build (parse (R"yui(
+        CountingColumn {
+            id: list; width: 100; height: 400;
+            repeat i in 0 .. 100 { Component { preferredHeight: 4; } }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    // Not at each child added and each value set
+    EXPECT_LE (CountingColumn::numLayouts, 4);
+
+    auto* list = builder.findById ("list");
+    ASSERT_EQ (list->getNumChildComponents(), 100);
+    EXPECT_EQ (list->getChildComponent (99)->getBounds(), Rectangle<float> (0.0f, 396.0f, 100.0f, 4.0f));
+
+    // Nor at each child going away with the interface
+    CountingColumn::numLayouts = 0;
+    builder.clear();
+    EXPECT_EQ (CountingColumn::numLayouts, 0);
+}
+
+TEST_F (YuiBuilderTests, ARepeatWorksInTheBodyOfADeclaredComponent)
+{
+    YuiBuilder builder;
+
+    const auto result = builder.build (parse (R"yui(
+        component Dots : Row {
+            property count: integer = 3;
+
+            repeat i in 0 .. root.count {
+                Label { text: format ("%d", i); }
+            }
+        }
+
+        Column {
+            Dots { id: three; }
+            Dots { id: five; count: 5; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_EQ (builder.findById ("three")->getNumChildComponents(), 3);
+    EXPECT_EQ (builder.findById ("five")->getNumChildComponents(), 5);
+}
+
+TEST_F (YuiBuilderTests, AnIntegerPropertyTakesTheNumberOfAModel)
+{
+    DataTree tree ("mode");
+    tree.beginTransaction().setProperty ("group", 3);
+    tree.beginTransaction().setProperty ("steps", var (Array<var> { false, false, true }));
+
+    DataTreeBindingProvider mode (tree, nullptr);
+
+    YuiBuilder builder;
+    builder.setModel ("mode", mode);
+
+    const auto result = builder.build (parse (R"yui(
+        Row {
+            ToggleButton { id: button; radioGroup: mode.group; checked <=> mode.steps[mode.group - 1]; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    // The numbers of a model are never integers by type
+    auto* button = builder.findById<ToggleButton> ("button");
+    EXPECT_EQ (button->getRadioGroupId(), 3);
+    EXPECT_TRUE (button->getToggleState());
+
+    tree.beginTransaction().setProperty ("group", 5.9);
+    EXPECT_EQ (button->getRadioGroupId(), 5);
+}
+
+TEST_F (YuiBuilderTests, ButtonsOfARadioGroupAreExclusive)
+{
+    YuiBuilder builder;
+
+    const auto result = builder.build (parse (R"yui(
+        Row {
+            ToggleButton { id: lfo; radioGroup: 1; checked: true; }
+            ToggleButton { id: step; radioGroup: 1; }
+            ToggleButton { id: free; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    auto* lfo = builder.findById<ToggleButton> ("lfo");
+    auto* step = builder.findById<ToggleButton> ("step");
+    ASSERT_NE (lfo, nullptr);
+    ASSERT_NE (step, nullptr);
+    EXPECT_TRUE (lfo->getToggleState());
+
+    step->setToggleState (true);
+    EXPECT_FALSE (lfo->getToggleState());
+    EXPECT_EQ (builder.findById<ToggleButton> ("free")->getRadioGroupId(), 0);
+}
+
+TEST_F (YuiBuilderTests, SetsThePaintMarginOfAComponent)
+{
+    YuiBuilder builder;
+
+    const auto result = builder.build (parse (R"yui(
+        Component {
+            Component { id: glow; paintMargin: 12; }
+            Component { id: sides; paintMargin: "0 6"; }
+            Component { id: plain; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+
+    EXPECT_EQ (builder.findById ("glow")->getPaintMargin(), EdgeSpacing<float> (12.0f));
+    EXPECT_EQ (builder.findById ("sides")->getPaintMargin(), EdgeSpacing<float> (6.0f, 0.0f, 6.0f, 0.0f));
+    EXPECT_EQ (builder.findById ("plain")->getPaintMargin(), EdgeSpacing<float>());
+    EXPECT_EQ (builder.findById ("glow")->getPaintBounds(), builder.findById ("glow")->getLocalBounds().enlarged (12.0f));
+}
+
+TEST_F (YuiBuilderTests, RunsTheFallbackForAnActionNobodyRegistered)
+{
+    YuiBuilder builder;
+    StringArray called;
+    int numSaved = 0;
+
+    builder.setAction ("save", [&] (const Array<var>&)
+    {
+        ++numSaved;
+    });
+
+    builder.setFallbackAction ([&] (const String& name, const Array<var>& arguments)
+    {
+        called.add (name + "/" + String (arguments.size()));
+    });
+
+    const auto result = builder.build (parse (R"yui(
+        Component {
+            TextButton { id: save; onClick: action ("save"); }
+            TextButton { id: load; onClick: action ("load", "preset", 2); }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    builder.findById<TextButton> ("save")->onClick();
+    builder.findById<TextButton> ("load")->onClick();
+
+    EXPECT_EQ (numSaved, 1);
+    EXPECT_EQ (called, StringArray ({ "load/2" }));
+
+    // Without a fallback, an action nobody registered does nothing
+    builder.setFallbackAction (nullptr);
+    builder.findById<TextButton> ("load")->onClick();
+    EXPECT_EQ (called.size(), 1);
 }
 
 TEST_F (YuiBuilderTests, RunsAnActionWhenASignalIsEmitted)

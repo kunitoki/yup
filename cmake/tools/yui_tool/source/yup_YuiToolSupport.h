@@ -50,6 +50,9 @@ public:
     /** Reads the models of a file, failing with the reason when it can't. */
     yup::Result loadFile (const yup::File& file);
 
+    /** Adds the models of an object in the shape of a models file, failing with the reason when it is not one. */
+    yup::Result loadValues (const yup::var& declared);
+
     /** Sets the models on a document, which they must outlive. */
     void attachTo (yup::YuiDocument& document) const;
 
@@ -96,6 +99,24 @@ std::vector<YuiToolProblem> findYuiToolProblems (const yup::YuiDocument& documen
     @param unsavedText The text to check in place of the one of the file, when given.
 */
 std::vector<YuiToolProblem> findYuiToolFileProblems (const yup::File& file, const std::optional<yup::String>& unsavedText, const YuiToolModels& models);
+
+/** What a document binds to that its models lack. */
+struct YuiToolMissingModels
+{
+    /** The models and properties lacking, in the shape of a models file: each property with a
+        sample value of the type the document reads it as, 0 when nothing tells. Void when
+        nothing lacks.
+    */
+    yup::var models;
+
+    /** How many errors the document still has once they are added, which are not theirs to fix. */
+    int numErrorsLeft = 0;
+};
+
+/** Finds what a file binds to that its models lack, by adding what its problems name until
+    none names more.
+*/
+YuiToolMissingModels findYuiToolMissingModels (const yup::File& file, const YuiToolModels& models);
 
 /** Returns the index of the root component of a parsed document, or -1 when it only holds declarations. */
 int findYuiToolRootIndex (const yup::DataTree& document);
@@ -217,11 +238,24 @@ private:
 
 /** Describes the layout of a view as `inspect` prints it: its components with their place, and
     what looks wrong with them.
+
+    @param withDrawings True to tell, for each component a drawing paints, where the elements of
+                        the drawing that have an id land in the interface.
+    @param only         A component of the interface to describe alone with what it holds, or
+                        nullptr for the whole interface.
 */
-yup::var describeYuiToolLayout (YuiToolView& view);
+yup::var describeYuiToolLayout (YuiToolView& view, bool withDrawings = false, const yup::Component* only = nullptr);
 
 /** Returns the component a description of the layout gives a path, or nullptr. */
 yup::Component* findYuiToolComponent (YuiToolView& view, const yup::String& path);
+
+/** Tells a component as a description of the layout names it: its type, its id when it has one
+    and its path. A component the document does not describe, such as a part a widget made for
+    itself, is told as the one of the document it belongs to.
+
+    @returns The description, or nothing for a component that is not of the interface.
+*/
+yup::var describeYuiToolComponent (YuiToolView& view, const yup::Component& component);
 
 //==============================================================================
 /** Describes a component type as `schema` does.
@@ -230,6 +264,14 @@ yup::Component* findYuiToolComponent (YuiToolView& view, const yup::String& path
                             the type it comes from.
 */
 yup::var describeYuiToolComponentType (const yup::ComponentTypeInfo& info, bool includeInherited);
+
+/** Describes what a document can name beyond its component types, as the code checking documents
+    knows it: `drawing` for the elements of a drawing with their properties, `styles` for what a
+    rule and a selector take, `expressions` for the functions, members and enumerations.
+
+    @returns The description, or nothing for a name that is none of these topics.
+*/
+yup::var describeYuiToolSchemaTopic (const yup::String& topic);
 
 /** Creates what draws with no window, or nullptr on a platform that has no such device. */
 std::unique_ptr<yup::GraphicsContext> createYuiToolGraphicsContext();

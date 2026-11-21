@@ -92,6 +92,26 @@ const Identifier& drawingProperty()
     return identifier;
 }
 
+const Identifier& repeatType()
+{
+    static const Identifier identifier ("repeat");
+    return identifier;
+}
+
+constexpr int maxRepeatedComponents = 1024;
+constexpr int maximumRangePasses = 8;
+
+// Where an element is in its document, as the indices leading to it from the root
+String makeElementKey (const DataTree& element)
+{
+    String key;
+
+    for (auto node = element; node.getParent().isValid(); node = node.getParent())
+        key = String (node.getParent().indexOf (node)) + (key.isEmpty() ? String() : "_" + key);
+
+    return key;
+}
+
 Identifier makeOptionalIdentifier (const var& value)
 {
     const auto text = value.toString();
@@ -292,9 +312,32 @@ struct YuiBuilder::TreeWatcher final : DataTreeListener
 };
 
 //==============================================================================
+/* Has the components of the repeats made again once the change of a range is over. */
+struct YuiBuilder::RangeUpdater final : AsyncUpdater
+{
+    explicit RangeUpdater (YuiBuilder& ownerToUse)
+        : owner (ownerToUse)
+    {
+    }
+
+    ~RangeUpdater() override
+    {
+        cancelPendingUpdate();
+    }
+
+    void handleAsyncUpdate() override
+    {
+        owner.applyPendingChanges();
+    }
+
+    YuiBuilder& owner;
+};
+
+//==============================================================================
 
 YuiBuilder::YuiBuilder()
     : treeWatcher (std::make_unique<TreeWatcher> (*this))
+    , rangeUpdater (std::make_unique<RangeUpdater> (*this))
 {
     registerBuiltInComponentTypes();
 
@@ -392,29 +435,118 @@ Result YuiBuilder::build (const DataTree& document)
         return checked;
     }
 
-    resetBindings();
+    const ScopedValueSetter<bool> building (isBuilding, true);
+    const auto numDeclarationDiagnostics = static_cast<std::ptrdiff_t> (diagnostics.size());
 
-    for (auto& [name, model] : models)
-        model->refreshProperties();
+    hasPendingRangeChange = false;
+    rangeUpdater->cancelPendingUpdate();
 
-    scopes.clear();
-    previousComponents = std::exchange (components, {});
+    // The range of a repeat is only known once the values it reads are applied. When it is not the one its
+    // components were made for, they are made again, which keeps those still described
+    for (int pass = 0;; ++pass)
+    {
+        diagnostics.erase (diagnostics.begin() + numDeclarationDiagnostics, diagnostics.end());
+        resetBindings();
 
-    auto& scope = *scopes.emplace_back (std::make_unique<Scope>());
-    scope.root = &createComponent (root, nullptr, scope, {});
-    applyTokens (*scope.root, scope);
+        for (auto& [name, model] : models)
+            model->refreshProperties();
 
-    // The tree exists before any value is applied, so expressions can reference any element
-    applyValues (std::exchange (applied, {}));
+        scopes.clear();
+        ranges.clear();
+        previousComponents = std::exchange (components, {});
 
-    // Children go first, so that no parent is destroyed while still holding them
-    while (! previousComponents.empty())
-        previousComponents.pop_back();
+        {
+            // A container is laid out once its children are made and have their values, not at each of them
+            const LayoutComponent::ScopedLayoutBatch layouts;
+
+            auto& scope = *scopes.emplace_back (std::make_unique<Scope>());
+            scope.root = &createComponent (root, nullptr, scope, {});
+            applyTokens (*scope.root, scope);
+
+            // The tree exists before any value is applied, so expressions can reference any element
+            applyValues (std::exchange (applied, {}));
+
+            // Children go first, so that no parent is destroyed while still holding them
+            while (! previousComponents.empty())
+                previousComponents.pop_back();
+        }
+
+        if (! bindRanges())
+            break;
+
+        if (pass == maximumRangePasses)
+        {
+            report ("The ranges of the repeats keep changing while their components are made", root);
+            break;
+        }
+    }
 
     if (treeWatcher != nullptr)
         treeWatcher->resetRoot (document);
 
     return Result::ok();
+}
+
+void YuiBuilder::applyPendingChanges()
+{
+    if (! std::exchange (hasPendingRangeChange, false))
+        return;
+
+    rangeUpdater->cancelPendingUpdate();
+
+    if (onRangeChanged != nullptr)
+    {
+        onRangeChanged();
+        return;
+    }
+
+    if (treeWatcher != nullptr && treeWatcher->watchedRoot.isValid())
+    {
+        const auto rootCopy = treeWatcher->watchedRoot;
+        build (rootCopy);
+    }
+}
+
+void YuiBuilder::rangeChanged()
+{
+    // A range changing while its components are made is seen by the build itself
+    if (isBuilding)
+        return;
+
+    hasPendingRangeChange = true;
+    rangeUpdater->triggerAsyncUpdate();
+}
+
+bool YuiBuilder::bindRanges()
+{
+    bool hasChanged = false;
+
+    for (auto& range : ranges)
+    {
+        const auto bindEnd = [&] (const Identifier& name, const char* end, const var& used)
+        {
+            const auto bound = bindings.bind (*range.parent, name, range.element.getProperty (end).toString(), ComponentProperty::Type::integer, resolverFor (*range.scope), nullptr, range.scope->locals.get());
+
+            if (bound.failed())
+            {
+                report (String ("repeat.") + end + ": " + bound.getErrorMessage(), range.element, Identifier (end));
+                range.parent->setProperty (name, 0);
+            }
+
+            // An end is an integer, so it only changes when the repeat has other turns to run
+            watchers.push_back (std::make_unique<YuiPropertyWatcher> (*range.parent, name, [this] (const Array<var>&)
+            {
+                rangeChanged();
+            }));
+
+            return range.parent->getProperty (name) != used;
+        };
+
+        hasChanged |= bindEnd (range.fromName, "from", range.usedFrom);
+        hasChanged |= bindEnd (range.toName, "to", range.usedTo);
+    }
+
+    return hasChanged;
 }
 
 void YuiBuilder::clear()
@@ -424,11 +556,19 @@ void YuiBuilder::clear()
 
     resetBindings();
 
-    while (! components.empty())
-        components.pop_back();
+    {
+        // The containers go away with their children: none is laid out again for each child it loses
+        const LayoutComponent::ScopedLayoutBatch layouts;
+
+        while (! components.empty())
+            components.pop_back();
+    }
 
     applied.clear();
     scopes.clear();
+    ranges.clear();
+    hasPendingRangeChange = false;
+    rangeUpdater->cancelPendingUpdate();
     composites.clear();
     palettes.clear();
     drawings.clear();
@@ -509,6 +649,11 @@ void YuiBuilder::setAction (const String& name, Action action)
         actions[name] = std::move (action);
     else
         actions.erase (name);
+}
+
+void YuiBuilder::setFallbackAction (FallbackAction action)
+{
+    fallbackAction = std::move (action);
 }
 
 void YuiBuilder::setModel (const String& name, BindingProvider& provider)
@@ -774,19 +919,27 @@ Result YuiBuilder::checkTypes (const DataTree& element)
         return report ("The component type '" + typeName.toString() + "' can't be created from .yui", element);
     }
 
-    for (const auto& child : element)
+    return checkChildTypes (element);
+}
+
+Result YuiBuilder::checkChildTypes (const DataTree& parent)
+{
+    for (const auto& child : parent)
     {
-        if (! detail::isYuiComponentElement (child))
+        // What a repeat holds are children of the element the repeat is in
+        const auto isRepeat = child.getType() == repeatType();
+
+        if (! isRepeat && ! detail::isYuiComponentElement (child))
             continue;
 
-        if (auto result = checkTypes (child); result.failed())
+        if (auto result = isRepeat ? checkChildTypes (child) : checkTypes (child); result.failed())
             return result;
     }
 
     return Result::ok();
 }
 
-Component& YuiBuilder::createComponent (const DataTree& element, Component* parent, Scope& scope, const DataTree& recordElement)
+Component& YuiBuilder::createComponent (const DataTree& element, Component* parent, Scope& scope, const DataTree& recordElement, const String& turn)
 {
     const auto typeName = element.getType();
     const auto& key = recordElement.isValid() ? recordElement : element;
@@ -800,7 +953,7 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
         auto& bodyScope = *scopes.emplace_back (std::make_unique<Scope>());
         const auto declarationsIndex = static_cast<std::ptrdiff_t> (pending.size());
 
-        component = &createComponent (composite.body, parent, bodyScope, key);
+        component = &createComponent (composite.body, parent, bodyScope, key, turn);
         bodyScope.root = component;
         component->setTypeInfo (composite.info.get());
 
@@ -813,7 +966,7 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
         // checkTypes made sure the type exists and can be created
         const auto& type = *ComponentTypeRegistry::getInstance().findType (typeName);
 
-        auto created = reuseComponent (key, parent, type);
+        auto created = reuseComponent (key, parent, type, turn);
         const auto isReused = created != nullptr;
 
         if (! isReused)
@@ -827,7 +980,7 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
         if (parent != nullptr)
             placeChild (*parent, *component, isReused);
 
-        components.push_back ({ key, parent, &type, std::move (created) });
+        components.push_back ({ key, parent, &type, std::move (created), turn });
     }
 
     static const Identifier bindType ("bind");
@@ -864,6 +1017,12 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
         if (child.getType() == bindType || child.getType() == changedType)
             continue;
 
+        if (child.getType() == repeatType())
+        {
+            createRepeated (child, *component, scope, {});
+            continue;
+        }
+
         if (! detail::isYuiComponentElement (child))
         {
             report ("'" + child.getType().toString() + "' is not a component type", child);
@@ -876,11 +1035,91 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
     return *component;
 }
 
-std::unique_ptr<Component> YuiBuilder::reuseComponent (const DataTree& element, Component* parent, const ComponentTypeInfo& type)
+void YuiBuilder::createRepeated (const DataTree& repeat, Component& parent, Scope& scope, const String& turn)
+{
+    const auto name = repeat.getProperty ("name").toString();
+    const auto key = "__repeat_" + makeElementKey (repeat) + (turn.isNotEmpty() ? "_" + turn.replaceCharacter ('/', '_') : String());
+    const Identifier fromName (key + "_from");
+    const Identifier toName (key + "_to");
+
+    // An end of the range is what it was when it was last known, else the number it is written as
+    const auto readEnd = [&] (const Identifier& property, const char* end)
+    {
+        if (const auto known = parent.getProperty (property); ! known.isVoid())
+            return known;
+
+        const auto text = repeat.getProperty (end).toString().trim();
+        return text.isNotEmpty() && text.containsOnly ("0123456789") ? var (text.getIntValue()) : var();
+    };
+
+    const auto from = readEnd (fromName, "from");
+    const auto to = readEnd (toName, "to");
+
+    ranges.push_back ({ &parent, &scope, repeat, fromName, toName, from, to });
+
+    if (from.isVoid() || to.isVoid())
+        return;
+
+    const auto first = static_cast<int> (from);
+    auto count = static_cast<int64> (static_cast<int> (to)) - first;
+
+    if (count > maxRepeatedComponents)
+    {
+        report ("A repeat runs at most " + String (maxRepeatedComponents) + " times, not " + String (count), repeat, Identifier ("to"));
+        count = maxRepeatedComponents;
+    }
+
+    for (int offset = 0; offset < count; ++offset)
+    {
+        const auto index = first + offset;
+        const auto ownTurn = turn.isEmpty() ? String (index) : turn + "/" + String (index);
+
+        auto& turnScope = *scopes.emplace_back (std::make_unique<Scope>());
+        turnScope.outer = &scope;
+        turnScope.indexNames = scope.indexNames;
+        turnScope.indexValues = scope.indexValues;
+
+        // An index hides one of the same name around it
+        if (const auto hidden = turnScope.indexNames.indexOf (name); hidden >= 0)
+        {
+            turnScope.indexNames.remove (hidden);
+            turnScope.indexValues.remove (hidden);
+        }
+
+        turnScope.indexNames.add (name);
+        turnScope.indexValues.add (index);
+
+        std::vector<ComponentSignal::Argument> indices;
+
+        for (const auto& indexName : turnScope.indexNames)
+            indices.push_back ({ Identifier (indexName), ComponentProperty::Type::integer });
+
+        turnScope.locals = std::make_shared<YuiHandlerArguments> (turnScope.indexNames, indices);
+        turnScope.locals->setValues (turnScope.indexValues);
+
+        for (const auto& child : repeat)
+        {
+            if (child.getType() == repeatType())
+            {
+                createRepeated (child, parent, turnScope, ownTurn);
+            }
+            else if (detail::isYuiComponentElement (child))
+            {
+                createComponent (child, &parent, turnScope, {}, ownTurn);
+            }
+            else if (offset == 0)
+            {
+                report ("'" + child.getType().toString() + "' is not a component type", child);
+            }
+        }
+    }
+}
+
+std::unique_ptr<Component> YuiBuilder::reuseComponent (const DataTree& element, Component* parent, const ComponentTypeInfo& type, const String& turn)
 {
     for (auto& record : previousComponents)
     {
-        if (record.component == nullptr || record.element != element || record.parent != parent || record.type != &type)
+        if (record.component == nullptr || record.element != element || record.parent != parent || record.type != &type || record.turn != turn)
             continue;
 
         // A composite type info of the previous build is about to go away
@@ -1256,7 +1495,7 @@ YuiBuilder::ApplyOutcome YuiBuilder::applyProperty (Component& component, const 
         if (drawings.find (drawingName) != drawings.end())
             return installNamedDrawing (drawingName);
 
-        if (auto compiled = PropertyExpression::compile (component, value.text, ComponentProperty::Type::string, resolverFor (scope)); compiled.wasOk())
+        if (auto compiled = PropertyExpression::compile (component, value.text, ComponentProperty::Type::string, resolverFor (scope), scope.locals.get()); compiled.wasOk())
             return installNamedDrawing (compiled.getReference()->evaluate().toString());
 
         report (component, name, "unknown drawing '" + drawingName + "'", value);
@@ -1280,7 +1519,7 @@ YuiBuilder::ApplyOutcome YuiBuilder::applyProperty (Component& component, const 
         }
 
         bool isLive = false;
-        if (bindings.bind (component, name, value.text, ComponentProperty::Type::string, resolverFor (scope), &isLive).wasOk())
+        if (bindings.bind (component, name, value.text, ComponentProperty::Type::string, resolverFor (scope), &isLive, scope.locals.get()).wasOk())
             return isLive ? ApplyOutcome::live : ApplyOutcome::constant;
 
         report (component, name, "unknown drawing '" + drawingName + "'", value);
@@ -1318,7 +1557,7 @@ YuiBuilder::ApplyOutcome YuiBuilder::applyProperty (Component& component, const 
 
     bool isLive = false;
 
-    if (auto result = bindings.bind (component, name, value.text, type, resolverFor (scope), &isLive); result.failed())
+    if (auto result = bindings.bind (component, name, value.text, type, resolverFor (scope), &isLive, scope.locals.get()); result.failed())
     {
         report (component, name, result.getErrorMessage(), value);
         return ApplyOutcome::failed;
@@ -1346,7 +1585,33 @@ YuiBuilder::ApplyOutcome YuiBuilder::applyProperty (Component& component, const 
 void YuiBuilder::applyLink (Component& component, const Value& link, Scope& scope)
 {
     const auto& name = link.name;
-    const auto split = detail::splitYuiPath (link.text);
+    auto path = link.text;
+    int index = -1;
+
+    // An element of a list: its index is read once, when the link is made
+    if (const auto open = path.indexOfChar ('['); open >= 0)
+    {
+        const auto indexText = path.substring (open + 1).upToLastOccurrenceOf ("]", false, false);
+        path = path.substring (0, open).trim();
+
+        auto compiled = PropertyExpression::compile (component, indexText, ComponentProperty::Type::integer, resolverFor (scope), scope.locals.get(), baseDirectory);
+
+        if (compiled.failed())
+        {
+            report (component, name, compiled.getErrorMessage(), link);
+            return;
+        }
+
+        index = static_cast<int> (compiled.getReference()->evaluate());
+
+        if (index < 0)
+        {
+            report (component, name, "the index of an element is 0 or more", link);
+            return;
+        }
+    }
+
+    const auto split = detail::splitYuiPath (path);
 
     if (! split.has_value())
     {
@@ -1380,7 +1645,13 @@ void YuiBuilder::applyLink (Component& component, const Value& link, Scope& scop
         return;
     }
 
-    bindings.link (component, name, *source, sourceProperty);
+    if (index >= 0 && source->getTypeInfo().findProperty (sourceProperty)->type != ComponentProperty::Type::array)
+    {
+        report (component, name, "'" + path + "' is not a list", link);
+        return;
+    }
+
+    bindings.link (component, name, *source, sourceProperty, index);
 
     if (model != nullptr)
         model->trackGestures (component, sourceProperty);
@@ -1429,7 +1700,18 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
     if (handler.argumentNames.size() > static_cast<int> (signal.arguments.size()))
         return fail ("expected at most " + String (static_cast<int> (signal.arguments.size())) + " argument names");
 
-    auto locals = std::make_shared<YuiHandlerArguments> (handler.argumentNames, signal.arguments);
+    // The names the handler gives the arguments of the signal, then the indices of the repeats it is in
+    auto localNames = handler.argumentNames;
+    std::vector<ComponentSignal::Argument> localTypes (signal.arguments.begin(), signal.arguments.begin() + handler.argumentNames.size());
+    const auto numArguments = handler.argumentNames.size();
+
+    for (const auto& indexName : scope.indexNames)
+    {
+        localNames.add (indexName);
+        localTypes.push_back ({ Identifier (indexName), ComponentProperty::Type::integer });
+    }
+
+    auto locals = std::make_shared<YuiHandlerArguments> (localNames, localTypes);
 
     struct Step
     {
@@ -1495,12 +1777,16 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
         steps->push_back (std::move (step));
     }
 
-    signal.connect (component, [this, locals, steps = std::shared_ptr<const std::vector<Step>> (std::move (steps))] (const Array<var>& signalArguments)
+    signal.connect (component, [this, locals, numArguments, indices = scope.indexValues, steps = std::shared_ptr<const std::vector<Step>> (std::move (steps))] (const Array<var>& signalArguments)
     {
+        auto localValues = signalArguments;
+        localValues.resize (numArguments);
+        localValues.addArray (indices);
+
         for (const auto& step : *steps)
         {
             // Set for each call, as a call emitting a signal can run this handler again
-            locals->setValues (signalArguments);
+            locals->setValues (localValues);
 
             auto callArguments = signalArguments;
 
@@ -1521,6 +1807,11 @@ void YuiBuilder::connectHandler (Component& component, const ComponentSignal& si
             {
                 const auto action = found->second;
                 action (callArguments);
+            }
+            else if (fallbackAction != nullptr)
+            {
+                const auto action = fallbackAction;
+                action (step.actionName, callArguments);
             }
         }
     });
@@ -1578,6 +1869,15 @@ Component* YuiBuilder::resolveComponent (const Scope& scope, const String& name,
 
     if (self != nullptr && name == "parent")
         return self->getParentComponent();
+
+    // A turn of a repeat reads what the scope around it holds
+    if (scope.outer != nullptr)
+    {
+        if (const auto found = scope.ids.find (name); found != scope.ids.end())
+            return found->second;
+
+        return resolveComponent (*scope.outer, name);
+    }
 
     if (name == "root")
         return scope.root;

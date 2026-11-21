@@ -163,11 +163,60 @@ test ("an agent checks and inspects the files given", () => {
     assert.deepEqual (layout.warnings.map (warning => warning.path), ["0"]);
 });
 
+test ("an agent plays pointer events and reads what they changed", () => {
+    write ("events/main.yui", "Column { width: 200; height: 120;\n"
+                              + "    ToggleButton { id: power; preferredHeight: 30; checked <=> model.power; }\n"
+                              + "    Slider { id: gain; preferredHeight: 30; value <=> model.gain; }\n"
+                              + "    TextButton { id: save; preferredHeight: 30; onClick: action (\"save\", model.gain); }\n"
+                              + "    Row { preferredHeight: 30; repeat i in 0 .. (model.power ? 3 : 1) { Label { text: format (\"%d\", i); } } }\n}\n");
+    write ("events/main.models.json", JSON.stringify ({ model: { power: false, gain: 0.25 } }));
+
+    const played = agent ("yui_inspect", { file: "events/main.yui", events: [{ id: "power", type: "click" },
+                                                                             { id: "gain", type: "drag", by: [60, 0] },
+                                                                             { id: "save", type: "click" }] });
+    const told = JSON.parse (played.text);
+
+    assert.equal (played.isError, false, played.text);
+    assert.deepEqual (told.events.map (event => event.received.id), ["power", "gain", "save"]);
+    assert.deepEqual (told.changed.model.power, [false, true]);
+    assert.ok (told.changed.model.gain[1] > 0.25);
+    assert.equal (told.actions[0].name, "save");
+
+    // The components of a repeat follow the range the events changed, with no message loop to wait for
+    assert.equal (told.root.children[3].children.length, 3);
+});
+
+test ("an agent is told what a file can name, the models it lacks and where its drawings land", () => {
+    write ("lacking/main.yui", "drawing Mark {\n    rect { id: box; bounds: rect (2, 4, 20, 10); fill: #ff0000; }\n}\n\n"
+                               + "style {\n    #mark { drawing: Mark; }\n}\n\n"
+                               + "Component { width: 100; height: 50;\n"
+                               + "    Component { id: mark; x: 10; y: 10; width: 40; height: 20; enabled: seq.on; opacity: seq.steps[2]; }\n}\n");
+
+    const checked = JSON.parse (agent ("yui_check", { file: "lacking/main.yui" }).text);
+
+    assert.deepEqual (checked.missingModels, { seq: { on: false, steps: [0] } });
+    assert.equal (checked.errorsWithMissingModels, 0);
+
+    write ("lacking/main.models.json", JSON.stringify (checked.missingModels));
+
+    const mark = JSON.parse (agent ("yui_inspect", { file: "lacking/main.yui", element: "mark", drawings: true }).text).root;
+
+    assert.deepEqual (mark.drawing.map (element => [element.id, element.bounds, element.line]), [["box", [12, 14, 20, 10], 2]]);
+
+    for (const topic of ["drawing", "styles", "expressions"])
+        assert.equal (agent ("yui_schema", { topic }).isError, false);
+
+    assert.ok (JSON.parse (agent ("yui_schema", { topic: "drawing" }).text).elements.some (element => element.type === "rect"));
+    assert.deepEqual (JSON.parse (agent ("yui_schema", { type: "Slider" }).text).bases, ["Component"]);
+});
+
 test ("an agent is told why a tool can't answer", () => {
     write ("agent/plain.yui", "Column {}\n");
 
     assert.equal (agent ("yui_check", { file: "agent/missing.yui" }).isError, true);
     assert.equal (agent ("yui_bogus").isError, true);
     assert.match (agent ("yui_render", { file: "agent/plain.yui" }).text, /no graphics device/);
+    assert.match (agent ("yui_render", { file: "agent/plain.yui", output: "agent/plain.png" }).text, /nowhere to write/);
+    assert.equal (agent ("yui_render", { file: "agent/plain.yui", reference: "agent/missing.png" }).isError, true);
     assert.match (agent ("yui_capture_preview").text, /no live preview/);
 });

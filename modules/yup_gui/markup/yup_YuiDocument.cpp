@@ -120,12 +120,16 @@ bool isStrictGrammarContainer (const Identifier& type) noexcept
     return strictContainers.contains (type.toString());
 }
 
-std::optional<YuiDiagnostic> validateGrammarNodes (const DataTreeSchema& schema, const DataTree& node)
+std::optional<YuiDiagnostic> validateGrammarNodes (const DataTreeSchema& schema, const DataTree& node, bool isAmongComponents = false)
 {
     if (! node.isValid())
         return YuiDiagnostic { .message = "Invalid DataTree" };
 
     const auto nodeType = node.getType();
+    static const Identifier repeatType ("repeat");
+
+    // A repeat among components holds components, where the one of a drawing holds what a drawing does
+    const auto repeatsComponents = isAmongComponents && nodeType == repeatType;
 
     if (isGrammarNodeType (nodeType))
     {
@@ -147,7 +151,15 @@ std::optional<YuiDiagnostic> validateGrammarNodes (const DataTreeSchema& schema,
             }
         }
 
-        if (isStrictGrammarContainer (nodeType))
+        if (repeatsComponents)
+        {
+            for (const auto& child : node)
+            {
+                if (child.getType() != repeatType && ! detail::isYuiComponentElement (child))
+                    return YuiDiagnostic { .message = "A repeat of components holds components and other repeats, not '" + child.getType().toString() + "'", .element = child };
+            }
+        }
+        else if (isStrictGrammarContainer (nodeType))
         {
             for (int i = 0; i < node.getNumChildren(); ++i)
             {
@@ -159,8 +171,10 @@ std::optional<YuiDiagnostic> validateGrammarNodes (const DataTreeSchema& schema,
         }
     }
 
+    const auto holdsComponents = repeatsComponents || detail::isYuiComponentElement (node);
+
     for (int i = 0; i < node.getNumChildren(); ++i)
-        if (auto problem = validateGrammarNodes (schema, node.getChild (i)))
+        if (auto problem = validateGrammarNodes (schema, node.getChild (i), holdsComponents))
             return problem;
 
     return std::nullopt;
@@ -389,6 +403,12 @@ YuiDocument::YuiDocument()
     {
         if (! isLoading && lastLoadSucceeded && tree.isValid())
             handleLiveTreeMutation();
+    };
+
+    builder.onRangeChanged = [this]
+    {
+        if (! isLoading && lastLoadSucceeded && tree.isValid())
+            handleRangeChange();
     };
 }
 
@@ -710,6 +730,21 @@ void YuiDocument::handleLiveTreeMutation()
     attachStyleContext (root);
 }
 
+void YuiDocument::handleRangeChange()
+{
+    const ScopedValueSetter<bool> loading (isLoading, true);
+    diagnostics.clear();
+
+    // The document is as it was, so its stylesheet is kept: nothing is restyled from scratch and transitions keep running
+    const auto built = builder.build (tree);
+
+    for (const auto& diagnostic : builder.getDiagnostics())
+        report (sourceMap, diagnostic);
+
+    if (built.wasOk())
+        attachStyleContext (*builder.getRoot());
+}
+
 void YuiDocument::resetState()
 {
     builder.clear();
@@ -731,6 +766,16 @@ void YuiDocument::clear()
 void YuiDocument::setAction (const String& name, YuiBuilder::Action action)
 {
     builder.setAction (name, std::move (action));
+}
+
+void YuiDocument::setFallbackAction (YuiBuilder::FallbackAction action)
+{
+    builder.setFallbackAction (std::move (action));
+}
+
+void YuiDocument::applyPendingChanges()
+{
+    builder.applyPendingChanges();
 }
 
 void YuiDocument::setModel (const String& name, BindingProvider& provider)

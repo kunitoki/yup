@@ -185,6 +185,39 @@ TEST_F (StyleContextTests, QualifiedDeclarationsCascadeToDescendants)
     EXPECT_TRUE (other.getStyleState() == nullptr || other.getStyleState()->getComputedValues().isEmpty());
 }
 
+TEST_F (StyleContextTests, RestylingLaysAContainerOutOnce)
+{
+    struct CountingColumn : ColumnComponent
+    {
+        int numLayouts = 0;
+
+        void performLayout (Rectangle<float> area) override
+        {
+            ++numLayouts;
+            ColumnComponent::performLayout (area);
+        }
+    };
+
+    CountingColumn column;
+    std::vector<std::unique_ptr<Component>> items;
+
+    column.setBounds (0.0f, 0.0f, 100.0f, 400.0f);
+
+    for (int index = 0; index < 50; ++index)
+    {
+        auto& item = *items.emplace_back (std::make_unique<Component>());
+        item.addStyleClass (Identifier ("item"));
+        column.addAndMakeVisible (item);
+    }
+
+    const auto before = column.numLayouts;
+    attach (column, "style { .item { preferredHeight: 4; } }");
+
+    // Not at each of the items the rule gives a size to
+    EXPECT_LE (column.numLayouts - before, 4);
+    EXPECT_EQ (items.back()->getBounds(), Rectangle<float> (0.0f, 196.0f, 100.0f, 4.0f));
+}
+
 TEST_F (StyleContextTests, ChangingStyleClassesRestyles)
 {
     Component root ("root");
@@ -768,6 +801,50 @@ TEST_F (StyleContextTests, RemovingShadowsRestoresThePaintMargin)
     restyle (root);
     EXPECT_TRUE (root.getStyleState()->getShadows().empty());
     EXPECT_FLOAT_EQ (root.getPaintMargin().getLeft(), 2.0f);
+}
+
+TEST_F (StyleContextTests, ARuleSetsThePaintMarginAndRestoresItWhenItStopsApplying)
+{
+    Component root ("root");
+    root.setPaintMargin (2.0f);
+
+    attach (root, R"yui(style { .glowing { paintMargin: 20; } .wide { paintMargin: "4 8"; } })yui");
+    EXPECT_FLOAT_EQ (root.getPaintMargin().getLeft(), 2.0f);
+
+    root.addStyleClass (Identifier ("glowing"));
+    restyle (root);
+    EXPECT_EQ (root.getPaintMargin(), EdgeSpacing<float> (20.0f));
+
+    // One, two or four values, in the order margin takes them: top and bottom, then left and right
+    root.addStyleClass (Identifier ("wide"));
+    restyle (root);
+    EXPECT_EQ (root.getPaintMargin(), EdgeSpacing<float> (8.0f, 4.0f, 8.0f, 4.0f));
+
+    root.removeStyleClass (Identifier ("wide"));
+    root.removeStyleClass (Identifier ("glowing"));
+    restyle (root);
+    EXPECT_EQ (root.getPaintMargin(), EdgeSpacing<float> (2.0f));
+}
+
+TEST_F (StyleContextTests, AShadowWidensThePaintMarginARuleSets)
+{
+    Component root ("root");
+    attach (root, "style { #root { paintMargin: 10; } .lifted { shadow: 0 0 6 #000000; } .floating { shadow: 0 0 30 #000000; } }");
+    EXPECT_FLOAT_EQ (root.getPaintMargin().getLeft(), 10.0f);
+
+    // The margin is the larger of the one set and the reach of the shadows
+    root.addStyleClass (Identifier ("lifted"));
+    restyle (root);
+    EXPECT_FLOAT_EQ (root.getPaintMargin().getLeft(), 10.0f);
+
+    root.addStyleClass (Identifier ("floating"));
+    restyle (root);
+    EXPECT_FLOAT_EQ (root.getPaintMargin().getLeft(), 30.0f);
+
+    root.removeStyleClass (Identifier ("floating"));
+    root.removeStyleClass (Identifier ("lifted"));
+    restyle (root);
+    EXPECT_FLOAT_EQ (root.getPaintMargin().getLeft(), 10.0f);
 }
 
 TEST_F (StyleContextTests, ReportsMalformedShadows)

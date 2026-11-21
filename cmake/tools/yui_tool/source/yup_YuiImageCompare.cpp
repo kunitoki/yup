@@ -32,9 +32,10 @@ namespace
 constexpr int panelGap = 8;
 constexpr uint8 panelBackground = 24;
 constexpr int visibleDifference = 24;
-constexpr int maximumCells = 8;
+constexpr int maximumCells = 12;
 constexpr int minimumCellSide = 10;
 constexpr double noticeableError = 0.01;
+constexpr double shareOfWorstCell = 0.25;
 constexpr size_t maximumDifferences = 5;
 
 //==============================================================================
@@ -194,7 +195,11 @@ struct Cells
     std::vector<int> counts;
 };
 
-/** Joins the cells that differ and touch into the regions holding them, the worst first. */
+/** Joins the cells that differ most and touch into the regions holding them, the worst first.
+
+    A cell counts when it differs enough to be seen and is not far behind the worst one, so that
+    the regions stay around what differs most instead of growing over all that differs a little.
+*/
 std::vector<YuiToolComparison::Difference> findDifferences (const Cells& cells, const Rectangle<float>& region)
 {
     struct Found
@@ -205,6 +210,13 @@ std::vector<YuiToolComparison::Difference> findDifferences (const Cells& cells, 
 
     std::vector<Found> found;
     std::vector<bool> visited (cells.errors.size());
+    double worstMean = 0.0;
+
+    for (int row = 0; row < cells.rows; ++row)
+        for (int column = 0; column < cells.columns; ++column)
+            worstMean = jmax (worstMean, cells.meanAt (column, row));
+
+    const auto threshold = jmax (noticeableError, worstMean * shareOfWorstCell);
 
     const auto cellWidth = region.getWidth() / static_cast<float> (cells.columns);
     const auto cellHeight = region.getHeight() / static_cast<float> (cells.rows);
@@ -213,7 +225,7 @@ std::vector<YuiToolComparison::Difference> findDifferences (const Cells& cells, 
     {
         for (int startColumn = 0; startColumn < cells.columns; ++startColumn)
         {
-            if (visited[cells.indexOf (startColumn, startRow)] || cells.meanAt (startColumn, startRow) < noticeableError)
+            if (visited[cells.indexOf (startColumn, startRow)] || cells.meanAt (startColumn, startRow) < threshold)
                 continue;
 
             std::vector<std::pair<int, int>> pending { { startColumn, startRow } };
@@ -240,7 +252,7 @@ std::vector<YuiToolComparison::Difference> findDifferences (const Cells& cells, 
                     if (nextColumn < 0 || nextColumn >= cells.columns || nextRow < 0 || nextRow >= cells.rows)
                         continue;
 
-                    if (visited[cells.indexOf (nextColumn, nextRow)] || cells.meanAt (nextColumn, nextRow) < noticeableError)
+                    if (visited[cells.indexOf (nextColumn, nextRow)] || cells.meanAt (nextColumn, nextRow) < threshold)
                         continue;
 
                     visited[cells.indexOf (nextColumn, nextRow)] = true;

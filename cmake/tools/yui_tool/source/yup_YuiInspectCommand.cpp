@@ -69,23 +69,67 @@ double rounded (float value)
     return std::round (static_cast<double> (value) * 100.0) / 100.0;
 }
 
+// The first element under another that has a type and an id, itself included
+DataTree findElement (const DataTree& parent, const String& type, const String& id)
+{
+    if (parent.getType().toString() == type && parent.getProperty ("id").toString() == id)
+        return parent;
+
+    for (const auto& child : parent)
+        if (const auto found = findElement (child, type, id); found.isValid())
+            return found;
+
+    return {};
+}
+
+DataTree findDrawing (const DataTree& parent, const String& name)
+{
+    if (parent.getType().toString() == "drawing" && parent.getProperty ("name").toString() == name)
+        return parent;
+
+    for (const auto& child : parent)
+        if (const auto found = findDrawing (child, name); found.isValid())
+            return found;
+
+    return {};
+}
+
+// The element of a document a measured element of a drawing was written as: in the drawing its path starts
+// with, else anywhere, as what a `use` paints is written in another drawing
+DataTree findDrawingElement (const DataTree& document, const DrawingStyle::ElementBounds& measured)
+{
+    const auto drawing = findDrawing (document, measured.path.upToFirstOccurrenceOf ("/", false, false));
+
+    if (const auto found = drawing.isValid() ? findElement (drawing, measured.type, measured.id) : DataTree(); found.isValid())
+        return found;
+
+    return findElement (document, measured.type, measured.id);
+}
+
 //==============================================================================
 /** Writes the layout of an interface down, with what looks wrong in it. */
 class LayoutDescription
 {
 public:
-    explicit LayoutDescription (YuiToolView& viewToDescribe)
+    LayoutDescription (YuiToolView& viewToDescribe, bool shouldDescribeDrawings)
         : view (viewToDescribe)
         , builder (viewToDescribe.getDocument().getBuilder())
         , sourceMap (viewToDescribe.getDocument().getSourceMap())
         , root (*viewToDescribe.getRoot())
+        , describesDrawings (shouldDescribeDrawings)
     {
     }
 
-    var describe()
+    // Describes the interface, or one of its components with what it holds
+    var describe (const Component* only)
     {
-        const Described described { &root, builder.findElementFor (&root), {}, root.isVisible() };
-        const auto tree = describe (described, {}, true);
+        Described described { &root, builder.findElementFor (&root), {}, root.isVisible() };
+        String path;
+
+        if (only != nullptr && only != &root && ! findDescribed (described, *only, path))
+            return {};
+
+        const auto tree = describe (described, path, true);
 
         auto* layout = new DynamicObject();
         layout->setProperty ("file", view.getInput().getFullPathName());
@@ -98,6 +142,30 @@ public:
     }
 
 private:
+    // Moves to a component the document describes, looked for under another one, and tells its path
+    bool findDescribed (Described& current, const Component& target, String& path) const
+    {
+        if (current.component == &target)
+            return true;
+
+        const auto children = findDescribedChildren (builder, current);
+
+        for (std::size_t index = 0; index < children.size(); ++index)
+        {
+            auto child = children[index];
+            auto childPath = path.isEmpty() ? String (static_cast<int> (index)) : path + "/" + String (static_cast<int> (index));
+
+            if (findDescribed (child, target, childPath))
+            {
+                current = child;
+                path = childPath;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // Where the element of a component was written, when the document still knows
     void addPosition (DynamicObject& record, const DataTree& element) const
     {
@@ -117,6 +185,39 @@ private:
 
         record.setProperty ("line", located.line);
         record.setProperty ("column", located.column);
+    }
+
+    static var describeBounds (const Rectangle<float>& bounds, Point<float> origin)
+    {
+        return var (Array<var> { rounded (bounds.getX() + origin.getX()), rounded (bounds.getY() + origin.getY()), rounded (bounds.getWidth()), rounded (bounds.getHeight()) });
+    }
+
+    // The elements of the drawing painting a component that have an id, where they land in the interface
+    Array<var> describeDrawing (DrawingStyle& drawing, const Component& component, Point<float> origin) const
+    {
+        Array<var> elements;
+
+        for (const auto& measured : drawing.measureElements (component))
+        {
+            if (measured.id.isEmpty())
+                continue;
+
+            auto* record = new DynamicObject();
+            record->setProperty ("type", measured.type);
+            record->setProperty ("id", measured.id);
+            addPosition (*record, findDrawingElement (view.getDocument().getTree(), measured));
+            record->setProperty ("bounds", describeBounds (measured.bounds, origin));
+
+            if (measured.numRows > 1)
+                record->setProperty ("rows", measured.numRows);
+
+            if (! measured.textBounds.isEmpty())
+                record->setProperty ("text", describeBounds (measured.textBounds, origin));
+
+            elements.add (var (record));
+        }
+
+        return elements;
     }
 
     void warn (const Described& described, const String& label, const String& path, const String& problem)
@@ -154,6 +255,11 @@ private:
         if (const auto text = component.getProperty (textProperty); text.isString() && text.toString().isNotEmpty())
             record->setProperty ("text", text.toString().substring (0, 80));
 
+        if (describesDrawings)
+            if (auto* drawing = dynamic_cast<DrawingStyle*> (component.getStyle().get()))
+                if (const auto elements = describeDrawing (*drawing, component, described.origin); ! elements.isEmpty())
+                    record->setProperty ("drawing", var (elements));
+
         // What is wrong with a component is wrong with all it holds, which is then not told again
         if (checkPlace && described.isShown)
         {
@@ -189,6 +295,7 @@ private:
     const YuiBuilder& builder;
     std::shared_ptr<const YuiSourceMap> sourceMap;
     Component& root;
+    const bool describesDrawings;
     Array<var> warnings;
 };
 
@@ -196,12 +303,12 @@ private:
 
 //==============================================================================
 
-var describeYuiToolLayout (YuiToolView& view)
+var describeYuiToolLayout (YuiToolView& view, bool withDrawings, const Component* only)
 {
     if (! view.hasInterface())
         return {};
 
-    return LayoutDescription (view).describe();
+    return LayoutDescription (view, withDrawings).describe (only);
 }
 
 Component* findYuiToolComponent (YuiToolView& view, const String& path)
@@ -228,6 +335,61 @@ Component* findYuiToolComponent (YuiToolView& view, const String& path)
     }
 
     return current.component;
+}
+
+namespace
+{
+
+// The path of a component the document describes, looked for under another one
+bool findPath (const YuiBuilder& builder, const Described& current, const Component& target, String& path)
+{
+    if (current.component == &target)
+        return true;
+
+    const auto children = findDescribedChildren (builder, current);
+
+    for (std::size_t index = 0; index < children.size(); ++index)
+    {
+        auto childPath = path.isEmpty() ? String (static_cast<int> (index)) : path + "/" + String (static_cast<int> (index));
+
+        if (findPath (builder, children[index], target, childPath))
+        {
+            path = childPath;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+} // namespace
+
+var describeYuiToolComponent (YuiToolView& view, const Component& component)
+{
+    if (! view.hasInterface())
+        return {};
+
+    const auto& builder = view.getDocument().getBuilder();
+    const auto* described = &component;
+
+    // What a widget made for itself is told as the widget
+    while (described != nullptr && described != view.getRoot() && ! builder.findElementFor (described).isValid())
+        described = described->getParentComponent();
+
+    String path;
+
+    if (described == nullptr || ! findPath (builder, { view.getRoot(), {}, {}, true }, *described, path))
+        return {};
+
+    auto* record = new DynamicObject();
+    record->setProperty ("type", described->getTypeInfo().getTypeName().toString());
+
+    if (described->getComponentID().isNotEmpty())
+        record->setProperty ("id", described->getComponentID());
+
+    record->setProperty ("path", path);
+
+    return var (record);
 }
 
 int runYuiInspectCommand (int argc, char** argv)

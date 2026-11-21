@@ -184,6 +184,28 @@ public:
     double getSkewFactor() const;
 
     //==============================================================================
+    /** Returns the area of the button lowering the value of a slider of type IncDecButtons, in
+        its coordinates. Empty for a slider of another type.
+
+        The buttons are at the ends of the slider with the value between them: on a line when the
+        slider is wider than tall, the one raising the value above the other otherwise. A press
+        on a button steps the value by the interval of the range, or by a hundredth of the range
+        when it has none, and keeps stepping while it is held.
+    */
+    Rectangle<float> getDecrementButtonBounds() const;
+
+    /** Returns the area of the button raising the value of a slider of type IncDecButtons.
+
+        @see getDecrementButtonBounds
+    */
+    Rectangle<float> getIncrementButtonBounds() const;
+
+    /** Returns which button of a slider of type IncDecButtons is pressed: -1 for the one lowering
+        the value, 1 for the one raising it and 0 for none.
+    */
+    int getPressedStep() const noexcept { return pressedStep; }
+
+    //==============================================================================
     /** Sets the number of decimal places to use when displaying values.
 
         @param decimalPlaces Number of decimal places (negative for automatic)
@@ -359,6 +381,10 @@ private:
     bool isMouseOverThumb (Point<float> mousePos) const;
     float getThumbSize() const;
 
+    Rectangle<float> getStepButtonBounds (int direction) const;
+    void stepValue (int direction);
+    void repeatStep();
+
     void showPopupMenu();
     void createTextEditor();
     void hideTextEditor (bool discardCurrentEditorContents);
@@ -393,6 +419,9 @@ private:
     double valueOnMouseDown = 0.0;
     double minValueOnMouseDown = 0.0;
     double maxValueOnMouseDown = 0.0;
+
+    int pressedStep = 0;
+    TimedCallback stepRepeater;
 
     std::unique_ptr<Component> popupBubbleComponent;
     std::unique_ptr<TextEditor> textEditor;

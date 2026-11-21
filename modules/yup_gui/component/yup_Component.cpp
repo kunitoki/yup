@@ -40,6 +40,7 @@ struct ComponentIds
     static inline const Identifier bounds { "bounds" };
     static inline const Identifier transform { "transform" };
     static inline const Identifier cached { "cached" };
+    static inline const Identifier paintMargin { "paintMargin" };
     static inline const Identifier focused { "focused" };
     static inline const Identifier focusWithin { "focus-within" };
     static inline const Identifier hovered { "hovered" };
@@ -907,9 +908,15 @@ void Component::setPaintMargin (float left, float top, float right, float bottom
 {
     jassert (left >= 0.0f && top >= 0.0f && right >= 0.0f && bottom >= 0.0f);
 
+    const EdgeSpacing<float> newMargin { jmax (0.0f, left), jmax (0.0f, top), jmax (0.0f, right), jmax (0.0f, bottom) };
+    const auto hasChanged = paintMargin != newMargin;
+
     repaint();
-    paintMargin = { jmax (0.0f, left), jmax (0.0f, top), jmax (0.0f, right), jmax (0.0f, bottom) };
+    paintMargin = newMargin;
     repaint();
+
+    if (hasChanged)
+        notifyPropertyChanged (ComponentIds::paintMargin);
 }
 
 void Component::setPaintMargin (float margin)
@@ -1969,6 +1976,20 @@ const ComponentTypeInfo& Component::getClassTypeInfo()
                                  .styleableProperty (ComponentIds::opacity, &Component::getOpacity, &Component::setOpacity, 1.0)
                                  .styleableProperty (ComponentIds::transform, &Component::getTransform, &Component::setTransform, VariantConverter<AffineTransform>::toVar (AffineTransform()))
                                  .styleableProperty (ComponentIds::cached, &Component::isCachedToTexture, &Component::setCachedToTexture, false, "Keeps what the component paints in a texture, painted again only when the component is repainted.")
+                                 .addProperty (ComponentProperty {
+                                     .name = ComponentIds::paintMargin,
+                                     .type = Type::any,
+                                     .defaultValue = 0.0,
+                                     .getter = [] (const Component& c)
+                                     {
+                                         return VariantConverter<EdgeSpacing<float>>::toVar (c.getPaintMargin());
+                                     },
+                                     .setter = [] (Component& c, const var& v)
+                                     {
+                                         c.setPaintMargin (LayoutComponent::parseSpacing (v));
+                                     },
+                                     .isInherited = false,
+                                     .description = "How far the component may paint outside its bounds, for a glow or a shadow it draws itself: a number, or a string of 1, 2 or 4 values (top right bottom left)." })
                                  .property (ComponentIds::x, &Component::getX, [] (Component& c, float v) { c.setBounds (v, c.getY(), c.getWidth(), c.getHeight()); })
                                  .property (ComponentIds::y, &Component::getY, [] (Component& c, float v) { c.setBounds (c.getX(), v, c.getWidth(), c.getHeight()); })
                                  .property (ComponentIds::width, &Component::getWidth, [] (Component& c, float v) { c.setBounds (c.getX(), c.getY(), v, c.getHeight()); })
