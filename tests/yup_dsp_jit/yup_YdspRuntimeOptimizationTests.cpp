@@ -1293,7 +1293,7 @@ TEST_F (YdspRuntimeOptimizationTests, ReusesIntermediateBuffersAndSupportsRepeat
     {
         ASSERT_TRUE (graph.prepare (48000.0, size).wasOk());
 
-        const auto regionBytes = (static_cast<size_t> (size) * sizeof (float) + 7) & ~size_t (7);
+        const auto regionBytes = YdspIrFunction::alignStateBytes (static_cast<size_t> (size) * sizeof (float));
         EXPECT_EQ (2 * regionBytes, graph.getScratchMemorySizeBytes());
 
         std::vector<float> input (static_cast<size_t> (size), 2.0f);
@@ -1317,7 +1317,7 @@ TEST_F (YdspRuntimeOptimizationTests, ReusesFloat64RegionsAtOddBlockSizes)
 
     ASSERT_TRUE (graph.isValid());
     ASSERT_TRUE (graph.prepare (48000.0, 17).wasOk());
-    EXPECT_EQ (2u * 17u * sizeof (double), graph.getScratchMemorySizeBytes());
+    EXPECT_EQ (2u * YdspIrFunction::alignStateBytes (17u * sizeof (double)), graph.getScratchMemorySizeBytes());
 
     std::array<double, 17> input {}, output {};
     input.fill (0.25);

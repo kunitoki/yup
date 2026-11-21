@@ -44,12 +44,21 @@ namespace yup
 /**
     A multi-channel buffer containing floating point audio samples.
 
+    When the buffer owns its memory, every channel starts on a 64 byte boundary
+    (see channelAlignmentBytes), so each channel can be processed with aligned
+    SIMD loads and never shares a cache line with its neighbour. A buffer that
+    refers to external data keeps whatever alignment that data has.
+
     @tags{Audio}
 */
 template <typename Type>
 class AudioBuffer
 {
 public:
+    //==============================================================================
+    /** The alignment, in bytes, of the start of every channel the buffer owns. */
+    static constexpr size_t channelAlignmentBytes = 64;
+
     //==============================================================================
     /** Creates an empty buffer with 0 channels and 0 length. */
     AudioBuffer() noexcept
@@ -398,10 +407,8 @@ public:
 
         if (newNumSamples != size || newNumChannels != numChannels)
         {
-            auto allocatedSamplesPerChannel = ((size_t) newNumSamples + 3) & ~3u;
-            auto channelListSize = ((static_cast<size_t> (1 + newNumChannels) * sizeof (Type*)) + 15) & ~15u;
-            auto newTotalBytes = ((size_t) newNumChannels * (size_t) allocatedSamplesPerChannel * sizeof (Type))
-                               + channelListSize + 32;
+            const auto layout = getLayout (newNumChannels, newNumSamples);
+            const auto newTotalBytes = layout.totalBytes;
             bool wasNonEmptyClearedData = isClear && size > 0;
 
             if (keepExistingContent)
@@ -417,14 +424,7 @@ public:
 
                     auto numSamplesToCopy = (size_t) jmin (newNumSamples, size);
 
-                    auto newChannels = unalignedPointerCast<Type**> (newData.get());
-                    auto newChan = unalignedPointerCast<Type*> (newData + channelListSize);
-
-                    for (int j = 0; j < newNumChannels; ++j)
-                    {
-                        newChannels[j] = newChan;
-                        newChan += allocatedSamplesPerChannel;
-                    }
+                    auto newChannels = assignChannels (newData.get(), layout, newNumChannels);
 
                     if (! isClear)
                     {
@@ -450,16 +450,9 @@ public:
                 {
                     allocatedBytes = newTotalBytes;
                     allocatedData.allocate (newTotalBytes, clearExtraSpace || wasNonEmptyClearedData);
-                    channels = unalignedPointerCast<Type**> (allocatedData.get());
                 }
 
-                auto* chan = unalignedPointerCast<Type*> (allocatedData + channelListSize);
-
-                for (int i = 0; i < newNumChannels; ++i)
-                {
-                    channels[i] = chan;
-                    chan += allocatedSamplesPerChannel;
-                }
+                channels = assignChannels (allocatedData.get(), layout, newNumChannels);
             }
 
             channels[newNumChannels] = nullptr;
@@ -1244,31 +1237,53 @@ private:
     //==============================================================================
     void allocateData()
     {
-        static_assert (alignof (Type) <= getMaxAlignmentBytes(),
-                       "AudioBuffer cannot hold types with alignment requirements larger than that guaranteed by malloc");
-
         jassert (size >= 0);
 
-        auto channelListSize = (size_t) (numChannels + 1) * sizeof (Type*);
-        auto requiredSampleAlignment = std::alignment_of_v<Type>;
-        size_t alignmentOverflow = channelListSize % requiredSampleAlignment;
+        const auto layout = getLayout (numChannels, size);
 
-        if (alignmentOverflow != 0)
-            channelListSize += requiredSampleAlignment - alignmentOverflow;
-
-        allocatedBytes = (size_t) numChannels * (size_t) size * sizeof (Type) + channelListSize + 32;
+        allocatedBytes = layout.totalBytes;
         allocatedData.malloc (allocatedBytes);
-        channels = unalignedPointerCast<Type**> (allocatedData.get());
-        auto chan = unalignedPointerCast<Type*> (allocatedData + channelListSize);
+        channels = assignChannels (allocatedData.get(), layout, numChannels);
+        isClear = false;
+    }
 
-        for (int i = 0; i < numChannels; ++i)
+    //==============================================================================
+    struct Layout
+    {
+        size_t channelListBytes = 0;
+        size_t channelStrideBytes = 0;
+        size_t totalBytes = 0;
+    };
+
+    static Layout getLayout (int numChannelsToUse, int numSamplesToUse) noexcept
+    {
+        static_assert (alignof (Type) <= channelAlignmentBytes,
+                       "AudioBuffer cannot hold types with alignment requirements larger than its channel alignment");
+
+        Layout layout;
+        layout.channelListBytes = static_cast<size_t> (numChannelsToUse + 1) * sizeof (Type*);
+        layout.channelStrideBytes = (static_cast<size_t> (numSamplesToUse) * sizeof (Type) + (channelAlignmentBytes - 1))
+                                  & ~(channelAlignmentBytes - 1);
+
+        layout.totalBytes = layout.channelListBytes + (channelAlignmentBytes - 1)
+                          + static_cast<size_t> (numChannelsToUse) * layout.channelStrideBytes + 32;
+
+        return layout;
+    }
+
+    static Type** assignChannels (char* block, const Layout& layout, int numChannelsToUse) noexcept
+    {
+        auto* channelList = unalignedPointerCast<Type**> (block);
+        auto* channel = snapPointerToAlignment (block + layout.channelListBytes, channelAlignmentBytes);
+
+        for (int i = 0; i < numChannelsToUse; ++i)
         {
-            channels[i] = chan;
-            chan += size;
+            channelList[i] = unalignedPointerCast<Type*> (channel);
+            channel += layout.channelStrideBytes;
         }
 
-        channels[numChannels] = nullptr;
-        isClear = false;
+        channelList[numChannelsToUse] = nullptr;
+        return channelList;
     }
 
     void allocateChannels (Type* const* dataToReferTo, int offset)

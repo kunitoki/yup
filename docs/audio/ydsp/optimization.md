@@ -46,7 +46,7 @@ which it was.
 
 ## Fast math
 
-`fastMath` is on by default and changes two things:
+`fastMath` is on by default and changes three things:
 
 - **Transcendentals.** A loop calling `sin`, `cos`, `tan`, `atan2`, `tanh`,
   `exp`, `log`, `pow` and friends is widened to [SLEEF](https://sleef.org)'s
@@ -58,6 +58,15 @@ which it was.
   rounded operation. With `fastMath` off, nothing is contracted and every
   operation rounds separately. An explicit `fma()` in the source stays one
   rounding in every tier.
+- **Order of operations.** The additions of a contracted chain such as
+  `a * b + c - d * e` may be reordered so the product that arrives last - the
+  output of the previous stage, or a value fed back from the previous sample -
+  is added last, and `x * k1 * k2` multiplies by `k1 * k2` once when both are
+  fixed for the block. A sum built one term at a time over many statements -
+  `acc = acc + c[i] * h[i]` across the taps of a FIR - may be added up in a
+  few partial sums side by side. The result differs from the order as written
+  by a rounding, as with contraction. With `fastMath` off, operations keep the
+  order of the source.
 
 Turn it off when a patch is a reference implementation, when you are comparing
 output against a double-precision model, or when a resonant structure at the
@@ -66,12 +75,12 @@ cost throughput in anything built out of transcendentals; for everything else
 the 3.5 ULP tier is far below the noise floor of 24-bit audio.
 
 ```cpp
-options.fastMath = false; // strict 1-ULP transcendentals, no contraction
+options.fastMath = false; // strict 1-ULP transcendentals, no contraction or reordering
 ```
 
 ```{admonition} Determinism
 :class: tip
-Contraction is applied consistently, and a target without a fused
+Contraction and reordering are applied consistently, and a target without a fused
 multiply-add instruction - WebAssembly included - expands it through an exact
 double-precision sequence that rounds once. The same source therefore produces
 the same samples on every supported target, with or without `fastMath`.
@@ -165,15 +174,40 @@ simplifies arithmetic, turns small branches into selects, forwards stores to
 loads, eliminates common subexpressions and dead code, hoists loop-invariant
 work out of the sample loop, removes array bounds checks it can prove are never
 taken, fuses and unrolls loops, widens them to the target's vector width,
-splits reduction chains so lanes accumulate independently, and contracts
-multiplies and adds where `fastMath` allows it.
+splits reduction chains so lanes accumulate independently, keeps scalar state
+and small constant-indexed state arrays in registers across the sample loop,
+and contracts and reorders multiplies and adds where `fastMath` allows it.
 
-Two consequences are worth knowing when you write a patch:
+A few consequences are worth knowing when you write a patch:
+
+- **A `process block` keeps scalar state in registers too.** It is read once
+  and written back once, so a recurrence written inside a
+  `for n in 0..blockSize` loop does not go through memory on every sample.
+- **Coefficients computed in the process body run once per block.** Anything
+  that depends only on parameters, the sample rate and constants - a `tan`, an
+  `exp`, a `?:` that picks between two such values - is moved ahead of the
+  sample loop. You do not need to restructure the patch to get that.
+- **A state array that only its `{ ... }` initialiser writes is a table of
+  constants.** `m[3]` is then the literal you wrote, and is folded like one.
+  One assignment to an element anywhere in the processor makes the array
+  ordinary state again.
+- **A bank loop may use its variable as a number.** `float (i)` and
+  `float (i + 1)` - the harmonic number of an additive bank - no longer keep a
+  constant-bound loop scalar.
+
+- **A small state array indexed by constants is as cheap as scalar state.** The
+  stages of a filter written as `z[0]`, `z[1]`, ... (up to 8 elements per
+  array, 16 per processor) live in registers for the whole block. An index
+  that is only known at run time keeps the array in memory.
 
 - **Bounds checks disappear when they can be proven redundant.** Indexing a
   delay line with an expression the compiler can bound - a wrapped counter, a
-  `%` by the array length - costs nothing. An index it cannot bound keeps its
-  check.
+  `%` by the array length, a mask - costs nothing. An index it cannot bound
+  keeps its check. The same reasoning removes the overflow checks of integer
+  arithmetic, so it pays to let the compiler see the range of a position: write
+  it as `i = i + 1; if (i >= n) { i = 0; }` or as `i = (i + 1) & mask`, and
+  `i - k` and `(i - k) & mask` are then plain instructions. A `for` variable
+  with constant bounds has a known range too.
 - **A kernel calling vectorized transcendentals may be capped to four lanes**,
   because the SLEEF routines come in four-lane form. A patch full of `sin` and
   `exp` will not reach AVX-512 width; one made of multiplies and adds will.

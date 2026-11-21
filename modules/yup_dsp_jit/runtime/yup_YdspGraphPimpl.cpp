@@ -526,7 +526,7 @@ void YdspAudioGraph::Pimpl::dispatchEventToNode (Node& node, YdspEventShape shap
 
 //==============================================================================
 
-void YdspAudioGraph::Pimpl::drainOutputEvents (Node& node, int srcNodeIndex, int blockSize, yup::MidiBuffer* midiOut)
+void YdspAudioGraph::Pimpl::routeOutputEvents (Node& node, int srcNodeIndex, int blockSize, yup::MidiBuffer* midiOut)
 {
     size_t pending = 0;
     for (auto carried : node.carryQueue)
@@ -668,41 +668,58 @@ void YdspAudioGraph::Pimpl::deliverResolvedEvent (int dstNode, int dstEventInput
 
 //==============================================================================
 
-void YdspAudioGraph::Pimpl::resolveNodeInputs (Node& node, Span<const YdspInputBuffer> inputs, int blockSize)
+const void* YdspAudioGraph::Pimpl::runConnectionDelay (StreamConnection& connection, const void* source, int blockSize, int voice) noexcept
 {
-    for (int s = 0; s < node.numInputs; ++s)
+    const auto lane = voice >= 0 ? voice : 0;
+    const auto numLanes = static_cast<int> (connection.delayWritePos.size());
+    const auto stride = static_cast<int> (connection.delayData.size()) / numLanes;
+    const auto base = static_cast<size_t> (lane) * static_cast<size_t> (stride);
+
+    const auto* src = static_cast<const float*> (source);
+    auto* delayed = connection.delayOutput.data();
+    auto& writePos = connection.delayWritePos[static_cast<size_t> (lane)];
+    auto readPos = writePos - connection.delaySamples;
+    if (readPos < 0)
+        readPos += stride;
+
+    for (int i = 0; i < blockSize; ++i)
     {
-        const auto first = node.inputConnectionStart[static_cast<size_t> (s)];
-        const auto last = node.inputConnectionStart[static_cast<size_t> (s) + 1];
-        jassert (last > first);
-
-        if (last - first == 1)
-        {
-            auto& connection = node.inputConnections[static_cast<size_t> (first)];
-            const auto* data = applyConnectionDelay (connection, connectionSourceData (connection, inputs), blockSize);
-            node.runtimeInputs[static_cast<size_t> (s)] = const_cast<void*> (data);
-            continue;
-        }
-
-        auto* mix = node.inputMixPtrs[static_cast<size_t> (s)];
-        jassert (mix != nullptr);
-
-        const auto elemSize = static_cast<size_t> (node.inputElemSizes[static_cast<size_t> (s)]);
-        const auto type = node.inputElemTypes[static_cast<size_t> (s)];
-
-        for (int c = first; c < last; ++c)
-        {
-            auto& connection = node.inputConnections[static_cast<size_t> (c)];
-            const auto* data = applyConnectionDelay (connection, connectionSourceData (connection, inputs), blockSize);
-
-            if (c == first)
-                std::memcpy (mix, data, static_cast<size_t> (blockSize) * elemSize);
-            else
-                accumulateStream (mix, data, type, blockSize);
-        }
-
-        node.runtimeInputs[static_cast<size_t> (s)] = mix;
+        connection.delayData[base + static_cast<size_t> (writePos)] = src[i];
+        delayed[i] = connection.delayData[base + static_cast<size_t> (readPos)];
+        if (++writePos == stride)
+            writePos = 0;
+        if (++readPos == stride)
+            readPos = 0;
     }
+
+    return delayed;
+}
+
+//==============================================================================
+
+void YdspAudioGraph::Pimpl::mixNodeInput (Node& node, int s, Span<const YdspInputBuffer> inputs, int blockSize)
+{
+    const auto first = node.inputConnectionStart[static_cast<size_t> (s)];
+    const auto last = node.inputConnectionStart[static_cast<size_t> (s) + 1];
+
+    auto* mix = node.inputMixPtrs[static_cast<size_t> (s)];
+    jassert (mix != nullptr);
+
+    const auto elemSize = static_cast<size_t> (node.inputElemSizes[static_cast<size_t> (s)]);
+    const auto type = node.inputElemTypes[static_cast<size_t> (s)];
+
+    for (int c = first; c < last; ++c)
+    {
+        auto& connection = node.inputConnections[static_cast<size_t> (c)];
+        const auto* data = applyConnectionDelay (connection, connectionSourceData (connection, inputs), blockSize);
+
+        if (c == first)
+            std::memcpy (mix, data, static_cast<size_t> (blockSize) * elemSize);
+        else
+            accumulateStream (mix, data, type, blockSize);
+    }
+
+    node.runtimeInputs[static_cast<size_t> (s)] = mix;
 }
 
 //==============================================================================
@@ -961,6 +978,92 @@ void YdspAudioGraph::Pimpl::mixGraphOutputs (Span<const YdspInputBuffer> inputs,
                 accumulateStream (destination, data, type, blockSize);
         }
     }
+}
+
+//==============================================================================
+
+void YdspAudioGraph::Pimpl::prepareOutputIsolation (int maxBlockSize)
+{
+    isolatedOutputs.clear();
+    isolatedOutputData.resize (0);
+
+    // One single-voice node that writes every output itself is one kernel
+    // call. Any other shape reads an input after some output was written.
+    bool isSingleKernel = nodes.size() == 1 && nodes.front().voiceCount == 1;
+
+    for (const bool direct : graphOutputDirect)
+        isSingleKernel = isSingleKernel && direct;
+
+    if (isSingleKernel)
+        return;
+
+    const auto numElements = static_cast<size_t> (maxBlockSize);
+    std::vector<size_t> offsets;
+    size_t totalBytes = 0;
+
+    for (const auto type : outputStreamTypes)
+    {
+        offsets.push_back (totalBytes);
+        totalBytes += YdspIrFunction::alignStateBytes (numElements * static_cast<size_t> (elementSizeBytes (type)));
+    }
+
+    isolatedOutputData.resize (totalBytes);
+    isolatedOutputs.reserve (outputStreamTypes.size());
+
+    for (size_t o = 0; o < outputStreamTypes.size(); ++o)
+    {
+        auto* data = isolatedOutputData.data() + offsets[o];
+
+        switch (detail::toElementType (outputStreamTypes[o]))
+        {
+            case YdspElementType::float32:
+                isolatedOutputs.emplace_back (Span<float> (reinterpret_cast<float*> (data), numElements));
+                break;
+
+            case YdspElementType::float64:
+                isolatedOutputs.emplace_back (Span<double> (reinterpret_cast<double*> (data), numElements));
+                break;
+
+            case YdspElementType::int32:
+            case YdspElementType::boolean:
+                isolatedOutputs.emplace_back (Span<int32_t> (reinterpret_cast<int32_t*> (data), numElements));
+                break;
+
+            case YdspElementType::int64:
+                isolatedOutputs.emplace_back (Span<int64_t> (reinterpret_cast<int64_t*> (data), numElements));
+                break;
+        }
+    }
+}
+
+bool YdspAudioGraph::Pimpl::outputsOverlapInputs (Span<const YdspInputBuffer> inputs, Span<YdspOutputBuffer> outputs, int blockSize) const noexcept
+{
+    const auto numElements = static_cast<size_t> (blockSize);
+
+    for (size_t o = 0; o < outputs.size(); ++o)
+    {
+        const auto outputBegin = reinterpret_cast<std::uintptr_t> (detail::getStreamBufferView (outputs[o]).data);
+        const auto outputEnd = outputBegin + numElements * static_cast<size_t> (elementSizeBytes (outputStreamTypes[o]));
+
+        for (size_t i = 0; i < inputs.size(); ++i)
+        {
+            const auto inputBegin = reinterpret_cast<std::uintptr_t> (detail::getStreamBufferView (inputs[i]).data);
+            const auto inputEnd = inputBegin + numElements * static_cast<size_t> (elementSizeBytes (inputStreamTypes[i]));
+
+            if (inputBegin < outputEnd && outputBegin < inputEnd)
+                return true;
+        }
+    }
+
+    return false;
+}
+
+void YdspAudioGraph::Pimpl::copyOutputs (Span<YdspOutputBuffer> destination, Span<YdspOutputBuffer> source, int blockSize) const noexcept
+{
+    for (size_t o = 0; o < destination.size(); ++o)
+        std::memcpy (const_cast<void*> (detail::getStreamBufferView (destination[o]).data),
+                     detail::getStreamBufferView (source[o]).data,
+                     static_cast<size_t> (blockSize) * static_cast<size_t> (elementSizeBytes (outputStreamTypes[o])));
 }
 
 //==============================================================================

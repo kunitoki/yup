@@ -236,6 +236,7 @@ bool sameCseExpression (const YdspIrInst& a, YdspValueType aType, const YdspIrIn
     return a.op == b.op && aType == bType && a.a == b.a && a.b == b.b && a.c == b.c
         && a.memIndex == b.memIndex && a.ivalue == b.ivalue && a.bvalue == b.bvalue
         && a.saturatingIntegerArithmetic == b.saturatingIntegerArithmetic
+        && a.overflowFreeIntegerArithmetic == b.overflowFreeIntegerArithmetic
         && a.boundedFloatToInt == b.boundedFloatToInt
         && std::bit_cast<uint64_t> (a.fvalue) == std::bit_cast<uint64_t> (b.fvalue);
 }
@@ -403,6 +404,98 @@ bool YdspOptimizer::commonSubexpressionElimination (YdspIrFunction& fn)
 
 //==============================================================================
 
+void YdspOptimizer::formAdvanceWrap (YdspIrFunction& fn)
+{
+    const YdspValueUseCounts counts (fn);
+    std::vector<const YdspIrInst*> constants (fn.valueTypes.size(), nullptr);
+
+    for (const auto& block : fn.blocks)
+        for (const auto& inst : block.insts)
+            if (inst.op == YdspIrOp::constI && counts.definedOnce (inst.result))
+                constants[static_cast<size_t> (inst.result)] = &inst;
+
+    const auto constantOf = [&] (int value) -> std::optional<int64_t>
+    {
+        if (value < 0 || constants[static_cast<size_t> (value)] == nullptr)
+            return std::nullopt;
+
+        return constants[static_cast<size_t> (value)]->ivalue;
+    };
+
+    const auto reads = [] (const YdspIrInst& inst, int value) noexcept
+    {
+        return (isValueIdOperand (inst.op, 0) && inst.a == value)
+            || (isValueIdOperand (inst.op, 1) && inst.b == value)
+            || (isValueIdOperand (inst.op, 2) && inst.c == value);
+    };
+
+    for (auto& block : fn.blocks)
+    {
+        auto& insts = block.insts;
+
+        for (size_t i = 0; i < insts.size(); ++i)
+        {
+            auto& add = insts[i];
+
+            if (add.op != YdspIrOp::addI || ! add.overflowFreeIntegerArithmetic || add.result < 0
+                || fn.valueTypes[static_cast<size_t> (add.result)] != YdspValueType::int32Type)
+                continue;
+
+            const auto counter = constantOf (add.b) == 1 ? add.a
+                               : constantOf (add.a) == 1 ? add.b
+                                                         : -1;
+            if (counter < 0)
+                continue;
+
+            // The only readers of the incremented value up to the select are
+            // the wrap test and the select itself, and nothing redefines it.
+            size_t compareIndex = insts.size(), selectIndex = insts.size();
+            int64_t bound = 0;
+
+            for (size_t j = i + 1; j < insts.size(); ++j)
+            {
+                const auto& inst = insts[j];
+
+                if (compareIndex == insts.size())
+                {
+                    const auto limit = constantOf (inst.b);
+
+                    if ((inst.op == YdspIrOp::geI || inst.op == YdspIrOp::gtI) && inst.a == add.result && limit.has_value()
+                        && counts.definedOnce (inst.result) && counts.uses[static_cast<size_t> (inst.result)] == 1)
+                    {
+                        compareIndex = j;
+                        bound = *limit + (inst.op == YdspIrOp::gtI ? 1 : 0);
+                        continue;
+                    }
+                }
+                else if (inst.op == YdspIrOp::selectB && inst.result == add.result && inst.a == insts[compareIndex].result
+                         && constantOf (inst.b) == 0 && inst.c == add.result)
+                {
+                    selectIndex = j;
+                    break;
+                }
+
+                if (inst.result == add.result || reads (inst, add.result))
+                    break;
+            }
+
+            if (selectIndex == insts.size() || bound < 1 || bound > std::numeric_limits<int32_t>::max())
+                continue;
+
+            add.op = YdspIrOp::advanceWrapI;
+            add.a = counter;
+            add.b = -1;
+            add.ivalue = bound;
+            add.overflowFreeIntegerArithmetic = false;
+
+            insts.erase (insts.begin() + static_cast<std::ptrdiff_t> (selectIndex));
+            insts.erase (insts.begin() + static_cast<std::ptrdiff_t> (compareIndex));
+        }
+    }
+}
+
+//==============================================================================
+
 void YdspOptimizer::foldStateWriteBacks (YdspIrFunction& fn)
 {
     const auto isFoldableProducer = [] (YdspIrOp op) noexcept
@@ -526,6 +619,8 @@ void YdspOptimizer::foldStateWriteBacks (YdspIrFunction& fn)
 
                 bool valid = true;
 
+                std::vector<int> earlyCopies;
+
                 forEachValueUse (fn, [&] (int useBlock, int useInst, int operand, int value)
                 {
                     (void) operand;
@@ -562,11 +657,19 @@ void YdspOptimizer::foldStateWriteBacks (YdspIrFunction& fn)
                                 const int readValue = readOperand == 0 ? between.a
                                                      : (readOperand == 1 ? between.b : between.c);
 
-                                if (readValue == carried)
+                                if (readValue != carried)
+                                    continue;
+
+                                if (isMoveOpcode (between.op) && between.result != carried && between.result != produced)
                                 {
-                                    valid = false;
-                                    return;
+                                    if (std::find (earlyCopies.begin(), earlyCopies.end(), j) == earlyCopies.end())
+                                        earlyCopies.push_back (j);
+
+                                    continue;
                                 }
+
+                                valid = false;
+                                return;
                             }
                         }
                     }
@@ -574,6 +677,29 @@ void YdspOptimizer::foldStateWriteBacks (YdspIrFunction& fn)
 
                 if (! valid)
                     continue;
+
+                auto moveIndex = move;
+
+                if (! earlyCopies.empty())
+                {
+                    const int saved = static_cast<int> (fn.valueTypes.size());
+                    fn.valueTypes.push_back (fn.valueTypes[static_cast<size_t> (carried)]);
+
+                    if (! fn.valueLanes.empty())
+                        fn.valueLanes.push_back (fn.laneCountOf (carried));
+
+                    for (const auto copy : earlyCopies)
+                        insts[static_cast<size_t> (copy)].a = saved;
+
+                    YdspIrInst save;
+                    save.op = moveOpcodeFor (fn.valueTypes[static_cast<size_t> (carried)]);
+                    save.result = saved;
+                    save.a = carried;
+                    insts.insert (insts.begin() + producer, save);
+
+                    ++producer;
+                    ++moveIndex;
+                }
 
                 insts[static_cast<size_t> (producer)].result = carried;
 
@@ -601,7 +727,7 @@ void YdspOptimizer::foldStateWriteBacks (YdspIrFunction& fn)
                     }
                 }
 
-                insts.erase (insts.begin() + static_cast<std::ptrdiff_t> (move));
+                insts.erase (insts.begin() + static_cast<std::ptrdiff_t> (moveIndex));
                 applied = true;
             }
         }
@@ -611,38 +737,40 @@ void YdspOptimizer::foldStateWriteBacks (YdspIrFunction& fn)
 
 //==============================================================================
 
+// The operations that always lower to a call, which only the registers the
+// calling convention preserves survive.
+bool isCallBoundary (YdspIrOp op) noexcept
+{
+    switch (op)
+    {
+        case YdspIrOp::sinF:
+        case YdspIrOp::cosF:
+        case YdspIrOp::tanF:
+        case YdspIrOp::asinF:
+        case YdspIrOp::acosF:
+        case YdspIrOp::atanF:
+        case YdspIrOp::sinhF:
+        case YdspIrOp::coshF:
+        case YdspIrOp::tanhF:
+        case YdspIrOp::asinhF:
+        case YdspIrOp::acoshF:
+        case YdspIrOp::atanhF:
+        case YdspIrOp::logF:
+        case YdspIrOp::log10F:
+        case YdspIrOp::powF:
+        case YdspIrOp::atan2F:
+        case YdspIrOp::fmodF:
+        case YdspIrOp::roundF:
+        case YdspIrOp::copysignF:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
 void YdspOptimizer::rematerializePostCallLeaves (YdspIrFunction& fn)
 {
-    const auto isCallBoundary = [] (YdspIrOp op) noexcept
-    {
-        switch (op)
-        {
-            case YdspIrOp::sinF:
-            case YdspIrOp::cosF:
-            case YdspIrOp::tanF:
-            case YdspIrOp::asinF:
-            case YdspIrOp::acosF:
-            case YdspIrOp::atanF:
-            case YdspIrOp::sinhF:
-            case YdspIrOp::coshF:
-            case YdspIrOp::tanhF:
-            case YdspIrOp::asinhF:
-            case YdspIrOp::acoshF:
-            case YdspIrOp::atanhF:
-            case YdspIrOp::logF:
-            case YdspIrOp::log10F:
-            case YdspIrOp::powF:
-            case YdspIrOp::atan2F:
-            case YdspIrOp::fmodF:
-            case YdspIrOp::roundF:
-            case YdspIrOp::copysignF:
-                return true;
-
-            default:
-                return false;
-        }
-    };
-
     const auto isLeafDef = [] (YdspIrOp op) noexcept
     {
         return op == YdspIrOp::constF || op == YdspIrOp::constI || op == YdspIrOp::loadParam;

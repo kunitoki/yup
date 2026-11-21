@@ -9162,4 +9162,304 @@ TEST (YdspJitGraphTests, ReservedHostMidiOutputCapacityCoversDenseOutputWithoutA
     EXPECT_EQ (64, midi.getNumEvents());
 }
 
+//==============================================================================
+// Host buffers shared between inputs and outputs: every node must still read
+// the input the host supplied, whatever another node wrote in the meantime.
+
+TEST (YdspJitGraphTests, InPlaceBuffersKeepInputsIntactAcrossNodes)
+{
+    YdspCompiler compiler;
+
+    auto graph = compilePatch (R"YDSP(
+        processor Gain { input stream in; output stream out; process { out = in * 0.5; } }
+        graph G {
+            input stream l; input stream r; output stream outL; output stream outR;
+            node a = Gain; node b = Gain;
+            connection { l -> a.in; a.out -> outR; r -> b.in; b.out -> outL; }
+        }
+    )YDSP",
+                               compiler);
+
+    ASSERT_TRUE (graph.isValid());
+    graph.prepare (44100.0, 64);
+
+    std::vector<float> left (37), right (37);
+
+    for (size_t i = 0; i < left.size(); ++i)
+    {
+        left[i] = 1.0f + static_cast<float> (i);
+        right[i] = -2.0f * static_cast<float> (i);
+    }
+
+    const auto originalLeft = left;
+    const auto originalRight = right;
+
+    const yup::YdspInputBuffer inputs[] { yup::Span<const float> (left), yup::Span<const float> (right) };
+    yup::YdspOutputBuffer outputs[] { yup::Span<float> (left), yup::Span<float> (right) };
+
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    YdspAllocationCounter allocations;
+    allocations.start();
+#endif
+    const auto result = graph.process ({ inputs, outputs, 37 });
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    EXPECT_EQ (0u, allocations.stop());
+#endif
+    ASSERT_EQ (yup::YdspProcessResult::ok, result);
+
+    for (size_t i = 0; i < left.size(); ++i)
+    {
+        EXPECT_EQ (originalRight[i] * 0.5f, left[i]) << i;
+        EXPECT_EQ (originalLeft[i] * 0.5f, right[i]) << i;
+    }
+}
+
+TEST (YdspJitGraphTests, InPlaceBuffersKeepInputsIntactForPassThroughConnections)
+{
+    YdspCompiler compiler;
+
+    auto graph = compilePatch (R"YDSP(
+        graph G {
+            input stream l; input stream r; output stream outL; output stream outR;
+            connection { l -> outR; r -> outL; }
+        }
+    )YDSP",
+                               compiler);
+
+    ASSERT_TRUE (graph.isValid());
+    graph.prepare (44100.0, 64);
+
+    std::vector<float> left (37), right (37);
+
+    for (size_t i = 0; i < left.size(); ++i)
+    {
+        left[i] = 1.0f + static_cast<float> (i);
+        right[i] = -2.0f * static_cast<float> (i);
+    }
+
+    const auto originalLeft = left;
+    const auto originalRight = right;
+
+    const float* inputs[] = { left.data(), right.data() };
+    float* outputs[] = { left.data(), right.data() };
+    runProcess32 (graph, inputs, outputs, 37);
+
+    EXPECT_EQ (originalRight, left);
+    EXPECT_EQ (originalLeft, right);
+}
+
+TEST (YdspJitGraphTests, InPlaceBufferSeesItsOwnWritesAtAFixedIndex)
+{
+    YdspCompiler compiler;
+
+    auto graph = compilePatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            process block {
+                for i in 0..blockSize { out[i] = in[i] + in[0]; }
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                               compiler);
+
+    ASSERT_TRUE (graph.isValid());
+    graph.prepare (44100.0, 64);
+
+    std::vector<float> buffer (37);
+
+    for (size_t i = 0; i < buffer.size(); ++i)
+        buffer[i] = 1.0f + static_cast<float> (i);
+
+    auto expected = buffer;
+
+    for (size_t i = 0; i < expected.size(); ++i)
+        expected[i] = expected[i] + expected[0];
+
+    const float* inputs[] = { buffer.data() };
+    float* outputs[] = { buffer.data() };
+    runProcess32 (graph, inputs, outputs, 37);
+
+    EXPECT_EQ (expected, buffer);
+}
+
+//==============================================================================
+
+TEST (YdspJitGraphTests, CounterWrapIdiomMatchesTheSourceForEveryOperatorAndStart)
+{
+    // `n = n + k; if (n cmp K) n = 0;` in the shape the optimiser turns into one
+    // increment-and-wrap, and in the shapes it must leave alone: other steps
+    // and operators, and a start value where the increment saturates.
+    const char* operators[] { ">=", ">", "<", "<=" };
+
+    for (const auto* op : operators)
+    {
+        for (const int step : { 1, 3 })
+        {
+            for (const int64_t start : { int64_t (0), int64_t (2147483645) })
+            {
+                SCOPED_TRACE (String (op) + " step " + String (step) + " start " + String (start));
+
+                YdspCompiler compiler;
+                auto graph = compilePatch (String ("processor P { output stream out; state int n; init { n = ") + String (start)
+                                           + "; } process { n = n + " + String (step) + "; if (n " + op
+                                           + " 12) { n = 0; } out = float (n) * 0.001; } }"
+                                             " graph G { output stream y; node p = P; connection { p.out -> y; } }",
+                                           compiler);
+
+                ASSERT_TRUE (graph.isValid());
+                ASSERT_TRUE (graph.prepare (44100.0, 64).wasOk());
+
+                std::vector<float> output (40);
+                yup::YdspOutputBuffer outputs[] { yup::Span<float> (output) };
+                ASSERT_EQ (yup::YdspProcessResult::ok, graph.process ({ {}, outputs, 40 }));
+
+                int64_t n = start;
+
+                for (size_t i = 0; i < output.size(); ++i)
+                {
+                    n = jmin (n + step, int64_t (2147483647));
+
+                    const bool hit = String (op) == ">=" ? n >= 12
+                                   : String (op) == ">"  ? n > 12
+                                   : String (op) == "<"  ? n < 12
+                                                         : n <= 12;
+                    if (hit)
+                        n = 0;
+
+                    EXPECT_EQ (static_cast<float> (n) * 0.001f, output[i]) << i;
+                }
+            }
+        }
+    }
+}
+
+TEST (YdspJitGraphTests, StateRotationReadsTheValuesOfThePreviousSample)
+{
+    YdspCompiler compiler;
+
+    auto graph = compilePatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float x1;
+            state float x2;
+            state float y1;
+            state float y2;
+            process {
+                let y = 0.5 * in + 0.25 * x1 + 0.125 * x2 + 0.5 * y1 - 0.25 * y2;
+                x2 = x1;
+                x1 = in;
+                y2 = y1;
+                y1 = y;
+                out = y;
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                               compiler);
+
+    ASSERT_TRUE (graph.isValid());
+    ASSERT_TRUE (graph.prepare (44100.0, 64).wasOk());
+
+    std::vector<float> input (64), output (64);
+
+    for (size_t i = 0; i < input.size(); ++i)
+        input[i] = std::sin (0.37f * static_cast<float> (i));
+
+    const float* inputs[] = { input.data() };
+    float* outputs[] = { output.data() };
+    runProcess32 (graph, inputs, outputs, 64);
+
+    double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
+
+    for (size_t i = 0; i < input.size(); ++i)
+    {
+        const double x = input[i];
+        const double y = 0.5 * x + 0.25 * x1 + 0.125 * x2 + 0.5 * y1 - 0.25 * y2;
+        x2 = x1;
+        x1 = x;
+        y2 = y1;
+        y1 = y;
+
+        EXPECT_NEAR (y, output[i], 1.0e-5) << i;
+    }
+}
+
+TEST (YdspJitGraphTests, ConstantIndexedStateArrayPersistsAcrossBlocksAndResets)
+{
+    YdspCompiler compiler;
+
+    auto graph = compilePatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float xm[2];
+            state float ym[2];
+            process {
+                let o1 = 0.5 * in + xm[0] - 0.5 * ym[0];
+                xm[0] = in;
+                ym[0] = o1;
+
+                let o2 = 0.25 * o1 + xm[1] - 0.25 * ym[1];
+                xm[1] = o1;
+                ym[1] = o2;
+
+                out = o2;
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                               compiler);
+
+    ASSERT_TRUE (graph.isValid());
+    ASSERT_TRUE (graph.prepare (44100.0, 64).wasOk());
+
+    std::vector<float> input (96), output (96);
+
+    for (size_t i = 0; i < input.size(); ++i)
+        input[i] = std::sin (0.41f * static_cast<float> (i));
+
+    const auto expectMatchesReference = [&]
+    {
+        double xm[2] {}, ym[2] {};
+
+        for (size_t i = 0; i < input.size(); ++i)
+        {
+            const double x = input[i];
+            const double o1 = 0.5 * x + xm[0] - 0.5 * ym[0];
+            xm[0] = x;
+            ym[0] = o1;
+            const double o2 = 0.25 * o1 + xm[1] - 0.25 * ym[1];
+            xm[1] = o1;
+            ym[1] = o2;
+
+            EXPECT_NEAR (o2, output[i], 1.0e-5) << i;
+        }
+    };
+
+    // Three blocks of uneven size: the elements must come back from memory at
+    // the start of each one exactly as the previous block left them.
+    const auto render = [&]
+    {
+        size_t position = 0;
+
+        for (const size_t blockSize : { size_t (64), size_t (1), size_t (31) })
+        {
+            const float* inputs[] = { input.data() + position };
+            float* outputs[] = { output.data() + position };
+            runProcess32 (graph, inputs, outputs, static_cast<int> (blockSize));
+            position += blockSize;
+        }
+    };
+
+    render();
+    expectMatchesReference();
+
+    graph.reset();
+    render();
+    expectMatchesReference();
+}
+
 } // namespace yup::test

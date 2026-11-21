@@ -1747,3 +1747,298 @@ TEST (YdspVectorizerTests, MatchAndIfRetainEquivalentOptimizedLoops)
         EXPECT_EQ (shape (reference), shape (actual));
     }
 }
+
+//==============================================================================
+// Host buffers that overlap: a widened stream loop reads a whole vector before
+// it writes one, so it must fall back to the scalar loop unless the buffers are
+// disjoint or exactly the same.
+
+namespace
+{
+
+constexpr int vectorizerOverlapSamples = 67;
+constexpr int vectorizerOverlapPadding = 16;
+
+// One allocation holding the input at `padding` and the output `offset`
+// samples after it, filled with a ramp.
+std::vector<float> vectorizerOverlapStorage()
+{
+    std::vector<float> storage (static_cast<size_t> (vectorizerOverlapSamples + 2 * vectorizerOverlapPadding));
+
+    for (size_t i = 0; i < storage.size(); ++i)
+        storage[i] = 1.0f + 0.25f * static_cast<float> (i);
+
+    return storage;
+}
+
+} // namespace
+
+TEST (YdspVectorizerTests, WidenedStreamLoopMatchesScalarOrderForOverlappingBuffers)
+{
+    const auto source = vectorizerPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            process { out = in * 0.5; }
+        }
+    )YDSP");
+
+    for (const int offset : { 0, 1, 3, 9, 16, -1, -5 })
+    {
+        SCOPED_TRACE (offset);
+
+        YdspCompiler compiler;
+        auto graph = vectorizerCompileGraph (source, compiler);
+        ASSERT_TRUE (graph.isValid());
+        graph.prepare (48000.0, 128);
+
+        auto expected = vectorizerOverlapStorage();
+        {
+            const auto* in = expected.data() + vectorizerOverlapPadding;
+            auto* out = expected.data() + vectorizerOverlapPadding + offset;
+
+            for (int i = 0; i < vectorizerOverlapSamples; ++i)
+                out[i] = in[i] * 0.5f;
+        }
+
+        auto actual = vectorizerOverlapStorage();
+        vectorizerRunBlock (graph,
+                            actual.data() + vectorizerOverlapPadding,
+                            actual.data() + vectorizerOverlapPadding + offset,
+                            vectorizerOverlapSamples);
+
+        EXPECT_EQ (expected, actual);
+    }
+}
+
+TEST (YdspVectorizerTests, WidenedStreamLoopMatchesScalarOrderWhenOutputOverlapsOneOfTwoInputs)
+{
+    const auto source = String (R"YDSP(
+        processor P {
+            input stream a;
+            input stream b;
+            output stream out;
+            process { out = a + b; }
+        }
+        graph G { input stream x; input stream w; output stream y; node p = P; connection { x -> p.a; w -> p.b; p.out -> y; } }
+    )YDSP");
+
+    for (const int offset : { 0, 1, 2, 7 })
+    {
+        SCOPED_TRACE (offset);
+
+        YdspCompiler compiler;
+        auto graph = vectorizerCompileGraph (source, compiler);
+        ASSERT_TRUE (graph.isValid());
+        graph.prepare (48000.0, 128);
+
+        std::vector<float> first (static_cast<size_t> (vectorizerOverlapSamples));
+
+        for (size_t i = 0; i < first.size(); ++i)
+            first[i] = 0.5f * static_cast<float> (i);
+
+        auto expected = vectorizerOverlapStorage();
+        {
+            const auto* in = expected.data() + vectorizerOverlapPadding;
+            auto* out = expected.data() + vectorizerOverlapPadding + offset;
+
+            for (int i = 0; i < vectorizerOverlapSamples; ++i)
+                out[i] = first[static_cast<size_t> (i)] + in[i];
+        }
+
+        auto actual = vectorizerOverlapStorage();
+
+        const auto numSamples = static_cast<size_t> (vectorizerOverlapSamples);
+        std::vector<YdspInputBuffer> inputs;
+        inputs.emplace_back (Span<const float> (first.data(), numSamples));
+        inputs.emplace_back (Span<const float> (actual.data() + vectorizerOverlapPadding, numSamples));
+
+        std::vector<YdspOutputBuffer> outputs;
+        outputs.emplace_back (Span<float> (actual.data() + vectorizerOverlapPadding + offset, numSamples));
+
+        ASSERT_EQ (YdspProcessResult::ok, graph.process (YdspProcessRequest { inputs, outputs, vectorizerOverlapSamples }));
+
+        EXPECT_EQ (expected, actual);
+    }
+}
+
+TEST (YdspVectorizerTests, GuardsOnlyTheStreamPairsAWidenedStoreCanReorder)
+{
+    YdspDiagnostics diagnostics;
+    auto ir = vectorizerBuildIr (vectorizerPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            process block {
+                for i in 0..blockSize { out[i] = in[i] * 0.5; }
+                for j in 0..blockSize { out[j] = out[j] + 1.0; }
+            }
+        }
+    )YDSP"), diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+    ASSERT_FALSE (ir->kernels.empty());
+
+    const auto& fn = *ir->kernels[0];
+
+    // Both loops widen, but only the first one touches two streams.
+    int widenedLoops = 0;
+
+    for (const auto& result : fn.vectorizationResults)
+        widenedLoops += result.widened() ? 1 : 0;
+
+    EXPECT_EQ (2, widenedLoops);
+    EXPECT_EQ (1, vectorizerCountInst (fn, YdspIrOp::loadInputAddress));
+    EXPECT_EQ (1, vectorizerCountInst (fn, YdspIrOp::loadOutputAddress));
+}
+
+TEST (YdspVectorizerTests, PeeledIterationsRoundLikeTheWidenedLanes)
+{
+    // Six elements are one vector plus two peeled iterations. Every element
+    // runs the same recurrence on the same input, so they must stay bit-equal:
+    // a peeled iteration may not round its multiply-add differently from a lane.
+    const auto source = vectorizerPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z[6];
+            process {
+                for i in 0..6 { z[i] = z[i] * 0.9 + in * 0.3; }
+                out = z[0] - z[5];
+            }
+        }
+    )YDSP");
+
+    YdspCompiler compiler;
+    auto graph = vectorizerCompileGraph (source, compiler);
+    ASSERT_TRUE (graph.isValid());
+    graph.prepare (48000.0, 64);
+
+    std::vector<float> input (64), output (64, 1.0f);
+
+    for (size_t i = 0; i < input.size(); ++i)
+        input[i] = 0.1f + 0.37f * static_cast<float> (i % 7);
+
+    vectorizerRunBlock (graph, input.data(), output.data(), 64);
+
+    EXPECT_EQ (std::vector<float> (64, 0.0f), output);
+}
+
+TEST (YdspVectorizerTests, PeeledIterationsReuseTheHoistedLoopInvariantWork)
+{
+    YdspDiagnostics diagnostics;
+    auto ir = vectorizerBuildIr (vectorizerPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z[6];
+            process {
+                for i in 0..6 { z[i] = z[i] * 0.9 + in * 0.3; }
+                out = z[0];
+            }
+        }
+    )YDSP"), diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = *ir->kernels[0];
+    ASSERT_TRUE (fn.vectorized);
+
+    // `in * 0.3` is computed once; the other multiplies are one per peeled
+    // iteration plus the widened one.
+    EXPECT_EQ (4, vectorizerCountInst (fn, YdspIrOp::mulF));
+}
+
+#if ! YUP_WASM
+TEST (YdspVectorizerTests, WidensALoopThatConvertsItsVariableToFloat)
+{
+    // `float (i + 1)` is the harmonic number of an additive bank. Widened, it
+    // is a vector that counts up from the scalar conversion, which is exact
+    // for a constant bound - so the widened loop gives the scalar loop's
+    // samples bit for bit.
+    const auto source = vectorizerPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z[10];
+            process block {
+                for n in 0..blockSize {
+                    for i in 0..10 { z[i] = z[i] * 0.5 + in[n] * float (i + 1); }
+                    out[n] = z[0] + z[4] + z[9];
+                }
+            }
+        }
+    )YDSP");
+
+    YdspCompileOptions widened;
+    widened.fastMath = false;
+    widened.emitOptimizationReport = true;
+
+    auto scalar = widened;
+    scalar.optimizationTier = YdspOptimizationTier::baseline;
+
+    YdspCompiler compiler;
+    auto widenedGraph = vectorizerCompileGraph (source, compiler, widened);
+    auto scalarGraph = vectorizerCompileGraph (source, compiler, scalar);
+
+    ASSERT_TRUE (widenedGraph.isValid() && scalarGraph.isValid());
+    ASSERT_TRUE (widenedGraph.prepare (48000.0, 64).wasOk() && scalarGraph.prepare (48000.0, 64).wasOk());
+
+    const auto& loops = widenedGraph.getExecutionReport().getKernels()[0].loopVectorization.loops;
+    ASSERT_FALSE (loops.empty());
+    EXPECT_TRUE (loops[0].widened()) << loops[0].describe();
+
+    std::vector<float> input (64), widenedOutput (64, 0.0f), scalarOutput (64, 0.0f);
+
+    for (size_t i = 0; i < input.size(); ++i)
+        input[i] = std::sin (static_cast<float> (i) * 0.37f);
+
+    vectorizerRunBlock (widenedGraph, input.data(), widenedOutput.data(), 64);
+    vectorizerRunBlock (scalarGraph, input.data(), scalarOutput.data(), 64);
+
+    for (size_t i = 0; i < input.size(); ++i)
+        EXPECT_EQ (scalarOutput[i], widenedOutput[i]) << i;
+}
+
+TEST (YdspVectorizerTests, UnrolledAccumulationIsSplitIntoPartialSumsOnlyUnderFastMath)
+{
+    // The taps of a FIR: 32 products added into one sum. Unrolled, each add
+    // waits on the one before it; fast math may sum them in four interleaved
+    // partials instead, strict math keeps the order as written.
+    const auto source = vectorizerPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float c[32], h[32];
+            state int idx;
+            process block {
+                for n in 0..blockSize {
+                    h[idx] = in[n];
+                    float acc = 0.0;
+                    for i in 0..32 { acc = acc + c[i] * h[(idx - i) & 31]; }
+                    idx = (idx + 1) & 31;
+                    out[n] = acc;
+                }
+            }
+        }
+    )YDSP");
+
+    for (const bool fastMath : { false, true })
+    {
+        YdspCompileOptions options;
+        options.fastMath = fastMath;
+        options.emitOptimizationReport = true;
+
+        YdspCompiler compiler;
+        auto graph = vectorizerCompileGraph (source, compiler, options);
+        ASSERT_TRUE (graph.isValid());
+
+        const auto& kernel = graph.getExecutionReport().getKernels()[0];
+        EXPECT_TRUE (kernel.unrolled) << fastMath;
+        EXPECT_EQ (fastMath, kernel.reductionSplit) << fastMath;
+    }
+}
+#endif
+

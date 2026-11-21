@@ -575,6 +575,80 @@ TEST (YdspAsmJitCodegenTests, SampleLoopTailPreservesEmptyBlocksAndExactTripCoun
     dumpAsmOnFailureCodegen (kernel);
 }
 
+TEST (YdspAsmJitCodegenTests, SampleLoopIsClosedByItsOwnIncrementOnArm64)
+{
+    YdspDiagnostics diagnostics;
+    const auto kernel = compileKernel (R"YDSP(
+        processor Counter {
+            input stream in; output stream out; state float sum;
+            process { sum = sum + in; out = sum; }
+        }
+        graph G { input stream x; output stream y; node p = Counter; connection { x -> p.in; p.out -> y; } }
+    )YDSP", "Counter", diagnostics);
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, kernel.fn);
+
+    const auto input = makeRampCodegen (37, 0.5f);
+    const auto output = runKernel (kernel, input, 37);
+
+    float sum = 0.0f;
+    for (size_t i = 0; i < output.size(); ++i)
+        EXPECT_EQ (sum += input[i], output[i]) << i;
+
+#if YUP_ARM && YUP_64BIT
+    // The loop counts from -n up to zero against the end of each stream, so
+    // the only compare left is the guard for an empty block.
+    int compares = 0;
+    for (const auto& line : StringArray::fromLines (kernel.asmText))
+        compares += line.trimStart().startsWith ("cmp ") ? 1 : 0;
+
+    EXPECT_EQ (1, compares) << kernel.asmText;
+    EXPECT_TRUE (kernel.asmText.contains ("adds ")) << kernel.asmText;
+#endif
+
+    dumpAsmOnFailureCodegen (kernel);
+}
+
+TEST (YdspAsmJitCodegenTests, HandWrittenRingWrapsItsReadAndWritePositions)
+{
+    YdspDiagnostics diagnostics;
+    const auto kernel = compileKernel (R"YDSP(
+        processor Ring {
+            input stream in; output stream out;
+            state float buf[5000]; state int wp;
+            process {
+                int r = wp - 300;
+                if (r < 0) { r = r + 5000; }
+                out = buf[r];
+                buf[wp] = in;
+                wp = wp + 1;
+                if (wp >= 5000) { wp = 0; }
+            }
+        }
+        graph G { input stream x; output stream y; node p = Ring; connection { x -> p.in; p.out -> y; } }
+    )YDSP", "Ring", diagnostics);
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, kernel.fn);
+
+    // Long enough for both positions to pass the end of the ring twice.
+    const int numSamples = 12000;
+    const auto input = makeRampCodegen (numSamples, 1.0f);
+    const auto output = runKernel (kernel, input, numSamples);
+
+    for (int i = 0; i < numSamples; ++i)
+        ASSERT_EQ (i < 300 ? 0.0f : input[static_cast<size_t> (i - 300)], output[static_cast<size_t> (i)]) << i;
+
+#if YUP_ARM && YUP_64BIT
+    // The read wrap tests the flags of its own subtraction, and the write
+    // wrap compares against a ring length loaded once, ahead of the loop.
+    EXPECT_TRUE (kernel.asmText.contains ("subs ")) << kernel.asmText;
+    EXPECT_TRUE (kernel.asmText.contains ("csinc ")) << kernel.asmText;
+    EXPECT_LT (kernel.asmText.indexOf (", 4999"), kernel.asmText.indexOf ("b.ge ")) << kernel.asmText;
+#endif
+
+    dumpAsmOnFailureCodegen (kernel);
+}
+
 TEST (YdspAsmJitCodegenTests, TwoIterationVectorMathUnrollPreservesOutputAndState)
 {
     YdspDiagnostics diagnostics;

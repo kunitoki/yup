@@ -49,7 +49,9 @@ protected:
     YdspMem emitVectorStreamMem (const YdspGp& base, int indexValue) override;
 
     void prepareStateAddressing (const YdspIrFunction& fn) override;
+    void prepareWrapBounds (const YdspIrFunction& fn) override;
     void beginBlock (int blockIndex) override;
+    void endBlock (int blockIndex) override;
     void onValueRedefined (int value) override;
 
     void loadGpFromMem (const YdspGp& dst, const YdspMem& src) override;
@@ -108,8 +110,12 @@ protected:
     void branchOnFlags (YdspCond cond, bool branchWhenTrue, const asmjit::Label& target) override;
 
 private:
-    std::unordered_map<int, YdspGp> stateArrayBaseRegs;
+    // Keyed by scope and region base: the scope is the outermost loop the
+    // accessing block sits in (an index into the function's loops), or -1.
+    std::map<std::pair<int, int>, YdspGp> stateArrayBaseRegs;
+    std::map<int, std::vector<std::pair<int, YdspGp>>> loopArrayBases; // by preheader block
     std::unordered_map<int, YdspGp> vectorIndexRegs;
+    std::unordered_map<int32_t, YdspGp> wrapLastRegs;
 };
 
 } // namespace yup

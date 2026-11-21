@@ -383,6 +383,7 @@ public:
     static constexpr uint8_t opI32TruncF32S = 0xA8;
     static constexpr uint8_t opI32TruncF64S = 0xAA;
     static constexpr uint8_t opI64ExtendI32S = 0xAC;
+    static constexpr uint8_t opI64ExtendI32U = 0xAD;
     static constexpr uint8_t opI64TruncF32S = 0xAE;
     static constexpr uint8_t opI64TruncF64S = 0xB0;
     static constexpr uint8_t opF32ConvertI32S = 0xB2;

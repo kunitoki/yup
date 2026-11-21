@@ -166,6 +166,36 @@ bool YdspOptimizer::constantFolding (YdspIrFunction& fn)
                 const auto& b = operand (inst.b);
                 const auto& c = operand (inst.c);
 
+                // An element of a table: the array is written by its
+                // initialiser list alone, so a known index names a value.
+                if (inst.op == YdspIrOp::loadStateArrayF || inst.op == YdspIrOp::loadStateArrayI)
+                {
+                    const auto type = fn.valueTypes[static_cast<size_t> (inst.result)];
+                    const auto table = std::find_if (fn.stateArrays.begin(), fn.stateArrays.end(), [&] (const YdspIrFunction::StateArray& array)
+                    {
+                        return ! array.constants.empty() && array.base == inst.memIndex && array.type == type;
+                    });
+
+                    if (table == fn.stateArrays.end() || ! a.isConst || a.isFloat || a.isBool || a.i < 0 || a.i >= table->length
+                        || definitionCount[static_cast<size_t> (inst.result)] != 1 || fn.laneCountOf (inst.result) != 1)
+                        continue;
+
+                    const auto value = table->constants[static_cast<size_t> (a.i)];
+                    const bool isFloat = isFloatValueType (type);
+
+                    constants[static_cast<size_t> (inst.result)] = { true, isFloat, false, isFloat ? value : 0.0, isFloat ? 0 : static_cast<int64_t> (value), false };
+
+                    inst.op = isFloat ? YdspIrOp::constF : YdspIrOp::constI;
+                    inst.a = inst.b = inst.c = -1;
+                    inst.memIndex = -1;
+                    inst.fvalue = isFloat ? value : 0.0;
+                    inst.ivalue = isFloat ? 0 : static_cast<int64_t> (value);
+
+                    changed = true;
+                    anyChanged = true;
+                    continue;
+                }
+
                 const bool allConst = (inst.a < 0 || a.isConst) && (inst.b < 0 || b.isConst) && (inst.c < 0 || c.isConst);
 
                 if (! allConst)

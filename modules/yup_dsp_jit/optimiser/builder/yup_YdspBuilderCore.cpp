@@ -129,7 +129,9 @@ YdspStateLayout computeStateLayout (const YdspAnalyzedProcessor& processor, Ydsp
         structDecls[structDecl.name] = &structDecl;
 
     uint64_t elements = 0;
-    constexpr auto maxElements = static_cast<uint64_t> (std::numeric_limits<int32_t>::max()) / 8;
+    // Leaves room for the padding between the array segment's typed regions.
+    constexpr auto maxElements = static_cast<uint64_t> (std::numeric_limits<int32_t>::max()) / 8
+                               - 4 * static_cast<uint64_t> (YdspIrFunction::stateAlignmentBytes);
     for (const auto* state : processor.states)
     {
         const auto instances = static_cast<uint64_t> (jmax (1, state->arraySize));
@@ -219,6 +221,100 @@ YdspStateLayout computeStateLayout (const YdspAnalyzedProcessor& processor, Ydsp
     return layout;
 }
 
+//==============================================================================
+
+namespace
+{
+
+std::optional<double> literalValueOf (const YdspExpr& expr)
+{
+    if (expr.kind == YdspExprKind::intLiteral)
+        return static_cast<double> (expr.integer);
+
+    if (expr.kind == YdspExprKind::floatLiteral)
+        return expr.number;
+
+    if (expr.kind == YdspExprKind::unary && expr.op == YdspOperator::neg && expr.children.size() == 1)
+        if (const auto inner = literalValueOf (*expr.children[0]))
+            return -*inner;
+
+    return std::nullopt;
+}
+
+bool assignsElementOf (const YdspStmt& stmt, const String& array)
+{
+    return stmt.kind == YdspStmtKind::assign && stmt.target != nullptr
+        && stmt.target->kind == YdspExprKind::index && stmt.target->children.size() == 2
+        && stmt.target->children[0]->kind == YdspExprKind::identifier && stmt.target->children[0]->text == array;
+}
+
+bool writesArray (const YdspStmt& stmt, const String& array)
+{
+    if (assignsElementOf (stmt, array))
+        return true;
+
+    for (const auto& child : stmt.children)
+        if (writesArray (*child, array))
+            return true;
+
+    for (const auto* child : { stmt.thenStmt.get(), stmt.elseStmt.get(), stmt.body.get() })
+        if (child != nullptr && writesArray (*child, array))
+            return true;
+
+    return false;
+}
+
+bool writesArray (const std::vector<YdspStmtPtr>& body, const String& array)
+{
+    return std::any_of (body.begin(), body.end(), [&array] (const YdspStmtPtr& stmt) { return writesArray (*stmt, array); });
+}
+
+/** The elements of a state array that only its own initialiser list writes,
+    or nothing when anything else in the processor assigns one. The semantic
+    analyzer has turned that list into literal assignments at the top of
+    `init`, which is what is read back here. */
+std::vector<double> constantElementsOf (const YdspAnalyzedProcessor& processor, const YdspStateDecl& state)
+{
+    const auto& decl = *processor.decl;
+
+    if ((decl.process != nullptr && writesArray (decl.process->body, state.name))
+        || std::any_of (decl.functions.begin(), decl.functions.end(), [&state] (const auto& function) { return writesArray (function.body, state.name); })
+        || std::any_of (decl.eventHandlers.begin(), decl.eventHandlers.end(), [&state] (const auto& handler) { return writesArray (handler.body, state.name); }))
+        return {};
+
+    const auto type = toStorageType (state.type);
+    std::vector<double> elements (static_cast<size_t> (state.arraySize), 0.0);
+
+    if (decl.init == nullptr)
+        return elements;
+
+    for (const auto& stmt : decl.init->body)
+    {
+        if (! assignsElementOf (*stmt, state.name))
+        {
+            if (writesArray (*stmt, state.name))
+                return {};
+
+            continue;
+        }
+
+        const auto& index = *stmt->target->children[1];
+        const auto value = stmt->value != nullptr ? literalValueOf (*stmt->value) : std::nullopt;
+
+        // An integer table takes integer literals only: what a fraction is
+        // converted to is the lowering's business, not a guess to make here.
+        if (index.kind != YdspExprKind::intLiteral || index.integer < 0 || index.integer >= state.arraySize
+            || ! value.has_value() || (! isFloatValueType (type) && *value != std::trunc (*value)))
+            return {};
+
+        elements[static_cast<size_t> (index.integer)] = type == YdspValueType::float32Type ? static_cast<double> (static_cast<float> (*value)) : *value;
+    }
+
+    return elements;
+}
+
+} // namespace
+
 } // namespace detail
 
 //==============================================================================
@@ -294,6 +390,10 @@ void YdspIrBuilder::build()
     }
     else
     {
+        // A block process reads and writes its scalar state inside its own
+        // loops: like the sample loop, it works on registers and writes the
+        // state back once, at the end.
+        loadScalarStateRegisters();
         lowerStatements (processor.decl->process->body);
 
         for (const auto& [slot, reg, captureExpr] : pendingPrevStores)
@@ -301,6 +401,8 @@ void YdspIrBuilder::build()
             const auto resolved = coerceTo (captureValue (*captureExpr), YdspValueType::float32Type);
             writeHiddenSlot (slot, reg, resolved, YdspValueType::float32Type);
         }
+
+        storeScalarStateRegisters();
     }
 
     fn.float32Scalars = layout.float32ScalarCount + hiddenFloat32Scalars;
@@ -311,6 +413,13 @@ void YdspIrBuilder::build()
     fn.float64ArrayElements = layout.float64ArrayCursor;
     fn.int32ArrayElements = layout.int32ArrayCursor;
     fn.int64ArrayElements = layout.int64ArrayCursor;
+
+    // The init kernel is what fills a table: there the elements are still
+    // ordinary writes and reads.
+    for (const auto* state : processor.states)
+        if (state->arraySize > 0 && state->structName.isEmpty())
+            fn.stateArrays.push_back ({ toStorageType (state->type), stateArrayBase (state), state->arraySize,
+                                        isInit ? std::vector<double>() : detail::constantElementsOf (processor, *state) });
 
     if (sharedLayout != nullptr)
     {
@@ -329,23 +438,44 @@ void YdspIrBuilder::build()
 
 //==============================================================================
 
+void YdspIrBuilder::loadScalarStateRegisters()
+{
+    for (const auto* state : processor.states)
+    {
+        if (state->arraySize > 0 || ! state->structName.isEmpty())
+            continue;
+
+        stateRegs[state] = emitInst ({ stateIsInt (state) ? YdspIrOp::loadStateI : YdspIrOp::loadStateF,
+                                       newValue (toStorageType (state->type)),
+                                       stateScalarSlot (state) });
+    }
+}
+
+void YdspIrBuilder::storeScalarStateRegisters()
+{
+    for (const auto* state : processor.states)
+    {
+        if (state->arraySize > 0 || ! state->structName.isEmpty())
+            continue;
+
+        emitInst ({ stateIsInt (state) ? YdspIrOp::storeStateI : YdspIrOp::storeStateF,
+                    -1,
+                    stateRegs[state],
+                    -1,
+                    -1,
+                    stateScalarSlot (state) });
+    }
+}
+
+//==============================================================================
+
 void YdspIrBuilder::buildSampleLoop()
 {
     collectSharedInputDelays();
     sampleIndex = emitConstI (0);
     const auto one = emitConstI (1);
 
-    for (const auto* state : processor.states)
-    {
-        if (state->arraySize > 0 || ! state->structName.isEmpty())
-            continue;
-
-        const auto type = toStorageType (state->type);
-
-        stateRegs[state] = emitInst ({ stateIsInt (state) ? YdspIrOp::loadStateI : YdspIrOp::loadStateF,
-                                       newValue (type),
-                                       stateScalarSlot (state) });
-    }
+    loadScalarStateRegisters();
 
     const int header = newBlock();
     currentBlock = header;
@@ -384,18 +514,7 @@ void YdspIrBuilder::buildSampleLoop()
 
     currentBlock = epilogue;
 
-    for (const auto* state : processor.states)
-    {
-        if (state->arraySize > 0 || ! state->structName.isEmpty())
-            continue;
-
-        emitInst ({ stateIsInt (state) ? YdspIrOp::storeStateI : YdspIrOp::storeStateF,
-                    -1,
-                    stateRegs[state],
-                    -1,
-                    -1,
-                    stateScalarSlot (state) });
-    }
+    storeScalarStateRegisters();
 
     for (const auto& promoted : promotedHiddenSlots)
     {

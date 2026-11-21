@@ -24,7 +24,9 @@
 #include <yup_audio_basics/yup_audio_basics.h>
 
 #include <cmath>
+#include <cstdint>
 #include <algorithm>
+#include <utility>
 #include <vector>
 #include <cstring>
 
@@ -66,6 +68,26 @@ protected:
                     return false;
             }
         }
+
+        return true;
+    }
+
+    static constexpr size_t channelAlignment = 64;
+
+    static bool channelsAreAligned (const BufferType& buffer)
+    {
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            if (reinterpret_cast<std::uintptr_t> (buffer.getReadPointer (ch)) % channelAlignment != 0)
+                return false;
+
+        return true;
+    }
+
+    static bool channelsDoNotOverlap (const BufferType& buffer)
+    {
+        for (int ch = 1; ch < buffer.getNumChannels(); ++ch)
+            if (buffer.getReadPointer (ch) < buffer.getReadPointer (ch - 1) + buffer.getNumSamples())
+                return false;
 
         return true;
     }
@@ -1409,4 +1431,81 @@ TYPED_TEST (AudioBufferTests, DISABLED_AddFromExternalDataWithGain)
     EXPECT_TRUE (approximatelyEqual (externalData[0], static_cast<TypeParam> (6.0))); // 2 + 2*2
     EXPECT_TRUE (approximatelyEqual (externalData[1], static_cast<TypeParam> (9.0))); // 3 + 3*2
     EXPECT_FALSE (buffer.hasBeenCleared());
+}
+
+TYPED_TEST (AudioBufferTests, OwnedChannelsAreAlignedAfterConstruction)
+{
+    using BufferType = typename TestFixture::BufferType;
+
+    for (const int channels : { 1, 2, 3, 33 })
+    {
+        for (const int samples : { 1, 7, 63, 64, 129, 513 })
+        {
+            BufferType buffer (channels, samples);
+
+            EXPECT_TRUE (this->channelsAreAligned (buffer)) << channels << " channels, " << samples << " samples";
+            EXPECT_TRUE (this->channelsDoNotOverlap (buffer)) << channels << " channels, " << samples << " samples";
+        }
+    }
+}
+
+TYPED_TEST (AudioBufferTests, OwnedChannelsAreAlignedAfterCopyAndMove)
+{
+    using BufferType = typename TestFixture::BufferType;
+
+    BufferType source;
+    this->initializeBuffer (source, 3, 37);
+
+    BufferType copied (source);
+    EXPECT_TRUE (this->channelsAreAligned (copied));
+    EXPECT_TRUE (this->buffersAreEqual (source, copied));
+
+    BufferType assigned (1, 5);
+    assigned = source;
+    EXPECT_TRUE (this->channelsAreAligned (assigned));
+    EXPECT_TRUE (this->buffersAreEqual (source, assigned));
+
+    BufferType moved (std::move (copied));
+    EXPECT_TRUE (this->channelsAreAligned (moved));
+    EXPECT_TRUE (this->buffersAreEqual (source, moved));
+
+    AudioBuffer<float> other (2, 11);
+    other.clear();
+    BufferType converted;
+    converted.makeCopyOf (other);
+    EXPECT_TRUE (this->channelsAreAligned (converted));
+}
+
+TYPED_TEST (AudioBufferTests, OwnedChannelsStayAlignedAcrossSetSize)
+{
+    using BufferType = typename TestFixture::BufferType;
+
+    const std::pair<int, int> sizes[] = { { 3, 101 }, { 1, 5 }, { 2, 37 }, { 2, 36 }, { 40, 9 } };
+
+    for (int flags = 0; flags < 8; ++flags)
+    {
+        const bool keepExistingContent = (flags & 1) != 0;
+        const bool clearExtraSpace = (flags & 2) != 0;
+        const bool avoidReallocating = (flags & 4) != 0;
+
+        for (const auto& [channels, samples] : sizes)
+        {
+            BufferType buffer;
+            this->initializeBuffer (buffer, 2, 37);
+
+            buffer.setSize (channels, samples, keepExistingContent, clearExtraSpace, avoidReallocating);
+
+            ASSERT_EQ (channels, buffer.getNumChannels());
+            ASSERT_EQ (samples, buffer.getNumSamples());
+            EXPECT_TRUE (this->channelsAreAligned (buffer)) << "flags " << flags << ", " << channels << "x" << samples;
+            EXPECT_TRUE (this->channelsDoNotOverlap (buffer)) << "flags " << flags << ", " << channels << "x" << samples;
+
+            if (! keepExistingContent)
+                continue;
+
+            for (int ch = 0; ch < jmin (2, channels); ++ch)
+                for (int i = 0; i < jmin (37, samples); ++i)
+                    ASSERT_EQ (static_cast<TypeParam> (i + 1), buffer.getSample (ch, i)) << "flags " << flags << ", " << channels << "x" << samples;
+        }
+    }
 }

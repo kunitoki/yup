@@ -106,6 +106,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `AudioFormatManager::createWriterFor` replaces an existing file instead of writing over it, and no longer leaks the stream or touches the file when no format handles the extension.
 - `AudioFormatWriter::ThreadedWriter` writes the data still queued when destroyed, even if its thread has stopped, and stops accepting data after a write failure.
 - `AudioFormatReader::read` into an `AudioBuffer` reads every channel when both sides have more than two.
+- `AudioBuffer` starts every channel it owns on a 64 byte boundary (`channelAlignmentBytes`). Channels were only 4 byte aligned for odd sample counts. Each channel is padded up to 64 bytes.
 - `AppleCoreAudioFormat` picks the AAC container from the file extension and only claims AAC container extensions for writing.
 - `CartesianPlane` gains `setLegendTextColor`, so the legend is readable on light backgrounds.
 - `KMeterComponent` skips scale labels that would overlap, which crowded the compressed bottom of the segmented scale.
@@ -113,6 +114,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### DSP
 
 - Fixed `RbjFilter` and `ZoelzerFilter` aborting with a pure virtual call when constructed with a mode other than `lowpass`.
+- YDSP JIT: `YdspAudioGraph::process` gives the same samples whether or not the host output buffers overlap its input buffers. Vectorized stream loops fall back to their scalar form for buffers less than one vector apart, and graphs with several nodes or pass-through connections no longer overwrite an input another node still has to read.
+- YDSP JIT: a vectorized loop whose trip count is not a multiple of the vector width now fuses multiply-adds in its leftover iterations like in its vector lanes, and no longer recomputes loop-invariant work for each of them. Elements of one bank used to round differently, and 6 to 15 element in-place banks ran about 20% slower than needed.
+- YDSP JIT: faster scalar kernels. A `?:` between two values that already exist compiles to a select instead of a branch on audio data, the counter idiom `n = n + 1; if (n >= N) { n = 0; }` becomes one increment-and-wrap, a state rotation such as `y2 = y1; y1 = y;` keeps no move on the feedback path, and on ARM64 register moves no longer add latency to a recurrence, ring positions of any length advance in two instructions, the sample loop is closed by its own increment and a ring wrap such as `r = w - d; if (r < 0) { r = r + n; }` reuses the flags of its subtraction.
+- YDSP JIT: `YdspAudioGraph::process` does about a third less fixed work per call, which matters at small block sizes.
+- YDSP JIT: small state arrays that a per-sample `process` only indexes with constants (`z[0]`, `z[1]`, ...) are kept in registers across the block, like scalar state.
+- YDSP JIT: **behavior change** under `fastMath` (the default): the additions of a multiply-add chain may be reordered so a value fed back from the previous sample or stage goes through one operation, and `x * k1 * k2` multiplies by `k1 * k2` once when both are fixed for the block. Output can differ from the previous release by a rounding; `fastMath = false` keeps the order as written.
+- YDSP JIT: graph state and intermediate stream buffers are 64 byte aligned, so `float64` and `int64` state arrays no longer sit at odd 4 byte offsets.
+- YDSP JIT: faster kernels for larger patches. A `process block` keeps scalar state in registers like a per-sample `process`; index and overflow checks are also removed for masked positions (`i = (i + 1) & mask`), `for` variables and block processes; a state array that only its `{ ... }` initialiser writes is read as constants; a bank loop using `float (i)` is vectorized; table and coefficient loads leave vectorized loops; and values computed ahead of the sample loop, array and stream pointers included, no longer sit in memory during it because of an earlier `exp()` or `tan()` call.
+- YDSP JIT: **behavior change**: a `?:` or `if`/`else` inside the sample loop whose condition and branches are all fixed for the block and free of side effects is computed once per block ahead of the loop, with both branches evaluated. Under `fastMath`, a sum accumulated over many statements, such as the taps of a FIR, may be added up in four partial sums, which changes its rounding.
 
 ### Python Bindings
 

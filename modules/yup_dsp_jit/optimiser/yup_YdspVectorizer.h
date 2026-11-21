@@ -51,6 +51,11 @@ namespace yup
       loop. Empty ranges stay empty. Runtime-bound widening is only
       admitted when the body has a stream access the remainder can touch.
     - **Stream accesses are widened only at the induction variable.**
+    - **Host buffers may overlap.** A loop that stores to a stream and touches
+      another one tests their addresses on entry and leaves the whole span to
+      its scalar remainder unless the buffers are the same or at least one
+      vector apart. A loop with no scalar remainder, or one that also reads a
+      stream at a fixed index, stays scalar.
     - **A transcendental on a widened value disqualifies the loop**, unless the
       target reported vector math (sleef_library is linked), in which case the
       SLEEF-backed family (sin/cos/exp/log/tanh/...) is widened and the codegen

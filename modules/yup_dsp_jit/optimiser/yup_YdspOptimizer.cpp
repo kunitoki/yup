@@ -104,6 +104,9 @@ String vectorizationReasonText (YdspVectorizationReason reason)
         case YdspVectorizationReason::runtimeBoundWithoutStreams:
             return "a blockSize-bound loop needs a stream access at the loop variable";
 
+        case YdspVectorizationReason::streamOverlapUnprovable:
+            return "a stream store may overlap another stream the loop reads at a fixed index, or the loop has no scalar remainder to fall back to";
+
         case YdspVectorizationReason::keptScalarForContraction:
             return "the body has a fused multiply-add chain that must stay scalar to round once";
 
@@ -355,25 +358,49 @@ void YdspOptimizer::runPasses (YdspIrFunction& fn)
     fn.fastMath = fastMath;
     fn.vectorMathEnabled = vectorMathEnabled;
     fn.packedFmaAvailable = targetHasPackedFusedMultiplyAdd;
+    fn.vectorRampAvailable = targetHasVectorRamp;
 
-    for (int i = 0; i < 4; ++i)
+    const auto simplify = [this, &fn]
     {
-        bool changed = constantFolding (fn);
-        changed |= algebraicSimplification (fn);
-        changed |= ifConversion (fn);
-        changed |= storeToLoadForwarding (fn);
-        changed |= copyPropagation (fn);
-        changed |= eliminateProvenBoundsChecks (fn);
-        changed |= commonSubexpressionElimination (fn);
-        changed |= deadCodeElimination (fn);
+        for (int i = 0; i < 4; ++i)
+        {
+            bool changed = constantFolding (fn);
+            changed |= algebraicSimplification (fn);
+            changed |= ifConversion (fn);
+            changed |= storeToLoadForwarding (fn);
+            changed |= copyPropagation (fn);
+            changed |= eliminateProvenBoundsChecks (fn);
+            changed |= commonSubexpressionElimination (fn);
+            changed |= deadCodeElimination (fn);
 
-        if (! changed)
-            break;
-    }
+            if (! changed)
+                break;
+        }
+    };
+
+    simplify();
+
+    // Once the indices are folded: the moves this leaves behind are what the
+    // second round and the write-back fold clean up.
+    if (promoteStateArrays (fn))
+        simplify();
 
     loopInvariantCodeMotion (fn);
     commonSubexpressionElimination (fn);
     deadCodeElimination (fn);
+
+    // A `?:` whose arms the hoist has shown to be fixed for the block: as a
+    // select it leaves the sample loop too, with everything computed from it.
+    if (ifConversion (fn, true))
+    {
+        loopInvariantCodeMotion (fn);
+        commonSubexpressionElimination (fn);
+        deadCodeElimination (fn);
+    }
+
+    // After the hoist, which is what puts a constant factor in the entry block.
+    if (fastMath && combineInvariantFactors (fn))
+        deadCodeElimination (fn);
 
     // Fuse adjacent same-bound loops before the vectoriser so the merged loop
     // is widened and unrolled as one (the per-loop overhead it removes only
@@ -434,6 +461,9 @@ void YdspOptimizer::runPasses (YdspIrFunction& fn)
     {
         contractMultiplyAdd (fn);
         deadCodeElimination (fn);
+
+        if (fastMath)
+            rebalanceMultiplyAddChains (fn);
     }
 
     // Last of all, and outside the switch above: a patch that spells `fma()`
@@ -450,9 +480,15 @@ void YdspOptimizer::runPasses (YdspIrFunction& fn)
     // carried value between the producer and the move.
     foldStateWriteBacks (fn);
 
+    // After the fold, which leaves a carried counter incremented in place.
+    formAdvanceWrap (fn);
+
     // Split constants used in one interval between calls, and parameter loads
     // used only after the last call, out of the calls' live ranges.
     rematerializePostCallLeaves (fn);
+
+    // Last, so no pass has to see through the copies.
+    splitLiveRangesAtLoops (fn);
     deadCodeElimination (fn);
 
     // Finally, drop blocks that became unreachable during lowering (the joins

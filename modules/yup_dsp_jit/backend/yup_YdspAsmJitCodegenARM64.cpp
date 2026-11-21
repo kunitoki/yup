@@ -64,6 +64,10 @@ asmjit::arm::CondCode toArmCondition (asmjit::arm::CondCode cond) noexcept
             return asmjit::arm::CondCode::kGT;
         case asmjit::arm::CondCode::kSignedGE:
             return asmjit::arm::CondCode::kGE;
+        case asmjit::arm::CondCode::kSign:
+            return asmjit::arm::CondCode::kMI;
+        case asmjit::arm::CondCode::kNotSign:
+            return asmjit::arm::CondCode::kPL;
         default:
             return asmjit::arm::CondCode::kEQ;
     }
@@ -109,26 +113,39 @@ YdspAsmJitCodegenARM64::YdspMem YdspAsmJitCodegenARM64::memPtrIndexed (const Yds
 void YdspAsmJitCodegenARM64::prepareStateAddressing (const YdspIrFunction& fn)
 {
     stateArrayBaseRegs.clear();
+    loopArrayBases.clear();
 
-    const auto reserve = [this] (int value, int region)
+    // A base address made in the prologue is live for the whole kernel, so a
+    // call anywhere - a block-rate `exp()`, say - leaves it in memory, to be
+    // read back at every element access of a sample loop that calls nothing.
+    // Each outermost loop gets its own instead, made in its preheader.
+    std::map<std::pair<int, int>, double> references;
+
+    const auto reserve = [this, &fn, &references] (int value, int region, int block)
     {
         if (value < 0 || static_cast<size_t> (value) >= valueTypes.size())
             return;
 
+        const auto scope = blockLoopScope[static_cast<size_t> (block)];
         const auto base = stateArrayBase (valueTypes[static_cast<size_t> (value)], region);
+        references[{ scope, base }] += referenceCost (block);
 
-        if (stateArrayBaseRegs.count (base) != 0)
+        if (stateArrayBaseRegs.count ({ scope, base }) != 0)
             return;
 
-        if (base == 0)
+        if (scope < 0 && base == 0)
         {
-            stateArrayBaseRegs.emplace (base, stateArraysReg);
+            stateArrayBaseRegs.emplace (std::make_pair (scope, base), stateArraysReg);
             return;
         }
 
         YdspGp addr = cc->new_gp64 ("arrayBase");
-        addGpImm (*cc, addr, stateArraysReg, base);
-        stateArrayBaseRegs.emplace (base, addr);
+        stateArrayBaseRegs.emplace (std::make_pair (scope, base), addr);
+
+        if (scope < 0)
+            addGpImm (*cc, addr, stateArraysReg, base);
+        else
+            loopArrayBases[fn.loops[static_cast<size_t> (scope)].headerBlock - 1].emplace_back (base, addr);
     };
 
     for (size_t b = 0; b < fn.blocks.size(); ++b)
@@ -142,17 +159,50 @@ void YdspAsmJitCodegenARM64::prepareStateAddressing (const YdspIrFunction& fn)
             {
                 case YdspIrOp::loadStateArrayF:
                 case YdspIrOp::loadStateArrayI:
-                    reserve (inst.result, inst.memIndex);
+                    reserve (inst.result, inst.memIndex, static_cast<int> (b));
                     break;
 
                 case YdspIrOp::storeStateArrayF:
                 case YdspIrOp::storeStateArrayI:
-                    reserve (inst.b, inst.memIndex);
+                    reserve (inst.b, inst.memIndex, static_cast<int> (b));
                     break;
 
                 default:
                     break;
             }
+        }
+    }
+
+    // Ranked like the values that index them: by where the accesses are.
+    for (const auto& [key, reg] : stateArrayBaseRegs)
+        if (reg != stateArraysReg)
+            if (auto* virt = cc->virt_reg_by_reg (reg))
+                virt->set_weight (weightFor (references[key]));
+}
+
+void YdspAsmJitCodegenARM64::endBlock (int blockIndex)
+{
+    if (const auto bases = loopArrayBases.find (blockIndex); bases != loopArrayBases.end())
+        for (const auto& [base, reg] : bases->second)
+            addGpImm (*cc, reg, stateArraysReg, base);
+}
+
+void YdspAsmJitCodegenARM64::prepareWrapBounds (const YdspIrFunction& fn)
+{
+    wrapLastRegs.clear();
+
+    for (const auto& block : fn.blocks)
+    {
+        for (const auto& inst : block.insts)
+        {
+            const auto last = static_cast<int32_t> (inst.ivalue) - 1;
+
+            if (inst.op != YdspIrOp::advanceWrapI || (last >= 0 && last <= aarch64ImmediateLimit) || wrapLastRegs.count (last) != 0)
+                continue;
+
+            YdspGp lastReg = cc->new_gp32 ("wrapLast");
+            cc->mov (lastReg, asmjit::Imm (last));
+            wrapLastRegs.emplace (last, lastReg);
         }
     }
 }
@@ -177,7 +227,7 @@ YdspAsmJitCodegenARM64::YdspMem YdspAsmJitCodegenARM64::emitStateMem (YdspValueT
 
     const auto shift = asmjit::arm::Shift (asmjit::arm::ShiftOp::kLSL, static_cast<int> (scale));
 
-    if (const auto it = stateArrayBaseRegs.find (base); it != stateArrayBaseRegs.end())
+    if (const auto it = stateArrayBaseRegs.find ({ blockLoopScope[static_cast<size_t> (currentBlock)], base }); it != stateArrayBaseRegs.end())
         return asmjit::a64::ptr (it->second, gp (indexValue), shift);
 
     YdspGp addr = cc->new_gp64 ("addr");
@@ -198,7 +248,7 @@ YdspAsmJitCodegenARM64::YdspMem YdspAsmJitCodegenARM64::emitVectorStateMem (int 
         scaled = vectorIndexRegs.emplace (indexValue, offset).first;
     }
 
-    if (const auto region = stateArrayBaseRegs.find (base); region != stateArrayBaseRegs.end())
+    if (const auto region = stateArrayBaseRegs.find ({ blockLoopScope[static_cast<size_t> (currentBlock)], base }); region != stateArrayBaseRegs.end())
         return asmjit::a64::ptr (region->second, scaled->second);
 
     YdspGp addr = cc->new_gp64 ("addr");
@@ -257,7 +307,9 @@ void YdspAsmJitCodegenARM64::storeFloatToMem (const YdspMem& dst, const YdspFp& 
 
 void YdspAsmJitCodegenARM64::moveFloat (const YdspFp& dst, const YdspFp& src)
 {
-    cc->fmov (dst, src);
+    // A whole-register move is resolved at rename, where `fmov` executes:
+    // the state rotations of a recurrence sit on its feedback path.
+    cc->mov (dst.b16(), src.b16());
 }
 
 //==============================================================================
@@ -631,19 +683,26 @@ void YdspAsmJitCodegenARM64::emitWrapInt (const YdspGp& dst, const YdspGp& value
 
 void YdspAsmJitCodegenARM64::emitAdvanceWrapInt (const YdspGp& dst, const YdspGp& value, int32_t bound)
 {
-    if (bound > 0 && bound <= aarch64ImmediateLimit)
-        cc->add (dst, value, asmjit::Imm (1));
+    // Tests the old value so the increment folds into the select: the ring
+    // position is carried from sample to sample through two instructions.
+    const auto last = bound - 1;
+
+    if (last >= 0 && last <= aarch64ImmediateLimit)
+    {
+        cc->cmp (value, asmjit::Imm (last));
+    }
+    else if (const auto hoisted = wrapLastRegs.find (last); hoisted != wrapLastRegs.end())
+    {
+        cc->cmp (value, hoisted->second);
+    }
     else
     {
-        YdspGp boundReg = cc->new_gp32 ("wrapBound");
-        cc->mov (boundReg, asmjit::Imm (bound));
-        cc->add (dst, value, asmjit::Imm (1));
-        cc->cmp (dst, boundReg);
-        cc->csel (dst, dst, asmjit::a64::wzr, asmjit::Imm (static_cast<uint32_t> (asmjit::arm::CondCode::kLT)));
-        return;
+        YdspGp lastReg = cc->new_gp32 ("wrapLast");
+        cc->mov (lastReg, asmjit::Imm (last));
+        cc->cmp (value, lastReg);
     }
-    cc->cmp (dst, asmjit::Imm (bound));
-    cc->csel (dst, dst, asmjit::a64::wzr, asmjit::Imm (static_cast<uint32_t> (asmjit::arm::CondCode::kLT)));
+
+    cc->csinc (dst, asmjit::a64::wzr, value, asmjit::Imm (static_cast<uint32_t> (asmjit::arm::CondCode::kGE)));
 }
 
 //==============================================================================

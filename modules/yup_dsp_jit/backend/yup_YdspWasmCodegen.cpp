@@ -1298,6 +1298,8 @@ private:
                 return "i32.trunc_f64_s";
             case 0xAC:
                 return "i64.extend_i32_s";
+            case 0xAD:
+                return "i64.extend_i32_u";
             case 0xAE:
                 return "i64.trunc_f32_s";
             case 0xB0:
@@ -2039,6 +2041,16 @@ private:
             }
 
             // ---- streams ----
+            case YdspIrOp::loadInputAddress:
+            case YdspIrOp::loadOutputAddress:
+                pushCtxLoad (inst.op == YdspIrOp::loadInputAddress ? kernelInputsOff : kernelOutputsOff, YdspValueType::int32Type);
+                emitter.i32Const (inst.memIndex * 4);
+                emitter.op (YdspWasmEmitter::opI32Add);
+                emitter.load (YdspWasmEmitter::opI32Load, 2, 0);
+                emitter.op (YdspWasmEmitter::opI64ExtendI32U);
+                setValue (inst.result);
+                return;
+
             case YdspIrOp::loadInput:
             case YdspIrOp::loadOutput:
             {

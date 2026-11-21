@@ -68,6 +68,10 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
     // source loop into a high-pressure native basic block. Widened loops have
     // already reduced that pressure by running fewer iterations.
     constexpr int maxScalarUnrolledInstructions = 128;
+    // A body that only reads and accumulates - the taps of a FIR - keeps
+    // nothing live from one copy to the next but its sum, so the pressure the
+    // budget above guards against does not build up.
+    constexpr int maxAccumulationUnrolledInstructions = 320;
     constexpr int maxTripCount = 32;
 
     const auto hasNativeCall = [] (const YdspIrInst& inst)
@@ -247,7 +251,12 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
         {
             return fn.laneCountOf (inst.result) > 1;
         });
-        const auto instructionBudget = hasWidenedValue ? maxUnrolledInstructions : maxScalarUnrolledInstructions;
+        const bool onlyAccumulates = callCount == 0 && std::none_of (bodyBlock.insts.begin(), bodyBlock.insts.end(), [] (const YdspIrInst& inst)
+        {
+            return inst.result < 0;
+        });
+        const auto instructionBudget = hasWidenedValue ? maxUnrolledInstructions
+                                     : (onlyAccumulates ? maxAccumulationUnrolledInstructions : maxScalarUnrolledInstructions);
 
         if (tripCount < 1 || tripCount > maxTripCount || tripCount * bodySize > instructionBudget)
             continue;

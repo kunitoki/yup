@@ -28,8 +28,17 @@ void YdspOptimizer::splitWidenedReductionChains (YdspIrFunction& fn)
 {
     constexpr size_t minChainLength = 4;
 
-    if (! fn.vectorized || fn.valueLanes.empty())
+    // Beyond this many links the addends are no longer all held at once for a
+    // tree: they are summed into a few running partials as they arrive.
+    constexpr size_t maxTreeLength = 8;
+    constexpr size_t numPartials = 4;
+
+    // A widened accumulator has already been re-associated by the vectoriser;
+    // a scalar one is only re-associated under fastMath.
+    if (! fastMath && (! fn.vectorized || fn.valueLanes.empty()))
         return;
+
+    fn.valueLanes.resize (fn.valueTypes.size(), 1);
 
     const auto newAccumulator = [&fn] (int like)
     {
@@ -100,7 +109,8 @@ void YdspOptimizer::splitWidenedReductionChains (YdspIrFunction& fn)
 
             for (const auto candidate : { insts[start].a, insts[start].b })
             {
-                if (candidate < 0 || fn.laneCountOf (candidate) <= 1)
+                if (candidate < 0 || (fn.laneCountOf (candidate) <= 1 && ! fastMath)
+                    || fn.valueTypes[static_cast<size_t> (candidate)] != YdspValueType::float32Type)
                     continue;
 
                 if (insts[start].result == candidate)
@@ -182,22 +192,41 @@ void YdspOptimizer::splitWidenedReductionChains (YdspIrFunction& fn)
             leaves.reserve (links.size() + 1);
             leaves.push_back (initialAccumulator);
 
-            for (const auto& link : links)
-            {
-                const auto& add = insts[link.addIndex];
+            // A long scalar chain feeds its addends to the partials in turn,
+            // so only those are live at any point; the tree below then sums
+            // them. A widened chain keeps the association it always had.
+            std::vector<int> partials (links.size() > maxTreeLength && fn.laneCountOf (accumulator) == 1 ? numPartials : 0, -1);
 
+            for (size_t n = 0; n < links.size(); ++n)
+            {
+                const auto& add = insts[links[n].addIndex];
                 const auto addend = add.a == accumulator ? add.b : add.a;
-                const auto leaf = newAccumulator (addend);
 
                 YdspIrInst leafSnapshot;
-                leafSnapshot.op = YdspIrOp::movF;
-                leafSnapshot.result = leaf;
-                leafSnapshot.a = addend;
+                leafSnapshot.result = newAccumulator (addend);
+
+                if (partials.empty() || partials[n % numPartials] < 0)
+                {
+                    leafSnapshot.op = YdspIrOp::movF;
+                    leafSnapshot.a = addend;
+                }
+                else
+                {
+                    leafSnapshot.op = YdspIrOp::addF;
+                    leafSnapshot.a = partials[n % numPartials];
+                    leafSnapshot.b = addend;
+                }
 
                 leafSnapshots.push_back (leafSnapshot);
-                leafAddIndexes.push_back (link.addIndex);
-                leaves.push_back (leaf);
+                leafAddIndexes.push_back (links[n].addIndex);
+
+                if (partials.empty())
+                    leaves.push_back (leafSnapshot.result);
+                else
+                    partials[n % numPartials] = leafSnapshot.result;
             }
+
+            leaves.insert (leaves.end(), partials.begin(), partials.end());
 
             // Balanced pairwise reduction.
             std::vector<YdspIrInst> tree;

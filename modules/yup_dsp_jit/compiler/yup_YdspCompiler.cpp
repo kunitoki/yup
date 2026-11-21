@@ -1241,6 +1241,7 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
     constexpr bool hasVectorMath = false;
 #endif
     optimizer.setTargetHasVectorMath (hasVectorMath && fastMath);
+    optimizer.setTargetHasVectorRamp (hasVectorMath);
 
     optimizer.setVectorizationEnabled (enableVectorization);
     optimizer.setVectorWidth (target.vectorWidth);

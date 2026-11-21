@@ -605,7 +605,10 @@ primary    = literal | identifier | call | "(" expression ")" ;
   `&&` evaluates its right operand only when the left is true; `||` only
   when the left is false. A ternary evaluates only its selected branch.
   `select(cond,a,b)` evaluates both arguments. These rules also hold with
-  `fastMath` enabled. Short-circuit and memory-guard branches retain conditional
+  `fastMath` enabled. The one exception is a ternary inside the sample loop
+  whose condition and branches are all fixed for the block and free of side
+  effects - a coefficient chosen from a parameter: it is computed once per
+  block ahead of the loop, with both branches evaluated. Short-circuit and memory-guard branches retain conditional
   evaluation. Unrelated branches may still optimize, and unconditional
   loop-invariant work can move out of the sample loop; optimization reports
   describe the remaining restrictions.
@@ -1922,7 +1925,12 @@ if (result.wasOk())
   span and optional MIDI output. A shorter event-input span or a null entry
   carries no events for that input. Each input is routed only to its explicitly
   connected nodes. Stream type/count mismatches return a `YdspProcessResult`
-  error without processing.
+  error without processing. Output spans may be the input spans (in-place
+  processing) or overlap them: every node still reads the input the host
+  supplied. A graph that is a single one-voice node writing every output itself
+  runs straight on the host buffers, in sample order; any other graph renders an
+  overlapping block into internal buffers and copies it out, which costs one
+  copy in and one copy out per output stream.
 - `YdspAudioGraph::getEventInputCount()` / `getEventInputName(index)` — enumerate
   the graph's event inputs (declaration order), so a host can build the
   request's `eventInputs` span.

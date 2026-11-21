@@ -108,6 +108,7 @@ public:
     using YdspFp = typename Traits::Fp;
     using YdspMem = typename Traits::Mem;
     using YdspCond = typename Traits::Cond;
+    using YdspInstPosition = std::pair<int, int>;
 
     /** Emits position-independent code for the supplied target environment. */
     ResultValue<YdspNativeArtifact> emit (const asmjit::Environment& environment,
@@ -148,6 +149,10 @@ protected:
         it memoized for the block just finished. */
     virtual void beginBlock (int blockIndex) { (void) blockIndex; }
 
+    /** Called after the last instruction of a block, ahead of its terminator:
+        the place for what a target sets up on the way into a loop. */
+    virtual void endBlock (int blockIndex) { (void) blockIndex; }
+
     /** Called after each instruction that writes a value id, so a target can
         drop anything it memoized from that id's previous contents.
 
@@ -166,6 +171,14 @@ protected:
         constant) region base to the array pointer first. x86-64 folds the
         whole thing into one addressing mode and does nothing here. */
     virtual void prepareStateAddressing (const YdspIrFunction& fn) { (void) fn; }
+
+    /** Loads, once in the prologue, every increment-and-wrap bound the target
+        cannot encode in the compare itself.
+
+        Only AArch64 needs this: its compare immediate is 12 bits wide, so the
+        last index of a ring longer than that would otherwise be rebuilt in a
+        register on every sample. */
+    virtual void prepareWrapBounds (const YdspIrFunction& fn) { (void) fn; }
 
     virtual void loadGpFromMem (const YdspGp& dst, const YdspMem& src) = 0;
     virtual void storeGpToMem (const YdspMem& dst, const YdspGp& src) = 0;
@@ -292,9 +305,40 @@ protected:
     YdspMem packedConstMem (uint64_t bits, bool is64);
     YdspMem vectorConstMem (uint32_t bits);
 
+    void computeLoopScopes (const YdspIrFunction& fn);
+
+    /** The channel pointer of a stream for an access in the given block. */
+    YdspGp streamBase (int blockIndex, bool isInput, int slot) const;
+
+    /** What one reference in the given block counts for when ranking
+        registers: ten times more per enclosing loop. */
+    double referenceCost (int blockIndex) const noexcept;
+
+    /** The allocator weight (1 to 240) of a register with that many
+        loop-weighted references. Pinned registers use 255. */
+    static uint32_t weightFor (double references) noexcept;
+
     void planCompareFusion (const YdspIrFunction& fn);
     void emitPlannedIntCompareToFlags (const YdspIrInst& compare);
     void planOperandLowering (const YdspIrFunction& fn);
+
+    /** Finds the subtractions (and additions) whose own flags can stand in
+        for a following `x < 0` / `x >= 0` test of their result, which is the
+        hand-written ring wrap `r = a - b; if (r < 0) { r = r + n; }`.
+
+        AArch64 only: arithmetic there leaves the flags alone unless asked to
+        set them, so the instructions between the subtraction and the select
+        can be checked against a short list that is known not to touch them. */
+    void planFlagReuse (const YdspIrFunction& fn);
+
+    /** Finds the loops whose induction only indexes streams, and makes them
+        count from `-n` up to zero against the end of each stream.
+
+        The increment then closes the loop with its own flags, which removes
+        the compare from every sample. AArch64 only. */
+    void planEndRelativeLoops (const YdspIrFunction& fn);
+    void emitEndRelativeLoopSetup (int preheaderBlock);
+    void emitFlagSettingArithmetic (const YdspIrInst& inst, YdspInstPosition position);
 
     void materializeMathCallTargets (const YdspIrFunction& fn);
     void loadExternalSymbol (const YdspGp& target, const void* address);
@@ -340,8 +384,6 @@ protected:
     //==============================================================================
     // Shared state
 
-    using YdspInstPosition = std::pair<int, int>;
-
     YdspAsm* cc = nullptr;
 
     YdspGp inputsReg;
@@ -355,8 +397,17 @@ protected:
     YdspGp outputEventsReg;
     YdspGp traceQueueReg;
 
-    std::vector<YdspGp> inputBaseRegs;
-    std::vector<YdspGp> outputBaseRegs;
+    /** The outermost loop each block sits in, as an index into the function's
+        loops, or -1: what a loop sets up in its preheader is keyed by this.
+        Only a loop that is entered through its preheader alone counts. */
+    std::vector<int> blockLoopScope;
+    int currentBlock = 0;
+
+    // Scope, input or output, slot.
+    using StreamBaseKey = std::tuple<int, bool, int>;
+
+    std::map<StreamBaseKey, YdspGp> streamBaseRegs;
+    std::map<int, std::vector<StreamBaseKey>> loopStreamBases; // by preheader block
 
     const YdspIrFunction* activeFn = nullptr;
 
@@ -377,6 +428,7 @@ protected:
     std::vector<YdspValueType> valueTypes;
     std::vector<int> valueLanes;
     std::vector<asmjit::Label> blockLabels;
+    std::vector<int> blockLoopDepth;
     std::vector<asmjit::Reg> regs;
 
     std::map<YdspInstPosition, YdspIrInst> fusedSelectCompares;
@@ -394,6 +446,25 @@ protected:
     std::set<int> elidedIntegerConstants;
     std::map<YdspInstPosition, int> fusedProductSubtracts;
     std::set<YdspInstPosition> elidedNegations;
+
+    /** A loop that counts up to zero: see planEndRelativeLoops(). */
+    struct EndRelativeLoop
+    {
+        int headerBlock = -1;
+        int latchBlock = -1;
+        int induction = -1;
+        int bound = -1;
+        YdspInstPosition seed { -1, -1 };
+
+        // Stream slot (inputs first, then outputs offset by the input count)
+        // to the address one past the stream's last sample.
+        std::map<int, YdspGp> streamEnds;
+        std::map<int, uint32_t> streamScales;
+    };
+
+    std::vector<EndRelativeLoop> endRelativeLoops;
+    std::set<YdspInstPosition> flagSettingArithmetic;
+    std::map<YdspInstPosition, bool> flagReusingSelects; // select -> true when it tests `x < 0`
 };
 
 } // namespace yup

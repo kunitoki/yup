@@ -178,6 +178,17 @@ public:
     */
     void setTargetHasPackedFusedMultiplyAdd (bool isSupported) noexcept { targetHasPackedFusedMultiplyAdd = isSupported; }
 
+    /** Tells the vectoriser whether the target can build a vector that counts
+        up from a scalar (`vrampF`).
+
+        With it, a bank loop that uses `float (i)` or `float (i + c)` - the
+        harmonic number of an additive bank, say - is widened instead of staying
+        scalar. Off by default; the native backends lower it.
+
+        @see YdspIrFunction::vectorRampAvailable
+    */
+    void setTargetHasVectorRamp (bool isSupported) noexcept { targetHasVectorRamp = isSupported; }
+
     //==============================================================================
     /** Runs the constant-folding pass over the given function.
 
@@ -258,6 +269,22 @@ public:
     */
     void foldStateWriteBacks (YdspIrFunction& fn);
 
+    /** Turns the counter idiom `n = n + 1; if (n >= N) { n = 0; }` into one
+        increment-and-wrap operation.
+
+        After if-conversion and the state write-back fold the idiom is an add, a
+        compare and a select, all on the value the loop carries to the next
+        sample. As one `advanceWrapI` a backend can test the value before the
+        increment and fold the increment into the select, which shortens that
+        carried chain - the limit on a sample-and-hold, a clock divider or a
+        hand-written ring position.
+
+        Only an increment proven not to overflow is rewritten, so wrapping and
+        saturating arithmetic agree on every backend. The incremented value may
+        have no reader between the add and the select other than the wrap test.
+    */
+    void formAdvanceWrap (YdspIrFunction& fn);
+
     /** Rematerializes scalar leaf values that would otherwise be parked around
         a libm call.
 
@@ -281,6 +308,27 @@ public:
     */
     void rematerializePostCallLeaves (YdspIrFunction& fn);
 
+    /** Gives a loop its own copy of every value that is live into or out of
+        it, when calls ahead of the loop would otherwise decide where those
+        values live.
+
+        A register allocator without live range splitting keeps a value in one
+        place for its whole life. A coefficient computed before a later
+        `exp()` or `tan()` call must therefore sit in one of the few registers
+        a call preserves, or in memory - and it is then read from memory on
+        every sample, although the sample loop makes no call at all. This is
+        the shape of every patch that derives its coefficients from parameters
+        ahead of the loop.
+
+        For an outermost loop that makes no call and has one ahead of it, each
+        such value is copied into a fresh one in the preheader (constants are
+        simply loaded again) and the loop is rewritten to use the copy; values
+        the loop writes are copied back in its exit block. The copies cost a
+        move per block and are live for the loop only, so the allocator is
+        free to place them in any register.
+    */
+    void splitLiveRangesAtLoops (YdspIrFunction& fn);
+
 
     /** Runs the if-conversion pass over the given function.
 
@@ -292,9 +340,54 @@ public:
         both fall through, which leaves every block index - and so every loop
         bound and every region the wasm backend recovers - exactly as it was.
 
+        With `speculateLoopInvariantArms` the pass does one thing only: it turns
+        an `if`/`else` or `?:` inside a loop into a select when the condition
+        is computed ahead of the loop and both arms are pure (math calls
+        included) and read nothing the loop computes. Such a choice is the same
+        on every iteration - a coefficient picked from a parameter, say - so the
+        hoist that follows computes both arms and the select once, ahead of the
+        loop, instead of branching on every sample. The unselected arm is
+        evaluated where the source would not have, which costs time once per
+        block and is otherwise unobservable. A choice the signal makes is left
+        alone.
+
         @returns true if the function was changed.
     */
-    bool ifConversion (YdspIrFunction& fn);
+    bool ifConversion (YdspIrFunction& fn, bool speculateLoopInvariantArms = false);
+
+    /** Keeps the elements of a small state array in registers across the
+        sample loop, the way scalar state already is.
+
+        An array the per-sample kernel only ever indexes with compile-time
+        constants (the stages of a phaser or a ladder written as `z[0]`,
+        `z[1]`, ...) is a set of scalars in disguise. Each element it touches is
+        loaded once ahead of the sample loop, read and written as a register
+        inside it, and stored back after it, so the value a stage carries from
+        one sample to the next no longer goes through memory.
+
+        Arrays with any other access keep their loads and stores: an index the
+        optimiser cannot fold, a widened access, an access outside the sample
+        loop. So do arrays longer than a few elements, and everything once the
+        kernel already carries enough promoted elements, since each one holds a
+        register for the whole loop. Init and event-handler functions are left
+        alone; they see the values the kernel stored back.
+
+        @returns true if the function was changed.
+    */
+    bool promoteStateArrays (YdspIrFunction& fn);
+
+    /** Rewrites `x * k1 * k2` as `x * (k1 * k2)` when k1 and k2 are fixed for
+        the whole call (constants, parameters, values computed from them ahead
+        of every loop) and x is not, so the per-sample work is one multiply
+        instead of two.
+
+        The product of the two fixed factors is computed once in the entry
+        block. Regrouping a product changes its rounding, so the optimiser only
+        runs this under fastMath.
+
+        @returns true if the function was changed.
+    */
+    bool combineInvariantFactors (YdspIrFunction& fn);
 
     /** Runs the store-to-load-forwarding pass over the given function.
 
@@ -418,11 +511,16 @@ public:
         depth a balanced tree would reach - restarting the block scan after
         each split would go further, and has not been measured.
 
-        Only a *widened* accumulator is touched. Its association has already
+        A *widened* accumulator is always eligible. Its association has already
         been changed by the vectoriser - lane j sums elements j, j+4, j+8 … and
         the lanes are then folded pairwise - and that is documented as not
-        bit-exact, so this stays inside a licence the language already takes. A
-        scalar chain carries no such licence and is left alone.
+        bit-exact, so this stays inside a licence the language already takes.
+
+        A scalar chain carries no such licence and is only touched under
+        `fastMath`: the `acc = acc + x` an unrolled FIR or dot product repeats
+        once per tap. A long one (more than eight links) is not balanced into
+        a tree, which would hold every addend at once, but summed into four
+        running partials that take the addends in turn.
     */
     void splitWidenedReductionChains (YdspIrFunction& fn);
 
@@ -441,6 +539,26 @@ public:
         @see setContractionEnabled
     */
     void contractMultiplyAdd (YdspIrFunction& fn);
+
+    /** Reorders a chain of fused multiply-adds so the product that arrives
+        last is added last.
+
+        `a * b + c - d * e` contracts to two chained operations, and the order
+        the source spells decides which product has to go through both. When
+        `b` is the output of the previous stage (a phaser, a ladder) or the
+        value fed back from the previous sample (the `y1` of a biquad), that
+        order doubles the latency of the path the kernel is limited by. The
+        pass estimates when each operand becomes available, counting a value
+        the block recomputes from itself as the latest of all, and swaps two
+        adjacent links when that shortens the chain.
+
+        Reordering additions changes the rounding, so this only runs under
+        fastMath. Like contraction it is an IR rewrite, so every backend
+        produces the same samples.
+
+        @see setFastMath, contractMultiplyAdd
+    */
+    void rebalanceMultiplyAddChains (YdspIrFunction& fn);
 
     /** Expands every `fmaF` into float64 arithmetic that rounds once.
 
@@ -468,6 +586,7 @@ private:
     bool fastMath = false;
     bool targetHasFusedMultiplyAdd = true;
     bool targetHasPackedFusedMultiplyAdd = false;
+    bool targetHasVectorRamp = false;
     bool vectorMathEnabled = false;
 };
 

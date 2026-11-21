@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <vector>
 
 using namespace yup;
 
@@ -391,8 +392,8 @@ TEST (YdspOptimizerTests, IfConversionSpeculatesASampleHoldInputLoad)
 
     const auto& fn = *ir->kernels[0];
 
-    // Only the sample loop header still branches: the hold and the wrap are
-    // both straight-line selects now.
+    // Only the sample loop header still branches: the hold is a straight-line
+    // select, and the increment, wrap test and wrap select are one operation.
     int branchIfCount = 0;
 
     for (const auto& block : fn.blocks)
@@ -400,7 +401,61 @@ TEST (YdspOptimizerTests, IfConversionSpeculatesASampleHoldInputLoad)
             ++branchIfCount;
 
     EXPECT_EQ (1, branchIfCount);
-    EXPECT_GE (countInst (fn, YdspIrOp::selectB), 2);
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::selectB));
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::advanceWrapI));
+    EXPECT_EQ (0, countInst (fn, YdspIrOp::geI));
+}
+
+TEST (YdspOptimizerTests, HoistsALoopInvariantTernaryOutOfTheSampleLoop)
+{
+    YdspDiagnostics diagnostics;
+
+    // The choice depends on a parameter only, so it is the same on every
+    // sample: both arms and the select belong ahead of the loop, not behind a
+    // branch (and a call) inside it.
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            input parameter float f = 0.5;
+            process {
+                let c = f > 0.49 * sampleRate ? -1.0 : cos (2.0 * pi * f / sampleRate);
+                out = in * sqrt (1.0 - c);
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                       diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = *ir->kernels[0];
+    ASSERT_EQ (1u, fn.loops.size());
+
+    const auto header = static_cast<size_t> (fn.loops[0].headerBlock);
+    const auto countBefore = [&] (YdspIrOp op)
+    {
+        int count = 0;
+
+        for (size_t b = 0; b < header; ++b)
+            for (const auto& inst : fn.blocks[b].insts)
+                count += inst.op == op ? 1 : 0;
+
+        return count;
+    };
+
+    int branchIfCount = 0;
+
+    for (const auto& block : fn.blocks)
+        if (block.term == YdspIrTerm::branchIf)
+            ++branchIfCount;
+
+    EXPECT_EQ (1, branchIfCount);
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::cosF));
+    EXPECT_EQ (1, countBefore (YdspIrOp::cosF));
+    EXPECT_EQ (1, countBefore (YdspIrOp::selectB));
+    EXPECT_EQ (1, countBefore (YdspIrOp::sqrtF));
 }
 
 TEST (YdspOptimizerTests, RematerializesConstantsBetweenCallsAndAfterTheLastCall)
@@ -1077,7 +1132,9 @@ TEST (YdspOptimizerTests, HoistsIterationLocalClampAndConversionChain)
         entrySelects += inst.op == YdspIrOp::selectB;
         entryConversions += inst.op == YdspIrOp::ftoi;
     }
-    EXPECT_EQ (2, entrySelects);
+    // The two clamps, plus the NaN guard of a conversion whose operand is
+    // now known to lie in [1, 8].
+    EXPECT_EQ (3, entrySelects);
     EXPECT_EQ (1, entryConversions);
     EXPECT_EQ (1, countInst (fn, YdspIrOp::ftoi));
 }
@@ -1365,7 +1422,8 @@ TEST (YdspOptimizerTests, HoistsClampAndConversionBeforeAnArrayGuard)
         entrySelects += inst.op == YdspIrOp::selectB;
         entryConversions += inst.op == YdspIrOp::ftoi;
     }
-    EXPECT_EQ (2, entrySelects);
+    // The two clamps, plus the NaN guard of the bounded conversion.
+    EXPECT_EQ (3, entrySelects);
     EXPECT_EQ (1, entryConversions);
     EXPECT_EQ (2, countInst (fn, YdspIrOp::ftoi));
 }
@@ -4580,4 +4638,452 @@ TEST (YdspOptimizerTests, CleanupPassesReportAnAlreadyStableFunction)
     EXPECT_FALSE (optimizer.copyPropagation (fn));
     EXPECT_FALSE (optimizer.commonSubexpressionElimination (fn));
     EXPECT_FALSE (optimizer.deadCodeElimination (fn));
+}
+
+TEST (YdspOptimizerTests, StateArraySegmentAndRegionsStartOnCacheLineBoundaries)
+{
+    YdspDiagnostics diagnostics;
+
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float a[3];
+            state int n[70];
+            state float64 d[5];
+            process {
+                a[0] = in; n[0] = 1; d[0] = 0.5;
+                out = (in @ 200) + a[0];
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                       diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = *ir->kernels[0];
+
+    // Arrays stay packed inside their region: 3 declared elements, then the
+    // 201 element hidden delay ring.
+    EXPECT_EQ (204, fn.float32ArrayElements);
+
+    // The array segment and each typed region inside it start on a cache line,
+    // so every element sits at a multiple of its own size.
+    EXPECT_GT (fn.stateScalarSize(), 0u);
+    EXPECT_EQ (0u, fn.stateScalarSize() % 64);
+    EXPECT_EQ (832, fn.int32ArrayRegionOffset());
+    EXPECT_EQ (832 + 320, fn.float64ArrayRegionOffset());
+    EXPECT_EQ (832 + 320 + 64, fn.int64ArrayRegionOffset());
+    EXPECT_EQ (fn.stateScalarSize() + 832u + 320u + 64u, fn.stateSize());
+}
+
+TEST (YdspOptimizerTests, TernaryBetweenExistingValuesBecomesASelect)
+{
+    YdspDiagnostics diagnostics;
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            input parameter float attack = 0.2, release = 0.01;
+            state float env;
+            process {
+                let level = abs (in);
+                let coeff = level > env ? attack : release;
+                env = env + coeff * (level - env);
+                out = env > 0.5 ? 1.0 : exp (env);
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP", diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = *ir->kernels[0];
+
+    // Choosing between two parameters evaluates nothing, so it is a select; the
+    // second `?:` still branches around its exp().
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::selectB));
+    EXPECT_EQ (1, std::count_if (fn.blocks.begin(), fn.blocks.end(), [] (const YdspIrBlock& block)
+    {
+        return block.preservesConditionalEvaluation && block.term == YdspIrTerm::branchIf;
+    }));
+}
+
+TEST (YdspOptimizerTests, StateRotationKeepsNoMoveOnTheCarriedChain)
+{
+    YdspDiagnostics diagnostics;
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float y1;
+            state float y2;
+            process {
+                let y = in + 0.5 * y1 - 0.25 * y2;
+                y2 = y1;
+                y1 = y;
+                out = y;
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP", diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = *ir->kernels[0];
+
+    // `y1 = y` is folded into the instruction that computes y even though
+    // `y2 = y1` reads y1 in between, which leaves that one copy as the only move.
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::movF));
+
+    for (const auto& block : fn.blocks)
+        for (const auto& inst : block.insts)
+            if (inst.op == YdspIrOp::storeOutput)
+                for (const auto& producer : block.insts)
+                    if (producer.result == inst.b)
+                        EXPECT_EQ (YdspIrOp::subF, producer.op);
+}
+
+TEST (YdspOptimizerTests, ConstantIndexedStateArraysAreKeptInRegisters)
+{
+    YdspDiagnostics diagnostics;
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            input parameter int k = 1;
+            state float z[4];
+            state float big[32];
+            state float v[4];
+            process {
+                let a = in + z[0] * 0.5;
+                z[0] = a;
+                z[1] = a - z[3];
+                big[0] = a;
+                v[k] = a;
+                out = z[1] + big[0] + v[0];
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP", diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = *ir->kernels[0];
+    ASSERT_EQ (3u, fn.stateArrays.size());
+
+    const auto exitBlock = static_cast<size_t> (fn.loops[0].exitBlock);
+
+    const auto countAccesses = [&fn] (size_t firstBlock, size_t lastBlock, int base, bool stores)
+    {
+        int count = 0;
+
+        for (size_t b = firstBlock; b < lastBlock; ++b)
+            for (const auto& inst : fn.blocks[b].insts)
+                if (inst.memIndex == base && inst.op == (stores ? YdspIrOp::storeStateArrayF : YdspIrOp::loadStateArrayF))
+                    ++count;
+
+        return count;
+    };
+
+    // z is only ever indexed by constants: its three touched elements are
+    // loaded ahead of the sample loop, live in registers inside it, and the two
+    // that are written are stored back after it.
+    const auto z = fn.stateArrays[0].base;
+    EXPECT_EQ (3, countAccesses (0, 1, z, false));
+    EXPECT_EQ (0, countAccesses (1, exitBlock, z, false) + countAccesses (1, exitBlock, z, true));
+    EXPECT_EQ (2, countAccesses (exitBlock, exitBlock + 1, z, true));
+
+    // big is too long to spend registers on, and v has an index only known at
+    // run time: both stay in memory.
+    EXPECT_GT (countAccesses (1, exitBlock, fn.stateArrays[1].base, true), 0);
+    EXPECT_GT (countAccesses (1, exitBlock, fn.stateArrays[2].base, true), 0);
+    EXPECT_EQ (0, countAccesses (0, 1, fn.stateArrays[2].base, false));
+}
+
+TEST (YdspOptimizerTests, FastMathMultipliesByTwoFixedFactorsOnce)
+{
+    for (const bool fastMath : { false, true })
+    {
+        SCOPED_TRACE (fastMath);
+
+        YdspDiagnostics diagnostics;
+        auto ir = buildIr (R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                input parameter float drive = 2.0;
+                process { out = floor (in * 64.0) * 0.015625 * drive; }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP", diagnostics, fastMath);
+
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        ASSERT_NE (nullptr, ir);
+
+        const auto& fn = *ir->kernels[0];
+
+        const auto multipliesIn = [&fn] (size_t firstBlock, size_t lastBlock)
+        {
+            int count = 0;
+
+            for (size_t b = firstBlock; b < lastBlock; ++b)
+                for (const auto& inst : fn.blocks[b].insts)
+                    count += inst.op == YdspIrOp::mulF ? 1 : 0;
+
+            return count;
+        };
+
+        // `0.015625 * drive` is the same for every sample: fast math computes
+        // it once ahead of the loop, strict math keeps the order as written.
+        EXPECT_EQ (fastMath ? 1 : 0, multipliesIn (0, 1));
+        EXPECT_EQ (fastMath ? 2 : 3, multipliesIn (1, fn.blocks.size()));
+    }
+}
+
+//==============================================================================
+// block processes, range proofs and tables
+//==============================================================================
+
+namespace
+{
+
+const YdspIrFunction& processKernelOf (const YdspIrProgram& ir)
+{
+    for (const auto& kernel : ir.kernels)
+        if (! kernel->isInit && ! kernel->isEventHandler)
+            return *kernel;
+
+    return *ir.kernels[0];
+}
+
+int countSaturatingArithmetic (const YdspIrFunction& fn)
+{
+    int count = 0;
+
+    for (const auto& block : fn.blocks)
+        for (const auto& inst : block.insts)
+            count += inst.saturatingIntegerArithmetic ? 1 : 0;
+
+    return count;
+}
+
+} // namespace
+
+TEST (YdspOptimizerTests, BlockProcessKeepsScalarStateInARegisterAcrossItsLoop)
+{
+    YdspDiagnostics diagnostics;
+
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z;
+            process block {
+                for n in 0..blockSize { z = z * 0.5 + in[n]; out[n] = z; }
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                       diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = processKernelOf (*ir);
+    ASSERT_EQ (1u, fn.loops.size());
+
+    // Read once on the way in and written once on the way out: the recurrence
+    // itself never touches the state memory.
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::loadStateF));
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::storeStateF));
+
+    for (int b = fn.loops[0].headerBlock; b < fn.loops[0].exitBlock; ++b)
+        for (const auto& inst : fn.blocks[static_cast<size_t> (b)].insts)
+            EXPECT_TRUE (inst.op != YdspIrOp::loadStateF && inst.op != YdspIrOp::storeStateF);
+}
+
+TEST (YdspOptimizerTests, RangeProofCoversMaskedPositionsAndLoopVariablesInABlockProcess)
+{
+    for (const auto* advance : { "idx = (idx + 1) & 31;", "idx = idx + 1;" })
+    {
+        YdspDiagnostics diagnostics;
+
+        // A FIR over a ring written the usual way: the position is masked, the
+        // taps count down from it.
+        auto ir = buildIr (String (R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                state float h[32];
+                state int idx;
+                process block {
+                    for n in 0..blockSize {
+                        h[idx & 31] = in[n];
+                        float acc = 0.0;
+                        for i in 0..32 { acc = acc + h[(idx - i) & 31]; }
+                        ADVANCE
+                        out[n] = acc;
+                    }
+                }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP").replace ("ADVANCE", advance),
+                           diagnostics);
+
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        ASSERT_NE (nullptr, ir);
+
+        const auto& fn = processKernelOf (*ir);
+        const bool masked = String (advance).contains ("&");
+
+        // Every index is masked into range either way. Only the masked
+        // position is known to stay small, so only then can `idx - i` and
+        // `idx + 1` not overflow.
+        EXPECT_EQ (0, countInst (fn, YdspIrOp::ltUI)) << advance;
+        EXPECT_EQ (masked, countSaturatingArithmetic (fn) == 0) << advance;
+    }
+}
+
+TEST (YdspOptimizerTests, WideIntermediateOfA32BitCongruentialStepDoesNotSaturate)
+{
+    YdspDiagnostics diagnostics;
+
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            output stream out;
+            state int seed;
+            process {
+                seed = int32 (int64 (seed) * 1103515245 + 12345);
+                out = float (seed) * (1.0 / 2147483647.0);
+            }
+        }
+        graph G { output stream y; node p = P; connection { p.out -> y; } }
+    )YDSP",
+                       diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    // An int32 times a constant below 2^31, plus a small constant, is far
+    // inside int64: neither operation needs its overflow check.
+    const auto& fn = processKernelOf (*ir);
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::mulI));
+    EXPECT_EQ (0, countSaturatingArithmetic (fn));
+}
+
+TEST (YdspOptimizerTests, StateArrayWrittenOnlyByItsInitialiserIsATableOfConstants)
+{
+    for (const auto* extra : { "", "m[3] = in;" })
+    {
+        YdspDiagnostics diagnostics;
+
+        auto ir = buildIr (String (R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                state float m[4] = { 0.5, -0.25, 2.0 };
+                process {
+                    EXTRA
+                    out = in * m[1] + m[2] + m[3];
+                }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP").replace ("EXTRA", extra),
+                           diagnostics);
+
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        ASSERT_NE (nullptr, ir);
+
+        const auto& fn = processKernelOf (*ir);
+        const bool isTable = String (extra).isEmpty();
+
+        bool readsCoefficientAsConstant = false;
+
+        for (const auto& block : fn.blocks)
+            for (const auto& inst : block.insts)
+                readsCoefficientAsConstant |= inst.op == YdspIrOp::constF && inst.fvalue == -0.25;
+
+        // Nothing but the declaration writes the table, so its elements are
+        // their initial values (zero past the list). One write anywhere in the
+        // processor and they are state again.
+        EXPECT_EQ (isTable, readsCoefficientAsConstant) << extra;
+        EXPECT_EQ (isTable, countInst (fn, YdspIrOp::loadStateArrayF) == 0) << extra;
+    }
+}
+
+TEST (YdspOptimizerTests, SampleLoopReadsCopiesOfWhatIsLiveAcrossTheCallsAheadOfIt)
+{
+    YdspDiagnostics diagnostics;
+
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            input parameter float a = 0.5, b = 0.25;
+            state float z;
+            process {
+                let g = exp (-a);
+                let h = sin (b);
+                z = z * g + in * h;
+                out = z;
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                       diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = processKernelOf (*ir);
+    ASSERT_EQ (1u, fn.loops.size());
+    ASSERT_GT (fn.loops[0].headerBlock, 0);
+
+    // Where the last call ahead of the loop is, and where each value is made.
+    std::pair<int, int> lastCall { -1, -1 };
+    std::vector<std::pair<int, int>> definedAt (fn.valueTypes.size(), { -1, -1 });
+
+    for (int b = 0; b < static_cast<int> (fn.blocks.size()); ++b)
+    {
+        const auto& insts = fn.blocks[static_cast<size_t> (b)].insts;
+
+        for (int i = 0; i < static_cast<int> (insts.size()); ++i)
+        {
+            if (insts[static_cast<size_t> (i)].op == YdspIrOp::expF || insts[static_cast<size_t> (i)].op == YdspIrOp::sinF)
+                lastCall = { b, i };
+
+            if (insts[static_cast<size_t> (i)].result >= 0)
+                definedAt[static_cast<size_t> (insts[static_cast<size_t> (i)].result)] = { b, i };
+        }
+    }
+
+    ASSERT_LT (lastCall.first, fn.loops[0].headerBlock);
+    ASSERT_GE (lastCall.first, 0);
+
+    // Nothing the loop touches was made before that call: a value that is
+    // live across a call can only sit in the few registers a call preserves.
+    for (int b = fn.loops[0].headerBlock; b < fn.loops[0].exitBlock; ++b)
+    {
+        for (const auto& inst : fn.blocks[static_cast<size_t> (b)].insts)
+        {
+            const int operands[] { inst.a, inst.b, inst.c };
+
+            for (int operand = 0; operand < 3; ++operand)
+            {
+                if (operands[operand] < 0 || ! ydspIsValueIdOperandForTest (inst.op, operand))
+                    continue;
+
+                const auto made = definedAt[static_cast<size_t> (operands[operand])];
+                EXPECT_TRUE (made.first >= fn.loops[0].headerBlock || made > lastCall) << "value " << operands[operand];
+            }
+        }
+    }
+
+    EXPECT_TRUE (ydspEveryUseIsDefined (fn));
 }

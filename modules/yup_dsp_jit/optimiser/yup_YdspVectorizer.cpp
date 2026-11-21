@@ -272,6 +272,15 @@ private:
         return false;
     }
 
+    /** One host stream: an input or an output endpoint slot. */
+    struct StreamRef
+    {
+        bool isInput = false;
+        int slot = -1;
+
+        bool operator== (const StreamRef& other) const noexcept { return isInput == other.isInput && slot == other.slot; }
+    };
+
     /** One recognised `acc = acc + x` accumulation in the loop body. */
     struct Reduction
     {
@@ -355,6 +364,8 @@ private:
         if (! findInductionUpdate())
             return fail (YdspVectorizationReason::unrecognizedInductionUpdate);
 
+        findInductionRamps();
+
         if (! checkInductionUses())
             return fail (YdspVectorizationReason::inductionUsedAsValue);
 
@@ -375,6 +386,9 @@ private:
                 if (write.op == store && write.memIndex == read.memIndex)
                     return fail (YdspVectorizationReason::indirectAccess);
         }
+
+        if (! collectStreamGuards())
+            return fail (YdspVectorizationReason::streamOverlapUnprovable);
 
         if (! checkSingleDefinitionAndLiveOut())
             return fail (YdspVectorizationReason::loopCarriedValue);
@@ -458,6 +472,66 @@ private:
                 ++matches;
 
         return matches == 1;
+    }
+
+    /** Finds the stream pairs a widened body could reorder if the host
+        buffers overlap.
+
+        The scalar loop interleaves its accesses sample by sample; the widened
+        loop reads and writes `lanes` samples at a time, so a store can land on
+        a sample another access of the same vector has yet to reach, or has
+        already passed. That needs one of the two accesses to be a store and
+        their streams to sit closer than one vector without being the same
+        buffer, which only the run time addresses can tell.
+
+        Returns false when no run time check can clear the loop: a store
+        beside a read at a fixed index (the rewrite hoists that read out of the
+        loop entirely), or a constant-bound loop, which has no scalar remainder
+        to fall back to.
+    */
+    bool collectStreamGuards()
+    {
+        const auto& insts = fn.blocks[static_cast<size_t> (body)].insts;
+
+        std::vector<StreamRef> stores, accesses;
+        bool hasFixedIndexRead = false;
+
+        const auto addUnique = [] (std::vector<StreamRef>& list, StreamRef stream)
+        {
+            if (std::find (list.begin(), list.end(), stream) == list.end())
+                list.push_back (stream);
+        };
+
+        for (const auto& inst : insts)
+        {
+            if (! isStreamAccess (inst.op))
+                continue;
+
+            const StreamRef stream { inst.op == YdspIrOp::loadInput, inst.memIndex };
+
+            if (inst.a != loop.induction)
+            {
+                hasFixedIndexRead = true;
+                continue;
+            }
+
+            addUnique (accesses, stream);
+
+            if (inst.op == YdspIrOp::storeOutput)
+                addUnique (stores, stream);
+        }
+
+        for (const auto& store : stores)
+            for (const auto& other : accesses)
+                if (! (store == other)
+                    && std::find (streamGuards.begin(), streamGuards.end(), std::make_pair (other, store)) == streamGuards.end())
+                    streamGuards.emplace_back (store, other);
+
+        if (stores.empty())
+            return true;
+
+        return ! hasFixedIndexRead
+            && (streamGuards.empty() || loop.bound.kind != YdspLoopBoundKind::constant);
     }
 
     bool checkTailFeasibility() const
@@ -605,7 +679,7 @@ private:
                 if (static_cast<int> (b) != body)
                     return false;
 
-                if (static_cast<int> (j) == incrementIndex)
+                if (static_cast<int> (j) == incrementIndex || isRamp[j] || isRampOffset[j])
                     continue;
 
                 const bool indexOnly = (isStateArrayAccess (inst.op) || isStreamAccess (inst.op))
@@ -622,6 +696,84 @@ private:
         }
 
         return true;
+    }
+
+    /** Finds the conversions of the loop variable to float: `float (i)` and
+        `float (i + c)`, which widen to a vector counting up from the scalar.
+
+        Only for a constant bound, where every value involved is far below
+        2^24: there `float (i + c + k)` and `float (i + c) + k` are the same
+        number, so the widened loop rounds like the scalar one.
+    */
+    void findInductionRamps()
+    {
+        const auto& insts = fn.blocks[static_cast<size_t> (body)].insts;
+
+        isRamp.assign (insts.size(), false);
+        isRampOffset.assign (insts.size(), false);
+
+        constexpr int largestExactCount = 1 << 20;
+
+        if (! fn.vectorRampAvailable || loop.bound.kind != YdspLoopBoundKind::constant || loop.bound.constant > largestExactCount)
+            return;
+
+        const auto isFloat32Conversion = [&] (const YdspIrInst& inst, int source)
+        {
+            return inst.op == YdspIrOp::itof && inst.a == source
+                && fn.valueTypes[static_cast<size_t> (inst.result)] == YdspValueType::float32Type;
+        };
+
+        // The offset value may feed nothing but float32 conversions: any other
+        // reader would see one value per vector instead of one per element.
+        const auto convertsOnly = [&] (int value, size_t definedAt)
+        {
+            const auto v = static_cast<size_t> (value);
+
+            if (defsInBody[v] != 1 || defsElsewhere[v] != 0 || usesElsewhere[v] != 0)
+                return false;
+
+            for (size_t k = 0; k < insts.size(); ++k)
+            {
+                const auto& inst = insts[k];
+
+                if (inst.a != value && inst.b != value && inst.c != value)
+                    continue;
+
+                if (k < definedAt || ! isFloat32Conversion (inst, value))
+                    return false;
+            }
+
+            return true;
+        };
+
+        for (size_t j = 0; j < insts.size(); ++j)
+        {
+            const auto& inst = insts[j];
+
+            if (static_cast<int> (j) == incrementIndex || inst.result < 0)
+                continue;
+
+            if (isFloat32Conversion (inst, loop.induction))
+            {
+                isRamp[j] = true;
+                continue;
+            }
+
+            int offset = 0;
+
+            const bool offsetsInduction = (inst.op == YdspIrOp::addI && inst.a == loop.induction && readConstantInt (inst.b, offset))
+                                       || (inst.op == YdspIrOp::addI && inst.b == loop.induction && readConstantInt (inst.a, offset))
+                                       || (inst.op == YdspIrOp::subI && inst.a == loop.induction && readConstantInt (inst.b, offset));
+
+            if (! offsetsInduction || std::abs (offset) > largestExactCount || ! convertsOnly (inst.result, j))
+                continue;
+
+            isRampOffset[j] = true;
+
+            for (size_t k = j + 1; k < insts.size(); ++k)
+                if (isFloat32Conversion (insts[k], inst.result))
+                    isRamp[k] = true;
+        }
     }
 
     bool findReductions()
@@ -713,6 +865,13 @@ private:
                     isVector[static_cast<size_t> (inst.result)] = true;
                 }
 
+                continue;
+            }
+
+            if (isRamp[j])
+            {
+                widened[j] = true;
+                isVector[static_cast<size_t> (inst.result)] = true;
                 continue;
             }
 
@@ -993,9 +1152,18 @@ private:
                 || reductionAt (static_cast<int> (j)) != nullptr)
                 continue;
 
-            if (inst.result < 0
-                || inst.op == YdspIrOp::loadStateArrayF
-                || inst.op == YdspIrOp::loadStateArrayI)
+            if (inst.result < 0)
+                continue;
+
+            // An element the body never writes - a coefficient table - is read
+            // once, ahead of the loop. One it does write must be read in place.
+            const bool isArrayLoad = inst.op == YdspIrOp::loadStateArrayF || inst.op == YdspIrOp::loadStateArrayI;
+
+            if (isArrayLoad && std::any_of (insts.begin(), insts.end(), [&inst] (const YdspIrInst& other)
+                {
+                    return other.memIndex == inst.memIndex
+                        && other.op == (inst.op == YdspIrOp::loadStateArrayF ? YdspIrOp::storeStateArrayF : YdspIrOp::storeStateArrayI);
+                }))
                 continue;
 
             bool operandsReady = true;
@@ -1113,6 +1281,16 @@ private:
             if (! widened[j])
             {
                 newBody.push_back (inst);
+                continue;
+            }
+
+            if (isRamp[j])
+            {
+                // The scalar conversion gives the first lane; the rest count up.
+                const auto first = newValue (YdspValueType::float32Type, 1);
+                newBody.push_back ({ YdspIrOp::itof, first, inst.a });
+                newBody.push_back ({ YdspIrOp::vrampF, inst.result, first });
+                fn.valueLanes[static_cast<size_t> (inst.result)] = lanes;
                 continue;
             }
 
@@ -1241,12 +1419,14 @@ private:
 
         for (int k = 0; k < tail; ++k)
         {
+            tailRemap.assign (static_cast<size_t> (numValues), -1);
+
             const auto index = newValue (YdspValueType::int32Type, 1);
             preheaderInsts.push_back ({ YdspIrOp::constI, index, -1, -1, -1, -1, 0.0, start + k });
 
             for (size_t j = 0; j < oldBody.size(); ++j)
             {
-                if (static_cast<int> (j) == incrementIndex || static_cast<int> (j) == inductionMoveIndex)
+                if (static_cast<int> (j) == incrementIndex || static_cast<int> (j) == inductionMoveIndex || hoistToPreheader[j])
                     continue;
 
                 auto inst = oldBody[j];
@@ -1271,6 +1451,123 @@ private:
         }
     }
 
+    /** Emits the test for collectStreamGuards' pairs and returns its bool
+        value: true when two of the streams are different buffers less than one
+        vector apart, in either direction.
+    */
+    /** Emits the run time test for stream buffers that overlap within one
+        vector, and returns the boolean it leaves behind.
+
+        Buffers whose addresses agree modulo the vector size are either the
+        same buffer or at least one vector apart, which one pass over the
+        addresses settles - the case of every host that hands out aligned
+        buffers, or offsets them all alike to split a block. Only when they
+        disagree does the pair by pair comparison run, in a block of its own
+        that the preheader branches around. Two blocks are inserted ahead of
+        the header for that: the comparison, and the new preheader.
+    */
+    int emitStreamOverlapTest()
+    {
+        const auto vectorBytes = static_cast<int64_t> (lanes) * 4;
+
+        const auto emit = [this] (int block, YdspIrOp op, YdspValueType type, int a = -1, int b = -1, int64_t literal = 0, int slot = -1)
+        {
+            const auto result = newValue (type, 1);
+            fn.blocks[static_cast<size_t> (block)].insts.push_back ({ op, result, a, b, -1, slot, 0.0, literal });
+            return result;
+        };
+
+        const auto wide = YdspValueType::int64Type;
+        const auto flag = YdspValueType::boolType;
+        const int entry = preheader;
+
+        std::vector<std::pair<StreamRef, int>> addresses;
+
+        const auto addressOf = [&] (StreamRef stream)
+        {
+            for (const auto& [known, value] : addresses)
+                if (known == stream)
+                    return value;
+
+            addresses.emplace_back (stream, emit (entry, stream.isInput ? YdspIrOp::loadInputAddress : YdspIrOp::loadOutputAddress, wide, -1, -1, 0, stream.slot));
+            return addresses.back().second;
+        };
+
+        for (const auto& [first, second] : streamGuards)
+        {
+            addressOf (first);
+            addressOf (second);
+        }
+
+        int differing = -1;
+
+        for (size_t i = 1; i < addresses.size(); ++i)
+        {
+            const auto difference = emit (entry, YdspIrOp::xorI, wide, addresses[i].second, addresses[0].second);
+            differing = differing < 0 ? difference : emit (entry, YdspIrOp::orI, wide, differing, difference);
+        }
+
+        const auto zero = emit (entry, YdspIrOp::constI, wide);
+        const auto residues = emit (entry, YdspIrOp::andI, wide, differing, emit (entry, YdspIrOp::constI, wide, -1, -1, vectorBytes - 1));
+        const auto misaligned = emit (entry, YdspIrOp::neI, flag, residues, zero);
+
+        const auto overlap = newValue (flag, 1);
+        fn.blocks[static_cast<size_t> (entry)].insts.push_back ({ YdspIrOp::constB, overlap });
+
+        // entry -> [pairs] -> new preheader -> header
+        const int pairs = header;
+
+        fn.blocks.insert (fn.blocks.begin() + header, 2, YdspIrBlock {});
+
+        for (auto& block : fn.blocks)
+        {
+            if (block.termTarget >= pairs)
+                block.termTarget += 2;
+
+            if (block.termTarget2 >= pairs)
+                block.termTarget2 += 2;
+        }
+
+        for (auto& loopEntry : fn.loops)
+        {
+            if (loopEntry.headerBlock >= pairs)
+                loopEntry.headerBlock += 2;
+
+            if (loopEntry.exitBlock >= pairs)
+                loopEntry.exitBlock += 2;
+        }
+
+        header += 2;
+        body += 2;
+        exit += 2;
+        preheader = header - 1;
+
+        auto& entryBlock = fn.blocks[static_cast<size_t> (entry)];
+        entryBlock.term = YdspIrTerm::branchIf;
+        entryBlock.termCond = misaligned;
+        entryBlock.termTarget = pairs;
+        entryBlock.termTarget2 = preheader;
+
+        const auto bias = emit (pairs, YdspIrOp::constI, wide, -1, -1, vectorBytes - 1);
+        const auto window = emit (pairs, YdspIrOp::constI, wide, -1, -1, 2 * vectorBytes - 1);
+
+        int found = -1;
+
+        for (const auto& [first, second] : streamGuards)
+        {
+            // 0 < |distance| < vectorBytes, the upper bound as one unsigned compare.
+            const auto distance = emit (pairs, YdspIrOp::subI, wide, addressOf (first), addressOf (second));
+            const auto withinVector = emit (pairs, YdspIrOp::ltUI, flag, emit (pairs, YdspIrOp::addI, wide, distance, bias), window);
+            const auto pair = emit (pairs, YdspIrOp::andB, flag, withinVector, emit (pairs, YdspIrOp::neI, flag, distance, zero));
+
+            found = found < 0 ? pair : emit (pairs, YdspIrOp::orB, flag, found, pair);
+        }
+
+        fn.blocks[static_cast<size_t> (pairs)].insts.push_back ({ YdspIrOp::movB, overlap, found });
+
+        return overlap;
+    }
+
     int emitRuntimeEpilogue (const std::vector<YdspIrInst>& oldBody)
     {
         const auto loopId = loop.id;
@@ -1282,13 +1579,19 @@ private:
             if (inst.op == YdspIrOp::ltI && inst.a == induction)
                 boundValue = inst.b;
 
-        auto& preheaderInsts = fn.blocks[static_cast<size_t> (preheader)].insts;
+        // Looked up at each use: the overlap test below moves the preheader.
+        const auto preheaderInstructions = [this]() -> std::vector<YdspIrInst>&
+        {
+            return fn.blocks[static_cast<size_t> (preheader)].insts;
+        };
 
         int endValue = boundValue;
         int spanValue = boundValue;
 
         if (start > 0)
         {
+            auto& preheaderInsts = preheaderInstructions();
+
             const auto startValue = newValue (YdspValueType::int32Type, 1);
             preheaderInsts.push_back ({ YdspIrOp::constI, startValue, -1, -1, -1, -1, 0.0, start });
 
@@ -1304,13 +1607,23 @@ private:
         }
 
         const auto mask = newValue (YdspValueType::int32Type, 1);
-        preheaderInsts.push_back ({ YdspIrOp::constI, mask, -1, -1, -1, -1, 0.0, lanes - 1 });
+        preheaderInstructions().push_back ({ YdspIrOp::constI, mask, -1, -1, -1, -1, 0.0, lanes - 1 });
 
         const auto tailValue = newValue (YdspValueType::int32Type, 1);
-        preheaderInsts.push_back ({ YdspIrOp::andI, tailValue, spanValue, mask });
+        preheaderInstructions().push_back ({ YdspIrOp::andI, tailValue, spanValue, mask });
+
+        // Buffers that overlap leave the whole span to the scalar remainder:
+        // the widened loop then runs no iteration at all.
+        const auto scalarCount = streamGuards.empty() ? tailValue : newValue (YdspValueType::int32Type, 1);
+
+        if (! streamGuards.empty())
+        {
+            const auto overlap = emitStreamOverlapTest();
+            preheaderInstructions().push_back ({ YdspIrOp::selectB, scalarCount, overlap, spanValue, tailValue });
+        }
 
         const auto vectorN = newValue (YdspValueType::int32Type, 1);
-        preheaderInsts.push_back ({ YdspIrOp::subI, vectorN, endValue, tailValue });
+        preheaderInstructions().push_back ({ YdspIrOp::subI, vectorN, endValue, scalarCount });
 
         for (auto& inst : fn.blocks[static_cast<size_t> (header)].insts)
             if (inst.op == YdspIrOp::ltI && inst.a == induction)
@@ -1414,10 +1727,13 @@ private:
     std::vector<bool> definedInHeader;
     std::vector<bool> isVector;
     std::vector<bool> widened;
+    std::vector<bool> isRamp;
+    std::vector<bool> isRampOffset;
     std::vector<bool> hoistToPreheader;
     std::vector<bool> valueHoisted;
     std::vector<int> tailRemap;
     std::vector<Reduction> reductions;
+    std::vector<std::pair<StreamRef, StreamRef>> streamGuards;
 };
 
 } // namespace

@@ -138,4 +138,235 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
             insts.insert (insts.begin() + static_cast<std::ptrdiff_t> (it->first), it->second);
     }
 }
+//==============================================================================
+
+void YdspOptimizer::rebalanceMultiplyAddChains (YdspIrFunction& fn)
+{
+    // Rough latencies, in cycles. Only their order matters.
+    const auto latencyOf = [] (YdspIrOp op) noexcept
+    {
+        switch (op)
+        {
+            case YdspIrOp::fmaF:
+            case YdspIrOp::fmsubF:
+                return 4;
+
+            case YdspIrOp::mulF:
+            case YdspIrOp::loadInput:
+            case YdspIrOp::loadOutput:
+            case YdspIrOp::loadStateArrayF:
+            case YdspIrOp::loadStateArrayI:
+                return 3;
+
+            case YdspIrOp::movF:
+            case YdspIrOp::movI:
+            case YdspIrOp::movB:
+            case YdspIrOp::constF:
+            case YdspIrOp::constI:
+            case YdspIrOp::constB:
+                return 0;
+
+            case YdspIrOp::divF:
+            case YdspIrOp::sqrtF:
+                return 10;
+
+            case YdspIrOp::sinF:
+            case YdspIrOp::cosF:
+            case YdspIrOp::tanF:
+            case YdspIrOp::asinF:
+            case YdspIrOp::acosF:
+            case YdspIrOp::atanF:
+            case YdspIrOp::sinhF:
+            case YdspIrOp::coshF:
+            case YdspIrOp::tanhF:
+            case YdspIrOp::asinhF:
+            case YdspIrOp::acoshF:
+            case YdspIrOp::atanhF:
+            case YdspIrOp::expF:
+            case YdspIrOp::logF:
+            case YdspIrOp::log10F:
+            case YdspIrOp::powF:
+            case YdspIrOp::fmodF:
+            case YdspIrOp::atan2F:
+                return 20;
+
+            default:
+                return 2;
+        }
+    };
+
+    // A value the block reads and then recomputes from itself is carried from
+    // one pass over the block to the next: whatever sits between that read and
+    // that write is paid on every sample, however early the read comes.
+    constexpr int carriedDepth = 1000;
+    constexpr size_t maxCarriedValues = 32;
+
+    const auto isFusedOp = [] (YdspIrOp op) noexcept { return op == YdspIrOp::fmaF || op == YdspIrOp::fmsubF; };
+    const auto numValues = fn.valueTypes.size();
+    const YdspValueUseCounts counts (fn);
+
+    for (auto& block : fn.blocks)
+    {
+        auto& insts = block.insts;
+
+        if (std::count_if (insts.begin(), insts.end(), [&] (const YdspIrInst& inst) { return isFusedOp (inst.op); }) < 2)
+            continue;
+
+        const auto forEachOperand = [] (const YdspIrInst& inst, auto&& visit)
+        {
+            if (isValueIdOperand (inst.op, 0) && inst.a >= 0)
+                visit (inst.a);
+            if (isValueIdOperand (inst.op, 1) && inst.b >= 0)
+                visit (inst.b);
+            if (isValueIdOperand (inst.op, 2) && inst.c >= 0)
+                visit (inst.c);
+        };
+
+        std::vector<int> carried;
+        {
+            std::vector<char> defined (numValues, 0), readFirst (numValues, 0);
+
+            for (const auto& inst : insts)
+            {
+                forEachOperand (inst, [&] (int value)
+                {
+                    if (! defined[static_cast<size_t> (value)])
+                        readFirst[static_cast<size_t> (value)] = 1;
+                });
+
+                if (inst.result < 0)
+                    continue;
+
+                // Float values only: a counter or the sample index is carried
+                // too, but through a single add, and marking it late would make
+                // everything read from a stream look late with it.
+                if (readFirst[static_cast<size_t> (inst.result)] && ! defined[static_cast<size_t> (inst.result)]
+                    && isFloatValueType (fn.valueTypes[static_cast<size_t> (inst.result)])
+                    && carried.size() < maxCarriedValues)
+                    carried.push_back (inst.result);
+
+                defined[static_cast<size_t> (inst.result)] = 1;
+            }
+        }
+
+        std::vector<int> entryDepth (numValues, 0);
+
+        for (const auto candidate : carried)
+        {
+            std::vector<char> dependsOnEntry (numValues, 0);
+            dependsOnEntry[static_cast<size_t> (candidate)] = 1;
+
+            for (const auto& inst : insts)
+            {
+                bool depends = false;
+
+                forEachOperand (inst, [&] (int value)
+                {
+                    depends = depends || dependsOnEntry[static_cast<size_t> (value)];
+                });
+
+                if (inst.result == candidate && depends)
+                    entryDepth[static_cast<size_t> (candidate)] = carriedDepth;
+
+                if (inst.result >= 0)
+                    dependsOnEntry[static_cast<size_t> (inst.result)] = depends ? 1 : 0;
+            }
+        }
+
+        // Each swap moves a late product one multiply-add further down its
+        // chain, so a chain of n settles in at most n rounds.
+        for (int round = 0; round < 8; ++round)
+        {
+            bool changed = false;
+            auto depth = entryDepth;
+            std::vector<int> definedAt (numValues, -1);
+
+            for (size_t r = 0; r < insts.size(); ++r)
+            {
+                auto& outer = insts[r];
+
+                const auto recordDepth = [&]
+                {
+                    if (outer.result < 0)
+                        return;
+
+                    int latest = 0;
+
+                    forEachOperand (outer, [&] (int value)
+                    {
+                        latest = jmax (latest, depth[static_cast<size_t> (value)]);
+                    });
+
+                    depth[static_cast<size_t> (outer.result)] = latest + latencyOf (outer.op);
+                    definedAt[static_cast<size_t> (outer.result)] = static_cast<int> (r);
+                };
+
+                const auto innerIndex = isFusedOp (outer.op) && outer.c >= 0 ? definedAt[static_cast<size_t> (outer.c)] : -1;
+
+                if (innerIndex < 0 || ! isFusedOp (insts[static_cast<size_t> (innerIndex)].op)
+                    || outer.a == outer.c || outer.b == outer.c || outer.result < 0
+                    || ! counts.definedOnce (outer.c) || counts.uses[static_cast<size_t> (outer.c)] != 1
+                    || fn.laneCountOf (outer.result) != 1 || fn.laneCountOf (outer.c) != 1)
+                {
+                    recordDepth();
+                    continue;
+                }
+
+                auto& inner = insts[static_cast<size_t> (innerIndex)];
+
+                // Swapping evaluates the outer product where the inner one was
+                // and the inner one where the outer was, so each product's
+                // factors must hold the same values at both places.
+                bool movable = true;
+
+                for (size_t j = static_cast<size_t> (innerIndex); j < r && movable; ++j)
+                {
+                    const auto result = insts[j].result;
+
+                    movable = result < 0
+                           || (result != outer.a && result != outer.b
+                               && (j == static_cast<size_t> (innerIndex) || (result != inner.a && result != inner.b)));
+                }
+
+                if (! movable)
+                {
+                    recordDepth();
+                    continue;
+                }
+
+                const auto depthOf = [&depth] (int value) { return depth[static_cast<size_t> (value)]; };
+                const auto innerFactors = jmax (depthOf (inner.a), depthOf (inner.b));
+                const auto outerFactors = jmax (depthOf (outer.a), depthOf (outer.b));
+                const auto addend = depthOf (inner.c);
+
+                const auto current = jmax (jmax (innerFactors, addend) + 4, outerFactors) + 4;
+                const auto swapped = jmax (jmax (outerFactors, addend) + 4, innerFactors) + 4;
+
+                if (swapped < current)
+                {
+                    const auto innerOp = inner.op;
+                    const auto innerA = inner.a;
+                    const auto innerB = inner.b;
+
+                    inner.op = outer.op;
+                    inner.a = outer.a;
+                    inner.b = outer.b;
+
+                    outer.op = innerOp;
+                    outer.a = innerA;
+                    outer.b = innerB;
+
+                    depth[static_cast<size_t> (inner.result)] = jmax (outerFactors, addend) + 4;
+                    changed = true;
+                }
+
+                recordDepth();
+            }
+
+            if (! changed)
+                break;
+        }
+    }
+}
+
 } // namespace yup

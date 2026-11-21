@@ -724,4 +724,62 @@ TEST (YdspFusedMultiplyAddTests, TheContractedSubtractRoundsOnce)
         EXPECT_EQ (expected, sample);
 }
 
+//==============================================================================
+
+TEST (YdspFusedMultiplyAddTests, FastMathFeedsTheCarriedValueThroughOneMultiplyAdd)
+{
+    const auto source = R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float x1;
+            state float y1;
+            state float y2;
+            process {
+                let y = 0.2 * in + 0.4 * x1 + 0.37 * y1 - 0.19 * y2;
+                x1 = in;
+                y2 = y1;
+                y1 = y;
+                out = y;
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP";
+
+    for (const bool fastMath : { false, true })
+    {
+        SCOPED_TRACE (fastMath);
+
+        YdspDiagnostics diagnostics;
+        YdspLexer lexer (source, diagnostics);
+        YdspParser parser (lexer.tokenize(), diagnostics);
+        auto program = parser.parseProgram();
+        ASSERT_NE (nullptr, program);
+
+        YdspSemanticAnalyzer analyzer (diagnostics);
+        auto analyzed = analyzer.analyze (std::move (program));
+        ASSERT_NE (nullptr, analyzed);
+
+        YdspOptimizer optimizer (diagnostics);
+        optimizer.setContractionEnabled (true);
+        optimizer.setFastMath (fastMath);
+        auto ir = optimizer.build (*analyzed);
+        ASSERT_NE (nullptr, ir) << diagnostics.toString();
+
+        // y1 is fed back from the previous sample, so the multiply-add it enters
+        // is on the path every sample has to wait for. As written that is the
+        // third of four chained operations; reordered, it is the last one, which
+        // then both reads and writes y1.
+        int carriedThroughOne = 0;
+
+        for (const auto& block : ir->kernels[0]->blocks)
+            for (const auto& inst : block.insts)
+                if ((inst.op == YdspIrOp::fmaF || inst.op == YdspIrOp::fmsubF)
+                    && (inst.result == inst.a || inst.result == inst.b))
+                    ++carriedThroughOne;
+
+        EXPECT_EQ (fastMath ? 1 : 0, carriedThroughOne);
+    }
+}
+
 } // namespace yup::test
