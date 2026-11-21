@@ -1262,6 +1262,44 @@ TEST_F (DrawingStyleGpuTest, ClipPathsClipToAllTheirShapes)
     EXPECT_EQ (image.getPixelColor (2, 1).getAlpha(), 0);
 }
 
+TEST_F (DrawingStyleGpuTest, ClipPathShapesAddUpWhicheverWayTheirOutlinesRun)
+{
+    // A rect runs clockwise and an ellipse the other way: where they overlap is still inside
+    const auto overlapping = render (R"yui(
+        drawing {
+            clip {
+                clipPath {
+                    rect { bounds: rect (0, 0, 10, 10); }
+                    ellipse { bounds: rect (6, 6, 10, 10); }
+                }
+                rect { bounds: bounds; fill: #ff0000; }
+            }
+        })yui");
+    ASSERT_TRUE (overlapping.isValid());
+
+    EXPECT_EQ (overlapping.getPixelColor (2, 2), Color (0xffff0000));
+    EXPECT_EQ (overlapping.getPixelColor (12, 12), Color (0xffff0000));
+    EXPECT_EQ (overlapping.getPixelColor (8, 8), Color (0xffff0000));
+    EXPECT_EQ (overlapping.getPixelColor (14, 2).getAlpha(), 0);
+
+    // The hole of a shape stays one, until another shape covers it
+    const auto ring = render (R"yui(
+        drawing {
+            clip {
+                clipPath {
+                    path { data: "M 0 0 V 16 H 16 V 0 Z M 4 4 H 12 V 12 H 4 Z"; }
+                    rect { bounds: rect (4, 4, 2, 2); }
+                }
+                rect { bounds: bounds; fill: #ff0000; }
+            }
+        })yui");
+    ASSERT_TRUE (ring.isValid());
+
+    EXPECT_EQ (ring.getPixelColor (2, 2), Color (0xffff0000));
+    EXPECT_EQ (ring.getPixelColor (8, 8).getAlpha(), 0);
+    EXPECT_EQ (ring.getPixelColor (5, 5), Color (0xffff0000));
+}
+
 TEST_F (DrawingStyleGpuTest, ARepeatHoldingContainersDrawsThemOncePerTurn)
 {
     const auto image = render (R"yui(

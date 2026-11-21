@@ -146,6 +146,28 @@ A shape with neither a fill nor a stroke is filled with the current fill color.
 [set by a group](#paint-set-by-groups). Bare enumeration values like `round`
 resolve to the property they are assigned to.
 
+A gradient is written in the coordinates of the drawing, or for the unit
+square and placed in a rectangle with `mappedTo`: `objectBounds` is the box of
+the shape being painted, so one gradient follows every shape it paints (see
+the [graphics values](../../graphics/expressions.md)).
+
+```yui
+let fade: linearGradient (palette.accent, point (0, 0), palette.accent.withAlpha (0.1), point (0, 1));
+
+rect   { bounds: rect (8, 4, 68, 56); cornerRadius: 8; fill: palette.accent; }
+rect   { bounds: rect (94, 4, 68, 56); cornerRadius: 8; fillGradient: fade.mappedTo (objectBounds); }
+circle { center: point (214, 32); radius: 28;
+         fillGradient: radialGradient (palette.accent.brighter (0.9), point (204, 22), palette.accent.darker (0.4), 40); }
+rect   { bounds: rect (268, 6, 64, 52); cornerRadius: 8; fill: none; stroke: palette.text; strokeWidth: 3; dash: dash (8, 6); cap: round; }
+rect   { bounds: rect (356, 6, 64, 52); fill: palette.accent.withAlpha (0.35); stroke: palette.text; strokeWidth: 8; strokePosition: inside; }
+circle { center: point (472, 32); radius: 22; fill: palette.accent; feather: 10; }
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_paint_light.jpg#gh-light-mode-only" alt="Shapes painted with a fill, a linear and a radial gradient, a dashed stroke, a stroke inside the shape and a feather" width="640">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_paint_dark.jpg#gh-dark-mode-only" alt="Shapes painted with a fill, a linear and a radial gradient, a dashed stroke, a stroke inside the shape and a feather" width="640">
+</p>
+
 `rect` adds `cornerRadius`, the per-corner `topLeftRadius`, `topRightRadius`,
 `bottomLeftRadius` and `bottomRightRadius`, and `cornerSize` for elliptical
 corners with a horizontal and a vertical radius (`cornerSize: size (8, 4)`).
@@ -161,8 +183,17 @@ without `font` it uses the theme's default font. It is placed in one of two ways
   text is on the point.
 
 ```yui
-text { anchor: point (12, 20); textAnchor: middle; letterSpacing: 0.5; text: "yup"; fill: palette.text; }
+let big: defaultFont.withHeight (20);
+
+text { bounds: rect (4, 4, 150, 56); text: "fitted"; font: big; fill: palette.text; }
+text { bounds: rect (180, 4, 150, 56).reduced (8); text: "justified"; justification: bottomRight; font: big; fill: palette.text; }
+text { anchor: point (432, 40); textAnchor: middle; letterSpacing: 3; text: "anchored"; font: big; fill: palette.text; }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_text_light.jpg#gh-light-mode-only" alt="A text centered in its bounds, one justified to their bottom right, and one centered on an anchor point of its baseline" width="640">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_text_dark.jpg#gh-dark-mode-only" alt="A text centered in its bounds, one justified to their bottom right, and one centered on an anchor point of its baseline" width="640">
+</p>
 
 ## Named colors
 
@@ -252,6 +283,47 @@ overridden per component.
   `palette.<role>`.
 - Every element accepts an optional `id`, used in error messages.
 
+A `group` and a `layer` both fade what they hold, but not alike. A `mask` fades
+a layer by what it draws, and a `clip` cuts what it holds:
+
+```yui
+drawing Pair {
+    viewBox: rect (0, 0, 100, 60);
+    circle { center: point (34, 30); radius: 26; fill: palette.accent; }
+    circle { center: point (66, 30); radius: 26; fill: palette.text; }
+}
+
+group { opacity: 0.5; use Pair { bounds: rect (14, 2, 100, 60); } }      // each circle fades: the overlap shows
+layer { opacity: 0.5; use Pair { bounds: rect (142, 2, 100, 60); } }     // faded as one picture
+
+layer {
+    mask { rect { bounds: rect (270, 2, 100, 60); fillGradient: linearGradient (#ffffff, point (270, 0), #ffffff00, point (370, 0)); } }
+    use Pair { bounds: rect (270, 2, 100, 60); }
+}
+
+clip { bounds: rect (420, 16, 56, 32); use Pair { bounds: rect (398, 2, 100, 60); } }
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_scopes_light.jpg#gh-light-mode-only" alt="Two overlapping circles faded by a group, faded by a layer, masked by a gradient and clipped to a rectangle" width="640">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_scopes_dark.jpg#gh-dark-mode-only" alt="Two overlapping circles faded by a group, faded by a layer, masked by a gradient and clipped to a rectangle" width="640">
+</p>
+
+The two kinds of `repeat` side by side: the ticks of a scale are the rows of
+one `line`, and the lamps of the ring above are a `group` drawn turn after turn:
+
+```yui
+repeat i in 0 .. 41 {
+    line { from: point (4 + i * 5, bounds.height); to: point (4 + i * 5, bounds.height - (i % 5 == 0 ? 28 : 14));
+           stroke: i < 26 ? palette.accent : palette.outline; strokeWidth: 2; cap: round; }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_repeat_light.jpg#gh-light-mode-only" alt="A scale of ticks drawn by a repeat of lines, and a ring of lamps drawn by a repeat of groups" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_repeat_dark.jpg#gh-dark-mode-only" alt="A scale of ticks drawn by a repeat of lines, and a ring of lamps drawn by a repeat of groups" width="560">
+</p>
+
 ## View boxes and viewports
 
 A drawing normally works in the pixels of its component. With a `viewBox` it
@@ -274,6 +346,14 @@ drawing Icon {
     }
 }
 ```
+
+The same drawing painting components of four sizes, the last one wider than
+tall:
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_viewbox_light.jpg#gh-light-mode-only" alt="An icon drawn in a view box of 24, fitted and centered in components of four sizes" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_viewbox_dark.jpg#gh-dark-mode-only" alt="An icon drawn in a view box of 24, fitted and centered in components of four sizes" width="560">
+</p>
 
 - The drawing is not clipped to its `viewBox`: with `scaleToFill`, what falls
   outside the component is clipped by the component as usual.
@@ -299,6 +379,11 @@ group {
     group { strokeWidth: 1; line { from: point (2, 2); to: point (22, 22); } }
 }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_groups_light.jpg#gh-light-mode-only" alt="A square, a circle and two lines painted by the fill and the stroke of the group they are in" width="400">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_groups_dark.jpg#gh-dark-mode-only" alt="A square, a circle and two lines painted by the fill and the stroke of the group they are in" width="400">
+</p>
 
 - A group sets `fill`, `fillGradient`, `fillPattern`, `fillOpacity`, `stroke`,
   `strokeGradient`, `strokePattern`, `strokeOpacity`, `strokeWidth`,
@@ -337,6 +422,11 @@ drawing Toolbar {
 }
 ```
 
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_use_light.jpg#gh-light-mode-only" alt="One drawing painted twice, with another color, paint and opacity the second time" width="400">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_use_dark.jpg#gh-dark-mode-only" alt="One drawing painted twice, with another color, paint and opacity the second time" width="400">
+</p>
+
 - `use` takes `bounds` (the bounds around it by default), `transform`,
   `opacity`, `blend`, `visible`, `color`, the [paint a group sets](#paint-set-by-groups)
   and the properties the drawing declares.
@@ -371,9 +461,14 @@ drawing Chart {
     }
 
     rect { bounds: bounds.reduced (4); fillPattern: Dots; }
-    path { data: "M 4 20 L 12 8 L 20 14"; fill: none; stroke: palette.text; strokeWidth: 2; markerMid: Arrow; markerEnd: Arrow; }
+    path { data: "M 4 20 L 12 8 L 20 14"; fill: none; stroke: palette.text; strokeWidth: 0.75; markerMid: Arrow; markerEnd: Arrow; }
 }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_patterns_light.jpg#gh-light-mode-only" alt="A rectangle filled with a pattern of dots, under a path with an arrow at its middle and end vertices" width="400">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_patterns_dark.jpg#gh-dark-mode-only" alt="A rectangle filled with a pattern of dots, under a path with an arrow at its middle and end vertices" width="400">
+</p>
 
 | `pattern`       | Meaning                                                              |
 |-----------------|----------------------------------------------------------------------|
@@ -405,13 +500,18 @@ which are not painted. It is the `<clipPath>` of SVG:
 ```yui
 clip {
     clipPath {
-        circle { center: point (12, 12); radius: 8; }
-        rect { bounds: rect (0, 0, 12, 24); transform: transform.rotation (10deg); }
+        circle { center: point (12, 12); radius: 7; }
+        ellipse { bounds: rect (1, 9, 22, 6); transform: transform.rotation (-30deg, 12, 12); }
     }
 
-    rect { bounds: bounds; fill: palette.accent; }            // clipped to the circle and the rectangle together
+    rect { bounds: bounds; fill: palette.accent; }            // clipped to the circle and the ellipse together
 }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_clip_light.jpg#gh-light-mode-only" alt="A rectangle clipped to a circle and a turned ellipse together" width="400">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_clip_dark.jpg#gh-dark-mode-only" alt="A rectangle clipped to a circle and a turned ellipse together" width="400">
+</p>
 
 The outlines of the shapes of a `clipPath` are added up, and several `clipPath`
 blocks intersect. A `clipPath` holds shapes, `let`s and `repeat`s; a `text` has
@@ -470,6 +570,31 @@ layer {
   picture or one of its values changes. It needs a GPU: without one the layer is
   drawn as it is.
 - A layer with a `filter` can't have a `mask`: put it inside the masked layer.
+
+Some of them on the same star, the last one lighting a blurred copy of its
+alpha to raise its edges:
+
+```yui
+layer { filter { blur { deviation: 3; } } use Mark { bounds: rect (107, 4, 56, 56); } }
+layer { filter { dropShadow { offset: point (3, 4); deviation: 2; color: #000000a0; } } use Mark { bounds: rect (192, 4, 56, 56); } }
+layer { filter { colorMatrix { hueRotate: 120deg; } } use Mark { bounds: rect (277, 4, 56, 56); } }
+layer { filter { morphology { radius: 2; dilate: true; } } use Mark { bounds: rect (362, 4, 56, 56); } }
+
+layer {
+    filter {
+        blur { in: sourceAlpha; deviation: 2; }
+        lighting { scale: 6; specular: true; exponent: 30; azimuth: 225deg; elevation: 50deg; result: light; }
+        composite { in: light; in2: source; operator: atop; }
+    }
+
+    use Mark { bounds: rect (447, 4, 56, 56); }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_filters_light.jpg#gh-light-mode-only" alt="A star drawn as it is, then through a blur, a drop shadow, a color matrix, a morphology and a lighting filter" width="640">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_filters_dark.jpg#gh-dark-mode-only" alt="A star drawn as it is, then through a blur, a drop shadow, a color matrix, a morphology and a lighting filter" width="640">
+</p>
 
 ## Importing an SVG
 
@@ -560,7 +685,17 @@ drawing Knob {
     property showTicks: boolean = true;
 
     let r: min (bounds.width, bounds.height) * 0.5;
-    circle { center: bounds.center; radius: r * bezelSize; fill: ring; }
+
+    circle { center: bounds.center; radius: r; fill: ring; }
+    circle { center: bounds.center; radius: r * bezelSize; fill: palette.surfaceRaised; }
+
+    repeat i in 0 .. ticks {
+        circle { center: polar (bounds.center, r * bezelSize * 0.82, lerp (135deg, 405deg, i / (ticks - 1.0)));
+                 radius: 1.5; fill: palette.textMuted; visible: showTicks; }
+    }
+
+    line { from: bounds.center; to: polar (bounds.center, r * bezelSize * 0.62, lerp (135deg, 405deg, normalized));
+           stroke: palette.text; strokeWidth: 4; cap: round; }
 }
 ```
 
@@ -594,11 +729,23 @@ can vary them per class, id or state:
 
 ```yui
 style {
-    .knob { drawing: Knob; }
+    .knob         { drawing: Knob; }
     .knob:pressed { bezelSize: 0.84; }
-    #drive .knob { ring: palette.text; }
+    .plain        { bezelSize: 0.92; showTicks: false; }
+    #drive        { ring: palette.text; ticks: 5; }
+}
+
+Row {
+    Slider { class: knob; value: 0.2; }
+    Slider { class: "knob plain"; value: 0.5; }
+    Slider { id: drive; class: knob; value: 0.8; }
 }
 ```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_properties_light.jpg#gh-light-mode-only" alt="Three sliders painted by one drawing, whose bezel, ring color and ticks are set by style rules" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_properties_dark.jpg#gh-dark-mode-only" alt="Three sliders painted by one drawing, whose bezel, ring color and ticks are set by style rules" width="560">
+</p>
 
 From C++, set them on the component with `setProperty ("bezelSize", 0.7)`, and
 list them with `DrawingStyle::getProperties()`.

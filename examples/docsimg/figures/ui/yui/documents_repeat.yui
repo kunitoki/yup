@@ -1,0 +1,14 @@
+// size: 480 136
+Column {
+    gap: 10;
+
+    Slider { id: steps; sliderType: incDecButtons; minimum: 1; maximum: 8; interval: 1; value: 6; preferredHeight: 28; }
+
+    Row {
+        gap: 4; flexGrow: 1;
+
+        repeat i in 0 .. steps.value {
+            ToggleButton { text: format ("%d", i + 1); checked: i % 3 == 0; flexGrow: 1; }
+        }
+    }
+}

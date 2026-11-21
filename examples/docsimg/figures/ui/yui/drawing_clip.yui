@@ -1,0 +1,19 @@
+// size: 320 144
+drawing Cut {
+    viewBox: rect (0, 0, 24, 24);
+
+    clip {
+        clipPath {
+            circle { center: point (12, 12); radius: 7; }
+            ellipse { bounds: rect (1, 9, 22, 6); transform: transform.rotation (-30deg, 12, 12); }
+        }
+
+        rect { bounds: bounds; fill: palette.accent; }
+    }
+}
+
+style {
+    .cut { drawing: Cut; }
+}
+
+Component { class: cut; }

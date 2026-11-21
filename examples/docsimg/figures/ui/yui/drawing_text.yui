@@ -1,0 +1,29 @@
+// size: 560 132
+drawing Texts {
+    let big: defaultFont.withHeight (20);
+    let label: defaultFont.withHeight (12);
+
+    group {
+        fill: none; stroke: palette.outline;
+
+        rect { bounds: rect (4, 4, 150, 56); cornerRadius: 6; }
+        rect { bounds: rect (180, 4, 150, 56); cornerRadius: 6; }
+        line { from: point (356, 40); to: point (508, 40); }
+    }
+
+    text { bounds: rect (4, 4, 150, 56); text: "fitted"; font: big; fill: palette.text; }
+    text { bounds: rect (180, 4, 150, 56).reduced (8); text: "justified"; justification: bottomRight; font: big; fill: palette.text; }
+
+    circle { center: point (432, 40); radius: 3; fill: palette.accent; }
+    text { anchor: point (432, 40); textAnchor: middle; letterSpacing: 3; text: "anchored"; font: big; fill: palette.text; }
+
+    text { bounds: rect (4, 64, 150, 16);   text: "bounds";                font: label; fill: palette.textMuted; }
+    text { bounds: rect (180, 64, 150, 16); text: "justification";         font: label; fill: palette.textMuted; }
+    text { bounds: rect (356, 64, 152, 16); text: "anchor, letterSpacing"; font: label; fill: palette.textMuted; }
+}
+
+style {
+    .texts { drawing: Texts; }
+}
+
+Component { class: texts; }

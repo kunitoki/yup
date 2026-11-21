@@ -1,0 +1,35 @@
+// size: 480 148
+drawing Knob {
+    property bezelSize: number = 0.8;
+    property ring: color = palette.accent;
+    property ticks: integer = 11;
+    property showTicks: boolean = true;
+
+    let r: min (bounds.width, bounds.height) * 0.5;
+
+    circle { center: bounds.center; radius: r; fill: ring; }
+    circle { center: bounds.center; radius: r * bezelSize; fill: palette.surfaceRaised; }
+
+    repeat i in 0 .. ticks {
+        circle { center: polar (bounds.center, r * bezelSize * 0.82, lerp (135deg, 405deg, i / (ticks - 1.0)));
+                 radius: 1.5; fill: palette.textMuted; visible: showTicks; }
+    }
+
+    line { from: bounds.center; to: polar (bounds.center, r * bezelSize * 0.62, lerp (135deg, 405deg, normalized));
+           stroke: palette.text; strokeWidth: 4; cap: round; }
+}
+
+style {
+    .knob         { drawing: Knob; }
+    .knob:pressed { bezelSize: 0.84; }
+    .plain        { bezelSize: 0.92; showTicks: false; }
+    #drive        { ring: palette.text; ticks: 5; }
+}
+
+Row {
+    gap: 24; justify: center;
+
+    Slider { class: knob; value: 0.2; preferredWidth: 100; }
+    Slider { class: "knob plain"; value: 0.5; preferredWidth: 100; }
+    Slider { id: drive; class: knob; value: 0.8; preferredWidth: 100; }
+}

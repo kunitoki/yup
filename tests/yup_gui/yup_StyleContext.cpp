@@ -826,6 +826,22 @@ TEST_F (StyleContextTests, ARuleSetsThePaintMarginAndRestoresItWhenItStopsApplyi
     EXPECT_EQ (root.getPaintMargin(), EdgeSpacing<float> (2.0f));
 }
 
+TEST_F (StyleContextTests, ABlurFilterWidensThePaintMarginByWhatItSpreadsOver)
+{
+    Component root ("root");
+
+    attach (root, "style { .soft { filter: blur(4px); } }");
+    EXPECT_EQ (root.getPaintMargin(), EdgeSpacing<float>());
+
+    root.addStyleClass (Identifier ("soft"));
+    restyle (root);
+    EXPECT_EQ (root.getPaintMargin(), EdgeSpacing<float> (12.0f));
+
+    root.removeStyleClass (Identifier ("soft"));
+    restyle (root);
+    EXPECT_EQ (root.getPaintMargin(), EdgeSpacing<float>());
+}
+
 TEST_F (StyleContextTests, AShadowWidensThePaintMarginARuleSets)
 {
     Component root ("root");

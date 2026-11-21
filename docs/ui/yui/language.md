@@ -130,6 +130,10 @@ is written on (bare or prefixed by `self.`), `parent.`, the elements with an
 reads anything is a [binding](reactivity.md), kept up to date while what it
 reads changes.
 
+A property that is an `integer` takes any number, cut to a whole one as
+`int (...)` cuts it. The numbers of a model are never integers by type, so
+`radioGroup: mode.group;` needs no cast.
+
 The values of `style` and `palette` blocks are kept as written up to their `;`,
 because some aren't expressions (`transition: bezelSize 150ms easeOut;`,
 `drawing: Knob;`). They are compiled when the stylesheet applies them.

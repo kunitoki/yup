@@ -152,6 +152,35 @@ so changing one from C++ updates everything reading it:
 document.getRoot()->setProperty ("spacing", 16);
 ```
 
+Style rules read them too, so a document keeps its sizes and colors in one
+place:
+
+```yui
+tokens {
+    property spacing: number = 12;
+    property radius: number = 14;
+    property brand: color = #ff8800;
+}
+
+style {
+    TextButton { cornerRadius: radius; }
+    .brand     { backgroundColor: brand; textColor: #1b1b1e; }
+}
+
+Row {
+    gap: spacing;
+
+    TextButton { text: "Open"; flexGrow: 1; }
+    TextButton { text: "Save"; flexGrow: 1; }
+    TextButton { text: "Export"; class: brand; flexGrow: 1; }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/documents_tokens_light.jpg#gh-light-mode-only" alt="Three buttons whose gap, corner radius and one color come from the tokens of the document" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/documents_tokens_dark.jpg#gh-dark-mode-only" alt="Three buttons whose gap, corner radius and one color come from the tokens of the document" width="560">
+</p>
+
 ## Composite components
 
 A `component` block declares a new type made of other components:
@@ -381,6 +410,30 @@ Row {
 - In the body of a `component`, the range can read the properties of the
   component, as in `repeat i in 0 .. root.count`.
 
+Here the range reads a stepper, so its buttons add and remove the ones below
+it:
+
+```yui
+Column {
+    gap: 10;
+
+    Slider { id: steps; sliderType: incDecButtons; minimum: 1; maximum: 8; interval: 1; value: 6; preferredHeight: 28; }
+
+    Row {
+        gap: 4; flexGrow: 1;
+
+        repeat i in 0 .. steps.value {
+            ToggleButton { text: format ("%d", i + 1); checked: i % 3 == 0; flexGrow: 1; }
+        }
+    }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/documents_repeat_light.jpg#gh-light-mode-only" alt="A stepper showing 6 over a row of six numbered toggle buttons made by a repeat" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/documents_repeat_dark.jpg#gh-dark-mode-only" alt="A stepper showing 6 over a row of six numbered toggle buttons made by a repeat" width="560">
+</p>
+
 A tool or a test with no message loop calls
 `document.applyPendingChanges()` to have the components made again at once.
 
@@ -408,6 +461,25 @@ sliders:
 ```yui
 Slider { sliderType: incDecButtons; minimum: 1; maximum: 16; interval: 1; value <=> seq.length; }
 ```
+
+Both in a row, with no model:
+
+```yui
+Row {
+    gap: 8;
+
+    ToggleButton { text: "LFO";  radioGroup: 1; checked: true; flexGrow: 1; }
+    ToggleButton { text: "STEP"; radioGroup: 1; flexGrow: 1; }
+    ToggleButton { text: "ENV";  radioGroup: 1; flexGrow: 1; }
+
+    Slider { sliderType: incDecButtons; minimum: 1; maximum: 16; interval: 1; value: 8; preferredWidth: 150; }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/documents_radio_light.jpg#gh-light-mode-only" alt="Three exclusive toggle buttons, the first one on, beside a stepper showing 8" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/documents_radio_dark.jpg#gh-dark-mode-only" alt="Three exclusive toggle buttons, the first one on, beside a stepper showing 8" width="560">
+</p>
 
 ## See also
 

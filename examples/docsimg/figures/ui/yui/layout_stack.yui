@@ -1,0 +1,10 @@
+// size: 400 176
+style {
+    .over { backgroundColor: palette.accent; textColor: palette.onAccent; }
+}
+
+Stack {
+    TextButton { text: "content"; }
+    TextButton { text: "3"; class: over; alignSelf: start; justifySelf: end; margin: 8; preferredWidth: 28; preferredHeight: 28; }
+    TextButton { text: "saved"; class: over; alignSelf: end; justifySelf: center; margin: 10; preferredWidth: 120; preferredHeight: 28; }
+}

@@ -33,6 +33,14 @@ texel-space parameters such as blur radii or pixel block sizes from the texture,
 not from `bounds`. The subtree is rendered at full opacity and the component's
 opacity is applied once, when the effect draws into `g`.
 
+The texture also holds the [paint margin](component-basics.md#paint-margin) of
+the component, so what it paints around its bounds goes through the effect, and
+an effect such as a drop shadow has room to draw past them. The destination
+`bounds` are then the local bounds grown by the margin, up to the whole pixels
+around it, and start at a negative position: draw into `bounds`, not into a
+rectangle at the origin. Stylesheet `shadow:` and `glow:` layers are painted
+under the effect and are not part of the texture.
+
 ---
 
 ## Step 1 — Subclass `ComponentEffect`
@@ -157,6 +165,21 @@ if (auto ops = yup::FilterEffect::parse ("hue-rotate(90deg) brightness(115%)"); 
   <img class="dark-only rounded" src="../_static/images/ui/component-effects_built-in_dark.jpg#gh-dark-mode-only" alt="A component drawn as is, blurred, with a drop shadow, with a glow and in grayscale" width="640">
 </p>
 
+An effect set from C++ gets no room on its own, and what it draws past the
+[paint bounds](component-basics.md#paint-margin) of the component is cut. A
+blur, a drop shadow or a glow spreads three times its radius on every side, and
+a drop shadow its offset further, so give the component that margin:
+
+```cpp
+card.setComponentEffect (new yup::DropShadowEffect (yup::Color (0xaa000000), 5.0f, { 0.0f, 5.0f }));
+card.setPaintMargin (20.0f); // three times the radius, and the offset
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../_static/images/ui/component-effects_paint-margin_light.jpg#gh-light-mode-only" alt="A card whose drop shadow is cut at its bounds, and the same card with a paint margin and its whole shadow" width="400">
+  <img class="dark-only rounded" src="../_static/images/ui/component-effects_paint-margin_dark.jpg#gh-dark-mode-only" alt="A card whose drop shadow is cut at its bounds, and the same card with a paint margin and its whole shadow" width="400">
+</p>
+
 ### Using Effects from `.yui` Stylesheets
 
 Stylesheets separate built-in CSS filter chains from application-defined effects:
@@ -201,7 +224,10 @@ for full syntax and animation rules.
 The [graphics example](https://github.com/kunitoki/yup/tree/main/examples/graphics) demonstrates several reusable
 effect patterns implemented as `ComponentEffect` subclasses. Each lives in
 `examples/graphics/source/examples/ComponentEffects.h`, with its fragment shader
-precompiled from `examples/graphics/data/shaders/effect_*.frag`:
+precompiled from `examples/graphics/data/shaders/effect_*.frag`. The demo applies
+them, the built-in effects or a CSS filter chain to a component that paints
+around its bounds, and lets you change its paint margin, cache it to a texture
+and give it a stylesheet `shadow:`, `glow:` and `filter:`:
 
 | Effect | Shader | Parameter |
 |---|---|---|
@@ -227,9 +253,13 @@ fragment shader string and a parameter struct.
 ## Effect + Caching Interaction
 
 When both `setCachedToTexture(true)` and `setComponentEffect(...)` are set on
-the same component, the **effect takes priority**: the full subtree is rendered
-offscreen, the effect is applied, and the result is stored in the cache.
-Subsequent frames draw the cached (already-effected) texture directly.
+the same component, the **effect takes priority**: the subtree is rendered
+offscreen and the effect runs over it on every frame, as it can change from one
+frame to the next. What is kept between frames is the rendering of the subtree,
+see [Repainting Under an Effect](#repainting-under-an-effect).
+
+A cached component keeps what it paints in its paint margin too, the texture
+holds it. Its children are not in the texture: they are painted over it.
 
 If you need a cached background with an effect applied **only to the
 background** (not the children), set `setCachedToTexture(true)` on the
@@ -249,7 +279,9 @@ subtree is not painted at all and the effect runs over the previous rendering.
 That needs every dirty pixel to be covered again from the bottom up, so it applies
 when the component is opaque (and paints all of its bounds, as opaque components
 must) and clipped. A transparent component, one with unclipped rendering, a resized
-canvas or continuous rendering repaints the whole subtree as before.
+canvas or continuous rendering repaints the whole subtree as before. So does a
+repaint that reaches into the paint margin, or a pixel the bounds cover in part
+only: nothing opaque covers those again.
 
 So keep the component with the effect opaque, and repaint only what changes: a meter
 that repaints its own bounds costs the meter, not the interface under the effect.
@@ -299,6 +331,8 @@ private:
 - Return a point even when it falls outside the bounds, so a captured drag keeps
   tracking. Return `std::nullopt` only for degenerate mappings: hit-testing then
   skips the component, and other conversions fall back to its position.
+- Both get the `bounds` the effect is drawn into when the component is painted:
+  the local bounds grown by the paint margin.
 - Repainting anything inside a component with an effect runs the effect over the
   whole component again, since the effect can move pixels anywhere inside it.
 - When an animated effect moves content under a pointer that stays still, the

@@ -3021,7 +3021,8 @@ Path DrawingStyle::collectOutline (const std::vector<std::unique_ptr<Node>>& sha
 
         if (shape->kind == Node::Kind::shape)
         {
-            outline.appendPath (shape->drawing.getOutline (*slot->state, numRows));
+            const auto shapeOutline = shape->drawing.getOutline (*slot->state, numRows);
+            outline.appendPath (shapeOutline.isClockwise() ? shapeOutline : shapeOutline.reversed());
             continue;
         }
 

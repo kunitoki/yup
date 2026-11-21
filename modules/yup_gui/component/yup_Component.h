@@ -874,9 +874,10 @@ public:
         component clears what it drew there.
 
         A component still paints inside its parent's area only. The margin is not painted
-        for components on the desktop. Components with a ComponentEffect or cached to a
-        texture keep their content in their bounds, only their stylesheet `shadow:` layers
-        paint in the margin.
+        for components on the desktop. A ComponentEffect or a stylesheet `filter:` runs over
+        the margin too, and the texture of a component cached with setCachedToTexture() holds
+        it. The stylesheet `shadow:` layers are neither run through the effect nor cached, they
+        are painted under it.
 
         @param left    How far the component may paint left of its bounds
         @param top     How far the component may paint above its bounds
@@ -2327,13 +2328,15 @@ private:
     AffineTransform getTransformToTopLevelComponent() const;
     Point<float> getTopLevelScreenOrigin() const;
     void applyPaintState (Graphics& g, const RectangleList<float>& clipRegion, const RectangleList<float>* activeClipRegion = nullptr) const;
-    void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
+    void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr, bool paintShadows = true);
     void paintStyleShadows (Graphics& g) const;
+    EdgeSpacing<float> getOffscreenMargin() const;
+    Rectangle<float> getEffectBounds (float scale) const;
     void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
     bool hasActiveEffect() const noexcept;
     void applyActiveEffects (Graphics& g, GpuTexture::Ptr texture, Rectangle<float> bounds, float scale);
     void releaseUnusedEffectCanvases() noexcept;
-    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt);
+    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt, const EdgeSpacing<float>& margin = {}, bool paintShadows = true);
     std::optional<RectangleList<float>> takeEffectDirtyRegion (bool renderContinuous);
     void invalidateCanvasesIfThemeChanged();
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
@@ -2361,6 +2364,7 @@ private:
     Rectangle<float> boundsInParent;
     AffineTransform transform;
     EdgeSpacing<float> paintMargin;
+    Point<float> offscreenOrigin;
     ComponentNative::Ptr native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;

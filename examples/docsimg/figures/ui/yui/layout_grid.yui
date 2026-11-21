@@ -1,0 +1,12 @@
+// size: 480 216
+Grid {
+    columns: "96px 1fr";
+    rows: "32px 1fr 24px";
+    areas: "header header, nav content, footer footer";
+    gap: 6;
+
+    TextButton { text: "header";  gridArea: "header"; }
+    TextButton { text: "nav";     gridArea: "nav"; }
+    TextButton { text: "content"; gridArea: "content"; }
+    TextButton { text: "footer";  gridArea: "footer"; }
+}

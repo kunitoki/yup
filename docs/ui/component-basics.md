@@ -413,9 +413,10 @@ auto area = comp.getPaintBounds();              // local bounds grown by the mar
 In a `.yui` document it is the `paintMargin` property, see
 [Styles](yui/styles.md).
 
-The margin is still clipped to the parent. Desktop components, and components
-with an effect or cached to a texture, paint within their bounds only. A
-`PopupMenu` shown inside a parent component uses it for its drop shadow.
+The margin is still clipped to the parent, and desktop components paint within
+their bounds only. An [effect](component-effects.md), a stylesheet `filter:` and
+the texture of a cached component hold the margin too. A `PopupMenu` shown
+inside a parent component uses it for its drop shadow.
 
 ### `refreshDisplay()` — continuous animation
 

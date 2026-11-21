@@ -71,6 +71,34 @@ Parts combine as in CSS: `Row.toolbar > TextButton:hover` or
 `ComboBox:hover:enabled, ComboBox:open`. Pseudo-elements, `:not()` and sibling
 combinators are not supported.
 
+```yui
+style {
+    TextButton          { cornerRadius: 6; }
+    .primary            { backgroundColor: palette.accent; textColor: palette.onAccent; }
+    #reset              { textColor: #ff5544; outlineColor: #ff5544; }
+    [text="[text]"]     { cornerRadius: 20; }
+    .bar > ToggleButton { cornerRadius: 0; }
+    :checked            { backgroundToggledColor: #2e9e5b; }
+    :disabled           { opacity: 0.35; }
+}
+
+Row {
+    class: bar; gap: 8;
+
+    TextButton   { text: "Type"; flexGrow: 1; }
+    TextButton   { text: ".class"; class: primary; flexGrow: 1; }
+    TextButton   { id: reset; text: "#id"; flexGrow: 1; }
+    TextButton   { text: "[text]"; flexGrow: 1; }
+    ToggleButton { text: ":checked"; checked: true; flexGrow: 1; }
+    TextButton   { text: ":disabled"; enabled: false; flexGrow: 1; }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/styles_selectors_light.jpg#gh-light-mode-only" alt="Six buttons, each styled by a rule matching its type, its class, its id, one of its properties or its state" width="640">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/styles_selectors_dark.jpg#gh-dark-mode-only" alt="Six buttons, each styled by a rule matching its type, its class, its id, one of its properties or its state" width="640">
+</p>
+
 A rule overrides a rule with a lower specificity (IDs count most, then classes,
 attributes and pseudo-classes, then types), and a later rule overrides an
 earlier one with the same specificity. Components are restyled when their
@@ -142,7 +170,7 @@ stylesheet can reshape the built-in widgets without a drawing:
 
 | Widget | Properties (default) |
 |---|---|
-| `Slider` | `trackWidth` (4) and `thumbSize` (16) for linear sliders; `rotaryInset` (unset: derived from track and thumb), `rotaryTrackWidth` (8) and `rotaryThumbRadius` (5) for rotary ones |
+| `Slider` | `trackWidth` (4) and `thumbSize` (16) for linear sliders; for rotary ones, as proportions of the width, `rotaryInset` (0.1), `rotaryArcWidth` (0.075), `rotaryDialInset` (0.105), `rotaryDialOutlineWidth` (0.0175), `rotaryPointerInset` (0.175) and `rotaryPointerWidth` (0.03) |
 | `TextButton`, `ToggleButton`, `TextEditor`, `ComboBox` | `cornerRadius` (4), `outlineWidth` (1), `focusedOutlineWidth` (2) |
 | `PopupMenu` | `cornerRadius` (4), `outlineWidth` (1), `itemCornerRadius` (2), `itemHeight` (22), `verticalPadding` (4) |
 | `SwitchButton` | `cornerRadius` (unset: a pill), `thumbInset` (4) |
@@ -176,6 +204,41 @@ style automatically.
 Like the colors they are kept per widget type (`TextButton::Style::cornerRadiusId`),
 so a `cornerRadius` given to a card doesn't round the buttons inside it. They
 only change the painting: a slider keeps its own hit area for the thumb.
+
+Three widgets as the theme draws them, and with their geometry set by rules:
+
+```yui
+style {
+    .styled TextButton   { cornerRadius: 16; outlineWidth: 2; }
+    .styled Slider       { trackWidth: 10; thumbSize: 24; }
+    .styled SwitchButton { cornerRadius: 4; thumbInset: 7; }
+}
+
+Row {
+    gap: 32;
+
+    Column {
+        gap: 10; flexGrow: 1;
+
+        TextButton   { text: "Default"; flexGrow: 1; }
+        Slider       { value: 0.6; flexGrow: 1; }
+        SwitchButton { checked: true; flexGrow: 1; }
+    }
+
+    Column {
+        class: styled; gap: 10; flexGrow: 1;
+
+        TextButton   { text: "Styled"; flexGrow: 1; }
+        Slider       { value: 0.6; flexGrow: 1; }
+        SwitchButton { checked: true; flexGrow: 1; }
+    }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/styles_geometry_light.jpg#gh-light-mode-only" alt="A button, a slider and a switch as the theme draws them, and with another corner radius, track and thumb" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/styles_geometry_dark.jpg#gh-dark-mode-only" alt="A button, a slider and a switch as the theme draws them, and with another corner radius, track and thumb" width="560">
+</p>
 
 ### Declaring properties
 
@@ -296,6 +359,40 @@ style {
 }
 ```
 
+So one drawing gives as many looks as there are rules setting its properties:
+
+```yui
+drawing Meter {
+    property level: number = 0.5;
+    property tone: color = palette.accent;
+    property segments: integer = 12;
+
+    repeat i in 0 .. segments {
+        rect { bounds: rect (i * bounds.width / segments + 1, 0, bounds.width / segments - 2, bounds.height);
+               cornerRadius: 2; fill: i < level * segments ? tone : palette.outline.withAlpha (0.4); }
+    }
+}
+
+style {
+    .meter { drawing: Meter; }
+    .hot   { tone: #ff5544; level: 0.9; }
+    #fine  { segments: 32; level: 0.4; }
+}
+
+Column {
+    gap: 10;
+
+    Component { class: meter; flexGrow: 1; }
+    Component { class: "meter hot"; flexGrow: 1; }
+    Component { id: fine; class: meter; flexGrow: 1; }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/styles_drawing_light.jpg#gh-light-mode-only" alt="Three meters painted by one drawing, with the level, the color and the number of segments rules give them" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/styles_drawing_dark.jpg#gh-dark-mode-only" alt="Three meters painted by one drawing, with the level, the color and the number of segments rules give them" width="560">
+</p>
+
 ## Layout
 
 Layout container properties (`gap`, `padding`, `justify`, ...) and item
@@ -309,6 +406,34 @@ style {
     .compact Grid       { columns: 2; }
 }
 ```
+
+The same toolbar twice, the second one with one more class:
+
+```yui
+style {
+    Row.toolbar        { gap: 6; }
+    .toolbar > .spacer { flexGrow: 1; }
+    Row.compact        { gap: 2; justify: center; }
+    .compact > .spacer { flexGrow: 0; preferredWidth: 24; }
+}
+
+Column {
+    gap: 12;
+
+    Row { class: toolbar; flexGrow: 1;
+          TextButton { text: "Open"; preferredWidth: 72; } TextButton { text: "Save"; preferredWidth: 72; }
+          Component { class: spacer; } TextButton { text: "Help"; preferredWidth: 72; } }
+
+    Row { class: "toolbar compact"; flexGrow: 1;
+          TextButton { text: "Open"; preferredWidth: 72; } TextButton { text: "Save"; preferredWidth: 72; }
+          Component { class: spacer; } TextButton { text: "Help"; preferredWidth: 72; } }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/styles_layout_light.jpg#gh-light-mode-only" alt="A toolbar with its last button pushed to the end, and the same toolbar gathered at the center by another class" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/styles_layout_dark.jpg#gh-dark-mode-only" alt="A toolbar with its last button pushed to the end, and the same toolbar gathered at the center by another class" width="560">
+</p>
 
 See [Declarative layout in `.yui`](layout.md) and
 [Layout components](../component-layout.md#layout-components) for the containers
@@ -421,6 +546,8 @@ style {
     `palette.accent.withAlpha (0.5)`)
   Consecutive color-matrix filters collapse into a single GPU pass, and `filter:`
   runs in its own style layer so it never overwrites a C++ `setComponentEffect()`.
+  The filter covers what the component paints in its paint margin too, while
+  its `shadow:` and `glow:` layers stay under it, unfiltered.
 - `effect:` is strictly for user-defined `ComponentEffect` factories registered
   by the application in `ComponentEffectRegistry`, or `none`:
 
@@ -435,6 +562,40 @@ style {
   `waitArrow`, `hand`, `crosshair`, `crossbones`, `resizeLeftRight`,
   `resizeUpDown`, `resizeTopLeftRightBottom`, `resizeBottomLeftRightTop` and
   `resizeAll`.
+
+The functions of `filter:` on the same button:
+
+```yui
+style {
+    TextButton { backgroundColor: palette.accent; textColor: palette.onAccent; cornerRadius: 8; }
+
+    .blur   { filter: blur(2px); }
+    .shadow { filter: drop-shadow(0 6 8 palette.accent.withAlpha (0.7)); }
+    .bright { filter: brightness(150%); }
+    .gray   { filter: grayscale(100%); }
+    .sepia  { filter: sepia(100%); }
+    .hue    { filter: hue-rotate(120deg); }
+    .invert { filter: invert(100%); }
+}
+
+Grid {
+    columns: 4; rows: 2; gap: 16;
+
+    TextButton { text: "none"; }
+    TextButton { text: "blur"; class: blur; }
+    TextButton { text: "drop-shadow"; class: shadow; }
+    TextButton { text: "brightness"; class: bright; }
+    TextButton { text: "grayscale"; class: gray; }
+    TextButton { text: "sepia"; class: sepia; }
+    TextButton { text: "hue-rotate"; class: hue; }
+    TextButton { text: "invert"; class: invert; }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/styles_filters_light.jpg#gh-light-mode-only" alt="Eight buttons: one as it is, the others blurred, with a drop shadow, brighter, gray, sepia, with its hue turned and inverted" width="640">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/styles_filters_dark.jpg#gh-dark-mode-only" alt="Eight buttons: one as it is, the others blurred, with a drop shadow, brighter, gray, sepia, with its hue turned and inverted" width="640">
+</p>
 
 A component that paints outside its bounds itself, as a drawing with a glow
 around a lamp does, asks for the room with `paintMargin`, on the component or
@@ -452,9 +613,37 @@ Only what is painted changes: the bounds, the layout and the hit testing of
 the component stay the same, and what it paints is still clipped to its
 parent.
 
-The paint margin of the component grows automatically to hold its `shadow:`,
-`glow:` and `filter: drop-shadow(...)` layers, over the one `paintMargin`
-asks for. When no rule sets one of these
+A lamp whose glow is wider than its component, cut to its bounds and then
+given the room:
+
+```yui
+drawing Lamp {
+    circle { center: bounds.center; radius: bounds.width * 0.85; fill: palette.accent.withAlpha (0.4); feather: 16; }
+    circle { center: bounds.center; radius: bounds.width / 2 - 2; fill: palette.accent; }
+}
+
+style {
+    .lamp { drawing: Lamp; }
+    .room { paintMargin: 28; }
+}
+
+Row {
+    gap: 96; justify: center; align: center;
+
+    Component { class: lamp; preferredWidth: 40; preferredHeight: 40; }
+    Component { class: "lamp room"; preferredWidth: 40; preferredHeight: 40; }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/styles_paint-margin_light.jpg#gh-light-mode-only" alt="A lamp whose glow is cut to the square of its component, and the same lamp glowing all around once it has a paint margin" width="480">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/styles_paint-margin_dark.jpg#gh-dark-mode-only" alt="A lamp whose glow is cut to the square of its component, and the same lamp glowing all around once it has a paint margin" width="480">
+</p>
+
+The paint margin of the component grows automatically to hold its `shadow:`
+and `glow:` layers, and what a `filter:` spreads over: three times the radius
+of a `blur(...)`, and of a `drop-shadow(...)` with its offset. It grows over the
+one `paintMargin` asks for. When no rule sets one of these
 declarations anymore, the component gets back the cursor, effect or paint margin
 it had before, unless the application changed it in between. Unknown names and
 malformed declarations are reported as diagnostics.

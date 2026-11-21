@@ -1,0 +1,9 @@
+// size: 560 100
+Row {
+    gap: 6;
+
+    TextButton { text: "order: 1"; order: 1; preferredWidth: 80; }
+    TextButton { text: "margin"; margin: "0 20"; preferredWidth: 80; }
+    TextButton { text: "alignSelf: end"; alignSelf: end; preferredWidth: 120; preferredHeight: 24; }
+    TextButton { text: "flexGrow: 1"; flexGrow: 1; }
+}

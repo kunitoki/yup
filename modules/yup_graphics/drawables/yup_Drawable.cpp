@@ -500,10 +500,8 @@ void Drawable::paintElement (Graphics& g,
                         clipTransform = clipTransform.followedBy (unitsTransform);
                     }
 
-                    if (! clipTransform.isIdentity())
-                        result.appendPath (*elementPath, clipTransform);
-                    else
-                        result.appendPath (*elementPath);
+                    const bool endsClockwise = elementPath->isClockwise() == (clipTransform.getDeterminant() >= 0.0f);
+                    result.appendPath (endsClockwise ? *elementPath : elementPath->reversed(), clipTransform);
                 }
 
                 return result;
