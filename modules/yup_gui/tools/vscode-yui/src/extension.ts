@@ -1,6 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
+import { YuiAgentBackend } from "./agentBackend";
+import { YuiAgentTools } from "./agentSetup";
 import { collectDocumentFiles, realPathOf, toolPathOf } from "./documentFiles";
 import { YuiPreview } from "./preview";
 import { errorMessage, findToolScript, YuiTool, YuiToolFile, YuiToolResult } from "./tool";
@@ -325,6 +327,11 @@ class YuiSession {
     /** Whether there is a tool to run, without which what it gives is quietly off. */
     hasTool (): boolean {
         return this.tool !== undefined && this.tool.isAvailable ();
+    }
+
+    /** The tool, for who runs it on documents of its own. */
+    yuiTool (): YuiTool | undefined {
+        return this.hasTool () ? this.tool : undefined;
     }
 
     dispose (): void {
@@ -724,8 +731,9 @@ export function activate (context: vscode.ExtensionContext): void {
     const diagnostics = vscode.languages.createDiagnosticCollection ("yui");
     const session = new YuiSession (context, output, diagnostics);
     const preview = new YuiPreview (session, session.toolScript ());
+    const agentTools = new YuiAgentTools (new YuiAgentBackend (session, preview), String (context.extension.packageJSON.version), message => session.log (message));
 
-    context.subscriptions.push (output, diagnostics, session, preview);
+    context.subscriptions.push (output, diagnostics, session, preview, agentTools);
 
     const modelsWatcher = vscode.workspace.createFileSystemWatcher ("**/*.json");
     const modelsChanged = (uri: vscode.Uri) => session.modelsChanged (uri.fsPath);
@@ -747,13 +755,20 @@ export function activate (context: vscode.ExtensionContext): void {
                 session.modelsChanged (event.document.uri.fsPath);
         }),
         vscode.workspace.onDidCloseTextDocument (document => session.forget (document)),
-        vscode.workspace.onDidChangeConfiguration (event => session.configurationChanged (event)),
+        vscode.workspace.onDidChangeConfiguration (event => {
+            session.configurationChanged (event);
+
+            if (event.affectsConfiguration ("yui.mcp"))
+                void agentTools.apply ();
+        }),
         vscode.languages.registerCompletionItemProvider ({ language: "yui" }, new YuiCompletionProvider (session), ".", ":"),
         vscode.commands.registerCommand ("yui.preview", () => preview.open ()),
-        vscode.commands.registerCommand ("yui.importSvg", () => importSvg (session))
+        vscode.commands.registerCommand ("yui.importSvg", () => importSvg (session)),
+        vscode.commands.registerCommand ("yui.setUpAgentTools", () => agentTools.setUp ())
     );
 
     session.lintOpenDocuments ();
+    void agentTools.apply ();
 }
 
 export function deactivate (): void {

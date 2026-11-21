@@ -1,0 +1,292 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#include "yup_YuiCommands.h"
+#include "yup_YuiToolSupport.h"
+
+#include <cmath>
+#include <iostream>
+
+using namespace yup;
+
+namespace
+{
+
+//==============================================================================
+/** A component a document describes, at its place in the interface. */
+struct Described
+{
+    Component* component = nullptr;
+    DataTree element;
+    Point<float> origin;
+    bool isShown = true;
+};
+
+// The components a document describes right under another one. Those a widget creates for itself are
+// passed through, so what they hold is listed in their place
+void collectDescribed (const YuiBuilder& builder, const Component& parent, Point<float> origin, bool isShown, std::vector<Described>& children)
+{
+    for (int index = 0; index < parent.getNumChildComponents(); ++index)
+    {
+        auto* child = parent.getChildComponent (index);
+        const Point<float> childOrigin { origin.getX() + child->getX(), origin.getY() + child->getY() };
+        const auto element = builder.findElementFor (child);
+
+        if (element.isValid())
+            children.push_back ({ child, element, childOrigin, isShown && child->isVisible() });
+        else
+            collectDescribed (builder, *child, childOrigin, isShown && child->isVisible(), children);
+    }
+}
+
+std::vector<Described> findDescribedChildren (const YuiBuilder& builder, const Described& parent)
+{
+    std::vector<Described> children;
+    collectDescribed (builder, *parent.component, parent.origin, parent.isShown, children);
+    return children;
+}
+
+double rounded (float value)
+{
+    return std::round (static_cast<double> (value) * 100.0) / 100.0;
+}
+
+//==============================================================================
+/** Writes the layout of an interface down, with what looks wrong in it. */
+class LayoutDescription
+{
+public:
+    explicit LayoutDescription (YuiToolView& viewToDescribe)
+        : view (viewToDescribe)
+        , builder (viewToDescribe.getDocument().getBuilder())
+        , sourceMap (viewToDescribe.getDocument().getSourceMap())
+        , root (*viewToDescribe.getRoot())
+    {
+    }
+
+    var describe()
+    {
+        const Described described { &root, builder.findElementFor (&root), {}, root.isVisible() };
+        const auto tree = describe (described, {}, true);
+
+        auto* layout = new DynamicObject();
+        layout->setProperty ("file", view.getInput().getFullPathName());
+        layout->setProperty ("width", rounded (root.getWidth()));
+        layout->setProperty ("height", rounded (root.getHeight()));
+        layout->setProperty ("root", tree);
+        layout->setProperty ("warnings", var (warnings));
+
+        return var (layout);
+    }
+
+private:
+    // Where the element of a component was written, when the document still knows
+    void addPosition (DynamicObject& record, const DataTree& element) const
+    {
+        if (sourceMap == nullptr || ! element.isValid())
+            return;
+
+        YuiDiagnostic probe;
+        probe.element = element;
+
+        const auto located = sourceMap->locate (probe);
+
+        if (located.line <= 0)
+            return;
+
+        if (located.source.isNotEmpty())
+            record.setProperty ("file", view.getInput().getParentDirectory().getChildFile (located.source).getFullPathName());
+
+        record.setProperty ("line", located.line);
+        record.setProperty ("column", located.column);
+    }
+
+    void warn (const Described& described, const String& label, const String& path, const String& problem)
+    {
+        auto* warning = new DynamicObject();
+        warning->setProperty ("message", label + " " + problem);
+        warning->setProperty ("path", path);
+        addPosition (*warning, described.element);
+
+        warnings.add (var (warning));
+    }
+
+    var describe (const Described& described, const String& path, bool checkPlace)
+    {
+        const auto& component = *described.component;
+        const auto typeName = described.element.isValid() ? described.element.getType().toString() : component.getTypeInfo().getTypeName().toString();
+        const auto id = component.getComponentID();
+        const Rectangle<float> bounds { described.origin.getX(), described.origin.getY(), component.getWidth(), component.getHeight() };
+
+        auto* record = new DynamicObject();
+        record->setProperty ("type", typeName);
+
+        if (id.isNotEmpty())
+            record->setProperty ("id", id);
+
+        record->setProperty ("path", path);
+        addPosition (*record, described.element);
+        record->setProperty ("bounds", var (Array<var> { rounded (bounds.getX()), rounded (bounds.getY()), rounded (bounds.getWidth()), rounded (bounds.getHeight()) }));
+
+        if (! component.isVisible())
+            record->setProperty ("visible", false);
+
+        static const Identifier textProperty ("text");
+
+        if (const auto text = component.getProperty (textProperty); text.isString() && text.toString().isNotEmpty())
+            record->setProperty ("text", text.toString().substring (0, 80));
+
+        // What is wrong with a component is wrong with all it holds, which is then not told again
+        if (checkPlace && described.isShown)
+        {
+            const auto label = id.isNotEmpty() ? typeName + " #" + id : typeName;
+            const auto hasNoWidth = bounds.getWidth() < 1.0f;
+            const auto hasNoHeight = bounds.getHeight() < 1.0f;
+
+            if (hasNoWidth || hasNoHeight)
+            {
+                warn (described, label, path, String ("has no ") + (hasNoWidth && hasNoHeight ? "size" : (hasNoWidth ? "width" : "height")) + ", so nothing of it shows: inside a Row or a Column it needs a preferred size or a flexGrow");
+                checkPlace = false;
+            }
+            else if (! bounds.intersects (root.getLocalBounds()))
+            {
+                warn (described, label, path, "lies outside the interface");
+                checkPlace = false;
+            }
+        }
+
+        Array<var> children;
+        int index = 0;
+
+        for (const auto& child : findDescribedChildren (builder, described))
+            children.add (describe (child, path.isEmpty() ? String (index++) : path + "/" + String (index++), checkPlace));
+
+        if (! children.isEmpty())
+            record->setProperty ("children", var (children));
+
+        return var (record);
+    }
+
+    YuiToolView& view;
+    const YuiBuilder& builder;
+    std::shared_ptr<const YuiSourceMap> sourceMap;
+    Component& root;
+    Array<var> warnings;
+};
+
+} // namespace
+
+//==============================================================================
+
+var describeYuiToolLayout (YuiToolView& view)
+{
+    if (! view.hasInterface())
+        return {};
+
+    return LayoutDescription (view).describe();
+}
+
+Component* findYuiToolComponent (YuiToolView& view, const String& path)
+{
+    if (! view.hasInterface())
+        return nullptr;
+
+    const auto& builder = view.getDocument().getBuilder();
+    Described current { view.getRoot(), {}, {}, true };
+
+    for (const auto& step : StringArray::fromTokens (path, "/", ""))
+    {
+        // A step is the place of a child, which a few digits always tell
+        if (step.isEmpty() || step.length() > 6 || ! step.containsOnly ("0123456789"))
+            return nullptr;
+
+        const auto children = findDescribedChildren (builder, current);
+        const auto index = step.getIntValue();
+
+        if (index >= static_cast<int> (children.size()))
+            return nullptr;
+
+        current = children[static_cast<std::size_t> (index)];
+    }
+
+    return current.component;
+}
+
+int runYuiInspectCommand (int argc, char** argv)
+{
+    YuiToolViewOptions options;
+    YuiToolModels models;
+
+    for (int i = 2; i < argc; ++i)
+    {
+        const auto isValid = readYuiToolViewOption (argc, argv, i, options, models);
+
+        if (! isValid.has_value())
+        {
+            std::cerr << "invalid argument: " << argv[i] << "\n";
+            return 2;
+        }
+
+        if (! *isValid)
+            return 2;
+    }
+
+    const auto& target = options.target;
+
+    if (options.input == File() || (target.drawing.isNotEmpty() && target.palette.isNotEmpty()) || (target.hostType.isNotEmpty() && target.palette.isNotEmpty()))
+    {
+        std::cerr << "Inspecting requires an input file, with --drawing or --palette but not both\n";
+        return 2;
+    }
+
+    if (! options.input.existsAsFile())
+    {
+        std::cerr << "can't read '" << options.input.getFullPathName() << "'\n";
+        return 2;
+    }
+
+    YuiToolView view (options, models);
+    const auto& shown = view.getShown();
+
+    if (shown.status == YuiToolShown::Status::nothing)
+    {
+        std::cerr << options.input.getFullPathName() << ": error: nothing to inspect, " << shown.message << "\n";
+        return 1;
+    }
+
+    if (shown.status == YuiToolShown::Status::invalidName)
+    {
+        std::cerr << "invalid name given to --drawing, --palette or --as\n";
+        return 2;
+    }
+
+    for (const auto& problem : view.findProblems())
+        if (problem.isError)
+            problem.print();
+
+    if (! view.hasInterface())
+        return 1;
+
+    view.settle();
+
+    std::cout << JSON::toString (describeYuiToolLayout (view)).toStdString() << "\n";
+    return 0;
+}

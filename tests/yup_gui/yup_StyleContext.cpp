@@ -940,6 +940,42 @@ TEST_F (StyleContextTests, AncestorStateClassAndIdChangesRestyleCombinatorDescen
     EXPECT_DOUBLE_EQ (glow (icon), 6.0);
 }
 
+TEST_F (StyleContextTests, HoverAndPressedSetWithoutAPointerMatchTheirPseudoClasses)
+{
+    Component root ("root");
+    Component row ("row");
+    Component icon ("icon");
+    icon.addStyleClass (Identifier ("icon"));
+
+    root.addAndMakeVisible (row);
+    row.addAndMakeVisible (icon);
+
+    attach (root, R"yui(
+        style {
+            .icon { glow: 1; }
+            #row:hover .icon { glow: 2; }
+            #row:pressed > .icon { glow: 3; }
+        })yui");
+
+    icon.setHovered (true);
+    restyle (root);
+    EXPECT_TRUE (row.isHovered());
+    EXPECT_TRUE (root.isHovered());
+    EXPECT_DOUBLE_EQ (glow (icon), 2.0);
+
+    icon.setPressed (true);
+    restyle (root);
+    EXPECT_TRUE (row.isPressed());
+    EXPECT_DOUBLE_EQ (glow (icon), 3.0);
+
+    icon.setPressed (false);
+    icon.setHovered (false);
+    restyle (root);
+    EXPECT_FALSE (row.isHovered());
+    EXPECT_FALSE (row.isPressed());
+    EXPECT_DOUBLE_EQ (glow (icon), 1.0);
+}
+
 TEST_F (StyleContextTests, FocusWithinAndActiveRestyleAncestorsAndSiblings)
 {
     Component root ("root");

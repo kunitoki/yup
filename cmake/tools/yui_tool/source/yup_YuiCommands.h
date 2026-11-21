@@ -43,3 +43,12 @@ int runYuiImportSvgCommand (int argc, char** argv);
 
 /** Draws a document, or a drawing or a palette it declares, into an image. */
 int runYuiRenderCommand (int argc, char** argv);
+
+/** Writes the layout of a document as JSON: its components with their place, and what looks wrong with them. */
+int runYuiInspectCommand (int argc, char** argv);
+
+/** Serves the tools of an agent over the Model Context Protocol, on the standard input and output.
+
+    Only the tool built for a desktop has it: the one built for the web is called into by its host.
+*/
+int runYuiMcpCommand (int argc, char** argv);

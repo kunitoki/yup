@@ -19,6 +19,7 @@
   ==============================================================================
 */
 
+#include "../source/yup_YuiAgentTools.h"
 #include "../source/yup_YuiCommands.h"
 #include "../source/yup_YuiToolSupport.h"
 
@@ -61,6 +62,38 @@ Size<float> findDeclaredSize (const DataTree& tree)
     };
 
     return { read ("width"), read ("height") };
+}
+
+// The values of the models as an agent reads them. A long list is the data of a meter rather than something
+// set by hand, and is told by its length
+var summarizeModels (const var& models)
+{
+    constexpr int longestListShown = 16;
+
+    auto* summary = new DynamicObject();
+    const auto* declared = models.getDynamicObject();
+
+    if (declared == nullptr)
+        return var (summary);
+
+    for (const auto& model : declared->getProperties())
+    {
+        auto* values = new DynamicObject();
+
+        if (const auto* properties = model.value.getDynamicObject())
+        {
+            for (const auto& property : properties->getProperties())
+            {
+                const auto* list = property.value.getArray();
+
+                values->setProperty (property.name, list != nullptr && list->size() > longestListShown ? var (String (list->size()) + " values") : property.value);
+            }
+        }
+
+        summary->setProperty (model.name, var (values));
+    }
+
+    return var (summary);
 }
 
 //==============================================================================
@@ -113,6 +146,9 @@ public:
 
         auto& document = session->view.getDocument();
         const auto shown = loadYuiToolTarget (document, session->view.getLoader(), input, target);
+
+        shownInput = input;
+        shownTarget = shown.target;
 
         Array<var> problems;
 
@@ -180,6 +216,48 @@ public:
         return session != nullptr ? session->models.toJson() : var (new DynamicObject());
     }
 
+    /** Captures the interface as it is shown now, for an agent: its image, with what it is an image of. */
+    YuiAgentResult capture (const var& arguments)
+    {
+        if (session == nullptr || session->view.getDocument().getRoot() == nullptr)
+            return YuiAgentResult::fail ("the preview shows no interface: open a .yui document and run 'YUI: Open Preview'");
+
+        double scale = 1.0;
+
+        if (const auto read = readYuiAgentScale (arguments, scale); read.failed())
+            return YuiAgentResult::fail (read.getErrorMessage());
+
+        auto* native = getNativeComponent();
+        auto* context = native != nullptr ? native->getGraphicsContext() : nullptr;
+        const auto image = context != nullptr ? snapshotToImage (*context, true, static_cast<float> (scale)) : Image();
+
+        YuiAgentResult result;
+
+        if (! encodeYuiToolPng (image, result.image))
+            return YuiAgentResult::fail ("the preview has no graphics device to capture with");
+
+        auto* captured = new DynamicObject();
+        captured->setProperty ("file", shownInput.getFullPathName());
+
+        if (shownTarget.drawing.isNotEmpty())
+            captured->setProperty ("drawing", shownTarget.drawing);
+
+        if (shownTarget.palette.isNotEmpty())
+            captured->setProperty ("palette", shownTarget.palette);
+
+        if (shownTarget.hostType.isNotEmpty())
+            captured->setProperty ("as", shownTarget.hostType);
+
+        captured->setProperty ("width", image.getWidth());
+        captured->setProperty ("height", image.getHeight());
+        captured->setProperty ("scale", scale);
+        captured->setProperty ("theme", shownLight.value_or (false) ? "light" : "dark");
+        captured->setProperty ("models", summarizeModels (session->models.toJson()));
+
+        result.text = JSON::toString (var (captured));
+        return result;
+    }
+
 private:
     // The models outlive the document they are set on
     struct Session
@@ -190,11 +268,79 @@ private:
 
     std::unique_ptr<Session> session;
     String sessionKey;
+    File shownInput;
+    YuiToolTarget shownTarget;
     std::optional<bool> shownLight;
 };
 
 PreviewWindow* previewWindow = nullptr;
 MemoryBlock pendingFile;
+
+//==============================================================================
+// Sets the module up to work on the files of its host with no page to open a window in: once, as an
+// application is, default theme included
+bool prepareToRunWithoutPage()
+{
+    static const bool hasDriver = SDL_SetHint (SDL_HINT_VIDEO_DRIVER, "dummy");
+    static const ScopedYupInitialiser_GUI gui;
+    static const ScopedYupInitialiser_Windowing windowing;
+
+    if (! hasDriver || ApplicationTheme::getGlobalTheme() == nullptr)
+        return false;
+
+    // A command runs to its end, so the loop the message manager started has nothing to do but keep the
+    // host awake: it is stopped, and the runtime that would end with it is kept for the next commands.
+    // The loop of a running application is left alone
+    static const bool isLoopStopped = []
+    {
+        if (YUPApplicationBase::getInstance() != nullptr)
+            return false;
+
+        emscripten_runtime_keepalive_push();
+        emscripten_cancel_main_loop();
+        return true;
+    }();
+
+    ignoreUnused (isLoopStopped);
+
+    getFilesFolder().createDirectory();
+    getFilesFolder().setAsCurrentWorkingDirectory();
+
+    return true;
+}
+
+// What the tools of an agent get here: the files of the host and, in a page, the window it shows to draw with
+YuiAgentHost makeAgentHost()
+{
+    YuiAgentHost host;
+    host.baseFolder = getFilesFolder();
+
+    if (previewWindow == nullptr)
+        return host;
+
+    host.snapshot = [] (Component& component, double scale)
+    {
+        Image image;
+        auto* native = previewWindow != nullptr ? previewWindow->getNativeComponent() : nullptr;
+
+        if (auto* context = native != nullptr ? native->getGraphicsContext() : nullptr)
+        {
+            native->runWithGraphicsContext ([&]
+            {
+                image = component.snapshotToImage (*context, true, static_cast<float> (scale));
+            });
+        }
+
+        return image;
+    };
+
+    host.capturePreview = [] (const var& arguments)
+    {
+        return previewWindow != nullptr ? previewWindow->capture (arguments) : YuiAgentResult::fail ("the preview is closed");
+    };
+
+    return host;
+}
 
 //==============================================================================
 class PreviewApplication final : public YUPApplication
@@ -289,34 +435,11 @@ extern "C"
         if (const auto exitCode = checkYuiToolCommand (argc, argv.data()))
             return *exitCode;
 
-        // Set up once as an application is, default theme included, with no page to open a window in
-        static const bool hasDriver = SDL_SetHint (SDL_HINT_VIDEO_DRIVER, "dummy");
-        static const ScopedYupInitialiser_GUI gui;
-        static const ScopedYupInitialiser_Windowing windowing;
-
-        if (! hasDriver || ApplicationTheme::getGlobalTheme() == nullptr)
+        if (! prepareToRunWithoutPage())
         {
             std::cerr << "yup_yui_tool: can't initialise the windowing system\n";
             return 2;
         }
-
-        // A command runs to its end, so the loop the message manager started has nothing to do but keep the
-        // host awake: it is stopped, and the runtime that would end with it is kept for the next commands.
-        // The loop of a running application is left alone
-        static const bool isLoopStopped = []
-        {
-            if (YUPApplicationBase::getInstance() != nullptr)
-                return false;
-
-            emscripten_runtime_keepalive_push();
-            emscripten_cancel_main_loop();
-            return true;
-        }();
-
-        ignoreUnused (isLoopStopped);
-
-        getFilesFolder().createDirectory();
-        getFilesFolder().setAsCurrentWorkingDirectory();
 
         const auto exitCode = runYuiToolCommand (argc, argv.data());
 
@@ -357,6 +480,48 @@ extern "C"
     {
         static std::string text;
         text = previewWindow != nullptr ? JSON::toString (previewWindow->getModels(), true).toStdString() : std::string ("{}");
+        return text.c_str();
+    }
+
+    // Returns the tools of an agent as JSON: `tools`, each with its name, description and inputSchema, `drawing`,
+    // the names of those only a page can run as they draw, and `instructions`, how they are meant to be used
+    const char* EMSCRIPTEN_KEEPALIVE yuiAgentTools()
+    {
+        static std::string text;
+
+        const auto tools = getYuiAgentTools (true);
+        Array<var> drawing;
+
+        for (const auto& tool : *tools.getArray())
+            if (doesYuiAgentToolDraw (tool["name"].toString()))
+                drawing.add (tool["name"]);
+
+        auto* listed = new DynamicObject();
+        listed->setProperty ("tools", tools);
+        listed->setProperty ("drawing", var (drawing));
+        listed->setProperty ("instructions", getYuiAgentInstructions());
+
+        text = JSON::toString (var (listed), true).toStdString();
+        return text.c_str();
+    }
+
+    // Runs a tool of an agent on the files given, with its arguments as a JSON object. The answer is JSON too:
+    // `text`, `isError`, and `image`, a PNG in base64 which is empty when the tool gives none
+    const char* EMSCRIPTEN_KEEPALIVE yuiAgentCall (const char* name, const char* arguments)
+    {
+        static std::string text;
+
+        // A page set itself up as the application it runs
+        const auto isReady = YUPApplicationBase::getInstance() != nullptr || prepareToRunWithoutPage();
+        const auto answer = isReady ? callYuiAgentTool (String::fromUTF8 (name), JSON::fromString (String::fromUTF8 (arguments)), makeAgentHost())
+                                    : YuiAgentResult::fail ("the windowing system can't be initialised");
+
+        auto* record = new DynamicObject();
+        record->setProperty ("text", answer.text);
+        record->setProperty ("isError", answer.isError);
+        record->setProperty ("image", answer.image.isEmpty() ? String() : Base64::toBase64 (answer.image.getData(), answer.image.getSize()));
+
+        text = JSON::toString (var (record), true).toStdString();
         return text.c_str();
     }
 }

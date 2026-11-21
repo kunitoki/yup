@@ -38,6 +38,10 @@ function lint (...args) {
     return { code: result.code, diagnostics: JSON.parse (result.stdout).diagnostics };
 }
 
+function agent (name, args = {}) {
+    return JSON.parse (tool.ccall ("yuiAgentCall", "string", ["string", "string"], [name, JSON.stringify (args)]));
+}
+
 before (async () => {
     tool = await createYuiTool ({ noInitialRun: true, print: line => output.push (line), printErr: line => errors.push (line) });
 });
@@ -131,4 +135,39 @@ test ("rendering to an image is left to the native tool", () => {
     write ("render/main.yui", "Column {}\n");
 
     assert.equal (run ("render", "render/main.yui", "--output", "main.png").code, 3);
+});
+
+test ("the tools of an agent are listed, with those only a page can run", () => {
+    const listed = JSON.parse (tool.ccall ("yuiAgentTools", "string", [], []));
+
+    assert.deepEqual (listed.tools.map (entry => entry.name), ["yui_check", "yui_inspect", "yui_render", "yui_schema", "yui_capture_preview"]);
+    assert.deepEqual (listed.drawing, ["yui_render", "yui_capture_preview"]);
+    assert.deepEqual (listed.tools[0].inputSchema.required, ["file"]);
+    assert.ok (listed.instructions.length > 0);
+});
+
+test ("an agent checks and inspects the files given", () => {
+    write ("agent/main.yui", "Column {\n    Row { id: bar;\n        Label { text: \"Lost\"; }\n    }\n}\n");
+
+    const checked = agent ("yui_check", { file: "agent/main.yui" });
+
+    assert.equal (checked.isError, false);
+    assert.equal (checked.image, "");
+    assert.deepEqual (JSON.parse (checked.text), { file: "/yui/agent/main.yui", errors: 0, warnings: 0, problems: [] });
+
+    const inspected = agent ("yui_inspect", { file: "agent/main.yui", size: "200x100" });
+    const layout = JSON.parse (inspected.text);
+
+    assert.equal (inspected.isError, false);
+    assert.equal (layout.root.children[0].id, "bar");
+    assert.deepEqual (layout.warnings.map (warning => warning.path), ["0"]);
+});
+
+test ("an agent is told why a tool can't answer", () => {
+    write ("agent/plain.yui", "Column {}\n");
+
+    assert.equal (agent ("yui_check", { file: "agent/missing.yui" }).isError, true);
+    assert.equal (agent ("yui_bogus").isError, true);
+    assert.match (agent ("yui_render", { file: "agent/plain.yui" }).text, /no graphics device/);
+    assert.match (agent ("yui_capture_preview").text, /no live preview/);
 });

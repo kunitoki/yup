@@ -1774,6 +1774,16 @@ bool Component::isPressed() const noexcept
     return flags.isPressed;
 }
 
+void Component::setHovered (bool shouldBeHovered)
+{
+    setHoveredChain (shouldBeHovered);
+}
+
+void Component::setPressed (bool shouldBePressed)
+{
+    setPressedChain (shouldBePressed);
+}
+
 bool Component::isFocused() const noexcept
 {
     return flags.isFocused;

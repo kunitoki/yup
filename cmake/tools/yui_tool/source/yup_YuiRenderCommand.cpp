@@ -29,48 +29,6 @@ using namespace yup;
 namespace
 {
 
-//==============================================================================
-/** Fills the image behind the interface with the background of the palette its root is drawn with. */
-class Backdrop final : public Component
-{
-public:
-    explicit Backdrop (Component& rootToShow)
-        : root (rootToShow)
-    {
-        addAndMakeVisible (root);
-    }
-
-    void paint (Graphics& g) override
-    {
-        g.setFillColor (ApplicationTheme::getGlobalTheme()->getPalette (root).getColor (ThemePalette::Role::background));
-        g.fillAll();
-    }
-
-    void resized() override
-    {
-        root.setBounds (getLocalBounds());
-    }
-
-private:
-    Component& root;
-};
-
-//==============================================================================
-// Drawing needs a device of the GPU but no window, which only some platforms give
-std::unique_ptr<GraphicsContext> createGraphicsContext()
-{
-#if YUP_MAC
-    return GraphicsContext::createContext (GpuPlatform::Metal, {});
-#elif YUP_WINDOWS
-    GraphicsContext::Options options;
-    options.allowHeadlessRendering = true;
-
-    return GraphicsContext::createContext (GpuPlatform::Direct3D, options);
-#else
-    return nullptr;
-#endif
-}
-
 bool writePng (const Image& image, const File& file)
 {
     file.deleteFile();
@@ -89,16 +47,9 @@ bool writePng (const Image& image, const File& file)
 
 int runYuiRenderCommand (int argc, char** argv)
 {
-    const auto workingDirectory = File::getCurrentWorkingDirectory();
-    File input;
     File output;
-    String drawing;
-    String palette;
-    String hostType;
-    Size<float> size;
-    Size<float> fallbackSize;
     float scale = 2.0f;
-    auto mode = ThemePalette::Mode::dark;
+    YuiToolViewOptions options;
     YuiToolModels models;
 
     for (int i = 2; i < argc; ++i)
@@ -108,37 +59,7 @@ int runYuiRenderCommand (int argc, char** argv)
 
         if (argument == "--output" && hasValue)
         {
-            output = workingDirectory.getChildFile (argv[++i]);
-        }
-        else if (argument == "--models" && hasValue)
-        {
-            if (! models.load (argv[++i]))
-                return 2;
-        }
-        else if (argument == "--drawing" && hasValue)
-        {
-            drawing = argv[++i];
-        }
-        else if (argument == "--palette" && hasValue)
-        {
-            palette = argv[++i];
-        }
-        else if (argument == "--as" && hasValue)
-        {
-            hostType = argv[++i];
-        }
-        else if ((argument == "--size" || argument == "--default-size") && hasValue)
-        {
-            const String value (argv[++i]);
-            const Size<float> parsed { value.upToFirstOccurrenceOf ("x", false, true).getFloatValue(), value.fromFirstOccurrenceOf ("x", false, true).getFloatValue() };
-
-            if (parsed.getWidth() < 1.0f || parsed.getHeight() < 1.0f)
-            {
-                std::cerr << "invalid size, expected <width>x<height>: " << value << "\n";
-                return 2;
-            }
-
-            (argument == "--size" ? size : fallbackSize) = parsed;
+            output = File::getCurrentWorkingDirectory().getChildFile (argv[++i]);
         }
         else if (argument == "--scale" && hasValue)
         {
@@ -150,13 +71,10 @@ int runYuiRenderCommand (int argc, char** argv)
                 return 2;
             }
         }
-        else if (argument == "--theme" && hasValue && (String (argv[i + 1]) == "dark" || String (argv[i + 1]) == "light"))
+        else if (const auto isValid = readYuiToolViewOption (argc, argv, i, options, models))
         {
-            mode = String (argv[++i]) == "light" ? ThemePalette::Mode::light : ThemePalette::Mode::dark;
-        }
-        else if (input == File() && ! argument.startsWithChar ('-'))
-        {
-            input = workingDirectory.getChildFile (argument);
+            if (! *isValid)
+                return 2;
         }
         else
         {
@@ -165,29 +83,26 @@ int runYuiRenderCommand (int argc, char** argv)
         }
     }
 
-    if (input == File() || output == File() || (drawing.isNotEmpty() && palette.isNotEmpty()) || (hostType.isNotEmpty() && palette.isNotEmpty()))
+    const auto& target = options.target;
+
+    if (options.input == File() || output == File() || (target.drawing.isNotEmpty() && target.palette.isNotEmpty()) || (target.hostType.isNotEmpty() && target.palette.isNotEmpty()))
     {
         std::cerr << "Rendering requires an input file and --output <image.png>, with --drawing or --palette but not both\n";
         return 2;
     }
 
-    if (! input.existsAsFile())
+    if (! options.input.existsAsFile())
     {
-        std::cerr << "can't read '" << input.getFullPathName() << "'\n";
+        std::cerr << "can't read '" << options.input.getFullPathName() << "'\n";
         return 2;
     }
 
-    ApplicationTheme::getGlobalTheme()->setPalette (ThemePalette ({}, mode));
-
-    YuiDocument document;
-    YuiLoader loader (document);
-    models.attachTo (document);
-
-    const auto shown = loadYuiToolTarget (document, loader, input, { drawing, palette, hostType });
+    YuiToolView view (options, models);
+    const auto& shown = view.getShown();
 
     if (shown.status == YuiToolShown::Status::nothing)
     {
-        std::cerr << input.getFullPathName() << ": error: nothing to render, " << shown.message << "\n";
+        std::cerr << options.input.getFullPathName() << ": error: nothing to render, " << shown.message << "\n";
         return 1;
     }
 
@@ -197,11 +112,11 @@ int runYuiRenderCommand (int argc, char** argv)
         return 2;
     }
 
-    for (const auto& problem : findYuiToolProblems (document, input, shown.result))
+    for (const auto& problem : view.findProblems())
         if (problem.isError)
             problem.print();
 
-    if (shown.result.failed())
+    if (! view.hasInterface())
     {
         if (shown.target.drawing.isNotEmpty() && shown.target.hostType.isEmpty())
             std::cerr << "hint: a drawing reading the properties of a widget needs it as its host, for example --as Slider\n";
@@ -209,22 +124,8 @@ int runYuiRenderCommand (int argc, char** argv)
         return 1;
     }
 
-    auto& root = *document.getRoot();
-
-    // The size asked on the command line, else the one the root asks for, else a default one
-    if (size.getWidth() < 1.0f)
-    {
-        if (root.getWidth() >= 1.0f && root.getHeight() >= 1.0f)
-            size = root.getSize();
-        else
-            size = fallbackSize.getWidth() >= 1.0f ? fallbackSize : shown.defaultSize;
-    }
-
-    Backdrop backdrop (root);
-    backdrop.setSize (size);
-
-    const auto context = createGraphicsContext();
-    const auto image = context != nullptr ? backdrop.snapshotToImage (*context, true, scale) : Image();
+    const auto context = createYuiToolGraphicsContext();
+    const auto image = context != nullptr ? view.getComponent()->snapshotToImage (*context, true, scale) : Image();
 
     if (! image.isValid())
     {

@@ -2,6 +2,7 @@
 # ISC license: https://www.isc.org/licenses/
 """Run manually: python3 test_cli.py /absolute/path/to/yup_yui_tool"""
 
+import base64
 import json
 from pathlib import Path
 import subprocess
@@ -18,6 +19,14 @@ UNKNOWN_TYPE = "Component { Slidr { id: knob; } }\n"
 UNDECLARED_PROPERTY = "Column {\n    Slider { id: a; mysterySetting: 123; }\n}\n"
 STYLE_ONLY = "style {\n    .knob { trackWidth: 4; }\n}\n"
 STYLE_ERROR = "style {\n    Slider::before { opacity: 1; }\n}\n"
+NO_HEIGHT = 'Column {\n    Row { id: bar;\n        Label { text: "Lost"; }\n    }\n}\n'
+HOVER = ("palette Signal {\n    colors: #ff0000, #00ff00;\n    background: #ff0000;\n}\n\n"
+         "style {\n    #panel:hover { palette: Signal; }\n}\n\nComponent { id: panel; }\n")
+HALVES = ("drawing Fill {\n    property tone: color = #ff0000;\n    rect { bounds: bounds; fill: tone; }\n}\n\n"
+          "style {\n    #left { drawing: Fill; }\n    #right { drawing: Fill; tone: TONE; }\n}\n\n"
+          "Component { width: 40; height: 20;\n"
+          "    Component { id: left; x: 0; y: 0; width: 20; height: 20; }\n"
+          "    Component { id: right; x: 20; y: 0; width: 20; height: 20; }\n}\n")
 SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#ff0000"/></svg>\n'
 
 
@@ -375,6 +384,264 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--theme", "sepia").returncode, 2)
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--drawing", "A", "--palette", "B").returncode, 2)
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--as", "}").returncode, 2)
+
+    # ==========================================================================
+    # inspect
+
+    def inspect(self, *args, code=0):
+        """Returns the layout inspect prints, or what it ran into when it is expected to fail."""
+        result = self.invoke("inspect", *args)
+        self.assertEqual(result.returncode, code, result.stderr)
+        return json.loads(result.stdout) if code == 0 else result
+
+    def test_inspect_describes_the_components_with_their_place(self):
+        path = self.write("ui.yui", 'Column {\n    padding: 10;\n    Label { id: title; text: "Hello"; preferredHeight: 20; }\n'
+                                    '    Slider { flexGrow: 1; }\n}\n')
+        layout = self.inspect("ui.yui", "--size", "200x100")
+        self.assertEqual(layout["file"], str(path))
+        self.assertEqual((layout["width"], layout["height"]), (200, 100))
+        self.assertEqual(layout["warnings"], [])
+
+        root = layout["root"]
+        self.assertEqual((root["type"], root["path"], root["line"], root["bounds"]), ("Column", "", 1, [0, 0, 200, 100]))
+        self.assertNotIn("id", root)
+
+        title, slider = root["children"]
+        self.assertEqual((title["type"], title["id"], title["path"], title["line"], title["text"]), ("Label", "title", "0", 3, "Hello"))
+        self.assertEqual((slider["type"], slider["path"], slider["line"]), ("Slider", "1", 4))
+        self.assertEqual(title["bounds"][3], 20)
+        self.assertGreaterEqual(slider["bounds"][1], title["bounds"][1] + 20)
+        self.assertGreater(slider["bounds"][3], 20)
+
+    def test_inspect_warns_about_what_has_no_size(self):
+        self.write("ui.yui", NO_HEIGHT)
+        layout = self.inspect("ui.yui", "--size", "200x100")
+        self.assertEqual(len(layout["warnings"]), 1, layout["warnings"])
+        self.assertIn("Row #bar has no ", layout["warnings"][0]["message"])
+        self.assertEqual((layout["warnings"][0]["path"], layout["warnings"][0]["line"]), ("0", 2))
+
+    def test_inspect_lays_out_what_a_file_declares(self):
+        self.write("dot.yui", "drawing Dot {\n    circle { center: bounds.center; radius: 20; fill: #ff0000; }\n}\n")
+        layout = self.inspect("dot.yui", "--drawing", "Dot", "--as", "Slider")
+        self.assertEqual((layout["root"]["type"], layout["width"], layout["height"]), ("Slider", 200, 200))
+
+    def test_inspect_reports_what_cant_be_laid_out(self):
+        self.write("broken.yui", UNKNOWN_TYPE)
+        self.write("style.yui", STYLE_ONLY)
+        result = self.inspect("broken.yui", code=1)
+        self.assertIn(":1:13: error: ", result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("nothing to inspect", self.inspect("style.yui", code=1).stderr)
+
+    def test_inspect_usage_errors(self):
+        self.write("ui.yui", VALID)
+        self.assertEqual(self.invoke("inspect").returncode, 2)
+        self.assertEqual(self.invoke("inspect", "missing.yui").returncode, 2)
+        self.assertEqual(self.invoke("inspect", "ui.yui", "--size", "big").returncode, 2)
+        self.assertEqual(self.invoke("inspect", "ui.yui", "--scale", "2").returncode, 2)
+        self.assertEqual(self.invoke("inspect", "ui.yui", "--drawing", "A", "--palette", "B").returncode, 2)
+
+    # ==========================================================================
+    # mcp
+
+    def mcp(self, *requests):
+        """Sends requests to the server, each a method with its params, and returns the result of each."""
+        messages = [{"jsonrpc": "2.0", "id": 0, "method": "initialize",
+                     "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "1"}}},
+                    {"jsonrpc": "2.0", "method": "notifications/initialized"}]
+        messages += [{"jsonrpc": "2.0", "id": index + 1, "method": method, "params": params}
+                     for index, (method, params) in enumerate(requests)]
+
+        result = self.invoke("mcp", stdin="".join(json.dumps(message) + "\n" for message in messages))
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        # The output holds the answers and nothing else, one per line
+        answers = {answer["id"]: answer for answer in map(json.loads, result.stdout.splitlines())}
+        self.assertEqual(answers[0]["result"]["serverInfo"]["name"], "yup_yui_tool")
+        return [answers[index + 1]["result"] for index in range(len(requests))]
+
+    def call(self, name, **arguments):
+        """Calls a tool of the server: returns whether it failed, its text, and its image when it gives one."""
+        result, = self.mcp(("tools/call", {"name": name, "arguments": arguments}))
+        image = next((base64.b64decode(block["data"]) for block in result["content"] if block["type"] == "image"), None)
+        return result.get("isError", False), result["content"][0]["text"], image
+
+    def test_mcp_lists_the_tools(self):
+        listed, = self.mcp(("tools/list", {}))
+        tools = {tool["name"]: tool for tool in listed["tools"]}
+        self.assertEqual(sorted(tools), ["yui_check", "yui_inspect", "yui_render", "yui_schema"])
+        self.assertEqual(tools["yui_check"]["inputSchema"]["required"], ["file"])
+        self.assertIn("states", tools["yui_render"]["inputSchema"]["properties"])
+        self.assertEqual(self.invoke("mcp", "extra").returncode, 2)
+
+    def test_mcp_checks_a_file(self):
+        path = self.write("ui.yui", UNKNOWN_TYPE)
+        failed, text, image = self.call("yui_check", file="ui.yui")
+        found = json.loads(text)
+        self.assertFalse(failed)
+        self.assertIsNone(image)
+        self.assertEqual((found["file"], found["errors"], found["warnings"]), (str(path), 1, 0))
+        self.assertEqual((found["problems"][0]["line"], found["problems"][0]["column"]), (1, 13))
+
+    def test_mcp_uses_the_models_next_to_a_file(self):
+        self.write("ui.yui", "Slider { id: gain; value <=> model.gain; }\n")
+        self.assertEqual(json.loads(self.call("yui_check", file="ui.yui")[1])["errors"], 1)
+
+        self.write("ui.models.json", json.dumps({"model": {"gain": 0.5}}))
+        self.assertEqual(json.loads(self.call("yui_check", file="ui.yui")[1])["errors"], 0)
+        self.assertFalse(self.call("yui_inspect", file="ui.yui", values={"model": {"gain": 0.9}})[0])
+        self.assertTrue(self.call("yui_inspect", file="ui.yui", values={"model": {"level": 0.9}})[0])
+        self.assertTrue(self.call("yui_check", file="ui.yui", models="missing.json")[0])
+
+    def test_mcp_inspects_the_layout(self):
+        self.write("ui.yui", NO_HEIGHT)
+        failed, text, image = self.call("yui_inspect", file="ui.yui", size="200x100")
+        layout = json.loads(text)
+        self.assertFalse(failed)
+        self.assertIsNone(image)
+        self.assertEqual(layout["root"]["children"][0]["id"], "bar")
+        self.assertEqual([warning["path"] for warning in layout["warnings"]], ["0"])
+        self.assertEqual(layout["problems"], [])
+
+    def test_mcp_tells_why_a_tool_cant_answer(self):
+        self.write("broken.yui", UNKNOWN_TYPE)
+        self.write("ui.yui", VALID)
+
+        failed, text, _ = self.call("yui_inspect", file="broken.yui")
+        self.assertTrue(failed)
+        self.assertIn(":1:13: error: ", text)
+
+        self.assertTrue(self.call("yui_inspect", file="missing.yui")[0])
+        self.assertTrue(self.call("yui_inspect", file="ui.yui", size="big")[0])
+        self.assertTrue(self.call("yui_inspect", file="ui.yui", theme="sepia")[0])
+        self.assertTrue(self.call("yui_inspect", file="ui.yui", states=[{"id": "nobody", "state": "hover"}])[0])
+        self.assertTrue(self.call("yui_inspect", file="ui.yui", states=[{"id": "knob", "state": "focus"}])[0])
+        self.assertTrue(self.call("yui_inspect", file="ui.yui", states=[{"path": "7", "state": "hover"}])[0])
+        self.assertFalse(self.call("yui_inspect", file="ui.yui", states=[{"id": "knob", "state": "hover"}, {"path": "0", "state": "pressed"}])[0])
+        self.assertTrue(self.call("yui_capture_preview")[0])
+        self.assertTrue(self.call("yui_bogus")[0])
+
+    def test_mcp_describes_what_a_file_can_name(self):
+        described = json.loads(self.call("yui_schema")[1])
+        self.assertIn("Slider", [entry["name"] for entry in described["types"]])
+        self.assertIn("accent", described["paletteRoles"])
+
+        slider = json.loads(self.call("yui_schema", type="Slider")[1])
+        properties = {entry["name"]: entry for entry in slider["properties"]}
+        self.assertNotIn("from", properties["value"])
+        self.assertTrue(any(entry.get("from") == "Component" for entry in slider["properties"]))
+        self.assertTrue(self.call("yui_schema", type="Slidr")[0])
+
+    def test_mcp_renders_an_image_in_the_states_asked(self):
+        self.write("ui.yui", HOVER)
+        failed, text, image = self.call("yui_render", file="ui.yui", size="8x8")
+        if failed and "no graphics device" in text:
+            self.skipTest("no graphics device to render with")
+        self.assertFalse(failed, text)
+        self.assertEqual((json.loads(text)["width"], json.loads(text)["height"]), (8, 8))
+
+        (self.root / "out.png").write_bytes(image)
+        self.assertNotEqual(self.first_pixel(), (255, 0, 0))
+
+        (self.root / "out.png").write_bytes(self.call("yui_render", file="ui.yui", size="8x8", states=[{"id": "panel", "state": "hover"}])[2])
+        self.assertEqual(self.first_pixel(), (255, 0, 0))
+
+        scaled = self.call("yui_render", file="ui.yui", size="8x8", scale=2)[2]
+        self.assertEqual(tuple(int.from_bytes(scaled[offset:offset + 4], "big") for offset in (16, 20)), (16, 16))
+        self.assertTrue(self.call("yui_render", file="ui.yui", scale=9)[0])
+
+    def draw(self, **arguments):
+        """Calls yui_render: returns what it tells and its image, skipping where nothing can draw."""
+        failed, text, image = self.call("yui_render", **arguments)
+        if failed and "no graphics device" in text:
+            self.skipTest("no graphics device to render with")
+        self.assertFalse(failed, text)
+        (self.root / "out.png").write_bytes(image)
+        return json.loads(text), image
+
+    def test_mcp_renders_a_region_or_an_element(self):
+        self.write("ui.yui", HALVES.replace("TONE", "#0000ff"))
+
+        told, _ = self.draw(file="ui.yui", region=[20, 0, 20, 20])
+        self.assertEqual((told["width"], told["height"], told["region"]), (20, 20, [20, 0, 20, 20]))
+        self.assertEqual(self.first_pixel(), (0, 0, 255))
+
+        told, _ = self.draw(file="ui.yui", element="left", margin=0)
+        self.assertEqual((told["width"], told["height"], told["region"]), (20, 20, [0, 0, 20, 20]))
+        self.assertEqual(self.first_pixel(), (255, 0, 0))
+
+        # The margin around an element stops at the edges of the interface, and a path names one as an id does
+        self.assertEqual(self.draw(file="ui.yui", element="1")[0]["region"], [12, 0, 28, 20])
+
+        told, _ = self.draw(file="ui.yui", region=[30, 5, 100, 100], scale=8)
+        self.assertEqual((told["width"], told["height"], told["region"]), (80, 120, [30, 5, 10, 15]))
+
+        self.assertTrue(self.call("yui_render", file="ui.yui", scale=8)[0])
+        self.assertTrue(self.call("yui_render", file="ui.yui", region=[40, 0, 10, 10])[0])
+        self.assertTrue(self.call("yui_render", file="ui.yui", region=[0, 0, 10])[0])
+        self.assertTrue(self.call("yui_render", file="ui.yui", region=[0, 0, 10, 10], element="left")[0])
+        self.assertTrue(self.call("yui_render", file="ui.yui", element="nobody")[0])
+        self.assertTrue(self.call("yui_render", file="ui.yui", size="4096x10", scale=2)[0])
+
+    def test_mcp_renders_a_grid_of_coordinates(self):
+        self.write("ui.yui", HALVES.replace("TONE", "#0000ff"))
+
+        _, plain = self.draw(file="ui.yui", scale=4)
+        told, ruled = self.draw(file="ui.yui", scale=4, grid=10)
+        self.assertEqual((told["width"], told["height"], told["grid"]), (160, 80, 10))
+        self.assertNotEqual(plain, ruled)
+
+        self.assertTrue(self.call("yui_render", file="ui.yui", grid=1)[0])
+        self.assertTrue(self.call("yui_render", file="ui.yui", grid=-10)[0])
+
+    def test_mcp_saves_the_image_where_asked(self):
+        self.write("ui.yui", HALVES.replace("TONE", "#0000ff"))
+
+        told, image = self.draw(file="ui.yui", output="shots/first.png")
+        self.assertEqual(told["output"], str(self.root / "shots" / "first.png"))
+        self.assertEqual((self.root / "shots" / "first.png").read_bytes(), image)
+
+        self.assertTrue(self.call("yui_render", file="ui.yui", output="../outside.png")[0])
+        self.assertTrue(self.call("yui_render", file="ui.yui", output="shots/first.jpg")[0])
+        self.assertFalse((self.root / "shots" / "first.jpg").exists())
+
+    def test_mcp_compares_a_render_with_a_reference(self):
+        self.write("ui.yui", HALVES.replace("TONE", "#0000ff"))
+        self.write("other.yui", HALVES.replace("TONE", "#00ff00"))
+        self.draw(file="ui.yui", output="reference.png")
+
+        # Three panels, one above the other for an interface wider than tall
+        told, _ = self.draw(file="ui.yui", reference="reference.png")
+        compared = told["comparison"]
+        self.assertEqual((told["width"], told["height"]), (40, 76))
+        self.assertEqual((compared["similarity"], compared["differentPixels"], compared["worst"]), (1, 0, []))
+        self.assertEqual((compared["reference"], compared["resized"], compared["panel"]), ([40, 20], False, [40, 20]))
+        self.assertEqual((compared["panels"], compared["arrangement"]), (["reference", "render", "difference"], "column"))
+
+        # What differs is told by how much and where, as regions to draw next
+        compared = self.draw(file="other.yui", reference="reference.png")[0]["comparison"]
+        self.assertEqual(compared["differentPixels"], 0.5)
+        self.assertLess(compared["similarity"], 0.9)
+        self.assertTrue(compared["worst"])
+        self.assertTrue(all(cell["region"][0] >= 20 and cell["error"] > 0 for cell in compared["worst"]))
+
+        # A region is compared with the same region of the reference
+        compared = self.draw(file="other.yui", reference="reference.png", region=[0, 0, 20, 20])[0]["comparison"]
+        self.assertEqual((compared["similarity"], compared["arrangement"]), (1, "row"))
+
+        # A reference of another size is brought to the size of the render
+        self.draw(file="ui.yui", scale=2, output="double.png")
+        compared = self.draw(file="ui.yui", reference="double.png")[0]["comparison"]
+        self.assertEqual((compared["reference"], compared["resized"]), ([80, 40], True))
+        self.assertGreater(compared["similarity"], 0.95)
+
+        # An interface with no size of its own takes the one of the reference
+        self.write("bare.yui", "Component { }\n")
+        self.assertEqual(self.draw(file="bare.yui", reference="reference.png")[0]["comparison"]["panel"], [40, 20])
+
+        self.write("notes.png", "not an image")
+        self.assertTrue(self.call("yui_render", file="ui.yui", reference="missing.png")[0])
+        self.assertTrue(self.call("yui_render", file="ui.yui", reference="notes.png")[0])
 
 
 if __name__ == "__main__":

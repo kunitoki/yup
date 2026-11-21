@@ -3,8 +3,9 @@
 `yup_yui_tool` checks `.yui` files outside the application: on the command
 line, while configuring a build, and, [built for the web](#the-tool-for-the-web),
 behind the diagnostics, completions and live preview of the VS Code extension.
-It also renders documents to images and imports SVG artwork as drawings. The
-tool lives in `cmake/tools/yui_tool`, and loads documents with the same
+It also renders documents to images, describes their layout, imports SVG
+artwork as drawings and gives all of this to [coding agents](#tools-for-agents).
+The tool lives in `cmake/tools/yui_tool`, and loads documents with the same
 `YuiDocument` and `YuiLoader` an application uses, so it reports what the
 application would.
 
@@ -230,6 +231,111 @@ works on macOS, through Metal, with no display attached. On Windows it uses
 Direct3D without a window. It isn't available on Linux yet, where OpenGL needs
 a context that the tool doesn't create.
 
+## Inspecting the layout
+
+```sh
+yup_yui_tool inspect ui/main.yui
+yup_yui_tool inspect ui/main.yui --size 640x760 --models ui/models.json
+```
+
+prints the layout of a document as JSON, without drawing it, so it needs no
+graphics device and works everywhere. It takes the options of `render` saying
+what to show and how (`--size`, `--default-size`, `--theme`, `--models`,
+`--drawing`, `--as`, `--palette`), and exits with the same codes.
+
+```json
+{
+    "file": "/project/ui/main.yui",
+    "width": 640,
+    "height": 400,
+    "root": {
+        "type": "Column", "path": "", "line": 3, "column": 1, "bounds": [0, 0, 640, 400],
+        "children": [
+            { "type": "Row", "id": "toolbar", "path": "0", "line": 6, "column": 5, "bounds": [0, 0, 640, 0] }
+        ]
+    },
+    "warnings": [
+        { "message": "Row #toolbar has no height, so nothing of it shows: inside a Row or a Column it needs a preferred size or a flexGrow", "path": "0", "line": 6, "column": 5 }
+    ]
+}
+```
+
+- A component has its `type`, its `id` when it has one, the `line` and `column`
+  it was written at (and the `file`, for one of an imported file), its `text`
+  when it has one, and `visible: false` when it is hidden.
+- `bounds` are `[x, y, width, height]` in logical pixels, from the top left of
+  the interface.
+- `path` names a component by its place among the `children`: `0/2` is the
+  third child of the first child of the root.
+- `warnings` tell what is laid out with no width or no height, or outside the
+  interface. Once for a component, not again for what it holds.
+
+Only the components the document describes are listed. Those a widget creates
+for itself are left out, and what they hold is listed in their place.
+
+The layout is the one the interface settles in: its styles are brought up to
+date with its size, and their transitions to their end.
+
+## Tools for agents
+
+A coding agent writing `.yui` files, such as Claude Code or GitHub Copilot,
+can't see what it wrote. The tool gives it what `lint`, `inspect`, `render`
+and `schema` give, as tools of the
+[Model Context Protocol](https://modelcontextprotocol.io/):
+
+| Tool | Answers |
+|---|---|
+| `yui_check` | The problems of a file and of the files it imports. |
+| `yui_inspect` | The layout, as `inspect` prints it, with the problems. |
+| `yui_render` | A PNG of the interface, or of a drawing, a palette or a component of the file, with the problems. |
+| `yui_schema` | The component types and the palette roles, or the properties and signals of one type, those of its bases included. |
+| `yui_capture_preview` | A PNG of the live preview of VS Code as it is now, with the values of its models, a long list told by its length. Only the [extension](#vs-code) has it. |
+
+The tools taking a `file` also take what `render` takes, under the same names:
+`drawing`, `palette`, `as`, `size`, `theme`, `models`, and `scale` for those
+giving an image (1 by default, 4 at most). Two arguments are theirs alone:
+
+- `values` sets model values over those of the models file:
+  `{ "params": { "cutoff": 0.9 } }`.
+- `states` shows components as their `:hover` or `:pressed` rules style them,
+  each named by its `id` or by the `path` `yui_inspect` gives it:
+  `[{ "id": "play", "state": "hover" }]`. The focus can't be shown, as it
+  needs a window.
+
+`yui_inspect` and `yui_render` show the interface as it settles: its styles up
+to date with its size and its states, and their transitions at their end.
+
+Without `models`, a `<name>.yui` file uses the `<name>.models.json` next to it
+when there is one.
+
+There are two ways to serve them. Both are listed in the `.mcp.json` at the root
+of the project, which Claude Code and GitHub Copilot read:
+
+```json
+{
+    "mcpServers": {
+        "yui": { "type": "stdio", "command": "/path/to/yup_yui_tool", "args": ["mcp"] }
+    }
+}
+```
+
+`yup_yui_tool mcp` serves them by itself, on its standard input and output,
+with no editor. Paths are relative to the folder it is started in. `yui_render`
+needs a graphics device, as `render` does, so it fails on Linux, where
+`yui_inspect` still answers.
+
+```json
+{
+    "mcpServers": {
+        "yui": { "type": "http", "url": "http://127.0.0.1:7391/mcp" }
+    }
+}
+```
+
+The [VS Code extension](#vs-code) serves them from the editor, with no native
+tool to build: it checks the documents as they are in their editors, unsaved
+changes included, and draws in its preview panel on every platform.
+
 ## Importing an SVG
 
 ```sh
@@ -267,6 +373,8 @@ into instead of starting a process:
 | `yuiToolAllocate (size)`, `yuiToolWriteFile (path)` | Give a file: its bytes are copied to the memory returned, then it is named with a path relative to the folder of the files. |
 | `yuiToolRun (arguments)` | Runs a command in the folder of the files. The arguments are a JSON array of strings, the result is the exit code, and the output goes to `print` and `printErr`. |
 | `yuiPreviewShow (path, drawing, palette, type, models, light)` | Shows a file in the canvas, or a drawing, a palette or a component type of it, once the application called `yuiPreviewReady`. The outcome is given to `yuiPreviewShown`: the problems, and the size the interface asks for. |
+| `yuiAgentTools ()` | Returns the [tools for agents](#tools-for-agents) as JSON: `tools`, each with its `name`, `description` and `inputSchema`, `drawing`, the names of those only a page can run, and `instructions`. |
+| `yuiAgentCall (name, arguments)` | Runs one of them on the files given, with its arguments as a JSON object. The answer is JSON: `text`, `isError`, and `image`, a PNG in base64 that is empty when the tool gives none. |
 
 The module is built without threads (see `YUP_ENABLE_EMSCRIPTEN_THREADS` in the
 [CMake API](../../build-system/cmake-api.md)), so it runs in pages that can't be
@@ -283,7 +391,9 @@ support to VS Code:
   palette roles, `colors.` names and pseudo-classes, from `schema`;
 - `YUI: Open Preview`, a panel beside the editor running the interface, a
   drawing, a palette or a component of the file;
-- the `YUI: Import SVG as Drawing` command.
+- the `YUI: Import SVG as Drawing` command;
+- the [tools for agents](#tools-for-agents), once `YUI: Set Up Agent Tools` was
+  run in a workspace.
 
 ```sh
 just vscode_yui
@@ -292,8 +402,8 @@ just vscode_yui
 builds the tool for the web, which needs the Emscripten SDK activated, packages
 it with the extension and installs it. The extension holds no native binary, so
 the same package works on every platform. The settings are `yui.lint.enabled`, `yui.lint.models`, the path of
-the [models](#models) file of the workspace, `yui.preview.size` and
-`yui.preview.theme`.
+the [models](#models) file of the workspace, `yui.preview.size`,
+`yui.preview.theme`, `yui.mcp.enabled` and `yui.mcp.port`.
 
 Documents are checked and shown as they are in their editors, so what is typed
 counts before it is saved. The preview is live: the interface answers the mouse
@@ -319,6 +429,17 @@ The toolbar of the preview chooses what it shows and how:
 The size and the theme are the two `yui.preview` settings, which the toolbar
 writes.
 
+`YUI: Set Up Agent Tools` turns `yui.mcp.enabled` on for the workspace and
+adds the server to its `.mcp.json`, keeping what the file holds. The server
+only listens on this machine, at `http://127.0.0.1:<yui.mcp.port>/mcp`, only
+reads the files of the workspace and writes none: a document importing a file
+outside of it is checked without that file. The models of the
+`yui.lint.models` setting are read wherever they are. Each window serving a
+workspace needs a port of its own, which the command finds when the one set is
+taken. A tool that draws opens the preview panel beside the editor when it is
+closed, and leaves what it shows alone. Without a `theme`, it draws in the one
+the preview shows.
+
 There is no formatter yet: writing a document back from its tree would lose
 its comments.
 
@@ -336,6 +457,13 @@ just yui_tool_wasm_test
 
 builds the tool for the web and runs `cmake/tools/yui_tool/tests/test_web.js`
 with Node, which loads the module and runs the commands the way an editor does.
+
+```sh
+just vscode_yui_test
+```
+
+runs the tests of the extension that need no editor: those of the server its
+tools for agents are reached through.
 
 ## See also
 

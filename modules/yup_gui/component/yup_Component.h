@@ -1923,6 +1923,28 @@ public:
     */
     bool isPressed() const noexcept;
 
+    /** Hovers this component and its parents, or stops hovering them, with no pointer over it.
+
+        This is for tools and tests showing a component the way its `:hover` rules style it. The
+        pointer takes over again as soon as it moves over the window of the component.
+
+        @param shouldBeHovered True to hover the component, false to stop hovering it.
+
+        @see isHovered, setPressed
+    */
+    void setHovered (bool shouldBeHovered);
+
+    /** Presses this component and its parents, or releases them, with no mouse button held down.
+
+        This is for tools and tests showing a component the way its `:pressed` rules style it. It
+        sends no mouse event, so nothing is clicked.
+
+        @param shouldBePressed True to press the component, false to release it.
+
+        @see isPressed, setHovered
+    */
+    void setPressed (bool shouldBePressed);
+
     /** Returns true between the focus gain and the focus loss reported to this component.
 
         This is what the `:focus` and `:focused` pseudo-classes match.

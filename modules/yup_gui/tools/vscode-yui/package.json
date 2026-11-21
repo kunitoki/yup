@@ -1,14 +1,14 @@
 {
   "name": "vscode-yui",
   "displayName": "YUI - YUP UI Language",
-  "description": "Syntax highlighting, snippets, diagnostics, completions, live preview and SVG import for YUI, the declarative UI language of the YUP library.",
+  "description": "Syntax highlighting, snippets, diagnostics, completions, live preview, SVG import and tools for coding agents for YUI, the declarative UI language of the YUP library.",
   "version": "2.0.1",
   "publisher": "yup",
   "license": "ISC",
   "icon": "images/yui-icon.png",
   "main": "./out/extension.js",
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.90.0"
   },
   "categories": [
     "Programming Languages"
@@ -26,7 +26,8 @@
   },
   "homepage": "https://github.com/kunitoki/yup",
   "activationEvents": [
-    "onLanguage:yui"
+    "onLanguage:yui",
+    "onStartupFinished"
   ],
   "contributes": {
     "configuration": {
@@ -63,6 +64,18 @@
           ],
           "default": "auto",
           "description": "The theme the preview is shown with, also chosen in its toolbar."
+        },
+        "yui.mcp.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Serve the tools for coding agents on this machine: the problems, the layout and an image of a .yui document, over the Model Context Protocol. 'YUI: Set Up Agent Tools' turns it on for a workspace and lists the server in its .mcp.json."
+        },
+        "yui.mcp.port": {
+          "type": "integer",
+          "default": 7391,
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "The port the tools for coding agents are served on, at http://127.0.0.1:<port>/mcp. Each window serving them needs its own, which 'YUI: Set Up Agent Tools' finds."
         }
       }
     },
@@ -105,6 +118,10 @@
       {
         "command": "yui.importSvg",
         "title": "YUI: Import SVG as Drawing"
+      },
+      {
+        "command": "yui.setUpAgentTools",
+        "title": "YUI: Set Up Agent Tools"
       }
     ],
     "menus": {
@@ -123,18 +140,28 @@
         {
           "command": "yui.importSvg",
           "when": "yui.hasTool"
+        },
+        {
+          "command": "yui.setUpAgentTools",
+          "when": "yui.hasTool"
         }
       ]
     }
   },
   "scripts": {
-    "compile": "tsc -p ./tsconfig.json",
-    "watch": "tsc -watch -p ./tsconfig.json",
+    "check": "tsc -p ./tsconfig.json",
+    "compile": "npm run check && node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "test": "node esbuild.js --test && node --test out-test/agentServer.test.js",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {
-    "@types/vscode": "^1.75.0",
+    "@modelcontextprotocol/client": "^2.4.0",
+    "@modelcontextprotocol/node": "^2.1.2",
+    "@modelcontextprotocol/server": "^2.4.0",
     "@types/node": "^20.0.0",
+    "@types/vscode": "^1.75.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.0.0"
   }
 }

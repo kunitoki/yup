@@ -43,3 +43,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The tool is packaged as a WebAssembly module (`tools/package-tool.sh`), so
   one package works on every platform and holds no native binary. A package
   built without it keeps highlighting and snippets, and turns the rest off.
+- **YUI: Set Up Agent Tools**, serving coding agents such as Claude Code and
+  GitHub Copilot the problems (`yui_check`), the layout (`yui_inspect`), an
+  image (`yui_render`), the component types (`yui_schema`) and the live preview
+  (`yui_capture_preview`) of the `.yui` documents of a workspace, over the Model
+  Context Protocol. It is off until the command is run, which sets
+  `yui.mcp.enabled` and `yui.mcp.port` for the workspace and lists the server in
+  its `.mcp.json`. The server only listens on this machine.
+- The extension is bundled with esbuild, and needs VS Code 1.90 or later.

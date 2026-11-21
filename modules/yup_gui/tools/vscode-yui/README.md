@@ -40,6 +40,10 @@ available in a package built without it.
   toolbar choosing what is shown, its size, its theme and its zoom
 - **SVG import**: **YUI: Import SVG as Drawing** converts an `.svg` into a
   `drawing` block and opens it in a new editor
+- **Tools for agents**: **YUI: Set Up Agent Tools** gives the coding agents of
+  a workspace, such as Claude Code and GitHub Copilot, the problems, the layout
+  and an image of the `.yui` documents they write. See
+  [Tools for agents](#tools-for-agents)
 
 Formatting is deliberately not provided: the `.yui` writer does not preserve
 comments, so a formatter would drop them.
@@ -52,6 +56,8 @@ comments, so a formatter would drop them.
 | `yui.lint.models` | empty | Path to a JSON file declaring the application models, absolute or relative to the workspace folder of the linted document. When empty, a document uses `<document>.models.json` next to it. Documents are linted again when their models file is created, edited or deleted. |
 | `yui.preview.size` | `auto` | The size of the preview: `auto`, `panel` or `<width>x<height>` in logical pixels, such as `640x400`. See [Preview](#preview). |
 | `yui.preview.theme` | `auto` | The theme the preview is shown with: `auto` follows the VSCode color theme, `light` and `dark` set it. |
+| `yui.mcp.enabled` | `false` | Serve the [tools for agents](#tools-for-agents) on this machine. **YUI: Set Up Agent Tools** turns it on for a workspace. |
+| `yui.mcp.port` | `7391` | The port they are served on, at `http://127.0.0.1:<port>/mcp`. Each window serving them needs its own. |
 
 A document that binds to a model (`value <=> params.cutoff;`) reads something
 that only exists inside the application, so without a models file those
@@ -111,6 +117,47 @@ document that stops loading keeps the interface it had until it loads again.
 The preview draws with WebGL 2, and the panel says so in a window that has
 none.
 
+## Tools for agents
+
+A coding agent can't see what the `.yui` file it wrote looks like. **YUI: Set Up
+Agent Tools** serves it tools of the
+[Model Context Protocol](https://modelcontextprotocol.io/) from the editor:
+
+| Tool | Answers |
+|---|---|
+| `yui_check` | The problems of a document and of the files it imports. |
+| `yui_inspect` | Its layout as text: each component with its type, id, source line and bounds, and warnings for what has no size or lies outside the interface. |
+| `yui_render` | An image of the interface, or of a drawing, a palette or a component of the file, at a size and in a theme, with model values and `:hover` or `:pressed` states set. |
+| `yui_schema` | The component types, or the properties and signals of one. |
+| `yui_capture_preview` | An image of the preview panel as it is now, with the values of its models. |
+
+The command turns `yui.mcp.enabled` on for the workspace and adds the server to
+the `.mcp.json` at its root, which Claude Code and GitHub Copilot read:
+
+```json
+{
+  "mcpServers": {
+    "yui": { "type": "http", "url": "http://127.0.0.1:7391/mcp" }
+  }
+}
+```
+
+- Documents are read as they are in their editors, so unsaved changes count.
+- The tools that draw run in the preview panel, which opens beside the editor
+  when it is closed. What it shows is left alone.
+- The server only listens on this machine, only reads the files of the
+  workspace and writes none. A document importing a file outside the workspace
+  is checked without that file. The models of `yui.lint.models` are read
+  wherever they are.
+- Each window serves its own workspace on its own port. When the port set is
+  taken, the command finds the next free one and writes it to the workspace
+  settings and to `.mcp.json`.
+
+The arguments of the tools are described in the
+[tooling page](../../../../docs/ui/yui/tooling.md#tools-for-agents) of the
+documentation, with `yup_yui_tool mcp`, which serves the same tools with no
+editor.
+
 ## Installing
 
 ### From source (development)
@@ -164,7 +211,11 @@ vscode-yui/
 ├── package.json                  # extension manifest
 ├── language-configuration.json   # comments, brackets, indentation
 ├── images/yui-icon.png           # extension and `.yui` file icon
+├── esbuild.js                    # bundles the extension and its tests
 ├── src/extension.ts              # activation: diagnostics, completions, commands
+├── src/agentServer.ts            # the server of the tools for agents
+├── src/agentBackend.ts           # runs those tools on the documents of the editor
+├── src/agentSetup.ts             # their settings, and the command setting a workspace up
 ├── src/documentFiles.ts          # a document with the files it names, as the tool is given them
 ├── src/tool.ts                   # runs the commands of the tool in a worker thread
 ├── src/toolWorker.ts             # the worker: loads the module and runs a command
@@ -173,6 +224,7 @@ vscode-yui/
 ├── syntaxes/yui.tmLanguage.json  # TextMate grammar (source.yui)
 ├── snippets/yui.code-snippets    # code snippets
 ├── tools/package-tool.sh         # copies the tool built for the web into tool/
+├── test/agentServer.test.ts      # tests of the server, run by `npm test`
 └── test/sample.yui               # a document to try the grammar on
 ```
 

@@ -34,6 +34,10 @@
 #include <sys/socket.h>
 #endif
 
+#include <iostream>
+#include <string>
+#include <thread>
+
 //==============================================================================
 // Core LLM.
 #include "llm/yup_LLMMessage.cpp"
@@ -50,6 +54,7 @@
 #include "mcp/yup_MCPTypes.cpp"
 #include "mcp/yup_MCPClient.cpp"
 #include "mcp/yup_MCPHttpServerTransport.cpp"
+#include "mcp/yup_MCPStdioServerTransport.cpp"
 #include "mcp/yup_MCPServer.cpp"
 
 // Provider implementations.

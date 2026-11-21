@@ -77,6 +77,10 @@ earlier one with the same specificity. Components are restyled when their
 classes, states, IDs, parents or the properties a selector reads change, once
 per frame.
 
+`Component::setHovered` and `Component::setPressed` put a component in the
+`:hover` and `:pressed` states with no pointer, which is how a tool or a test
+shows what those rules do.
+
 ## Values and precedence
 
 Declaration values are expressions, evaluated for the component the rule

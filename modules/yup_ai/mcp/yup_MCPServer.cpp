@@ -348,7 +348,7 @@ bool MCPServer::isRunning() const noexcept
 
 Result MCPServer::startStdio()
 {
-    return Result::fail ("MCP stdio transport is not implemented yet");
+    return start (std::make_unique<MCPStdioServerTransport>());
 }
 
 Result MCPServer::startHttp (int port)

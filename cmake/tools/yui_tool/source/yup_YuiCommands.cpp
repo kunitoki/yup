@@ -21,6 +21,8 @@
 
 #include "yup_YuiCommands.h"
 
+#include <yup_core/yup_core.h>
+
 #include <iostream>
 #include <string_view>
 
@@ -29,8 +31,13 @@ std::optional<int> checkYuiToolCommand (int argc, char** argv)
     const std::string_view mode (argc > 1 ? argv[1] : "");
     const auto isHelp = mode == "--help" || mode == "-h";
 
-    if (mode == "verify" || mode == "lint" || mode == "schema" || mode == "import-svg" || mode == "render")
+    if (mode == "verify" || mode == "lint" || mode == "schema" || mode == "import-svg" || mode == "render" || mode == "inspect")
         return std::nullopt;
+
+#if ! YUP_WASM
+    if (mode == "mcp")
+        return std::nullopt;
+#endif
 
     std::cerr << "yup_yui_tool verify [--json] [--models <models.json>] <file.yui>...\n"
               << "yup_yui_tool lint [--json] [--strict] [--models <models.json>] <file.yui>...\n"
@@ -38,7 +45,13 @@ std::optional<int> checkYuiToolCommand (int argc, char** argv)
               << "yup_yui_tool schema [--output <file.json>]\n"
               << "yup_yui_tool import-svg <input.svg> [--output <output.yui>] [--name <Name>] [--color-properties]\n"
               << "yup_yui_tool render <file.yui> --output <image.png> [--size <width>x<height>] [--default-size <width>x<height>]\n"
-              << "  [--scale <factor>] [--theme dark|light] [--models <models.json>] [--drawing <Name>] [--as <Type>] [--palette <Name>]\n";
+              << "  [--scale <factor>] [--theme dark|light] [--models <models.json>] [--drawing <Name>] [--as <Type>] [--palette <Name>]\n"
+              << "yup_yui_tool inspect <file.yui> [--size <width>x<height>] [--default-size <width>x<height>]\n"
+              << "  [--theme dark|light] [--models <models.json>] [--drawing <Name>] [--as <Type>] [--palette <Name>]\n"
+#if ! YUP_WASM
+              << "yup_yui_tool mcp\n"
+#endif
+        ;
 
     return isHelp ? 0 : 2;
 }
@@ -58,6 +71,14 @@ int runYuiToolCommand (int argc, char** argv)
 
     if (mode == "render")
         return runYuiRenderCommand (argc, argv);
+
+    if (mode == "inspect")
+        return runYuiInspectCommand (argc, argv);
+
+#if ! YUP_WASM
+    if (mode == "mcp")
+        return runYuiMcpCommand (argc, argv);
+#endif
 
     return runYuiImportSvgCommand (argc, argv);
 }

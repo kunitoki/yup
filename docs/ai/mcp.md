@@ -134,6 +134,35 @@ Clients configure it as an HTTP server:
 { "type": "http", "url": "http://127.0.0.1:7380/mcp" }
 ```
 
+### MCPStdioServerTransport
+
+A server transport for the MCP stdio transport, for a server its client starts
+as a child process: one JSON-RPC message per line, read from the standard input
+and answered on the standard output. Nothing else may be written to that output.
+
+- Reads the input on a thread of its own, which calls the tool handlers one at
+  a time. Hop to the message thread for anything UI related.
+- The input ending is how the client leaves: `isConnected()` turns false and
+  `waitForInputToEnd()` returns.
+- `stop()` waits for the message being handled, never for the input: a
+  transport stopped while its input is still open leaves its thread to end with
+  the next line, or with the input.
+
+```cpp
+auto transport = std::make_unique<yup::MCPStdioServerTransport>();
+auto* stdio = transport.get();
+
+if (server.start (std::move (transport)).wasOk())
+    stdio->waitForInputToEnd(); // Serve until the client leaves
+```
+
+`MCPServer::startStdio()` is a shortcut for starting it. It also takes a pair of
+streams in place of the standard ones. Clients configure it as a command:
+
+```json
+{ "type": "stdio", "command": "/path/to/my-server", "args": ["--mcp"] }
+```
+
 ## MCPClient
 
 A synchronous client that connects to an MCP server through a transport.

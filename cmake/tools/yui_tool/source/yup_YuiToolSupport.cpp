@@ -44,21 +44,26 @@ bool YuiToolModels::load (const String& path)
         return false;
     }
 
-    const auto fail = [&file] (const String& reason)
+    if (const auto result = loadFile (file); result.failed())
     {
-        std::cerr << file.getFullPathName() << ": error: " << reason << "\n";
+        std::cerr << file.getFullPathName() << ": error: " << result.getErrorMessage() << "\n";
         return false;
-    };
+    }
 
+    return true;
+}
+
+Result YuiToolModels::loadFile (const File& file)
+{
     var parsed;
 
     if (const auto result = JSON::parse (file.loadFileAsString(), parsed); result.failed())
-        return fail (result.getErrorMessage());
+        return result;
 
     const auto* declared = parsed.getDynamicObject();
 
     if (declared == nullptr)
-        return fail ("expected an object with a member for each model");
+        return Result::fail ("expected an object with a member for each model");
 
     for (const auto& model : declared->getProperties())
     {
@@ -69,7 +74,7 @@ bool YuiToolModels::load (const String& path)
         const auto* properties = model.value.getDynamicObject();
 
         if (properties == nullptr)
-            return fail ("model '" + model.name.toString() + "' must be an object of properties and sample values");
+            return Result::fail ("model '" + model.name.toString() + "' must be an object of properties and sample values");
 
         DataTree tree ("model");
 
@@ -87,7 +92,7 @@ bool YuiToolModels::load (const String& path)
         providers.push_back (std::make_unique<DataTreeBindingProvider> (tree));
     }
 
-    return true;
+    return Result::ok();
 }
 
 void YuiToolModels::attachTo (YuiDocument& document) const
@@ -191,6 +196,43 @@ std::vector<YuiToolProblem> findYuiToolProblems (const YuiDocument& document, co
         problems.push_back ({ .file = file, .message = loadResult.getErrorMessage() });
 
     return problems;
+}
+
+namespace
+{
+
+// A file holding only declarations (styles, drawings, components) is written to be imported
+bool hasNoRootComponent (const String& text, const YuiLoader& loader)
+{
+    const auto parsed = YuiParser::parse (text, [&loader] (const String& path)
+    {
+        return loader.getLoadedText (path);
+    });
+
+    return parsed.wasOk() && findYuiToolRootIndex (parsed.document) < 0;
+}
+
+} // namespace
+
+std::vector<YuiToolProblem> findYuiToolFileProblems (const File& file, const std::optional<String>& unsavedText, const YuiToolModels& models)
+{
+    YuiDocument document;
+    YuiLoader loader (document);
+    models.attachTo (document);
+
+    auto result = loader.loadFile (file);
+
+    if (unsavedText.has_value())
+        result = loader.reloadFromString (*unsavedText);
+
+    if (result.failed())
+    {
+        // There is no interface to build from declarations alone, so they are checked as those of an empty one
+        if (const auto text = loader.getLoadedText (file.getFileName()); text.has_value() && hasNoRootComponent (*text, loader))
+            result = loader.reloadFromString (*text + "\nComponent {}\n");
+    }
+
+    return findYuiToolProblems (document, file, result);
 }
 
 int findYuiToolRootIndex (const DataTree& document)
@@ -358,4 +400,190 @@ YuiToolShown loadYuiToolTarget (YuiDocument& document, YuiLoader& loader, const 
 
     shown.target = target;
     return shown;
+}
+
+//==============================================================================
+
+std::optional<Size<float>> parseYuiToolSize (const String& text)
+{
+    const Size<float> size { text.upToFirstOccurrenceOf ("x", false, true).getFloatValue(), text.fromFirstOccurrenceOf ("x", false, true).getFloatValue() };
+
+    if (size.getWidth() < 1.0f || size.getHeight() < 1.0f)
+        return std::nullopt;
+
+    return size;
+}
+
+std::optional<bool> readYuiToolViewOption (int argc, char** argv, int& index, YuiToolViewOptions& options, YuiToolModels& models)
+{
+    const String argument (argv[index]);
+    const auto hasValue = index + 1 < argc;
+
+    if (argument == "--models" && hasValue)
+        return models.load (argv[++index]);
+
+    if (argument == "--drawing" && hasValue)
+    {
+        options.target.drawing = argv[++index];
+        return true;
+    }
+
+    if (argument == "--palette" && hasValue)
+    {
+        options.target.palette = argv[++index];
+        return true;
+    }
+
+    if (argument == "--as" && hasValue)
+    {
+        options.target.hostType = argv[++index];
+        return true;
+    }
+
+    if ((argument == "--size" || argument == "--default-size") && hasValue)
+    {
+        const String value (argv[++index]);
+        const auto size = parseYuiToolSize (value);
+
+        if (! size.has_value())
+        {
+            std::cerr << "invalid size, expected <width>x<height>: " << value << "\n";
+            return false;
+        }
+
+        (argument == "--size" ? options.size : options.fallbackSize) = *size;
+        return true;
+    }
+
+    if (argument == "--theme" && hasValue && (String (argv[index + 1]) == "dark" || String (argv[index + 1]) == "light"))
+    {
+        options.mode = String (argv[++index]) == "light" ? ThemePalette::Mode::light : ThemePalette::Mode::dark;
+        return true;
+    }
+
+    if (options.input == File() && ! argument.startsWithChar ('-'))
+    {
+        options.input = File::getCurrentWorkingDirectory().getChildFile (argument);
+        return true;
+    }
+
+    return std::nullopt;
+}
+
+//==============================================================================
+
+namespace
+{
+
+/** Fills the image behind the interface with the background of the palette its root is drawn with. */
+class Backdrop final : public Component
+{
+public:
+    explicit Backdrop (Component& rootToShow)
+        : root (rootToShow)
+    {
+        addAndMakeVisible (root);
+    }
+
+    void paint (Graphics& g) override
+    {
+        g.setFillColor (ApplicationTheme::getGlobalTheme()->getPalette (root).getColor (ThemePalette::Role::background));
+        g.fillAll();
+    }
+
+    void resized() override
+    {
+        root.setBounds (getLocalBounds());
+    }
+
+private:
+    Component& root;
+};
+
+} // namespace
+
+YuiToolView::YuiToolView (const YuiToolViewOptions& options, const YuiToolModels& models)
+    : input (options.input)
+    , previousPalette (ApplicationTheme::getGlobalTheme()->getPalette())
+{
+    ApplicationTheme::getGlobalTheme()->setPalette (ThemePalette ({}, options.mode));
+
+    models.attachTo (document);
+    shown = loadYuiToolTarget (document, loader, input, options.target);
+
+    auto* root = document.getRoot();
+
+    if (shown.status != YuiToolShown::Status::loaded || shown.result.failed() || root == nullptr)
+        return;
+
+    // The size asked for, else the one the root asks for, else a default one
+    auto size = options.size;
+
+    if (size.getWidth() < 1.0f)
+    {
+        if (root->getWidth() >= 1.0f && root->getHeight() >= 1.0f)
+            size = root->getSize();
+        else
+            size = options.fallbackSize.getWidth() >= 1.0f ? options.fallbackSize : shown.defaultSize;
+    }
+
+    backdrop = std::make_unique<Backdrop> (*root);
+    backdrop->setSize (size);
+}
+
+YuiToolView::~YuiToolView()
+{
+    // The interface goes before the theme it was styled with
+    backdrop.reset();
+    document.clear();
+
+    ApplicationTheme::getGlobalTheme()->setPalette (previousPalette);
+}
+
+std::vector<YuiToolProblem> YuiToolView::findProblems() const
+{
+    return findYuiToolProblems (document, input, shown.result);
+}
+
+void YuiToolView::settle()
+{
+    auto* root = getRoot();
+    auto* context = root != nullptr ? root->getStyleContext() : nullptr;
+
+    if (context == nullptr)
+        return;
+
+    // A pass restyles what the size, a state or the pass before changed, which may start transitions, then
+    // brings those running to their end, which may in turn change what other styles read
+    for (int pass = 0; pass < 4; ++pass)
+        context->refresh (3600.0);
+
+    context->restyleNow();
+}
+
+//==============================================================================
+
+std::unique_ptr<GraphicsContext> createYuiToolGraphicsContext()
+{
+    // Drawing needs a device of the GPU but no window, which only some platforms give
+#if YUP_MAC
+    return GraphicsContext::createContext (GpuPlatform::Metal, {});
+#elif YUP_WINDOWS
+    GraphicsContext::Options options;
+    options.allowHeadlessRendering = true;
+
+    return GraphicsContext::createContext (GpuPlatform::Direct3D, options);
+#else
+    return nullptr;
+#endif
+}
+
+bool encodeYuiToolPng (const Image& image, MemoryBlock& data)
+{
+    if (! image.isValid())
+        return false;
+
+    // The writer owns the stream, which trims the block to what was written when it goes
+    PngImageFormatWriter writer (new MemoryOutputStream (data, false), image.getPixelFormat());
+    return writer.writeImage (image);
 }

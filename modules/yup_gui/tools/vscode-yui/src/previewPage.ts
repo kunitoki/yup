@@ -376,7 +376,13 @@ export function previewPage (nonce: string, module: PreviewModule | undefined): 
 
     let tool;
     let failed = false;
+    let failure = "";
     let waiting;
+    const agentCalls = [];
+
+    // The files given before the tool started, in the order they came: what shows them and the calls of
+    // agents both give some, and the last one given of a file is the one that counts
+    const earlyFiles = [];
     let shown;
     let report;
     let collecting = false;
@@ -387,10 +393,46 @@ export function previewPage (nonce: string, module: PreviewModule | undefined): 
             return;
 
         failed = true;
+        failure = "the preview can't run here: " + reason;
         tool = undefined;
         waiting = undefined;
         showNote ("The preview can't run here: " + reason + ".");
         vscode.postMessage ({ type: "failed", reason: String (reason) });
+
+        for (const call of agentCalls.splice (0))
+            agentCall (call);
+    }
+
+    // Gives the tool the files of its host, at the paths it names them with
+    function writeFiles (files) {
+        for (const file of files) {
+            const pointer = tool._yuiToolAllocate (file.data.length);
+            new Uint8Array (tool.wasmMemory.buffer, pointer, file.data.length).set (file.data);
+            tool.ccall ("yuiToolWriteFile", null, ["string"], [file.path]);
+        }
+    }
+
+    // Runs a tool of an agent, which the page is asked for when the tool draws. Those asked before the tool
+    // started wait for it
+    function agentCall (message) {
+        if (failed) {
+            vscode.postMessage ({ type: "agentResult", id: message.id, error: failure });
+            return;
+        }
+
+        if (tool === undefined) {
+            earlyFiles.push (...message.files);
+            agentCalls.push (Object.assign ({}, message, { files: [] }));
+            return;
+        }
+
+        try {
+            writeFiles (message.files);
+            vscode.postMessage ({ type: "agentResult", id: message.id, result: tool.ccall ("yuiAgentCall", "string", ["string", "string"], [message.name, message.arguments]) });
+        }
+        catch (error) {
+            vscode.postMessage ({ type: "agentResult", id: message.id, error: String (error) });
+        }
     }
 
     function start () {
@@ -415,8 +457,19 @@ export function previewPage (nonce: string, module: PreviewModule | undefined): 
             yuiPreviewReady: () => {
                 tool = options;
 
+                try {
+                    writeFiles (earlyFiles.splice (0));
+                }
+                catch (error) {
+                    fail (error);
+                    return;
+                }
+
                 if (waiting !== undefined)
                     show (waiting);
+
+                for (const call of agentCalls.splice (0))
+                    agentCall (call);
             }
         };
 
@@ -463,11 +516,8 @@ export function previewPage (nonce: string, module: PreviewModule | undefined): 
             return;
 
         if (tool === undefined) {
-            // The files of the message waiting behind this one are still to be written
-            if (waiting !== undefined)
-                message = Object.assign ({}, message, { files: waiting.files.concat (message.files) });
-
-            waiting = message;
+            earlyFiles.push (...message.files);
+            waiting = Object.assign ({}, message, { files: [] });
             showNote ("Starting the preview...");
             return;
         }
@@ -475,11 +525,7 @@ export function previewPage (nonce: string, module: PreviewModule | undefined): 
         waiting = undefined;
 
         try {
-            for (const file of message.files) {
-                const pointer = tool._yuiToolAllocate (file.data.length);
-                new Uint8Array (tool.wasmMemory.buffer, pointer, file.data.length).set (file.data);
-                tool.ccall ("yuiToolWriteFile", null, ["string"], [file.path]);
-            }
+            writeFiles (message.files);
 
             report = undefined;
             errors = [];
@@ -770,6 +816,8 @@ export function previewPage (nonce: string, module: PreviewModule | undefined): 
             applyState (message);
         else if (message.type === "show")
             show (message);
+        else if (message.type === "agentCall")
+            agentCall (message);
         else if (message.type === "note" && ! failed)
             showNote (message.text);
     });

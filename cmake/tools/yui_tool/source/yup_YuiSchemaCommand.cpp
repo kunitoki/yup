@@ -20,10 +20,10 @@
 */
 
 #include "yup_YuiCommands.h"
-
-#include <yup_gui/yup_gui.h>
+#include "yup_YuiToolSupport.h"
 
 #include <iostream>
+#include <set>
 
 using namespace yup;
 
@@ -149,18 +149,45 @@ var describeSignal (const ComponentSignal& signal)
     return var (record);
 }
 
-// The properties and signals are the ones the type declares: the inherited ones are those of its base
-var describeComponentType (const ComponentTypeInfo& info)
+} // namespace
+
+// The properties and signals are the ones the type declares: the inherited ones are those of its base,
+// listed here too when asked, each with the type it comes from
+var describeYuiToolComponentType (const ComponentTypeInfo& info, bool includeInherited)
 {
     Array<var> properties;
-
-    for (const auto& property : info.getOwnProperties())
-        properties.add (describeProperty (property));
-
     Array<var> signals;
+    std::set<String> listedProperties;
+    std::set<String> listedSignals;
 
-    for (const auto& signal : info.getOwnSignals())
-        signals.add (describeSignal (signal));
+    for (const auto* type = &info; type != nullptr; type = includeInherited ? type->getBaseTypeInfo() : nullptr)
+    {
+        for (const auto& property : type->getOwnProperties())
+        {
+            if (! listedProperties.insert (property.name.toString()).second)
+                continue;
+
+            auto described = describeProperty (property);
+
+            if (type != &info)
+                described.getDynamicObject()->setProperty ("from", type->getTypeName().toString());
+
+            properties.add (described);
+        }
+
+        for (const auto& signal : type->getOwnSignals())
+        {
+            if (! listedSignals.insert (signal.name.toString()).second)
+                continue;
+
+            auto described = describeSignal (signal);
+
+            if (type != &info)
+                described.getDynamicObject()->setProperty ("from", type->getTypeName().toString());
+
+            signals.add (described);
+        }
+    }
 
     auto* record = new DynamicObject();
     record->setProperty ("name", info.getTypeName().toString());
@@ -174,8 +201,6 @@ var describeComponentType (const ComponentTypeInfo& info)
 
     return var (record);
 }
-
-} // namespace
 
 int runYuiSchemaCommand (int argc, char** argv)
 {
@@ -200,7 +225,7 @@ int runYuiSchemaCommand (int argc, char** argv)
     Array<var> types;
 
     for (const auto* info : ComponentTypeRegistry::getInstance().getRegisteredTypes())
-        types.add (describeComponentType (*info));
+        types.add (describeYuiToolComponentType (*info, false));
 
     auto* schema = new DynamicObject();
     schema->setProperty ("version", schemaVersion);

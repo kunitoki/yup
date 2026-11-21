@@ -82,8 +82,10 @@ function commonFolder (files: string[]): string {
 
     A name is looked for next to the document naming it, then next to the main one, which is where
     the paths of a document are resolved from.
+
+    @param isAllowed Tells whether a file a document names may be read, for who must not read them all.
 */
-export async function collectDocumentFiles (document: vscode.TextDocument, modelsPath: string | undefined): Promise<DocumentFiles> {
+export async function collectDocumentFiles (document: vscode.TextDocument, modelsPath: string | undefined, isAllowed: (file: string) => boolean = () => true): Promise<DocumentFiles> {
     const main = document.uri.fsPath;
     const contents = new Map<string, Uint8Array> ([[main, Buffer.from (document.getText (), "utf8")]]);
     const pending = [main];
@@ -108,7 +110,7 @@ export async function collectDocumentFiles (document: vscode.TextDocument, model
                 if (contents.has (candidate))
                     break;
 
-                const found = await read (candidate);
+                const found = isAllowed (candidate) ? await read (candidate) : undefined;
 
                 if (found === undefined || total + found.length > maximumBytes)
                     continue;

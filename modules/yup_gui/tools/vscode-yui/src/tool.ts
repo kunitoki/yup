@@ -51,6 +51,20 @@ export class YuiTool {
 
     /** Runs a command on the files given, of which only those that changed are sent again. */
     run (args: string[], files: YuiToolFile[] = []): Promise<YuiToolResult | undefined> {
+        return this.ask ({ args }, files);
+    }
+
+    /** Returns the tools of an agent as the tool describes them, in JSON. */
+    async agentTools (): Promise<string | undefined> {
+        return (await this.ask ({ agentTools: true }, []))?.stdout;
+    }
+
+    /** Runs a tool of an agent on the files given, with its arguments as JSON, and returns its answer in JSON. */
+    async agentCall (name: string, argumentsJson: string, files: YuiToolFile[]): Promise<string | undefined> {
+        return (await this.ask ({ agentTool: name, agentArguments: argumentsJson }, files))?.stdout;
+    }
+
+    private ask (asked: object, files: YuiToolFile[]): Promise<YuiToolResult | undefined> {
         const worker = this.start ();
 
         if (worker === undefined)
@@ -70,7 +84,7 @@ export class YuiTool {
             const id = this.nextId++;
 
             this.waiting.set (id, resolve);
-            worker.postMessage ({ id, args, files: changed });
+            worker.postMessage ({ ...asked, id, files: changed });
         });
     }
 

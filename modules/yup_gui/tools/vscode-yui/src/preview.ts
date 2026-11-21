@@ -3,6 +3,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { collectDocumentFiles, withoutComments } from "./documentFiles";
 import { maximumSize, PreviewModule, previewPage, zoomLevels } from "./previewPage";
+import { YuiToolFile } from "./tool";
 
 export interface PreviewSchema {
     instantiableTypes (): string[];
@@ -27,6 +28,15 @@ const rootTarget = "root";
 const plainHost = "Component";
 const themes = ["auto", "light", "dark"];
 const typingDelayMs = 150;
+const pageStartMs = 20000;
+const agentCallMs = 30000;
+
+/** A call of an agent the page was sent, until it answers. */
+interface AgentCall {
+    resolve (answer: string): void;
+    reject (reason: Error): void;
+    timer: NodeJS.Timeout;
+}
 
 /** A size of the preview: 'auto', 'panel' or a fixed '<width>x<height>' in logical pixels. */
 function isSizeOption (value: string): boolean {
@@ -87,6 +97,12 @@ function isLightTheme (): boolean {
     return kind === vscode.ColorThemeKind.Light || kind === vscode.ColorThemeKind.HighContrastLight;
 }
 
+/** Whether the preview shows the light theme: the one set for it, else the one matching the editor. */
+export function previewIsLight (): boolean {
+    const theme = themeOption ();
+    return theme !== "auto" ? theme === "light" : isLightTheme ();
+}
+
 /**
     The single preview panel, where the tool runs the interface of the active document.
 
@@ -106,6 +122,9 @@ export class YuiPreview {
     private modelsFile: string | undefined;
     private ready = false;
     private sequence = 0;
+    private readonly agentCalls = new Map<number, AgentCall> ();
+    private readonly startWaiters: Array<(started: boolean) => void> = [];
+    private agentSequence = 0;
 
     constructor (private readonly host: PreviewHost, private readonly toolScript: string | undefined) {
         this.disposables.push (
@@ -164,6 +183,65 @@ export class YuiPreview {
             return;
         }
 
+        this.createPanel ();
+    }
+
+    /**
+        Runs a tool of an agent in the page, which is where the tool can draw.
+
+        @param openIfClosed Whether to open the panel for it, beside the editor and without taking the focus.
+        @returns The answer of the tool, in JSON.
+    */
+    async agentCall (name: string, argumentsJson: string, files: YuiToolFile[], openIfClosed: boolean): Promise<string> {
+        if (this.toolScript === undefined)
+            throw new Error ("this installation of the extension has no yup_yui_tool module");
+
+        if (this.panel === undefined) {
+            if (! openIfClosed)
+                throw new Error ("the preview is closed: open a .yui document and run 'YUI: Open Preview'");
+
+            this.createPanel ();
+        }
+
+        if (! await this.pageStarted ())
+            throw new Error ("the preview did not start");
+
+        return new Promise ((resolve, reject) => {
+            const id = ++this.agentSequence;
+            const timer = setTimeout (() => this.agentCallEnded (id)?.reject (new Error ("the preview did not answer")), agentCallMs);
+
+            this.agentCalls.set (id, { resolve, reject, timer });
+            this.post ({ type: "agentCall", id, name, arguments: argumentsJson, files: this.unsent (files) });
+        });
+    }
+
+    // Resolves once the page listens, or with false when it is closed or takes too long to start
+    private pageStarted (): Promise<boolean> {
+        if (this.ready)
+            return Promise.resolve (true);
+
+        return new Promise (resolve => {
+            const timer = setTimeout (() => resolve (false), pageStartMs);
+
+            this.startWaiters.push (started => {
+                clearTimeout (timer);
+                resolve (started);
+            });
+        });
+    }
+
+    private agentCallEnded (id: number): AgentCall | undefined {
+        const call = this.agentCalls.get (id);
+
+        if (call !== undefined) {
+            clearTimeout (call.timer);
+            this.agentCalls.delete (id);
+        }
+
+        return call;
+    }
+
+    private createPanel (): void {
         const toolFolder = this.toolScript === undefined ? undefined : vscode.Uri.file (path.dirname (this.toolScript));
 
         this.ready = false;
@@ -177,6 +255,12 @@ export class YuiPreview {
             this.cancelTyping ();
             this.panel = undefined;
             this.ready = false;
+
+            for (const started of this.startWaiters.splice (0))
+                started (false);
+
+            for (const id of Array.from (this.agentCalls.keys ()))
+                this.agentCallEnded (id)?.reject (new Error ("the preview was closed"));
         }, undefined, this.disposables);
 
         const webview = this.panel.webview;
@@ -203,12 +287,26 @@ export class YuiPreview {
         const record = message as Record<string, unknown>;
         const name = record["name"];
         const value = record["value"];
+        const id = record["id"];
+        const result = record["result"];
 
         if (record["type"] === "ready") {
             // A page that was loaded again, as one moved to another window is, has none of the files
             this.sent.clear ();
             this.ready = true;
+
+            for (const started of this.startWaiters.splice (0))
+                started (true);
+
             void this.render ();
+        }
+        else if (record["type"] === "agentResult" && typeof id === "number") {
+            const call = this.agentCallEnded (id);
+
+            if (typeof result === "string")
+                call?.resolve (result);
+            else
+                call?.reject (new Error (String (record["error"])));
         }
         else if (record["type"] === "refresh") {
             void this.render ();
@@ -364,20 +462,7 @@ export class YuiPreview {
             modelsValues = null;
         }
 
-        // The page keeps the files it was given, so only those that changed are sent again
-        const changed = collected.files.filter (file => {
-            const digest = crypto.createHash ("sha1").update (file.data).digest ("hex");
-
-            if (this.sent.get (file.path) === digest)
-                return false;
-
-            this.sent.set (file.path, digest);
-            return true;
-        });
-
-        // A message to a page is written as JSON, where a Buffer of Node turns itself into a list of numbers
-        // before it can be sent as bytes: a plain array of bytes is sent as such
-        const files = changed.map (file => ({ path: file.path, data: new Uint8Array (file.data) }));
+        const files = this.unsent (collected.files);
 
         this.post ({
             type: "show",
@@ -390,10 +475,27 @@ export class YuiPreview {
             palette: target.palette,
             host: target.component.length > 0 ? target.component : (host !== plainHost ? host : ""),
             interface: target.id === rootTarget,
-            light: theme !== "auto" ? theme === "light" : isLightTheme (),
+            light: previewIsLight (),
             size,
             zoom
         });
+    }
+
+    // The page keeps the files it was given, so only those that changed are sent again
+    private unsent (files: YuiToolFile[]): { path: string; data: Uint8Array }[] {
+        const changed = files.filter (file => {
+            const digest = crypto.createHash ("sha1").update (file.data).digest ("hex");
+
+            if (this.sent.get (file.path) === digest)
+                return false;
+
+            this.sent.set (file.path, digest);
+            return true;
+        });
+
+        // A message to a page is written as JSON, where a Buffer of Node turns itself into a list of numbers
+        // before it can be sent as bytes: a plain array of bytes is sent as such
+        return changed.map (file => ({ path: file.path, data: new Uint8Array (file.data) }));
     }
 
     private post (message: unknown): void {

@@ -1,2 +1,6 @@
 src/**
+test/*.ts
+out-test/**
+node_modules/**
+esbuild.js
 **/*.map

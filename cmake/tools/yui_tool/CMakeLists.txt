@@ -43,6 +43,11 @@ set (yup_modules
     yup_graphics
     yup_gui)
 
+# The tool serves agents by itself with yup_ai, which the module a host calls into has no use for
+if (NOT YUP_PLATFORM_EMSCRIPTEN)
+    list (APPEND yup_modules yup_ai)
+endif()
+
 set (thirdparty_modules
     zlib
     xsimd
@@ -76,7 +81,7 @@ file (GLOB sources "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
 if (YUP_PLATFORM_EMSCRIPTEN)
     # For the web the tool is a module a host calls into, such as an editor extension: it runs the commands
     # on files given in memory, and is the application showing an interface live in the canvas of a page
-    list (REMOVE_ITEM sources "${CMAKE_CURRENT_LIST_DIR}/source/main.cpp")
+    list (REMOVE_ITEM sources "${CMAKE_CURRENT_LIST_DIR}/source/main.cpp" "${CMAKE_CURRENT_LIST_DIR}/source/yup_YuiMcpCommand.cpp")
     list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/web/main.cpp")
 
     yup_standalone_app (
@@ -113,6 +118,7 @@ else()
             yup::yup_events
             yup::yup_graphics
             yup::yup_gui
+            yup::yup_ai
             libpng)
 
     # yup_gui always compiles its SDL windowing, which a console application doesn't link by itself
