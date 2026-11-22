@@ -53,6 +53,36 @@ DRAWN = ('drawing Meter {\n'
          '}\n\n'
          'style {\n    #meter { drawing: Meter; }\n}\n\n'
          'Component { width: 100; height: 80;\n    Component { id: meter; x: 20; y: 10; width: 60; height: 50; }\n}\n')
+USED = ('palette Signal {\n    colors: #ff0000, #00ff00;\n    background: #ff0000;\n}\n\n'
+        'drawing Dial {\n    rect { bounds: bounds; fill: #0000ff; }\n'
+        '    circle { center: bounds.center; radius: 2 + 4 * normalized; fill: #ffffff; }\n}\n\n'
+        'drawing Spare {\n    viewBox: rect (0, 0, 48, 24);\n    rect { bounds: bounds; fill: palette.background; }\n}\n\n'
+        'component Caption : Label { text: "Imported"; }\n'
+        'component Unused : Label { text: "Unused"; }\n\n'
+        'style {\n    .dial { drawing: Dial; }\n}\n\n'
+        'Component { width: 100; height: 80;\n'
+        '    Slider { id: first; class: dial; x: 10; y: 20; width: 30; height: 30; paintMargin: 4; }\n'
+        '    Slider { id: second; class: dial; x: 60; y: 20; width: 20; height: 20; }\n'
+        '    Caption { id: caption; x: 10; y: 60; width: 60; height: 16; }\n'
+        '}\n')
+# A document as it is while it is typed: its last component is not closed, so it does not load
+TYPED = ('import "parts.yui";\n\n'
+         'tokens { gap: 8; }\n\n'
+         'palette Ember { mode: dark; colors: #1b1b1e, #ff8800; glow: #ffcc00; }\n\n'
+         'drawing Knob {\n'
+         '    property ring: color = palette.glow;\n'
+         '    drawing Cap { circle { center: bounds.center; radius: 4; } }\n'
+         '    use Cap { bounds: bounds; }\n'
+         '    circle {\n        ra\n    }\n'
+         '}\n\n'
+         'component Dial : Slider {\n    property caption: string = "Dial";\n    signal turned (amount);\n}\n\n'
+         'style {\n    #add, .knob { drawing: Knob; ring: #abc; }\n    .bar { drawing: Bar; }\n}\n\n'
+         'Column {\n    id: panel;\n'
+         '    Dial { id: cutoff; sliderType: rotaryVerticalDrag; value <=> params.cutoff; }\n'
+         '    Dial {\n        id: other;\n        cap\n    }\n'
+         '    Slider { wid\n')
+PARTS = 'drawing Bar { rect { bounds: bounds; fill: #ff0000; } }\ncomponent Toolbar : Row { }\n'
+NEEDLE = "drawing Needle {\n    circle { center: bounds.center; radius: 4 * normalized; fill: #ff0000; }\n}\n"
 SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#ff0000"/></svg>\n'
 
 
@@ -82,6 +112,8 @@ class YuiToolCliTests(unittest.TestCase):
 
     def test_help_and_usage_errors(self):
         self.assertEqual(self.invoke("--help").returncode, 0)
+        self.assertEqual(self.invoke("--version").returncode, 0)
+        self.assertTrue(self.invoke("--version").stdout.startswith("yup_yui_tool "))
         self.assertEqual(self.invoke().returncode, 2)
         self.assertEqual(self.invoke("format", "ui.yui").returncode, 2)
         self.assertEqual(self.invoke("verify").returncode, 2)
@@ -382,9 +414,38 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(self.render("colors.yui", "--scale", "1"), (360, 300))
         self.assertEqual(self.render("colors.yui", "--palette", "Ember", "--scale", "1"), (360, 300))
 
-    def test_render_previews_a_declaration_of_a_file_with_a_root(self):
-        self.write("ui.yui", 'component Caption : Label { text: "Imported"; }\n\nColumn { Caption { id: caption; } }\n')
-        self.assertEqual(self.render("ui.yui", "--as", "Caption", "--scale", "1"), (200, 200))
+    def test_render_previews_a_declaration_where_the_interface_uses_it(self):
+        self.write("ui.yui", USED)
+
+        # The first component the drawing paints, with its paint margin, and the first one of the type
+        self.assertEqual(self.render("ui.yui", "--drawing", "Dial", "--scale", "1"), (38, 38))
+        self.assertEqual(self.render("ui.yui", "--as", "Caption", "--scale", "1"), (60, 16))
+
+    def test_render_previews_a_declaration_the_interface_does_not_use_alone(self):
+        self.write("ui.yui", USED)
+
+        # A drawing is given the size of its view box and the first palette of the file
+        self.assertEqual(self.render("ui.yui", "--drawing", "Spare", "--scale", "1"), (48, 24))
+        self.assertEqual(self.first_pixel(), (255, 0, 0))
+
+        self.assertEqual(self.render("ui.yui", "--as", "Unused", "--scale", "1"), (200, 200))
+        self.assertEqual(self.render("ui.yui", "--drawing", "Dial", "--as", "Slider", "--scale", "1"), (200, 200))
+
+    def test_render_draws_an_element_or_a_region(self):
+        self.write("ui.yui", USED)
+        self.assertEqual(self.render("ui.yui", "--element", "second", "--margin", "0", "--scale", "1"), (20, 20))
+        self.assertEqual(self.first_pixel(), (0, 0, 255))
+        self.assertEqual(self.render("ui.yui", "--element", "second", "--scale", "1"), (36, 36))
+        self.assertEqual(self.render("ui.yui", "--drawing", "Dial", "--element", "1", "--margin", "0", "--scale", "1"), (20, 20))
+        self.assertEqual(self.render("ui.yui", "--region", "90,70,50,40", "--scale", "1"), (10, 10))
+
+    def test_render_draws_guides_over_the_components_named(self):
+        self.write("ui.yui", USED)
+        self.assertEqual(self.render("ui.yui", "--scale", "1"), (100, 80))
+        plain = (self.root / "out.png").read_bytes()
+
+        self.assertEqual(self.render("ui.yui", "--guides", "first,1", "--scale", "1"), (100, 80))
+        self.assertNotEqual((self.root / "out.png").read_bytes(), plain)
 
     def test_render_reports_what_cant_be_drawn(self):
         self.write("broken.yui", UNKNOWN_TYPE)
@@ -400,6 +461,11 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertIn("Missing", self.render("dot.yui", "--drawing", "Missing", code=1).stderr)
         self.assertIn("Missing", self.render("dot.yui", "--palette", "Missing", code=1).stderr)
 
+        self.write("used.yui", USED)
+        self.assertIn("nobody", self.render("used.yui", "--element", "nobody", code=1).stderr)
+        self.assertIn("nobody", self.render("used.yui", "--guides", "first,nobody", code=1).stderr)
+        self.assertIn("nothing of the interface", self.render("used.yui", "--region", "500,500,10,10", code=1).stderr)
+
     def test_render_usage_errors(self):
         self.write("ui.yui", VALID)
         self.assertEqual(self.invoke("render", "ui.yui").returncode, 2)
@@ -410,6 +476,9 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--theme", "sepia").returncode, 2)
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--drawing", "A", "--palette", "B").returncode, 2)
         self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--as", "}").returncode, 2)
+        self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--region", "1,2,3").returncode, 2)
+        self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--margin", "wide").returncode, 2)
+        self.assertEqual(self.invoke("render", "ui.yui", "--output", "out.png", "--element", "knob", "--region", "0,0,4,4").returncode, 2)
 
     # ==========================================================================
     # inspect
@@ -451,6 +520,38 @@ class YuiToolCliTests(unittest.TestCase):
         layout = self.inspect("dot.yui", "--drawing", "Dot", "--as", "Slider")
         self.assertEqual((layout["root"]["type"], layout["width"], layout["height"]), ("Slider", 200, 200))
 
+    def test_inspect_describes_a_declaration_where_the_interface_uses_it(self):
+        self.write("ui.yui", USED)
+
+        first, second, caption = self.inspect("ui.yui")["root"]["children"]
+        self.assertEqual(first["paintBounds"], [6, 16, 38, 38])
+        self.assertNotIn("paintBounds", second)
+
+        used = self.inspect("ui.yui", "--drawing", "Dial")
+        self.assertEqual((used["root"]["type"], used["root"]["id"], used["root"]["path"], used["root"]["bounds"]), ("Slider", "first", "0", [10, 20, 30, 30]))
+        self.assertEqual((used["width"], used["height"]), (100, 80))
+        self.assertEqual(self.inspect("ui.yui", "--as", "Caption")["root"]["id"], "caption")
+
+        # A component is described alone when named, another use of the drawing as well
+        self.assertEqual(self.inspect("ui.yui", "--element", "second")["root"]["bounds"], [60, 20, 20, 20])
+        self.assertEqual(self.inspect("ui.yui", "--drawing", "Dial", "--element", "1")["root"]["id"], "second")
+        self.assertIn("nobody", self.inspect("ui.yui", "--element", "nobody", code=1).stderr)
+
+        # What the interface does not use stands alone in place of it
+        self.assertEqual((self.inspect("ui.yui", "--drawing", "Spare")["width"], self.inspect("ui.yui", "--as", "Unused")["width"]), (48, 200))
+
+    def test_inspect_tells_when_a_drawing_needs_the_widget_it_is_made_for(self):
+        self.write("needle.yui", NEEDLE)
+
+        alone = self.invoke("inspect", "needle.yui")
+        self.assertEqual(alone.returncode, 0, alone.stderr)
+        self.assertIn("Unknown symbol 'normalized'", alone.stderr)
+        self.assertIn("hint: ", alone.stderr)
+
+        hosted = self.invoke("inspect", "needle.yui", "--as", "Slider")
+        self.assertEqual(hosted.returncode, 0, hosted.stderr)
+        self.assertNotIn("hint: ", hosted.stderr)
+
     def test_inspect_reports_what_cant_be_laid_out(self):
         self.write("broken.yui", UNKNOWN_TYPE)
         self.write("style.yui", STYLE_ONLY)
@@ -466,6 +567,124 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(self.invoke("inspect", "ui.yui", "--size", "big").returncode, 2)
         self.assertEqual(self.invoke("inspect", "ui.yui", "--scale", "2").returncode, 2)
         self.assertEqual(self.invoke("inspect", "ui.yui", "--drawing", "A", "--palette", "B").returncode, 2)
+
+    # ==========================================================================
+    # outline, complete, definition, hover
+
+    def ask(self, command, *args, code=0):
+        """Returns what a command of an editor answers."""
+        result = self.invoke(command, *args)
+        self.assertEqual(result.returncode, code, result.stderr)
+        return json.loads(result.stdout) if code == 0 else result
+
+    @staticmethod
+    def place(text, marker, inside=0):
+        """Returns the place right after a marker of a text, or that many characters before its end, as <line>:<column>."""
+        index = text.index(marker) + len(marker) - inside
+        return f"{text.count(chr(10), 0, index) + 1}:{index - text.rfind(chr(10), 0, index)}"
+
+    def labels(self, marker, inside=0):
+        found = self.ask("complete", "ui.yui", "--at", self.place(TYPED, marker, inside))
+        return {item["label"]: item for item in found["items"]}
+
+    def test_outline_tells_what_a_file_that_does_not_load_is_made_of(self):
+        self.write("ui.yui", TYPED)
+        parts = self.write("parts.yui", PARTS)
+        self.assertEqual(self.invoke("verify", "ui.yui").returncode, 1)
+
+        outline = self.ask("outline", "ui.yui")
+        symbols = outline["symbols"]
+        self.assertEqual([(symbol["name"], symbol["kind"]) for symbol in symbols],
+                         [("tokens", "tokens"), ("Ember", "palette"), ("Knob", "drawing"), ("Dial", "component"), ("style", "style"), ("Column #panel", "element")])
+        self.assertEqual([child["name"] for child in symbols[2]["children"]], ["ring"])
+        self.assertEqual([child["name"] for child in symbols[4]["children"]], ["#add, .knob", ".bar"])
+        self.assertEqual([child["name"] for child in symbols[5]["children"]], ["Dial #cutoff", "Dial #other", "Slider"])
+        self.assertEqual((symbols[2]["range"][:2], symbols[2]["selection"]), ([7, 1], [7, 1, 7, 13]))
+
+        self.assertEqual(outline["imports"], [{"path": "parts.yui", "range": [1, 9, 1, 18], "file": str(parts)}])
+
+        # The colors are those written as values: the id of a selector is not one
+        lines = TYPED.split("\n")
+        written = [lines[color["range"][0] - 1][color["range"][1] - 1:color["range"][3] - 1] for color in outline["colors"]]
+        self.assertEqual(written, ["#1b1b1e", "#ff8800", "#ffcc00", "#abc"])
+        self.assertEqual([round(part * 255) for part in outline["colors"][3]["color"]], [0xaa, 0xbb, 0xcc, 255])
+
+        # What it can show is its interface, what it declares and what the files it imports declare
+        self.assertEqual([target["id"] for target in outline["targets"]],
+                         ["root", "drawing:Knob", "palette:Ember", "component:Dial", "drawing:Bar", "component:Toolbar"])
+        self.assertEqual(outline["targets"][4], {"id": "drawing:Bar", "label": "Drawing: Bar (parts.yui)", "drawing": "Bar", "palette": "", "component": ""})
+        self.assertEqual(outline["hosts"][0], "Component")
+        self.assertTrue({"Slider", "Dial", "Toolbar"} <= set(outline["hosts"]))
+
+    def test_complete_tells_what_can_be_written_at_a_place(self):
+        self.write("ui.yui", TYPED)
+        self.write("parts.yui", PARTS)
+        self.write("ui.models.json", '{ "params": { "cutoff": 0.5, "name": "Init" } }')
+
+        # Where a statement starts: the properties and signals of the component, and the types it can hold
+        statements = self.labels("Slider { wid")
+        self.assertEqual((statements["width"]["kind"], statements["onValueChanged"]["kind"], statements["Dial"]["kind"]), ("property", "signal", "type"))
+        self.assertIn("Toolbar", statements)
+
+        # A component declared adds its own to those of the type it is made from
+        declared = self.labels("        cap")
+        self.assertEqual((declared["caption"]["detail"], declared["turned"]["kind"]), ("string", "signal"))
+        self.assertIn("value", declared)
+
+        # In a drawing: what an element holds and takes, and the drawings it can use
+        shape = self.labels("        ra")
+        self.assertTrue({"radius", "center", "fill"} <= set(shape))
+        self.assertNotIn("width", shape)
+        self.assertTrue({"Cap", "Knob", "Bar"} <= set(self.labels("    use ")))
+
+        # After a dot: the colors of the palettes, and the properties of a model
+        self.assertTrue({"accent", "glow"} <= set(self.labels("= palette.")))
+        self.assertEqual(sorted(self.labels("<=> params.")), ["cutoff", "name"])
+
+        # The value of a property: the drawings declared, or what an enumeration takes
+        self.assertTrue({"Knob", "Bar", "none"} <= set(self.labels(".knob { drawing: ")))
+        self.assertIn("rotaryVerticalDrag", self.labels("sliderType: "))
+
+        # At the top of a file: what it is made of
+        self.assertTrue({"import", "style", "Slider"} <= set(self.labels('import "parts.yui";\n')))
+
+    def test_definition_tells_where_what_is_named_is_declared(self):
+        ui = self.write("ui.yui", TYPED)
+        parts = self.write("parts.yui", PARTS)
+
+        def definition(marker, inside=1):
+            return self.ask("definition", "ui.yui", "--at", self.place(TYPED, marker, inside))
+
+        self.assertEqual(definition(".knob { drawing: Knob"), {"file": str(ui), "line": 7, "column": 9})
+        self.assertEqual(definition(".bar { drawing: Bar"), {"file": str(parts), "line": 1, "column": 9})
+        self.assertEqual(definition('import "parts'), {"file": str(parts), "line": 1, "column": 1})
+        self.assertEqual(definition("    use Cap"), {"file": str(ui), "line": 9, "column": 13})
+        self.assertEqual(definition("= palette.glow"), {"file": str(ui), "line": 5, "column": 55})
+        self.assertEqual(definition("    Dial { id: cutoff", inside=14), {"file": str(ui), "line": 16, "column": 11})
+        self.assertEqual(definition("id: panel"), {})
+
+    def test_hover_tells_what_a_property_is(self):
+        self.write("ui.yui", TYPED)
+        self.write("parts.yui", PARTS)
+
+        told = self.ask("hover", "ui.yui", "--at", self.place(TYPED, "id: cutoff; sliderType", 1))
+        self.assertEqual(told["code"], "sliderType: enumeration")
+        self.assertIn("rotaryVerticalDrag", told["values"])
+        self.assertEqual(told["range"], [28, 24, 28, 34])
+
+        # Only what a statement starts with is one
+        self.assertEqual(self.ask("hover", "ui.yui", "--at", self.place(TYPED, "id: cutoff", 1)), {})
+
+    def test_editor_commands_usage_errors(self):
+        self.write("ui.yui", VALID)
+        self.assertEqual(self.invoke("outline").returncode, 2)
+        self.assertEqual(self.invoke("outline", "missing.yui").returncode, 2)
+        self.assertEqual(self.invoke("complete", "ui.yui").returncode, 2)
+        self.assertEqual(self.invoke("complete", "ui.yui", "--at", "3").returncode, 2)
+        self.assertEqual(self.invoke("definition", "ui.yui", "--at", "0:1").returncode, 2)
+        self.assertEqual(self.invoke("hover", "ui.yui", "--unknown").returncode, 2)
+        # A place past the end of the file is its end
+        self.assertIn("import", {item["label"] for item in self.ask("complete", "ui.yui", "--at", "99:99")["items"]})
 
     # ==========================================================================
     # mcp
@@ -583,6 +802,36 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(elements["caption"]["text"][:2], [20, 10])
         self.assertTrue(0 < elements["caption"]["text"][2] < 60)
         self.assertNotIn("text", elements["track"])
+
+    def test_mcp_shows_a_declaration_where_the_interface_uses_it(self):
+        self.write("ui.yui", USED)
+        self.write("needle.yui", NEEDLE)
+
+        used = json.loads(self.call("yui_inspect", file="ui.yui", drawing="Dial")[1])
+        self.assertEqual(used["use"], {"type": "Slider", "id": "first", "path": "0"})
+        self.assertEqual((used["root"]["id"], used["problems"]), ("first", []))
+        self.assertEqual(json.loads(self.call("yui_inspect", file="ui.yui", drawing="Dial", element="second")[1])["root"]["id"], "second")
+        self.assertNotIn("use", json.loads(self.call("yui_inspect", file="ui.yui", drawing="Spare")[1]))
+
+        # A drawing made for a widget says so when it is shown on a plain component
+        self.assertIn("hint", json.loads(self.call("yui_inspect", file="needle.yui")[1]))
+        self.assertNotIn("hint", json.loads(self.call("yui_inspect", file="needle.yui", **{"as": "Slider"})[1]))
+
+        failed, text, _ = self.call("yui_render", file="ui.yui", drawing="Dial")
+        if failed and "no graphics device" in text:
+            self.skipTest("no graphics device to render with")
+        self.assertFalse(failed, text)
+
+        drawn = json.loads(text)
+        self.assertEqual((drawn["width"], drawn["height"], drawn["region"], drawn["use"]["id"]), (38, 38, [6, 16, 38, 38], "first"))
+
+        # Guides are drawn over the components named
+        plain = self.call("yui_render", file="ui.yui")[2]
+        failed, _, guided = self.call("yui_render", file="ui.yui", guides=["first", "1"])
+        self.assertFalse(failed)
+        self.assertNotEqual(guided, plain)
+        self.assertTrue(self.call("yui_render", file="ui.yui", guides=["nobody"])[0])
+        self.assertTrue(self.call("yui_render", file="ui.yui", guides="first")[0])
 
     def test_mcp_tells_why_a_tool_cant_answer(self):
         self.write("broken.yui", UNKNOWN_TYPE)
@@ -841,6 +1090,32 @@ class YuiToolCliTests(unittest.TestCase):
         self.write("notes.png", "not an image")
         self.assertTrue(self.call("yui_render", file="ui.yui", reference="missing.png")[0])
         self.assertTrue(self.call("yui_render", file="ui.yui", reference="notes.png")[0])
+
+    def test_mcp_reads_and_writes_images_inside_its_folder_only(self):
+        self.write("ui.yui", HALVES.replace("TONE", "#0000ff"))
+        self.draw(file="ui.yui", output="reference.png")
+
+        elsewhere = tempfile.TemporaryDirectory()
+        self.addCleanup(elsewhere.cleanup)
+        outside = Path(elsewhere.name).resolve()
+        (outside / "reference.png").write_bytes((self.root / "reference.png").read_bytes())
+        (self.root / "link").symlink_to(outside, target_is_directory=True)
+
+        for reference in (str(outside / "reference.png"), "link/reference.png"):
+            failed, text, _ = self.call("yui_render", file="ui.yui", reference=reference)
+            self.assertTrue(failed and "'reference'" in text, text)
+
+        # A link is not followed out of the folder
+        failed, text, _ = self.call("yui_render", file="ui.yui", output="link/shot.png")
+        self.assertTrue(failed and "'output'" in text, text)
+        self.assertFalse((outside / "shot.png").exists())
+
+    def test_mcp_refuses_what_is_not_a_number(self):
+        self.write("ui.yui", HALVES.replace("TONE", "#0000ff"))
+
+        for name, value in (("scale", "nan"), ("grid", "nan"), ("region", ["nan", 0, 10, 10])):
+            failed, text, _ = self.call("yui_render", file="ui.yui", **{name: value})
+            self.assertTrue(failed and f"'{name}'" in text, text)
 
 
 if __name__ == "__main__":

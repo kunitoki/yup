@@ -248,6 +248,7 @@ struct DrawingStyle::Compiled
     std::vector<const Node*> evaluated;
     std::map<String, const ExpressionType*> symbols;
     std::vector<ComponentProperty> properties;
+    String name;
 
     /* The drawings found by name through the resolver, as they were when compiling. */
     std::vector<std::pair<String, DataTree>> dependencies;
@@ -353,6 +354,7 @@ public:
 
             expansions.push_back (drawing);
             compileDrawing (drawing, path, std::move (scope), nullptr, result.nodes);
+            result.name = name;
             result.numLevels = numLevels;
             result.numLoops = numLoops;
         }
@@ -1434,22 +1436,26 @@ private:
     }
 
     /* Compiles the properties of a group into its program: `property:output` entries, after the statements it always needs. */
+    /* Compiles properties of an element into the program of its node. Each is `property`, `property:output`
+       for one written to an output of another name, or `property:output:function` for one given to a function first. */
     void compileProperties (Node& node, const DataTree& element, const String& path, const Scope& scope, const StringArray& properties, Statements assignments = {})
     {
         StringArray uses;
 
         for (const auto& entry : properties)
         {
-            const auto property = entry.upToFirstOccurrenceOf (":", false, false);
+            const auto fields = StringArray::fromTokens (entry, ":", "");
+            const auto property = fields[0];
             const Identifier propId (property);
 
             if (! element.hasProperty (propId))
                 continue;
 
-            const auto output = entry.containsChar (':') ? entry.fromFirstOccurrenceOf (":", false, false) : property;
+            const auto output = fields.size() > 1 ? fields[1] : property;
             const auto value = parseValue (element, propId, path, scope);
+            const auto text = fields.size() > 2 ? fields[2] + " (" + value.text + ")" : value.text;
 
-            assignments.push_back ({ output + " = " + value.text + ";", path + "." + property, element, propId });
+            assignments.push_back ({ output + " = " + text + ";", path + "." + property, element, propId });
             uses.addArray (value.uses);
         }
 
@@ -1471,6 +1477,10 @@ private:
         node.size = findOutput<Size<float>> (node.program, "_size");
         node.reference = findOutput<Point<float>> (node.program, "_reference");
         node.angle = findOutput<float> (node.program, "_angle");
+        node.clip = findOutput<Rectangle<float>> (node.program, "clip");
+        node.clipPath = findOutput<Path> (node.program, "clipPath");
+        node.maskPath = findOutput<Path> (node.program, "_maskPath");
+        node.maskMode = findOutput<LayerMaskMode> (node.program, "_maskMode");
         addSlot (node, false);
     }
 
@@ -1664,44 +1674,7 @@ private:
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::layer;
 
-        Statements assignments;
-        StringArray uses;
-
-        const auto addLayerProp = [&] (const char* propName, const char* outputName, bool wrapMaskPath = false)
-        {
-            const Identifier propId (propName);
-            if (! element.hasProperty (propId))
-                return;
-
-            const auto value = parseValue (element, propId, path, scope);
-            const auto rhs = wrapMaskPath ? ("_toMaskPath (" + value.text + ")") : value.text;
-            assignments.push_back ({ String (outputName) + " = " + rhs + ";", path + "." + propName, element, propId });
-            uses.addArray (value.uses);
-        };
-
-        addLayerProp ("opacity", "opacity");
-        addLayerProp ("blend", "blend");
-        addLayerProp ("clip", "clip");
-        addLayerProp ("clipPath", "clipPath");
-        addLayerProp ("mask", "_maskPath", true);
-        addLayerProp ("maskMode", "_maskMode");
-        addLayerProp ("visible", "visible");
-
-        if (! assignments.empty())
-        {
-            auto statements = selectLets (scope, uses);
-            statements.insert (statements.end(), assignments.begin(), assignments.end());
-
-            node->program = compileStatements (statements, path, element);
-            node->visible = findOutput<bool> (node->program, "visible");
-            node->opacity = findOutput<float> (node->program, "opacity");
-            node->blend = findOutput<BlendMode> (node->program, "blend");
-            node->clip = findOutput<Rectangle<float>> (node->program, "clip");
-            node->clipPath = findOutput<Path> (node->program, "clipPath");
-            node->maskPath = findOutput<Path> (node->program, "_maskPath");
-            node->maskMode = findOutput<LayerMaskMode> (node->program, "_maskMode");
-            addSlot (*node, false);
-        }
+        compileProperties (*node, element, path, scope, { "opacity", "blend", "clip", "clipPath", "mask:_maskPath:_toMaskPath", "maskMode:_maskMode", "visible" });
 
         // What a filtered layer draws is kept, like the tile of a pattern, until what its elements read around it changes
         const bool isFiltered = element.getChildWithName ("filter").isValid();
@@ -1913,37 +1886,7 @@ private:
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::clip;
 
-        Statements assignments;
-        StringArray uses;
-
-        const auto addClipProp = [&] (const char* propName, const char* outputName)
-        {
-            const Identifier propId (propName);
-            if (! element.hasProperty (propId))
-                return;
-
-            const auto value = parseValue (element, propId, path, scope);
-            assignments.push_back ({ String (outputName) + " = " + value.text + ";", path + "." + propName, element, propId });
-            uses.addArray (value.uses);
-        };
-
-        addClipProp ("bounds", "clip");
-        addClipProp ("rect", "clip");
-        addClipProp ("path", "clipPath");
-        addClipProp ("clipPath", "clipPath");
-        addClipProp ("visible", "visible");
-
-        if (! assignments.empty())
-        {
-            auto statements = selectLets (scope, uses);
-            statements.insert (statements.end(), assignments.begin(), assignments.end());
-
-            node->program = compileStatements (statements, path, element);
-            node->visible = findOutput<bool> (node->program, "visible");
-            node->clip = findOutput<Rectangle<float>> (node->program, "clip");
-            node->clipPath = findOutput<Path> (node->program, "clipPath");
-            addSlot (*node, false);
-        }
+        compileProperties (*node, element, path, scope, { "bounds:clip", "rect:clip", "path:clipPath", "clipPath", "visible" });
 
         compileElements (element, path, scope.enter(), Placement::normal, node->children, { nullptr, &node->clipShapes });
         return node;
@@ -1959,38 +1902,7 @@ private:
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::mask;
 
-        Statements assignments;
-        StringArray uses;
-
-        for (const auto* modeProp : { "mode", "maskMode" })
-        {
-            const Identifier propId (modeProp);
-            if (! element.hasProperty (propId))
-                continue;
-
-            const auto value = parseValue (element, propId, path, scope);
-            assignments.push_back ({ "_maskMode = " + value.text + ";", path + "." + modeProp, element, propId });
-            uses.addArray (value.uses);
-        }
-
-        if (element.hasProperty ("visible"))
-        {
-            const Identifier propId ("visible");
-            const auto value = parseValue (element, propId, path, scope);
-            assignments.push_back ({ "visible = " + value.text + ";", path + ".visible", element, propId });
-            uses.addArray (value.uses);
-        }
-
-        if (! assignments.empty())
-        {
-            auto statements = selectLets (scope, uses);
-            statements.insert (statements.end(), assignments.begin(), assignments.end());
-
-            node->program = compileStatements (statements, path, element);
-            node->visible = findOutput<bool> (node->program, "visible");
-            node->maskMode = findOutput<LayerMaskMode> (node->program, "_maskMode");
-            addSlot (*node, false);
-        }
+        compileProperties (*node, element, path, scope, { "mode:_maskMode", "maskMode:_maskMode", "visible" });
 
         compileElements (element, path, scope.enter(), Placement::normal, node->children);
         return node;
@@ -2587,6 +2499,11 @@ StringArray DrawingStyle::getShapePaintProperties()
     return Compiler::listShapePaint();
 }
 
+const String& DrawingStyle::getName() const noexcept
+{
+    return compiled->name;
+}
+
 const std::vector<ComponentProperty>& DrawingStyle::getProperties() const noexcept
 {
     return compiled->properties;
@@ -3153,11 +3070,10 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
 
                     if (fitting == Fitting::tile)
                     {
-                        g.setClipPath (targetArea);
-
-                        for (float y = targetArea.getY(); y < targetArea.getBottom(); y += sourceBounds.getHeight())
-                            for (float x = targetArea.getX(); x < targetArea.getRight(); x += sourceBounds.getWidth())
-                                g.drawImage (image, { x, y, sourceBounds.getWidth(), sourceBounds.getHeight() });
+                        // One fill, however many tiles the area holds
+                        g.setFillImage (image, AffineTransform::translation (targetArea.getX(), targetArea.getY()), { ImageWrap::Repeat, ImageWrap::Repeat, ImageFilter::Linear });
+                        g.setFeather (0.0f);
+                        g.fillRect (targetArea);
                     }
                     else
                     {

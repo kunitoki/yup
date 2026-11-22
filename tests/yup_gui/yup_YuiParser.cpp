@@ -687,3 +687,17 @@ TEST_F (YuiParserTest, StripsCommentsInsideRawStyleValuesSelectorsAndExpressions
     EXPECT_TRUE (unclosedArray.failed());
 }
 
+TEST_F (YuiParserTest, ReportsElementsNestedTooDeeply)
+{
+    const auto nested = [] (int depth)
+    {
+        return String::repeatedString ("Component { ", depth) + String::repeatedString ("}", depth);
+    };
+
+    EXPECT_TRUE (YuiParser::parse (nested (64)).wasOk());
+
+    const auto parsed = YuiParser::parse (nested (200));
+    ASSERT_FALSE (parsed.wasOk());
+    EXPECT_TRUE (parsed.diagnostics.front().message.contains ("nested")) << parsed.diagnostics.front().message;
+}
+

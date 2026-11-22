@@ -34,6 +34,15 @@ std::optional<int> checkYuiToolCommand (int argc, char** argv)
     if (mode == "verify" || mode == "lint" || mode == "schema" || mode == "import-svg" || mode == "render" || mode == "inspect")
         return std::nullopt;
 
+    if (mode == "outline" || mode == "complete" || mode == "definition" || mode == "hover")
+        return std::nullopt;
+
+    if (mode == "--version")
+    {
+        std::cout << "yup_yui_tool " << YUP_YUI_TOOL_VERSION << "\n";
+        return 0;
+    }
+
 #if ! YUP_WASM
     if (mode == "mcp")
         return std::nullopt;
@@ -46,12 +55,17 @@ std::optional<int> checkYuiToolCommand (int argc, char** argv)
               << "yup_yui_tool import-svg <input.svg> [--output <output.yui>] [--name <Name>] [--color-properties]\n"
               << "yup_yui_tool render <file.yui> --output <image.png> [--size <width>x<height>] [--default-size <width>x<height>]\n"
               << "  [--scale <factor>] [--theme dark|light] [--models <models.json>] [--drawing <Name>] [--as <Type>] [--palette <Name>]\n"
+              << "  [--element <id|path> [--margin <pixels>]] [--region <x>,<y>,<width>,<height>] [--guides <id|path>[,<id|path>...]]\n"
               << "yup_yui_tool inspect <file.yui> [--size <width>x<height>] [--default-size <width>x<height>]\n"
-              << "  [--theme dark|light] [--models <models.json>] [--drawing <Name>] [--as <Type>] [--palette <Name>]\n"
+              << "  [--theme dark|light] [--models <models.json>] [--drawing <Name>] [--as <Type>] [--palette <Name>] [--element <id|path>]\n"
+              << "yup_yui_tool outline <file.yui>\n"
+              << "yup_yui_tool complete <file.yui> --at <line>:<column> [--models <models.json>]\n"
+              << "yup_yui_tool definition <file.yui> --at <line>:<column>\n"
+              << "yup_yui_tool hover <file.yui> --at <line>:<column>\n"
 #if ! YUP_WASM
               << "yup_yui_tool mcp\n"
 #endif
-        ;
+              << "yup_yui_tool --version\n";
 
     return isHelp ? 0 : 2;
 }
@@ -74,6 +88,18 @@ int runYuiToolCommand (int argc, char** argv)
 
     if (mode == "inspect")
         return runYuiInspectCommand (argc, argv);
+
+    if (mode == "outline")
+        return runYuiOutlineCommand (argc, argv);
+
+    if (mode == "complete")
+        return runYuiCompleteCommand (argc, argv);
+
+    if (mode == "definition")
+        return runYuiDefinitionCommand (argc, argv);
+
+    if (mode == "hover")
+        return runYuiHoverCommand (argc, argv);
 
 #if ! YUP_WASM
     if (mode == "mcp")

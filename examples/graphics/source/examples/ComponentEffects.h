@@ -95,7 +95,7 @@ public:
         marginSlider.setValue (24.0, yup::dontSendNotification);
         marginSlider.onValueChanged = [this] (double value)
         {
-            setPaintMargin (static_cast<float> (value));
+            setSubjectMargin (static_cast<float> (value));
         };
         addAndMakeVisible (marginSlider);
         addAndMakeVisible (marginLabel);
@@ -103,7 +103,7 @@ public:
         addToggle (movingMarginToggle, "Moving", false, [this]
         {
             if (! movingMarginToggle.getToggleState())
-                setPaintMargin (static_cast<float> (marginSlider.getValue()));
+                setSubjectMargin (static_cast<float> (marginSlider.getValue()));
         });
 
         addToggle (cacheToggle, "Cache", false, [this]
@@ -150,7 +150,7 @@ public:
         addToggle (snapshotEffectsToggle, "With effects", true, {});
         addAndMakeVisible (snapshotPreview);
 
-        setPaintMargin (static_cast<float> (marginSlider.getValue()));
+        setSubjectMargin (static_cast<float> (marginSlider.getValue()));
         selectEffect();
     }
 
@@ -268,9 +268,9 @@ public:
     {
         time += elapsedSeconds;
 
-        // A margin that moves is a canvas that changes size: the numbers tell how often
+        // A margin that moves: its canvas grows to the largest it gets and stays, as the numbers tell
         if (movingMarginToggle.getToggleState())
-            applyPaintMargin (static_cast<float> (marginSlider.getValue() * (0.5 + 0.5 * std::sin (time * 2.0))));
+            applySubjectMargin (static_cast<float> (marginSlider.getValue() * (0.5 + 0.5 * std::sin (time * 2.0))));
 
         if (shaderEffect != nullptr && status.isEmpty() && shaderEffect->getCompileError().isNotEmpty())
             setStatus ("Shader compile failed: " + shaderEffect->getCompileError());
@@ -1232,13 +1232,13 @@ private:
     }
 
     //==============================================================================
-    void setPaintMargin (float margin)
+    void setSubjectMargin (float margin)
     {
         marginLabel.setText (number (margin), yup::dontSendNotification);
-        applyPaintMargin (margin);
+        applySubjectMargin (margin);
     }
 
-    void applyPaintMargin (float margin)
+    void applySubjectMargin (float margin)
     {
         stage.subject.setPaintMargin (margin);
 

@@ -106,16 +106,41 @@ DataTree findDrawingElement (const DataTree& document, const DrawingStyle::Eleme
     return findElement (document, measured.type, measured.id);
 }
 
+// Moves to a component the document describes, looked for under another one, and tells its path
+bool findDescribed (const YuiBuilder& builder, Described& current, const Component& target, String& path)
+{
+    if (current.component == &target)
+        return true;
+
+    const auto children = findDescribedChildren (builder, current);
+
+    for (std::size_t index = 0; index < children.size(); ++index)
+    {
+        auto child = children[index];
+        auto childPath = path.isEmpty() ? String (static_cast<int> (index)) : path + "/" + String (static_cast<int> (index));
+
+        if (findDescribed (builder, child, target, childPath))
+        {
+            current = child;
+            path = childPath;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 //==============================================================================
 /** Writes the layout of an interface down, with what looks wrong in it. */
 class LayoutDescription
 {
 public:
-    LayoutDescription (YuiToolView& viewToDescribe, bool shouldDescribeDrawings)
-        : view (viewToDescribe)
-        , builder (viewToDescribe.getDocument().getBuilder())
-        , sourceMap (viewToDescribe.getDocument().getSourceMap())
-        , root (*viewToDescribe.getRoot())
+    LayoutDescription (YuiDocument& documentToDescribe, const File& inputFile, bool shouldDescribeDrawings)
+        : document (documentToDescribe)
+        , input (inputFile)
+        , builder (documentToDescribe.getBuilder())
+        , sourceMap (documentToDescribe.getSourceMap())
+        , root (*documentToDescribe.getRoot())
         , describesDrawings (shouldDescribeDrawings)
     {
     }
@@ -126,13 +151,13 @@ public:
         Described described { &root, builder.findElementFor (&root), {}, root.isVisible() };
         String path;
 
-        if (only != nullptr && only != &root && ! findDescribed (described, *only, path))
+        if (only != nullptr && only != &root && ! findDescribed (builder, described, *only, path))
             return {};
 
         const auto tree = describe (described, path, true);
 
         auto* layout = new DynamicObject();
-        layout->setProperty ("file", view.getInput().getFullPathName());
+        layout->setProperty ("file", input.getFullPathName());
         layout->setProperty ("width", rounded (root.getWidth()));
         layout->setProperty ("height", rounded (root.getHeight()));
         layout->setProperty ("root", tree);
@@ -142,30 +167,6 @@ public:
     }
 
 private:
-    // Moves to a component the document describes, looked for under another one, and tells its path
-    bool findDescribed (Described& current, const Component& target, String& path) const
-    {
-        if (current.component == &target)
-            return true;
-
-        const auto children = findDescribedChildren (builder, current);
-
-        for (std::size_t index = 0; index < children.size(); ++index)
-        {
-            auto child = children[index];
-            auto childPath = path.isEmpty() ? String (static_cast<int> (index)) : path + "/" + String (static_cast<int> (index));
-
-            if (findDescribed (child, target, childPath))
-            {
-                current = child;
-                path = childPath;
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     // Where the element of a component was written, when the document still knows
     void addPosition (DynamicObject& record, const DataTree& element) const
     {
@@ -181,7 +182,7 @@ private:
             return;
 
         if (located.source.isNotEmpty())
-            record.setProperty ("file", view.getInput().getParentDirectory().getChildFile (located.source).getFullPathName());
+            record.setProperty ("file", input.getParentDirectory().getChildFile (located.source).getFullPathName());
 
         record.setProperty ("line", located.line);
         record.setProperty ("column", located.column);
@@ -205,7 +206,7 @@ private:
             auto* record = new DynamicObject();
             record->setProperty ("type", measured.type);
             record->setProperty ("id", measured.id);
-            addPosition (*record, findDrawingElement (view.getDocument().getTree(), measured));
+            addPosition (*record, findDrawingElement (document.getTree(), measured));
             record->setProperty ("bounds", describeBounds (measured.bounds, origin));
 
             if (measured.numRows > 1)
@@ -246,6 +247,10 @@ private:
         record->setProperty ("path", path);
         addPosition (*record, described.element);
         record->setProperty ("bounds", var (Array<var> { rounded (bounds.getX()), rounded (bounds.getY()), rounded (bounds.getWidth()), rounded (bounds.getHeight()) }));
+
+        // What a component may paint outside its bounds, as a shadow or a glow
+        if (! component.getPaintMargin().isZero())
+            record->setProperty ("paintBounds", describeBounds (component.getPaintBounds(), described.origin));
 
         if (! component.isVisible())
             record->setProperty ("visible", false);
@@ -291,7 +296,8 @@ private:
         return var (record);
     }
 
-    YuiToolView& view;
+    YuiDocument& document;
+    const File input;
     const YuiBuilder& builder;
     std::shared_ptr<const YuiSourceMap> sourceMap;
     Component& root;
@@ -303,21 +309,21 @@ private:
 
 //==============================================================================
 
-var describeYuiToolLayout (YuiToolView& view, bool withDrawings, const Component* only)
+var describeYuiToolLayout (YuiDocument& document, const File& input, bool withDrawings, const Component* only)
 {
-    if (! view.hasInterface())
+    if (document.getRoot() == nullptr)
         return {};
 
-    return LayoutDescription (view, withDrawings).describe (only);
+    return LayoutDescription (document, input, withDrawings).describe (only);
 }
 
-Component* findYuiToolComponent (YuiToolView& view, const String& path)
+Component* findYuiToolComponent (YuiDocument& document, const String& path)
 {
-    if (! view.hasInterface())
+    if (document.getRoot() == nullptr)
         return nullptr;
 
-    const auto& builder = view.getDocument().getBuilder();
-    Described current { view.getRoot(), {}, {}, true };
+    const auto& builder = document.getBuilder();
+    Described current { document.getRoot(), {}, {}, true };
 
     for (const auto& step : StringArray::fromTokens (path, "/", ""))
     {
@@ -337,48 +343,23 @@ Component* findYuiToolComponent (YuiToolView& view, const String& path)
     return current.component;
 }
 
-namespace
+var describeYuiToolComponent (YuiDocument& document, const Component& component)
 {
-
-// The path of a component the document describes, looked for under another one
-bool findPath (const YuiBuilder& builder, const Described& current, const Component& target, String& path)
-{
-    if (current.component == &target)
-        return true;
-
-    const auto children = findDescribedChildren (builder, current);
-
-    for (std::size_t index = 0; index < children.size(); ++index)
-    {
-        auto childPath = path.isEmpty() ? String (static_cast<int> (index)) : path + "/" + String (static_cast<int> (index));
-
-        if (findPath (builder, children[index], target, childPath))
-        {
-            path = childPath;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-} // namespace
-
-var describeYuiToolComponent (YuiToolView& view, const Component& component)
-{
-    if (! view.hasInterface())
+    if (document.getRoot() == nullptr)
         return {};
 
-    const auto& builder = view.getDocument().getBuilder();
+    const auto& builder = document.getBuilder();
     const auto* described = &component;
 
     // What a widget made for itself is told as the widget
-    while (described != nullptr && described != view.getRoot() && ! builder.findElementFor (described).isValid())
+    while (described != nullptr && described != document.getRoot() && ! builder.findElementFor (described).isValid())
         described = described->getParentComponent();
 
     String path;
 
-    if (described == nullptr || ! findPath (builder, { view.getRoot(), {}, {}, true }, *described, path))
+    Described root { document.getRoot(), {}, {}, true };
+
+    if (described == nullptr || ! findDescribed (builder, root, *described, path))
         return {};
 
     auto* record = new DynamicObject();
@@ -444,11 +425,28 @@ int runYuiInspectCommand (int argc, char** argv)
         if (problem.isError)
             problem.print();
 
+    if (shown.needsHost)
+        std::cerr << "hint: a drawing reading the properties of a widget needs it as its host, for example --as Slider\n";
+
     if (! view.hasInterface())
         return 1;
 
     view.settle();
 
-    std::cout << JSON::toString (describeYuiToolLayout (view)).toStdString() << "\n";
+    // A component named is described alone, as is the one a drawing or a type shown in context is framed on
+    const Component* only = view.getUse();
+
+    if (options.element.isNotEmpty())
+    {
+        only = findYuiToolElement (view.getDocument(), options.element);
+
+        if (only == nullptr)
+        {
+            std::cerr << options.input.getFullPathName() << ": error: nothing to inspect, there is no component with the id or at the path '" << options.element << "'\n";
+            return 1;
+        }
+    }
+
+    std::cout << JSON::toString (describeYuiToolLayout (view.getDocument(), view.getInput(), false, only)).toStdString() << "\n";
     return 0;
 }

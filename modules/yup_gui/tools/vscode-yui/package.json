@@ -1,7 +1,7 @@
 {
   "name": "vscode-yui",
   "displayName": "YUI - YUP UI Language",
-  "description": "Syntax highlighting, snippets, diagnostics, completions, live preview, SVG import and tools for coding agents for YUI, the declarative UI language of the YUP library.",
+  "description": "Syntax highlighting, snippets, diagnostics, completions, navigation, live preview, SVG import and tools for coding agents for YUI, the declarative UI language of the YUP library.",
   "version": "2.0.1",
   "publisher": "yup",
   "license": "ISC",

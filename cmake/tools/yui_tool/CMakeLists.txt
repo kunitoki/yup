@@ -128,3 +128,4 @@ endif()
 
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 target_sources (${target_name} PRIVATE ${sources})
+target_compile_definitions (${target_name} PRIVATE YUP_YUI_TOOL_VERSION="${target_version}")

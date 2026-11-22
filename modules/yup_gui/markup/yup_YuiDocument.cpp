@@ -106,20 +106,6 @@ bool isGrammarNodeType (const Identifier& type) noexcept
     return grammarTypes.contains (type.toString());
 }
 
-bool isStrictGrammarContainer (const Identifier& type) noexcept
-{
-    static const StringArray strictContainers {
-        "import", "tokens", "palette", "style", "rule", "keyframes", "keyframe",
-        "declaration", "property", "alias", "signal", "argument", "drawing",
-        "let", "repeat", "group", "clip", "layer", "mask", "rect", "ellipse", "circle",
-        "line", "arc", "path", "polygon", "star", "text", "image", "svg", "bind", "changed",
-        "viewport", "use", "pattern", "marker", "clipPath", "filter", "blur", "offset", "flood",
-        "colorMatrix", "composite", "blend", "morphology", "lighting", "displacement", "dropShadow"
-    };
-
-    return strictContainers.contains (type.toString());
-}
-
 std::optional<YuiDiagnostic> validateGrammarNodes (const DataTreeSchema& schema, const DataTree& node, bool isAmongComponents = false)
 {
     if (! node.isValid())
@@ -159,7 +145,7 @@ std::optional<YuiDiagnostic> validateGrammarNodes (const DataTreeSchema& schema,
                     return YuiDiagnostic { .message = "A repeat of components holds components and other repeats, not '" + child.getType().toString() + "'", .element = child };
             }
         }
-        else if (isStrictGrammarContainer (nodeType))
+        else if (nodeType.toString() != "yui" && nodeType.toString() != "component")
         {
             for (int i = 0; i < node.getNumChildren(); ++i)
             {
@@ -407,7 +393,7 @@ YuiDocument::YuiDocument()
 
     builder.onRangeChanged = [this]
     {
-        if (! isLoading && lastLoadSucceeded && tree.isValid())
+        if (! isLoading && tree.isValid())
             handleRangeChange();
     };
 }
@@ -685,6 +671,7 @@ void YuiDocument::attachStyleContext (Component& root)
 
 void YuiDocument::handleLiveTreeMutation()
 {
+    const WeakReference<Component> previousRoot (builder.getRoot());
     const ScopedValueSetter<bool> loading (isLoading, true);
     const auto previousIgnore = builder.isIgnoringTreeChanges();
     builder.setIgnoreTreeChanges (true);
@@ -728,18 +715,26 @@ void YuiDocument::handleLiveTreeMutation()
         report (sourceMap, diagnostic);
 
     attachStyleContext (root);
+
+    // Whoever shows the root has another one to show
+    if (previousRoot.get() != &root)
+        notifyLoaded (Result::ok());
 }
 
 void YuiDocument::handleRangeChange()
 {
     const ScopedValueSetter<bool> loading (isLoading, true);
-    diagnostics.clear();
+
+    // After a load that failed the interface kept still follows its ranges, and the problems shown stay those of the load
+    if (lastLoadSucceeded)
+        diagnostics.clear();
 
     // The document is as it was, so its stylesheet is kept: nothing is restyled from scratch and transitions keep running
     const auto built = builder.build (tree);
 
-    for (const auto& diagnostic : builder.getDiagnostics())
-        report (sourceMap, diagnostic);
+    if (lastLoadSucceeded)
+        for (const auto& diagnostic : builder.getDiagnostics())
+            report (sourceMap, diagnostic);
 
     if (built.wasOk())
         attachStyleContext (*builder.getRoot());

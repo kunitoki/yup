@@ -333,6 +333,23 @@ TEST_F (DrawingStyleTest, DeclaresItsProperties)
     EXPECT_NO_THROW (paintHeadless (*style.getReference(), slider));
 }
 
+TEST_F (DrawingStyleTest, ReturnsTheNameItWasDeclaredWith)
+{
+    Slider slider (Slider::RotaryVerticalDrag);
+    configure (slider);
+
+    const auto parsed = YuiParser::parse (knobDrawing);
+    ASSERT_TRUE (parsed.wasOk()) << parsed.diagnostics.front().toString();
+
+    auto named = DrawingStyle::create (slider, parsed.document.getChildWithName ("drawing"));
+    ASSERT_TRUE (named.wasOk()) << named.getErrorMessage();
+    EXPECT_EQ (named.getReference()->getName(), "Knob");
+
+    auto unnamed = DrawingStyle::create (slider, parseDrawing ("<drawing><rect bounds=\"bounds\" fill=\"trackColor\"/></drawing>"));
+    ASSERT_TRUE (unnamed.wasOk()) << unnamed.getErrorMessage();
+    EXPECT_TRUE (unnamed.getReference()->getName().isEmpty());
+}
+
 TEST_F (DrawingStyleTest, ReportsPropertyErrors)
 {
     EXPECT_EQ (createError ("<drawing><property name=\"a\" type=\"font\"/></drawing>"), String());
@@ -1661,4 +1678,38 @@ TEST_F (DrawingStyleTest, MeasuringFollowsTheStateOfTheComponent)
 
     slider.setValue (1.0, dontSendNotification);
     EXPECT_EQ (style.getReference()->measureElements (slider).front().bounds, Rectangle<float> (0.0f, 0.0f, 48.0f, 8.0f));
+}
+
+TEST_F (DrawingStyleGpuTest, TiledImagesRepeatFromTheCornerOfTheirBounds)
+{
+    DrawnComponent component (parseYui (R"yui(
+        drawing {
+            image { bounds: rect (2, 0, 14, 16); source: "memory:halves"; fitting: tile; }
+            image { bounds: rect (268435456, 0, 40, 4); source: "memory:halves"; fitting: tile; }
+        })yui"));
+
+    auto* style = dynamic_cast<DrawingStyle*> (component.getStyle().get());
+    ASSERT_NE (style, nullptr);
+
+    // Red on its left half, blue on its right one
+    style->setImageResolver ([] (const String&) -> std::optional<Image>
+    {
+        Image image (4, 4);
+        image.fillColor (Color (0xff0000ff));
+
+        for (int y = 0; y < 4; ++y)
+            for (int x = 0; x < 2; ++x)
+                image.setPixelColor (x, y, Color (0xffff0000));
+
+        return image;
+    });
+
+    const auto painted = component.snapshotToImage (*gpuContext);
+    ASSERT_TRUE (painted.isValid());
+
+    EXPECT_EQ (painted.getPixelColor (1, 8).getAlpha(), 0);
+    EXPECT_EQ (painted.getPixelColor (3, 8), Color (0xffff0000));
+    EXPECT_EQ (painted.getPixelColor (4, 8), Color (0xff0000ff));
+    EXPECT_EQ (painted.getPixelColor (7, 8), Color (0xffff0000));
+    EXPECT_EQ (painted.getPixelColor (9, 8), Color (0xff0000ff));
 }

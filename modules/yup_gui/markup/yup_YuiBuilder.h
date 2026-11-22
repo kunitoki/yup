@@ -386,6 +386,7 @@ private:
     bool ignoreTreeChanges = false;
     bool isBuilding = false;
     bool hasPendingRangeChange = false;
+    int numRepeatTurns = 1;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YuiBuilder)
 };

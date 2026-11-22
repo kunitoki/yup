@@ -35,11 +35,15 @@ opacity is applied once, when the effect draws into `g`.
 
 The texture also holds the [paint margin](component-basics.md#paint-margin) of
 the component, so what it paints around its bounds goes through the effect, and
-an effect such as a drop shadow has room to draw past them. The destination
-`bounds` are then the local bounds grown by the margin, up to the whole pixels
+an effect such as a drop shadow has room to draw past them. Stylesheet `shadow:`
+and `glow:` layers are part of the texture too. The destination `bounds` are
+then the local bounds grown by the margin, up to the whole units and pixels
 around it, and start at a negative position: draw into `bounds`, not into a
-rectangle at the origin. Stylesheet `shadow:` and `glow:` layers are painted
-under the effect and are not part of the texture.
+rectangle at the origin.
+
+A margin that shrinks keeps the texture it has, so a margin that is animated
+allocates nothing once it has been at its largest. `bounds` stay as large as the
+texture, and what the effect draws past the paint bounds is still cut.
 
 ---
 
@@ -280,8 +284,8 @@ That needs every dirty pixel to be covered again from the bottom up, so it appli
 when the component is opaque (and paints all of its bounds, as opaque components
 must) and clipped. A transparent component, one with unclipped rendering, a resized
 canvas or continuous rendering repaints the whole subtree as before. So does a
-repaint that reaches into the paint margin, or a pixel the bounds cover in part
-only: nothing opaque covers those again.
+paint margin that changes, a repaint that reaches into it, or a pixel the bounds
+cover in part only: nothing opaque covers those again.
 
 So keep the component with the effect opaque, and repaint only what changes: a meter
 that repaints its own bounds costs the meter, not the interface under the effect.

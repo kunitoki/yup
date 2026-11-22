@@ -80,6 +80,23 @@ test ("a file given again replaces the one before", () => {
     assert.deepEqual (lint ("replaced/main.yui"), { code: 0, diagnostics: [] });
 });
 
+test ("a file emptied replaces the one before", () => {
+    write ("emptied/main.yui", "Column {\n    gap 4;\n}\n");
+    assert.equal (lint ("emptied/main.yui").code, 1);
+
+    write ("emptied/main.yui", "");
+    assert.deepEqual (lint ("emptied/main.yui"), { code: 0, diagnostics: [] });
+});
+
+test ("a file removed is no longer there to import", () => {
+    write ("removed/main.yui", "import \"part.yui\";\n\nColumn {\n    Part {}\n}\n");
+    write ("removed/part.yui", "component Part : Label {\n    text: \"Part\";\n}\n");
+    assert.equal (lint ("removed/main.yui").code, 0);
+
+    tool.ccall ("yuiToolRemoveFile", null, ["string"], ["removed/part.yui"]);
+    assert.equal (lint ("removed/main.yui").code, 1);
+});
+
 test ("an empty file is a document with no problems", () => {
     write ("empty/main.yui", "");
 
@@ -208,6 +225,36 @@ test ("an agent is told what a file can name, the models it lacks and where its 
 
     assert.ok (JSON.parse (agent ("yui_schema", { topic: "drawing" }).text).elements.some (element => element.type === "rect"));
     assert.deepEqual (JSON.parse (agent ("yui_schema", { type: "Slider" }).text).bases, ["Component"]);
+});
+
+test ("an agent is shown a drawing where the interface uses it", () => {
+    write ("used/main.yui", "drawing Dial {\n    circle { center: bounds.center; radius: 2 + 4 * normalized; fill: #ffffff; }\n}\n\n"
+                            + "style {\n    .dial { drawing: Dial; }\n}\n\n"
+                            + "Component { width: 100; height: 80;\n"
+                            + "    Slider { id: first; class: dial; x: 10; y: 20; width: 30; height: 30; paintMargin: 4; }\n}\n");
+
+    const used = JSON.parse (agent ("yui_inspect", { file: "used/main.yui", drawing: "Dial" }).text);
+
+    assert.deepEqual (used.use, { type: "Slider", id: "first", path: "0" });
+    assert.deepEqual ([used.root.bounds, used.root.paintBounds, used.problems], [[10, 20, 30, 30], [6, 16, 38, 38], []]);
+    assert.equal (run ("--version").code, 0);
+});
+
+test ("an editor is told what a file is made of and what can be written in it, while it does not load", () => {
+    write ("typed/main.yui", "import \"parts.yui\";\n\ndrawing Knob { property ring: color = #abc; }\n\nColumn {\n    Slider { wid\n");
+    write ("typed/parts.yui", "component Dial : Slider { }\n");
+
+    const outline = JSON.parse (run ("outline", "typed/main.yui").stdout);
+
+    assert.deepEqual (outline.symbols.map (symbol => symbol.name), ["Knob", "Column"]);
+    assert.deepEqual (outline.targets.map (target => target.id), ["root", "drawing:Knob", "component:Dial"]);
+    assert.deepEqual (outline.imports[0].file, "/yui/typed/parts.yui");
+    assert.equal (outline.colors.length, 1);
+
+    const labels = JSON.parse (run ("complete", "typed/main.yui", "--at", "6:17").stdout).items.map (item => item.label);
+
+    assert.ok (labels.includes ("width") && labels.includes ("Dial"));
+    assert.deepEqual (JSON.parse (run ("definition", "typed/main.yui", "--at", "1:10").stdout), { file: "/yui/typed/parts.yui", line: 1, column: 1 });
 });
 
 test ("an agent is told why a tool can't answer", () => {

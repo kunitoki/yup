@@ -121,6 +121,11 @@ YuiToolMissingModels findYuiToolMissingModels (const yup::File& file, const YuiT
 /** Returns the index of the root component of a parsed document, or -1 when it only holds declarations. */
 int findYuiToolRootIndex (const yup::DataTree& document);
 
+/** Returns the size the root of a parsed document sets with plain numbers, which is the one it asks
+    to be shown at. It has no width or no height when the root sets none, or computes it.
+*/
+yup::Size<float> findYuiToolDeclaredSize (const yup::DataTree& document);
+
 //==============================================================================
 /** What of a document is shown: its interface, or one of its declarations hosted by a component. */
 struct YuiToolTarget
@@ -154,10 +159,74 @@ struct YuiToolShown
 
     /** The size to show it at when nothing asks for one. */
     yup::Size<float> defaultSize { 640.0f, 400.0f };
+
+    /** True when the target is shown where the interface uses it: the document is loaded as it
+        is, with its palette, its styles and its models, and one of the components the drawing
+        paints, or of the type, is what to frame. False when a component standing in for them
+        took the place of the root.
+    */
+    bool isInContext = false;
+
+    /** True when a drawing shown on a plain component reads what that component does not have,
+        so it needs the type it is made for as its host.
+    */
+    bool needsHost = false;
 };
 
-/** Loads a file into a document, showing a target of it. */
-YuiToolShown loadYuiToolTarget (yup::YuiDocument& document, yup::YuiLoader& loader, const yup::File& input, YuiToolTarget target);
+/** Loads a file into a document, showing a target of it.
+
+    A drawing given with no host type, and a component type, are shown in context when the
+    interface of the file has a component the drawing paints, or one of the type, that shows
+    with a size. Otherwise a component standing in for them takes the place of the root.
+
+    The interface is left at the size the uses were looked for at. A root that a view shows
+    took the size of that view, so the one it sets is then read from the file.
+
+    @param size         The size the interface is shown at when it is known, which the uses of
+                        a target are looked for at. None while it has no width.
+    @param fallbackSize The size used for it when neither `size` nor the root gives one.
+*/
+YuiToolShown loadYuiToolTarget (yup::YuiDocument& document,
+                                yup::YuiLoader& loader,
+                                const yup::File& input,
+                                YuiToolTarget target,
+                                yup::Size<float> size = {},
+                                yup::Size<float> fallbackSize = {});
+
+/** Returns the components of the interface of a document that a target can be framed on: those
+    its drawing paints, or else those of its type, that show with a size, in the order of the tree.
+
+    Only the components the document describes are told, as they are the ones a path names.
+*/
+std::vector<yup::Component*> findYuiToolUses (yup::YuiDocument& document, const YuiToolTarget& target);
+
+/** Returns the one of the uses of a target that is framed when no other is asked for, the first
+    of them, or nullptr when there is none.
+*/
+yup::Component* findYuiToolUse (yup::YuiDocument& document, const YuiToolTarget& target);
+
+/** Returns the component of an interface named by its id, or else by the path a description of
+    the layout gives it, or nullptr.
+*/
+yup::Component* findYuiToolElement (yup::YuiDocument& document, const yup::String& idOrPath);
+
+/** Returns what a component is called where its interface is told about: its type, then its id
+    when it has one, as `Slider #cutoff`.
+*/
+yup::String describeYuiToolName (const yup::Component& component);
+
+/** Returns where the top left of a component is in the interface it belongs to. */
+yup::Point<float> findYuiToolOrigin (const yup::Component& component, const yup::Component& root);
+
+/** Brings a part of an interface to whole pixels inside it. What is left has no size when
+    nothing of the interface is there.
+*/
+yup::Rectangle<float> clipYuiToolRegion (const yup::Rectangle<float>& region, const yup::Rectangle<float>& whole);
+
+/** Returns the part of an interface a component paints: its bounds with its paint margin, in
+    whole pixels inside the interface.
+*/
+yup::Rectangle<float> findYuiToolPaintArea (const yup::Component& component, const yup::Component& root);
 
 //==============================================================================
 /** What to show of a file and how, as the options of `render` and `inspect` say. */
@@ -165,6 +234,11 @@ struct YuiToolViewOptions
 {
     yup::File input;
     YuiToolTarget target;
+
+    /** A component of the interface to show in place of all of it, by its id or by the path a
+        description of the layout gives it. None when empty.
+    */
+    yup::String element;
 
     /** The size to show it at in logical pixels, none while it has no width. */
     yup::Size<float> size;
@@ -219,6 +293,16 @@ public:
     /** Returns what is drawn, the interface over the background of its palette, or nullptr without one. */
     yup::Component* getComponent() const noexcept { return backdrop.get(); }
 
+    /** Returns the component a target shown in context is framed on, or nullptr when the target
+        is all of the interface.
+    */
+    yup::Component* getUse() const noexcept { return use.get(); }
+
+    /** Returns the part of the interface to show: what the use of a target shown in context
+        paints, else all of it.
+    */
+    yup::Rectangle<float> getFrame() const;
+
     /** Brings the styles up to date with the size and the states of the interface, and their
         transitions to their end.
 
@@ -234,20 +318,45 @@ private:
     yup::YuiLoader loader { document };
     YuiToolShown shown;
     std::unique_ptr<yup::Component> backdrop;
+    yup::WeakReference<yup::Component> use;
 };
 
-/** Describes the layout of a view as `inspect` prints it: its components with their place, and
-    what looks wrong with them.
+//==============================================================================
+/** Shows a part of an interface in place of all of it, for as long as it lives.
 
+    The interface keeps its size and is only moved, so it is laid out as it is when shown whole.
+*/
+class YuiToolFrame final : public yup::Component
+{
+public:
+    /** Frames a part of an interface.
+
+        @param interfaceToShow What is drawn of a view, which must outlive the frame.
+        @param region          The part to show, in the coordinates of the interface.
+    */
+    YuiToolFrame (yup::Component& interfaceToShow, const yup::Rectangle<float>& region);
+    ~YuiToolFrame() override;
+
+private:
+    yup::Component& shown;
+};
+
+/** Describes the layout of a document as `inspect` prints it: its components with their place,
+    and what looks wrong with them.
+
+    @param document     A document loaded and laid out, as the one of a view is.
+    @param input        The file the document was loaded from.
     @param withDrawings True to tell, for each component a drawing paints, where the elements of
                         the drawing that have an id land in the interface.
     @param only         A component of the interface to describe alone with what it holds, or
                         nullptr for the whole interface.
+
+    @returns The description, or nothing for a document with no interface.
 */
-yup::var describeYuiToolLayout (YuiToolView& view, bool withDrawings = false, const yup::Component* only = nullptr);
+yup::var describeYuiToolLayout (yup::YuiDocument& document, const yup::File& input, bool withDrawings = false, const yup::Component* only = nullptr);
 
 /** Returns the component a description of the layout gives a path, or nullptr. */
-yup::Component* findYuiToolComponent (YuiToolView& view, const yup::String& path);
+yup::Component* findYuiToolComponent (yup::YuiDocument& document, const yup::String& path);
 
 /** Tells a component as a description of the layout names it: its type, its id when it has one
     and its path. A component the document does not describe, such as a part a widget made for
@@ -255,7 +364,7 @@ yup::Component* findYuiToolComponent (YuiToolView& view, const yup::String& path
 
     @returns The description, or nothing for a component that is not of the interface.
 */
-yup::var describeYuiToolComponent (YuiToolView& view, const yup::Component& component);
+yup::var describeYuiToolComponent (yup::YuiDocument& document, const yup::Component& component);
 
 //==============================================================================
 /** Describes a component type as `schema` does.

@@ -1,8 +1,18 @@
 import * as fs from "fs";
 import * as path from "path";
 
-// Where a file really is: its links followed as far as it exists, the rest of its path as it is written
-function realPath (file: string): string {
+function isLink (file: string): boolean {
+    try {
+        return fs.lstatSync (file).isSymbolicLink ();
+    }
+    catch {
+        return false;
+    }
+}
+
+// Where a file really is: its links followed as far as it exists, the rest of its path as it is written.
+// Nowhere when a link on the way leads to nothing, which writing would follow
+function realPath (file: string): string | undefined {
     let existing = path.resolve (file);
     const missing: string[] = [];
 
@@ -11,6 +21,9 @@ function realPath (file: string): string {
             return path.join (fs.realpathSync (existing), ...missing);
         }
         catch {
+            if (isLink (existing))
+                return undefined;
+
             const parent = path.dirname (existing);
 
             if (parent === existing)
@@ -29,8 +42,8 @@ function realPath (file: string): string {
 export function isInsideFolders (file: string, folders: string[]): boolean {
     const found = realPath (file);
 
-    return folders.some (folder => {
-        const relative = path.relative (realPath (folder), found);
+    return found !== undefined && folders.some (folder => {
+        const relative = path.relative (realPath (folder) ?? folder, found);
         return relative.length > 0 && ! relative.startsWith ("..") && ! path.isAbsolute (relative);
     });
 }

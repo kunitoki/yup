@@ -3,7 +3,8 @@
 `yup_yui_tool` checks `.yui` files outside the application: on the command
 line, while configuring a build, and, [built for the web](#the-tool-for-the-web),
 behind the diagnostics, completions and live preview of the VS Code extension.
-It also renders documents to images, describes their layout, imports SVG
+It also renders documents to images, describes their layout, answers what an
+[editor asks](#answering-an-editor) of a document being typed, imports SVG
 artwork as drawings and gives all of this to [coding agents](#tools-for-agents).
 The tool lives in `cmake/tools/yui_tool`, and loads documents with the same
 `YuiDocument` and `YuiLoader` an application uses, so it reports what the
@@ -16,7 +17,7 @@ just yui_tool --help
 builds it as `cmake/tools/yui_tool/build/yup_yui_tool` and runs it with the
 arguments given. The tool sets itself up as an application does, default theme
 included, but never opens a window, so it also runs on machines without a
-display such as build servers.
+display such as build servers. `yup_yui_tool --version` prints its version.
 
 ## Checking files
 
@@ -181,7 +182,7 @@ size of the image, in logical pixels, is the first of:
 2. the `width` and `height` the root component asks for;
 3. `--default-size <width>x<height>`, for a caller with a size to offer when
    the document has none;
-4. 640 by 400, or a smaller size when previewing a declaration.
+4. 640 by 400, or a smaller size when a declaration is shown alone.
 
 `--scale` is the number of pixels per logical pixel, 2 by default so the image
 is sharp on high density displays, and `--theme` is the mode of the default
@@ -195,26 +196,46 @@ A container gives no size to a child that asks for none: a `Row` in a `Column`
 needs a `preferredHeight` or a `flexGrow`, or it is laid out with no height
 and nothing of it shows in the image.
 
-What a file declares can be previewed on its own:
+What a file declares can be previewed too:
 
 ```sh
+yup_yui_tool render ui/main.yui --output knob.png --drawing Knob
+yup_yui_tool render ui/main.yui --output dial.png --as LabeledKnob
 yup_yui_tool render ui/knob.yui --output knob.png --drawing Knob --as Slider
-yup_yui_tool render ui/parts.yui --output dial.png --as LabeledKnob
 yup_yui_tool render ui/palette.yui --output palette.png --palette Ember
 ```
 
-- `--drawing <Name>` paints a component with the drawing. The component is a
-  plain `Component` unless `--as <Type>` names another one: a drawing reading
-  the properties of a widget, such as the `value` of a `Slider`, needs it as
-  its host.
-- `--as <Type>` alone shows one component of that type, which is how a
-  composite declared with `component` is previewed.
+- `--drawing <Name>` shows the drawing **where the interface uses it**: the
+  file is loaded as it is, and the image is the first component the drawing
+  paints, with its paint margin. There the drawing has the palette, the style
+  rules, the models and the kind of component it was made for, which a
+  component standing in for them lacks.
+- `--as <Type>` alone does the same for a component type, such as a composite
+  declared with `component`: the image is the first one of the interface.
+- `--drawing <Name> --as <Type>` shows the drawing alone, painting one
+  component of that type in place of the interface. So is a drawing, or a
+  type, the interface does not use: on a plain `Component`, given the first
+  palette of the file, and at the size of the `viewBox` of the drawing when it
+  sets one with plain numbers, else 200 by 200. A drawing reading the
+  properties of a widget, such as the `value` of a `Slider`, then needs it as
+  its host, which the tool says.
 - `--palette <Name>` shows a few widgets and a swatch of each role in the
   palette.
 
-The component takes the place of the root when the file has one. A file
-without a root and without these options shows its first drawing, or its first
-palette when it declares no drawing.
+A file without a root and without these options shows its first drawing, or
+its first palette when it declares no drawing.
+
+A part of the interface is drawn in place of all of it with:
+
+- `--element <id|path>`, a component named by its id or by the path `inspect`
+  gives it, with `--margin <pixels>` around it (8 when not given). It also
+  picks another component a drawing paints than the first;
+- `--region <x>,<y>,<width>,<height>`, in logical pixels of the interface.
+
+`--guides <id|path>[,<id|path>...]` draws guides over the components named:
+the bounds of each, the area it paints when it has a
+[paint margin](styles.md), dotted, and its distances to the bounds of what
+holds it.
 
 The errors of the document are printed as for `verify`. The image is still
 written when the document loads despite them.
@@ -241,7 +262,9 @@ yup_yui_tool inspect ui/main.yui --size 640x760 --models ui/models.json
 prints the layout of a document as JSON, without drawing it, so it needs no
 graphics device and works everywhere. It takes the options of `render` saying
 what to show and how (`--size`, `--default-size`, `--theme`, `--models`,
-`--drawing`, `--as`, `--palette`), and exits with the same codes.
+`--drawing`, `--as`, `--palette`, `--element`), and exits with the same codes.
+With `--element`, or a drawing or a type shown where the interface uses it,
+`root` is that component alone with what it holds.
 
 ```json
 {
@@ -264,7 +287,8 @@ what to show and how (`--size`, `--default-size`, `--theme`, `--models`,
   it was written at (and the `file`, for one of an imported file), its `text`
   when it has one, and `visible: false` when it is hidden.
 - `bounds` are `[x, y, width, height]` in logical pixels, from the top left of
-  the interface.
+  the interface. A component with a paint margin also has `paintBounds`, the
+  area it may paint.
 - `path` names a component by its place among the `children`: `0/2` is the
   third child of the first child of the root.
 - `warnings` tell what is laid out with no width or no height, or outside the
@@ -275,6 +299,65 @@ for itself are left out, and what they hold is listed in their place.
 
 The layout is the one the interface settles in: its styles are brought up to
 date with its size, and their transitions to their end.
+
+## Answering an editor
+
+An editor shows more of a document than its problems: its outline, what can be
+written where the caret is, where a name is declared. The tool answers these in
+JSON, so they are the same in every editor, and the [VS Code](#vs-code)
+extension only passes them on:
+
+```sh
+yup_yui_tool outline ui/main.yui
+yup_yui_tool complete ui/main.yui --at 42:17 --models ui/models.json
+yup_yui_tool definition ui/main.yui --at 42:17
+yup_yui_tool hover ui/main.yui --at 42:17
+```
+
+`--at <line>:<column>` is a place of the file, both from 1. The file is read
+without being loaded, so these also answer for one that has errors, as a
+document being typed has most of the time. The files it imports are read with
+it.
+
+`outline` tells what the file is made of:
+
+```json
+{
+    "file": "/project/ui/main.yui",
+    "imports": [ { "path": "parts.yui", "file": "/project/ui/parts.yui", "range": [1, 9, 1, 18] } ],
+    "symbols": [
+        { "name": "Knob", "kind": "drawing", "range": [7, 1, 14, 2], "selection": [7, 1, 7, 13],
+          "children": [ { "name": "ring", "kind": "property", "detail": "color", "range": [8, 14, 8, 18], "selection": [8, 14, 8, 18] } ] }
+    ],
+    "colors": [ { "range": [5, 37, 5, 44], "color": [0.106, 0.106, 0.118, 1.0] } ],
+    "targets": [ { "id": "drawing:Knob", "label": "Drawing: Knob", "drawing": "Knob", "palette": "", "component": "" } ],
+    "hosts": ["Component", "Button", "Slider"]
+}
+```
+
+- A `range` is `[line, column, endLine, endColumn]`.
+- The `kind` of a symbol is `drawing`, `palette`, `component`, `tokens`,
+  `style`, `rule`, `element` for a component of the interface, or `property`.
+- `colors` are the color literals, each with its red, green, blue and alpha
+  from 0 to 1.
+- `targets` are what `render` can show of the file: its interface, then the
+  drawings, palettes and components it and the files it imports declare.
+  `hosts` are the types a drawing can be shown alone as.
+
+`complete` lists what can be written at the place as `items`, each with a
+`label`, a `kind` (`type`, `property`, `signal`, `keyword`, `element`, `value`,
+`color`, `constant`, `field`, `drawing` or `palette`) and, when known, a
+`detail` and a `documentation`: the component types and the properties and
+signals of the one the place is in, the elements and properties of a drawing,
+the values of an enumeration, the drawings and palettes declared, the colors
+after `palette.`, the tokens after `tokens.` and the properties of a model.
+Without `--models`, the `<name>.models.json` next to the file is used.
+
+`definition` answers the `file`, `line` and `column` what is named at the place
+is declared at: a drawing, a component, a palette, a color of a palette, a
+token, or the file of an import. `hover` answers what the property or the
+signal a statement starts with is: its `code`, its `text` and the `values` of
+an enumeration. Both answer `{}` when there is nothing to tell.
 
 ## Tools for agents
 
@@ -293,7 +376,10 @@ and `schema` give, as tools of the
 
 The tools taking a `file` also take what `render` takes, under the same names:
 `drawing`, `palette`, `as`, `size`, `theme`, `models`, and `scale` for those
-giving an image (1 by default, 4 at most). Without `models`, a `<name>.yui`
+giving an image (1 by default, 4 at most). A `drawing`, or a type given as
+`as` alone, is shown where the interface uses it, and the answer names that
+component as `use`. A drawing shown on a plain component that reads what it
+lacks gets a `hint`. Without `models`, a `<name>.yui`
 file uses the `<name>.models.json` next to it when there is one. Answers are
 JSON on one line.
 
@@ -326,6 +412,9 @@ to date with its size and its states, and their transitions at their end.
 - `grid` draws lines that many logical pixels apart, each with the coordinate
   of the interface it is at, so places and sizes are read off the image, a
   part of the interface included.
+- `guides` draws guides over the components it lists by id or path, as
+  `--guides` does: their bounds, their paint margin and their distances to
+  what holds them.
 
 The interface is laid out at its size whatever part of it is drawn.
 
@@ -358,6 +447,7 @@ other for an interface wider than tall. The answer adds:
   (`resized`), and `stretched` tells one of other proportions.
 - An interface with no size of its own, and no `size` given, takes the size
   of the reference.
+- The reference is a file inside the folder of the project, as `output` is.
 
 The comparison is pixel by pixel: sharp text one pixel off scores badly, and
 the difference panel tells that from a real difference better than the score.
@@ -366,8 +456,8 @@ the difference panel tells that from a real difference better than the score.
 
 `output` names a `.png` file the image of `yui_render` or of
 `yui_capture_preview` is also written to. It must be inside the folder of the
-project, its folders are made and a file there is replaced. The image is still
-returned.
+project, with no link on the way to it, its folders are made and a file there
+is replaced. The image is still returned.
 
 ### Playing pointer events
 
@@ -517,8 +607,12 @@ into instead of starting a process:
 |---|---|
 | `createYuiTool (options)` | Loads the module. With `noInitialRun` the application isn't started, and the module only runs commands. |
 | `yuiToolAllocate (size)`, `yuiToolWriteFile (path)` | Give a file: its bytes are copied to the memory returned, then it is named with a path relative to the folder of the files. |
+| `yuiToolRemoveFile (path)` | Forgets a file given before, which the host no longer has. |
 | `yuiToolRun (arguments)` | Runs a command in the folder of the files. The arguments are a JSON array of strings, the result is the exit code, and the output goes to `print` and `printErr`. |
-| `yuiPreviewShow (path, drawing, palette, type, models, light)` | Shows a file in the canvas, or a drawing, a palette or a component type of it, once the application called `yuiPreviewReady`. The outcome is given to `yuiPreviewShown`: the problems, and the size the interface asks for. |
+| `yuiPreviewShow (path, drawing, palette, type, use, models, light)` | Shows a file in the canvas, or a drawing, a palette or a component type of it, once the application called `yuiPreviewReady`. `use` is the path of the component a drawing or a type is framed on. The outcome is given to `yuiPreviewShown`: the problems, the size the interface asks for, and the `uses` it can be framed on. |
+| `yuiPreviewSetView (width, height)` | Lays the interface out at a size, gives the canvas the size of what is shown of it and draws it, so a canvas that changed size is never shown empty. `yuiPreviewFramed (x, y, width, height)` is called with that part first, and returns how many times larger it is seen. |
+| `yuiPreviewSetGuides (on)`, `yuiPreviewSetCaret (line, column)` | Shows the guides over the interface, and tells where the caret of the editor is. |
+| `yuiPreviewSetStats (on)`, `yuiPreviewStats ()` | Starts or stops measuring how long the components take to paint, and returns how the interface is drawn in three lines of text: the frames a second and the time painting one takes, the pixels and the GPU, and the components taking the longest. |
 | `yuiAgentTools ()` | Returns the [tools for agents](#tools-for-agents) as JSON: `tools`, each with its `name`, `description` and `inputSchema`, `drawing`, the names of those only a page can run, and `instructions`. |
 | `yuiAgentCall (name, arguments)` | Runs one of them on the files given, with its arguments as a JSON object. The answer is JSON: `text`, `isError`, and `image`, a PNG in base64 that is empty when the tool gives none. |
 
@@ -533,8 +627,8 @@ support to VS Code:
 
 - syntax highlighting and snippets;
 - problems as you type, from `lint`, including those in imported files;
-- completions of component types, properties, signals, enumeration values,
-  palette roles, `colors.` names and pseudo-classes, from `schema`;
+- completions, the outline, go to definition, hovers and color swatches, which
+  are what the tool [answers an editor](#answering-an-editor);
 - `YUI: Open Preview`, a panel beside the editor running the interface, a
   drawing, a palette or a component of the file;
 - the `YUI: Import SVG as Drawing` command;
@@ -561,16 +655,32 @@ are listed under it.
 The toolbar of the preview chooses what it shows and how:
 
 - **Show**: the interface, or one of the drawings, palettes and components the
-  file declares, a drawing painted by the component type picked next to it;
+  file and the files it imports declare;
+- **as**: the component of the interface a drawing or a component is shown as,
+  where it is used, or the type a drawing is shown alone as;
 - **Size**: `Auto` shows an interface at the `width` and `height` its root
   sets, and otherwise at the size of the panel, `Panel` is always the size of
   the panel, both following it as it is resized, and a listed or typed size
   such as `640x400` is fixed;
+- **Zoom**: `Fit` scales what is shown to the panel, up or down, and a
+  percentage from 50% to 400% shows it at that scale. Either way it is drawn
+  at the size it is seen at, not stretched;
 - **Theme**: the default theme in its light or dark mode, or the one matching
-  the editor. It changes what the document takes from the theme: its palette
-  where the document sets none, the version of a
+  the editor while neither is pressed. It changes what the document takes
+  from the theme: its palette where the document sets none, the version of a
   [palette declared for both modes](styles.md#palettes), and `theme.dark`;
-- **Zoom**: from 50% to 400%.
+- **Models**: the values of the [models](#models) the interface binds to, to
+  change them and see it follow;
+- **Guides**: the bounds of the components clicked in the preview, or of the
+  one the caret of the editor is in, with their paint margin, dotted, and
+  their distances to what holds them. While they show, a click picks a
+  component instead of reaching the interface, with the shift key for several;
+- **Statistics**: how the interface is drawn, told once a second: the frames a
+  second, the time painting one takes on the processor, how much of the panel
+  the last one painted again, the pixels and the GPU it is drawn with, and the
+  components taking the longest to paint. The times are measured by the
+  `PaintProfiler` while this is on, and nothing is measured while it is off;
+- **Refresh**: shows the document again.
 
 The size and the theme are the two `yui.preview` settings, which the toolbar
 writes.

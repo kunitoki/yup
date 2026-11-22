@@ -5,7 +5,7 @@ type Asked = { args: string[] } | { agentTool: string; agentArguments: string } 
 
 type Request = Asked & {
     id: number;
-    files: { path: string; data: Uint8Array }[];
+    files: { path: string; data: Uint8Array; removed?: boolean }[];
 };
 
 interface ToolModule {
@@ -25,6 +25,11 @@ const ready = create ({ noInitialRun: true, print: (line: string) => output.push
 parentPort?.on ("message", (request: Request) => {
     ready.then (tool => {
         for (const file of request.files) {
+            if (file.removed === true) {
+                tool.ccall ("yuiToolRemoveFile", null, ["string"], [file.path]);
+                continue;
+            }
+
             const pointer = tool._yuiToolAllocate (file.data.length);
 
             new Uint8Array (tool.wasmMemory.buffer, pointer, file.data.length).set (file.data);

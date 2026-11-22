@@ -1215,3 +1215,19 @@ TEST_F (YuiSvgImporterParityTests, ColorPropertiesRecolorTheDrawing)
     EXPECT_LT (after.getRed(), 50);
     EXPECT_GT (after.getBlue(), 200);
 }
+
+TEST_F (YuiSvgImporterTests, APatternFillingItsOwnShapesEnds)
+{
+    const auto imported = importBody (R"svg(
+        <defs>
+            <pattern id="p" width="10" height="10" patternUnits="userSpaceOnUse">
+                <rect width="5" height="5" fill="url(#p)"/>
+                <rect x="5" y="5" width="5" height="5" fill="url(#p)"/>
+            </pattern>
+        </defs>
+        <rect width="50" height="50" fill="url(#p)"/>
+    )svg");
+
+    ASSERT_TRUE (imported.wasOk());
+    EXPECT_TRUE (compileError (imported.drawing).isEmpty()) << compileError (imported.drawing);
+}

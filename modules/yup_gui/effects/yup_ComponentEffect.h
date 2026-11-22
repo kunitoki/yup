@@ -72,9 +72,10 @@ public:
         @param bounds        The destination rectangle in g's coordinate space, which is the
                              area of the component held by the texture. For a component
                              painted in its parent it is the local bounds enlarged by the
-                             paint margin, up to the whole pixels around it, so it starts
-                             at a negative position when there is a margin. For a snapshot
-                             it is the local bounds.
+                             paint margin, up to the whole units and pixels around it, so
+                             it starts at a negative position when there is a margin. It
+                             does not shrink when the margin does, as the texture keeps the
+                             room it has. For a snapshot it is the local bounds.
     */
     virtual void apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds) = 0;
 

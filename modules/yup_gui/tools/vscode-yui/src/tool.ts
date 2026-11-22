@@ -7,12 +7,28 @@ import { Worker } from "worker_threads";
 export interface YuiToolFile {
     path: string;
     data: Uint8Array;
+
+    /** True for a file that is no longer there, which the tool forgets. */
+    removed?: boolean;
 }
 
 export interface YuiToolResult {
     code: number;
     stdout: string;
     stderr: string;
+}
+
+/** Returns the files a host of the tool does not have as they are now, and remembers it is given them. */
+export function unsentFiles (sent: Map<string, string>, files: YuiToolFile[]): YuiToolFile[] {
+    return files.filter (file => {
+        const digest = file.removed === true ? "removed" : crypto.createHash ("sha1").update (file.data).digest ("hex");
+
+        if (sent.get (file.path) === digest)
+            return false;
+
+        sent.set (file.path, digest);
+        return true;
+    });
 }
 
 /** The folder the tool keeps the files it is given in, which the paths it prints start with. */
@@ -70,15 +86,7 @@ export class YuiTool {
         if (worker === undefined)
             return Promise.resolve (undefined);
 
-        const changed = files.filter (file => {
-            const digest = crypto.createHash ("sha1").update (file.data).digest ("hex");
-
-            if (this.sent.get (file.path) === digest)
-                return false;
-
-            this.sent.set (file.path, digest);
-            return true;
-        });
+        const changed = unsentFiles (this.sent, files);
 
         return new Promise (resolve => {
             const id = this.nextId++;

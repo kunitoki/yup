@@ -1301,10 +1301,10 @@ bool StyleContext::syncStyledFilterAndMargins (Component& component, ComponentCa
         // A rule sets the margin in place of the one the component was given
         const auto base = styledMargin != nullptr ? LayoutComponent::parseSpacing (*styledMargin)
                                                   : cache.paintMarginOverride.base (component, getMargin);
-        auto left = jmax (base.getLeft(), filterMargin.getLeft());
-        auto top = jmax (base.getTop(), filterMargin.getTop());
-        auto right = jmax (base.getRight(), filterMargin.getRight());
-        auto bottom = jmax (base.getBottom(), filterMargin.getBottom());
+        auto left = base.getLeft();
+        auto top = base.getTop();
+        auto right = base.getRight();
+        auto bottom = base.getBottom();
 
         const auto expandMargin = [&] (const std::vector<StyleState::Shadow>& layers)
         {
@@ -1324,7 +1324,8 @@ bool StyleContext::syncStyledFilterAndMargins (Component& component, ComponentCa
             expandMargin (activeState->getGlows());
         }
 
-        changed |= cache.paintMarginOverride.apply (component, EdgeSpacing<float> (left, top, right, bottom), getMargin, setMargin);
+        // The filter runs over what is painted in the margin and over the shadows, and spreads them further
+        changed |= cache.paintMarginOverride.apply (component, EdgeSpacing<float> (left, top, right, bottom) + filterMargin, getMargin, setMargin);
     }
 
     return changed;

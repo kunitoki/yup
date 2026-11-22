@@ -662,6 +662,11 @@ private:
     // The declarations of a component (properties, aliases and signals) go to its own transaction
     void parseBody (DataTree& element, DataTree::Transaction* declarations = nullptr)
     {
+        const ScopedValueSetter<int> nesting (nestingDepth, nestingDepth + 1);
+
+        if (nestingDepth > maxNestingDepth)
+            throw Error { position, "Elements are nested more than " + String (maxNestingDepth) + " deep" };
+
         expect ("{");
 
         auto transaction = element.beginTransaction();
@@ -961,7 +966,11 @@ private:
     std::vector<int> lineStarts;
     std::vector<YuiDiagnostic> positions;
     int position = 0;
+    int nestingDepth = 0;
     bool insideDrawing = false;
+
+    // Each body is a call inside the one around it: this keeps the stack of any platform
+    static constexpr int maxNestingDepth = 128;
 };
 
 //==============================================================================

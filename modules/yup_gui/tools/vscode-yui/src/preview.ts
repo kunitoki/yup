@@ -1,21 +1,20 @@
 import * as crypto from "crypto";
 import * as path from "path";
 import * as vscode from "vscode";
-import { collectDocumentFiles, withoutComments } from "./documentFiles";
+import { collectDocumentFiles } from "./documentFiles";
 import { maximumSize, PreviewModule, previewPage, zoomLevels } from "./previewPage";
-import { YuiToolFile } from "./tool";
-
-export interface PreviewSchema {
-    instantiableTypes (): string[];
-}
+import { unsentFiles, YuiToolFile } from "./tool";
 
 export interface PreviewHost {
     log (message: string): void;
-    schema (): Promise<PreviewSchema | undefined>;
+
+    /** What the tool tells a document is made of: what it can show, and the types a drawing can be shown alone as. */
+    outline (document: vscode.TextDocument): Promise<Record<string, unknown> | undefined>;
+
     modelsPath (document: vscode.TextDocument): string | undefined;
 }
 
-/** Something a document can show: its interface, or a drawing, a palette or a component it declares. */
+/** Something a document can show, as the tool tells it: its interface, or a drawing, a palette or a component it declares. */
 interface PreviewTarget {
     id: string;
     label: string;
@@ -25,7 +24,11 @@ interface PreviewTarget {
 }
 
 const rootTarget = "root";
-const plainHost = "Component";
+
+// What a drawing or a component is shown as: a component of the interface, by its path, or alone as a type
+const useChoice = "use:";
+const hostChoice = "host:";
+
 const themes = ["auto", "light", "dark"];
 const typingDelayMs = 150;
 const pageStartMs = 20000;
@@ -54,42 +57,19 @@ function themeOption (): string {
     return themes.includes (configured) ? configured : "auto";
 }
 
-function declarationsOf (text: string, keyword: string): string[] {
-    const pattern = new RegExp (`^${keyword}\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*[:{]`, "gm");
-    const names: string[] = [];
-    let match = pattern.exec (text);
-
-    while (match !== null) {
-        if (! names.includes (match[1]))
-            names.push (match[1]);
-
-        match = pattern.exec (text);
-    }
-
-    return names;
+function strings (value: unknown): string[] {
+    return Array.isArray (value) ? value.filter ((item): item is string => typeof item === "string") : [];
 }
 
-function hasRootComponent (text: string): boolean {
-    return /^[A-Z][A-Za-z0-9_]*\s*\{/m.test (text);
-}
+// What the tool told a document can show
+function targetsOf (outline: Record<string, unknown> | undefined): PreviewTarget[] {
+    const told: unknown = outline?.["targets"];
+    const text = (value: unknown) => typeof value === "string" ? value : "";
 
-/** What the text of a document can show, its interface first. */
-function targetsOf (text: string): PreviewTarget[] {
-    const targets: PreviewTarget[] = [];
-
-    if (hasRootComponent (text))
-        targets.push ({ id: rootTarget, label: "Interface", drawing: "", palette: "", component: "" });
-
-    for (const name of declarationsOf (text, "drawing"))
-        targets.push ({ id: `drawing:${name}`, label: `Drawing: ${name}`, drawing: name, palette: "", component: "" });
-
-    for (const name of declarationsOf (text, "palette"))
-        targets.push ({ id: `palette:${name}`, label: `Palette: ${name}`, drawing: "", palette: name, component: "" });
-
-    for (const name of declarationsOf (text, "component"))
-        targets.push ({ id: `component:${name}`, label: `Component: ${name}`, drawing: "", palette: "", component: name });
-
-    return targets;
+    return (Array.isArray (told) ? told as Record<string, unknown>[] : [])
+        .filter (target => typeof target === "object" && target !== null && text (target["id"]).length > 0)
+        .map (target => ({ id: text (target["id"]), label: text (target["label"]), drawing: text (target["drawing"]),
+                           palette: text (target["palette"]), component: text (target["component"]) }));
 }
 
 function isLightTheme (): boolean {
@@ -113,7 +93,7 @@ export class YuiPreview {
     private panel: vscode.WebviewPanel | undefined;
     private document: vscode.TextDocument | undefined;
     private readonly targets = new Map<string, string> ();
-    private readonly hosts = new Map<string, string> ();
+    private readonly shownAs = new Map<string, string> ();
     private readonly sent = new Map<string, string> ();
     private readonly disposables: vscode.Disposable[] = [];
     private typingTimer: NodeJS.Timeout | undefined;
@@ -126,7 +106,10 @@ export class YuiPreview {
     private readonly startWaiters: Array<(started: boolean) => void> = [];
     private agentSequence = 0;
 
-    constructor (private readonly host: PreviewHost, private readonly toolScript: string | undefined) {
+    /**
+        @param icon The image shown next to the name of the panel in its tab.
+    */
+    constructor (private readonly host: PreviewHost, private readonly toolScript: string | undefined, private readonly icon: vscode.Uri) {
         this.disposables.push (
             vscode.workspace.onDidSaveTextDocument (document => {
                 if (document.languageId === "yui" || document.uri.fsPath === this.modelsFile)
@@ -145,6 +128,10 @@ export class YuiPreview {
 
                 this.document = editor.document;
                 void this.render ();
+            }),
+            vscode.window.onDidChangeTextEditorSelection (event => {
+                if (this.panel !== undefined && this.ready)
+                    this.postCaret (event.textEditor);
             }),
             vscode.workspace.onDidChangeConfiguration (event => {
                 if (event.affectsConfiguration ("yui.preview") || event.affectsConfiguration ("yui.lint.models"))
@@ -250,6 +237,8 @@ export class YuiPreview {
                                                        "YUI Preview",
                                                        { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
                                                        { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: toolFolder === undefined ? [] : [toolFolder] });
+
+        this.panel.iconPath = this.icon;
 
         this.panel.onDidDispose (() => {
             this.cancelTyping ();
@@ -367,12 +356,12 @@ export class YuiPreview {
         }
     }
 
-    // What to show and its host are only ever looked up among those the document offers, never passed on as typed
+    // What to show and what as are only ever looked up among those the document offers, never passed on as typed
     private async optionChosen (name: string, value: string): Promise<void> {
         if (name === "target" && this.document !== undefined)
             this.targets.set (this.document.uri.toString (), value);
-        else if (name === "host" && this.shown !== undefined)
-            this.hosts.set (this.shown, value);
+        else if (name === "shownAs" && this.shown !== undefined)
+            this.shownAs.set (this.shown, value);
         else if (name === "zoom" && zoomLevels.includes (value))
             this.zoom = value;
         else if ((name === "size" && isSizeOption (value)) || (name === "theme" && themes.includes (value)))
@@ -396,12 +385,12 @@ export class YuiPreview {
         }
     }
 
-    private async hostTypes (text: string): Promise<string[]> {
-        const schema = await this.host.schema ();
-        const names = new Set ((schema?.instantiableTypes () ?? []).concat (declarationsOf (text, "component")));
+    // Tells the page where the caret of the editor of the document shown is: the guides show the component it is in
+    private postCaret (editor: vscode.TextEditor | undefined): void {
+        if (editor === undefined || this.document === undefined || editor.document.uri.toString () !== this.document.uri.toString ())
+            return;
 
-        names.delete (plainHost);
-        return [plainHost].concat (Array.from (names).sort ());
+        this.post ({ type: "caret", line: editor.selection.active.line + 1, column: editor.selection.active.character + 1 });
     }
 
     private async render (): Promise<void> {
@@ -414,10 +403,14 @@ export class YuiPreview {
 
         const sequence = ++this.sequence;
         const key = document.uri.toString ();
-        const text = withoutComments (document.getText ());
-        const targets = targetsOf (text);
+        const modelsFile = this.host.modelsPath (document);
+        const collected = await collectDocumentFiles (document, modelsFile);
+
+        // The tool tells what the document can show, what the documents it imports declare included
+        const outline = await this.host.outline (document);
+        const targets = targetsOf (outline);
         const target: PreviewTarget | undefined = targets.find (candidate => candidate.id === this.targets.get (key)) ?? targets[0];
-        const hosts = target !== undefined && target.drawing.length > 0 ? await this.hostTypes (text) : [];
+        const hosts = target !== undefined && target.drawing.length > 0 ? strings (outline?.["hosts"]) : [];
 
         if (sequence !== this.sequence || this.panel === undefined)
             return;
@@ -425,13 +418,27 @@ export class YuiPreview {
         this.panel.title = `YUI Preview: ${path.basename (document.uri.fsPath)}`;
         this.shown = target === undefined ? undefined : `${key} ${target.id}`;
 
-        const chosenHost = this.shown === undefined ? undefined : this.hosts.get (this.shown);
-        const host = chosenHost !== undefined && hosts.includes (chosenHost) ? chosenHost : plainHost;
+        // A drawing stands alone as a type of component when one was chosen, and is otherwise shown where the
+        // interface uses it, as a component always is: on the use chosen, by its path
+        const chosen = (this.shown === undefined ? undefined : this.shownAs.get (this.shown)) ?? "";
+        const chosenHost = chosen.startsWith (hostChoice) ? chosen.substring (hostChoice.length) : "";
+        const host = hosts.includes (chosenHost) ? chosenHost : "";
+        const chosenUse = chosen.startsWith (useChoice) ? chosen.substring (useChoice.length) : "";
+        const use = host.length === 0 && /^[0-9/]*$/.test (chosenUse) ? chosenUse : "";
         const size = sizeOption ();
         const theme = themeOption ();
         const zoom = this.zoom;
 
-        this.post ({ type: "state", targets: targets.map (({ id, label }) => ({ id, label })), target: target?.id ?? "", hosts, host, size, theme, zoom });
+        this.post ({
+            type: "state",
+            targets: targets.map (({ id, label }) => ({ id, label })),
+            target: target?.id ?? "",
+            hosts,
+            shownAs: host.length > 0 ? hostChoice + host : useChoice + use,
+            size,
+            theme,
+            zoom
+        });
 
         if (this.toolScript === undefined) {
             this.post ({ type: "note", text: "The preview needs the yup_yui_tool module, which this installation of the extension does not have." });
@@ -442,12 +449,6 @@ export class YuiPreview {
             this.post ({ type: "note", text: "Nothing to preview: the document has no root component, drawing, palette or component declaration." });
             return;
         }
-
-        const modelsFile = this.host.modelsPath (document);
-        const collected = await collectDocumentFiles (document, modelsFile);
-
-        if (sequence !== this.sequence)
-            return;
 
         this.modelsFile = modelsFile;
 
@@ -473,29 +474,22 @@ export class YuiPreview {
             files,
             drawing: target.drawing,
             palette: target.palette,
-            host: target.component.length > 0 ? target.component : (host !== plainHost ? host : ""),
+            host: target.component.length > 0 ? target.component : host,
+            use,
             interface: target.id === rootTarget,
             light: previewIsLight (),
             size,
             zoom
         });
+
+        this.postCaret (vscode.window.visibleTextEditors.find (editor => editor.document.uri.toString () === key));
     }
 
     // The page keeps the files it was given, so only those that changed are sent again
-    private unsent (files: YuiToolFile[]): { path: string; data: Uint8Array }[] {
-        const changed = files.filter (file => {
-            const digest = crypto.createHash ("sha1").update (file.data).digest ("hex");
-
-            if (this.sent.get (file.path) === digest)
-                return false;
-
-            this.sent.set (file.path, digest);
-            return true;
-        });
-
+    private unsent (files: YuiToolFile[]): YuiToolFile[] {
         // A message to a page is written as JSON, where a Buffer of Node turns itself into a list of numbers
         // before it can be sent as bytes: a plain array of bytes is sent as such
-        return changed.map (file => ({ path: file.path, data: new Uint8Array (file.data) }));
+        return unsentFiles (this.sent, files).map (file => ({ ...file, data: new Uint8Array (file.data) }));
     }
 
     private post (message: unknown): void {

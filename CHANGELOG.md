@@ -106,6 +106,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ComboBox` is no longer opaque, as the other widgets: what is behind its rounded corners shows.
 - Buttons run `onClick` once for a press released over them while enabled. A toggle or a switch button ran it twice, and a button ran it when disabled or when the press was released away from it. `Button::clicked` is what a click does, for subclasses to change.
 - A `ComponentEffect`, a stylesheet `filter:` and `Component::setCachedToTexture` now hold the paint margin of the component, so what it paints around its bounds is no longer cut by them. `ComponentEffect::apply()`, `displayToContent()` and `contentToDisplay()` get the bounds grown by the margin, and a `filter:` widens the margin by what its `blur()` and `drop-shadow()` spread over.
+- Emscripten: the new `yupRenderPrimaryWindow` export draws the window right away, for a page that resized its canvas and would show it empty until the next animation frame.
 - Fixed a parent skipping its own paint under an opaque child drawn through an effect or with an opacity below 1, which left the previous frame showing through it, and a repaint under an effect blending into what its canvas kept where a repainted area ended inside a device pixel.
 
 ### Audio

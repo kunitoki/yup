@@ -40,6 +40,12 @@ test ("a link leading out of the workspace is not followed, even to a file that 
     assert.ok (! isInsideFolders (path.join (workspace, "link", "deeper", "first.png"), [workspace]));
 });
 
+test ("a link to a file that is not there is not written through", () => {
+    fs.symlinkSync (path.join (outside, "absent.png"), path.join (workspace, "dangling.png"));
+
+    assert.ok (! isInsideFolders (path.join (workspace, "dangling.png"), [workspace]));
+});
+
 test ("an image is written with the folders it needs, over the file that was there", async () => {
     const file = path.join (workspace, "shots", "new", "first.png");
 

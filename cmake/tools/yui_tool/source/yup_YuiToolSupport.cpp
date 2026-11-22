@@ -22,6 +22,7 @@
 #include "yup_YuiToolSupport.h"
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <limits>
 #include <set>
@@ -709,6 +710,22 @@ int findYuiToolRootIndex (const DataTree& document)
     return -1;
 }
 
+Size<float> findYuiToolDeclaredSize (const DataTree& document)
+{
+    const auto rootIndex = findYuiToolRootIndex (document);
+
+    if (rootIndex < 0)
+        return {};
+
+    const auto read = [root = document.getChild (rootIndex)] (const Identifier& name)
+    {
+        const auto text = root.getProperty (name).toString();
+        return text.containsOnly ("0123456789.") ? text.getFloatValue() : 0.0f;
+    };
+
+    return { read ("width"), read ("height") };
+}
+
 //==============================================================================
 
 namespace
@@ -766,6 +783,87 @@ SWATCHES        }
         .replace ("SWATCHES", swatches);
 }
 
+// The declaration of a drawing or of a palette of a document, in a style block too
+DataTree findDeclaration (const DataTree& document, const Identifier& type, const String& declared)
+{
+    static const Identifier name ("name");
+    static const Identifier style ("style");
+
+    for (const auto& element : document)
+    {
+        if (element.getType() == type && element.getProperty (name).toString() == declared)
+            return element;
+
+        if (element.getType() != style)
+            continue;
+
+        for (const auto& nested : element)
+            if (nested.getType() == type && nested.getProperty (name).toString() == declared)
+                return nested;
+    }
+
+    return {};
+}
+
+// The size of the view box a drawing sets with plain numbers, which is the one it was drawn for
+Size<float> findViewBoxSize (const DataTree& drawing)
+{
+    constexpr float largestSide = 4096.0f;
+
+    const auto text = drawing.getProperty ("viewBox").toString().trim();
+
+    if (! text.startsWith ("rect"))
+        return {};
+
+    const auto numbers = StringArray::fromTokens (text.fromFirstOccurrenceOf ("(", false, false).upToLastOccurrenceOf (")", false, false), ",", "");
+
+    if (numbers.size() != 4)
+        return {};
+
+    for (const auto& number : numbers)
+        if (number.trim().isEmpty() || ! number.trim().containsOnly ("0123456789."))
+            return {};
+
+    const Size<float> size { numbers[2].getFloatValue(), numbers[3].getFloatValue() };
+
+    if (jmin (size.getWidth(), size.getHeight()) < 1.0f || jmax (size.getWidth(), size.getHeight()) > largestSide)
+        return {};
+
+    return size;
+}
+
+// True for a component that is of a target: one its drawing paints, or else one of its type
+bool isUseOf (const Component& component, const YuiToolTarget& target)
+{
+    if (target.drawing.isEmpty())
+        return component.getTypeInfo().getTypeName().toString() == target.hostType;
+
+    const auto* drawing = dynamic_cast<const DrawingStyle*> (component.getStyle().get());
+
+    return drawing != nullptr && drawing->getName() == target.drawing;
+}
+
+// True for a component of an interface that is not hidden, itself or by what holds it, and paints inside it
+bool showsWithSize (const Component& component, const Component& root)
+{
+    for (const auto* shown = &component; shown != nullptr && shown != &root; shown = shown->getParentComponent())
+        if (! shown->isVisible())
+            return false;
+
+    const auto area = findYuiToolPaintArea (component, root);
+
+    return area.getWidth() >= 1.0f && area.getHeight() >= 1.0f;
+}
+
+void collectUses (const YuiBuilder& builder, Component& component, const Component& root, const YuiToolTarget& target, std::vector<Component*>& uses)
+{
+    if (builder.findElementFor (&component).isValid() && isUseOf (component, target) && showsWithSize (component, root))
+        uses.push_back (&component);
+
+    for (int index = 0; index < component.getNumChildComponents(); ++index)
+        collectUses (builder, *component.getChildComponent (index), root, target, uses);
+}
+
 // Gives a parsed document another root component, the one hosting what is previewed
 DataTree withRoot (const DataTree& document, const DataTree& root)
 {
@@ -786,7 +884,7 @@ DataTree withRoot (const DataTree& document, const DataTree& root)
 
 } // namespace
 
-YuiToolShown loadYuiToolTarget (YuiDocument& document, YuiLoader& loader, const File& input, YuiToolTarget target)
+YuiToolShown loadYuiToolTarget (YuiDocument& document, YuiLoader& loader, const File& input, YuiToolTarget target, Size<float> size, Size<float> fallbackSize)
 {
     YuiToolShown shown;
     shown.result = loader.loadFile (input);
@@ -817,6 +915,32 @@ YuiToolShown loadYuiToolTarget (YuiDocument& document, YuiLoader& loader, const 
         if (target.palette.isNotEmpty() && ! palettes.contains (target.palette))
             return nothing ("there is no palette '" + target.palette + "'");
 
+        // A drawing given no host, and a component type, are shown where the interface uses them:
+        // there they have the palette, the styles and the models they are made for
+        const auto isUsed = target.palette.isEmpty() && target.drawing.isEmpty() != target.hostType.isEmpty();
+
+        if (isUsed && hasRoot && shown.result.wasOk() && document.getRoot() != nullptr)
+        {
+            auto& root = *document.getRoot();
+
+            auto layoutSize = size;
+
+            if (layoutSize.getWidth() < 1.0f)
+                layoutSize = root.getParentComponent() == nullptr ? root.getSize() : findYuiToolDeclaredSize (parsed.document);
+
+            if (layoutSize.getWidth() < 1.0f || layoutSize.getHeight() < 1.0f)
+                layoutSize = fallbackSize.getWidth() >= 1.0f ? fallbackSize : shown.defaultSize;
+
+            root.setSize (layoutSize);
+
+            if (findYuiToolUse (document, target) != nullptr)
+            {
+                shown.isInContext = true;
+                shown.target = target;
+                return shown;
+            }
+        }
+
         // A file of declarations shows the first thing it declares that can be drawn
         if (! hasRoot && ! isPreview)
         {
@@ -835,8 +959,15 @@ YuiToolShown loadYuiToolTarget (YuiDocument& document, YuiLoader& loader, const 
         }
         else if (target.drawing.isNotEmpty() || target.hostType.isNotEmpty())
         {
-            hostText = (target.hostType.isNotEmpty() ? target.hostType : String ("Component")) + " { " + (target.drawing.isNotEmpty() ? "drawing: " + target.drawing + "; " : String()) + "}";
-            shown.defaultSize = { 200.0f, 200.0f };
+            // What stands in for the interface has none of its styles: the first palette of the file is the
+            // one its drawings most likely read the colors of
+            hostText = (target.hostType.isNotEmpty() ? target.hostType : String ("Component")) + " { "
+                     + (palettes.isEmpty() ? String() : "palette: " + palettes[0] + "; ")
+                     + (target.drawing.isNotEmpty() ? "drawing: " + target.drawing + "; " : String()) + "}";
+
+            const auto viewBox = target.drawing.isNotEmpty() ? findViewBoxSize (findDeclaration (parsed.document, "drawing", target.drawing)) : Size<float>();
+
+            shown.defaultSize = viewBox.getWidth() >= 1.0f ? viewBox : Size<float> (200.0f, 200.0f);
         }
         else if (! hasRoot)
         {
@@ -856,11 +987,73 @@ YuiToolShown loadYuiToolTarget (YuiDocument& document, YuiLoader& loader, const 
 
             // The positions of the text only hold while its elements keep their place
             shown.result = document.load (withRoot (parsed.document, host.document.getChild (0)), hasRoot ? YuiSourceMap() : parsed.sourceMap);
+
+            const auto& diagnostics = document.getDiagnostics();
+
+            shown.needsHost = target.drawing.isNotEmpty() && target.hostType.isEmpty()
+                           && std::any_of (diagnostics.begin(), diagnostics.end(), [] (const YuiDiagnostic& diagnostic)
+            {
+                return diagnostic.isError() && diagnostic.message.startsWith ("Component.drawing: ") && diagnostic.message.contains ("Unknown symbol '");
+            });
         }
     }
 
     shown.target = target;
     return shown;
+}
+
+std::vector<Component*> findYuiToolUses (YuiDocument& document, const YuiToolTarget& target)
+{
+    std::vector<Component*> uses;
+
+    if (auto* root = document.getRoot(); root != nullptr && (target.drawing.isNotEmpty() || target.hostType.isNotEmpty()))
+        collectUses (document.getBuilder(), *root, *root, target, uses);
+
+    return uses;
+}
+
+Component* findYuiToolUse (YuiDocument& document, const YuiToolTarget& target)
+{
+    const auto uses = findYuiToolUses (document, target);
+
+    return uses.empty() ? nullptr : uses.front();
+}
+
+Component* findYuiToolElement (YuiDocument& document, const String& idOrPath)
+{
+    auto* component = document.findById (idOrPath);
+
+    return component != nullptr ? component : findYuiToolComponent (document, idOrPath);
+}
+
+String describeYuiToolName (const Component& component)
+{
+    const auto id = component.getComponentID();
+
+    return component.getTypeInfo().getTypeName().toString() + (id.isNotEmpty() ? " #" + id : String());
+}
+
+Point<float> findYuiToolOrigin (const Component& component, const Component& root)
+{
+    Point<float> origin;
+
+    for (const auto* placed = &component; placed != nullptr && placed != &root; placed = placed->getParentComponent())
+        origin = origin + placed->getPosition();
+
+    return origin;
+}
+
+Rectangle<float> clipYuiToolRegion (const Rectangle<float>& region, const Rectangle<float>& whole)
+{
+    const auto x = std::floor (region.getX());
+    const auto y = std::floor (region.getY());
+
+    return Rectangle<float> (x, y, std::ceil (region.getRight()) - x, std::ceil (region.getBottom()) - y).intersection (whole);
+}
+
+Rectangle<float> findYuiToolPaintArea (const Component& component, const Component& root)
+{
+    return clipYuiToolRegion (component.getPaintBounds().translated (findYuiToolOrigin (component, root)), root.getLocalBounds());
 }
 
 //==============================================================================
@@ -898,6 +1091,12 @@ std::optional<bool> readYuiToolViewOption (int argc, char** argv, int& index, Yu
     if (argument == "--as" && hasValue)
     {
         options.target.hostType = argv[++index];
+        return true;
+    }
+
+    if (argument == "--element" && hasValue)
+    {
+        options.element = argv[++index];
         return true;
     }
 
@@ -970,7 +1169,7 @@ YuiToolView::YuiToolView (const YuiToolViewOptions& options, const YuiToolModels
     ApplicationTheme::getGlobalTheme()->setPalette (ThemePalette ({}, options.mode));
 
     models.attachTo (document);
-    shown = loadYuiToolTarget (document, loader, input, options.target);
+    shown = loadYuiToolTarget (document, loader, input, options.target, options.size, options.fallbackSize);
 
     auto* root = document.getRoot();
 
@@ -993,6 +1192,9 @@ YuiToolView::YuiToolView (const YuiToolViewOptions& options, const YuiToolModels
 
     // Nothing is under a pointer in a component that is not visible
     backdrop->setVisible (true);
+
+    if (shown.isInContext)
+        use = findYuiToolUse (document, shown.target);
 }
 
 YuiToolView::~YuiToolView()
@@ -1002,6 +1204,22 @@ YuiToolView::~YuiToolView()
     document.clear();
 
     ApplicationTheme::getGlobalTheme()->setPalette (previousPalette);
+}
+
+Rectangle<float> YuiToolView::getFrame() const
+{
+    if (backdrop == nullptr)
+        return {};
+
+    const auto whole = backdrop->getLocalBounds();
+
+    if (use == nullptr)
+        return whole;
+
+    // A use that lost its size since it was found leaves all of the interface to show
+    const auto area = findYuiToolPaintArea (*use.get(), *document.getRoot());
+
+    return area.getWidth() >= 1.0f && area.getHeight() >= 1.0f ? area : whole;
 }
 
 std::vector<YuiToolProblem> YuiToolView::findProblems() const
@@ -1023,6 +1241,24 @@ void YuiToolView::settle()
         context->refresh (3600.0);
 
     context->restyleNow();
+}
+
+//==============================================================================
+
+YuiToolFrame::YuiToolFrame (Component& interfaceToShow, const Rectangle<float>& region)
+    : shown (interfaceToShow)
+{
+    setOpaque (false);
+    setSize (region.getSize());
+
+    addAndMakeVisible (shown);
+    shown.setTopLeft ({ -region.getX(), -region.getY() });
+}
+
+YuiToolFrame::~YuiToolFrame()
+{
+    removeChildComponent (shown);
+    shown.setTopLeft ({ 0.0f, 0.0f });
 }
 
 //==============================================================================

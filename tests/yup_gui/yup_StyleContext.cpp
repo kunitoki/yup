@@ -842,6 +842,19 @@ TEST_F (StyleContextTests, ABlurFilterWidensThePaintMarginByWhatItSpreadsOver)
     EXPECT_EQ (root.getPaintMargin(), EdgeSpacing<float>());
 }
 
+TEST_F (StyleContextTests, AFilterSpreadsTheShadowsAndWhatIsInThePaintMargin)
+{
+    Component root ("root");
+    attach (root, "style { #root { paintMargin: 10; filter: blur(2px); } .floating { shadow: 0 0 30 #000000; } }");
+
+    // The filter runs over what is painted in the margin: a blur of 2 spreads it 6 further
+    EXPECT_EQ (root.getPaintMargin(), EdgeSpacing<float> (16.0f));
+
+    root.addStyleClass (Identifier ("floating"));
+    restyle (root);
+    EXPECT_EQ (root.getPaintMargin(), EdgeSpacing<float> (36.0f));
+}
+
 TEST_F (StyleContextTests, AShadowWidensThePaintMarginARuleSets)
 {
     Component root ("root");

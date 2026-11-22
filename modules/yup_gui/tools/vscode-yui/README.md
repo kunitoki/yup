@@ -7,8 +7,10 @@ SVG import for **YUI** - the declarative UI language of the
 A `.yui` document describes a component tree, its drawings, its stylesheet and
 its palettes, and binds them to the models of the application. Everything the
 extension knows beyond the grammar comes from `yup_yui_tool`: diagnostics from
-`lint`, completions from `schema`, drawings from `import-svg`, and the preview
-from the tool running the interface itself.
+`lint`, completions, outline, definitions and hovers from `complete`,
+`outline`, `definition` and `hover`, drawings from `import-svg`, and the
+preview from the tool running the interface itself. The extension only passes
+them on, so any editor asking the tool gets the same.
 
 The tool is packaged as a WebAssembly module, so one package works on every
 platform and holds no native binary. Syntax highlighting and snippets stay
@@ -31,13 +33,22 @@ available in a package built without it.
   The document is checked as it is in its editor, with the files it imports, so
   unsaved edits count, and a problem in an imported document is reported on
   that document
-- **Completions** from `yup_yui_tool schema`: the instantiable types at the
-  start of a line, the properties and signals of the enclosing type, the values
-  of an enumeration property, the pseudo classes inside `style`, and the roles
-  after `palette.`
+- **Completions**: the component types, the properties and signals of the
+  enclosing one, those a `component` of the document adds included, the values
+  of an enumeration property, the elements and properties of a `drawing`, the
+  drawings and palettes declared where one is named, the pseudo classes inside
+  `style`, the roles and the colors of the palettes after `palette.`, the
+  tokens after `tokens.` and the properties of a model after its name
+- **Outline** of the declarations, the style rules and the components of a
+  document, and **go to definition** on a drawing, a component, a palette, a
+  color of a palette, a token or an import, in the files it imports too
+- **Hovers** telling the type, the description and the values of a property or
+  a signal, and **color swatches** with the color picker on `#rgb`, `#rgba`,
+  `#rrggbb` and `#rrggbbaa`
 - **Preview**: **YUI: Open Preview** runs the interface next to the editor,
   where it answers the mouse and the keyboard and follows what is typed, with a
-  toolbar choosing what is shown, its size, its theme and its zoom
+  toolbar choosing what is shown, its size, its zoom and its theme, guides
+  showing the bounds of its components and statistics of how it is drawn
 - **SVG import**: **YUI: Import SVG as Drawing** converts an `.svg` into a
   `drawing` block and opens it in a new editor
 - **Tools for agents**: **YUI: Set Up Agent Tools** gives the coding agents of
@@ -87,17 +98,25 @@ The toolbar of the panel controls the preview:
 
 | Control | Choices |
 |---|---|
-| **Show** | The interface of the document, or any drawing, palette or component it declares. A drawing adds **as**, the component type painting it: `Component` by default, `Slider` for a drawing reading the value of a slider. |
+| **Show** | The interface of the document, or any drawing, palette or component it or the files it imports declare. |
+| **as** | A drawing and a component are shown where the interface uses them: on the first component the drawing paints, or the first one of the type, framed with its paint margin. **as** picks another of them, or shows a drawing on its own, painting one component of a type: `Component`, or `Slider` for a drawing reading the value of a slider. |
 | **Size** | `Auto`, `Panel`, a listed size or `Custom`. The two fields next to it show the size of the interface in logical pixels, and typing in them fixes it. |
-| **Theme** | `Auto` follows the VSCode color theme, `Light` and `Dark` set it. It changes what the document takes from the theme: its palette where the document sets none, and the version of a palette declared for both modes. The interface keeps its state. |
-| **Zoom** | `Fit` shows the interface at its size, shrunk to fit the panel when it is larger. A percentage shows it at that scale and scrolls. |
+| **Zoom** | `Fit` scales what is shown to the panel, up to 8 times larger or as small as it takes. A percentage shows it at that scale and scrolls. Either way it is drawn at the size it is seen at, so it stays sharp. |
+| **Theme** | The sun sets the light theme and the moon the dark one. With neither pressed the preview follows the VSCode color theme: click the pressed one to go back to that. It changes what the document takes from the theme: its palette where the document sets none, and the version of a palette declared for both modes. The interface keeps its state. |
+| **Models** | Opens the values of the models the interface binds to, to change them and see it follow, go back to those of the models file or write them to it. |
+| **Guides** | Shows the bounds of components, the area each paints when it has a paint margin, dotted, and its distances to the bounds of what holds it. |
+| **Statistics** | Tells how the interface is drawn, once a second: the frames a second, the time painting one takes, how much of the panel the last one painted again, the pixels and the GPU it is drawn with, and the components taking the longest to paint. |
 | **Refresh** | Shows the document again, for a change the panel can't see, such as one of the models file. |
 
 With the `Auto` size:
 
-- an interface whose root sets a `width` and a `height` is shown at that size;
+- an interface whose root sets a `width` and a `height` is shown at that size,
+  which `Fit` then scales to the panel: this is how an interface designed at
+  one size is previewed;
 - any other interface takes the size of the panel;
-- a drawing, a palette or a component keeps the size the tool gives it.
+- a drawing or a component shown where it is used takes the size it has there;
+- a palette, or a drawing on its own, keeps the size the tool gives it: the one
+  of the `viewBox` of the drawing when it sets one with plain numbers.
 
 `Panel` is always the size of the panel, whatever the root asks for or is
 shown. Either way the interface follows the panel as it is resized, so
@@ -109,6 +128,22 @@ settings: the toolbar writes them to the user settings, or to those of the
 workspace when it already sets them, and follows them when they are edited.
 What is shown is remembered per document and the zoom for the panel, both until
 the window closes.
+
+A drawing is best shown where it is used: there it has the palette, the style
+rules, the models and the kind of component it was made for. On its own it only
+has the first palette of the document, and one reading the properties of a
+widget fails until **as** names that widget, which the panel says.
+
+The times of **Statistics** are measured while it is on, which costs a little
+for each component painted, and nothing is measured while it is off. They are
+what painting asks of the processor: what the GPU then does is not in them, and
+shows in the frames a second.
+
+With **Guides** on, the component the caret of the editor is in is outlined in
+the preview. A click in the preview picks the component under it instead of
+reaching the interface, and a click with the shift key adds one or takes it
+away. Clicking never moves the caret, and moving the caret shows its component
+again.
 
 The interface is drawn at the pixel density of the display, with the models of
 `yui.lint.models`. The problems of the document are listed under it, and a
@@ -127,7 +162,7 @@ Agent Tools** serves it tools of the
 |---|---|
 | `yui_check` | The problems of a document and of the files it imports. |
 | `yui_inspect` | Its layout as text: each component with its type, id, source line and bounds, and warnings for what has no size or lies outside the interface. |
-| `yui_render` | An image of the interface, or of a drawing, a palette or a component of the file, at a size and in a theme, with model values and `:hover` or `:pressed` states set. Also a region or an element of it drawn larger, a grid of coordinates over it, and a comparison with a reference image. |
+| `yui_render` | An image of the interface, or of a drawing, a palette or a component of the file, at a size and in a theme, with model values and `:hover` or `:pressed` states set. Also a region or an element of it drawn larger, a grid of coordinates or guides over it, and a comparison with a reference image. |
 | `yui_schema` | The component types, or the properties and signals of one. |
 | `yui_capture_preview` | An image of the preview panel as it is now, with the values of its models. |
 
@@ -214,7 +249,8 @@ vscode-yui/
 ├── language-configuration.json   # comments, brackets, indentation
 ├── images/yui-icon.png           # extension and `.yui` file icon
 ├── esbuild.js                    # bundles the extension and its tests
-├── src/extension.ts              # activation: diagnostics, completions, commands
+├── src/extension.ts              # activation: diagnostics, commands, what the tool is asked
+├── src/language.ts               # completions, outline, definitions, hovers and colors, as the tool answers them
 ├── src/agentServer.ts            # the server of the tools for agents
 ├── src/agentBackend.ts           # runs those tools on the documents of the editor
 ├── src/agentFiles.ts             # what they read and write of the workspace

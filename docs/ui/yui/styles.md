@@ -546,8 +546,8 @@ style {
     `palette.accent.withAlpha (0.5)`)
   Consecutive color-matrix filters collapse into a single GPU pass, and `filter:`
   runs in its own style layer so it never overwrites a C++ `setComponentEffect()`.
-  The filter covers what the component paints in its paint margin too, while
-  its `shadow:` and `glow:` layers stay under it, unfiltered.
+  The filter covers what the component paints in its paint margin and its
+  `shadow:` and `glow:` layers too, as in CSS.
 - `effect:` is strictly for user-defined `ComponentEffect` factories registered
   by the application in `ComponentEffectRegistry`, or `none`:
 
@@ -641,12 +641,14 @@ Row {
 </p>
 
 The paint margin of the component grows automatically to hold its `shadow:`
-and `glow:` layers, and what a `filter:` spreads over: three times the radius
-of a `blur(...)`, and of a `drop-shadow(...)` with its offset. It grows over the
-one `paintMargin` asks for. When no rule sets one of these
-declarations anymore, the component gets back the cursor, effect or paint margin
-it had before, unless the application changed it in between. Unknown names and
-malformed declarations are reported as diagnostics.
+and `glow:` layers, when they reach further than the one `paintMargin` asks
+for. A `filter:` then adds what it spreads all of that over: three times the
+radius of a `blur(...)`, and of a `drop-shadow(...)` with its offset. The parent
+still cuts all of it where it ends: when a component sits closer to an edge of
+its parent than its shadow reaches, give the parent a `paintMargin` too. When no
+rule sets one of these declarations anymore, the component gets back the cursor,
+effect or paint margin it had before, unless the application changed it in
+between. Unknown names and malformed declarations are reported as diagnostics.
 
 ## See also
 

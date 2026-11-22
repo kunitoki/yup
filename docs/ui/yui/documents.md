@@ -405,8 +405,9 @@ Row {
   property. When it changes, the components are made again once the change is
   over, from the message loop: those still described are kept as they are,
   the others are added or removed.
-- A `repeat` runs at most 1024 times. A longer range is reported as a problem
-  and cut there.
+- A `repeat` runs at most 1024 times, counted together for repeats inside one
+  another: 32 turns of 32. A longer range is reported as a problem and cut
+  there.
 - In the body of a `component`, the range can read the properties of the
   component, as in `repeat i in 0 .. root.count`.
 

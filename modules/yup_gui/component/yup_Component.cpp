@@ -126,48 +126,93 @@ Size<int> getCanvasPixelSize (const Size<float>& logicalSize, float scale)
              jmax (1, roundToInt (logicalSize.getHeight() * scale)) };
 }
 
+/** Returns true if @a canvas exists and has exactly @a pixelSize. */
+bool hasPixelSize (const GpuCanvas::Ptr& canvas, const Size<int>& pixelSize)
+{
+    return canvas != nullptr
+        && canvas->getWidth() == pixelSize.getWidth()
+        && canvas->getHeight() == pixelSize.getHeight();
+}
+
 /** The part of a component an offscreen canvas holds: its bounds and a margin around them. */
 struct OffscreenArea
 {
-    Rectangle<float> bounds; ///< What the canvas holds, in the local space of the component.
-    Rectangle<float> clip;   ///< The paint bounds of the component, in the units the canvas is drawn in.
-    Point<float> origin;     ///< Where the origin of the component is in the canvas.
-    Size<int> pixelSize;     ///< The size of the canvas in device pixels.
+    Rectangle<float> bounds;      ///< What the canvas holds, in the local space of the component.
+    Rectangle<float> visible;     ///< The part of it the component paints in, up to whole pixels: what is drawn back.
+    Rectangle<float> clip;        ///< What the component paints in, in the units the canvas is drawn in.
+    Point<float> origin;          ///< Where the origin of the component is in the canvas.
+    Size<int> pixelSize;          ///< The size of the canvas in device pixels.
+    EdgeSpacing<int> pixelMargin; ///< The margin the canvas holds around the bounds, in device pixels.
 };
 
 /** Returns the area of an offscreen canvas holding a component of @a size and the @a margin around it.
 
-    The margin is grown to whole device pixels and added around the pixels the component has without
-    one, so what is inside the bounds is rendered the same with or without a margin.
+    The margin is grown to the whole units direct painting is clipped to, then to whole device pixels,
+    and added around the pixels the component has without one. So what is painted around the bounds
+    shows as far as it does without a canvas, and what is inside them is rendered the same with or
+    without a margin.
+
+    A canvas that is kept, holding @a keptMargin pixels around the same bounds, keeps the room it has:
+    a margin that shrinks, or moves from an edge to another, needs no new canvas. Only one that grows does.
 */
-OffscreenArea getOffscreenArea (const Size<float>& size, const EdgeSpacing<float>& margin, float scale)
+OffscreenArea getOffscreenArea (const Size<float>& size, const EdgeSpacing<float>& margin, float scale, const GpuCanvas::Ptr& keptCanvas = nullptr, const EdgeSpacing<int>& keptMargin = {})
 {
     const auto inner = getCanvasPixelSize (size, scale);
     const auto innerWidth = static_cast<float> (inner.getWidth());
     const auto innerHeight = static_cast<float> (inner.getHeight());
 
-    // A size rounded down leaves a part of a pixel that the margin after it holds too
-    const auto toPixels = [scale] (float edge, float remainder = 0.0f)
+    // Direct painting is clipped to the whole units around the paint bounds
+    const auto toUnits = [] (float edge, float length = 0.0f)
     {
-        return edge > 0.0f ? jmax (0.0f, std::ceil (edge * scale + jmax (0.0f, remainder) - 0.001f)) : 0.0f;
+        return edge > 0.0f ? std::ceil (length + edge) - length : 0.0f;
     };
 
-    const auto left = toPixels (margin.getLeft());
-    const auto top = toPixels (margin.getTop());
-    const auto right = toPixels (margin.getRight(), size.getWidth() * scale - innerWidth);
-    const auto bottom = toPixels (margin.getBottom(), size.getHeight() * scale - innerHeight);
+    const EdgeSpacing<float> reach (toUnits (margin.getLeft()),
+                                    toUnits (margin.getTop()),
+                                    toUnits (margin.getRight(), size.getWidth()),
+                                    toUnits (margin.getBottom(), size.getHeight()));
 
-    const auto unitX = size.getWidth() / innerWidth;
-    const auto unitY = size.getHeight() / innerHeight;
+    // A size that is no whole number of pixels leaves a part of a pixel to the margin after it, or takes it
+    const auto toPixels = [scale] (float edge, float remainder = 0.0f)
+    {
+        return edge > 0.0f ? jmax (0, roundToInt (std::ceil (edge * scale + remainder - 0.001f))) : 0;
+    };
+
+    const EdgeSpacing<int> needed (toPixels (reach.getLeft()),
+                                   toPixels (reach.getTop()),
+                                   toPixels (reach.getRight(), size.getWidth() * scale - innerWidth),
+                                   toPixels (reach.getBottom(), size.getHeight() * scale - innerHeight));
+
+    const bool keepsRoom = hasPixelSize (keptCanvas, { inner.getWidth() + keptMargin.getHorizontal(), inner.getHeight() + keptMargin.getVertical() });
+
+    const auto held = keepsRoom ? EdgeSpacing<int> (jmax (needed.getLeft(), keptMargin.getLeft()),
+                                                    jmax (needed.getTop(), keptMargin.getTop()),
+                                                    jmax (needed.getRight(), keptMargin.getRight()),
+                                                    jmax (needed.getBottom(), keptMargin.getBottom()))
+                                : needed;
 
     const Rectangle<float> bounds (Point<float>(), size);
-    const Point<float> origin (left / scale, top / scale);
+    const Point<float> origin (static_cast<float> (held.getLeft()) / scale, static_cast<float> (held.getTop()) / scale);
+
+    // A pixel of the canvas covers as much of the component as it does without a margin
+    const auto grownBy = [&] (const EdgeSpacing<int>& pixels)
+    {
+        const auto unitX = size.getWidth() / innerWidth;
+        const auto unitY = size.getHeight() / innerHeight;
+
+        return bounds.enlarged (EdgeSpacing<float> (static_cast<float> (pixels.getLeft()) * unitX,
+                                                    static_cast<float> (pixels.getTop()) * unitY,
+                                                    static_cast<float> (pixels.getRight()) * unitX,
+                                                    static_cast<float> (pixels.getBottom()) * unitY));
+    };
 
     return {
-        .bounds = bounds.enlarged (EdgeSpacing<float> (left * unitX, top * unitY, right * unitX, bottom * unitY)),
-        .clip = bounds.enlarged (margin).translated (origin),
+        .bounds = grownBy (held),
+        .visible = grownBy (needed),
+        .clip = bounds.enlarged (reach).translated (origin),
         .origin = origin,
-        .pixelSize = { inner.getWidth() + roundToInt (left + right), inner.getHeight() + roundToInt (top + bottom) }
+        .pixelSize = { inner.getWidth() + held.getHorizontal(), inner.getHeight() + held.getVertical() },
+        .pixelMargin = held
     };
 }
 
@@ -206,14 +251,6 @@ std::optional<RectangleList<float>> getPartialRepaintRegion (const RectangleList
     }
 
     return region;
-}
-
-/** Returns true if @a canvas exists and has exactly @a pixelSize. */
-bool hasPixelSize (const GpuCanvas::Ptr& canvas, const Size<int>& pixelSize)
-{
-    return canvas != nullptr
-        && canvas->getWidth() == pixelSize.getWidth()
-        && canvas->getHeight() == pixelSize.getHeight();
 }
 
 } // namespace
@@ -1030,7 +1067,7 @@ EdgeSpacing<float> Component::getOffscreenMargin() const
 
 Rectangle<float> Component::getEffectBounds (float scale) const
 {
-    return getOffscreenArea (getSize(), getOffscreenMargin(), scale).bounds;
+    return getOffscreenArea (getSize(), getOffscreenMargin(), scale, effectOffscreenCanvas, offscreenCanvasMargin).bounds;
 }
 
 void Component::setExcludedFromParentLayout (bool shouldBeExcluded)
@@ -2781,14 +2818,16 @@ void Component::paintChildrenAndOverChildren (Graphics& g,
     paintOverChildren (g);
 }
 
-GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas, const std::optional<RectangleList<float>>& dirtyRegion, const EdgeSpacing<float>& margin, bool paintShadows)
+GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas, const std::optional<RectangleList<float>>& dirtyRegion, bool holdPaintMargin)
 {
     if (getWidth() <= 0.0f || getHeight() <= 0.0f)
         return nullptr;
 
     const auto renderOffscreen = [&] () -> GpuCanvas::Ptr
     {
-        const auto area = getOffscreenArea (getSize(), margin, scale);
+        const auto margin = holdPaintMargin ? getOffscreenMargin() : EdgeSpacing<float>();
+        const auto area = holdPaintMargin ? getOffscreenArea (getSize(), margin, scale, reuseCanvas, offscreenCanvasMargin)
+                                          : getOffscreenArea (getSize(), margin, scale);
         const auto reused = hasPixelSize (reuseCanvas, area.pixelSize);
 
         GpuCanvas::Ptr canvas;
@@ -2807,8 +2846,15 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
 
         std::optional<RectangleList<float>> dirtyPixels;
 
-        if (reused && dirtyRegion.has_value())
+        // What was painted around the bounds is not painted over, so a new margin is painted in full
+        if (reused && dirtyRegion.has_value() && margin == offscreenPaintedMargin)
             dirtyPixels = getPartialRepaintRegion (*dirtyRegion, area, getSize(), scale);
+
+        if (holdPaintMargin)
+        {
+            offscreenCanvasMargin = area.pixelMargin;
+            offscreenPaintedMargin = margin;
+        }
 
         if (dirtyPixels.has_value() && dirtyPixels->isEmpty())
             return canvas;
@@ -2825,7 +2871,7 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
         flags.paintAsOffscreenRoot = true;
         offscreenOrigin = area.origin;
 
-        paintSubtree (offscreenG, clipRegion, opacity, renderContinuous, nullptr, paintShadows);
+        paintSubtree (offscreenG, clipRegion, opacity, renderContinuous);
 
         offscreenOrigin = {};
         flags.paintAsOffscreenRoot = false;
@@ -2931,8 +2977,7 @@ void Component::paintSubtree (Graphics& g,
                               const RectangleList<float>& clipRegion,
                               float opacity,
                               bool renderContinuous,
-                              const RectangleList<float>* activeClipRegion,
-                              bool paintShadows)
+                              const RectangleList<float>* activeClipRegion)
 {
     isRepainting.store (true, std::memory_order_relaxed);
 
@@ -2974,8 +3019,7 @@ void Component::paintSubtree (Graphics& g,
         {
             const auto paintState = g.saveState();
 
-            if (paintShadows)
-                paintStyleShadows (g);
+            paintStyleShadows (g);
 
             if (shouldMeasurePaint)
             {
@@ -3059,7 +3103,6 @@ void Component::internalPaint (Graphics& g,
         invalidateCanvasesIfThemeChanged();
 
         const auto scale = g.getContextScale();
-        const auto effectBounds = getEffectBounds (scale);
 
         auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(),
                                               1.0f,
@@ -3067,20 +3110,18 @@ void Component::internalPaint (Graphics& g,
                                               scale,
                                               std::move (effectOffscreenCanvas),
                                               takeEffectDirtyRegion (renderContinuous),
-                                              getOffscreenMargin(),
-                                              false);
+                                              true);
         if (canvas == nullptr)
             return;
 
+        const auto area = getOffscreenArea (getSize(), getOffscreenMargin(), scale, canvas, offscreenCanvasMargin);
         auto texture = canvas->asTexture();
 
         {
             const auto saved = g.saveState();
             g.setOpacity (opacity);
-            applyPaintState (g, getCanvasRegion (effectBounds), activeClipRegion);
-
-            paintStyleShadows (g);
-            applyActiveEffects (g, texture, effectBounds, scale);
+            applyPaintState (g, getCanvasRegion (area.visible), activeClipRegion);
+            applyActiveEffects (g, texture, area.bounds, scale);
         }
 
         effectOffscreenCanvas = canvas;
@@ -3096,7 +3137,7 @@ void Component::internalPaint (Graphics& g,
         invalidateCanvasesIfThemeChanged();
 
         const auto scale = g.getContextScale();
-        const auto area = getOffscreenArea (getSize(), getOffscreenMargin(), scale);
+        const auto area = getOffscreenArea (getSize(), getOffscreenMargin(), scale, cachedTextureCanvas, offscreenCanvasMargin);
 
         const auto sizeMatches = hasPixelSize (cachedTextureCanvas, area.pixelSize);
 
@@ -3123,6 +3164,7 @@ void Component::internalPaint (Graphics& g,
 
                 canvas->commit();
                 cachedTextureCanvas = canvas;
+                offscreenCanvasMargin = area.pixelMargin;
             }
         }
 
@@ -3131,7 +3173,7 @@ void Component::internalPaint (Graphics& g,
         {
             const auto saved = g.saveState();
             g.setOpacity (opacity);
-            applyPaintState (g, getCanvasRegion (area.bounds), activeClipRegion);
+            applyPaintState (g, getCanvasRegion (area.visible), activeClipRegion);
             paintStyleShadows (g);
 
             if (cachedTextureCanvas != nullptr)

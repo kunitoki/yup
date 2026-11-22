@@ -309,13 +309,8 @@ private:
 
     static String colorText (Color color)
     {
-        const auto hex = [] (uint8 component)
-        {
-            return String::toHexString (static_cast<int> (component)).paddedLeft ('0', 2);
-        };
-
-        const auto text = "#" + hex (color.getRed()) + hex (color.getGreen()) + hex (color.getBlue());
-        return color.getAlpha() == 255 ? text : text + hex (color.getAlpha());
+        const auto text = color.toString();
+        return color.getAlpha() == 255 ? text.dropLastCharacters (2) : text;
     }
 
     static String transformText (const AffineTransform& transform)
@@ -1075,11 +1070,17 @@ private:
         scope.state.dashOffset = 0.0f;
         scope.state.depth = fillState.depth + 1;
 
+        // A pattern filling its own shapes fills them with nothing
+        if (! visiting.insert (&pattern).second)
+            return std::nullopt;
+
         std::vector<Item> content;
 
         for (const auto& element : pattern.elements)
             if (element != nullptr)
                 convertElement (*element, scope, content);
+
+        visiting.erase (&pattern);
 
         if (content.empty())
             return std::nullopt;
@@ -1905,7 +1906,7 @@ private:
     std::map<String, String> letNames, definitionNames;
     std::map<String, std::set<String>> usedNames;
     std::set<String> usedLets;
-    std::set<const SVGElement*> visiting;
+    std::set<const void*> visiting;
     bool usesDefaultFont = false;
 };
 

@@ -1063,11 +1063,16 @@ void YuiBuilder::createRepeated (const DataTree& repeat, Component& parent, Scop
     const auto first = static_cast<int> (from);
     auto count = static_cast<int64> (static_cast<int> (to)) - first;
 
-    if (count > maxRepeatedComponents)
+    // Repeats inside one another run their turns together, so they share what one of them may run
+    const auto limit = maxRepeatedComponents / numRepeatTurns;
+
+    if (count > limit)
     {
-        report ("A repeat runs at most " + String (maxRepeatedComponents) + " times, not " + String (count), repeat, Identifier ("to"));
-        count = maxRepeatedComponents;
+        report ("A repeat runs at most " + String (limit) + " times" + (numRepeatTurns > 1 ? " inside the " + String (numRepeatTurns) + " turns around it" : String()) + ", not " + String (count), repeat, Identifier ("to"));
+        count = limit;
     }
+
+    const ScopedValueSetter<int> turns (numRepeatTurns, numRepeatTurns * jmax (1, static_cast<int> (count)));
 
     for (int offset = 0; offset < count; ++offset)
     {
@@ -1489,7 +1494,9 @@ YuiBuilder::ApplyOutcome YuiBuilder::applyProperty (Component& component, const 
             }
 
             component.setStyle (created.getReference());
-            return ApplyOutcome::constant;
+
+            // Made again by each build: it finds components in the scopes of the build that made it
+            return ApplyOutcome::live;
         };
 
         if (drawings.find (drawingName) != drawings.end())

@@ -82,6 +82,9 @@ bool doesYuiAgentToolDraw (const yup::String& name);
 /** Runs a tool with the arguments it was called with, an object. */
 YuiAgentResult callYuiAgentTool (const yup::String& name, const yup::var& arguments, const YuiAgentHost& host);
 
+/** The most pixels a side of an image a tool gives can have. */
+constexpr int maximumYuiAgentImageSide = 4096;
+
 /** Reads the `scale` a tool that draws was called with, which is 1 when it was given none.
 
     @param isPart True when the call draws a part of an interface, which may be drawn larger than all of it.

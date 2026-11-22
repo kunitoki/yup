@@ -21,6 +21,7 @@
 
 #include "yup_YuiAgentTools.h"
 #include "yup_YuiImageCompare.h"
+#include "yup_YuiToolGuides.h"
 #include "yup_YuiToolSupport.h"
 
 #include <cmath>
@@ -34,7 +35,6 @@ namespace
 constexpr float maximumSize = 4096.0f;
 constexpr double maximumScale = 4.0;
 constexpr double maximumZoom = 8.0;
-constexpr int maximumImageSide = 4096;
 constexpr float defaultMargin = 8.0f;
 constexpr float minimumGridStep = 4.0f;
 constexpr int longestListTold = 16;
@@ -267,12 +267,7 @@ String findWhyNothingShows (const YuiToolView& view)
     if (view.hasInterface())
         return {};
 
-    auto reason = "the document can't be loaded:\n" + describeProblems (view.findProblems());
-
-    if (shown.target.drawing.isNotEmpty() && shown.target.hostType.isEmpty())
-        reason << "\nhint: a drawing reading the properties of a widget needs it as its host, for example 'as': 'Slider'";
-
-    return reason;
+    return "the document can't be loaded:\n" + describeProblems (view.findProblems());
 }
 
 // The component an entry of a list names by its id or by its path
@@ -284,7 +279,7 @@ Result findNamed (const var& entry, YuiToolView& view, const char* what, Compone
     if (id.isEmpty() && ! entry.hasProperty ("path"))
         return Result::fail (String (what) + " names its component by 'id' or by 'path'");
 
-    component = id.isNotEmpty() ? view.getDocument().findById (id) : findYuiToolComponent (view, path);
+    component = id.isNotEmpty() ? view.getDocument().findById (id) : findYuiToolComponent (view.getDocument(), path);
 
     if (component == nullptr)
         return Result::fail (id.isNotEmpty() ? "there is no component with the id '" + id + "'" : "there is no component at the path '" + path + "'");
@@ -351,7 +346,7 @@ String findWhyNotReached (YuiToolView& view, const Component& named, const Compo
         isInside = component == &named;
 
     if (! isInside)
-        return "the event went to " + nameComponent (describeYuiToolComponent (view, *received)) + ", which is over the component there";
+        return "the event went to " + nameComponent (describeYuiToolComponent (view.getDocument(), *received)) + ", which is over the component there";
 
     if (! received->isEnabled())
         return "the component is disabled, so it ignores the pointer";
@@ -425,7 +420,7 @@ Result playEvents (const var& arguments, YuiToolView& view, PointerSimulator& po
         auto told = makeObject ({ { "type", type } });
 
         if (received != nullptr)
-            told.getDynamicObject()->setProperty ("received", describeYuiToolComponent (view, *received));
+            told.getDynamicObject()->setProperty ("received", describeYuiToolComponent (view.getDocument(), *received));
 
         if (const auto warning = findWhyNotReached (view, *component, received); warning.isNotEmpty())
             told.getDynamicObject()->setProperty ("warning", warning);
@@ -561,63 +556,29 @@ private:
     const float pixel;
 };
 
-/** Shows a region of the interface in place of all of it, under a grid when one is asked for.
-
-    The interface keeps its size and is only moved, so it is laid out as it is when shown whole.
-*/
-class Frame final : public Component
-{
-public:
-    Frame (Component& interfaceToShow, const Rectangle<float>& region, float gridSpacing, float scale)
-        : shown (interfaceToShow)
-    {
-        setOpaque (false);
-        setSize (region.getSize());
-
-        addAndMakeVisible (shown);
-        shown.setTopLeft ({ -region.getX(), -region.getY() });
-
-        if (gridSpacing <= 0.0f)
-            return;
-
-        grid = std::make_unique<GridOverlay> (region, gridSpacing, scale);
-        addAndMakeVisible (*grid);
-        grid->setBounds (getLocalBounds());
-    }
-
-    ~Frame() override
-    {
-        removeChildComponent (shown);
-        shown.setTopLeft ({ 0.0f, 0.0f });
-    }
-
-private:
-    Component& shown;
-    std::unique_ptr<GridOverlay> grid;
-};
-
-// What of the interface a call draws: all of it, or the region or the element it names
+// What of the interface a call draws: the region or the element it names, else the component a drawing or a
+// type shown in context is framed on, else all of it
 Result readRegion (const var& arguments, YuiToolView& view, Rectangle<float>& region, bool& isPart)
 {
     const auto whole = view.getComponent()->getLocalBounds();
     const auto& given = arguments["region"];
     const auto element = arguments["element"].toString();
 
-    region = whole;
+    region = view.getFrame();
     isPart = ! given.isVoid() || element.isNotEmpty();
 
     if (! isPart)
+    {
+        isPart = view.getUse() != nullptr;
         return Result::ok();
+    }
 
     if (! given.isVoid() && element.isNotEmpty())
         return Result::fail ("'region' and 'element' both say what to draw: give one of them");
 
     if (element.isNotEmpty())
     {
-        auto* component = view.getDocument().findById (element);
-
-        if (component == nullptr)
-            component = findYuiToolComponent (view, element);
+        const auto* component = findYuiToolElement (view.getDocument(), element);
 
         if (component == nullptr)
             return Result::fail ("there is no component with the id or at the path '" + element + "'");
@@ -639,11 +600,10 @@ Result readRegion (const var& arguments, YuiToolView& view, Rectangle<float>& re
         region = { static_cast<float> ((*values)[0]), static_cast<float> ((*values)[1]), static_cast<float> ((*values)[2]), static_cast<float> ((*values)[3]) };
     }
 
-    // Whole pixels, inside the interface
-    const auto x = std::floor (region.getX());
-    const auto y = std::floor (region.getY());
+    if (! std::isfinite (region.getX() + region.getY() + region.getWidth() + region.getHeight()))
+        return Result::fail ("'region' and 'margin' are numbers of logical pixels");
 
-    region = Rectangle<float> (x, y, std::ceil (region.getRight()) - x, std::ceil (region.getBottom()) - y).intersection (whole);
+    region = clipYuiToolRegion (region, whole);
 
     if (region.getWidth() < 1.0f || region.getHeight() < 1.0f)
         return Result::fail ("there is nothing of the interface there: it is " + String (roundToInt (whole.getWidth())) + "x" + String (roundToInt (whole.getHeight())) + " logical pixels");
@@ -659,10 +619,23 @@ Result readGrid (const var& arguments, double scale, float& spacing)
     if (given.isVoid())
         return Result::ok();
 
-    if (spacing * static_cast<float> (scale) < minimumGridStep)
+    if (! std::isfinite (spacing) || spacing * static_cast<float> (scale) < minimumGridStep)
         return Result::fail ("'grid' is the logical pixels between two lines, at least " + String (minimumGridStep / scale, 1) + " at this scale");
 
     return Result::ok();
+}
+
+// True for a file inside a folder with no link on the way to it, which could lead out of the folder
+bool isInsideFolder (const File& file, const File& folder)
+{
+    if (! file.isAChildOf (folder))
+        return false;
+
+    for (auto part = file; part != folder; part = part.getParentDirectory())
+        if (part.isSymbolicLink())
+            return false;
+
+    return true;
 }
 
 // The file a call asks its image to be written to, none when it asks for none
@@ -681,7 +654,7 @@ Result findOutput (const var& arguments, const YuiAgentHost& host, File& output)
     if (! output.hasFileExtension ("png"))
         return Result::fail ("'output' is the path of a .png file");
 
-    if (! output.isAChildOf (host.baseFolder) || output.isDirectory())
+    if (! isInsideFolder (output, host.baseFolder) || output.isDirectory())
         return Result::fail ("'output' is a file inside '" + host.baseFolder.getFullPathName() + "'");
 
     return Result::ok();
@@ -696,6 +669,9 @@ Result loadReference (const var& arguments, const YuiAgentHost& host, Image& ref
 
     const auto file = host.baseFolder.getChildFile (path);
     MemoryBlock data;
+
+    if (! isInsideFolder (file, host.baseFolder))
+        return Result::fail ("'reference' is a file inside '" + host.baseFolder.getFullPathName() + "'");
 
     if (! file.existsAsFile() || ! file.loadFileAsData (data))
         return Result::fail ("can't read '" + file.getFullPathName() + "'");
@@ -779,6 +755,17 @@ struct Drawn
     File output;
 };
 
+// Adds to an answer the component a drawing or a type shown in context is framed on, and what a drawing shown
+// on a plain component lacks
+void addUse (var& told, YuiToolView& view)
+{
+    if (const auto* use = view.getUse())
+        told.getDynamicObject()->setProperty ("use", describeYuiToolComponent (view.getDocument(), *use));
+
+    if (view.getShown().needsHost)
+        told.getDynamicObject()->setProperty ("hint", "a drawing reading the properties of a widget needs it as its host, for example 'as': 'Slider'");
+}
+
 // Adds to an answer what the events of the call did
 void addPlayed (var& told, const var& played)
 {
@@ -798,31 +785,74 @@ YuiAgentResult drawView (const var& arguments, const YuiAgentHost& host, YuiTool
     const auto tooLarge = [] (const String& what, int width, int height)
     {
         return YuiAgentResult::fail (what + " would be " + String (width) + "x" + String (height) + " pixels, more than "
-                                     + String (maximumImageSide) + " a side: lower 'scale' or draw a smaller 'region'");
+                                     + String (maximumYuiAgentImageSide) + " a side: lower 'scale' or draw a smaller 'region'");
     };
 
     const auto width = roundToInt (region.getWidth() * drawn.scale);
     const auto height = roundToInt (region.getHeight() * drawn.scale);
 
-    if (jmax (width, height) > maximumImageSide)
+    if (jmax (width, height) > maximumYuiAgentImageSide)
         return tooLarge ("the image", width, height);
 
-    const auto snap = [&] (float grid)
+    // The components the guides are drawn over
+    std::vector<Component*> marked;
+
+    if (const auto* guided = arguments["guides"].getArray())
+    {
+        for (const auto& named : *guided)
+        {
+            auto* component = findYuiToolElement (view.getDocument(), named.toString());
+
+            if (component == nullptr)
+                return YuiAgentResult::fail ("there is no component with the id or at the path '" + named.toString() + "' to draw guides over");
+
+            marked.push_back (component);
+        }
+    }
+    else if (! arguments["guides"].isVoid())
+    {
+        return YuiAgentResult::fail ("'guides' is a list of components, each named by its id or its path");
+    }
+
+    const auto hasMarks = drawn.grid > 0.0f || ! marked.empty();
+
+    // Draws the interface, with the grid and the guides over it unless it is asked plain
+    const auto snap = [&] (bool isPlain)
     {
         if (host.snapshot == nullptr)
             return Image();
 
-        if (! isPart && grid <= 0.0f)
+        if (! isPart && (isPlain || ! hasMarks))
             return host.snapshot (*view.getComponent(), drawn.scale);
 
         // Moving the interface into the frame may restyle it
-        Frame frame (*view.getComponent(), region, grid, static_cast<float> (drawn.scale));
+        YuiToolFrame frame (*view.getComponent(), region);
+        std::unique_ptr<GridOverlay> overlay;
+        YuiToolGuides guides;
+
+        if (! isPlain && ! marked.empty())
+        {
+            guides.setDocument (&view.getDocument());
+            guides.setView (region.getPosition(), 1.0f);
+            guides.setPicked (marked);
+
+            frame.addAndMakeVisible (guides);
+            guides.setBounds (frame.getLocalBounds());
+        }
+
+        if (! isPlain && drawn.grid > 0.0f)
+        {
+            overlay = std::make_unique<GridOverlay> (region, drawn.grid, static_cast<float> (drawn.scale));
+            frame.addAndMakeVisible (*overlay);
+            overlay->setBounds (frame.getLocalBounds());
+        }
+
         view.settle();
 
         return host.snapshot (frame, drawn.scale);
     };
 
-    auto image = snap (drawn.grid);
+    auto image = snap (false);
 
     if (! image.isValid())
         return YuiAgentResult::fail ("there is no graphics device to render with here: yui_inspect describes the layout without one");
@@ -835,17 +865,19 @@ YuiAgentResult drawView (const var& arguments, const YuiAgentHost& host, YuiTool
     if (isPart)
         record->setProperty ("region", describeRegion (region));
 
+    addUse (told, view);
+
     if (drawn.grid > 0.0f)
         record->setProperty ("grid", drawn.grid);
 
     if (drawn.reference.isValid())
     {
-        // The grid is shown over the render, and kept out of what is compared
-        const auto plain = drawn.grid > 0.0f ? snap (0.0f) : image;
+        // The grid and the guides are shown over the render, and kept out of what is compared
+        const auto plain = hasMarks ? snap (true) : image;
         const auto background = ApplicationTheme::getGlobalTheme()->getPalette (*view.getRoot()).getColor (ThemePalette::Role::background);
         const auto comparison = compareYuiToolImages (plain, image, drawn.reference, region, view.getComponent()->getSize(), background);
 
-        if (jmax (comparison.panels.getWidth(), comparison.panels.getHeight()) > maximumImageSide)
+        if (jmax (comparison.panels.getWidth(), comparison.panels.getHeight()) > maximumYuiAgentImageSide)
             return tooLarge ("the three panels of the comparison", comparison.panels.getWidth(), comparison.panels.getHeight());
 
         record->setProperty ("comparison", describeComparison (comparison, plain));
@@ -952,20 +984,19 @@ YuiAgentResult show (const var& arguments, const YuiAgentHost& host, bool draw)
 
     if (! draw)
     {
-        const Component* only = nullptr;
+        // A component named is described alone, as is the one a drawing or a type shown in context is framed on
+        const Component* only = view.getUse();
 
         if (const auto element = arguments["element"].toString(); element.isNotEmpty())
         {
-            only = view.getDocument().findById (element);
-
-            if (only == nullptr)
-                only = findYuiToolComponent (view, element);
+            only = findYuiToolElement (view.getDocument(), element);
 
             if (only == nullptr)
                 return YuiAgentResult::fail ("there is no component with the id or at the path '" + element + "'");
         }
 
-        auto layout = describeYuiToolLayout (view, static_cast<bool> (arguments["drawings"]), only);
+        auto layout = describeYuiToolLayout (view.getDocument(), view.getInput(), static_cast<bool> (arguments["drawings"]), only);
+        addUse (layout, view);
         addPlayed (layout, played);
         layout.getDynamicObject()->setProperty ("problems", listProblems (view.findProblems()));
 
@@ -1053,9 +1084,12 @@ String getYuiAgentInstructions()
 
 var getYuiAgentTools (bool withPreview)
 {
-    const auto drawing = std::pair<Identifier, var> { "drawing", describeText ("Name of a drawing the file declares, to show it painting a component in place of the interface.") };
+    const auto drawing = std::pair<Identifier, var> { "drawing", describeText ("Name of a drawing the file declares, to show the first component of the interface it paints, as it is styled there. "
+                                                                                "The answer names that component as 'use', and 'element' picks another. A drawing the interface does not "
+                                                                                "use is shown painting a component alone, of the type given as 'as'.") };
     const auto palette = std::pair<Identifier, var> { "palette", describeText ("Name of a palette the file declares, to show a few widgets and a swatch of each of its roles.") };
-    const auto host = std::pair<Identifier, var> { "as", describeText ("Type of the component painted by the drawing, such as Slider, or of a component the file declares to show on its own.") };
+    const auto host = std::pair<Identifier, var> { "as", describeText ("Type of a component the file declares, to show the first one of the interface, or one alone when it has none. "
+                                                                        "With 'drawing', the type of the component shown alone painted by it, such as Slider.") };
     const auto size = std::pair<Identifier, var> { "size", describeText ("Size in logical pixels as <width>x<height>, such as 640x400. Without it, the width and height the root sets, else 640x400.") };
     const auto theme = std::pair<Identifier, var> { "theme", makeObject ({ { "type", "string" }, { "enum", var (StringArray { "dark", "light" }) }, { "description", "Mode of the default theme, dark when not given." } }) };
     const auto values = std::pair<Identifier, var> { "values", makeObject ({ { "type", "object" }, { "description", "Model values to set over those of the models file, as { \"<model>\": { \"<property>\": <value> } }." } }) };
@@ -1064,6 +1098,7 @@ var getYuiAgentTools (bool withPreview)
     const auto region = std::pair<Identifier, var> { "region", makeObject ({ { "type", "array" }, { "items", makeObject ({ { "type", "number" } }) }, { "minItems", 4 }, { "maxItems", 4 }, { "description", "Part of the interface to draw, as [x, y, width, height] in its logical pixels. With a scale, it looks closer." } }) };
     const auto element = std::pair<Identifier, var> { "element", describeText ("The id of a component, or the path yui_inspect gives it, to draw it alone with a margin around it.") };
     const auto margin = std::pair<Identifier, var> { "margin", describeNumber ("Logical pixels drawn around the element, 8 when not given.") };
+    const auto guides = std::pair<Identifier, var> { "guides", makeObject ({ { "type", "array" }, { "items", makeObject ({ { "type", "string" } }) }, { "description", "Components to draw guides over, each by its id or the path yui_inspect gives it: its bounds, the area it paints when it has a paint margin, dotted, and its distances to the bounds of what holds it." } }) };
     const auto grid = std::pair<Identifier, var> { "grid", describeNumber ("Draws lines this many logical pixels apart over the image, with the coordinates of the interface they are at, to read places and sizes from it.") };
     const auto reference = std::pair<Identifier, var> { "reference", describeText ("Path of an image of what the interface is meant to look like. The image returned then holds the reference, the render and their "
                                                                                     "difference, and 'comparison' tells how alike they are (1 is the same) and the regions differing most, to draw next.") };
@@ -1091,7 +1126,7 @@ var getYuiAgentTools (bool withPreview)
                              "Draws a .yui interface, or a drawing, a palette or a component the file declares, and returns the image as a PNG "
                              "with the problems of the document. Use it to see what the file looks like: all of it, or a region or an element of it "
                              "drawn larger, under a grid of coordinates, or next to a reference image it is compared with.",
-                             { fileArgument(), drawing, palette, host, size, scaleArgument(), region, element, margin, grid, reference, outputArgument(), theme, modelsArgument(), values, states, events },
+                             { fileArgument(), drawing, palette, host, size, scaleArgument(), region, element, margin, grid, guides, reference, outputArgument(), theme, modelsArgument(), values, states, events },
                              { "file" }));
 
     tools.add (describeTool (schemaTool,
@@ -1145,7 +1180,7 @@ Result readYuiAgentScale (const var& arguments, double& scale, bool isPart)
 
     scale = given.isVoid() ? 1.0 : static_cast<double> (given);
 
-    if (scale <= 0.0 || scale > maximum)
+    if (! std::isfinite (scale) || scale <= 0.0 || scale > maximum)
         return Result::fail ("'scale' is a number of pixels per logical pixel, at most " + String (static_cast<int> (maximumScale))
                              + ", or " + String (static_cast<int> (maximumZoom)) + " for a 'region' or an 'element'");
 

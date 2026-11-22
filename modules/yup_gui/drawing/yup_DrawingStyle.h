@@ -151,6 +151,9 @@ public:
     static StringArray getShapePaintProperties();
 
     //==============================================================================
+    /** Returns the name the drawing was declared with, empty for a drawing that has none. */
+    const String& getName() const noexcept;
+
     /** Returns the properties the drawing declares, in declaration order. */
     const std::vector<ComponentProperty>& getProperties() const noexcept;
 
