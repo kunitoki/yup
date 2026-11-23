@@ -269,9 +269,6 @@ setuptools.setup(
         "Programming Language :: Python :: 3.14",
         "Operating System :: MacOS :: MacOS X",
         "Operating System :: Microsoft :: Windows",
-        "Operating System :: POSIX :: Linux",
-        "Operating System :: Android",
-        "Operating System :: iOS",
-        "Operating System :: WebAssembly"
+        "Operating System :: POSIX :: Linux"
     ]
 )
