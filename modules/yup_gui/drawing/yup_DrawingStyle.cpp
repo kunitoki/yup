@@ -730,6 +730,20 @@ private:
         return output == "strokeDash" ? ("dash (" + value + ")") : value;
     }
 
+    /* The type a geometry property is of when it is a point or a rect, or nullptr. The shapes read the
+       members of these, which an array of numbers lacks until it is given to one. Naming the type around
+       a value already of it adds nothing to the program. */
+    static const char* findGeometryType (const Shape& shape, const String& property)
+    {
+        if (property == "bounds")
+            return "rect";
+
+        if (property == "center" || property == "anchor")
+            return "point";
+
+        return String (shape.type) == "line" && (property == "from" || property == "to") ? "point" : nullptr;
+    }
+
     static String levelSymbol (int level)
     {
         return level == 0 ? String ("bounds") : levelPrefix + String (level);
@@ -2096,8 +2110,11 @@ private:
             const bool isExplicit = fallback.isEmpty() || element.hasProperty (propId);
             const auto value = isExplicit ? parseValue (element, propId, path, scope) : Value { "(" + fallback + ")", {} };
 
+            const auto* geometryType = findGeometryType (*shape, property);
+            const auto made = geometryType != nullptr ? String (geometryType) + " " + value.text : value.text;
+
             geometry.add (property);
-            own.push_back ({ "let _" + property + " = " + value.text + ";", path + "." + property, element, isExplicit ? propId : Identifier {} });
+            own.push_back ({ "let _" + property + " = " + made + ";", path + "." + property, element, isExplicit ? propId : Identifier {} });
             uses.addArray (value.uses);
         }
 

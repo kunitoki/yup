@@ -208,7 +208,10 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compile (Co
                                                                               Component* locals,
                                                                               const File& baseDirectory)
 {
-    if (text.trimStart().startsWithChar ('['))
+    // An array literal is a var of its elements, but for a point and a rectangle, which the expression makes of them
+    const bool isMadeOfNumbers = type == ComponentProperty::Type::point || type == ComponentProperty::Type::rectangle;
+
+    if (! isMadeOfNumbers && text.trimStart().startsWithChar ('['))
         return compileArrayLiteral (component, text, type, std::move (resolver), locals, baseDirectory);
 
     std::unique_ptr<PropertyExpression> expression (new PropertyExpression (getPropertyExpressionBaseContext()));
@@ -289,9 +292,6 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compileArra
                                                                                           Component* locals,
                                                                                           const File& baseDirectory)
 {
-    if (type.has_value() && *type != ComponentProperty::Type::array && *type != ComponentProperty::Type::any)
-        return makeResultValueFail ("An array can't be the value of this property");
-
     StringArray elementTexts;
     int offset = 0;
 
@@ -324,6 +324,20 @@ ResultValue<std::unique_ptr<PropertyExpression>> PropertyExpression::compileArra
             break;
         }
     }
+
+    // Read at an index, the array is part of an expression: [10, 20, 30][step]
+    if (raw[offset] == '[')
+    {
+        auto indexed = compile (component, "(" + text + "\n)", type, std::move (resolver), locals, baseDirectory);
+
+        if (indexed.wasOk())
+            indexed.getReference()->source = text;
+
+        return indexed;
+    }
+
+    if (type.has_value() && *type != ComponentProperty::Type::array && *type != ComponentProperty::Type::any)
+        return makeResultValueFail ("An array can't be the value of this property");
 
     if (raw[offset] != 0)
         return makeResultValueFail ("Expected the end of the array");

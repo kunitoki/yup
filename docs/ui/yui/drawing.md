@@ -115,6 +115,21 @@ children. `image` and `svg` also accept `fitting` (`scaleToFit` by default, or
 `centerInside`, `stretchWidth`, `stretchHeight`, `tile`) and `justification`
 (`center` by default).
 
+What is made of numbers can be written as the array of them, which is what
+it is given to: `center: [214, 32]` is a point, `bounds: [8, 4, 68, 56]` a
+rectangle, `cornerSize: [12, 4]` a size and `dash: [6, 3, 1, 3, 2, 3]` a dash
+of any length. So are the arguments of a function, as in
+`rect ([8, 4], [68, 56])`. Written this way it costs nothing more than
+`rect (8, 4, 68, 56)`, and a wrong count, such as three numbers for a point,
+is an error. A `number[]` property or model value is given the same way, with
+zeros for the numbers it lacks.
+
+It is the same array either way, read at an index and counted with `len`, as
+in `radius: [4, 6, 8][level]`, a `let` holding one included. An array has none
+of the members of what it makes: to read a member or call a method, name what
+it makes first, as in `rect ([8, 4, 68, 56]).reduced (4)` or
+`point (corner).x`.
+
 <p align="center">
   <img class="light-only rounded" src="../../_static/images/ui/yui/drawing_shapes_light.jpg#gh-light-mode-only" alt="The shapes of a drawing: rect, ellipse, circle, arc, line, path, polygon and star" width="640">
   <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_shapes_dark.jpg#gh-dark-mode-only" alt="The shapes of a drawing: rect, ellipse, circle, arc, line, path, polygon and star" width="640">
@@ -131,7 +146,7 @@ Every shape accepts these optional properties:
 | `fillOpacity`, `strokeOpacity`      | float         | Fades the fill or the stroke only.                  |
 | `strokeWidth`, `strokeMiterLimit`   | float         | Stroke geometry.                                    |
 | `strokePosition`                    | enum          | `center`, `inside` or `outside`.                    |
-| `dash`, `dashOffset`                | dash, float   | Dashes the stroke (`dash (6, 3)`, `"6, 3"`, `4` or a `number[]` property) and shifts the pattern start. |
+| `dash`, `dashOffset`                | dash, float   | Dashes the stroke (`dash (6, 3)`, `[6, 3]`, `"6, 3"`, `4` or a `number[]` property) and shifts the pattern start. |
 | `cap`, `join`                       | enum          | Stroke cap (`butt`, `round`, `square`) and join.    |
 | `feather`, `opacity`, `tint`        | float, float, color | Softens, fades or tints the shape.            |
 | `blend`                             | enum          | Blend mode.                                         |

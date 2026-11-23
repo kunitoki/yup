@@ -41,7 +41,8 @@ namespace yup
 using ExpressionThunk = void (*) (const void* state, void* output, const void* const* args, int numRows);
 
 //==============================================================================
-/** View of an array input bound to an ExpressionState.
+/** View of an array: an input bound to an ExpressionState, or the values of an array written
+    `[a, b, ...]` in an expression.
 
     Arrays are read-only for expressions, indexing is clamped to the valid range.
 
@@ -107,6 +108,7 @@ public:
         type->elementType = &elementType;
         type->indexThunk = &ArrayOperations<T>::index;
         type->lengthThunk = &ArrayOperations<T>::length;
+        type->makeThunk = &ArrayOperations<T>::make;
         return type;
     }
 
@@ -203,8 +205,8 @@ public:
     */
     bool areEqual (const void* a, const void* b) const { return equalsFunction != nullptr && equalsFunction (a, b); }
 
-    /** Allocates and default constructs a single value, owned by the returned pointer. */
-    std::shared_ptr<void> createValue() const;
+    /** Allocates and default constructs @p count consecutive values, owned by the returned pointer. */
+    std::shared_ptr<void> createValue (int count = 1) const;
 
     /** Returns the thunk implementing `condition ? a : b` for this type. */
     ExpressionThunk getSelectThunk() const noexcept { return selectThunk; }
@@ -214,6 +216,13 @@ public:
 
     /** Returns the thunk implementing `len (array)` for array types. */
     ExpressionThunk getLengthThunk() const noexcept { return lengthThunk; }
+
+    /** Returns the thunk implementing `[a, b, ...]` for array types.
+
+        Its state is the number of values, an `int`. Its arguments are the values, followed by the
+        memory it stores them in for the arrays to view: as many elements as values for every row.
+    */
+    ExpressionThunk getMakeThunk() const noexcept { return makeThunk; }
 
 private:
     //==============================================================================
@@ -291,6 +300,21 @@ private:
             for (int i = 0; i < numRows; ++i)
                 result[i] = arrays[i].size;
         }
+
+        static void make (const void* state, void* output, const void* const* args, int numRows)
+        {
+            const auto count = *static_cast<const int*> (state);
+            auto* result = static_cast<ExpressionArrayView<T>*> (output);
+            auto* elements = const_cast<T*> (static_cast<const T*> (args[count]));
+
+            for (int row = 0; row < numRows; ++row, elements += count)
+            {
+                for (int i = 0; i < count; ++i)
+                    elements[i] = static_cast<const T*> (args[i])[row];
+
+                result[row] = { elements, count };
+            }
+        }
     };
 
     ExpressionType (const String& typeName, const std::type_info& type, size_t typeSize, size_t typeAlignment);
@@ -311,6 +335,7 @@ private:
     ExpressionThunk selectThunk = nullptr;
     ExpressionThunk indexThunk = nullptr;
     ExpressionThunk lengthThunk = nullptr;
+    ExpressionThunk makeThunk = nullptr;
     const ExpressionType* elementType = nullptr;
     StringArray componentNames;
 

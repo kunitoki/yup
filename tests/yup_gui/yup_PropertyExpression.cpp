@@ -136,6 +136,27 @@ TEST_F (PropertyExpressionTests, EvaluatesPointsAndRectangles)
                Rectangle<float> (1.0f, 2.0f, 40.0f, 20.0f));
 }
 
+TEST_F (PropertyExpressionTests, AnArrayMakesThePointOrTheRectangleOfAProperty)
+{
+    Slider slider { Slider::LinearHorizontal };
+    slider.setBounds (0, 0, 40, 20);
+
+    EXPECT_EQ (VariantConverter<Point<float>>::fromVar (evaluate (slider, "[1, width]", ComponentProperty::Type::point)), Point<float> (1.0f, 40.0f));
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (evaluate (slider, "[1, 2, width, height]", ComponentProperty::Type::rectangle)),
+               Rectangle<float> (1.0f, 2.0f, 40.0f, 20.0f));
+
+    // An array has no members of what its numbers make until it is given to it
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (evaluate (slider, "rect ([1, 2, 10, 10]).enlarged (1)", ComponentProperty::Type::rectangle)),
+               Rectangle<float> (0.0f, 1.0f, 12.0f, 12.0f));
+
+    // Two numbers make a point and four a rectangle, and not the other way round
+    EXPECT_TRUE (error (slider, "[1, 2, 3]", ComponentProperty::Type::point).contains ("float[3]"));
+    EXPECT_FALSE (error (slider, "[1, 2, 3, 4]", ComponentProperty::Type::point).isEmpty());
+
+    // With no type to be of, it is the var holding its elements
+    EXPECT_EQ (PropertyExpression::compile (slider, "[1, 2]", std::nullopt).getReference()->getType(), ComponentProperty::Type::array);
+}
+
 TEST_F (PropertyExpressionTests, EvaluatesArrayLiterals)
 {
     Slider slider { Slider::LinearHorizontal };
@@ -156,6 +177,9 @@ TEST_F (PropertyExpressionTests, EvaluatesArrayLiterals)
 
     EXPECT_EQ (evaluate (slider, "[]").getArray()->size(), 0);
     EXPECT_EQ (elementsOf (evaluate (slider, "[1, value * 2, \"a\", true]")), "1.0|1.0|a|1");
+
+    // Read at an index, a literal is part of an expression
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (slider, "[10, 20, 30][1]", ComponentProperty::Type::number)), 20.0);
 
     // A nested literal is one element, an array of its own
     const auto nested = evaluate (slider, "[[1, 2], 3]", ComponentProperty::Type::array);

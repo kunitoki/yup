@@ -860,6 +860,40 @@ TEST_F (YuiDocumentTests, LiveTreeMutationsUpdateComponentsAndStyleSheetAutomati
     EXPECT_DOUBLE_EQ (static_cast<double> (knob->findProperty (Identifier ("trackWidth"))), 12.0);
 }
 
+TEST_F (YuiDocumentTests, ADrawingTakesArraysForTheValuesNumbersMake)
+{
+    YuiDocument document;
+    const auto result = document.loadFromString (R"yui(
+        drawing Marks {
+            rect { id: box; bounds: [4, 6, 20, 10]; cornerSize: [3, 2]; fill: #ffffff; stroke: #ffffff; dash: [6, 3]; }
+            circle { id: dot; center: [30, 30]; radius: [3, 5, 8][1]; fill: #ffffff; stroke: #ffffff; dash: [8, 6, 2, 6, 1, 6, 3]; }
+            line { from: [0, 0]; to: [10, 10]; stroke: #ffffff; }
+        }
+
+        Component {
+            Component { id: painted; drawing: Marks; }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+
+    auto* painted = document.findById ("painted");
+    auto* style = painted != nullptr ? dynamic_cast<DrawingStyle*> (painted->getStyle().get()) : nullptr;
+    ASSERT_NE (style, nullptr);
+
+    const auto boundsOf = [measured = style->measureElements (*painted)] (const String& id)
+    {
+        for (const auto& element : measured)
+            if (element.id == id)
+                return element.bounds;
+
+        return Rectangle<float>();
+    };
+
+    EXPECT_EQ (boundsOf ("box"), Rectangle<float> (4.0f, 6.0f, 20.0f, 10.0f));
+    EXPECT_EQ (boundsOf ("dot"), Rectangle<float> (25.0f, 25.0f, 10.0f, 10.0f));
+}
+
 TEST_F (YuiDocumentTests, ADrawingSetOnAComponentReadsTheComponentsOfTheLastLoad)
 {
     YuiDocument document;

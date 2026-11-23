@@ -359,6 +359,85 @@ TEST_F (CompiledExpressionTests, ColorLiteralsNeedAColorType)
     EXPECT_TRUE (compileError ("#ff8800").contains ("color literals need a 'color' type"));
 }
 
+TEST_F (CompiledExpressionTests, ArraysWrittenInPlaceAreArrays)
+{
+    EXPECT_EQ (context.getType<ExpressionArrayView<float>>(), resultType ("[1, 2.5, n]"));
+    EXPECT_EQ (3, (int) evaluate ("len ([1, 2, 3])"));
+    EXPECT_DOUBLE_EQ (2.0, (double) evaluate ("[1, 2, 3][1]"));
+    EXPECT_DOUBLE_EQ (3.0, (double) evaluate ("[1, 2, 3][7]"));
+
+    // One stands for an array given as an input
+    const float data[] = { 1.0f, 2.0f, 4.0f };
+    ExpressionState either (compile ("(n > 0 ? [5, 6] : values)[1]"));
+    either.bindArray (values, data, 3);
+    either.set (n, 1);
+    either.evaluate();
+    EXPECT_DOUBLE_EQ (6.0, (double) either.getVar (0));
+
+    either.set (n, 0);
+    either.evaluate();
+    EXPECT_DOUBLE_EQ (2.0, (double) either.getVar (0));
+
+    // What a function makes of a constant one when compiling still views its values when evaluating
+    context.addFunction ("same", [] (ExpressionArrayView<float> array) { return array; });
+    EXPECT_DOUBLE_EQ (3.0, (double) evaluate ("same ([1, 2, 3])[n]", 0.0f, 2));
+
+    // A context with no array of numbers has the ones written in place
+    ExpressionContext bare;
+    EXPECT_TRUE (CompiledExpression::compile ("[1, 2, 3][1] + len ([4, 5])", bare).wasOk());
+
+    EXPECT_TRUE (compileError ("[1, \"a\"]").contains ("must be of one type"));
+    EXPECT_TRUE (compileError ("[\"a\", \"b\"]").contains ("no array type for 'string'"));
+}
+
+TEST_F (CompiledExpressionTests, ArraysWrittenInPlaceCostWhatIsReadOfThem)
+{
+    // Its length and the values at known indices are the ones it was written with: no array is made
+    const auto known = compile ("let a = [x, x * 2, 3]; first = a[0]; count = len (a)");
+    EXPECT_EQ (0, known.getNumInstructions());
+
+    ExpressionState knownState (known);
+    knownState.set (x, 7.0f);
+    knownState.evaluate();
+    EXPECT_DOUBLE_EQ (7.0, (double) knownState.getVar (0));
+    EXPECT_EQ (3, (int) knownState.getVar (1));
+
+    // Read at an index only known when evaluating, it holds its values
+    const auto program = compile ("y = [x, x * 2, 10][n]");
+    ExpressionState state (program);
+
+    state.set (x, 3.0f);
+    state.set (n, 1);
+    state.evaluate();
+    EXPECT_DOUBLE_EQ (6.0, (double) state.getVar (0));
+
+    // The values change behind an array that stays the same
+    state.set (x, 4.0f);
+    state.evaluate();
+    EXPECT_DOUBLE_EQ (8.0, (double) state.getVar (0));
+    EXPECT_TRUE (state.hasOutputChanged (0));
+
+    state.set (n, 2);
+    state.evaluate();
+    EXPECT_DOUBLE_EQ (10.0, (double) state.getVar (0));
+
+    state.evaluate();
+    EXPECT_FALSE (state.hasOutputChanged (0));
+
+    // Every row has the array of its own values
+    const float xs[] = { 1.0f, 2.0f, 3.0f };
+    float ys[3] = {};
+
+    state.bindColumn (x, xs);
+    state.bindOutputColumn (program.getOutput<float> ("y").getValue(), ys);
+    state.set (n, 1);
+    state.evaluateRows (3);
+
+    EXPECT_FLOAT_EQ (2.0f, ys[0]);
+    EXPECT_FLOAT_EQ (4.0f, ys[1]);
+    EXPECT_FLOAT_EQ (6.0f, ys[2]);
+}
+
 TEST_F (CompiledExpressionTests, FusesInPlaceMethodChainsWithoutIntermediateClones)
 {
     struct BufferHandle

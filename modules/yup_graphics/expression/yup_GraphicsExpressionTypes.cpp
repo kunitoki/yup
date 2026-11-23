@@ -41,6 +41,12 @@ Color makeExpressionColor (R r, G g, B b, A a) noexcept
     return Color (expressionColorByte (a), expressionColorByte (r), expressionColorByte (g), expressionColorByte (b));
 }
 
+// A number of an array, zero where the array has none
+float readExpressionNumber (const ExpressionArrayView<float>& numbers, int index) noexcept
+{
+    return index < numbers.size ? numbers.data[index] : 0.0f;
+}
+
 } // namespace
 
 //==============================================================================
@@ -380,6 +386,23 @@ void addGraphicsExpressionTypes (ExpressionContext& context)
         .equality();
 
     context.addFunction ("dash", [] (const D& d) { return d; });
+
+    // An array of numbers is the point, the size or the rect it is given to, with zeros for the numbers it
+    // lacks. One written in place gives its numbers to their constructors instead. A dash takes an array
+    context.addFunction ("@convert", [] (ExpressionArrayView<float> numbers)
+    {
+        return P (readExpressionNumber (numbers, 0), readExpressionNumber (numbers, 1));
+    });
+
+    context.addFunction ("@convert", [] (ExpressionArrayView<float> numbers)
+    {
+        return S (readExpressionNumber (numbers, 0), readExpressionNumber (numbers, 1));
+    });
+
+    context.addFunction ("@convert", [] (ExpressionArrayView<float> numbers)
+    {
+        return R (readExpressionNumber (numbers, 0), readExpressionNumber (numbers, 1), readExpressionNumber (numbers, 2), readExpressionNumber (numbers, 3));
+    });
 
     font
         .constructor ([] { return Font(); })

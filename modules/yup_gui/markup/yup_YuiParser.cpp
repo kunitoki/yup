@@ -836,7 +836,8 @@ private:
     }
 
     // Values are kept as written, the expression parser only finds where they end. A value starting
-    // with '[' is an array literal, whose elements are expressions of their own.
+    // with '[' is an array literal, whose elements are expressions of their own, unless it is read at
+    // an index, which makes it part of an expression.
     String parseExpressionText()
     {
         skipWhitespace();
@@ -852,7 +853,13 @@ private:
                 throw Error { start + offset, result.getErrorMessage() };
 
             position = start + offset;
-            return String::fromUTF8 (text + start, offset);
+            skipWhitespace();
+
+            if (text[position] != '[')
+            {
+                position = start + offset;
+                return String::fromUTF8 (text + start, offset);
+            }
         }
 
         // The expression parser counts lines from the start of what it gets, so it only gets the rest of the text

@@ -67,9 +67,9 @@ uses strings (`CompiledExpression::isAllocationFree()`).
 
 Values that only depend on inputs set with `set` (not on bound columns or the
 row index) are computed once and reused until one of those inputs is set again,
-so `let scaleX = width / len (values);` costs nothing per row. Arrays are read
-again on every evaluation, so their elements can be changed in place, and
-functions added as not pure always run once per row.
+so `let scaleX = width / len (values);` costs nothing per row. Arrays given as
+inputs are read again on every evaluation, so their elements can be changed in
+place, and functions added as not pure always run once per row.
 
 Setting an input to the value it already has does nothing, and a computed value
 that comes out the same as before doesn't trigger the values that depend on it,
@@ -151,7 +151,15 @@ area * 2                      // trailing expression: output named 'result'
   `int (x)`, `float (x)`, `double (x)`, `bool (x)` and `string (x)` to convert
   explicitly. Numbers never convert to `bool` implicitly: write `x != 0`.
 - **Arrays**: `values[i]` clamps the index to the array bounds (an empty array
-  yields a default value), `len (values)` returns the size.
+  yields a default value), `len (values)` returns the size. Where a value
+  starts, `[a, b, ...]` is an array too, of the same type as one given as an
+  input: a `float[]` when its values are numbers, else the array of their one
+  type, when the context has it. It costs what is read of it: constant values
+  make a constant, `len` and an index known when compiling read the values it
+  was written with, and only an array read otherwise copies its values, when
+  one of them changed. A type named around a value none of its constructors
+  take converts it, so `rect ([x, y, w, h])` is `rect (x, y, w, h)` where the
+  context converts arrays to a `rect`.
 - **Safety**: integer division or modulo by zero yields 0 and integer overflow
   wraps. `?:`, `&&` and `||` evaluate both sides, so functions should be pure.
 - **Built-in functions**: `sin cos tan asin acos atan atan2 sqrt pow exp log log2

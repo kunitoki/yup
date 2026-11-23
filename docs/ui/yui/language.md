@@ -119,7 +119,7 @@ with the [graphics types](../../graphics/expressions.md) available:
 | Booleans and strings | `true`, `false`, `"CUTOFF"` |
 | Colors | `#ff8800`, `#ff880080`, `rgb (255, 136, 0)`, `colors.transparentBlack`, `palette.accent.darker (0.1)` |
 | Enumerations | `round`, `rotaryVerticalDrag`, `center` (a bare name the property knows) |
-| Graphics values | `bounds.center`, `rect (0, 0, 20, 20)`, `polar (bounds.center, r, a)` |
+| Graphics values | `bounds.center`, `rect (0, 0, 20, 20)`, `polar (bounds.center, r, a)`, `[10, 20]` and `[0, 0, 20, 20]` for a point and a rectangle |
 | Arrays | `[0.25, 0.5]`, `["low", "high"]`, `lanes[0]`, `len (lanes)` |
 | Operators and calls | `enabled ? 1 : 0.4`, `lerp (a0, a1, normalized)`, `min (width, height) / 2` |
 
@@ -153,8 +153,14 @@ property origin: point = point (1, 2);
 An array holds one element type. Its elements are expressions, read with
 `lanes[0]` and counted with `len (lanes)`, and an index outside the array
 reads a zero value. `point` and `rectangle` values are written `point (x, y)`
-and `rect (x, y, w, h)` and are stored as arrays of their components, so `<=>`
-links and transitions see them change element by element.
+and `rect (x, y, w, h)`, or as the array of their numbers, `[x, y]` and
+`[x, y, w, h]`, and are stored as arrays of their components, so `<=>` links
+and transitions see them change element by element. An array given to a
+property of no type stays an array: declare the property a `point` or a
+`rectangle` for it to be one. A `number[]` value is a point or a rectangle
+where one is expected too. Read at an index, as in `[0.2, 0.5, 1][step]`, or
+written inside an expression, `[a, b, ...]` is an array of numbers like any
+other.
 
 A `font` value can load a font file (TTF or OTF) with `font ("path")` or
 `font ("path", height)`. A relative path is resolved against the folder of
