@@ -62,15 +62,12 @@ jobs:
         working-directory: cmake/tools/yui_tool
         run: node --test tests/test_web.js
 
-      # The links of the README are relative to the folder of the extension, not to the root of the repository
       - name: Test and package the extension
         run: |
           sh tools/package-tool.sh
           npm ci
           npm test
-          npx --yes @vscode/vsce package -o vscode-yui.vsix \
-            --baseContentUrl https://github.com/kunitoki/yup/blob/HEAD/modules/yup_gui/tools/vscode-yui \
-            --baseImagesUrl https://github.com/kunitoki/yup/raw/HEAD/modules/yup_gui/tools/vscode-yui
+          npx --yes @vscode/vsce package -o vscode-yui.vsix
 
       - uses: actions/upload-artifact@v7
         with:

@@ -469,9 +469,16 @@ protected:
         canvas->commit();
     }
 
+    /** The shaders of Rive are compiled synchronously: its fallback shaders, which draw until the
+        specialized ones are compiled in the background, are a level off them. The images compared
+        would depend on when each of them was rendered.
+    */
     static void SetUpTestSuite()
     {
-        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
+        GraphicsContext::Options options;
+        options.synchronousShaderCompilations = true;
+
+        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, options);
         if (gpuContext == nullptr)
             return;
 
@@ -1610,8 +1617,8 @@ protected:
                      std::abs (a.getAlpha() - b.getAlpha()));
     }
 
-    /** Passes if no pixel of two images differs by more than the tolerance, and tells where they do. */
-    static ::testing::AssertionResult showTheSame (const Image& first, const Image& second)
+    /** Passes if no pixel of two images differs by more than what is allowed, and tells where they do. */
+    static ::testing::AssertionResult showTheSame (const Image& first, const Image& second, int allowed = tolerance)
     {
         if (! first.isValid() || ! second.isValid() || first.getWidth() != second.getWidth() || first.getHeight() != second.getHeight())
             return ::testing::AssertionFailure() << "the images can't be compared";
@@ -1625,7 +1632,7 @@ protected:
             for (int x = 0; x < first.getWidth(); ++x)
             {
                 const auto distance = difference (first.getPixelColor (x, y), second.getPixelColor (x, y));
-                if (distance <= tolerance)
+                if (distance <= allowed)
                     continue;
 
                 area = count++ == 0 ? Rectangle<int> (x, y, 1, 1) : area.unionWith ({ x, y, 1, 1 });
@@ -1658,6 +1665,9 @@ protected:
     }
 
     static constexpr int tolerance = 2;
+
+    /** A canvas dithers and rounds what is drawn in it, so a second one is a level further off. */
+    static constexpr int toleranceThroughTwoCanvases = tolerance + 1;
 };
 
 TEST_F (ComponentPaintMarginGpuTest, AnEffectShowsWhatDirectPaintingShows)
@@ -1674,7 +1684,9 @@ TEST_F (ComponentPaintMarginGpuTest, AnEffectShowsWhatDirectPaintingShows)
 
             const auto expected = render (direct, scale);
             EXPECT_EQ (margin > 0.0f, showsWhatIsPaintedAround (expected, direct, scale));
-            EXPECT_TRUE (showTheSame (expected, render (effected, scale)));
+
+            // The nested child is drawn in its canvas, then in the one of the subject
+            EXPECT_TRUE (showTheSame (expected, render (effected, scale), toleranceThroughTwoCanvases));
         }
     }
 }
@@ -1695,7 +1707,7 @@ TEST_F (ComponentPaintMarginGpuTest, AStyleFilterShowsWhatIsPaintedInThePaintMar
         EXPECT_TRUE (showTheSame (expected, render (filtered, scale)));
 
         // With an effect too, the filter runs over what the effect drew in a canvas of its own
-        EXPECT_TRUE (showTheSame (expected, render (both, scale)));
+        EXPECT_TRUE (showTheSame (expected, render (both, scale), toleranceThroughTwoCanvases));
     }
 }
 

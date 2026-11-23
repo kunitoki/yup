@@ -1,20 +1,53 @@
 # YUI for Visual Studio Code
 
-Syntax highlighting, snippets, editing support, live diagnostics, preview and
-SVG import for **YUI** - the declarative UI language of the
-[YUP](https://github.com/kunitoki/yup) library.
+Language support, a live preview and tools for coding agents for **YUI**, the
+declarative UI language of the [YUP](https://github.com/kunitoki/yup) library.
 
 A `.yui` document describes a component tree, its drawings, its stylesheet and
-its palettes, and binds them to the models of the application. Everything the
-extension knows beyond the grammar comes from `yup_yui_tool`: diagnostics from
-`lint`, completions, outline, definitions and hovers from `complete`,
-`outline`, `definition` and `hover`, drawings from `import-svg`, and the
-preview from the tool running the interface itself. The extension only passes
-them on, so any editor asking the tool gets the same.
+its palettes, and binds them to the models of the application. A small one, a
+dial drawn for a slider and a label following it:
 
-The tool is packaged as a WebAssembly module, so one package works on every
-platform and holds no native binary. Syntax highlighting and snippets stay
-available in a package built without it.
+```yui
+drawing Dial {
+    property value: number = 0;
+
+    let c: bounds.center;
+    let r: min (bounds.width, bounds.height) * 0.4;
+
+    circle { center: c; radius: r; fill: palette.surfaceRaised;
+             stroke: palette.accent; strokeWidth: 2; }
+
+    line { from: c; to: polar (c, r * 0.8, 135deg + 270deg * value);
+           stroke: palette.text; strokeWidth: 3; cap: round; }
+}
+
+style {
+    .knob { drawing: Dial; }
+}
+
+Column {
+    padding: 10;
+    gap: 10;
+
+    Slider { id: cutoff; class: knob; sliderType: rotaryVerticalDrag; value: 0.65; flexGrow: 1; }
+
+    Label { text: format ("cutoff %.0f%%", cutoff.value * 100);
+            justification: center; preferredHeight: 28; }
+}
+```
+
+Everything beyond the grammar is done by YUP itself, which the extension holds
+as a WebAssembly module: documents are checked and run the way an application
+loads them, there is nothing else to install, and it works the same on every
+platform.
+
+## Getting started
+
+1. Open a `.yui` file: its problems are reported as you type.
+2. Run **YUI: Open Preview** from the command palette, or click the preview
+   icon in the editor title, to run the interface beside the editor.
+3. When the document binds to the models of an application, describe them in a
+   models file next to it, as told under [Settings](#settings).
 
 ## Features
 
@@ -29,7 +62,7 @@ available in a package built without it.
   `Row` / `Column` / `Grid` / `Stack` layouts, two-way bindings and handlers
 - **Editing conveniences**: comment toggling, bracket matching and
   auto-closing, and indentation rules
-- **Diagnostics** from `yup_yui_tool lint`, on open, on save and while typing.
+- **Diagnostics** on open, on save and while typing.
   The document is checked as it is in its editor, with the files it imports, so
   unsaved edits count, and a problem in an imported document is reported on
   that document
@@ -92,7 +125,8 @@ palette) opens one panel beside the editor, where the tool runs the document
 whose editor is active. The interface is live: it answers the mouse and, once
 clicked, the keyboard, plays its transitions and animations, and follows the
 document as it is typed, keeping the state of its components the way
-[hot reload](../../../../docs/ui/yui/hot-reload.md) does in an application.
+[hot reload](https://yup.readthedocs.io/en/latest/ui/yui/hot-reload.html) does
+in an application.
 
 The toolbar of the panel controls the preview:
 
@@ -191,83 +225,28 @@ the `.mcp.json` at its root, which Claude Code and GitHub Copilot read:
   settings and to `.mcp.json`.
 
 The arguments of the tools are described in the
-[tooling page](../../../../docs/ui/yui/tooling.md#tools-for-agents) of the
-documentation, with `yup_yui_tool mcp`, which serves the same tools with no
-editor.
+[tooling page](https://yup.readthedocs.io/en/latest/ui/yui/tooling.html#tools-for-agents)
+of the documentation, with `yup_yui_tool mcp`, the command line tool of YUP
+serving the same tools with no editor.
 
-## Installing
+## Documentation
 
-### From source (development)
+The [YUI documentation](https://yup.readthedocs.io/en/latest/ui/yui/index.html)
+tells the [language](https://yup.readthedocs.io/en/latest/ui/yui/language.html),
+its [styles](https://yup.readthedocs.io/en/latest/ui/yui/styles.html),
+[drawings](https://yup.readthedocs.io/en/latest/ui/yui/drawing.html),
+[layout](https://yup.readthedocs.io/en/latest/ui/yui/layout.html) and
+[documents](https://yup.readthedocs.io/en/latest/ui/yui/documents.html), and
+the [tooling](https://yup.readthedocs.io/en/latest/ui/yui/tooling.html) this
+extension is made of. Documents to start from are in
+[`examples/graphics/data/yui`](https://github.com/kunitoki/yup/tree/main/examples/graphics/data/yui)
+of the YUP repository.
 
-1. Package the tool once, from the repository root: `just yui_tool_wasm`, then
-   `sh modules/yup_gui/tools/vscode-yui/tools/package-tool.sh`.
-2. Open this folder (`modules/yup_gui/tools/vscode-yui`) in VSCode.
-3. Press <kbd>F5</kbd> - a new Extension Development Host window opens with the
-   extension loaded.
+## Source and license
 
-### As a VSIX
+The extension is part of the YUP repository, in
+[`modules/yup_gui/tools/vscode-yui`](https://github.com/kunitoki/yup/tree/main/modules/yup_gui/tools/vscode-yui),
+where `DEVELOPMENT.md` tells how to build it. Problems are reported in its
+[issues](https://github.com/kunitoki/yup/issues).
 
-From the repository root, one command builds the tool for the web and the
-extension, and installs it into your local VSCode. It requires `just`, the
-`code` CLI on your `PATH` and the Emscripten SDK activated:
-
-```sh
-just vscode_yui
-```
-
-Or manually:
-
-```sh
-just yui_tool_wasm
-cd modules/yup_gui/tools/vscode-yui
-sh tools/package-tool.sh
-npm install
-npm run compile
-npx --yes @vscode/vsce package -o vscode-yui.vsix
-code --install-extension vscode-yui.vsix
-```
-
-`YUI_TOOL` overrides the folder the packaging script takes the module from.
-The generated `tool/` directory is release output and is ignored by Git.
-
-## Language reference
-
-The full language specification lives in the YUP repository at
-[`docs/ui/yui/language.md`](../../../../docs/ui/yui/language.md), with the
-[styles](../../../../docs/ui/yui/styles.md),
-[drawing](../../../../docs/ui/yui/drawing.md),
-[layout](../../../../docs/ui/yui/layout.md) and
-[documents](../../../../docs/ui/yui/documents.md) pages next to it. Real
-documents to test highlighting against live in
-[`examples/graphics/data/yui/`](../../../../examples/graphics/data/yui/).
-
-## Structure
-
-```
-vscode-yui/
-├── package.json                  # extension manifest
-├── language-configuration.json   # comments, brackets, indentation
-├── images/yui-icon.png           # extension and `.yui` file icon
-├── esbuild.js                    # bundles the extension and its tests
-├── src/extension.ts              # activation: diagnostics, commands, what the tool is asked
-├── src/language.ts               # completions, outline, definitions, hovers and colors, as the tool answers them
-├── src/agentServer.ts            # the server of the tools for agents
-├── src/agentBackend.ts           # runs those tools on the documents of the editor
-├── src/agentFiles.ts             # what they read and write of the workspace
-├── src/agentSetup.ts             # their settings, and the command setting a workspace up
-├── src/documentFiles.ts          # a document with the files it names, as the tool is given them
-├── src/tool.ts                   # runs the commands of the tool in a worker thread
-├── src/toolWorker.ts             # the worker: loads the module and runs a command
-├── src/preview.ts                # the preview panel: what to show
-├── src/previewPage.ts            # the page of the panel: toolbar and canvas
-├── syntaxes/yui.tmLanguage.json  # TextMate grammar (source.yui)
-├── snippets/yui.code-snippets    # code snippets
-├── tools/package-tool.sh         # copies the tool built for the web into tool/
-├── test/agentServer.test.ts      # tests of the server, run by `npm test`
-├── test/agentFiles.test.ts       # tests of what the tools read and write
-└── test/sample.yui               # a document to try the grammar on
-```
-
-## License
-
-ISC - see [LICENSE](LICENSE). Copyright (c) 2024-2026 kunitoki@gmail.com.
+ISC. Copyright (c) 2024-2026 kunitoki@gmail.com.

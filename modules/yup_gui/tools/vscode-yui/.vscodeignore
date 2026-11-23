@@ -3,4 +3,5 @@ test/*.ts
 out-test/**
 node_modules/**
 esbuild.js
+DEVELOPMENT.md
 **/*.map
