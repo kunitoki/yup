@@ -1,0 +1,21 @@
+// size: 560 104
+style {
+    TextButton          { cornerRadius: 6; }
+    .primary            { backgroundColor: palette.accent; textColor: palette.onAccent; }
+    #reset              { textColor: #ff5544; outlineColor: #ff5544; }
+    [text="[text]"]     { cornerRadius: 20; }
+    .bar > ToggleButton { cornerRadius: 0; }
+    :checked            { backgroundToggledColor: #2e9e5b; }
+    :disabled           { opacity: 0.35; }
+}
+
+Row {
+    class: bar; gap: 8;
+
+    TextButton   { text: "Type"; flexGrow: 1; }
+    TextButton   { text: ".class"; class: primary; flexGrow: 1; }
+    TextButton   { id: reset; text: "#id"; flexGrow: 1; }
+    TextButton   { text: "[text]"; flexGrow: 1; }
+    ToggleButton { text: ":checked"; checked: true; flexGrow: 1; }
+    TextButton   { text: ":disabled"; enabled: false; flexGrow: 1; }
+}

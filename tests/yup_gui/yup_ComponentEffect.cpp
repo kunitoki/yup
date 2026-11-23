@@ -105,6 +105,11 @@ public:
     {
         comp.internalPaint (g, repaintRegion, renderContinuous);
     }
+
+    static void setOnDesktop (Component& comp, bool value)
+    {
+        comp.flags.onDesktop = value;
+    }
 };
 
 } // namespace yup
@@ -464,9 +469,16 @@ protected:
         canvas->commit();
     }
 
+    /** The shaders of Rive are compiled synchronously: its fallback shaders, which draw until the
+        specialized ones are compiled in the background, are a level off them. The images compared
+        would depend on when each of them was rendered.
+    */
     static void SetUpTestSuite()
     {
-        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
+        GraphicsContext::Options options;
+        options.synchronousShaderCompilations = true;
+
+        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, options);
         if (gpuContext == nullptr)
             return;
 
@@ -1039,6 +1051,50 @@ TEST_F (ComponentEffectGpuTest, EffectCanvasMatchesTheTargetScale)
     EXPECT_EQ (96, canvas->getHeight());
 }
 
+TEST_F (ComponentEffectGpuTest, EffectCanvasAndBoundsCoverThePaintMargin)
+{
+    if (! gpuContext)
+        return;
+
+    struct BoundsRecordingEffect : ComponentEffect
+    {
+        void apply (Graphics&, GpuTexture::Ptr, Rectangle<float> bounds) override
+        {
+            appliedBounds = bounds;
+        }
+
+        Rectangle<float> appliedBounds;
+    };
+
+    auto comp = makeComp ("effected", 64, 48);
+    comp->setVisible (true);
+    comp->setPaintMargin (4.0f, 6.0f, 8.0f, 10.0f);
+
+    auto effect = ReferenceCountedObjectPtr<BoundsRecordingEffect> (new BoundsRecordingEffect());
+    comp->setComponentEffect (effect);
+
+    triggerPaintOnCanvas (*comp, 64, 48, 2.0f);
+
+    auto canvas = ComponentHelper::getEffectOffscreenCanvas (*comp);
+    ASSERT_NE (canvas, nullptr);
+    EXPECT_EQ (152, canvas->getWidth());
+    EXPECT_EQ (128, canvas->getHeight());
+    EXPECT_EQ (effect->appliedBounds, (Rectangle<float> { -4.0f, -6.0f, 76.0f, 64.0f }));
+
+    // A margin that is not a whole number of pixels grows to the next one, 7.5 to 8 here,
+    // so what is inside the bounds stays on the pixels it has without a margin
+    comp->setPaintMargin (5.0f);
+
+    triggerPaintOnCanvas (*comp, 64, 48, 1.5f);
+
+    canvas = ComponentHelper::getEffectOffscreenCanvas (*comp);
+    ASSERT_NE (canvas, nullptr);
+    EXPECT_EQ (112, canvas->getWidth());
+    EXPECT_EQ (88, canvas->getHeight());
+    EXPECT_NEAR (-16.0f / 3.0f, effect->appliedBounds.getX(), 1.0e-4f);
+    EXPECT_NEAR (64.0f + 32.0f / 3.0f, effect->appliedBounds.getWidth(), 1.0e-4f);
+}
+
 TEST_F (ComponentEffectGpuTest, CachedCanvasIsRecreatedWhenTheScaleChanges)
 {
     if (! gpuContext)
@@ -1352,6 +1408,610 @@ TEST_F (ComponentEffectPartialRepaintTest, TransformChangeDirtiesTheOldAndNewAre
 
     EXPECT_EQ (1, left.paints);
     EXPECT_EQ (1, right.paints);
+}
+
+TEST_F (ComponentEffectPartialRepaintTest, EffectCanvasHoldsWhatIsPaintedInThePaintMargin)
+{
+    // A strip in the left margin, over the whole height of the canvas
+    CountingChild marker { Color (0xff00ff00) };
+    marker.setBounds (-8, -8, 8, 144);
+    root->addAndMakeVisible (marker);
+    root->setPaintMargin (8.0f);
+    paintRoot();
+
+    const auto image = ComponentHelper::getEffectOffscreenCanvas (*root)->asImage();
+    ASSERT_TRUE (image.isValid());
+    ASSERT_EQ (144, image.getWidth());
+    ASSERT_EQ (144, image.getHeight());
+
+    // The bounds start at (8, 8) in the canvas, after the margin
+    EXPECT_TRUE (isNear (Color (0xff00ff00), image.getPixelColor (4, 72)));
+    EXPECT_TRUE (isNear (Color (0xffff0000), image.getPixelColor (40, 72)));
+    EXPECT_TRUE (isNear (Color (0xff0000ff), image.getPixelColor (104, 72)));
+    EXPECT_TRUE (image.getPixelColor (140, 72).isTransparent());
+}
+
+TEST_F (ComponentEffectPartialRepaintTest, DamageInsideTheBoundsIsRepaintedWhereItSitsInTheCanvas)
+{
+    root->setPaintMargin (8.0f);
+    paintRoot();
+    left.paints = 0;
+    right.paints = 0;
+
+    left.fill = Color (0xff00ff00);
+    left.repaint();
+    paintRoot();
+
+    EXPECT_EQ (1, left.paints);
+    EXPECT_EQ (0, right.paints);
+
+    const auto image = ComponentHelper::getEffectOffscreenCanvas (*root)->asImage();
+    ASSERT_TRUE (image.isValid());
+
+    // The left half covers 8 to 72 in the canvas
+    EXPECT_TRUE (isNear (Color (0xff00ff00), image.getPixelColor (10, 72)));
+    EXPECT_TRUE (isNear (Color (0xff00ff00), image.getPixelColor (70, 72)));
+    EXPECT_TRUE (isNear (Color (0xff0000ff), image.getPixelColor (74, 72)));
+}
+
+TEST_F (ComponentEffectPartialRepaintTest, DamageInThePaintMarginRepaintsEverything)
+{
+    CountingChild marker { Color (0xff00ff00) };
+    marker.setOpaque (false);
+    marker.setBounds (-8, -8, 8, 144);
+    root->addAndMakeVisible (marker);
+    root->setPaintMargin (8.0f);
+    paintRoot();
+    left.paints = 0;
+    right.paints = 0;
+
+    // Nothing opaque covers the margin again, so what was painted there has to be cleared
+    marker.fill = Color (0x00000000);
+    marker.repaint();
+    paintRoot();
+
+    EXPECT_EQ (1, left.paints);
+    EXPECT_EQ (1, right.paints);
+
+    const auto image = ComponentHelper::getEffectOffscreenCanvas (*root)->asImage();
+    ASSERT_TRUE (image.isValid());
+    EXPECT_TRUE (image.getPixelColor (4, 72).isTransparent());
+}
+
+// =============================================================================
+// Paint margin under an effect and in a cached texture
+// =============================================================================
+
+class ComponentPaintMarginGpuTest : public ComponentEffectGpuTest
+{
+protected:
+    /** Draws the subtree as it was rendered. */
+    struct PassThroughEffect : ComponentEffect
+    {
+        void apply (Graphics& g, GpuTexture::Ptr texture, Rectangle<float> bounds) override
+        {
+            appliedBounds = bounds;
+            g.drawTexture (texture, bounds);
+        }
+
+        Rectangle<float> appliedBounds;
+    };
+
+    /** Draws nothing of what it is given. */
+    struct BlankEffect : ComponentEffect
+    {
+        void apply (Graphics&, GpuTexture::Ptr, Rectangle<float>) override {}
+    };
+
+    /** Fills its bounds, and counts its paints. */
+    class Patch : public Component
+    {
+    public:
+        explicit Patch (Color colorToFill)
+            : fill (colorToFill)
+        {
+        }
+
+        void paint (Graphics& g) override
+        {
+            ++paints;
+            g.setFillColor (fill);
+            g.fillAll();
+        }
+
+        Color fill;
+        int paints = 0;
+    };
+
+    /** Fills its bounds, and paints around them as far as `reach`: a disc on its first corner, a
+        strip after its right edge and one after its bottom edge. */
+    class Subject : public Component
+    {
+    public:
+        explicit Subject (Color colorToFill)
+            : fill (colorToFill)
+        {
+            setOpaque (false);
+        }
+
+        void paint (Graphics& g) override
+        {
+            ++paints;
+            g.setFillColor (fill);
+            g.fillAll();
+
+            if (reach <= 0.0f)
+                return;
+
+            g.setFillColor (around);
+            g.fillEllipse (-reach, -reach, reach * 2.0f, reach * 2.0f);
+            g.fillRect (getWidth(), 0.0f, reach, getHeight());
+            g.fillRect (0.0f, getHeight(), getWidth(), reach);
+        }
+
+        Color fill;
+        Color around { 0xffffffff };
+        float reach = 0.0f;
+        int paints = 0;
+    };
+
+    /** A subject in a backdrop, with a child painting around itself too, and one that reaches out
+        of the subject. */
+    struct Scene
+    {
+        explicit Scene (float margin)
+        {
+            root.setBounds (0.0f, 0.0f, 96.0f, 80.0f);
+            root.setVisible (true);
+
+            subject.setComponentID ("subject");
+            subject.reach = margin;
+            subject.setPaintMargin (margin);
+            subject.setBounds (24.0f, 20.0f, 40.0f, 32.0f);
+            root.addAndMakeVisible (subject);
+
+            nested.reach = jmin (margin, 3.0f);
+            nested.setPaintMargin (nested.reach);
+            nested.setBounds (20.0f, 6.0f, 14.0f, 12.0f);
+            subject.addAndMakeVisible (nested);
+
+            reaching.setBounds (-2.0f, 16.0f, 10.0f, 8.0f);
+            subject.addAndMakeVisible (reaching);
+        }
+
+        void style (const String& text)
+        {
+            auto sheet = StyleSheet::parse (text);
+            ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+
+            root.setStyleSheet (sheet.getReference());
+            root.getStyleContext()->restyleNow();
+        }
+
+        Patch root { Color (0xff203040) };
+        Subject subject { Color (0x80ff4020) };
+        Subject nested { Color (0xc020c040) };
+        Patch reaching { Color (0xff00ccff) };
+    };
+
+    /** Paints a scene as a window would, and returns what is shown. */
+    Image render (Scene& scene, float scale)
+    {
+        auto canvas = GpuCanvas::create (*gpuContext, roundToInt (scene.root.getWidth() * scale), roundToInt (scene.root.getHeight() * scale));
+        if (canvas == nullptr)
+            return {};
+
+        auto& g = canvas->beginDraw ({}, scale);
+        ComponentHelper::triggerPaint (scene.root, g, scene.root.getLocalBounds(), false);
+        canvas->commit();
+
+        return canvas->asImage();
+    }
+
+    /** Returns the largest difference of a channel between two pixels. */
+    static int difference (Color a, Color b)
+    {
+        return jmax (std::abs (a.getRed() - b.getRed()),
+                     std::abs (a.getGreen() - b.getGreen()),
+                     std::abs (a.getBlue() - b.getBlue()),
+                     std::abs (a.getAlpha() - b.getAlpha()));
+    }
+
+    /** Passes if no pixel of two images differs by more than what is allowed, and tells where they do. */
+    static ::testing::AssertionResult showTheSame (const Image& first, const Image& second, int allowed = tolerance)
+    {
+        if (! first.isValid() || ! second.isValid() || first.getWidth() != second.getWidth() || first.getHeight() != second.getHeight())
+            return ::testing::AssertionFailure() << "the images can't be compared";
+
+        int count = 0, largest = 0;
+        Point<int> worst;
+        Rectangle<int> area;
+
+        for (int y = 0; y < first.getHeight(); ++y)
+        {
+            for (int x = 0; x < first.getWidth(); ++x)
+            {
+                const auto distance = difference (first.getPixelColor (x, y), second.getPixelColor (x, y));
+                if (distance <= allowed)
+                    continue;
+
+                area = count++ == 0 ? Rectangle<int> (x, y, 1, 1) : area.unionWith ({ x, y, 1, 1 });
+
+                if (distance > largest)
+                {
+                    largest = distance;
+                    worst = { x, y };
+                }
+            }
+        }
+
+        if (count == 0)
+            return ::testing::AssertionSuccess();
+
+        return ::testing::AssertionFailure()
+            << count << " pixels differ, by up to " << largest << " at (" << worst.getX() << ", " << worst.getY() << "): "
+            << String::toHexString (static_cast<int64> (first.getPixelColor (worst.getX(), worst.getY()).getARGB())) << " and "
+            << String::toHexString (static_cast<int64> (second.getPixelColor (worst.getX(), worst.getY()).getARGB()))
+            << ", all inside (" << area.getX() << ", " << area.getY() << ") - (" << area.getRight() << ", " << area.getBottom() << ")";
+    }
+
+    /** Returns true if the strip the subject paints after its right edge is in the image. The row
+        read is the middle one, so it is the same whichever way up the image is. */
+    static bool showsWhatIsPaintedAround (const Image& image, const Scene& scene, float scale)
+    {
+        const auto x = roundToInt ((scene.subject.getRight() + scene.subject.reach * 0.5f) * scale);
+
+        return image.isValid() && image.getPixelColor (x, image.getHeight() / 2) == scene.subject.around;
+    }
+
+    static constexpr int tolerance = 2;
+
+    /** A canvas dithers and rounds what is drawn in it, so a second one is a level further off. */
+    static constexpr int toleranceThroughTwoCanvases = tolerance + 1;
+};
+
+TEST_F (ComponentPaintMarginGpuTest, AnEffectShowsWhatDirectPaintingShows)
+{
+    for (const auto scale : { 1.0f, 2.0f, 1.5f })
+    {
+        for (const auto margin : { 0.0f, 8.0f, 2.5f })
+        {
+            SCOPED_TRACE (String ("scale ") + String (scale) + ", margin " + String (margin));
+
+            Scene direct (margin), effected (margin);
+            effected.subject.setComponentEffect (new PassThroughEffect());
+            effected.nested.setComponentEffect (new PassThroughEffect());
+
+            const auto expected = render (direct, scale);
+            EXPECT_EQ (margin > 0.0f, showsWhatIsPaintedAround (expected, direct, scale));
+
+            // The nested child is drawn in its canvas, then in the one of the subject
+            EXPECT_TRUE (showTheSame (expected, render (effected, scale), toleranceThroughTwoCanvases));
+        }
+    }
+}
+
+TEST_F (ComponentPaintMarginGpuTest, AStyleFilterShowsWhatIsPaintedInThePaintMargin)
+{
+    for (const auto scale : { 1.0f, 2.0f, 1.5f })
+    {
+        SCOPED_TRACE (String ("scale ") + String (scale));
+
+        Scene direct (8.0f), filtered (8.0f), both (8.0f);
+        filtered.style ("style { #subject { filter: hue-rotate(0deg); } }");
+        both.style ("style { #subject { filter: hue-rotate(0deg); } }");
+        both.subject.setComponentEffect (new PassThroughEffect());
+
+        const auto expected = render (direct, scale);
+        EXPECT_TRUE (showsWhatIsPaintedAround (expected, direct, scale));
+        EXPECT_TRUE (showTheSame (expected, render (filtered, scale)));
+
+        // With an effect too, the filter runs over what the effect drew in a canvas of its own
+        EXPECT_TRUE (showTheSame (expected, render (both, scale), toleranceThroughTwoCanvases));
+    }
+}
+
+TEST_F (ComponentPaintMarginGpuTest, ACachedComponentShowsWhatDirectPaintingShows)
+{
+    for (const auto scale : { 1.0f, 2.0f, 1.5f })
+    {
+        for (const auto margin : { 0.0f, 8.0f, 2.5f })
+        {
+            SCOPED_TRACE (String ("scale ") + String (scale) + ", margin " + String (margin));
+
+            Scene direct (margin), cached (margin);
+            cached.subject.setCachedToTexture (true);
+
+            const auto expected = render (direct, scale);
+            EXPECT_TRUE (showTheSame (expected, render (cached, scale)));
+
+            // Painted again from the texture it kept
+            EXPECT_TRUE (showTheSame (expected, render (cached, scale)));
+            EXPECT_EQ (1, cached.subject.paints);
+        }
+    }
+}
+
+TEST_F (ComponentPaintMarginGpuTest, TheCachedTextureHoldsThePaintMargin)
+{
+    Scene scene (8.0f);
+    scene.subject.setCachedToTexture (true);
+    render (scene, 2.0f);
+
+    auto canvas = ComponentHelper::getCachedTextureCanvas (scene.subject);
+    ASSERT_NE (canvas, nullptr);
+    EXPECT_EQ (112, canvas->getWidth());
+    EXPECT_EQ (96, canvas->getHeight());
+
+    // A margin that grows is a new texture, painted again
+    scene.subject.setPaintMargin (12.0f);
+    render (scene, 2.0f);
+
+    canvas = ComponentHelper::getCachedTextureCanvas (scene.subject);
+    ASSERT_NE (canvas, nullptr);
+    EXPECT_EQ (128, canvas->getWidth());
+    EXPECT_EQ (112, canvas->getHeight());
+    EXPECT_EQ (2, scene.subject.paints);
+}
+
+TEST_F (ComponentPaintMarginGpuTest, APartialRepaintShowsWhatAFullOneShows)
+{
+    const auto makeOpaque = [] (Scene& scene)
+    {
+        scene.subject.fill = Color (0xffff4020);
+        scene.subject.setOpaque (true);
+        scene.subject.setComponentEffect (new PassThroughEffect());
+    };
+
+    for (const auto scale : { 1.0f, 2.0f, 1.5f })
+    {
+        SCOPED_TRACE (String ("scale ") + String (scale));
+
+        Scene repainted (8.0f);
+        makeOpaque (repainted);
+        render (repainted, scale);
+
+        // Inside the bounds: only what changed is painted again, over what the canvas kept
+        repainted.nested.fill = Color (0xff2040ff);
+        repainted.nested.repaint();
+
+        {
+            Scene fresh (8.0f);
+            makeOpaque (fresh);
+            fresh.nested.fill = Color (0xff2040ff);
+
+            EXPECT_TRUE (showTheSame (render (fresh, scale), render (repainted, scale)));
+        }
+
+        EXPECT_EQ (2, repainted.nested.paints);
+        EXPECT_EQ (1, repainted.reaching.paints);
+
+        // In the margin: nothing covers what was painted there, so everything is painted again
+        repainted.subject.around = Color (0xff000000);
+        repainted.subject.repaint();
+
+        {
+            Scene fresh (8.0f);
+            makeOpaque (fresh);
+            fresh.nested.fill = Color (0xff2040ff);
+            fresh.subject.around = Color (0xff000000);
+
+            EXPECT_TRUE (showTheSame (render (fresh, scale), render (repainted, scale)));
+        }
+
+        EXPECT_EQ (2, repainted.reaching.paints);
+    }
+}
+
+TEST_F (ComponentPaintMarginGpuTest, APixelPartlyInsideTheBoundsIsNotPaintedOverWhatWasKept)
+{
+    // 32.6 pixels high: the last row is covered in part, and painting it again over itself would add up
+    Subject subject { Color (0xffff4020) };
+    subject.setOpaque (true);
+    subject.setBounds (0.0f, 0.0f, 40.0f, 32.6f);
+    subject.setVisible (true);
+    subject.setComponentEffect (new PassThroughEffect());
+
+    const auto paint = [&]
+    {
+        triggerPaintOnCanvas (subject, 64, 64);
+        return ComponentHelper::getEffectOffscreenCanvas (subject)->asImage();
+    };
+
+    const auto fresh = paint();
+
+    for (int count = 0; count < 3; ++count)
+    {
+        subject.repaint();
+        EXPECT_TRUE (showTheSame (fresh, paint()));
+    }
+
+    EXPECT_EQ (4, subject.paints);
+}
+
+TEST_F (ComponentPaintMarginGpuTest, AMarginLeavesWhatIsInsideTheBoundsOnItsPixels)
+{
+    // A size that is no whole number of pixels: 40.4 is rounded down and 32.6 up
+    const auto paintAlone = [this] (float margin, ReferenceCountedObjectPtr<PassThroughEffect> effect)
+    {
+        auto subject = std::make_unique<Subject> (Color (0x80ff4020));
+        subject->reach = 8.0f;
+        subject->setPaintMargin (margin);
+        subject->setBounds (0.0f, 0.0f, 40.4f, 32.6f);
+        subject->setVisible (true);
+        subject->setComponentEffect (effect);
+
+        triggerPaintOnCanvas (*subject, 64, 64);
+        return ComponentHelper::getEffectOffscreenCanvas (*subject);
+    };
+
+    ReferenceCountedObjectPtr<PassThroughEffect> without (new PassThroughEffect()), with (new PassThroughEffect());
+
+    const auto bare = paintAlone (0.0f, without);
+    const auto wide = paintAlone (8.0f, with);
+    ASSERT_NE (bare, nullptr);
+    ASSERT_NE (wide, nullptr);
+
+    EXPECT_EQ (40, bare->getWidth());
+    EXPECT_EQ (33, bare->getHeight());
+    EXPECT_EQ (without->appliedBounds, (Rectangle<float> { 0.0f, 0.0f, 40.4f, 32.6f }));
+
+    // The part of a pixel the width lost is held by the margin after it
+    EXPECT_EQ (8 + 40 + 9, wide->getWidth());
+    EXPECT_EQ (8 + 33 + 8, wide->getHeight());
+
+    // A pixel of the canvas covers as much of the component as it does without a margin
+    EXPECT_NEAR (without->appliedBounds.getWidth() / 40.0f, with->appliedBounds.getWidth() / 57.0f, 1.0e-5f);
+    EXPECT_NEAR (without->appliedBounds.getHeight() / 33.0f, with->appliedBounds.getHeight() / 49.0f, 1.0e-5f);
+    EXPECT_NEAR (-8.0f * 40.4f / 40.0f, with->appliedBounds.getX(), 1.0e-4f);
+
+    const auto bareImage = bare->asImage();
+    const auto wideImage = wide->asImage();
+    ASSERT_TRUE (bareImage.isValid());
+    ASSERT_TRUE (wideImage.isValid());
+
+    // The first and last rows are left out: one of them is only partly inside the bounds
+    int largest = 0;
+
+    for (int y = 1; y < 32; ++y)
+        for (int x = 0; x < 40; ++x)
+            largest = jmax (largest, difference (bareImage.getPixelColor (x, y), wideImage.getPixelColor (x + 8, y + 8)));
+
+    EXPECT_LE (largest, tolerance);
+}
+
+TEST_F (ComponentPaintMarginGpuTest, ACanvasKeepsItsRoomWhenThePaintMarginShrinks)
+{
+    for (const auto scale : { 1.0f, 2.0f, 1.5f })
+    {
+        SCOPED_TRACE (String ("scale ") + String (scale));
+
+        // The subject paints as far as 8 around its bounds, whatever its margin lets through
+        const auto showsWhatDirectPaintingShows = [&] (Scene& scene, float margin)
+        {
+            Scene direct (8.0f);
+            direct.subject.setPaintMargin (margin);
+            scene.subject.setPaintMargin (margin);
+
+            return showTheSame (render (direct, scale), render (scene, scale));
+        };
+
+        Scene effected (8.0f), cached (8.0f);
+        auto effect = ReferenceCountedObjectPtr<PassThroughEffect> (new PassThroughEffect());
+        effected.subject.setComponentEffect (effect);
+        cached.subject.setCachedToTexture (true);
+
+        render (effected, scale);
+        render (cached, scale);
+
+        const auto effectCanvas = ComponentHelper::getEffectOffscreenCanvas (effected.subject);
+        const auto cachedCanvas = ComponentHelper::getCachedTextureCanvas (cached.subject);
+        const auto bounds = effect->appliedBounds;
+        ASSERT_NE (effectCanvas, nullptr);
+        ASSERT_NE (cachedCanvas, nullptr);
+
+        // Less is painted in the canvas there is, and less of it is shown
+        for (const auto margin : { 3.0f, 0.0f, 5.5f, 8.0f })
+        {
+            SCOPED_TRACE (String ("margin ") + String (margin));
+
+            EXPECT_TRUE (showsWhatDirectPaintingShows (effected, margin));
+            EXPECT_TRUE (showsWhatDirectPaintingShows (cached, margin));
+
+            EXPECT_EQ (effectCanvas.get(), ComponentHelper::getEffectOffscreenCanvas (effected.subject).get());
+            EXPECT_EQ (cachedCanvas.get(), ComponentHelper::getCachedTextureCanvas (cached.subject).get());
+            EXPECT_EQ (bounds, effect->appliedBounds);
+        }
+
+        // A margin that grows past the room there is gets a new canvas
+        EXPECT_TRUE (showsWhatDirectPaintingShows (effected, 12.0f));
+        EXPECT_TRUE (showsWhatDirectPaintingShows (cached, 12.0f));
+
+        EXPECT_GT (ComponentHelper::getEffectOffscreenCanvas (effected.subject)->getWidth(), effectCanvas->getWidth());
+        EXPECT_GT (ComponentHelper::getCachedTextureCanvas (cached.subject)->getWidth(), cachedCanvas->getWidth());
+    }
+}
+
+TEST_F (ComponentPaintMarginGpuTest, AMarginThatShrinksLeavesNothingBehindInTheCanvas)
+{
+    Subject subject { Color (0xffff4020) };
+    subject.setOpaque (true);
+    subject.reach = 8.0f;
+    subject.setPaintMargin (8.0f);
+    subject.setBounds (0.0f, 0.0f, 40.0f, 32.0f);
+    subject.setVisible (true);
+    subject.setComponentEffect (new PassThroughEffect());
+
+    const auto paint = [&]
+    {
+        triggerPaintOnCanvas (subject, 64, 64);
+        return ComponentHelper::getEffectOffscreenCanvas (subject)->asImage();
+    };
+
+    // The middle row, in the strip painted after the right edge
+    const Point<int> around (8 + 40 + 4, 24);
+    EXPECT_EQ (subject.around, paint().getPixelColor (around.getX(), around.getY()));
+
+    // An opaque subject is painted again inside its bounds only: what it painted around them has to go
+    subject.setPaintMargin (0.0f);
+
+    const auto image = paint();
+    ASSERT_EQ (56, image.getWidth());
+    EXPECT_TRUE (image.getPixelColor (around.getX(), around.getY()).isTransparent());
+    EXPECT_EQ (subject.fill, image.getPixelColor (8 + 20, 24));
+}
+
+TEST_F (ComponentPaintMarginGpuTest, AStyleShadowGoesThroughTheEffect)
+{
+    const String shadows ("shadow: 2 3 6 #000000c0; glow: 4 #ffffff80;");
+    const String sheet ("style { #subject { " + shadows + " } }");
+
+    for (const auto scale : { 1.0f, 2.0f })
+    {
+        SCOPED_TRACE (String ("scale ") + String (scale));
+
+        // The subject is translucent, so a shadow painted twice behind it would show
+        Scene direct (0.0f), effected (0.0f);
+        direct.style (sheet);
+        effected.style (sheet);
+        effected.subject.setComponentEffect (new PassThroughEffect());
+
+        ASSERT_GT (effected.subject.getPaintMargin().getBottom(), 0.0f);
+        EXPECT_TRUE (showTheSame (render (direct, scale), render (effected, scale)));
+
+        // What an effect or a filter does not draw is not shown, the shadow no more than the rest
+        Scene hidden (0.0f), blank (0.0f), filtered (0.0f);
+        hidden.subject.setVisible (false);
+        blank.style (sheet);
+        blank.subject.setComponentEffect (new BlankEffect());
+        filtered.style ("style { #subject { " + shadows + " filter: opacity(0%); } }");
+
+        const auto expected = render (hidden, scale);
+        EXPECT_TRUE (showTheSame (expected, render (blank, scale)));
+        EXPECT_TRUE (showTheSame (expected, render (filtered, scale)));
+    }
+}
+
+TEST_F (ComponentPaintMarginGpuTest, AComponentOnTheDesktopKeepsItsCanvasesAtItsBounds)
+{
+    Subject subject { Color (0xffff4020) };
+    subject.setPaintMargin (8.0f);
+    subject.setBounds (0.0f, 0.0f, 64.0f, 48.0f);
+    subject.setVisible (true);
+
+    auto effect = ReferenceCountedObjectPtr<PassThroughEffect> (new PassThroughEffect());
+    subject.setComponentEffect (effect);
+
+    // Nothing shows outside a window
+    ComponentHelper::setOnDesktop (subject, true);
+    triggerPaintOnCanvas (subject, 64, 48, 2.0f);
+    ComponentHelper::setOnDesktop (subject, false);
+
+    auto canvas = ComponentHelper::getEffectOffscreenCanvas (subject);
+    ASSERT_NE (canvas, nullptr);
+    EXPECT_EQ (128, canvas->getWidth());
+    EXPECT_EQ (96, canvas->getHeight());
+    EXPECT_EQ (effect->appliedBounds, subject.getLocalBounds());
 }
 
 #endif // YUP_MAC

@@ -269,3 +269,165 @@ TEST_F (ToggleButtonTest, SetToggleStateUpdatesCheckedBindingsLinksAndStyles)
     document.clear();
     ApplicationTheme::setGlobalTheme (oldTheme.get());
 }
+
+TEST_F (ToggleButtonTest, OnlyOneButtonOfARadioGroupIsOn)
+{
+    Component panel;
+    Component otherPanel;
+    ToggleButton first, second, third, ungrouped, elsewhere;
+    SwitchButton switched;
+
+    for (auto* button : { &first, &second, &third })
+    {
+        button->setRadioGroupId (1);
+        panel.addAndMakeVisible (*button);
+    }
+
+    switched.setRadioGroupId (1);
+    panel.addAndMakeVisible (switched);
+    panel.addAndMakeVisible (ungrouped);
+
+    elsewhere.setRadioGroupId (1);
+    otherPanel.addAndMakeVisible (elsewhere);
+
+    ungrouped.setToggleState (true);
+    elsewhere.setToggleState (true);
+    EXPECT_EQ (first.getRadioGroupId(), 1);
+    EXPECT_EQ (ungrouped.getRadioGroupId(), 0);
+
+    first.setToggleState (true);
+    EXPECT_TRUE (first.getToggleState());
+
+    // Turning one on turns off the others of its group, whatever kind of button they are
+    second.setToggleState (true);
+    EXPECT_FALSE (first.getToggleState());
+    EXPECT_TRUE (second.getToggleState());
+
+    switched.setToggleState (true);
+    EXPECT_FALSE (second.getToggleState());
+    EXPECT_TRUE (switched.getToggleState());
+
+    third.setToggleState (true);
+    EXPECT_FALSE (switched.getToggleState());
+
+    // A button in no group, in another group or in another parent is left as it is
+    EXPECT_TRUE (ungrouped.getToggleState());
+    EXPECT_TRUE (elsewhere.getToggleState());
+
+    second.setRadioGroupId (2);
+    second.setToggleState (true);
+    EXPECT_TRUE (third.getToggleState());
+
+    // A button on that joins a group turns off the one that was on in it
+    second.setRadioGroupId (1);
+    EXPECT_TRUE (second.getToggleState());
+    EXPECT_FALSE (third.getToggleState());
+}
+
+TEST_F (ToggleButtonTest, AClickLeavesTheButtonOfARadioGroupOn)
+{
+    Component panel;
+    ToggleButton first, second;
+    SwitchButton switched;
+
+    panel.setVisible (true);
+    panel.setBounds (0.0f, 0.0f, 300.0f, 30.0f);
+    first.setBounds (0.0f, 0.0f, 100.0f, 30.0f);
+    second.setBounds (100.0f, 0.0f, 100.0f, 30.0f);
+    switched.setBounds (200.0f, 0.0f, 100.0f, 30.0f);
+
+    for (auto* button : std::initializer_list<Button*> { &first, &second, &switched })
+    {
+        button->setRadioGroupId (7);
+        panel.addAndMakeVisible (*button);
+    }
+
+    PointerSimulator pointer (panel);
+
+    pointer.click ({ 50.0f, 15.0f });
+    EXPECT_TRUE (first.getToggleState());
+
+    pointer.click ({ 50.0f, 15.0f });
+    EXPECT_TRUE (first.getToggleState());
+
+    pointer.click ({ 250.0f, 15.0f });
+    EXPECT_FALSE (first.getToggleState());
+    EXPECT_TRUE (switched.getToggleState());
+
+    pointer.click ({ 250.0f, 15.0f });
+    EXPECT_TRUE (switched.getToggleState());
+
+    // It can still be turned off by the program, and a button in no group by a click
+    switched.setToggleState (false);
+    EXPECT_FALSE (switched.getToggleState());
+
+    second.setRadioGroupId (0);
+    pointer.click ({ 150.0f, 15.0f });
+    pointer.click ({ 150.0f, 15.0f });
+    EXPECT_FALSE (second.getToggleState());
+}
+
+TEST_F (ToggleButtonTest, AClickRunsOnClickOnce)
+{
+    Component panel;
+    SwitchButton switched;
+    int toggleClicks = 0;
+    int switchClicks = 0;
+
+    panel.setVisible (true);
+    panel.setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+    switched.setBounds (100.0f, 0.0f, 100.0f, 30.0f);
+    panel.addAndMakeVisible (*toggleButton);
+    panel.addAndMakeVisible (switched);
+
+    toggleButton->onClick = [&toggleClicks]
+    {
+        ++toggleClicks;
+    };
+
+    switched.onClick = [&switchClicks]
+    {
+        ++switchClicks;
+    };
+
+    PointerSimulator pointer (panel);
+
+    pointer.click ({ 50.0f, 15.0f });
+    EXPECT_EQ (toggleClicks, 1);
+    EXPECT_TRUE (toggleButton->getToggleState());
+
+    pointer.click ({ 150.0f, 15.0f });
+    EXPECT_EQ (switchClicks, 1);
+    EXPECT_TRUE (switched.getToggleState());
+
+    // The button of a radio group that is on stays on, and still tells it was clicked
+    toggleButton->setRadioGroupId (3);
+    pointer.click ({ 50.0f, 15.0f });
+    EXPECT_EQ (toggleClicks, 2);
+    EXPECT_TRUE (toggleButton->getToggleState());
+
+    // A disabled button keeps its state
+    switched.setEnabled (false);
+    pointer.click ({ 150.0f, 15.0f });
+    EXPECT_EQ (switchClicks, 1);
+    EXPECT_TRUE (switched.getToggleState());
+}
+
+TEST_F (ToggleButtonTest, TheRadioGroupIsAPropertyThatNotifies)
+{
+    struct Recorder : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override { names.add (name.toString()); }
+
+        StringArray names;
+    } recorder;
+
+    toggleButton->addComponentListener (&recorder);
+    toggleButton->setProperty ("radioGroup", 3);
+
+    EXPECT_EQ (toggleButton->getRadioGroupId(), 3);
+    EXPECT_EQ (static_cast<int> (toggleButton->getProperty ("radioGroup")), 3);
+    EXPECT_TRUE (recorder.names.contains ("radioGroup"));
+
+    toggleButton->removeComponentListener (&recorder);
+}

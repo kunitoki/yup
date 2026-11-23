@@ -1,0 +1,19 @@
+// size: 480 120
+tokens {
+    property spacing: number = 12;
+    property radius: number = 14;
+    property brand: color = #ff8800;
+}
+
+style {
+    TextButton { cornerRadius: radius; }
+    .brand     { backgroundColor: brand; textColor: #1b1b1e; }
+}
+
+Row {
+    gap: spacing;
+
+    TextButton { text: "Open"; flexGrow: 1; }
+    TextButton { text: "Save"; flexGrow: 1; }
+    TextButton { text: "Export"; class: brand; flexGrow: 1; }
+}

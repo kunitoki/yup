@@ -538,3 +538,122 @@ TEST_F (SliderTest, EdgeCasesStepSnapping)
     slider->setValue (0.561);
     EXPECT_NEAR (0.56, slider->getValue(), tolerance);
 }
+
+//==============================================================================
+class SliderStepperTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        panel.setVisible (true);
+        panel.setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+
+        stepper.setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+        stepper.setRange (0.0, 10.0, 1.0);
+        stepper.setValue (5.0);
+        panel.addAndMakeVisible (stepper);
+    }
+
+    Component panel;
+    Slider stepper { Slider::IncDecButtons };
+    PointerSimulator pointer { panel };
+};
+
+TEST_F (SliderStepperTest, HasAButtonAtEachEndWithTheValueBetweenThem)
+{
+    const auto decrement = stepper.getDecrementButtonBounds();
+    const auto increment = stepper.getIncrementButtonBounds();
+
+    EXPECT_FALSE (decrement.isEmpty());
+    EXPECT_FALSE (increment.isEmpty());
+    EXPECT_LT (decrement.getRight(), increment.getX());
+    EXPECT_TRUE (stepper.getLocalBounds().contains (decrement));
+    EXPECT_TRUE (stepper.getLocalBounds().contains (increment));
+
+    // A slider of another type has none
+    Slider linear (Slider::LinearHorizontal);
+    linear.setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+    EXPECT_TRUE (linear.getDecrementButtonBounds().isEmpty());
+    EXPECT_TRUE (linear.getIncrementButtonBounds().isEmpty());
+}
+
+TEST_F (SliderStepperTest, AButtonStepsByTheInterval)
+{
+    const auto decrement = stepper.getDecrementButtonBounds().getCenter();
+    const auto increment = stepper.getIncrementButtonBounds().getCenter();
+
+    pointer.click (increment);
+    EXPECT_DOUBLE_EQ (stepper.getValue(), 6.0);
+
+    pointer.click (increment);
+    pointer.click (decrement);
+    pointer.click (decrement);
+    EXPECT_DOUBLE_EQ (stepper.getValue(), 5.0);
+
+    // The ends of the range stop it
+    stepper.setValue (10.0);
+    pointer.click (increment);
+    EXPECT_DOUBLE_EQ (stepper.getValue(), 10.0);
+
+    stepper.setValue (0.0);
+    pointer.click (decrement);
+    EXPECT_DOUBLE_EQ (stepper.getValue(), 0.0);
+}
+
+TEST_F (SliderStepperTest, AButtonStepsByAHundredthOfTheRangeWithNoInterval)
+{
+    stepper.setRange (0.0, 200.0);
+    stepper.setValue (50.0);
+
+    pointer.click (stepper.getIncrementButtonBounds().getCenter());
+    EXPECT_NEAR (stepper.getValue(), 52.0, 1.0e-9);
+}
+
+TEST_F (SliderStepperTest, TellsWhichButtonIsPressed)
+{
+    EXPECT_EQ (stepper.getPressedStep(), 0);
+
+    pointer.moveTo (stepper.getIncrementButtonBounds().getCenter());
+    pointer.press();
+    EXPECT_EQ (stepper.getPressedStep(), 1);
+    EXPECT_FALSE (stepper.isCurrentlyBeingDragged());
+
+    pointer.release();
+    EXPECT_EQ (stepper.getPressedStep(), 0);
+
+    pointer.moveTo (stepper.getDecrementButtonBounds().getCenter());
+    pointer.press();
+    EXPECT_EQ (stepper.getPressedStep(), -1);
+    pointer.release();
+}
+
+#if YUP_MODAL_LOOPS_PERMITTED
+TEST_F (SliderStepperTest, AButtonHeldKeepsStepping)
+{
+    pointer.moveTo (stepper.getIncrementButtonBounds().getCenter());
+    pointer.press();
+    EXPECT_DOUBLE_EQ (stepper.getValue(), 6.0);
+
+    MessageManager::getInstance()->runDispatchLoopUntil (700);
+    EXPECT_GT (stepper.getValue(), 6.0);
+
+    // Released, it stops
+    pointer.release();
+    const auto reached = stepper.getValue();
+
+    MessageManager::getInstance()->runDispatchLoopUntil (200);
+    EXPECT_DOUBLE_EQ (stepper.getValue(), reached);
+}
+#endif
+
+TEST_F (SliderStepperTest, TheValueIsDraggedUpAndDownBetweenTheButtons)
+{
+    const auto middle = stepper.getLocalBounds().getCenter();
+
+    pointer.drag (middle, middle.translated (0.0f, -12.0f));
+    EXPECT_GT (stepper.getValue(), 5.0);
+
+    const auto raised = stepper.getValue();
+    pointer.drag (middle, middle.translated (0.0f, 24.0f));
+    EXPECT_LT (stepper.getValue(), raised);
+}

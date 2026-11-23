@@ -66,7 +66,9 @@ enum class ExpressionOperator
     radians), `ms` (converted to seconds) and `%` (divided by 100). A `%` directly followed by an
     operand is the modulo operator instead, as in `10%3`. Color literals `#rgb`, `#rgba`,
     `#rrggbb` and `#rrggbbaa` are calls to `color` with the ARGB value as an `int`, so they compile
-    when the context has a `color` type (see addGraphicsExpressionTypes in yup_graphics).
+    when the context has a `color` type (see addGraphicsExpressionTypes in yup_graphics). Where a
+    value starts, `[a, b, ...]` is a call to `array` with its values: an array like the ones given
+    as inputs, a `float[]` when the values are numbers. After a value, `[` indexes it.
 
     A program made of a single expression produces the output named `result`.
 

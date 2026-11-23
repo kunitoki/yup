@@ -225,3 +225,14 @@ TEST_F (StyleSelectorTests, ParsesCommaSeparatedSelectorLists)
     EXPECT_TRUE (StyleSelector::parseList ("Slider, ").failed());
     EXPECT_TRUE (StyleSelector::parseList ("Slider, , Label").failed());
 }
+
+TEST_F (StyleSelectorTests, ListsThePseudoClassesOfEveryComponent)
+{
+    const auto names = StyleSelector::getPseudoClassNames();
+
+    for (const auto* name : { "root", "hover", "pressed", "focus", "focus-within", "disabled", "enabled" })
+        EXPECT_TRUE (names.contains (name)) << name;
+
+    for (const auto& name : names)
+        EXPECT_TRUE (StyleSelector::parse ("Slider:" + name).wasOk()) << name.toStdString();
+}

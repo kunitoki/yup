@@ -199,6 +199,17 @@ TEST_F (ComponentPointMappingTests, EffectRoutesClickToTheDisplayedChild)
     EXPECT_EQ (root.findComponentAt ({ 30.0f, 30.0f }), &parent);
 }
 
+TEST_F (ComponentPointMappingTests, EffectMapsInputOverThePaintBounds)
+{
+    addVisible (root, parent, { 100.0f, 100.0f, 100.0f, 100.0f });
+    parent.setPaintMargin (40.0f, 0.0f, 0.0f, 20.0f);
+    parent.setComponentEffect (new ZoomEffect());
+
+    // The effect draws into (-40, 0) - (100, 120), so the zoom is centered on (30, 60)
+    expectNear (*parent.getLocalPointFromParent ({ 150.0f, 160.0f }), { 40.0f, 60.0f });
+    expectNear (*parent.getParentPointFromLocal ({ 40.0f, 60.0f }), { 150.0f, 160.0f });
+}
+
 TEST_F (ComponentPointMappingTests, DegenerateMappingExcludesChild)
 {
     addVisible (root, parent, { 0.0f, 0.0f, 200.0f, 200.0f });
@@ -610,6 +621,20 @@ TEST_F (ComponentHierarchyRepaintTests, RepaintInsideEffectWidensToTheEffectedCo
     child.repaint();
 
     expectSingleArea (areas, { 20.0f, 20.0f, 100.0f, 100.0f });
+}
+
+TEST_F (ComponentHierarchyRepaintTests, RepaintInsideEffectCoversThePaintMarginOfTheEffectedComponent)
+{
+    Component effected, child;
+    addVisible (root, effected, { 20.0f, 20.0f, 100.0f, 100.0f });
+    addVisible (effected, child, { 10.0f, 10.0f, 5.0f, 5.0f });
+    effected.setComponentEffect (new NoOpEffect());
+    effected.setPaintMargin (4.0f, 6.0f, 8.0f, 10.0f);
+
+    const auto& areas = attachNative();
+    child.repaint();
+
+    expectSingleArea (areas, { 16.0f, 14.0f, 112.0f, 116.0f });
 }
 
 TEST_F (ComponentHierarchyRepaintTests, RepaintInsideManuallyCompositedChildRepaintsTheWholeHost)

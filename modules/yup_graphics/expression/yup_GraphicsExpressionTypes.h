@@ -129,6 +129,12 @@ struct YUP_API PatternPaint
     `textAnchor` (`start middle end`) map to StrokeCap, StrokeJoin, StrokePosition, BlendMode,
     Justification::Flags, Fitting, LayerMaskMode, ColorGradient::Spread and AnchoredText::Anchor.
 
+    An array of numbers (`float[]`) is the point, the size or the rect it is given to, and `dash` takes
+    one of any length. Written in place as `[a, b, ...]` it must hold the numbers of what it makes, two
+    for a point or a size and four for a rect, and compiles to their constructor. One given as an input
+    reads zeros for the numbers it lacks. An array has no members of what it makes, so
+    `rect ([0, 0, 100, 50]).center` names the rect first.
+
     The function `polar (center, radius, angle)` returns the point at `radius` from `center`, with the
     angle in radians measured from the positive x axis towards the positive y axis (clockwise on screen).
     `mix (a, b, t)` interpolates two points or two colors.

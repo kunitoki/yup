@@ -63,6 +63,33 @@ bool isStateProperty (const Component& component, const Identifier& name)
 
 //==============================================================================
 
+Span<const StyleSelector::PseudoEntry> StyleSelector::getBuiltinPseudos() noexcept
+{
+    static constexpr PseudoEntry builtinPseudos[] = {
+        { "hover", PseudoKind::hovered, "hovered" },
+        { "hovered", PseudoKind::hovered, "hovered" },
+        { "pressed", PseudoKind::pressed, "pressed" },
+        { "active", PseudoKind::pressed, "pressed" },
+        { "focus", PseudoKind::focused, "focused" },
+        { "focused", PseudoKind::focused, "focused" },
+        { "focus-within", PseudoKind::focusWithin, "focus-within" },
+        { "disabled", PseudoKind::disabled, "enabled" },
+        { "enabled", PseudoKind::enabled, "enabled" }
+    };
+
+    return builtinPseudos;
+}
+
+StringArray StyleSelector::getPseudoClassNames()
+{
+    StringArray names { "root" };
+
+    for (const auto& entry : getBuiltinPseudos())
+        names.add (entry.name);
+
+    return names;
+}
+
 ResultValue<StyleSelector> StyleSelector::parse (const String& text)
 {
     StyleSelector selector;
@@ -157,28 +184,9 @@ ResultValue<StyleSelector> StyleSelector::parse (const String& text)
                 }
                 else
                 {
-                    struct PseudoEntry
-                    {
-                        const char* name;
-                        PseudoKind kind;
-                        const char* watchedProperty;
-                    };
-
-                    static constexpr PseudoEntry builtinPseudos[] = {
-                        { "hover", PseudoKind::hovered, "hovered" },
-                        { "hovered", PseudoKind::hovered, "hovered" },
-                        { "pressed", PseudoKind::pressed, "pressed" },
-                        { "active", PseudoKind::pressed, "pressed" },
-                        { "focus", PseudoKind::focused, "focused" },
-                        { "focused", PseudoKind::focused, "focused" },
-                        { "focus-within", PseudoKind::focusWithin, "focus-within" },
-                        { "disabled", PseudoKind::disabled, "enabled" },
-                        { "enabled", PseudoKind::enabled, "enabled" }
-                    };
-
                     bool matchedBuiltin = false;
 
-                    for (const auto& entry : builtinPseudos)
+                    for (const auto& entry : getBuiltinPseudos())
                     {
                         if (name == entry.name)
                         {

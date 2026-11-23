@@ -1,0 +1,20 @@
+// size: 320 144
+drawing Toolbar {
+    viewBox: rect (0, 0, 24, 12);
+
+    drawing Leaf {
+        property tone: color = palette.accent;
+        viewBox: rect (0, 0, 10, 10);
+        path { data: "M 5 0 L 10 10 L 0 10 Z"; fill: tone; }
+        circle { center: point (5, 7); radius: 1; }
+    }
+
+    use Leaf { bounds: rect (2, 2, 8, 8); fill: palette.text; }
+    use Leaf { bounds: rect (14, 2, 8, 8); tone: palette.outline; fill: none; stroke: palette.text; opacity: 0.5; }
+}
+
+style {
+    .toolbar { drawing: Toolbar; }
+}
+
+Component { class: toolbar; }

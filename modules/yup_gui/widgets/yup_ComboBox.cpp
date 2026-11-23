@@ -83,6 +83,7 @@ ComboBox::ComboBox()
 ComboBox::ComboBox (StringRef componentID)
     : Component (componentID)
 {
+    setOpaque (false);
     setWantsKeyboardFocus (true);
     setMouseCursor (MouseCursor::Hand);
 }

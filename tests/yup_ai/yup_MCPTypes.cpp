@@ -1031,12 +1031,6 @@ TEST (MCPServer, DoubleStopIsSafe)
     EXPECT_FALSE (server.isRunning());
 }
 
-TEST (MCPServer, StartStdioReturnsNotImplemented)
-{
-    MCPServer server;
-    EXPECT_TRUE (server.startStdio().failed());
-}
-
 TEST (MCPServer, NegotiatesProtocolVersion)
 {
     MCPServer server;

@@ -252,3 +252,43 @@ TEST_F (TextButtonTest, TextButtonWithVerySmallSize)
     EXPECT_LE (textBounds.getRight(), 1.0f);
     EXPECT_LE (textBounds.getBottom(), 1.0f);
 }
+
+TEST_F (TextButtonTest, AClickIsAPressReleasedOverTheEnabledButton)
+{
+    Component panel;
+    int numClicks = 0;
+
+    panel.setVisible (true);
+    panel.setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+    panel.addAndMakeVisible (*textButton);
+
+    textButton->onClick = [&numClicks]
+    {
+        ++numClicks;
+    };
+
+    PointerSimulator pointer (panel);
+
+    pointer.click ({ 50.0f, 15.0f });
+    EXPECT_EQ (numClicks, 1);
+
+    // A press released away from the button is no click
+    pointer.drag ({ 50.0f, 15.0f }, { 150.0f, 15.0f });
+    EXPECT_EQ (numClicks, 1);
+
+    // A disabled button is not clicked
+    textButton->setEnabled (false);
+    pointer.click ({ 50.0f, 15.0f });
+    EXPECT_EQ (numClicks, 1);
+
+    // Nor one disabled while it is pressed, which is no longer down once released
+    textButton->setEnabled (true);
+    pointer.moveTo ({ 50.0f, 15.0f });
+    pointer.press();
+    EXPECT_TRUE (textButton->isButtonDown());
+
+    textButton->setEnabled (false);
+    pointer.release();
+    EXPECT_EQ (numClicks, 1);
+    EXPECT_FALSE (textButton->isButtonDown());
+}

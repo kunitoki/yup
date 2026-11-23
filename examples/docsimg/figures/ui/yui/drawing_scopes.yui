@@ -1,0 +1,32 @@
+// size: 560 138
+drawing Scopes {
+    let label: defaultFont.withHeight (12);
+
+    drawing Pair {
+        viewBox: rect (0, 0, 100, 60);
+        circle { center: point (34, 30); radius: 26; fill: palette.accent; }
+        circle { center: point (66, 30); radius: 26; fill: palette.text; }
+    }
+
+    group { opacity: 0.5; use Pair { bounds: rect (14, 2, 100, 60); } }
+    layer { opacity: 0.5; use Pair { bounds: rect (142, 2, 100, 60); } }
+
+    layer {
+        mask { rect { bounds: rect (270, 2, 100, 60); fillGradient: linearGradient (#ffffff, point (270, 0), #ffffff00, point (370, 0)); } }
+        use Pair { bounds: rect (270, 2, 100, 60); }
+    }
+
+    group { opacity: 0.15; use Pair { bounds: rect (398, 2, 100, 60); } }
+    clip { bounds: rect (420, 16, 56, 32); use Pair { bounds: rect (398, 2, 100, 60); } }
+
+    text { bounds: rect (0, 68, 128, 16);   text: "group, opacity"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (128, 68, 128, 16); text: "layer, opacity"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (256, 68, 128, 16); text: "layer, mask";    font: label; fill: palette.textMuted; }
+    text { bounds: rect (384, 68, 128, 16); text: "clip";           font: label; fill: palette.textMuted; }
+}
+
+style {
+    .scopes { drawing: Scopes; }
+}
+
+Component { class: scopes; }

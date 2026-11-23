@@ -217,6 +217,11 @@ public:
     /** Returns true when the element is a style, rule, palette, drawing or keyframes block. */
     static bool isStyleElement (const DataTree& element) noexcept;
 
+    /** Returns the names of the declarations a rule takes on top of the properties of the
+        components it styles, such as `palette`, `drawing` and `transition`, for a tool to list them.
+    */
+    static const StringArray& getDeclarationNames();
+
     /** Parses a `palette` element into @p palettes, returning a diagnostic if invalid.
 
         A name can be declared once for each mode: a second palette of the same mode is invalid.

@@ -70,6 +70,12 @@ public:
     */
     static ResultValue<std::vector<StyleSelector>> parseList (const String& text);
 
+    /** Returns the pseudo-classes every component has, such as `hover` and `disabled`, with `root`,
+        for a tool to list them. A selector also takes the state properties of a type as
+        pseudo-classes, such as the `checked` of a ToggleButton.
+    */
+    static StringArray getPseudoClassNames();
+
     //==============================================================================
     /** Returns true when this selector matches a component.
 
@@ -138,6 +144,15 @@ private:
         PseudoKind kind = PseudoKind::stateProperty;
         Identifier property;
     };
+
+    struct PseudoEntry
+    {
+        const char* name;
+        PseudoKind kind;
+        const char* watchedProperty;
+    };
+
+    static Span<const PseudoEntry> getBuiltinPseudos() noexcept;
 
     struct Compound
     {

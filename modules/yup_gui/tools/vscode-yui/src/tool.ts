@@ -7,12 +7,28 @@ import { Worker } from "worker_threads";
 export interface YuiToolFile {
     path: string;
     data: Uint8Array;
+
+    /** True for a file that is no longer there, which the tool forgets. */
+    removed?: boolean;
 }
 
 export interface YuiToolResult {
     code: number;
     stdout: string;
     stderr: string;
+}
+
+/** Returns the files a host of the tool does not have as they are now, and remembers it is given them. */
+export function unsentFiles (sent: Map<string, string>, files: YuiToolFile[]): YuiToolFile[] {
+    return files.filter (file => {
+        const digest = file.removed === true ? "removed" : crypto.createHash ("sha1").update (file.data).digest ("hex");
+
+        if (sent.get (file.path) === digest)
+            return false;
+
+        sent.set (file.path, digest);
+        return true;
+    });
 }
 
 /** The folder the tool keeps the files it is given in, which the paths it prints start with. */
@@ -51,26 +67,32 @@ export class YuiTool {
 
     /** Runs a command on the files given, of which only those that changed are sent again. */
     run (args: string[], files: YuiToolFile[] = []): Promise<YuiToolResult | undefined> {
+        return this.ask ({ args }, files);
+    }
+
+    /** Returns the tools of an agent as the tool describes them, in JSON. */
+    async agentTools (): Promise<string | undefined> {
+        return (await this.ask ({ agentTools: true }, []))?.stdout;
+    }
+
+    /** Runs a tool of an agent on the files given, with its arguments as JSON, and returns its answer in JSON. */
+    async agentCall (name: string, argumentsJson: string, files: YuiToolFile[]): Promise<string | undefined> {
+        return (await this.ask ({ agentTool: name, agentArguments: argumentsJson }, files))?.stdout;
+    }
+
+    private ask (asked: object, files: YuiToolFile[]): Promise<YuiToolResult | undefined> {
         const worker = this.start ();
 
         if (worker === undefined)
             return Promise.resolve (undefined);
 
-        const changed = files.filter (file => {
-            const digest = crypto.createHash ("sha1").update (file.data).digest ("hex");
-
-            if (this.sent.get (file.path) === digest)
-                return false;
-
-            this.sent.set (file.path, digest);
-            return true;
-        });
+        const changed = unsentFiles (this.sent, files);
 
         return new Promise (resolve => {
             const id = this.nextId++;
 
             this.waiting.set (id, resolve);
-            worker.postMessage ({ id, args, files: changed });
+            worker.postMessage ({ ...asked, id, files: changed });
         });
     }
 

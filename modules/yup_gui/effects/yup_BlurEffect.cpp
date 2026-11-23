@@ -97,6 +97,12 @@ inline bool ensureComponentEffectTarget (const GpuDevice::Ptr& device, GpuTarget
     return target != nullptr;
 }
 
+/** Returns how far a blur of @a sigma spreads on every side, which is the radius of its kernel. */
+inline float getBlurReach (float sigma) noexcept
+{
+    return std::ceil (jmax (0.0f, sigma) * 3.0f);
+}
+
 inline GpuTexture::Ptr runSeparableBlur (GraphicsContext& context,
                                          GpuDevice::Ptr& pipelineDevice,
                                          GpuPipeline::Ptr& pipeline,
@@ -136,7 +142,7 @@ inline GpuTexture::Ptr runSeparableBlur (GraphicsContext& context,
         return nullptr;
 
     const float clampedSigma = jmax (0.0f, sigmaPixels);
-    const float kernelRadius = std::ceil (clampedSigma * 3.0f);
+    const float kernelRadius = getBlurReach (clampedSigma);
     const float invW = 1.0f / static_cast<float> (width);
     const float invH = 1.0f / static_cast<float> (height);
 

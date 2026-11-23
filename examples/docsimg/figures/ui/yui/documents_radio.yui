@@ -1,0 +1,10 @@
+// size: 480 96
+Row {
+    gap: 8;
+
+    ToggleButton { text: "LFO";  radioGroup: 1; checked: true; flexGrow: 1; }
+    ToggleButton { text: "STEP"; radioGroup: 1; flexGrow: 1; }
+    ToggleButton { text: "ENV";  radioGroup: 1; flexGrow: 1; }
+
+    Slider { sliderType: incDecButtons; minimum: 1; maximum: 16; interval: 1; value: 8; preferredWidth: 150; }
+}

@@ -116,3 +116,25 @@ TEST_F (YuiViewTests, ClearingTheDocumentUnmountsTheRootComponent)
     EXPECT_EQ (view.getDocument().getRoot(), nullptr);
     EXPECT_EQ (view.getNumChildComponents(), 0);
 }
+
+TEST_F (YuiViewTests, HostsTheRootALiveTreeEditReplaces)
+{
+    YuiView view;
+    view.setSize (200, 100);
+
+    ASSERT_TRUE (view.getDocument().loadFromString ("Column { Slider { id: knob; } }").wasOk());
+
+    auto tree = view.getDocument().getTree();
+
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.removeChild (0);
+        transaction.addChild (DataTree ("Row"));
+    }
+
+    auto* root = view.getDocument().getRoot();
+    ASSERT_NE (root, nullptr);
+    EXPECT_EQ (root->getTypeInfo().getTypeName().toString(), "Row");
+    EXPECT_EQ (root->getParentComponent(), &view);
+    EXPECT_EQ (view.getNumChildComponents(), 1);
+}

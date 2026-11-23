@@ -1,0 +1,9 @@
+// size: 400 160
+FlexBox {
+    wrap: wrap;
+    gap: 6;
+
+    repeat i in 0 .. 10 {
+        TextButton { text: format ("%d", i + 1); preferredWidth: 44 + (i % 3) * 28; preferredHeight: 30; }
+    }
+}

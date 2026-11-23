@@ -288,6 +288,23 @@ Row {
 
 Invisible children are skipped entirely, rather than laid out and hidden.
 
+Each of those changes lays the children out again, so a thousand children
+added or removed one by one are laid out a thousand times. A
+`LayoutComponent::ScopedLayoutBatch` holds the layouts back while it exists,
+and each layout component that changed is laid out once when it goes away:
+
+```cpp
+{
+    const LayoutComponent::ScopedLayoutBatch batch;
+
+    for (auto& row : rows)
+        column.addAndMakeVisible (*row);
+}
+```
+
+Until then the children keep the bounds they had. Loading a `.yui` document
+and applying a stylesheet already do this.
+
 ### Container properties
 
 `padding` and `gap` come from `LayoutComponent`. `padding` takes a number, or a

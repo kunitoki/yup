@@ -172,6 +172,27 @@ TEST_F (ExpressionTests, ParsesColorLiterals)
     EXPECT_TRUE (parseError ("#").contains ("Invalid color literal"));
 }
 
+TEST_F (ExpressionTests, ParsesArraysAsCallsToArray)
+{
+    const auto array = parse ("[1, 2 + 3, x]");
+    ASSERT_EQ (Expression::Kind::call, array.getKind());
+    EXPECT_EQ (String ("array"), array.getName());
+    EXPECT_EQ (3, array.getNumInputs());
+
+    // An array is a value where one starts, so it can be an argument
+    const auto wrapped = parse ("rect ([0, 0, 100, 50])");
+    ASSERT_EQ (1, wrapped.getNumInputs());
+    EXPECT_EQ (String ("array"), wrapped.getInput (0).getName());
+    EXPECT_EQ (4, wrapped.getInput (0).getNumInputs());
+
+    // After a value, a bracket indexes it, an array written in place included
+    EXPECT_EQ (Expression::Kind::index, parse ("values[1]").getKind());
+    EXPECT_EQ (Expression::Kind::index, parse ("[1, 2, 3][n]").getKind());
+
+    EXPECT_TRUE (parseError ("[1, 2").contains ("Expected ']'"));
+    EXPECT_TRUE (parseError ("[]").contains ("Unexpected character ']'"));
+}
+
 TEST_F (ExpressionTests, ParsesExpressionsEmbeddedInText)
 {
     const String text ("fill: a > 1 ? #ff8800 : b; next: f (x, y) }");

@@ -1,0 +1,17 @@
+// size: 400 148
+drawing Lamp {
+    circle { center: bounds.center; radius: bounds.width * 0.85; fill: palette.accent.withAlpha (0.4); feather: 16; }
+    circle { center: bounds.center; radius: bounds.width / 2 - 2; fill: palette.accent; }
+}
+
+style {
+    .lamp { drawing: Lamp; }
+    .room { paintMargin: 28; }
+}
+
+Row {
+    gap: 96; justify: center; align: center;
+
+    Component { class: lamp; preferredWidth: 40; preferredHeight: 40; }
+    Component { class: "lamp room"; preferredWidth: 40; preferredHeight: 40; }
+}

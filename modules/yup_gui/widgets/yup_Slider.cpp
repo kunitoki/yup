@@ -27,6 +27,10 @@ namespace yup
 namespace
 {
 
+// How long a step button is held before it steps again, then between its steps
+constexpr int stepRepeatDelayMs = 400;
+constexpr int stepRepeatIntervalMs = 80;
+
 struct SliderIds
 {
     static inline const Identifier sliderType { "sliderType" };
@@ -144,6 +148,7 @@ Slider::Slider (SliderType sliderType, StringRef componentID)
     : Component (componentID)
     , sliderType (sliderType)
     , currentValue (defaultValue)
+    , stepRepeater (bindFront (&Slider::repeatStep, this))
 {
     setMouseCursor (MouseCursor::Hand);
     setWantsKeyboardFocus (true);
@@ -518,6 +523,29 @@ void Slider::mouseDown (const MouseEvent& event)
     mouseDragStartPosition = mouseDownPosition;
     isMouseOverSlider = true;
 
+    // A press on a button steps the value, and again while it is held
+    for (const auto direction : { -1, 1 })
+    {
+        if (! getStepButtonBounds (direction).contains (mouseDownPosition))
+            continue;
+
+        const BailOutChecker bailOutChecker (this);
+
+        pressedStep = direction;
+        stepValue (direction);
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+
+        stepRepeater.startTimer (stepRepeatDelayMs);
+
+        if (getClickingGrabFocus())
+            takeKeyboardFocus();
+
+        repaint();
+        return;
+    }
+
     const bool wasDragging = dragMode != notDragging;
     dragMode = getDragModeForMousePosition (mouseDownPosition);
 
@@ -603,6 +631,13 @@ void Slider::mouseDown (const MouseEvent& event)
 
 void Slider::mouseUp (const MouseEvent& event)
 {
+    if (pressedStep != 0)
+    {
+        pressedStep = 0;
+        stepRepeater.stopTimer();
+        repaint();
+    }
+
     if (dragMode != notDragging)
     {
         dragMode = notDragging;
@@ -770,6 +805,7 @@ void Slider::updateValueFromMousePosition (Point<float> mousePos, DragMode dragM
             break;
 
         case RotaryVerticalDrag:
+        case IncDecButtons:
             mouseDelta = mouseDragStartPosition.getY() - mousePos.getY();
             totalRange = sliderBounds.getHeight();
             break;
@@ -931,6 +967,54 @@ Rectangle<float> Slider::getSliderBounds() const
             // For rotary and other types, use smaller margin
             return Rectangle<float> (bounds.getX() + margin, bounds.getY() + margin, bounds.getWidth() - (margin * 2), bounds.getHeight() - (margin * 2));
     }
+}
+
+Rectangle<float> Slider::getStepButtonBounds (int direction) const
+{
+    if (sliderType != IncDecButtons)
+        return {};
+
+    auto bounds = getSliderBounds();
+
+    // On a line, the value rises to the right. One above the other, it rises upward
+    if (bounds.getWidth() >= bounds.getHeight())
+    {
+        const auto size = jmin (bounds.getHeight(), bounds.getWidth() / 3.0f);
+        return direction > 0 ? bounds.removeFromRight (size) : bounds.removeFromLeft (size);
+    }
+
+    const auto size = jmin (bounds.getWidth(), bounds.getHeight() / 3.0f);
+    return direction > 0 ? bounds.removeFromTop (size) : bounds.removeFromBottom (size);
+}
+
+Rectangle<float> Slider::getDecrementButtonBounds() const
+{
+    return getStepButtonBounds (-1);
+}
+
+Rectangle<float> Slider::getIncrementButtonBounds() const
+{
+    return getStepButtonBounds (1);
+}
+
+void Slider::stepValue (int direction)
+{
+    const auto interval = getInterval();
+    const auto amount = interval > 0.0 ? interval : (range.end - range.start) / 100.0;
+
+    setValue (currentValue + direction * amount);
+}
+
+void Slider::repeatStep()
+{
+    if (pressedStep == 0)
+    {
+        stepRepeater.stopTimer();
+        return;
+    }
+
+    stepRepeater.startTimer (stepRepeatIntervalMs);
+    stepValue (pressedStep);
 }
 
 Rectangle<float> Slider::getTextBoxBounds() const

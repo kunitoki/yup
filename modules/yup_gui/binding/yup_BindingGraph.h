@@ -83,6 +83,9 @@ public:
         @param type      The type of the value, or nothing to probe it from the text.
         @param resolver  Optional resolver turning prefixes into named components or models.
         @param isLive    Optional flag set to true when the expression reads dynamic inputs, false when constant.
+        @param locals    Optional component whose properties are read by their bare name before those
+                         of the target, such as the index of a repeat. Not owned, it must outlive
+                         the binding (see PropertyExpression::compile).
 
         @returns A failure if the expression does not compile, otherwise ok.
     */
@@ -91,7 +94,8 @@ public:
                  const String& text,
                  std::optional<ComponentProperty::Type> type = std::nullopt,
                  DrawingScope::ComponentResolver resolver = nullptr,
-                 bool* isLive = nullptr);
+                 bool* isLive = nullptr,
+                 Component* locals = nullptr);
 
     /** Removes the binding on a property, leaving its current value in place.
 
@@ -117,12 +121,20 @@ public:
         Unlike a binding, a link is not dropped when one of its properties is written, only
         when one of the two components is deleted or by @ref unlink.
 
+        With a source index, the target is linked to one element of a list the source holds,
+        as `checked <=> seq.steps[2]` does: it takes the value of that element, a change of the
+        list reaches it when that element changed, and a change of the target gives the source
+        the list again with that element replaced. Nothing is copied either way while the list
+        has no such element.
+
         @param target          The component whose property takes the value first.
         @param property        The property of the target.
         @param source          The component the initial value comes from.
         @param sourceProperty  The property of the source.
+        @param sourceIndex     The element of the list the source property holds, negative to
+                               link the property as a whole.
     */
-    void link (Component& target, const Identifier& property, Component& source, const Identifier& sourceProperty);
+    void link (Component& target, const Identifier& property, Component& source, const Identifier& sourceProperty, int sourceIndex = -1);
 
     /** Removes every link of a property, leaving the current values in place.
 
@@ -187,6 +199,7 @@ private:
         Identifier firstProperty;
         Component* second = nullptr;
         Identifier secondProperty;
+        int secondIndex = -1;
         bool isSyncing = false;
 
         bool touches (const Component& component, const Identifier& property) const noexcept
@@ -209,6 +222,12 @@ private:
         depends on the parents.
     */
     static var readLinked (const Component& component, const Identifier& property);
+
+    /** Returns what a side of a link holds: of a list linked by one of its elements, that element. */
+    static var readLinkSide (const Link& link, bool isFirst);
+
+    /** Gives a side of a link its value: an element of a list is written with the rest of the list. */
+    static void writeLinkSide (const Link& link, bool isFirst, const var& value);
     void invalidate (const Component& component, const Identifier& property);
     void markDirty (Binding& binding);
     void flush();

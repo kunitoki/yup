@@ -77,14 +77,14 @@ bool ExpressionType::isNumeric() const noexcept
 }
 
 //==============================================================================
-std::shared_ptr<void> ExpressionType::createValue() const
+std::shared_ptr<void> ExpressionType::createValue (int count) const
 {
     const auto valueAlignment = std::max (alignment, sizeof (void*));
-    void* storage = ::operator new (size, std::align_val_t (valueAlignment));
+    void* storage = ::operator new (size * (size_t) count, std::align_val_t (valueAlignment));
 
     try
     {
-        construct (storage, 1);
+        construct (storage, count);
     }
     catch (...)
     {
@@ -92,9 +92,9 @@ std::shared_ptr<void> ExpressionType::createValue() const
         throw;
     }
 
-    return std::shared_ptr<void> (storage, [destroyFunction = destroyFunction, valueAlignment] (void* p)
+    return std::shared_ptr<void> (storage, [destroyFunction = destroyFunction, valueAlignment, count] (void* p)
     {
-        destroyFunction (p, 1);
+        destroyFunction (p, count);
         ::operator delete (p, std::align_val_t (valueAlignment));
     });
 }

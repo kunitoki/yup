@@ -101,6 +101,31 @@ TEST_F (PropertyExpressionTests, ProbesTheTypeOfAValue)
     EXPECT_EQ (PropertyExpression::compile (slider, "[1]", std::nullopt).getReference()->getType(), ComponentProperty::Type::array);
 }
 
+TEST_F (PropertyExpressionTests, AnIntegerTakesANumberCutToAWholeOne)
+{
+    Slider slider { Slider::LinearHorizontal };
+    slider.setBounds (0, 0, 45, 20);
+
+    const auto integer = ComponentProperty::Type::integer;
+
+    // A number that is not whole is cut as `int (...)` cuts it, so the numbers of a model need no cast
+    EXPECT_TRUE (evaluate (slider, "2.75", integer).isInt());
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "2.75", integer)), 2);
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "-2.75", integer)), -2);
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "width / 10", integer)), 4);
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "width / 10", integer)), static_cast<int> (evaluate (slider, "int (width / 10)", integer)));
+
+    // Whole numbers are kept as they are, however large
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "7 / 2", integer)), 3);
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "16777217", integer)), 16777217);
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "true", integer)), 1);
+    EXPECT_EQ (static_cast<int> (evaluate (slider, "1e12", integer)), std::numeric_limits<int>::max());
+
+    // What is not a number is still refused
+    EXPECT_FALSE (error (slider, "\"12\"", integer).isEmpty());
+    EXPECT_FALSE (error (slider, "point (1, 2)", integer).isEmpty());
+}
+
 TEST_F (PropertyExpressionTests, EvaluatesPointsAndRectangles)
 {
     Slider slider { Slider::LinearHorizontal };
@@ -109,6 +134,27 @@ TEST_F (PropertyExpressionTests, EvaluatesPointsAndRectangles)
     EXPECT_EQ (VariantConverter<Point<float>>::fromVar (evaluate (slider, "point (1, width)")), Point<float> (1.0f, 40.0f));
     EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (evaluate (slider, "rect (1, 2, width, height)", ComponentProperty::Type::rectangle)),
                Rectangle<float> (1.0f, 2.0f, 40.0f, 20.0f));
+}
+
+TEST_F (PropertyExpressionTests, AnArrayMakesThePointOrTheRectangleOfAProperty)
+{
+    Slider slider { Slider::LinearHorizontal };
+    slider.setBounds (0, 0, 40, 20);
+
+    EXPECT_EQ (VariantConverter<Point<float>>::fromVar (evaluate (slider, "[1, width]", ComponentProperty::Type::point)), Point<float> (1.0f, 40.0f));
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (evaluate (slider, "[1, 2, width, height]", ComponentProperty::Type::rectangle)),
+               Rectangle<float> (1.0f, 2.0f, 40.0f, 20.0f));
+
+    // An array has no members of what its numbers make until it is given to it
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (evaluate (slider, "rect ([1, 2, 10, 10]).enlarged (1)", ComponentProperty::Type::rectangle)),
+               Rectangle<float> (0.0f, 1.0f, 12.0f, 12.0f));
+
+    // Two numbers make a point and four a rectangle, and not the other way round
+    EXPECT_TRUE (error (slider, "[1, 2, 3]", ComponentProperty::Type::point).contains ("float[3]"));
+    EXPECT_FALSE (error (slider, "[1, 2, 3, 4]", ComponentProperty::Type::point).isEmpty());
+
+    // With no type to be of, it is the var holding its elements
+    EXPECT_EQ (PropertyExpression::compile (slider, "[1, 2]", std::nullopt).getReference()->getType(), ComponentProperty::Type::array);
 }
 
 TEST_F (PropertyExpressionTests, EvaluatesArrayLiterals)
@@ -131,6 +177,9 @@ TEST_F (PropertyExpressionTests, EvaluatesArrayLiterals)
 
     EXPECT_EQ (evaluate (slider, "[]").getArray()->size(), 0);
     EXPECT_EQ (elementsOf (evaluate (slider, "[1, value * 2, \"a\", true]")), "1.0|1.0|a|1");
+
+    // Read at an index, a literal is part of an expression
+    EXPECT_DOUBLE_EQ (static_cast<double> (evaluate (slider, "[10, 20, 30][1]", ComponentProperty::Type::number)), 20.0);
 
     // A nested literal is one element, an array of its own
     const auto nested = evaluate (slider, "[[1, 2], 3]", ComponentProperty::Type::array);
@@ -249,4 +298,25 @@ TEST_F (PropertyExpressionTests, FontFileThatCannotBeLoadedGivesTheThemeFont)
 
     EXPECT_EQ (font.getFont().get(), themeFont.getValue().getFont().get());
     EXPECT_FLOAT_EQ (font.getHeight(), 11.0f);
+}
+
+TEST_F (PropertyExpressionTests, CreatesTheContextExpressionsAreCompiledWith)
+{
+    StringArray signatures;
+
+    for (const auto& function : PropertyExpression::createContext().getFunctions())
+        signatures.add (function.getSignature());
+
+    const auto hasFunction = [&signatures] (const String& start)
+    {
+        return std::any_of (signatures.begin(), signatures.end(), [&start] (const String& signature)
+        {
+            return signature.startsWith (start);
+        });
+    };
+
+    EXPECT_TRUE (hasFunction ("font (string"));
+    EXPECT_TRUE (hasFunction ("rect ("));
+    EXPECT_TRUE (hasFunction ("clamp ("));
+    EXPECT_TRUE (hasFunction (".withAlpha ("));
 }

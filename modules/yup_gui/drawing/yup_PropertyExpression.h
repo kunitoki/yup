@@ -37,7 +37,9 @@ namespace yup
     properties, the expression is compiled once and its type is inferred from its output.
 
     A text such as `[1, gain.value]` is an array literal: each element is an expression of its
-    own, of any type, and the value is a var holding them all.
+    own, of any type, and the value is a var holding them all. For a point or a rectangle it is
+    the array of the numbers making it: `[10, 20]` is `point (10, 20)` and `[0, 0, 100, 50]` is
+    `rect (0, 0, 100, 50)`.
 
     @code
     auto expression = PropertyExpression::compile (slider, "palette.accent.withAlpha (0.5)", ComponentProperty::Type::color);
@@ -75,6 +77,16 @@ public:
                                                                      DrawingScope::ComponentResolver resolver = nullptr,
                                                                      Component* locals = nullptr,
                                                                      const File& baseDirectory = {});
+
+    /** Returns a context holding what the expression of a property can use: the graphics types
+        with their constructors, members and methods, the functions and the enumerations.
+
+        It is the context expressions are compiled with before the symbols of a component are
+        added to it, for a tool to list what it holds (see ExpressionContext::getFunctions).
+
+        @param baseDirectory  The folder the font files of `font ("fonts/Inter.ttf")` load from.
+    */
+    static ExpressionContext createContext (const File& baseDirectory = {});
 
     /** Splits an array literal such as `[1, gain.value, [2, 3]]` into the texts of its elements.
 

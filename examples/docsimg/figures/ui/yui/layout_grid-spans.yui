@@ -1,0 +1,14 @@
+// size: 480 196
+Grid {
+    columns: 4;
+    rows: 3;
+    gap: 6;
+
+    TextButton { text: "gridColumnSpan: 2"; gridColumnSpan: 2; }
+    TextButton { text: "1"; }
+    TextButton { text: "gridRowSpan: 2"; gridRowSpan: 2; }
+
+    repeat i in 2 .. 5 { TextButton { text: format ("%d", i); } }
+
+    TextButton { text: "gridColumn: 1"; gridColumn: 1; gridRow: 2; gridColumnSpan: 3; }
+}

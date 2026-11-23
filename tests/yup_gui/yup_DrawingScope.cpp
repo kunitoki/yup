@@ -513,3 +513,24 @@ TEST_F (DrawingScopeTest, BridgesFontAndFontArrayPropertiesAndThemeScope)
     ApplicationTheme::setGlobalTheme (oldTheme);
 }
 
+TEST_F (DrawingScopeTest, AnArrayOfAnotherElementTypeLeavesNothingOfTheOldOneToRead)
+{
+    const auto steps = context.addArray<float> ("steps");
+
+    auto compiled = CompiledExpression::compile ("out = len (steps)", context);
+    ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+
+    const auto& program = compiled.getReference();
+    ExpressionState state (program);
+    DrawingScope::ArrayInput input;
+
+    input.bind (state, steps.index, ComponentProperty::Type::number, var (Array<var> { 1.0, 2.0 }));
+    state.evaluate();
+    EXPECT_DOUBLE_EQ (static_cast<double> (state.getVar (program.findOutput ("out"))), 2.0);
+
+    // Strings can't feed numbers, and the numbers there were are gone
+    input.bind (state, steps.index, ComponentProperty::Type::string, var (Array<var> { "a" }));
+    state.evaluate();
+    EXPECT_DOUBLE_EQ (static_cast<double> (state.getVar (program.findOutput ("out"))), 0.0);
+}
+

@@ -25,6 +25,7 @@ namespace yup
 {
 
 class YuiPropertyWatcher;
+class YuiHandlerArguments;
 
 //==============================================================================
 /**
@@ -166,6 +167,20 @@ public:
     */
     std::function<void()> onTreeMutated;
 
+    /** Optional hook invoked when the components of the `repeat` blocks have to be made again,
+        as the range of one changed. When null, the builder builds its document again itself.
+    */
+    std::function<void()> onRangeChanged;
+
+    /** Makes again, now, the components of the `repeat` blocks whose range changed.
+
+        The range of a `repeat` of components can read what changes, such as the property of a
+        model. When it does, the components are made again once the change is over, from the
+        message loop, keeping those that are still described. A tool or a test with no message
+        loop calls this to have it done. It does nothing when no range changed.
+    */
+    void applyPendingChanges();
+
     /** Temporarily suppresses automatic rebuilds triggered by DataTree mutations. */
     void setIgnoreTreeChanges (bool shouldIgnore) noexcept { ignoreTreeChanges = shouldIgnore; }
 
@@ -180,6 +195,17 @@ public:
         would be destroyed while it runs.
     */
     void setAction (const String& name, Action action);
+
+    /** The function run for the actions no function is registered for, given the name of the action and its arguments. */
+    using FallbackAction = std::function<void (const String& name, const Array<var>& arguments)>;
+
+    /** Sets the function run by the `action ("name", ...)` handlers that setAction() registered
+        no function for, or none when null, which leaves them doing nothing.
+
+        It lets a tool showing a document of an application it does not know tell which
+        actions the interface calls.
+    */
+    void setFallbackAction (FallbackAction action);
 
     /** Makes the values of a provider readable and writable as `name.property`.
 
@@ -210,6 +236,13 @@ private:
     {
         Component* root = nullptr;
         std::map<String, Component*> ids;
+
+        // A turn of a repeat: the scope around it, where the ids it does not hold are looked for, and
+        // the indices of the repeats it is in, which its expressions read by their name
+        const Scope* outer = nullptr;
+        StringArray indexNames;
+        Array<var> indexValues;
+        std::shared_ptr<YuiHandlerArguments> locals;
     };
 
     // A value or link written by the document, with the element and property it was written in
@@ -233,13 +266,29 @@ private:
         bool isInstantiating = false;
     };
 
-    // A component, identified by the element it was built from (the use site for a composite) and its parent
+    // A component, identified by the element it was built from (the use site for a composite), its parent
+    // and, for one a repeat makes, the turn of the repeat it is made in
     struct Record
     {
         DataTree element;
         Component* parent = nullptr;
         const ComponentTypeInfo* type = nullptr;
         std::unique_ptr<Component> component;
+        String turn;
+    };
+
+    // The range of a repeat of components: the properties of the parent holding its ends, which are
+    // bound to what the document says once the values are applied, and what they were when the
+    // components were made
+    struct RepeatRange
+    {
+        Component* parent = nullptr;
+        Scope* scope = nullptr;
+        DataTree element;
+        Identifier fromName;
+        Identifier toName;
+        var usedFrom;
+        var usedTo;
     };
 
     enum class ApplyOutcome
@@ -279,6 +328,7 @@ private:
     };
 
     struct TreeWatcher;
+    struct RangeUpdater;
 
     //==============================================================================
     void collectDeclarations (const DataTree& document);
@@ -287,8 +337,12 @@ private:
     ResultValue<const ComponentTypeInfo*> resolveType (const Identifier& typeName);
     Result resolveComposite (const Identifier& typeName, Composite& composite);
     Result checkTypes (const DataTree& element);
-    Component& createComponent (const DataTree& element, Component* parent, Scope& scope, const DataTree& recordElement);
-    std::unique_ptr<Component> reuseComponent (const DataTree& element, Component* parent, const ComponentTypeInfo& type);
+    Result checkChildTypes (const DataTree& parent);
+    Component& createComponent (const DataTree& element, Component* parent, Scope& scope, const DataTree& recordElement, const String& turn = {});
+    void createRepeated (const DataTree& repeat, Component& parent, Scope& scope, const String& turn);
+    bool bindRanges();
+    void rangeChanged();
+    std::unique_ptr<Component> reuseComponent (const DataTree& element, Component* parent, const ComponentTypeInfo& type, const String& turn);
     void placeChild (Component& parent, Component& child, bool isReused);
     void applyIdentity (Component& component, const DataTree& element, Scope& scope, bool isUseSite);
     void applyTokens (Component& root, Scope& scope);
@@ -311,6 +365,7 @@ private:
     std::vector<Record> previousComponents;
     AppliedValues applied;
     std::vector<std::unique_ptr<Scope>> scopes;
+    std::vector<RepeatRange> ranges;
     std::map<Identifier, Composite> composites;
     StyleSheet::Palettes palettes;
     std::map<String, DataTree> drawings;
@@ -321,12 +376,17 @@ private:
     std::vector<Connection> connections;
     std::vector<std::unique_ptr<YuiPropertyWatcher>> watchers;
     std::unique_ptr<TreeWatcher> treeWatcher;
+    std::unique_ptr<RangeUpdater> rangeUpdater;
     std::map<String, Action> actions;
+    FallbackAction fallbackAction;
     std::map<String, std::unique_ptr<BindingModel>> models;
     BindingGraph bindings;
     std::vector<YuiDiagnostic> diagnostics;
     File baseDirectory;
     bool ignoreTreeChanges = false;
+    bool isBuilding = false;
+    bool hasPendingRangeChange = false;
+    int numRepeatTurns = 1;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YuiBuilder)
 };
