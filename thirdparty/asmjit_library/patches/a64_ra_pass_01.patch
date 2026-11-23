@@ -1,0 +1,54 @@
+diff --git a/thirdparty/asmjit_library/upstream/asmjit/arm/a64_ra_pass.cpp b/thirdparty/asmjit_library/upstream/asmjit/arm/a64_ra_pass.cpp
+index 83ae77c..67ebc7e 100644
+--- a/thirdparty/asmjit_library/upstream/asmjit/arm/a64_ra_pass.cpp
++++ b/thirdparty/asmjit_library/upstream/asmjit/arm/a64_ra_pass.cpp
+@@ -667,6 +667,10 @@ void ARMRAPass::on_init() noexcept {
+   }
+   make_unavailable(RegGroup::kGp, Gp::kIdSp);
+   make_unavailable(RegGroup::kGp, Gp::kIdOs); // OS-specific use, usually TLS.
++
++  // x16 (IP0) is kept as the scratch register that `rewrite()` uses to reach stack slots beyond the immediate
++  // offset range of a load or store. Local change over upstream AsmJit.
++  make_unavailable(RegGroup::kGp, kStackScratchId);
+   make_unavailable(frame._unavailable_regs);
+ 
+   _sp = sp;
+@@ -769,6 +773,23 @@ ASMJIT_FAVOR_SPEED Error ARMRAPass::rewrite() noexcept {
+               mem._set_base(_sp.reg_type(), slot->base_reg_id());
+               mem.clear_reg_home();
+               mem.add_offset_lo32(offset);
++
++              // Every stack slot gets its own offset, so a function with many spilled registers has slots beyond
++              // 4 KB. A load or store encodes at most a 12-bit offset scaled by its access size (16380 bytes for a
++              // 32-bit register), or a signed 9-bit one: past 4 KB, form the high part of the address in the scratch
++              // register (an ADD immediate takes a 12-bit value shifted by 12) and keep the low part in the
++              // instruction, which then always fits, the slot being aligned to its size. Local change over upstream
++              // AsmJit.
++              int32_t final_offset = mem.offset_lo32();
++              if (final_offset >= 4096 && !mem.has_index() && op.as<Mem>().offset_mode() == OffsetMode::kFixed) {
++                uint32_t high = uint32_t(final_offset) & ~uint32_t(0xFFF);
++                Gp base = mem.base_id() == Gp::kIdSp ? sp : Gp::make_r64(mem.base_id());
++                BaseNode* saved_cursor = cc().set_cursor(node->prev());
++                ASMJIT_PROPAGATE(cc().add(Gp::make_r64(kStackScratchId), base, Imm(high)));
++                cc().set_cursor(saved_cursor);
++                mem._set_base(RegType::kGp64, kStackScratchId);
++                mem.set_offset_lo32(final_offset - int32_t(high));
++              }
+             }
+           }
+         }
+diff --git a/thirdparty/asmjit_library/upstream/asmjit/arm/a64_ra_pass_p.h b/thirdparty/asmjit_library/upstream/asmjit/arm/a64_ra_pass_p.h
+index 5784e1e..f1f27ba 100644
+--- a/thirdparty/asmjit_library/upstream/asmjit/arm/a64_ra_pass_p.h
++++ b/thirdparty/asmjit_library/upstream/asmjit/arm/a64_ra_pass_p.h
+@@ -32,6 +32,10 @@ public:
+   ASMJIT_NONCOPYABLE(ARMRAPass)
+   using Base = BaseRAPass;
+ 
++  //! Scratch register (x16, IP0) reserved to address stack slots beyond the immediate offset range of loads and
++  //! stores, see `rewrite()`. Local change over upstream AsmJit.
++  static constexpr uint32_t kStackScratchId = 16;
++
+   //! \name Members
+   //! \{
+ 

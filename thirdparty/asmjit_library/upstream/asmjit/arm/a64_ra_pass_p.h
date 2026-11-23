@@ -32,6 +32,10 @@ public:
   ASMJIT_NONCOPYABLE(ARMRAPass)
   using Base = BaseRAPass;
 
+  //! Scratch register (x16, IP0) reserved to address stack slots beyond the immediate offset range of loads and
+  //! stores, see `rewrite()`. Local change over upstream AsmJit.
+  static constexpr uint32_t kStackScratchId = 16;
+
   //! \name Members
   //! \{
 
