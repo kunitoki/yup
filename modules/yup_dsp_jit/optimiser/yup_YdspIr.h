@@ -206,12 +206,20 @@ enum class YdspIrOp
     movI,
     movB,
 
+    // SSA join node (populated during SSA optimisation passes and lowered out
+    // by destructSsa before vectorisation / unrolling / backend codegen).
+    phi,
+
     // Lane movement (the only opcodes whose operand and result lane counts
     // differ - every other opcode is reused as-is at `lanes > 1`, so `addF` on
     // a 4-lane value *is* a packed add).
     vsplat,      // every lane of the result = the scalar a
     vrampF,      // lane k of the result = the scalar a + k (a widened `float (i)`)
     vreduceAddF, // scalar result = sum of a's lanes (reassociates - see the vectoriser)
+    vinsertF,    // vector result = vector a (or zero if < 0) with lane memIndex set to scalar b
+    vextractF,   // scalar result = lane memIndex of vector a
+    bitcastFtoI, // bitwise float32 -> int32 reinterpretation (scalar or packed)
+    bitcastItoF, // bitwise int32 -> float32 reinterpretation (scalar or packed)
     ltUI,       // unsigned integer comparison; bounds checks reject negative indices
 };
 
@@ -280,6 +288,9 @@ inline YdspValueType inferTypeFromOp (YdspIrOp op) noexcept
         case YdspIrOp::vsplat:
         case YdspIrOp::vrampF:
         case YdspIrOp::vreduceAddF:
+        case YdspIrOp::vinsertF:
+        case YdspIrOp::vextractF:
+        case YdspIrOp::bitcastItoF:
             return YdspValueType::float32Type;
 
         case YdspIrOp::constI:
@@ -306,6 +317,7 @@ inline YdspValueType inferTypeFromOp (YdspIrOp op) noexcept
         case YdspIrOp::shlI:
         case YdspIrOp::shrI:
         case YdspIrOp::ftoi:
+        case YdspIrOp::bitcastFtoI:
         case YdspIrOp::extI:
         case YdspIrOp::truncI:
         case YdspIrOp::movI:
@@ -369,6 +381,9 @@ struct YdspIrInst
     bool boundedFloatToInt = false; // ftoi operand is finite and representable
     bool saturatingIntegerArithmetic = false; // source add/sub/mul; internal address arithmetic wraps
     bool overflowFreeIntegerArithmetic = false; // source add/sub/mul proven to stay in range, so left to wrap
+
+    // Incoming (predecessor block, value id) pairs for YdspIrOp::phi.
+    std::vector<std::pair<int, int>> phiIncoming;
 };
 
 //==============================================================================
@@ -442,15 +457,25 @@ struct YdspIrFunction
         its first element in that type's array region (the `memIndex` of every
         access to it) and its length.
 
-        `constants` holds the value of every element when the array is a table:
-        written by its declaration's `{ ... }` list and by nothing else, so a
-        read at a known index is that value. Empty otherwise. */
+        `readOnlyInProcess` is true when no instruction in the process kernel
+        or any event handler of the processor writes to the array.
+
+        `compileTimeConstant` is true when the array is written only by its
+        declaration's literal `{ ... }` initialiser list (with omitted trailing
+        elements zeroed) and by nothing in `process`, functions, or event
+        handlers. `constFloatValues` (for float32/float64 arrays) or
+        `constIntValues` (for int32/int64 arrays) holds every element value so
+        loads at constant indices fold directly to constants. */
     struct StateArray
     {
         YdspValueType type = YdspValueType::float32Type;
         int base = 0;
         int length = 0;
-        std::vector<double> constants;
+        std::vector<double> constFloatValues;
+        std::vector<int64_t> constIntValues;
+        bool readOnlyInProcess = false;
+        bool compileTimeConstant = false;
+        bool privateToProcess = false;
     };
 
     // The plain (non-struct) state arrays the processor declares.
@@ -658,9 +683,28 @@ inline std::vector<YdspValueType> resolveValueTypes (const YdspIrFunction& fn)
     for (const auto& block : fn.blocks)
         for (const auto& inst : block.insts)
             if (inst.result >= 0)
-                types[static_cast<size_t> (inst.result)] = inst.op == YdspIrOp::selectB
-                                                              ? types[static_cast<size_t> (inst.b)]
-                                                              : inferTypeFromOp (inst.op);
+            {
+                if (inst.op == YdspIrOp::selectB && inst.b >= 0 && static_cast<size_t> (inst.b) < types.size())
+                {
+                    types[static_cast<size_t> (inst.result)] = types[static_cast<size_t> (inst.b)];
+                }
+                else if (inst.op == YdspIrOp::phi)
+                {
+                    for (const auto& [predBlock, valueId] : inst.phiIncoming)
+                    {
+                        (void) predBlock;
+                        if (valueId >= 0 && static_cast<size_t> (valueId) < types.size())
+                        {
+                            types[static_cast<size_t> (inst.result)] = types[static_cast<size_t> (valueId)];
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    types[static_cast<size_t> (inst.result)] = inferTypeFromOp (inst.op);
+                }
+            }
 
     return types;
 }

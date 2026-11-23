@@ -25,6 +25,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <vector>
@@ -833,15 +834,30 @@ TEST (YdspVectorizerTests, RejectsALoopWithNoArrayAccessToWiden)
     )YDSP"));
 }
 
-TEST (YdspVectorizerTests, RejectsALoopUsingIntegerMin)
+TEST (YdspVectorizerTests, WidensALoopUsingIntegerMin)
 {
-    EXPECT_FALSE (vectorizerWidens (R"YDSP(
+    EXPECT_TRUE (vectorizerWidens (R"YDSP(
         processor P {
             input stream in;
             output stream out;
             state int buf[16];
             process {
                 for i in 0..16 { buf[i] = min (buf[i], 10); }
+                out = in + float32 (buf[0]);
+            }
+        }
+    )YDSP"));
+}
+
+TEST (YdspVectorizerTests, RejectsAnInt64Loop)
+{
+    EXPECT_FALSE (vectorizerWidens (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state int64 buf[16];
+            process {
+                for i in 0..16 { buf[i] = buf[i] + 1; }
                 out = in + float32 (buf[0]);
             }
         }
@@ -2041,4 +2057,360 @@ TEST (YdspVectorizerTests, UnrolledAccumulationIsSplitIntoPartialSumsOnlyUnderFa
     }
 }
 #endif
+
+//==============================================================================
+// Packed int32, int32 <-> float32 conversions, and integer comparisons/select.
+
+TEST (YdspVectorizerTests, WidensInt32StateArrayAndConversionOpsInIr)
+{
+    YdspDiagnostics diagnostics;
+    auto ir = vectorizerBuildIr (vectorizerPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state int a[10];
+            state int b[10];
+            process {
+                for i in 0..10 {
+                    let v = int (in * 10.0) + a[i];
+                    let c = clamp (abs (v), 0, 255);
+                    let m = select (c > 100, c & 15, (b[i] ^ 7) << 1);
+                    a[i] = max (m, -b[i]);
+                    b[i] = min (a[i] >> 1, 64);
+                }
+                out = float (a[0] + b[9]);
+            }
+        }
+    )YDSP"), diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+    ASSERT_FALSE (ir->kernels.empty());
+
+    const auto& fn = *ir->kernels[0];
+    EXPECT_TRUE (fn.vectorized);
+
+    bool foundWidenedLoadI = false;
+    bool foundWidenedStoreI = false;
+    bool foundWidenedSplatI = false;
+    bool foundWidenedSelectI = false;
+    bool foundWidenedGtI = false;
+
+    for (const auto& block : fn.blocks)
+    {
+        for (const auto& inst : block.insts)
+        {
+            if (inst.op == YdspIrOp::loadStateArrayI && fn.laneCountOf (inst.result) == fn.vectorWidth)
+                foundWidenedLoadI = true;
+
+            if (inst.op == YdspIrOp::storeStateArrayI && fn.laneCountOf (inst.b) == fn.vectorWidth)
+                foundWidenedStoreI = true;
+
+            if (inst.op == YdspIrOp::vsplat && fn.laneCountOf (inst.result) == fn.vectorWidth
+                && static_cast<size_t> (inst.result) < fn.valueTypes.size()
+                && fn.valueTypes[static_cast<size_t> (inst.result)] == YdspValueType::int32Type)
+                foundWidenedSplatI = true;
+
+            if (inst.op == YdspIrOp::selectB && fn.laneCountOf (inst.result) == fn.vectorWidth
+                && static_cast<size_t> (inst.result) < fn.valueTypes.size()
+                && fn.valueTypes[static_cast<size_t> (inst.result)] == YdspValueType::int32Type)
+                foundWidenedSelectI = true;
+
+            if (inst.op == YdspIrOp::gtI && fn.laneCountOf (inst.result) == fn.vectorWidth)
+                foundWidenedGtI = true;
+        }
+    }
+
+    EXPECT_TRUE (foundWidenedLoadI);
+    EXPECT_TRUE (foundWidenedStoreI);
+    EXPECT_TRUE (foundWidenedSplatI);
+    EXPECT_TRUE (foundWidenedSelectI);
+    EXPECT_TRUE (foundWidenedGtI);
+}
+
+TEST (YdspVectorizerTests, WidenedInt32StateBankMatchesScalarReference)
+{
+    const auto source = vectorizerPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state int acc[11];
+            process {
+                let drive = int (in);
+                for i in 0..11 {
+                    let x = acc[i] + drive - 3;
+                    let scaled = x * 2;
+                    let clamped = clamp (abs (scaled), 1, 200);
+                    let masked = ((clamped & 127) | 4) ^ 1;
+                    let shifted = (masked << 2) >> 1;
+                    acc[i] = select (shifted >= 20, min (shifted, 150), max (-shifted, -50));
+                }
+                out = float (acc[0] + acc[3] + acc[10]);
+            }
+        }
+    )YDSP");
+
+    YdspCompileOptions baselineOptions;
+    baselineOptions.optimizationTier = YdspOptimizationTier::baseline;
+
+    YdspCompileOptions hostOptions;
+    hostOptions.emitOptimizationReport = true;
+
+    YdspCompileOptions sse2Options;
+    sse2Options.targetPolicy = YdspTargetPolicy::baseline;
+    sse2Options.baselineTarget = YdspNativeTarget::sse2;
+
+    YdspCompiler compiler;
+    auto scalarGraph = vectorizerCompileGraph (source, compiler, baselineOptions);
+    auto hostGraph = vectorizerCompileGraph (source, compiler, hostOptions);
+    auto sse2Graph = vectorizerCompileGraph (source, compiler, sse2Options);
+
+    ASSERT_TRUE (scalarGraph.isValid() && hostGraph.isValid() && sse2Graph.isValid());
+
+#if ! YUP_WASM || defined (__wasm_simd128__)
+    EXPECT_TRUE (hostGraph.getExecutionReport().getKernels()[0].vectorized);
+#endif
+
+    scalarGraph.prepare (48000.0, 16);
+    hostGraph.prepare (48000.0, 16);
+    sse2Graph.prepare (48000.0, 16);
+
+    const std::vector<float> input { 10.0f, -5.0f, 0.0f, 33.0f, -12.0f, 7.0f, 100.0f, -40.0f,
+                                     1.0f, -1.0f, 15.0f, -20.0f, 4.0f, 8.0f, -9.0f, 25.0f };
+    std::vector<float> scalarOut (16, 0.0f), hostOut (16, 0.0f), sse2Out (16, 0.0f);
+
+    vectorizerRunBlock (scalarGraph, input.data(), scalarOut.data(), 16);
+    vectorizerRunBlock (hostGraph, input.data(), hostOut.data(), 16);
+    vectorizerRunBlock (sse2Graph, input.data(), sse2Out.data(), 16);
+
+    for (size_t i = 0; i < input.size(); ++i)
+    {
+        EXPECT_EQ (scalarOut[i], hostOut[i]) << "host sample " << i;
+        EXPECT_EQ (scalarOut[i], sse2Out[i]) << "sse2 sample " << i;
+    }
+}
+
+TEST (YdspVectorizerTests, WidenedFloatIntConversionsAndSelectMatchScalarReference)
+{
+    const auto source = vectorizerPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            process block {
+                for i in 0..blockSize {
+                    let n = int (in[i]);
+                    let adjusted = select (n < 0, n - 5, n + 7);
+                    let f = float (adjusted);
+                    out[i] = select (n == 0, 99.0, f);
+                }
+            }
+        }
+    )YDSP");
+
+    YdspCompileOptions baselineOptions;
+    baselineOptions.optimizationTier = YdspOptimizationTier::baseline;
+
+    YdspCompileOptions hostOptions;
+    hostOptions.emitOptimizationReport = true;
+
+    YdspCompileOptions sse2Options;
+    sse2Options.targetPolicy = YdspTargetPolicy::baseline;
+    sse2Options.baselineTarget = YdspNativeTarget::sse2;
+
+    YdspCompiler compiler;
+    auto scalarGraph = vectorizerCompileGraph (source, compiler, baselineOptions);
+    auto hostGraph = vectorizerCompileGraph (source, compiler, hostOptions);
+    auto sse2Graph = vectorizerCompileGraph (source, compiler, sse2Options);
+
+    ASSERT_TRUE (scalarGraph.isValid() && hostGraph.isValid() && sse2Graph.isValid());
+
+#if ! YUP_WASM || defined (__wasm_simd128__)
+    EXPECT_TRUE (hostGraph.getExecutionReport().getKernels()[0].vectorized);
+#endif
+
+    const std::vector<float> input {
+        0.0f, -0.0f, 3.75f, -4.25f,
+        2147483520.0f, 2147483648.0f, -2147483648.0f, -1e12f,
+        1e12f, std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN(),
+        42.5f, -19.9f, 0.25f, -0.25f,
+        100.0f, -100.0f, 7.0f
+    };
+
+    const int numSamples = static_cast<int> (input.size());
+    scalarGraph.prepare (48000.0, numSamples);
+    hostGraph.prepare (48000.0, numSamples);
+    sse2Graph.prepare (48000.0, numSamples);
+
+    std::vector<float> scalarOut (input.size(), 0.0f), hostOut (input.size(), 0.0f), sse2Out (input.size(), 0.0f);
+
+    vectorizerRunBlock (scalarGraph, input.data(), scalarOut.data(), numSamples);
+    vectorizerRunBlock (hostGraph, input.data(), hostOut.data(), numSamples);
+    vectorizerRunBlock (sse2Graph, input.data(), sse2Out.data(), numSamples);
+
+    for (size_t i = 0; i < input.size(); ++i)
+    {
+        EXPECT_EQ (scalarOut[i], hostOut[i]) << "host sample " << i << " (in=" << input[i] << ")";
+        EXPECT_EQ (scalarOut[i], sse2Out[i]) << "sse2 sample " << i << " (in=" << input[i] << ")";
+    }
+}
+
+TEST (YdspVectorizerTests, WidenedInt32ComparesProduceExpectedValues)
+{
+    const auto source = vectorizerPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            process block {
+                for i in 0..blockSize {
+                    let x = int (in[i]);
+                    let mask = select (x >  0,  1, 0)
+                             + select (x >= 0,  2, 0)
+                             + select (x <  0,  4, 0)
+                             + select (x <= 0,  8, 0)
+                             + select (x == 0, 16, 0)
+                             + select (x != 0, 32, 0);
+                    out[i] = float (mask);
+                }
+            }
+        }
+    )YDSP");
+
+    YdspCompileOptions baselineOptions;
+    baselineOptions.optimizationTier = YdspOptimizationTier::baseline;
+
+    YdspCompileOptions hostOptions;
+    hostOptions.emitOptimizationReport = true;
+
+    YdspCompileOptions sse2Options;
+    sse2Options.targetPolicy = YdspTargetPolicy::baseline;
+    sse2Options.baselineTarget = YdspNativeTarget::sse2;
+
+    YdspCompiler compiler;
+    auto scalarGraph = vectorizerCompileGraph (source, compiler, baselineOptions);
+    auto hostGraph = vectorizerCompileGraph (source, compiler, hostOptions);
+    auto sse2Graph = vectorizerCompileGraph (source, compiler, sse2Options);
+
+    ASSERT_TRUE (scalarGraph.isValid() && hostGraph.isValid() && sse2Graph.isValid());
+
+#if ! YUP_WASM || defined (__wasm_simd128__)
+    EXPECT_TRUE (hostGraph.getExecutionReport().getKernels()[0].vectorized);
+#endif
+
+    const std::vector<float> input { 1.0f, -1.0f, 0.0f, 5.0f, -5.0f, 0.0f, 2147483648.0f, -2147483648.0f, 3.0f, -3.0f, 0.0f };
+    const int numSamples = static_cast<int> (input.size());
+
+    scalarGraph.prepare (48000.0, numSamples);
+    hostGraph.prepare (48000.0, numSamples);
+    sse2Graph.prepare (48000.0, numSamples);
+
+    std::vector<float> scalarOut (input.size(), 0.0f), hostOut (input.size(), 0.0f), sse2Out (input.size(), 0.0f);
+
+    vectorizerRunBlock (scalarGraph, input.data(), scalarOut.data(), numSamples);
+    vectorizerRunBlock (hostGraph, input.data(), hostOut.data(), numSamples);
+    vectorizerRunBlock (sse2Graph, input.data(), sse2Out.data(), numSamples);
+
+    for (size_t i = 0; i < input.size(); ++i)
+    {
+        EXPECT_EQ (scalarOut[i], hostOut[i]) << "host sample " << i;
+        EXPECT_EQ (scalarOut[i], sse2Out[i]) << "sse2 sample " << i;
+    }
+}
+
+TEST (YdspVectorizerTests, WidenedSaturatingInt32ArithmeticAndShiftsMatchScalar)
+{
+    const auto source = String (R"YDSP(
+        processor P {
+            input stream a;
+            input stream b;
+            output stream out;
+            state int s[11];
+            process block {
+                for i in 0..blockSize {
+                    let x = int (a[i]);
+                    let y = int (b[i]);
+                    let sum = x + y;
+                    let diff = x - y;
+                    let prod = x * y;
+                    let n = -x;
+                    let ab = abs (x);
+                    let shl = x << y;
+                    let shr = x >> y;
+                    out[i] = float ((sum ^ diff ^ prod ^ n ^ ab ^ shl ^ shr) & 65535);
+                }
+                for j in 0..11 {
+                    s[j] = s[j] + 2147483647;
+                }
+            }
+        }
+        graph G {
+            input stream xa;
+            input stream xb;
+            output stream y;
+            node p = P;
+            connection { xa -> p.a; xb -> p.b; p.out -> y; }
+        }
+    )YDSP");
+
+    YdspCompileOptions baselineOptions;
+    baselineOptions.optimizationTier = YdspOptimizationTier::baseline;
+
+    YdspCompileOptions hostOptions;
+    hostOptions.emitOptimizationReport = true;
+
+    YdspCompileOptions sse2Options;
+    sse2Options.targetPolicy = YdspTargetPolicy::baseline;
+    sse2Options.baselineTarget = YdspNativeTarget::sse2;
+
+    YdspCompiler compiler;
+    auto scalarGraph = vectorizerCompileGraph (source, compiler, baselineOptions);
+    auto hostGraph = vectorizerCompileGraph (source, compiler, hostOptions);
+    auto sse2Graph = vectorizerCompileGraph (source, compiler, sse2Options);
+
+    ASSERT_TRUE (scalarGraph.isValid() && hostGraph.isValid() && sse2Graph.isValid());
+
+#if ! YUP_WASM || defined (__wasm_simd128__)
+    EXPECT_TRUE (hostGraph.getExecutionReport().getKernels()[0].vectorized);
+#endif
+
+    const std::vector<float> inA {
+        2147483648.0f, -2147483648.0f, -2147483648.0f, 100000.0f,
+        -100000.0f, 2147483520.0f, -7.0f, 42.0f,
+        -2147483648.0f, 0.0f, 123456.0f
+    };
+    const std::vector<float> inB {
+        1.0f, 1.0f, -1.0f, 100000.0f,
+        100000.0f, 1000.0f, 33.0f, -1.0f,
+        -2147483648.0f, 31.0f, 3.0f
+    };
+
+    const int numSamples = static_cast<int> (inA.size());
+    scalarGraph.prepare (48000.0, numSamples);
+    hostGraph.prepare (48000.0, numSamples);
+    sse2Graph.prepare (48000.0, numSamples);
+
+    std::vector<float> scalarOut (inA.size(), 0.0f), hostOut (inA.size(), 0.0f), sse2Out (inA.size(), 0.0f);
+
+    auto runTwo = [numSamples] (YdspAudioGraph& graph, const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out)
+    {
+        std::vector<YdspInputBuffer> inputs;
+        inputs.emplace_back (Span<const float> (a.data(), static_cast<size_t> (numSamples)));
+        inputs.emplace_back (Span<const float> (b.data(), static_cast<size_t> (numSamples)));
+
+        std::vector<YdspOutputBuffer> outputs;
+        outputs.emplace_back (Span<float> (out.data(), static_cast<size_t> (numSamples)));
+
+        ASSERT_EQ (YdspProcessResult::ok, graph.process (YdspProcessRequest { inputs, outputs, numSamples }));
+    };
+
+    runTwo (scalarGraph, inA, inB, scalarOut);
+    runTwo (hostGraph, inA, inB, hostOut);
+    runTwo (sse2Graph, inA, inB, sse2Out);
+
+    for (size_t i = 0; i < inA.size(); ++i)
+    {
+        EXPECT_EQ (scalarOut[i], hostOut[i]) << "host sample " << i;
+        EXPECT_EQ (scalarOut[i], sse2Out[i]) << "sse2 sample " << i;
+    }
+}
+
 

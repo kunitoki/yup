@@ -160,6 +160,29 @@ class YdspAlignedBytes
 public:
     YdspAlignedBytes() = default;
 
+    YdspAlignedBytes (YdspAlignedBytes&& other) noexcept
+        : storage (std::move (other.storage))
+        , alignedData (other.alignedData)
+        , numAlignedBytes (other.numAlignedBytes)
+    {
+        other.alignedData = nullptr;
+        other.numAlignedBytes = 0;
+    }
+
+    YdspAlignedBytes& operator= (YdspAlignedBytes&& other) noexcept
+    {
+        if (this != &other)
+        {
+            storage = std::move (other.storage);
+            alignedData = other.alignedData;
+            numAlignedBytes = other.numAlignedBytes;
+            other.alignedData = nullptr;
+            other.numAlignedBytes = 0;
+        }
+
+        return *this;
+    }
+
     void resize (size_t numBytes)
     {
         storage.assign (numBytes + static_cast<size_t> (YdspIrFunction::stateAlignmentBytes - 1), 0);
@@ -297,12 +320,20 @@ struct YdspAudioGraph::Pimpl
 
         YdspCompiledKernel kernel;
         YdspCompiledKernel initKernel;
+        YdspCompiledKernel batchKernel;
 
         int voiceCount = 1;    // voices this member runs (always the owning group's count)
         int groupIndex = -1;   // index into Pimpl::voiceGroups
         bool isEventDriven = false;
 
         bool isMidiOnly = false;
+        int batchVoiceWidth = 0;
+        int batchFloat32Scalars = 0;
+        int batchInt32Scalars = 0;
+        int batchInt32ArrayOffset = 0;
+        bool hasIntraGroupInputs = false;
+        bool hasIntraGroupOutputs = false;
+        bool handledAsBatchThisBlock = false;
 
         struct EventInputBinding
         {
@@ -364,6 +395,10 @@ struct YdspAudioGraph::Pimpl
         std::vector<std::pair<int, float>> automationParamSnapshot;
         std::vector<float> voiceScratch;
         std::vector<float*> voiceScratchPtrs;
+        detail::YdspAlignedBytes batchState;
+        std::vector<float> batchScratch;
+        std::vector<void*> batchOutputPtrs;
+        std::vector<int> activeBatchableVoices;
         std::vector<size_t> automationOrder;
         std::vector<size_t> pendingCallOrder;
         std::vector<void*> subBlockInputs;
@@ -385,6 +420,7 @@ struct YdspAudioGraph::Pimpl
 
         bool accumulatesToRuntimeOutputs = true;
         bool overwritesOutputs = false;
+        bool hasAccumulatedThisBlock = false;
 
         std::vector<int> paramByteOffsets;
         std::vector<int> paramGlobalSlots;
@@ -742,12 +778,12 @@ struct YdspAudioGraph::Pimpl
     //==========================================================================
     // Stream wiring resolution (per block, before/after the kernel calls).
 
-    static void accumulateStream (void* dst, const void* src, YdspValueType type, int blockSize) noexcept
+    static void accumulateStream (void* __restrict dst, const void* __restrict src, YdspValueType type, int blockSize) noexcept
     {
         if (type == YdspValueType::float64Type)
         {
-            auto* out = static_cast<double*> (dst);
-            const auto* in = static_cast<const double*> (src);
+            auto* __restrict out = static_cast<double*> (dst);
+            const auto* __restrict in = static_cast<const double*> (src);
 
             for (int i = 0; i < blockSize; ++i)
                 out[i] += in[i];
@@ -759,11 +795,37 @@ struct YdspAudioGraph::Pimpl
         if (type != YdspValueType::float32Type)
             return;
 
-        auto* out = static_cast<float*> (dst);
-        const auto* in = static_cast<const float*> (src);
+        auto* __restrict out = static_cast<float*> (dst);
+        const auto* __restrict in = static_cast<const float*> (src);
 
         for (int i = 0; i < blockSize; ++i)
             out[i] += in[i];
+    }
+
+    static void combineStreams (void* __restrict dst, const void* srcA, const void* srcB, YdspValueType type, int blockSize) noexcept
+    {
+        if (type == YdspValueType::float64Type)
+        {
+            auto* __restrict out = static_cast<double*> (dst);
+            const auto* inA = static_cast<const double*> (srcA);
+            const auto* inB = static_cast<const double*> (srcB);
+
+            for (int i = 0; i < blockSize; ++i)
+                out[i] = inA[i] + inB[i];
+
+            return;
+        }
+
+        jassert (type == YdspValueType::float32Type);
+        if (type != YdspValueType::float32Type)
+            return;
+
+        auto* __restrict out = static_cast<float*> (dst);
+        const auto* inA = static_cast<const float*> (srcA);
+        const auto* inB = static_cast<const float*> (srcB);
+
+        for (int i = 0; i < blockSize; ++i)
+            out[i] = inA[i] + inB[i];
     }
 
     static void clearConnectionDelay (StreamConnection& connection) noexcept
@@ -830,6 +892,7 @@ struct YdspAudioGraph::Pimpl
     void mixGraphOutputs (Span<const YdspInputBuffer> inputs, Span<YdspOutputBuffer> outputs, int blockSize);
 
     void prepareOutputIsolation (int maxBlockSize);
+    void prepareBatchKernels (int maxBlockSize);
     bool outputsOverlapInputs (Span<const YdspInputBuffer> inputs, Span<YdspOutputBuffer> outputs, int blockSize) const noexcept;
     void copyOutputs (Span<YdspOutputBuffer> destination, Span<YdspOutputBuffer> source, int blockSize) const noexcept;
 
@@ -888,7 +951,8 @@ struct YdspAudioGraph::Pimpl
     void restoreAutomationParams (Node& node, const YdspKernelContext& ctx);
 
     void processNodeWithSplits (Node& node, YdspKernelContext& ctx, int blockSize);
-    void runNodeVoice (Node& node, YdspKernelContext& ctx, int voice, int blockSize);
+    void runVoiceBatchChunk (Node& node, YdspKernelContext& ctx, const int* voices, size_t count, int blockSize);
+    void runNodeVoice (Node& node, YdspKernelContext& ctx, int voice, int blockSize, bool clearIdlePolyScratch = false);
     void invokeEventHandler (Node& node, const Node::PendingHandlerCall& call, const YdspKernelContext& ctx);
 
     //==========================================================================

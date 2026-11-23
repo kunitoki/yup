@@ -149,6 +149,39 @@ protected:
         it memoized for the block just finished. */
     virtual void beginBlock (int blockIndex) { (void) blockIndex; }
 
+    /** Allows a target to inspect the target environment and function
+        metadata before planning and emission begin. */
+    virtual void configureTarget (const asmjit::Environment& environment, const YdspIrFunction& fn)
+    {
+        (void) environment;
+        (void) fn;
+    }
+
+    /** Emits a target-specific zeroing sequence for float/double `+0.0`
+        constants, returning true if handled. */
+    virtual bool emitZeroFloatConst (const YdspFp& dst, bool is64)
+    {
+        (void) dst;
+        (void) is64;
+        return false;
+    }
+
+    /** Emits a target-specific zeroing sequence for a vector register,
+        returning true if handled. */
+    virtual bool emitZeroVector (const YdspFp& dst)
+    {
+        (void) dst;
+        return false;
+    }
+
+    /** True when emitZeroVector() can materialize a zero vector without
+        reading a scalar zero constant. */
+    virtual bool supportsZeroVector() const noexcept { return false; }
+
+    /** True when vector operations on this target use non-destructive 3-operand
+        VEX encodings. */
+    virtual bool usesVexVectors() const noexcept { return activeVectorWidth > 4; }
+
     /** Called after the last instruction of a block, ahead of its terminator:
         the place for what a target sets up on the way into a loop. */
     virtual void endBlock (int blockIndex) { (void) blockIndex; }
@@ -219,11 +252,38 @@ protected:
     virtual void vectorFloatCompare (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB) = 0;
     virtual void vectorSelectFloat (const YdspFp& mask, const YdspFp& dst, const YdspFp& whenTrue, const YdspFp& whenFalse) = 0;
 
+    virtual void vectorIntBinary (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB, bool saturating) = 0;
+    virtual void vectorIntShift (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspGp& shiftAmount) = 0;
+    virtual void vectorIntUnary (YdspIrOp op, const YdspFp& dst, const YdspFp& src) = 0;
+    virtual void vectorIntClamp (const YdspFp& dst, const YdspFp& src, const YdspFp& lo, const YdspFp& hi) = 0;
+    virtual void vectorIntCompare (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB) = 0;
+    virtual void vectorSelectInt (const YdspFp& mask, const YdspFp& dst, const YdspFp& whenTrue, const YdspFp& whenFalse) = 0;
+    virtual void vectorIntToFloat (const YdspFp& dst, const YdspFp& src) = 0;
+    virtual void vectorFloatToInt (const YdspFp& dst, const YdspFp& src, bool bounded) = 0;
+
     /** Every lane of dst = the scalar src (YdspIrOp::vsplat). */
     virtual void emitSplatFloat (const YdspFp& dst, const YdspFp& src) = 0;
+    virtual void emitSplatInt (const YdspFp& dst, const YdspGp& src) = 0;
 
     /** Scalar dst = the sum of src's lanes (YdspIrOp::vreduceAddF). */
     virtual void emitReduceAddFloat (const YdspFp& dst, const YdspFp& src) = 0;
+
+    /** Inserts scalar float32 `srcScalar` into `lane` of `dst`, starting from
+        `srcVec` when valid or a zeroed vector otherwise (YdspIrOp::vinsertF). */
+    virtual void emitInsertFloat (const YdspFp& dst, const YdspFp& srcVec, const YdspFp& srcScalar, int lane) = 0;
+
+    /** Extracts `lane` from float32 vector `srcVec` into scalar `dst`
+        (YdspIrOp::vextractF). */
+    virtual void emitExtractFloat (const YdspFp& dst, const YdspFp& srcVec, int lane) = 0;
+
+    /** Reinterprets a scalar float32 register's bits as int32 (YdspIrOp::bitcastFtoI). */
+    virtual void emitBitcastFloatToInt (const YdspGp& dst, const YdspFp& src) = 0;
+
+    /** Reinterprets a scalar int32 register's bits as float32 (YdspIrOp::bitcastItoF). */
+    virtual void emitBitcastIntToFloat (const YdspFp& dst, const YdspGp& src) = 0;
+
+    /** Adds a compile-time byte offset to a 64-bit GP pointer: dst = src + imm. */
+    virtual void emitAddPointerImm (const YdspGp& dst, const YdspGp& src, int32_t imm) = 0;
     virtual void roundFloat (const YdspFp& reg, int mode) = 0;
     virtual void intBinary (YdspIrOp op, const YdspGp& dst, const YdspGp& srcA, const YdspGp& srcB) = 0;
     virtual void emitSaturatingIntBinary (YdspIrOp op, const YdspGp& dst, const YdspGp& srcA, const YdspGp& srcB) = 0;
@@ -288,8 +348,10 @@ protected:
     virtual YdspFp newFp (const char* name) = 0;
     virtual YdspFp newFp64 (const char* name) = 0;
     virtual YdspFp newFpVector (const char* name) = 0;
+    virtual YdspFp newIntVector (const char* name) = 0;
 
     virtual YdspFp newFp128 (const char* name) { return newFpVector (name); }
+    virtual YdspFp newInt128 (const char* name) { return newIntVector (name); }
 
     //==============================================================================
     // Shared helpers (architecture-independent)
@@ -304,8 +366,10 @@ protected:
     YdspMem rawConstMem (uint64_t bits, bool is64);
     YdspMem packedConstMem (uint64_t bits, bool is64);
     YdspMem vectorConstMem (uint32_t bits);
+    YdspMem rampConstMem();
 
     void computeLoopScopes (const YdspIrFunction& fn);
+    void prepareRampConsts (const YdspIrFunction& fn);
 
     /** The channel pointer of a stream for an access in the given block. */
     YdspGp streamBase (int blockIndex, bool isInput, int slot) const;
@@ -326,18 +390,27 @@ protected:
         for a following `x < 0` / `x >= 0` test of their result, which is the
         hand-written ring wrap `r = a - b; if (r < 0) { r = r + n; }`.
 
-        AArch64 only: arithmetic there leaves the flags alone unless asked to
-        set them, so the instructions between the subtraction and the select
-        can be checked against a short list that is known not to touch them. */
+        On AArch64 arithmetic leaves flags untouched unless asked; on x86-64
+        intervening additions/subtractions with immediates are lowered via `lea`
+        so the flags survive through to the select. */
     void planFlagReuse (const YdspIrFunction& fn);
 
     /** Finds the loops whose induction only indexes streams, and makes them
         count from `-n` up to zero against the end of each stream.
 
         The increment then closes the loop with its own flags, which removes
-        the compare from every sample. AArch64 only. */
+        the compare from every sample. */
     void planEndRelativeLoops (const YdspIrFunction& fn);
     void emitEndRelativeLoopSetup (int preheaderBlock);
+
+    /** Strength-reduces induction-indexed state-array and stream accesses in
+        rolled loops (not already claimed by planEndRelativeLoops()) into
+        advancing base pointer GP registers initialized in the preheader and
+        stepped at the latch. */
+    void planLoopPointers (const YdspIrFunction& fn);
+    void emitLoopPointerSetup (int preheaderBlock);
+    void emitLoopPointerAdvance (int latchBlock);
+
     void emitFlagSettingArithmetic (const YdspIrInst& inst, YdspInstPosition position);
 
     void materializeMathCallTargets (const YdspIrFunction& fn);
@@ -408,6 +481,8 @@ protected:
 
     std::map<StreamBaseKey, YdspGp> streamBaseRegs;
     std::map<int, std::vector<StreamBaseKey>> loopStreamBases; // by preheader block
+    std::map<YdspInstPosition, YdspFp> vrampRegs;
+    std::map<int, std::vector<YdspFp>> loopRampConsts; // by preheader block
 
     const YdspIrFunction* activeFn = nullptr;
 
@@ -444,6 +519,8 @@ protected:
     std::map<YdspInstPosition, int32_t> arrayDisplacements;
     std::map<int, int64_t> integerCompareImmediates;
     std::set<int> elidedIntegerConstants;
+    std::set<int> elidedFloatConstants;
+    std::set<YdspInstPosition> zeroVectorSplats;
     std::map<YdspInstPosition, int> fusedProductSubtracts;
     std::set<YdspInstPosition> elidedNegations;
 
@@ -463,7 +540,42 @@ protected:
     };
 
     std::vector<EndRelativeLoop> endRelativeLoops;
+
+    struct LoopPointer
+    {
+        enum class Kind
+        {
+            stateArray,
+            stream
+        };
+
+        Kind kind = Kind::stateArray;
+        int baseOffset = 0;
+        bool isInput = false;
+        int streamSlot = -1;
+        int streamAccessBlock = -1;
+        int offsetValue = -1;
+        uint32_t elemBytes = 4;
+        YdspGp ptrReg;
+    };
+
+    struct AdvancingPointerLoop
+    {
+        int headerBlock = -1;
+        int latchBlock = -1;
+        int induction = -1;
+        int step = 1;
+        int startValue = -1;
+        std::optional<int64_t> startConst;
+        std::vector<LoopPointer> pointers;
+    };
+
+    std::vector<AdvancingPointerLoop> advancingPointerLoops;
+    std::map<YdspInstPosition, YdspGp> loopPointerAccesses;
+    std::set<YdspInstPosition> elidedLoopOffsetAdds;
+
     std::set<YdspInstPosition> flagSettingArithmetic;
+    std::set<YdspInstPosition> flagPreservingArithmetic;
     std::map<YdspInstPosition, bool> flagReusingSelects; // select -> true when it tests `x < 0`
 };
 

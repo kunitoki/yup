@@ -64,10 +64,12 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
     // the whole sample loop in the instruction cache.
     constexpr int maxUnrolledInstructions = 256;
     // Scalar loops keep more independent values live across the whole body;
-    // keeping their budget at the measured limit avoids turning a compact
-    // source loop into a high-pressure native basic block. Widened loops have
-    // already reduced that pressure by running fewer iterations.
-    constexpr int maxScalarUnrolledInstructions = 128;
+    // keeping their budget bounded avoids turning a compact source loop into a
+    // high-pressure native basic block while still unrolling medium loops such
+    // as a 10-band EQ. Widened loops have already reduced that pressure by
+    // running fewer iterations.
+    constexpr int maxScalarUnrolledInstructions = 224;
+    constexpr int maxMediumScalarUnrolledInstructions = 288;
     // A body that only reads and accumulates - the taps of a FIR - keeps
     // nothing live from one copy to the next but its sum, so the pressure the
     // budget above guards against does not build up.
@@ -143,11 +145,39 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
         if (! allInstructionsHaveResult)
             continue;
 
-        const auto& move = bodyBlock.insts.back();
-        if (move.op != YdspIrOp::movI || move.result != loop.induction || move.a < 0)
+        int moveIndex = -1;
+        for (int j = static_cast<int> (bodyBlock.insts.size()); j-- > 0;)
+        {
+            const auto& candidate = bodyBlock.insts[static_cast<size_t> (j)];
+            if (candidate.op == YdspIrOp::movI && candidate.result == loop.induction && candidate.a >= 0)
+            {
+                moveIndex = j;
+                break;
+            }
+
+            if (! isMoveOpcode (candidate.op) || candidate.result == loop.induction || candidate.a == loop.induction)
+                break;
+        }
+
+        if (moveIndex < 0)
             continue;
 
-        const auto& increment = bodyBlock.insts[bodyBlock.insts.size() - 2];
+        const auto& move = bodyBlock.insts[static_cast<size_t> (moveIndex)];
+
+        int incrementIndex = -1;
+        for (int j = moveIndex; j-- > 0;)
+        {
+            if (bodyBlock.insts[static_cast<size_t> (j)].result == move.a)
+            {
+                incrementIndex = j;
+                break;
+            }
+        }
+
+        if (incrementIndex < 0)
+            continue;
+
+        const auto& increment = bodyBlock.insts[static_cast<size_t> (incrementIndex)];
 
         if (increment.op != YdspIrOp::addI || increment.result != move.a || increment.a != loop.induction)
             continue;
@@ -187,14 +217,118 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
         const auto tripCount = span / *step;
         const auto bodySize = static_cast<int> (bodyBlock.insts.size());
 
-        const auto callCount = std::count_if (bodyBlock.insts.begin(), bodyBlock.insts.end(), hasNativeCall);
+        // Calls whose arguments depend solely on the induction variable,
+        // compile-time constants, and compile-time-constant state arrays will
+        // fold away completely after unrolling.
+        std::vector<char> foldableFromInduction (fn.valueTypes.size(), 0);
+        {
+            std::vector<int> defCounts (fn.valueTypes.size(), 0);
+
+            for (const auto& b : fn.blocks)
+                for (const auto& inst : b.insts)
+                    if (inst.result >= 0 && static_cast<size_t> (inst.result) < defCounts.size())
+                        ++defCounts[static_cast<size_t> (inst.result)];
+
+            for (const auto& b : fn.blocks)
+                for (const auto& inst : b.insts)
+                    if (isConstantOp (inst.op) && inst.result >= 0 && static_cast<size_t> (inst.result) < defCounts.size()
+                        && defCounts[static_cast<size_t> (inst.result)] == 1)
+                        foldableFromInduction[static_cast<size_t> (inst.result)] = 1;
+
+            if (loop.induction >= 0 && static_cast<size_t> (loop.induction) < foldableFromInduction.size())
+                foldableFromInduction[static_cast<size_t> (loop.induction)] = 1;
+
+            auto isPureFoldableOp = [&] (const YdspIrInst& inst) -> bool
+            {
+                if (inst.result < 0 || static_cast<size_t> (inst.result) >= fn.valueTypes.size() || fn.laneCountOf (inst.result) != 1)
+                    return false;
+
+                if (inst.op == YdspIrOp::loadStateArrayF || inst.op == YdspIrOp::loadStateArrayI)
+                {
+                    const auto type = fn.valueTypes[static_cast<size_t> (inst.result)];
+                    return std::any_of (fn.stateArrays.begin(), fn.stateArrays.end(), [&] (const YdspIrFunction::StateArray& array)
+                    {
+                        return array.compileTimeConstant && array.base == inst.memIndex && array.type == type;
+                    });
+                }
+
+                if (hasNativeCall (inst))
+                    return true;
+
+                switch (inst.op)
+                {
+                    case YdspIrOp::addF:
+                    case YdspIrOp::subF:
+                    case YdspIrOp::mulF:
+                    case YdspIrOp::divF:
+                    case YdspIrOp::negF:
+                    case YdspIrOp::absF:
+                    case YdspIrOp::minF:
+                    case YdspIrOp::maxF:
+                    case YdspIrOp::sqrtF:
+                    case YdspIrOp::floorF:
+                    case YdspIrOp::ceilF:
+                    case YdspIrOp::rintF:
+                    case YdspIrOp::itof:
+                    case YdspIrOp::extI:
+                    case YdspIrOp::addI:
+                    case YdspIrOp::subI:
+                    case YdspIrOp::mulI:
+                    case YdspIrOp::movF:
+                    case YdspIrOp::movI:
+                        return true;
+                    default:
+                        return false;
+                }
+            };
+
+            for (const auto& inst : bodyBlock.insts)
+            {
+                if (! isPureFoldableOp (inst))
+                    continue;
+
+                bool allFoldable = true;
+                const int operands[] { inst.a, inst.b, inst.c };
+                for (int operand = 0; operand < 3; ++operand)
+                {
+                    if (! isValueIdOperand (inst.op, operand))
+                        continue;
+
+                    const int opVal = operands[operand];
+                    if (opVal < 0)
+                        continue;
+
+                    if (static_cast<size_t> (opVal) >= foldableFromInduction.size()
+                        || ! foldableFromInduction[static_cast<size_t> (opVal)])
+                    {
+                        allFoldable = false;
+                        break;
+                    }
+                }
+
+                if (allFoldable && inst.result >= 0)
+                    foldableFromInduction[static_cast<size_t> (inst.result)] = 1;
+            }
+        }
+
+        const auto isUnfoldedNativeCall = [&] (const YdspIrInst& inst)
+        {
+            if (! hasNativeCall (inst))
+                return false;
+
+            return inst.result < 0
+                || static_cast<size_t> (inst.result) >= foldableFromInduction.size()
+                || ! foldableFromInduction[static_cast<size_t> (inst.result)];
+        };
+
+        const auto callCount = std::count_if (bodyBlock.insts.begin(), bodyBlock.insts.end(), isUnfoldedNativeCall);
         if (callCount != 0)
         {
             // Four-lane native math needs one call per copy. Wider calls may
             // split, and scalar/WASM calls retain the original conservative path.
             if (! fn.vectorMathEnabled || callCount != 1 || tripCount > 2 || tripCount * bodySize > 64)
                 continue;
-            const auto call = std::find_if (bodyBlock.insts.begin(), bodyBlock.insts.end(), hasNativeCall);
+            const auto call = std::find_if (bodyBlock.insts.begin(), bodyBlock.insts.end(), isUnfoldedNativeCall);
             if (fn.laneCountOf (call->result) != 4)
                 continue;
 
@@ -255,10 +389,19 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
         {
             return inst.result < 0;
         });
-        const auto instructionBudget = hasWidenedValue ? maxUnrolledInstructions
-                                     : (onlyAccumulates ? maxAccumulationUnrolledInstructions : maxScalarUnrolledInstructions);
+        const int foldableCount = static_cast<int> (std::count_if (bodyBlock.insts.begin(), bodyBlock.insts.end(), [&] (const YdspIrInst& inst)
+        {
+            return inst.result >= 0
+                && static_cast<size_t> (inst.result) < foldableFromInduction.size()
+                && foldableFromInduction[static_cast<size_t> (inst.result)];
+        }));
+        const int effectiveBodySize = std::max (1, bodySize - foldableCount);
 
-        if (tripCount < 1 || tripCount > maxTripCount || tripCount * bodySize > instructionBudget)
+        const auto scalarBudget = tripCount <= 12 ? maxMediumScalarUnrolledInstructions : maxScalarUnrolledInstructions;
+        const auto instructionBudget = hasWidenedValue ? maxUnrolledInstructions
+                                     : (onlyAccumulates ? maxAccumulationUnrolledInstructions : scalarBudget);
+
+        if (tripCount < 1 || tripCount > maxTripCount || tripCount * effectiveBodySize > instructionBudget)
             continue;
 
         preheaderBlock.insts.insert (preheaderBlock.insts.end(),
@@ -309,10 +452,15 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
         };
 
         // An induction assignment inside the body makes substitution unsafe.
-        const bool constantIndices = std::none_of (bodyBlock.insts.begin(), bodyBlock.insts.end() - 1, [&] (const auto& inst)
+        bool constantIndices = true;
+        for (size_t idx = 0; idx < bodyBlock.insts.size(); ++idx)
         {
-            return inst.result == loop.induction;
-        });
+            if (idx != static_cast<size_t> (moveIndex) && bodyBlock.insts[idx].result == loop.induction)
+            {
+                constantIndices = false;
+                break;
+            }
+        }
         for (int k = 0; k < tripCount; ++k)
         {
             std::vector<int> replacements (valueCount, -1);
@@ -339,7 +487,7 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
                     inst.result = newValue (original);
                     replacements[static_cast<size_t> (original)] = inst.result;
                 }
-                if (constantIndices && i == bodyBlock.insts.size() - 2)
+                if (constantIndices && i == static_cast<size_t> (incrementIndex))
                     inst = { YdspIrOp::constI, inst.result, -1, -1, -1, -1, 0.0, start + static_cast<int64_t> (k + 1) * *step };
                 preheaderBlock.insts.push_back (inst);
             }

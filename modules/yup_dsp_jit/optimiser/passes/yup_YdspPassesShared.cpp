@@ -118,6 +118,11 @@ bool hasValueResult (YdspIrOp op)
         case YdspIrOp::movF:
         case YdspIrOp::movI:
         case YdspIrOp::movB:
+        case YdspIrOp::bitcastFtoI:
+        case YdspIrOp::bitcastItoF:
+        case YdspIrOp::vinsertF:
+        case YdspIrOp::vextractF:
+        case YdspIrOp::phi:
             return true;
 
         // `vsplat` and `vreduceAddF` are deliberately absent. They are pure, so
@@ -133,6 +138,9 @@ bool hasValueResult (YdspIrOp op)
 
 bool isValueIdOperand (YdspIrOp op, int operand)
 {
+    if (op == YdspIrOp::phi)
+        return false;
+
     return ! ydspFirstOperandIsSlot (op) || operand != 0;
 }
 
@@ -152,6 +160,19 @@ void forEachValueUse (const YdspIrFunction& fn, F&& visitor)
         for (int instIndex = 0; instIndex < static_cast<int> (block.insts.size()); ++instIndex)
         {
             const auto& inst = block.insts[static_cast<size_t> (instIndex)];
+
+            if (inst.op == YdspIrOp::phi)
+            {
+                for (int operand = 0; operand < static_cast<int> (inst.phiIncoming.size()); ++operand)
+                {
+                    const int value = inst.phiIncoming[static_cast<size_t> (operand)].second;
+
+                    if (value >= 0)
+                        visitor (blockIndex, instIndex, operand, value);
+                }
+
+                continue;
+            }
 
             for (int operand = 0; operand < 3; ++operand)
             {
@@ -190,7 +211,8 @@ struct YdspValueUseCounts
 
         forEachValueUse (fn, [this] (int, int, int, int value)
         {
-            ++uses[static_cast<size_t> (value)];
+            if (value >= 0 && static_cast<size_t> (value) < uses.size())
+                ++uses[static_cast<size_t> (value)];
         });
     }
 
@@ -221,7 +243,8 @@ bool isCseEligible (YdspIrOp op) noexcept
     // Input streams are read-only. Array reads are reusable until an array
     // store invalidates the cache below; index redefinitions also invalidate it.
     // Other mutable loads remain excluded.
-    if (! hasValueResult (op) || isConstantOp (op) || op == YdspIrOp::loadBlockSize || op == YdspIrOp::loadSampleRate
+    if (! hasValueResult (op) || isConstantOp (op) || op == YdspIrOp::phi
+        || op == YdspIrOp::loadBlockSize || op == YdspIrOp::loadSampleRate
         || op == YdspIrOp::loadParam || op == YdspIrOp::loadParamOut
         || op == YdspIrOp::loadStateF || op == YdspIrOp::loadStateI
         || op == YdspIrOp::loadOutput
@@ -242,6 +265,261 @@ bool sameCseExpression (const YdspIrInst& a, YdspValueType aType, const YdspIrIn
 }
 
 } // namespace
+
+namespace detail
+{
+
+inline void collectCfgSuccessors (const YdspIrFunction& fn, int blockIndex, std::vector<int>& out)
+{
+    out.clear();
+
+    if (blockIndex < 0 || blockIndex >= static_cast<int> (fn.blocks.size()))
+        return;
+
+    const auto& block = fn.blocks[static_cast<size_t> (blockIndex)];
+
+    const auto pushUnique = [&] (int target)
+    {
+        if (target >= 0 && target < static_cast<int> (fn.blocks.size())
+            && std::find (out.begin(), out.end(), target) == out.end())
+            out.push_back (target);
+    };
+
+    switch (block.term)
+    {
+        case YdspIrTerm::fallthrough:
+            pushUnique (blockIndex + 1);
+            break;
+
+        case YdspIrTerm::branch:
+            pushUnique (block.termTarget);
+            break;
+
+        case YdspIrTerm::branchIf:
+            pushUnique (block.termTarget);
+            pushUnique (block.termTarget2);
+            break;
+    }
+}
+
+struct YdspDomTree
+{
+    int numBlocks = 0;
+    std::vector<int> rpo;
+    std::vector<int> rpoIndex;
+    std::vector<std::vector<int>> preds;
+    std::vector<std::vector<int>> succs;
+    std::vector<int> idom;
+    std::vector<std::vector<int>> domChildren;
+    std::vector<int> domIn;
+    std::vector<int> domOut;
+
+    explicit YdspDomTree (const YdspIrFunction& fn)
+    {
+        build (fn);
+    }
+
+    void build (const YdspIrFunction& fn)
+    {
+        numBlocks = static_cast<int> (fn.blocks.size());
+        rpo.clear();
+        rpoIndex.assign (static_cast<size_t> (numBlocks), -1);
+        preds.assign (static_cast<size_t> (numBlocks), {});
+        succs.assign (static_cast<size_t> (numBlocks), {});
+        idom.assign (static_cast<size_t> (numBlocks), -1);
+        domChildren.assign (static_cast<size_t> (numBlocks), {});
+        domIn.assign (static_cast<size_t> (numBlocks), -1);
+        domOut.assign (static_cast<size_t> (numBlocks), -1);
+
+        if (numBlocks == 0)
+            return;
+
+        std::vector<char> visited (static_cast<size_t> (numBlocks), 0);
+        std::vector<int> postorder;
+        postorder.reserve (static_cast<size_t> (numBlocks));
+
+        struct Frame
+        {
+            int block = 0;
+            size_t nextSucc = 0;
+        };
+
+        std::vector<Frame> stack;
+        visited[0] = 1;
+        collectCfgSuccessors (fn, 0, succs[0]);
+        stack.push_back ({ 0, 0 });
+
+        while (! stack.empty())
+        {
+            auto& top = stack.back();
+            const auto& blockSuccs = succs[static_cast<size_t> (top.block)];
+
+            if (top.nextSucc < blockSuccs.size())
+            {
+                const int next = blockSuccs[top.nextSucc++];
+
+                if (! visited[static_cast<size_t> (next)])
+                {
+                    visited[static_cast<size_t> (next)] = 1;
+                    collectCfgSuccessors (fn, next, succs[static_cast<size_t> (next)]);
+                    stack.push_back ({ next, 0 });
+                }
+            }
+            else
+            {
+                postorder.push_back (top.block);
+                stack.pop_back();
+            }
+        }
+
+        rpo.assign (postorder.rbegin(), postorder.rend());
+
+        for (int i = 0; i < static_cast<int> (rpo.size()); ++i)
+            rpoIndex[static_cast<size_t> (rpo[static_cast<size_t> (i)])] = i;
+
+        for (const int b : rpo)
+            for (const int s : succs[static_cast<size_t> (b)])
+                preds[static_cast<size_t> (s)].push_back (b);
+
+        idom[0] = 0;
+
+        const auto intersect = [this] (int b1, int b2) noexcept -> int
+        {
+            int f1 = b1;
+            int f2 = b2;
+
+            while (f1 != f2)
+            {
+                while (rpoIndex[static_cast<size_t> (f1)] > rpoIndex[static_cast<size_t> (f2)])
+                    f1 = idom[static_cast<size_t> (f1)];
+
+                while (rpoIndex[static_cast<size_t> (f2)] > rpoIndex[static_cast<size_t> (f1)])
+                    f2 = idom[static_cast<size_t> (f2)];
+            }
+
+            return f1;
+        };
+
+        for (bool changed = true; changed;)
+        {
+            changed = false;
+
+            for (size_t i = 1; i < rpo.size(); ++i)
+            {
+                const int b = rpo[i];
+                int newIdom = -1;
+
+                for (const int p : preds[static_cast<size_t> (b)])
+                {
+                    if (idom[static_cast<size_t> (p)] >= 0)
+                    {
+                        newIdom = p;
+                        break;
+                    }
+                }
+
+                if (newIdom < 0)
+                    continue;
+
+                for (const int p : preds[static_cast<size_t> (b)])
+                    if (p != newIdom && idom[static_cast<size_t> (p)] >= 0)
+                        newIdom = intersect (p, newIdom);
+
+                if (idom[static_cast<size_t> (b)] != newIdom)
+                {
+                    idom[static_cast<size_t> (b)] = newIdom;
+                    changed = true;
+                }
+            }
+        }
+
+        for (size_t i = 1; i < rpo.size(); ++i)
+        {
+            const int b = rpo[i];
+            const int parent = idom[static_cast<size_t> (b)];
+
+            if (parent >= 0)
+                domChildren[static_cast<size_t> (parent)].push_back (b);
+        }
+
+        int timer = 0;
+        std::vector<Frame> domStack;
+        domIn[0] = timer++;
+        domStack.push_back ({ 0, 0 });
+
+        while (! domStack.empty())
+        {
+            auto& top = domStack.back();
+            const auto& children = domChildren[static_cast<size_t> (top.block)];
+
+            if (top.nextSucc < children.size())
+            {
+                const int child = children[top.nextSucc++];
+                domIn[static_cast<size_t> (child)] = timer++;
+                domStack.push_back ({ child, 0 });
+            }
+            else
+            {
+                domOut[static_cast<size_t> (top.block)] = timer++;
+                domStack.pop_back();
+            }
+        }
+    }
+
+    bool isReachable (int b) const noexcept
+    {
+        return b >= 0 && b < numBlocks && rpoIndex[static_cast<size_t> (b)] >= 0;
+    }
+
+    bool dominates (int a, int b) const noexcept
+    {
+        if (! isReachable (a) || ! isReachable (b))
+            return false;
+
+        return domIn[static_cast<size_t> (a)] <= domIn[static_cast<size_t> (b)]
+            && domOut[static_cast<size_t> (b)] <= domOut[static_cast<size_t> (a)];
+    }
+
+    std::vector<std::vector<int>> computeDominanceFrontiers() const
+    {
+        std::vector<std::vector<int>> df (static_cast<size_t> (numBlocks));
+
+        for (const int b : rpo)
+        {
+            if (b == 0)
+                continue;
+
+            const auto& bPreds = preds[static_cast<size_t> (b)];
+
+            if (bPreds.size() < 2)
+                continue;
+
+            const int stop = idom[static_cast<size_t> (b)];
+
+            for (const int p : bPreds)
+            {
+                int runner = p;
+
+                while (runner >= 0 && runner != stop)
+                {
+                    auto& frontier = df[static_cast<size_t> (runner)];
+
+                    if (std::find (frontier.begin(), frontier.end(), b) == frontier.end())
+                        frontier.push_back (b);
+
+                    if (runner == 0)
+                        break;
+
+                    runner = idom[static_cast<size_t> (runner)];
+                }
+            }
+        }
+
+        return df;
+    }
+};
+
+} // namespace detail
 
 //==============================================================================
 
@@ -325,6 +603,14 @@ bool YdspOptimizer::commonSubexpressionElimination (YdspIrFunction& fn)
         {
             for (auto& inst : fn.blocks[static_cast<size_t> (blockIndex)].insts)
             {
+                if (inst.op == YdspIrOp::phi)
+                {
+                    for (auto& incoming : inst.phiIncoming)
+                        shareUse (incoming.second);
+
+                    continue;
+                }
+
                 if (isValueIdOperand (inst.op, 0))
                     shareUse (inst.a);
                 if (isValueIdOperand (inst.op, 1))
@@ -431,6 +717,24 @@ void YdspOptimizer::formAdvanceWrap (YdspIrFunction& fn)
 
     for (auto& block : fn.blocks)
     {
+        for (auto& inst : block.insts)
+        {
+            if (inst.op == YdspIrOp::addI && ! inst.saturatingIntegerArithmetic
+                && constantOf (inst.a).has_value() && ! constantOf (inst.b).has_value())
+            {
+                std::swap (inst.a, inst.b);
+            }
+            else if ((inst.op == YdspIrOp::gtI || inst.op == YdspIrOp::leI)
+                     && constantOf (inst.a) == 0 && ! constantOf (inst.b).has_value())
+            {
+                inst.op = inst.op == YdspIrOp::gtI ? YdspIrOp::ltI : YdspIrOp::geI;
+                std::swap (inst.a, inst.b);
+            }
+        }
+    }
+
+    for (auto& block : fn.blocks)
+    {
         auto& insts = block.insts;
 
         for (size_t i = 0; i < insts.size(); ++i)
@@ -451,6 +755,7 @@ void YdspOptimizer::formAdvanceWrap (YdspIrFunction& fn)
             // the wrap test and the select itself, and nothing redefines it.
             size_t compareIndex = insts.size(), selectIndex = insts.size();
             int64_t bound = 0;
+            bool invertedCompare = false;
 
             for (size_t j = i + 1; j < insts.size(); ++j)
             {
@@ -465,14 +770,48 @@ void YdspOptimizer::formAdvanceWrap (YdspIrFunction& fn)
                     {
                         compareIndex = j;
                         bound = *limit + (inst.op == YdspIrOp::gtI ? 1 : 0);
+                        invertedCompare = false;
+                        continue;
+                    }
+
+                    if ((inst.op == YdspIrOp::ltI || inst.op == YdspIrOp::leI) && inst.a == add.result && limit.has_value()
+                        && counts.definedOnce (inst.result) && counts.uses[static_cast<size_t> (inst.result)] == 1)
+                    {
+                        compareIndex = j;
+                        bound = *limit + (inst.op == YdspIrOp::leI ? 1 : 0);
+                        invertedCompare = true;
                         continue;
                     }
                 }
-                else if (inst.op == YdspIrOp::selectB && inst.result == add.result && inst.a == insts[compareIndex].result
-                         && constantOf (inst.b) == 0 && inst.c == add.result)
+                else if (inst.op == YdspIrOp::selectB && inst.a == insts[compareIndex].result
+                         && inst.result >= 0
+                         && fn.valueTypes[static_cast<size_t> (inst.result)] == YdspValueType::int32Type
+                         && ((! invertedCompare && constantOf (inst.b) == 0 && inst.c == add.result)
+                             || (invertedCompare && inst.b == add.result && constantOf (inst.c) == 0)))
                 {
-                    selectIndex = j;
-                    break;
+                    if (inst.result == add.result
+                        || (counts.definedOnce (add.result) && counts.useCount (add.result) == 2))
+                    {
+                        bool resultTouchedBetween = false;
+
+                        if (inst.result != add.result)
+                        {
+                            for (size_t k = i + 1; k < j; ++k)
+                            {
+                                if (insts[k].result == inst.result || reads (insts[k], inst.result))
+                                {
+                                    resultTouchedBetween = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (! resultTouchedBetween)
+                        {
+                            selectIndex = j;
+                            break;
+                        }
+                    }
                 }
 
                 if (inst.result == add.result || reads (inst, add.result))
@@ -483,6 +822,7 @@ void YdspOptimizer::formAdvanceWrap (YdspIrFunction& fn)
                 continue;
 
             add.op = YdspIrOp::advanceWrapI;
+            add.result = insts[selectIndex].result;
             add.a = counter;
             add.b = -1;
             add.ivalue = bound;
@@ -1004,5 +1344,98 @@ void YdspOptimizer::rematerializePostCallLeaves (YdspIrFunction& fn)
         }
     }
 }
+
+namespace detail
+{
+
+void mergeStraightLineBlocks (YdspIrFunction& fn)
+{
+    for (const auto& block : fn.blocks)
+        for (const auto& inst : block.insts)
+            if (inst.op == YdspIrOp::phi)
+                return;
+
+    bool merged = true;
+
+    while (merged)
+    {
+        merged = false;
+
+        for (size_t b = 0; b + 1 < fn.blocks.size(); ++b)
+        {
+            const auto& cur = fn.blocks[b];
+            const bool flowsToNext = cur.term == YdspIrTerm::fallthrough
+                                  || (cur.term == YdspIrTerm::branch && cur.termTarget == static_cast<int> (b + 1));
+
+            if (! flowsToNext)
+                continue;
+
+            const int nextIdx = static_cast<int> (b + 1);
+            bool hasOtherPred = false;
+
+            for (size_t other = 0; other < fn.blocks.size(); ++other)
+            {
+                if (other == b)
+                    continue;
+
+                const auto& ob = fn.blocks[other];
+
+                if (ob.termTarget == nextIdx || ob.termTarget2 == nextIdx
+                    || (ob.term == YdspIrTerm::fallthrough && static_cast<int> (other + 1) == nextIdx))
+                {
+                    hasOtherPred = true;
+                    break;
+                }
+            }
+
+            if (hasOtherPred)
+                continue;
+
+            bool loopBoundary = false;
+
+            for (const auto& loop : fn.loops)
+                if (loop.headerBlock == nextIdx || loop.exitBlock == nextIdx)
+                    loopBoundary = true;
+
+            if (loopBoundary)
+                continue;
+
+            auto& dst = fn.blocks[b];
+            auto& src = fn.blocks[static_cast<size_t> (nextIdx)];
+
+            dst.insts.insert (dst.insts.end(), src.insts.begin(), src.insts.end());
+            dst.term = src.term;
+            dst.termCond = src.termCond;
+            dst.termTarget = src.termTarget;
+            dst.termTarget2 = src.termTarget2;
+            dst.preservesConditionalEvaluation = dst.preservesConditionalEvaluation || src.preservesConditionalEvaluation;
+
+            fn.blocks.erase (fn.blocks.begin() + nextIdx);
+
+            const auto rebase = [nextIdx] (int& target)
+            {
+                if (target > nextIdx)
+                    --target;
+            };
+
+            for (auto& blk : fn.blocks)
+            {
+                rebase (blk.termTarget);
+                rebase (blk.termTarget2);
+            }
+
+            for (auto& loop : fn.loops)
+            {
+                rebase (loop.headerBlock);
+                rebase (loop.exitBlock);
+            }
+
+            merged = true;
+            break;
+        }
+    }
+}
+
+} // namespace detail
 
 } // namespace yup

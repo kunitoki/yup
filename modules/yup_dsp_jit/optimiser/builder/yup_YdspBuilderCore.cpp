@@ -226,7 +226,7 @@ YdspStateLayout computeStateLayout (const YdspAnalyzedProcessor& processor, Ydsp
 namespace
 {
 
-std::optional<double> literalValueOf (const YdspExpr& expr)
+std::optional<double> literalFloatValueOf (const YdspExpr& expr)
 {
     if (expr.kind == YdspExprKind::intLiteral)
         return static_cast<double> (expr.integer);
@@ -235,8 +235,20 @@ std::optional<double> literalValueOf (const YdspExpr& expr)
         return expr.number;
 
     if (expr.kind == YdspExprKind::unary && expr.op == YdspOperator::neg && expr.children.size() == 1)
-        if (const auto inner = literalValueOf (*expr.children[0]))
+        if (const auto inner = literalFloatValueOf (*expr.children[0]))
             return -*inner;
+
+    return std::nullopt;
+}
+
+std::optional<int64_t> literalIntValueOf (const YdspExpr& expr)
+{
+    if (expr.kind == YdspExprKind::intLiteral)
+        return expr.integer;
+
+    if (expr.kind == YdspExprKind::unary && expr.op == YdspOperator::neg && expr.children.size() == 1)
+        if (const auto inner = literalIntValueOf (*expr.children[0]))
+            return *inner == std::numeric_limits<int64_t>::min() ? std::numeric_limits<int64_t>::min() : -*inner;
 
     return std::nullopt;
 }
@@ -253,64 +265,169 @@ bool writesArray (const YdspStmt& stmt, const String& array)
     if (assignsElementOf (stmt, array))
         return true;
 
-    for (const auto& child : stmt.children)
-        if (writesArray (*child, array))
-            return true;
+    bool found = false;
 
-    for (const auto* child : { stmt.thenStmt.get(), stmt.elseStmt.get(), stmt.body.get() })
-        if (child != nullptr && writesArray (*child, array))
-            return true;
+    ydspForEachSubStmt (stmt, [&] (const YdspStmt& child)
+    {
+        if (! found && writesArray (child, array))
+            found = true;
+    });
 
-    return false;
+    return found;
 }
 
 bool writesArray (const std::vector<YdspStmtPtr>& body, const String& array)
 {
-    return std::any_of (body.begin(), body.end(), [&array] (const YdspStmtPtr& stmt) { return writesArray (*stmt, array); });
+    return std::any_of (body.begin(), body.end(), [&array] (const YdspStmtPtr& stmt) { return stmt != nullptr && writesArray (*stmt, array); });
 }
 
-/** The elements of a state array that only its own initialiser list writes,
-    or nothing when anything else in the processor assigns one. The semantic
-    analyzer has turned that list into literal assignments at the top of
-    `init`, which is what is read back here. */
-std::vector<double> constantElementsOf (const YdspAnalyzedProcessor& processor, const YdspStateDecl& state)
+bool bodyWritesArrayThroughCalls (const std::vector<YdspStmtPtr>& body,
+                                  const String& array,
+                                  const std::vector<YdspFuncDecl>& functions,
+                                  std::unordered_set<String>& visited);
+
+bool exprCallsWritingFunction (const YdspExpr& expr,
+                                 const String& array,
+                                 const std::vector<YdspFuncDecl>& functions,
+                                 std::unordered_set<String>& visited)
+{
+    if (expr.kind == YdspExprKind::call)
+    {
+        for (const auto& fnDecl : functions)
+        {
+            if (fnDecl.name == expr.text && visited.insert (fnDecl.name).second)
+            {
+                if (bodyWritesArrayThroughCalls (fnDecl.body, array, functions, visited))
+                    return true;
+            }
+        }
+    }
+
+    bool found = false;
+
+    ydspForEachSubExpr (expr, [&] (const YdspExpr& child)
+    {
+        if (! found && exprCallsWritingFunction (child, array, functions, visited))
+            found = true;
+    });
+
+    return found;
+}
+
+bool stmtWritesArrayThroughCalls (const YdspStmt& stmt,
+                                  const String& array,
+                                  const std::vector<YdspFuncDecl>& functions,
+                                  std::unordered_set<String>& visited)
+{
+    if (assignsElementOf (stmt, array))
+        return true;
+
+    bool found = false;
+
+    ydspForEachSubExpr (stmt, [&] (const YdspExpr& expr)
+    {
+        if (! found && exprCallsWritingFunction (expr, array, functions, visited))
+            found = true;
+    });
+
+    if (found)
+        return true;
+
+    ydspForEachSubStmt (stmt, [&] (const YdspStmt& child)
+    {
+        if (! found && stmtWritesArrayThroughCalls (child, array, functions, visited))
+            found = true;
+    });
+
+    return found;
+}
+
+bool bodyWritesArrayThroughCalls (const std::vector<YdspStmtPtr>& body,
+                                  const String& array,
+                                  const std::vector<YdspFuncDecl>& functions,
+                                  std::unordered_set<String>& visited)
+{
+    return std::any_of (body.begin(), body.end(), [&] (const YdspStmtPtr& stmt)
+    {
+        return stmt != nullptr && stmtWritesArrayThroughCalls (*stmt, array, functions, visited);
+    });
+}
+
+/** Populates compile-time constant elements of a state array when only its
+    initialiser list writes it (the semantic analyzer has lowered that list
+    into literal assignments at the top of `init`), and nothing in `process`,
+    processor functions, or event handlers assigns to it. */
+void populateConstantElements (const YdspAnalyzedProcessor& processor,
+                               const YdspStateDecl& state,
+                               YdspIrFunction::StateArray& out)
 {
     const auto& decl = *processor.decl;
 
     if ((decl.process != nullptr && writesArray (decl.process->body, state.name))
         || std::any_of (decl.functions.begin(), decl.functions.end(), [&state] (const auto& function) { return writesArray (function.body, state.name); })
         || std::any_of (decl.eventHandlers.begin(), decl.eventHandlers.end(), [&state] (const auto& handler) { return writesArray (handler.body, state.name); }))
-        return {};
+        return;
 
-    const auto type = toStorageType (state.type);
-    std::vector<double> elements (static_cast<size_t> (state.arraySize), 0.0);
+    const bool isFloat = isFloatValueType (out.type);
+    std::vector<double> floatElements;
+    std::vector<int64_t> intElements;
 
-    if (decl.init == nullptr)
-        return elements;
+    if (isFloat)
+        floatElements.assign (static_cast<size_t> (state.arraySize), 0.0);
+    else
+        intElements.assign (static_cast<size_t> (state.arraySize), 0);
 
-    for (const auto& stmt : decl.init->body)
+    if (decl.init != nullptr)
     {
-        if (! assignsElementOf (*stmt, state.name))
+        for (const auto& stmt : decl.init->body)
         {
-            if (writesArray (*stmt, state.name))
-                return {};
+            if (stmt == nullptr)
+                continue;
 
-            continue;
+            if (! assignsElementOf (*stmt, state.name))
+            {
+                if (writesArray (*stmt, state.name))
+                    return;
+
+                continue;
+            }
+
+            const auto& index = *stmt->target->children[1];
+
+            if (index.kind != YdspExprKind::intLiteral || index.integer < 0 || index.integer >= state.arraySize
+                || stmt->value == nullptr)
+                return;
+
+            if (isFloat)
+            {
+                const auto value = literalFloatValueOf (*stmt->value);
+
+                if (! value.has_value())
+                    return;
+
+                floatElements[static_cast<size_t> (index.integer)] = out.type == YdspValueType::float32Type
+                                                                       ? static_cast<double> (static_cast<float> (*value))
+                                                                       : *value;
+            }
+            else
+            {
+                // An integer table takes integer literals only: what a fraction
+                // is converted to is the lowering's business, not a guess here.
+                const auto value = literalIntValueOf (*stmt->value);
+
+                if (! value.has_value())
+                    return;
+
+                intElements[static_cast<size_t> (index.integer)] = out.type == YdspValueType::int32Type
+                                                                     ? static_cast<int64_t> (static_cast<int32_t> (*value))
+                                                                     : *value;
+            }
         }
-
-        const auto& index = *stmt->target->children[1];
-        const auto value = stmt->value != nullptr ? literalValueOf (*stmt->value) : std::nullopt;
-
-        // An integer table takes integer literals only: what a fraction is
-        // converted to is the lowering's business, not a guess to make here.
-        if (index.kind != YdspExprKind::intLiteral || index.integer < 0 || index.integer >= state.arraySize
-            || ! value.has_value() || (! isFloatValueType (type) && *value != std::trunc (*value)))
-            return {};
-
-        elements[static_cast<size_t> (index.integer)] = type == YdspValueType::float32Type ? static_cast<double> (static_cast<float> (*value)) : *value;
     }
 
-    return elements;
+    out.compileTimeConstant = true;
+    out.constFloatValues = std::move (floatElements);
+    out.constIntValues = std::move (intElements);
 }
 
 } // namespace
@@ -417,9 +534,70 @@ void YdspIrBuilder::build()
     // The init kernel is what fills a table: there the elements are still
     // ordinary writes and reads.
     for (const auto* state : processor.states)
-        if (state->arraySize > 0 && state->structName.isEmpty())
-            fn.stateArrays.push_back ({ toStorageType (state->type), stateArrayBase (state), state->arraySize,
-                                        isInit ? std::vector<double>() : detail::constantElementsOf (processor, *state) });
+    {
+        if (state->arraySize <= 0 || ! state->structName.isEmpty())
+            continue;
+
+        const auto type = toStorageType (state->type);
+        const int base = stateArrayBase (state);
+        const bool isFloat = isFloatValueType (type);
+        const bool is64 = is64BitValueType (type);
+
+        bool readOnlyInProcess = ! isInit && ! isEventHandler;
+
+        if (readOnlyInProcess)
+        {
+            for (const auto& block : fn.blocks)
+            {
+                for (const auto& inst : block.insts)
+                {
+                    if ((isFloat && inst.op != YdspIrOp::storeStateArrayF)
+                        || (! isFloat && inst.op != YdspIrOp::storeStateArrayI))
+                        continue;
+
+                    if (inst.memIndex != base)
+                        continue;
+
+                    if (inst.b >= 0 && static_cast<size_t> (inst.b) < valueTypes.size()
+                        && is64BitValueType (valueTypes[static_cast<size_t> (inst.b)]) != is64)
+                        continue;
+
+                    readOnlyInProcess = false;
+                    break;
+                }
+
+                if (! readOnlyInProcess)
+                    break;
+            }
+        }
+
+        if (readOnlyInProcess)
+        {
+            std::unordered_set<String> visitedFuncs;
+
+            for (const auto& handler : processor.eventHandlers)
+            {
+                if (handler.decl != nullptr
+                    && detail::bodyWritesArrayThroughCalls (handler.decl->body, state->name, processor.decl->functions, visitedFuncs))
+                {
+                    readOnlyInProcess = false;
+                    break;
+                }
+            }
+        }
+
+        YdspIrFunction::StateArray entry;
+        entry.type = type;
+        entry.base = base;
+        entry.length = state->arraySize;
+        entry.readOnlyInProcess = readOnlyInProcess;
+        entry.privateToProcess = ! isInit && ! isEventHandler && processor.eventHandlers.empty();
+
+        if (! isInit)
+            detail::populateConstantElements (processor, *state, entry);
+
+        fn.stateArrays.push_back (std::move (entry));
+    }
 
     if (sharedLayout != nullptr)
     {

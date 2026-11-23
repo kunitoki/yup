@@ -43,7 +43,7 @@ void forEachValueOperand (const YdspIrInst& inst, Callback&& callback)
         callback (inst.c);
 }
 
-bool isPackedFloatOp (YdspIrOp op, bool allowVectorMath, bool allowPackedFma) noexcept
+bool isPackedFloatOp (YdspIrOp op, bool allowVectorMath, bool allowPackedFma, bool allowFastMath) noexcept
 {
     switch (op)
     {
@@ -86,9 +86,12 @@ bool isPackedFloatOp (YdspIrOp op, bool allowVectorMath, bool allowPackedFma) no
     }
 
     // The SLEEF-backed transcendental family: only reachable once the target
-    // reported vector math (native builds link sleef_library). Each op here
-    // must have a 4-lane Sleef_<name>f4 counterpart the codegen can call, or a
-    // widened loop would silently lower to nothing.
+    // reported vector math (native builds link sleef_library). Under fastMath,
+    // the 9 IR-lowered transcendentals run inline without SLEEF on every
+    // SIMD target (including AVX2 8-lane and WASM SIMD128).
+    if (allowFastMath && isInlineFastMathTranscendental (op))
+        return true;
+
     if (allowVectorMath)
     {
         switch (op)
@@ -119,6 +122,31 @@ bool isPackedFloatOp (YdspIrOp op, bool allowVectorMath, bool allowPackedFma) no
     }
 
     return false;
+}
+
+bool isPackedIntOp (YdspIrOp op) noexcept
+{
+    switch (op)
+    {
+        case YdspIrOp::addI:
+        case YdspIrOp::subI:
+        case YdspIrOp::mulI:
+        case YdspIrOp::negI:
+        case YdspIrOp::minI:
+        case YdspIrOp::maxI:
+        case YdspIrOp::absI:
+        case YdspIrOp::clampI:
+        case YdspIrOp::andI:
+        case YdspIrOp::orI:
+        case YdspIrOp::xorI:
+        case YdspIrOp::shlI:
+        case YdspIrOp::shrI:
+        case YdspIrOp::movI:
+            return true;
+
+        default:
+            return false;
+    }
 }
 
 bool isStateArrayAccess (YdspIrOp op) noexcept
@@ -365,6 +393,7 @@ private:
             return fail (YdspVectorizationReason::unrecognizedInductionUpdate);
 
         findInductionRamps();
+        findStreamIndexOffsets();
 
         if (! checkInductionUses())
             return fail (YdspVectorizationReason::inductionUsedAsValue);
@@ -377,11 +406,18 @@ private:
 
         for (const auto& read : fn.blocks[static_cast<size_t> (body)].insts)
         {
-            if ((read.op != YdspIrOp::loadStateArrayF && read.op != YdspIrOp::loadOutput)
-                || read.a == loop.induction)
+            const bool isOffsetOutputRead = read.op == YdspIrOp::loadOutput
+                                         && read.a >= 0
+                                         && isStreamOffsetValue[static_cast<size_t> (read.a)];
+
+            if ((read.op != YdspIrOp::loadStateArrayF && read.op != YdspIrOp::loadStateArrayI && read.op != YdspIrOp::loadOutput)
+                || read.a == loop.induction
+                || isOffsetOutputRead)
                 continue;
 
-            const auto store = read.op == YdspIrOp::loadOutput ? YdspIrOp::storeOutput : YdspIrOp::storeStateArrayF;
+            const auto store = read.op == YdspIrOp::loadOutput ? YdspIrOp::storeOutput
+                             : read.op == YdspIrOp::loadStateArrayF ? YdspIrOp::storeStateArrayF
+                                                                     : YdspIrOp::storeStateArrayI;
             for (const auto& write : fn.blocks[static_cast<size_t> (body)].insts)
                 if (write.op == store && write.memIndex == read.memIndex)
                     return fail (YdspVectorizationReason::indirectAccess);
@@ -411,6 +447,109 @@ private:
             && loop.bound.kind != YdspLoopBoundKind::constant
             && hasContractionFusableChain())
             return fail (YdspVectorizationReason::keptScalarForContraction);
+
+        // A constant-bound loop whose transcendentals depend solely on the
+        // induction variable, constants, and compile-time-constant arrays will
+        // unroll and fold all of those calls away at compile time; widening it
+        // first would keep packed transcendental calls at runtime.
+        if (loop.bound.kind == YdspLoopBoundKind::constant && (loop.bound.constant - start) <= 32)
+        {
+            const auto isTranscendental = [] (YdspIrOp op) noexcept
+            {
+                return isCallBoundary (op) || isInlineFastMathTranscendental (op) || op == YdspIrOp::expF;
+            };
+
+            const auto& bodyInsts = fn.blocks[static_cast<size_t> (body)].insts;
+            const bool hasTranscendental = std::any_of (bodyInsts.begin(), bodyInsts.end(), [&] (const YdspIrInst& inst)
+            {
+                return isTranscendental (inst.op);
+            });
+
+            if (hasTranscendental)
+            {
+                std::vector<char> foldable (static_cast<size_t> (numValues), 0);
+
+                for (const auto& blk : fn.blocks)
+                    for (const auto& inst : blk.insts)
+                        if (isConstantOp (inst.op) && inst.result >= 0 && inst.result < numValues
+                            && defsInBody[static_cast<size_t> (inst.result)] + defsElsewhere[static_cast<size_t> (inst.result)] == 1)
+                            foldable[static_cast<size_t> (inst.result)] = 1;
+
+                if (loop.induction >= 0 && loop.induction < numValues)
+                    foldable[static_cast<size_t> (loop.induction)] = 1;
+
+                auto isFoldableOp = [&] (const YdspIrInst& inst) -> bool
+                {
+                    if (inst.result < 0 || inst.result >= numValues)
+                        return false;
+
+                    if (inst.op == YdspIrOp::loadStateArrayF || inst.op == YdspIrOp::loadStateArrayI)
+                    {
+                        const auto type = fn.valueTypes[static_cast<size_t> (inst.result)];
+                        return std::any_of (fn.stateArrays.begin(), fn.stateArrays.end(), [&] (const YdspIrFunction::StateArray& array)
+                        {
+                            return array.compileTimeConstant && array.base == inst.memIndex && array.type == type;
+                        });
+                    }
+
+                    if (isTranscendental (inst.op))
+                        return true;
+
+                    switch (inst.op)
+                    {
+                        case YdspIrOp::addF:
+                        case YdspIrOp::subF:
+                        case YdspIrOp::mulF:
+                        case YdspIrOp::divF:
+                        case YdspIrOp::negF:
+                        case YdspIrOp::absF:
+                        case YdspIrOp::minF:
+                        case YdspIrOp::maxF:
+                        case YdspIrOp::sqrtF:
+                        case YdspIrOp::floorF:
+                        case YdspIrOp::ceilF:
+                        case YdspIrOp::rintF:
+                        case YdspIrOp::itof:
+                        case YdspIrOp::extI:
+                        case YdspIrOp::addI:
+                        case YdspIrOp::subI:
+                        case YdspIrOp::mulI:
+                        case YdspIrOp::movF:
+                        case YdspIrOp::movI:
+                            return true;
+                        default:
+                            return false;
+                    }
+                };
+
+                bool allCallsFoldable = true;
+
+                for (const auto& inst : bodyInsts)
+                {
+                    if (isFoldableOp (inst))
+                    {
+                        bool opsOk = true;
+                        forEachValueOperand (inst, [&] (int v)
+                        {
+                            if (! foldable[static_cast<size_t> (v)])
+                                opsOk = false;
+                        });
+
+                        if (opsOk)
+                            foldable[static_cast<size_t> (inst.result)] = 1;
+                    }
+
+                    if (isTranscendental (inst.op) && (inst.result < 0 || ! foldable[static_cast<size_t> (inst.result)]))
+                    {
+                        allCallsFoldable = false;
+                        break;
+                    }
+                }
+
+                if (allCallsFoldable)
+                    return fail (YdspVectorizationReason::keptScalarForContraction);
+            }
+        }
 
         return true;
     }
@@ -495,6 +634,7 @@ private:
 
         std::vector<StreamRef> stores, accesses;
         bool hasFixedIndexRead = false;
+        int commonStreamBase = -2;
 
         const auto addUnique = [] (std::vector<StreamRef>& list, StreamRef stream)
         {
@@ -508,12 +648,20 @@ private:
                 continue;
 
             const StreamRef stream { inst.op == YdspIrOp::loadInput, inst.memIndex };
+            const bool isOffset = inst.a >= 0 && isStreamOffsetValue[static_cast<size_t> (inst.a)];
 
-            if (inst.a != loop.induction)
+            if (inst.a != loop.induction && ! isOffset)
             {
                 hasFixedIndexRead = true;
                 continue;
             }
+
+            const int accessBase = isOffset ? streamOffsetBase[static_cast<size_t> (inst.a)] : -1;
+
+            if (commonStreamBase == -2)
+                commonStreamBase = accessBase;
+            else if (commonStreamBase != accessBase)
+                hasFixedIndexRead = true;
 
             addUnique (accesses, stream);
 
@@ -530,8 +678,19 @@ private:
         if (stores.empty())
             return true;
 
-        return ! hasFixedIndexRead
-            && (streamGuards.empty() || loop.bound.kind != YdspLoopBoundKind::constant);
+        if (hasFixedIndexRead)
+            return false;
+
+        if (streamGuards.empty())
+            return true;
+
+        if (loop.bound.kind != YdspLoopBoundKind::constant)
+            return true;
+
+        // A chunked constant-bound loop distributed around a loop-invariant
+        // stream offset (`base + k`) can fall back to a scalar remainder loop
+        // when the buffers overlap, provided the constant span has no peel tail.
+        return commonStreamBase >= 0 && tail == 0 && start >= 0 && findHeaderCompare();
     }
 
     bool checkTailFeasibility() const
@@ -679,7 +838,7 @@ private:
                 if (static_cast<int> (b) != body)
                     return false;
 
-                if (static_cast<int> (j) == incrementIndex || isRamp[j] || isRampOffset[j])
+                if (static_cast<int> (j) == incrementIndex || isRamp[j] || isRampOffset[j] || isStreamOffset[j])
                     continue;
 
                 const bool indexOnly = (isStateArrayAccess (inst.op) || isStreamAccess (inst.op))
@@ -773,6 +932,86 @@ private:
             for (size_t k = j + 1; k < insts.size(); ++k)
                 if (isFloat32Conversion (insts[k], inst.result))
                     isRamp[k] = true;
+        }
+    }
+
+    /** Recognizes `idx = base + induction` (with loop-invariant `base`) used
+        exclusively as the element index of stream loads/stores inside the
+        loop body, so constant-chunk distributed loops can widen stream ops. */
+    void findStreamIndexOffsets()
+    {
+        const auto& insts = fn.blocks[static_cast<size_t> (body)].insts;
+
+        isStreamOffset.assign (insts.size(), false);
+        isStreamOffsetValue.assign (static_cast<size_t> (numValues), false);
+        streamOffsetBase.assign (static_cast<size_t> (numValues), -1);
+
+        for (size_t j = 0; j < insts.size(); ++j)
+        {
+            const auto& inst = insts[j];
+
+            if (static_cast<int> (j) == incrementIndex || inst.result < 0)
+                continue;
+
+            if (inst.op != YdspIrOp::addI || inst.saturatingIntegerArithmetic)
+                continue;
+
+            if (fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::int32Type)
+                continue;
+
+            int base = -1;
+
+            if (inst.a == loop.induction && isLoopInvariant (inst.b))
+                base = inst.b;
+            else if (inst.b == loop.induction && isLoopInvariant (inst.a))
+                base = inst.a;
+
+            if (base < 0)
+                continue;
+
+            const auto value = static_cast<size_t> (inst.result);
+
+            if (defsInBody[value] != 1 || defsElsewhere[value] != 0 || usesElsewhere[value] != 0)
+                continue;
+
+            if (fn.blocks[static_cast<size_t> (body)].termCond == inst.result)
+                continue;
+
+            bool onlyStreamIndexes = false;
+
+            for (size_t k = 0; k < insts.size(); ++k)
+            {
+                const auto& use = insts[k];
+                bool readsValue = false;
+
+                forEachValueOperand (use, [&] (int operand)
+                {
+                    if (operand == inst.result)
+                        readsValue = true;
+                });
+
+                if (! readsValue)
+                    continue;
+
+                if (k <= j
+                    || ! isStreamAccess (use.op)
+                    || use.a != inst.result
+                    || use.b == inst.result
+                    || use.c == inst.result)
+                {
+                    onlyStreamIndexes = false;
+                    break;
+                }
+
+                onlyStreamIndexes = true;
+            }
+
+            if (! onlyStreamIndexes)
+                continue;
+
+            isStreamOffset[j] = true;
+            isStreamOffsetValue[value] = true;
+            streamOffsetBase[value] = base;
         }
     }
 
@@ -875,6 +1114,9 @@ private:
                 continue;
             }
 
+            if (isStreamOffset[j])
+                continue;
+
             switch (inst.op)
             {
                 case YdspIrOp::eqF:
@@ -894,7 +1136,101 @@ private:
                     if (! readsVector)
                         break;
 
-                    if (inst.result < 0 || fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::boolType)
+                    if (inst.result < 0 || inst.a < 0 || inst.b < 0
+                        || fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::boolType
+                        || fn.valueTypes[static_cast<size_t> (inst.a)] != YdspValueType::float32Type
+                        || fn.valueTypes[static_cast<size_t> (inst.b)] != YdspValueType::float32Type)
+                        return fail (YdspVectorizationReason::unsupportedWidenedType);
+
+                    widened[j] = true;
+                    isVector[static_cast<size_t> (inst.result)] = true;
+                    break;
+                }
+
+                case YdspIrOp::eqI:
+                case YdspIrOp::neI:
+                case YdspIrOp::ltI:
+                case YdspIrOp::leI:
+                case YdspIrOp::gtI:
+                case YdspIrOp::geI:
+                {
+                    bool readsVector = false;
+
+                    forEachValueOperand (inst, [&] (int value)
+                    {
+                        readsVector = readsVector || isVector[static_cast<size_t> (value)];
+                    });
+
+                    if (! readsVector)
+                        break;
+
+                    if (inst.result < 0 || inst.a < 0 || inst.b < 0
+                        || fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::boolType
+                        || fn.valueTypes[static_cast<size_t> (inst.a)] != YdspValueType::int32Type
+                        || fn.valueTypes[static_cast<size_t> (inst.b)] != YdspValueType::int32Type)
+                        return fail (YdspVectorizationReason::unsupportedWidenedType);
+
+                    widened[j] = true;
+                    isVector[static_cast<size_t> (inst.result)] = true;
+                    break;
+                }
+
+                case YdspIrOp::andB:
+                case YdspIrOp::orB:
+                case YdspIrOp::notB:
+                case YdspIrOp::movB:
+                {
+                    bool readsVector = false;
+
+                    forEachValueOperand (inst, [&] (int value)
+                    {
+                        readsVector = readsVector || isVector[static_cast<size_t> (value)];
+                    });
+
+                    if (! readsVector)
+                        break;
+
+                    bool allVectorBool = inst.result >= 0
+                                      && fn.valueTypes[static_cast<size_t> (inst.result)] == YdspValueType::boolType;
+
+                    forEachValueOperand (inst, [&] (int value)
+                    {
+                        if (! isVector[static_cast<size_t> (value)]
+                            || fn.valueTypes[static_cast<size_t> (value)] != YdspValueType::boolType)
+                            allVectorBool = false;
+                    });
+
+                    if (! allVectorBool)
+                        return fail (YdspVectorizationReason::unsupportedWidenedType);
+
+                    widened[j] = true;
+                    isVector[static_cast<size_t> (inst.result)] = true;
+                    break;
+                }
+
+                case YdspIrOp::itof:
+                {
+                    if (inst.a < 0 || ! isVector[static_cast<size_t> (inst.a)])
+                        break;
+
+                    if (inst.result < 0
+                        || fn.valueTypes[static_cast<size_t> (inst.a)] != YdspValueType::int32Type
+                        || fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::float32Type)
+                        return fail (YdspVectorizationReason::unsupportedWidenedType);
+
+                    widened[j] = true;
+                    isVector[static_cast<size_t> (inst.result)] = true;
+                    break;
+                }
+
+                case YdspIrOp::ftoi:
+                {
+                    if (inst.a < 0 || ! isVector[static_cast<size_t> (inst.a)])
+                        break;
+
+                    if (inst.result < 0
+                        || fn.valueTypes[static_cast<size_t> (inst.a)] != YdspValueType::float32Type
+                        || fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::int32Type)
                         return fail (YdspVectorizationReason::unsupportedWidenedType);
 
                     widened[j] = true;
@@ -915,9 +1251,14 @@ private:
                         break;
 
                     if (inst.result < 0 || inst.a < 0 || inst.b < 0 || inst.c < 0
-                        || ! isVector[static_cast<size_t> (inst.a)]
-                        || fn.valueTypes[static_cast<size_t> (inst.b)] != YdspValueType::float32Type
-                        || fn.valueTypes[static_cast<size_t> (inst.c)] != YdspValueType::float32Type)
+                        || ! isVector[static_cast<size_t> (inst.a)])
+                        return fail (YdspVectorizationReason::unsupportedWidenedType);
+
+                    const auto resultType = fn.valueTypes[static_cast<size_t> (inst.result)];
+
+                    if ((resultType != YdspValueType::float32Type && resultType != YdspValueType::int32Type)
+                        || fn.valueTypes[static_cast<size_t> (inst.b)] != resultType
+                        || fn.valueTypes[static_cast<size_t> (inst.c)] != resultType)
                         return fail (YdspVectorizationReason::unsupportedWidenedType);
 
                     widened[j] = true;
@@ -959,16 +1300,42 @@ private:
 
                 case YdspIrOp::loadStateArrayI:
                 {
-                    if (! isLoopInvariant (inst.a))
+                    if (inst.a == loop.induction)
+                    {
+                        if (fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::int32Type)
+                            return fail (YdspVectorizationReason::unsupportedWidenedType);
+
+                        widened[j] = true;
+                        isVector[static_cast<size_t> (inst.result)] = true;
+                        ++widenedAccessCount;
+                    }
+                    else if (! isLoopInvariant (inst.a))
+                    {
+                        return fail (YdspVectorizationReason::indirectAccess);
+                    }
+
+                    break;
+                }
+
+                case YdspIrOp::storeStateArrayI:
+                {
+                    if (inst.a != loop.induction)
                         return fail (YdspVectorizationReason::indirectAccess);
 
+                    if (inst.b < 0 || fn.valueTypes[static_cast<size_t> (inst.b)] != YdspValueType::int32Type)
+                        return fail (YdspVectorizationReason::unsupportedWidenedType);
+
+                    widened[j] = true;
+                    ++widenedAccessCount;
                     break;
                 }
 
                 case YdspIrOp::loadInput:
                 case YdspIrOp::loadOutput:
                 {
-                    if (inst.a == loop.induction)
+                    const bool isOffset = inst.a >= 0 && isStreamOffsetValue[static_cast<size_t> (inst.a)];
+
+                    if (inst.a == loop.induction || isOffset)
                     {
                         if (fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::float32Type)
                             return fail (YdspVectorizationReason::unsupportedWidenedType);
@@ -988,7 +1355,9 @@ private:
 
                 case YdspIrOp::storeOutput:
                 {
-                    if (inst.a != loop.induction)
+                    const bool isOffset = inst.a >= 0 && isStreamOffsetValue[static_cast<size_t> (inst.a)];
+
+                    if (inst.a != loop.induction && ! isOffset)
                         return fail (YdspVectorizationReason::invariantStreamStore);
 
                     if (inst.b < 0 || fn.valueTypes[static_cast<size_t> (inst.b)] != YdspValueType::float32Type)
@@ -1000,7 +1369,6 @@ private:
                     break;
                 }
 
-                case YdspIrOp::storeStateArrayI:
                 case YdspIrOp::storeStateF:
                 case YdspIrOp::storeStateI:
                 case YdspIrOp::storeParam:
@@ -1030,7 +1398,28 @@ private:
                     if (! readsVector)
                         break;
 
-                    if (! isPackedFloatOp (inst.op, fn.vectorMathEnabled, fn.packedFmaAvailable) || inst.result < 0)
+                    if (isPackedIntOp (inst.op))
+                    {
+                        if (inst.result < 0 || fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::int32Type)
+                            return fail (YdspVectorizationReason::unsupportedWidenedType);
+
+                        bool operandsAreInt32 = true;
+
+                        forEachValueOperand (inst, [&] (int value)
+                        {
+                            if (fn.valueTypes[static_cast<size_t> (value)] != YdspValueType::int32Type)
+                                operandsAreInt32 = false;
+                        });
+
+                        if (! operandsAreInt32)
+                            return fail (YdspVectorizationReason::unsupportedWidenedType);
+
+                        widened[j] = true;
+                        isVector[static_cast<size_t> (inst.result)] = true;
+                        break;
+                    }
+
+                    if (! isPackedFloatOp (inst.op, fn.vectorMathEnabled, fn.packedFmaAvailable, fn.fastMath) || inst.result < 0)
                         return fail (YdspVectorizationReason::unsupportedWidenedOp);
 
                     if (fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::float32Type)
@@ -1228,7 +1617,7 @@ private:
             if (const auto existing = cache.find (scalar); existing != cache.end())
                 return existing->second;
 
-            const auto splat = newValue (YdspValueType::float32Type, lanes);
+            const auto splat = newValue (fn.valueTypes[static_cast<size_t> (scalar)], lanes);
 
             if (definedInBody)
                 newBody.push_back ({ YdspIrOp::vsplat, splat, scalar });
@@ -1239,9 +1628,13 @@ private:
             return splat;
         };
 
-        const auto isFloatOperand = [this] (int value)
+        const auto isSplatOperand = [this] (int value)
         {
-            return value >= 0 && isFloatValueType (fn.valueTypes[static_cast<size_t> (value)]);
+            if (value < 0)
+                return false;
+
+            const auto type = fn.valueTypes[static_cast<size_t> (value)];
+            return isFloatValueType (type) || type == YdspValueType::int32Type;
         };
 
         for (size_t j = 0; j < oldBody.size(); ++j)
@@ -1294,30 +1687,36 @@ private:
                 continue;
             }
 
-            if (inst.op == YdspIrOp::storeStateArrayF || inst.op == YdspIrOp::storeOutput)
+            if (inst.op == YdspIrOp::storeStateArrayF || inst.op == YdspIrOp::storeStateArrayI || inst.op == YdspIrOp::storeOutput)
             {
                 inst.b = splatOf (inst.b);
             }
+            else if (inst.op == YdspIrOp::shlI || inst.op == YdspIrOp::shrI)
+            {
+                if (isSplatOperand (inst.a))
+                    inst.a = splatOf (inst.a);
+            }
             else if (inst.op != YdspIrOp::loadStateArrayF
+                  && inst.op != YdspIrOp::loadStateArrayI
                   && inst.op != YdspIrOp::loadInput
                   && inst.op != YdspIrOp::loadOutput)
             {
-                if (isFloatOperand (inst.a))
+                if (isSplatOperand (inst.a))
                     inst.a = splatOf (inst.a);
 
-                if (isFloatOperand (inst.b))
+                if (isSplatOperand (inst.b))
                     inst.b = splatOf (inst.b);
 
-                if (isFloatOperand (inst.c))
+                if (isSplatOperand (inst.c))
                     inst.c = splatOf (inst.c);
             }
 
-            if (isFloatComparison (inst.op))
+            if (isFloatComparison (inst.op) || isIntComparison (inst.op))
             {
-                if (isFloatOperand (inst.a))
+                if (isSplatOperand (inst.a))
                     inst.a = splatOf (inst.a);
 
-                if (isFloatOperand (inst.b))
+                if (isSplatOperand (inst.b))
                     inst.b = splatOf (inst.b);
             }
 
@@ -1332,7 +1731,7 @@ private:
         tailRemap.assign (static_cast<size_t> (numValues), -1);
         int foldBlock = exit;
 
-        if (loop.bound.kind == YdspLoopBoundKind::constant)
+        if (loop.bound.kind == YdspLoopBoundKind::constant && streamGuards.empty())
         {
             if (tail > 0)
                 emitPeel (oldBody);
@@ -1606,11 +2005,18 @@ private:
             preheaderInsts.push_back ({ YdspIrOp::subI, spanValue, endValue, startValue });
         }
 
-        const auto mask = newValue (YdspValueType::int32Type, 1);
-        preheaderInstructions().push_back ({ YdspIrOp::constI, mask, -1, -1, -1, -1, 0.0, lanes - 1 });
-
         const auto tailValue = newValue (YdspValueType::int32Type, 1);
-        preheaderInstructions().push_back ({ YdspIrOp::andI, tailValue, spanValue, mask });
+
+        if (loop.bound.kind == YdspLoopBoundKind::constant)
+        {
+            preheaderInstructions().push_back ({ YdspIrOp::constI, tailValue, -1, -1, -1, -1, 0.0, 0 });
+        }
+        else
+        {
+            const auto mask = newValue (YdspValueType::int32Type, 1);
+            preheaderInstructions().push_back ({ YdspIrOp::constI, mask, -1, -1, -1, -1, 0.0, lanes - 1 });
+            preheaderInstructions().push_back ({ YdspIrOp::andI, tailValue, spanValue, mask });
+        }
 
         // Buffers that overlap leave the whole span to the scalar remainder:
         // the widened loop then runs no iteration at all.
@@ -1650,6 +2056,8 @@ private:
         }
 
         fn.loops[static_cast<size_t> (loopId)].exitBlock = exit;
+        if (loop.bound.kind == YdspLoopBoundKind::constant)
+            fn.loops[static_cast<size_t> (loopId)].bound = { YdspLoopBoundKind::blockSize, 0 };
         fn.blocks[static_cast<size_t> (header)].termTarget2 = exit;
 
         auto& tailHeaderInsts = fn.blocks[static_cast<size_t> (exit)].insts;
@@ -1729,6 +2137,9 @@ private:
     std::vector<bool> widened;
     std::vector<bool> isRamp;
     std::vector<bool> isRampOffset;
+    std::vector<bool> isStreamOffset;
+    std::vector<bool> isStreamOffsetValue;
+    std::vector<int> streamOffsetBase;
     std::vector<bool> hoistToPreheader;
     std::vector<bool> valueHoisted;
     std::vector<int> tailRemap;

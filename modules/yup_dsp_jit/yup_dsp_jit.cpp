@@ -89,12 +89,16 @@
 
 // Optimisation: compiler passes
 #include "optimiser/passes/yup_YdspPassesShared.cpp"
+#include "optimiser/passes/yup_YdspPassesSsa.cpp"
 #include "optimiser/passes/yup_YdspPassesConstantFolding.cpp"
 #include "optimiser/passes/yup_YdspPassesBoundsChecks.cpp"
 #include "optimiser/passes/yup_YdspPassesAlgebraicSimplification.cpp"
 #include "optimiser/passes/yup_YdspPassesCopyPropagation.cpp"
 #include "optimiser/passes/yup_YdspPassesIfConversion.cpp"
+#include "optimiser/passes/yup_YdspPassesDistributeSampleLoop.cpp"
 #include "optimiser/passes/yup_YdspPassesFullyUnrollBoundedLoops.cpp"
+#include "optimiser/passes/yup_YdspPassesSlpVectorize.cpp"
+#include "optimiser/passes/yup_YdspPassesFastMath.cpp"
 #include "optimiser/passes/yup_YdspPassesSplitWidenedReductionChains.cpp"
 #include "optimiser/passes/yup_YdspPassesStoreToLoadForwarding.cpp"
 #include "optimiser/passes/yup_YdspPassesPromoteStateArrays.cpp"
@@ -104,6 +108,7 @@
 #include "optimiser/passes/yup_YdspPassesLoopFusion.cpp"
 #include "optimiser/passes/yup_YdspPassesContractMultiplyAdd.cpp"
 #include "optimiser/passes/yup_YdspPassesLowerFusedMultiplyAdd.cpp"
+#include "optimiser/passes/yup_YdspPassesSchedule.cpp"
 
 // Optimisation: vectorisation
 #include "optimiser/yup_YdspVectorizer.cpp"

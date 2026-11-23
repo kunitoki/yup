@@ -5767,6 +5767,144 @@ TEST (YdspJitGraphTests, VoiceBankedSubgraphSkipsVoicesWhoseWholeChainIsAsleep)
         EXPECT_FLOAT_EQ (0.0f, asleep[static_cast<size_t> (i)]) << "asleep at " << i;
 }
 
+TEST (YdspJitGraphTests, VoiceBankedSubgraphIdleVoicesDoNotLeakScratchAcrossWakeSleepCycles)
+{
+    // Upstream oscillator goes idle via voiceActivity while downstream effect
+    // stays awake (no voiceActivity): idle voices skip the oscillator while
+    // the effect still reads upstream scratch, which must stay zeroed rather
+    // than leaking an earlier active voice's pitch.
+    {
+        YdspCompiler compiler;
+
+        auto graph = compilePatch (R"YDSP(
+            processor FlagOsc {
+                output stream out;
+                input event midi;
+                state float s;
+                state int active [[ role: voiceActivity ]];
+                event midi (e: noteOn) { s = e.pitch; active = 1; }
+                event midi (e: noteOff) { s = 0.0; active = 0; }
+                process { out = s; }
+            }
+            processor AlwaysOnGain {
+                input stream in;
+                output stream out;
+                process { out = in * 2.0; }
+            }
+            graph MixedChain {
+                input event midi;
+                output stream out;
+                node osc = FlagOsc;
+                node fx = AlwaysOnGain;
+                connection { midi -> osc.midi; osc.out -> fx.in; fx.out -> out; }
+            }
+            graph G [[ main ]] {
+                input event midi;
+                output stream y;
+                node v = MixedChain[4];
+                connection { midi -> v.midi; v.out -> y; }
+            }
+        )YDSP",
+                                   compiler);
+
+        ASSERT_TRUE (graph.isValid());
+        graph.prepare (44100.0, 64);
+
+        const auto noteOn = makeNoteBuffer ({ { 0, 60, 1.0f }, { 0, 64, 1.0f } });
+        const auto block1 = renderOneBlock (graph, &noteOn, 64);
+
+        for (int i = 0; i < 64; ++i)
+            EXPECT_FLOAT_EQ (248.0f, block1[static_cast<size_t> (i)]) << "block1 at " << i;
+
+        yup::MidiBuffer noteOffBoth;
+        noteOffBoth.addEvent (yup::MidiMessage::noteOff (1, 60), 0);
+        noteOffBoth.addEvent (yup::MidiMessage::noteOff (1, 64), 0);
+        const auto block2 = renderOneBlock (graph, &noteOffBoth, 64);
+
+        for (int i = 0; i < 64; ++i)
+            EXPECT_FLOAT_EQ (0.0f, block2[static_cast<size_t> (i)]) << "block2 idle at " << i;
+
+        // Re-wake one voice mid-block; the pre-noteOn span and all other idle
+        // voices must remain silent.
+        const auto wakeMidBlock = makeNoteBuffer ({ { 16, 72, 1.0f } });
+        const auto block3 = renderOneBlock (graph, &wakeMidBlock, 64);
+
+        for (int i = 0; i < 16; ++i)
+            EXPECT_FLOAT_EQ (0.0f, block3[static_cast<size_t> (i)]) << "block3 pre-note at " << i;
+
+        for (int i = 16; i < 64; ++i)
+            EXPECT_FLOAT_EQ (144.0f, block3[static_cast<size_t> (i)]) << "block3 awake at " << i;
+    }
+
+    // Partial-overwrite processor (!overwritesOutputs) in a polyphonic chain:
+    // unwritten samples on a newly woken voice must be zero, not stale scratch
+    // left behind by another voice in the same block.
+    {
+        YdspCompiler compiler;
+
+        auto graph = compilePatch (R"YDSP(
+            processor ConditionalOsc {
+                output stream out;
+                input event midi;
+                state float s;
+                state int active [[ role: voiceActivity ]];
+                event midi (e: noteOn) { s = e.pitch; active = 1; }
+                event midi (e: noteOff) { s = 0.0; active = 0; }
+                process block {
+                    for i in 0..blockSize {
+                        if (active != 0) { out[i] = s; }
+                    }
+                }
+            }
+            processor Pass {
+                input stream in;
+                output stream out;
+                state int active [[ role: voiceActivity ]];
+                process {
+                    out = in;
+                    active = select (in * in < 0.000001, 0, 1);
+                }
+            }
+            graph ConditionalChain {
+                input event midi;
+                output stream out;
+                node osc = ConditionalOsc;
+                node pass = Pass;
+                connection { midi -> osc.midi; osc.out -> pass.in; pass.out -> out; }
+            }
+            graph G [[ main ]] {
+                input event midi;
+                output stream y;
+                node v = ConditionalChain[2];
+                connection { midi -> v.midi; v.out -> y; }
+            }
+        )YDSP",
+                                   compiler);
+
+        ASSERT_TRUE (graph.isValid());
+        graph.prepare (44100.0, 64);
+
+        const auto firstVoice = makeNoteBuffer ({ { 0, 60, 1.0f } });
+        const auto block1 = renderOneBlock (graph, &firstVoice, 64);
+
+        for (int i = 0; i < 64; ++i)
+            EXPECT_FLOAT_EQ (60.0f, block1[static_cast<size_t> (i)]) << "voice 0 at " << i;
+
+        // Release voice 0 at 0 (writes nothing via conditional branch) and
+        // trigger voice 1 at 16: neither voice may see 60.0f anywhere.
+        yup::MidiBuffer swapNotes;
+        swapNotes.addEvent (yup::MidiMessage::noteOff (1, 60), 0);
+        swapNotes.addEvent (yup::MidiMessage::noteOn (1, 64, 1.0f), 16);
+        const auto block2 = renderOneBlock (graph, &swapNotes, 64);
+
+        for (int i = 0; i < 16; ++i)
+            EXPECT_FLOAT_EQ (0.0f, block2[static_cast<size_t> (i)]) << "pre-wake at " << i;
+
+        for (int i = 16; i < 64; ++i)
+            EXPECT_FLOAT_EQ (64.0f, block2[static_cast<size_t> (i)]) << "voice 1 at " << i;
+    }
+}
+
 TEST (YdspJitGraphTests, MonoNodeFollowsTheHeldNoteStackWithLegato)
 {
     YdspCompiler compiler;
@@ -7799,6 +7937,102 @@ TEST (YdspJitGraphTests, FanInSurvivesASecondPrepareAtADifferentBlockSize)
 
         for (int i = 0; i < blockSize; ++i)
             EXPECT_NEAR (10.0f, out[0][static_cast<size_t> (i)], 1e-6f) << "block " << blockSize << " sample " << i;
+    }
+}
+
+TEST (YdspJitGraphTests, AccumulatesMultipleFloat32AndFloat64SourcesCorrectly)
+{
+    // Float32: 4 sources summed at a node input and 3 sources summed at a
+    // graph output (plus duplicate same-buffer connections) over an odd block size.
+    {
+        YdspCompiler compiler;
+
+        auto graph = fanCompile (R"YDSP(
+            graph G {
+                input stream x;
+                output stream y;
+                node a = Gain (g = 1.5);
+                node b = Gain (g = 2.5);
+                node c = Gain (g = 3.0);
+                node s = Gain (g = 2.0);
+                connection {
+                    x -> a.in;
+                    x -> b.in;
+                    x -> c.in;
+                    a.out -> s.in;
+                    b.out -> s.in;
+                    c.out -> s.in;
+                    x -> s.in;
+                    s.out -> y;
+                    x -> y;
+                    x -> y;
+                }
+            }
+        )YDSP",
+                                 compiler);
+
+        ASSERT_TRUE (graph.isValid());
+        constexpr int blockSize = 37;
+        graph.prepare (44100.0, blockSize);
+
+        std::vector<float> input (blockSize);
+        for (int i = 0; i < blockSize; ++i)
+            input[static_cast<size_t> (i)] = 0.25f * static_cast<float> (i - 10);
+
+        const auto out = fanRun (graph, { input }, 1);
+
+        // s.in = (1.5 + 2.5 + 3.0 + 1.0) * x = 8 * x; s.out = 16 * x;
+        // y = s.out + x + x = 18 * x.
+        for (int i = 0; i < blockSize; ++i)
+            EXPECT_NEAR (input[static_cast<size_t> (i)] * 18.0f, out[0][static_cast<size_t> (i)], 1e-5f) << "f32 sample " << i;
+    }
+
+    // Float64: 3 sources summed at a node input and 3 sources summed at a graph output.
+    {
+        YdspCompiler compiler;
+
+        auto graph = compilePatch (R"YDSP(
+            processor WideGain { input stream float64 in; output stream float64 out; input parameter float64 g = 1.0; process { out = in * g; } }
+            graph G {
+                input stream float64 x;
+                output stream float64 y;
+                node a = WideGain (g = 1.25);
+                node b = WideGain (g = 2.5);
+                node c = WideGain (g = 4.25);
+                node s = WideGain (g = 0.5);
+                connection {
+                    x -> a.in;
+                    x -> b.in;
+                    x -> c.in;
+                    a.out -> s.in;
+                    b.out -> s.in;
+                    c.out -> s.in;
+                    s.out -> y;
+                    a.out -> y;
+                    x -> y;
+                }
+            }
+        )YDSP",
+                                   compiler);
+
+        ASSERT_TRUE (graph.isValid());
+        constexpr int blockSize = 19;
+        graph.prepare (44100.0, blockSize);
+
+        std::vector<double> input (blockSize);
+        for (int i = 0; i < blockSize; ++i)
+            input[static_cast<size_t> (i)] = 0.1 * static_cast<double> (i + 1);
+
+        std::vector<double> output (blockSize, 0.0);
+        std::vector<YdspInputBuffer> inputs { YdspInputBuffer (Span<const double> (input.data(), input.size())) };
+        std::vector<YdspOutputBuffer> outputs { YdspOutputBuffer (Span<double> (output.data(), output.size())) };
+
+        ASSERT_EQ (YdspProcessResult::ok, graph.process (yup::YdspProcessRequest { inputs, outputs, blockSize }));
+
+        // s.in = (1.25 + 2.5 + 4.25) * x = 8.0 * x; s.out = 4.0 * x;
+        // y = s.out + a.out + x = (4.0 + 1.25 + 1.0) * x = 6.25 * x.
+        for (int i = 0; i < blockSize; ++i)
+            EXPECT_NEAR (input[static_cast<size_t> (i)] * 6.25, output[static_cast<size_t> (i)], 1e-12) << "f64 sample " << i;
     }
 }
 

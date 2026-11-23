@@ -675,8 +675,9 @@ const void* YdspAudioGraph::Pimpl::runConnectionDelay (StreamConnection& connect
     const auto stride = static_cast<int> (connection.delayData.size()) / numLanes;
     const auto base = static_cast<size_t> (lane) * static_cast<size_t> (stride);
 
-    const auto* src = static_cast<const float*> (source);
-    auto* delayed = connection.delayOutput.data();
+    const auto* __restrict src = static_cast<const float*> (source);
+    auto* __restrict delayed = connection.delayOutput.data();
+    auto* __restrict ring = connection.delayData.data() + base;
     auto& writePos = connection.delayWritePos[static_cast<size_t> (lane)];
     auto readPos = writePos - connection.delaySamples;
     if (readPos < 0)
@@ -684,8 +685,8 @@ const void* YdspAudioGraph::Pimpl::runConnectionDelay (StreamConnection& connect
 
     for (int i = 0; i < blockSize; ++i)
     {
-        connection.delayData[base + static_cast<size_t> (writePos)] = src[i];
-        delayed[i] = connection.delayData[base + static_cast<size_t> (readPos)];
+        ring[static_cast<size_t> (writePos)] = src[i];
+        delayed[i] = ring[static_cast<size_t> (readPos)];
         if (++writePos == stride)
             writePos = 0;
         if (++readPos == stride)
@@ -701,22 +702,25 @@ void YdspAudioGraph::Pimpl::mixNodeInput (Node& node, int s, Span<const YdspInpu
 {
     const auto first = node.inputConnectionStart[static_cast<size_t> (s)];
     const auto last = node.inputConnectionStart[static_cast<size_t> (s) + 1];
+    jassert (last - first >= 2);
 
     auto* mix = node.inputMixPtrs[static_cast<size_t> (s)];
     jassert (mix != nullptr);
 
-    const auto elemSize = static_cast<size_t> (node.inputElemSizes[static_cast<size_t> (s)]);
     const auto type = node.inputElemTypes[static_cast<size_t> (s)];
 
-    for (int c = first; c < last; ++c)
+    auto& firstConn = node.inputConnections[static_cast<size_t> (first)];
+    auto& secondConn = node.inputConnections[static_cast<size_t> (first + 1)];
+    const auto* data0 = applyConnectionDelay (firstConn, connectionSourceData (firstConn, inputs), blockSize);
+    const auto* data1 = applyConnectionDelay (secondConn, connectionSourceData (secondConn, inputs), blockSize);
+
+    combineStreams (mix, data0, data1, type, blockSize);
+
+    for (int c = first + 2; c < last; ++c)
     {
         auto& connection = node.inputConnections[static_cast<size_t> (c)];
         const auto* data = applyConnectionDelay (connection, connectionSourceData (connection, inputs), blockSize);
-
-        if (c == first)
-            std::memcpy (mix, data, static_cast<size_t> (blockSize) * elemSize);
-        else
-            accumulateStream (mix, data, type, blockSize);
+        accumulateStream (mix, data, type, blockSize);
     }
 
     node.runtimeInputs[static_cast<size_t> (s)] = mix;
@@ -743,7 +747,6 @@ void YdspAudioGraph::Pimpl::resolveGroupMemberInputs (Node& node, Span<const Yds
             }
         }
 
-        const auto elemSize = static_cast<size_t> (node.inputElemSizes[static_cast<size_t> (s)]);
         const auto type = node.inputElemTypes[static_cast<size_t> (s)];
 
         if (voice < 0)
@@ -772,15 +775,18 @@ void YdspAudioGraph::Pimpl::resolveGroupMemberInputs (Node& node, Span<const Yds
             auto* mix = node.inputMixPtrs[static_cast<size_t> (s)];
             jassert (mix != nullptr);
 
-            for (int c = first; c < last; ++c)
+            auto& firstConn = node.inputConnections[static_cast<size_t> (first)];
+            auto& secondConn = node.inputConnections[static_cast<size_t> (first + 1)];
+            firstConn.blockSource = applyConnectionDelay (firstConn, connectionSourceData (firstConn, inputs), blockSize);
+            secondConn.blockSource = applyConnectionDelay (secondConn, connectionSourceData (secondConn, inputs), blockSize);
+
+            combineStreams (mix, firstConn.blockSource, secondConn.blockSource, type, blockSize);
+
+            for (int c = first + 2; c < last; ++c)
             {
                 auto& connection = node.inputConnections[static_cast<size_t> (c)];
                 connection.blockSource = applyConnectionDelay (connection, connectionSourceData (connection, inputs), blockSize);
-
-                if (c == first)
-                    std::memcpy (mix, connection.blockSource, static_cast<size_t> (blockSize) * elemSize);
-                else
-                    accumulateStream (mix, connection.blockSource, type, blockSize);
+                accumulateStream (mix, connection.blockSource, type, blockSize);
             }
 
             node.runtimeInputs[static_cast<size_t> (s)] = mix;
@@ -805,19 +811,20 @@ void YdspAudioGraph::Pimpl::resolveGroupMemberInputs (Node& node, Span<const Yds
         auto* mix = node.inputMixPtrs[static_cast<size_t> (s)];
         jassert (mix != nullptr);
 
-        for (int c = first; c < last; ++c)
+        const auto resolveSource = [&] (StreamConnection& connection)
         {
-            auto& connection = node.inputConnections[static_cast<size_t> (c)];
+            return connection.readsVoiceScratch
+                     ? applyConnectionDelay (connection, connectionSourceAtVoice (connection, inputs, voice), blockSize, voice)
+                     : connection.blockSource;
+        };
 
-            const auto* data = connection.readsVoiceScratch
-                                 ? applyConnectionDelay (connection, connectionSourceAtVoice (connection, inputs, voice), blockSize, voice)
-                                 : connection.blockSource;
+        const auto* data0 = resolveSource (node.inputConnections[static_cast<size_t> (first)]);
+        const auto* data1 = resolveSource (node.inputConnections[static_cast<size_t> (first + 1)]);
 
-            if (c == first)
-                std::memcpy (mix, data, static_cast<size_t> (blockSize) * elemSize);
-            else
-                accumulateStream (mix, data, type, blockSize);
-        }
+        combineStreams (mix, data0, data1, type, blockSize);
+
+        for (int c = first + 2; c < last; ++c)
+            accumulateStream (mix, resolveSource (node.inputConnections[static_cast<size_t> (c)]), type, blockSize);
 
         node.runtimeInputs[static_cast<size_t> (s)] = mix;
     }
@@ -867,13 +874,19 @@ void YdspAudioGraph::Pimpl::processPolyphonicGroup (VoiceGroup& group,
 
         resolveGroupMemberInputs (node, inputs, blockSize, -1);
 
-        if (node.accumulatesToRuntimeOutputs)
+        node.hasAccumulatedThisBlock = false;
+        node.handledAsBatchThisBlock = false;
+
+        if (! node.hasIntraGroupInputs
+            && ! node.hasIntraGroupOutputs
+            && node.accumulatesToRuntimeOutputs
+            && node.batchKernel.isValid()
+            && node.batchVoiceWidth >= 4
+            && node.pendingAllSoundOffOffsets.empty()
+            && node.pendingAutomation.empty())
         {
-            for (int ch = 0; ch < node.numOutputs; ++ch)
-            {
-                auto* dst = static_cast<float*> (node.runtimeOutputs[static_cast<size_t> (ch)]);
-                std::fill (dst, dst + blockSize, 0.0f);
-            }
+            processNodeWithSplits (node, ctx, blockSize);
+            node.handledAsBatchThisBlock = true;
         }
     }
 
@@ -884,6 +897,9 @@ void YdspAudioGraph::Pimpl::processPolyphonicGroup (VoiceGroup& group,
         {
             const auto& node = nodes[static_cast<size_t> (topoOrder[static_cast<size_t> (topoStart + m)])];
 
+            if (node.handledAsBatchThisBlock)
+                continue;
+
             if (! node.pendingAllSoundOffOffsets.empty() || ! node.pendingAutomation.empty())
                 return true;
         }
@@ -893,17 +909,6 @@ void YdspAudioGraph::Pimpl::processPolyphonicGroup (VoiceGroup& group,
 
     for (int v = 0; v < group.voiceCount; ++v)
     {
-        for (int m = 0; m < memberCount; ++m)
-        {
-            auto& node = nodes[static_cast<size_t> (topoOrder[static_cast<size_t> (topoStart + m)])];
-
-            for (int ch = 0; ch < node.numOutputs; ++ch)
-            {
-                auto* dst = node.voiceScratchPtrs[static_cast<size_t> (ch)];
-                std::fill (dst, dst + blockSize, 0.0f);
-            }
-        }
-
         bool voiceRuns = hasBlockWork;
 
         if (! voiceRuns)
@@ -911,6 +916,9 @@ void YdspAudioGraph::Pimpl::processPolyphonicGroup (VoiceGroup& group,
             for (int m = 0; m < memberCount && ! voiceRuns; ++m)
             {
                 const auto& node = nodes[static_cast<size_t> (topoOrder[static_cast<size_t> (topoStart + m)])];
+
+                if (node.handledAsBatchThisBlock)
+                    continue;
 
                 if (! voiceIsIdle (node, v) || ! node.voicePendingCalls[static_cast<size_t> (v)].empty())
                     voiceRuns = true;
@@ -924,6 +932,9 @@ void YdspAudioGraph::Pimpl::processPolyphonicGroup (VoiceGroup& group,
         {
             auto& node = nodes[static_cast<size_t> (topoOrder[static_cast<size_t> (topoStart + m)])];
 
+            if (node.handledAsBatchThisBlock)
+                continue;
+
             ctx.params = params.data() + node.paramOffset;
             ctx.paramOut = paramOut.data() + node.paramOutOffset;
             ctx.outputEvents = &node.outputEventQueue;
@@ -932,7 +943,7 @@ void YdspAudioGraph::Pimpl::processPolyphonicGroup (VoiceGroup& group,
                 restoreAutomationParams (node, ctx);
 
             resolveGroupMemberInputs (node, inputs, blockSize, v);
-            runNodeVoice (node, ctx, v, blockSize);
+            runNodeVoice (node, ctx, v, blockSize, m + 1 < memberCount);
         }
     }
 
@@ -941,6 +952,15 @@ void YdspAudioGraph::Pimpl::processPolyphonicGroup (VoiceGroup& group,
     {
         const auto nodeIndex = topoOrder[static_cast<size_t> (topoStart + m)];
         auto& node = nodes[static_cast<size_t> (nodeIndex)];
+
+        if (node.accumulatesToRuntimeOutputs && ! node.hasAccumulatedThisBlock)
+        {
+            for (int ch = 0; ch < node.numOutputs; ++ch)
+            {
+                auto* dst = static_cast<float*> (node.runtimeOutputs[static_cast<size_t> (ch)]);
+                std::fill (dst, dst + blockSize, 0.0f);
+            }
+        }
 
         drainOutputEvents (node, nodeIndex, blockSize, midiOut);
     }
@@ -967,25 +987,75 @@ void YdspAudioGraph::Pimpl::mixGraphOutputs (Span<const YdspInputBuffer> inputs,
         const auto type = outputStreamTypes[static_cast<size_t> (o)];
         const auto elemSize = static_cast<size_t> (elementSizeBytes (type));
 
-        for (int c = first; c < last; ++c)
+        if (last - first == 1)
+        {
+            auto& source = graphOutputSources[static_cast<size_t> (first)];
+            const auto* data = applyConnectionDelay (source, connectionSourceData (source, inputs), blockSize);
+
+            if (destination != data)
+                std::memmove (destination, data, static_cast<size_t> (blockSize) * elemSize);
+
+            continue;
+        }
+
+        auto& firstSource = graphOutputSources[static_cast<size_t> (first)];
+        auto& secondSource = graphOutputSources[static_cast<size_t> (first + 1)];
+        const auto* data0 = applyConnectionDelay (firstSource, connectionSourceData (firstSource, inputs), blockSize);
+        const auto* data1 = applyConnectionDelay (secondSource, connectionSourceData (secondSource, inputs), blockSize);
+
+        combineStreams (destination, data0, data1, type, blockSize);
+
+        for (int c = first + 2; c < last; ++c)
         {
             auto& source = graphOutputSources[static_cast<size_t> (c)];
             const auto* data = applyConnectionDelay (source, connectionSourceData (source, inputs), blockSize);
-
-            if (c == first)
-                std::memmove (destination, data, static_cast<size_t> (blockSize) * elemSize);
-            else
-                accumulateStream (destination, data, type, blockSize);
+            accumulateStream (destination, data, type, blockSize);
         }
     }
 }
 
 //==============================================================================
 
+void YdspAudioGraph::Pimpl::prepareBatchKernels (int maxBlockSize)
+{
+    for (auto& node : nodes)
+    {
+        node.batchState.resize (0);
+        node.batchScratch.clear();
+        node.batchOutputPtrs.clear();
+        node.activeBatchableVoices.clear();
+
+        if (! node.batchKernel.isValid() || node.batchVoiceWidth < 4)
+            continue;
+
+        const auto width = static_cast<size_t> (node.batchVoiceWidth);
+        const auto float32Bytes = static_cast<size_t> (node.batchFloat32Scalars + 1) * width * sizeof (float);
+        const auto int32Offset = YdspIrFunction::alignStateBytes (float32Bytes);
+        const auto int32Bytes = static_cast<size_t> (node.batchInt32Scalars) * width * sizeof (int32_t);
+        const auto totalBytes = YdspIrFunction::alignStateBytes (int32Offset + int32Bytes);
+
+        node.batchInt32ArrayOffset = static_cast<int> (int32Offset);
+        node.batchState.resize (totalBytes);
+
+        node.batchScratch.assign (static_cast<size_t> (node.numOutputs * maxBlockSize), 0.0f);
+        node.batchOutputPtrs.resize (static_cast<size_t> (node.numOutputs), nullptr);
+
+        for (int ch = 0; ch < node.numOutputs; ++ch)
+            node.batchOutputPtrs[static_cast<size_t> (ch)] = node.batchScratch.data() + static_cast<size_t> (ch) * static_cast<size_t> (maxBlockSize);
+
+        node.activeBatchableVoices.reserve (static_cast<size_t> (node.voiceCount));
+    }
+}
+
 void YdspAudioGraph::Pimpl::prepareOutputIsolation (int maxBlockSize)
 {
+    prepareBatchKernels (maxBlockSize);
+
     isolatedOutputs.clear();
     isolatedOutputData.resize (0);
+
+    if (inputStreamTypes.empty() || outputStreamTypes.empty())
+        return;
 
     // One single-voice node that writes every output itself is one kernel
     // call. Any other shape reads an input after some output was written.
@@ -1435,26 +1505,136 @@ void YdspAudioGraph::Pimpl::silenceVoice (Node& node, YdspKernelContext& ctx)
 
 //==============================================================================
 
+void YdspAudioGraph::Pimpl::runVoiceBatchChunk (Node& node, YdspKernelContext& ctx, const int* voices, size_t count, int blockSize)
+{
+    jassert (node.batchKernel.isValid());
+    jassert (count > 0 && count <= static_cast<size_t> (node.batchVoiceWidth));
+    jassert (node.batchVoiceWidth <= 8);
+
+    const int width = node.batchVoiceWidth;
+    const uint8_t* voicePtrs[8] {};
+
+    for (int lane = 0; lane < width; ++lane)
+    {
+        const int voiceIndex = lane < static_cast<int> (count) ? voices[lane] : voices[0];
+        voicePtrs[lane] = state.data() + node.stateOffset + static_cast<size_t> (voiceIndex) * node.stateSize;
+    }
+
+    auto* dstF32 = reinterpret_cast<float*> (node.batchState.data());
+
+    for (int slot = 0; slot < node.batchFloat32Scalars; ++slot)
+    {
+        const size_t dstBase = static_cast<size_t> (slot) * static_cast<size_t> (width);
+
+        for (int lane = 0; lane < width; ++lane)
+            dstF32[dstBase + static_cast<size_t> (lane)] = reinterpret_cast<const float*> (voicePtrs[lane])[slot];
+    }
+
+    const size_t maskBase = static_cast<size_t> (node.batchFloat32Scalars) * static_cast<size_t> (width);
+
+    for (int lane = 0; lane < width; ++lane)
+        dstF32[maskBase + static_cast<size_t> (lane)] = lane < static_cast<int> (count) ? 1.0f : 0.0f;
+
+    auto* dstI32 = reinterpret_cast<int32_t*> (node.batchState.data() + node.batchInt32ArrayOffset);
+    const size_t i32ByteOffset = static_cast<size_t> (node.batchFloat32Scalars) * sizeof (float);
+
+    for (int slot = 0; slot < node.batchInt32Scalars; ++slot)
+    {
+        const size_t dstBase = static_cast<size_t> (slot) * static_cast<size_t> (width);
+
+        for (int lane = 0; lane < width; ++lane)
+            dstI32[dstBase + static_cast<size_t> (lane)] = reinterpret_cast<const int32_t*> (voicePtrs[lane] + i32ByteOffset)[slot];
+    }
+
+    YdspKernelContext batchCtx = ctx;
+    batchCtx.numSamples = blockSize;
+    batchCtx.inputs = node.runtimeInputs.data();
+    batchCtx.outputs = node.hasAccumulatedThisBlock ? node.batchOutputPtrs.data() : node.runtimeOutputs.data();
+    batchCtx.state = node.batchState.data();
+    batchCtx.stateArrays = node.batchState.data();
+
+    node.batchKernel (&batchCtx);
+
+    if (! node.hasAccumulatedThisBlock)
+    {
+        node.hasAccumulatedThisBlock = true;
+    }
+    else
+    {
+        for (int ch = 0; ch < node.numOutputs; ++ch)
+            accumulateStream (node.runtimeOutputs[static_cast<size_t> (ch)],
+                              node.batchOutputPtrs[static_cast<size_t> (ch)],
+                              YdspValueType::float32Type,
+                              blockSize);
+    }
+
+    for (size_t lane = 0; lane < count; ++lane)
+    {
+        auto* vState = state.data() + node.stateOffset + static_cast<size_t> (voices[lane]) * node.stateSize;
+        auto* vF32 = reinterpret_cast<float*> (vState);
+
+        for (int slot = 0; slot < node.batchFloat32Scalars; ++slot)
+            vF32[slot] = dstF32[static_cast<size_t> (slot) * static_cast<size_t> (width) + lane];
+
+        auto* vI32 = reinterpret_cast<int32_t*> (vState + i32ByteOffset);
+
+        for (int slot = 0; slot < node.batchInt32Scalars; ++slot)
+            vI32[slot] = dstI32[static_cast<size_t> (slot) * static_cast<size_t> (width) + lane];
+    }
+}
+
 void YdspAudioGraph::Pimpl::processNodeWithSplits (Node& node, YdspKernelContext& ctx, int blockSize)
 {
     const bool polyphonic = node.voiceCount > 1;
+    node.hasAccumulatedThisBlock = false;
 
-    for (int ch = 0; ch < node.numInputs; ++ch)
-        node.subBlockInputs[static_cast<size_t> (ch)] = node.runtimeInputs[static_cast<size_t> (ch)];
-
-    for (int ch = 0; ch < node.numOutputs; ++ch)
-        node.subBlockOutputs[static_cast<size_t> (ch)] = node.runtimeOutputs[static_cast<size_t> (ch)];
-
-    ctx.inputs = node.subBlockInputs.data();
-    ctx.outputs = node.subBlockOutputs.data();
-
-    if (polyphonic)
+    if (polyphonic
+        && node.batchKernel.isValid()
+        && node.batchVoiceWidth >= 4
+        && node.accumulatesToRuntimeOutputs
+        && node.pendingAllSoundOffOffsets.empty()
+        && node.pendingAutomation.empty())
     {
-        for (int ch = 0; ch < node.numOutputs; ++ch)
+        node.activeBatchableVoices.clear();
+
+        for (int v = 0; v < node.voiceCount; ++v)
         {
-            auto* dst = static_cast<float*> (node.runtimeOutputs[static_cast<size_t> (ch)]);
-            std::fill (dst, dst + blockSize, 0.0f);
+            if (node.isEventDriven && ! node.voicePendingCalls[static_cast<size_t> (v)].empty())
+            {
+                runNodeVoice (node, ctx, v, blockSize);
+                continue;
+            }
+
+            if (node.isEventDriven && voiceIsIdle (node, v))
+                continue;
+
+            node.activeBatchableVoices.push_back (v);
         }
+
+        const size_t numBatchable = node.activeBatchableVoices.size();
+        const size_t batchWidth = static_cast<size_t> (node.batchVoiceWidth);
+        size_t cursor = 0;
+
+        while (numBatchable - cursor >= 3)
+        {
+            const size_t chunkCount = std::min (batchWidth, numBatchable - cursor);
+            runVoiceBatchChunk (node, ctx, node.activeBatchableVoices.data() + cursor, chunkCount, blockSize);
+            cursor += chunkCount;
+        }
+
+        for (; cursor < numBatchable; ++cursor)
+            runNodeVoice (node, ctx, node.activeBatchableVoices[cursor], blockSize);
+
+        if (! node.hasAccumulatedThisBlock)
+        {
+            for (int ch = 0; ch < node.numOutputs; ++ch)
+            {
+                auto* dst = static_cast<float*> (node.runtimeOutputs[static_cast<size_t> (ch)]);
+                std::fill (dst, dst + blockSize, 0.0f);
+            }
+        }
+
+        return;
     }
 
     const bool rewindAutomation = polyphonic && ! node.pendingAutomation.empty();
@@ -1468,11 +1648,20 @@ void YdspAudioGraph::Pimpl::processNodeWithSplits (Node& node, YdspKernelContext
 
         runNodeVoice (node, ctx, v, blockSize);
     }
+
+    if (polyphonic && node.accumulatesToRuntimeOutputs && ! node.hasAccumulatedThisBlock)
+    {
+        for (int ch = 0; ch < node.numOutputs; ++ch)
+        {
+            auto* dst = static_cast<float*> (node.runtimeOutputs[static_cast<size_t> (ch)]);
+            std::fill (dst, dst + blockSize, 0.0f);
+        }
+    }
 }
 
 //==============================================================================
 
-void YdspAudioGraph::Pimpl::runNodeVoice (Node& node, YdspKernelContext& ctx, int voice, int blockSize)
+void YdspAudioGraph::Pimpl::runNodeVoice (Node& node, YdspKernelContext& ctx, int voice, int blockSize, bool clearIdlePolyScratch)
 {
     const bool polyphonic = node.voiceCount > 1;
 
@@ -1485,20 +1674,15 @@ void YdspAudioGraph::Pimpl::runNodeVoice (Node& node, YdspKernelContext& ctx, in
         && node.pendingAllSoundOffOffsets.empty()
         && node.pendingAutomation.empty())
     {
-        if (! polyphonic)
+        if (! polyphonic || clearIdlePolyScratch)
             clearVoiceSpan (node, 0, blockSize, polyphonic);
 
         return;
     }
 
-    if (polyphonic)
-    {
-        for (int ch = 0; ch < node.numOutputs; ++ch)
-        {
-            auto* dst = node.voiceScratchPtrs[static_cast<size_t> (ch)];
-            std::fill (dst, dst + blockSize, 0.0f);
-        }
-    }
+    const bool preClearedPolyScratch = polyphonic && ! node.overwritesOutputs;
+    if (preClearedPolyScratch)
+        clearVoiceSpan (node, 0, blockSize, true);
 
     auto& callOrder = node.pendingCallOrder;
     callOrder.resize (calls.size());
@@ -1540,7 +1724,7 @@ void YdspAudioGraph::Pimpl::runNodeVoice (Node& node, YdspKernelContext& ctx, in
                 runKernelSubBlock (node, ctx, prevOffset, p - prevOffset, polyphonic);
                 rendered = true;
             }
-            else
+            else if (! preClearedPolyScratch)
             {
                 clearVoiceSpan (node, prevOffset, p - prevOffset, polyphonic);
             }
@@ -1573,7 +1757,7 @@ void YdspAudioGraph::Pimpl::runNodeVoice (Node& node, YdspKernelContext& ctx, in
             runKernelSubBlock (node, ctx, prevOffset, blockSize - prevOffset, polyphonic);
             rendered = true;
         }
-        else
+        else if (! preClearedPolyScratch)
         {
             clearVoiceSpan (node, prevOffset, blockSize - prevOffset, polyphonic);
         }
@@ -1581,13 +1765,22 @@ void YdspAudioGraph::Pimpl::runNodeVoice (Node& node, YdspKernelContext& ctx, in
 
     if (polyphonic && rendered && node.accumulatesToRuntimeOutputs)
     {
-        for (int ch = 0; ch < node.numOutputs; ++ch)
+        if (! node.hasAccumulatedThisBlock)
         {
-            const auto* src = node.voiceScratchPtrs[static_cast<size_t> (ch)];
-            auto* dst = static_cast<float*> (node.runtimeOutputs[static_cast<size_t> (ch)]);
+            for (int ch = 0; ch < node.numOutputs; ++ch)
+                std::memcpy (node.runtimeOutputs[static_cast<size_t> (ch)],
+                             node.voiceScratchPtrs[static_cast<size_t> (ch)],
+                             static_cast<size_t> (blockSize) * sizeof (float));
 
-            for (int i = 0; i < blockSize; ++i)
-                dst[i] += src[i];
+            node.hasAccumulatedThisBlock = true;
+        }
+        else
+        {
+            for (int ch = 0; ch < node.numOutputs; ++ch)
+                accumulateStream (node.runtimeOutputs[static_cast<size_t> (ch)],
+                                  node.voiceScratchPtrs[static_cast<size_t> (ch)],
+                                  YdspValueType::float32Type,
+                                  blockSize);
         }
     }
 }

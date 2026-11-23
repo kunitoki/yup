@@ -54,7 +54,7 @@ public:
         @param requireGraph If false, also accept libraries without a root graph.
         @return A unique pointer to the analyzed program, or nullptr if analysis failed.
     */
-    std::unique_ptr<YdspAnalyzedProgram> analyze (std::unique_ptr<YdspProgram> program, bool requireGraph = true);
+    std::unique_ptr<YdspAnalyzedProgram> analyze (std::unique_ptr<YdspProgram> program, bool requireGraph = true, bool fuseGraph = true);
 
 private:
     //==============================================================================

@@ -190,12 +190,51 @@ public:
     void setTargetHasVectorRamp (bool isSupported) noexcept { targetHasVectorRamp = isSupported; }
 
     //==============================================================================
+    /** Converts the function into pruned SSA form using Cytron-style iterated
+        dominance frontiers and `YdspIrOp::phi` join nodes.
+
+        Multi-definition virtual registers (such as mutable locals, carried
+        state registers and loop induction variables) receive a distinct SSA
+        value id per definition, and `phi` nodes are placed where definitions
+        merge and the variable is live-in. Updates `fn.valueTypes`,
+        `fn.valueLanes` and `fn.loops[i].induction` to match the SSA names.
+
+        @returns true if the function was rewritten into SSA form.
+    */
+    bool constructSsa (YdspIrFunction& fn);
+
+    /** Lowers SSA `phi` nodes out of the function back into standard non-SSA
+        IR suitable for the loop transforms, vectoriser and codegen backends.
+
+        Trivial `phi` nodes are simplified, non-interfering preheader values are
+        copy-coalesced (preserving canonical constant-bound loop induction moves),
+        and remaining `phi` incoming edges are sequentialized into parallel
+        copies placed at the end of single-successor predecessors or safely split
+        critical-edge blocks that preserve `fn.loops` and structured control
+        flow.
+
+        @returns true if any `phi` nodes were lowered.
+    */
+    bool destructSsa (YdspIrFunction& fn);
+
+    /** Performs dominator-tree Global Value Numbering (GVN) on SSA form.
+
+        Walks the dominator tree in preorder with a scoped expression table,
+        canonicalizing commutative operations and eliminating redundant pure
+        computations, constants, copies, trivial or duplicate `phi`s, input
+        stream loads and unstored parameter loads across dominated blocks.
+
+        @returns true if the function was changed.
+    */
+    bool globalValueNumbering (YdspIrFunction& fn);
+
+    //==============================================================================
     /** Runs the constant-folding pass over the given function.
 
-        Folds instructions whose operands are all compile-time constants into
-        a single constant instruction. Because the IR is non-SSA, only value
-        ids defined exactly once are ever treated as constant (multi-defined
-        registers, such as loop induction variables, are left alone).
+        Folds instructions (and constant `phi` / `selectB` nodes) whose
+        operands are compile-time constants into a single constant instruction,
+        and folds constant conditional branches while updating `phi` incoming
+        edges. Only value ids defined exactly once are treated as constant.
 
         @returns true if the function was changed.
     */
@@ -221,8 +260,11 @@ public:
 
     /** Runs the copy-propagation pass over the given function.
 
-        Replaces uses of a `mov` destination with its source within a block,
-        stopping at redefinitions of either register.
+        Replaces uses of a `mov` destination with its source within a block
+        (stopping at redefinitions of either register), and across dominated
+        blocks (including `phi` incoming operands) when both source and
+        destination are single-definition SSA values with matching type and lane
+        shape.
 
         @returns true if the function was changed.
     */
@@ -329,6 +371,12 @@ public:
     */
     void splitLiveRangesAtLoops (YdspIrFunction& fn);
 
+    /** Localizes excess loop-carried `int32` state indices (such as 20-32 delay
+        line write pointers in reverbs/diffusers) to short load-update-store
+        spans inside the sample loop so they do not exhaust GP registers.
+    */
+    void localizeHighPressureStateIndices (YdspIrFunction& fn);
+
 
     /** Runs the if-conversion pass over the given function.
 
@@ -393,14 +441,12 @@ public:
 
         Rewrites a state-array load into a move from the value most recently
         stored to that same element, so `a[i] = x; ... = a[i];` stops going
-        through memory. The load's result is unchanged, so this needs no SSA
-        property: it replaces one definition with an identical value.
+        through memory.
 
-        Only forwards within a block, with identical element types and lane
-        counts and an unchanged stored value. Nonnegative int32-range constant
-        indices defined in the block are tracked at each access, accounting for
-        redefinitions. Accesses through the same unchanged index can also be
-        compared by base offset.
+        Forwards both within a block and across strictly dominating blocks when
+        single-definition SSA dominance guarantees that the index and stored
+        value remain valid and no intervening aliasing store, `emitEvent`, or
+        loop-backedge write reaches the load.
         An intervening store is skipped only when the complete element ranges
         are disjoint. Partial vector overlap, uncertain aliases, different
         element types and event emission block forwarding.
@@ -420,6 +466,7 @@ public:
         @returns true if the function was changed.
     */
     bool deadCodeElimination (YdspIrFunction& fn);
+    bool eliminateDeadPrivateArrayStores (YdspIrFunction& fn);
 
     /** Removes basic blocks unreachable from the entry block.
 
@@ -569,6 +616,34 @@ public:
         @see setTargetHasFusedMultiplyAdd
     */
     void lowerFusedMultiplyAdd (YdspIrFunction& fn);
+
+    /** Lowers scalar and packed float32 transcendentals (`exp`, `tanh`,
+        `sin`, `cos`, `log`, `log10`, `pow`, `atan`, `atan2`) into branchless
+        minimax polynomial + range-reduction sequences when `fn.fastMath` is
+        enabled, avoiding external `libm`/SLEEF call boundaries.
+    */
+    bool lowerFastMathTranscendentals (YdspIrFunction& fn);
+
+    /** Lowers widened (`lanes > 1`) float32 `tanh`, and range-proven `sin`/`cos`
+        (`|x| <= 128`), into `<= 1 ULP` inline SIMD sequences in strict mode when
+        target vector math is available.
+    */
+    bool lowerStrictVectorTranscendentals (YdspIrFunction& fn);
+
+    /** Distributes mixed stateful+stateless sample loops into strip-mined
+        chunked loops so stateless feedforward stages can be widened.
+    */
+    bool distributeSampleLoop (YdspIrFunction& fn);
+
+    /** Packs isomorphic parallel scalar chains in basic blocks into 4- or
+        8-lane vector operations (Superword-Level Parallelism).
+    */
+    bool slpVectorize (YdspIrFunction& fn);
+
+    /** Schedules instructions within basic blocks using critical-path latency
+        and register-pressure heuristics.
+    */
+    bool scheduleInstructions (YdspIrFunction& fn);
 
     /** Populates the execution report from an optimised IR program. */
     static void buildReport (const YdspIrProgram& program, YdspExecutionReport& report);

@@ -559,6 +559,703 @@ YdspTargetSelection selectTarget (const YdspCompileOptions& options, const YdspH
     return result;
 }
 
+bool isCrossVoiceBatchableOp (YdspIrOp op, bool allowFma, bool allowVectorMath) noexcept
+{
+    switch (op)
+    {
+        case YdspIrOp::movF:
+        case YdspIrOp::movI:
+        case YdspIrOp::movB:
+        case YdspIrOp::addF:
+        case YdspIrOp::subF:
+        case YdspIrOp::mulF:
+        case YdspIrOp::divF:
+        case YdspIrOp::minF:
+        case YdspIrOp::maxF:
+        case YdspIrOp::negF:
+        case YdspIrOp::absF:
+        case YdspIrOp::sqrtF:
+        case YdspIrOp::floorF:
+        case YdspIrOp::ceilF:
+        case YdspIrOp::rintF:
+        case YdspIrOp::clampF:
+        case YdspIrOp::lerpF:
+        case YdspIrOp::addI:
+        case YdspIrOp::subI:
+        case YdspIrOp::mulI:
+        case YdspIrOp::minI:
+        case YdspIrOp::maxI:
+        case YdspIrOp::absI:
+        case YdspIrOp::negI:
+        case YdspIrOp::clampI:
+        case YdspIrOp::andI:
+        case YdspIrOp::orI:
+        case YdspIrOp::xorI:
+        case YdspIrOp::shlI:
+        case YdspIrOp::shrI:
+        case YdspIrOp::eqF:
+        case YdspIrOp::neF:
+        case YdspIrOp::ltF:
+        case YdspIrOp::leF:
+        case YdspIrOp::gtF:
+        case YdspIrOp::geF:
+        case YdspIrOp::eqI:
+        case YdspIrOp::neI:
+        case YdspIrOp::ltI:
+        case YdspIrOp::leI:
+        case YdspIrOp::gtI:
+        case YdspIrOp::geI:
+        case YdspIrOp::andB:
+        case YdspIrOp::orB:
+        case YdspIrOp::notB:
+        case YdspIrOp::selectB:
+        case YdspIrOp::itof:
+        case YdspIrOp::ftoi:
+            return true;
+
+        case YdspIrOp::fmaF:
+        case YdspIrOp::fmsubF:
+            return allowFma;
+
+        case YdspIrOp::sinF:
+        case YdspIrOp::cosF:
+        case YdspIrOp::tanF:
+        case YdspIrOp::asinF:
+        case YdspIrOp::acosF:
+        case YdspIrOp::atanF:
+        case YdspIrOp::sinhF:
+        case YdspIrOp::coshF:
+        case YdspIrOp::tanhF:
+        case YdspIrOp::asinhF:
+        case YdspIrOp::acoshF:
+        case YdspIrOp::atanhF:
+        case YdspIrOp::expF:
+        case YdspIrOp::logF:
+        case YdspIrOp::log10F:
+        case YdspIrOp::powF:
+        case YdspIrOp::atan2F:
+        case YdspIrOp::fmodF:
+            return allowVectorMath;
+
+        default:
+            return false;
+    }
+}
+
+bool isScalarOnlyProducer (YdspIrOp op) noexcept
+{
+    switch (op)
+    {
+        case YdspIrOp::constF:
+        case YdspIrOp::constI:
+        case YdspIrOp::constB:
+        case YdspIrOp::loadParam:
+        case YdspIrOp::loadSampleRate:
+        case YdspIrOp::loadBlockSize:
+        case YdspIrOp::loadInput:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+bool is32BitBatchType (YdspValueType type) noexcept
+{
+    return type == YdspValueType::float32Type
+        || type == YdspValueType::int32Type
+        || type == YdspValueType::boolType;
+}
+
+std::unique_ptr<YdspIrFunction> buildCrossVoiceBatchIr (const YdspAnalyzedProcessor& processor,
+                                                        const std::vector<YdspAnalyzedFunc>& programFunctions,
+                                                        const YdspIrFunction& scalarKernel,
+                                                        const YdspTargetSelection& target,
+                                                        bool fastMath,
+                                                        bool enableUnrolling,
+                                                        bool hasVectorMath)
+{
+    const int batchVectorWidth = std::min (target.vectorWidth, 8);
+
+    if (batchVectorWidth < 4)
+        return nullptr;
+
+    if (processor.mode != YdspProcessMode::sample || processor.decl == nullptr || processor.decl->process == nullptr)
+        return nullptr;
+
+    if (processor.outputStreams.empty())
+        return nullptr;
+
+    for (const auto* endpoint : processor.outputStreams)
+        if (toStorageType (endpoint->type) != YdspValueType::float32Type)
+            return nullptr;
+
+    for (const auto* endpoint : processor.inputStreams)
+        if (! is32BitBatchType (toStorageType (endpoint->type)))
+            return nullptr;
+
+    YdspDiagnostics localDiagnostics;
+    const auto layout = detail::computeStateLayout (processor, localDiagnostics);
+
+    if (localDiagnostics.hasErrors())
+        return nullptr;
+
+    auto fn = std::make_unique<YdspIrFunction>();
+    detail::YdspRingBoundsProof ringProof (processor);
+    YdspIrBuilder::Config builderConfig;
+    builderConfig.provenArrayAccesses = &ringProof.accesses;
+    builderConfig.boundedFloatCasts = &ringProof.casts;
+    builderConfig.boundedIntegerArithmetic = &ringProof.arithmetic;
+    builderConfig.programFunctions = &programFunctions;
+    builderConfig.traceSites = nullptr;
+
+    YdspIrBuilder builder (*fn, processor, localDiagnostics, layout, builderConfig);
+    builder.build();
+
+    if (localDiagnostics.hasErrors())
+        return nullptr;
+
+#if ! YUP_WASM
+    const bool allowFma = target.supportsFusedMultiplyAdd && batchVectorWidth > 1;
+    const bool allowVectorMath = hasVectorMath;
+#else
+    const bool allowFma = false;
+    const bool allowVectorMath = false;
+#endif
+
+    fn->name = processor.decl->name + ".batch";
+    fn->fastMath = fastMath;
+    fn->vectorMathEnabled = allowVectorMath;
+    fn->packedFmaAvailable = allowFma;
+    fn->vectorRampAvailable = false;
+
+    YdspOptimizer batchOpt (localDiagnostics);
+    batchOpt.setFastMath (fastMath);
+    batchOpt.setTracingEnabled (false);
+    batchOpt.setTargetHasFusedMultiplyAdd (target.supportsFusedMultiplyAdd);
+    batchOpt.setTargetHasPackedFusedMultiplyAdd (allowFma);
+    batchOpt.setTargetHasVectorMath (allowVectorMath);
+    batchOpt.setTargetHasVectorRamp (false);
+    batchOpt.setVectorizationEnabled (false);
+    batchOpt.setUnrollingEnabled (enableUnrolling);
+    batchOpt.setReductionSplittingEnabled (false);
+    batchOpt.setContractionEnabled (false);
+
+    const auto simplify = [&]
+    {
+        for (int i = 0; i < 4; ++i)
+        {
+            bool changed = batchOpt.constantFolding (*fn);
+            changed |= batchOpt.algebraicSimplification (*fn);
+            changed |= batchOpt.ifConversion (*fn);
+            changed |= batchOpt.storeToLoadForwarding (*fn);
+            changed |= batchOpt.copyPropagation (*fn);
+            changed |= batchOpt.eliminateProvenBoundsChecks (*fn);
+            changed |= batchOpt.commonSubexpressionElimination (*fn);
+            changed |= batchOpt.deadCodeElimination (*fn);
+
+            if (! changed)
+                break;
+        }
+    };
+
+    simplify();
+
+    if (batchOpt.promoteStateArrays (*fn))
+        simplify();
+
+    batchOpt.constructSsa (*fn);
+
+    for (int i = 0; i < 4; ++i)
+    {
+        bool changed = batchOpt.constantFolding (*fn);
+        changed |= batchOpt.globalValueNumbering (*fn);
+        changed |= batchOpt.storeToLoadForwarding (*fn);
+        changed |= batchOpt.copyPropagation (*fn);
+
+        while (batchOpt.deadCodeElimination (*fn))
+            changed = true;
+
+        if (! changed)
+            break;
+    }
+
+    batchOpt.loopInvariantCodeMotion (*fn);
+    batchOpt.globalValueNumbering (*fn);
+
+    while (batchOpt.deadCodeElimination (*fn)) {}
+
+    batchOpt.destructSsa (*fn);
+
+    if (batchOpt.ifConversion (*fn, true))
+    {
+        batchOpt.loopInvariantCodeMotion (*fn);
+        batchOpt.commonSubexpressionElimination (*fn);
+        batchOpt.deadCodeElimination (*fn);
+    }
+
+    if (fastMath && batchOpt.combineInvariantFactors (*fn))
+        batchOpt.deadCodeElimination (*fn);
+
+    if (enableUnrolling)
+    {
+        batchOpt.fullyUnrollBoundedLoops (*fn);
+        batchOpt.deadCodeElimination (*fn);
+
+        if (batchOpt.storeToLoadForwarding (*fn))
+            batchOpt.deadCodeElimination (*fn);
+    }
+
+    batchOpt.removeUnreachableBlocks (*fn);
+
+    if (localDiagnostics.hasErrors())
+        return nullptr;
+
+    if (! fn->isSampleMode || fn->isInit || fn->isEventHandler || fn->numOutputs <= 0)
+        return nullptr;
+
+    if (fn->float64Scalars != 0 || fn->int64Scalars != 0
+        || fn->float32Scalars != scalarKernel.float32Scalars
+        || fn->int32Scalars != scalarKernel.int32Scalars
+        || scalarKernel.float64Scalars != 0 || scalarKernel.int64Scalars != 0)
+        return nullptr;
+
+    if (fn->loops.size() != 1)
+        return nullptr;
+
+    const auto& loop = fn->loops.front();
+
+    if (loop.unrolled || loop.bound.kind != YdspLoopBoundKind::blockSize)
+        return nullptr;
+
+    if (loop.headerBlock < 1 || loop.exitBlock != loop.headerBlock + 2
+        || static_cast<size_t> (loop.exitBlock) >= fn->blocks.size())
+        return nullptr;
+
+    const int headerBlock = loop.headerBlock;
+    const int bodyBlock = headerBlock + 1;
+    const int exitBlock = loop.exitBlock;
+
+    for (size_t b = 0; b < fn->blocks.size(); ++b)
+    {
+        const auto& block = fn->blocks[b];
+        const int idx = static_cast<int> (b);
+
+        if (idx == headerBlock)
+        {
+            if (block.term != YdspIrTerm::branchIf || block.termCond < 0
+                || block.termTarget != bodyBlock || block.termTarget2 != exitBlock)
+                return nullptr;
+        }
+        else if (idx == bodyBlock)
+        {
+            if (block.term != YdspIrTerm::branch || block.termTarget != headerBlock)
+                return nullptr;
+        }
+        else
+        {
+            if (block.term != YdspIrTerm::fallthrough
+                && ! (block.term == YdspIrTerm::branch && block.termTarget == idx + 1))
+                return nullptr;
+        }
+    }
+
+    fn->valueTypes = resolveValueTypes (*fn);
+    const int numValues = static_cast<int> (fn->valueTypes.size());
+
+    if (numValues <= 0 || loop.induction < 0 || loop.induction >= numValues)
+        return nullptr;
+
+    std::vector<bool> outputWritten (static_cast<size_t> (fn->numOutputs), false);
+
+    for (size_t b = 0; b < fn->blocks.size(); ++b)
+    {
+        const int idx = static_cast<int> (b);
+
+        for (const auto& inst : fn->blocks[b].insts)
+        {
+            switch (inst.op)
+            {
+                case YdspIrOp::emitEvent:
+                case YdspIrOp::storeEventFieldF:
+                case YdspIrOp::storeEventFieldI:
+                case YdspIrOp::loadEventFieldF:
+                case YdspIrOp::loadEventFieldI:
+                case YdspIrOp::traceInt:
+                case YdspIrOp::traceFloat:
+                case YdspIrOp::traceCommit:
+                case YdspIrOp::storeParam:
+                case YdspIrOp::loadParamOut:
+                case YdspIrOp::storeParamOut:
+                case YdspIrOp::loadStateArrayF:
+                case YdspIrOp::storeStateArrayF:
+                case YdspIrOp::loadStateArrayI:
+                case YdspIrOp::storeStateArrayI:
+                case YdspIrOp::loadInputAddress:
+                case YdspIrOp::loadOutputAddress:
+                case YdspIrOp::loadOutput:
+                case YdspIrOp::phi:
+                case YdspIrOp::vsplat:
+                case YdspIrOp::vrampF:
+                case YdspIrOp::vreduceAddF:
+                case YdspIrOp::vinsertF:
+                case YdspIrOp::vextractF:
+                case YdspIrOp::bitcastFtoI:
+                case YdspIrOp::bitcastItoF:
+                    return nullptr;
+
+                case YdspIrOp::storeOutput:
+                    if (idx != bodyBlock || inst.a != loop.induction
+                        || inst.memIndex < 0 || inst.memIndex >= fn->numOutputs
+                        || inst.b < 0 || inst.b >= numValues
+                        || fn->valueTypes[static_cast<size_t> (inst.b)] != YdspValueType::float32Type)
+                        return nullptr;
+
+                    outputWritten[static_cast<size_t> (inst.memIndex)] = true;
+                    break;
+
+                case YdspIrOp::loadStateF:
+                    if (inst.result < 0 || inst.a < 0 || inst.a >= fn->float32Scalars
+                        || fn->valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::float32Type)
+                        return nullptr;
+                    break;
+
+                case YdspIrOp::storeStateF:
+                    if (inst.memIndex < 0 || inst.memIndex >= fn->float32Scalars
+                        || inst.a < 0 || inst.a >= numValues
+                        || fn->valueTypes[static_cast<size_t> (inst.a)] != YdspValueType::float32Type)
+                        return nullptr;
+                    break;
+
+                case YdspIrOp::loadStateI:
+                    if (inst.result < 0 || inst.a < 0 || inst.a >= fn->int32Scalars
+                        || fn->valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::int32Type)
+                        return nullptr;
+                    break;
+
+                case YdspIrOp::storeStateI:
+                    if (inst.memIndex < 0 || inst.memIndex >= fn->int32Scalars
+                        || inst.a < 0 || inst.a >= numValues
+                        || fn->valueTypes[static_cast<size_t> (inst.a)] != YdspValueType::int32Type)
+                        return nullptr;
+                    break;
+
+                default:
+                    break;
+            }
+        }
+    }
+
+    if (! std::all_of (outputWritten.begin(), outputWritten.end(), [] (bool w) { return w; }))
+        return nullptr;
+
+    std::vector<bool> varying (static_cast<size_t> (numValues), false);
+    std::vector<int> defCount (static_cast<size_t> (numValues), 0);
+    std::vector<int> defBlock (static_cast<size_t> (numValues), -1);
+
+    for (size_t b = 0; b < fn->blocks.size(); ++b)
+    {
+        for (const auto& inst : fn->blocks[b].insts)
+        {
+            if (inst.result >= 0)
+            {
+                ++defCount[static_cast<size_t> (inst.result)];
+                defBlock[static_cast<size_t> (inst.result)] = static_cast<int> (b);
+            }
+
+            if (inst.op == YdspIrOp::loadStateF || inst.op == YdspIrOp::loadStateI)
+                varying[static_cast<size_t> (inst.result)] = true;
+        }
+    }
+
+    bool changed = true;
+
+    while (changed)
+    {
+        changed = false;
+
+        for (const auto& block : fn->blocks)
+        {
+            for (const auto& inst : block.insts)
+            {
+                if (inst.result < 0 || varying[static_cast<size_t> (inst.result)] || ydspFirstOperandIsSlot (inst.op))
+                    continue;
+
+                const bool opAVarying = inst.a >= 0 && varying[static_cast<size_t> (inst.a)];
+                const bool opBVarying = inst.b >= 0 && varying[static_cast<size_t> (inst.b)];
+                const bool opCVarying = inst.c >= 0 && varying[static_cast<size_t> (inst.c)];
+
+                if (opAVarying || opBVarying || opCVarying)
+                {
+                    varying[static_cast<size_t> (inst.result)] = true;
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    if (varying[static_cast<size_t> (loop.induction)]
+        || varying[static_cast<size_t> (fn->blocks[static_cast<size_t> (headerBlock)].termCond)])
+        return nullptr;
+
+    for (int v = 0; v < numValues; ++v)
+        if (varying[static_cast<size_t> (v)] && ! is32BitBatchType (fn->valueTypes[static_cast<size_t> (v)]))
+            return nullptr;
+
+    for (const auto& block : fn->blocks)
+    {
+        for (const auto& inst : block.insts)
+        {
+            if (inst.op == YdspIrOp::loadInput && inst.a >= 0 && varying[static_cast<size_t> (inst.a)])
+                return nullptr;
+
+            if (inst.result < 0 || ! varying[static_cast<size_t> (inst.result)])
+                continue;
+
+            if (inst.op == YdspIrOp::loadStateF || inst.op == YdspIrOp::loadStateI || isScalarOnlyProducer (inst.op))
+                continue;
+
+            if (! isCrossVoiceBatchableOp (inst.op, allowFma, allowVectorMath))
+                return nullptr;
+
+            for (const int operand : { inst.a, inst.b, inst.c })
+                if (operand >= 0 && ! ydspFirstOperandIsSlot (inst.op) && ! is32BitBatchType (fn->valueTypes[static_cast<size_t> (operand)]))
+                    return nullptr;
+
+            if (inst.op == YdspIrOp::itof && fn->valueTypes[static_cast<size_t> (inst.a)] != YdspValueType::int32Type)
+                return nullptr;
+
+            if (inst.op == YdspIrOp::ftoi && fn->valueTypes[static_cast<size_t> (inst.a)] != YdspValueType::float32Type)
+                return nullptr;
+        }
+    }
+
+    auto batchFn = std::make_unique<YdspIrFunction>();
+    batchFn->name = fn->name;
+    batchFn->isSampleMode = true;
+    batchFn->numParams = fn->numParams;
+    batchFn->numParamsOut = fn->numParamsOut;
+    batchFn->numInputs = fn->numInputs;
+    batchFn->numOutputs = fn->numOutputs;
+    batchFn->inputTypes = fn->inputTypes;
+    batchFn->outputTypes = fn->outputTypes;
+    batchFn->paramTypes = fn->paramTypes;
+    batchFn->paramOutTypes = fn->paramOutTypes;
+    batchFn->fastMath = fn->fastMath;
+    batchFn->vectorMathEnabled = allowVectorMath;
+    batchFn->packedFmaAvailable = allowFma;
+    batchFn->vectorRampAvailable = false;
+    batchFn->vectorized = true;
+    batchFn->vectorWidth = batchVectorWidth;
+
+    batchFn->float32Scalars = 0;
+    batchFn->int32Scalars = 0;
+    batchFn->float64Scalars = 0;
+    batchFn->int64Scalars = 0;
+    batchFn->float32ArrayElements = (fn->float32Scalars + 1) * batchVectorWidth;
+    batchFn->int32ArrayElements = fn->int32Scalars * batchVectorWidth;
+    batchFn->float64ArrayElements = 0;
+    batchFn->int64ArrayElements = 0;
+
+    batchFn->valueTypes = fn->valueTypes;
+    batchFn->valueLanes.assign (static_cast<size_t> (numValues), 1);
+
+    for (int v = 0; v < numValues; ++v)
+        if (varying[static_cast<size_t> (v)])
+            batchFn->valueLanes[static_cast<size_t> (v)] = batchVectorWidth;
+
+    batchFn->blocks.resize (fn->blocks.size());
+    batchFn->loops = fn->loops;
+
+    const auto newValue = [&] (YdspValueType type, int lanes)
+    {
+        const int id = static_cast<int> (batchFn->valueTypes.size());
+        batchFn->valueTypes.push_back (type);
+        batchFn->valueLanes.push_back (lanes);
+        return id;
+    };
+
+    const auto emitConstI = [&] (std::vector<YdspIrInst>& out, int64_t val)
+    {
+        const int id = newValue (YdspValueType::int32Type, 1);
+        out.push_back ({ YdspIrOp::constI, id, -1, -1, -1, -1, 0.0, val });
+        return id;
+    };
+
+    const auto emitSplatToTarget = [&] (std::vector<YdspIrInst>& out, int scalarVal, int dstVec)
+    {
+        if (batchFn->valueTypes[static_cast<size_t> (scalarVal)] == YdspValueType::boolType)
+        {
+            const int c0 = emitConstI (out, 0);
+            const int v0 = newValue (YdspValueType::int32Type, batchVectorWidth);
+            out.push_back ({ YdspIrOp::vsplat, v0, c0 });
+            const int vb = newValue (YdspValueType::int32Type, batchVectorWidth);
+            out.push_back ({ YdspIrOp::vsplat, vb, scalarVal });
+            out.push_back ({ YdspIrOp::neI, dstVec, vb, v0 });
+        }
+        else
+        {
+            out.push_back ({ YdspIrOp::vsplat, dstVec, scalarVal });
+        }
+    };
+
+    std::vector<int> cachedPrologueVec (static_cast<size_t> (numValues), -1);
+
+    const auto promoteToVec = [&] (std::vector<YdspIrInst>& out, int blockIdx, int scalarVal)
+    {
+        if (scalarVal < 0)
+            return scalarVal;
+
+        if (static_cast<size_t> (scalarVal) < varying.size() && varying[static_cast<size_t> (scalarVal)])
+            return scalarVal;
+
+        const bool invariant = static_cast<size_t> (scalarVal) < defCount.size()
+                            && defCount[static_cast<size_t> (scalarVal)] == 1
+                            && defBlock[static_cast<size_t> (scalarVal)] >= 0
+                            && defBlock[static_cast<size_t> (scalarVal)] < headerBlock;
+
+        if (invariant && cachedPrologueVec[static_cast<size_t> (scalarVal)] >= 0)
+            return cachedPrologueVec[static_cast<size_t> (scalarVal)];
+
+        const auto type = batchFn->valueTypes[static_cast<size_t> (scalarVal)];
+        const int dstVec = newValue (type, batchVectorWidth);
+
+        if (invariant)
+        {
+            auto& targetInsts = blockIdx < headerBlock ? out : batchFn->blocks[static_cast<size_t> (headerBlock - 1)].insts;
+            emitSplatToTarget (targetInsts, scalarVal, dstVec);
+            cachedPrologueVec[static_cast<size_t> (scalarVal)] = dstVec;
+            return dstVec;
+        }
+
+        emitSplatToTarget (out, scalarVal, dstVec);
+        return dstVec;
+    };
+
+    const int activeMaskIdx = emitConstI (batchFn->blocks[0].insts, static_cast<int64_t> (fn->float32Scalars) * batchVectorWidth);
+    const int activeMaskVal = newValue (YdspValueType::float32Type, batchVectorWidth);
+    batchFn->blocks[0].insts.push_back ({ YdspIrOp::loadStateArrayF, activeMaskVal, activeMaskIdx, -1, -1, 0 });
+
+    for (size_t b = 0; b < fn->blocks.size(); ++b)
+    {
+        const int blockIdx = static_cast<int> (b);
+        const auto& srcBlock = fn->blocks[b];
+        auto& dstBlock = batchFn->blocks[b];
+        auto& out = dstBlock.insts;
+
+        dstBlock.term = srcBlock.term;
+        dstBlock.termCond = srcBlock.termCond;
+        dstBlock.termTarget = srcBlock.termTarget;
+        dstBlock.termTarget2 = srcBlock.termTarget2;
+        dstBlock.preservesConditionalEvaluation = srcBlock.preservesConditionalEvaluation;
+
+        for (const auto& inst : srcBlock.insts)
+        {
+            if (inst.op == YdspIrOp::loadStateF)
+            {
+                const int slotIdx = emitConstI (out, static_cast<int64_t> (inst.a) * batchVectorWidth);
+                out.push_back ({ YdspIrOp::loadStateArrayF, inst.result, slotIdx, -1, -1, 0 });
+                continue;
+            }
+
+            if (inst.op == YdspIrOp::loadStateI)
+            {
+                const int slotIdx = emitConstI (out, static_cast<int64_t> (inst.a) * batchVectorWidth);
+                out.push_back ({ YdspIrOp::loadStateArrayI, inst.result, slotIdx, -1, -1, 0 });
+                continue;
+            }
+
+            if (inst.op == YdspIrOp::storeStateF)
+            {
+                const int vecVal = promoteToVec (out, blockIdx, inst.a);
+                const int slotIdx = emitConstI (out, static_cast<int64_t> (inst.memIndex) * batchVectorWidth);
+                out.push_back ({ YdspIrOp::storeStateArrayF, -1, slotIdx, vecVal, -1, 0 });
+                continue;
+            }
+
+            if (inst.op == YdspIrOp::storeStateI)
+            {
+                int vecVal = promoteToVec (out, blockIdx, inst.a);
+
+                if (batchFn->valueTypes[static_cast<size_t> (vecVal)] == YdspValueType::boolType)
+                {
+                    const int c1 = emitConstI (out, 1);
+                    const int v1 = newValue (YdspValueType::int32Type, batchVectorWidth);
+                    out.push_back ({ YdspIrOp::vsplat, v1, c1 });
+                    const int masked = newValue (YdspValueType::int32Type, batchVectorWidth);
+                    out.push_back ({ YdspIrOp::andI, masked, vecVal, v1 });
+                    vecVal = masked;
+                }
+
+                const int slotIdx = emitConstI (out, static_cast<int64_t> (inst.memIndex) * batchVectorWidth);
+                out.push_back ({ YdspIrOp::storeStateArrayI, -1, slotIdx, vecVal, -1, 0 });
+                continue;
+            }
+
+            if (inst.op == YdspIrOp::storeOutput)
+            {
+                const int vecVal = promoteToVec (out, blockIdx, inst.b);
+                const int masked = newValue (YdspValueType::float32Type, batchVectorWidth);
+                out.push_back ({ YdspIrOp::mulF, masked, vecVal, activeMaskVal });
+                const int reduced = newValue (YdspValueType::float32Type, 1);
+                out.push_back ({ YdspIrOp::vreduceAddF, reduced, masked });
+                out.push_back ({ YdspIrOp::storeOutput, -1, inst.a, reduced, -1, inst.memIndex });
+                continue;
+            }
+
+            if (inst.result >= 0 && varying[static_cast<size_t> (inst.result)])
+            {
+                if (isScalarOnlyProducer (inst.op))
+                {
+                    const int tmp = newValue (batchFn->valueTypes[static_cast<size_t> (inst.result)], 1);
+                    auto scalarInst = inst;
+                    scalarInst.result = tmp;
+                    out.push_back (scalarInst);
+                    emitSplatToTarget (out, tmp, inst.result);
+                    continue;
+                }
+
+                auto vecInst = inst;
+                vecInst.a = promoteToVec (out, blockIdx, vecInst.a);
+
+                if (! ((vecInst.op == YdspIrOp::shlI || vecInst.op == YdspIrOp::shrI)
+                       && vecInst.b >= 0
+                       && (static_cast<size_t> (vecInst.b) >= varying.size() || ! varying[static_cast<size_t> (vecInst.b)])))
+                {
+                    vecInst.b = promoteToVec (out, blockIdx, vecInst.b);
+                }
+
+                vecInst.c = promoteToVec (out, blockIdx, vecInst.c);
+                out.push_back (vecInst);
+                continue;
+            }
+
+            out.push_back (inst);
+        }
+    }
+
+    if (fastMath && allowFma)
+    {
+        batchOpt.setContractionEnabled (true);
+        batchOpt.contractMultiplyAdd (*batchFn);
+        batchOpt.deadCodeElimination (*batchFn);
+        batchOpt.rebalanceMultiplyAddChains (*batchFn);
+    }
+
+    if (! target.supportsFusedMultiplyAdd)
+        batchOpt.lowerFusedMultiplyAdd (*batchFn);
+
+    batchOpt.foldStateWriteBacks (*batchFn);
+    batchOpt.deadCodeElimination (*batchFn);
+    batchOpt.scheduleInstructions (*batchFn);
+    batchOpt.removeUnreachableBlocks (*batchFn);
+
+    if (localDiagnostics.hasErrors() || batchFn->valueLanes.size() != batchFn->valueTypes.size())
+        return nullptr;
+
+    return batchFn;
+}
+
 } // namespace
 
 struct YdspCompiler::Pimpl
@@ -1229,18 +1926,15 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
     optimizer.setTargetHasPackedFusedMultiplyAdd (target.supportsFusedMultiplyAdd && target.vectorWidth > 1);
 
     // Native builds link sleef_library, so a widened transcendental lowers to
-    // 4-lane SLEEF calls; wasm keeps strict libm-only numerics and must not
-    // widen transcendental loops (the wasm backend imports libm per call).
-    // Widening transcendental loops is additionally gated on fastMath: the
-    // measured u10 (strict) vector path lost to the scalar libm it replaces on
-    // the sine-bank shape (strict host 45 ns vs its own scalar baseline 36),
-    // so strict compiles keep transcendental loops scalar on libm.
+    // 4-lane SLEEF calls (u35 under fastMath, u10 <= 1 ULP under strict mode);
+    // wasm keeps strict libm-only numerics and must not widen transcendental
+    // loops (the wasm backend imports libm per call).
 #if ! YUP_WASM
     constexpr bool hasVectorMath = true;
 #else
     constexpr bool hasVectorMath = false;
 #endif
-    optimizer.setTargetHasVectorMath (hasVectorMath && fastMath);
+    optimizer.setTargetHasVectorMath (hasVectorMath);
     optimizer.setTargetHasVectorRamp (hasVectorMath);
 
     optimizer.setVectorizationEnabled (enableVectorization);
@@ -1399,6 +2093,10 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
     {
         String processorName;
         YdspCompiledKernel kernel;
+        YdspCompiledKernel batchKernel;
+        int batchVoiceWidth = 0;
+        int batchFloat32Scalars = 0;
+        int batchInt32Scalars = 0;
         bool isInit = false;
         bool overwritesOutputs = false;
         int numInputs = 0;
@@ -1419,6 +2117,15 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
 
         std::vector<EventHandlerTable> eventHandlerTables;
     };
+
+    std::unordered_set<String> polyphonicProcessors;
+
+    if (useNativeTier && hasLoopTransforms && target.vectorWidth > 1 && bundleInput == nullptr)
+    {
+        for (const auto& node : analyzedGraph.nodes)
+            if (node.voiceCount >= 4 && node.rateMultiplier == 1 && node.rateDivider == 1 && node.processor != nullptr)
+                polyphonicProcessors.insert (node.processor->name);
+    }
 
     std::vector<KernelInfo> kernelInfos;
 
@@ -1512,6 +2219,40 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
 
         if (! info.kernel.isValid())
             return ResultValue<YdspAudioGraph>::fail (diagnostics.getItem (0).message);
+
+        if (! kernel->isInit && polyphonicProcessors.count (kernel->name) != 0)
+        {
+            const auto procIt = std::find_if (analyzed->processors.begin(),
+                                              analyzed->processors.end(),
+                                              [&] (const YdspAnalyzedProcessor& p)
+            {
+                return p.decl != nullptr && p.decl->name == kernel->name;
+            });
+
+            if (procIt != analyzed->processors.end())
+            {
+                if (auto batchIr = buildCrossVoiceBatchIr (*procIt, analyzed->functions, *kernel, target, fastMath, enableUnrolling, hasVectorMath))
+                {
+                    YdspDiagnostics batchDiagnostics;
+#if YUP_WASM
+                    info.batchKernel = compileWasmFn (*batchIr, batchDiagnostics);
+#else
+                    size_t batchCodeSize = 0;
+                    info.batchKernel = YdspCompiledKernel (YdspAsmJitCodegen::compile (graphPimpl->runtime, *batchIr, batchDiagnostics, &batchCodeSize));
+
+                    if (info.batchKernel.isValid() && options.emitOptimizationReport)
+                        optimizationReport.generatedCodeSize += batchCodeSize;
+#endif
+
+                    if (info.batchKernel.isValid())
+                    {
+                        info.batchVoiceWidth = batchIr->vectorWidth;
+                        info.batchFloat32Scalars = kernel->float32Scalars;
+                        info.batchInt32Scalars = kernel->int32Scalars;
+                    }
+                }
+            }
+        }
 
         kernelInfos.push_back (std::move (info));
     }
@@ -1614,6 +2355,15 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
         runtimeNode.voiceCount = node.voiceCount;
         runtimeNode.isEventDriven = node.isEventDriven;
         runtimeNode.isMidiOnly = node.isMidiOnly;
+
+        if (runtimeNode.voiceCount >= 4 && runtimeNode.rateMultiplier == 1 && runtimeNode.rateDivider == 1
+            && kernelInfo->batchKernel.isValid())
+        {
+            runtimeNode.batchKernel = kernelInfo->batchKernel;
+            runtimeNode.batchVoiceWidth = kernelInfo->batchVoiceWidth;
+            runtimeNode.batchFloat32Scalars = kernelInfo->batchFloat32Scalars;
+            runtimeNode.batchInt32Scalars = kernelInfo->batchInt32Scalars;
+        }
         // One event binding per input event endpoint this processor declares,
         // keyed by its local position (not by any graph port) - the handler
         // table for that input is the processor's, shared by every node
@@ -1881,6 +2631,12 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
             connection.readsVoiceScratch = (srcNode.voiceGroupIndex >= 0
                                             && srcNode.voiceGroupIndex == dstNode.voiceGroupIndex
                                             && srcNode.voiceCount > 1);
+
+            if (connection.readsVoiceScratch)
+            {
+                graphPimpl->nodes[static_cast<size_t> (edge.srcNode)].hasIntraGroupOutputs = true;
+                graphPimpl->nodes[static_cast<size_t> (edge.dstNode)].hasIntraGroupInputs = true;
+            }
         }
 
         if (edge.dstNode >= 0)

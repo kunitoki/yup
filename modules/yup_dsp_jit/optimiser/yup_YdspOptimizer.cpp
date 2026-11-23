@@ -312,7 +312,8 @@ namespace
 {
 
 /** True when the function holds a transcendental that a widened loop would
-    lower through the 4-lane SLEEF set.
+    lower through the 4-lane SLEEF set (under `fastMath`, the 9 IR-lowered
+    ops run inline at full target width instead of calling SLEEF).
 */
 bool functionUsesSleefVectorMath (const YdspIrFunction& fn)
 {
@@ -320,25 +321,30 @@ bool functionUsesSleefVectorMath (const YdspIrFunction& fn)
         for (const auto& inst : block.insts)
             switch (inst.op)
             {
-                case YdspIrOp::sinF:
-                case YdspIrOp::cosF:
-                case YdspIrOp::tanF:
                 case YdspIrOp::asinF:
                 case YdspIrOp::acosF:
-                case YdspIrOp::atanF:
                 case YdspIrOp::sinhF:
                 case YdspIrOp::coshF:
-                case YdspIrOp::tanhF:
                 case YdspIrOp::asinhF:
                 case YdspIrOp::acoshF:
                 case YdspIrOp::atanhF:
+                case YdspIrOp::fmodF:
+                    return true;
+
+                case YdspIrOp::sinF:
+                case YdspIrOp::cosF:
+                case YdspIrOp::tanF:
+                case YdspIrOp::atanF:
+                case YdspIrOp::tanhF:
                 case YdspIrOp::expF:
                 case YdspIrOp::logF:
                 case YdspIrOp::log10F:
                 case YdspIrOp::powF:
                 case YdspIrOp::atan2F:
-                case YdspIrOp::fmodF:
-                    return true;
+                    if (! fn.fastMath)
+                        return true;
+                    break;
+
                 default:
                     break;
             }
@@ -385,9 +391,31 @@ void YdspOptimizer::runPasses (YdspIrFunction& fn)
     if (promoteStateArrays (fn))
         simplify();
 
+    // Construct SSA, run dominator-tree GVN and cross-block scalar passes to a
+    // fixed point, hoist loop invariants, then lower cleanly out of SSA before
+    // structured loop transforms, vectorisation and backend codegen.
+    constructSsa (fn);
+
+    for (int i = 0; i < 4; ++i)
+    {
+        bool changed = constantFolding (fn);
+        changed |= globalValueNumbering (fn);
+        changed |= storeToLoadForwarding (fn);
+        changed |= copyPropagation (fn);
+
+        while (deadCodeElimination (fn))
+            changed = true;
+
+        if (! changed)
+            break;
+    }
+
     loopInvariantCodeMotion (fn);
-    commonSubexpressionElimination (fn);
-    deadCodeElimination (fn);
+    globalValueNumbering (fn);
+
+    while (deadCodeElimination (fn)) {}
+
+    destructSsa (fn);
 
     // A `?:` whose arms the hoist has shown to be fixed for the block: as a
     // select it leaves the sample loop too, with everything computed from it.
@@ -422,6 +450,12 @@ void YdspOptimizer::runPasses (YdspIrFunction& fn)
     // unaffected.
     if (vectorizationEnabled && ! fn.isEventHandler)
     {
+        removeUnreachableBlocks (fn);
+        detail::mergeStraightLineBlocks (fn);
+
+        if (distributeSampleLoop (fn))
+            deadCodeElimination (fn);
+
         const int effectiveWidth = (fn.vectorMathEnabled && vectorWidth > 4 && functionUsesSleefVectorMath (fn))
                                      ? 4
                                      : vectorWidth;
@@ -438,11 +472,42 @@ void YdspOptimizer::runPasses (YdspIrFunction& fn)
     {
         fullyUnrollBoundedLoops (fn);
         deadCodeElimination (fn);
+
+        // Unrolling exposes constant indices into compile-time-constant arrays
+        // (such as constant pan/gain tables); fold them before forwarding and SLP.
+        if (constantFolding (fn))
+            deadCodeElimination (fn);
     }
 
     // This cleanup compares full access ranges and preserves vector lane counts.
     // The scalar algebraic passes above must not run on the widened function.
     if ((fn.vectorized || unrollingEnabled) && storeToLoadForwarding (fn))
+    {
+        if (unrollingEnabled)
+            eliminateDeadPrivateArrayStores (fn);
+        deadCodeElimination (fn);
+    }
+
+    // Promote small constant-indexed state arrays exposed by loop unrolling
+    // (for example, unrolled biquad cascades) before SLP vectorizes copies.
+    if (unrollingEnabled && promoteStateArrays (fn))
+    {
+        copyPropagation (fn);
+        deadCodeElimination (fn);
+    }
+
+    // Pack parallel unrolled / scalar chains (Reverb combs, parallel filters)
+    // once unrolling has exposed them and before fast-math lowering expands
+    // transcendentals into polynomial sequences.
+    if (vectorizationEnabled && ! fn.isEventHandler && slpVectorize (fn))
+        deadCodeElimination (fn);
+
+    // Lower float32 fast-math transcendentals inline for both scalar and
+    // widened loops/SLP trees before reduction splitting, FMA contraction, and
+    // scheduling.
+    if (fastMath && lowerFastMathTranscendentals (fn))
+        deadCodeElimination (fn);
+    else if (! fastMath && fn.vectorMathEnabled && lowerStrictVectorTranscendentals (fn))
         deadCodeElimination (fn);
 
     // Only reachable once the copies exist: a rolled loop has one add into the
@@ -490,6 +555,11 @@ void YdspOptimizer::runPasses (YdspIrFunction& fn)
     // Last, so no pass has to see through the copies.
     splitLiveRangesAtLoops (fn);
     deadCodeElimination (fn);
+
+    localizeHighPressureStateIndices (fn);
+
+    // Reorder instructions inside blocks to hide latency and bound register pressure.
+    scheduleInstructions (fn);
 
     // Finally, drop blocks that became unreachable during lowering (the joins
     // of if/else regions whose both arms return early). Their dangling edges to

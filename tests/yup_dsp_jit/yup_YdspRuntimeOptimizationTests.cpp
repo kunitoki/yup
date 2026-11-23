@@ -47,13 +47,14 @@ protected:
         const String type = doublePrecision ? "float64" : "float";
         const auto expression = readsOutput ? "in + out" : "in + 1.0";
 
-        // A second input prevents chain fusion from removing the scratch under test.
+        // Connected output events prevent chain fusion while keeping sample-mode overwritesOutputs intact.
         const auto source = String ("processor Step { input stream ") + type
-            + " in; input stream " + type + " bias; output stream " + type + " out; process { out = " + expression + "; } } "
+            + " in; output stream " + type + " out; output event ev; process { out = " + expression + "; } } "
             + "graph G { input stream " + type + " x; output stream " + type + " y; "
+              "output event ev0; output event ev1; output event ev2; output event ev3; "
               "node a = Step; node b = Step; node c = Step; node d = Step; "
-              "connection { x -> a.in; x -> a.bias; x -> b.bias; x -> c.bias; x -> d.bias; "
-              "a.out -> b.in; b.out -> c.in; c.out -> d.in; d.out -> y; } }";
+              "connection { x -> a.in; a.out -> b.in; b.out -> c.in; c.out -> d.in; d.out -> y; "
+              "a.ev -> ev0; b.ev -> ev1; c.ev -> ev2; d.ev -> ev3; } }";
 
         return yup::test::patches::compilePatch (source, compiler, strictOptions());
     }
@@ -1928,3 +1929,1299 @@ TEST_F (YdspRuntimeOptimizationTests, ConstantMatchRemovesUnselectedArmsAndTheir
         EXPECT_TRUE (foundInit);
     }
 }
+
+TEST_F (YdspRuntimeOptimizationTests, StateArrayPromotionScalesWithTargetRegisterBudgetsAndScalarPressure)
+{
+    const auto compileIr = [] (StringRef source, bool hasFma, int width, bool unroll = false)
+    {
+        YdspDiagnostics diagnostics;
+        YdspLexer lexer (source, diagnostics);
+        YdspParser parser (lexer.tokenize(), diagnostics);
+        auto program = parser.parseProgram();
+        EXPECT_NE (nullptr, program) << diagnostics.toString();
+
+        YdspSemanticAnalyzer analyzer (diagnostics);
+        auto analyzed = analyzer.analyze (std::move (program));
+        EXPECT_NE (nullptr, analyzed) << diagnostics.toString();
+
+        YdspOptimizer optimizer (diagnostics);
+        optimizer.setTargetHasFusedMultiplyAdd (hasFma);
+        optimizer.setVectorWidth (width);
+        optimizer.setUnrollingEnabled (unroll);
+
+        auto ir = optimizer.build (*analyzed);
+        EXPECT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        EXPECT_NE (nullptr, ir);
+        return ir;
+    };
+
+    const auto countArrayOps = [] (const YdspIrFunction& fn, size_t firstBlock, size_t lastBlock, int base, bool stores)
+    {
+        int count = 0;
+
+        for (size_t b = firstBlock; b < lastBlock; ++b)
+            for (const auto& inst : fn.blocks[b].insts)
+                if (inst.memIndex == base && inst.op == (stores ? YdspIrOp::storeStateArrayF : YdspIrOp::loadStateArrayF))
+                    ++count;
+
+        return count;
+    };
+
+    // 12-stage phaser / filter bank promotes on both AArch64 and x86-64.
+    const auto phaser12 = R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z[12];
+            process {
+                float x = in;
+                z[0] = z[0] * 0.5 + x;   z[1] = z[1] * 0.5 + z[0];
+                z[2] = z[2] * 0.5 + z[1]; z[3] = z[3] * 0.5 + z[2];
+                z[4] = z[4] * 0.5 + z[3]; z[5] = z[5] * 0.5 + z[4];
+                z[6] = z[6] * 0.5 + z[5]; z[7] = z[7] * 0.5 + z[6];
+                z[8] = z[8] * 0.5 + z[7]; z[9] = z[9] * 0.5 + z[8];
+                z[10] = z[10] * 0.5 + z[9]; z[11] = z[11] * 0.5 + z[10];
+                out = z[11];
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP";
+
+    for (const auto& cfg : std::vector<std::pair<bool, int>> { { true, 4 }, { false, 4 }, { true, 8 } })
+    {
+        SCOPED_TRACE (::testing::Message() << "fma=" << cfg.first << ", width=" << cfg.second);
+        auto ir = compileIr (phaser12, cfg.first, cfg.second);
+        ASSERT_NE (nullptr, ir);
+        const auto& fn = *ir->kernels[0];
+        ASSERT_EQ (1u, fn.stateArrays.size());
+        const auto base = fn.stateArrays[0].base;
+        const auto header = static_cast<size_t> (fn.loops[0].headerBlock);
+        const auto exitBlock = static_cast<size_t> (fn.loops[0].exitBlock);
+
+        EXPECT_EQ (12, countArrayOps (fn, 0, header, base, false));
+        EXPECT_EQ (0, countArrayOps (fn, header, exitBlock, base, false) + countArrayOps (fn, header, exitBlock, base, true));
+        EXPECT_EQ (12, countArrayOps (fn, exitBlock, exitBlock + 1, base, true));
+    }
+
+    // 16-element bank promotes on AArch64 (32 FP regs) but stays in memory on x86-64 (16 XMM regs).
+    const auto bank16 = R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z[16];
+            process {
+                float x = in;
+                z[0] = z[0] * 0.5 + x;    z[1] = z[1] * 0.5 + z[0];
+                z[2] = z[2] * 0.5 + z[1]; z[3] = z[3] * 0.5 + z[2];
+                z[4] = z[4] * 0.5 + z[3]; z[5] = z[5] * 0.5 + z[4];
+                z[6] = z[6] * 0.5 + z[5]; z[7] = z[7] * 0.5 + z[6];
+                z[8] = z[8] * 0.5 + z[7]; z[9] = z[9] * 0.5 + z[8];
+                z[10] = z[10] * 0.5 + z[9]; z[11] = z[11] * 0.5 + z[10];
+                z[12] = z[12] * 0.5 + z[11]; z[13] = z[13] * 0.5 + z[12];
+                z[14] = z[14] * 0.5 + z[13]; z[15] = z[15] * 0.5 + z[14];
+                out = z[15];
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP";
+
+    {
+        auto armIr = compileIr (bank16, true, 4);
+        ASSERT_NE (nullptr, armIr);
+        const auto& fn = *armIr->kernels[0];
+        const auto base = fn.stateArrays[0].base;
+        const auto header = static_cast<size_t> (fn.loops[0].headerBlock);
+        const auto exitBlock = static_cast<size_t> (fn.loops[0].exitBlock);
+        EXPECT_EQ (16, countArrayOps (fn, 0, header, base, false));
+        EXPECT_EQ (0, countArrayOps (fn, header, exitBlock, base, false) + countArrayOps (fn, header, exitBlock, base, true));
+        EXPECT_EQ (16, countArrayOps (fn, exitBlock, exitBlock + 1, base, true));
+    }
+
+    for (const auto& cfg : std::vector<std::pair<bool, int>> { { false, 4 }, { true, 8 } })
+    {
+        SCOPED_TRACE (::testing::Message() << "fma=" << cfg.first << ", width=" << cfg.second);
+        auto x64Ir = compileIr (bank16, cfg.first, cfg.second);
+        ASSERT_NE (nullptr, x64Ir);
+        const auto& fn = *x64Ir->kernels[0];
+        const auto base = fn.stateArrays[0].base;
+        const auto header = static_cast<size_t> (fn.loops[0].headerBlock);
+        const auto exitBlock = static_cast<size_t> (fn.loops[0].exitBlock);
+        EXPECT_EQ (0, countArrayOps (fn, 0, header, base, false));
+        EXPECT_GT (countArrayOps (fn, header, exitBlock, base, true), 0);
+    }
+
+    // Two 12-element arrays (24 total) both promote on AArch64, while x86-64 promotes only the first.
+    const auto dualBank12 = R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float a[12];
+            state float b[12];
+            process {
+                a[0] = a[0] * 0.5 + in;   a[1] = a[1] * 0.5 + a[0];
+                a[2] = a[2] * 0.5 + a[1]; a[3] = a[3] * 0.5 + a[2];
+                a[4] = a[4] * 0.5 + a[3]; a[5] = a[5] * 0.5 + a[4];
+                a[6] = a[6] * 0.5 + a[5]; a[7] = a[7] * 0.5 + a[6];
+                a[8] = a[8] * 0.5 + a[7]; a[9] = a[9] * 0.5 + a[8];
+                a[10] = a[10] * 0.5 + a[9]; a[11] = a[11] * 0.5 + a[10];
+                b[0] = b[0] * 0.5 + a[11]; b[1] = b[1] * 0.5 + b[0];
+                b[2] = b[2] * 0.5 + b[1];  b[3] = b[3] * 0.5 + b[2];
+                b[4] = b[4] * 0.5 + b[3];  b[5] = b[5] * 0.5 + b[4];
+                b[6] = b[6] * 0.5 + b[5];  b[7] = b[7] * 0.5 + b[6];
+                b[8] = b[8] * 0.5 + b[7];  b[9] = b[9] * 0.5 + b[8];
+                b[10] = b[10] * 0.5 + b[9]; b[11] = b[11] * 0.5 + b[10];
+                out = b[11];
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP";
+
+    {
+        auto armIr = compileIr (dualBank12, true, 4);
+        ASSERT_NE (nullptr, armIr);
+        const auto& fn = *armIr->kernels[0];
+        ASSERT_EQ (2u, fn.stateArrays.size());
+        const auto header = static_cast<size_t> (fn.loops[0].headerBlock);
+        const auto exitBlock = static_cast<size_t> (fn.loops[0].exitBlock);
+        EXPECT_EQ (12, countArrayOps (fn, 0, header, fn.stateArrays[0].base, false));
+        EXPECT_EQ (12, countArrayOps (fn, 0, header, fn.stateArrays[1].base, false));
+        EXPECT_EQ (0, countArrayOps (fn, header, exitBlock, fn.stateArrays[0].base, true));
+        EXPECT_EQ (0, countArrayOps (fn, header, exitBlock, fn.stateArrays[1].base, true));
+    }
+
+    {
+        auto x64Ir = compileIr (dualBank12, false, 4);
+        ASSERT_NE (nullptr, x64Ir);
+        const auto& fn = *x64Ir->kernels[0];
+        ASSERT_EQ (2u, fn.stateArrays.size());
+        const auto header = static_cast<size_t> (fn.loops[0].headerBlock);
+        const auto exitBlock = static_cast<size_t> (fn.loops[0].exitBlock);
+        EXPECT_EQ (12, countArrayOps (fn, 0, header, fn.stateArrays[0].base, false));
+        EXPECT_EQ (0, countArrayOps (fn, header, exitBlock, fn.stateArrays[0].base, true));
+        EXPECT_EQ (0, countArrayOps (fn, 0, header, fn.stateArrays[1].base, false));
+        EXPECT_GT (countArrayOps (fn, header, exitBlock, fn.stateArrays[1].base, true), 0);
+    }
+
+    // Existing live scalar state slots subtract from the promotion budget on x86-64.
+    const auto scalarPlusPhaser12 = R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float s0; state float s1; state float s2; state float s3;
+            state float z[12];
+            process {
+                s0 = s0 * 0.5 + in; s1 = s1 * 0.5 + s0; s2 = s2 * 0.5 + s1; s3 = s3 * 0.5 + s2;
+                z[0] = z[0] * 0.5 + s3;   z[1] = z[1] * 0.5 + z[0];
+                z[2] = z[2] * 0.5 + z[1]; z[3] = z[3] * 0.5 + z[2];
+                z[4] = z[4] * 0.5 + z[3]; z[5] = z[5] * 0.5 + z[4];
+                z[6] = z[6] * 0.5 + z[5]; z[7] = z[7] * 0.5 + z[6];
+                z[8] = z[8] * 0.5 + z[7]; z[9] = z[9] * 0.5 + z[8];
+                z[10] = z[10] * 0.5 + z[9]; z[11] = z[11] * 0.5 + z[10];
+                out = z[11];
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP";
+
+    {
+        auto x64Ir = compileIr (scalarPlusPhaser12, false, 4);
+        ASSERT_NE (nullptr, x64Ir);
+        const auto& fn = *x64Ir->kernels[0];
+        const auto header = static_cast<size_t> (fn.loops[0].headerBlock);
+        const auto exitBlock = static_cast<size_t> (fn.loops[0].exitBlock);
+        EXPECT_EQ (0, countArrayOps (fn, 0, header, fn.stateArrays[0].base, false));
+        EXPECT_GT (countArrayOps (fn, header, exitBlock, fn.stateArrays[0].base, true), 0);
+    }
+
+    {
+        auto armIr = compileIr (scalarPlusPhaser12, true, 4);
+        ASSERT_NE (nullptr, armIr);
+        const auto& fn = *armIr->kernels[0];
+        const auto header = static_cast<size_t> (fn.loops[0].headerBlock);
+        const auto exitBlock = static_cast<size_t> (fn.loops[0].exitBlock);
+        EXPECT_EQ (12, countArrayOps (fn, 0, header, fn.stateArrays[0].base, false));
+        EXPECT_EQ (0, countArrayOps (fn, header, exitBlock, fn.stateArrays[0].base, true));
+    }
+}
+
+TEST_F (YdspRuntimeOptimizationTests, StateArrayPromotionStaysConservativeAroundSampleLoopCalls)
+{
+    const auto compileIr = [] (StringRef source, bool hasFma, int width, bool fastMath)
+    {
+        YdspDiagnostics diagnostics;
+        YdspLexer lexer (source, diagnostics);
+        YdspParser parser (lexer.tokenize(), diagnostics);
+        auto program = parser.parseProgram();
+        EXPECT_NE (nullptr, program) << diagnostics.toString();
+
+        YdspSemanticAnalyzer analyzer (diagnostics);
+        auto analyzed = analyzer.analyze (std::move (program));
+        EXPECT_NE (nullptr, analyzed) << diagnostics.toString();
+
+        YdspOptimizer optimizer (diagnostics);
+        optimizer.setTargetHasFusedMultiplyAdd (hasFma);
+        optimizer.setVectorWidth (width);
+        optimizer.setFastMath (fastMath);
+
+        auto ir = optimizer.build (*analyzed);
+        EXPECT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        EXPECT_NE (nullptr, ir);
+        return ir;
+    };
+
+    const auto countArrayOps = [] (const YdspIrFunction& fn, size_t firstBlock, size_t lastBlock, int base, bool stores)
+    {
+        int count = 0;
+
+        for (size_t b = firstBlock; b < lastBlock; ++b)
+            for (const auto& inst : fn.blocks[b].insts)
+                if (inst.memIndex == base && inst.op == (stores ? YdspIrOp::storeStateArrayF : YdspIrOp::loadStateArrayF))
+                    ++count;
+
+        return count;
+    };
+
+    const auto callWithBank8 = R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z[8];
+            process {
+                let s = sin (in);
+                z[0] = z[0] * 0.5 + s;    z[1] = z[1] * 0.5 + z[0];
+                z[2] = z[2] * 0.5 + z[1]; z[3] = z[3] * 0.5 + z[2];
+                z[4] = z[4] * 0.5 + z[3]; z[5] = z[5] * 0.5 + z[4];
+                z[6] = z[6] * 0.5 + z[5]; z[7] = z[7] * 0.5 + z[6];
+                out = z[7];
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP";
+
+    for (const bool fastMath : { false, true })
+    {
+        // On x86-64 (0 callee-saved XMM registers on SysV), an 8-element array stays in memory around calls.
+        auto x64Ir = compileIr (callWithBank8, false, 4, fastMath);
+        ASSERT_NE (nullptr, x64Ir);
+        const auto& x64Fn = *x64Ir->kernels[0];
+        const auto x64Header = static_cast<size_t> (x64Fn.loops[0].headerBlock);
+        const auto x64Exit = static_cast<size_t> (x64Fn.loops[0].exitBlock);
+        EXPECT_EQ (0, countArrayOps (x64Fn, 0, x64Header, x64Fn.stateArrays[0].base, false));
+        EXPECT_GT (countArrayOps (x64Fn, x64Header, x64Exit, x64Fn.stateArrays[0].base, true), 0);
+
+        // On AArch64 (8 callee-saved FP registers), 8 elements fit without call spills.
+        auto armIr = compileIr (callWithBank8, true, 4, fastMath);
+        ASSERT_NE (nullptr, armIr);
+        const auto& armFn = *armIr->kernels[0];
+        const auto armHeader = static_cast<size_t> (armFn.loops[0].headerBlock);
+        const auto armExit = static_cast<size_t> (armFn.loops[0].exitBlock);
+        EXPECT_EQ (8, countArrayOps (armFn, 0, armHeader, armFn.stateArrays[0].base, false));
+        EXPECT_EQ (0, countArrayOps (armFn, armHeader, armExit, armFn.stateArrays[0].base, true));
+    }
+
+    // A 12-element bank exceeds AArch64's 8 callee-saved FP registers around a libm call.
+    const auto callWithBank12 = R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z[12];
+            process {
+                let s = sin (in);
+                z[0] = z[0] * 0.5 + s;    z[1] = z[1] * 0.5 + z[0];
+                z[2] = z[2] * 0.5 + z[1]; z[3] = z[3] * 0.5 + z[2];
+                z[4] = z[4] * 0.5 + z[3]; z[5] = z[5] * 0.5 + z[4];
+                z[6] = z[6] * 0.5 + z[5]; z[7] = z[7] * 0.5 + z[6];
+                z[8] = z[8] * 0.5 + z[7]; z[9] = z[9] * 0.5 + z[8];
+                z[10] = z[10] * 0.5 + z[9]; z[11] = z[11] * 0.5 + z[10];
+                out = z[11];
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP";
+
+    auto arm12Ir = compileIr (callWithBank12, true, 4, false);
+    ASSERT_NE (nullptr, arm12Ir);
+    const auto& arm12Fn = *arm12Ir->kernels[0];
+    const auto arm12Header = static_cast<size_t> (arm12Fn.loops[0].headerBlock);
+    const auto arm12Exit = static_cast<size_t> (arm12Fn.loops[0].exitBlock);
+    EXPECT_EQ (0, countArrayOps (arm12Fn, 0, arm12Header, arm12Fn.stateArrays[0].base, false));
+    EXPECT_GT (countArrayOps (arm12Fn, arm12Header, arm12Exit, arm12Fn.stateArrays[0].base, true), 0);
+}
+
+TEST_F (YdspRuntimeOptimizationTests, PromotesSubsetAndUnrolledConstantIndexedStateArraysAcrossBranches)
+{
+    const auto countArrayOps = [] (const YdspIrFunction& fn, size_t firstBlock, size_t lastBlock, int base, bool stores)
+    {
+        int count = 0;
+
+        for (size_t b = firstBlock; b < lastBlock; ++b)
+            for (const auto& inst : fn.blocks[b].insts)
+                if (inst.memIndex == base && inst.op == (stores ? YdspIrOp::storeStateArrayF : YdspIrOp::loadStateArrayF))
+                    ++count;
+
+        return count;
+    };
+
+    // 1. Subset of constant indices inside an array larger than maxArrayLength.
+    {
+        const auto source = R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                state float z[20];
+                process {
+                    let v = in + z[15] * 0.25;
+                    z[1] = z[1] * 0.5 + v;
+                    z[7] = z[7] * 0.5 + z[1];
+                    out = z[7];
+                }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP";
+
+        for (const bool hasFma : { false, true })
+        {
+            YdspDiagnostics diagnostics;
+            YdspLexer lexer (source, diagnostics);
+            YdspParser parser (lexer.tokenize(), diagnostics);
+            auto program = parser.parseProgram();
+            ASSERT_NE (nullptr, program);
+            YdspSemanticAnalyzer analyzer (diagnostics);
+            auto analyzed = analyzer.analyze (std::move (program));
+            ASSERT_NE (nullptr, analyzed);
+            YdspOptimizer optimizer (diagnostics);
+            optimizer.setTargetHasFusedMultiplyAdd (hasFma);
+            optimizer.setVectorWidth (4);
+            auto ir = optimizer.build (*analyzed);
+            ASSERT_NE (nullptr, ir);
+            ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+            const auto& fn = *ir->kernels[0];
+            const auto base = fn.stateArrays[0].base;
+            const auto header = static_cast<size_t> (fn.loops[0].headerBlock);
+            const auto exitBlock = static_cast<size_t> (fn.loops[0].exitBlock);
+
+            EXPECT_EQ (3, countArrayOps (fn, 0, header, base, false));
+            EXPECT_EQ (0, countArrayOps (fn, header, exitBlock, base, false) + countArrayOps (fn, header, exitBlock, base, true));
+            EXPECT_EQ (2, countArrayOps (fn, exitBlock, exitBlock + 1, base, true));
+        }
+    }
+
+    // 2. Constant-indexed array accesses across inner branches inside the sample loop.
+    {
+        const auto source = R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                state float z[6];
+                process {
+                    if (in > 0.0) {
+                        z[0] = z[0] * 0.5 + in;
+                        z[1] = z[1] * 0.25 + z[0];
+                    } else {
+                        z[2] = z[2] * 0.5 - in;
+                    }
+                    out = z[0] + z[1] + z[2];
+                }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP";
+
+        YdspDiagnostics diagnostics;
+        YdspLexer lexer (source, diagnostics);
+        YdspParser parser (lexer.tokenize(), diagnostics);
+        auto program = parser.parseProgram();
+        ASSERT_NE (nullptr, program);
+        YdspSemanticAnalyzer analyzer (diagnostics);
+        auto analyzed = analyzer.analyze (std::move (program));
+        ASSERT_NE (nullptr, analyzed);
+        YdspOptimizer optimizer (diagnostics);
+        auto ir = optimizer.build (*analyzed);
+        ASSERT_NE (nullptr, ir);
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+        const auto& fn = *ir->kernels[0];
+        const auto base = fn.stateArrays[0].base;
+        const auto header = static_cast<size_t> (fn.loops[0].headerBlock);
+        const auto exitBlock = static_cast<size_t> (fn.loops[0].exitBlock);
+
+        EXPECT_EQ (3, countArrayOps (fn, 0, header, base, false));
+        EXPECT_EQ (0, countArrayOps (fn, header, exitBlock, base, false) + countArrayOps (fn, header, exitBlock, base, true));
+        EXPECT_EQ (3, countArrayOps (fn, exitBlock, exitBlock + 1, base, true));
+    }
+
+    // 3. Inner constant-bound loop unrolled into constant-indexed accesses.
+    {
+        const auto source = R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                state float z[12];
+                process {
+                    float x = in;
+                    for i in 0..12 {
+                        let y = z[i] * 0.5 + x;
+                        z[i] = y;
+                        x = y;
+                    }
+                    out = x;
+                }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP";
+
+        YdspDiagnostics diagnostics;
+        YdspLexer lexer (source, diagnostics);
+        YdspParser parser (lexer.tokenize(), diagnostics);
+        auto program = parser.parseProgram();
+        ASSERT_NE (nullptr, program);
+        YdspSemanticAnalyzer analyzer (diagnostics);
+        auto analyzed = analyzer.analyze (std::move (program));
+        ASSERT_NE (nullptr, analyzed);
+        YdspOptimizer optimizer (diagnostics);
+        optimizer.setTargetHasFusedMultiplyAdd (false);
+        optimizer.setVectorWidth (4);
+        optimizer.setUnrollingEnabled (true);
+        auto ir = optimizer.build (*analyzed);
+        ASSERT_NE (nullptr, ir);
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+        auto& fn = *ir->kernels[0];
+        ASSERT_EQ (2u, fn.loops.size());
+        const auto* sampleLoop = fn.loops[0].bound.kind == YdspLoopBoundKind::blockSize ? &fn.loops[0] : &fn.loops[1];
+        const auto* innerLoop = sampleLoop == &fn.loops[0] ? &fn.loops[1] : &fn.loops[0];
+        ASSERT_EQ (YdspLoopBoundKind::blockSize, sampleLoop->bound.kind);
+        ASSERT_EQ (YdspLoopBoundKind::constant, innerLoop->bound.kind);
+        ASSERT_TRUE (innerLoop->unrolled);
+
+        const auto base = fn.stateArrays[0].base;
+        const auto header = static_cast<size_t> (sampleLoop->headerBlock);
+        const auto exitBlock = static_cast<size_t> (sampleLoop->exitBlock);
+
+        EXPECT_EQ (12, countArrayOps (fn, 0, header, base, false));
+        EXPECT_EQ (0, countArrayOps (fn, header, exitBlock, base, false) + countArrayOps (fn, header, exitBlock, base, true));
+        EXPECT_EQ (12, countArrayOps (fn, exitBlock, exitBlock + 1, base, true));
+    }
+
+    // 4. Sample loop whose headerBlock != 1 (multi-block entry/preheader).
+    {
+        YdspDiagnostics diagnostics;
+        YdspOptimizer optimizer (diagnostics);
+
+        YdspIrFunction fn;
+        fn.isSampleMode = true;
+        fn.stateArrays.push_back ({ YdspValueType::float32Type, 0, 4, {} });
+        fn.valueTypes = {
+            YdspValueType::int32Type,   // 0: idx0
+            YdspValueType::int32Type,   // 1: one
+            YdspValueType::int32Type,   // 2: blockSize
+            YdspValueType::int32Type,   // 3: sampleIndex
+            YdspValueType::boolType,    // 4: cond
+            YdspValueType::float32Type, // 5: loaded
+            YdspValueType::float32Type, // 6: sum
+            YdspValueType::int32Type    // 7: next
+        };
+
+        fn.blocks.resize (5);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 2 },
+            { YdspIrOp::constI, 1, -1, -1, -1, -1, 0.0, 1 },
+            { YdspIrOp::loadBlockSize, 2 }
+        };
+        fn.blocks[0].term = YdspIrTerm::fallthrough;
+
+        fn.blocks[1].insts = {
+            { YdspIrOp::constI, 3, -1, -1, -1, -1, 0.0, 0 }
+        };
+        fn.blocks[1].term = YdspIrTerm::fallthrough;
+
+        fn.blocks[2].insts = {
+            { YdspIrOp::ltI, 4, 3, 2 }
+        };
+        fn.blocks[2].term = YdspIrTerm::branchIf;
+        fn.blocks[2].termCond = 4;
+        fn.blocks[2].termTarget = 3;
+        fn.blocks[2].termTarget2 = 4;
+
+        fn.blocks[3].insts = {
+            { YdspIrOp::loadStateArrayF, 5, 0, -1, -1, 0 },
+            { YdspIrOp::addF, 6, 5, 5 },
+            { YdspIrOp::storeStateArrayF, -1, 0, 6, -1, 0 },
+            { YdspIrOp::addI, 7, 3, 1 },
+            { YdspIrOp::movI, 3, 7 }
+        };
+        fn.blocks[3].term = YdspIrTerm::branch;
+        fn.blocks[3].termTarget = 2;
+
+        YdspIrLoop loop;
+        loop.id = 0;
+        loop.headerBlock = 2;
+        loop.exitBlock = 4;
+        loop.induction = 3;
+        loop.bound = { YdspLoopBoundKind::blockSize, 0 };
+        fn.loops.push_back (loop);
+
+        EXPECT_TRUE (optimizer.promoteStateArrays (fn));
+        EXPECT_EQ (1, countArrayOps (fn, 0, 1, 0, false));
+        EXPECT_EQ (0, countArrayOps (fn, 2, 4, 0, false) + countArrayOps (fn, 2, 4, 0, true));
+        EXPECT_EQ (1, countArrayOps (fn, 4, 5, 0, true));
+    }
+}
+
+TEST_F (YdspRuntimeOptimizationTests, PromotedStateArraysPreserveRoundTripSemanticsAcrossBlocksBranchesAndReset)
+{
+    const auto phaserSource = R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z[12] = { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2 };
+            process {
+                float x = in;
+                z[0] = z[0] * 0.5 + x;    z[1] = z[1] * 0.5 + z[0];
+                z[2] = z[2] * 0.5 + z[1]; z[3] = z[3] * 0.5 + z[2];
+                z[4] = z[4] * 0.5 + z[3]; z[5] = z[5] * 0.5 + z[4];
+                z[6] = z[6] * 0.5 + z[5]; z[7] = z[7] * 0.5 + z[6];
+                z[8] = z[8] * 0.5 + z[7]; z[9] = z[9] * 0.5 + z[8];
+                z[10] = z[10] * 0.5 + z[9]; z[11] = z[11] * 0.5 + z[10];
+                out = z[11];
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP";
+
+    const auto branchSource = R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z[12] = { 5.0, 2.0 };
+            process {
+                if (in > 0.0) {
+                    z[0] = z[0] + in;
+                } else {
+                    z[1] = z[1] * 0.5 - in;
+                }
+                out = z[0] + z[1];
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP";
+
+    for (const auto* source : { phaserSource, branchSource })
+    {
+        auto baselineOptions = strictOptions();
+        auto autoOptions = strictOptions();
+        autoOptions.optimizationTier = YdspOptimizationTier::automatic;
+        autoOptions.targetPolicy = YdspTargetPolicy::host;
+
+        auto baseGraph = yup::test::patches::compilePatch (source, compiler, baselineOptions);
+        auto autoGraph = yup::test::patches::compilePatch (source, compiler, autoOptions);
+        ASSERT_TRUE (baseGraph.isValid());
+        ASSERT_TRUE (autoGraph.isValid());
+        ASSERT_TRUE (baseGraph.prepare (48000.0, 16).wasOk());
+        ASSERT_TRUE (autoGraph.prepare (48000.0, 16).wasOk());
+
+        const std::array<float, 16> blockA { 1.0f, -0.5f, 0.25f, -0.75f, 0.5f, 0.0f, -1.0f, 0.125f,
+                                             0.3f, -0.2f, 0.4f, -0.6f, 0.7f, -0.8f, 0.9f, -0.1f };
+        const std::array<float, 7> blockB { -0.5f, -0.25f, -0.125f, 0.0f, 2.0f, -1.5f, 0.5f };
+
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            baseGraph.reset();
+            autoGraph.reset();
+
+            std::array<float, 16> baseOutA {}, autoOutA {};
+            const YdspInputBuffer inA[] { Span<const float> (blockA) };
+            YdspOutputBuffer baseBufA[] { Span<float> (baseOutA) };
+            YdspOutputBuffer autoBufA[] { Span<float> (autoOutA) };
+
+            ASSERT_EQ (YdspProcessResult::ok, baseGraph.process ({ inA, baseBufA, 16 }));
+            ASSERT_EQ (YdspProcessResult::ok, autoGraph.process ({ inA, autoBufA, 16 }));
+
+            for (size_t i = 0; i < 16; ++i)
+                EXPECT_FLOAT_EQ (baseOutA[i], autoOutA[i]) << "pass=" << pass << " i=" << i;
+
+            std::array<float, 7> baseOutB {}, autoOutB {};
+            const YdspInputBuffer inB[] { Span<const float> (blockB) };
+            YdspOutputBuffer baseBufB[] { Span<float> (baseOutB) };
+            YdspOutputBuffer autoBufB[] { Span<float> (autoOutB) };
+
+            ASSERT_EQ (YdspProcessResult::ok, baseGraph.process ({ inB, baseBufB, 7 }));
+            ASSERT_EQ (YdspProcessResult::ok, autoGraph.process ({ inB, autoBufB, 7 }));
+
+            for (size_t i = 0; i < 7; ++i)
+                EXPECT_FLOAT_EQ (baseOutB[i], autoOutB[i]) << "pass=" << pass << " i=" << i;
+
+            if (source == branchSource)
+            {
+                float z0 = 5.0f;
+                float z1 = 2.0f;
+
+                for (size_t i = 0; i < 16; ++i)
+                {
+                    if (blockA[i] > 0.0f)
+                        z0 = z0 + blockA[i];
+                    else
+                        z1 = z1 * 0.5f - blockA[i];
+
+                    EXPECT_NEAR (z0 + z1, autoOutA[i], 1e-5f) << "pass=" << pass << " i=" << i;
+                }
+
+                for (size_t i = 0; i < 7; ++i)
+                {
+                    if (blockB[i] > 0.0f)
+                        z0 = z0 + blockB[i];
+                    else
+                        z1 = z1 * 0.5f - blockB[i];
+
+                    EXPECT_NEAR (z0 + z1, autoOutB[i], 1e-5f) << "pass=" << pass << " i=" << i;
+                }
+            }
+            else
+            {
+                std::array<float, 12> z { 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f, 1.1f, 1.2f };
+
+                const auto step = [&z] (float sample)
+                {
+                    z[0] = z[0] * 0.5f + sample;
+                    for (size_t s = 1; s < z.size(); ++s)
+                        z[s] = z[s] * 0.5f + z[s - 1];
+                    return z[11];
+                };
+
+                for (size_t i = 0; i < 16; ++i)
+                    EXPECT_NEAR (step (blockA[i]), autoOutA[i], 1e-5f) << "pass=" << pass << " i=" << i;
+
+                for (size_t i = 0; i < 7; ++i)
+                    EXPECT_NEAR (step (blockB[i]), autoOutB[i], 1e-5f) << "pass=" << pass << " i=" << i;
+            }
+        }
+    }
+}
+
+TEST_F (YdspRuntimeOptimizationTests, WideInt64LcgAndReassignedLocalsProveOverflowFreeAndMatchReference)
+{
+    const auto singleExprSource = R"YDSP(
+        processor P {
+            output stream out;
+            output parameter int64 meter;
+            state int seed = 1;
+            process {
+                seed = int32 (int64 (seed) * 1103515245 + 12345);
+                meter = int64 (seed);
+                out = float (seed) * (1.0 / 2147483648.0);
+            }
+        }
+        graph G { output stream y; node p = P; connection { p.out -> y; } }
+    )YDSP";
+
+    const auto splitLocalSource = R"YDSP(
+        processor P {
+            output stream out;
+            output parameter int64 meter;
+            state int seed = 1;
+            process {
+                int64 wide = int64 (seed) * 1103515245;
+                wide = wide + 12345;
+                seed = int32 (wide);
+                meter = int64 (seed);
+                out = float (seed) * (1.0 / 2147483648.0);
+            }
+        }
+        graph G { output stream y; node p = P; connection { p.out -> y; } }
+    )YDSP";
+
+    for (const auto* source : { singleExprSource, splitLocalSource })
+    {
+        YdspDiagnostics diagnostics;
+        YdspLexer lexer (source, diagnostics);
+        YdspParser parser (lexer.tokenize(), diagnostics);
+        auto program = parser.parseProgram();
+        ASSERT_NE (nullptr, program);
+        YdspSemanticAnalyzer analyzer (diagnostics);
+        auto analyzed = analyzer.analyze (std::move (program));
+        ASSERT_NE (nullptr, analyzed);
+        YdspOptimizer optimizer (diagnostics);
+        auto ir = optimizer.build (*analyzed);
+        ASSERT_NE (nullptr, ir);
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+        const auto& fn = *ir->kernels[0];
+        int mulCount = 0;
+        int addCount = 0;
+        for (const auto& block : fn.blocks)
+            for (const auto& inst : block.insts)
+            {
+                if (inst.op == YdspIrOp::mulI && fn.valueTypes[static_cast<size_t> (inst.result)] == YdspValueType::int64Type)
+                {
+                    ++mulCount;
+                    EXPECT_TRUE (inst.overflowFreeIntegerArithmetic);
+                    EXPECT_FALSE (inst.saturatingIntegerArithmetic);
+                }
+                if (inst.op == YdspIrOp::addI && fn.valueTypes[static_cast<size_t> (inst.result)] == YdspValueType::int64Type)
+                {
+                    ++addCount;
+                    EXPECT_TRUE (inst.overflowFreeIntegerArithmetic);
+                    EXPECT_FALSE (inst.saturatingIntegerArithmetic);
+                }
+            }
+        EXPECT_EQ (1, mulCount);
+        EXPECT_EQ (1, addCount);
+
+        for (const auto tier : { YdspOptimizationTier::baseline, YdspOptimizationTier::automatic, YdspOptimizationTier::aggressive })
+            for (const bool fastMath : { false, true })
+            {
+                auto options = strictOptions();
+                options.optimizationTier = tier;
+                options.fastMath = fastMath;
+                auto graph = yup::test::patches::compilePatch (source, compiler, options);
+                ASSERT_TRUE (graph.isValid());
+                ASSERT_TRUE (graph.prepare (48000.0, 1).wasOk());
+                float output = 0.0f;
+                YdspOutputBuffer outputs[] { Span<float> (&output, 1) };
+                int32_t expected = 1;
+                for (int step = 0; step < 32; ++step)
+                {
+                    ASSERT_EQ (YdspProcessResult::ok, graph.process ({ {}, outputs, 1 }));
+                    expected = static_cast<int32_t> (static_cast<int64_t> (expected) * 1103515245LL + 12345LL);
+                    EXPECT_EQ (expected, graph.getIntOutputValue ("p.meter")) << "step=" << step;
+                }
+            }
+    }
+
+    const auto overflowingInt64Source = R"YDSP(
+        processor P {
+            input parameter int seed = 1;
+            output stream out;
+            state int64 big = 1;
+            process {
+                int64 tooBig = int64 (seed) * 2147483647 * 3;
+                big = big * 1103515245 + 12345;
+                out = float (int32 (big ^ tooBig)) * 0.0;
+            }
+        }
+        graph G { output stream y; node p = P; connection { p.out -> y; } }
+    )YDSP";
+
+    YdspDiagnostics diagnostics;
+    YdspLexer lexer (overflowingInt64Source, diagnostics);
+    YdspParser parser (lexer.tokenize(), diagnostics);
+    auto program = parser.parseProgram();
+    ASSERT_NE (nullptr, program);
+    YdspSemanticAnalyzer analyzer (diagnostics);
+    auto analyzed = analyzer.analyze (std::move (program));
+    ASSERT_NE (nullptr, analyzed);
+    YdspOptimizer optimizer (diagnostics);
+    auto ir = optimizer.build (*analyzed);
+    ASSERT_NE (nullptr, ir);
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+    const auto& fn = *ir->kernels[0];
+    int overflowFree = 0;
+    int saturating = 0;
+    for (const auto& block : fn.blocks)
+        for (const auto& inst : block.insts)
+            if ((inst.op == YdspIrOp::mulI || inst.op == YdspIrOp::addI)
+                && fn.valueTypes[static_cast<size_t> (inst.result)] == YdspValueType::int64Type)
+            {
+                overflowFree += inst.overflowFreeIntegerArithmetic ? 1 : 0;
+                saturating += inst.saturatingIntegerArithmetic ? 1 : 0;
+            }
+    EXPECT_EQ (1, overflowFree); // int64 (seed) * 2147483647 only
+    EXPECT_EQ (3, saturating);   // * 3, big * 1103515245, and + 12345
+}
+
+TEST_F (YdspRuntimeOptimizationTests, BoundedFloatToIntCoversMinMaxClampFloorAndPreservesNegativeAndNaN)
+{
+    const auto buildFn = [] (const String& body) -> std::unique_ptr<YdspIrProgram>
+    {
+        const auto source = String (R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                state int idx;
+                state float table[440];
+                process {
+                    BODY
+                }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP").replace ("BODY", body);
+
+        YdspDiagnostics diagnostics;
+        YdspLexer lexer (source, diagnostics);
+        YdspParser parser (lexer.tokenize(), diagnostics);
+        auto program = parser.parseProgram();
+        if (program == nullptr)
+            return nullptr;
+        YdspSemanticAnalyzer analyzer (diagnostics);
+        auto analyzed = analyzer.analyze (std::move (program));
+        if (analyzed == nullptr)
+            return nullptr;
+        YdspOptimizer optimizer (diagnostics);
+        return optimizer.build (*analyzed);
+    };
+
+    for (const auto* expr : {
+             "out = float (int32 (min (427.0, max (0.0, in))));",
+             "out = float (int32 (clamp (in, 0.0, 4000.0)));",
+             "out = float (int32 (floor (clamp (in, 0.0, 4000.0))));",
+             "out = float (int32 (floor (min (427.0, max (0.0, in)))));",
+             "out = float (int32 (floor (float (idx & 7) * 2.5 + 1.0)));",
+             "out = float (int32 (min (427.0, max (-4.0, in)) + 4.0));" })
+    {
+        auto ir = buildFn (expr);
+        ASSERT_NE (nullptr, ir) << expr;
+        const auto& fn = *ir->kernels[0];
+        int ftoiCount = 0;
+        for (const auto& block : fn.blocks)
+            for (const auto& inst : block.insts)
+                if (inst.op == YdspIrOp::ftoi)
+                {
+                    ++ftoiCount;
+                    EXPECT_TRUE (inst.boundedFloatToInt) << expr;
+                }
+        EXPECT_EQ (1, ftoiCount) << expr;
+    }
+
+    for (const auto* expr : {
+             "out = float (int32 (floor (in)));",
+             "out = float (int32 (clamp (in, 0.0, 2147483648.0)));" })
+    {
+        auto ir = buildFn (expr);
+        ASSERT_NE (nullptr, ir) << expr;
+        const auto& fn = *ir->kernels[0];
+        int ftoiCount = 0;
+        for (const auto& block : fn.blocks)
+            for (const auto& inst : block.insts)
+                if (inst.op == YdspIrOp::ftoi)
+                {
+                    ++ftoiCount;
+                    EXPECT_FALSE (inst.boundedFloatToInt) << expr;
+                }
+        EXPECT_EQ (1, ftoiCount) << expr;
+    }
+
+    // Signed [-4, 427] ranges still prove array bounds checks after shifting into [0, 431].
+    {
+        auto ir = buildFn ("out = table[int32 (min (427.0, max (-4.0, in))) + 4];");
+        ASSERT_NE (nullptr, ir);
+        const auto& fn = *ir->kernels[0];
+        for (const auto& block : fn.blocks)
+            for (const auto& inst : block.insts)
+                EXPECT_NE (YdspIrOp::ltUI, inst.op);
+    }
+
+    const auto runtimeSource = R"YDSP(
+        processor P {
+            input parameter float value = 0.0;
+            output parameter int64 outMinMax, outClamp, outFloorClamp, outFloorMinMax, outSignedMinMax, outSignedClamp;
+            output stream out;
+            process {
+                outMinMax = int64 (int32 (min (427.0, max (0.0, value))));
+                outClamp = int64 (int32 (clamp (value, 0.0, 4000.0)));
+                outFloorClamp = int64 (int32 (floor (clamp (value, 0.0, 4000.0))));
+                outFloorMinMax = int64 (int32 (floor (min (427.0, max (0.0, value)))));
+                outSignedMinMax = int64 (int32 (min (427.0, max (-4.0, value))));
+                outSignedClamp = int64 (int32 (clamp (value, -4.0, 427.0)));
+                out = 0.0;
+            }
+        }
+        graph G { output stream y; node p = P; connection { p.out -> y; } }
+    )YDSP";
+
+    struct Case
+    {
+        float input;
+        int64_t minMax;
+        int64_t clampVal;
+        int64_t floorClamp;
+        int64_t floorMinMax;
+        int64_t signedMinMax;
+        int64_t signedClamp;
+    };
+
+    const Case cases[] {
+        { -100.0f, 0, 0, 0, 0, -4, -4 },
+        { -4.0f, 0, 0, 0, 0, -4, -4 },
+        { -2.5f, 0, 0, 0, 0, -2, -2 },
+        { -0.0f, 0, 0, 0, 0, 0, 0 },
+        { 0.0f, 0, 0, 0, 0, 0, 0 },
+        { 3.75f, 3, 3, 3, 3, 3, 3 },
+        { 427.0f, 427, 427, 427, 427, 427, 427 },
+        { 5000.0f, 427, 4000, 4000, 427, 427, 427 },
+        { std::numeric_limits<float>::infinity(), 427, 4000, 4000, 427, 427, 427 },
+        { -std::numeric_limits<float>::infinity(), 0, 0, 0, 0, -4, -4 },
+        { std::numeric_limits<float>::quiet_NaN(), 0, 0, 0, 0, 0, 0 },
+    };
+
+    for (const auto tier : { YdspOptimizationTier::baseline, YdspOptimizationTier::automatic, YdspOptimizationTier::aggressive })
+        for (const bool fastMath : { false, true })
+        {
+            SCOPED_TRACE (::testing::Message() << "tier=" << static_cast<int> (tier) << ", fastMath=" << fastMath);
+            auto options = strictOptions();
+            options.optimizationTier = tier;
+            options.fastMath = fastMath;
+            auto graph = yup::test::patches::compilePatch (runtimeSource, compiler, options);
+            ASSERT_TRUE (graph.isValid());
+            ASSERT_TRUE (graph.prepare (48000.0, 1).wasOk());
+            float output = 0.0f;
+            YdspOutputBuffer outputs[] { Span<float> (&output, 1) };
+            for (const auto& c : cases)
+            {
+                SCOPED_TRACE (::testing::Message() << "input=" << c.input);
+                graph.setParameter ("p.value", c.input);
+                ASSERT_EQ (YdspProcessResult::ok, graph.process ({ {}, outputs, 1 }));
+                EXPECT_EQ (c.minMax, graph.getIntOutputValue ("p.outMinMax"));
+                EXPECT_EQ (c.clampVal, graph.getIntOutputValue ("p.outClamp"));
+                EXPECT_EQ (c.floorClamp, graph.getIntOutputValue ("p.outFloorClamp"));
+                EXPECT_EQ (c.floorMinMax, graph.getIntOutputValue ("p.outFloorMinMax"));
+                EXPECT_EQ (c.signedMinMax, graph.getIntOutputValue ("p.outSignedMinMax"));
+                EXPECT_EQ (c.signedClamp, graph.getIntOutputValue ("p.outSignedClamp"));
+            }
+        }
+}
+
+TEST_F (YdspRuntimeOptimizationTests, PromotesBlockModeUnrolledBiquadCascadeStateArraysAndMatchesReference)
+{
+    const auto source = R"YDSP(
+        processor P {
+            input stream in1;
+            output stream out1;
+            input parameter float cutoff = 1000.0;
+            input parameter float q = 0.707;
+            state float w1[8];
+            state float w2[8];
+            process block {
+                let w0 = 2.0 * pi * cutoff / sampleRate;
+                let alpha = sin (w0) / (2.0 * q);
+                let cw = cos (w0);
+                let a0 = 1.0 + alpha;
+                let b0 = (1.0 - cw) * 0.5 / a0;
+                let b1 = (1.0 - cw) / a0;
+                let a1 = -2.0 * cw / a0;
+                let a2 = (1.0 - alpha) / a0;
+                for n in 0..blockSize {
+                    float x = in1[n];
+                    for i in 0..8 {
+                        let w = x + (-a1 * w1[i] - a2 * w2[i]);
+                        x = b0 * w + b1 * w1[i] + b0 * w2[i];
+                        w2[i] = w1[i];
+                        w1[i] = w;
+                    }
+                    out1[n] = x;
+                }
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in1; p.out1 -> y; } }
+    )YDSP";
+
+    YdspDiagnostics diagnostics;
+    YdspLexer lexer (source, diagnostics);
+    YdspParser parser (lexer.tokenize(), diagnostics);
+    auto program = parser.parseProgram();
+    ASSERT_NE (nullptr, program);
+    YdspSemanticAnalyzer analyzer (diagnostics);
+    auto analyzed = analyzer.analyze (std::move (program));
+    ASSERT_NE (nullptr, analyzed);
+    YdspOptimizer optimizer (diagnostics);
+    optimizer.setTargetHasFusedMultiplyAdd (true);
+    optimizer.setVectorWidth (4);
+    optimizer.setVectorizationEnabled (true);
+    optimizer.setUnrollingEnabled (true);
+    optimizer.setFastMath (true);
+    optimizer.setContractionEnabled (true);
+    auto ir = optimizer.build (*analyzed);
+    ASSERT_NE (nullptr, ir);
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+    const auto& fn = *ir->kernels[0];
+    const auto sampleLoop = std::find_if (fn.loops.begin(), fn.loops.end(), [] (const YdspIrLoop& loop)
+    {
+        return loop.bound.kind == YdspLoopBoundKind::blockSize && ! loop.unrolled;
+    });
+    ASSERT_NE (fn.loops.end(), sampleLoop);
+
+    const auto header = static_cast<size_t> (sampleLoop->headerBlock);
+    const auto exitBlock = static_cast<size_t> (sampleLoop->exitBlock);
+
+    int inLoopArrayOps = 0;
+    for (size_t b = header; b < exitBlock; ++b)
+        for (const auto& inst : fn.blocks[b].insts)
+            if (inst.op == YdspIrOp::loadStateArrayF || inst.op == YdspIrOp::storeStateArrayF)
+                ++inLoopArrayOps;
+
+    EXPECT_EQ (0, inLoopArrayOps);
+
+    // Numerical equivalence against baseline scalar execution across odd block sizes.
+    auto baselineOpts = strictOptions();
+    baselineOpts.optimizationTier = YdspOptimizationTier::baseline;
+    auto baselineGraph = yup::test::patches::compilePatch (source, compiler, baselineOpts);
+    ASSERT_TRUE (baselineGraph.isValid());
+
+    auto hostOpts = YdspCompileOptions {};
+    hostOpts.fastMath = true;
+    auto hostGraph = yup::test::patches::compilePatch (source, compiler, hostOpts);
+    ASSERT_TRUE (hostGraph.isValid());
+
+    ASSERT_TRUE (baselineGraph.prepare (48000.0, 64).wasOk());
+    ASSERT_TRUE (hostGraph.prepare (48000.0, 64).wasOk());
+
+    std::vector<float> input (128);
+    for (size_t i = 0; i < input.size(); ++i)
+        input[i] = std::sin (static_cast<float> (i) * 0.13f) * 0.5f;
+
+    std::vector<float> refOut (128), optOut (128);
+    size_t pos = 0;
+    for (const int bs : { 17, 31, 64, 16 })
+    {
+        YdspInputBuffer inBuf[] { Span<const float> (input.data() + pos, static_cast<size_t> (bs)) };
+        YdspOutputBuffer refBuf[] { Span<float> (refOut.data() + pos, static_cast<size_t> (bs)) };
+        YdspOutputBuffer optBuf[] { Span<float> (optOut.data() + pos, static_cast<size_t> (bs)) };
+        ASSERT_EQ (YdspProcessResult::ok, baselineGraph.process ({ inBuf, refBuf, bs }));
+        ASSERT_EQ (YdspProcessResult::ok, hostGraph.process ({ inBuf, optBuf, bs }));
+        pos += static_cast<size_t> (bs);
+    }
+
+    for (size_t i = 0; i < input.size(); ++i)
+        EXPECT_NEAR (refOut[i], optOut[i], 1.0e-5f) << "sample=" << i;
+}
+
+TEST_F (YdspRuntimeOptimizationTests, FoldsUnrolledConstantTableTranscendentalsOutOfSampleLoop)
+{
+    const auto source = R"YDSP(
+        processor P {
+            input stream in0, in1, in2, in3;
+            output stream outL, outR;
+            state float gain[4] = { -6.0, -3.0, -9.0, 0.0 };
+            state float pan[4] = { 0.0, 0.25, 0.75, 1.0 };
+            state float xs[4];
+            process {
+                xs[0] = in0; xs[1] = in1; xs[2] = in2; xs[3] = in3;
+                float l = 0.0;
+                float r = 0.0;
+                for i in 0..4 {
+                    let x = xs[i] * pow (10.0, gain[i] / 20.0);
+                    l = l + x * cos (pan[i] * pi * 0.5);
+                    r = r + x * sin (pan[i] * pi * 0.5);
+                }
+                outL = l;
+                outR = r;
+            }
+        }
+        graph G {
+            input stream a, b, c, d;
+            output stream l, r;
+            node p = P;
+            connection { a -> p.in0; b -> p.in1; c -> p.in2; d -> p.in3; p.outL -> l; p.outR -> r; }
+        }
+    )YDSP";
+
+    for (const bool fastMath : { false, true })
+    {
+        SCOPED_TRACE (fastMath);
+        YdspDiagnostics diagnostics;
+        YdspLexer lexer (source, diagnostics);
+        YdspParser parser (lexer.tokenize(), diagnostics);
+        auto program = parser.parseProgram();
+        ASSERT_NE (nullptr, program);
+        YdspSemanticAnalyzer analyzer (diagnostics);
+        auto analyzed = analyzer.analyze (std::move (program));
+        ASSERT_NE (nullptr, analyzed);
+        YdspOptimizer optimizer (diagnostics);
+        optimizer.setVectorWidth (4);
+        optimizer.setVectorizationEnabled (true);
+        optimizer.setUnrollingEnabled (true);
+        optimizer.setFastMath (fastMath);
+        optimizer.setContractionEnabled (fastMath);
+        auto ir = optimizer.build (*analyzed);
+        ASSERT_NE (nullptr, ir);
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+        const auto& fn = *ir->kernels[0];
+        for (const auto& block : fn.blocks)
+            for (const auto& inst : block.insts)
+            {
+                EXPECT_NE (YdspIrOp::powF, inst.op) << "unrolled=" << (int) fn.loops[0].unrolled << " ctc0=" << (int) fn.stateArrays[0].compileTimeConstant << " ctc1=" << (int) fn.stateArrays[1].compileTimeConstant;
+                EXPECT_NE (YdspIrOp::cosF, inst.op);
+                EXPECT_NE (YdspIrOp::sinF, inst.op);
+            }
+    }
+
+    auto baselineOpts = strictOptions();
+    baselineOpts.optimizationTier = YdspOptimizationTier::baseline;
+    auto baselineGraph = yup::test::patches::compilePatch (source, compiler, baselineOpts);
+    ASSERT_TRUE (baselineGraph.isValid());
+
+    auto hostOpts = YdspCompileOptions {};
+    hostOpts.fastMath = true;
+    auto hostGraph = yup::test::patches::compilePatch (source, compiler, hostOpts);
+    ASSERT_TRUE (hostGraph.isValid());
+
+    ASSERT_TRUE (baselineGraph.prepare (48000.0, 32).wasOk());
+    ASSERT_TRUE (hostGraph.prepare (48000.0, 32).wasOk());
+
+    std::vector<float> a (32, 0.5f), b (32, -0.25f), c (32, 0.75f), d (32, -0.1f);
+    std::vector<float> refL (32), refR (32), optL (32), optR (32);
+    YdspInputBuffer ins[] { Span<const float> (a), Span<const float> (b), Span<const float> (c), Span<const float> (d) };
+    YdspOutputBuffer refOuts[] { Span<float> (refL), Span<float> (refR) };
+    YdspOutputBuffer optOuts[] { Span<float> (optL), Span<float> (optR) };
+    ASSERT_EQ (YdspProcessResult::ok, baselineGraph.process ({ ins, refOuts, 32 }));
+    ASSERT_EQ (YdspProcessResult::ok, hostGraph.process ({ ins, optOuts, 32 }));
+
+    for (size_t i = 0; i < 32; ++i)
+    {
+        EXPECT_NEAR (refL[i], optL[i], 1.0e-5f);
+        EXPECT_NEAR (refR[i], optR[i], 1.0e-5f);
+    }
+}
+
+TEST_F (YdspRuntimeOptimizationTests, UnrollsTenBandCascadeAndPromotesFilterStateInBlockMode)
+{
+    const auto source = R"YDSP(
+        processor P {
+            input stream in1;
+            output stream out1;
+            state float gains[10] = { 3.0, -2.0, 4.0, -3.0, 2.0, -4.0, 3.0, -2.0, 1.0, -1.0 };
+            state float x1[10], x2[10], y1[10], y2[10];
+            state float b0[10], b1[10], b2[10], a1[10], a2[10];
+            process block {
+                for k in 0..10 {
+                    let A = pow (10.0, gains[k] / 40.0);
+                    let w0 = 2.0 * pi * 31.25 * pow (2.0, float (k)) / sampleRate;
+                    let al = sin (w0) / (2.0 * 1.41);
+                    let cw = cos (w0);
+                    let a0 = 1.0 + al / A;
+                    b0[k] = (1.0 + al * A) / a0;
+                    b1[k] = -2.0 * cw / a0;
+                    b2[k] = (1.0 - al * A) / a0;
+                    a1[k] = -2.0 * cw / a0;
+                    a2[k] = (1.0 - al / A) / a0;
+                }
+                for n in 0..blockSize {
+                    float x = in1[n];
+                    for k in 0..10 {
+                        let y = b0[k] * x + b1[k] * x1[k] + b2[k] * x2[k] + (-a1[k] * y1[k] - a2[k] * y2[k]);
+                        x2[k] = x1[k];
+                        x1[k] = x;
+                        y2[k] = y1[k];
+                        y1[k] = y;
+                        x = y;
+                    }
+                    out1[n] = x;
+                }
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in1; p.out1 -> y; } }
+    )YDSP";
+
+    YdspDiagnostics diagnostics;
+    YdspLexer lexer (source, diagnostics);
+    YdspParser parser (lexer.tokenize(), diagnostics);
+    auto program = parser.parseProgram();
+    ASSERT_NE (nullptr, program);
+    YdspSemanticAnalyzer analyzer (diagnostics);
+    auto analyzed = analyzer.analyze (std::move (program));
+    ASSERT_NE (nullptr, analyzed);
+    YdspOptimizer optimizer (diagnostics);
+    optimizer.setTargetHasFusedMultiplyAdd (true);
+    optimizer.setVectorWidth (4);
+    optimizer.setVectorizationEnabled (true);
+    optimizer.setUnrollingEnabled (true);
+    optimizer.setFastMath (true);
+    optimizer.setContractionEnabled (true);
+    auto ir = optimizer.build (*analyzed);
+    ASSERT_NE (nullptr, ir);
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+    const auto& fn = *ir->kernels[0];
+    int unrolledConstantLoops = 0;
+    for (const auto& loop : fn.loops)
+        if (loop.bound.kind == YdspLoopBoundKind::constant && loop.unrolled)
+            ++unrolledConstantLoops;
+    EXPECT_EQ (1, unrolledConstantLoops);
+
+    auto baselineOpts = strictOptions();
+    baselineOpts.optimizationTier = YdspOptimizationTier::baseline;
+    auto baselineGraph = yup::test::patches::compilePatch (source, compiler, baselineOpts);
+    ASSERT_TRUE (baselineGraph.isValid());
+
+    auto hostOpts = YdspCompileOptions {};
+    hostOpts.fastMath = true;
+    auto hostGraph = yup::test::patches::compilePatch (source, compiler, hostOpts);
+    ASSERT_TRUE (hostGraph.isValid());
+
+    ASSERT_TRUE (baselineGraph.prepare (48000.0, 64).wasOk());
+    ASSERT_TRUE (hostGraph.prepare (48000.0, 64).wasOk());
+
+    std::vector<float> input (64);
+    for (size_t i = 0; i < input.size(); ++i)
+        input[i] = std::sin (static_cast<float> (i) * 0.21f) * 0.4f;
+
+    std::vector<float> refOut (64), optOut (64);
+    YdspInputBuffer inBuf[] { Span<const float> (input) };
+    YdspOutputBuffer refBuf[] { Span<float> (refOut) };
+    YdspOutputBuffer optBuf[] { Span<float> (optOut) };
+    ASSERT_EQ (YdspProcessResult::ok, baselineGraph.process ({ inBuf, refBuf, 64 }));
+    ASSERT_EQ (YdspProcessResult::ok, hostGraph.process ({ inBuf, optBuf, 64 }));
+
+    for (size_t i = 0; i < 64; ++i)
+        EXPECT_NEAR (refOut[i], optOut[i], 2.0e-5f) << "sample=" << i;
+}
+
+TEST_F (YdspRuntimeOptimizationTests, EliminatesDeadWriteOnlyPrivateStateArrayStoresAfterForwarding)
+{
+    const auto source = R"YDSP(
+        processor P {
+            input stream in0, in1, in2, in3;
+            output stream outL, outR;
+            state float gain[4] = { -6.0, -3.0, -9.0, 0.0 };
+            state float pan[4] = { 0.0, 0.25, 0.75, 1.0 };
+            state float xs[4];
+            process {
+                xs[0] = in0; xs[1] = in1; xs[2] = in2; xs[3] = in3;
+                float l = 0.0;
+                float r = 0.0;
+                for i in 0..4 {
+                    let x = xs[i] * pow (10.0, gain[i] / 20.0);
+                    l = l + x * cos (pan[i] * pi * 0.5);
+                    r = r + x * sin (pan[i] * pi * 0.5);
+                }
+                outL = l;
+                outR = r;
+            }
+        }
+        graph G {
+            input stream a, b, c, d;
+            output stream l, r;
+            node p = P;
+            connection { a -> p.in0; b -> p.in1; c -> p.in2; d -> p.in3; p.outL -> l; p.outR -> r; }
+        }
+    )YDSP";
+
+    YdspDiagnostics diagnostics;
+    YdspLexer lexer (source, diagnostics);
+    YdspParser parser (lexer.tokenize(), diagnostics);
+    auto program = parser.parseProgram();
+    ASSERT_NE (nullptr, program);
+    YdspSemanticAnalyzer analyzer (diagnostics);
+    auto analyzed = analyzer.analyze (std::move (program));
+    ASSERT_NE (nullptr, analyzed);
+    YdspOptimizer optimizer (diagnostics);
+    optimizer.setVectorWidth (4);
+    optimizer.setVectorizationEnabled (true);
+    optimizer.setUnrollingEnabled (true);
+    optimizer.setFastMath (true);
+    optimizer.setContractionEnabled (true);
+    auto ir = optimizer.build (*analyzed);
+    ASSERT_NE (nullptr, ir);
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+    const auto& fn = *ir->kernels[0];
+    for (const auto& block : fn.blocks)
+        for (const auto& inst : block.insts)
+        {
+            EXPECT_NE (YdspIrOp::storeStateArrayF, inst.op);
+            EXPECT_NE (YdspIrOp::loadStateArrayF, inst.op);
+        }
+}
+

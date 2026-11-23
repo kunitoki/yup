@@ -219,4 +219,225 @@ void YdspOptimizer::splitLiveRangesAtLoops (YdspIrFunction& fn)
     }
 }
 
+void YdspOptimizer::localizeHighPressureStateIndices (YdspIrFunction& fn)
+{
+    if (! fn.isSampleMode || fn.isEventHandler || fn.isInit || fn.blocks.empty())
+        return;
+
+    const auto numBlocks = static_cast<int> (fn.blocks.size());
+    const size_t keepCount = (targetHasFusedMultiplyAdd && vectorWidth <= 4) ? 14u : 6u;
+
+    const auto sampleLoop = std::find_if (fn.loops.begin(), fn.loops.end(), [numBlocks] (const YdspIrLoop& loop)
+    {
+        return loop.bound.kind == YdspLoopBoundKind::blockSize
+            && ! loop.unrolled
+            && loop.headerBlock >= 1
+            && loop.exitBlock == loop.headerBlock + 2
+            && loop.exitBlock < numBlocks;
+    });
+
+    if (sampleLoop == fn.loops.end())
+        return;
+
+    const int header = sampleLoop->headerBlock;
+    const int body = header + 1;
+    const int exit = sampleLoop->exitBlock;
+
+    if (fn.blocks[static_cast<size_t> (body)].term != YdspIrTerm::branch
+        || fn.blocks[static_cast<size_t> (body)].termTarget != header)
+        return;
+
+    // Collect loop-carried int32 state indices loaded before the loop and
+    // stored back at exit.
+    struct CarriedIndex
+    {
+        int reg = -1;
+        int slot = -1;
+        int loadBlock = -1;
+        size_t loadInstIdx = 0;
+        size_t storeExitInstIdx = 0;
+        size_t firstUseInBody = 0;
+        size_t lastDefInBody = 0;
+    };
+
+    std::unordered_map<int, int> totalDefs;
+    for (int b = 0; b < numBlocks; ++b)
+        for (const auto& inst : fn.blocks[static_cast<size_t> (b)].insts)
+            if (inst.result >= 0)
+                ++totalDefs[inst.result];
+
+    auto& exitInsts = fn.blocks[static_cast<size_t> (exit)].insts;
+    std::vector<CarriedIndex> candidates;
+
+    for (int b = 0; b < header; ++b)
+    {
+        const auto& insts = fn.blocks[static_cast<size_t> (b)].insts;
+
+        for (size_t i = 0; i < insts.size(); ++i)
+        {
+            const auto& inst = insts[i];
+            if (inst.op != YdspIrOp::loadStateI || inst.result < 0)
+                continue;
+
+            const int reg = inst.result;
+            const int slot = inst.a;
+
+            if (reg == sampleLoop->induction || static_cast<size_t> (reg) >= fn.valueTypes.size()
+                || fn.valueTypes[static_cast<size_t> (reg)] != YdspValueType::int32Type)
+                continue;
+
+            // Find matching storeStateI in exit block.
+            int storeIdx = -1;
+            int storeCount = 0;
+            for (size_t s = 0; s < exitInsts.size(); ++s)
+            {
+                if (exitInsts[s].op == YdspIrOp::storeStateI && exitInsts[s].a == reg && exitInsts[s].memIndex == slot)
+                {
+                    storeIdx = static_cast<int> (s);
+                    ++storeCount;
+                }
+            }
+
+            if (storeCount != 1 || storeIdx < 0)
+                continue;
+
+            // Ensure reg is not used outside { preheader load, body, exit store }.
+            bool usedElsewhere = false;
+            for (int ob = 0; ob < numBlocks && ! usedElsewhere; ++ob)
+            {
+                if (ob == body)
+                    continue;
+
+                const auto& oBlock = fn.blocks[static_cast<size_t> (ob)];
+                if (oBlock.term == YdspIrTerm::branchIf && oBlock.termCond == reg)
+                {
+                    usedElsewhere = true;
+                    break;
+                }
+
+                for (size_t oi = 0; oi < oBlock.insts.size(); ++oi)
+                {
+                    if (ob == b && oi == i)
+                        continue;
+                    if (ob == exit && oi == static_cast<size_t> (storeIdx))
+                        continue;
+
+                    const auto& oInst = oBlock.insts[oi];
+                    if (oInst.result == reg
+                        || (isValueIdOperand (oInst.op, 0) && oInst.a == reg)
+                        || (isValueIdOperand (oInst.op, 1) && oInst.b == reg)
+                        || (isValueIdOperand (oInst.op, 2) && oInst.c == reg))
+                    {
+                        usedElsewhere = true;
+                        break;
+                    }
+                }
+            }
+
+            if (usedElsewhere)
+                continue;
+
+            // Inspect body span for reg.
+            const auto& bodyInsts = fn.blocks[static_cast<size_t> (body)].insts;
+            size_t firstUse = bodyInsts.size();
+            size_t lastTouch = 0;
+            int lastDef = -1;
+            bool slotConflict = false;
+
+            for (size_t bi = 0; bi < bodyInsts.size(); ++bi)
+            {
+                const auto& bInst = bodyInsts[bi];
+                if ((bInst.op == YdspIrOp::loadStateI && bInst.a == slot)
+                    || (bInst.op == YdspIrOp::storeStateI && bInst.memIndex == slot))
+                    slotConflict = true;
+
+                const bool readsReg = (isValueIdOperand (bInst.op, 0) && bInst.a == reg)
+                                   || (isValueIdOperand (bInst.op, 1) && bInst.b == reg)
+                                   || (isValueIdOperand (bInst.op, 2) && bInst.c == reg);
+                const bool writesReg = bInst.result == reg;
+
+                if (readsReg || writesReg)
+                {
+                    if (firstUse == bodyInsts.size())
+                    {
+                        if (! readsReg)
+                            slotConflict = true; // must read before overwriting
+                        firstUse = bi;
+                    }
+
+                    lastTouch = bi;
+                    if (writesReg)
+                        lastDef = static_cast<int> (bi);
+                }
+            }
+
+            if (slotConflict || firstUse >= bodyInsts.size() || lastDef < 0
+                || static_cast<size_t> (lastDef) != lastTouch
+                || (lastTouch - firstUse) > 16)
+                continue;
+
+            candidates.push_back ({ reg, slot, b, i, static_cast<size_t> (storeIdx), firstUse, static_cast<size_t> (lastDef) });
+        }
+    }
+
+    if (candidates.size() <= keepCount)
+        return;
+
+    // Keep the first `keepCount` indices in registers across the loop and
+    // localize the excess slots around their short in-body spans.
+    std::vector<CarriedIndex> toLocalize (candidates.begin() + static_cast<ptrdiff_t> (keepCount), candidates.end());
+
+    // Remove preheader loads and exit stores (sort descending by index per block).
+    std::unordered_map<int, std::vector<size_t>> loadRemovals;
+    std::vector<size_t> exitRemovals;
+
+    for (const auto& c : toLocalize)
+    {
+        loadRemovals[c.loadBlock].push_back (c.loadInstIdx);
+        exitRemovals.push_back (c.storeExitInstIdx);
+    }
+
+    for (auto& [b, idxs] : loadRemovals)
+    {
+        std::sort (idxs.rbegin(), idxs.rend());
+        auto& insts = fn.blocks[static_cast<size_t> (b)].insts;
+        for (const size_t idx : idxs)
+            insts.erase (insts.begin() + static_cast<ptrdiff_t> (idx));
+    }
+
+    std::sort (exitRemovals.rbegin(), exitRemovals.rend());
+    for (const size_t idx : exitRemovals)
+        exitInsts.erase (exitInsts.begin() + static_cast<ptrdiff_t> (idx));
+
+    // Rewrite body in one linear pass, inserting local load before firstUse
+    // and store after lastDef.
+    std::unordered_map<size_t, std::vector<const CarriedIndex*>> loadsBefore;
+    std::unordered_map<size_t, std::vector<const CarriedIndex*>> storesAfter;
+
+    for (const auto& c : toLocalize)
+    {
+        loadsBefore[c.firstUseInBody].push_back (&c);
+        storesAfter[c.lastDefInBody].push_back (&c);
+    }
+
+    auto& bodyInsts = fn.blocks[static_cast<size_t> (body)].insts;
+    std::vector<YdspIrInst> updatedBody;
+    updatedBody.reserve (bodyInsts.size() + toLocalize.size() * 2);
+
+    for (size_t bi = 0; bi < bodyInsts.size(); ++bi)
+    {
+        if (const auto it = loadsBefore.find (bi); it != loadsBefore.end())
+            for (const auto* c : it->second)
+                updatedBody.push_back ({ YdspIrOp::loadStateI, c->reg, c->slot });
+
+        updatedBody.push_back (bodyInsts[bi]);
+
+        if (const auto it = storesAfter.find (bi); it != storesAfter.end())
+            for (const auto* c : it->second)
+                updatedBody.push_back ({ YdspIrOp::storeStateI, -1, c->reg, -1, -1, c->slot });
+    }
+
+    bodyInsts = std::move (updatedBody);
+}
+
 } // namespace yup

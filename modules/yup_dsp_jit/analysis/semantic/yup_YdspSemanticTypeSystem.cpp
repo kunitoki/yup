@@ -556,7 +556,7 @@ bool YdspSemanticAnalyzer::resolveLoopBound (const YdspExpr& expr, YdspLoopBound
 
 //==============================================================================
 
-std::unique_ptr<YdspAnalyzedProgram> YdspSemanticAnalyzer::analyze (std::unique_ptr<YdspProgram> program, bool requireGraph)
+std::unique_ptr<YdspAnalyzedProgram> YdspSemanticAnalyzer::analyze (std::unique_ptr<YdspProgram> program, bool requireGraph, bool fuseGraph)
 {
     jassert (program != nullptr);
 
@@ -640,10 +640,13 @@ std::unique_ptr<YdspAnalyzedProgram> YdspSemanticAnalyzer::analyze (std::unique_
 
     analyzed->graph = std::move (analyzedGraphs[static_cast<size_t> (mainIndex)]);
 
-    fuseNodeChains (*analyzed);
+    if (fuseGraph)
+    {
+        fuseNodeChains (*analyzed);
 
-    if (diagnostics.hasErrors())
-        return nullptr;
+        if (diagnostics.hasErrors())
+            return nullptr;
+    }
 
     computeLatencyAndCompensate (analyzed->graph, analyzed->ast->graphs[static_cast<size_t> (mainIndex)].location);
 

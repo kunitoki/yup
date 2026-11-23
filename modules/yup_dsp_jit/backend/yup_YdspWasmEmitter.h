@@ -193,6 +193,9 @@ public:
     /** Appends `local.set <index>`. */
     void localSet (uint32_t index);
 
+    /** Appends `local.tee <index>`. */
+    void localTee (uint32_t index);
+
     /** Appends `i32.const <value>`. */
     void i32Const (int32_t value);
 
@@ -235,6 +238,38 @@ public:
 
     /** Appends `f32x4.extract_lane <lane>`. */
     void f32x4ExtractLane (uint32_t lane);
+
+    /** Appends `f32x4.replace_lane <lane>`. */
+    void f32x4ReplaceLane (uint32_t lane)
+    {
+        jassert (lane < 4);
+        simdOp (opF32x4ReplaceLane);
+        u8 (static_cast<uint8_t> (lane));
+    }
+
+    /** Appends `i32x4.extract_lane <lane>`. */
+    void i32x4ExtractLane (uint32_t lane)
+    {
+        jassert (lane < 4);
+        simdOp (opI32x4ExtractLane);
+        u8 (static_cast<uint8_t> (lane));
+    }
+
+    /** Appends `i32x4.replace_lane <lane>`. */
+    void i32x4ReplaceLane (uint32_t lane)
+    {
+        jassert (lane < 4);
+        simdOp (opI32x4ReplaceLane);
+        u8 (static_cast<uint8_t> (lane));
+    }
+
+    /** Appends `v128.const` with all 16 bytes zeroed. */
+    void v128ConstZero()
+    {
+        static constexpr uint8_t zeros[16] = {};
+        simdOp (opV128Const);
+        bytes (zeros, sizeof (zeros));
+    }
 #endif
 
     //==============================================================================
@@ -392,6 +427,8 @@ public:
     static constexpr uint8_t opF64ConvertI32S = 0xB7;
     static constexpr uint8_t opF64ConvertI64S = 0xB9;
     static constexpr uint8_t opF64PromoteF32 = 0xBB;
+    static constexpr uint8_t opI32ReinterpretF32 = 0xBC;
+    static constexpr uint8_t opF32ReinterpretI32 = 0xBE;
 
     // Memory
     static constexpr uint8_t opI32Load = 0x28;
@@ -411,26 +448,60 @@ public:
     static constexpr uint32_t opV128Load = 0x00;
     static constexpr uint32_t opV128Store = 0x0B;
 
+    // Constants
+    static constexpr uint32_t opV128Const = 0x0C;
+
     // Lane manipulation
     static constexpr uint32_t opI8x16Shuffle = 0x0D;
+    static constexpr uint32_t opI32x4Splat = 0x11;
     static constexpr uint32_t opF32x4Splat = 0x13;
+    static constexpr uint32_t opI32x4ExtractLane = 0x1B;
+    static constexpr uint32_t opI32x4ReplaceLane = 0x1C;
     static constexpr uint32_t opF32x4ExtractLane = 0x1F;
+    static constexpr uint32_t opF32x4ReplaceLane = 0x20;
 
     // Rounding
     static constexpr uint32_t opF32x4Ceil = 0x67;
     static constexpr uint32_t opF32x4Floor = 0x68;
     static constexpr uint32_t opF32x4Nearest = 0x6A;
 
+    // Comparisons (i32x4)
+    static constexpr uint32_t opI32x4Eq = 0x37;
+    static constexpr uint32_t opI32x4Ne = 0x38;
+    static constexpr uint32_t opI32x4LtS = 0x39;
+    static constexpr uint32_t opI32x4GtS = 0x3B;
+    static constexpr uint32_t opI32x4LeS = 0x3D;
+    static constexpr uint32_t opI32x4GeS = 0x3F;
+
     // Comparisons (f32x4, per-lane all-ones/all-zeros masks) and the bitwise
-    // per-lane select that consumes them - the wasm lowering of widened
-    // compare/select chains (see the packed float compare helper in codegen).
+    // ops / per-lane select that consume them.
     static constexpr uint32_t opF32x4Eq = 0x41;
     static constexpr uint32_t opF32x4Ne = 0x42;
     static constexpr uint32_t opF32x4Lt = 0x43;
     static constexpr uint32_t opF32x4Gt = 0x44;
     static constexpr uint32_t opF32x4Le = 0x45;
     static constexpr uint32_t opF32x4Ge = 0x46;
+    static constexpr uint32_t opV128Not = 0x4D;
+    static constexpr uint32_t opV128And = 0x4E;
+    static constexpr uint32_t opV128Andnot = 0x4F;
+    static constexpr uint32_t opV128Or = 0x50;
+    static constexpr uint32_t opV128Xor = 0x51;
     static constexpr uint32_t opV128Bitselect = 0x52;
+
+    // Integer arithmetic (i32x4)
+    static constexpr uint32_t opI32x4Abs = 0xA0;
+    static constexpr uint32_t opI32x4Neg = 0xA1;
+    static constexpr uint32_t opI32x4Shl = 0xAB;
+    static constexpr uint32_t opI32x4ShrS = 0xAC;
+    static constexpr uint32_t opI32x4Add = 0xAE;
+    static constexpr uint32_t opI32x4Sub = 0xB1;
+    static constexpr uint32_t opI32x4Mul = 0xB5;
+    static constexpr uint32_t opI32x4MinS = 0xB8;
+    static constexpr uint32_t opI32x4MaxS = 0xBA;
+
+    // Widening multiply (i64x2) for saturating i32x4 multiply
+    static constexpr uint32_t opI64x2ExtmulLowI32x4S = 0xDC;
+    static constexpr uint32_t opI64x2ExtmulHighI32x4S = 0xDD;
 
     // Float arithmetic (f32x4)
     static constexpr uint32_t opF32x4Abs = 0xE0;
@@ -442,6 +513,10 @@ public:
     static constexpr uint32_t opF32x4Div = 0xE7;
     static constexpr uint32_t opF32x4Min = 0xE8;
     static constexpr uint32_t opF32x4Max = 0xE9;
+
+    // Conversions
+    static constexpr uint32_t opI32x4TruncSatF32x4S = 0xF8;
+    static constexpr uint32_t opF32x4ConvertI32x4S = 0xFA;
 #endif
 
     //==============================================================================
