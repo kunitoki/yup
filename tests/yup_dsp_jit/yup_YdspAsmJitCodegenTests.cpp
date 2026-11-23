@@ -5197,4 +5197,64 @@ TEST (YdspAsmJitCodegenTests, LocalizesExcessRingIndicesUnderHighGpPressureOnArm
     }
 }
 
+TEST (YdspAsmJitCodegenTests, SpillsBeyondTheLoadStoreOffsetRangeAssemble)
+{
+    // 5000 values loaded before the first add are all live at once, so their spill slots span about 20 KB of
+    // stack: past the 16380-byte offset a 32-bit AArch64 load or store can encode.
+    constexpr int numValues = 5000;
+    constexpr int numElements = 64;
+
+    YdspIrFunction fn;
+    fn.name = "LargeSpillArea";
+    fn.isSampleMode = false;
+    fn.float32ArrayElements = numElements + 1;
+    fn.valueTypes.push_back (YdspValueType::int32Type);
+    fn.blocks.resize (1);
+    auto& insts = fn.blocks[0].insts;
+    insts.push_back ({ YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 });
+
+    for (int i = 0; i < numValues; ++i)
+    {
+        fn.valueTypes.push_back (YdspValueType::float32Type);
+        insts.push_back ({ YdspIrOp::loadStateArrayF, i + 1, 0, -1, -1, i % numElements });
+    }
+
+    int sum = 1;
+    for (int i = 1; i < numValues; ++i)
+    {
+        fn.valueTypes.push_back (YdspValueType::float32Type);
+        const int result = static_cast<int> (fn.valueTypes.size()) - 1;
+        insts.push_back ({ YdspIrOp::addF, result, sum, i + 1 });
+        sum = result;
+    }
+
+    insts.push_back ({ YdspIrOp::storeStateArrayF, -1, 0, sum, -1, numElements });
+
+    for (const auto architecture : { YdspTargetArchitecture::arm64, YdspTargetArchitecture::x64 })
+    {
+        YdspDiagnostics diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, architecture }, fn, diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+    }
+
+    YdspDiagnostics diagnostics;
+    asmjit::JitRuntime runtime;
+    const auto kernel = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+    ASSERT_NE (nullptr, kernel) << diagnostics.toString();
+
+    std::vector<float> stateArrays (static_cast<size_t> (numElements + 1), 0.0f);
+    for (int i = 0; i < numElements; ++i)
+        stateArrays[static_cast<size_t> (i)] = static_cast<float> (i + 1);
+
+    YdspKernelContext context;
+    context.stateArrays = stateArrays.data();
+    kernel (&context);
+
+    float expected = 0.0f;
+    for (int i = 0; i < numValues; ++i)
+        expected += static_cast<float> (i % numElements + 1);
+
+    EXPECT_EQ (expected, stateArrays[static_cast<size_t> (numElements)]);
+}
+
 } // namespace yup::test
