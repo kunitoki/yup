@@ -47,7 +47,7 @@ jobs:
         key: wasm-tests-${{ matrix.config }}
         max-size: 1G
     - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v15
+      uses: mymindstorm/setup-emsdk@v16
       with:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: emsdk-cache
@@ -74,7 +74,7 @@ jobs:
       with:
         key: wasm-example-${{ matrix.example }}
     - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v15
+      uses: mymindstorm/setup-emsdk@v16
       with:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: emsdk-cache
