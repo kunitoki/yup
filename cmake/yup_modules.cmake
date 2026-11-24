@@ -1126,6 +1126,7 @@ macro (yup_add_default_modules modules_path)
         if (IS_DIRECTORY "${thirdparty_module_dir}")
             get_filename_component (module_dir_name "${thirdparty_module_dir}" NAME)
             yup_add_module (${modules_path}/thirdparty/${module_dir_name} "${modules_definitions}" ${thirdparty_group})
+            add_library (yup::${module_dir_name} ALIAS ${module_dir_name})
         endif()
     endforeach()
 

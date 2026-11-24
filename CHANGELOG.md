@@ -139,6 +139,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added the `YUP_ENABLE_EMSCRIPTEN_THREADS` CMake option, ON by default. Turned off, Emscripten targets are built without threads and shared memory, so they run in pages that can't be cross-origin isolated, such as the webview of an editor. Audio needs threads there, so a target using `yup_audio_devices` is then refused while configuring.
 - Added the `docsimg` example and the `just docs_images` recipe, which render the figures of the documentation into `docs/_static/images` in both color modes, and `just docs` to build the pages locally.
 - CI: Smart CI no longer schedules test builds for modules a platform has no test runner for (the `untested` entries in `.github/smart_ci_config.json`), which failed the Android job on changes limited to such modules, e.g. `yup_python`.
+- CMake: thirdparty modules now get a `yup::` alias like the YUP modules, so `MODULES yup::libvorbis` no longer fails in `yup_standalone_app`.
 
 ---
 

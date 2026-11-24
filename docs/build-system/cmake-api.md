@@ -317,7 +317,7 @@ also be used independently for non-plugin GUI applications.
 | `TARGET_STATIC_LIBRARY` | ON\|OFF | OFF | Build the `MODULES` once into a static library instead of an executable. Apps listing it in their `MODULES` link it and get the same compile settings, without compiling the modules again. |
 | `DEFINITIONS` | list | - | Additional compile definitions. |
 | `COMPILE_OPTIONS` | list | - | Additional compile options. |
-| `MODULES` | list | - | YUP module dependencies. |
+| `MODULES` | list | - | YUP and thirdparty module dependencies, with or without the `yup::` prefix (e.g. `yup::yup_gui yup::libpng`). |
 | `SOURCES` | list | - | Additional source files. |
 | `LINK_OPTIONS` | list | - | Additional linker options. |
 | `BUNDLE_RESOURCES` | list | - | Files to bundle for runtime access via `File::getSpecialLocation (File::bundleDirectory)`, as `"local/path@relative/dest"` pairs. See `yup_add_bundled_resources()` below. |
