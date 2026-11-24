@@ -73,7 +73,8 @@ rive::ore::TextureViewDim toRstbViewDim (ShaderReflection::ImageDimension dim, b
 //==============================================================================
 
 std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflection,
-                                               ShaderStage stage)
+                                               ShaderStage stage,
+                                               const ShaderReflection* pairedStage)
 {
     using namespace rive::ore;
 
@@ -102,10 +103,22 @@ std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflectio
 
         if (isTexture)
         {
+            // A pipeline carries one declaration per texture: a stage that never filters it follows the paired stage
+            const auto* sampling = &res;
+
+            if (res.imageUnfiltered && pairedStage != nullptr)
+            {
+                for (const auto& paired : pairedStage->separateImages)
+                {
+                    if (paired.set == res.set && paired.binding == res.binding)
+                        sampling = &paired;
+                }
+            }
+
             e.textureViewDim = toRstbViewDim (res.imageDim, res.imageArrayed);
-            e.textureSampleType = res.imageIsDepth ? TextureSampleType::Depth
-                                : res.imageUnfiltered ? TextureSampleType::UnfilterableFloat
-                                                      : TextureSampleType::Float;
+            e.textureSampleType = sampling->imageIsDepth    ? TextureSampleType::Depth
+                                : sampling->imageUnfiltered ? TextureSampleType::UnfilterableFloat
+                                                            : TextureSampleType::Float;
             e.textureMultisampled = res.imageMS;
         }
 

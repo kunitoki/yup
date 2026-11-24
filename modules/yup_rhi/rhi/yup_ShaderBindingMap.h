@@ -36,13 +36,22 @@ namespace yup
     stage. Texture entries also carry the reflected view dimension, sample type
     and multisampled flag, which WebGPU validates against the shader itself.
 
+    A graphics pipeline carries one declaration per texture, so both of its
+    stages have to give a texture they declare the same sample type. Each stage
+    reflects its own code only, and one that declares a texture without sampling
+    it, as shaders sharing their declarations do, reflects it unfilterable. Pass
+    the reflection of the other stage as @p pairedStage, and a texture this
+    stage never filters takes the sample type the other stage reflects for it.
+
     @warning Combined texture+sampler declarations (@c uniform @c sampler2D) are
              deliberately not mapped: shaders must be written Vulkan-style, with
              a separate @c texture2D / @c textureCube and a separate @c sampler.
              A combined declaration yields no binding-map entries at all.
 
-    @param reflection  The reflection data for a single shader stage.
-    @param stage       Which stage the reflection belongs to (vertex/fragment).
+    @param reflection   The reflection data for a single shader stage.
+    @param stage        Which stage the reflection belongs to (vertex/fragment).
+    @param pairedStage  The reflection of the other stage of the same graphics
+                        pipeline, or nullptr for a stage that has none.
 
     @returns A binary blob suitable for GpuShaderSource::bindingMap. The blob is
              empty only if the reflection declares no bindable resources.
@@ -50,7 +59,8 @@ namespace yup
     @see GpuShaderSource, GpuPipeline, ShaderReflection
 */
 std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflection,
-                                               ShaderStage stage);
+                                               ShaderStage stage,
+                                               const ShaderReflection* pairedStage = nullptr);
 
 //==============================================================================
 /** Builds a GPU program-link fixup blob from shader reflection data.
