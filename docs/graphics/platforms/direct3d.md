@@ -47,6 +47,10 @@ transpiler is built in.
 - `getPipelineCacheData()` returns nothing.
 - Direct3D has no current-context affinity, so `Options::contextActivator` is
   ignored and offscreen GPU work can be started from any thread.
+- Windows can refuse a swapchain for a while, as it does in a session that is
+  not interactive (a process started over SSH). The window logs the error,
+  skips its frames and retries, so it starts drawing once a swapchain can be
+  created.
 
 ## When to prefer Vulkan on Windows
 

@@ -130,7 +130,7 @@ public:
     }
 
     //==============================================================================
-    void refreshDisplay (double lastFrameTimeSeconds) override
+    void refreshDisplay (double lastFrameTimeSeconds)
     {
         if (playing)
         {
@@ -807,6 +807,7 @@ void main()
     yup::GpuTarget::Ptr target;
     std::array<yup::GpuTexture::Ptr, numChannels> channelTextures;
     yup::GpuSampler::Ptr channelSampler;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&ShadersDemo::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShadersDemo)
 };

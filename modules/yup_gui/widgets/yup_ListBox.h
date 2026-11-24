@@ -808,7 +808,7 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
     /** @internal */
     void mouseDown (const MouseEvent& event) override;
     /** @internal */
@@ -974,6 +974,7 @@ private:
     bool mouseDragScrollingEnabled = false;
     bool pullToRefreshEnabled = false;
     bool refreshing = false;
+    FrameAttachment frameAttachment { *this, bindFront (&ListBox::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ListBox)
 };

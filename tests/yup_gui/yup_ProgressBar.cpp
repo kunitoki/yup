@@ -260,6 +260,45 @@ TEST_F (ProgressBarTests, ProgressCanBeSetFromMultipleThreads)
     EXPECT_LE (finalProgress, 1.0);
 }
 
+TEST_F (ProgressBarTests, SetProgressFromAnotherThreadIsAppliedOnTheMessageThread)
+{
+    struct PropertyListener : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier&) override
+        {
+            ++callCount;
+            calledOnMessageThread = MessageManager::getInstance()->isThisTheMessageThread();
+        }
+
+        int callCount = 0;
+        bool calledOnMessageThread = false;
+    };
+
+    PropertyListener listener;
+    progressBar->addComponentListener (&listener);
+
+    std::thread worker ([this]
+    {
+        progressBar->setProgress (0.5, dontSendNotification);
+    });
+
+    worker.join();
+
+    EXPECT_EQ (0, listener.callCount);
+    EXPECT_EQ (0.0, progressBar->getProgress());
+
+#if YUP_MODAL_LOOPS_PERMITTED
+    for (int i = 0; i < 100 && listener.callCount == 0; ++i)
+        runDispatchLoopUntil (10);
+
+    EXPECT_EQ (1, listener.callCount);
+    EXPECT_TRUE (listener.calledOnMessageThread);
+    EXPECT_EQ (0.5, progressBar->getProgress());
+#endif
+
+    progressBar->removeComponentListener (&listener);
+}
+
 //==============================================================================
 // Rendering Tests
 //==============================================================================

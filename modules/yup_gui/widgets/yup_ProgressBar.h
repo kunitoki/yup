@@ -61,7 +61,10 @@ public:
         this range will be clamped. Pass -1.0 to enter indeterminate mode with
         animated moving ribbons.
 
-        This method is thread-safe and can be called from any thread.
+        This method is thread-safe and can be called from any thread. From a thread that is
+        neither the message thread nor holding the message manager lock, the update is posted to
+        the message thread: getProgress() returns the new value, and listeners are notified, once
+        it has been processed there.
 
         @param newProgress      The new progress value (0.0 to 1.0, or -1.0 for indeterminate)
         @param notification     Whether to notify listeners of the change
@@ -121,7 +124,7 @@ public:
     void paint (Graphics& g) override;
 
     /** @internal */
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
 
 private:
     //==============================================================================
@@ -132,9 +135,13 @@ private:
     Atomic<double> currentProgress { 0.0 };
     Atomic<bool> indeterminate { false };
 
+    // Created with the component, as other threads can copy a weak reference but not create one
+    const WeakReference<Component> weakThis { this };
+
     // Animation state for indeterminate mode
     double animationPhase = 0.0;
     Time lastAnimationTime;
+    FrameAttachment frameAttachment { *this, bindFront (&ProgressBar::refreshDisplay, this) };
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ProgressBar)

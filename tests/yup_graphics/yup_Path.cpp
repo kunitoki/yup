@@ -931,6 +931,58 @@ TEST (PathTests, CreateCopyPreservesOpenContourAndClose)
     EXPECT_NEAR (120.0f, closed.getLength(), 1.0e-3f);
 }
 
+TEST (PathTests, CopiesShareTheirOutlineUntilOneChanges)
+{
+    Path original;
+    original.moveTo (0.0f, 0.0f).lineTo (30.0f, 0.0f);
+
+    Path copy = original;
+    EXPECT_EQ (copy.getRenderPath(), original.getRenderPath());
+
+    copy.lineTo (30.0f, 40.0f);
+    EXPECT_EQ (2, original.size());
+    EXPECT_EQ (3, copy.size());
+
+    const Path kept = original;
+    original.clear();
+    EXPECT_TRUE (original.isEmpty());
+    EXPECT_EQ (2, kept.size());
+}
+
+TEST (PathTests, ChangingADrawnPathLeavesThePendingDrawAlone)
+{
+    Path path;
+    path.moveTo (0.0f, 0.0f).lineTo (30.0f, 0.0f);
+
+    // The renderer holds on to the render path of every draw, until the frame is flushed
+    auto pendingDraw = rive::ref_rcp (path.getRenderPath());
+
+    path.clear();
+    path.moveTo (5.0f, 5.0f).lineTo (5.0f, 10.0f).lineTo (10.0f, 10.0f);
+
+    EXPECT_EQ (3, path.size());
+    EXPECT_NE (path.getRenderPath(), pendingDraw.get());
+    ASSERT_EQ (2u, pendingDraw->getRawPath().verbs().size());
+    EXPECT_FLOAT_EQ (30.0f, pendingDraw->getRawPath().points()[1].x);
+
+    pendingDraw = rive::ref_rcp (path.getRenderPath());
+    path.lineTo (10.0f, 5.0f);
+
+    EXPECT_EQ (4, path.size());
+    EXPECT_EQ (3u, pendingDraw->getRawPath().verbs().size());
+
+    // Once the frame is flushed nothing else uses the outline, which is changed in place again
+    pendingDraw = rive::ref_rcp (path.getRenderPath());
+    const auto* flushedRenderPath = pendingDraw.get();
+    pendingDraw = nullptr;
+
+    path.clear();
+    path.moveTo (1.0f, 1.0f).lineTo (2.0f, 2.0f);
+
+    EXPECT_EQ (2, path.size());
+    EXPECT_EQ (path.getRenderPath(), flushedRenderPath);
+}
+
 TEST (PathTests, IteratorPostfixIncrement)
 {
     Path p;

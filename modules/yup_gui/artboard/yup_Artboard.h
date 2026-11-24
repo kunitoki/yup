@@ -40,9 +40,9 @@ namespace yup
     on the message thread.
 
     Artboards are not internally synchronized. Beyond the message thread, the
-    artboard also advances from refreshDisplay(), which YUP runs on the render
-    thread while holding the message manager lock, so the two never run
-    concurrently. Everything the advance reaches runs on that thread too: the
+    artboard also advances once per frame through a FrameAttachment, which YUP
+    runs on the render thread while holding the message manager lock, so the two
+    never run concurrently. Everything the advance reaches runs on that thread too: the
     NodeBoundsCallbacks registered with setNodeBoundsListener(), the bounds and
     transform updates pushed into components attached with
     attachComponentToNode(), onPropertyChanged / propertyChanged, and the
@@ -152,8 +152,8 @@ public:
     //==============================================================================
     /** Advances the Rive artboard by a given number of seconds.
 
-        refreshDisplay() calls this every frame and repaints the artboard only when
-        it returns true, so a still artboard costs nothing to draw.
+        The artboard calls this every frame and repaints only when it returns true,
+        so a still artboard costs nothing to draw.
 
         @param elapsedSeconds The number of seconds to advance the Rive artboard by.
 
@@ -493,7 +493,7 @@ public:
 
         Events are drained after every advance and after every pointer, wheel and
         keyboard interaction, so the callback fires from advanceAndApply(),
-        refreshDisplay() and the input handlers, on the thread described above. Only actual changes are reported: the
+        the per-frame advance and the input handlers, on the thread described above. Only actual changes are reported: the
         artboard remembers the last value seen for each event and skips repeats.
 
         @param artboard     The artboard that reported the event.
@@ -526,7 +526,7 @@ public:
 
     //==============================================================================
     /** @internal */
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
@@ -632,6 +632,7 @@ private:
     bool notifyingNodeBounds = false;
     bool drainingEvents = false;
     bool applyingNodeAttachment = false;
+    FrameAttachment frameAttachment { *this, bindFront (&Artboard::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Artboard)
 };

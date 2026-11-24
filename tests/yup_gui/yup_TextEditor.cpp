@@ -721,6 +721,28 @@ TEST_F (TextEditorTests, CaretHasLineBoundsWhenEmpty)
     EXPECT_NEAR (lineCaret.getHeight(), emptyCaret.getHeight(), 1.0f);
 }
 
+TEST_F (TextEditorTests, SingleLineTextSitsInTheVerticalMiddle)
+{
+    editor->setBounds (0.0f, 0.0f, 200.0f, 80.0f);
+    editor->setText ("Hi");
+    const auto lineCaret = editor->getCaretBounds();
+    EXPECT_NEAR (40.0f, lineCaret.getCenterY(), 1.0f);
+
+    editor->setText ("");
+    EXPECT_NEAR (40.0f, editor->getCaretBounds().getCenterY(), 1.0f);
+
+    editor->setMultiLine (true);
+    EXPECT_LT (editor->getCaretBounds().getY(), lineCaret.getY());
+}
+
+TEST_F (TextEditorTests, SingleLineTextStaysCenteredInEditorShorterThanALine)
+{
+    editor->setBounds (0.0f, 0.0f, 200.0f, 10.0f);
+    editor->setText ("Hi");
+
+    EXPECT_NEAR (5.0f, editor->getCaretBounds().getCenterY(), 1.0f);
+}
+
 /* TODO: moveCaretToWordEnd/moveCaretToWordStart is private
 TEST_F (TextEditorTests, DoubleClickSelectsWord)
 {

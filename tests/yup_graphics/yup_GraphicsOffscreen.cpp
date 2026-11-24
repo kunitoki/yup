@@ -1222,6 +1222,27 @@ TEST_F (GraphicsGpuPixelTests, FrameDescriptorPassesTriangulationThresholds)
     EXPECT_TRUE (canvas->commit());
 }
 
+TEST_F (GraphicsGpuPixelTests, PathRebuiltAfterADrawLeavesThatDrawAlone)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        g.setFillColor (Colors::red);
+
+        Path path;
+        path.addRectangle (4.0f, 20.0f, 24.0f, 24.0f);
+        g.fillPath (path);
+
+        path.clear();
+        path.addEllipse (36.0f, 20.0f, 24.0f, 24.0f);
+        g.fillPath (path);
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 16, 32), 200);
+    EXPECT_GT (alphaAt (pixels, 48, 32), 200);
+    EXPECT_LT (alphaAt (pixels, 32, 32), 50);
+}
+
 TEST_F (GraphicsGpuPixelTests, CenteredClipStrokeKeepsOnlyTheBand)
 {
     const auto pixels = render ([] (Graphics& g)

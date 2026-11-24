@@ -291,6 +291,7 @@ private:
     bool isRendering() const;
     void getRenderContext();
     void runWithComputeContext (const std::function<void()>& fn);
+    bool isIdleFrame();
     bool renderFrame();
 
     static int mouseCaptureRequestCount;

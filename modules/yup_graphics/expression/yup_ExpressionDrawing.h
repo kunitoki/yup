@@ -163,6 +163,10 @@ public:
         the previous draw, the cached shapes are drawn again as they are, which saves building their paths
         and lets the renderer reuse them. Programs are still evaluated on every draw.
 
+        Outputs that change on consecutive draws (animations) are drawn without being recorded, so they
+        cost no more than drawing without a cache; once they stop changing, the next draw records the
+        shapes again and the following ones reuse them.
+
         Paths assigned to `path` and `clipPath` are compared by identity (copies of a Path share its data), so assign new
         paths instead of modifying a path in place.
 

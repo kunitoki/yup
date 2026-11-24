@@ -79,6 +79,7 @@
 
 #if YUP_MAC
 #include "native/yup_GpuCanvas_mac.cpp"
+#include "native/yup_GraphicsContext_mac.cpp"
 #endif
 
 #if YUP_IMAGE_FORMAT_BMP

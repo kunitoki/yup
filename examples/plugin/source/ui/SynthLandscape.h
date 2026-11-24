@@ -64,9 +64,9 @@ public:
     /** Lets the landscape shimmer, while something plays. */
     void setAnimating (bool shouldAnimate) noexcept { animating = shouldAnimate; }
 
-    /** Moves the animation on; call it from the display's refreshDisplay().
+    /** Moves the animation on; call it from the display's FrameAttachment callback.
 
-        The caller's refreshDisplay runs once per rendered frame, so the animation advances at
+        The callback runs once per rendered frame, so the animation advances at
         the window's frame rate (the Frame Rate menu's 30/60/VSync) rather than a fixed rate.
 
         @param lastFrameTimeSeconds   The time since the last frame.

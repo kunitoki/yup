@@ -440,10 +440,16 @@ inline int getDefaultParameterChangeCapacity (const AudioProcessor& processor)
     return static_cast<int> (processor.getParameters().size()) * 4 + 32;
 }
 
-/** Calls the processor's normal or bypass processing path for a prepared context. */
+/** Calls the processor's normal or bypass processing path for a prepared context.
+
+    The processor runs with denormals disabled, and the floating point mode of the calling
+    thread is restored afterwards.
+*/
 template <typename Context>
 void processAudioBlock (AudioProcessor& processor, Context& context, bool isBypassed)
 {
+    ScopedNoDenormals noDenormals;
+
     if (isBypassed)
         processor.processBlockBypassed (context);
     else

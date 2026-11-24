@@ -755,6 +755,56 @@ public:
     virtual void runWithGraphicsContext (const std::function<void()>& fn) { fn(); }
 
     //==============================================================================
+    /** Receives a callback for every frame of a native window.
+
+        Most code should use a FrameAttachment instead, which registers a function for a Component
+        and follows it from one window to another.
+
+        @see addFrameListener, removeFrameListener, FrameAttachment
+    */
+    class FrameListener
+    {
+    public:
+        /** Destructor. */
+        virtual ~FrameListener() = default;
+
+        /** Called once per frame, before the window paints.
+
+            On platforms with a render thread this runs on that thread while it holds the message
+            manager lock, so it never runs at the same time as the message thread and can use the
+            components of the window freely. On the web it runs on the main thread.
+
+            The graphics context is not current during this call: GPU work belongs in
+            Component::paint() or goes through runWithGraphicsContext().
+
+            The window is painted afterwards only when something asked for it, so call
+            Component::repaint() when what is displayed changed.
+
+            @param elapsedSeconds The time since the previous frame, in seconds.
+        */
+        virtual void frameStarted (double elapsedSeconds) = 0;
+    };
+
+    /** Adds a listener that is called for every frame of this window.
+
+        Adding a listener that is already registered does nothing.
+
+        Must be called on the message thread, or with the message manager locked.
+
+        @param listener The listener to add, which must stay alive until it is removed.
+    */
+    void addFrameListener (FrameListener* listener);
+
+    /** Removes a listener added with addFrameListener().
+
+        Must be called on the message thread, or with the message manager locked, which includes
+        FrameListener::frameStarted() itself.
+
+        @param listener The listener to remove.
+    */
+    void removeFrameListener (FrameListener* listener);
+
+    //==============================================================================
     /** Returns the areas that were dirty when the frame being painted started.
 
         A development tool reads this while the frame is painted, to show what the window really
@@ -792,6 +842,20 @@ public:
                                            void* parent);
 
 protected:
+    /** Returns true when at least one frame listener is registered.
+
+        Safe to call from any thread, without the message manager locked.
+    */
+    bool hasFrameListeners() const noexcept;
+
+    /** Calls the frame listeners.
+
+        A backend calls this once per frame before painting, with the message manager locked.
+
+        @param elapsedSeconds The time since the previous frame, in seconds.
+    */
+    void callFrameListeners (double elapsedSeconds);
+
     /** The Component associated with this native component. */
     Component& component;
     /** The configuration flags for this native component. */
@@ -800,6 +864,10 @@ protected:
     RectangleList<float> frameRepaintAreas;
 
 private:
+    ListenerList<FrameListener> frameListeners;
+    std::atomic<int> numFrameListeners { 0 };
+
+    YUP_DECLARE_WEAK_REFERENCEABLE (ComponentNative)
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentNative)
 };
 

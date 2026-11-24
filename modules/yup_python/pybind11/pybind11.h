@@ -4086,6 +4086,14 @@ inline function
     {
         return function();
     }
+
+    // The instance is being deallocated (e.g. its __dict__ is cleared and a member's C++ destructor calls
+    // back into this object): binding a method would take and drop a reference, deallocating it twice
+    if (Py_REFCNT (self.ptr()) == 0)
+    {
+        return function();
+    }
+
     handle type = type::handle_of (self);
     auto key = std::make_pair (type.ptr(), name);
 

@@ -430,16 +430,16 @@ struct ExpressionDrawing::DrawBuffers
     /* A shape or a label drawn with a style. */
     struct Operation
     {
-        Operation (const Style& shapeStyle, const Path& shape)
-            : style (shapeStyle)
-            , path (shape)
+        Operation (Style shapeStyle, Path shape)
+            : style (std::move (shapeStyle))
+            , path (std::move (shape))
         {
             if (style.shouldStroke && style.hasDash())
-                dashedPath = shape.createDashed (style.strokeDash->asSpan(), style.strokeDashOffset.value_or (0.0f));
+                dashedPath = path->createDashed (style.strokeDash->asSpan(), style.strokeDashOffset.value_or (0.0f));
         }
 
-        Operation (const Style& labelStyle, Text labelText)
-            : style (labelStyle)
+        Operation (Style labelStyle, Text labelText)
+            : style (std::move (labelStyle))
             , label (std::move (labelText))
         {
         }
@@ -528,12 +528,12 @@ struct ExpressionDrawing::DrawBuffers
     {
         flush();
 
-        for (const auto& polyline : polylines)
+        for (auto& polyline : polylines)
         {
-            auto style = polyline.style;
+            auto& style = polyline.style;
             style.shouldFill = style.hasFill();
             style.shouldStroke = style.hasStroke() || ! style.hasFill();
-            emit (style, polyline.path);
+            emit (std::move (style), std::move (polyline.path));
         }
 
         polylines.clear();
@@ -574,16 +574,17 @@ private:
         if (batch.isEmpty())
             return;
 
-        emit (batchStyle, batch);
+        // The batch style is only compared again after a new batch reassigns it
+        emit (std::move (batchStyle), std::move (batch));
 
         // A new path, as the renderer or the cache still reference the emitted one
         batch = Path();
     }
 
-    void emit (const Style& style, const Path& shape)
+    void emit (Style style, Path shape)
     {
         if (outline == nullptr)
-            emit (Operation (style, shape));
+            emit (Operation (std::move (style), std::move (shape)));
         else if (appliesTransforms && style.transform)
             outline->appendPath (shape, *style.transform);
         else
@@ -817,7 +818,7 @@ void ExpressionDrawing::DrawBuffers::addRow (const Lanes& lanes, int lane)
             text.area = lanes.labelRect[lane];
         }
 
-        emit (Operation (style, std::move (text)));
+        emit (Operation (std::move (style), std::move (text)));
     }
 }
 
@@ -830,6 +831,8 @@ struct ExpressionDrawing::Cache::Data
     Fields<ExpressionDrawingColumn> snapshot;
     std::vector<DrawBuffers::Operation> operations;
     bool wasRebuilt = false;
+    bool outputsChanged = false;
+    bool isRecorded = false;
 };
 
 ExpressionDrawing::Cache::Cache()
@@ -949,12 +952,19 @@ void ExpressionDrawing::draw (Graphics& g, ExpressionState& state, int numRows, 
         startRow += numEvaluated;
     }
 
-    data.wasRebuilt = hasChanged || data.numRows != startRow;
+    const bool outputsChanged = hasChanged || data.numRows != startRow;
+
+    // Outputs changing on consecutive draws are animated: recording them would only be thrown away
+    const bool shouldRecord = ! (outputsChanged && data.outputsChanged);
+
     data.numRows = startRow;
+    data.outputsChanged = outputsChanged;
+    data.wasRebuilt = outputsChanged || ! data.isRecorded;
 
     if (data.wasRebuilt)
     {
         data.operations.clear();
+        data.isRecorded = shouldRecord;
 
         DrawBuffers::Lanes lanes {};
 
@@ -963,12 +973,15 @@ void ExpressionDrawing::draw (Graphics& g, ExpressionState& state, int numRows, 
             values = output.isValid() ? column.values.get() : nullptr;
         }, *outputs, data.snapshot, lanes);
 
-        DrawBuffers buffers (settings, g, labelFont, &data.operations);
+        DrawBuffers buffers (settings, g, labelFont, shouldRecord ? &data.operations : nullptr);
 
         for (int row = 0; row < data.numRows; ++row)
             buffers.addRow (lanes, row);
 
         buffers.finish();
+
+        if (! shouldRecord)
+            return;
     }
 
     for (const auto& operation : data.operations)

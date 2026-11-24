@@ -120,10 +120,10 @@ artboard->setFitting (std::nullopt);   // the artboard lays itself out
 
 ### Advancing and pausing
 
-`Artboard` advances itself from `Component::refreshDisplay` each frame, and
+`Artboard` advances itself every frame, and
 repaints only while its scene is animating or after something in it changed. A
 still artboard costs nothing to draw, so there is no need for continuous
-rendering or a `refreshDisplay` override that calls `repaint()`. A state machine
+rendering or a `FrameAttachment` that calls `repaint()`. A state machine
 resting in a looping animation never settles, even if nothing visibly moves, and
 a file with scripts stays busy for as long as any script's `advance()` returns
 true.
@@ -481,8 +481,9 @@ for (int i = 0; i < schema->getNumProperties(); ++i)
 
 Artboards and their handles are not internally synchronized.
 
-`Artboard` advances from `refreshDisplay`, which YUP runs on the render thread
-while holding the message manager lock — so it never runs concurrently with the
+`Artboard` advances once per frame, which YUP runs on the render thread
+while holding the message manager lock (see
+[Threading](component-basics.md#threading)) - so it never runs concurrently with the
 message thread, but everything the advance reaches runs *on that thread*: node
 bounds listeners, bounds updates pushed into attached components,
 `onPropertyChanged`, and the `PropertyChangedCallback` of a bound instance. A

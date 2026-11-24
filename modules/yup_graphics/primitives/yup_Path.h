@@ -130,10 +130,15 @@ public:
     Path (const Point<float>& p);
 
     //==============================================================================
-    /** Copy and move constructors and assignment operators. */
-    Path (const Path& other) noexcept = default;
+    /** Copy and move constructors and assignment operators.
+
+        Copying is cheap: a copy shares the outline of the path it was copied from, until one of
+        the two changes its own. The same holds for a path that was drawn, it can be changed or
+        cleared right away, as the draw keeps the outline the path had.
+    */
+    Path (const Path& other) noexcept;
     Path (Path&& other) noexcept = default;
-    Path& operator= (const Path& other) noexcept = default;
+    Path& operator= (const Path& other) noexcept;
     Path& operator= (Path&& other) noexcept = default;
 
     //==============================================================================
@@ -1025,12 +1030,16 @@ public:
     void appendPath (rive::rcp<rive::RiveRenderPath> other, const AffineTransform& transform);
 
 private:
+    rive::RiveRenderPath& getExclusiveRenderPath (bool keepOutline = true);
+    void detachRenderPath (bool keepOutline);
+
     rive::rcp<rive::RiveRenderPath> path;
     uint64 fillPolygonMutationID = 0;
     uint64 simpleContourMutationID = 0;
     mutable rive::rcp<rive::RiveRenderPath> cachedClockwisePath;
     mutable uint64 cachedClockwiseMutationID = 0;
     mutable bool cachedClockwiseNonZero = true;
+    mutable bool renderPathMayBeShared = false;
 };
 
 //==============================================================================

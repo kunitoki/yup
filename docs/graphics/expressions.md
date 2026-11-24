@@ -200,7 +200,10 @@ ExpressionDrawing::Cache cache; // one per drawing, kept alongside it
 bars.getReference().draw (g, state, (int) data.size(), nullptr, &cache);
 ```
 
-`cache.wasRebuilt()` reports whether the last draw had to rebuild. Paths
+`cache.wasRebuilt()` reports whether the last draw had to rebuild. Outputs that
+change on consecutive draws, like animations, are drawn without being recorded,
+so a cache costs nothing while they animate; the first draw after they settle
+records the shapes again. Paths
 assigned to `path` and `clipPath` are compared by identity, so build a new path instead of
 modifying one in place; paths built per row in the program are new on every
 draw, so drawings using them always rebuild.

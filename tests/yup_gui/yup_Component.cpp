@@ -270,11 +270,6 @@ public:
         comp.internalUserTriedToCloseWindow();
     }
 
-    static void triggerRefreshDisplay (Component& comp, double lastFrameTimeSeconds)
-    {
-        comp.internalRefreshDisplay (lastFrameTimeSeconds);
-    }
-
     static bool triggerKeyDown (Component& comp, const KeyPress& keys, const Point<float>& position)
     {
         return comp.internalKeyDown (keys, position);
@@ -2190,11 +2185,6 @@ TEST_F (ComponentMockTest, AdditionalVirtualMethodTests)
     mockComponent->takeKeyboardFocus();
     mockComponent->leaveKeyboardFocus();
 
-    // Test refresh display
-    EXPECT_CALL (*mockComponent, refreshDisplay (0.016));
-    mockComponent->refreshDisplay (0.016);
-    ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
-
     // Test userTriedToCloseWindow
     EXPECT_CALL (*mockComponent, userTriedToCloseWindow());
     mockComponent->userTriedToCloseWindow();
@@ -2853,9 +2843,6 @@ TEST_F (ComponentTest, InternalDisplayAndCloseDispatch)
 {
     ComponentHelper::triggerDisplayChanged (*root);
     ComponentHelper::triggerUserTriedToCloseWindow (*root);
-
-    // refreshDisplay recurses into children.
-    ComponentHelper::triggerRefreshDisplay (*root, 0.016);
 }
 
 TEST_F (ComponentTest, InternalKeyboardDispatch)

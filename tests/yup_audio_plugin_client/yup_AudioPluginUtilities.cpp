@@ -85,6 +85,7 @@ public:
     void processBlock (AudioProcessContext<float>&) override
     {
         ++floatProcessCallCount;
+        denormalsWereDisabled = FloatVectorOperations::areDenormalsDisabled();
     }
 
     void processBlock (AudioProcessContext<double>&) override
@@ -95,6 +96,7 @@ public:
     void processBlockBypassed (AudioProcessContext<float>&) override
     {
         ++floatBypassCallCount;
+        denormalsWereDisabled = FloatVectorOperations::areDenormalsDisabled();
     }
 
     void processBlockBypassed (AudioProcessContext<double>&) override
@@ -131,6 +133,7 @@ public:
     int doubleProcessCallCount = 0;
     int floatBypassCallCount = 0;
     int doubleBypassCallCount = 0;
+    bool denormalsWereDisabled = false;
     MemoryBlock lastLoadedState;
     MemoryBlock lastSavedState;
 };
@@ -711,6 +714,30 @@ TEST_F (ProcessAudioBlockTests, RoutesToBypassedWhenBypassed)
     EXPECT_EQ (0, processor.floatProcessCallCount);
     EXPECT_EQ (1, processor.floatBypassCallCount);
 }
+
+#if ! defined(YUP_WASM)
+TEST_F (ProcessAudioBlockTests, DisablesDenormalsOnlyWhileProcessing)
+{
+    const bool wereDisabled = FloatVectorOperations::areDenormalsDisabled();
+    FloatVectorOperations::disableDenormalisedNumberSupport (false);
+
+    AudioBuffer<float> audio (2, 64);
+    MidiBuffer midi;
+    ParameterChangeBuffer params;
+    AudioProcessContext<float> ctx { audio, midi, params };
+
+    processAudioBlock (processor, ctx, false);
+    EXPECT_TRUE (processor.denormalsWereDisabled);
+    EXPECT_FALSE (FloatVectorOperations::areDenormalsDisabled());
+
+    processor.denormalsWereDisabled = false;
+    processAudioBlock (processor, ctx, true);
+    EXPECT_TRUE (processor.denormalsWereDisabled);
+    EXPECT_FALSE (FloatVectorOperations::areDenormalsDisabled());
+
+    FloatVectorOperations::disableDenormalisedNumberSupport (wereDisabled);
+}
+#endif
 
 //==============================================================================
 class WrapperTypeTests : public ::testing::Test

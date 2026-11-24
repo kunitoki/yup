@@ -214,7 +214,7 @@ public:
     void paint (Graphics& g) override;
 
     /** @internal */
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
 
 private:
     //==============================================================================
@@ -244,6 +244,7 @@ private:
     float lastCallbackPeak = -100.0f;
     float lastCallbackAverage = -100.0f;
     bool lastCallbackClipping = false;
+    FrameAttachment frameAttachment { *this, bindFront (&KMeterComponent::refreshDisplay, this) };
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (KMeterComponent)

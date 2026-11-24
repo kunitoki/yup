@@ -31,6 +31,7 @@ class ComponentTestHelper;
 #endif
 
 class ComponentTypeInfo;
+class FrameAttachment;
 class StyleContext;
 class StyleSheet;
 class StyleState;
@@ -1567,7 +1568,13 @@ public:
     /**
         Paint the component.
 
+        On platforms with a render thread this is called on that thread while it holds the message
+        manager lock, so it never runs at the same time as the message thread: state shared with
+        mouse handlers, timers and other message thread callbacks needs no extra locking.
+
         @param g The graphics context to paint the component on.
+
+        @see FrameAttachment
      */
     virtual void paint (Graphics& g);
 
@@ -1577,14 +1584,6 @@ public:
         @param g The graphics context to paint the component on.
      */
     virtual void paintOverChildren (Graphics& g);
-
-    //==============================================================================
-    /**
-        Refresh the display of the component.
-
-        @param lastFrameTimeSeconds The time since the last frame.
-     */
-    virtual void refreshDisplay (double lastFrameTimeSeconds);
 
     //==============================================================================
     /**
@@ -2230,7 +2229,7 @@ private:
     void clearPressedInSubtree();
     void sendEnablementChanged();
     void sendPaletteChanged();
-    void internalRefreshDisplay (double lastFrameTimeSeconds);
+    void updateFrameAttachments();
     void internalRepaint();
     void internalRepaint (const Rectangle<float>& rect);
     void internalPaint (Graphics& g, const RectangleList<float>& repaintRegions, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
@@ -2350,6 +2349,7 @@ private:
     friend class SDLComponentNative;
     friend class PointerSimulator;
     friend class StyleContext;
+    friend class FrameAttachment;
     friend class WeakReference<Component>;
 
     template <class T>
@@ -2372,6 +2372,7 @@ private:
     MouseListenerList nestedMouseListeners;
     GestureListenerList gestureListeners;
     ComponentListenerList componentListeners;
+    Array<FrameAttachment*> frameAttachments;
     ComponentStyle::Ptr style;
     std::unique_ptr<ThemePalette> palette;
     std::unique_ptr<StyleState> styleState;

@@ -58,7 +58,7 @@ public:
     void setAnimating (bool shouldAnimate) noexcept { landscape.setAnimating (shouldAnimate); }
 
     void paint (yup::Graphics& g) override;
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
     void mouseDown (const yup::MouseEvent& event) override;
     void mouseDrag (const yup::MouseEvent& event) override;
     void mouseUp (const yup::MouseEvent& event) override;
@@ -92,4 +92,5 @@ private:
     yup::Font labelFont;
     SynthLandscape landscape;
     bool hovered = false;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&SynthFilterResponse::refreshDisplay, this) };
 };

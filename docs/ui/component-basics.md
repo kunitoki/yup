@@ -418,22 +418,89 @@ their bounds only. An [effect](component-effects.md), a stylesheet `filter:` and
 the texture of a cached component hold the margin too. A `PopupMenu` shown
 inside a parent component uses it for its drop shadow.
 
-### `refreshDisplay()` — continuous animation
+### Per-frame updates
 
-Override `refreshDisplay()` for per-frame animation (timers, property animation,
-etc.):
+A `FrameAttachment` calls a function once per frame of the window the component
+is in, before it is painted, with the time elapsed since the previous frame. Use
+it for animation, kinetic scrolling and anything else that moves with the
+display:
 
 ```cpp
-void MySpinner::refreshDisplay (double lastFrameTimeSeconds) override
+class MySpinner : public yup::Component
 {
-    rotation += 360.0f * static_cast<float> (lastFrameTimeSeconds);
-    repaint();
-}
+public:
+    void paint (yup::Graphics& g) override;
+
+private:
+    void advance (double elapsedSeconds)
+    {
+        rotation += 360.0f * static_cast<float> (elapsedSeconds);
+        repaint();
+    }
+
+    float rotation = 0.0f;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&MySpinner::advance, this) };
+};
 ```
 
-This is called every frame for the entire component tree. The
-`lastFrameTimeSeconds` parameter is the wall-clock time elapsed since the
-previous frame.
+- The attachment follows the component: the function is called while the
+  component is in a window, whichever window that is, and no longer once the
+  component leaves it or is deleted.
+- A frame callback does not paint anything by itself: call `repaint()` when what
+  is shown changed.
+- To get frames only for a while, hold a `std::optional<yup::FrameAttachment>`
+  and reset it when the animation ends. The function may reset its own
+  attachment.
+- A window with no attachment and nothing to repaint does no work per frame, so
+  attach only what needs every frame.
+- Any object can own one, not just the component: pass the component whose
+  window should drive it.
+
+---
+
+## Threading
+
+A window is served by two threads:
+
+- The **message thread** runs the event loop: mouse, keyboard and touch
+  handlers, timers and `MessageManager::callAsync`.
+- The **render thread** of the window runs its frames: the `FrameAttachment`
+  functions first, then `paint()` and `paintOverChildren()` when something needs
+  repainting.
+
+The render thread holds the message manager lock while it calls into the
+components, which keeps the message thread waiting. The two never run component
+code at the same time, so what a mouse handler or a timer shares with `paint()`
+needs no lock of its own, and children can be added or removed from the message
+thread at any time.
+
+| Part of a frame | Thread | Message manager locked | Graphics context current |
+|---|---|---|---|
+| `FrameAttachment` functions | Render | Yes | No |
+| `paint()`, `paintOverChildren()`, effects | Render | Yes | Yes |
+| Submitting the frame to the GPU and presenting it | Render | No | Yes |
+
+What follows from this:
+
+- **Keep frame functions and `paint()` short.** The message thread, and with it
+  all input, waits for them.
+- **Callbacks run on the thread that caused them.** A `setBounds()` from a frame
+  function calls `resized()` on the render thread, still with the lock held.
+- **Do GPU work in `paint()`**, where the graphics context is current. Anywhere
+  else go through `ComponentNative::runWithGraphicsContext()`.
+- **The frame is submitted after the lock is released.** What `paint()` drew is
+  still in use while the message thread runs again. A `Path` can be changed
+  right away: it then changes an outline of its own.
+- **Other threads are not covered.** Hand data from audio and worker threads
+  over with atomics, a queue or a lock, or take a `MessageManagerLock`, which
+  keeps out the message thread and the frames alike.
+- **A nested message loop lets frames run.** A handler that runs a modal loop
+  sees frames before it returns, so bring its state up to date first.
+- On the web there is no render thread: frames run on the main thread, between
+  messages.
+
+See [the message thread](../core/multithreading/message-thread.md) for the lock
+and for posting work to the message thread.
 
 ---
 

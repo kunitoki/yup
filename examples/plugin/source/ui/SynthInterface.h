@@ -141,7 +141,7 @@ public:
     void showModulationPanel (SynthModulationTarget& target) override;
 
 private:
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
 
     void showSettingsMenu (yup::Point<float> position);
     void changeViewOptions (const std::function<void (SynthViewOptions&)>& change);
@@ -253,4 +253,5 @@ private:
     yup::Rectangle<float> keyboardTile;
     yup::Rectangle<float> keysWell;
     yup::Font wheelCaptionFont;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&SynthInterface::refreshDisplay, this) };
 };

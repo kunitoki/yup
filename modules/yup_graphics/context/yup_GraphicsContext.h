@@ -152,6 +152,18 @@ public:
     */
     virtual void onSizeChanged (void* nativeHandle, int width, int height, float dpiScale, uint32_t sampleCount) = 0;
 
+    /** Returns true when the context has a surface to render frames into.
+
+        A backend can be unable to create its presentation surface, or to present to it, for a
+        reason that goes away on its own: Direct3D cannot create a swapchain in a Windows session
+        that is not interactive, Metal and WebGPU can have nothing to present a frame to. While
+        this returns false, skip the frame (no begin() / end()) and call onSizeChanged() again to
+        retry. Call it from the thread that renders.
+
+        @return True if frames can be rendered, false if the surface is unavailable for now.
+    */
+    virtual bool isSurfaceAvailable() const noexcept { return true; }
+
     //==============================================================================
     /** Begins a rendering frame.
 

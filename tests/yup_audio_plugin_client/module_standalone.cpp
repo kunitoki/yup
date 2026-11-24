@@ -233,6 +233,24 @@ TEST_F (StandaloneProcessorPlayerTests, UnpreparedPlayerOutputsSilence)
     EXPECT_FLOAT_EQ (0.0f, outputs.data[0][0]);
 }
 
+TEST_F (StandaloneProcessorPlayerTests, ProcessesWithDenormalsDisabled)
+{
+    const bool wereDisabled = FloatVectorOperations::areDenormalsDisabled();
+    FloatVectorOperations::disableDenormalisedNumberSupport (false);
+
+    TestPluginProcessor processor (testPluginBusLayoutStereo());
+    StandaloneProcessorPlayer player (processor);
+    player.prepare (44100.0, 64);
+
+    DeviceChannels outputs (2, 64, 1.0f);
+    process (player, nullptr, outputs, 64);
+
+    EXPECT_EQ (1, processor.processCallCount);
+    EXPECT_TRUE (processor.denormalsWereDisabled);
+
+    FloatVectorOperations::disableDenormalisedNumberSupport (wereDisabled);
+}
+
 //==============================================================================
 class StandaloneStateStoreTests : public ::testing::Test
 {

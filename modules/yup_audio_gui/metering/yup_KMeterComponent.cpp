@@ -109,8 +109,6 @@ void KMeterComponent::paint (Graphics& g)
 
 void KMeterComponent::refreshDisplay (double lastFrameTimeSeconds)
 {
-    Component::refreshDisplay (lastFrameTimeSeconds);
-
     timeSinceLastUpdate += lastFrameTimeSeconds;
 
     // Update at configured refresh rate

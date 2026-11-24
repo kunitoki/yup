@@ -272,7 +272,7 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
 
 private:
     //==============================================================================
@@ -343,6 +343,7 @@ private:
     // Window compensation
     float windowGain = 1.0f;
     bool needsWindowUpdate = true;
+    FrameAttachment frameAttachment { *this, bindFront (&SpectrogramComponent::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpectrogramComponent)
 };
