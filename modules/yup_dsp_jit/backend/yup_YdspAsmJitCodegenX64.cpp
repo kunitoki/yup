@@ -196,6 +196,22 @@ void YdspAsmJitCodegenX64::floatBinary (YdspIrOp op, const YdspFp& dst, const Yd
 {
     const bool is64 = isDoubleFloat (dst);
 
+    // The SSE forms compute into their left operand: with the destination as
+    // the right one (`y = a - y`), loading the left into it first would lose it.
+    if (dst == srcB && dst != srcA)
+    {
+        if (op == YdspIrOp::addF || op == YdspIrOp::mulF)
+        {
+            floatBinary (op, dst, srcB, srcA);
+            return;
+        }
+
+        YdspFp result = is64 ? newFp64 ("binaryResult") : newFp ("binaryResult");
+        floatBinary (op, result, srcA, srcB);
+        moveFloat (dst, result);
+        return;
+    }
+
     if (dst != srcA)
         moveFloat (dst, srcA);
 
@@ -474,6 +490,14 @@ void YdspAsmJitCodegenX64::vectorBinary (YdspIrOp op, const YdspFp& dst, const Y
                 break;
         }
 
+        return;
+    }
+
+    if (dst == srcB && dst != srcA)
+    {
+        YdspFp result = newFpVector ("binaryResult");
+        vectorBinary (op, result, srcA, srcB);
+        moveVector (dst, result);
         return;
     }
 
@@ -1605,6 +1629,21 @@ void YdspAsmJitCodegenX64::emitSaturatingIntBinary (YdspIrOp op, const YdspGp& d
 
 void YdspAsmJitCodegenX64::intBinary (YdspIrOp op, const YdspGp& dst, const YdspGp& srcA, const YdspGp& srcB)
 {
+    // As in floatBinary: `n = a - n` must not load `a` over the right operand.
+    if (dst == srcB && dst != srcA)
+    {
+        if (op != YdspIrOp::subI && op != YdspIrOp::shlI && op != YdspIrOp::shrI)
+        {
+            intBinary (op, dst, srcB, srcA);
+            return;
+        }
+
+        YdspGp result = dst.is_gp64() ? cc->new_gp64 ("binaryResult") : cc->new_gp32 ("binaryResult");
+        intBinary (op, result, srcA, srcB);
+        moveGp (dst, result);
+        return;
+    }
+
     if (dst != srcA)
         moveGp (dst, srcA);
 

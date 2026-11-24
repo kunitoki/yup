@@ -5197,6 +5197,88 @@ TEST (YdspAsmJitCodegenTests, LocalizesExcessRingIndicesUnderHighGpPressureOnArm
     }
 }
 
+TEST (YdspAsmJitCodegenTests, SubtractionIntoItsRightOperandKeepsBothOperands)
+{
+    // `y = a - y` is what a folded state write-back leaves behind. A two-address
+    // target must not load `a` into `y` before it has read `y`.
+    YdspIrFunction fn;
+    fn.name = "SubtractIntoRight";
+    fn.isSampleMode = false;
+    fn.float32ArrayElements = 3;
+    fn.int32ArrayElements = 3;
+    fn.blocks.resize (1);
+    auto& insts = fn.blocks[0].insts;
+
+    const auto newValue = [&fn] (YdspValueType type)
+    {
+        fn.valueTypes.push_back (type);
+        return static_cast<int> (fn.valueTypes.size()) - 1;
+    };
+
+    int index[3];
+    for (int i = 0; i < 3; ++i)
+    {
+        index[i] = newValue (YdspValueType::int32Type);
+        insts.push_back ({ YdspIrOp::constI, index[i], -1, -1, -1, -1, 0.0, i });
+    }
+
+    const int floatLeft = newValue (YdspValueType::float32Type);
+    const int floatRight = newValue (YdspValueType::float32Type);
+    insts.push_back ({ YdspIrOp::loadStateArrayF, floatLeft, index[0], -1, -1, 0 });
+    insts.push_back ({ YdspIrOp::loadStateArrayF, floatRight, index[1], -1, -1, 0 });
+    insts.push_back ({ YdspIrOp::subF, floatRight, floatLeft, floatRight });
+    insts.push_back ({ YdspIrOp::storeStateArrayF, -1, index[2], floatRight, -1, 0 });
+
+    const int intLeft = newValue (YdspValueType::int32Type);
+    const int intRight = newValue (YdspValueType::int32Type);
+    insts.push_back ({ YdspIrOp::loadStateArrayI, intLeft, index[0], -1, -1, 0 });
+    insts.push_back ({ YdspIrOp::loadStateArrayI, intRight, index[1], -1, -1, 0 });
+    insts.push_back ({ YdspIrOp::subI, intRight, intLeft, intRight });
+    insts.push_back ({ YdspIrOp::storeStateArrayI, -1, index[2], intRight, -1, 0 });
+
+    {
+        YdspDiagnostics diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, fn, diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+
+        // A subtraction of a register from itself is the lost operand.
+        for (const auto& line : StringArray::fromLines (diagnostics.toString()))
+        {
+            const auto text = line.upToFirstOccurrenceOf (";", false, false).trim();
+            if (! text.startsWith ("subss ") && ! text.startsWith ("sub "))
+                continue;
+
+            const auto operands = text.fromFirstOccurrenceOf (" ", false, false);
+            EXPECT_NE (operands.upToFirstOccurrenceOf (",", false, false).trim(),
+                       operands.fromFirstOccurrenceOf (",", false, false).trim())
+                << line;
+        }
+    }
+
+    YdspDiagnostics diagnostics;
+    asmjit::JitRuntime runtime;
+    const auto kernel = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+    ASSERT_NE (nullptr, kernel) << diagnostics.toString();
+
+    const auto intRegion = static_cast<size_t> (fn.int32ArrayRegionOffset());
+    std::vector<float> stateArrays ((intRegion + 3 * sizeof (int32_t)) / sizeof (float) + 16, 0.0f);
+    stateArrays[0] = 5.0f;
+    stateArrays[1] = 2.0f;
+
+    const int32_t intValues[] { 9, 4, 0 };
+    std::memcpy (reinterpret_cast<char*> (stateArrays.data()) + intRegion, intValues, sizeof (intValues));
+
+    YdspKernelContext context;
+    context.stateArrays = stateArrays.data();
+    kernel (&context);
+
+    int32_t intResult = 0;
+    std::memcpy (&intResult, reinterpret_cast<char*> (stateArrays.data()) + intRegion + 2 * sizeof (int32_t), sizeof (intResult));
+
+    EXPECT_EQ (3.0f, stateArrays[2]);
+    EXPECT_EQ (5, intResult);
+}
+
 TEST (YdspAsmJitCodegenTests, X64SpillsEightLaneVectorsAtFullWidth)
 {
     // Twenty eight-lane values live at once are more than the sixteen ymm
