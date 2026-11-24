@@ -95,6 +95,7 @@ public:
     void processBlock (yup::AudioProcessContext<float>& context) override
     {
         ++processCallCount;
+        denormalsWereDisabled = yup::FloatVectorOperations::areDenormalsDisabled();
         captureInputBusChannels (context);
         captureBlock (context);
     }
@@ -201,6 +202,9 @@ public:
     bool supportsDouble = false;
     int processCallCount = 0;
     int bypassCallCount = 0;
+
+    /** Whether denormals were disabled while the last block was in processBlock. */
+    bool denormalsWereDisabled = false;
     std::function<yup::AudioProcessorEditor*()> editorFactory;
     std::function<bool (const yup::AudioBusLayout&)> layoutSupported;
     bool wantsNoteExpression = false;

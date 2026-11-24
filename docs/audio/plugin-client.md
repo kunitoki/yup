@@ -130,6 +130,10 @@ VST3 hosts can also map MIDI controllers to parameters through
   presets.
 - **Suspension**: wrappers skip or silence a block when the processor is suspended or its process
   lock is held, so reconfiguring under `ScopedProcessSuspension` is safe in every format.
+- **Denormals**: every wrapper, the standalone included, calls `processBlock` and
+  `processBlockBypassed()` with denormals disabled (flush-to-zero, plus denormals-are-zero on
+  Intel CPUs, nothing in the browser) and restores the floating point mode of the host thread
+  afterwards.
 
 [Host integration](../build-system/building-plugins.md#host-integration) lists the
 format-specific details of each feature.

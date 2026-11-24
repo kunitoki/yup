@@ -40,7 +40,8 @@ with a hard deadline. Inside it:
   are already sized by the wrapper.
 - Read parameters through `getValue()` or an `AudioParameterHandle`, both lock-free.
 - Share results with the editor through atomics, then let the editor poll them.
-- Use `yup::ScopedNoDenormals` at the top of heavy DSP code.
+- Plugin wrappers and `AudioGraphProcessor` call `processBlock` with denormals disabled. Use
+  `yup::ScopedNoDenormals` around DSP that runs anywhere else, such as a thread of your own.
 
 Wrappers try-lock the processor's process lock before each block. When the lock is busy or
 processing is suspended (see [Suspending processing](#suspending-processing)) the block
