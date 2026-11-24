@@ -31,7 +31,7 @@ jobs:
           - { os: macos-latest, id: macosx_arm64, archs: arm64 }
           - { os: windows-latest, id: win_amd64, archs: AMD64 }
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
         with:
