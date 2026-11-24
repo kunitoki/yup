@@ -241,7 +241,7 @@ private:
         }
 
         //==============================================================================
-        void refreshDisplay (double lastFrameTimeSeconds) override
+        void refreshDisplay (double lastFrameTimeSeconds)
         {
             if (! autoRotate)
                 return;
@@ -508,6 +508,7 @@ private:
         yup::GpuBuffer::Ptr vertexBuffer;
         yup::GpuBuffer::Ptr indexBuffer;
         yup::uint32 indexCount = 0;
+        yup::FrameAttachment frameAttachment { *this, yup::bindFront (&CurvedPanelView::refreshDisplay, this) };
     };
 
     //==============================================================================

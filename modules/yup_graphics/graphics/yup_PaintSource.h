@@ -56,9 +56,10 @@ namespace yup
         float phase = 0.0f;
     };
 
-    void refreshDisplay (double lastFrameTimeSeconds) override
+    // Called every frame through a yup::FrameAttachment
+    void advance (double elapsedSeconds)
     {
-        waves.phase = std::fmod (waves.phase + (float) lastFrameTimeSeconds, 1.0f);
+        waves.phase = std::fmod (waves.phase + (float) elapsedSeconds, 1.0f);
         waves.markDirty();
         repaint();
     }

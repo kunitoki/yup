@@ -76,8 +76,9 @@ class DrawablesComponent(yup.Component):
         g.strokeLine(200, 350, 550, 350)
 
         # --- Text
+        font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(18.0)
         g.setFillColor(yup.Colors.white)
-        g.drawText("YUP Drawables Demo", bounds, yup.Justification.centredBottom)
+        g.fillFittedText("YUP Drawables Demo", font, bounds.reduced(10), yup.Justification.centerBottom)
 
 
 if __name__ == "__main__":

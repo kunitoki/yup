@@ -89,7 +89,6 @@ public:
     // Rendering
     MOCK_METHOD (void, paint, (yup::Graphics&), (override));
     MOCK_METHOD (void, paintOverChildren, (yup::Graphics&), (override));
-    MOCK_METHOD (void, refreshDisplay, (double), (override));
     MOCK_METHOD (void, styleChanged, (), (override));
 
     // Input

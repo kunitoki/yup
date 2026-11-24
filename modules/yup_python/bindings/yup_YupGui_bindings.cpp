@@ -787,7 +787,6 @@ void registerYupGuiBindings (py::module_& m)
         .def ("isRenderingUnclipped", &Component::isRenderingUnclipped)
         .def ("setPaintProfilingDisabled", &Component::setPaintProfilingDisabled, "shouldBeDisabled"_a)
         .def ("isPaintProfilingDisabled", &Component::isPaintProfilingDisabled)
-        .def ("refreshDisplay", &Component::refreshDisplay, "lastFrameTimeSeconds"_a)
         .def ("repaint", py::overload_cast<>(&Component::repaint))
         .def ("repaint", py::overload_cast<const Rectangle<float>&>(&Component::repaint))
         .def ("repaint", py::overload_cast<float, float, float, float>(&Component::repaint))
@@ -918,6 +917,30 @@ void registerYupGuiBindings (py::module_& m)
               "back. Returns an invalid Image when the context has no GPU or the component has no size.")
         .def ("snapshotToTexture", &Component::snapshotToTexture, "ctx"_a, "includeEffects"_a = true,
               "Like snapshotToImage, but returns the GPU texture without reading pixels back.")
+    ;
+
+    // ============================================================================================ yup::FrameAttachment
+
+    py::class_<FrameAttachment> classFrameAttachment (m, "FrameAttachment");
+
+    classFrameAttachment
+        .def (py::init ([] (Component& component, py::function callback)
+        {
+            // The attachment usually is an attribute of the object whose method it calls: holding that
+            // method strongly would be a reference cycle the garbage collector cannot see through
+            if (py::isinstance (callback, py::module_::import ("types").attr ("MethodType")))
+            {
+                callback = py::cpp_function ([weakMethod = py::module_::import ("weakref").attr ("WeakMethod") (callback)] (double elapsedSeconds)
+                {
+                    if (py::object method = weakMethod(); ! method.is_none())
+                        method (elapsedSeconds);
+                });
+            }
+
+            return std::make_unique<FrameAttachment> (component, callback.cast<FrameAttachment::Callback>());
+        }), "component"_a, "callback"_a,
+              "Calls callback (elapsedSeconds) once per frame of the window showing the component, before it is painted.\n"
+              "A bound method is held weakly, so an object can keep the attachment calling one of its own methods.")
     ;
 
     // ============================================================================================ yup::DragAndDropTarget

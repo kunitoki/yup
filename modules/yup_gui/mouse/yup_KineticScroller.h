@@ -37,7 +37,7 @@ namespace yup
     the timestamp of a pointer sample or as the frame delta handed to update(). That makes it fully
     deterministic, so a test can drive it with made-up times, and it lets any scrolling component
     reuse it by feeding it pointer positions along its scroll axis and calling update() once per
-    frame (typically from Component::refreshDisplay()).
+    frame (typically from a FrameAttachment).
 
     The offset grows when content moves towards the start of the viewport, so dragging the pointer
     towards the start increases it, exactly like a scroll position.
@@ -51,8 +51,8 @@ namespace yup
     scroller.dragTo (event.getPosition().getY(), clock);
     scroller.endDrag (clock);
 
-    // refreshDisplay
-    if (scroller.update (lastFrameTimeSeconds))
+    // every frame, from a FrameAttachment
+    if (scroller.update (elapsedSeconds))
         layoutContent (scroller.getOffset());
     @endcode
 

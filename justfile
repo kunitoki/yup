@@ -127,12 +127,12 @@ python_wheel:
 [doc("install python wheel for yup_python bindings")]
 [working-directory: 'python']
 python_install:
-  uv pip install --force-reinstall dist/yup-*.whl
+  uv pip install --force-reinstall dist/yup_audio-*.whl
 
 [doc("uninstall python wheel for yup_python bindings")]
 [working-directory: 'python']
 python_uninstall:
-  uv pip uninstall -y yup
+  uv pip uninstall yup-audio
 
 [doc("run tests for yup_python bindings")]
 [working-directory: 'python']

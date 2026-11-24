@@ -261,6 +261,7 @@ TEST_F (ExpressionDrawingTests, CacheReusesShapesWhileOutputsDontChange)
     cache.reset();
     EXPECT_FALSE (cache.wasRebuilt());
     EXPECT_TRUE (draw (3));
+    EXPECT_FALSE (draw (3));
 
     auto other = ExpressionDrawing::create ("rect = rect (row * 12, 0, 10, 10)", context);
     ASSERT_TRUE (other.wasOk()) << other.getErrorMessage().toStdString();

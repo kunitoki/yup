@@ -264,7 +264,7 @@ public:
         snapshotPreview.setBounds (column);
     }
 
-    void refreshDisplay (double elapsedSeconds) override
+    void refreshDisplay (double elapsedSeconds)
     {
         time += elapsedSeconds;
 
@@ -727,7 +727,7 @@ private:
             }
         }
 
-        void refreshDisplay (double) override
+        void refreshDisplay (double)
         {
             if (! animated)
                 return;
@@ -740,6 +740,7 @@ private:
 
     private:
         float phase = 0.0f;
+        yup::FrameAttachment frameAttachment { *this, yup::bindFront (&Spinner::refreshDisplay, this) };
     };
 
     //==============================================================================
@@ -845,7 +846,7 @@ private:
             spinner.setBounds (area);
         }
 
-        void refreshDisplay (double) override
+        void refreshDisplay (double)
         {
             if (! animated)
                 return;
@@ -873,6 +874,7 @@ private:
         float phase = 0.0f;
         double lastChangeSeconds = 0.0;
         int clicks = 0;
+        yup::FrameAttachment frameAttachment { *this, yup::bindFront (&Subject::refreshDisplay, this) };
     };
 
     //==============================================================================
@@ -1373,6 +1375,7 @@ private:
 
     double time = 0.0;
     double measureCountdown = 0.0;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&ComponentEffectsDemo::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentEffectsDemo)
 };

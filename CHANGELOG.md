@@ -112,6 +112,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A `ComponentEffect`, a stylesheet `filter:` and `Component::setCachedToTexture` now hold the paint margin of the component, so what it paints around its bounds is no longer cut by them. `ComponentEffect::apply()`, `displayToContent()` and `contentToDisplay()` get the bounds grown by the margin, and a `filter:` widens the margin by what its `blur()` and `drop-shadow()` spread over.
 - Emscripten: the new `yupRenderPrimaryWindow` export draws the window right away, for a page that resized its canvas and would show it empty until the next animation frame.
 - Fixed a parent skipping its own paint under an opaque child drawn through an effect or with an opacity below 1, which left the previous frame showing through it, and a repaint under an effect blending into what its canvas kept where a repainted area ended inside a device pixel.
+- **Breaking:** `Component::refreshDisplay` is gone. A `FrameAttachment` calls a function for every frame of the window a component is in (`FrameAttachment frameAttachment { *this, bindFront (&MyComponent::advance, this) };`) and follows the component in and out of windows, so a frame no longer visits every component, and a window with nothing attached and nothing to repaint no longer stops the message thread on every frame. `ComponentNative::FrameListener` is the interface below it. See the new threading section of the component documentation for what runs on the render thread.
+- `ProgressBar::setProgress` called off the message thread now posts the whole update to it, so property listeners, bindings and stylesheets are never reached from a worker thread. **Behavior change**: `getProgress()` returns the new value once the message thread processed it, and on the message thread the repaint and a `sendNotificationSync` callback are no longer deferred.
 
 ### Audio
 
@@ -131,6 +133,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Python Bindings
 
 - Bound the `.yui` runtime: `YuiDocument`, `YuiLoader`, `YuiView`, `YuiParser`, `YuiWriter`, `YuiSvgImporter` and `YuiDiagnostic`, `StyleSheet` with the style classes and stylesheet of a `Component`, the reflection types (`ComponentTypeInfo`, `ComponentProperty`, `ComponentSignal`, `ComponentTypeRegistry`, `Component.getTypeInfo()`), and `BindingProvider`, which a Python class can subclass to be the model of a document, with `DataTreeBindingProvider`. Actions, import resolvers and resource finders are Python functions.
+- `Component.refreshDisplay` is no longer an override: create a `yup.FrameAttachment(component, callback)` instead. A bound method is held weakly, so `self.frameAttachment = yup.FrameAttachment(self, self.advance)` does not keep the component alive.
+- Fixed a crash when deleting a Python component (such as a window) that keeps its children as attributes: a child destroyed while the parent was being deallocated called the parent's Python overrides and deallocated it twice.
 
 ### Build System
 

@@ -209,6 +209,7 @@
 #include "component/yup_ComponentTypeInfo.cpp"
 #include "component/yup_ComponentTypeRegistry.cpp"
 #include "component/yup_Component.cpp"
+#include "component/yup_FrameAttachment.cpp"
 #include "mouse/yup_PointerSimulator.cpp"
 #include "effects/yup_BlurEffect.cpp"
 #include "effects/yup_DropShadowEffect.cpp"

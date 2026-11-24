@@ -70,7 +70,7 @@ public:
         }
     }
 
-    void refreshDisplay (double elapsedSeconds) override
+    void refreshDisplay (double elapsedSeconds)
     {
         if (! isShowing())
             return;
@@ -127,4 +127,5 @@ private:
 
     std::vector<float> data;
     float phase = 0.0f;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&ExpressionChartDemo::refreshDisplay, this) };
 };

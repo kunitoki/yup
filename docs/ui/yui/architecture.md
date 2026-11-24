@@ -243,12 +243,10 @@ Styling is batched once per frame, before painting.
 ```mermaid
 sequenceDiagram
     participant Window as Native window
-    participant Root as Root component
     participant Context as StyleContext
     participant Knob as Styled component
     participant Drawing as DrawingStyle
-    Window->>Root: internalRefreshDisplay
-    Root->>Context: refresh
+    Window->>Context: refresh, through its FrameAttachment
     Note right of Context: Palette switched?<br/>Mark palette-dependent components dirty
     Context->>Knob: restyle the dirty components, top-down
     Note right of Knob: StyleState values, drawing,<br/>transitions to start,<br/>state-backed setters, repaint

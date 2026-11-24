@@ -66,8 +66,8 @@ const auto natural  = animation.size();         // the authored size, in points
 
 ## Playing it in a component
 
-`AnimationPlayer` holds the playhead. Advance it once per displayed frame from
-`refreshDisplay`, and draw it from `paint`:
+`AnimationPlayer` holds the playhead. Advance it once per displayed frame from a
+`FrameAttachment`, and draw it from `paint`:
 
 ```cpp
 class AnimatedLogo : public yup::Component
@@ -81,19 +81,20 @@ public:
         player.play();
     }
 
-    void refreshDisplay (double lastFrameTimeSeconds) override
-    {
-        if (player.advanceTime (static_cast<float> (lastFrameTimeSeconds)))
-            repaint();
-    }
-
     void paint (yup::Graphics& g) override
     {
         player.render (g, getLocalBounds().to<float>());
     }
 
 private:
+    void advance (double elapsedSeconds)
+    {
+        if (player.advanceTime (static_cast<float> (elapsedSeconds)))
+            repaint();
+    }
+
     yup::AnimationPlayer player;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&AnimatedLogo::advance, this) };
 };
 ```
 
@@ -102,9 +103,9 @@ actually changed, so repainting on its result keeps an idle or slow animation
 from redrawing the window every vsync.
 
 ```{note}
-`refreshDisplay` is only called while the window renders continuously. See
-[Component basics](../ui/component-basics.md) for the window options that
-control it.
+The function runs for every frame of the window the component is in, whether or
+not anything is repainted. See
+[Component basics](../ui/component-basics.md#per-frame-updates).
 ```
 
 ## Controlling playback
@@ -262,6 +263,6 @@ as JSON. They do not produce the zipped `.lottie` container.
 ## Related areas
 
 - [Graphics](../graphics/index.md) - the `Graphics` API animations render with.
-- [UI](../ui/index.md) - components, `refreshDisplay` and continuous rendering.
+- [UI](../ui/index.md) - components, `FrameAttachment` and continuous rendering.
 - [Artboards (Rive)](../ui/artboard.md) - the other animation runtime in YUP,
   for Rive `.riv` files with state machines and data binding.

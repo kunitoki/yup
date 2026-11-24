@@ -1429,6 +1429,23 @@ bool SDLComponentNative::cancelMouseGestureIfReleasedElsewhere()
 
 //==============================================================================
 
+bool SDLComponentNative::isIdleFrame()
+{
+    if (shouldRenderContinuous.load (std::memory_order_relaxed) || hasFrameListeners())
+        return false;
+
+    // A lost surface is recreated by the frame
+    if (context != nullptr && ! context->isSurfaceAvailable())
+        return false;
+
+    const auto contentSize = getContentSize();
+    if (contentSize.getWidth() != currentContentWidth || contentSize.getHeight() != currentContentHeight)
+        return false;
+
+    const ScopedLock sl (repaintLock);
+    return currentRepaintAreas.isEmpty();
+}
+
 bool SDLComponentNative::renderFrame()
 {
     YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderFrame);
@@ -1510,9 +1527,9 @@ bool SDLComponentNative::renderFrame()
         RectangleList<float> repaintAreas;
 
         {
-            YUP_PROFILE_NAMED_INTERNAL_TRACE (RefreshDisplay);
+            YUP_PROFILE_NAMED_INTERNAL_TRACE (FrameListeners);
 
-            component.internalRefreshDisplay (currentTimeSeconds - lastRenderTimeSeconds);
+            callFrameListeners (currentTimeSeconds - lastRenderTimeSeconds);
             lastRenderTimeSeconds = currentTimeSeconds;
         }
 
@@ -1643,6 +1660,13 @@ bool SDLComponentNative::renderFrame()
         }
 #endif
     });
+
+    // Nothing to call and nothing to paint: the frame ends here, without stalling the message thread
+    if (isIdleFrame())
+    {
+        lastRenderTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+        return false;
+    }
 
     {
         YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderInternal);

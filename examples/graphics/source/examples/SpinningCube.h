@@ -196,7 +196,7 @@ public:
     ~SpinningCubeDemo() override = default;
 
     //==============================================================================
-    void refreshDisplay (double lastFrameTimeSeconds) override
+    void refreshDisplay (double lastFrameTimeSeconds)
     {
         if (! isDragging)
         {
@@ -1002,4 +1002,5 @@ void main() {
     std::unique_ptr<yup::Label> shaderModeLabel;
     std::unique_ptr<yup::Label> compileStatusLabel;
     std::unique_ptr<yup::TextEditor> errorEditor;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&SpinningCubeDemo::refreshDisplay, this) };
 };

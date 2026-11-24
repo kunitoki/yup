@@ -177,7 +177,7 @@ public:
 
     ~LottieDemo() override = default;
 
-    void refreshDisplay (double lastFrameTimeSeconds) override
+    void refreshDisplay (double lastFrameTimeSeconds)
     {
         if (! player.isPlaying())
             return;
@@ -423,6 +423,7 @@ private:
     std::unique_ptr<yup::Slider> scrubSlider;
     std::unique_ptr<yup::Label> scrubLabel;
     std::unique_ptr<yup::Label> statusLabel;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&LottieDemo::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LottieDemo)
 };
