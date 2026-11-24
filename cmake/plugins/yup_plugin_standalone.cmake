@@ -46,6 +46,17 @@ function (_yup_audio_plugin_create_standalone)
         list (APPEND product_args TARGET_PRODUCT_NAME "${YUP_ARG_PLUGIN_NAME}")
     endif()
 
+    if (YUP_ARG_PLUGIN_MICROPHONE_USAGE)
+        list (APPEND product_args MICROPHONE_USAGE "${YUP_ARG_PLUGIN_MICROPHONE_USAGE}")
+    endif()
+
+    # ==== The application takes the plugin icon, without one yup_standalone_app keeps its default
+    set (icon_args "")
+    _yup_audio_plugin_get_icon (plugin_icon)
+    if (plugin_icon)
+        list (APPEND icon_args TARGET_ICON "${plugin_icon}")
+    endif()
+
     # ==== Forward only the emscripten options that were given, so yup_standalone_app keeps its defaults
     set (emscripten_args "")
     foreach (emscripten_arg CUSTOM_SHELL INITIAL_MEMORY PTHREAD_POOL_SIZE STACK_SIZE PRELOAD_FILES)
@@ -58,6 +69,7 @@ function (_yup_audio_plugin_create_standalone)
     yup_standalone_app (
         TARGET_NAME ${target_name}_standalone_plugin
         ${product_args}
+        ${icon_args}
         TARGET_VERSION ${target_version}
         TARGET_IDE_GROUP ${target_ide_group}
         TARGET_APP_ID ${target_bundle_id}

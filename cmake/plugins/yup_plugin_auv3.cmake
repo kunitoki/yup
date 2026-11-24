@@ -128,6 +128,7 @@ function (yup_plugin_auv3)
         VISIBILITY_INLINES_HIDDEN ON
         BUNDLE TRUE
         BUNDLE_EXTENSION "appex"
+        OUTPUT_NAME "${YUP_ARG_PLUGIN_NAME}"
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_INFO_PLIST "${auv3_plist_output}"
         MACOSX_BUNDLE_BUNDLE_NAME "${YUP_ARG_PLUGIN_NAME}"
@@ -138,6 +139,8 @@ function (yup_plugin_auv3)
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_PACKAGE_TYPE XPC!
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${auv3_bundle_identifier}"
         XCODE_GENERATE_SCHEME ON)
+
+    _yup_audio_plugin_set_output_directory (${target_name}_auv3_plugin AUv3)
 
     _yup_audio_plugin_apply_binary_optimizations (${target_name}_auv3_plugin)
 
@@ -162,6 +165,9 @@ function (yup_plugin_auv3)
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${auv3_container_bundle_identifier}"
         FOLDER "${target_ide_group}"
         XCODE_GENERATE_SCHEME ON)
+
+    # The container embeds the extension, so it is built beside it
+    _yup_audio_plugin_set_output_directory (${container_target} AUv3)
 
     target_link_libraries (${container_target} PRIVATE "-framework Cocoa")
 
@@ -202,6 +208,6 @@ function (yup_plugin_auv3)
         "${auv3_entitlements}")
 
     if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
-        yup_audio_plugin_copy_bundle (${target_name} auv3)
+        yup_audio_plugin_copy_bundle (${target_name} auv3 "${YUP_ARG_PLUGIN_NAME}")
     endif()
 endfunction()

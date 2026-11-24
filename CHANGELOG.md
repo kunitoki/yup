@@ -141,6 +141,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - CI: Smart CI no longer schedules test builds for modules a platform has no test runner for (the `untested` entries in `.github/smart_ci_config.json`), which failed the Android job on changes limited to such modules, e.g. `yup_python`.
 - CMake: thirdparty modules now get a `yup::` alias like the YUP modules, so `MODULES yup::libvorbis` no longer fails in `yup_standalone_app`.
 - CMake: the built-in `Info.plist` of macOS and iOS apps now has the `NSMicrophoneUsageDescription` they need to record from audio inputs (the inputs were silent on macOS). Its text is set with `MICROPHONE_USAGE` on `yup_standalone_app`, and with `PLUGIN_MICROPHONE_USAGE` on `yup_audio_plugin` for the standalone.
+- CMake: **Breaking:** the plugins built by `yup_audio_plugin` are named after `PLUGIN_NAME` instead of their target (`Retrace.vst3`, not `example_plugin_vst3_plugin.vst3`), as the standalone application already was. They share that name, so each format is built in a directory of its own (`CLAP`, `AU`, `AUv3`, `AAX`, `LV2`). The targets keep their names.
+- CMake: `yup_audio_plugin` no longer ignores `PLUGIN_ICON_BIG` and `PLUGIN_ICON_SMALL`: the standalone application takes the plugin icon instead of the YUP one, and on Windows the `.ico` beside it is the folder icon of the VST3 bundle instead of the VST3 SDK one.
 
 ---
 

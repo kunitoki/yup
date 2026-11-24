@@ -249,6 +249,12 @@ if (yup::AudioProcessor::getWrapperType() == yup::AudioPluginWrapperType::standa
     enableStandaloneOnlyFeatures();
 ```
 
+Each format is built by its own target, `${target_name}_<format>_plugin` (for example
+`my_plugin_vst3_plugin`), while the plugin it builds is named after `PLUGIN_NAME`: `MyPlugin.vst3`,
+`MyPlugin.clap`, `MyPlugin.component`. The formats share that name, so each one is built in a
+directory of its own: `CLAP`, `AU`, `AUv3`, `AAX` and `LV2` in the binary directory of the plugin,
+`VST3` in the one of the whole build.
+
 ## Building for Different Platforms
 
 ### macOS
@@ -274,6 +280,7 @@ cmake --build build --config Release
 `PLUGIN_CREATE_STANDALONE ON` builds the plugin as an application. The target is
 `<TARGET_NAME>_standalone_plugin`, while the application itself is named after
 `PLUGIN_NAME` (for example `Retrace.app`, shown as Retrace in the macOS menu bar).
+Its icon is the one given with `PLUGIN_ICON_BIG`, the YUP one without it.
 The window shows a slim toolbar above the editor:
 
 - **Settings** opens the audio and MIDI device settings inside the window. Close

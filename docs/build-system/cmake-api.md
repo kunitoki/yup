@@ -158,6 +158,11 @@ are compiled once and linked into every format; each format only compiles its ow
 sources as `PRIVATE`, as `PUBLIC` or `INTERFACE` sources would be compiled again by every format. All arguments are optional unless noted otherwise. Keys
 that are not specified will fall back to sensible defaults.
 
+Every format has a target of its own, `<TARGET_NAME>_<format>_plugin`, and builds a plugin named after
+`PLUGIN_NAME`: `MyPlugin.vst3`, `MyPlugin.clap`, `MyPlugin.component`. As the formats share that name,
+each one is built in a directory of its own: `CLAP`, `AU`, `AUv3`, `AAX` and `LV2` in the binary
+directory of the plugin, `VST3` in the one of the whole build.
+
 #### Target Globals
 
 | Key | Type | Default | Description |
@@ -188,7 +193,7 @@ At least one format must be enabled, otherwise configuration fails with an error
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `PLUGIN_ID` | string | - | Globally-unique plugin identifier (e.g. `com.mycompany.MyPlugin`). |
-| `PLUGIN_NAME` | string | `<TARGET_NAME>` | Display name shown in DAWs. |
+| `PLUGIN_NAME` | string | `<TARGET_NAME>` | Display name shown in DAWs, and the name of the built plugins (`<PLUGIN_NAME>.vst3`, `<PLUGIN_NAME>.clap`, ...). |
 | `PLUGIN_VENDOR` | string | - | Vendor/company name. |
 | `PLUGIN_EMAIL` | string | - | Contact email address. |
 | `PLUGIN_VERSION` | string | `1` | Plugin version string. |
@@ -274,8 +279,8 @@ All codesigning options are macOS-only and have no effect on other platforms.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `PLUGIN_ICON_BIG` | path | - | Path to a large icon image file. |
-| `PLUGIN_ICON_SMALL` | path | - | Path to a small icon image file. |
+| `PLUGIN_ICON_BIG` | path | *(built-in)* | Path to the icon image of the plugin (PNG). The standalone application takes it as its `TARGET_ICON`, with the files beside it (see `yup_standalone_app`). On Windows the `<name>.ico` beside it is also the folder icon of the VST3 bundle, which otherwise has the one of the VST3 SDK. |
+| `PLUGIN_ICON_SMALL` | path | - | Used as the icon of the plugin when `PLUGIN_ICON_BIG` is not given. |
 
 #### Custom Plist Injection
 
