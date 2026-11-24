@@ -760,11 +760,17 @@ public:
     //==============================================================================
     /** Fills a path with the current color or gradient.
 
+        The path can be changed or cleared right after the call, what gets drawn is the outline it
+        had when it was passed in.
+
         @param path The path to fill.
     */
     void fillPath (const Path& path);
 
     /** Draws a path with a specified thickness.
+
+        The path can be changed or cleared right after the call, what gets drawn is the outline it
+        had when it was passed in.
 
         @param path The path to draw.
         @param thickness The thickness of the line used to draw the path.

@@ -1128,10 +1128,66 @@ Path::Path (const Point<float>& p)
     moveTo (p);
 }
 
+Path::Path (const Path& other) noexcept
+    : path (other.path)
+    , fillPolygonMutationID (other.fillPolygonMutationID)
+    , simpleContourMutationID (other.simpleContourMutationID)
+    , cachedClockwisePath (other.cachedClockwisePath)
+    , cachedClockwiseMutationID (other.cachedClockwiseMutationID)
+    , cachedClockwiseNonZero (other.cachedClockwiseNonZero)
+    , renderPathMayBeShared (true)
+{
+    other.renderPathMayBeShared = true;
+}
+
+Path& Path::operator= (const Path& other) noexcept
+{
+    Path copy (other);
+    swapWithPath (copy);
+
+    return *this;
+}
+
 Path::Path (rive::rcp<rive::RiveRenderPath> newPath)
     : path (std::move (newPath))
+    , renderPathMayBeShared (true)
 {
     jassert (path != nullptr);
+}
+
+//==============================================================================
+
+rive::RiveRenderPath& Path::getExclusiveRenderPath (bool keepOutline)
+{
+    if (renderPathMayBeShared)
+        detachRenderPath (keepOutline);
+
+    return *path;
+}
+
+void Path::detachRenderPath (bool keepOutline)
+{
+    if (path->debugging_refcnt() == 1)
+    {
+        std::atomic_thread_fence (std::memory_order_acquire);
+    }
+    else if (keepOutline)
+    {
+        *this = createCopy();
+    }
+    else
+    {
+        const auto& rawPath = path->getRawPath();
+
+        auto newPath = rive::make_rcp<rive::RiveRenderPath>();
+        newPath->fillRule (path->getFillRule());
+
+        const_cast<rive::RawPath&> (newPath->getRawPath()).reserve (rawPath.verbs().size(), rawPath.points().size());
+
+        path = std::move (newPath);
+    }
+
+    renderPathMayBeShared = false;
 }
 
 //==============================================================================
@@ -1152,7 +1208,7 @@ void reservePathShapeSpace (const rive::RiveRenderPath& path, int numVerbs, int 
 
 void Path::reserveSpace (int numSegments)
 {
-    auto& rawPath = const_cast<rive::RawPath&> (path->getRawPath());
+    auto& rawPath = const_cast<rive::RawPath&> (getExclusiveRenderPath().getRawPath());
 
     rawPath.reserve (
         rawPath.verbs().size() + static_cast<std::size_t> (numSegments),
@@ -1170,14 +1226,14 @@ int Path::size() const
 
 void Path::clear()
 {
-    path->rewind();
+    getExclusiveRenderPath (false).rewind();
 }
 
 //==============================================================================
 
 Path& Path::moveTo (float x, float y)
 {
-    path->moveTo (x, y);
+    getExclusiveRenderPath().moveTo (x, y);
 
     return *this;
 }
@@ -1191,7 +1247,7 @@ Path& Path::moveTo (const Point<float>& p)
 
 Path& Path::lineTo (float x, float y)
 {
-    path->lineTo (x, y);
+    getExclusiveRenderPath().lineTo (x, y);
 
     return *this;
 }
@@ -1205,7 +1261,9 @@ Path& Path::lineTo (const Point<float>& p)
 
 Path& Path::quadTo (float x, float y, float x1, float y1)
 {
-    const auto& rawPath = path->getRawPath();
+    auto& renderPath = getExclusiveRenderPath();
+
+    const auto& rawPath = renderPath.getRawPath();
     if (rawPath.points().empty())
         moveTo (x, y);
 
@@ -1216,7 +1274,7 @@ Path& Path::quadTo (float x, float y, float x1, float y1)
     const rive::Vec2D c1 = rive::Vec2D::lerp (last, control, 2.0f / 3.0f);
     const rive::Vec2D c2 = rive::Vec2D::lerp (end, control, 2.0f / 3.0f);
 
-    path->cubic (c1, c2, end);
+    renderPath.cubic (c1, c2, end);
 
     return *this;
 }
@@ -1230,7 +1288,7 @@ Path& Path::quadTo (const Point<float>& p, float x1, float y1)
 
 Path& Path::cubicTo (float x, float y, float x1, float y1, float x2, float y2)
 {
-    path->cubicTo (x, y, x1, y1, x2, y2);
+    getExclusiveRenderPath().cubicTo (x, y, x1, y1, x2, y2);
 
     return *this;
 }
@@ -1244,7 +1302,7 @@ Path& Path::cubicTo (const Point<float>& p, float x1, float y1, float x2, float 
 
 Path& Path::close()
 {
-    path->close();
+    getExclusiveRenderPath().close();
 
     return *this;
 }
@@ -1276,7 +1334,7 @@ Path& Path::addRectangle (float x, float y, float width, float height)
     width = jmax (0.0f, width);
     height = jmax (0.0f, height);
 
-    reservePathShapeSpace (*path, 5, 5);
+    reservePathShapeSpace (getExclusiveRenderPath(), 5, 5);
 
     moveTo (x, y);
     lineTo (x + width, y);
@@ -1301,7 +1359,7 @@ Path& Path::addRoundedRectangle (float x, float y, float width, float height, fl
 {
     const bool wasEmpty = isEmpty();
 
-    reservePathShapeSpace (*path, 9, 17);
+    reservePathShapeSpace (getExclusiveRenderPath(), 9, 17);
 
     width = jmax (0.0f, width);
     height = jmax (0.0f, height);
@@ -1363,7 +1421,7 @@ Path& Path::addRoundedRectangle (const Rectangle<float>& rect, const Size<float>
 {
     const bool wasEmpty = isEmpty();
 
-    reservePathShapeSpace (*path, 9, 17);
+    reservePathShapeSpace (getExclusiveRenderPath(), 9, 17);
 
     const float x = rect.getX();
     const float y = rect.getY();
@@ -1398,7 +1456,7 @@ Path& Path::addEllipse (float x, float y, float width, float height)
 {
     const bool wasEmpty = isEmpty();
 
-    reservePathShapeSpace (*path, 6, 13);
+    reservePathShapeSpace (getExclusiveRenderPath(), 6, 13);
 
     width = jmax (0.0f, width);
     height = jmax (0.0f, height);
@@ -1434,7 +1492,7 @@ Path& Path::addCenteredEllipse (float centerX, float centerY, float radiusX, flo
 {
     const bool wasEmpty = isEmpty();
 
-    reservePathShapeSpace (*path, 6, 13);
+    reservePathShapeSpace (getExclusiveRenderPath(), 6, 13);
 
     radiusX = jmax (0.0f, radiusX);
     radiusY = jmax (0.0f, radiusY);
@@ -1495,7 +1553,7 @@ Path& Path::addArc (const Rectangle<float>& rect,
 Path& Path::addCenteredArc (float centerX, float centerY, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
     const int segments = jlimit (2, 54, static_cast<int> (std::ceil (std::abs (toRadians - fromRadians) / 0.1f)));
-    reservePathShapeSpace (*path, segments + 2, segments + 2);
+    reservePathShapeSpace (getExclusiveRenderPath(), segments + 2, segments + 2);
 
     const float delta = (toRadians - fromRadians) / segments;
     const float cosTheta = std::cos (rotationOfEllipse);
@@ -1553,7 +1611,7 @@ void Path::addTriangle (float x1, float y1, float x2, float y2, float x3, float 
 
 void Path::addTriangle (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3)
 {
-    reservePathShapeSpace (*path, 4, 3);
+    reservePathShapeSpace (getExclusiveRenderPath(), 4, 3);
 
     moveTo (p1);
     lineTo (p2);
@@ -1570,7 +1628,7 @@ void Path::addQuadrilateral (float x1, float y1, float x2, float y2, float x3, f
 
 void Path::addQuadrilateral (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3, const Point<float>& p4)
 {
-    reservePathShapeSpace (*path, 5, 4);
+    reservePathShapeSpace (getExclusiveRenderPath(), 5, 4);
 
     moveTo (p1);
     lineTo (p2);
@@ -1586,7 +1644,7 @@ Path& Path::addPolygon (const Point<float>& centre, int numberOfSides, float rad
     if (numberOfSides < 3)
         return *this;
 
-    reservePathShapeSpace (*path, numberOfSides + 1, numberOfSides);
+    reservePathShapeSpace (getExclusiveRenderPath(), numberOfSides + 1, numberOfSides);
 
     const float angleIncrement = MathConstants<float>::twoPi / numberOfSides;
     radius = jmax (0.0f, radius);
@@ -1619,7 +1677,7 @@ Path& Path::addStar (const Point<float>& centre, int numberOfPoints, float inner
     if (numberOfPoints < 3)
         return *this;
 
-    reservePathShapeSpace (*path, numberOfPoints * 2 + 1, numberOfPoints * 2);
+    reservePathShapeSpace (getExclusiveRenderPath(), numberOfPoints * 2 + 1, numberOfPoints * 2);
 
     const float angleIncrement = MathConstants<float>::twoPi / (numberOfPoints * 2);
     innerRadius = jmax (0.0f, innerRadius);
@@ -1937,26 +1995,28 @@ Path& Path::combineWith (const Path& other, BooleanOperation operation)
 
 Path& Path::appendPath (const Path& other)
 {
-    path->addRenderPath (other.getRenderPath(), rive::Mat2D());
+    auto& renderPath = getExclusiveRenderPath();
+    renderPath.addRenderPath (other.path.get(), rive::Mat2D());
 
     return *this;
 }
 
 Path& Path::appendPath (const Path& other, const AffineTransform& transform)
 {
-    path->addRenderPath (other.getRenderPath(), transform.toMat2D());
+    auto& renderPath = getExclusiveRenderPath();
+    renderPath.addRenderPath (other.path.get(), transform.toMat2D());
 
     return *this;
 }
 
 void Path::appendPath (rive::rcp<rive::RiveRenderPath> other)
 {
-    path->addRenderPath (other.get(), rive::Mat2D());
+    getExclusiveRenderPath().addRenderPath (other.get(), rive::Mat2D());
 }
 
 void Path::appendPath (rive::rcp<rive::RiveRenderPath> other, const AffineTransform& transform)
 {
-    path->addRenderPath (other.get(), transform.toMat2D());
+    getExclusiveRenderPath().addRenderPath (other.get(), transform.toMat2D());
 }
 
 //==============================================================================
@@ -1969,6 +2029,7 @@ void Path::swapWithPath (Path& other) noexcept
     cachedClockwisePath.swap (other.cachedClockwisePath);
     std::swap (cachedClockwiseMutationID, other.cachedClockwiseMutationID);
     std::swap (cachedClockwiseNonZero, other.cachedClockwiseNonZero);
+    std::swap (renderPathMayBeShared, other.renderPathMayBeShared);
 }
 
 //==============================================================================
@@ -2118,6 +2179,9 @@ Path::Iterator Path::end() const
 
 rive::RiveRenderPath* Path::getRenderPath() const
 {
+    // The renderer holds on to it for every draw, until the frame is flushed
+    renderPathMayBeShared = true;
+
     return path.get();
 }
 

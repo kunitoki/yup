@@ -61,6 +61,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Path::createCopy` keeps the fill rule, and appending many shapes to one `Path` no longer reallocates its storage for every shape.
 - `ColorGradient` and `ColorGradient::ColorStop` support `==` and `!=`.
 - Fixed `Path::addRectangle` leaving its contour open, so a rectangle drawn with a wide stroke (`Graphics::strokeRect`) had no join at its first corner.
+- Fixed a `Path` changed after it was drawn (cleared and rebuilt in the same `paint()`, or changed from the message thread while the frame was flushed) corrupting that draw or crashing the render thread: a path whose outline a pending draw or a copy still uses now changes an outline of its own. **Breaking:** changing the outline of a copy of a `Path` no longer changes the path it was copied from.
 - Added `Path::isClockwise` and `Path::reversed`. Bound in Python. `Drawable` uses them to add up the shapes of a `<clipPath>` that run opposite ways (a `<rect>` over a `<circle>`, a mirrored shape), whose overlap was left out of the clip.
 - Added `VariantConverter` specialisations for `Color` (converting to and from the ARGB `int64` a `var` stores it as), `Point<float>` and `Rectangle<float>` (as `var` arrays of their components), so `getPropertyAs<Color>` and expression bindings can read color, point and rectangle properties.
 - **Breaking:** `Font` equality also compares the height, so fonts differing only in height compare different.
