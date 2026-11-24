@@ -274,6 +274,42 @@ TEST_F (ExpressionDrawingTests, CacheReusesShapesWhileOutputsDontChange)
     EXPECT_FALSE (cache.wasRebuilt());
 }
 
+TEST_F (ExpressionDrawingTests, CacheRecordsAgainWhenAnimatedOutputsSettle)
+{
+    auto graphicsContext = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    ASSERT_NE (graphicsContext, nullptr);
+    auto renderer = graphicsContext->makeRenderer (200, 200);
+    ASSERT_NE (renderer, nullptr);
+    Graphics g (*graphicsContext, *renderer);
+
+    auto drawing = ExpressionDrawing::create ("rect = rect (row * 12, 0, 10, values[row] * 50)", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    std::vector<float> data { 0.25f, 0.75f };
+
+    ExpressionState state (drawing.getReference().getProgram());
+    state.bindArray (values, data.data(), (int) data.size());
+    state.bindRowIndex (row);
+
+    ExpressionDrawing::Cache cache;
+
+    const auto draw = [&]
+    {
+        drawing.getReference().draw (g, state, (int) data.size(), nullptr, &cache);
+        return cache.wasRebuilt();
+    };
+
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        data[0] = 0.1f * (float) frame;
+        EXPECT_TRUE (draw());
+    }
+
+    // The last animated draw wasn't recorded, so the first settled draw records it
+    EXPECT_TRUE (draw());
+    EXPECT_FALSE (draw());
+}
+
 TEST_F (ExpressionDrawingTests, DrawsStylesTransformsAndClips)
 {
     auto graphicsContext = GraphicsContext::createContext (GpuPlatform::Headless, {});

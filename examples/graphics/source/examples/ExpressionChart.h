@@ -23,9 +23,7 @@
 
 //==============================================================================
 
-class ExpressionChartDemo
-    : public yup::Component
-    , public yup::Timer
+class ExpressionChartDemo : public yup::Component
 {
 public:
     ExpressionChartDemo()
@@ -70,13 +68,19 @@ public:
             state.bindArray (values, data.data(), (int) data.size());
             state.bindRowIndex (row);
         }
-
-        startTimerHz (60);
     }
 
-    ~ExpressionChartDemo() override
+    void refreshDisplay (double elapsedSeconds) override
     {
-        stopTimer();
+        if (! isShowing())
+            return;
+
+        phase += static_cast<float> (elapsedSeconds);
+
+        for (size_t i = 0; i < data.size(); ++i)
+            data[i] = 0.5f + 0.45f * std::sin ((float) i * 0.3f + phase) * std::cos ((float) i * 0.07f - phase * 0.5f);
+
+        repaint();
     }
 
     void paint (yup::Graphics& g) override
@@ -92,19 +96,9 @@ public:
             state->set (time, phase);
         }
 
-        bars.draw (g, *states[0], (int) data.size(), nullptr, &caches[0]);
-        curve.draw (g, *states[1], (int) data.size(), nullptr, &caches[1]);
-        markers.draw (g, *states[2], (int) data.size(), nullptr, &caches[2]);
-    }
-
-    void timerCallback() override
-    {
-        phase += 1.0f / 60.0f;
-
-        for (size_t i = 0; i < data.size(); ++i)
-            data[i] = 0.5f + 0.45f * std::sin ((float) i * 0.3f + phase) * std::cos ((float) i * 0.07f - phase * 0.5f);
-
-        repaint();
+        bars.draw (g, *states[0], (int) data.size());
+        curve.draw (g, *states[1], (int) data.size());
+        markers.draw (g, *states[2], (int) data.size());
     }
 
 private:
@@ -130,7 +124,6 @@ private:
 
     yup::ExpressionDrawing bars, curve, markers;
     std::vector<std::unique_ptr<yup::ExpressionState>> states;
-    std::array<yup::ExpressionDrawing::Cache, 3> caches;
 
     std::vector<float> data;
     float phase = 0.0f;
