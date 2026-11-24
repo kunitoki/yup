@@ -138,7 +138,8 @@ To build one yourself from shader reflection data, use the helpers in
 
 ```cpp
 std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflection,
-                                               ShaderStage             stage);
+                                               ShaderStage             stage,
+                                               const ShaderReflection* pairedStage = nullptr);
 ```
 
 The blob maps uniform buffers, separate images (textures), separate samplers,
@@ -150,6 +151,12 @@ validates against the shader itself - so a `textureCube`, `texture3D`,
 On WebGPU, a float texture that the WGSL of every stage only reads with
 `texelFetch` (a WGSL `textureLoad`) is declared unfilterable, so a depth texture
 can be bound there and read raw next to its comparison binding.
+
+A pipeline carries one declaration per texture, so its two stages have to agree
+on the sample type of a texture both declare. For the stages of a graphics
+pipeline, pass the reflection of the other stage as `pairedStage`: a stage that
+only declares a texture, as stages sharing their declarations do, then takes
+the sample type of the stage that samples it instead of calling it unfilterable.
 
 > **Shaders must declare textures and samplers separately.** A combined
 > `uniform sampler2D` produces *no* binding-map entries at all and will not bind.
