@@ -520,7 +520,17 @@ void DrawingScope::ArrayInput::bind (ExpressionState& state, int input, Componen
         using Type = typename decltype (tag)::type;
 
         if (! std::holds_alternative<Array<Type>> (values))
+        {
+            // The state may still view the elements of the type there was, which go away
+            const auto unbind = [&]<class Previous> (const Array<Previous>& previous)
+            {
+                if (previous.data() != nullptr)
+                    state.bindArray (ExpressionArray<Previous> { input }, static_cast<const Previous*> (nullptr), 0);
+            };
+
+            std::visit (unbind, values);
             values = Array<Type>();
+        }
 
         auto& elements = std::get<Array<Type>> (values);
         elements.clearQuick();

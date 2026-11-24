@@ -1,5 +1,6 @@
 node_modules/
 out/
+out-test/
 **/*.map
 *.vsix
 tool/

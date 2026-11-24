@@ -1189,6 +1189,8 @@ void registerYupGraphicsBindings (py::module_& m)
         // Transformations
         .def ("transform", &Path::transform, "transform"_a)
         .def ("transformed", &Path::transformed, "transform"_a)
+        .def ("isClockwise", &Path::isClockwise)
+        .def ("reversed", &Path::reversed)
         .def ("scaleToFit", &Path::scaleToFit, "x"_a, "y"_a, "width"_a, "height"_a, "preserveProportions"_a)
 
         // Bounds and utility

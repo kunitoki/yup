@@ -587,6 +587,10 @@ TEST_F (ComponentPropertyTest, AllWritableStateBackedPropertiesNotifyListeners)
                     break;
                 }
 
+                case ComponentProperty::Type::any:
+                    nextValue = 12.0;
+                    break;
+
                 default:
                     FAIL() << "Unhandled writable state-backed property type on " << typeInfo->getTypeName().toString() << "." << property.name.toString();
             }

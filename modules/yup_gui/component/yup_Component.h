@@ -874,9 +874,11 @@ public:
         component clears what it drew there.
 
         A component still paints inside its parent's area only. The margin is not painted
-        for components on the desktop. Components with a ComponentEffect or cached to a
-        texture keep their content in their bounds, only their stylesheet `shadow:` layers
-        paint in the margin.
+        for components on the desktop. A ComponentEffect or a stylesheet `filter:` runs over
+        the margin too, and the texture of a component cached with setCachedToTexture() holds
+        it. The stylesheet `shadow:` and `glow:` layers run through the effect as well, while a
+        cached texture does not hold them. A margin that shrinks keeps those textures as they
+        are, so animating it allocates nothing once it has been at its largest.
 
         @param left    How far the component may paint left of its bounds
         @param top     How far the component may paint above its bounds
@@ -1923,6 +1925,28 @@ public:
     */
     bool isPressed() const noexcept;
 
+    /** Hovers this component and its parents, or stops hovering them, with no pointer over it.
+
+        This is for tools and tests showing a component the way its `:hover` rules style it. The
+        pointer takes over again as soon as it moves over the window of the component.
+
+        @param shouldBeHovered True to hover the component, false to stop hovering it.
+
+        @see isHovered, setPressed
+    */
+    void setHovered (bool shouldBeHovered);
+
+    /** Presses this component and its parents, or releases them, with no mouse button held down.
+
+        This is for tools and tests showing a component the way its `:pressed` rules style it. It
+        sends no mouse event, so nothing is clicked.
+
+        @param shouldBePressed True to press the component, false to release it.
+
+        @see isPressed, setHovered
+    */
+    void setPressed (bool shouldBePressed);
+
     /** Returns true between the focus gain and the focus loss reported to this component.
 
         This is what the `:focus` and `:focused` pseudo-classes match.
@@ -2307,11 +2331,13 @@ private:
     void applyPaintState (Graphics& g, const RectangleList<float>& clipRegion, const RectangleList<float>* activeClipRegion = nullptr) const;
     void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
     void paintStyleShadows (Graphics& g) const;
+    EdgeSpacing<float> getOffscreenMargin() const;
+    Rectangle<float> getEffectBounds (float scale) const;
     void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous, const RectangleList<float>* activeClipRegion = nullptr);
     bool hasActiveEffect() const noexcept;
     void applyActiveEffects (Graphics& g, GpuTexture::Ptr texture, Rectangle<float> bounds, float scale);
     void releaseUnusedEffectCanvases() noexcept;
-    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt);
+    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt, bool holdPaintMargin = false);
     std::optional<RectangleList<float>> takeEffectDirtyRegion (bool renderContinuous);
     void invalidateCanvasesIfThemeChanged();
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
@@ -2322,6 +2348,7 @@ private:
 
     friend class ComponentNative;
     friend class SDLComponentNative;
+    friend class PointerSimulator;
     friend class StyleContext;
     friend class WeakReference<Component>;
 
@@ -2338,6 +2365,7 @@ private:
     Rectangle<float> boundsInParent;
     AffineTransform transform;
     EdgeSpacing<float> paintMargin;
+    Point<float> offscreenOrigin;
     ComponentNative::Ptr native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
@@ -2358,6 +2386,8 @@ private:
     GpuCanvas::Ptr cachedTextureCanvas;
     GpuCanvas::Ptr effectOffscreenCanvas;
     GpuCanvas::Ptr filterIntermediateCanvas;
+    EdgeSpacing<int> offscreenCanvasMargin;
+    EdgeSpacing<float> offscreenPaintedMargin;
     RectangleList<float> effectDirtyRegion;
     static constexpr int maximumDirtyRectangles = 8;
     GpuCanvas::Ptr presentedCanvas;

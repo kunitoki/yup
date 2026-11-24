@@ -1738,6 +1738,15 @@ void SDLComponentNative::renderAnimationFrame (double timestampMs)
         revalidateStationaryPointer();
 }
 
+void SDLComponentNative::renderNow()
+{
+    YUP_TRY
+    {
+        renderFrame();
+    }
+    YUP_CATCH_EXCEPTION
+}
+
 //==============================================================================
 // Called by the page shell. Getters return -1 until the application has created its window.
 extern "C"
@@ -1777,6 +1786,14 @@ extern "C"
     {
         if (auto* native = SDLComponentNative::getPrimaryNativeComponent(); native != nullptr && width > 0 && height > 0)
             native->getComponent().setSize (static_cast<float> (width), static_cast<float> (height));
+    }
+
+    // Draws the window now instead of at its next animation frame. The browser clears a canvas that changes
+    // size: what just gave the window another one calls this, or the canvas shows empty until that frame
+    void EMSCRIPTEN_KEEPALIVE yupRenderPrimaryWindow()
+    {
+        if (auto* native = SDLComponentNative::getPrimaryNativeComponent())
+            native->renderNow();
     }
 }
 #endif

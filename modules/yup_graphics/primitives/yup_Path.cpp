@@ -2028,6 +2028,28 @@ Path Path::transformed (const AffineTransform& t) const
 
 //==============================================================================
 
+bool Path::isClockwise() const
+{
+    return path->getCoarseArea() >= 0.0f;
+}
+
+Path Path::reversed() const
+{
+    const bool wasSimple = simpleContourMutationID != 0 && simpleContourMutationID == path->getRawPathMutationID();
+
+    auto newPath = rive::make_rcp<rive::RiveRenderPath>();
+    newPath->fillRule (path->getFillRule());
+    newPath->addRenderPathBackwards (path.get(), rive::Mat2D());
+
+    Path result { std::move (newPath) };
+    if (wasSimple)
+        result.simpleContourMutationID = result.path->getRawPathMutationID();
+
+    return result;
+}
+
+//==============================================================================
+
 Rectangle<float> Path::getBounds() const
 {
     const auto& aabb = path->getBounds();

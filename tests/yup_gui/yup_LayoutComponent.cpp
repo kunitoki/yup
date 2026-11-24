@@ -227,3 +227,73 @@ TEST_F (LayoutComponentTests, StandardContainersSkipRelayoutOnUnrelatedStyleChan
     customLayout.setProperty (Identifier ("customLayoutProperty"), 42);
     EXPECT_EQ (customLayout.layoutCount, customBefore + 1);
 }
+
+TEST_F (LayoutComponentTests, ABatchLaysOutOnceWhenItEnds)
+{
+    Component first, second;
+    layout.setBounds (0, 0, 100, 60);
+
+    const auto before = layout.layoutCount;
+
+    {
+        const LayoutComponent::ScopedLayoutBatch batch;
+
+        layout.addAndMakeVisible (first);
+        layout.addAndMakeVisible (second);
+        first.setProperty (LayoutComponent::Properties::flexGrowId, 1.0);
+        layout.setBounds (0, 0, 200, 60);
+
+        {
+            // A batch inside another ends with it
+            const LayoutComponent::ScopedLayoutBatch inner;
+            layout.setGap (4.0f);
+        }
+
+        EXPECT_EQ (layout.layoutCount, before);
+    }
+
+    EXPECT_EQ (layout.layoutCount, before + 1);
+    EXPECT_EQ (layout.lastArea, Rectangle<float> (0.0f, 0.0f, 200.0f, 60.0f));
+
+    // With no batch a layout is done at once
+    layout.setGap (8.0f);
+    EXPECT_EQ (layout.layoutCount, before + 2);
+}
+
+TEST_F (LayoutComponentTests, ABatchLeavesOutWhatIsGoneOrWasLaidOutByItsParent)
+{
+    struct CountingRow : RowComponent
+    {
+        int layoutCount = 0;
+
+        void performLayout (Rectangle<float> area) override
+        {
+            ++layoutCount;
+            RowComponent::performLayout (area);
+        }
+    };
+
+    ColumnComponent column;
+    CountingRow row;
+    Component cell;
+    auto gone = std::make_unique<TestLayout>();
+
+    column.setBounds (0, 0, 100, 60);
+
+    {
+        const LayoutComponent::ScopedLayoutBatch batch;
+
+        column.addAndMakeVisible (row);
+        row.setProperty (LayoutComponent::Properties::preferredHeightId, 20.0);
+        row.addAndMakeVisible (cell);
+        cell.setProperty (LayoutComponent::Properties::flexGrowId, 1.0);
+
+        gone->setBounds (0, 0, 10, 10);
+        gone.reset();
+    }
+
+    // The column gave the row its bounds, which laid it out: it is not laid out again
+    EXPECT_EQ (row.layoutCount, 1);
+    EXPECT_EQ (row.getBounds(), Rectangle<float> (0.0f, 0.0f, 100.0f, 20.0f));
+    EXPECT_EQ (cell.getBounds(), Rectangle<float> (0.0f, 0.0f, 100.0f, 20.0f));
+}

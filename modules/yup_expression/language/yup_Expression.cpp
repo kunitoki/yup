@@ -356,6 +356,9 @@ private:
         if (*position == '#')
             return parseColor();
 
+        if (*position == '[')
+            return parseArray();
+
         if (! isIdentifierStart (*position))
             fail (isAtEnd() ? "Unexpected end of expression" : "Unexpected character '" + String::charToString ((yup_wchar) (uint8) *position) + "'");
 
@@ -510,6 +513,24 @@ private:
             fail ("Unknown unit '" + unit + "', expected one of %, px, deg, rad, s or ms", start);
 
         return unit;
+    }
+
+    // Where a value starts, `[` opens the array of the values up to `]`. After a value, it indexes it
+    Expression parseArray()
+    {
+        const auto start = getPosition();
+        ++position;
+
+        std::vector<Expression> values;
+
+        do
+        {
+            values.push_back (parseTernary());
+        } while (match (","));
+
+        expect ("]");
+
+        return make (Kind::call, ExpressionOperator::none, "array", {}, std::move (values), start);
     }
 
     Expression parseColor()

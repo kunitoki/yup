@@ -1,0 +1,72 @@
+# Builds the wheels of the Python bindings of python/ and publishes them to PyPI.
+#
+# It publishes with Trusted Publishing, so there is no token to store. Set up once, at
+# https://pypi.org/manage/account/publishing/ (or in the "Publishing" settings of the project, once it exists):
+#   - a GitHub publisher for the project that "name" names in python/setup.py, with the owner "kunitoki",
+#     the repository "yup" and the workflow "deploy_wheels.yml", with no environment.
+#
+# PyPI refuses a file it already has: raise the version in modules/yup_core/system/yup_StandardHeader.h first.
+
+name: Python Wheels
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-wheels
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build_cp${{ matrix.python }}-${{ matrix.platform.id }}
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      matrix:
+        python: [311, 312, 313, 314]
+        platform:
+          - { os: ubuntu-latest, id: manylinux_x86_64, archs: x86_64 }
+          - { os: macos-latest, id: macosx_arm64, archs: arm64 }
+          - { os: windows-latest, id: win_amd64, archs: AMD64 }
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.4.1
+        env:
+          CIBW_ARCHS: ${{ matrix.platform.archs }}
+          CIBW_BUILD: cp${{ matrix.python }}-${{ matrix.platform.id }}
+          CIBW_DEBUG_TRACEBACK: TRUE
+          CIBW_ENVIRONMENT: CIBW_DEBUG_TRACEBACK=TRUE
+          CIBW_ENVIRONMENT_MACOS: >-
+            CIBW_DEBUG_TRACEBACK=TRUE MACOSX_DEPLOYMENT_TARGET=12.0 YUP_OSX_DEPLOYMENT_TARGET=12.0 YUP_OSX_ARCHITECTURES="arm64"
+        with:
+          package-dir: python
+          output-dir: wheelhouse
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheel-cp${{ matrix.python }}-${{ matrix.platform.id }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

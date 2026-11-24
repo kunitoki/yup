@@ -82,11 +82,14 @@ function commonFolder (files: string[]): string {
 
     A name is looked for next to the document naming it, then next to the main one, which is where
     the paths of a document are resolved from.
+
+    @param isAllowed Tells whether a file a document names may be read, for who must not read them all.
 */
-export async function collectDocumentFiles (document: vscode.TextDocument, modelsPath: string | undefined): Promise<DocumentFiles> {
+export async function collectDocumentFiles (document: vscode.TextDocument, modelsPath: string | undefined, isAllowed: (file: string) => boolean = () => true): Promise<DocumentFiles> {
     const main = document.uri.fsPath;
     const contents = new Map<string, Uint8Array> ([[main, Buffer.from (document.getText (), "utf8")]]);
     const pending = [main];
+    const missing = new Set<string> ();
     let total = 0;
 
     while (pending.length > 0) {
@@ -108,10 +111,12 @@ export async function collectDocumentFiles (document: vscode.TextDocument, model
                 if (contents.has (candidate))
                     break;
 
-                const found = await read (candidate);
+                const found = isAllowed (candidate) ? await read (candidate) : undefined;
 
-                if (found === undefined || total + found.length > maximumBytes)
+                if (found === undefined || total + found.length > maximumBytes) {
+                    missing.add (candidate);
                     continue;
+                }
 
                 total += found.length;
                 contents.set (candidate, found);
@@ -129,6 +134,12 @@ export async function collectDocumentFiles (document: vscode.TextDocument, model
     for (const [file, data] of contents) {
         if (isInside (folder, file))
             files.push ({ path: toolPath (file), data });
+    }
+
+    // The tool keeps the files it was given: one a document names and that is gone is forgotten there too
+    for (const file of missing) {
+        if (isInside (folder, file) && ! contents.has (file))
+            files.push ({ path: toolPath (file), data: new Uint8Array (), removed: true });
     }
 
     const models = modelsPath === undefined ? undefined : await read (modelsPath);

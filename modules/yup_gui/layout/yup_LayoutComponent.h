@@ -31,7 +31,8 @@ namespace yup
     A layout component positions its visible children whenever it is resized, its children change,
     a child's layout item property changes, or a stylesheet restyles it. Subclasses implement
     @ref performLayout and read each child's layout item properties (`flexGrow`, `margin`,
-    `gridArea`, ...) through the helpers here.
+    `gridArea`, ...) through the helpers here. A @ref ScopedLayoutBatch makes many such changes
+    cost one layout.
 
     Its own properties are `padding`, the space kept inside its bounds, and `gap`, the space kept
     between the children.
@@ -107,8 +108,45 @@ public:
     float getGap() const;
 
     //==============================================================================
-    /** Lays the children out again. Called automatically when anything affecting the layout changes. */
+    /** Lays the children out again. Called automatically when anything affecting the layout changes.
+
+        While a ScopedLayoutBatch exists the layout is done when it ends.
+    */
     void updateLayout();
+
+    //==============================================================================
+    /** Holds layouts back while it exists, so that many changes cost one layout.
+
+        A layout component lays its children out at each change: a child added or removed, a
+        new size, a layout property. Adding a thousand children one by one lays them out a
+        thousand times, each time over more of them. While a batch exists the layout components
+        only take note of the changes, and each is laid out once when the batch ends, or when
+        the last one ends if there are several. Until then the children keep the bounds they had.
+
+        @code
+        {
+            const LayoutComponent::ScopedLayoutBatch batch;
+
+            for (auto& row : rows)
+                column.addAndMakeVisible (*row);
+        }
+        @endcode
+
+        Loading a `.yui` document and applying a stylesheet already do this. A batch holds back
+        the layout components used on the thread it is made on.
+    */
+    class YUP_API ScopedLayoutBatch
+    {
+    public:
+        /** Starts holding the layouts back. */
+        ScopedLayoutBatch();
+
+        /** Lays out the components that changed, once this is the last batch to end. */
+        ~ScopedLayoutBatch();
+
+    private:
+        YUP_DECLARE_NON_COPYABLE (ScopedLayoutBatch)
+    };
 
     //==============================================================================
     /** Returns the static type info describing the Layout type. */
@@ -128,6 +166,10 @@ public:
 
     /** @internal */
     void layoutPropertyChanged() override;
+
+    //==============================================================================
+    /** Converts a number, an array of 4 edges, or a string of 1, 2 or 4 values in CSS order, into an edge spacing. */
+    static EdgeSpacing<float> parseSpacing (const var& value);
 
 protected:
     //==============================================================================
@@ -167,14 +209,12 @@ protected:
         }
     }
 
-    /** Converts a number, an array of 4 edges, or a string of 1, 2 or 4 values in CSS order, into an edge spacing. */
-    static EdgeSpacing<float> parseSpacing (const var& value);
-
     /** Splits a track or area list on whitespace and commas. */
     static StringArray splitTokens (const String& text);
 
 private:
     bool isPerformingLayout = false;
+    bool isLayoutHeld = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LayoutComponent)
 };

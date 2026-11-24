@@ -262,6 +262,23 @@ simple non-overlapping contours: outer contours clockwise, holes counter-clockwi
 curves flattened. Self-intersecting and overlapping contours are resolved, so the
 result fills the same area under any fill rule.
 
+Under the non-zero rule, contours running opposite ways cancel each other where
+they overlap, and the shape helpers do not all run the same way (a rectangle and
+an ellipse do not). `isClockwise` tells which way a path runs and `reversed`
+returns it running the other way, curves kept, so shapes can be added up into one
+path:
+
+```cpp
+Path dot;
+dot.addEllipse (30, 30, 60, 60);
+
+Path clip;
+clip.addRectangle (0, 0, 60, 60);
+clip.appendPath (dot.isClockwise() ? dot : dot.reversed());
+
+g.setClipPath (clip);                          // the rectangle and the ellipse together
+```
+
 ## Stroke types
 
 Stroking is configured with three related types:

@@ -1,0 +1,26 @@
+// size: 560 138
+drawing Paint {
+    let label: defaultFont.withHeight (12);
+    let fade: linearGradient (palette.accent, point (0, 0), palette.accent.withAlpha (0.1), point (0, 1));
+
+    rect   { bounds: rect (8, 4, 68, 56); cornerRadius: 8; fill: palette.accent; }
+    rect   { bounds: rect (94, 4, 68, 56); cornerRadius: 8; fillGradient: fade.mappedTo (objectBounds); }
+    circle { center: point (214, 32); radius: 28;
+             fillGradient: radialGradient (palette.accent.brighter (0.9), point (204, 22), palette.accent.darker (0.4), 40); }
+    rect   { bounds: rect (268, 6, 64, 52); cornerRadius: 8; fill: none; stroke: palette.text; strokeWidth: 3; dash: dash (8, 6); cap: round; }
+    rect   { bounds: rect (356, 6, 64, 52); fill: palette.accent.withAlpha (0.35); stroke: palette.text; strokeWidth: 8; strokePosition: inside; }
+    circle { center: point (472, 32); radius: 22; fill: palette.accent; feather: 10; }
+
+    text { bounds: rect (0, 68, 84, 16);   text: "fill";           font: label; fill: palette.textMuted; }
+    text { bounds: rect (86, 68, 84, 16);  text: "fillGradient";   font: label; fill: palette.textMuted; }
+    text { bounds: rect (172, 68, 84, 16); text: "radialGradient"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (258, 68, 84, 16); text: "dash, cap";      font: label; fill: palette.textMuted; }
+    text { bounds: rect (344, 68, 88, 16); text: "strokePosition"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (430, 68, 84, 16); text: "feather";        font: label; fill: palette.textMuted; }
+}
+
+style {
+    .paint { drawing: Paint; }
+}
+
+Component { class: paint; }

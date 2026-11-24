@@ -149,7 +149,10 @@ public:
     /** Returns a copy of the current filter operations. */
     std::vector<Operation> getOperations() const;
 
-    /** Returns the paint margin needed around the component bounds for drop-shadow offsets. */
+    /** Returns the paint margin needed around the component bounds: what its blurs and the blur
+        of its drop shadows spread over, and the offset of its drop shadows. In a chain each
+        operation works on what the ones before it left, so their margins add up.
+    */
     EdgeSpacing<float> getRequiredMargin() const noexcept;
 
     //==============================================================================

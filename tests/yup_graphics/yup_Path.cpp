@@ -1533,6 +1533,60 @@ TEST_F (PathFillPolygonTests, EmptyPathReturnsEmptyPath)
     EXPECT_TRUE (Path().createFillPolygon().isEmpty());
 }
 
+TEST_F (PathFillPolygonTests, IsClockwiseTellsWhichWayAPathRuns)
+{
+    EXPECT_TRUE (createSquare (0.0f, 0.0f, 10.0f, true).isClockwise());
+    EXPECT_FALSE (createSquare (0.0f, 0.0f, 10.0f, false).isClockwise());
+    EXPECT_TRUE (Path().isClockwise());
+
+    // A path runs the way most of its area does, so a hole does not turn it around
+    auto ring = createSquare (0.0f, 0.0f, 10.0f, false);
+    ring.appendPath (createSquare (3.0f, 3.0f, 4.0f, true));
+    EXPECT_FALSE (ring.isClockwise());
+}
+
+TEST_F (PathFillPolygonTests, ReversedRunsTheOtherWayThroughTheSameSegments)
+{
+    Path open;
+    open.moveTo (0.0f, 0.0f).lineTo (10.0f, 0.0f).quadTo (10.0f, 10.0f, 20.0f, 10.0f);
+
+    const auto backwards = open.reversed();
+    const auto contours = getContours (backwards);
+    ASSERT_EQ (contours.size(), 1u);
+    EXPECT_EQ (contours[0].front(), Point<double> (10.0, 10.0));
+    EXPECT_EQ (contours[0].back(), Point<double> (0.0, 0.0));
+    EXPECT_EQ (backwards.reversed().toString(), open.toString());
+
+    // Curves stay curves, contours stay closed, and the fill rule is kept
+    Path shapes;
+    shapes.setUsingNonZeroWinding (false);
+    shapes.addEllipse (0.0f, 0.0f, 20.0f, 10.0f);
+    shapes.addRectangle (0.0f, 20.0f, 4.0f, 4.0f);
+
+    const auto turned = shapes.reversed();
+    EXPECT_NE (turned.isClockwise(), shapes.isClockwise());
+    EXPECT_EQ (turned.size(), shapes.size());
+    EXPECT_EQ (turned.getBounds(), shapes.getBounds());
+    EXPECT_FALSE (turned.isUsingNonZeroWinding());
+    EXPECT_EQ (turned.reversed().toString(), shapes.toString());
+
+    const auto countVerbs = [] (const Path& path, Path::Verb verb)
+    {
+        int count = 0;
+
+        for (const auto& segment : path)
+            count += segment.verb == verb ? 1 : 0;
+
+        return count;
+    };
+
+    EXPECT_GT (countVerbs (turned, Path::Verb::CubicTo), 0);
+    EXPECT_EQ (countVerbs (turned, Path::Verb::CubicTo), countVerbs (shapes, Path::Verb::CubicTo));
+    EXPECT_EQ (countVerbs (turned, Path::Verb::Close), 2);
+
+    EXPECT_TRUE (Path().reversed().isEmpty());
+}
+
 TEST_F (PathFillPolygonTests, CounterClockwiseContourBecomesClockwise)
 {
     const auto areas = getSortedAreas (createSquare (0.0f, 0.0f, 10.0f, false).createFillPolygon());

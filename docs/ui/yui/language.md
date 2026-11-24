@@ -119,7 +119,7 @@ with the [graphics types](../../graphics/expressions.md) available:
 | Booleans and strings | `true`, `false`, `"CUTOFF"` |
 | Colors | `#ff8800`, `#ff880080`, `rgb (255, 136, 0)`, `colors.transparentBlack`, `palette.accent.darker (0.1)` |
 | Enumerations | `round`, `rotaryVerticalDrag`, `center` (a bare name the property knows) |
-| Graphics values | `bounds.center`, `rect (0, 0, 20, 20)`, `polar (bounds.center, r, a)` |
+| Graphics values | `bounds.center`, `rect (0, 0, 20, 20)`, `polar (bounds.center, r, a)`, `[10, 20]` and `[0, 0, 20, 20]` for a point and a rectangle |
 | Arrays | `[0.25, 0.5]`, `["low", "high"]`, `lanes[0]`, `len (lanes)` |
 | Operators and calls | `enabled ? 1 : 0.4`, `lerp (a0, a1, normalized)`, `min (width, height) / 2` |
 
@@ -129,6 +129,10 @@ is written on (bare or prefixed by `self.`), `parent.`, the elements with an
 `palette.` roles and the `theme.` ones. In the instance tree, a value that
 reads anything is a [binding](reactivity.md), kept up to date while what it
 reads changes.
+
+A property that is an `integer` takes any number, cut to a whole one as
+`int (...)` cuts it. The numbers of a model are never integers by type, so
+`radioGroup: mode.group;` needs no cast.
 
 The values of `style` and `palette` blocks are kept as written up to their `;`,
 because some aren't expressions (`transition: bezelSize 150ms easeOut;`,
@@ -149,8 +153,14 @@ property origin: point = point (1, 2);
 An array holds one element type. Its elements are expressions, read with
 `lanes[0]` and counted with `len (lanes)`, and an index outside the array
 reads a zero value. `point` and `rectangle` values are written `point (x, y)`
-and `rect (x, y, w, h)` and are stored as arrays of their components, so `<=>`
-links and transitions see them change element by element.
+and `rect (x, y, w, h)`, or as the array of their numbers, `[x, y]` and
+`[x, y, w, h]`, and are stored as arrays of their components, so `<=>` links
+and transitions see them change element by element. An array given to a
+property of no type stays an array: declare the property a `point` or a
+`rectangle` for it to be one. A `number[]` value is a point or a rectangle
+where one is expected too. Read at an index, as in `[0.2, 0.5, 1][step]`, or
+written inside an expression, `[a, b, ...]` is an array of numbers like any
+other.
 
 A `font` value can load a font file (TTF or OTF) with `font ("path")` or
 `font ("path", height)`. A relative path is resolved against the folder of
@@ -187,9 +197,11 @@ A `component` block also declares:
 ## Scopes in drawings
 
 `let name: value;` names a value for the elements after it, and
-`repeat i in from .. to { ... }` draws its shapes once per integer from `from`
-to `to - 1`. Both only exist inside drawings, see
-[Scopes](drawing.md#scopes).
+`repeat i in from .. to { ... }` draws what it holds once per integer from
+`from` to `to - 1`, see [Scopes](drawing.md#scopes). A `let` only exists
+inside drawings. A `repeat` among components makes the components it holds
+once per integer, see [Repeating
+components](documents.md#repeating-components).
 
 Inside a drawing, `drawing Name { ... }`, `pattern Name { ... }` and
 `marker Name { ... }` define a drawing, a tile and a marker for the elements
@@ -199,8 +211,9 @@ after them, and `use Name { ... }` paints a drawing by name, see
 
 ## Bindings and handlers
 
-`name <=> id.property;` links a property both ways to another, or to a model
-property (`value <=> params.cutoff;`), see [Two-way
+`name <=> id.property;` links a property both ways to another, to a model
+property (`value <=> params.cutoff;`) or to one element of a list
+(`checked <=> seq.steps[i];`), see [Two-way
 bindings](documents.md#two-way-bindings).
 
 A property named after a signal is a handler: a call, either an action

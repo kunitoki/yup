@@ -66,6 +66,7 @@
       ],
       "deps": ["iosDeps", "iosSimDeps", "appleDeps"],
       "tests": true,
+      "untested": ["yup_dsp_jit", "yup_audio_plugin_host", "yup_audio_plugin_client", "yup_python"],
       "skip": [
         "/native/(generated|java[^/]*)/",
         "/native/[^/]*_(android|emscripten|linux|mac|vulkan|wasm|windows)\\."
@@ -121,6 +122,7 @@
       ],
       "deps": ["wasmDeps"],
       "tests": true,
+      "untested": ["yup_audio_plugin_host", "yup_audio_plugin_client", "yup_gui", "yup_audio_gui", "yup_3d", "yup_renderer", "yup_python"],
       "skip": [
         "/native/(generated|java[^/]*)/",
         "/native/[^/]*_(android|apple|linux|mac|vulkan|windows)\\.",
@@ -139,6 +141,7 @@
       ],
       "deps": ["androidDeps"],
       "tests": true,
+      "untested": ["yup_dsp_jit", "yup_audio_plugin_host", "yup_audio_plugin_client", "yup_python"],
       "skip": [
         "/native/[^/]*_(apple|emscripten|linux|mac|wasm|windows)\\.",
         "/native/[^/]*_ios[^/]*\\."

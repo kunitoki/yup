@@ -21,6 +21,10 @@ and tested for the change:
 With --platform, the "platforms" section of the config restricts the result to
 that platform: native files of other platforms are ignored, only that platform's
 <platform>Deps header lines count, and only the examples it builds are listed.
+Modules a platform lists under "untested" have no test runner there (see
+tests/CMakeLists.txt) and are dropped from "tests", so a change limited to them
+schedules no test build. Windows keeps yup_python, as ci.yml keys its wheel
+builds on it.
 Build files a platform lists under "owns" (its workflow, cmake platform files)
 trigger a full build of the platforms owning them and are ignored by the others.
 
@@ -306,6 +310,7 @@ def compute_affected(changed_files, config, graph, platform=None):
     platform = platform or {}
     platform_skip = platform.get("skip", [])
     platform_examples = platform.get("examples", {})
+    platform_untested = set(platform.get("untested", []))
     supported_examples = set(platform_examples) & graph.examples if platform else graph.examples
 
     changed_yup = set()
@@ -358,7 +363,7 @@ def compute_affected(changed_files, config, graph, platform=None):
         examples = sorted(examples & supported_examples)
         return {
             "full_build": full,
-            "tests": sorted(tests) if platform.get("tests", True) else [],
+            "tests": sorted(tests - platform_untested) if platform.get("tests", True) else [],
             "examples": examples,
             "example_targets": {example: platform_examples[example] for example in examples} if platform else {},
         }

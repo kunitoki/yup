@@ -54,6 +54,58 @@ protected:
 };
 
 //==============================================================================
+TEST_F (ExpressionContextTests, ListsWhatAnExpressionCanUse)
+{
+    enum class Cap
+    {
+        butt,
+        round
+    };
+
+    context.addEnum<Cap> ("cap", { { "butt", Cap::butt }, { "round", Cap::round } });
+    context.addConstant ("answer", 42);
+    context.addFunction ("twice", [] (float x)
+    {
+        return x * 2.0f;
+    });
+    context.addFunction (".next", [] (int x)
+    {
+        return x + 1;
+    });
+
+    StringArray signatures;
+
+    for (const auto& function : context.getFunctions())
+        signatures.add (function.getSignature());
+
+    EXPECT_TRUE (signatures.contains ("twice (float) -> float"));
+    EXPECT_TRUE (signatures.contains (".next (int) -> int"));
+    EXPECT_TRUE (signatures.contains ("min (float, float) -> float"));
+
+    EXPECT_EQ (StringArray ({ "answer" }), context.getConstantNames());
+
+    const auto enumerations = context.getEnumerations();
+    ASSERT_EQ (1u, enumerations.size());
+    EXPECT_EQ (String ("cap"), enumerations.front().first);
+    EXPECT_EQ (StringArray ({ "butt", "round" }), enumerations.front().second);
+}
+
+TEST_F (ExpressionContextTests, ListsAReplacedBuiltinFunctionOnce)
+{
+    context.addFunction ("min", [] (float a, float b)
+    {
+        return a < b ? b : a;
+    });
+
+    int numFound = 0;
+
+    for (const auto& function : context.getFunctions())
+        numFound += function.getSignature() == "min (float, float) -> float" ? 1 : 0;
+
+    EXPECT_EQ (1, numFound);
+}
+
+//==============================================================================
 TEST_F (ExpressionContextTests, DeclaresInputs)
 {
     const auto a = context.addInput<float> ("a");

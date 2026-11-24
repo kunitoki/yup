@@ -1,0 +1,20 @@
+// size: 320 144
+drawing Badge {
+    viewBox: rect (0, 0, 24, 24);
+
+    group {
+        fill: palette.surface; stroke: palette.outline; strokeWidth: 2; color: palette.accent;
+
+        rect { bounds: rect (2, 2, 20, 20); }
+        circle { center: point (12, 12); radius: 5; fill: currentColor; stroke: none; }
+        path { data: "M 2 12 L 22 12"; fill: none; }
+
+        group { strokeWidth: 1; line { from: point (2, 2); to: point (22, 22); } }
+    }
+}
+
+style {
+    .badge { drawing: Badge; }
+}
+
+Component { class: badge; }

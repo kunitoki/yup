@@ -89,6 +89,13 @@ bool looksLikeGlowDeclaration (const String& parsed, const std::vector<StringArr
     return ! isExpressionInfixOperator (tokens[lengths]);
 }
 
+// The declarations parseRuleDeclarationValue reads as something else than the value of a property
+const StringArray& getSpecialDeclarationNames()
+{
+    static const StringArray names { "palette", "drawing", "effect", "filter", "cursor", "transition", "animation", "shadow", "glow" };
+    return names;
+}
+
 void parseRuleDeclarationValue (StyleSheet::Declaration& declaration)
 {
     using Kind = StyleSheet::Declaration::Kind;
@@ -517,6 +524,11 @@ ResultValue<StyleSheet::Ptr> StyleSheet::parse (const String& text)
         return makeResultValueFail (parsed.diagnostics.front().toString());
 
     return fromTree (parsed.document);
+}
+
+const StringArray& StyleSheet::getDeclarationNames()
+{
+    return getSpecialDeclarationNames();
 }
 
 bool StyleSheet::isStyleElement (const DataTree& element) noexcept

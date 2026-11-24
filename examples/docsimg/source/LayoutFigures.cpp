@@ -342,6 +342,20 @@ void addStylingPageFigures (Figures& f)
 
         return gallery;
     });
+
+    f.component ("ui/component-effects_paint-margin", { 400.0f, 150.0f }, []() -> std::unique_ptr<Component>
+    {
+        auto gallery = std::make_unique<Gallery> (2, 20.0f);
+
+        for (const auto margin : { 0.0f, 20.0f })
+        {
+            auto& card = gallery->add (margin > 0.0f ? "setPaintMargin (20)" : "no paint margin", std::make_unique<Box> ("YUP"));
+            card.setComponentEffect (new DropShadowEffect (Color (0xaa000000), 5.0f, { 0.0f, 5.0f }));
+            card.setPaintMargin (margin);
+        }
+
+        return gallery;
+    });
 }
 
 } // namespace

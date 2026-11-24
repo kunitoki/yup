@@ -1,0 +1,33 @@
+// size: 560 138
+drawing Filters {
+    let label: defaultFont.withHeight (12);
+
+    drawing Mark {
+        viewBox: rect (0, 0, 40, 40);
+        star { center: point (20, 20); points: 5; innerRadius: 8; outerRadius: 18; fill: palette.accent; }
+        circle { center: point (20, 21); radius: 4; fill: #ff8800; }
+    }
+
+    use Mark { bounds: rect (22, 4, 56, 56); }
+    layer { filter { blur { deviation: 3; } } use Mark { bounds: rect (107, 4, 56, 56); } }
+    layer { filter { dropShadow { offset: point (3, 4); deviation: 2; color: #000000a0; } } use Mark { bounds: rect (192, 4, 56, 56); } }
+    layer { filter { colorMatrix { hueRotate: 120deg; } } use Mark { bounds: rect (277, 4, 56, 56); } }
+    layer { filter { morphology { radius: 2; dilate: true; } } use Mark { bounds: rect (362, 4, 56, 56); } }
+    layer { filter { blur { in: sourceAlpha; deviation: 2; }
+                     lighting { scale: 6; specular: true; exponent: 30; azimuth: 225deg; elevation: 50deg; result: light; }
+                     composite { in: light; in2: source; operator: atop; } }
+            use Mark { bounds: rect (447, 4, 56, 56); } }
+
+    text { bounds: rect (8, 68, 84, 16);   text: "none";        font: label; fill: palette.textMuted; }
+    text { bounds: rect (93, 68, 84, 16);  text: "blur";        font: label; fill: palette.textMuted; }
+    text { bounds: rect (178, 68, 84, 16); text: "dropShadow";  font: label; fill: palette.textMuted; }
+    text { bounds: rect (263, 68, 84, 16); text: "colorMatrix"; font: label; fill: palette.textMuted; }
+    text { bounds: rect (348, 68, 84, 16); text: "morphology";  font: label; fill: palette.textMuted; }
+    text { bounds: rect (433, 68, 84, 16); text: "lighting";    font: label; fill: palette.textMuted; }
+}
+
+style {
+    .filters { drawing: Filters; }
+}
+
+Component { class: filters; }

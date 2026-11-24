@@ -182,6 +182,38 @@ TEST_F (FilterEffectTests, BuiltInEffectClassesConstructAndConfigureDirectly)
     EXPECT_NE (dynamic_cast<ColorMatrixEffect*> (faded.get()), nullptr);
 }
 
+TEST_F (FilterEffectTests, ADropShadowAsksForTheRoomItsBlurSpreadsOver)
+{
+    FilterEffect effect;
+
+    // The blur spreads three deviations on every side, and the offset moves the shadow further
+    effect.setOperations ({ FilterEffect::Operation::dropShadow ({ 2.0f, 6.0f }, 4.0f, Colors::black) });
+    EXPECT_EQ (effect.getRequiredMargin(), EdgeSpacing<float> (12.0f, 12.0f, 14.0f, 18.0f));
+
+    effect.setOperations ({ FilterEffect::Operation::dropShadow ({ -3.0f, 0.0f }, 0.0f, Colors::black) });
+    EXPECT_EQ (effect.getRequiredMargin(), EdgeSpacing<float> (3.0f, 0.0f, 0.0f, 0.0f));
+
+    // A shadow that paints nothing asks for none
+    effect.setOperations ({ FilterEffect::Operation::dropShadow ({ 2.0f, 6.0f }, 4.0f, Colors::transparentBlack) });
+    EXPECT_EQ (effect.getRequiredMargin(), EdgeSpacing<float>());
+}
+
+TEST_F (FilterEffectTests, ABlurAsksForTheRoomItSpreadsOver)
+{
+    FilterEffect effect;
+
+    effect.setOperations ({ FilterEffect::Operation::blur (4.0f) });
+    EXPECT_EQ (effect.getRequiredMargin(), EdgeSpacing<float> (12.0f));
+
+    // In a chain an operation spreads what the ones before it left: 6 for the blur, then 3 and the offset
+    effect.setOperations ({ FilterEffect::Operation::blur (2.0f), FilterEffect::Operation::dropShadow ({ 0.0f, 4.0f }, 1.0f, Colors::black) });
+    EXPECT_EQ (effect.getRequiredMargin(), EdgeSpacing<float> (9.0f, 9.0f, 9.0f, 13.0f));
+
+    // The operations that leave every pixel where it is ask for none
+    effect.setOperations ({ FilterEffect::Operation::hueRotate (1.0f), FilterEffect::Operation::opacity (0.5f), FilterEffect::Operation::blur (0.0f) });
+    EXPECT_EQ (effect.getRequiredMargin(), EdgeSpacing<float>());
+}
+
 TEST_F (FilterEffectTests, StyleContextAppliesFilterWithoutOverwritingCustomComponentEffect)
 {
     struct CustomUserEffect : ComponentEffect

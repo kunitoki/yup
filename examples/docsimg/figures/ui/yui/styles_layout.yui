@@ -1,0 +1,19 @@
+// size: 480 140
+style {
+    Row.toolbar        { gap: 6; }
+    .toolbar > .spacer { flexGrow: 1; }
+    Row.compact        { gap: 2; justify: center; }
+    .compact > .spacer { flexGrow: 0; preferredWidth: 24; }
+}
+
+Column {
+    gap: 12;
+
+    Row { class: toolbar; flexGrow: 1;
+          TextButton { text: "Open"; preferredWidth: 72; } TextButton { text: "Save"; preferredWidth: 72; }
+          Component { class: spacer; } TextButton { text: "Help"; preferredWidth: 72; } }
+
+    Row { class: "toolbar compact"; flexGrow: 1;
+          TextButton { text: "Open"; preferredWidth: 72; } TextButton { text: "Save"; preferredWidth: 72; }
+          Component { class: spacer; } TextButton { text: "Help"; preferredWidth: 72; } }
+}
