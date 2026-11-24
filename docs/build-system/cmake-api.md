@@ -225,20 +225,15 @@ At least one format must be enabled, otherwise configuration fails with an error
 |---|---|---|---|
 | `PLUGIN_CLAP_FEATURES` | list | *(auto)* | Space-separated list of CLAP plugin features. If omitted, auto-derived from `IS_SYNTH` and `IS_MONO`. |
 
-Supported feature names:
+Supported feature names are the standard features of `clap/plugin-features.h`, each one the value
+of its `CLAP_PLUGIN_FEATURE_*` constant (`audio-effect` is `CLAP_PLUGIN_FEATURE_AUDIO_EFFECT`).
+Any other name is skipped with a warning while configuring.
 
-| Value | CLAP Constant |
+| Group | Values |
 |---|---|
-| `instrument` | `CLAP_PLUGIN_FEATURE_INSTRUMENT` |
-| `audio-effect` | `CLAP_PLUGIN_FEATURE_AUDIO_EFFECT` |
-| `note-effect` | `CLAP_PLUGIN_FEATURE_NOTE_EFFECT` |
-| `note-detector` | `CLAP_PLUGIN_FEATURE_NOTE_DETECTOR` |
-| `analyzer` | `CLAP_PLUGIN_FEATURE_ANALYZER` |
-| `synthesizer` | `CLAP_PLUGIN_FEATURE_SYNTHESIZER` |
-| `mono` | `CLAP_PLUGIN_FEATURE_MONO` |
-| `stereo` | `CLAP_PLUGIN_FEATURE_STEREO` |
-| `surround` | `CLAP_PLUGIN_FEATURE_SURROUND` |
-| `utility` | `CLAP_PLUGIN_FEATURE_UTILITY` |
+| Category | `instrument`, `audio-effect`, `note-effect`, `note-detector`, `analyzer` |
+| Sub-category | `synthesizer`, `sampler`, `drum`, `drum-machine`, `filter`, `phaser`, `equalizer`, `de-esser`, `phase-vocoder`, `granular`, `frequency-shifter`, `pitch-shifter`, `distortion`, `transient-shaper`, `compressor`, `expander`, `gate`, `limiter`, `flanger`, `chorus`, `delay`, `reverb`, `tremolo`, `glitch`, `utility`, `pitch-correction`, `restoration`, `multi-effects`, `mixing`, `mastering` |
+| Audio capabilities | `mono`, `stereo`, `surround`, `ambisonic` |
 
 #### VST3-Specific
 

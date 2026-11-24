@@ -690,28 +690,24 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
 
     # -- CLAP-specific defines
     if (plugin_type STREQUAL "clap" AND YUP_ARG_PLUGIN_CLAP_FEATURES)
+        # The standard features of clap/plugin-features.h
+        set (_clap_standard_features
+            instrument audio-effect note-effect note-detector analyzer
+            synthesizer sampler drum drum-machine
+            filter phaser equalizer de-esser phase-vocoder granular frequency-shifter pitch-shifter
+            distortion transient-shaper compressor expander gate limiter
+            flanger chorus delay reverb tremolo glitch
+            utility pitch-correction restoration multi-effects mixing mastering
+            mono stereo surround ambisonic)
+
         set (_clap_features_str "")
         foreach (_feature IN LISTS YUP_ARG_PLUGIN_CLAP_FEATURES)
-            if (_feature STREQUAL "instrument")
-                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_INSTRUMENT,")
-            elseif (_feature STREQUAL "audio-effect")
-                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_AUDIO_EFFECT,")
-            elseif (_feature STREQUAL "note-effect")
-                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_NOTE_EFFECT,")
-            elseif (_feature STREQUAL "note-detector")
-                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_NOTE_DETECTOR,")
-            elseif (_feature STREQUAL "analyzer")
-                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_ANALYZER,")
-            elseif (_feature STREQUAL "synthesizer")
-                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_SYNTHESIZER,")
-            elseif (_feature STREQUAL "mono")
-                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_MONO,")
-            elseif (_feature STREQUAL "stereo")
-                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_STEREO,")
-            elseif (_feature STREQUAL "surround")
-                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_SURROUND,")
-            elseif (_feature STREQUAL "utility")
-                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_UTILITY,")
+            if (_feature IN_LIST _clap_standard_features)
+                # Each constant is the feature in upper case with underscores, except CLAP_PLUGIN_FEATURE_DEESSER
+                string (REPLACE "de-esser" "deesser" _feature_constant "${_feature}")
+                string (REPLACE "-" "_" _feature_constant "${_feature_constant}")
+                string (TOUPPER "${_feature_constant}" _feature_constant)
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_${_feature_constant},")
             else()
                 _yup_message (WARNING "Unknown CLAP feature: ${_feature}")
             endif()
