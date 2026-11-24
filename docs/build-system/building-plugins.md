@@ -288,6 +288,16 @@ the next launch, together with the window position and size (ignored when the
 window would no longer be on any screen). On desktop they live in
 `<user application data>/<PLUGIN_VENDOR>/<PLUGIN_NAME>/standalone.xml`.
 
+macOS and iOS ask the user before the standalone records from an audio input.
+`PLUGIN_MICROPHONE_USAGE` sets the reason shown in that request:
+
+```cmake
+yup_audio_plugin (
+    # ...
+    PLUGIN_CREATE_STANDALONE ON
+    PLUGIN_MICROPHONE_USAGE "MyPlugin processes the sound of your audio inputs.")
+```
+
 When the editor's `shouldPreserveAspectRatio()` returns true, the window keeps
 its proportions while resized. Fullscreen, maximized and full browser windows
 are letterboxed: the toolbar, editor and keyboard keep those proportions,

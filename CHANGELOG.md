@@ -140,6 +140,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added the `docsimg` example and the `just docs_images` recipe, which render the figures of the documentation into `docs/_static/images` in both color modes, and `just docs` to build the pages locally.
 - CI: Smart CI no longer schedules test builds for modules a platform has no test runner for (the `untested` entries in `.github/smart_ci_config.json`), which failed the Android job on changes limited to such modules, e.g. `yup_python`.
 - CMake: thirdparty modules now get a `yup::` alias like the YUP modules, so `MODULES yup::libvorbis` no longer fails in `yup_standalone_app`.
+- CMake: the built-in `Info.plist` of macOS and iOS apps now has the `NSMicrophoneUsageDescription` they need to record from audio inputs (the inputs were silent on macOS). Its text is set with `MICROPHONE_USAGE` on `yup_standalone_app`, and with `PLUGIN_MICROPHONE_USAGE` on `yup_audio_plugin` for the standalone.
 
 ---
 

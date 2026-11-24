@@ -246,6 +246,12 @@ Common VST3 categories: `Fx`, `Instrument`, `Analyzer`, `Delay`, `Distortion`, `
 
 Multiple categories are pipe-joined automatically. Example: `PLUGIN_VST3_CATEGORIES Fx Stereo` produces `"Fx|Stereo"`.
 
+#### Standalone-Specific
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `PLUGIN_MICROPHONE_USAGE` | string | `<app name> needs access to your audio inputs.` | Apple only: the reason shown when macOS or iOS asks the user to let the standalone record from an audio input, the `NSMicrophoneUsageDescription` of its `Info.plist`. |
+
 #### Codesigning & Entitlements
 
 All codesigning options are macOS-only and have no effect on other platforms.
@@ -349,6 +355,7 @@ These arguments only affect the Emscripten build and are ignored elsewhere.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `CUSTOM_PLIST` | path | *(built-in)* | Custom `Info.plist` template for the app bundle. |
+| `MICROPHONE_USAGE` | string | `<TARGET_PRODUCT_NAME> needs access to your audio inputs.` | The reason shown when macOS or iOS asks the user to let the app record from an audio input, the `NSMicrophoneUsageDescription` of the built-in `Info.plist`. A `CUSTOM_PLIST` sets the key itself. |
 
 ---
 
