@@ -53,7 +53,7 @@ public:
     }
 
     //==============================================================================
-    void refreshDisplay (double lastFrameTimeSeconds) override
+    void refreshDisplay (double lastFrameTimeSeconds)
     {
         if (! isVisible())
             return;
@@ -281,4 +281,5 @@ private:
     std::uint32_t lastHits = 0;
     float averageLow = 0.0f, averageHigh = 0.0f;
     bool listening = false;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&Demo::refreshDisplay, this) };
 };
