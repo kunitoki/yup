@@ -101,6 +101,13 @@ plain UNORM format, and composited with alpha for windows created with
 `GpuDevice::Options::vsync` synchronizes presentation to the display refresh;
 it is off by default.
 
+A backend can have nothing to present to for a moment: Direct3D is refused a
+swapchain in a Windows session that is not interactive, Metal and WebGPU can be
+handed no texture to present a frame to. The window logs it once and retries on
+its own, skipping its frames on Direct3D and drawing them again on Metal and
+WebGPU. Code driving a `GraphicsContext` itself checks `isSurfaceAvailable()`
+before each frame and calls `onSizeChanged()` again while it is false.
+
 ## Shaders
 
 Shaders are written once and compiled per backend. An offline

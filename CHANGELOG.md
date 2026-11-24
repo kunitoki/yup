@@ -64,6 +64,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Breaking:** `Font` equality also compares the height, so fonts differing only in height compare different.
 - **Breaking:** `Font::withAxisValue` and `Font::withAxisValues` return the font unchanged, instead of an empty font, for an axis the font does not have or an index out of range, so text styled for a variable font still draws with a font lacking the axis. Check for an axis with `Font::getAxisDescription`.
 - **Breaking:** `AnimationEasing` is renamed to `Easing` and moved from `yup_animation` to `yup_graphics`, so graphics-level animation and styling can interpolate with it without depending on `yup_animation`. It is now built on `CubicBezier` (exposed through `getCurve()`) and no longer caches a lookup table, so a shared easing can be evaluated from several threads. `Easing` is also available in the Python bindings.
+- Fixed windows mishandling a backend that has nothing to present to for a while: Direct3D aborted the process when the swapchain could not be created, as in a Windows session that is not interactive (an application started over SSH), Metal presented to a missing drawable and WebGPU left its frame open without a surface texture. The condition is logged once and the window skips or redraws its frames until one is presented. Added `GraphicsContext::isSurfaceAvailable`.
 
 ### UI
 

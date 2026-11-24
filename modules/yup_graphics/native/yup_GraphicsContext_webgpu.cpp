@@ -80,6 +80,7 @@ public:
 
         width = newWidth;
         height = newHeight;
+        presentPending = false;
 
         if (surface == nullptr)
         {
@@ -116,6 +117,8 @@ public:
         renderTarget = getRenderContext()->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>()->makeRenderTarget (wgpu::TextureFormat::BGRA8Unorm, (uint32_t) width, (uint32_t) height);
     }
 
+    bool isSurfaceAvailable() const noexcept override { return ! presentPending; }
+
     void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDescriptor) override
     {
         if (offscreenTextureView == nullptr || renderTarget == nullptr)
@@ -131,30 +134,42 @@ public:
         if (renderTarget == nullptr || offscreenTexture == nullptr || surface == nullptr)
             return;
 
-        wgpu::SurfaceTexture surfaceTexture = {};
-        surface.GetCurrentTexture (&surfaceTexture);
-        if (surfaceTexture.texture == nullptr)
-            return;
-
         wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
 
+        // Flushed even without a texture to present to, which closes the frame Rive opened
         getRenderContext()->flush ({ .renderTarget = renderTarget.get(),
                                      .externalCommandBuffer = encoder.Get() });
 
-        wgpu::TexelCopyTextureInfo copySource = {};
-        copySource.texture = offscreenTexture;
-        copySource.aspect = wgpu::TextureAspect::All;
+        wgpu::SurfaceTexture surfaceTexture = {};
+        surface.GetCurrentTexture (&surfaceTexture);
 
-        wgpu::TexelCopyTextureInfo copyDestination = {};
-        copyDestination.texture = surfaceTexture.texture;
-        copyDestination.aspect = wgpu::TextureAspect::All;
+        if (surfaceTexture.texture != nullptr)
+        {
+            surfaceTextureMissing = false;
 
-        wgpu::Extent3D copySize = {};
-        copySize.width = (uint32_t) width;
-        copySize.height = (uint32_t) height;
-        copySize.depthOrArrayLayers = 1;
+            wgpu::TexelCopyTextureInfo copySource = {};
+            copySource.texture = offscreenTexture;
+            copySource.aspect = wgpu::TextureAspect::All;
 
-        encoder.CopyTextureToTexture (&copySource, &copyDestination, &copySize);
+            wgpu::TexelCopyTextureInfo copyDestination = {};
+            copyDestination.texture = surfaceTexture.texture;
+            copyDestination.aspect = wgpu::TextureAspect::All;
+
+            wgpu::Extent3D copySize = {};
+            copySize.width = (uint32_t) width;
+            copySize.height = (uint32_t) height;
+            copySize.depthOrArrayLayers = 1;
+
+            encoder.CopyTextureToTexture (&copySource, &copyDestination, &copySize);
+        }
+        else
+        {
+            // The surface is configured again and the frame retried, see isSurfaceAvailable()
+            if (! std::exchange (surfaceTextureMissing, true))
+                fprintf (stderr, "WebGPU: no surface texture to present to (status %d), frames are retried until there is one\n", static_cast<int> (surfaceTexture.status));
+
+            presentPending = true;
+        }
 
         wgpu::CommandBuffer commands = encoder.Finish();
         queue.Submit (1, &commands);
@@ -170,6 +185,8 @@ private:
     wgpu::Surface surface;
     wgpu::Texture offscreenTexture;
     wgpu::TextureView offscreenTextureView;
+    bool presentPending = false;
+    bool surfaceTextureMissing = false;
     int width = 0;
     int height = 0;
     rive::rcp<rive::gpu::RenderTargetWebGPU> renderTarget;

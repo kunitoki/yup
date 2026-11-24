@@ -1449,7 +1449,7 @@ bool SDLComponentNative::renderFrame()
         if (contentWidth == 0 || contentHeight == 0 || ! isVisible())
             return false;
 
-        if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
+        if (currentContentWidth != contentWidth || currentContentHeight != contentHeight || ! context->isSurfaceAvailable())
         {
             YUP_PROFILE_NAMED_INTERNAL_TRACE (ResizeRenderer);
 
@@ -1478,6 +1478,10 @@ bool SDLComponentNative::renderFrame()
 
             repaint();
         }
+
+        // The surface is unavailable: skip the frame, the next one tries again
+        if (! context->isSurfaceAvailable())
+            return false;
 
         const auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
         const auto currentTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
