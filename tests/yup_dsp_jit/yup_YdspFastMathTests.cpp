@@ -772,7 +772,8 @@ TEST_F (YdspFastMathTests, LowerStrictVectorTranscendentalsPreservesOneUlpOnTanh
             continue;
         }
 
-        const float ref = std::tanh (input[i]);
+        // Rounded from the double result: a libm tanhf can itself be 2 ULP off.
+        const float ref = static_cast<float> (std::tanh (static_cast<double> (input[i])));
         auto toOrdered = [] (float v) -> int32_t
         {
             const auto bits = std::bit_cast<int32_t> (v);

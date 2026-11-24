@@ -5197,6 +5197,65 @@ TEST (YdspAsmJitCodegenTests, LocalizesExcessRingIndicesUnderHighGpPressureOnArm
     }
 }
 
+TEST (YdspAsmJitCodegenTests, X64SpillsEightLaneVectorsAtFullWidth)
+{
+    // Twenty eight-lane values live at once are more than the sixteen ymm
+    // registers hold, so some are spilled: with a 128-bit SSE move the upper
+    // four lanes of each would be lost.
+    constexpr int numValues = 20;
+    constexpr int lanes = 8;
+
+    YdspIrFunction fn;
+    fn.name = "WideSpills";
+    fn.isSampleMode = false;
+    fn.vectorized = true;
+    fn.vectorWidth = lanes;
+    fn.float32ArrayElements = (numValues + 1) * lanes;
+    fn.blocks.resize (1);
+    auto& insts = fn.blocks[0].insts;
+
+    const auto newValue = [&fn] (YdspValueType type, int laneCount)
+    {
+        fn.valueTypes.push_back (type);
+        fn.valueLanes.push_back (laneCount);
+        return static_cast<int> (fn.valueTypes.size()) - 1;
+    };
+
+    std::vector<int> loaded;
+
+    for (int i = 0; i < numValues; ++i)
+    {
+        const int index = newValue (YdspValueType::int32Type, 1);
+        insts.push_back ({ YdspIrOp::constI, index, -1, -1, -1, -1, 0.0, i * lanes });
+        loaded.push_back (newValue (YdspValueType::float32Type, lanes));
+        insts.push_back ({ YdspIrOp::loadStateArrayF, loaded.back(), index, -1, -1, 0 });
+    }
+
+    int sum = loaded[0];
+
+    for (int i = 1; i < numValues; ++i)
+    {
+        const int result = newValue (YdspValueType::float32Type, lanes);
+        insts.push_back ({ YdspIrOp::addF, result, sum, loaded[static_cast<size_t> (i)] });
+        sum = result;
+    }
+
+    const int outIndex = newValue (YdspValueType::int32Type, 1);
+    insts.push_back ({ YdspIrOp::constI, outIndex, -1, -1, -1, -1, 0.0, numValues * lanes });
+    insts.push_back ({ YdspIrOp::storeStateArrayF, -1, outIndex, sum, -1, 0 });
+
+    YdspDiagnostics diagnostics;
+    const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, fn, diagnostics);
+    ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+
+    const auto listing = diagnostics.toString();
+    EXPECT_TRUE (listing.contains ("ymmword ptr [rsp")) << listing;
+
+    for (const auto& line : StringArray::fromLines (listing))
+        if (line.contains ("ymmword ptr [rsp"))
+            EXPECT_TRUE (line.trimStart().startsWith ("v")) << line;
+}
+
 TEST (YdspAsmJitCodegenTests, SpillsBeyondTheLoadStoreOffsetRangeAssemble)
 {
     // 5000 values loaded before the first add are all live at once, so their spill slots span about 20 KB of

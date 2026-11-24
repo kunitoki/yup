@@ -68,7 +68,8 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
 
         for (size_t i = 0; i < insts.size(); ++i)
         {
-            if ((insts[i].op != YdspIrOp::addF && insts[i].op != YdspIrOp::subF) || ! isFusableFloat32 (insts[i].result))
+            if ((insts[i].op != YdspIrOp::addF && insts[i].op != YdspIrOp::subF) || ! isFusableFloat32 (insts[i].result)
+                || insts[i].keepsSeparateRounding)
                 continue;
 
             const auto findMultiply = [&] (int operand) -> std::optional<size_t>

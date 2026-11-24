@@ -381,6 +381,7 @@ struct YdspIrInst
     bool boundedFloatToInt = false; // ftoi operand is finite and representable
     bool saturatingIntegerArithmetic = false; // source add/sub/mul; internal address arithmetic wraps
     bool overflowFreeIntegerArithmetic = false; // source add/sub/mul proven to stay in range, so left to wrap
+    bool keepsSeparateRounding = false; // add/sub never fused with its multiply: the scalar twin of a lane that rounds twice
 
     // Incoming (predecessor block, value id) pairs for YdspIrOp::phi.
     std::vector<std::pair<int, int>> phiIncoming;

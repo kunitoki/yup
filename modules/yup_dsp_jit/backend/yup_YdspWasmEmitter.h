@@ -496,8 +496,8 @@ public:
     static constexpr uint32_t opI32x4Add = 0xAE;
     static constexpr uint32_t opI32x4Sub = 0xB1;
     static constexpr uint32_t opI32x4Mul = 0xB5;
-    static constexpr uint32_t opI32x4MinS = 0xB8;
-    static constexpr uint32_t opI32x4MaxS = 0xBA;
+    static constexpr uint32_t opI32x4MinS = 0xB6;
+    static constexpr uint32_t opI32x4MaxS = 0xB8;
 
     // Widening multiply (i64x2) for saturating i32x4 multiply
     static constexpr uint32_t opI64x2ExtmulLowI32x4S = 0xDC;

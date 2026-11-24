@@ -1941,6 +1941,49 @@ TEST (YdspVectorizerTests, PeeledIterationsRoundLikeTheWidenedLanes)
     EXPECT_EQ (std::vector<float> (64, 0.0f), output);
 }
 
+TEST (YdspVectorizerTests, PeeledIterationsStayUnfusedWhereTheLanesCannotFuse)
+{
+    // A target that contracts but has no packed fused multiply-add leaves the
+    // lanes as a multiply and an add, so the peeled iterations must keep theirs
+    // apart too instead of being contracted into a scalar fused multiply-add.
+    const auto source = vectorizerPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z[6];
+            process {
+                for i in 0..6 { z[i] = z[i] * 0.9 + in * 0.3; }
+                out = z[0] - z[5];
+            }
+        }
+    )YDSP");
+
+    for (const bool hasPackedFma : { false, true })
+    {
+        YdspDiagnostics diagnostics;
+        YdspLexer lexer (source, diagnostics);
+        auto program = YdspParser (lexer.tokenize(), diagnostics).parseProgram();
+        ASSERT_NE (nullptr, program) << diagnostics.toString();
+        auto analyzed = YdspSemanticAnalyzer (diagnostics).analyze (std::move (program));
+        ASSERT_NE (nullptr, analyzed) << diagnostics.toString();
+
+        YdspOptimizer optimizer (diagnostics);
+        optimizer.setFastMath (true);
+        optimizer.setContractionEnabled (true);
+        optimizer.setTargetHasPackedFusedMultiplyAdd (hasPackedFma);
+        optimizer.setVectorizationEnabled (true);
+
+        auto ir = optimizer.build (*analyzed);
+        ASSERT_NE (nullptr, ir) << diagnostics.toString();
+
+        const auto& fn = *ir->kernels[0];
+        ASSERT_TRUE (fn.vectorized);
+
+        // One widened multiply-add and two peeled ones, or none at all.
+        EXPECT_EQ (hasPackedFma ? 3 : 0, vectorizerCountInst (fn, YdspIrOp::fmaF)) << hasPackedFma;
+    }
+}
+
 TEST (YdspVectorizerTests, PeeledIterationsReuseTheHoistedLoopInvariantWork)
 {
     YdspDiagnostics diagnostics;

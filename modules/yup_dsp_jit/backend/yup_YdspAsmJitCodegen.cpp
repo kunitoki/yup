@@ -263,8 +263,17 @@ ResultValue<YdspNativeArtifact> YdspAsmJitCodegenImpl<Traits>::emit (const asmji
             });
         });
 
+        // Marks the frame as AVX, or the register allocator moves, spills and
+        // reloads a ymm register with the 128-bit SSE forms and loses its
+        // upper lanes.
         if (fn.vectorWidth > YdspVectorizer::vectorWidth || fn.packedFmaAvailable || hasFusedMultiplyAdd)
+        {
+            funcNode->frame().set_avx_enabled();
             funcNode->frame().set_avx_cleanup();
+
+            if (fn.vectorWidth == 16)
+                funcNode->frame().set_avx512_enabled();
+        }
     }
 
     this->cc = &cc;
@@ -3082,16 +3091,23 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
             return;
 
         case YdspIrOp::clampF:
+        {
+            // The clamped value goes second in both steps: an x86 min/max
+            // returns its second operand when either one is a NaN, so a NaN is
+            // passed through there too, as AArch64 and wasm do.
             if (isVectorValue (inst.result))
             {
-                vectorBinary (YdspIrOp::maxF, fp (inst.result), fp (inst.a), fp (inst.b));
-                vectorBinary (YdspIrOp::minF, fp (inst.result), fp (inst.result), fp (inst.c));
+                YdspFp raised = newFpVector ("clampMax");
+                vectorBinary (YdspIrOp::maxF, raised, fp (inst.b), fp (inst.a));
+                vectorBinary (YdspIrOp::minF, fp (inst.result), fp (inst.c), raised);
                 return;
             }
 
-            floatBinary (YdspIrOp::maxF, fp (inst.result), fp (inst.a), fp (inst.b));
-            floatBinary (YdspIrOp::minF, fp (inst.result), fp (inst.result), fp (inst.c));
+            YdspFp raised = is64BitValueType (valueTypes[static_cast<size_t> (inst.result)]) ? newFp64 ("clampMax") : newFp ("clampMax");
+            floatBinary (YdspIrOp::maxF, raised, fp (inst.b), fp (inst.a));
+            floatBinary (YdspIrOp::minF, fp (inst.result), fp (inst.c), raised);
             return;
+        }
 
         case YdspIrOp::fmaF:
             if (isVectorValue (inst.result))

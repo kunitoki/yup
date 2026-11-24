@@ -1778,6 +1778,15 @@ private:
         return slot;
     }
 
+    /** A scalar copy of the body has to round like the lanes it stands in for:
+        where they stay a separate multiply and add, so does it.
+    */
+    void keepLaneRounding (YdspIrInst& inst) const noexcept
+    {
+        if (scalarOnlyContraction && (inst.op == YdspIrOp::addF || inst.op == YdspIrOp::subF))
+            inst.keepsSeparateRounding = true;
+    }
+
     void emitPeel (const std::vector<YdspIrInst>& oldBody)
     {
         auto& preheaderInsts = fn.blocks[static_cast<size_t> (preheader)].insts;
@@ -1844,6 +1853,7 @@ private:
                 inst.a = replaceOperand (inst.a);
                 inst.b = replaceOperand (inst.b);
                 inst.c = replaceOperand (inst.c);
+                keepLaneRounding (inst);
 
                 preheaderInsts.push_back (inst);
             }
@@ -2083,6 +2093,7 @@ private:
             copy.a = tailId (copy.a);
             copy.b = tailId (copy.b);
             copy.c = tailId (copy.c);
+            keepLaneRounding (copy);
 
             tailBodyInsts.push_back (copy);
         }

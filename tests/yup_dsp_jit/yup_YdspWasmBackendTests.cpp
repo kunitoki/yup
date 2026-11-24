@@ -616,7 +616,7 @@ TEST (YdspWasmBackendTests, VectorizedFloatIntConversionsAndSelectMatchScalarRef
 namespace
 {
 
-std::vector<uint8_t> compileBackendWasmBytes (StringRef source, const char* kernelName, YdspDiagnostics& diagnostics, bool enableVectorization = false)
+std::vector<uint8_t> compileBackendWasmBytes (StringRef source, const char* kernelName, YdspDiagnostics& diagnostics, bool enableVectorization = false, bool enableFastMath = false)
 {
     YdspLexer lexer (source, diagnostics);
     auto tokens = lexer.tokenize();
@@ -633,7 +633,10 @@ std::vector<uint8_t> compileBackendWasmBytes (StringRef source, const char* kern
     if (analyzed == nullptr || diagnostics.hasErrors())
         return {};
 
+    // Wasm has no fused multiply-add: a spelled fma() goes through the exact float64 expansion.
     YdspOptimizer optimizer (diagnostics);
+    optimizer.setTargetHasFusedMultiplyAdd (false);
+    optimizer.setFastMath (enableFastMath);
 
     if (enableVectorization)
     {
@@ -713,8 +716,9 @@ TEST (YdspWasmBackendTests, StackForwardingAndLocalTeeReduceLocalsInArithmeticCh
 
     for (size_t i = 0; i < input.size(); ++i)
     {
-        const float t = input[i] * 0.5f + 0.25f;
-        const float expected = (t * t + t) * 1.5f - 0.125f;
+        // The default compile contracts each multiply-add, which rounds once.
+        const float t = std::fma (input[i], 0.5f, 0.25f);
+        const float expected = std::fma (std::fma (t, t, t), 1.5f, -0.125f);
         EXPECT_FLOAT_EQ (expected, output[i]) << "at " << i;
     }
 }
@@ -899,7 +903,7 @@ TEST (YdspWasmBackendTests, FastMathBitcastExecutesAccuratelyInWasm)
     )YDSP";
 
     YdspDiagnostics diagnostics;
-    const auto bytes = compileBackendWasmBytes (source, "P", diagnostics, false);
+    const auto bytes = compileBackendWasmBytes (source, "P", diagnostics, false, true);
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
     ASSERT_FALSE (bytes.empty());
 
@@ -1653,10 +1657,10 @@ TEST_F (YdspWasmBitcastAndLaneTests, SlpVectorizedSourceEmitsBalancedGatherAndEx
             output stream out;
             state float z0, z1, z2, z3;
             process {
-                z0 = z0 * 0.5 + in0;
-                z1 = z1 * 0.5 + in1;
-                z2 = z2 * 0.5 + in2;
-                z3 = z3 * 0.5 + in3;
+                z0 = (z0 * 0.5 + in0) * 0.9;
+                z1 = (z1 * 0.5 + in1) * 0.9;
+                z2 = (z2 * 0.5 + in2) * 0.9;
+                z3 = (z3 * 0.5 + in3) * 0.9;
                 out = z0 + z1 + z2 + z3;
             }
         }
@@ -1677,7 +1681,7 @@ TEST_F (YdspWasmBitcastAndLaneTests, SlpVectorizedSourceEmitsBalancedGatherAndEx
     expectBalancedStack (bytes);
 
     const auto wat = YdspWasmCodegen::toText (bytes);
-    EXPECT_TRUE (wat.contains ("f32x4.replace_lane"));
-    EXPECT_TRUE (wat.contains ("f32x4.extract_lane"));
+    EXPECT_TRUE (wat.contains ("f32x4.replace_lane")) << wat;
+    EXPECT_TRUE (wat.contains ("f32x4.extract_lane")) << wat;
 }
 #endif
