@@ -72,7 +72,7 @@ jobs:
       matrix:
         include:
         - { os: windows-latest, python: 311, platform_id: win_amd64, cibw_archs: AMD64 }
-        - { os: windows-latest, python: 311, platform_id: win_arm64, cibw_archs: ARM64 }
+        #- { os: windows-latest, python: 311, platform_id: win_arm64, cibw_archs: ARM64 }
 
     steps:
     - uses: actions/checkout@v7
@@ -85,11 +85,11 @@ jobs:
         python-version: "3.13"
 
     - name: Build wheels
-      uses: pypa/cibuildwheel@v3.4.1
+      uses: pypa/cibuildwheel@v4.3.5
       env:
         CIBW_ARCHS: ${{matrix.cibw_archs}}
         CIBW_BUILD: cp${{ matrix.python }}-${{ matrix.platform_id }}
-        CIBW_TEST_SKIP: "*-win_arm64"
+        #CIBW_TEST_SKIP: "*-win_arm64"
         CIBW_DEBUG_TRACEBACK: TRUE
         CIBW_ENVIRONMENT: CIBW_DEBUG_TRACEBACK=TRUE
       with:
