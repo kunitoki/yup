@@ -260,8 +260,10 @@ function (_yup_audio_plugin_create_lv2)
     set (lv2_binary_suffix "${CMAKE_SHARED_LIBRARY_SUFFIX}")
     set (lv2_binary_name "${target_name}_lv2_plugin${lv2_binary_suffix}")
 
-    # Bundle lives in the build output dir alongside the other plugin formats
-    set (lv2_bundle_name "${target_name}_lv2_plugin.lv2")
+    # The bundle is named after the plugin and built beside the binary. The files in it keep the
+    # target name, as the TTL refers to them by IRI and a plugin name is not always a valid one
+    _yup_audio_plugin_get_product_name (plugin_product_name)
+    set (lv2_bundle_name "${plugin_product_name}.lv2")
     set (lv2_bundle_dir "$<TARGET_FILE_DIR:${target_name}_lv2_plugin>/${lv2_bundle_name}")
     set (lv2_plugin_ttl_name "${target_name}_plugin.ttl")
 
@@ -338,6 +340,8 @@ function (_yup_audio_plugin_create_lv2)
         FOLDER "${target_ide_group}"
         XCODE_GENERATE_SCHEME ON)
 
+    _yup_audio_plugin_set_output_directory (${target_name}_lv2_plugin LV2)
+
     _yup_audio_plugin_apply_binary_optimizations (${target_name}_lv2_plugin
         EXPORTED_SYMBOLS lv2_descriptor lv2ui_descriptor)
 
@@ -367,7 +371,7 @@ function (_yup_audio_plugin_create_lv2)
         VERBATIM)
 
     if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
-        yup_audio_plugin_copy_bundle (${target_name} lv2
+        yup_audio_plugin_copy_bundle (${target_name} lv2 "${plugin_product_name}"
             LV2_BUNDLE_DIR  "${lv2_bundle_dir}"
             LV2_BUNDLE_NAME "${lv2_bundle_name}")
     endif()
@@ -378,7 +382,7 @@ function (_yup_audio_plugin_create_lv2)
         # duplicate URI (the installed copy wins), so validate the installed
         # bundle directly - this is also what hosts actually load.
         yup_validate_pluginval (${target_name}_lv2_plugin
-            "$ENV{HOME}/Library/Audio/Plug-Ins/LV2/${target_name}_lv2_plugin.lv2")
+            "$ENV{HOME}/Library/Audio/Plug-Ins/LV2/${lv2_bundle_name}")
     else()
         yup_validate_pluginval (${target_name}_lv2_plugin "${lv2_bundle_dir}")
     endif()

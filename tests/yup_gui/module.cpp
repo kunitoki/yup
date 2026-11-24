@@ -59,6 +59,7 @@
 #include "yup_FilterEffect.cpp"
 #include "yup_FlexBox.cpp"
 #include "yup_FlexBoxParity.cpp"
+#include "yup_FrameAttachment.cpp"
 #include "yup_GestureEvent.cpp"
 #include "yup_GestureRecognizer.cpp"
 #include "yup_Grid.cpp"

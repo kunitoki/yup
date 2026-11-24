@@ -329,9 +329,11 @@ private:
   `contentToDisplay()` backs `localToScreen()` and what is built on it, like popup
   placement and the text input caret rectangle. Without it, the identity is used
   as an approximation.
-- Both run on the message thread while `apply()` runs on the render thread: read
-  the parameters the last `apply()` published through atomics or a lock. This
-  also keeps input consistent with what is on screen.
+- Both run on the message thread and `apply()` on the render thread, but never
+  at the same time (see [Threading](component-basics.md#threading)): the atomic
+  above only matters when yet another thread sets the parameters. Map with what
+  the last `apply()` drew with, which keeps input consistent with what is on
+  screen.
 - Return a point even when it falls outside the bounds, so a captured drag keeps
   tracking. Return `std::nullopt` only for degenerate mappings: hit-testing then
   skips the component, and other conversions fall back to its position.

@@ -240,6 +240,22 @@ shapes.addEllipse (0, 120, 100, 50);
 shapes.addArc (arcBounds, 0.0f, MathConstants<float>::pi, true);
 ```
 
+A path can be reused as soon as it has been drawn: the draw keeps the outline the
+path had, so one `Path` can be cleared and rebuilt for every shape of a `paint()`.
+Copies are cheap as well, a copy shares the outline of the original until one of
+the two changes its own.
+
+```cpp
+Path bar;
+
+for (const auto& area : bars)
+{
+    bar.clear();
+    bar.addRoundedRectangle (area, 3.0f);
+    g.fillPath (bar);
+}
+```
+
 `createStrokePolygon` turns a path into the outline of its stroke, so a stroke can
 be filled with fill-only effects such as a feather. Closed contours become a ring,
 open contours end with the given cap, and overlaps are merged into simple contours.

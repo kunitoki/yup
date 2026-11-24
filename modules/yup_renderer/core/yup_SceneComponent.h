@@ -74,13 +74,14 @@ public:
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
 
 private:
     Scene::Ptr scene;
     SceneRenderer renderer;
     bool continuousUpdates = false;
     bool rendered = false;
+    FrameAttachment frameAttachment { *this, bindFront (&SceneComponent::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneComponent)
 };

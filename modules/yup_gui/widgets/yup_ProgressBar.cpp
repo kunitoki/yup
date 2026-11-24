@@ -70,6 +70,17 @@ ProgressBar::~ProgressBar() = default;
 //==============================================================================
 void ProgressBar::setProgress (double newProgress, NotificationType notification)
 {
+    if (! MessageManager::getInstance()->currentThreadHasLockedMessageManager())
+    {
+        MessageManager::callAsync ([this, self = weakThis, newProgress, notification]
+        {
+            if (self != nullptr)
+                setProgress (newProgress, notification);
+        });
+
+        return;
+    }
+
     const bool wasIndeterminate = indeterminate.get();
     const double oldProgress = currentProgress.get();
 
@@ -158,10 +169,8 @@ void ProgressBar::paint (Graphics& g)
     }
 }
 
-void ProgressBar::refreshDisplay (double lastFrameTimeSeconds)
+void ProgressBar::refreshDisplay ([[maybe_unused]] double lastFrameTimeSeconds)
 {
-    Component::refreshDisplay (lastFrameTimeSeconds);
-
     // Animate in indeterminate mode
     if (indeterminate.get())
     {
@@ -181,16 +190,8 @@ void ProgressBar::refreshDisplay (double lastFrameTimeSeconds)
 //==============================================================================
 void ProgressBar::updateProgress (double newProgress, NotificationType notification)
 {
-    WeakReference<Component> self = this;
-
-    MessageManager::callAsync ([this, self, notification]
-    {
-        if (self.get() == nullptr)
-            return;
-
-        repaint();
-        sendProgressChanged (notification);
-    });
+    repaint();
+    sendProgressChanged (notification);
 }
 
 void ProgressBar::sendProgressChanged (NotificationType notification)

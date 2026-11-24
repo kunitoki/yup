@@ -107,7 +107,7 @@ public:
 
     //==============================================================================
     void paint (yup::Graphics& g) override;
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
     void resized() override;
     void mouseDown (const yup::MouseEvent& event) override;
     void mouseDrag (const yup::MouseEvent& event) override;
@@ -210,4 +210,5 @@ private:
     bool editingPartials = false;
     bool pendingEdit = false;
     yup::Font captionFont;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&WaveformEditor::refreshDisplay, this) };
 };

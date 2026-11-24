@@ -14,6 +14,7 @@ import time
 class AnimatedComponent(yup.Component):
     def __init__(self):
         yup.Component.__init__(self)
+        self.frameAttachment = yup.FrameAttachment(self, self.refreshDisplay)
         self.setOpaque(True)
         self.startTime = time.perf_counter()
 

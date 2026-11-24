@@ -248,6 +248,7 @@ private:
     uint32 lastPaletteGeneration = 0;
     bool isRestyling = false;
     bool observerDirty = false;
+    FrameAttachment frameAttachment { root, bindFront (&StyleContext::refresh, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StyleContext)
 };

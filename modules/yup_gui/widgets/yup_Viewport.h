@@ -127,7 +127,7 @@ public:
     /** @internal */
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
     /** @internal */
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
     /** @internal */
     bool mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
     /** @internal */
@@ -153,6 +153,7 @@ private:
     float scrollStep = 40.0f;
     bool showVerticalScrollBar = true;
     bool showHorizontalScrollBar = true;
+    FrameAttachment frameAttachment { *this, bindFront (&Viewport::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Viewport)
 };

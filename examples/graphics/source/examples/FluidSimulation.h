@@ -243,7 +243,7 @@ public:
     }
 
     //==============================================================================
-    void refreshDisplay (double /*lastFrameTimeSeconds*/) override
+    void refreshDisplay (double /*lastFrameTimeSeconds*/)
     {
         if (gpuReady || compiling)
             repaint();
@@ -1064,6 +1064,7 @@ private:
     std::unique_ptr<yup::Slider> vorticitySlider;
     std::unique_ptr<yup::Label> radiusLabel;
     std::unique_ptr<yup::Slider> radiusSlider;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&FluidSimulationDemo::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FluidSimulationDemo)
 };

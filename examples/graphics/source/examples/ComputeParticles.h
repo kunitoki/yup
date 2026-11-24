@@ -126,7 +126,7 @@ public:
         }
     }
 
-    void refreshDisplay (double /*lastFrameTimeSeconds*/) override
+    void refreshDisplay (double /*lastFrameTimeSeconds*/)
     {
         if (gpuReady)
             repaint();
@@ -489,6 +489,7 @@ private:
     std::unique_ptr<yup::Slider> gravitySlider;
     std::unique_ptr<yup::Label> gravityLabel;
     std::unique_ptr<yup::Label> statusLabel;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&ComputeParticlesDemo::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComputeParticlesDemo)
 };

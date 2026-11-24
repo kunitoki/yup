@@ -115,9 +115,10 @@ struct Waves : PaintSource
     float phase = 0.0f;
 };
 
-void refreshDisplay (double dt) override
+// Called every frame, through a FrameAttachment
+void advance (double elapsedSeconds)
 {
-    waves.phase += (float) dt;
+    waves.phase += (float) elapsedSeconds;
     waves.markDirty();
     repaint();
 }
@@ -131,7 +132,7 @@ void paint (Graphics& g) override
 
 - **Timing is up to you.** The content is drawn again only after `markDirty()`,
   and at most once per frame however many shapes use it. Call `markDirty()`
-  between frames (in `refreshDisplay`, a timer or an event), not inside `paint`.
+  between frames (in a `FrameAttachment` function, a timer or an event), not inside `paint`.
 - **Resolution is automatic.** It follows the on-screen size when the paint is
   set: it grows at once and shrinks only after the source has been drawn smaller
   for a while. Changing the transform after setting the paint only affects

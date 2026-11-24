@@ -176,6 +176,34 @@ ComponentNative::~ComponentNative()
 
 //==============================================================================
 
+void ComponentNative::addFrameListener (FrameListener* listener)
+{
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
+    frameListeners.add (listener);
+    numFrameListeners.store (frameListeners.size(), std::memory_order_release);
+}
+
+void ComponentNative::removeFrameListener (FrameListener* listener)
+{
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
+    frameListeners.remove (listener);
+    numFrameListeners.store (frameListeners.size(), std::memory_order_release);
+}
+
+bool ComponentNative::hasFrameListeners() const noexcept
+{
+    return numFrameListeners.load (std::memory_order_acquire) > 0;
+}
+
+void ComponentNative::callFrameListeners (double elapsedSeconds)
+{
+    frameListeners.call (&FrameListener::frameStarted, elapsedSeconds);
+}
+
+//==============================================================================
+
 Component& ComponentNative::getComponent()
 {
     return component;

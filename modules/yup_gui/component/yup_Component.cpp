@@ -274,6 +274,9 @@ Component::~Component()
 
     componentListeners.call (&ComponentListener::componentBeingDeleted, *this);
 
+    while (! frameAttachments.isEmpty())
+        frameAttachments.getLast()->detach();
+
     if (parentComponent != nullptr)
     {
         if (flags.isHovered)
@@ -1687,8 +1690,6 @@ void Component::paint (Graphics& g)
 
 void Component::paintOverChildren ([[maybe_unused]] Graphics& g) {}
 
-void Component::refreshDisplay ([[maybe_unused]] double lastFrameTimeSeconds) {}
-
 //==============================================================================
 
 void Component::setWantsMouseEvents (bool allowSelfMouseEvents, bool allowChildrenMouseEvents)
@@ -2751,17 +2752,6 @@ bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
     return false;
 }
 
-void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
-{
-    if (styleContext != nullptr)
-        styleContext->refresh (lastFrameTimeSeconds);
-
-    refreshDisplay (lastFrameTimeSeconds);
-
-    for (auto child : children)
-        child->internalRefreshDisplay (lastFrameTimeSeconds);
-}
-
 //==============================================================================
 
 void Component::internalRepaint()
@@ -3628,8 +3618,16 @@ void Component::internalUserTriedToCloseWindow()
 
 //==============================================================================
 
+void Component::updateFrameAttachments()
+{
+    for (auto* attachment : frameAttachments)
+        attachment->updateNative();
+}
+
 void Component::internalAttachedToNative()
 {
+    updateFrameAttachments();
+
     auto bailOutChecker = BailOutChecker (this);
 
     attachedToNative();
@@ -3648,6 +3646,8 @@ void Component::internalAttachedToNative()
 
 void Component::internalDetachedFromNative()
 {
+    updateFrameAttachments();
+
     auto bailOutChecker = BailOutChecker (this);
 
     detachedFromNative();

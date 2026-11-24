@@ -249,6 +249,12 @@ if (yup::AudioProcessor::getWrapperType() == yup::AudioPluginWrapperType::standa
     enableStandaloneOnlyFeatures();
 ```
 
+Each format is built by its own target, `${target_name}_<format>_plugin` (for example
+`my_plugin_vst3_plugin`), while the plugin it builds is named after `PLUGIN_NAME`: `MyPlugin.vst3`,
+`MyPlugin.clap`, `MyPlugin.component`. The formats share that name, so each one is built in a
+directory of its own: `CLAP`, `AU`, `AUv3`, `AAX` and `LV2` in the binary directory of the plugin,
+`VST3` in the one of the whole build.
+
 ## Building for Different Platforms
 
 ### macOS
@@ -274,6 +280,7 @@ cmake --build build --config Release
 `PLUGIN_CREATE_STANDALONE ON` builds the plugin as an application. The target is
 `<TARGET_NAME>_standalone_plugin`, while the application itself is named after
 `PLUGIN_NAME` (for example `Retrace.app`, shown as Retrace in the macOS menu bar).
+Its icon is the one given with `PLUGIN_ICON_BIG`, the YUP one without it.
 The window shows a slim toolbar above the editor:
 
 - **Settings** opens the audio and MIDI device settings inside the window. Close
@@ -287,6 +294,16 @@ saved when the settings close and when the application quits, then restored on
 the next launch, together with the window position and size (ignored when the
 window would no longer be on any screen). On desktop they live in
 `<user application data>/<PLUGIN_VENDOR>/<PLUGIN_NAME>/standalone.xml`.
+
+macOS and iOS ask the user before the standalone records from an audio input.
+`PLUGIN_MICROPHONE_USAGE` sets the reason shown in that request:
+
+```cmake
+yup_audio_plugin (
+    # ...
+    PLUGIN_CREATE_STANDALONE ON
+    PLUGIN_MICROPHONE_USAGE "MyPlugin processes the sound of your audio inputs.")
+```
 
 When the editor's `shouldPreserveAspectRatio()` returns true, the window keeps
 its proportions while resized. Fullscreen, maximized and full browser windows

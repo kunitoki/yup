@@ -199,6 +199,8 @@ public:
     {
         jassert (swapchain != nil);
 
+        presentPending = false;
+
         swapchain.contentsScale = dpiScale;
         swapchain.drawableSize = CGSizeMake (width, height);
 
@@ -216,6 +218,8 @@ public:
         descriptor.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
         currentTexture = [gpu newTextureWithDescriptor:descriptor];
     }
+
+    bool isSurfaceAvailable() const noexcept override { return ! presentPending; }
 
     //==============================================================================
 
@@ -247,6 +251,22 @@ public:
         // Render texture in view drawable
         jassert (currentFrameSurface == nil);
         currentFrameSurface = [swapchain nextDrawable];
+
+        // The layer hands out no drawable for now: commit what was drawn and let the frame be retried
+        if (currentFrameSurface == nil)
+        {
+            if (! std::exchange (drawableMissing, true))
+                Logger::outputDebugString ("Metal: no drawable to present to, frames are retried until there is one");
+
+            presentPending = true;
+
+            [presentCommandBuffer commit];
+            renderTarget->setTargetTexture (nil);
+            return;
+        }
+
+        drawableMissing = false;
+
         jassert (currentFrameSurface.texture.width == renderTarget->width());
         jassert (currentFrameSurface.texture.height == renderTarget->height());
 
@@ -303,6 +323,8 @@ private:
     CAMetalLayer* swapchain = nil;
     rive::rcp<rive::gpu::RenderTargetMetal> renderTarget;
     id<CAMetalDrawable> currentFrameSurface = nil;
+    bool presentPending = false;
+    bool drawableMissing = false;
     id<MTLRenderPipelineState> pipelineState = nil;
     id<MTLTexture> currentTexture = nil;
     id<MTLBuffer> quadVertexBuffer = nil;

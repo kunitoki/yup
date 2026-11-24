@@ -237,6 +237,27 @@ def test_component_keeps_the_listener_alive():
     assert log == ["resized"]
 
 
+class ParentHoldingChild(yup.Component):
+    def __init__(self, log):
+        yup.Component.__init__(self)
+        self.log = log
+        self.child = yup.Component()
+        self.addAndMakeVisible(self.child)
+
+    def childrenChanged(self):
+        self.log.append("childrenChanged")
+
+
+def test_deleting_parent_holding_child_attribute_does_not_call_back_into_it():
+    log = []
+    parent = ParentHoldingChild(log)
+    log.clear()
+
+    # Clearing the parent's attributes deletes the child, whose destructor detaches it from the
+    # parent being deallocated: calling the Python override then would deallocate it twice
+    assert log == []
+
+
 # ==============================================================================
 # ComponentPaintMetrics
 # ==============================================================================

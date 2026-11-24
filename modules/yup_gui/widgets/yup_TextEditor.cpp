@@ -646,6 +646,16 @@ Font TextEditor::getEffectiveFont() const
     return font.value_or (defaultFont).withHeight (fontSize.value_or (defaultFont.getHeight()));
 }
 
+float TextEditor::getLineHeight() const
+{
+    if (const auto lineHeight = styledText.getCaretBounds (0).getHeight(); lineHeight > 0.0f)
+        return lineHeight;
+
+    // Text that lays out no line takes the height of a line of the font.
+    const auto currentFont = getEffectiveFont();
+    return (currentFont.getDescent() - currentFont.getAscent()) * currentFont.getHeight();
+}
+
 void TextEditor::updateStyledTextIfNeeded()
 {
     if (! needsUpdate)
@@ -770,10 +780,7 @@ Rectangle<float> TextEditor::getCaretBounds() const
 
     // Empty text lays out no line, so the caret takes the height of a line of the font.
     if (text.isEmpty())
-    {
-        const auto currentFont = getEffectiveFont();
-        caretBounds = { 0.0f, 0.0f, 1.0f, (currentFont.getDescent() - currentFont.getAscent()) * currentFont.getHeight() };
-    }
+        caretBounds = { 0.0f, 0.0f, 1.0f, getLineHeight() };
 
     // Adjust bounds to be relative to the text editor's bounds with scroll offset applied
     return caretBounds.translated (textBounds.getTopLeft() - scrollOffset);
@@ -1027,7 +1034,13 @@ void TextEditor::updateTextInputRectIfActive()
 
 Rectangle<float> TextEditor::getTextBounds() const
 {
-    return getLocalBounds().reduced (4.0f);
+    const auto bounds = getLocalBounds().reduced (4.0f);
+    if (multiLine)
+        return bounds;
+
+    // A single line sits in the vertical middle of the editor, overflowing it evenly when taller.
+    const auto lineHeight = getLineHeight();
+    return bounds.withHeight (lineHeight).translated (0.0f, (bounds.getHeight() - lineHeight) * 0.5f);
 }
 
 //==============================================================================

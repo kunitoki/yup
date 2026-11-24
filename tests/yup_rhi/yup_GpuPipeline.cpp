@@ -138,6 +138,45 @@ TEST (ShaderBindingMapTests, DepthSamplerIsEncodedAsComparisonSampler)
     EXPECT_EQ (filtering->kind, rive::ore::ResourceKind::Sampler);
 }
 
+TEST (ShaderBindingMapTests, UnfilteredTextureTakesTheSampleTypeOfThePairedStage)
+{
+    // The vertex stage only declares the textures the fragment stage samples, compares and fetches
+    ShaderReflection vertex, fragment;
+
+    for (uint32 binding = 0; binding < 3; ++binding)
+    {
+        ShaderReflection::ResourceBinding image;
+        image.binding = binding;
+        image.imageUnfiltered = true;
+        vertex.separateImages.push_back (image);
+
+        image.imageIsDepth = binding == 1;
+        image.imageUnfiltered = binding == 2;
+        fragment.separateImages.push_back (image);
+    }
+
+    using SampleType = rive::ore::TextureSampleType;
+
+    const auto sampleTypes = [] (const std::vector<uint8>& blob)
+    {
+        rive::ore::BindingMap map;
+        EXPECT_TRUE (rive::ore::BindingMap::fromBlob (blob.data(), blob.size(), &map));
+
+        std::vector<SampleType> types;
+        for (size_t i = 0; i < map.size(); ++i)
+            types.push_back (map.at (i).textureSampleType);
+
+        return types;
+    };
+
+    const std::vector<SampleType> agreed { SampleType::Float, SampleType::Depth, SampleType::UnfilterableFloat };
+    EXPECT_EQ (sampleTypes (makeShaderBindingMapBlob (vertex, ShaderStage::vertex, &fragment)), agreed);
+    EXPECT_EQ (sampleTypes (makeShaderBindingMapBlob (fragment, ShaderStage::fragment, &vertex)), agreed);
+
+    // On its own, the vertex stage takes every texture it never samples for an unfilterable one
+    EXPECT_EQ (sampleTypes (makeShaderBindingMapBlob (vertex, ShaderStage::vertex)), std::vector<SampleType> (3, SampleType::UnfilterableFloat));
+}
+
 TEST (ShaderBindingMapTests, StorageBufferIsEncoded)
 {
     ShaderReflection refl;

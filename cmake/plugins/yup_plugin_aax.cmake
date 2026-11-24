@@ -152,6 +152,7 @@ function (_yup_audio_plugin_create_aax)
     set (target_bundle_id "${YUP_ARG_TARGET_BUNDLE_ID}")
     set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
+    _yup_audio_plugin_get_product_name (plugin_product_name)
 
     _yup_find_aax_sdk()
 
@@ -209,6 +210,7 @@ function (_yup_audio_plugin_create_aax)
         ${aax_plugin_bundle_libraries})
 
     set_target_properties (${target_name}_aax_plugin PROPERTIES
+        OUTPUT_NAME "${plugin_product_name}"
         C_VISIBILITY_PRESET hidden
         CXX_VISIBILITY_PRESET hidden
         OBJC_VISIBILITY_PRESET hidden
@@ -216,6 +218,8 @@ function (_yup_audio_plugin_create_aax)
         VISIBILITY_INLINES_HIDDEN ON
         FOLDER "${target_ide_group}"
         XCODE_GENERATE_SCHEME ON)
+
+    _yup_audio_plugin_set_output_directory (${target_name}_aax_plugin AAX)
 
     _yup_audio_plugin_apply_binary_optimizations (${target_name}_aax_plugin)
 
@@ -228,7 +232,7 @@ function (_yup_audio_plugin_create_aax)
             BUNDLE_EXTENSION "aaxplugin"
             MACOSX_BUNDLE TRUE
             MACOSX_BUNDLE_INFO_PLIST "${aax_plist_output}"
-            MACOSX_BUNDLE_BUNDLE_NAME "${target_name}_aax_plugin"
+            MACOSX_BUNDLE_BUNDLE_NAME "${plugin_product_name}"
             MACOSX_BUNDLE_BUNDLE_VERSION "${target_version}"
             MACOSX_BUNDLE_SHORT_VERSION_STRING "${target_version}"
             MACOSX_BUNDLE_GUI_IDENTIFIER "${target_bundle_id}.aax"
@@ -241,12 +245,11 @@ function (_yup_audio_plugin_create_aax)
     else()
         # Windows AAX plugins are directory bundles laid out as
         # Name.aaxplugin/Contents/x64/Name.aaxplugin
-        set (aax_bundle_dir "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_aax_plugin.aaxplugin")
+        set (aax_bundle_dir "${CMAKE_CURRENT_BINARY_DIR}/AAX/${plugin_product_name}.aaxplugin")
 
         set_target_properties (${target_name}_aax_plugin PROPERTIES
             PREFIX ""
             SUFFIX ".aaxplugin"
-            OUTPUT_NAME "${target_name}_aax_plugin"
             RUNTIME_OUTPUT_DIRECTORY "$<1:${aax_bundle_dir}/Contents/x64>"
             LIBRARY_OUTPUT_DIRECTORY "$<1:${aax_bundle_dir}/Contents/x64>")
 
@@ -260,6 +263,6 @@ function (_yup_audio_plugin_create_aax)
     endif()
 
     if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
-        yup_audio_plugin_copy_bundle (${target_name} aax)
+        yup_audio_plugin_copy_bundle (${target_name} aax "${plugin_product_name}")
     endif()
 endfunction()

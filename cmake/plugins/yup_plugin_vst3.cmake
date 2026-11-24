@@ -109,6 +109,7 @@ function (_yup_audio_plugin_create_vst3)
     set (target_bundle_id "${YUP_ARG_TARGET_BUNDLE_ID}")
     set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
+    _yup_audio_plugin_get_product_name (plugin_product_name)
 
     _yup_fetch_vst3sdk()
 
@@ -127,7 +128,15 @@ function (_yup_audio_plugin_create_vst3)
     # Create VST3 plugin target
     _yup_message (STATUS "Creating VST3 plugin target")
 
-    smtg_add_vst3plugin(${target_name}_vst3_plugin)
+    _yup_audio_plugin_get_icon (plugin_icon)
+    if (plugin_icon)
+        cmake_path (REPLACE_EXTENSION plugin_icon LAST_ONLY ".ico" OUTPUT_VARIABLE plugin_folder_icon)
+        if (EXISTS "${plugin_folder_icon}")
+            set (SMTG_PACKAGE_ICON_PATH "${plugin_folder_icon}")
+        endif()
+    endif()
+
+    smtg_add_vst3plugin (${target_name}_vst3_plugin PACKAGE_NAME "${plugin_product_name}")
 
     target_compile_features (${target_name}_vst3_plugin PRIVATE cxx_std_${target_cxx_standard})
 
@@ -200,7 +209,7 @@ function (_yup_audio_plugin_create_vst3)
 
         set_target_properties (${target_name}_vst3_plugin PROPERTIES
             MACOSX_BUNDLE_INFO_PLIST "${vst3_plist_output}"
-            MACOSX_BUNDLE_BUNDLE_NAME "${target_name}_vst3_plugin"
+            MACOSX_BUNDLE_BUNDLE_NAME "${plugin_product_name}"
             MACOSX_BUNDLE_BUNDLE_VERSION "${target_version}"
             MACOSX_BUNDLE_SHORT_VERSION_STRING "${target_version}"
             MACOSX_BUNDLE_GUI_IDENTIFIER "${target_bundle_id}"
@@ -220,6 +229,6 @@ function (_yup_audio_plugin_create_vst3)
     yup_validate_pluginval (${target_name}_vst3_plugin "${vst3_pluginval_path}")
 
     if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
-        yup_audio_plugin_copy_bundle (${target_name} vst3)
+        yup_audio_plugin_copy_bundle (${target_name} vst3 "${plugin_product_name}")
     endif()
 endfunction()

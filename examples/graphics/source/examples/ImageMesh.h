@@ -139,7 +139,7 @@ public:
         }
     }
 
-    void refreshDisplay (double lastFrameTimeSeconds) override
+    void refreshDisplay (double lastFrameTimeSeconds)
     {
         const auto elapsed = static_cast<float> (yup::jlimit (0.0, 0.1, lastFrameTimeSeconds));
         time += elapsed;
@@ -405,4 +405,5 @@ private:
     yup::ToggleButton additiveToggle;
     yup::Label alphaLabel;
     yup::Slider alphaSlider { yup::Slider::LinearHorizontal };
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&ImageMeshDemo::refreshDisplay, this) };
 };
