@@ -85,6 +85,8 @@ public:
 
     /** Sets whether this editor should support multiple lines.
 
+        A single line sits in the vertical middle of the editor, multiple lines start from its top.
+
         @param shouldBeMultiLine    True to enable multiline editing
     */
     void setMultiLine (bool shouldBeMultiLine);
@@ -281,7 +283,9 @@ public:
     void resetFontSize();
 
     //==============================================================================
-    /** Returns the bounds of the text. */
+    /** Returns the area the text is laid out in: the editor inside its padding when multi-line,
+        a strip one line high in its vertical middle when single line.
+    */
     Rectangle<float> getTextBounds() const;
 
     /** Returns the bounds of the caret. */
@@ -348,6 +352,7 @@ private:
     //==============================================================================
     void updateStyledTextIfNeeded();
     Font getEffectiveFont() const;
+    float getLineHeight() const;
     void updateCaretPosition();
     void sendTextChanged (NotificationType notification);
     void ensureCaretVisible();
