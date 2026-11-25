@@ -70,9 +70,10 @@ const ComponentTypeInfo& TabComponent::getClassTypeInfo()
                                  .property (
                                      TabComponentIds::selectedTab,
                                      [] (const TabComponent& c) { return c.getTabBar().getSelectedTabId().toString(); },
-                                     [] (TabComponent& c, const String& v) { c.getTabBar().setSelectedTab (Identifier (v)); },
+                                     // No id is the first tab, the one selected as the pages are added
+                                     [] (TabComponent& c, const String& v) { c.getTabBar().setSelectedTab (v.isNotEmpty() ? Identifier (v) : c.getTabBar().getTabId (0)); },
                                      {},
-                                     "The id of the selected tab.")
+                                     "The id of the selected tab, the first one when empty.")
                                  .signal (ComponentSignal {
                                      .name = Identifier ("onTabChanged"),
                                      .connect = [] (Component& component, ComponentSignal::Handler handler)

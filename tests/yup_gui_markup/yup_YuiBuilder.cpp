@@ -408,7 +408,7 @@ TEST_F (YuiBuilderTests, RebuildingResetsWhatTheDocumentNoLongerWrites)
 {
     auto document = parse (R"yui(
         Component {
-            Label { id: caption; class: "big"; text: "a"; flexGrow: 2; }
+            Label { id: caption; class: "big"; text: "a"; flexGrow: 2; visible: false; }
             TextButton { id: button; onClick: action ("press"); }
         }
     )yui");
@@ -426,11 +426,51 @@ TEST_F (YuiBuilderTests, RebuildingResetsWhatTheDocumentNoLongerWrites)
     EXPECT_EQ (caption->getText(), String());
     EXPECT_FALSE (caption->hasProperty ("flexGrow"));
     EXPECT_TRUE (caption->getStyleClasses().isEmpty());
+    EXPECT_TRUE (caption->isVisible());
 
     auto* button = builder.findById<TextButton> ("button");
     ASSERT_NE (button, nullptr);
     button->onClick();
     EXPECT_EQ (presses, 0);
+}
+
+TEST_F (YuiBuilderTests, RebuildingResetsWhatAComponentIsGivenByWhereItIs)
+{
+    auto document = parse (R"yui(
+        Component {
+            width: 406; height: 100;
+            ResizableDivider { id: split; position: 120; }
+            TabComponent { id: tabs; selectedTab: "second"; Column { id: first; } Column { id: second; } }
+            Row { width: 120; height: 40; Label { id: item; flexGrow: 1; flexBasis: 0; width: 10; } }
+        }
+    )yui");
+
+    YuiBuilder builder;
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    auto* split = builder.findById<ResizableDivider> ("split");
+    auto* tabs = builder.findById<TabComponent> ("tabs");
+    auto* item = builder.findById ("item");
+    ASSERT_NE (split, nullptr);
+    ASSERT_NE (tabs, nullptr);
+    ASSERT_NE (item, nullptr);
+    EXPECT_FLOAT_EQ (split->getPosition(), 120.0f);
+    EXPECT_EQ (tabs->getTabBar().getSelectedTabId().toString(), "second");
+
+    YuiTreeDiff::apply (document, parse (R"yui(
+        Component {
+            width: 406; height: 100;
+            ResizableDivider { id: split; }
+            TabComponent { id: tabs; Column { id: first; } Column { id: second; } }
+            Row { width: 120; height: 40; Label { id: item; flexGrow: 1; flexBasis: 0; } }
+        }
+    )yui"));
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    // A new instance, in no parent, tells none of them: the middle of the extent, the first page, the bounds of the row
+    EXPECT_FLOAT_EQ (split->getPosition(), 200.0f);
+    EXPECT_EQ (tabs->getTabBar().getSelectedTabId().toString(), "first");
+    EXPECT_EQ (item->getBounds(), Rectangle<float> (0.0f, 0.0f, 120.0f, 40.0f));
 }
 
 TEST_F (YuiBuilderTests, KeepsWhatWasBuiltWhenTheNewDocumentCantBeBuilt)

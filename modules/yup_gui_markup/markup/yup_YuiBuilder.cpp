@@ -1326,9 +1326,16 @@ void YuiBuilder::resetValue (Component& component, const ComponentTypeInfo& type
         return;
     }
 
-    // A state-backed value goes back to the one a new component has
+    // A state-backed value goes back to the one a new component has. It is shown when placed, a new instance is still hidden
+    static const Identifier visible ("visible");
+
     if (! descriptor->isReadOnly())
-        component.setProperty (name, type.createInstance()->getProperty (name));
+        component.setProperty (name, name == visible ? var (true) : type.createInstance()->getProperty (name));
+
+    // Nor has a new instance the bounds a layout container gives its items: the container gives them again
+    // shortcut: a TabComponent shows and places its pages itself and is not asked, upgrade if documents set those
+    if (auto* parent = component.getParentComponent())
+        parent->childLayoutChanged (component);
 }
 
 void YuiBuilder::applyPending (const Pending& entry)

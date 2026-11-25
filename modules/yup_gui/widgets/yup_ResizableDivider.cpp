@@ -63,7 +63,24 @@ const ComponentTypeInfo& ResizableDivider::getClassTypeInfo()
                                  .property (ResizableDividerIds::thickness, &ResizableDivider::getThickness, &ResizableDivider::setThickness, 6.0f, "The thickness of the interactive bar, in points.")
                                  .property (ResizableDividerIds::lineThickness, &ResizableDivider::getLineThickness, &ResizableDivider::setLineThickness, 1.0f, "The thickness of the idle line, in points.")
                                  .property (ResizableDividerIds::activeLineThickness, &ResizableDivider::getActiveLineThickness, &ResizableDivider::setActiveLineThickness, 3.0f, "The thickness of the hovered, focused or dragged line, in points.")
-                                 .property (ResizableDividerIds::position, &ResizableDivider::getPosition, [] (ResizableDivider& d, float v) { d.setPosition (v); }, var(), "The position of the divider in the parent, in points.")
+                                 .addProperty (ComponentProperty {
+                                     .name = ResizableDividerIds::position,
+                                     .type = ComponentProperty::Type::number,
+                                     .getter = [] (const Component& c)
+                                     {
+                                         // A divider that is nowhere, as a new one, has no position in points to tell
+                                         const auto& divider = static_cast<const ResizableDivider&> (c);
+                                         const auto hasExtent = divider.availableExtent.has_value() || divider.getParentComponent() != nullptr;
+
+                                         return hasExtent ? var (static_cast<double> (divider.getPosition())) : var();
+                                     },
+                                     .setter = [] (Component& c, const var& v)
+                                     {
+                                         // No position puts the divider back where a new one is, in the middle
+                                         static_cast<ResizableDivider&> (c).setPosition (v.isVoid() ? Length::percent (50.0f) : Length::pixels (static_cast<float> (static_cast<double> (v))));
+                                     },
+                                     .isStyleable = false,
+                                     .description = "The position of the divider in the parent, in points." })
                                  .property (ResizableDividerIds::normalized, &ResizableDivider::getNormalizedPosition, [] (ResizableDivider& d, float v) { d.setNormalizedPosition (v); }, 0.5f, "The position as a ratio of the usable extent.")
                                  .state (ResizableDividerIds::dragging, &ResizableDivider::isDragging)
                                  .state (ResizableDividerIds::collapsed, &ResizableDivider::isCollapsed)
