@@ -45,67 +45,12 @@ else()
     endif()
 endif()
 
-# ==== Embed the graphics shaders
-yup_add_shader_bundle (${target_name}_shaders
-    VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
-    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/synth_waveform.frag"
-    NAMESPACE retrace
-    OUTPUT_NAME SynthWaveformShaderBundle
-    RESOURCE_NAME synthWaveformShader)
-
-yup_add_shader_bundle (${target_name}_glow_prefilter_shaders
-    VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
-    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/retrace_glow_prefilter.frag"
-    NAMESPACE retrace
-    OUTPUT_NAME SynthGlowPrefilterShaderBundle
-    RESOURCE_NAME synthGlowPrefilterShader)
-
-yup_add_shader_bundle (${target_name}_blur_shaders
-    VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
-    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/retrace_blur.frag"
-    NAMESPACE retrace
-    OUTPUT_NAME SynthBlurShaderBundle
-    RESOURCE_NAME synthBlurShader)
-
-yup_add_shader_bundle (${target_name}_neon_composite_shaders
-    VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
-    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/retrace_neon_composite.frag"
-    NAMESPACE retrace
-    OUTPUT_NAME SynthNeonCompositeShaderBundle
-    RESOURCE_NAME synthNeonCompositeShader)
-
-# ==== Pack the factory presets into a bank, a zip archive embedded in the plugin (retrace::factoryBank_data / _size)
-set (factory_presets_dir "${CMAKE_CURRENT_LIST_DIR}/data/presets")
-set (factory_bank "${CMAKE_CURRENT_BINARY_DIR}/Factory.rebank")
-
-file (GLOB_RECURSE factory_presets RELATIVE "${factory_presets_dir}" CONFIGURE_DEPENDS "${factory_presets_dir}/*.retrace")
-list (SORT factory_presets)
-list (TRANSFORM factory_presets PREPEND "${factory_presets_dir}/" OUTPUT_VARIABLE factory_preset_files)
-set_property (DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${factory_preset_files})
-
-# A fixed time stamp keeps the archive, and so the embedded bytes, the same until a preset changes
-execute_process (
-    COMMAND ${CMAKE_COMMAND} -E tar cf "${factory_bank}" --format=zip --mtime=2026-01-01 -- ${factory_presets}
-    WORKING_DIRECTORY "${factory_presets_dir}"
-    RESULT_VARIABLE factory_bank_result)
-
-if (NOT factory_bank_result EQUAL 0)
-    message (FATAL_ERROR "Cannot pack the factory presets into ${factory_bank}")
-endif()
-
-yup_add_embedded_binary_resources (${target_name}_factory_bank
-    OUT_DIR FactoryBank
-    HEADER FactoryBank.h
-    NAMESPACE retrace
-    RESOURCE_NAMES factoryBank
-    RESOURCES "${factory_bank}")
-
 # ==== Define the audio plugin target and its properties
-set (plugin_name "Retrace")
-set (plugin_description "A spectral frequency modulated synthesiser.")
-set (plugin_id "YpRT")
-set (plugin_manufacturer "yup.audio")
-set (plugin_manufacturer_id "yup!")
+set (plugin_name "YupSynth")
+set (plugin_description "A simple polyphonic instrument.")
+set (plugin_id "YpSy")
+set (plugin_manufacturer "org.yup")
+set (plugin_manufacturer_id "Yup!")
 set (plugin_manufacturer_email "kunitoki@gmail.com")
 set (plugin_website "https://github.com/kunitoki/yup")
 
@@ -118,7 +63,7 @@ yup_audio_plugin (
     TARGET_IDE_GROUP "Examples"
     PLUGIN_ID "${plugin_manufacturer}.${plugin_name}"
     PLUGIN_NAME "${plugin_name}"
-    PLUGIN_VENDOR "${plugin_manufacturer_id}"
+    PLUGIN_VENDOR "${plugin_manufacturer}"
     PLUGIN_EMAIL "${plugin_manufacturer_email}"
     PLUGIN_VERSION "${target_version}"
     PLUGIN_DESCRIPTION "${plugin_description}"
@@ -134,42 +79,16 @@ yup_audio_plugin (
     PLUGIN_CREATE_AAX ${plugin_create_aax}
     PLUGIN_AU_MANUFACTURER "${plugin_manufacturer_id}"
     PLUGIN_AU_SUBTYPE "${plugin_id}"
-    PLUGIN_AAX_MANUFACTURER_ID "YUPA"
+    PLUGIN_AAX_MANUFACTURER_ID "YUPP"
     PLUGIN_AAX_PRODUCT_ID ${plugin_id}
-    PLUGIN_AAX_PLUGIN_ID_NATIVE "YpRN"
-    PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE "YpRA"
+    PLUGIN_AAX_PLUGIN_ID_NATIVE "YpSN"
+    PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE "YpSA"
     PLUGIN_AAX_CATEGORY "AAX_ePlugInCategory_Example"
     PLUGIN_COPY_AFTER_BUILD ON
-    DEFINITIONS
-        YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT=1
     MODULES
         yup::yup_gui
         yup::yup_audio_processors
-        yup::yup_audio_gui
-        yup::yup_ai
-        yup::yup_audio_formats
-        dr_libs
-        libpng
-        pffft_library
-        ${target_name}_shaders
-        ${target_name}_glow_prefilter_shaders
-        ${target_name}_blur_shaders
-        ${target_name}_neon_composite_shaders
-        ${target_name}_factory_bank)
-
-# ==== Enable link time optimization for release builds of the shared core and every plugin format
-include (CheckIPOSupported)
-check_ipo_supported (RESULT ipo_supported OUTPUT ipo_output)
-if (ipo_supported)
-    foreach (plugin_format clap vst3 standalone au auv3 aax lv2)
-        if (TARGET ${target_name}_${plugin_format}_plugin)
-            set_target_properties (${target_name}_${plugin_format}_plugin PROPERTIES
-                INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
-        endif()
-    endforeach()
-else()
-    message (STATUS "LTO not supported for ${target_name}: ${ipo_output}")
-endif()
+        yup::yup_audio_gui)
 
 # ==== Prepare sources
 file (GLOB_RECURSE sources
@@ -179,11 +98,3 @@ source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 
 # The plugin sources are compiled once into the shared plugin core
 target_sources (${target_name}_shared PRIVATE ${sources})
-
-# The shader bundles and the factory bank are OBJECT libraries, whose objects only reach targets linking them directly
-target_sources (${target_name}_shared INTERFACE
-    $<TARGET_OBJECTS:${target_name}_shaders>
-    $<TARGET_OBJECTS:${target_name}_glow_prefilter_shaders>
-    $<TARGET_OBJECTS:${target_name}_blur_shaders>
-    $<TARGET_OBJECTS:${target_name}_neon_composite_shaders>
-    $<TARGET_OBJECTS:${target_name}_factory_bank>)
