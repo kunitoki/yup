@@ -165,6 +165,18 @@ void YdspOptimizer::loopInvariantCodeMotion (YdspIrFunction& fn)
             };
             for (const auto& inst : fn.blocks[b].insts)
             {
+                if (inst.op == YdspIrOp::phi)
+                {
+                    for (const auto& incoming : inst.phiIncoming)
+                        if (incoming.second >= 0)
+                            local[static_cast<size_t> (incoming.second)] = false;
+
+                    if (inst.result >= 0)
+                        local[static_cast<size_t> (inst.result)] = false;
+
+                    continue;
+                }
+
                 if (isValueIdOperand (inst.op, 0))
                     read (inst.a);
                 if (isValueIdOperand (inst.op, 1))
@@ -235,16 +247,98 @@ void YdspOptimizer::loopInvariantCodeMotion (YdspIrFunction& fn)
             if (inst.result >= 0)
                 ++definitionCount[inst.result];
 
+    const auto valueTypes = resolveValueTypes (fn);
     const auto dominators = computeDominators (fn);
+
+    struct ArrayRegionKey
+    {
+        bool isFloat = false;
+        bool is64Bit = false;
+        int memIndex = -1;
+
+        bool operator== (const ArrayRegionKey& other) const noexcept = default;
+    };
+
+    struct ArrayRegionKeyHash
+    {
+        size_t operator() (const ArrayRegionKey& key) const noexcept
+        {
+            return (static_cast<size_t> (key.memIndex) << 2)
+                 ^ (static_cast<size_t> (key.isFloat) << 1)
+                 ^ static_cast<size_t> (key.is64Bit);
+        }
+    };
 
     for (const auto& loop : fn.loops)
     {
+        if (loop.unrolled)
+            continue;
+
         const int loopStart = loop.headerBlock;
         const int loopEnd = loop.exitBlock;
 
         const int preheader = loopStart - 1;
         if (preheader < 0 || loopEnd > static_cast<int> (fn.blocks.size()))
             continue;
+
+        std::unordered_set<ArrayRegionKey, ArrayRegionKeyHash> writtenArrayRegions;
+
+        for (int b = loopStart; b < loopEnd; ++b)
+        {
+            for (const auto& inst : fn.blocks[static_cast<size_t> (b)].insts)
+            {
+                if (inst.op != YdspIrOp::storeStateArrayF && inst.op != YdspIrOp::storeStateArrayI)
+                    continue;
+
+                const bool isFloat = inst.op == YdspIrOp::storeStateArrayF;
+
+                if (inst.b >= 0 && static_cast<size_t> (inst.b) < valueTypes.size())
+                {
+                    const bool is64 = is64BitValueType (valueTypes[static_cast<size_t> (inst.b)]);
+                    writtenArrayRegions.insert ({ isFloat, is64, inst.memIndex });
+                }
+                else
+                {
+                    writtenArrayRegions.insert ({ isFloat, false, inst.memIndex });
+                    writtenArrayRegions.insert ({ isFloat, true, inst.memIndex });
+                }
+            }
+        }
+
+        const auto isArrayRegionWrittenInLoop = [&] (const YdspIrInst& load)
+        {
+            if (load.memIndex < 0)
+                return true;
+
+            const bool isFloat = load.op == YdspIrOp::loadStateArrayF;
+            const auto loadType = static_cast<size_t> (load.result) < valueTypes.size()
+                                    ? valueTypes[static_cast<size_t> (load.result)]
+                                    : inferTypeFromOp (load.op);
+            const bool is64 = is64BitValueType (loadType);
+
+            if (writtenArrayRegions.count ({ isFloat, is64, load.memIndex }) != 0)
+                return true;
+
+            for (const auto& array : fn.stateArrays)
+            {
+                if (isFloatValueType (array.type) == isFloat
+                    && is64BitValueType (array.type) == is64
+                    && load.memIndex >= array.base
+                    && load.memIndex < array.base + array.length)
+                {
+                    for (const auto& written : writtenArrayRegions)
+                    {
+                        if (written.isFloat == isFloat
+                            && written.is64Bit == is64
+                            && written.memIndex >= array.base
+                            && written.memIndex < array.base + array.length)
+                            return true;
+                    }
+                }
+            }
+
+            return false;
+        };
 
         const auto& preheaderDominators = dominators[static_cast<size_t> (preheader)];
         std::vector<int> latches;
@@ -313,11 +407,13 @@ void YdspOptimizer::loopInvariantCodeMotion (YdspIrFunction& fn)
 
             for (int block = loopStart; block < loopEnd; ++block)
             {
+                const bool dominatesAllLatches = ! latches.empty()
+                    && std::all_of (latches.begin(), latches.end(), [&] (int latch)
+                       { return dominators[static_cast<size_t> (latch)][static_cast<size_t> (block)]; });
+
                 // A guarded expression must not execute on an unselected path.
                 // Only hoist blocks visited on every iteration backedge.
-                if (fn.hasGuardedControlFlow
-                    && (latches.empty() || ! std::all_of (latches.begin(), latches.end(), [&] (int latch)
-                        { return dominators[static_cast<size_t> (latch)][static_cast<size_t> (block)]; })))
+                if (fn.hasGuardedControlFlow && ! dominatesAllLatches)
                     continue;
 
                 auto& insts = fn.blocks[static_cast<size_t> (block)].insts;
@@ -332,12 +428,18 @@ void YdspOptimizer::loopInvariantCodeMotion (YdspIrFunction& fn)
                     if (definitionCount[inst.result] != 1)
                         continue;
 
-                    if (inst.op == YdspIrOp::loadInput
+                    if (inst.op == YdspIrOp::phi
+                        || inst.op == YdspIrOp::loadInput
                         || inst.op == YdspIrOp::loadOutput
                         || inst.op == YdspIrOp::loadParamOut
-                        || inst.op == YdspIrOp::loadStateF || inst.op == YdspIrOp::loadStateI
-                        || inst.op == YdspIrOp::loadStateArrayF || inst.op == YdspIrOp::loadStateArrayI)
+                        || inst.op == YdspIrOp::loadStateF || inst.op == YdspIrOp::loadStateI)
                         continue;
+
+                    if (inst.op == YdspIrOp::loadStateArrayF || inst.op == YdspIrOp::loadStateArrayI)
+                    {
+                        if (! dominatesAllLatches || fn.laneCountOf (inst.result) != 1 || isArrayRegionWrittenInLoop (inst))
+                            continue;
+                    }
 
                     if (inst.op == YdspIrOp::loadParam && storedParamSlots.count (inst.a) != 0)
                         continue;

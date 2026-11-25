@@ -102,6 +102,41 @@ bool isMove (YdspIrOp op) noexcept
     return isMoveOpcode (op);
 }
 
+// Calls without side effects, and reads of what is fixed for the block:
+// evaluating one whose result is then discarded costs time and nothing else.
+bool isPureBlockConstant (YdspIrOp op) noexcept
+{
+    switch (op)
+    {
+        case YdspIrOp::loadSampleRate:
+        case YdspIrOp::loadBlockSize:
+        case YdspIrOp::sinF:
+        case YdspIrOp::cosF:
+        case YdspIrOp::tanF:
+        case YdspIrOp::asinF:
+        case YdspIrOp::acosF:
+        case YdspIrOp::atanF:
+        case YdspIrOp::sinhF:
+        case YdspIrOp::coshF:
+        case YdspIrOp::tanhF:
+        case YdspIrOp::asinhF:
+        case YdspIrOp::acoshF:
+        case YdspIrOp::atanhF:
+        case YdspIrOp::expF:
+        case YdspIrOp::logF:
+        case YdspIrOp::log10F:
+        case YdspIrOp::powF:
+        case YdspIrOp::atan2F:
+        case YdspIrOp::fmodF:
+        case YdspIrOp::roundF:
+        case YdspIrOp::copysignF:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
 bool isSpeculatableStreamInputLoad (const YdspIrFunction& fn, YdspIrOp op, int indexValue, int containingBlock) noexcept
 {
     if (op != YdspIrOp::loadInput || indexValue < 0 || containingBlock < 0)
@@ -135,7 +170,7 @@ bool isSpeculatableStreamInputLoad (const YdspIrFunction& fn, YdspIrOp op, int i
 
 //==============================================================================
 
-bool YdspOptimizer::ifConversion (YdspIrFunction& fn)
+bool YdspOptimizer::ifConversion (YdspIrFunction& fn, bool speculateLoopInvariantArms)
 {
     bool changed = false;
 
@@ -143,6 +178,70 @@ bool YdspOptimizer::ifConversion (YdspIrFunction& fn)
 
     if (fn.blocks.size() < 3)
         return false;
+
+    // Where each value is defined, for the loop-invariant arm test: -1 when it
+    // has no definition and -2 when it has several.
+    std::vector<int> definitionBlock (fn.valueTypes.size(), -1);
+
+    if (speculateLoopInvariantArms)
+        for (size_t b = 0; b < fn.blocks.size(); ++b)
+            for (const auto& inst : fn.blocks[b].insts)
+                if (inst.result >= 0)
+                    definitionBlock[static_cast<size_t> (inst.result)] = definitionBlock[static_cast<size_t> (inst.result)] == -1 ? static_cast<int> (b) : -2;
+
+    // An arm is fixed for the whole run of the loop around it when everything
+    // it computes is pure and reads only values from before that loop (or its
+    // own earlier results). Such an arm can run once ahead of the loop.
+    const auto outermostHeaderAround = [&fn] (int block)
+    {
+        int outermostHeader = -1;
+
+        for (const auto& loop : fn.loops)
+            if (! loop.unrolled && loop.headerBlock <= block && block < loop.exitBlock
+                && (outermostHeader < 0 || loop.headerBlock < outermostHeader))
+                outermostHeader = loop.headerBlock;
+
+        return outermostHeader;
+    };
+
+    const auto isLoopInvariantArm = [&] (int armIndex, size_t numTemporaries)
+    {
+        const int outermostHeader = outermostHeaderAround (armIndex);
+
+        if (outermostHeader < 0)
+            return false;
+
+        const auto& insts = fn.blocks[static_cast<size_t> (armIndex)].insts;
+        std::unordered_set<int> ownResults;
+
+        for (size_t i = 0; i <= numTemporaries && i < insts.size(); ++i)
+        {
+            const auto& inst = insts[i];
+
+            for (int operand = 0; operand < 3; ++operand)
+            {
+                const int value = operand == 0 ? inst.a : (operand == 1 ? inst.b : inst.c);
+
+                if (value < 0 || ! isValueIdOperand (inst.op, operand) || ownResults.count (value) != 0)
+                    continue;
+
+                const auto definedIn = definitionBlock[static_cast<size_t> (value)];
+
+                if (definedIn < 0 || definedIn >= outermostHeader)
+                    return false;
+            }
+
+            if (i < numTemporaries)
+            {
+                if (definitionBlock[static_cast<size_t> (inst.result)] < 0)
+                    return false;
+
+                ownResults.insert (inst.result);
+            }
+        }
+
+        return true;
+    };
 
     // Two-sided: `if (cond) { y = a; } else { y = b; }` lowers to
     //   c:      branchIf cond -> then (c+1), else (c+2)
@@ -159,14 +258,13 @@ bool YdspOptimizer::ifConversion (YdspIrFunction& fn)
 
         const auto& condBlock = fn.blocks[c];
 
-        if (condBlock.preservesConditionalEvaluation
-            || condBlock.term != YdspIrTerm::branchIf
+        if (condBlock.term != YdspIrTerm::branchIf
             || condBlock.termCond < 0
             || condBlock.termTarget != static_cast<int> (thenIndex)
             || condBlock.termTarget2 != static_cast<int> (elseIndex))
             continue;
 
-        const auto armMove = [] (const YdspIrFunction& function, const YdspIrBlock& block, int armIndex, int join)
+        const auto armMove = [speculateLoopInvariantArms] (const YdspIrFunction& function, const YdspIrBlock& block, int armIndex, int join)
         {
             // Returns (resultId, sourceId, pureHoistEnd) or (-1, ...): the
             // final instruction must be a move into the shared value and every
@@ -183,6 +281,7 @@ bool YdspOptimizer::ifConversion (YdspIrFunction& fn)
 
             for (size_t i = 0; i + 1 < block.insts.size(); ++i)
                 if ((! isSpeculatable (block.insts[i].op)
+                     && ! (speculateLoopInvariantArms && isPureBlockConstant (block.insts[i].op) && block.insts[i].result >= 0)
                      && ! isSpeculatableStreamInputLoad (function, block.insts[i].op, block.insts[i].a, armIndex))
                     || isMove (block.insts[i].op))
                     return std::tuple<int, int, size_t> (-1, -1, 0);
@@ -194,6 +293,34 @@ bool YdspOptimizer::ifConversion (YdspIrFunction& fn)
         const auto elseArm = armMove (fn, fn.blocks[elseIndex], static_cast<int> (elseIndex), static_cast<int> (joinIndex));
 
         if (std::get<0> (thenArm) < 0 || std::get<0> (elseArm) < 0 || std::get<0> (thenArm) != std::get<0> (elseArm))
+            continue;
+
+        // A `?:` promises that only the chosen arm is evaluated. Selecting
+        // between two values that already exist evaluates nothing, so that is
+        // the one shape of it a select may replace.
+        const auto onlyNamesAValue = [] (const YdspIrBlock& arm, size_t numTemporaries)
+        {
+            return std::all_of (arm.insts.begin(), arm.insts.begin() + static_cast<std::ptrdiff_t> (numTemporaries), [] (const YdspIrInst& inst)
+            {
+                return isConstantOp (inst.op);
+            });
+        };
+
+        const bool namesValues = onlyNamesAValue (fn.blocks[thenIndex], std::get<2> (thenArm))
+                              && onlyNamesAValue (fn.blocks[elseIndex], std::get<2> (elseArm));
+
+        // The whole choice has to be fixed, condition included: one that the
+        // signal decides keeps evaluating only the arm it picks.
+        const auto conditionDefinedIn = definitionBlock[static_cast<size_t> (condBlock.termCond)];
+
+        const bool invariantChoice = speculateLoopInvariantArms
+                                  && conditionDefinedIn >= 0 && conditionDefinedIn < outermostHeaderAround (static_cast<int> (c))
+                                  && isLoopInvariantArm (static_cast<int> (thenIndex), std::get<2> (thenArm))
+                                  && isLoopInvariantArm (static_cast<int> (elseIndex), std::get<2> (elseArm));
+
+        // This round only looks for the choices the hoist can now lift out.
+        if (speculateLoopInvariantArms ? ! invariantChoice
+                                       : condBlock.preservesConditionalEvaluation && ! namesValues)
             continue;
 
         const auto reachedElsewhere = [&fn, c, thenIndex, elseIndex]
@@ -254,8 +381,12 @@ bool YdspOptimizer::ifConversion (YdspIrFunction& fn)
             block.termCond = -1;
             block.termTarget = -1;
             block.termTarget2 = -1;
+            block.preservesConditionalEvaluation = false;
         }
     }
+
+    if (speculateLoopInvariantArms)
+        return changed;
 
     for (size_t c = 0; c + 2 < fn.blocks.size(); ++c)
     {

@@ -62,14 +62,16 @@ enum class YdspNativeTarget
     The default is the host-selected `automatic` tier, with `fastMath` enabled:
     native targets lower widened transcendentals to SLEEF's `u35` 4-lane set
     and fused multiply-add contraction is allowed (scalar float32 values always
-    stay on the platform libm). The WebAssembly backend never widens
+    stay on the platform libm), as is reordering the additions of a contracted
+    chain and multiplying by the product of two factors that are fixed for the
+    block. The WebAssembly backend never widens
     transcendentals (it does not link sleef_library), but it otherwise honors
     `fastMath`: scalar float32 contraction is fused there too, and a target
     without a fused multiply-add instruction (wasm included) expands the fused
     op through the exact float64 sequence, so it rounds once and stays
     bit-stable with the native default. Set `fastMath` to false for strict
     1-ULP behavior: widened transcendentals then use SLEEF's `u10` tier on
-    native and nothing contracts anywhere.
+    native and nothing contracts or is reordered anywhere.
 */
 struct YdspCompileOptions
 {

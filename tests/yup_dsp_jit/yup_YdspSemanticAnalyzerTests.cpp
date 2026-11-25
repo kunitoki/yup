@@ -28,7 +28,7 @@ using namespace yup;
 namespace
 {
 
-std::unique_ptr<YdspAnalyzedProgram> analyze (StringRef source, YdspDiagnostics& diagnostics)
+std::unique_ptr<YdspAnalyzedProgram> analyze (StringRef source, YdspDiagnostics& diagnostics, bool fuseGraph = true)
 {
     YdspLexer lexer (source, diagnostics);
     auto tokens = lexer.tokenize();
@@ -40,7 +40,7 @@ std::unique_ptr<YdspAnalyzedProgram> analyze (StringRef source, YdspDiagnostics&
         return nullptr;
 
     YdspSemanticAnalyzer analyzer (diagnostics);
-    return analyzer.analyze (std::move (program));
+    return analyzer.analyze (std::move (program), true, fuseGraph);
 }
 
 } // namespace
@@ -3635,7 +3635,7 @@ constexpr const char* fanGainProcessor =
 
 std::unique_ptr<YdspAnalyzedProgram> analyzeFan (StringRef source, YdspDiagnostics& diagnostics)
 {
-    return analyze (String (fanGainProcessor) + source, diagnostics);
+    return analyze (String (fanGainProcessor) + source, diagnostics, false);
 }
 
 } // namespace
@@ -3860,7 +3860,8 @@ TEST (YdspSemanticAnalyzerTests, AcceptsFanOutOnANonFloatStream)
             connection { x -> a.in; x -> b.in; a.out -> y; b.out -> z; }
         }
     )YDSP",
-                             diagnostics);
+                             diagnostics,
+                             false);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
     ASSERT_NE (nullptr, analyzed);
@@ -3881,7 +3882,8 @@ TEST (YdspSemanticAnalyzerTests, AcceptsSummingFanInOnAFloat64Stream)
             connection { x -> a.in; x -> b.in; a.out -> y; b.out -> y; }
         }
     )YDSP",
-                             diagnostics);
+                             diagnostics,
+                             false);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
     ASSERT_NE (nullptr, analyzed);
@@ -3901,7 +3903,7 @@ constexpr const char* splitMergeProcessors =
 
 std::unique_ptr<YdspAnalyzedProgram> analyzeSplitMerge (StringRef source, YdspDiagnostics& diagnostics)
 {
-    return analyze (String (splitMergeProcessors) + source, diagnostics);
+    return analyze (String (splitMergeProcessors) + source, diagnostics, false);
 }
 
 int countEdgesFromGraphInput (const YdspAnalyzedGraph& graph, int index)

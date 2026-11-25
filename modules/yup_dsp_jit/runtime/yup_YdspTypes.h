@@ -111,6 +111,8 @@ struct YdspAutomationEvent
     follow declaration order. Event inputs may be shorter than the declared
     count; missing or null entries carry no events. Automation may be unsorted.
     MIDI timestamps and automation offsets must lie in [0, numSamples).
+    Output spans may be, or overlap, input spans: every node still reads the
+    input the host supplied.
     midiOut must not alias an input MIDI buffer and is appended to, not cleared.
 */
 struct YdspProcessRequest

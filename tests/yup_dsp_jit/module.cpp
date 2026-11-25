@@ -35,6 +35,10 @@
 #include "yup_YdspSmokeTests.cpp"
 #include "yup_YdspSubgraphTests.cpp"
 #include "yup_YdspVectorizerTests.cpp"
+#include "yup_YdspSlpVectorizerTests.cpp"
+#include "yup_YdspLoopDistributionTests.cpp"
+#include "yup_YdspFastMathTests.cpp"
+#include "yup_YdspSchedulerTests.cpp"
 #include "yup_YdspWasmBackendTests.cpp"
 #include "yup_YdspWasmTests.cpp"
 

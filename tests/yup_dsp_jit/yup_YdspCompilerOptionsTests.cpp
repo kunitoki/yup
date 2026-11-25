@@ -131,11 +131,9 @@ TEST (YdspCompilerOptionsTests, ScalarFloat32ExpInlinePathIsUsedUnderFastMathOnA
         graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
     )YDSP";
 
-    // A scalar baseline keeps the per-sample loop scalar, so the float32 exp
-    // lowering is the thing under test. Under fastMath the inline degree-8
-    // Estrin polynomial runs on the hot path (it keeps a rare libm fallback
-    // for |x| > 1, so the kernel still contains a blr); strict mode calls
-    // libm expf every sample and contains no polynomial at all.
+    // Under fastMath on scalar baseline (no FMA), exp() lowers to an inline
+    // float64-expanded polynomial with no libm blr call. Under host targetPolicy
+    // with scalar baseline optimizationTier, hardware fmadd is emitted directly.
     YdspCompileOptions options;
     options.optimizationTier = YdspOptimizationTier::baseline;
     options.targetPolicy = YdspTargetPolicy::baseline;
@@ -160,7 +158,18 @@ TEST (YdspCompilerOptionsTests, ScalarFloat32ExpInlinePathIsUsedUnderFastMathOnA
     const auto fastGraph = std::move (fastResult).getValue();
     ASSERT_TRUE (fastGraph.isValid());
     const auto fastListing = fastGraph.getDiagnostics().toString();
-    EXPECT_TRUE (fastListing.contains ("fmadd")) << "the inline Estrin exp must be present under fastMath";
+    EXPECT_FALSE (fastListing.contains ("blr")) << "inline fastMath exp must eliminate the libm call";
+
+    options.targetPolicy = YdspTargetPolicy::host;
+    YdspCompiler hostScalarCompiler;
+    auto hostScalarResult = hostScalarCompiler.compile (source, options);
+    ASSERT_TRUE (hostScalarResult.wasOk()) << hostScalarCompiler.getDiagnostics().toString();
+
+    const auto hostScalarGraph = std::move (hostScalarResult).getValue();
+    ASSERT_TRUE (hostScalarGraph.isValid());
+    const auto hostScalarListing = hostScalarGraph.getDiagnostics().toString();
+    EXPECT_FALSE (hostScalarListing.contains ("blr"));
+    EXPECT_TRUE (hostScalarListing.contains ("fmadd")) << "the inline fastMath exp polynomial must use fmadd on AArch64";
 #endif
 }
 

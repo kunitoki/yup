@@ -63,9 +63,16 @@ public:
     {
     }
 
-    void setRenderData (const std::vector<float>& data)
+    /** Takes the latest audio block. Returns false when it is the block already
+        shown (silence, or the audio thread has not produced a new one), in
+        which case there is nothing to repaint. */
+    bool setRenderData (const std::vector<float>& data)
     {
+        if (data == renderData)
+            return false;
+
         renderData = data;
+        return true;
     }
 
     void paint (yup::Graphics& g) override
@@ -77,53 +84,72 @@ public:
         if (renderData.empty() || bounds.isEmpty())
             return;
 
+        updatePath (bounds);
+
         auto lineColor = paletteGlowColor();
 
-        const float xSize = static_cast<float> (bounds.getWidth()) / static_cast<float> (renderData.size());
-        const float halfHeight = static_cast<float> (bounds.getHeight()) * 0.5f;
-
-        // Build the main waveform path
-        path.clear();
-        path.reserveSpace (static_cast<int> (renderData.size()));
-        path.moveTo (bounds.getX(), bounds.getY() + (renderData[0] + 1.0f) * halfHeight);
-
-        for (std::size_t i = 1; i < renderData.size(); ++i)
-        {
-            const float s = renderData[i];
-            float sign = (s >= 0) ? 1.0f : -1.0f;
-            const float absVal = powf(fabsf(s), 0.5f);
-            const float sample = sign * absVal;
-            const float y = (sample + 1.0f) * halfHeight;
-            path.lineTo (bounds.getX() + static_cast<float> (i) * xSize, bounds.getY() + y);
-        }
-
-        filledPath = path.createStrokePolygon (2.0f);
-
-        g.setFillColor (lineColor);
-        g.setFeather (4.0f);
-        g.fillPath (filledPath);
-
-        g.setFillColor (lineColor.brighter (0.2f));
-        g.setFeather (2.0f);
-        g.fillPath (filledPath);
-
-        g.setStrokeColor (lineColor.withAlpha (0.8f));
+        g.setStrokeColor (lineColor);
         g.setStrokeWidth (1.0f);
         g.strokePath (path);
 
         g.setStrokeColor (lineColor.brighter (0.3f));
         g.setStrokeWidth (0.5f);
         g.strokePath (path);
-
-        g.setStrokeColor (yup::Colors::white.withAlpha (0.9f));
-        g.setStrokeWidth (0.3f);
-        g.strokePath (path);
     }
 
 private:
+    /** Rebuilds the trace with one column per pixel. Each column spans the
+        lowest and highest sample that fall in it, in the order they occur, so
+        a block of any length keeps its peaks without a point per sample. */
+    void updatePath (const yup::Rectangle<float>& bounds)
+    {
+        const auto numSamples = renderData.size();
+        const auto numColumns = yup::jlimit (std::size_t (1), numSamples, static_cast<std::size_t> (bounds.getWidth()));
+        const auto columnWidth = bounds.getWidth() / static_cast<float> (numColumns);
+        const auto halfHeight = bounds.getHeight() * 0.5f;
+
+        // Square-root companding keeps a quiet signal visible.
+        const auto toY = [&] (float sample)
+        {
+            const auto shaped = std::copysign (std::sqrt (std::abs (sample)), sample);
+            return bounds.getY() + (shaped + 1.0f) * halfHeight;
+        };
+
+        path.clear();
+        path.reserveSpace (static_cast<int> (numColumns * 2));
+
+        for (std::size_t column = 0; column < numColumns; ++column)
+        {
+            const auto first = column * numSamples / numColumns;
+            const auto last = yup::jmax (first + 1, (column + 1) * numSamples / numColumns);
+
+            auto lowest = first, highest = first;
+
+            for (auto i = first + 1; i < last; ++i)
+            {
+                if (renderData[i] < renderData[lowest])
+                    lowest = i;
+
+                if (renderData[i] > renderData[highest])
+                    highest = i;
+            }
+
+            const auto x = bounds.getX() + static_cast<float> (column) * columnWidth;
+            const auto earlier = yup::jmin (lowest, highest);
+            const auto later = yup::jmax (lowest, highest);
+
+            if (column == 0)
+                path.moveTo (x, toY (renderData[earlier]));
+            else
+                path.lineTo (x, toY (renderData[earlier]));
+
+            if (later != earlier)
+                path.lineTo (x, toY (renderData[later]));
+        }
+    }
+
     std::vector<float> renderData;
     yup::Path path;
-    yup::Path filledPath;
 };
 
 //==============================================================================
@@ -524,12 +550,15 @@ public:
 
     void refreshDisplay (double)
     {
+        bool waveformChanged = false;
+
         {
             const yup::AudioLockType::ScopedLockType sl (renderMutex);
-            oscilloscope.setRenderData (renderData);
+            waveformChanged = oscilloscope.setRenderData (renderData);
         }
 
-        oscilloscope.repaint();
+        if (waveformChanged)
+            oscilloscope.repaint();
 
         if (! meters.empty() && ! showingEditorTab)
         {

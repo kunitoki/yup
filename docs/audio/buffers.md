@@ -32,6 +32,12 @@ external memory (see [Referencing external memory](#referencing-external-memory)
 in which case both buffers point at the same data. `operator==` compares the
 channel count and the samples of every channel.
 
+Every channel of a buffer that owns its memory starts on a 64 byte boundary
+(`AudioBuffer<Type>::channelAlignmentBytes`), whatever the sample count, so a
+channel can be handed to aligned SIMD code and never shares a cache line with the
+next one. A buffer that refers to external memory keeps the alignment of that
+memory.
+
 ## Sizing a buffer
 
 `setSize()` changes the channel count and length:

@@ -37,9 +37,14 @@ namespace yup
 class YdspAsmJitCodegenARM64 : public YdspAsmJitCodegenImpl<YdspARM64Traits>
 {
 protected:
+    bool emitZeroFloatConst (const YdspFp& dst, bool is64) override;
+    bool emitZeroVector (const YdspFp& dst) override;
+    bool supportsZeroVector() const noexcept override { return true; }
+
     YdspFp newFp (const char* name) override;
     YdspFp newFp64 (const char* name) override;
     YdspFp newFpVector (const char* name) override;
+    YdspFp newIntVector (const char* name) override;
 
     YdspMem memPtr (const YdspGp& base, int32_t offset) const override;
     YdspMem memPtrIndexed (const YdspGp& base, const YdspGp& index, uint32_t scaleLog2, int32_t offset) const override;
@@ -49,7 +54,9 @@ protected:
     YdspMem emitVectorStreamMem (const YdspGp& base, int indexValue) override;
 
     void prepareStateAddressing (const YdspIrFunction& fn) override;
+    void prepareWrapBounds (const YdspIrFunction& fn) override;
     void beginBlock (int blockIndex) override;
+    void endBlock (int blockIndex) override;
     void onValueRedefined (int value) override;
 
     void loadGpFromMem (const YdspGp& dst, const YdspMem& src) override;
@@ -72,8 +79,22 @@ protected:
     void vectorUnary (YdspIrOp op, const YdspFp& dst, const YdspFp& src) override;
     void vectorFloatCompare (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB) override;
     void vectorSelectFloat (const YdspFp& mask, const YdspFp& dst, const YdspFp& whenTrue, const YdspFp& whenFalse) override;
+    void vectorIntBinary (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB, bool saturating) override;
+    void vectorIntShift (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspGp& shiftAmount) override;
+    void vectorIntUnary (YdspIrOp op, const YdspFp& dst, const YdspFp& src) override;
+    void vectorIntClamp (const YdspFp& dst, const YdspFp& src, const YdspFp& lo, const YdspFp& hi) override;
+    void vectorIntCompare (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB) override;
+    void vectorSelectInt (const YdspFp& mask, const YdspFp& dst, const YdspFp& whenTrue, const YdspFp& whenFalse) override;
+    void vectorIntToFloat (const YdspFp& dst, const YdspFp& src) override;
+    void vectorFloatToInt (const YdspFp& dst, const YdspFp& src, bool bounded) override;
     void emitSplatFloat (const YdspFp& dst, const YdspFp& src) override;
+    void emitSplatInt (const YdspFp& dst, const YdspGp& src) override;
     void emitReduceAddFloat (const YdspFp& dst, const YdspFp& src) override;
+    void emitInsertFloat (const YdspFp& dst, const YdspFp& srcVec, const YdspFp& srcScalar, int lane) override;
+    void emitExtractFloat (const YdspFp& dst, const YdspFp& srcVec, int lane) override;
+    void emitBitcastFloatToInt (const YdspGp& dst, const YdspFp& src) override;
+    void emitBitcastIntToFloat (const YdspFp& dst, const YdspGp& src) override;
+    void emitAddPointerImm (const YdspGp& dst, const YdspGp& src, int32_t imm) override;
 
     void roundFloat (const YdspFp& reg, int mode) override;
     void intBinary (YdspIrOp op, const YdspGp& dst, const YdspGp& srcA, const YdspGp& srcB) override;
@@ -108,8 +129,16 @@ protected:
     void branchOnFlags (YdspCond cond, bool branchWhenTrue, const asmjit::Label& target) override;
 
 private:
-    std::unordered_map<int, YdspGp> stateArrayBaseRegs;
+    int estimateLiveGpRegs (const YdspIrFunction& fn, int scope) const;
+
+    // Keyed by scope and region base: the scope is the outermost loop the
+    // accessing block sits in (an index into the function's loops), or -1.
+    std::map<std::pair<int, int>, YdspGp> stateArrayBaseRegs;
+    std::map<int, std::vector<std::pair<int, YdspGp>>> loopArrayBases; // by preheader block
     std::unordered_map<int, YdspGp> vectorIndexRegs;
+    std::unordered_map<int32_t, YdspGp> wrapLastRegs;
+    int lastUnhoistedArrayBase = -1;
+    YdspGp lastUnhoistedArrayBaseReg;
 };
 
 } // namespace yup

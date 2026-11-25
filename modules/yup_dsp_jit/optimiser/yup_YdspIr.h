@@ -79,6 +79,12 @@ enum class YdspIrOp
     loadOutput,  // float outputs[memIndex][a]   (reading an output stream)
     storeOutput, // float outputs[memIndex][a] = b
 
+    // The address of a stream's first element, as an int64. Only the
+    // vectoriser emits these, to test at run time whether the host handed a
+    // widened loop buffers that overlap.
+    loadInputAddress,  // int64 (address of inputs[memIndex])
+    loadOutputAddress, // int64 (address of outputs[memIndex])
+
     // Float arithmetic
     addF,
     subF,
@@ -200,11 +206,20 @@ enum class YdspIrOp
     movI,
     movB,
 
+    // SSA join node (populated during SSA optimisation passes and lowered out
+    // by destructSsa before vectorisation / unrolling / backend codegen).
+    phi,
+
     // Lane movement (the only opcodes whose operand and result lane counts
     // differ - every other opcode is reused as-is at `lanes > 1`, so `addF` on
     // a 4-lane value *is* a packed add).
     vsplat,      // every lane of the result = the scalar a
+    vrampF,      // lane k of the result = the scalar a + k (a widened `float (i)`)
     vreduceAddF, // scalar result = sum of a's lanes (reassociates - see the vectoriser)
+    vinsertF,    // vector result = vector a (or zero if < 0) with lane memIndex set to scalar b
+    vextractF,   // scalar result = lane memIndex of vector a
+    bitcastFtoI, // bitwise float32 -> int32 reinterpretation (scalar or packed)
+    bitcastItoF, // bitwise int32 -> float32 reinterpretation (scalar or packed)
     ltUI,       // unsigned integer comparison; bounds checks reject negative indices
 };
 
@@ -271,7 +286,11 @@ inline YdspValueType inferTypeFromOp (YdspIrOp op) noexcept
         case YdspIrOp::extF:
         case YdspIrOp::truncF:
         case YdspIrOp::vsplat:
+        case YdspIrOp::vrampF:
         case YdspIrOp::vreduceAddF:
+        case YdspIrOp::vinsertF:
+        case YdspIrOp::vextractF:
+        case YdspIrOp::bitcastItoF:
             return YdspValueType::float32Type;
 
         case YdspIrOp::constI:
@@ -298,6 +317,7 @@ inline YdspValueType inferTypeFromOp (YdspIrOp op) noexcept
         case YdspIrOp::shlI:
         case YdspIrOp::shrI:
         case YdspIrOp::ftoi:
+        case YdspIrOp::bitcastFtoI:
         case YdspIrOp::extI:
         case YdspIrOp::truncI:
         case YdspIrOp::movI:
@@ -360,6 +380,11 @@ struct YdspIrInst
     bool bvalue = false; // constB payload
     bool boundedFloatToInt = false; // ftoi operand is finite and representable
     bool saturatingIntegerArithmetic = false; // source add/sub/mul; internal address arithmetic wraps
+    bool overflowFreeIntegerArithmetic = false; // source add/sub/mul proven to stay in range, so left to wrap
+    bool keepsSeparateRounding = false; // add/sub never fused with its multiply: the scalar twin of a lane that rounds twice
+
+    // Incoming (predecessor block, value id) pairs for YdspIrOp::phi.
+    std::vector<std::pair<int, int>> phiIncoming;
 };
 
 //==============================================================================
@@ -429,6 +454,34 @@ struct YdspIrFunction
     int int32ArrayElements = 0;   // total i32 elements across arrays
     int int64ArrayElements = 0;   // total i64 elements across arrays
 
+    /** One declared `state T name[N]` array: its storage type, the index of
+        its first element in that type's array region (the `memIndex` of every
+        access to it) and its length.
+
+        `readOnlyInProcess` is true when no instruction in the process kernel
+        or any event handler of the processor writes to the array.
+
+        `compileTimeConstant` is true when the array is written only by its
+        declaration's literal `{ ... }` initialiser list (with omitted trailing
+        elements zeroed) and by nothing in `process`, functions, or event
+        handlers. `constFloatValues` (for float32/float64 arrays) or
+        `constIntValues` (for int32/int64 arrays) holds every element value so
+        loads at constant indices fold directly to constants. */
+    struct StateArray
+    {
+        YdspValueType type = YdspValueType::float32Type;
+        int base = 0;
+        int length = 0;
+        std::vector<double> constFloatValues;
+        std::vector<int64_t> constIntValues;
+        bool readOnlyInProcess = false;
+        bool compileTimeConstant = false;
+        bool privateToProcess = false;
+    };
+
+    // The plain (non-struct) state arrays the processor declares.
+    std::vector<StateArray> stateArrays;
+
     // Byte offset within a voice's scalar segment of the processor's
     // `[[ role: voiceActivity ]]` flag, or -1 when it declares none. The
     // runtime reads it to skip a released voice whose flag is 0.
@@ -479,6 +532,10 @@ struct YdspIrFunction
     // it (x86 vector FMA has no safe scalar fallback on an SSE2 target).
     bool packedFmaAvailable = false;
 
+    // Whether the target lowers `vrampF`, so the vectoriser may widen a loop
+    // that converts its induction variable to float.
+    bool vectorRampAvailable = false;
+
     std::vector<YdspIrBlock> blocks;
     std::vector<YdspIrLoop> loops;
 
@@ -494,31 +551,51 @@ struct YdspIrFunction
     /** Returns the total number of instructions across all blocks. */
     int getInstructionCount() const noexcept;
 
+    /** The boundary, in bytes, that the array segment and each of its typed
+        regions start on - one cache line, which is also the widest vector any
+        target loads - so every element sits at a multiple of its own size.
+        Arrays inside a region stay packed: aligning each one measured no
+        faster. The host must hand the kernel a state block aligned to it for
+        these offsets to be real addresses. */
+    static constexpr int stateAlignmentBytes = 64;
+
+    /** Rounds a byte count up to the next stateAlignmentBytes boundary. */
+    template <typename Integer>
+    static constexpr Integer alignStateBytes (Integer bytes) noexcept
+    {
+        return static_cast<Integer> ((bytes + (stateAlignmentBytes - 1)) / stateAlignmentBytes * stateAlignmentBytes);
+    }
+
+    /** True when the function has an array segment at all. */
+    bool hasStateArrays() const noexcept
+    {
+        return float32ArrayElements > 0 || float64ArrayElements > 0 || int32ArrayElements > 0 || int64ArrayElements > 0;
+    }
+
     /** Returns the state memory size in bytes for the given function.
 
         Covers the scalar segment (every scalar slot) plus the array segment
         (every array element: delay lines, rings). This layout is shared by
         every codegen backend and by the host runtime, which allocates state
-        from it. */
+        from it. With an array segment the size is a multiple of
+        stateAlignmentBytes, so consecutive voices keep the alignment. */
     size_t stateSize() const noexcept
     {
-        const auto f32 = static_cast<size_t> (float32Scalars) + static_cast<size_t> (float32ArrayElements);
-        const auto f64 = static_cast<size_t> (float64Scalars) + static_cast<size_t> (float64ArrayElements);
-        const auto i32 = static_cast<size_t> (int32Scalars) + static_cast<size_t> (int32ArrayElements);
-        const auto i64 = static_cast<size_t> (int64Scalars) + static_cast<size_t> (int64ArrayElements);
+        if (! hasStateArrays())
+            return stateScalarSize();
 
-        return f32 * 4 + f64 * 8 + i32 * 4 + i64 * 8;
+        return stateScalarSize() + static_cast<size_t> (alignStateBytes (int64ArrayRegionOffset() + int64ArrayElements * 8));
     }
 
     /** Returns the scalar segment's size in bytes (stateArrays = state + this).
 
-        May be 4-mod-8 for odd f32+i32 scalar counts; the array segment base is
-        deliberately not 8-aligned (both native targets and wasm permit
-        unaligned accesses). */
+        Padded up to stateAlignmentBytes when an array segment follows it. */
     size_t stateScalarSize() const noexcept
     {
-        return static_cast<size_t> (float32Scalars * 4 + int32Scalars * 4
-                                    + float64Scalars * 8 + int64Scalars * 8);
+        const auto bytes = static_cast<size_t> (float32Scalars * 4 + int32Scalars * 4
+                                                + float64Scalars * 8 + int64Scalars * 8);
+
+        return hasStateArrays() ? alignStateBytes (bytes) : bytes;
     }
 
     //==============================================================================
@@ -530,7 +607,8 @@ struct YdspIrFunction
     // reverb rings) can grow without pushing scalar slots out of the
     // immediate addressing range. Region order within each segment is
     // [f32][i32][f64][i64]; every codegen backend derives its addressing from
-    // the helpers below, so the layout lives in one place.
+    // the helpers below, so the layout lives in one place. Each array region
+    // starts on a stateAlignmentBytes boundary.
 
     /** Byte offset where the int32 scalar region begins within the scalar segment. */
     int int32ScalarRegionOffset() const noexcept { return float32Scalars * 4; }
@@ -542,13 +620,13 @@ struct YdspIrFunction
     int int64ScalarRegionOffset() const noexcept { return float64ScalarRegionOffset() + float64Scalars * 8; }
 
     /** Byte offset where the int32 array region begins within the array segment. */
-    int int32ArrayRegionOffset() const noexcept { return float32ArrayElements * 4; }
+    int int32ArrayRegionOffset() const noexcept { return alignStateBytes (float32ArrayElements * 4); }
 
     /** Byte offset where the float64 array region begins within the array segment. */
-    int float64ArrayRegionOffset() const noexcept { return int32ArrayRegionOffset() + int32ArrayElements * 4; }
+    int float64ArrayRegionOffset() const noexcept { return alignStateBytes (int32ArrayRegionOffset() + int32ArrayElements * 4); }
 
     /** Byte offset where the int64 array region begins within the array segment. */
-    int int64ArrayRegionOffset() const noexcept { return float64ArrayRegionOffset() + float64ArrayElements * 8; }
+    int int64ArrayRegionOffset() const noexcept { return alignStateBytes (float64ArrayRegionOffset() + float64ArrayElements * 8); }
 
     /** Returns the byte offset of the scalar state slot of the given type
         within the scalar segment. */
@@ -606,9 +684,28 @@ inline std::vector<YdspValueType> resolveValueTypes (const YdspIrFunction& fn)
     for (const auto& block : fn.blocks)
         for (const auto& inst : block.insts)
             if (inst.result >= 0)
-                types[static_cast<size_t> (inst.result)] = inst.op == YdspIrOp::selectB
-                                                              ? types[static_cast<size_t> (inst.b)]
-                                                              : inferTypeFromOp (inst.op);
+            {
+                if (inst.op == YdspIrOp::selectB && inst.b >= 0 && static_cast<size_t> (inst.b) < types.size())
+                {
+                    types[static_cast<size_t> (inst.result)] = types[static_cast<size_t> (inst.b)];
+                }
+                else if (inst.op == YdspIrOp::phi)
+                {
+                    for (const auto& [predBlock, valueId] : inst.phiIncoming)
+                    {
+                        (void) predBlock;
+                        if (valueId >= 0 && static_cast<size_t> (valueId) < types.size())
+                        {
+                            types[static_cast<size_t> (inst.result)] = types[static_cast<size_t> (valueId)];
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    types[static_cast<size_t> (inst.result)] = inferTypeFromOp (inst.op);
+                }
+            }
 
     return types;
 }

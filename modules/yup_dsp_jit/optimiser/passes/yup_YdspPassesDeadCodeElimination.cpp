@@ -103,6 +103,88 @@ bool YdspOptimizer::deadCodeElimination (YdspIrFunction& fn)
     return changed;
 }
 
+bool YdspOptimizer::eliminateDeadPrivateArrayStores (YdspIrFunction& fn)
+{
+    if (fn.stateArrays.empty() || fn.isInit || fn.isEventHandler)
+        return false;
+
+    auto valueIs64Bit = [&fn] (int valueId) noexcept -> bool
+    {
+        return valueId >= 0
+            && static_cast<size_t> (valueId) < fn.valueTypes.size()
+            && is64BitValueType (fn.valueTypes[static_cast<size_t> (valueId)]);
+    };
+
+    std::vector<const YdspIrFunction::StateArray*> unreadPrivateArrays;
+
+    for (const auto& array : fn.stateArrays)
+    {
+        if (! array.privateToProcess || array.length <= 0)
+            continue;
+
+        const bool isFloat = isFloatValueType (array.type);
+        const bool is64 = is64BitValueType (array.type);
+        bool hasRead = false;
+
+        for (const auto& block : fn.blocks)
+        {
+            for (const auto& inst : block.insts)
+            {
+                if ((isFloat && inst.op != YdspIrOp::loadStateArrayF)
+                    || (! isFloat && inst.op != YdspIrOp::loadStateArrayI))
+                    continue;
+
+                if (inst.memIndex >= array.base && inst.memIndex < array.base + array.length
+                    && valueIs64Bit (inst.result) == is64)
+                {
+                    hasRead = true;
+                    break;
+                }
+            }
+
+            if (hasRead)
+                break;
+        }
+
+        if (! hasRead)
+            unreadPrivateArrays.push_back (&array);
+    }
+
+    if (unreadPrivateArrays.empty())
+        return false;
+
+    bool changed = false;
+
+    for (auto& block : fn.blocks)
+    {
+        const auto oldSize = block.insts.size();
+        block.insts.erase (std::remove_if (block.insts.begin(), block.insts.end(), [&] (const YdspIrInst& inst)
+        {
+            if (inst.op != YdspIrOp::storeStateArrayF && inst.op != YdspIrOp::storeStateArrayI)
+                return false;
+
+            const bool isFloat = inst.op == YdspIrOp::storeStateArrayF;
+            const bool is64 = valueIs64Bit (inst.b);
+
+            for (const auto* array : unreadPrivateArrays)
+            {
+                if (isFloatValueType (array->type) == isFloat
+                    && is64BitValueType (array->type) == is64
+                    && inst.memIndex >= array->base && inst.memIndex < array->base + array->length)
+                    return true;
+            }
+
+            return false;
+        }),
+                           block.insts.end());
+
+        if (block.insts.size() != oldSize)
+            changed = true;
+    }
+
+    return changed;
+}
+
 //==============================================================================
 
 void YdspOptimizer::removeUnreachableBlocks (YdspIrFunction& fn)

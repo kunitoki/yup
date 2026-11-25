@@ -70,24 +70,6 @@ uint64_t doubleBits (double value)
     return bits;
 }
 
-bool isIntComparison (YdspIrOp op) noexcept
-{
-    switch (op)
-    {
-        case YdspIrOp::eqI:
-        case YdspIrOp::neI:
-        case YdspIrOp::ltI:
-        case YdspIrOp::ltUI:
-        case YdspIrOp::leI:
-        case YdspIrOp::gtI:
-        case YdspIrOp::geI:
-            return true;
-
-        default:
-            return false;
-    }
-}
-
 // The condition each comparison opcode tests. Float comparisons use the
 // unsigned codes: comiss/fcmp report an ordered result through the carry flag,
 // so the unsigned forms are the ones that exclude NaN.
@@ -205,6 +187,10 @@ private:
                 asmjit::x86::Inst::kIdMovupd,
                 asmjit::x86::Inst::kIdMovdqa,
                 asmjit::x86::Inst::kIdMovdqu,
+                asmjit::x86::Inst::kIdVmovaps,
+                asmjit::x86::Inst::kIdVmovups,
+                asmjit::x86::Inst::kIdVmovdqa,
+                asmjit::x86::Inst::kIdVmovdqu,
                 asmjit::x86::Inst::kIdMovq,
                 asmjit::x86::Inst::kIdMovss,
                 asmjit::x86::Inst::kIdMovsd,
@@ -277,14 +263,27 @@ ResultValue<YdspNativeArtifact> YdspAsmJitCodegenImpl<Traits>::emit (const asmji
             });
         });
 
-        if (fn.vectorWidth > YdspVectorizer::vectorWidth || hasFusedMultiplyAdd)
+        // Marks the frame as AVX, or the register allocator moves, spills and
+        // reloads a ymm register with the 128-bit SSE forms and loses its
+        // upper lanes.
+        if (fn.vectorWidth > YdspVectorizer::vectorWidth || fn.packedFmaAvailable || hasFusedMultiplyAdd)
+        {
+            funcNode->frame().set_avx_enabled();
             funcNode->frame().set_avx_cleanup();
+
+            if (fn.vectorWidth == 16)
+                funcNode->frame().set_avx512_enabled();
+        }
     }
 
     this->cc = &cc;
     this->isEventHandler = isEventHandler;
     activeFn = &fn;
+    computeLoopScopes (fn);
+    streamBaseRegs.clear();
+    loopStreamBases.clear();
     activeVectorWidth = fn.vectorWidth == 8 || fn.vectorWidth == 16 ? fn.vectorWidth : YdspVectorizer::vectorWidth;
+    configureTarget (environment, fn);
 
     YdspGp ctxReg = cc.new_gp64 ("ctx");
     funcNode->set_arg (0, ctxReg);
@@ -375,35 +374,45 @@ ResultValue<YdspNativeArtifact> YdspAsmJitCodegenImpl<Traits>::emit (const asmji
         // are fixed for the whole call, so re-deriving them at every access
         // costs one dependent load per stream access per sample.
         //
+        // Each outermost loop loads its own in its preheader rather than
+        // sharing one set from the prologue: a pointer that is live for the
+        // whole kernel sits across every call a block-rate section makes, and
+        // is then read back from memory at each access of the sample loop.
+        //
         // Only the streams this kernel actually touches may be dereferenced:
         // the init kernel declares the processor's endpoints but is invoked
         // with inputs/outputs set to null (runInitKernels), so hoisting a
         // stream it never reads would fault on the null channel array.
-        inputBaseRegs.assign (static_cast<size_t> (fn.numInputs), YdspGp {});
-        outputBaseRegs.assign (static_cast<size_t> (fn.numOutputs), YdspGp {});
-
-        for (const auto& block : fn.blocks)
+        for (size_t b = 0; b < fn.blocks.size(); ++b)
         {
-            for (const auto& inst : block.insts)
+            for (const auto& inst : fn.blocks[b].insts)
             {
-                const bool isInput = inst.op == YdspIrOp::loadInput;
-                const bool isOutput = inst.op == YdspIrOp::loadOutput || inst.op == YdspIrOp::storeOutput;
+                const bool isInput = inst.op == YdspIrOp::loadInput || inst.op == YdspIrOp::loadInputAddress;
+                const bool isOutput = inst.op == YdspIrOp::loadOutput || inst.op == YdspIrOp::storeOutput
+                                   || inst.op == YdspIrOp::loadOutputAddress;
 
                 if (! isInput && ! isOutput)
                     continue;
 
-                auto& bases = isInput ? inputBaseRegs : outputBaseRegs;
-                const auto slot = static_cast<size_t> (inst.memIndex);
+                const auto scope = blockLoopScope[b];
+                const StreamBaseKey key { scope, isInput, inst.memIndex };
 
-                if (slot >= bases.size() || bases[slot].is_valid())
+                if (inst.memIndex < 0 || inst.memIndex >= (isInput ? fn.numInputs : fn.numOutputs) || streamBaseRegs.count (key) != 0)
                     continue;
 
-                bases[slot] = cc.new_gp64 (isInput ? "inStream" : "outStream");
-                loadGpFromMem (bases[slot], memPtr (isInput ? inputsReg : outputsReg, inst.memIndex * 8));
+                const auto base = cc.new_gp64 (isInput ? "inStream" : "outStream");
+                streamBaseRegs.emplace (key, base);
 
-                // These base pointers are live across the whole sample loop;
-                // give them top weight so the allocator never spills them.
-                if (auto* virt = cc.virt_reg_by_reg (bases[slot]))
+                if (scope < 0)
+                {
+                    loadGpFromMem (base, memPtr (isInput ? inputsReg : outputsReg, inst.memIndex * 8));
+                    continue;
+                }
+
+                loopStreamBases[fn.loops[static_cast<size_t> (scope)].headerBlock - 1].push_back (key);
+
+                // Live across the whole loop: never worth spilling.
+                if (auto* virt = cc.virt_reg_by_reg (base))
                     virt->set_weight (255);
             }
         }
@@ -562,23 +571,53 @@ ResultValue<YdspNativeArtifact> YdspAsmJitCodegenImpl<Traits>::emit (const asmji
         }
     }
 
-    // Weight the registers the allocator must not spill: loop induction
-    // variables (their value is live across the back edge) and every widened
-    // value (a spilled 4/8-lane vector costs several loads/stores per sample).
-    // asmjit's weight is an alloc/spill hint on the virtual register.
+    // The allocator ranks a register by how densely it is referenced over its
+    // live range, which knows nothing about loops: a value that is live for
+    // the whole kernel and read once per sample ranks below one the prologue
+    // touches twice. Rank each value by where its references are instead.
+    blockLoopDepth.assign (fn.blocks.size(), 0);
+
     for (const auto& loop : fn.loops)
-        if (loop.induction >= 0 && static_cast<size_t> (loop.induction) < regs.size())
-            if (regs[static_cast<size_t> (loop.induction)].is_valid())
-                if (auto* virt = cc.virt_reg_by_reg (regs[static_cast<size_t> (loop.induction)]))
-                    virt->set_weight (255);
+        if (! loop.unrolled)
+            for (int b = std::max (0, loop.headerBlock); b < loop.exitBlock && b < static_cast<int> (fn.blocks.size()); ++b)
+                ++blockLoopDepth[static_cast<size_t> (b)];
 
-    for (size_t i = 0; i < valueLanes.size() && i < regs.size(); ++i)
     {
-        if (valueLanes[i] <= 1 || ! regs[i].is_valid())
-            continue;
+        std::vector<double> references (regs.size(), 0.0);
 
-        if (auto* virt = cc.virt_reg_by_reg (regs[i]))
-            virt->set_weight (255);
+        for (size_t b = 0; b < fn.blocks.size(); ++b)
+            for (const auto& inst : fn.blocks[b].insts)
+                if (inst.result >= 0)
+                    references[static_cast<size_t> (inst.result)] += referenceCost (static_cast<int> (b));
+
+        forEachValueUse (fn, [&] (int block, int, int, int value)
+        {
+            if (static_cast<size_t> (value) < references.size())
+                references[static_cast<size_t> (value)] += referenceCost (block);
+        });
+
+        const auto setWeight = [&cc] (const asmjit::Reg& reg, uint32_t weight)
+        {
+            if (reg.is_valid())
+                if (auto* virt = cc.virt_reg_by_reg (reg))
+                    virt->set_weight (weight);
+        };
+
+        // Loop induction variables (live across the back edge) and every
+        // widened value (a spilled 4/8-lane vector costs several loads/stores
+        // per sample) are kept in registers outright.
+        std::vector<bool> pinned (regs.size(), false);
+
+        for (const auto& loop : fn.loops)
+            if (loop.induction >= 0 && static_cast<size_t> (loop.induction) < regs.size())
+                pinned[static_cast<size_t> (loop.induction)] = true;
+
+        for (size_t i = 0; i < valueLanes.size() && i < regs.size(); ++i)
+            pinned[i] = pinned[i] || valueLanes[i] > 1;
+
+        for (size_t i = 0; i < regs.size(); ++i)
+            setWeight (regs[i], pinned[i] ? 255u : weightFor (references[i]));
+
     }
 
     // Last chance to set up addressing that would otherwise be re-derived at
@@ -586,13 +625,19 @@ ResultValue<YdspNativeArtifact> YdspAsmJitCodegenImpl<Traits>::emit (const asmji
     // before any block is emitted, so the addresses dominate every use.
     planCompareFusion (fn);
     planOperandLowering (fn);
+    planFlagReuse (fn);
+    planEndRelativeLoops (fn);
+    planLoopPointers (fn);
     prepareStateAddressing (fn);
+    prepareWrapBounds (fn);
+    prepareRampConsts (fn);
     materializeMathCallTargets (fn);
 
     // Emit the blocks.
     for (size_t i = 0; i < fn.blocks.size(); ++i)
     {
         cc.bind (blockLabels[i]);
+        currentBlock = static_cast<int> (i);
         beginBlock (static_cast<int> (i));
 
         for (size_t j = 0; j < fn.blocks[i].insts.size(); ++j)
@@ -609,6 +654,22 @@ ResultValue<YdspNativeArtifact> YdspAsmJitCodegenImpl<Traits>::emit (const asmji
                 onValueRedefined (inst.result);
         }
 
+        if (const auto bases = loopStreamBases.find (static_cast<int> (i)); bases != loopStreamBases.end())
+            for (const auto& key : bases->second)
+                loadGpFromMem (streamBaseRegs.at (key), memPtr (std::get<1> (key) ? inputsReg : outputsReg, std::get<2> (key) * 8));
+
+        if (const auto ramps = loopRampConsts.find (static_cast<int> (i)); ramps != loopRampConsts.end())
+        {
+            const auto mem = rampConstMem();
+
+            for (const auto& ramp : ramps->second)
+                loadVectorFromMem (ramp, mem);
+        }
+
+        endBlock (static_cast<int> (i));
+        emitEndRelativeLoopSetup (static_cast<int> (i));
+        emitLoopPointerSetup (static_cast<int> (i));
+        emitLoopPointerAdvance (static_cast<int> (i));
         emitTerminator (fn.blocks[i], static_cast<int> (i));
     }
 
@@ -679,12 +740,15 @@ void YdspAsmJitCodegenImpl<Traits>::planOperandLowering (const YdspIrFunction& f
     arrayDisplacements.clear();
     integerCompareImmediates.clear();
     elidedIntegerConstants.clear();
+    elidedFloatConstants.clear();
+    zeroVectorSplats.clear();
     fusedProductSubtracts.clear();
     elidedNegations.clear();
 
     const YdspValueUseCounts counts (fn);
     auto remainingUses = counts.uses;
     std::unordered_map<int, int64_t> literals;
+    std::unordered_set<int> floatZeroLiterals;
     std::vector<YdspInstPosition> definitions (fn.valueTypes.size(), { -1, -1 });
     for (size_t b = 0; b < fn.blocks.size(); ++b)
         for (size_t i = 0; i < fn.blocks[b].insts.size(); ++i)
@@ -695,6 +759,11 @@ void YdspAsmJitCodegenImpl<Traits>::planOperandLowering (const YdspIrFunction& f
             definitions[static_cast<size_t> (inst.result)] = { static_cast<int> (b), static_cast<int> (i) };
             if (inst.op == YdspIrOp::constI)
                 literals.emplace (inst.result, inst.ivalue);
+            else if (inst.op == YdspIrOp::constF
+                     && static_cast<size_t> (inst.result) < valueTypes.size()
+                     && valueTypes[static_cast<size_t> (inst.result)] == YdspValueType::float32Type
+                     && floatBits (inst.fvalue) == 0)
+                floatZeroLiterals.insert (inst.result);
         }
 
     std::vector<bool> local (fn.valueTypes.size(), true);
@@ -712,14 +781,6 @@ void YdspAsmJitCodegenImpl<Traits>::planOperandLowering (const YdspIrFunction& f
         {
             const auto& inst = insts[i];
             const YdspInstPosition position { static_cast<int> (b), static_cast<int> (i) };
-            if ((inst.op == YdspIrOp::fmaF || inst.op == YdspIrOp::fmsubF)
-                && isVectorValue (inst.result) && counts.definedOnce (inst.result)
-                && counts.definedOnce (inst.c) && counts.useCount (inst.c) == 1
-                && local[static_cast<size_t> (inst.result)] && local[static_cast<size_t> (inst.c)]
-                && definitions[static_cast<size_t> (inst.c)].first == static_cast<int> (b)
-                && fn.laneCountOf (inst.result) == fn.laneCountOf (inst.c)
-                && valueTypes[static_cast<size_t> (inst.result)] == valueTypes[static_cast<size_t> (inst.c)])
-                regs[static_cast<size_t> (inst.result)] = regs[static_cast<size_t> (inst.c)];
 
             const bool arrayLoad = inst.op == YdspIrOp::loadStateArrayF || inst.op == YdspIrOp::loadStateArrayI;
             const bool arrayStore = inst.op == YdspIrOp::storeStateArrayF || inst.op == YdspIrOp::storeStateArrayI;
@@ -748,7 +809,8 @@ void YdspAsmJitCodegenImpl<Traits>::planOperandLowering (const YdspIrFunction& f
                 const bool fusedCompare = isIntComparison (inst.op)
                     && counts.definedOnce (inst.result) && elidedCompares.count (position) != 0;
                 bool encodable = false;
-                if (fusedCompare || (! inst.saturatingIntegerArithmetic && (inst.op == YdspIrOp::addI || inst.op == YdspIrOp::subI)) || inst.op == YdspIrOp::andI)
+                if (! isVectorValue (inst.result)
+                    && (fusedCompare || (! inst.saturatingIntegerArithmetic && (inst.op == YdspIrOp::addI || inst.op == YdspIrOp::subI)) || inst.op == YdspIrOp::andI))
                 {
                     const bool wide = valueTypes[static_cast<size_t> (inst.a)] == YdspValueType::int64Type;
                     if constexpr (Traits::isX64)
@@ -775,29 +837,224 @@ void YdspAsmJitCodegenImpl<Traits>::planOperandLowering (const YdspIrFunction& f
                 }
             }
 
-            if (inst.op != YdspIrOp::fmaF || isVectorValue (inst.result)
-                || ! counts.definedOnce (inst.c) || counts.useCount (inst.c) != 1)
-                continue;
-
-            for (size_t j = i; j-- > 0;)
+            bool isFusedProductSubtract = false;
+            if (inst.op == YdspIrOp::fmaF && ! isVectorValue (inst.result)
+                && counts.definedOnce (inst.c) && counts.useCount (inst.c) == 1)
             {
-                const auto& negation = insts[j];
-                if (negation.result != inst.c)
-                    continue;
-                if (negation.op != YdspIrOp::negF)
-                    break;
-
-                bool stable = true;
-                for (size_t k = j + 1; k < i; ++k)
-                    if (insts[k].result == negation.a)
-                        stable = false;
-
-                if (stable)
+                for (size_t j = i; j-- > 0;)
                 {
-                    fusedProductSubtracts.emplace (position, negation.a);
-                    elidedNegations.emplace (static_cast<int> (b), static_cast<int> (j));
+                    const auto& negation = insts[j];
+                    if (negation.result != inst.c)
+                        continue;
+                    if (negation.op != YdspIrOp::negF)
+                        break;
+
+                    bool stable = true;
+                    for (size_t k = j + 1; k < i; ++k)
+                        if (insts[k].result == negation.a)
+                            stable = false;
+
+                    if (stable)
+                    {
+                        fusedProductSubtracts.emplace (position, negation.a);
+                        elidedNegations.emplace (static_cast<int> (b), static_cast<int> (j));
+                        isFusedProductSubtract = true;
+                    }
+                    break;
                 }
-                break;
+            }
+
+            if (supportsZeroVector()
+                && inst.op == YdspIrOp::vsplat
+                && inst.result >= 0
+                && inst.a >= 0
+                && static_cast<size_t> (inst.a) < remainingUses.size())
+            {
+                const bool isFloat = isFloatValueType (valueTypes[static_cast<size_t> (inst.result)]);
+                const bool isZero = isFloat
+                                  ? floatZeroLiterals.count (inst.a) != 0
+                                  : (literals.find (inst.a) != literals.end() && literals.at (inst.a) == 0);
+                if (isZero)
+                {
+                    zeroVectorSplats.insert (position);
+                    --remainingUses[static_cast<size_t> (inst.a)];
+                }
+            }
+
+            const auto hasEnclosingBackEdge = [&] (int defBlock, int useBlock) -> bool
+            {
+                for (size_t k = static_cast<size_t> (defBlock); k < fn.blocks.size(); ++k)
+                {
+                    const auto& blk = fn.blocks[k];
+                    const int targets[] { blk.termTarget, blk.termTarget2 };
+
+                    for (const int target : targets)
+                        if (target > defBlock && target <= useBlock && target <= static_cast<int> (k))
+                            return true;
+                }
+
+                return false;
+            };
+
+            const auto canCoalesce = [&] (int operand) -> bool
+            {
+                if (operand < 0
+                    || ! counts.definedOnce (inst.result)
+                    || ! counts.definedOnce (operand)
+                    || counts.useCount (operand) != 1
+                    || ! local[static_cast<size_t> (inst.result)]
+                    || fn.laneCountOf (inst.result) != fn.laneCountOf (operand)
+                    || valueTypes[static_cast<size_t> (inst.result)] != valueTypes[static_cast<size_t> (operand)])
+                    return false;
+
+                const auto def = definitions[static_cast<size_t> (operand)];
+
+                if (def.first == static_cast<int> (b))
+                    return def.second < static_cast<int> (i);
+
+                return def.first >= 0
+                    && def.first < static_cast<int> (b)
+                    && blockLoopScope[static_cast<size_t> (def.first)] == blockLoopScope[b]
+                    && blockLoopDepth[static_cast<size_t> (def.first)] == blockLoopDepth[b]
+                    && ! hasEnclosingBackEdge (def.first, static_cast<int> (b));
+            };
+
+            const auto canCoalesceCarriedAddend = [&] (int initialResult, int addend) -> bool
+            {
+                if (initialResult < 0 || addend < 0 || initialResult == addend
+                    || ! counts.definedOnce (initialResult)
+                    || ! local[static_cast<size_t> (initialResult)]
+                    || fn.laneCountOf (initialResult) != fn.laneCountOf (addend)
+                    || valueTypes[static_cast<size_t> (initialResult)] != valueTypes[static_cast<size_t> (addend)])
+                    return false;
+
+                const auto usesOperand = [] (const YdspIrInst& candidate, int value) noexcept
+                {
+                    for (int opIndex = 0; opIndex < 3; ++opIndex)
+                        if (isValueIdOperand (candidate.op, opIndex))
+                        {
+                            const int opVal = opIndex == 0 ? candidate.a : (opIndex == 1 ? candidate.b : candidate.c);
+                            if (opVal == value)
+                                return true;
+                        }
+
+                    return false;
+                };
+
+                int current = initialResult;
+                size_t moveIndex = insts.size();
+
+                for (size_t k = i + 1; k < insts.size(); ++k)
+                {
+                    const auto& next = insts[k];
+
+                    if (next.op == YdspIrOp::movF && next.result == addend && next.a == current)
+                    {
+                        moveIndex = k;
+                        break;
+                    }
+
+                    if (next.result == addend || next.result == current || usesOperand (next, addend))
+                        return false;
+
+                    if (usesOperand (next, current))
+                    {
+                        const bool isNextFma = (next.op == YdspIrOp::fmaF || next.op == YdspIrOp::fmsubF);
+
+                        if (isNextFma
+                            && next.c == current
+                            && next.a != current
+                            && next.b != current
+                            && counts.definedOnce (current)
+                            && local[static_cast<size_t> (current)]
+                            && counts.useCount (current) == 1
+                            && next.result >= 0
+                            && counts.definedOnce (next.result)
+                            && local[static_cast<size_t> (next.result)]
+                            && fn.laneCountOf (next.result) == fn.laneCountOf (addend)
+                            && valueTypes[static_cast<size_t> (next.result)] == valueTypes[static_cast<size_t> (addend)])
+                        {
+                            current = next.result;
+                            continue;
+                        }
+
+                        if (current == initialResult)
+                            continue;
+
+                        return false;
+                    }
+                }
+
+                if (moveIndex >= insts.size())
+                    return false;
+
+                for (size_t k = moveIndex + 1; k < insts.size(); ++k)
+                    if (usesOperand (insts[k], current))
+                        return false;
+
+                return true;
+            };
+
+            const auto coalesceWith = [&] (int operand)
+            {
+                if (auto* resVirt = cc->virt_reg_by_reg (regs[static_cast<size_t> (inst.result)]))
+                    if (auto* opVirt = cc->virt_reg_by_reg (regs[static_cast<size_t> (operand)]))
+                        opVirt->set_weight (std::max (opVirt->weight(), resVirt->weight()));
+
+                regs[static_cast<size_t> (inst.result)] = regs[static_cast<size_t> (operand)];
+            };
+
+            if (inst.op == YdspIrOp::vinsertF)
+            {
+                if (inst.a >= 0 && canCoalesce (inst.a))
+                    coalesceWith (inst.a);
+            }
+            else if ((inst.op == YdspIrOp::fmaF || inst.op == YdspIrOp::fmsubF) && ! isFusedProductSubtract)
+            {
+                if (canCoalesce (inst.c) || canCoalesceCarriedAddend (inst.result, inst.c))
+                {
+                    coalesceWith (inst.c);
+                }
+                else if constexpr (Traits::isX64)
+                {
+                    if (inst.op == YdspIrOp::fmaF)
+                    {
+                        if (canCoalesce (inst.b))
+                            coalesceWith (inst.b);
+                    }
+                    else
+                    {
+                        if (canCoalesce (inst.a))
+                            coalesceWith (inst.a);
+                        else if (canCoalesce (inst.b))
+                            coalesceWith (inst.b);
+                    }
+                }
+            }
+            else if constexpr (Traits::isX64)
+            {
+                const bool isVector = isVectorValue (inst.result);
+                const bool isFloatBin = inst.op == YdspIrOp::addF || inst.op == YdspIrOp::subF
+                                     || inst.op == YdspIrOp::mulF || inst.op == YdspIrOp::divF
+                                     || inst.op == YdspIrOp::minF || inst.op == YdspIrOp::maxF;
+                const bool isScalarIntBin = ! isVector && ! inst.saturatingIntegerArithmetic
+                                         && (inst.op == YdspIrOp::addI || inst.op == YdspIrOp::subI
+                                             || inst.op == YdspIrOp::mulI || inst.op == YdspIrOp::andI
+                                             || inst.op == YdspIrOp::orI || inst.op == YdspIrOp::xorI
+                                             || inst.op == YdspIrOp::shlI || inst.op == YdspIrOp::shrI
+                                             || inst.op == YdspIrOp::andB || inst.op == YdspIrOp::orB);
+                const bool isNonVexVectorIntBin = isVector && ! usesVexVectors() && ! inst.saturatingIntegerArithmetic
+                                               && (inst.op == YdspIrOp::addI || inst.op == YdspIrOp::subI
+                                                   || inst.op == YdspIrOp::andI || inst.op == YdspIrOp::orI
+                                                   || inst.op == YdspIrOp::xorI || inst.op == YdspIrOp::andB
+                                                   || inst.op == YdspIrOp::orB);
+                const bool isNonVexVectorFloatBin = isVector && ! usesVexVectors() && isFloatBin;
+
+                if (((! isVector && isFloatBin) || isScalarIntBin || isNonVexVectorFloatBin || isNonVexVectorIntBin)
+                    && canCoalesce (inst.a))
+                {
+                    coalesceWith (inst.a);
+                }
             }
         }
     }
@@ -805,6 +1062,10 @@ void YdspAsmJitCodegenImpl<Traits>::planOperandLowering (const YdspIrFunction& f
     for (const auto& [value, literal] : literals)
         if (remainingUses[static_cast<size_t> (value)] == 0)
             elidedIntegerConstants.insert (value);
+
+    for (const int value : floatZeroLiterals)
+        if (static_cast<size_t> (value) < remainingUses.size() && remainingUses[static_cast<size_t> (value)] == 0)
+            elidedFloatConstants.insert (value);
 }
 
 template <typename Traits>
@@ -866,7 +1127,7 @@ void YdspAsmJitCodegenImpl<Traits>::planCompareFusion (const YdspIrFunction& fn)
         {
             const auto& select = block.insts[j];
 
-            if (select.op != YdspIrOp::selectB || select.result < 0 || select.a < 0)
+            if (select.op != YdspIrOp::selectB || select.result < 0 || select.a < 0 || isVectorValue (select.result))
                 continue;
 
             const auto condition = select.a;
@@ -894,7 +1155,7 @@ void YdspAsmJitCodegenImpl<Traits>::planCompareFusion (const YdspIrFunction& fn)
 
             const auto& compare = block.insts[producer];
 
-            if (! isFloatComparison (compare.op) && ! isIntComparison (compare.op))
+            if ((! isFloatComparison (compare.op) && ! isIntComparison (compare.op)) || isVectorValue (compare.result))
                 continue;
 
             // Re-emitting the comparison next to the select is only equivalent
@@ -962,7 +1223,7 @@ void YdspAsmJitCodegenImpl<Traits>::planCompareFusion (const YdspIrFunction& fn)
 
         const auto& compare = block.insts[static_cast<size_t> (producer)];
 
-        if (! isFloatComparison (compare.op) && ! isIntComparison (compare.op))
+        if ((! isFloatComparison (compare.op) && ! isIntComparison (compare.op)) || isVectorValue (compare.result))
             continue;
 
         bool operandsStable = true;
@@ -978,6 +1239,1073 @@ void YdspAsmJitCodegenImpl<Traits>::planCompareFusion (const YdspIrFunction& fn)
 
         if (fusedBranchCompares.emplace (static_cast<int> (b), compare).second)
             elidedCompares.insert ({ static_cast<int> (b), producer });
+    }
+}
+
+//==============================================================================
+
+template <typename Traits>
+void YdspAsmJitCodegenImpl<Traits>::computeLoopScopes (const YdspIrFunction& fn)
+{
+    const auto numBlocks = static_cast<int> (fn.blocks.size());
+    blockLoopScope.assign (fn.blocks.size(), -1);
+
+    for (size_t l = 0; l < fn.loops.size(); ++l)
+    {
+        const auto& loop = fn.loops[l];
+        const int header = loop.headerBlock;
+        const int exit = std::min (loop.exitBlock, numBlocks);
+
+        if (loop.unrolled || header < 1 || exit <= header)
+            continue;
+
+        const auto& preheader = fn.blocks[static_cast<size_t> (header) - 1];
+        bool entersThroughPreheader = preheader.term == YdspIrTerm::fallthrough
+                                   || (preheader.term == YdspIrTerm::branch && preheader.termTarget == header);
+
+        for (int b = 0; b < numBlocks && entersThroughPreheader; ++b)
+        {
+            const auto& block = fn.blocks[static_cast<size_t> (b)];
+            const bool inside = b >= header && b < exit;
+
+            for (const int target : { block.termTarget, block.termTarget2, block.term == YdspIrTerm::fallthrough ? b + 1 : -1 })
+                if (! inside && b != header - 1 && target >= header && target < exit)
+                    entersThroughPreheader = false;
+        }
+
+        if (! entersThroughPreheader)
+            continue;
+
+        // The outermost loop wins: an inner loop's blocks are already claimed.
+        for (int b = header; b < exit; ++b)
+        {
+            auto& scope = blockLoopScope[static_cast<size_t> (b)];
+
+            if (scope < 0 || fn.loops[static_cast<size_t> (scope)].headerBlock > header)
+                scope = static_cast<int> (l);
+        }
+    }
+}
+
+template <typename Traits>
+typename YdspAsmJitCodegenImpl<Traits>::YdspGp YdspAsmJitCodegenImpl<Traits>::streamBase (int blockIndex, bool isInput, int slot) const
+{
+    const auto base = streamBaseRegs.find ({ blockLoopScope[static_cast<size_t> (blockIndex)], isInput, slot });
+
+    jassert (base != streamBaseRegs.end());
+    return base != streamBaseRegs.end() ? base->second : YdspGp {};
+}
+
+template <typename Traits>
+double YdspAsmJitCodegenImpl<Traits>::referenceCost (int blockIndex) const noexcept
+{
+    const auto depth = static_cast<size_t> (blockIndex) < blockLoopDepth.size() ? blockLoopDepth[static_cast<size_t> (blockIndex)] : 0;
+    return std::pow (10.0, std::min (depth, 4));
+}
+
+template <typename Traits>
+uint32_t YdspAsmJitCodegenImpl<Traits>::weightFor (double references) noexcept
+{
+    // One reference in a loop nested four deep is 10^4, about 13 doublings.
+    return static_cast<uint32_t> (jlimit (1.0, 240.0, 16.0 * std::log2 (1.0 + references)));
+}
+
+template <typename Traits>
+void YdspAsmJitCodegenImpl<Traits>::planFlagReuse (const YdspIrFunction& fn)
+{
+    flagSettingArithmetic.clear();
+    flagPreservingArithmetic.clear();
+    flagReusingSelects.clear();
+
+    const YdspValueUseCounts counts (fn);
+    std::unordered_set<int> zeros;
+
+    for (const auto& block : fn.blocks)
+        for (const auto& inst : block.insts)
+            if (inst.op == YdspIrOp::constI && inst.ivalue == 0 && counts.definedOnce (inst.result))
+                zeros.insert (inst.result);
+
+    const auto isFlagPreservingPureOp = [this] (const YdspIrInst& between, YdspInstPosition at) -> bool
+    {
+        if (elidedCompares.count (at) != 0
+            || elidedNegations.count (at) != 0
+            || flagReusingSelects.count (at) != 0)
+            return true;
+
+        if ((between.result >= 0 && isVectorValue (between.result))
+            || (between.b >= 0 && isVectorValue (between.b)))
+            return false;
+
+        switch (between.op)
+        {
+            case YdspIrOp::constI:
+            case YdspIrOp::constB:
+            case YdspIrOp::constF:
+            case YdspIrOp::movI:
+            case YdspIrOp::movF:
+            case YdspIrOp::movB:
+            case YdspIrOp::loadBlockSize:
+            case YdspIrOp::loadSampleRate:
+            case YdspIrOp::loadParam:
+            case YdspIrOp::storeParam:
+            case YdspIrOp::loadParamOut:
+            case YdspIrOp::storeParamOut:
+            case YdspIrOp::loadStateF:
+            case YdspIrOp::storeStateF:
+            case YdspIrOp::loadStateI:
+            case YdspIrOp::storeStateI:
+            case YdspIrOp::loadStateArrayF:
+            case YdspIrOp::storeStateArrayF:
+            case YdspIrOp::loadStateArrayI:
+            case YdspIrOp::storeStateArrayI:
+            case YdspIrOp::loadInput:
+            case YdspIrOp::loadOutput:
+            case YdspIrOp::storeOutput:
+            case YdspIrOp::loadEventFieldF:
+            case YdspIrOp::loadEventFieldI:
+            case YdspIrOp::storeEventFieldF:
+            case YdspIrOp::storeEventFieldI:
+            case YdspIrOp::addF:
+            case YdspIrOp::subF:
+            case YdspIrOp::mulF:
+            case YdspIrOp::divF:
+            case YdspIrOp::minF:
+            case YdspIrOp::maxF:
+            case YdspIrOp::negF:
+            case YdspIrOp::absF:
+            case YdspIrOp::sqrtF:
+            case YdspIrOp::floorF:
+            case YdspIrOp::ceilF:
+            case YdspIrOp::rintF:
+            case YdspIrOp::clampF:
+            case YdspIrOp::lerpF:
+            case YdspIrOp::fmaF:
+            case YdspIrOp::fmsubF:
+            case YdspIrOp::itof:
+            case YdspIrOp::extI:
+            case YdspIrOp::truncI:
+            case YdspIrOp::extF:
+            case YdspIrOp::truncF:
+            case YdspIrOp::bitcastFtoI:
+            case YdspIrOp::bitcastItoF:
+                return true;
+
+            default:
+                return false;
+        }
+    };
+
+    // In position order, so a select that sits between a later select and its
+    // subtraction is already known when that later one is checked.
+    for (const auto& [selectAt, compare] : fusedSelectCompares)
+    {
+        int testedValue = -1;
+        bool isLtZero = false;
+
+        if ((compare.op == YdspIrOp::ltI || compare.op == YdspIrOp::geI) && zeros.count (compare.b) != 0)
+        {
+            testedValue = compare.a;
+            isLtZero = (compare.op == YdspIrOp::ltI);
+        }
+        else if ((compare.op == YdspIrOp::gtI || compare.op == YdspIrOp::leI) && zeros.count (compare.a) != 0)
+        {
+            testedValue = compare.b;
+            isLtZero = (compare.op == YdspIrOp::gtI);
+        }
+        else
+        {
+            continue;
+        }
+
+        const auto& insts = fn.blocks[static_cast<size_t> (selectAt.first)].insts;
+        int producer = -1;
+
+        for (int k = selectAt.second; k-- > 0 && producer < 0;)
+            if (insts[static_cast<size_t> (k)].result == testedValue)
+                producer = k;
+
+        if (producer < 0)
+            continue;
+
+        const YdspInstPosition producerPos { selectAt.first, producer };
+        if (flagPreservingArithmetic.count (producerPos) != 0)
+            continue;
+
+        const auto& arithmetic = insts[static_cast<size_t> (producer)];
+
+        if ((arithmetic.op != YdspIrOp::addI && arithmetic.op != YdspIrOp::subI) || arithmetic.saturatingIntegerArithmetic)
+            continue;
+
+        // Everything emitted between the two must leave the flags alone.
+        // Note: on x86-64, add/sub clobber flags so intervening addI/subI
+        // (with an encodable immediate for subI) are emitted via lea instead,
+        // and constI/constB/movI stay on mov (never xor).
+        bool flagsSurvive = true;
+        std::vector<YdspInstPosition> preserved;
+
+        for (int k = producer + 1; k < selectAt.second && flagsSurvive; ++k)
+        {
+            const YdspInstPosition at { selectAt.first, k };
+            const auto& between = insts[static_cast<size_t> (k)];
+
+            bool plainArithmetic = false;
+            if (! between.saturatingIntegerArithmetic && flagSettingArithmetic.count (at) == 0)
+            {
+                if constexpr (Traits::isX64)
+                {
+                    if (between.op == YdspIrOp::addI)
+                    {
+                        const auto imm = integerImmediates.find (at);
+                        plainArithmetic = imm == integerImmediates.end()
+                                       || (imm->second >= std::numeric_limits<int32_t>::min()
+                                           && imm->second <= std::numeric_limits<int32_t>::max());
+                    }
+                    else if (between.op == YdspIrOp::subI)
+                    {
+                        const auto imm = integerImmediates.find (at);
+                        plainArithmetic = imm != integerImmediates.end()
+                                       && imm->second > std::numeric_limits<int32_t>::min()
+                                       && imm->second <= std::numeric_limits<int32_t>::max();
+                    }
+
+                    if (plainArithmetic)
+                        preserved.push_back (at);
+                }
+                else
+                {
+                    plainArithmetic = between.op == YdspIrOp::addI || between.op == YdspIrOp::subI;
+                }
+            }
+
+            flagsSurvive = plainArithmetic || isFlagPreservingPureOp (between, at);
+        }
+
+        if (! flagsSurvive)
+            continue;
+
+        for (const auto& at : preserved)
+            flagPreservingArithmetic.insert (at);
+
+        flagSettingArithmetic.insert (producerPos);
+        flagReusingSelects.emplace (selectAt, isLtZero);
+    }
+}
+
+template <typename Traits>
+void YdspAsmJitCodegenImpl<Traits>::emitFlagSettingArithmetic (const YdspIrInst& inst, YdspInstPosition position)
+{
+    const auto dst = gp (inst.result);
+    const auto source = gp (inst.a);
+    const auto immediate = integerImmediates.find (position);
+
+    if constexpr (Traits::isX64)
+    {
+        if (immediate != integerImmediates.end())
+        {
+            if (dst != source)
+                moveGp (dst, source);
+
+            const auto value = asmjit::Imm (static_cast<int32_t> (immediate->second));
+            if (inst.op == YdspIrOp::addI)
+                cc->add (dst, value);
+            else
+                cc->sub (dst, value);
+        }
+        else
+        {
+            const auto rhs = gp (inst.b);
+            if (dst == rhs && dst != source)
+            {
+                const auto tmp = dst.is_gp64() ? cc->new_gp64 ("flagArith") : cc->new_gp32 ("flagArith");
+                moveGp (tmp, source);
+                if (inst.op == YdspIrOp::addI)
+                    cc->add (tmp, rhs);
+                else
+                    cc->sub (tmp, rhs);
+                moveGp (dst, tmp);
+            }
+            else
+            {
+                if (dst != source)
+                    moveGp (dst, source);
+                if (inst.op == YdspIrOp::addI)
+                    cc->add (dst, rhs);
+                else
+                    cc->sub (dst, rhs);
+            }
+        }
+    }
+    else
+    {
+        if (immediate != integerImmediates.end() && inst.op == YdspIrOp::addI)
+            cc->adds (dst, source, asmjit::Imm (immediate->second));
+        else if (immediate != integerImmediates.end())
+            cc->subs (dst, source, asmjit::Imm (immediate->second));
+        else if (inst.op == YdspIrOp::addI)
+            cc->adds (dst, source, gp (inst.b));
+        else
+            cc->subs (dst, source, gp (inst.b));
+    }
+}
+
+template <typename Traits>
+void YdspAsmJitCodegenImpl<Traits>::planEndRelativeLoops (const YdspIrFunction& fn)
+{
+    endRelativeLoops.clear();
+
+    const YdspValueUseCounts counts (fn);
+    const auto numBlocks = static_cast<int> (fn.blocks.size());
+
+    const auto isZero = [&] (int value)
+    {
+        if (! counts.definedOnce (value))
+            return false;
+
+        for (const auto& block : fn.blocks)
+            for (const auto& inst : block.insts)
+                if (inst.result == value)
+                    return inst.op == YdspIrOp::constI && inst.ivalue == 0;
+
+        return false;
+    };
+
+    for (const auto& loop : fn.loops)
+    {
+        EndRelativeLoop plan;
+        plan.headerBlock = loop.headerBlock;
+        plan.latchBlock = loop.exitBlock - 1;
+        plan.induction = loop.induction;
+
+        if (loop.unrolled || plan.headerBlock < 1 || plan.latchBlock <= plan.headerBlock || plan.latchBlock >= numBlocks
+            || plan.induction < 0 || valueTypes[static_cast<size_t> (plan.induction)] != YdspValueType::int32Type)
+            continue;
+
+        // The shape emitTerminator() rotates: a compare-only header, tested
+        // again at the latch.
+        const auto& header = fn.blocks[static_cast<size_t> (plan.headerBlock)];
+        const auto& latch = fn.blocks[static_cast<size_t> (plan.latchBlock)];
+        const auto& preheader = fn.blocks[static_cast<size_t> (plan.headerBlock) - 1];
+        const auto test = fusedBranchCompares.find (plan.headerBlock);
+
+        if (test == fusedBranchCompares.end() || header.insts.size() != 1 || header.term != YdspIrTerm::branchIf
+            || header.termTarget != plan.headerBlock + 1 || header.termTarget2 != plan.latchBlock + 1
+            || latch.term != YdspIrTerm::branch || latch.termTarget != plan.headerBlock || latch.insts.empty()
+            || ! (preheader.term == YdspIrTerm::fallthrough
+                  || (preheader.term == YdspIrTerm::branch && preheader.termTarget == plan.headerBlock)))
+            continue;
+
+        plan.bound = test->second.b;
+
+        if (test->second.op != YdspIrOp::ltI || test->second.a != plan.induction
+            || integerCompareImmediates.count (test->second.result) != 0
+            || ! counts.definedOnce (plan.bound)
+            || valueTypes[static_cast<size_t> (plan.bound)] != YdspValueType::int32Type)
+            continue;
+
+        const YdspInstPosition step { plan.latchBlock, static_cast<int> (latch.insts.size()) - 1 };
+        const auto& increment = latch.insts.back();
+        const auto one = integerImmediates.find (step);
+
+        if (increment.op != YdspIrOp::addI || increment.result != plan.induction || increment.a != plan.induction
+            || increment.saturatingIntegerArithmetic || one == integerImmediates.end() || one->second != 1)
+            continue;
+
+        // Entered from the preheader and the latch only, with the offset
+        // seeded to zero in the preheader and the bound known by then.
+        bool eligible = true;
+        int definitions = 0;
+
+        for (int b = 0; b < numBlocks && eligible; ++b)
+        {
+            const auto& block = fn.blocks[static_cast<size_t> (b)];
+
+            if (b != plan.latchBlock && b != plan.headerBlock - 1
+                && (block.termTarget == plan.headerBlock || block.termTarget2 == plan.headerBlock))
+                eligible = false;
+
+            for (int i = 0; i < static_cast<int> (block.insts.size()); ++i)
+            {
+                const auto& inst = block.insts[static_cast<size_t> (i)];
+
+                if (inst.result == plan.bound && b >= plan.headerBlock)
+                    eligible = false;
+
+                if (inst.result != plan.induction)
+                    continue;
+
+                ++definitions;
+
+                if (YdspInstPosition { b, i } != step)
+                    plan.seed = { b, i };
+            }
+        }
+
+        if (! eligible || definitions != 2 || plan.seed.first != plan.headerBlock - 1)
+            continue;
+
+        const auto& seed = preheader.insts[static_cast<size_t> (plan.seed.second)];
+
+        if (! ((seed.op == YdspIrOp::constI && seed.ivalue == 0) || (seed.op == YdspIrOp::movI && isZero (seed.a))))
+            continue;
+
+        // Besides the loop test and the increment, the induction may only
+        // index a scalar stream access inside the loop.
+        forEachValueUse (fn, [&] (int block, int instruction, int operand, int value)
+        {
+            if (value != plan.induction || ! eligible)
+                return;
+
+            const YdspInstPosition at { block, instruction };
+
+            if (at == step || at == YdspInstPosition { plan.headerBlock, 0 })
+                return;
+
+            if (instruction < 0 || operand != 0 || block <= plan.headerBlock || block > plan.latchBlock)
+            {
+                eligible = false;
+                return;
+            }
+
+            const auto& inst = fn.blocks[static_cast<size_t> (block)].insts[static_cast<size_t> (instruction)];
+            const bool isLoad = inst.op == YdspIrOp::loadInput || inst.op == YdspIrOp::loadOutput;
+            const int accessed = isLoad ? inst.result : inst.b;
+
+            if ((! isLoad && inst.op != YdspIrOp::storeOutput) || isVectorValue (accessed))
+            {
+                eligible = false;
+                return;
+            }
+
+            const uint32_t scale = is64BitValueType (valueTypes[static_cast<size_t> (accessed)]) ? 3u : 2u;
+            const int slot = inst.op == YdspIrOp::loadInput ? inst.memIndex : fn.numInputs + inst.memIndex;
+
+            if (const auto [known, inserted] = plan.streamScales.emplace (slot, scale); ! inserted && known->second != scale)
+                eligible = false;
+        });
+
+        if (! eligible)
+            continue;
+
+        const auto pinned = [this] (const char* name)
+        {
+            YdspGp reg = cc->new_gp64 (name);
+
+            if (auto* virt = cc->virt_reg_by_reg (reg))
+                virt->set_weight (255);
+
+            return reg;
+        };
+
+        regs[static_cast<size_t> (plan.induction)] = pinned ("sampleOffset");
+
+        for (const auto& [slot, scale] : plan.streamScales)
+            plan.streamEnds.emplace (slot, pinned ("streamEnd"));
+
+        flagSettingArithmetic.insert (step);
+        endRelativeLoops.push_back (std::move (plan));
+    }
+}
+
+template <typename Traits>
+void YdspAsmJitCodegenImpl<Traits>::emitEndRelativeLoopSetup (int preheaderBlock)
+{
+    for (const auto& loop : endRelativeLoops)
+    {
+        if (loop.headerBlock - 1 != preheaderBlock)
+            continue;
+
+        YdspGp count = cc->new_gp64 ("sampleCount");
+
+        if constexpr (Traits::isX64)
+        {
+            emitExtendInt (count, gp (loop.bound));
+
+            for (const auto& [slot, end] : loop.streamEnds)
+            {
+                const bool isInput = slot < activeFn->numInputs;
+                const auto base = streamBase (loop.headerBlock, isInput, isInput ? slot : slot - activeFn->numInputs);
+
+                cc->lea (end, memPtrIndexed (base, count, loop.streamScales.at (slot), 0));
+            }
+
+            moveGp (gp (loop.induction), count);
+            cc->neg (gp (loop.induction));
+        }
+        else
+        {
+            cc->sxtw (count, gp (loop.bound));
+
+            for (const auto& [slot, end] : loop.streamEnds)
+            {
+                const bool isInput = slot < activeFn->numInputs;
+                const auto base = streamBase (loop.headerBlock, isInput, isInput ? slot : slot - activeFn->numInputs);
+
+                cc->add (end, base, count, asmjit::arm::Shift (asmjit::arm::ShiftOp::kLSL, loop.streamScales.at (slot)));
+            }
+
+            cc->neg (gp (loop.induction), count);
+        }
+    }
+}
+
+template <typename Traits>
+void YdspAsmJitCodegenImpl<Traits>::planLoopPointers (const YdspIrFunction& fn)
+{
+    advancingPointerLoops.clear();
+    loopPointerAccesses.clear();
+    elidedLoopOffsetAdds.clear();
+
+    const YdspValueUseCounts counts (fn);
+    const int numBlocks = static_cast<int> (fn.blocks.size());
+
+    const auto constantIntOf = [&] (int value) -> std::optional<int64_t>
+    {
+        if (! counts.definedOnce (value))
+            return std::nullopt;
+
+        for (const auto& block : fn.blocks)
+            for (const auto& inst : block.insts)
+                if (inst.result == value)
+                    return inst.op == YdspIrOp::constI ? std::optional<int64_t> (inst.ivalue) : std::nullopt;
+
+        return std::nullopt;
+    };
+
+    const auto isCallInLoop = [] (const YdspIrInst& inst) noexcept
+    {
+        switch (inst.op)
+        {
+            case YdspIrOp::sinF:
+            case YdspIrOp::cosF:
+            case YdspIrOp::tanF:
+            case YdspIrOp::asinF:
+            case YdspIrOp::acosF:
+            case YdspIrOp::atanF:
+            case YdspIrOp::sinhF:
+            case YdspIrOp::coshF:
+            case YdspIrOp::tanhF:
+            case YdspIrOp::asinhF:
+            case YdspIrOp::acoshF:
+            case YdspIrOp::atanhF:
+            case YdspIrOp::expF:
+            case YdspIrOp::logF:
+            case YdspIrOp::log10F:
+            case YdspIrOp::powF:
+            case YdspIrOp::atan2F:
+            case YdspIrOp::fmodF:
+            case YdspIrOp::roundF:
+            case YdspIrOp::copysignF:
+            case YdspIrOp::emitEvent:
+            case YdspIrOp::traceInt:
+            case YdspIrOp::traceFloat:
+            case YdspIrOp::traceCommit:
+                return true;
+
+            default:
+                return false;
+        }
+    };
+
+    for (const auto& loop : fn.loops)
+    {
+        const int header = loop.headerBlock;
+        const int preheader = header - 1;
+        const int latch = loop.exitBlock - 1;
+
+        if (loop.unrolled || header < 1 || latch <= header || latch >= numBlocks
+            || loop.induction < 0 || static_cast<size_t> (loop.induction) >= valueTypes.size()
+            || valueTypes[static_cast<size_t> (loop.induction)] != YdspValueType::int32Type)
+            continue;
+
+        if (std::any_of (endRelativeLoops.begin(), endRelativeLoops.end(), [header] (const EndRelativeLoop& er) { return er.headerBlock == header; }))
+            continue;
+
+        const auto& preheaderBlock = fn.blocks[static_cast<size_t> (preheader)];
+        const auto& latchBlock = fn.blocks[static_cast<size_t> (latch)];
+
+        const bool validPreheader = preheaderBlock.term == YdspIrTerm::fallthrough
+                                 || (preheaderBlock.term == YdspIrTerm::branch && preheaderBlock.termTarget == header);
+
+        if (! validPreheader || latchBlock.term != YdspIrTerm::branch || latchBlock.termTarget != header || latchBlock.insts.empty())
+            continue;
+
+        bool validCfg = true;
+
+        for (int b = 0; b < numBlocks && validCfg; ++b)
+        {
+            const auto& block = fn.blocks[static_cast<size_t> (b)];
+            const bool inside = b >= header && b <= latch;
+            const int fallthroughTarget = block.term == YdspIrTerm::fallthrough ? b + 1 : -1;
+
+            for (const int target : { block.termTarget, block.termTarget2, fallthroughTarget })
+            {
+                if (target < 0)
+                    continue;
+
+                if (! inside && b != preheader && target >= header && target <= latch)
+                    validCfg = false;
+
+                if (inside && b != latch && target == header)
+                    validCfg = false;
+            }
+        }
+
+        if (! validCfg)
+            continue;
+
+        // Identify the single constant-step induction update at the end of latch.
+        int latchIncIndex = -1;
+        int latchMoveIndex = -1;
+        int64_t stepConst = 0;
+        const auto latchSize = static_cast<int> (latchBlock.insts.size());
+
+        {
+            const auto& lastInst = latchBlock.insts.back();
+
+            if (lastInst.op == YdspIrOp::addI && lastInst.result == loop.induction
+                && lastInst.a == loop.induction && ! lastInst.saturatingIntegerArithmetic)
+            {
+                latchIncIndex = latchSize - 1;
+                const auto imm = integerImmediates.find ({ latch, latchIncIndex });
+                const auto c = imm != integerImmediates.end() ? std::optional<int64_t> (imm->second) : constantIntOf (lastInst.b);
+
+                if (c.has_value())
+                    stepConst = *c;
+            }
+            else if (latchSize >= 2 && lastInst.op == YdspIrOp::movI && lastInst.result == loop.induction)
+            {
+                const auto& prevInst = latchBlock.insts[static_cast<size_t> (latchSize - 2)];
+
+                if (prevInst.op == YdspIrOp::addI && prevInst.result == lastInst.a
+                    && prevInst.result != loop.induction && prevInst.a == loop.induction
+                    && ! prevInst.saturatingIntegerArithmetic)
+                {
+                    latchIncIndex = latchSize - 2;
+                    latchMoveIndex = latchSize - 1;
+                    const auto imm = integerImmediates.find ({ latch, latchIncIndex });
+                    const auto c = imm != integerImmediates.end() ? std::optional<int64_t> (imm->second) : constantIntOf (prevInst.b);
+
+                    if (c.has_value())
+                        stepConst = *c;
+                }
+            }
+        }
+
+        if (latchIncIndex < 0 || stepConst < 1 || stepConst > 256)
+            continue;
+
+        // Verify induction is seeded once in preheader, updated only at latch,
+        // and never written elsewhere.
+        bool validDefs = true;
+        int seedIndex = -1;
+
+        for (int b = 0; b < numBlocks && validDefs; ++b)
+        {
+            const auto& insts = fn.blocks[static_cast<size_t> (b)].insts;
+
+            for (int i = 0; i < static_cast<int> (insts.size()); ++i)
+            {
+                if (insts[static_cast<size_t> (i)].result != loop.induction)
+                    continue;
+
+                if (b == preheader)
+                {
+                    if (seedIndex >= 0)
+                        validDefs = false;
+
+                    seedIndex = i;
+                }
+                else if (b == latch && i == (latchMoveIndex >= 0 ? latchMoveIndex : latchIncIndex))
+                {
+                    continue;
+                }
+                else
+                {
+                    validDefs = false;
+                }
+            }
+        }
+
+        if (! validDefs || seedIndex < 0)
+            continue;
+
+        const auto& seedInst = preheaderBlock.insts[static_cast<size_t> (seedIndex)];
+        std::optional<int64_t> startConst;
+        int startValue = -1;
+
+        if (seedInst.op == YdspIrOp::constI)
+        {
+            startConst = seedInst.ivalue;
+        }
+        else if (seedInst.op == YdspIrOp::movI && seedInst.a >= 0 && seedInst.a != loop.induction)
+        {
+            startConst = constantIntOf (seedInst.a);
+
+            if (! startConst.has_value())
+            {
+                startValue = seedInst.a;
+
+                for (int k = seedIndex + 1; k < static_cast<int> (preheaderBlock.insts.size()); ++k)
+                    if (preheaderBlock.insts[static_cast<size_t> (k)].result == startValue)
+                        validDefs = false;
+            }
+        }
+        else
+        {
+            continue;
+        }
+
+        if (! validDefs)
+            continue;
+
+        // Find `streamIdx = addI(invariantBase, induction)` within blocks in [header+1, latch].
+        struct StreamOffsetInfo
+        {
+            int block = -1;
+            int instIndex = -1;
+            int baseValue = -1;
+        };
+
+        std::unordered_map<int, StreamOffsetInfo> streamOffsets;
+
+        const auto isInvariantInLoop = [&] (int value) -> bool
+        {
+            if (value < 0 || value == loop.induction
+                || static_cast<size_t> (value) >= valueTypes.size()
+                || valueTypes[static_cast<size_t> (value)] != YdspValueType::int32Type)
+                return false;
+
+            for (int b = header; b <= latch; ++b)
+                for (const auto& inst : fn.blocks[static_cast<size_t> (b)].insts)
+                    if (inst.result == value)
+                        return false;
+
+            return true;
+        };
+
+        for (int b = header + 1; b <= latch; ++b)
+        {
+            const auto& insts = fn.blocks[static_cast<size_t> (b)].insts;
+            const int limit = (b == latch) ? latchIncIndex : static_cast<int> (insts.size());
+
+            for (int i = 0; i < limit; ++i)
+            {
+                const auto& inst = insts[static_cast<size_t> (i)];
+
+                if (inst.op != YdspIrOp::addI || inst.saturatingIntegerArithmetic
+                    || inst.result < 0 || isVectorValue (inst.result)
+                    || ! counts.definedOnce (inst.result))
+                    continue;
+
+                if (valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::int32Type)
+                    continue;
+
+                int baseVal = -1;
+
+                if (inst.a == loop.induction && isInvariantInLoop (inst.b))
+                    baseVal = inst.b;
+                else if (inst.b == loop.induction && isInvariantInLoop (inst.a))
+                    baseVal = inst.a;
+
+                if (baseVal >= 0)
+                    streamOffsets.emplace (inst.result, StreamOffsetInfo { b, i, baseVal });
+            }
+        }
+
+        // Collect candidate state-array and stream accesses indexed by loop.induction
+        // (or by a loop-invariant offset + loop.induction for streams).
+        // Key: (kindInt, baseOrSlot, isInput, offsetValue)
+        using PtrKey = std::tuple<int, int, bool, int>;
+
+        struct PtrCandidate
+        {
+            LoopPointer pointer;
+            std::vector<YdspInstPosition> positions;
+            std::vector<int> replacedOffsetValues;
+            double refs = 0.0;
+            bool valid = true;
+        };
+
+        std::map<PtrKey, PtrCandidate> candidates;
+        bool hasCall = false;
+
+        for (int b = header; b <= latch; ++b)
+        {
+            const auto& insts = fn.blocks[static_cast<size_t> (b)].insts;
+            const int limit = (b == latch) ? latchIncIndex : static_cast<int> (insts.size());
+
+            for (int i = 0; i < limit; ++i)
+            {
+                const auto& inst = insts[static_cast<size_t> (i)];
+
+                if (isCallInLoop (inst))
+                    hasCall = true;
+
+                if (b == header)
+                    continue;
+
+                const YdspInstPosition pos { b, i };
+
+                if (arrayDisplacements.count (pos) != 0)
+                    continue;
+
+                const bool isArrayLoad = inst.op == YdspIrOp::loadStateArrayF || inst.op == YdspIrOp::loadStateArrayI;
+                const bool isArrayStore = inst.op == YdspIrOp::storeStateArrayF || inst.op == YdspIrOp::storeStateArrayI;
+
+                if (isArrayLoad || isArrayStore)
+                {
+                    if (inst.a != loop.induction)
+                        continue;
+
+                    const int valueId = isArrayLoad ? inst.result : inst.b;
+
+                    if (valueId < 0 || static_cast<size_t> (valueId) >= valueTypes.size())
+                        continue;
+
+                    const auto type = valueTypes[static_cast<size_t> (valueId)];
+                    const uint32_t elemBytes = is64BitValueType (type) ? 8u : 4u;
+                    const int baseOffset = stateArrayBase (type, inst.memIndex);
+
+                    const PtrKey key { 0, baseOffset, false, -1 };
+                    auto& entry = candidates[key];
+
+                    if (entry.positions.empty())
+                    {
+                        entry.pointer.kind = LoopPointer::Kind::stateArray;
+                        entry.pointer.baseOffset = baseOffset;
+                        entry.pointer.elemBytes = elemBytes;
+                    }
+                    else if (entry.pointer.elemBytes != elemBytes)
+                    {
+                        entry.valid = false;
+                    }
+
+                    entry.positions.push_back (pos);
+                    entry.refs += referenceCost (b);
+                    continue;
+                }
+
+                const bool isStreamLoad = inst.op == YdspIrOp::loadInput || inst.op == YdspIrOp::loadOutput;
+                const bool isStreamStore = inst.op == YdspIrOp::storeOutput;
+
+                if (isStreamLoad || isStreamStore)
+                {
+                    const bool isInput = inst.op == YdspIrOp::loadInput;
+                    const int valueId = isStreamLoad ? inst.result : inst.b;
+
+                    if (valueId < 0 || static_cast<size_t> (valueId) >= valueTypes.size())
+                        continue;
+
+                    if (! streamBase (b, isInput, inst.memIndex).is_valid())
+                        continue;
+
+                    int offsetVal = -1;
+                    int replacedOffsetVal = -1;
+
+                    if (inst.a != loop.induction)
+                    {
+                        const auto offIt = streamOffsets.find (inst.a);
+
+                        if (offIt == streamOffsets.end() || offIt->second.block != b || offIt->second.instIndex >= i)
+                            continue;
+
+                        offsetVal = offIt->second.baseValue;
+                        replacedOffsetVal = inst.a;
+                    }
+
+                    const auto type = valueTypes[static_cast<size_t> (valueId)];
+                    const uint32_t elemBytes = is64BitValueType (type) ? 8u : 4u;
+
+                    const PtrKey key { 1, inst.memIndex, isInput, offsetVal };
+                    auto& entry = candidates[key];
+
+                    if (entry.positions.empty())
+                    {
+                        entry.pointer.kind = LoopPointer::Kind::stream;
+                        entry.pointer.isInput = isInput;
+                        entry.pointer.streamSlot = inst.memIndex;
+                        entry.pointer.streamAccessBlock = b;
+                        entry.pointer.offsetValue = offsetVal;
+                        entry.pointer.elemBytes = elemBytes;
+                    }
+                    else if (entry.pointer.elemBytes != elemBytes)
+                    {
+                        entry.valid = false;
+                    }
+
+                    entry.positions.push_back (pos);
+
+                    if (replacedOffsetVal >= 0)
+                        entry.replacedOffsetValues.push_back (replacedOffsetVal);
+
+                    entry.refs += referenceCost (b);
+                }
+            }
+        }
+
+        std::vector<PtrCandidate> selected;
+
+        for (auto& [key, cand] : candidates)
+        {
+            (void) key;
+            if (cand.valid && ! cand.positions.empty())
+                selected.push_back (std::move (cand));
+        }
+
+        if (selected.empty())
+            continue;
+
+        std::sort (selected.begin(), selected.end(), [] (const PtrCandidate& a, const PtrCandidate& b)
+        {
+            if (a.refs != b.refs)
+                return a.refs > b.refs;
+
+            return a.positions.size() > b.positions.size();
+        });
+
+        const size_t maxPointers = Traits::isX64 ? (hasCall ? 3u : 6u) : (hasCall ? 6u : 12u);
+
+        if (selected.size() > maxPointers)
+            selected.resize (maxPointers);
+
+        AdvancingPointerLoop plan;
+        plan.headerBlock = header;
+        plan.latchBlock = latch;
+        plan.induction = loop.induction;
+        plan.step = static_cast<int> (stepConst);
+        plan.startValue = startValue;
+        plan.startConst = startConst;
+
+        std::unordered_map<int, int> replacedOffsetUseCount;
+
+        for (auto& cand : selected)
+        {
+            YdspGp ptr = cc->new_gp64 ("loopPtr");
+
+            if (auto* virt = cc->virt_reg_by_reg (ptr))
+                virt->set_weight (hasCall ? weightFor (cand.refs) : 255u);
+
+            cand.pointer.ptrReg = ptr;
+
+            for (const auto& pos : cand.positions)
+                loopPointerAccesses.emplace (pos, ptr);
+
+            for (const int offVal : cand.replacedOffsetValues)
+                ++replacedOffsetUseCount[offVal];
+
+            plan.pointers.push_back (cand.pointer);
+        }
+
+        for (const auto& [offVal, replacedCount] : replacedOffsetUseCount)
+        {
+            if (replacedCount == counts.useCount (offVal))
+            {
+                const auto& info = streamOffsets.at (offVal);
+                elidedLoopOffsetAdds.emplace (info.block, info.instIndex);
+            }
+        }
+
+        advancingPointerLoops.push_back (std::move (plan));
+    }
+}
+
+template <typename Traits>
+void YdspAsmJitCodegenImpl<Traits>::emitLoopPointerSetup (int preheaderBlock)
+{
+    for (const auto& loop : advancingPointerLoops)
+    {
+        if (loop.headerBlock - 1 != preheaderBlock)
+            continue;
+
+        for (const auto& lp : loop.pointers)
+        {
+            const uint32_t scaleLog2 = lp.elemBytes == 8 ? 3u : 2u;
+            const YdspGp baseReg = lp.kind == LoopPointer::Kind::stateArray
+                                     ? stateArraysReg
+                                     : streamBase (lp.streamAccessBlock, lp.isInput, lp.streamSlot);
+            const int32_t baseOffset = lp.kind == LoopPointer::Kind::stateArray ? lp.baseOffset : 0;
+
+            if (lp.offsetValue < 0 && loop.startConst.has_value())
+            {
+                const int64_t totalOffset = static_cast<int64_t> (baseOffset)
+                                          + (*loop.startConst) * static_cast<int64_t> (lp.elemBytes);
+
+                if (totalOffset >= std::numeric_limits<int32_t>::min()
+                    && totalOffset <= std::numeric_limits<int32_t>::max())
+                {
+                    emitAddPointerImm (lp.ptrReg, baseReg, static_cast<int32_t> (totalOffset));
+                }
+                else
+                {
+                    YdspGp off = cc->new_gp64 ("ptrOff");
+                    cc->mov (off, asmjit::Imm (totalOffset));
+
+                    if constexpr (Traits::isX64)
+                        cc->lea (lp.ptrReg, asmjit::x86::ptr (baseReg, off));
+                    else
+                        cc->add (lp.ptrReg, baseReg, off);
+                }
+
+                continue;
+            }
+
+            YdspGp idx64 = cc->new_gp64 ("ptrIdx");
+
+            if (lp.offsetValue >= 0)
+            {
+                emitExtendInt (idx64, gp (lp.offsetValue));
+
+                if (loop.startConst.has_value() && *loop.startConst != 0)
+                {
+                    emitAddPointerImm (idx64, idx64, static_cast<int32_t> (*loop.startConst));
+                }
+                else if (! loop.startConst.has_value())
+                {
+                    YdspGp start64 = cc->new_gp64 ("ptrStart");
+                    emitExtendInt (start64, gp (loop.startValue));
+
+                    if constexpr (Traits::isX64)
+                        cc->add (idx64, start64);
+                    else
+                        cc->add (idx64, idx64, start64);
+                }
+            }
+            else
+            {
+                emitExtendInt (idx64, gp (loop.startValue));
+            }
+
+            if constexpr (Traits::isX64)
+            {
+                cc->lea (lp.ptrReg, memPtrIndexed (baseReg, idx64, scaleLog2, baseOffset));
+            }
+            else
+            {
+                if (baseOffset != 0)
+                {
+                    YdspGp basePlusOff = cc->new_gp64 ("ptrBase");
+                    emitAddPointerImm (basePlusOff, baseReg, baseOffset);
+                    cc->add (lp.ptrReg, basePlusOff, idx64, asmjit::arm::Shift (asmjit::arm::ShiftOp::kLSL, static_cast<int> (scaleLog2)));
+                }
+                else
+                {
+                    cc->add (lp.ptrReg, baseReg, idx64, asmjit::arm::Shift (asmjit::arm::ShiftOp::kLSL, static_cast<int> (scaleLog2)));
+                }
+            }
+        }
+    }
+}
+
+template <typename Traits>
+void YdspAsmJitCodegenImpl<Traits>::emitLoopPointerAdvance (int latchBlock)
+{
+    for (const auto& loop : advancingPointerLoops)
+    {
+        if (loop.latchBlock != latchBlock)
+            continue;
+
+        for (const auto& lp : loop.pointers)
+            emitAddPointerImm (lp.ptrReg, lp.ptrReg, static_cast<int32_t> (loop.step * static_cast<int> (lp.elemBytes)));
     }
 }
 
@@ -1018,6 +2346,174 @@ typename YdspAsmJitCodegenImpl<Traits>::YdspMem YdspAsmJitCodegenImpl<Traits>::v
 }
 
 template <typename Traits>
+typename YdspAsmJitCodegenImpl<Traits>::YdspMem YdspAsmJitCodegenImpl<Traits>::rampConstMem()
+{
+    std::array<float, 16> offsets {};
+
+    for (size_t lane = 0; lane < offsets.size(); ++lane)
+        offsets[lane] = static_cast<float> (lane);
+
+    return cc->new_const (asmjit::ConstPoolScope::kLocal, offsets.data(), static_cast<size_t> (activeVectorWidth) * sizeof (float));
+}
+
+template <typename Traits>
+void YdspAsmJitCodegenImpl<Traits>::prepareRampConsts (const YdspIrFunction& fn)
+{
+    vrampRegs.clear();
+    loopRampConsts.clear();
+
+    const auto mayEmitCall = [] (const YdspIrInst& inst) noexcept
+    {
+        switch (inst.op)
+        {
+            case YdspIrOp::sinF:
+            case YdspIrOp::cosF:
+            case YdspIrOp::tanF:
+            case YdspIrOp::asinF:
+            case YdspIrOp::acosF:
+            case YdspIrOp::atanF:
+            case YdspIrOp::sinhF:
+            case YdspIrOp::coshF:
+            case YdspIrOp::tanhF:
+            case YdspIrOp::asinhF:
+            case YdspIrOp::acoshF:
+            case YdspIrOp::atanhF:
+            case YdspIrOp::expF:
+            case YdspIrOp::logF:
+            case YdspIrOp::log10F:
+            case YdspIrOp::powF:
+            case YdspIrOp::atan2F:
+            case YdspIrOp::fmodF:
+            case YdspIrOp::roundF:
+            case YdspIrOp::copysignF:
+            case YdspIrOp::emitEvent:
+            case YdspIrOp::traceInt:
+            case YdspIrOp::traceFloat:
+            case YdspIrOp::traceCommit:
+                return true;
+
+            default:
+                return false;
+        }
+    };
+
+    const int numBlocks = static_cast<int> (fn.blocks.size());
+    std::vector<bool> loopEligible (fn.loops.size(), false);
+    std::vector<bool> loopHasCall (fn.loops.size(), false);
+
+    for (size_t l = 0; l < fn.loops.size(); ++l)
+    {
+        const auto& loop = fn.loops[l];
+        const int header = loop.headerBlock;
+        const int exit = std::min (loop.exitBlock, numBlocks);
+
+        if (loop.unrolled || header < 1 || exit <= header)
+            continue;
+
+        const auto& preheader = fn.blocks[static_cast<size_t> (header) - 1];
+        bool entersThroughPreheader = preheader.term == YdspIrTerm::fallthrough
+                                   || (preheader.term == YdspIrTerm::branch && preheader.termTarget == header);
+
+        for (int b = 0; b < numBlocks && entersThroughPreheader; ++b)
+        {
+            const auto& block = fn.blocks[static_cast<size_t> (b)];
+            const bool inside = b >= header && b < exit;
+
+            for (const int target : { block.termTarget, block.termTarget2, block.term == YdspIrTerm::fallthrough ? b + 1 : -1 })
+                if (! inside && b != header - 1 && target >= header && target < exit)
+                    entersThroughPreheader = false;
+        }
+
+        loopEligible[l] = entersThroughPreheader;
+
+        if (! entersThroughPreheader)
+            continue;
+
+        for (int b = header; b < exit && ! loopHasCall[l]; ++b)
+            for (const auto& inst : fn.blocks[static_cast<size_t> (b)].insts)
+                if (mayEmitCall (inst))
+                {
+                    loopHasCall[l] = true;
+                    break;
+                }
+    }
+
+    std::unordered_map<int, YdspFp> loopRampReg;
+    std::vector<YdspInstPosition> topLevelRamps;
+    double topLevelReferences = 0.0;
+    bool topLevelHasCall = false;
+
+    for (size_t b = 0; b < fn.blocks.size(); ++b)
+    {
+        if (blockLoopScope[b] < 0 && ! topLevelHasCall)
+            for (const auto& inst : fn.blocks[b].insts)
+                if (mayEmitCall (inst))
+                {
+                    topLevelHasCall = true;
+                    break;
+                }
+
+        for (size_t i = 0; i < fn.blocks[b].insts.size(); ++i)
+        {
+            if (fn.blocks[b].insts[i].op != YdspIrOp::vrampF)
+                continue;
+
+            int bestLoop = -1;
+
+            for (size_t l = 0; l < fn.loops.size(); ++l)
+            {
+                if (! loopEligible[l] || loopHasCall[l])
+                    continue;
+
+                const auto& loop = fn.loops[l];
+
+                if (static_cast<int> (b) >= loop.headerBlock && static_cast<int> (b) < std::min (loop.exitBlock, numBlocks))
+                    if (bestLoop < 0 || loop.headerBlock < fn.loops[static_cast<size_t> (bestLoop)].headerBlock)
+                        bestLoop = static_cast<int> (l);
+            }
+
+            const YdspInstPosition position { static_cast<int> (b), static_cast<int> (i) };
+
+            if (bestLoop >= 0)
+            {
+                auto it = loopRampReg.find (bestLoop);
+
+                if (it == loopRampReg.end())
+                {
+                    YdspFp ramp = newFpVector ("ramp");
+
+                    if (auto* virt = cc->virt_reg_by_reg (ramp))
+                        virt->set_weight (255);
+
+                    it = loopRampReg.emplace (bestLoop, ramp).first;
+                    loopRampConsts[fn.loops[static_cast<size_t> (bestLoop)].headerBlock - 1].push_back (ramp);
+                }
+
+                vrampRegs.emplace (position, it->second);
+            }
+            else if (blockLoopScope[b] < 0)
+            {
+                topLevelRamps.push_back (position);
+                topLevelReferences += referenceCost (static_cast<int> (b));
+            }
+        }
+    }
+
+    if (topLevelRamps.size() >= 2 && ! topLevelHasCall)
+    {
+        YdspFp ramp = newFpVector ("ramp");
+
+        if (auto* virt = cc->virt_reg_by_reg (ramp))
+            virt->set_weight (weightFor (topLevelReferences));
+
+        loadVectorFromMem (ramp, rampConstMem());
+
+        for (const auto& position : topLevelRamps)
+            vrampRegs.emplace (position, ramp);
+    }
+}
+
+template <typename Traits>
 void YdspAsmJitCodegenImpl<Traits>::loadFloatConst (const YdspFp& dst, double value, YdspValueType type)
 {
     // Read the literal straight out of the constant pool. Materializing it via
@@ -1026,8 +2522,12 @@ void YdspAsmJitCodegenImpl<Traits>::loadFloatConst (const YdspFp& dst, double va
     // constant is live - which, after LICM hoists every constant into the entry
     // block, is the whole kernel.
     const bool is64 = (type == YdspValueType::float64Type);
+    const uint64_t bits = is64 ? doubleBits (value) : floatBits (value);
 
-    loadFloatFromMem (dst, rawConstMem (is64 ? doubleBits (value) : floatBits (value), is64));
+    if (bits == 0 && emitZeroFloatConst (dst, is64))
+        return;
+
+    loadFloatFromMem (dst, rawConstMem (bits, is64));
 }
 
 //==============================================================================
@@ -1099,8 +2599,41 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
 {
     const YdspInstPosition position { blockIndex, instIndex };
     if ((inst.op == YdspIrOp::constI && elidedIntegerConstants.count (inst.result) != 0)
-        || elidedNegations.count (position) != 0)
+        || (inst.op == YdspIrOp::constF && elidedFloatConstants.count (inst.result) != 0)
+        || elidedNegations.count (position) != 0
+        || elidedLoopOffsetAdds.count (position) != 0)
         return;
+
+    // The preheader seeds an end-relative loop's offset itself.
+    if (std::any_of (endRelativeLoops.begin(), endRelativeLoops.end(), [&] (const EndRelativeLoop& loop) { return loop.seed == position; }))
+        return;
+
+    if (flagSettingArithmetic.count (position) != 0)
+    {
+        emitFlagSettingArithmetic (inst, position);
+        return;
+    }
+
+    if constexpr (Traits::isX64)
+    {
+        if (flagPreservingArithmetic.count (position) != 0)
+        {
+            const auto immediate = integerImmediates.find (position);
+
+            if (immediate != integerImmediates.end())
+            {
+                const auto imm = static_cast<int32_t> (immediate->second);
+                const auto offset = inst.op == YdspIrOp::addI ? imm : -imm;
+                cc->lea (gp (inst.result), asmjit::x86::ptr (gp (inst.a).r64(), offset));
+            }
+            else
+            {
+                cc->lea (gp (inst.result), asmjit::x86::ptr (gp (inst.a).r64(), gp (inst.b).r64()));
+            }
+
+            return;
+        }
+    }
 
     if (const auto displacement = arrayDisplacements.find (position); displacement != arrayDisplacements.end())
     {
@@ -1135,7 +2668,9 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
     {
         if constexpr (Traits::isX64)
         {
-            moveGp (gp (inst.result), gp (inst.a));
+            if (gp (inst.result) != gp (inst.a))
+                moveGp (gp (inst.result), gp (inst.a));
+
             const auto value = asmjit::Imm (static_cast<int32_t> (immediate->second));
             if (inst.op == YdspIrOp::addI)
                 cc->add (gp (inst.result), value);
@@ -1328,44 +2863,68 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
         }
 
         case YdspIrOp::loadStateArrayF:
-        {
-            const auto type = valueTypes[static_cast<size_t> (inst.result)];
-
-            // A widened access reads a whole vector of consecutive elements
-            // starting at the same element index, so only the width changes.
-            if (isVectorValue (inst.result))
-            {
-                loadVectorFromMem (fp (inst.result), emitVectorStateMem (stateArrayBase (type, inst.memIndex), inst.a));
-                return;
-            }
-
-            emitStateAccess (type, true, fp (inst.result), stateArrayBase (type, inst.memIndex), inst.a);
-            return;
-        }
         case YdspIrOp::storeStateArrayF:
-        {
-            const auto type = valueTypes[static_cast<size_t> (inst.b)];
-
-            if (isVectorValue (inst.b))
-            {
-                storeVectorToMem (emitVectorStateMem (stateArrayBase (type, inst.memIndex), inst.a), fp (inst.b));
-                return;
-            }
-
-            emitStateAccess (type, false, fp (inst.b), stateArrayBase (type, inst.memIndex), inst.a);
-            return;
-        }
-
         case YdspIrOp::loadStateArrayI:
-        {
-            const auto type = valueTypes[static_cast<size_t> (inst.result)];
-            emitStateAccess (type, true, gp (inst.result), stateArrayBase (type, inst.memIndex), inst.a);
-            return;
-        }
         case YdspIrOp::storeStateArrayI:
         {
-            const auto type = valueTypes[static_cast<size_t> (inst.b)];
-            emitStateAccess (type, false, gp (inst.b), stateArrayBase (type, inst.memIndex), inst.a);
+            const bool isLoad = inst.op == YdspIrOp::loadStateArrayF || inst.op == YdspIrOp::loadStateArrayI;
+            const int valueId = isLoad ? inst.result : inst.b;
+            const auto type = valueTypes[static_cast<size_t> (valueId)];
+
+            if (const auto ptrIt = loopPointerAccesses.find (position); ptrIt != loopPointerAccesses.end())
+            {
+                const auto mem = memPtr (ptrIt->second, 0);
+
+                if (isVectorValue (valueId))
+                {
+                    if (isLoad)
+                        loadVectorFromMem (fp (valueId), mem);
+                    else
+                        storeVectorToMem (mem, fp (valueId));
+                }
+                else if (isFloatValueType (type))
+                {
+                    if (isLoad)
+                        loadFloatFromMem (fp (valueId), mem);
+                    else
+                        storeFloatToMem (mem, fp (valueId));
+                }
+                else
+                {
+                    if (isLoad)
+                        loadGpFromMem (gp (valueId), mem);
+                    else
+                        storeGpToMem (mem, gp (valueId));
+                }
+
+                return;
+            }
+
+            if (isVectorValue (valueId))
+            {
+                const auto mem = emitVectorStateMem (stateArrayBase (type, inst.memIndex), inst.a);
+
+                if (isLoad)
+                    loadVectorFromMem (fp (valueId), mem);
+                else
+                    storeVectorToMem (mem, fp (valueId));
+
+                return;
+            }
+
+            const asmjit::Reg reg = isFloatValueType (type) ? asmjit::Reg (fp (valueId)) : asmjit::Reg (gp (valueId));
+            emitStateAccess (type, isLoad, reg, stateArrayBase (type, inst.memIndex), inst.a);
+            return;
+        }
+
+        case YdspIrOp::loadInputAddress:
+        case YdspIrOp::loadOutputAddress:
+        {
+            const auto base = streamBase (blockIndex, inst.op == YdspIrOp::loadInputAddress, inst.memIndex);
+
+            if (base.is_valid())
+                moveGp (gp (inst.result), base);
+
             return;
         }
 
@@ -1375,23 +2934,51 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
         {
             const bool isStore = (inst.op == YdspIrOp::storeOutput);
             const bool isInput = (inst.op == YdspIrOp::loadInput);
+            const int valueId = isStore ? inst.b : inst.result;
 
-            const auto type = isStore ? valueTypes[static_cast<size_t> (inst.b)]
-                                      : valueTypes[static_cast<size_t> (inst.result)];
+            const auto type = valueTypes[static_cast<size_t> (valueId)];
 
-            const auto& bases = isInput ? inputBaseRegs : outputBaseRegs;
-            const auto slot = static_cast<size_t> (inst.memIndex);
+            if (const auto ptrIt = loopPointerAccesses.find (position); ptrIt != loopPointerAccesses.end())
+            {
+                const auto mem = memPtr (ptrIt->second, 0);
 
-            // compile() pre-loaded a base for every stream slot referenced by
+                if (isVectorValue (valueId))
+                {
+                    if (isStore)
+                        storeVectorToMem (mem, fp (valueId));
+                    else
+                        loadVectorFromMem (fp (valueId), mem);
+                }
+                else if (isFloatValueType (type))
+                {
+                    if (isStore)
+                        storeFloatToMem (mem, fp (valueId));
+                    else
+                        loadFloatFromMem (fp (valueId), mem);
+                }
+                else
+                {
+                    if (isStore)
+                        storeGpToMem (mem, gp (valueId));
+                    else
+                        loadGpFromMem (gp (valueId), mem);
+                }
+
+                return;
+            }
+
+            // compile() planned a base for every stream slot referenced by
             // the IR, so a miss here means the two scans disagree.
-            jassert (slot < bases.size() && bases[slot].is_valid());
+            YdspGp base = streamBase (blockIndex, isInput, inst.memIndex);
 
-            if (slot >= bases.size() || ! bases[slot].is_valid())
+            if (! base.is_valid())
                 return;
 
-            const YdspGp base = bases[slot];
+            for (const auto& loop : endRelativeLoops)
+                if (loop.induction == inst.a)
+                    base = loop.streamEnds.at (isInput ? inst.memIndex : fn.numInputs + inst.memIndex);
 
-            if (isVectorValue (isStore ? inst.b : inst.result))
+            if (isVectorValue (valueId))
             {
                 const auto mem = emitVectorStreamMem (base, inst.a);
 
@@ -1426,11 +3013,44 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
 
         // ---- lane movement ----
         case YdspIrOp::vsplat:
-            emitSplatFloat (fp (inst.result), fp (inst.a));
+            if (zeroVectorSplats.count (position) != 0 && emitZeroVector (fp (inst.result)))
+                return;
+
+            if (isFloatValueType (valueTypes[static_cast<size_t> (inst.result)]))
+                emitSplatFloat (fp (inst.result), fp (inst.a));
+            else
+                emitSplatInt (fp (inst.result), gp (inst.a));
             return;
+
+        case YdspIrOp::vrampF:
+        {
+            YdspFp ramp;
+
+            if (const auto hoisted = vrampRegs.find (position); hoisted != vrampRegs.end())
+            {
+                ramp = hoisted->second;
+            }
+            else
+            {
+                ramp = newFpVector ("ramp");
+                loadVectorFromMem (ramp, rampConstMem());
+            }
+
+            emitSplatFloat (fp (inst.result), fp (inst.a));
+            vectorBinary (YdspIrOp::addF, fp (inst.result), fp (inst.result), ramp);
+            return;
+        }
 
         case YdspIrOp::vreduceAddF:
             emitReduceAddFloat (fp (inst.result), fp (inst.a));
+            return;
+
+        case YdspIrOp::vinsertF:
+            emitInsertFloat (fp (inst.result), inst.a >= 0 ? fp (inst.a) : YdspFp {}, fp (inst.b), inst.memIndex);
+            return;
+
+        case YdspIrOp::vextractF:
+            emitExtractFloat (fp (inst.result), fp (inst.a), inst.memIndex);
             return;
 
         // ---- float arithmetic ----
@@ -1471,16 +3091,23 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
             return;
 
         case YdspIrOp::clampF:
+        {
+            // The clamped value goes second in both steps: an x86 min/max
+            // returns its second operand when either one is a NaN, so a NaN is
+            // passed through there too, as AArch64 and wasm do.
             if (isVectorValue (inst.result))
             {
-                vectorBinary (YdspIrOp::maxF, fp (inst.result), fp (inst.a), fp (inst.b));
-                vectorBinary (YdspIrOp::minF, fp (inst.result), fp (inst.result), fp (inst.c));
+                YdspFp raised = newFpVector ("clampMax");
+                vectorBinary (YdspIrOp::maxF, raised, fp (inst.b), fp (inst.a));
+                vectorBinary (YdspIrOp::minF, fp (inst.result), fp (inst.c), raised);
                 return;
             }
 
-            floatBinary (YdspIrOp::maxF, fp (inst.result), fp (inst.a), fp (inst.b));
-            floatBinary (YdspIrOp::minF, fp (inst.result), fp (inst.result), fp (inst.c));
+            YdspFp raised = is64BitValueType (valueTypes[static_cast<size_t> (inst.result)]) ? newFp64 ("clampMax") : newFp ("clampMax");
+            floatBinary (YdspIrOp::maxF, raised, fp (inst.b), fp (inst.a));
+            floatBinary (YdspIrOp::minF, fp (inst.result), fp (inst.c), raised);
             return;
+        }
 
         case YdspIrOp::fmaF:
             if (isVectorValue (inst.result))
@@ -1520,6 +3147,15 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
         case YdspIrOp::xorI:
         case YdspIrOp::shlI:
         case YdspIrOp::shrI:
+            if (isVectorValue (inst.result))
+            {
+                if ((inst.op == YdspIrOp::shlI || inst.op == YdspIrOp::shrI) && ! isVectorValue (inst.b))
+                    vectorIntShift (inst.op, fp (inst.result), fp (inst.a), gp (inst.b));
+                else
+                    vectorIntBinary (inst.op, fp (inst.result), fp (inst.a), fp (inst.b), inst.saturatingIntegerArithmetic);
+                return;
+            }
+
             if (inst.saturatingIntegerArithmetic && (inst.op == YdspIrOp::addI || inst.op == YdspIrOp::subI || inst.op == YdspIrOp::mulI))
                 emitSaturatingIntBinary (inst.op, gp (inst.result), gp (inst.a), gp (inst.b));
             else
@@ -1527,6 +3163,12 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
             return;
 
         case YdspIrOp::negI:
+            if (isVectorValue (inst.result))
+            {
+                vectorIntUnary (inst.op, fp (inst.result), fp (inst.a));
+                return;
+            }
+
             emitSaturatingIntNeg (gp (inst.result), gp (inst.a));
             return;
 
@@ -1543,17 +3185,35 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
             return;
 
         case YdspIrOp::minI:
+            if (isVectorValue (inst.result))
+            {
+                vectorIntBinary (inst.op, fp (inst.result), fp (inst.a), fp (inst.b), false);
+                return;
+            }
+
             emitIntCompareToFlags (gp (inst.a), gp (inst.b));
             emitSelectIntOnFlags (YdspCond::kSignedLT, gp (inst.result), gp (inst.a), gp (inst.b));
             return;
 
         case YdspIrOp::maxI:
+            if (isVectorValue (inst.result))
+            {
+                vectorIntBinary (inst.op, fp (inst.result), fp (inst.a), fp (inst.b), false);
+                return;
+            }
+
             emitIntCompareToFlags (gp (inst.a), gp (inst.b));
             emitSelectIntOnFlags (YdspCond::kSignedGT, gp (inst.result), gp (inst.a), gp (inst.b));
             return;
 
         case YdspIrOp::clampI:
         {
+            if (isVectorValue (inst.result))
+            {
+                vectorIntClamp (fp (inst.result), fp (inst.a), fp (inst.b), fp (inst.c));
+                return;
+            }
+
             const auto dst = gp (inst.result);
             YdspGp maxed = dst.is_gp64() ? cc->new_gp64 ("clampMax") : cc->new_gp32 ("clampMax");
 
@@ -1566,6 +3226,12 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
 
         case YdspIrOp::absI:
         {
+            if (isVectorValue (inst.result))
+            {
+                vectorIntUnary (inst.op, fp (inst.result), fp (inst.a));
+                return;
+            }
+
             const auto dst = gp (inst.result);
             const auto src = gp (inst.a);
             YdspGp negated = dst.is_gp64() ? cc->new_gp64 ("absNeg") : cc->new_gp32 ("absNeg");
@@ -1600,11 +3266,17 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
 
         // ---- conversions ----
         case YdspIrOp::itof:
-            emitIntToFloat (fp (inst.result), gp (inst.a));
+            if (isVectorValue (inst.result))
+                vectorIntToFloat (fp (inst.result), fp (inst.a));
+            else
+                emitIntToFloat (fp (inst.result), gp (inst.a));
             return;
 
         case YdspIrOp::ftoi:
-            emitFloatToInt (gp (inst.result), fp (inst.a), inst.boundedFloatToInt);
+            if (isVectorValue (inst.result))
+                vectorFloatToInt (fp (inst.result), fp (inst.a), inst.boundedFloatToInt);
+            else
+                emitFloatToInt (gp (inst.result), fp (inst.a), inst.boundedFloatToInt);
             return;
 
         case YdspIrOp::extI:
@@ -1623,9 +3295,39 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
             emitTruncateFloat (fp (inst.result), fp (inst.a));
             return;
 
+        case YdspIrOp::bitcastFtoI:
+            if (isVectorValue (inst.result))
+            {
+                if (fp (inst.result) != fp (inst.a))
+                    moveVector (fp (inst.result), fp (inst.a));
+            }
+            else
+            {
+                emitBitcastFloatToInt (gp (inst.result), fp (inst.a));
+            }
+            return;
+
+        case YdspIrOp::bitcastItoF:
+            if (isVectorValue (inst.result))
+            {
+                if (fp (inst.result) != fp (inst.a))
+                    moveVector (fp (inst.result), fp (inst.a));
+            }
+            else
+            {
+                emitBitcastIntToFloat (fp (inst.result), gp (inst.a));
+            }
+            return;
+
         // ---- logic ----
         case YdspIrOp::andB:
         case YdspIrOp::orB:
+            if (isVectorValue (inst.result))
+            {
+                vectorIntBinary (inst.op, fp (inst.result), fp (inst.a), fp (inst.b), false);
+                return;
+            }
+
             if (inst.saturatingIntegerArithmetic && (inst.op == YdspIrOp::addI || inst.op == YdspIrOp::subI || inst.op == YdspIrOp::mulI))
                 emitSaturatingIntBinary (inst.op, gp (inst.result), gp (inst.a), gp (inst.b));
             else
@@ -1633,7 +3335,10 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
             return;
 
         case YdspIrOp::notB:
-            emitNotB (gp (inst.result), gp (inst.a));
+            if (isVectorValue (inst.result))
+                vectorIntUnary (inst.op, fp (inst.result), fp (inst.a));
+            else
+                emitNotB (gp (inst.result), gp (inst.a));
             return;
 
         // ---- comparisons ----
@@ -1661,6 +3366,12 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
         case YdspIrOp::leI:
         case YdspIrOp::gtI:
         case YdspIrOp::geI:
+            if (isVectorValue (inst.result))
+            {
+                vectorIntCompare (inst.op, fp (inst.result), fp (inst.a), fp (inst.b));
+                return;
+            }
+
             if (elidedCompares.count ({ blockIndex, instIndex }) == 0)
                 emitIntCompare (conditionForComparison<YdspCond> (inst.op), gp (inst.a), gp (inst.b), gp (inst.result));
 
@@ -1676,7 +3387,10 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
             return;
         case YdspIrOp::movI:
         case YdspIrOp::movB:
-            moveGp (gp (inst.result), gp (inst.a));
+            if (isVectorValue (inst.result))
+                moveVector (fp (inst.result), fp (inst.a));
+            else
+                moveGp (gp (inst.result), gp (inst.a));
             return;
 
         // ---- select ----
@@ -1684,7 +3398,10 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
         {
             if (isVectorValue (inst.result))
             {
-                vectorSelectFloat (fp (inst.a), fp (inst.result), fp (inst.b), fp (inst.c));
+                if (isFloatValueType (valueTypes[static_cast<size_t> (inst.result)]))
+                    vectorSelectFloat (fp (inst.a), fp (inst.result), fp (inst.b), fp (inst.c));
+                else
+                    vectorSelectInt (fp (inst.a), fp (inst.result), fp (inst.b), fp (inst.c));
                 return;
             }
 
@@ -1692,6 +3409,20 @@ void YdspAsmJitCodegenImpl<Traits>::emitInstruction (const YdspIrFunction& fn, c
             // always data dependent, so a branch diamond here would be an
             // unpredictable branch per sample.
             const bool isFloatResult = isFloatValueType (valueTypes[static_cast<size_t> (inst.result)]);
+
+            // The subtraction that produced the tested value left its sign in
+            // the flags, and nothing since has touched them.
+            if (const auto reused = flagReusingSelects.find ({ blockIndex, instIndex }); reused != flagReusingSelects.end())
+            {
+                const auto cond = reused->second ? YdspCond::kSign : YdspCond::kNotSign;
+
+                if (isFloatResult)
+                    emitSelectFloatOnFlags (cond, fp (inst.result), fp (inst.b), fp (inst.c));
+                else
+                    emitSelectIntOnFlags (cond, gp (inst.result), gp (inst.b), gp (inst.c));
+
+                return;
+            }
 
             // Consume the comparison's flags directly where that is legal,
             // rather than reading back the 0/1 register it would produce.
@@ -1808,7 +3539,12 @@ asmjit::Reg YdspAsmJitCodegenImpl<Traits>::newRegFor (const std::vector<YdspValu
     const auto type = types[static_cast<size_t> (inst.result)];
 
     if (isVectorValue (inst.result))
+    {
+        if (type == YdspValueType::int32Type || type == YdspValueType::boolType)
+            return newIntVector ("v");
+
         return newFpVector ("v");
+    }
 
     if (type == YdspValueType::float64Type)
         return newFp64 ("v");
@@ -2145,6 +3881,7 @@ void YdspAsmJitCodegenImpl<Traits>::materializeMathCallTargets (const YdspIrFunc
             }
 
             const auto is64 = inst.a >= 0 && valueTypes[static_cast<size_t> (inst.a)] == YdspValueType::float64Type;
+            const bool useDouble = is64 || ! fn.fastMath;
 
             void* fnPtr = nullptr;
 
@@ -2167,7 +3904,7 @@ void YdspAsmJitCodegenImpl<Traits>::materializeMathCallTargets (const YdspIrFunc
                 case YdspIrOp::log10F:
                 {
                     if (const auto* entry = sleefUnaryEntry (inst.op))
-                        fnPtr = is64 ? reinterpret_cast<void*> (entry->libmF64) : reinterpret_cast<void*> (entry->libmF32);
+                        fnPtr = useDouble ? reinterpret_cast<void*> (entry->libmF64) : reinterpret_cast<void*> (entry->libmF32);
                     break;
                 }
 
@@ -2176,18 +3913,18 @@ void YdspAsmJitCodegenImpl<Traits>::materializeMathCallTargets (const YdspIrFunc
                 case YdspIrOp::fmodF:
                 {
                     if (const auto* entry = sleefBinaryEntry (inst.op))
-                        fnPtr = is64 ? reinterpret_cast<void*> (entry->libmF64) : reinterpret_cast<void*> (entry->libmF32);
+                        fnPtr = useDouble ? reinterpret_cast<void*> (entry->libmF64) : reinterpret_cast<void*> (entry->libmF32);
                     break;
                 }
 
                 case YdspIrOp::roundF:
-                    fnPtr = is64 ? reinterpret_cast<void*> (static_cast<double (*) (double)> (&::round))
-                                 : reinterpret_cast<void*> (&::roundf);
+                    fnPtr = useDouble ? reinterpret_cast<void*> (static_cast<double (*) (double)> (&::round))
+                                      : reinterpret_cast<void*> (&::roundf);
                     break;
 
                 case YdspIrOp::copysignF:
-                    fnPtr = is64 ? reinterpret_cast<void*> (static_cast<double (*) (double, double)> (&::copysign))
-                                 : reinterpret_cast<void*> (&::copysignf);
+                    fnPtr = useDouble ? reinterpret_cast<void*> (static_cast<double (*) (double, double)> (&::copysign))
+                                      : reinterpret_cast<void*> (&::copysignf);
                     break;
 
                 default:
@@ -2554,7 +4291,22 @@ void YdspAsmJitCodegenImpl<Traits>::emitTerminator (const YdspIrBlock& sourceBlo
             {
                 const auto& compare = it->second;
 
-                if (isFloatComparison (compare.op))
+                const auto endRelative = std::find_if (endRelativeLoops.begin(), endRelativeLoops.end(), [&] (const EndRelativeLoop& loop)
+                {
+                    return loop.headerBlock == compareBlockIndex;
+                });
+
+                if (endRelative != endRelativeLoops.end() && blockIndex == endRelative->latchBlock)
+                {
+                    // The increment set the flags, and the offset is zero
+                    // exactly when the last sample is done.
+                    branchOnFlags (YdspCond::kNotEqual, true, thenLabel);
+                    return;
+                }
+
+                if (endRelative != endRelativeLoops.end())
+                    cc->cmp (gp (endRelative->induction), asmjit::Imm (0));
+                else if (isFloatComparison (compare.op))
                     emitFloatCompareToFlags (fp (compare.a), fp (compare.b));
                 else
                     emitPlannedIntCompareToFlags (compare);

@@ -42,4 +42,43 @@ inline bool isFloatComparison (YdspIrOp op) noexcept
     }
 }
 
+inline bool isIntComparison (YdspIrOp op) noexcept
+{
+    switch (op)
+    {
+        case YdspIrOp::eqI:
+        case YdspIrOp::neI:
+        case YdspIrOp::ltI:
+        case YdspIrOp::ltUI:
+        case YdspIrOp::leI:
+        case YdspIrOp::gtI:
+        case YdspIrOp::geI:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+inline bool isInlineFastMathTranscendental (YdspIrOp op) noexcept
+{
+    switch (op)
+    {
+        case YdspIrOp::sinF:
+        case YdspIrOp::cosF:
+        case YdspIrOp::tanF:
+        case YdspIrOp::atanF:
+        case YdspIrOp::tanhF:
+        case YdspIrOp::expF:
+        case YdspIrOp::logF:
+        case YdspIrOp::log10F:
+        case YdspIrOp::powF:
+        case YdspIrOp::atan2F:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
 } // namespace yup

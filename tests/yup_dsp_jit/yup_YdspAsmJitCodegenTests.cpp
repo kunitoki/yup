@@ -575,6 +575,80 @@ TEST (YdspAsmJitCodegenTests, SampleLoopTailPreservesEmptyBlocksAndExactTripCoun
     dumpAsmOnFailureCodegen (kernel);
 }
 
+TEST (YdspAsmJitCodegenTests, SampleLoopIsClosedByItsOwnIncrementOnArm64)
+{
+    YdspDiagnostics diagnostics;
+    const auto kernel = compileKernel (R"YDSP(
+        processor Counter {
+            input stream in; output stream out; state float sum;
+            process { sum = sum + in; out = sum; }
+        }
+        graph G { input stream x; output stream y; node p = Counter; connection { x -> p.in; p.out -> y; } }
+    )YDSP", "Counter", diagnostics);
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, kernel.fn);
+
+    const auto input = makeRampCodegen (37, 0.5f);
+    const auto output = runKernel (kernel, input, 37);
+
+    float sum = 0.0f;
+    for (size_t i = 0; i < output.size(); ++i)
+        EXPECT_EQ (sum += input[i], output[i]) << i;
+
+#if YUP_ARM && YUP_64BIT
+    // The loop counts from -n up to zero against the end of each stream, so
+    // the only compare left is the guard for an empty block.
+    int compares = 0;
+    for (const auto& line : StringArray::fromLines (kernel.asmText))
+        compares += line.trimStart().startsWith ("cmp ") ? 1 : 0;
+
+    EXPECT_EQ (1, compares) << kernel.asmText;
+    EXPECT_TRUE (kernel.asmText.contains ("adds ")) << kernel.asmText;
+#endif
+
+    dumpAsmOnFailureCodegen (kernel);
+}
+
+TEST (YdspAsmJitCodegenTests, HandWrittenRingWrapsItsReadAndWritePositions)
+{
+    YdspDiagnostics diagnostics;
+    const auto kernel = compileKernel (R"YDSP(
+        processor Ring {
+            input stream in; output stream out;
+            state float buf[5000]; state int wp;
+            process {
+                int r = wp - 300;
+                if (r < 0) { r = r + 5000; }
+                out = buf[r];
+                buf[wp] = in;
+                wp = wp + 1;
+                if (wp >= 5000) { wp = 0; }
+            }
+        }
+        graph G { input stream x; output stream y; node p = Ring; connection { x -> p.in; p.out -> y; } }
+    )YDSP", "Ring", diagnostics);
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, kernel.fn);
+
+    // Long enough for both positions to pass the end of the ring twice.
+    const int numSamples = 12000;
+    const auto input = makeRampCodegen (numSamples, 1.0f);
+    const auto output = runKernel (kernel, input, numSamples);
+
+    for (int i = 0; i < numSamples; ++i)
+        ASSERT_EQ (i < 300 ? 0.0f : input[static_cast<size_t> (i - 300)], output[static_cast<size_t> (i)]) << i;
+
+#if YUP_ARM && YUP_64BIT
+    // The read wrap tests the flags of its own subtraction, and the write
+    // wrap compares against a ring length loaded once, ahead of the loop.
+    EXPECT_TRUE (kernel.asmText.contains ("subs ")) << kernel.asmText;
+    EXPECT_TRUE (kernel.asmText.contains ("csinc ")) << kernel.asmText;
+    EXPECT_LT (kernel.asmText.indexOf (", 4999"), kernel.asmText.indexOf ("b.ge ")) << kernel.asmText;
+#endif
+
+    dumpAsmOnFailureCodegen (kernel);
+}
+
 TEST (YdspAsmJitCodegenTests, TwoIterationVectorMathUnrollPreservesOutputAndState)
 {
     YdspDiagnostics diagnostics;
@@ -2803,6 +2877,2525 @@ TEST (YdspAsmJitCodegenTests, EmitEventDropsWhenTheQueueIsAtCapacity)
 
     EXPECT_EQ (0u, queue.entries.size());
     EXPECT_EQ (1u, queue.droppedCount.load());
+}
+
+//==============================================================================
+// x86-64 codegen parity: branchless advanceWrap, end-relative loops, flag reuse,
+// VEX 4-lane vectors, xorps/vxorps zeroing, and 2-address / scalar FMA coalescing
+
+TEST (YdspAsmJitCodegenTests, BranchlessAdvanceWrapOnX64)
+{
+    YdspDiagnostics diagnostics;
+    const auto source = R"YDSP(
+        processor RingWrap {
+            input stream in; output stream out;
+            state float buf[5000]; state int wp;
+            process {
+                out = buf[wp];
+                buf[wp] = in;
+                wp = wp + 1;
+                if (wp >= 5000) { wp = 0; }
+            }
+        }
+        graph G { input stream x; output stream y; node p = RingWrap; connection { x -> p.in; p.out -> y; } }
+    )YDSP";
+
+    YdspLexer lexer (source, diagnostics);
+    YdspParser parser (lexer.tokenize(), diagnostics);
+    auto parsed = parser.parseProgram();
+    ASSERT_NE (nullptr, parsed) << diagnostics.toString();
+
+    YdspSemanticAnalyzer analyzer (diagnostics);
+    auto analyzed = analyzer.analyze (std::move (parsed));
+    ASSERT_NE (nullptr, analyzed) << diagnostics.toString();
+
+    YdspOptimizer optimizer (diagnostics);
+    auto ir = optimizer.build (*analyzed);
+    ASSERT_NE (nullptr, ir) << diagnostics.toString();
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_FALSE (ir->kernels.empty());
+
+    const auto& fn = *ir->kernels.front();
+
+    {
+        YdspDiagnostics x64Diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, fn, x64Diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << x64Diagnostics.toString();
+        const auto listing = x64Diagnostics.toString();
+
+        EXPECT_TRUE (listing.contains ("cmovnl ")) << listing;
+        EXPECT_TRUE (listing.contains (", 5000")) << listing;
+        const auto loopBodyStart = listing.indexOf ("L4:");
+        const auto loopLatchStart = listing.indexOf ("L5:");
+        ASSERT_GE (loopBodyStart, 0);
+        ASSERT_GT (loopLatchStart, loopBodyStart);
+        EXPECT_FALSE (listing.substring (loopBodyStart, loopLatchStart).contains ("jl ")) << listing;
+    }
+
+    // Verify execution equivalence across wrap boundaries (including dst != value).
+    const auto kernel = compileKernel (source, "RingWrap", diagnostics);
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, kernel.fn);
+
+    constexpr int numSamples = 10050;
+    const auto input = makeRampCodegen (numSamples, 1.0f);
+    const auto output = runKernel (kernel, input, numSamples);
+
+    for (int i = 0; i < numSamples; ++i)
+        ASSERT_FLOAT_EQ (i < 5000 ? 0.0f : input[static_cast<size_t> (i - 5000)], output[static_cast<size_t> (i)]) << i;
+}
+
+TEST (YdspAsmJitCodegenTests, EndRelativeLoopAndFlagReuseOnX64)
+{
+    auto buildIr = [] (StringRef source, YdspDiagnostics& diagnostics) -> std::unique_ptr<YdspIrProgram>
+    {
+        YdspLexer lexer (source, diagnostics);
+        YdspParser parser (lexer.tokenize(), diagnostics);
+        auto parsed = parser.parseProgram();
+        if (parsed == nullptr)
+            return nullptr;
+        YdspSemanticAnalyzer analyzer (diagnostics);
+        auto analyzed = analyzer.analyze (std::move (parsed));
+        if (analyzed == nullptr)
+            return nullptr;
+        YdspOptimizer optimizer (diagnostics);
+        return optimizer.build (*analyzed);
+    };
+
+    // 1. Sample loop closes on its own increment without a latch compare.
+    {
+        YdspDiagnostics diagnostics;
+        const auto source = R"YDSP(
+            processor Counter {
+                input stream in; output stream out; state float sum;
+                process { sum = sum + in; out = sum; }
+            }
+            graph G { input stream x; output stream y; node p = Counter; connection { x -> p.in; p.out -> y; } }
+        )YDSP";
+        auto ir = buildIr (source, diagnostics);
+        ASSERT_NE (nullptr, ir) << diagnostics.toString();
+        ASSERT_FALSE (ir->kernels.empty());
+
+        YdspDiagnostics x64Diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, *ir->kernels.front(), x64Diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << x64Diagnostics.toString();
+        const auto listing = x64Diagnostics.toString();
+
+        int compares = 0;
+        for (const auto& line : StringArray::fromLines (listing))
+            compares += line.trimStart().startsWith ("cmp ") ? 1 : 0;
+
+        EXPECT_EQ (1, compares) << listing;
+        EXPECT_TRUE (listing.contains ("neg ")) << listing;
+        EXPECT_TRUE (listing.contains ("jnz ")) << listing;
+
+        const auto kernel = compileKernel (source, "Counter", diagnostics);
+        ASSERT_NE (nullptr, kernel.fn);
+        const auto input = makeRampCodegen (37, 0.5f);
+        const auto output = runKernel (kernel, input, 37);
+        float sum = 0.0f;
+        for (size_t i = 0; i < output.size(); ++i)
+            EXPECT_EQ (sum += input[i], output[i]) << i;
+    }
+
+    // 2. Hand-written ring wrap reuses sub flags and preserves flags across + 5000 via lea.
+    {
+        YdspDiagnostics diagnostics;
+        const auto source = R"YDSP(
+            processor Ring {
+                input stream in; output stream out;
+                state float buf[5000]; state int wp;
+                process {
+                    int r = wp - 300;
+                    if (r < 0) { r = r + 5000; }
+                    out = buf[r];
+                    buf[wp] = in;
+                    wp = wp + 1;
+                    if (wp >= 5000) { wp = 0; }
+                }
+            }
+            graph G { input stream x; output stream y; node p = Ring; connection { x -> p.in; p.out -> y; } }
+        )YDSP";
+        auto ir = buildIr (source, diagnostics);
+        ASSERT_NE (nullptr, ir) << diagnostics.toString();
+        ASSERT_FALSE (ir->kernels.empty());
+
+        YdspDiagnostics x64Diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, *ir->kernels.front(), x64Diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << x64Diagnostics.toString();
+        const auto listing = x64Diagnostics.toString();
+
+        EXPECT_TRUE (listing.contains ("cmovs ")) << listing;
+        EXPECT_TRUE (listing.contains ("lea ") && listing.contains ("+5000]")) << listing;
+    }
+}
+
+TEST (YdspAsmJitCodegenTests, ZeroFloatConstUsesXorpsAndVxorpsOnX64)
+{
+    for (const bool avx : { false, true })
+    {
+        SCOPED_TRACE (avx);
+        YdspIrFunction fn;
+        fn.name = "ZeroFloatConsts";
+        fn.vectorWidth = avx ? 8 : 4;
+        fn.packedFmaAvailable = avx;
+        fn.float32ArrayElements = 4;
+        fn.float64ArrayElements = 4;
+        fn.valueTypes = {
+            YdspValueType::int32Type,
+            YdspValueType::int32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float64Type,
+            YdspValueType::float64Type
+        };
+        fn.blocks.resize (1);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::constI, 1, -1, -1, -1, -1, 0.0, 1 },
+            { YdspIrOp::constF, 2, -1, -1, -1, -1, 0.0 },
+            { YdspIrOp::constF, 3, -1, -1, -1, -1, -0.0 },
+            { YdspIrOp::constF, 4, -1, -1, -1, -1, 0.0 },
+            { YdspIrOp::constF, 5, -1, -1, -1, -1, -0.0 },
+            { YdspIrOp::storeStateArrayF, -1, 0, 2, -1, 0 },
+            { YdspIrOp::storeStateArrayF, -1, 1, 3, -1, 0 },
+            { YdspIrOp::storeStateArrayF, -1, 0, 4, -1, 0 },
+            { YdspIrOp::storeStateArrayF, -1, 1, 5, -1, 0 }
+        };
+
+        YdspDiagnostics diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, fn, diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+        const auto listing = diagnostics.toString();
+
+        if (avx)
+        {
+            EXPECT_TRUE (listing.contains ("vxorps ")) << listing;
+            EXPECT_TRUE (listing.contains ("vxorpd ")) << listing;
+        }
+        else
+        {
+            EXPECT_TRUE (listing.contains ("xorps ")) << listing;
+            EXPECT_TRUE (listing.contains ("xorpd ")) << listing;
+            EXPECT_FALSE (listing.contains ("vxorps ")) << listing;
+            EXPECT_FALSE (listing.contains ("vxorpd ")) << listing;
+        }
+
+        // Negative zero still loads its sign bit from the constant pool.
+        EXPECT_TRUE (listing.contains ("movss ")) << listing;
+        EXPECT_TRUE (listing.contains ("movsd ")) << listing;
+    }
+
+    // Verify +0.0 vs -0.0 signbit preservation on host execution.
+    YdspIrFunction runtimeFn;
+    runtimeFn.name = "ZeroFloatRuntime";
+    runtimeFn.float32ArrayElements = 4;
+    runtimeFn.float64ArrayElements = 4;
+    runtimeFn.valueTypes = {
+        YdspValueType::int32Type,
+        YdspValueType::int32Type,
+        YdspValueType::float32Type,
+        YdspValueType::float32Type,
+        YdspValueType::float64Type,
+        YdspValueType::float64Type
+    };
+    runtimeFn.blocks.resize (1);
+    runtimeFn.blocks[0].insts = {
+        { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+        { YdspIrOp::constI, 1, -1, -1, -1, -1, 0.0, 1 },
+        { YdspIrOp::constF, 2, -1, -1, -1, -1, 0.0 },
+        { YdspIrOp::constF, 3, -1, -1, -1, -1, -0.0 },
+        { YdspIrOp::constF, 4, -1, -1, -1, -1, 0.0 },
+        { YdspIrOp::constF, 5, -1, -1, -1, -1, -0.0 },
+        { YdspIrOp::storeStateArrayF, -1, 0, 2, -1, 0 },
+        { YdspIrOp::storeStateArrayF, -1, 1, 3, -1, 0 },
+        { YdspIrOp::storeStateArrayF, -1, 0, 4, -1, 0 },
+        { YdspIrOp::storeStateArrayF, -1, 1, 5, -1, 0 }
+    };
+
+    YdspDiagnostics diagnostics;
+    asmjit::JitRuntime runtime;
+    const auto compiled = YdspAsmJitCodegen::compile (runtime, runtimeFn, diagnostics);
+    ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+    std::vector<uint8_t> state (YdspAsmJitCodegen::stateSize (runtimeFn), 0xff);
+    YdspKernelContext ctx;
+    ctx.numSamples = 1;
+    ctx.state = state.data();
+    ctx.stateArrays = state.data() + YdspAsmJitCodegen::stateScalarSize (runtimeFn);
+    compiled (&ctx);
+
+    float fPos = 1.0f;
+    float fNeg = 1.0f;
+    double dPos = 1.0;
+    double dNeg = 1.0;
+    const auto* arrays = static_cast<const uint8_t*> (ctx.stateArrays);
+    std::memcpy (&fPos, arrays + runtimeFn.stateArrayByteOffset (YdspValueType::float32Type, 0), sizeof (float));
+    std::memcpy (&fNeg, arrays + runtimeFn.stateArrayByteOffset (YdspValueType::float32Type, 1), sizeof (float));
+    std::memcpy (&dPos, arrays + runtimeFn.stateArrayByteOffset (YdspValueType::float64Type, 0), sizeof (double));
+    std::memcpy (&dNeg, arrays + runtimeFn.stateArrayByteOffset (YdspValueType::float64Type, 1), sizeof (double));
+
+    EXPECT_EQ (0.0f, fPos);
+    EXPECT_FALSE (std::signbit (fPos));
+    EXPECT_EQ (0.0f, fNeg);
+    EXPECT_TRUE (std::signbit (fNeg));
+    EXPECT_EQ (0.0, dPos);
+    EXPECT_FALSE (std::signbit (dPos));
+    EXPECT_EQ (0.0, dNeg);
+    EXPECT_TRUE (std::signbit (dNeg));
+}
+
+TEST (YdspAsmJitCodegenTests, FourLaneVectorLoweringRespectsSse2VsAvxOnX64)
+{
+    for (const bool avx : { false, true })
+    {
+        SCOPED_TRACE (avx);
+        YdspIrFunction fn;
+        fn.name = "FourLaneVectors";
+        fn.vectorized = true;
+        fn.vectorWidth = 4;
+        fn.packedFmaAvailable = avx;
+        fn.float32ArrayElements = 16;
+        fn.valueTypes = {
+            YdspValueType::int32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::boolType,
+            YdspValueType::float32Type
+        };
+        fn.valueLanes = { 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
+        fn.blocks.resize (1);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::loadStateArrayF, 1, 0, -1, -1, 0 },
+            { YdspIrOp::loadStateArrayF, 2, 0, -1, -1, 4 },
+            { YdspIrOp::addF, 3, 1, 2 },
+            { YdspIrOp::subF, 4, 3, 2 },
+            { YdspIrOp::mulF, 5, 4, 1 },
+            { YdspIrOp::divF, 6, 5, 2 },
+            { YdspIrOp::minF, 7, 6, 1 },
+            { YdspIrOp::maxF, 8, 7, 2 },
+            { YdspIrOp::sqrtF, 9, 8 },
+            { YdspIrOp::floorF, 10, 9 },
+            { YdspIrOp::ltF, 11, 10, 1 },
+            { YdspIrOp::selectB, 12, 11, 10, 2 },
+            { YdspIrOp::storeStateArrayF, -1, 0, 12, -1, 8 }
+        };
+
+        YdspDiagnostics diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, fn, diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+        const auto listing = diagnostics.toString();
+
+        if (avx)
+        {
+            EXPECT_TRUE (listing.contains ("vaddps ")) << listing;
+            EXPECT_TRUE (listing.contains ("vsubps ")) << listing;
+            EXPECT_TRUE (listing.contains ("vmulps ")) << listing;
+            EXPECT_TRUE (listing.contains ("vdivps ")) << listing;
+            EXPECT_TRUE (listing.contains ("vminps ")) << listing;
+            EXPECT_TRUE (listing.contains ("vmaxps ")) << listing;
+            EXPECT_TRUE (listing.contains ("vsqrtps ")) << listing;
+            EXPECT_TRUE (listing.contains ("vroundps ")) << listing;
+            EXPECT_TRUE (listing.contains ("vcmpps ")) << listing;
+            EXPECT_TRUE (listing.contains ("vblendvps ")) << listing;
+        }
+        else
+        {
+            EXPECT_TRUE (listing.contains ("addps ")) << listing;
+            EXPECT_TRUE (listing.contains ("andps ")) << listing;
+            EXPECT_TRUE (listing.contains ("andnps ")) << listing;
+            EXPECT_TRUE (listing.contains ("orps ")) << listing;
+            EXPECT_FALSE (listing.contains ("vaddps ")) << listing;
+            EXPECT_FALSE (listing.contains ("vblendvps ")) << listing;
+            EXPECT_FALSE (listing.contains ("blendvps ")) << listing;
+            EXPECT_FALSE (listing.contains ("vcmpps ")) << listing;
+            EXPECT_FALSE (listing.contains ("vroundps ")) << listing;
+            EXPECT_FALSE (listing.contains ("vzeroupper")) << listing;
+        }
+    }
+
+    // Execution equivalence between scalar baseline, SSE2 baseline, and host target.
+    const auto source = R"YDSP(
+        processor VecSelect {
+            input stream in; output stream out;
+            process {
+                float x = abs (in) + 0.25;
+                float s = sqrt (x);
+                float f = floor (s * 4.0) * 0.25;
+                out = f < 1.0 ? f : min (s, 2.0);
+            }
+        }
+        graph G { input stream x; output stream y; node p = VecSelect; connection { x -> p.in; p.out -> y; } }
+    )YDSP";
+
+    YdspCompiler compiler;
+    YdspCompileOptions scalarOpts;
+    scalarOpts.targetPolicy = YdspTargetPolicy::baseline;
+    scalarOpts.baselineTarget = YdspNativeTarget::scalar;
+    scalarOpts.optimizationTier = YdspOptimizationTier::baseline;
+
+    YdspCompileOptions hostOpts;
+    hostOpts.targetPolicy = YdspTargetPolicy::host;
+
+    auto scalarGraph = compiler.compile (source, scalarOpts);
+    ASSERT_TRUE (scalarGraph.wasOk()) << scalarGraph.getErrorMessage();
+    auto hostGraph = compiler.compile (source, hostOpts);
+    ASSERT_TRUE (hostGraph.wasOk()) << hostGraph.getErrorMessage();
+
+    constexpr int numSamples = 64;
+    ASSERT_TRUE (scalarGraph.getReference().prepare (48000.0, numSamples).wasOk());
+    ASSERT_TRUE (hostGraph.getReference().prepare (48000.0, numSamples).wasOk());
+
+    auto input = makeRampCodegen (numSamples, -1.5f);
+    std::vector<float> scalarOut (numSamples, 0.0f);
+    std::vector<float> hostOut (numSamples, 0.0f);
+
+    std::vector<YdspInputBuffer> inBufs;
+    inBufs.emplace_back (Span<const float> (input.data(), static_cast<size_t> (numSamples)));
+    std::vector<YdspOutputBuffer> scalarOutBufs;
+    scalarOutBufs.emplace_back (Span<float> (scalarOut.data(), static_cast<size_t> (numSamples)));
+    std::vector<YdspOutputBuffer> hostOutBufs;
+    hostOutBufs.emplace_back (Span<float> (hostOut.data(), static_cast<size_t> (numSamples)));
+
+    scalarGraph.getReference().process (YdspProcessRequest { inBufs, scalarOutBufs, numSamples });
+    hostGraph.getReference().process (YdspProcessRequest { inBufs, hostOutBufs, numSamples });
+
+    for (int i = 0; i < numSamples; ++i)
+        EXPECT_NEAR (scalarOut[static_cast<size_t> (i)], hostOut[static_cast<size_t> (i)], 1e-6f) << i;
+}
+
+TEST (YdspAsmJitCodegenTests, TwoAddressAndScalarFmaCoalescingAvoidsRedundantMovesOnX64)
+{
+    // Scalar FMA coalescing on dead local addend c -> vfmadd231ss / vfnmadd231ss without movss.
+    for (const auto op : { YdspIrOp::fmaF, YdspIrOp::fmsubF })
+    {
+        SCOPED_TRACE (static_cast<int> (op));
+        YdspIrFunction fn;
+        fn.name = "ScalarFmaCoalesce";
+        fn.float32ArrayElements = 8;
+        fn.valueTypes = {
+            YdspValueType::int32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type
+        };
+        fn.blocks.resize (1);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::loadStateArrayF, 1, 0, -1, -1, 0 },
+            { YdspIrOp::loadStateArrayF, 2, 0, -1, -1, 1 },
+            { YdspIrOp::loadStateArrayF, 3, 0, -1, -1, 2 },
+            { YdspIrOp::loadStateArrayF, 4, 0, -1, -1, 3 },
+            { YdspIrOp::loadStateArrayF, 5, 0, -1, -1, 4 },
+            { YdspIrOp::mulF, 6, 1, 2 },
+            { op, 7, 3, 4, 6 },
+            { YdspIrOp::storeStateArrayF, -1, 0, 7, -1, 5 }
+        };
+
+        YdspDiagnostics diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, fn, diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+        const auto listing = diagnostics.toString();
+
+        EXPECT_TRUE (listing.contains (op == YdspIrOp::fmaF ? "vfmadd231ss " : "vfnmadd231ss ")) << listing;
+
+        // Only memory loads/stores should use movss; no register-to-register movss.
+        for (const auto& line : StringArray::fromLines (listing))
+        {
+            const auto inst = line.trimStart();
+            if (inst.startsWith ("movss "))
+                EXPECT_TRUE (inst.contains ("[")) << listing;
+        }
+    }
+
+    // Chained 2-address scalar float ops reuse srcA without movss copies.
+    {
+        YdspIrFunction fn;
+        fn.name = "TwoAddressChain";
+        fn.float32ArrayElements = 8;
+        fn.valueTypes = {
+            YdspValueType::int32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type,
+            YdspValueType::float32Type
+        };
+        fn.blocks.resize (1);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::loadStateArrayF, 1, 0, -1, -1, 0 },
+            { YdspIrOp::loadStateArrayF, 2, 0, -1, -1, 1 },
+            { YdspIrOp::addF, 3, 1, 2 },
+            { YdspIrOp::mulF, 4, 3, 2 },
+            { YdspIrOp::storeStateArrayF, -1, 0, 4, -1, 2 }
+        };
+
+        YdspDiagnostics diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, fn, diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+        const auto listing = diagnostics.toString();
+
+        for (const auto& line : StringArray::fromLines (listing))
+        {
+            const auto inst = line.trimStart();
+            if (inst.startsWith ("movss "))
+                EXPECT_TRUE (inst.contains ("[")) << listing;
+        }
+
+        // Verify numerical equivalence on host.
+        asmjit::JitRuntime runtime;
+        const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+        ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+        std::vector<float> state (8, 0.0f);
+        state[0] = 3.5f;
+        state[1] = 2.0f;
+        YdspKernelContext ctx;
+        ctx.numSamples = 1;
+        ctx.state = state.data();
+        ctx.stateArrays = state.data();
+        compiled (&ctx);
+        EXPECT_FLOAT_EQ ((3.5f + 2.0f) * 2.0f, state[2]);
+    }
+}
+
+TEST (YdspAsmJitCodegenTests, ZeroFloatConstAndVectorZeroSplatUseFmovAndMoviOnArm64)
+{
+    YdspIrFunction fn;
+    fn.name = "Arm64ZeroConsts";
+    fn.vectorized = true;
+    fn.vectorWidth = 4;
+    fn.float32ArrayElements = 16;
+    fn.float64ArrayElements = 4;
+    fn.int32ArrayElements = 8;
+    fn.valueTypes = {
+        YdspValueType::int32Type,
+        YdspValueType::int32Type,
+        YdspValueType::float32Type,
+        YdspValueType::float32Type,
+        YdspValueType::float64Type,
+        YdspValueType::float64Type,
+        YdspValueType::float32Type,
+        YdspValueType::float32Type,
+        YdspValueType::int32Type,
+        YdspValueType::int32Type
+    };
+    fn.valueLanes = { 1, 1, 1, 1, 1, 1, 1, 4, 1, 4 };
+    fn.blocks.resize (1);
+    fn.blocks[0].insts = {
+        { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+        { YdspIrOp::constI, 1, -1, -1, -1, -1, 0.0, 1 },
+        { YdspIrOp::constF, 2, -1, -1, -1, -1, 0.0 },
+        { YdspIrOp::constF, 3, -1, -1, -1, -1, -0.0 },
+        { YdspIrOp::constF, 4, -1, -1, -1, -1, 0.0 },
+        { YdspIrOp::constF, 5, -1, -1, -1, -1, -0.0 },
+        { YdspIrOp::constF, 6, -1, -1, -1, -1, 0.0 },
+        { YdspIrOp::vsplat, 7, 6 },
+        { YdspIrOp::constI, 8, -1, -1, -1, -1, 0.0, 0 },
+        { YdspIrOp::vsplat, 9, 8 },
+        { YdspIrOp::storeStateArrayF, -1, 0, 2, -1, 0 },
+        { YdspIrOp::storeStateArrayF, -1, 1, 3, -1, 0 },
+        { YdspIrOp::storeStateArrayF, -1, 0, 4, -1, 0 },
+        { YdspIrOp::storeStateArrayF, -1, 1, 5, -1, 0 },
+        { YdspIrOp::storeStateArrayF, -1, 0, 7, -1, 4 },
+        { YdspIrOp::storeStateArrayI, -1, 0, 9, -1, 0 }
+    };
+
+    YdspDiagnostics diagnostics;
+    const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, diagnostics);
+    ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    const auto listing = diagnostics.toString();
+
+    bool sawFmovWzr = false;
+    bool sawFmovXzr = false;
+    int moviZeroCount = 0;
+    int scalarPoolLoads = 0;
+
+    for (const auto& line : StringArray::fromLines (listing))
+    {
+        const auto inst = line.trimStart();
+        if (inst.startsWith ("fmov ") && inst.contains ("wzr"))
+            sawFmovWzr = true;
+        if (inst.startsWith ("fmov ") && inst.contains ("xzr"))
+            sawFmovXzr = true;
+        if (inst.startsWith ("movi ") && inst.contains (".16b, 0"))
+            ++moviZeroCount;
+        if ((inst.startsWith ("ldr s") || inst.startsWith ("ldr d")) && inst.contains ("[L"))
+            ++scalarPoolLoads;
+        EXPECT_FALSE (inst.startsWith ("dup ")) << listing;
+    }
+
+    EXPECT_TRUE (sawFmovWzr) << listing;
+    EXPECT_TRUE (sawFmovXzr) << listing;
+    EXPECT_EQ (2, moviZeroCount) << listing;
+    EXPECT_EQ (2, scalarPoolLoads) << listing;
+
+    // Verify +0.0 / -0.0 signbit preservation and zeroed vectors on host.
+    asmjit::JitRuntime runtime;
+    const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+    ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+    std::vector<uint8_t> state (YdspAsmJitCodegen::stateSize (fn), 0xff);
+    YdspKernelContext ctx;
+    ctx.numSamples = 1;
+    ctx.state = state.data();
+    ctx.stateArrays = state.data() + YdspAsmJitCodegen::stateScalarSize (fn);
+    compiled (&ctx);
+
+    const auto* arrays = static_cast<const uint8_t*> (ctx.stateArrays);
+    float fPos = 1.0f;
+    float fNeg = 1.0f;
+    double dPos = 1.0;
+    double dNeg = 1.0;
+    std::memcpy (&fPos, arrays + fn.stateArrayByteOffset (YdspValueType::float32Type, 0), sizeof (float));
+    std::memcpy (&fNeg, arrays + fn.stateArrayByteOffset (YdspValueType::float32Type, 1), sizeof (float));
+    std::memcpy (&dPos, arrays + fn.stateArrayByteOffset (YdspValueType::float64Type, 0), sizeof (double));
+    std::memcpy (&dNeg, arrays + fn.stateArrayByteOffset (YdspValueType::float64Type, 1), sizeof (double));
+
+    EXPECT_EQ (0.0f, fPos);
+    EXPECT_FALSE (std::signbit (fPos));
+    EXPECT_EQ (0.0f, fNeg);
+    EXPECT_TRUE (std::signbit (fNeg));
+    EXPECT_EQ (0.0, dPos);
+    EXPECT_FALSE (std::signbit (dPos));
+    EXPECT_EQ (0.0, dNeg);
+    EXPECT_TRUE (std::signbit (dNeg));
+
+    for (int lane = 0; lane < 4; ++lane)
+    {
+        float vf = 1.0f;
+        int32_t vi = 1;
+        std::memcpy (&vf, arrays + fn.stateArrayByteOffset (YdspValueType::float32Type, 4 + lane), sizeof (float));
+        std::memcpy (&vi, arrays + fn.stateArrayByteOffset (YdspValueType::int32Type, lane), sizeof (int32_t));
+        EXPECT_EQ (0.0f, vf);
+        EXPECT_FALSE (std::signbit (vf));
+        EXPECT_EQ (0, vi);
+    }
+}
+
+TEST (YdspAsmJitCodegenTests, VrampFConstantIsHoistedOutOfLoopsOnArm64)
+{
+    YdspIrFunction fn;
+    fn.name = "HoistedVrampLoop";
+    fn.vectorized = true;
+    fn.vectorWidth = 4;
+    fn.float32ArrayElements = 16;
+    fn.valueTypes = {
+        YdspValueType::int32Type, // 0: zero
+        YdspValueType::int32Type, // 1: bound (16)
+        YdspValueType::int32Type, // 2: step (4)
+        YdspValueType::int32Type, // 3: induction i
+        YdspValueType::boolType,  // 4: i < 16
+        YdspValueType::float32Type, // 5: float(i)
+        YdspValueType::float32Type, // 6: vrampF(float(i))
+        YdspValueType::int32Type, // 7: i + 4
+        YdspValueType::float32Type // 8: stored / reduced
+    };
+    fn.valueLanes = { 1, 1, 1, 1, 1, 1, 4, 1, 4 };
+    fn.blocks.resize (4);
+
+    // Block 0: preheader
+    fn.blocks[0].insts = {
+        { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+        { YdspIrOp::constI, 1, -1, -1, -1, -1, 0.0, 16 },
+        { YdspIrOp::constI, 2, -1, -1, -1, -1, 0.0, 4 },
+        { YdspIrOp::movI, 3, 0 }
+    };
+    fn.blocks[0].term = YdspIrTerm::fallthrough;
+
+    // Block 1: header
+    fn.blocks[1].insts = {
+        { YdspIrOp::ltI, 4, 3, 1 }
+    };
+    fn.blocks[1].term = YdspIrTerm::branchIf;
+    fn.blocks[1].termCond = 4;
+    fn.blocks[1].termTarget = 2;
+    fn.blocks[1].termTarget2 = 3;
+
+    // Block 2: body
+    fn.blocks[2].insts = {
+        { YdspIrOp::itof, 5, 3 },
+        { YdspIrOp::vrampF, 6, 5 },
+        { YdspIrOp::storeStateArrayF, -1, 3, 6, -1, 0 },
+        { YdspIrOp::addI, 7, 3, 2 },
+        { YdspIrOp::movI, 3, 7 }
+    };
+    fn.blocks[2].term = YdspIrTerm::branch;
+    fn.blocks[2].termTarget = 1;
+
+    // Block 3: exit
+    fn.blocks[3].term = YdspIrTerm::fallthrough;
+
+    YdspIrLoop loop;
+    loop.id = 0;
+    loop.headerBlock = 1;
+    loop.exitBlock = 3;
+    loop.induction = 3;
+    loop.bound.kind = YdspLoopBoundKind::constant;
+    loop.bound.constant = 16;
+    fn.loops.push_back (loop);
+
+    YdspDiagnostics diagnostics;
+    const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, diagnostics);
+    ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    const auto listing = diagnostics.toString();
+
+    int rampConstLoads = 0;
+    int lastRampLoadLine = -1;
+    int firstVectorAddLine = -1;
+    const auto lines = StringArray::fromLines (listing);
+
+    for (int i = 0; i < lines.size(); ++i)
+    {
+        const auto inst = lines[i].trimStart();
+        if (inst.startsWith ("ldr q") && inst.contains ("[L"))
+        {
+            ++rampConstLoads;
+            lastRampLoadLine = i;
+        }
+        if (firstVectorAddLine < 0 && inst.startsWith ("fadd ") && inst.contains (".4s"))
+            firstVectorAddLine = i;
+    }
+
+    EXPECT_EQ (1, rampConstLoads) << listing;
+    EXPECT_GE (lastRampLoadLine, 0) << listing;
+    EXPECT_GT (firstVectorAddLine, lastRampLoadLine) << listing;
+
+    // Verify execution on host.
+    asmjit::JitRuntime runtime;
+    const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+    ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+    std::vector<uint8_t> state (YdspAsmJitCodegen::stateSize (fn), 0);
+    YdspKernelContext ctx;
+    ctx.numSamples = 1;
+    ctx.state = state.data();
+    ctx.stateArrays = state.data() + YdspAsmJitCodegen::stateScalarSize (fn);
+    compiled (&ctx);
+
+    const auto* arrays = static_cast<const float*> (ctx.stateArrays);
+    for (int i = 0; i < 16; ++i)
+        EXPECT_FLOAT_EQ (static_cast<float> (i), arrays[i]) << i;
+}
+
+TEST (YdspAsmJitCodegenTests, VectorFmaCoalescesCarriedAccumulatorsAndPreservesAliasedOperandsOnArm64)
+{
+    // 1. Rolled loop-carried accumulator: fmla updates acc in place with zero .16b moves.
+    for (const auto op : { YdspIrOp::fmaF, YdspIrOp::fmsubF })
+    {
+        SCOPED_TRACE (static_cast<int> (op));
+        YdspIrFunction fn;
+        fn.name = "RolledFmaAccumulator";
+        fn.vectorized = true;
+        fn.vectorWidth = 4;
+        fn.packedFmaAvailable = true;
+        fn.float32ArrayElements = 16;
+        fn.valueTypes = {
+            YdspValueType::int32Type,   // 0: zero int
+            YdspValueType::int32Type,   // 1: bound (8)
+            YdspValueType::int32Type,   // 2: step (4)
+            YdspValueType::int32Type,   // 3: i
+            YdspValueType::boolType,    // 4: i < 8
+            YdspValueType::float32Type, // 5: zero float
+            YdspValueType::float32Type, // 6: acc
+            YdspValueType::float32Type, // 7: a
+            YdspValueType::float32Type, // 8: b
+            YdspValueType::float32Type, // 9: fmaTmp
+            YdspValueType::int32Type    // 10: i + 4
+        };
+        fn.valueLanes = { 1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 1 };
+        fn.blocks.resize (4);
+
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::constI, 1, -1, -1, -1, -1, 0.0, 8 },
+            { YdspIrOp::constI, 2, -1, -1, -1, -1, 0.0, 4 },
+            { YdspIrOp::movI, 3, 0 },
+            { YdspIrOp::constF, 5, -1, -1, -1, -1, 0.0 },
+            { YdspIrOp::vsplat, 6, 5 }
+        };
+        fn.blocks[0].term = YdspIrTerm::fallthrough;
+
+        fn.blocks[1].insts = {
+            { YdspIrOp::ltI, 4, 3, 1 }
+        };
+        fn.blocks[1].term = YdspIrTerm::branchIf;
+        fn.blocks[1].termCond = 4;
+        fn.blocks[1].termTarget = 2;
+        fn.blocks[1].termTarget2 = 3;
+
+        fn.blocks[2].insts = {
+            { YdspIrOp::loadStateArrayF, 7, 3, -1, -1, 0 },
+            { YdspIrOp::loadStateArrayF, 8, 3, -1, -1, 8 },
+            { op, 9, 7, 8, 6 },
+            { YdspIrOp::movF, 6, 9 },
+            { YdspIrOp::addI, 10, 3, 2 },
+            { YdspIrOp::movI, 3, 10 }
+        };
+        fn.blocks[2].term = YdspIrTerm::branch;
+        fn.blocks[2].termTarget = 1;
+
+        fn.blocks[3].insts = {
+            { YdspIrOp::storeStateArrayF, -1, 0, 6, -1, 12 }
+        };
+        fn.blocks[3].term = YdspIrTerm::fallthrough;
+
+        YdspIrLoop loop;
+        loop.id = 0;
+        loop.headerBlock = 1;
+        loop.exitBlock = 3;
+        loop.induction = 3;
+        loop.bound.kind = YdspLoopBoundKind::constant;
+        loop.bound.constant = 8;
+        fn.loops.push_back (loop);
+
+        YdspDiagnostics diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        const auto listing = diagnostics.toString();
+
+        EXPECT_TRUE (listing.contains (op == YdspIrOp::fmaF ? "fmla " : "fmls ")) << listing;
+
+        int vectorCopies = 0;
+        for (const auto& line : StringArray::fromLines (listing))
+            if (line.trimStart().startsWith ("mov ") && line.contains (".16b"))
+                ++vectorCopies;
+
+        EXPECT_EQ (0, vectorCopies) << listing;
+    }
+
+    // 2. Unrolled multi-step FMA chain updating carried accumulator without .16b moves.
+    {
+        YdspIrFunction fn;
+        fn.name = "UnrolledFmaChain";
+        fn.vectorized = true;
+        fn.vectorWidth = 4;
+        fn.packedFmaAvailable = true;
+        fn.float32ArrayElements = 20;
+        fn.valueTypes = {
+            YdspValueType::int32Type,   // 0: zero
+            YdspValueType::float32Type, // 1: zero float
+            YdspValueType::float32Type, // 2: acc
+            YdspValueType::float32Type, // 3: a0
+            YdspValueType::float32Type, // 4: b0
+            YdspValueType::float32Type, // 5: t0
+            YdspValueType::float32Type, // 6: a1
+            YdspValueType::float32Type, // 7: b1
+            YdspValueType::float32Type  // 8: t1
+        };
+        fn.valueLanes = { 1, 1, 4, 4, 4, 4, 4, 4, 4 };
+        fn.blocks.resize (1);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::constF, 1, -1, -1, -1, -1, 0.0 },
+            { YdspIrOp::vsplat, 2, 1 },
+            { YdspIrOp::loadStateArrayF, 3, 0, -1, -1, 0 },
+            { YdspIrOp::loadStateArrayF, 4, 0, -1, -1, 4 },
+            { YdspIrOp::fmaF, 5, 3, 4, 2 },
+            { YdspIrOp::movF, 2, 5 },
+            { YdspIrOp::loadStateArrayF, 6, 0, -1, -1, 8 },
+            { YdspIrOp::loadStateArrayF, 7, 0, -1, -1, 12 },
+            { YdspIrOp::fmaF, 8, 6, 7, 2 },
+            { YdspIrOp::movF, 2, 8 },
+            { YdspIrOp::storeStateArrayF, -1, 0, 2, -1, 16 }
+        };
+
+        YdspDiagnostics diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+        const auto listing = diagnostics.toString();
+
+        int fmlaCount = 0;
+        int vectorCopies = 0;
+        for (const auto& line : StringArray::fromLines (listing))
+        {
+            const auto inst = line.trimStart();
+            if (inst.startsWith ("fmla "))
+                ++fmlaCount;
+            if (inst.startsWith ("mov ") && inst.contains (".16b"))
+                ++vectorCopies;
+        }
+
+        EXPECT_EQ (2, fmlaCount) << listing;
+        EXPECT_EQ (0, vectorCopies) << listing;
+
+        asmjit::JitRuntime runtime;
+        const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+        ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+        std::vector<float> state (20, 0.0f);
+        for (size_t i = 0; i < 4; ++i)
+        {
+            state[i] = static_cast<float> (i + 1);
+            state[4 + i] = 2.0f;
+            state[8 + i] = static_cast<float> (i + 5);
+            state[12 + i] = 3.0f;
+        }
+        YdspKernelContext ctx;
+        ctx.numSamples = 1;
+        ctx.state = state.data();
+        ctx.stateArrays = state.data();
+        compiled (&ctx);
+
+        for (size_t i = 0; i < 4; ++i)
+            EXPECT_FLOAT_EQ (static_cast<float> (i + 1) * 2.0f + static_cast<float> (i + 5) * 3.0f, state[16 + i]);
+    }
+
+    // 3. Safety when dst == a or dst == b and dst != c: c must not clobber a/b before fmla/fmls.
+    for (const auto op : { YdspIrOp::fmaF, YdspIrOp::fmsubF })
+        for (const bool aliasB : { false, true })
+        {
+            SCOPED_TRACE (static_cast<int> (op) * 2 + (aliasB ? 1 : 0));
+            YdspIrFunction fn;
+            fn.name = "AliasedVectorFmaOperands";
+            fn.vectorized = true;
+            fn.vectorWidth = 4;
+            fn.packedFmaAvailable = true;
+            fn.float32ArrayElements = 16;
+            fn.valueTypes = {
+                YdspValueType::int32Type,
+                YdspValueType::float32Type,
+                YdspValueType::float32Type,
+                YdspValueType::float32Type
+            };
+            fn.valueLanes = { 1, 4, 4, 4 };
+            fn.blocks.resize (1);
+            fn.blocks[0].insts = {
+                { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+                { YdspIrOp::loadStateArrayF, 1, 0, -1, -1, 0 },
+                { YdspIrOp::loadStateArrayF, 2, 0, -1, -1, 4 },
+                { YdspIrOp::loadStateArrayF, 3, 0, -1, -1, 8 },
+                { op, aliasB ? 2 : 1, 1, 2, 3 },
+                { YdspIrOp::storeStateArrayF, -1, 0, aliasB ? 2 : 1, -1, 12 }
+            };
+
+            YdspDiagnostics diagnostics;
+            const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, diagnostics);
+            ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+            ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+            asmjit::JitRuntime runtime;
+            const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+            ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+            std::vector<float> state (16, 0.0f);
+            for (size_t i = 0; i < 4; ++i)
+            {
+                state[i] = static_cast<float> (i + 2);
+                state[4 + i] = 10.0f;
+                state[8 + i] = static_cast<float> (i + 1);
+            }
+            YdspKernelContext ctx;
+            ctx.numSamples = 1;
+            ctx.state = state.data();
+            ctx.stateArrays = state.data();
+            compiled (&ctx);
+
+            for (size_t i = 0; i < 4; ++i)
+            {
+                const float prod = state[i] * state[4 + i];
+                const float expected = op == YdspIrOp::fmaF ? (prod + state[8 + i]) : (state[8 + i] - prod);
+                EXPECT_FLOAT_EQ (expected, state[12 + i]) << i;
+            }
+        }
+}
+
+TEST (YdspAsmJitCodegenTests, HighArrayCountKernelCapsHoistedBasesAndReducesSpillsOnArm64)
+{
+    // 1. Shared index across 24 state arrays: caps hoisted bases at 8 (+ base 0)
+    //    and keeps the sample loop free of stack spills.
+    {
+        constexpr int numArrays = 24;
+        constexpr int arrayLength = 16;
+
+        YdspIrFunction fn;
+        fn.name = "SharedIndex24Arrays";
+        fn.numInputs = 1;
+        fn.numOutputs = 1;
+        fn.inputTypes = { YdspValueType::float32Type };
+        fn.outputTypes = { YdspValueType::float32Type };
+        fn.int32Scalars = 1;
+        fn.float32ArrayElements = numArrays * arrayLength;
+
+        const auto addValue = [&] (YdspValueType type) -> int
+        {
+            const int id = static_cast<int> (fn.valueTypes.size());
+            fn.valueTypes.push_back (type);
+            fn.valueLanes.push_back (1);
+            return id;
+        };
+
+        const int zeroVal = addValue (YdspValueType::int32Type);
+        const int numSamplesVal = addValue (YdspValueType::int32Type);
+        const int oneVal = addValue (YdspValueType::int32Type);
+        const int sampleIdxVal = addValue (YdspValueType::int32Type);
+        const int wpVal = addValue (YdspValueType::int32Type);
+        const int condVal = addValue (YdspValueType::boolType);
+        const int inSampleVal = addValue (YdspValueType::float32Type);
+        const int nextWpVal = addValue (YdspValueType::int32Type);
+
+        fn.blocks.resize (4);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, zeroVal, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::loadBlockSize, numSamplesVal },
+            { YdspIrOp::constI, oneVal, -1, -1, -1, -1, 0.0, 1 },
+            { YdspIrOp::movI, sampleIdxVal, zeroVal },
+            { YdspIrOp::loadStateI, wpVal, 0 }
+        };
+        fn.blocks[0].term = YdspIrTerm::fallthrough;
+
+        fn.blocks[1].insts = {
+            { YdspIrOp::ltI, condVal, sampleIdxVal, numSamplesVal }
+        };
+        fn.blocks[1].term = YdspIrTerm::branchIf;
+        fn.blocks[1].termCond = condVal;
+        fn.blocks[1].termTarget = 2;
+        fn.blocks[1].termTarget2 = 3;
+
+        fn.blocks[2].insts = {
+            { YdspIrOp::loadInput, inSampleVal, sampleIdxVal, -1, -1, 0 },
+            { YdspIrOp::advanceWrapI, nextWpVal, wpVal, -1, -1, -1, 0.0, arrayLength },
+            { YdspIrOp::movI, wpVal, nextWpVal }
+        };
+
+        int accVal = inSampleVal;
+        for (int k = 0; k < numArrays; ++k)
+        {
+            const int tapVal = addValue (YdspValueType::float32Type);
+            const int sumVal = addValue (YdspValueType::float32Type);
+            const int baseElem = k * arrayLength;
+            fn.blocks[2].insts.push_back ({ YdspIrOp::storeStateArrayF, -1, wpVal, inSampleVal, -1, baseElem });
+            fn.blocks[2].insts.push_back ({ YdspIrOp::loadStateArrayF, tapVal, wpVal, -1, -1, baseElem });
+            fn.blocks[2].insts.push_back ({ YdspIrOp::addF, sumVal, accVal, tapVal });
+            accVal = sumVal;
+        }
+
+        const int nextSampleVal = addValue (YdspValueType::int32Type);
+        fn.blocks[2].insts.push_back ({ YdspIrOp::storeOutput, -1, sampleIdxVal, accVal, -1, 0 });
+        fn.blocks[2].insts.push_back ({ YdspIrOp::addI, nextSampleVal, sampleIdxVal, oneVal });
+        fn.blocks[2].insts.push_back ({ YdspIrOp::movI, sampleIdxVal, nextSampleVal });
+        fn.blocks[2].term = YdspIrTerm::branch;
+        fn.blocks[2].termTarget = 1;
+
+        fn.blocks[3].insts = {
+            { YdspIrOp::storeStateI, -1, wpVal, -1, -1, 0 }
+        };
+        fn.blocks[3].term = YdspIrTerm::fallthrough;
+
+        YdspIrLoop loop;
+        loop.id = 0;
+        loop.headerBlock = 1;
+        loop.exitBlock = 3;
+        loop.induction = sampleIdxVal;
+        loop.bound.kind = YdspLoopBoundKind::blockSize;
+        fn.loops.push_back (loop);
+
+        YdspDiagnostics diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+        const auto listing = diagnostics.toString();
+        int stackAccesses = 0;
+        int preheaderAdds = 0;
+        bool inPreheader = true;
+
+        for (const auto& line : StringArray::fromLines (listing))
+        {
+            const auto trimmed = line.trimStart();
+            if (trimmed.contains ("[sp"))
+                ++stackAccesses;
+
+            if (inPreheader)
+            {
+                if (trimmed.startsWith ("cmp "))
+                    inPreheader = false;
+                else if (trimmed.startsWith ("add ") && ! trimmed.contains ("sp"))
+                    ++preheaderAdds;
+            }
+        }
+
+        EXPECT_LE (preheaderAdds, 8) << listing;
+        EXPECT_LE (stackAccesses, 8) << listing;
+
+        asmjit::JitRuntime runtime;
+        const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+        ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+        std::vector<uint8_t> state (YdspAsmJitCodegen::stateSize (fn), 0);
+        std::vector<float> input { 1.0f, 2.0f, -0.5f, 0.25f };
+        std::vector<float> output (input.size(), 0.0f);
+        void* inPtrs[] { input.data() };
+        void* outPtrs[] { output.data() };
+        YdspKernelContext ctx;
+        ctx.inputs = inPtrs;
+        ctx.outputs = outPtrs;
+        ctx.state = state.data();
+        ctx.stateArrays = state.data() + YdspAsmJitCodegen::stateScalarSize (fn);
+        ctx.numSamples = static_cast<int> (input.size());
+        compiled (&ctx);
+
+        for (size_t i = 0; i < input.size(); ++i)
+            EXPECT_NEAR (input[i] * static_cast<float> (numArrays + 1), output[i], 1e-5f) << i;
+    }
+
+    // 2. 24 independent delay lines with loop-carried ring indices and >4095 bounds:
+    //    caps hoisted arrayBase and wrapLast registers under high GP pressure.
+    {
+        constexpr int numDelays = 24;
+        std::vector<int> bounds (numDelays);
+        std::vector<int> baseElems (numDelays);
+        int totalElems = 0;
+
+        for (int k = 0; k < numDelays; ++k)
+        {
+            bounds[static_cast<size_t> (k)] = k < 18 ? (32 + k) : (4600 + (k - 18) * 100);
+            baseElems[static_cast<size_t> (k)] = totalElems;
+            totalElems += bounds[static_cast<size_t> (k)];
+        }
+
+        YdspIrFunction fn;
+        fn.name = "Diffuser24Delays";
+        fn.numInputs = 1;
+        fn.numOutputs = 1;
+        fn.inputTypes = { YdspValueType::float32Type };
+        fn.outputTypes = { YdspValueType::float32Type };
+        fn.int32Scalars = numDelays;
+        fn.float32ArrayElements = totalElems;
+
+        const auto addValue = [&] (YdspValueType type) -> int
+        {
+            const int id = static_cast<int> (fn.valueTypes.size());
+            fn.valueTypes.push_back (type);
+            fn.valueLanes.push_back (1);
+            return id;
+        };
+
+        const int zeroVal = addValue (YdspValueType::int32Type);
+        const int numSamplesVal = addValue (YdspValueType::int32Type);
+        const int oneVal = addValue (YdspValueType::int32Type);
+        const int sampleIdxVal = addValue (YdspValueType::int32Type);
+        std::vector<int> wpVals (numDelays);
+        for (int k = 0; k < numDelays; ++k)
+            wpVals[static_cast<size_t> (k)] = addValue (YdspValueType::int32Type);
+
+        const int condVal = addValue (YdspValueType::boolType);
+        const int inSampleVal = addValue (YdspValueType::float32Type);
+
+        fn.blocks.resize (4);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, zeroVal, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::loadBlockSize, numSamplesVal },
+            { YdspIrOp::constI, oneVal, -1, -1, -1, -1, 0.0, 1 },
+            { YdspIrOp::movI, sampleIdxVal, zeroVal }
+        };
+        for (int k = 0; k < numDelays; ++k)
+            fn.blocks[0].insts.push_back ({ YdspIrOp::loadStateI, wpVals[static_cast<size_t> (k)], k });
+        fn.blocks[0].term = YdspIrTerm::fallthrough;
+
+        fn.blocks[1].insts = {
+            { YdspIrOp::ltI, condVal, sampleIdxVal, numSamplesVal }
+        };
+        fn.blocks[1].term = YdspIrTerm::branchIf;
+        fn.blocks[1].termCond = condVal;
+        fn.blocks[1].termTarget = 2;
+        fn.blocks[1].termTarget2 = 3;
+
+        fn.blocks[2].insts = {
+            { YdspIrOp::loadInput, inSampleVal, sampleIdxVal, -1, -1, 0 }
+        };
+
+        int accVal = inSampleVal;
+        for (int k = 0; k < numDelays; ++k)
+        {
+            const int wp = wpVals[static_cast<size_t> (k)];
+            const int nextWp = addValue (YdspValueType::int32Type);
+            const int tapVal = addValue (YdspValueType::float32Type);
+            const int sumVal = addValue (YdspValueType::float32Type);
+            const int baseElem = baseElems[static_cast<size_t> (k)];
+            const int bound = bounds[static_cast<size_t> (k)];
+
+            fn.blocks[2].insts.push_back ({ YdspIrOp::storeStateArrayF, -1, wp, inSampleVal, -1, baseElem });
+            fn.blocks[2].insts.push_back ({ YdspIrOp::advanceWrapI, nextWp, wp, -1, -1, -1, 0.0, bound });
+            fn.blocks[2].insts.push_back ({ YdspIrOp::movI, wp, nextWp });
+            fn.blocks[2].insts.push_back ({ YdspIrOp::loadStateArrayF, tapVal, wp, -1, -1, baseElem });
+            fn.blocks[2].insts.push_back ({ YdspIrOp::addF, sumVal, accVal, tapVal });
+            accVal = sumVal;
+        }
+
+        const int nextSampleVal = addValue (YdspValueType::int32Type);
+        fn.blocks[2].insts.push_back ({ YdspIrOp::storeOutput, -1, sampleIdxVal, accVal, -1, 0 });
+        fn.blocks[2].insts.push_back ({ YdspIrOp::addI, nextSampleVal, sampleIdxVal, oneVal });
+        fn.blocks[2].insts.push_back ({ YdspIrOp::movI, sampleIdxVal, nextSampleVal });
+        fn.blocks[2].term = YdspIrTerm::branch;
+        fn.blocks[2].termTarget = 1;
+
+        for (int k = 0; k < numDelays; ++k)
+            fn.blocks[3].insts.push_back ({ YdspIrOp::storeStateI, -1, wpVals[static_cast<size_t> (k)], -1, -1, k });
+        fn.blocks[3].term = YdspIrTerm::fallthrough;
+
+        YdspIrLoop loop;
+        loop.id = 0;
+        loop.headerBlock = 1;
+        loop.exitBlock = 3;
+        loop.induction = sampleIdxVal;
+        loop.bound.kind = YdspLoopBoundKind::blockSize;
+        fn.loops.push_back (loop);
+
+        YdspDiagnostics diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+        const auto listing = diagnostics.toString();
+        int stackAccesses = 0;
+        int preheaderAdds = 0;
+        bool inPreheader = true;
+
+        for (const auto& line : StringArray::fromLines (listing))
+        {
+            const auto trimmed = line.trimStart();
+            if (trimmed.contains ("[sp"))
+                ++stackAccesses;
+
+            if (inPreheader)
+            {
+                if (trimmed.startsWith ("cmp "))
+                    inPreheader = false;
+                else if (trimmed.startsWith ("add ") && ! trimmed.contains ("sp"))
+                    ++preheaderAdds;
+            }
+        }
+
+        EXPECT_LE (preheaderAdds, 2) << listing;
+        EXPECT_LT (stackAccesses, 32) << listing;
+
+        asmjit::JitRuntime runtime;
+        const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+        ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+        std::vector<uint8_t> state (YdspAsmJitCodegen::stateSize (fn), 0);
+        std::vector<int32_t> refWps (numDelays, 0);
+        std::vector<float> refArrays (static_cast<size_t> (totalElems), 0.0f);
+
+        constexpr int blockSamples = 40;
+        for (int block = 0; block < 2; ++block)
+        {
+            std::vector<float> input (blockSamples);
+            for (int i = 0; i < blockSamples; ++i)
+                input[static_cast<size_t> (i)] = 0.1f * static_cast<float> (block * blockSamples + i + 1);
+
+            std::vector<float> actual (blockSamples, 0.0f);
+            void* inPtrs[] { input.data() };
+            void* outPtrs[] { actual.data() };
+            YdspKernelContext ctx;
+            ctx.inputs = inPtrs;
+            ctx.outputs = outPtrs;
+            ctx.state = state.data();
+            ctx.stateArrays = state.data() + YdspAsmJitCodegen::stateScalarSize (fn);
+            ctx.numSamples = blockSamples;
+            compiled (&ctx);
+
+            for (int i = 0; i < blockSamples; ++i)
+            {
+                const float x = input[static_cast<size_t> (i)];
+                float acc = x;
+                for (int k = 0; k < numDelays; ++k)
+                {
+                    const int baseElem = baseElems[static_cast<size_t> (k)];
+                    const int bound = bounds[static_cast<size_t> (k)];
+                    refArrays[static_cast<size_t> (baseElem + refWps[static_cast<size_t> (k)])] = x;
+                    refWps[static_cast<size_t> (k)] = (refWps[static_cast<size_t> (k)] + 1 >= bound) ? 0 : (refWps[static_cast<size_t> (k)] + 1);
+                    acc += refArrays[static_cast<size_t> (baseElem + refWps[static_cast<size_t> (k)])];
+                }
+                EXPECT_NEAR (acc, actual[static_cast<size_t> (i)], 1e-4f) << "block=" << block << " i=" << i;
+            }
+        }
+    }
+}
+
+TEST (YdspAsmJitCodegenTests, AddGpImmUsesImmediateEncodingWithoutTemporaryOnArm64)
+{
+    struct Case
+    {
+        int memIndex;
+        int expectedAdds;
+        bool expectMov;
+        const char* expectedToken;
+    };
+
+    const Case cases[] {
+        { 64, 1, false, ", 256" },         // <= 4095: single add #imm12
+        { 2048, 1, false, ", 2, 12" },     // 8192 = 2 << 12: single shifted add
+        { 2055, 2, false, ", 28" },        // 8220 = (2 << 12) + 28: two adds, zero mov temps
+        { 4194304, 1, true, nullptr }      // 0x1000000 > 0xFFFFFF: register fallback
+    };
+
+    for (const auto& testCase : cases)
+    {
+        SCOPED_TRACE (testCase.memIndex);
+
+        YdspIrFunction fn;
+        fn.name = "AddGpImmCase";
+        fn.float32ArrayElements = testCase.memIndex + 8;
+        fn.valueTypes = { YdspValueType::int32Type, YdspValueType::float32Type };
+        fn.valueLanes = { 1, 1 };
+        fn.blocks.resize (1);
+        fn.blocks[0].insts = {
+            { YdspIrOp::loadBlockSize, 0 },
+            { YdspIrOp::loadStateArrayF, 1, 0, -1, -1, testCase.memIndex },
+            { YdspIrOp::storeStateArrayF, -1, 0, 1, -1, testCase.memIndex }
+        };
+
+        YdspDiagnostics diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+        const auto listing = diagnostics.toString();
+        int addCount = 0;
+        int movCount = 0;
+        bool sawExpected = testCase.expectedToken == nullptr;
+
+        for (const auto& line : StringArray::fromLines (listing))
+        {
+            const auto trimmed = line.trimStart();
+            if (trimmed.startsWith ("add "))
+            {
+                ++addCount;
+                if (testCase.expectedToken != nullptr && trimmed.contains (testCase.expectedToken))
+                    sawExpected = true;
+            }
+            else if (trimmed.startsWith ("mov"))
+            {
+                ++movCount;
+            }
+        }
+
+        EXPECT_EQ (testCase.expectedAdds, addCount) << listing;
+        EXPECT_EQ (testCase.expectMov, movCount > 0) << listing;
+        EXPECT_TRUE (sawExpected) << listing;
+    }
+
+    // Verify runtime execution for a 4096..0xFFFFFF offset (memIndex = 2055 -> base = 8220).
+    YdspIrFunction fn;
+    fn.name = "AddGpImmRuntime";
+    fn.float32ArrayElements = 2064;
+    fn.valueTypes = { YdspValueType::int32Type, YdspValueType::float32Type, YdspValueType::float32Type };
+    fn.valueLanes = { 1, 1, 1 };
+    fn.blocks.resize (1);
+    fn.blocks[0].insts = {
+        { YdspIrOp::loadBlockSize, 0 },
+        { YdspIrOp::loadStateArrayF, 1, 0, -1, -1, 2055 },
+        { YdspIrOp::addF, 2, 1, 1 },
+        { YdspIrOp::storeStateArrayF, -1, 0, 2, -1, 2055 }
+    };
+
+    YdspDiagnostics diagnostics;
+    asmjit::JitRuntime runtime;
+    const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+    ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+    std::vector<float> state (2064, 0.0f);
+    state[2055 + 3] = 7.5f;
+    YdspKernelContext ctx;
+    ctx.numSamples = 3;
+    ctx.state = state.data();
+    ctx.stateArrays = state.data();
+    compiled (&ctx);
+
+    EXPECT_FLOAT_EQ (15.0f, state[2055 + 3]);
+}
+
+TEST (YdspAsmJitCodegenTests, BitcastFloatAndIntScalarAndVectorRoundTrip)
+{
+    // 1. Scalar bitcastFtoI -> xorI (sign flip) -> bitcastItoF
+    {
+        YdspIrFunction fn;
+        fn.name = "ScalarBitcast";
+        fn.numInputs = 1;
+        fn.numOutputs = 1;
+        fn.inputTypes = { YdspValueType::float32Type };
+        fn.outputTypes = { YdspValueType::float32Type };
+        fn.valueTypes = {
+            YdspValueType::int32Type,   // 0: idx
+            YdspValueType::float32Type, // 1: in
+            YdspValueType::int32Type,   // 2: bits
+            YdspValueType::int32Type,   // 3: signMask
+            YdspValueType::int32Type,   // 4: flippedBits
+            YdspValueType::float32Type  // 5: out
+        };
+        fn.valueLanes = { 1, 1, 1, 1, 1, 1 };
+        fn.blocks.resize (1);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::loadInput, 1, 0, -1, -1, 0 },
+            { YdspIrOp::bitcastFtoI, 2, 1 },
+            { YdspIrOp::constI, 3, -1, -1, -1, -1, 0.0, static_cast<int64_t> (static_cast<int32_t> (0x80000000u)) },
+            { YdspIrOp::xorI, 4, 2, 3 },
+            { YdspIrOp::bitcastItoF, 5, 4 },
+            { YdspIrOp::storeOutput, -1, 0, 5, -1, 0 }
+        };
+
+        for (const auto arch : { YdspTargetArchitecture::x64, YdspTargetArchitecture::arm64 })
+        {
+            YdspDiagnostics diagnostics;
+            const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, arch }, fn, diagnostics);
+            ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+            ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        }
+
+        YdspDiagnostics diagnostics;
+        asmjit::JitRuntime runtime;
+        const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+        ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+        for (const float x : { 0.0f, -0.0f, 1.5f, -3.25f, 42.125f })
+        {
+            float in = x;
+            float out = 0.0f;
+            void* inPtrs[] { &in };
+            void* outPtrs[] { &out };
+            YdspKernelContext ctx;
+            ctx.inputs = inPtrs;
+            ctx.outputs = outPtrs;
+            ctx.numSamples = 1;
+            compiled (&ctx);
+
+            const auto expectedBits = std::bit_cast<uint32_t> (x) ^ 0x80000000u;
+            EXPECT_EQ (expectedBits, std::bit_cast<uint32_t> (out));
+        }
+    }
+
+    // 2. Vector bitcastFtoI -> xorI -> bitcastItoF (4-lane SSE2/AVX/ARM64 and 8-lane AVX2)
+    for (const int width : { 4, 8 })
+    {
+        YdspIrFunction fn;
+        fn.name = "VectorBitcast";
+        fn.vectorized = true;
+        fn.vectorWidth = width;
+        fn.float32ArrayElements = 16;
+        fn.valueTypes = {
+            YdspValueType::int32Type,   // 0: idx
+            YdspValueType::float32Type, // 1: vecF
+            YdspValueType::int32Type,   // 2: vecI
+            YdspValueType::int32Type,   // 3: maskScalar
+            YdspValueType::int32Type,   // 4: maskVec
+            YdspValueType::int32Type,   // 5: xored
+            YdspValueType::float32Type  // 6: outF
+        };
+        fn.valueLanes = { 1, width, width, 1, width, width, width };
+        fn.blocks.resize (1);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::loadStateArrayF, 1, 0, -1, -1, 0 },
+            { YdspIrOp::bitcastFtoI, 2, 1 },
+            { YdspIrOp::constI, 3, -1, -1, -1, -1, 0.0, static_cast<int64_t> (static_cast<int32_t> (0x80000000u)) },
+            { YdspIrOp::vsplat, 4, 3 },
+            { YdspIrOp::xorI, 5, 2, 4 },
+            { YdspIrOp::bitcastItoF, 6, 5 },
+            { YdspIrOp::storeStateArrayF, -1, 0, 6, -1, 8 }
+        };
+
+        if (width == 4)
+        {
+            YdspDiagnostics armDiag;
+            const auto armArt = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, armDiag);
+            ASSERT_TRUE (armArt.wasOk()) << armDiag.toString();
+        }
+
+        YdspDiagnostics x64Diag;
+        const auto x64Art = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, fn, x64Diag);
+        ASSERT_TRUE (x64Art.wasOk()) << x64Diag.toString();
+
+        if (width == 4)
+        {
+            YdspDiagnostics diagnostics;
+            asmjit::JitRuntime runtime;
+            const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+            ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+            std::vector<float> state (16, 0.0f);
+            state[0] = 1.25f;
+            state[1] = -2.5f;
+            state[2] = 0.0f;
+            state[3] = -0.0f;
+
+            YdspKernelContext ctx;
+            ctx.numSamples = 1;
+            ctx.state = state.data();
+            ctx.stateArrays = state.data();
+            compiled (&ctx);
+
+            for (int k = 0; k < 4; ++k)
+                EXPECT_EQ (std::bit_cast<uint32_t> (state[static_cast<size_t> (k)]) ^ 0x80000000u,
+                           std::bit_cast<uint32_t> (state[8 + static_cast<size_t> (k)]));
+        }
+    }
+}
+
+TEST (YdspAsmJitCodegenTests, VectorInsertAndExtractAllLanesAndCoalescing)
+{
+    for (const int width : { 4, 8 })
+    {
+        for (const bool enableAvx : { false, true })
+        {
+            if (width == 8 && ! enableAvx)
+                continue;
+
+            YdspIrFunction fn;
+            fn.name = "InsertExtractRoundTrip";
+            fn.vectorized = true;
+            fn.vectorWidth = width;
+            fn.packedFmaAvailable = enableAvx;
+            fn.float32ArrayElements = 32;
+
+            // Values:
+            //   0..width-1: scalar inputs (loaded from state[0..width-1])
+            //   width..2*width-1: chained vinsertF vectors
+            //   2*width..3*width-1: extracted scalars
+            //   3*width: constI 0
+            //   3*width+1..4*width: constI lane indices
+            fn.valueTypes.assign (static_cast<size_t> (width * 3 + 1 + width), YdspValueType::float32Type);
+            fn.valueLanes.assign (fn.valueTypes.size(), 1);
+
+            for (int k = 0; k < width; ++k)
+                fn.valueLanes[static_cast<size_t> (width + k)] = width;
+
+            const int zeroConst = width * 3;
+            fn.valueTypes[static_cast<size_t> (zeroConst)] = YdspValueType::int32Type;
+
+            for (int k = 0; k < width; ++k)
+                fn.valueTypes[static_cast<size_t> (zeroConst + 1 + k)] = YdspValueType::int32Type;
+
+            fn.blocks.resize (1);
+            auto& insts = fn.blocks[0].insts;
+
+            for (int k = 0; k < width; ++k)
+            {
+                const int idxId = zeroConst + 1 + k;
+                insts.push_back ({ YdspIrOp::constI, idxId, -1, -1, -1, -1, 0.0, k });
+                insts.push_back ({ YdspIrOp::loadStateArrayF, k, idxId, -1, -1, 0 });
+            }
+
+            for (int k = 0; k < width; ++k)
+            {
+                const int prev = k == 0 ? -1 : (width + k - 1);
+                insts.push_back ({ YdspIrOp::vinsertF, width + k, prev, k, -1, k });
+            }
+
+            const int finalVec = width + width - 1;
+            insts.push_back ({ YdspIrOp::constI, zeroConst, -1, -1, -1, -1, 0.0, 0 });
+            insts.push_back ({ YdspIrOp::storeStateArrayF, -1, zeroConst, finalVec, -1, 16 });
+
+            for (int k = 0; k < width; ++k)
+            {
+                const int extId = width * 2 + k;
+                insts.push_back ({ YdspIrOp::vextractF, extId, finalVec, -1, -1, k });
+                insts.push_back ({ YdspIrOp::storeStateArrayF, -1, zeroConst + 1 + k, extId, -1, 8 });
+            }
+
+            YdspDiagnostics x64Diag;
+            const auto x64Art = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, fn, x64Diag);
+            ASSERT_TRUE (x64Art.wasOk()) << x64Diag.toString();
+            ASSERT_FALSE (x64Diag.hasErrors()) << x64Diag.toString();
+
+            if (width == 4 && ! enableAvx)
+            {
+                YdspDiagnostics armDiag;
+                const auto armArt = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, armDiag);
+                ASSERT_TRUE (armArt.wasOk()) << armDiag.toString();
+                ASSERT_FALSE (armDiag.hasErrors()) << armDiag.toString();
+
+                const auto listing = armDiag.toString();
+                int insCount = 0;
+                int vecMoveCount = 0;
+
+                for (const auto& line : StringArray::fromLines (listing))
+                {
+                    const auto trimmed = line.trimStart();
+                    if (trimmed.startsWith ("ins "))
+                        ++insCount;
+                    else if (trimmed.startsWith ("mov ") && trimmed.contains (".16b"))
+                        ++vecMoveCount;
+                }
+
+                EXPECT_EQ (3, insCount) << listing;
+                EXPECT_EQ (0, vecMoveCount) << listing;
+
+                YdspDiagnostics runtimeDiag;
+                asmjit::JitRuntime runtime;
+                const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, runtimeDiag);
+                ASSERT_NE (nullptr, compiled) << runtimeDiag.toString();
+
+                std::vector<float> state (32, 0.0f);
+                state[0] = 1.5f;
+                state[1] = -2.25f;
+                state[2] = 3.75f;
+                state[3] = 4.5f;
+
+                YdspKernelContext ctx;
+                ctx.numSamples = 1;
+                ctx.state = state.data();
+                ctx.stateArrays = state.data();
+                compiled (&ctx);
+
+                for (int k = 0; k < 4; ++k)
+                {
+                    EXPECT_FLOAT_EQ (state[static_cast<size_t> (k)], state[16 + static_cast<size_t> (k)]);
+                    EXPECT_FLOAT_EQ (state[static_cast<size_t> (k)], state[8 + static_cast<size_t> (k)]);
+                }
+            }
+        }
+    }
+
+    // Verify `a < 0` at a non-zero lane zeroes the untouched lanes.
+    {
+        YdspIrFunction fn;
+        fn.name = "InsertNonZeroStart";
+        fn.vectorized = true;
+        fn.vectorWidth = 4;
+        fn.float32ArrayElements = 8;
+        fn.valueTypes = {
+            YdspValueType::int32Type,   // 0: const 0
+            YdspValueType::float32Type, // 1: scalar
+            YdspValueType::float32Type  // 2: vec
+        };
+        fn.valueLanes = { 1, 1, 4 };
+        fn.blocks.resize (1);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::constF, 1, -1, -1, -1, -1, 9.25 },
+            { YdspIrOp::vinsertF, 2, -1, 1, -1, 2 },
+            { YdspIrOp::storeStateArrayF, -1, 0, 2, -1, 0 }
+        };
+
+        YdspDiagnostics diagnostics;
+        asmjit::JitRuntime runtime;
+        const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+        ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+        std::vector<float> state (8, 99.0f);
+        YdspKernelContext ctx;
+        ctx.numSamples = 1;
+        ctx.state = state.data();
+        ctx.stateArrays = state.data();
+        compiled (&ctx);
+
+        EXPECT_FLOAT_EQ (0.0f, state[0]);
+        EXPECT_FLOAT_EQ (0.0f, state[1]);
+        EXPECT_FLOAT_EQ (9.25f, state[2]);
+        EXPECT_FLOAT_EQ (0.0f, state[3]);
+    }
+}
+
+TEST (YdspAsmJitCodegenTests, AdvancingLoopPointersEliminateIndexScalingInRolledLoops)
+{
+    // 1. Rolled 4-lane state-array loop (like Additive64 / ModalBank).
+    {
+        constexpr int count = 16;
+
+        YdspIrFunction fn;
+        fn.name = "RolledVectorArrayLoop";
+        fn.vectorized = true;
+        fn.vectorWidth = 4;
+        fn.float32ArrayElements = count * 3;
+        fn.valueTypes = {
+            YdspValueType::int32Type,   // 0: zero
+            YdspValueType::int32Type,   // 1: bound (16)
+            YdspValueType::int32Type,   // 2: step (4)
+            YdspValueType::int32Type,   // 3: induction k
+            YdspValueType::boolType,    // 4: cond
+            YdspValueType::float32Type, // 5: vecA
+            YdspValueType::float32Type, // 6: vecB
+            YdspValueType::float32Type, // 7: sum
+            YdspValueType::int32Type    // 8: kNext
+        };
+        fn.valueLanes = { 1, 1, 1, 1, 1, 4, 4, 4, 1 };
+
+        fn.blocks.resize (4);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::constI, 1, -1, -1, -1, -1, 0.0, count },
+            { YdspIrOp::constI, 2, -1, -1, -1, -1, 0.0, 4 },
+            { YdspIrOp::movI, 3, 0 }
+        };
+        fn.blocks[0].term = YdspIrTerm::fallthrough;
+
+        fn.blocks[1].insts = {
+            { YdspIrOp::ltI, 4, 3, 1 }
+        };
+        fn.blocks[1].term = YdspIrTerm::branchIf;
+        fn.blocks[1].termCond = 4;
+        fn.blocks[1].termTarget = 2;
+        fn.blocks[1].termTarget2 = 3;
+
+        fn.blocks[2].insts = {
+            { YdspIrOp::loadStateArrayF, 5, 3, -1, -1, 0 },
+            { YdspIrOp::loadStateArrayF, 6, 3, -1, -1, count },
+            { YdspIrOp::addF, 7, 5, 6 },
+            { YdspIrOp::storeStateArrayF, -1, 3, 7, -1, count * 2 },
+            { YdspIrOp::addI, 8, 3, 2 },
+            { YdspIrOp::movI, 3, 8 }
+        };
+        fn.blocks[2].term = YdspIrTerm::branch;
+        fn.blocks[2].termTarget = 1;
+
+        fn.blocks[3].term = YdspIrTerm::fallthrough;
+
+        YdspIrLoop loop;
+        loop.id = 0;
+        loop.headerBlock = 1;
+        loop.exitBlock = 3;
+        loop.induction = 3;
+        loop.bound = { YdspLoopBoundKind::constant, count };
+        fn.loops.push_back (loop);
+
+        // ARM64: advancing pointers eliminate sxtw + lsl inside the loop.
+        {
+            YdspDiagnostics armDiag;
+            const auto armArt = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, armDiag);
+            ASSERT_TRUE (armArt.wasOk()) << armDiag.toString();
+
+            const auto listing = armDiag.toString();
+            int sxtwCount = 0;
+            int stepAddCount = 0;
+
+            for (const auto& line : StringArray::fromLines (listing))
+            {
+                const auto trimmed = line.upToFirstOccurrenceOf (";", false, false).trim();
+                if (trimmed.startsWith ("sxtw "))
+                    ++sxtwCount;
+                else if (trimmed.startsWith ("add ") && trimmed.endsWith (", 16"))
+                    ++stepAddCount;
+            }
+
+            EXPECT_EQ (0, sxtwCount) << listing;
+            EXPECT_EQ (3, stepAddCount) << listing;
+        }
+
+        // x64: advancing pointers step by 16 at the latch.
+        {
+            YdspDiagnostics x64Diag;
+            const auto x64Art = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, fn, x64Diag);
+            ASSERT_TRUE (x64Art.wasOk()) << x64Diag.toString();
+
+            const auto listing = x64Diag.toString();
+            int stepLeaCount = 0;
+
+            for (const auto& line : StringArray::fromLines (listing))
+            {
+                const auto trimmed = line.trimStart();
+                if (trimmed.startsWith ("lea ") && trimmed.contains ("+16]"))
+                    ++stepLeaCount;
+            }
+
+            EXPECT_EQ (3, stepLeaCount) << listing;
+        }
+
+        YdspDiagnostics diagnostics;
+        asmjit::JitRuntime runtime;
+        const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+        ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+        std::vector<float> state (static_cast<size_t> (count * 3), 0.0f);
+        for (int i = 0; i < count; ++i)
+        {
+            state[static_cast<size_t> (i)] = static_cast<float> (i) + 1.0f;
+            state[static_cast<size_t> (count + i)] = static_cast<float> (i) * 2.0f;
+        }
+
+        YdspKernelContext ctx;
+        ctx.numSamples = 1;
+        ctx.state = state.data();
+        ctx.stateArrays = state.data();
+        compiled (&ctx);
+
+        for (int i = 0; i < count; ++i)
+            EXPECT_FLOAT_EQ (state[static_cast<size_t> (i)] + state[static_cast<size_t> (count + i)],
+                             state[static_cast<size_t> (count * 2 + i)]);
+    }
+
+    // 2. Chunked SampleLoopDistributor-style loop with stream offset `pos + k`
+    //    inside an outer loop.
+    {
+        constexpr int chunkSize = 16;
+
+        YdspIrFunction fn;
+        fn.name = "ChunkedStreamOffsetLoop";
+        fn.vectorized = true;
+        fn.vectorWidth = 4;
+        fn.numInputs = 1;
+        fn.numOutputs = 1;
+        fn.inputTypes = { YdspValueType::float32Type };
+        fn.outputTypes = { YdspValueType::float32Type };
+        fn.float32ArrayElements = chunkSize;
+        fn.valueTypes = {
+            YdspValueType::int32Type,   // 0: zero
+            YdspValueType::int32Type,   // 1: chunkConst (16)
+            YdspValueType::int32Type,   // 2: step (4)
+            YdspValueType::int32Type,   // 3: numSamples
+            YdspValueType::int32Type,   // 4: pos
+            YdspValueType::boolType,    // 5: outerCond
+            YdspValueType::int32Type,   // 6: k
+            YdspValueType::boolType,    // 7: innerCond
+            YdspValueType::int32Type,   // 8: streamIdx (pos + k)
+            YdspValueType::float32Type, // 9: inVec
+            YdspValueType::float32Type, // 10: scaled
+            YdspValueType::int32Type,   // 11: kNext
+            YdspValueType::int32Type    // 12: posNext
+        };
+        fn.valueLanes = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 4, 1, 1 };
+
+        // Blocks:
+        //   0: preheader (pos = 0)
+        //   1: outer header (pos < numSamples)
+        //   2: inner preheader (k = 0)
+        //   3: inner header (k < 16)
+        //   4: inner body
+        //   5: outer latch (pos += 16)
+        //   6: exit
+        fn.blocks.resize (7);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::constI, 1, -1, -1, -1, -1, 0.0, chunkSize },
+            { YdspIrOp::constI, 2, -1, -1, -1, -1, 0.0, 4 },
+            { YdspIrOp::loadBlockSize, 3 },
+            { YdspIrOp::movI, 4, 0 }
+        };
+        fn.blocks[0].term = YdspIrTerm::fallthrough;
+
+        fn.blocks[1].insts = { { YdspIrOp::ltI, 5, 4, 3 } };
+        fn.blocks[1].term = YdspIrTerm::branchIf;
+        fn.blocks[1].termCond = 5;
+        fn.blocks[1].termTarget = 2;
+        fn.blocks[1].termTarget2 = 6;
+
+        fn.blocks[2].insts = { { YdspIrOp::movI, 6, 0 } };
+        fn.blocks[2].term = YdspIrTerm::fallthrough;
+
+        fn.blocks[3].insts = { { YdspIrOp::ltI, 7, 6, 1 } };
+        fn.blocks[3].term = YdspIrTerm::branchIf;
+        fn.blocks[3].termCond = 7;
+        fn.blocks[3].termTarget = 4;
+        fn.blocks[3].termTarget2 = 5;
+
+        fn.blocks[4].insts = {
+            { YdspIrOp::addI, 8, 4, 6 },
+            { YdspIrOp::loadInput, 9, 8, -1, -1, 0 },
+            { YdspIrOp::addF, 10, 9, 9 },
+            { YdspIrOp::storeOutput, -1, 8, 10, -1, 0 },
+            { YdspIrOp::addI, 11, 6, 2 },
+            { YdspIrOp::movI, 6, 11 }
+        };
+        fn.blocks[4].term = YdspIrTerm::branch;
+        fn.blocks[4].termTarget = 3;
+
+        fn.blocks[5].insts = {
+            { YdspIrOp::addI, 12, 4, 1 },
+            { YdspIrOp::movI, 4, 12 }
+        };
+        fn.blocks[5].term = YdspIrTerm::branch;
+        fn.blocks[5].termTarget = 1;
+
+        fn.blocks[6].term = YdspIrTerm::fallthrough;
+
+        fn.loops.push_back ({ 0, 1, 6, 4, { YdspLoopBoundKind::blockSize, 0 }, false });
+        fn.loops.push_back ({ 1, 3, 5, 6, { YdspLoopBoundKind::constant, chunkSize }, false });
+
+        for (const auto arch : { YdspTargetArchitecture::x64, YdspTargetArchitecture::arm64 })
+        {
+            YdspDiagnostics diag;
+            const auto art = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, arch }, fn, diag);
+            ASSERT_TRUE (art.wasOk()) << diag.toString();
+        }
+
+        YdspDiagnostics diagnostics;
+        asmjit::JitRuntime runtime;
+        const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+        ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+        std::vector<float> input (32);
+        for (size_t i = 0; i < input.size(); ++i)
+            input[i] = static_cast<float> (i) * 0.5f - 4.0f;
+
+        std::vector<float> output (32, 0.0f);
+        std::vector<uint8_t> state (YdspAsmJitCodegen::stateSize (fn), 0);
+        void* inPtrs[] { input.data() };
+        void* outPtrs[] { output.data() };
+
+        YdspKernelContext ctx;
+        ctx.inputs = inPtrs;
+        ctx.outputs = outPtrs;
+        ctx.state = state.data();
+        ctx.stateArrays = state.data() + YdspAsmJitCodegen::stateScalarSize (fn);
+        ctx.numSamples = 32;
+        compiled (&ctx);
+
+        for (size_t i = 0; i < input.size(); ++i)
+            EXPECT_FLOAT_EQ (input[i] * 2.0f, output[i]) << i;
+    }
+}
+
+TEST (YdspAsmJitCodegenTests, NegativeRingWrapReusesSubFlagsAndEliminatesCompare)
+{
+    // 1. Direct IR: Echo-style negative wrap with N = 96000 (> 4095) and an
+    //    intervening float op between subI and selectB.
+    {
+        YdspIrFunction fn;
+        fn.name = "EchoNegativeWrap";
+        fn.numInputs = 1;
+        fn.numOutputs = 1;
+        fn.inputTypes = { YdspValueType::float32Type };
+        fn.outputTypes = { YdspValueType::float32Type };
+        fn.float32ArrayElements = 8;
+        fn.valueTypes = {
+            YdspValueType::int32Type,   // 0: idx
+            YdspValueType::int32Type,   // 1: delay (4)
+            YdspValueType::int32Type,   // 2: zero
+            YdspValueType::int32Type,   // 3: ringSize (96000)
+            YdspValueType::int32Type,   // 4: diff
+            YdspValueType::float32Type, // 5: input sample (flag-preserving intervening op)
+            YdspValueType::float32Type, // 6: scaled sample
+            YdspValueType::boolType,    // 7: cond (diff < 0)
+            YdspValueType::int32Type,   // 8: wrapped (diff + 96000)
+            YdspValueType::int32Type,   // 9: readIdx
+            YdspValueType::float32Type  // 10: float(readIdx)
+        };
+        fn.valueLanes = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+
+        YdspIrInst subInst { YdspIrOp::subI, 4, 0, 1 };
+        subInst.saturatingIntegerArithmetic = false;
+        YdspIrInst addInst { YdspIrOp::addI, 8, 4, 3 };
+        addInst.saturatingIntegerArithmetic = false;
+
+        fn.blocks.resize (1);
+        fn.blocks[0].insts = {
+            { YdspIrOp::loadBlockSize, 0 },
+            { YdspIrOp::constI, 1, -1, -1, -1, -1, 0.0, 4 },
+            { YdspIrOp::constI, 2, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::constI, 3, -1, -1, -1, -1, 0.0, 96000 },
+            subInst,
+            { YdspIrOp::loadInput, 5, 2, -1, -1, 0 },
+            { YdspIrOp::addF, 6, 5, 5 },
+            { YdspIrOp::ltI, 7, 4, 2 },
+            addInst,
+            { YdspIrOp::selectB, 9, 7, 8, 4 },
+            { YdspIrOp::itof, 10, 9 },
+            { YdspIrOp::addF, 10, 10, 6 },
+            { YdspIrOp::storeOutput, -1, 2, 10, -1, 0 }
+        };
+
+        // ARM64: subs + add + csel mi, zero cmp.
+        {
+            YdspDiagnostics armDiag;
+            const auto armArt = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, armDiag);
+            ASSERT_TRUE (armArt.wasOk()) << armDiag.toString();
+
+            const auto listing = armDiag.toString();
+            int subsCount = 0;
+            int cmpCount = 0;
+            int cselMiCount = 0;
+
+            for (const auto& line : StringArray::fromLines (listing))
+            {
+                const auto trimmed = line.upToFirstOccurrenceOf (";", false, false).trim();
+                if (trimmed.startsWith ("subs "))
+                    ++subsCount;
+                else if (trimmed.startsWith ("cmp "))
+                    ++cmpCount;
+                else if (trimmed.startsWith ("csel ")
+                         && (trimmed.endsWith (", mi")
+                             || trimmed.endsWith (", " + String (static_cast<uint32_t> (asmjit::arm::CondCode::kMI)))))
+                    ++cselMiCount;
+            }
+
+            EXPECT_EQ (1, subsCount) << listing;
+            EXPECT_EQ (0, cmpCount) << listing;
+            EXPECT_EQ (1, cselMiCount) << listing;
+        }
+
+        // x64: sub + lea + cmovs, zero cmp.
+        {
+            YdspDiagnostics x64Diag;
+            const auto x64Art = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, fn, x64Diag);
+            ASSERT_TRUE (x64Art.wasOk()) << x64Diag.toString();
+
+            const auto listing = x64Diag.toString();
+            int cmpCount = 0;
+            int cmovsCount = 0;
+
+            for (const auto& line : StringArray::fromLines (listing))
+            {
+                const auto trimmed = line.trimStart();
+                if (trimmed.startsWith ("cmp "))
+                    ++cmpCount;
+                else if (trimmed.startsWith ("cmovs "))
+                    ++cmovsCount;
+            }
+
+            EXPECT_EQ (0, cmpCount) << listing;
+            EXPECT_EQ (1, cmovsCount) << listing;
+        }
+
+        YdspDiagnostics diagnostics;
+        asmjit::JitRuntime runtime;
+        const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+        ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+        for (const int idx : { 0, 2, 4, 10 })
+        {
+            float in = 0.5f;
+            float out = 0.0f;
+            void* inPtrs[] { &in };
+            void* outPtrs[] { &out };
+            YdspKernelContext ctx;
+            ctx.inputs = inPtrs;
+            ctx.outputs = outPtrs;
+            ctx.numSamples = idx;
+            compiled (&ctx);
+
+            const int expectedIdx = (idx - 4 < 0) ? (idx - 4 + 96000) : (idx - 4);
+            EXPECT_FLOAT_EQ (static_cast<float> (expectedIdx) + 1.0f, out) << idx;
+        }
+    }
+
+    // 2. Full Echo & Karplus YDSP patches compile and wrap negative indices accurately.
+    {
+        YdspDiagnostics diagnostics;
+        auto echoKernel = compileKernel (R"YDSP(
+            processor EchoWrap {
+                input stream in;
+                output stream out;
+                input parameter float delaySamples = 3.0;
+                state float buf[16];
+                state int wp;
+                process {
+                    int d = int (clamp (delaySamples, 1.0, 15.0));
+                    int readA = wp - d;
+                    if (readA < 0) { readA = readA + 16; }
+                    int readB = readA - 1;
+                    if (readB < 0) { readB = 15; }
+                    buf[wp] = in;
+                    out = buf[readA] + buf[readB];
+                    wp = wp + 1;
+                    if (wp >= 16) { wp = 0; }
+                }
+            }
+            graph G { input stream x; output stream y; node e = EchoWrap; connection { x -> e.in; e.out -> y; } }
+        )YDSP",
+                                         "EchoWrap",
+                                         diagnostics);
+
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        ASSERT_NE (nullptr, echoKernel.fn);
+
+        std::vector<float> input (20, 0.0f);
+        for (size_t i = 0; i < input.size(); ++i)
+            input[i] = static_cast<float> (i + 1);
+
+        const auto output = runKernel (echoKernel, input, static_cast<int> (input.size()), { 3.0f });
+
+        std::vector<float> ring (16, 0.0f);
+        int wp = 0;
+
+        for (size_t i = 0; i < input.size(); ++i)
+        {
+            int readA = wp - 3;
+            if (readA < 0)
+                readA += 16;
+
+            int readB = readA - 1;
+            if (readB < 0)
+                readB = 15;
+
+            ring[static_cast<size_t> (wp)] = input[i];
+            const float expected = ring[static_cast<size_t> (readA)] + ring[static_cast<size_t> (readB)];
+            wp = (wp + 1 >= 16) ? 0 : (wp + 1);
+
+            EXPECT_FLOAT_EQ (expected, output[i]) << i;
+        }
+
+        dumpAsmOnFailureCodegen (echoKernel);
+    }
+}
+
+TEST (YdspAsmJitCodegenTests, StrictScalarLibmCachesDoubleTargetInPrologueOnArm64)
+{
+    YdspIrFunction fn;
+    fn.name = "StrictSinLoop";
+    fn.fastMath = false;
+    fn.numInputs = 1;
+    fn.numOutputs = 1;
+    fn.inputTypes = { YdspValueType::float32Type };
+    fn.outputTypes = { YdspValueType::float32Type };
+    fn.valueTypes = {
+        YdspValueType::int32Type,   // 0: zero
+        YdspValueType::int32Type,   // 1: numSamples
+        YdspValueType::int32Type,   // 2: one
+        YdspValueType::int32Type,   // 3: i
+        YdspValueType::boolType,    // 4: cond
+        YdspValueType::float32Type, // 5: x
+        YdspValueType::float32Type, // 6: sin(x)
+        YdspValueType::int32Type    // 7: next
+    };
+    fn.valueLanes = { 1, 1, 1, 1, 1, 1, 1, 1 };
+    fn.blocks.resize (4);
+    fn.blocks[0].insts = {
+        { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+        { YdspIrOp::loadBlockSize, 1 },
+        { YdspIrOp::constI, 2, -1, -1, -1, -1, 0.0, 1 },
+        { YdspIrOp::movI, 3, 0 }
+    };
+    fn.blocks[0].term = YdspIrTerm::fallthrough;
+    fn.blocks[1].insts = { { YdspIrOp::ltI, 4, 3, 1 } };
+    fn.blocks[1].term = YdspIrTerm::branchIf;
+    fn.blocks[1].termCond = 4;
+    fn.blocks[1].termTarget = 2;
+    fn.blocks[1].termTarget2 = 3;
+    fn.blocks[2].insts = {
+        { YdspIrOp::loadInput, 5, 3, -1, -1, 0 },
+        { YdspIrOp::sinF, 6, 5 },
+        { YdspIrOp::storeOutput, -1, 3, 6, -1, 0 },
+        { YdspIrOp::addI, 7, 3, 2 },
+        { YdspIrOp::movI, 3, 7 }
+    };
+    fn.blocks[2].term = YdspIrTerm::branch;
+    fn.blocks[2].termTarget = 1;
+    fn.blocks[3].term = YdspIrTerm::fallthrough;
+    fn.loops.push_back ({ 0, 1, 3, 3, { YdspLoopBoundKind::blockSize, 0 }, false });
+
+    YdspDiagnostics diag;
+    const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, diag);
+    ASSERT_TRUE (artifact.wasOk()) << diag.toString();
+    const auto listing = diag.toString();
+
+    // The f64 libm target pointer is loaded once in the prologue (before loop header L3:),
+    // not inside the loop body.
+    const auto headerPos = listing.indexOf ("L3:");
+    const auto poolLoadPos = listing.indexOf ("ldr x23, [L");
+    ASSERT_GT (headerPos, 0) << listing;
+    ASSERT_GE (poolLoadPos, 0) << listing;
+    EXPECT_LT (poolLoadPos, headerPos) << listing;
+}
+
+TEST (YdspAsmJitCodegenTests, ReusesAdjacentUnhoistedArrayBaseOnArm64)
+{
+    // Build > 22 live GP values so prepareStateAddressing sets maxHoistedBases = 0,
+    // and verify adjacent load+store pairs on the same high-offset array reuse
+    // the computed base address instead of repeating add #hi, lsl #12 + add #lo.
+    constexpr int numDelays = 24;
+    constexpr int arrayLen = 200;
+    YdspIrFunction fn;
+    fn.name = "AdjacentUnhoistedBase";
+    fn.int32Scalars = numDelays;
+    fn.float32ArrayElements = numDelays * arrayLen;
+
+    const auto addVal = [&] (YdspValueType t) -> int
+    {
+        const int id = static_cast<int> (fn.valueTypes.size());
+        fn.valueTypes.push_back (t);
+        fn.valueLanes.push_back (1);
+        return id;
+    };
+
+    std::vector<int> idxVals (numDelays);
+    for (int k = 0; k < numDelays; ++k)
+        idxVals[static_cast<size_t> (k)] = addVal (YdspValueType::int32Type);
+
+    fn.blocks.resize (1);
+    for (int k = 0; k < numDelays; ++k)
+        fn.blocks[0].insts.push_back ({ YdspIrOp::loadStateI, idxVals[static_cast<size_t> (k)], k });
+
+    for (int k = 0; k < numDelays; ++k)
+    {
+        const int baseElem = k * arrayLen;
+        const int loaded = addVal (YdspValueType::float32Type);
+        const int doubled = addVal (YdspValueType::float32Type);
+        const int idx = idxVals[static_cast<size_t> (k)];
+        fn.blocks[0].insts.push_back ({ YdspIrOp::loadStateArrayF, loaded, idx, -1, -1, baseElem });
+        fn.blocks[0].insts.push_back ({ YdspIrOp::addF, doubled, loaded, loaded });
+        fn.blocks[0].insts.push_back ({ YdspIrOp::storeStateArrayF, -1, idx, doubled, -1, baseElem });
+    }
+
+    YdspDiagnostics diag;
+    const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 }, fn, diag);
+    ASSERT_TRUE (artifact.wasOk()) << diag.toString();
+    const auto listing = diag.toString();
+
+    int shiftedAdds = 0;
+    for (const auto& line : StringArray::fromLines (listing))
+    {
+        const auto inst = line.upToFirstOccurrenceOf (";", false, false).trim();
+        if (inst.startsWith ("add ") && inst.endsWith (", 12"))
+            ++shiftedAdds;
+    }
+
+    // Arrays 6..23 (18 arrays) have byte offsets > 4095; each pair shares one
+    // shifted add instead of emitting two.
+    EXPECT_EQ (18, shiftedAdds) << listing;
+}
+
+TEST (YdspAsmJitCodegenTests, LocalizesExcessRingIndicesUnderHighGpPressureOnArm64)
+{
+    constexpr int numDelays = 24;
+    constexpr int arrayStride = 160;
+    YdspIrFunction fn;
+    fn.isSampleMode = true;
+    fn.name = "LocalizeIndices24";
+    fn.numInputs = 1;
+    fn.numOutputs = 1;
+    fn.inputTypes = { YdspValueType::float32Type };
+    fn.outputTypes = { YdspValueType::float32Type };
+    fn.int32Scalars = numDelays;
+    fn.float32ArrayElements = numDelays * arrayStride;
+
+    const auto addVal = [&] (YdspValueType t) -> int
+    {
+        const int id = static_cast<int> (fn.valueTypes.size());
+        fn.valueTypes.push_back (t);
+        fn.valueLanes.push_back (1);
+        return id;
+    };
+
+    const int zeroVal = addVal (YdspValueType::int32Type);
+    const int numSamplesVal = addVal (YdspValueType::int32Type);
+    const int oneVal = addVal (YdspValueType::int32Type);
+    const int sampleIdxVal = addVal (YdspValueType::int32Type);
+    const int condVal = addVal (YdspValueType::boolType);
+    const int inSampleVal = addVal (YdspValueType::float32Type);
+
+    std::vector<int> wpVals (numDelays);
+    for (int k = 0; k < numDelays; ++k)
+        wpVals[static_cast<size_t> (k)] = addVal (YdspValueType::int32Type);
+
+    fn.blocks.resize (4);
+    fn.blocks[0].insts = {
+        { YdspIrOp::constI, zeroVal, -1, -1, -1, -1, 0.0, 0 },
+        { YdspIrOp::loadBlockSize, numSamplesVal },
+        { YdspIrOp::constI, oneVal, -1, -1, -1, -1, 0.0, 1 },
+        { YdspIrOp::movI, sampleIdxVal, zeroVal }
+    };
+    for (int k = 0; k < numDelays; ++k)
+        fn.blocks[0].insts.push_back ({ YdspIrOp::loadStateI, wpVals[static_cast<size_t> (k)], k });
+    fn.blocks[0].term = YdspIrTerm::fallthrough;
+
+    fn.blocks[1].insts = { { YdspIrOp::ltI, condVal, sampleIdxVal, numSamplesVal } };
+    fn.blocks[1].term = YdspIrTerm::branchIf;
+    fn.blocks[1].termCond = condVal;
+    fn.blocks[1].termTarget = 2;
+    fn.blocks[1].termTarget2 = 3;
+
+    fn.blocks[2].insts = { { YdspIrOp::loadInput, inSampleVal, sampleIdxVal, -1, -1, 0 } };
+    int accVal = inSampleVal;
+    for (int k = 0; k < numDelays; ++k)
+    {
+        const int wp = wpVals[static_cast<size_t> (k)];
+        const int tapVal = addVal (YdspValueType::float32Type);
+        const int sumVal = addVal (YdspValueType::float32Type);
+        const int baseElem = k * arrayStride;
+        fn.blocks[2].insts.push_back ({ YdspIrOp::loadStateArrayF, tapVal, wp, -1, -1, baseElem });
+        fn.blocks[2].insts.push_back ({ YdspIrOp::storeStateArrayF, -1, wp, inSampleVal, -1, baseElem });
+        fn.blocks[2].insts.push_back ({ YdspIrOp::advanceWrapI, wp, wp, -1, -1, -1, 0.0, 113 + k });
+        fn.blocks[2].insts.push_back ({ YdspIrOp::addF, sumVal, accVal, tapVal });
+        accVal = sumVal;
+    }
+    const int nextSampleVal = addVal (YdspValueType::int32Type);
+    fn.blocks[2].insts.push_back ({ YdspIrOp::storeOutput, -1, sampleIdxVal, accVal, -1, 0 });
+    fn.blocks[2].insts.push_back ({ YdspIrOp::addI, nextSampleVal, sampleIdxVal, oneVal });
+    fn.blocks[2].insts.push_back ({ YdspIrOp::movI, sampleIdxVal, nextSampleVal });
+    fn.blocks[2].term = YdspIrTerm::branch;
+    fn.blocks[2].termTarget = 1;
+
+    for (int k = 0; k < numDelays; ++k)
+        fn.blocks[3].insts.push_back ({ YdspIrOp::storeStateI, -1, wpVals[static_cast<size_t> (k)], -1, -1, k });
+    fn.blocks[3].term = YdspIrTerm::fallthrough;
+    fn.loops.push_back ({ 0, 1, 3, sampleIdxVal, { YdspLoopBoundKind::blockSize, 0 }, false });
+
+    YdspDiagnostics diagnostics;
+    YdspOptimizer optimizer (diagnostics);
+    optimizer.setTargetHasFusedMultiplyAdd (true);
+    optimizer.setVectorWidth (4);
+    optimizer.localizeHighPressureStateIndices (fn);
+
+    int preheaderLoads = 0;
+    for (const auto& inst : fn.blocks[0].insts)
+        if (inst.op == YdspIrOp::loadStateI)
+            ++preheaderLoads;
+
+    int bodyLoads = 0;
+    int bodyStores = 0;
+    for (const auto& inst : fn.blocks[2].insts)
+    {
+        if (inst.op == YdspIrOp::loadStateI)
+            ++bodyLoads;
+        else if (inst.op == YdspIrOp::storeStateI)
+            ++bodyStores;
+    }
+
+    EXPECT_EQ (14, preheaderLoads);
+    EXPECT_EQ (10, bodyLoads);
+    EXPECT_EQ (10, bodyStores);
+
+    // Verify compiled runtime behavior matches scalar ring reference across blocks.
+    asmjit::JitRuntime runtime;
+    const auto compiled = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+    ASSERT_NE (nullptr, compiled) << diagnostics.toString();
+
+    std::vector<uint8_t> state (YdspAsmJitCodegen::stateSize (fn), 0);
+    std::vector<int32_t> refWps (numDelays, 0);
+    std::vector<float> refArrays (static_cast<size_t> (numDelays * arrayStride), 0.0f);
+
+    for (int block = 0; block < 3; ++block)
+    {
+        constexpr int nSamples = 64;
+        std::vector<float> input (nSamples);
+        for (int i = 0; i < nSamples; ++i)
+            input[static_cast<size_t> (i)] = 0.05f * static_cast<float> (block * nSamples + i + 1);
+
+        std::vector<float> actual (nSamples, 0.0f);
+        void* inPtrs[] { input.data() };
+        void* outPtrs[] { actual.data() };
+        YdspKernelContext ctx;
+        ctx.inputs = inPtrs;
+        ctx.outputs = outPtrs;
+        ctx.state = state.data();
+        ctx.stateArrays = state.data() + YdspAsmJitCodegen::stateScalarSize (fn);
+        ctx.numSamples = nSamples;
+        compiled (&ctx);
+
+        for (int i = 0; i < nSamples; ++i)
+        {
+            const float x = input[static_cast<size_t> (i)];
+            float acc = x;
+            for (int k = 0; k < numDelays; ++k)
+            {
+                const int baseElem = k * arrayStride;
+                acc += refArrays[static_cast<size_t> (baseElem + refWps[static_cast<size_t> (k)])];
+                refArrays[static_cast<size_t> (baseElem + refWps[static_cast<size_t> (k)])] = x;
+                const int bound = 113 + k;
+                refWps[static_cast<size_t> (k)] = (refWps[static_cast<size_t> (k)] + 1 >= bound) ? 0 : (refWps[static_cast<size_t> (k)] + 1);
+            }
+            EXPECT_NEAR (acc, actual[static_cast<size_t> (i)], 1e-4f) << "block=" << block << " i=" << i;
+        }
+    }
+}
+
+TEST (YdspAsmJitCodegenTests, SubtractionIntoItsRightOperandKeepsBothOperands)
+{
+    // `y = a - y` is what a folded state write-back leaves behind. A two-address
+    // target must not load `a` into `y` before it has read `y`.
+    YdspIrFunction fn;
+    fn.name = "SubtractIntoRight";
+    fn.isSampleMode = false;
+    fn.float32ArrayElements = 3;
+    fn.int32ArrayElements = 3;
+    fn.blocks.resize (1);
+    auto& insts = fn.blocks[0].insts;
+
+    const auto newValue = [&fn] (YdspValueType type)
+    {
+        fn.valueTypes.push_back (type);
+        return static_cast<int> (fn.valueTypes.size()) - 1;
+    };
+
+    int index[3];
+    for (int i = 0; i < 3; ++i)
+    {
+        index[i] = newValue (YdspValueType::int32Type);
+        insts.push_back ({ YdspIrOp::constI, index[i], -1, -1, -1, -1, 0.0, i });
+    }
+
+    const int floatLeft = newValue (YdspValueType::float32Type);
+    const int floatRight = newValue (YdspValueType::float32Type);
+    insts.push_back ({ YdspIrOp::loadStateArrayF, floatLeft, index[0], -1, -1, 0 });
+    insts.push_back ({ YdspIrOp::loadStateArrayF, floatRight, index[1], -1, -1, 0 });
+    insts.push_back ({ YdspIrOp::subF, floatRight, floatLeft, floatRight });
+    insts.push_back ({ YdspIrOp::storeStateArrayF, -1, index[2], floatRight, -1, 0 });
+
+    const int intLeft = newValue (YdspValueType::int32Type);
+    const int intRight = newValue (YdspValueType::int32Type);
+    insts.push_back ({ YdspIrOp::loadStateArrayI, intLeft, index[0], -1, -1, 0 });
+    insts.push_back ({ YdspIrOp::loadStateArrayI, intRight, index[1], -1, -1, 0 });
+    insts.push_back ({ YdspIrOp::subI, intRight, intLeft, intRight });
+    insts.push_back ({ YdspIrOp::storeStateArrayI, -1, index[2], intRight, -1, 0 });
+
+    {
+        YdspDiagnostics diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, fn, diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+
+        // A subtraction of a register from itself is the lost operand.
+        for (const auto& line : StringArray::fromLines (diagnostics.toString()))
+        {
+            const auto text = line.upToFirstOccurrenceOf (";", false, false).trim();
+            if (! text.startsWith ("subss ") && ! text.startsWith ("sub "))
+                continue;
+
+            const auto operands = text.fromFirstOccurrenceOf (" ", false, false);
+            EXPECT_NE (operands.upToFirstOccurrenceOf (",", false, false).trim(),
+                       operands.fromFirstOccurrenceOf (",", false, false).trim())
+                << line;
+        }
+    }
+
+    YdspDiagnostics diagnostics;
+    asmjit::JitRuntime runtime;
+    const auto kernel = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+    ASSERT_NE (nullptr, kernel) << diagnostics.toString();
+
+    const auto intRegion = static_cast<size_t> (fn.int32ArrayRegionOffset());
+    std::vector<float> stateArrays ((intRegion + 3 * sizeof (int32_t)) / sizeof (float) + 16, 0.0f);
+    stateArrays[0] = 5.0f;
+    stateArrays[1] = 2.0f;
+
+    const int32_t intValues[] { 9, 4, 0 };
+    std::memcpy (reinterpret_cast<char*> (stateArrays.data()) + intRegion, intValues, sizeof (intValues));
+
+    YdspKernelContext context;
+    context.stateArrays = stateArrays.data();
+    kernel (&context);
+
+    int32_t intResult = 0;
+    std::memcpy (&intResult, reinterpret_cast<char*> (stateArrays.data()) + intRegion + 2 * sizeof (int32_t), sizeof (intResult));
+
+    EXPECT_EQ (3.0f, stateArrays[2]);
+    EXPECT_EQ (5, intResult);
+}
+
+TEST (YdspAsmJitCodegenTests, X64SpillsEightLaneVectorsAtFullWidth)
+{
+    // Twenty eight-lane values live at once are more than the sixteen ymm
+    // registers hold, so some are spilled: with a 128-bit SSE move the upper
+    // four lanes of each would be lost.
+    constexpr int numValues = 20;
+    constexpr int lanes = 8;
+
+    YdspIrFunction fn;
+    fn.name = "WideSpills";
+    fn.isSampleMode = false;
+    fn.vectorized = true;
+    fn.vectorWidth = lanes;
+    fn.float32ArrayElements = (numValues + 1) * lanes;
+    fn.blocks.resize (1);
+    auto& insts = fn.blocks[0].insts;
+
+    const auto newValue = [&fn] (YdspValueType type, int laneCount)
+    {
+        fn.valueTypes.push_back (type);
+        fn.valueLanes.push_back (laneCount);
+        return static_cast<int> (fn.valueTypes.size()) - 1;
+    };
+
+    std::vector<int> loaded;
+
+    for (int i = 0; i < numValues; ++i)
+    {
+        const int index = newValue (YdspValueType::int32Type, 1);
+        insts.push_back ({ YdspIrOp::constI, index, -1, -1, -1, -1, 0.0, i * lanes });
+        loaded.push_back (newValue (YdspValueType::float32Type, lanes));
+        insts.push_back ({ YdspIrOp::loadStateArrayF, loaded.back(), index, -1, -1, 0 });
+    }
+
+    int sum = loaded[0];
+
+    for (int i = 1; i < numValues; ++i)
+    {
+        const int result = newValue (YdspValueType::float32Type, lanes);
+        insts.push_back ({ YdspIrOp::addF, result, sum, loaded[static_cast<size_t> (i)] });
+        sum = result;
+    }
+
+    const int outIndex = newValue (YdspValueType::int32Type, 1);
+    insts.push_back ({ YdspIrOp::constI, outIndex, -1, -1, -1, -1, 0.0, numValues * lanes });
+    insts.push_back ({ YdspIrOp::storeStateArrayF, -1, outIndex, sum, -1, 0 });
+
+    YdspDiagnostics diagnostics;
+    const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 }, fn, diagnostics);
+    ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+
+    const auto listing = diagnostics.toString();
+    EXPECT_TRUE (listing.contains ("ymmword ptr [rsp")) << listing;
+
+    for (const auto& line : StringArray::fromLines (listing))
+        if (line.contains ("ymmword ptr [rsp"))
+            EXPECT_TRUE (line.trimStart().startsWith ("v")) << line;
+}
+
+TEST (YdspAsmJitCodegenTests, SpillsBeyondTheLoadStoreOffsetRangeAssemble)
+{
+    // 5000 values loaded before the first add are all live at once, so their spill slots span about 20 KB of
+    // stack: past the 16380-byte offset a 32-bit AArch64 load or store can encode.
+    constexpr int numValues = 5000;
+    constexpr int numElements = 64;
+
+    YdspIrFunction fn;
+    fn.name = "LargeSpillArea";
+    fn.isSampleMode = false;
+    fn.float32ArrayElements = numElements + 1;
+    fn.valueTypes.push_back (YdspValueType::int32Type);
+    fn.blocks.resize (1);
+    auto& insts = fn.blocks[0].insts;
+    insts.push_back ({ YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 });
+
+    for (int i = 0; i < numValues; ++i)
+    {
+        fn.valueTypes.push_back (YdspValueType::float32Type);
+        insts.push_back ({ YdspIrOp::loadStateArrayF, i + 1, 0, -1, -1, i % numElements });
+    }
+
+    int sum = 1;
+    for (int i = 1; i < numValues; ++i)
+    {
+        fn.valueTypes.push_back (YdspValueType::float32Type);
+        const int result = static_cast<int> (fn.valueTypes.size()) - 1;
+        insts.push_back ({ YdspIrOp::addF, result, sum, i + 1 });
+        sum = result;
+    }
+
+    insts.push_back ({ YdspIrOp::storeStateArrayF, -1, 0, sum, -1, numElements });
+
+    for (const auto architecture : { YdspTargetArchitecture::arm64, YdspTargetArchitecture::x64 })
+    {
+        YdspDiagnostics diagnostics;
+        const auto artifact = YdspAsmJitCodegen::emit ({ YdspTargetOperatingSystem::linuxTarget, architecture }, fn, diagnostics);
+        ASSERT_TRUE (artifact.wasOk()) << diagnostics.toString();
+    }
+
+    YdspDiagnostics diagnostics;
+    asmjit::JitRuntime runtime;
+    const auto kernel = YdspAsmJitCodegen::compile (runtime, fn, diagnostics);
+    ASSERT_NE (nullptr, kernel) << diagnostics.toString();
+
+    std::vector<float> stateArrays (static_cast<size_t> (numElements + 1), 0.0f);
+    for (int i = 0; i < numElements; ++i)
+        stateArrays[static_cast<size_t> (i)] = static_cast<float> (i + 1);
+
+    YdspKernelContext context;
+    context.stateArrays = stateArrays.data();
+    kernel (&context);
+
+    float expected = 0.0f;
+    for (int i = 0; i < numValues; ++i)
+        expected += static_cast<float> (i % numElements + 1);
+
+    EXPECT_EQ (expected, stateArrays[static_cast<size_t> (numElements)]);
 }
 
 } // namespace yup::test

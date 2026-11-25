@@ -607,34 +607,207 @@ bool YdspOptimizer::algebraicSimplification (YdspIrFunction& fn)
 
                 case YdspIrOp::powF:
                 {
-                    // pow (x, 2.0) -> x * x under fast math: libm pow rounds
-                    // once with its own algorithm, so it is not bit-equal to a
-                    // multiply; strict mode keeps the intrinsic.
+                    // Strength-reducing small constant exponents and constant
+                    // bases changes rounding relative to libm pow, so strict
+                    // mode keeps the intrinsic.
                     if (fn.fastMath)
                     {
-                        if (const auto* lit = literalOf (inst.b); lit != nullptr && lit->fvalue == 2.0)
+                        const auto type = fn.valueTypes[static_cast<size_t> (result)];
+                        const int lanes = fn.laneCountOf (result);
+                        const auto instIndex = static_cast<size_t> (&inst - block.insts.data());
+
+                        auto floatLiteralValue = [&] (int id) -> std::optional<double>
                         {
-                            changed = true;
-                            inst.op = YdspIrOp::mulF;
-                            inst.b = inst.a;
-                            continue;
+                            if (const auto* lit = literalOf (id); lit != nullptr && lit->op == YdspIrOp::constF)
+                                return lit->fvalue;
+
+                            if (counts.definedOnce (id) && definitionBlocks[static_cast<size_t> (id)] == &block)
+                            {
+                                const auto* def = definitions[static_cast<size_t> (id)];
+
+                                if (def->op == YdspIrOp::vsplat)
+                                    if (const auto* lit = literalOf (def->a); lit != nullptr && lit->op == YdspIrOp::constF)
+                                        return lit->fvalue;
+                            }
+
+                            return std::nullopt;
+                        };
+
+                        const auto newTemp = [&] (int valueLanes)
+                        {
+                            const int id = static_cast<int> (fn.valueTypes.size());
+                            fn.valueTypes.push_back (type);
+
+                            if (! fn.valueLanes.empty() || valueLanes > 1)
+                            {
+                                fn.valueLanes.resize (static_cast<size_t> (id), 1);
+                                fn.valueLanes.push_back (valueLanes);
+                            }
+
+                            return id;
+                        };
+
+                        const auto emitFloatConst = [&] (double val, std::vector<YdspIrInst>& ops)
+                        {
+                            const int scalarId = newTemp (1);
+                            ops.push_back ({ YdspIrOp::constF, scalarId, -1, -1, -1, -1, val });
+
+                            if (lanes <= 1)
+                                return scalarId;
+
+                            const int vecId = newTemp (lanes);
+                            ops.push_back ({ YdspIrOp::vsplat, vecId, scalarId });
+                            return vecId;
+                        };
+
+                        if (const auto rawExp = floatLiteralValue (inst.b); rawExp.has_value())
+                        {
+                            const double exp = type == YdspValueType::float32Type
+                                                 ? static_cast<double> (static_cast<float> (*rawExp))
+                                                 : *rawExp;
+
+                            std::vector<YdspIrInst> ops;
+                            int base = inst.a;
+
+                            if (lanes > 1 && fn.laneCountOf (base) == 1 && exp != 0.0 && exp != 1.0)
+                            {
+                                const int splatted = newTemp (lanes);
+                                ops.push_back ({ YdspIrOp::vsplat, splatted, base });
+                                base = splatted;
+                            }
+
+                            if (exp == 0.0)
+                            {
+                                if (lanes <= 1)
+                                {
+                                    inst.op = YdspIrOp::constF;
+                                    inst.a = inst.b = inst.c = -1;
+                                    inst.fvalue = 1.0;
+                                }
+                                else
+                                {
+                                    const int scalarOne = newTemp (1);
+                                    insertedOperands.push_back ({ &block, instIndex, { { YdspIrOp::constF, scalarOne, -1, -1, -1, -1, 1.0 } } });
+                                    inst.op = YdspIrOp::vsplat;
+                                    inst.a = scalarOne;
+                                    inst.b = inst.c = -1;
+                                }
+
+                                changed = true;
+                                continue;
+                            }
+
+                            if (exp == 1.0)
+                            {
+                                inst.op = (lanes > 1 && fn.laneCountOf (inst.a) == 1) ? YdspIrOp::vsplat : YdspIrOp::movF;
+                                inst.b = inst.c = -1;
+                                changed = true;
+                                continue;
+                            }
+
+                            if (exp == 2.0)
+                            {
+                                if (! ops.empty())
+                                    insertedOperands.push_back ({ &block, instIndex, std::move (ops) });
+
+                                inst.op = YdspIrOp::mulF;
+                                inst.a = base;
+                                inst.b = base;
+                                inst.c = -1;
+                                changed = true;
+                                continue;
+                            }
+
+                            if (exp == 3.0)
+                            {
+                                const int x2 = newTemp (lanes);
+                                ops.push_back ({ YdspIrOp::mulF, x2, base, base });
+                                insertedOperands.push_back ({ &block, instIndex, std::move (ops) });
+                                inst.op = YdspIrOp::mulF;
+                                inst.a = x2;
+                                inst.b = base;
+                                inst.c = -1;
+                                changed = true;
+                                continue;
+                            }
+
+                            if (exp == 4.0)
+                            {
+                                const int x2 = newTemp (lanes);
+                                ops.push_back ({ YdspIrOp::mulF, x2, base, base });
+                                insertedOperands.push_back ({ &block, instIndex, std::move (ops) });
+                                inst.op = YdspIrOp::mulF;
+                                inst.a = x2;
+                                inst.b = x2;
+                                inst.c = -1;
+                                changed = true;
+                                continue;
+                            }
+
+                            if (exp == -1.0)
+                            {
+                                const int one = emitFloatConst (1.0, ops);
+                                insertedOperands.push_back ({ &block, instIndex, std::move (ops) });
+                                inst.op = YdspIrOp::divF;
+                                inst.a = one;
+                                inst.b = base;
+                                inst.c = -1;
+                                changed = true;
+                                continue;
+                            }
+
+                            if (exp == -2.0)
+                            {
+                                const int x2 = newTemp (lanes);
+                                ops.push_back ({ YdspIrOp::mulF, x2, base, base });
+                                const int one = emitFloatConst (1.0, ops);
+                                insertedOperands.push_back ({ &block, instIndex, std::move (ops) });
+                                inst.op = YdspIrOp::divF;
+                                inst.a = one;
+                                inst.b = x2;
+                                inst.c = -1;
+                                changed = true;
+                                continue;
+                            }
+
+                            if (exp == -4.0)
+                            {
+                                const int x2 = newTemp (lanes);
+                                const int x4 = newTemp (lanes);
+                                ops.push_back ({ YdspIrOp::mulF, x2, base, base });
+                                ops.push_back ({ YdspIrOp::mulF, x4, x2, x2 });
+                                const int one = emitFloatConst (1.0, ops);
+                                insertedOperands.push_back ({ &block, instIndex, std::move (ops) });
+                                inst.op = YdspIrOp::divF;
+                                inst.a = one;
+                                inst.b = x4;
+                                inst.c = -1;
+                                changed = true;
+                                continue;
+                            }
+
+                            if (exp == 0.5)
+                            {
+                                if (! ops.empty())
+                                    insertedOperands.push_back ({ &block, instIndex, std::move (ops) });
+
+                                inst.op = YdspIrOp::sqrtF;
+                                inst.a = base;
+                                inst.b = inst.c = -1;
+                                changed = true;
+                                continue;
+                            }
                         }
 
                         if (const auto* lit = literalOf (inst.a); lit != nullptr && lit->op == YdspIrOp::constF)
                         {
-                            const auto type = fn.valueTypes[static_cast<size_t> (result)];
                             const double base = type == YdspValueType::float32Type ? static_cast<double> (static_cast<float> (lit->fvalue))
                                                                                  : lit->fvalue;
                             if (base > 0.0 && base != 1.0 && std::isfinite (base))
                             {
-                                const int logarithm = static_cast<int> (fn.valueTypes.size());
-                                fn.valueTypes.push_back (type);
-                                const int product = static_cast<int> (fn.valueTypes.size());
-                                fn.valueTypes.push_back (type);
-                                fn.valueLanes.resize (fn.valueTypes.size(), 1);
-                                fn.valueLanes[static_cast<size_t> (logarithm)] = fn.laneCountOf (result);
-                                fn.valueLanes[static_cast<size_t> (product)] = fn.laneCountOf (result);
-                                insertedOperands.push_back ({ &block, static_cast<size_t> (&inst - block.insts.data()),
+                                const int logarithm = newTemp (lanes);
+                                const int product = newTemp (lanes);
+                                insertedOperands.push_back ({ &block, instIndex,
                                                               { { YdspIrOp::constF, logarithm, -1, -1, -1, -1, std::log (base) },
                                                                 { YdspIrOp::mulF, product, inst.b, logarithm } } });
                                 inst.op = YdspIrOp::expF;

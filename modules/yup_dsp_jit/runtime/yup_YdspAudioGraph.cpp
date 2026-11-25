@@ -260,6 +260,7 @@ Result YdspAudioGraph::prepare (double sampleRate, int maxBlockSize, int maxEven
 
     for (auto& node : pimpl->nodes)
     {
+        stateBytes = YdspIrFunction::alignStateBytes (stateBytes);
         node.stateOffset = static_cast<int> (stateBytes);
         stateBytes += node.stateSize * static_cast<size_t> (node.voiceCount);
 
@@ -401,7 +402,7 @@ Result YdspAudioGraph::prepare (double sampleRate, int maxBlockSize, int maxEven
     for (auto& source : pimpl->graphOutputSources)
         prepareConnectionDelay (source);
 
-    pimpl->state.assign (stateBytes, 0);
+    pimpl->state.resize (stateBytes);
 
     const auto slotIsMixed = [] (const Pimpl::Node& node, int slot)
     {
@@ -466,7 +467,7 @@ Result YdspAudioGraph::prepare (double sampleRate, int maxBlockSize, int maxEven
 
     const auto allocateRegion = [&] (int first, int last, int elementSize)
     {
-        const auto bytes = (static_cast<size_t> (maxBlockSize) * static_cast<size_t> (elementSize) + 7) & ~size_t (7);
+        const auto bytes = YdspIrFunction::alignStateBytes (static_cast<size_t> (maxBlockSize) * static_cast<size_t> (elementSize));
 
         for (auto& region : regions)
             if (region.lastUse < first && region.bytes == bytes && region.elementSize == elementSize)
@@ -508,7 +509,7 @@ Result YdspAudioGraph::prepare (double sampleRate, int maxBlockSize, int maxEven
                 mixOffsets[n][static_cast<size_t> (s)] = allocateRegion (starts[n], ends[n], node.inputElemSizes[static_cast<size_t> (s)]);
     }
 
-    pimpl->scratch.assign (scratchBytes, 0);
+    pimpl->scratch.resize (scratchBytes);
 
     for (size_t n = 0; n < nodeCount; ++n)
     {
@@ -522,6 +523,9 @@ Result YdspAudioGraph::prepare (double sampleRate, int maxBlockSize, int maxEven
             if (slotIsMixed (node, s))
                 node.inputMixPtrs[static_cast<size_t> (s)] = pimpl->scratch.data() + mixOffsets[n][static_cast<size_t> (s)];
     }
+
+    pimpl->prepareOutputIsolation (maxBlockSize);
+    pimpl->hasMixedGraphOutputs = std::find (pimpl->graphOutputDirect.begin(), pimpl->graphOutputDirect.end(), false) != pimpl->graphOutputDirect.end();
 
     pimpl->runInitKernels();
     pimpl->publishValueSnapshots();
@@ -538,7 +542,7 @@ void YdspAudioGraph::reset()
     for (auto& instrument : pimpl->mpeInstruments)
         instrument->releaseAllNotes();
 
-    pimpl->state.assign (pimpl->state.size(), 0);
+    pimpl->state.fillWithZeros();
 
     pimpl->droppedEventCount.store (0, std::memory_order_relaxed);
 
@@ -648,7 +652,7 @@ void YdspAudioGraph::prewarmKernels()
 YdspProcessResult YdspAudioGraph::process (const YdspProcessRequest& request)
 {
     const auto& inputs = request.inputs;
-    const auto& outputs = request.outputs;
+    auto outputs = request.outputs;
     const auto& eventInputs = request.eventInputs;
     const auto& automation = request.automation;
     const auto numSamples = request.numSamples;
@@ -736,6 +740,17 @@ YdspProcessResult YdspAudioGraph::process (const YdspProcessRequest& request)
     if (blockSize == 0)
         return YdspProcessResult::ok;
 
+    // Nodes write host outputs as they run, so an output that overlaps an
+    // input would change what a later node reads. Such a block renders into
+    // stand-in buffers, seeded with the host contents a node may leave as is.
+    const bool isolateOutputs = ! pimpl->isolatedOutputs.empty() && pimpl->outputsOverlapInputs (inputs, outputs, blockSize);
+
+    if (isolateOutputs)
+    {
+        pimpl->copyOutputs (pimpl->isolatedOutputs, outputs, blockSize);
+        outputs = pimpl->isolatedOutputs;
+    }
+
     pimpl->drainHostParams();
 
     for (auto& node : pimpl->nodes)
@@ -792,18 +807,22 @@ YdspProcessResult YdspAudioGraph::process (const YdspProcessRequest& request)
 
     for (auto& node : pimpl->nodes)
     {
-        node.automationOrder.resize (node.pendingAutomation.size());
+        if (node.automationOrder.size() != node.pendingAutomation.size())
+            node.automationOrder.resize (node.pendingAutomation.size());
+
         for (size_t i = 0; i < node.automationOrder.size(); ++i)
             node.automationOrder[i] = i;
 
-        std::sort (node.automationOrder.begin(), node.automationOrder.end(), [&node] (size_t a, size_t b)
-        {
-            const auto left = node.pendingAutomation[a].sampleOffset;
-            const auto right = node.pendingAutomation[b].sampleOffset;
-            return left != right ? left < right : a < b;
-        });
+        if (node.automationOrder.size() > 1)
+            std::sort (node.automationOrder.begin(), node.automationOrder.end(), [&node] (size_t a, size_t b)
+            {
+                const auto left = node.pendingAutomation[a].sampleOffset;
+                const auto right = node.pendingAutomation[b].sampleOffset;
+                return left != right ? left < right : a < b;
+            });
 
-        std::sort (node.pendingAllSoundOffOffsets.begin(), node.pendingAllSoundOffOffsets.end());
+        if (node.pendingAllSoundOffOffsets.size() > 1)
+            std::sort (node.pendingAllSoundOffOffsets.begin(), node.pendingAllSoundOffOffsets.end());
     }
 
     YdspKernelContext ctx;
@@ -957,7 +976,12 @@ YdspProcessResult YdspAudioGraph::process (const YdspProcessRequest& request)
         ++topoIndex;
     }
 
-    pimpl->mixGraphOutputs (inputs, outputs, blockSize);
+    if (pimpl->hasMixedGraphOutputs)
+        pimpl->mixGraphOutputs (inputs, outputs, blockSize);
+
+    if (isolateOutputs)
+        pimpl->copyOutputs (request.outputs, outputs, blockSize);
+
     pimpl->publishValueSnapshots();
 
     return YdspProcessResult::ok;
