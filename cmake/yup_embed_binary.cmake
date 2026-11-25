@@ -18,6 +18,29 @@
 # ==============================================================================
 
 #==============================================================================
+# Embeds files into an OBJECT library that can be linked into a target, as byte
+# arrays declared by a generated header.
+#
+# Usage:
+#   yup_add_embedded_binary_resources (<library_name>
+#       OUT_DIR        <subdir>         # of CMAKE_CURRENT_BINARY_DIR, for the generated sources
+#       HEADER         <file name>      # of the generated header
+#       [NAMESPACE     <namespace>]     # default: the global namespace
+#       RESOURCE_NAMES <symbol>...      # of the RESOURCES, then of the INCLUDES
+#       [RESOURCES     <file>...]
+#       [INCLUDES      <file>...])
+#
+# RESOURCES are embedded when configuring: the byte array of a file is only
+# generated again when its content changed. INCLUDES are byte arrays generated
+# at build time by custom commands of the same directory, as the initializer
+# list `yup_shader_bundler --output-inc` writes: the library is built after
+# them. A library can hold both. RESOURCE_NAMES names every one of them, in
+# order: the RESOURCES first, then the INCLUDES.
+#
+# After the call, link against <library_name> and include the generated header,
+# which exposes for each name:
+#     extern const uint8_t     <symbol>_data[];
+#     extern const std::size_t <symbol>_size;
 
 function (yup_add_embedded_binary_resources library_name)
     set (options "")
@@ -26,11 +49,8 @@ function (yup_add_embedded_binary_resources library_name)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
-    # ==== INCLUDES are byte arrays generated at build time, in place of the RESOURCES files
-    set (resource_inputs ${YUP_ARG_RESOURCES})
-    if (YUP_ARG_INCLUDES)
-        set (resource_inputs ${YUP_ARG_INCLUDES})
-    endif()
+    # ==== RESOURCE_NAMES names the RESOURCES files, then the INCLUDES: byte arrays generated at build time
+    set (resource_inputs ${YUP_ARG_RESOURCES} ${YUP_ARG_INCLUDES})
 
     set (binary_output_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}")
     set (binary_scratch_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}/scratch")
@@ -66,7 +86,7 @@ function (yup_add_embedded_binary_resources library_name)
         set (full_resource_unit_path "${binary_output_path}/${resource_name}.cpp")
         set (full_resource_hex_path "${binary_output_path}/${resource_name}.inc")
         set (resource_include "${resource_name}.inc")
-        if (YUP_ARG_INCLUDES)
+        if (resource IN_LIST YUP_ARG_INCLUDES)
             set (full_resource_hex_path "${resource}")
             set (resource_include "${resource}")
         endif()
@@ -109,7 +129,7 @@ function (yup_add_embedded_binary_resources library_name)
         endif()
 
         # Regenerate the byte array only when the input changed since the last run
-        if (NOT YUP_ARG_INCLUDES)
+        if (NOT resource IN_LIST YUP_ARG_INCLUDES)
             set (resource_hash_path "${full_resource_hex_path}.md5")
             file (MD5 "${resource}" resource_hash)
 

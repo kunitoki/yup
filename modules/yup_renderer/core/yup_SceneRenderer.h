@@ -61,6 +61,13 @@ namespace yup
     inline. The background color is display-referred on both tiers: it shows exactly as picked,
     never tone mapped. Silhouettes and transparent surfaces over the background blend with it after
     tone mapping on every path, so they look the same on both tiers and with or without bloom.
+    The returned texture is premultiplied by alpha, as Graphics::drawTexture() takes it. A
+    BackgroundNode color of alpha below 1 makes the scene see-through: the texels no surface covers
+    hold that color multiplied by its alpha, antialiased silhouettes and blended surfaces keep
+    their share of it, and drawing the texture composites the scene over what lies behind it, see
+    SceneComponent. There the glow of bloom is light without coverage, added to what lies behind,
+    and the world fog covers it by its own opacity. A visible environment (EnvironmentNode::visible)
+    covers every texel, whatever the background.
     RenderSettings::depthOfField blurs what lies away from the focus of the active camera, after
     the temporal accumulation and before bloom, on both tiers: on the raster tier where the device
     allows half-float targets and the depth and normal prepass (RenderCapabilities::Feature::depthOfField).
@@ -74,6 +81,17 @@ namespace yup
     normal prepass, as the first post effect.
     Highlights of very smooth surfaces are widened where normals change quickly across a pixel, to
     keep them from sparkling.
+
+    The meshes under a MaterialShaderNode take their color from its MaterialShader instead of this
+    shading, on the tiers the shader has a variant for: a GLSL function of the surface, unlit. It
+    is exposed, tone mapped and encoded like any other color, and drawn with the alpha mode,
+    culling and depth of the material of the mesh. Both tiers shade those meshes forward: the full
+    tier draws the opaque ones over its shaded G-buffer, depth tested against it and writing their
+    own depth and motion, before the blended surfaces. They are not in the G-buffer, so the
+    ambient occlusion, the screen-space reflections and global illumination and the contact
+    shadows of the full tier neither see nor shade them, while the passes drawing their depth do
+    it with their material: the shadows they cast, and the depth and normal prepass of the raster
+    tier. Reflection probes and irradiance volumes capture them with their material too.
 
     The color and depth targets are kept between frames and created again when the size, the
     tier, the raster sample count or the device changes, so render() can be called every frame.
@@ -102,7 +120,8 @@ public:
         found by its next render, which restarts the accumulation, still renders, and reports the
         failure through getLastGpuFailure(); see also waitForGPU().
 
-        @return The rendered texture, valid until the next render, or nullptr on failure; see getLastError().
+        @return The rendered texture, premultiplied by alpha and valid until the next render, or
+                nullptr on failure; see getLastError().
     */
     GpuTexture::Ptr render (const GpuDevice::Ptr& device, Scene& scene, int widthPx, int heightPx);
 
@@ -181,11 +200,15 @@ public:
         The full tier accumulates RenderSettings::taaSamples jittered frames, then keeps the result
         until something changes. Changes come in three kinds:
         - most changes restart the convergence: the camera, entity transforms, new content in a
-          Texture (see Texture::setGpuTexture()), lights, the ambient light, the default light,
-          materials, the meshes drawn, exposure and the environment. The accumulated history is
-          kept, reprojected and clipped to the new frames, so moving parts blend in smoothly and
-          still parts stay antialiased. Once nothing changes any more, the history counts as one
-          frame of the accumulation that follows;
+          Texture (see Texture::setGpuTexture()), new vertices in a Mesh (see Mesh::setVertices()),
+          lights, the ambient light, the default light, materials, the shader and the uniform
+          values of a MaterialShaderNode, the meshes drawn, exposure and
+          the environment. The accumulated history is kept, reprojected and clipped to the new
+          frames, so moving parts blend in smoothly and still parts stay antialiased. New vertices
+          have no motion of their own, only the transform of their entity does: a mesh changing
+          shape is neither reprojected nor smeared by motion blur, the clipping alone fades its
+          previous shape out. Once nothing changes any more, the history counts as one frame of
+          the accumulation that follows;
         - the size, the tier, RenderSettings::taaSamples and restartAccumulation() discard the
           history, and the accumulation starts over from the next frame alone;
         - tone mapping, the bloom, depth of field and motion blur settings, the depth of field
@@ -205,10 +228,10 @@ public:
     /** Discards the accumulated history and the shadow maps, so the next renders start over from
         the next frame alone and isConverged() is false.
 
-        Call it after changes the renderer cannot see: vertices edited in place in a Mesh, or
-        a GpuTexture redrawn without calling Texture::setGpuTexture(). Also call it after a large
-        change, such as a camera cut: changes that only restart the convergence keep the history,
-        and silhouettes keep a faint trace of the image before them.
+        Call it after changes the renderer cannot see, such as a GpuTexture redrawn without calling
+        Texture::setGpuTexture(). Also call it after a large change, such as a camera cut: changes
+        that only restart the convergence keep the history, and silhouettes keep a faint trace of
+        the image before them.
     */
     void restartAccumulation() noexcept;
 

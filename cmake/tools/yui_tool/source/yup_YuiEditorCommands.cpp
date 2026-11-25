@@ -215,6 +215,50 @@ String findId (const YuiToolBlock& block)
     return {};
 }
 
+// The statement naming the file a shader is made from, as it is written: `fragment: "fx/crt.frag"`, or `material` in
+// place of `fragment`. Empty for a shader that names none yet
+String findShaderFile (const YuiToolIndex& index, const YuiToolDeclaration& shader)
+{
+    for (const auto& statement : shader.block->statements)
+    {
+        const auto name = statement.text.upToFirstOccurrenceOf (":", false, false).trim();
+
+        if (name == "fragment" || name == "material")
+            return index.getText (statement.start, statement.end);
+    }
+
+    return {};
+}
+
+// What a statement gives the property it starts with, as it is written and without the quotes of a string: the shader of
+// a material still loads named in one, `shader: "Hologram"`, which the code of a file leaves blank
+String findValue (const YuiToolIndex& index, const YuiToolStatement& statement)
+{
+    return index.getText (statement.start, statement.end).fromFirstOccurrenceOf (":", false, false).trim().unquoted();
+}
+
+// The shader a material names in a string at a place, with where its name starts, or an empty one
+String findShaderNamedAt (const YuiToolIndex& index, int offset, int& start)
+{
+    const auto chain = index.findBlocksAt (offset);
+
+    if (chain.empty())
+        return {};
+
+    for (const auto& statement : chain.back()->statements)
+    {
+        if (offset < statement.start || offset > statement.end || statement.text.upToFirstOccurrenceOf (":", false, false).trim() != "shader")
+            continue;
+
+        const auto name = findValue (index, statement);
+        start = statement.start + index.getText (statement.start, statement.end).lastIndexOf (name);
+
+        return offset >= start && offset <= start + name.length() ? name : String();
+    }
+
+    return {};
+}
+
 var makeSymbol (const String& name, const String& kind, const String& detail, const var& range, const var& selection, const Array<var>& children)
 {
     auto* symbol = new DynamicObject();
@@ -274,7 +318,7 @@ var describeSymbol (const YuiToolIndex& index, const YuiToolBlock& block, bool i
         return {};
     }
 
-    // A drawing, a palette and the tokens hold what they declare, the rest what is written in them
+    // A drawing, a shader, a palette and the tokens hold what they declare, the rest what is written in them
     if (declaration != declarations.end() && declaration->kind != "component")
     {
         for (const auto& member : declaration->members)
@@ -346,18 +390,25 @@ var describeTargets (const std::vector<YuiToolSource>& sources)
     return var (targets);
 }
 
+// True for a type of a 3D scene. A scene shows what its nodes are, which paint nothing: a drawing is shown as none of them
+bool isSceneType (const ComponentTypeInfo* info)
+{
+    return info != nullptr
+        && (info->isSubtypeOf (Identifier ("Scene3D")) || info->isSubtypeOf (Identifier ("Node3D")) || info->isSubtypeOf (Identifier ("Material3D")));
+}
+
 // The types a drawing can be shown alone as: a plain component first, then those that can be made
 var describeHosts (const std::vector<YuiToolSource>& sources)
 {
     StringArray hosts;
 
     for (const auto* info : ComponentTypeRegistry::getInstance().getRegisteredTypes())
-        if (info->hasFactory())
+        if (info->hasFactory() && ! isSceneType (info))
             hosts.addIfNotAlreadyThere (info->getTypeName().toString());
 
     for (const auto& source : sources)
         for (const auto& declaration : source.index->getDeclarations())
-            if (declaration.kind == "component")
+            if (declaration.kind == "component" && ! isSceneType (resolveType (sources, declaration.name)))
                 hosts.addIfNotAlreadyThere (declaration.name);
 
     hosts.removeString ("Component");
@@ -478,6 +529,23 @@ void addDeclared (Completions& found, const std::vector<YuiToolSource>& sources,
                 found.add (declaration.name, kind);
 }
 
+// The shaders a file and those it imports declare that are made from a `fragment`, which an effect, a drawing and a
+// filter run, or from a `material`, which a Material3D is drawn by. Each is told with the file it is made from
+void addShaders (Completions& found, const std::vector<YuiToolSource>& sources, const char* madeFrom)
+{
+    for (const auto& source : sources)
+    {
+        for (const auto& declaration : source.index->getDeclarations())
+        {
+            if (declaration.kind != "shader")
+                continue;
+
+            if (const auto file = findShaderFile (*source.index, declaration); file.startsWith (madeFrom))
+                found.add (declaration.name, "shader", file);
+        }
+    }
+}
+
 // What the declarations of a kind hold, as the colors of the palettes and the tokens
 void addDeclaredMembers (Completions& found, const std::vector<YuiToolSource>& sources, const char* kind, const char* itemKind)
 {
@@ -546,12 +614,27 @@ void addMembersOf (Completions& found, const std::vector<YuiToolSource>& sources
     }
 }
 
-// The values a property takes: the drawings and the palettes declared, or those of an enumeration
-void addValuesOf (Completions& found, const std::vector<YuiToolSource>& sources, const String& property, const YuiToolBlock* inner)
+// The values a property takes: the drawings, the palettes and the shaders declared, or those of an enumeration
+void addValuesOf (Completions& found, const std::vector<YuiToolSource>& sources, const String& property, const YuiToolBlock* inner, bool inString)
 {
+    // The shader of a material is named bare, as a drawing is. It still loads named in a string, so one being typed
+    // is completed with it, and with nothing else that is told here
+    if (property == "shader")
+        addShaders (found, sources, "material");
+
+    if (inString)
+        return;
+
     if (property == "drawing" || property == "palette")
     {
         addDeclared (found, sources, property == "drawing" ? "drawing" : "palette");
+        found.add ("none", "value");
+        return;
+    }
+
+    if (property == "effect")
+    {
+        addShaders (found, sources, "fragment");
         found.add ("none", "value");
         return;
     }
@@ -611,11 +694,36 @@ void addDrawingStatements (Completions& found, const std::vector<YuiToolSource>&
             addAll (topic["shapePaint"], "property");
     }
 
-    // A drawing that is used also takes the properties it declares
+    // A drawing that is used also takes the properties it declares, and so does a shader, used when no drawing has its name
     if (keyword == "use")
-        if (const auto* used = findDeclared (sources, "drawing", inner.header.fromFirstOccurrenceOf ("use", false, false).trim()))
+    {
+        const auto name = inner.header.fromFirstOccurrenceOf ("use", false, false).trim();
+        const auto* used = findDeclared (sources, "drawing", name);
+
+        if (used == nullptr)
+            used = findDeclared (sources, "shader", name);
+
+        if (used != nullptr)
             for (const auto& member : used->members)
                 found.add (member.name, "property", member.detail);
+    }
+}
+
+// The properties of the drawing and of the shader a block picks: with `drawing` the one painting it, with `effect` the
+// shader run over it, and with `shader` the one a material is drawn by
+void addPickedMembers (Completions& found, const std::vector<YuiToolSource>& sources, const YuiToolBlock& block)
+{
+    for (const auto& statement : block.statements)
+    {
+        const auto name = statement.text.upToFirstOccurrenceOf (":", false, false).trim();
+
+        if (name != "drawing" && name != "effect" && name != "shader")
+            continue;
+
+        if (const auto* picked = findDeclared (sources, name == "drawing" ? "drawing" : "shader", findValue (*sources.front().index, statement)))
+            for (const auto& member : picked->members)
+                found.add (member.name, "property", member.detail);
+    }
 }
 
 // What can be written where a statement starts, which depends on what it is written in
@@ -623,7 +731,7 @@ void addStatements (Completions& found, const std::vector<YuiToolSource>& source
 {
     if (chain.empty())
     {
-        for (const auto* keyword : { "import", "tokens", "palette", "drawing", "component", "style" })
+        for (const auto* keyword : { "import", "tokens", "palette", "drawing", "shader", "component", "style" })
             found.add (keyword, "keyword");
 
         addTypes (found, sources);
@@ -643,6 +751,15 @@ void addStatements (Completions& found, const std::vector<YuiToolSource>& source
 
     if (top.header == "tokens")
         return;
+
+    // A shader names the file it is made from, and declares what it takes
+    if (topKeyword == "shader")
+    {
+        found.add ("fragment", "property");
+        found.add ("material", "property");
+        found.add ("property", "keyword");
+        return;
+    }
 
     if (topKeyword == "palette")
     {
@@ -666,16 +783,11 @@ void addStatements (Completions& found, const std::vector<YuiToolSource>& source
 
     if (top.header == "style")
     {
-        // A rule sets what styles take, the properties of the drawing it picks and those of the type it selects
+        // A rule sets what styles take, the properties of the drawing and of the shader it picks and those of the type it selects
         for (const auto& name : StyleSheet::getDeclarationNames())
             found.add (name, "property");
 
-        for (const auto& statement : inner.statements)
-            if (statement.text.upToFirstOccurrenceOf (":", false, false).trim() == "drawing")
-                if (const auto* drawing = findDeclared (sources, "drawing", statement.text.fromFirstOccurrenceOf (":", false, false).trim()))
-                    for (const auto& member : drawing->members)
-                        found.add (member.name, "property", member.detail);
-
+        addPickedMembers (found, sources, inner);
         addTypeMembers (found, sources, findTypeName (inner));
         return;
     }
@@ -700,6 +812,7 @@ void addStatements (Completions& found, const std::vector<YuiToolSource>& source
 
     addTypes (found, sources);
     addTypeMembers (found, sources, findTypeName (*element));
+    addPickedMembers (found, sources, *element);
 }
 
 // What can be written at a place of a file: what it is depends on what is written before it on its line
@@ -751,7 +864,7 @@ var complete (const std::vector<YuiToolSource>& sources, int offset, const YuiTo
         return found.toJson();
     }
 
-    // The drawing an element uses, those a drawing declares for itself first
+    // The drawing or the shader an element uses, the drawings a drawing declares for itself first
     if (written.trimStart() == "use" && written != before)
     {
         if (! chain.empty())
@@ -760,13 +873,17 @@ var complete (const std::vector<YuiToolSource>& sources, int offset, const YuiTo
                     found.add (block->header.fromFirstOccurrenceOf ("drawing", false, false).trim(), "drawing");
 
         addDeclared (found, sources, "drawing");
+        addShaders (found, sources, "fragment");
         return found.toJson();
     }
 
-    // The value of a property, which a statement starts with
-    if (written.endsWithChar (':'))
+    // The value of a property, which a statement starts with, also right after the quote opening a string
+    const auto inString = written.endsWithChar ('"');
+    const auto opening = inString ? written.dropLastCharacters (1).trimEnd() : written;
+
+    if (opening.endsWithChar (':'))
     {
-        auto end = lineStart + written.length() - 1;
+        auto end = lineStart + opening.length() - 1;
 
         while (end > lineStart && CharacterFunctions::isWhitespace (index.getCodeAt (end - 1)))
             --end;
@@ -780,7 +897,7 @@ var complete (const std::vector<YuiToolSource>& sources, int offset, const YuiTo
         const auto opener = index.getCodeAt (start - 1);
 
         if (property.isNotEmpty() && (start == lineStart || opener == '{' || opener == ';'))
-            addValuesOf (found, sources, property, inner);
+            addValuesOf (found, sources, property, inner, inString);
 
         return found.toJson();
     }
@@ -832,7 +949,13 @@ var findDefinition (const std::vector<YuiToolSource>& sources, int offset)
     const auto name = index.findNameAt (offset, start);
 
     if (name.isEmpty())
-        return makeNothing();
+    {
+        // The shader of a material still loads named in a string, which nothing else is named in
+        const YuiToolSource* owning = nullptr;
+        const auto* shader = findDeclared (sources, "shader", findShaderNamedAt (index, offset, start), &owning);
+
+        return shader != nullptr ? tellPlace (*owning, shader->offset) : makeNothing();
+    }
 
     // A color of a palette and a token are declared where they are given their value
     int ownerStart = 0;
@@ -862,7 +985,7 @@ var findDefinition (const std::vector<YuiToolSource>& sources, int offset)
         }
     }
 
-    for (const auto* kind : { "drawing", "component", "palette" })
+    for (const auto* kind : { "drawing", "shader", "component", "palette" })
     {
         const YuiToolSource* owning = nullptr;
 
@@ -873,12 +996,31 @@ var findDefinition (const std::vector<YuiToolSource>& sources, int offset)
     return makeNothing();
 }
 
-// What the property or the signal a statement starts with is, nothing for anything else
+// A shader as it is declared, the defaults of its properties left out: the file it is made from and what it takes
+String describeShader (const YuiToolIndex& index, const YuiToolDeclaration& shader)
+{
+    String code;
+    code << "shader " << shader.name << " {";
+
+    if (const auto file = findShaderFile (index, shader); file.isNotEmpty())
+        code << "\n    " << file << ";";
+
+    for (const auto& member : shader.members)
+        code << "\n    property " << member.name << ": " << member.detail << ";";
+
+    return code + "\n}";
+}
+
+// What the property or the signal a statement starts with is, or the shader named elsewhere, nothing for anything else
 var describeHover (const std::vector<YuiToolSource>& sources, int offset)
 {
     const auto& index = *sources.front().index;
     int start = 0;
-    const auto name = index.findNameAt (offset, start);
+    auto name = index.findNameAt (offset, start);
+
+    // The shader of a material still loads named in a string
+    if (name.isEmpty())
+        name = findShaderNamedAt (index, offset, start);
 
     if (name.isEmpty())
         return makeNothing();
@@ -891,7 +1033,20 @@ var describeHover (const std::vector<YuiToolSource>& sources, int offset)
         --lead;
 
     if (const auto opener = index.getCodeAt (lead - 1); lead > lineStart && opener != '{' && opener != ';')
-        return makeNothing();
+    {
+        // A shader is told where it is named: where it is declared, and where an effect, a `use` or a material takes it
+        const YuiToolSource* owner = nullptr;
+        const auto* shader = findDeclared (sources, "shader", name, &owner);
+
+        if (shader == nullptr)
+            return makeNothing();
+
+        auto* told = new DynamicObject();
+        told->setProperty ("code", describeShader (*owner->index, *shader));
+        told->setProperty ("range", describeRange (index, start, start + name.length()));
+
+        return var (told);
+    }
 
     const auto chain = index.findBlocksAt (start);
     const YuiToolBlock* element = nullptr;

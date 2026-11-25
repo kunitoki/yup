@@ -102,6 +102,51 @@ protected:
         return channelAt (pixels, x, y, 3);
     }
 
+#if YUP_ENABLE_SHADER_TRANSPILER
+    static GpuImageShader::Ptr compileShader (const char* fragment)
+    {
+        const auto created = GpuImageShader::createFromGlsl (fragment);
+        EXPECT_TRUE (created.wasOk()) << created.getErrorMessage();
+        return created.wasOk() ? created.getValue() : nullptr;
+    }
+
+    /** The picture it reads, with its red and its blue swapped. */
+    static constexpr const char* swapFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D source;
+layout(set = 0, binding = 1) uniform sampler sourceSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    vec4 pixel = texture (sampler2D (source, sourceSampler), uv);
+    color = vec4 (pixel.b, pixel.g, pixel.r, pixel.a);
+})";
+
+    /** The red of the first picture it reads with the green of the second one, opaque. */
+    static constexpr const char* mixFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D base;
+layout(set = 0, binding = 1) uniform texture2D overlay;
+layout(set = 0, binding = 2) uniform sampler linearClamp;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    color = vec4 (texture (sampler2D (base, linearClamp), uv).r, texture (sampler2D (overlay, linearClamp), uv).g, 0.0, 1.0);
+})";
+
+    /** Its color everywhere, reading no picture. */
+    static constexpr const char* fillFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform Parameters
+{
+    vec4 tint;
+} params;
+layout(location = 0) out vec4 color;
+void main()
+{
+    color = params.tint;
+})";
+#endif
+
     static constexpr int size = 64;
     static std::unique_ptr<GraphicsGpuPixelTestHost> host;
     static GraphicsContext* gpuContext;
@@ -292,3 +337,100 @@ TEST_F (FilterGraphTests, ChangingTheFilterKeepsTheContentDrawn)
     EXPECT_GT (alphaAt (pixels, 12, 32), 200);
     EXPECT_LT (alphaAt (pixels, 36, 32), 10);
 }
+
+TEST_F (FilterGraphTests, ShaderThatCantBeDrawnLeavesThePictureAsItIs)
+{
+    // With no shader to draw the filter fails as a whole, whatever its other primitives do
+    const auto pixels = render ({ { .type = FilterGraph::Type::offset, .result = "moved", .offset = { 16.0f, 0.0f } },
+                                  { .type = FilterGraph::Type::shader, .in = "moved" } });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (channelAt (pixels, 32, 32, 0), 200);
+    EXPECT_GT (alphaAt (pixels, 32, 32), 200);
+    EXPECT_LT (alphaAt (pixels, 46, 32), 10);
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+
+TEST_F (FilterGraphTests, ShaderRunsOnThePictureItReads)
+{
+    const auto swap = compileShader (swapFragment);
+    ASSERT_NE (swap, nullptr);
+    EXPECT_EQ (swap->getNumInputTextures(), 1);
+
+    // The red square becomes blue where the primitive before left it, up and to the right: each pixel reads its own
+    const auto pixels = render ({ { .type = FilterGraph::Type::offset, .offset = { 16.0f, -8.0f } },
+                                  { .type = FilterGraph::Type::shader, .shader = swap, .uniforms = swap->createUniforms() } });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_LT (channelAt (pixels, 48, 20, 0), 10);
+    EXPECT_GT (channelAt (pixels, 48, 20, 2), 200);
+    EXPECT_GT (alphaAt (pixels, 48, 20), 200);
+    EXPECT_LT (alphaAt (pixels, 48, 44), 10);
+    EXPECT_LT (alphaAt (pixels, 16, 20), 10);
+}
+
+TEST_F (FilterGraphTests, ShaderCombinesTheTwoPicturesItReads)
+{
+    const auto mix = compileShader (mixFragment);
+    ASSERT_NE (mix, nullptr);
+    EXPECT_EQ (mix->getNumInputTextures(), 2);
+
+    const FilterGraph::Primitive green { .type = FilterGraph::Type::flood, .result = "green", .color = Color (0xff00ff00) };
+
+    // The red of the square with the green of the flood where the square is, and the green alone around it
+    const auto pixels = render ({ green, { .type = FilterGraph::Type::shader, .in = FilterGraph::sourceGraphic, .in2 = "green", .shader = mix, .uniforms = mix->createUniforms() } });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (channelAt (pixels, 32, 32, 0), 200);
+    EXPECT_GT (channelAt (pixels, 32, 32, 1), 200);
+    EXPECT_LT (channelAt (pixels, 8, 8, 0), 10);
+    EXPECT_GT (channelAt (pixels, 8, 8, 1), 200);
+    EXPECT_EQ (alphaAt (pixels, 8, 8), 255);
+
+    // The first texture reads `in` and the second one `in2`
+    const auto swapped = render ({ green, { .type = FilterGraph::Type::shader, .in = "green", .in2 = FilterGraph::sourceGraphic, .shader = mix, .uniforms = mix->createUniforms() } });
+    ASSERT_EQ (swapped.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_LT (channelAt (swapped, 32, 32, 0), 10);
+    EXPECT_LT (channelAt (swapped, 32, 32, 1), 10);
+    EXPECT_EQ (alphaAt (swapped, 32, 32), 255);
+}
+
+TEST_F (FilterGraphTests, ShaderReadingNoPictureMakesItsOwnFromItsUniforms)
+{
+    const auto fill = compileShader (fillFragment);
+    ASSERT_NE (fill, nullptr);
+    EXPECT_EQ (fill->getNumInputTextures(), 0);
+
+    auto uniforms = fill->createUniforms();
+    const float blue[] = { 0.0f, 0.0f, 1.0f, 1.0f };
+    ASSERT_TRUE (uniforms.set ("tint", blue));
+
+    // Blue everywhere, the square it does not read included
+    const auto filled = render ({ { .type = FilterGraph::Type::shader, .shader = fill, .uniforms = uniforms } });
+    ASSERT_EQ (filled.size(), static_cast<std::size_t> (size * size * 4));
+
+    for (const auto point : { Point<int> (8, 8), Point<int> (32, 32), Point<int> (56, 56) })
+    {
+        EXPECT_LT (channelAt (filled, point.getX(), point.getY(), 0), 10);
+        EXPECT_GT (channelAt (filled, point.getX(), point.getY(), 2), 200);
+        EXPECT_GT (alphaAt (filled, point.getX(), point.getY()), 200);
+    }
+
+    // The picture is one the primitives after it read by its name
+    const auto merged = render ({ { .type = FilterGraph::Type::shader, .result = "fill", .shader = fill, .uniforms = uniforms },
+                                  { .type = FilterGraph::Type::composite, .in = FilterGraph::sourceGraphic, .in2 = "fill" } });
+    ASSERT_EQ (merged.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (channelAt (merged, 32, 32, 0), 200);
+    EXPECT_LT (channelAt (merged, 32, 32, 2), 10);
+    EXPECT_GT (channelAt (merged, 8, 8, 2), 200);
+
+    // The uniforms are the ones of the primitive: zeroed ones fill with nothing
+    const auto empty = render ({ { .type = FilterGraph::Type::shader, .shader = fill, .uniforms = fill->createUniforms() } });
+    ASSERT_EQ (empty.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_LT (alphaAt (empty, 32, 32), 10);
+}
+
+#endif // YUP_ENABLE_SHADER_TRANSPILER

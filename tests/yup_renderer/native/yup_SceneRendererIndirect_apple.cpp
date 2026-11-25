@@ -732,7 +732,8 @@ TEST_F (SceneRendererMetalTests, SsrWeighsNeighborRaysByThePixelsLobe)
     RecordProperty ("emitterContrast", String (emitter, 1).toStdString());
     RecordProperty ("reflectedContrast", String (reflected, 1).toStdString());
 
-    // Measured 56.7 of the emitter's 166.2 (0.34), and 49.0 (0.29) with a plain mean of the rays
+    // Measured 58.1 of the emitter's 165.8 (0.35); with the history clipped to the rays of its pixel,
+    // 56.7 (0.34), and 49.0 (0.29) with a plain mean of the rays
     EXPECT_GT (reflected, 0.32 * emitter);
 }
 #endif
@@ -767,7 +768,8 @@ TEST_F (SceneRendererMetalTests, SsrGlossyReflectionsConvergeWithoutSpeckles)
     RecordProperty ("reflectedRed", String (level, 1).toStdString());
     RecordProperty ("noise", String (noise, 2).toStdString());
 
-    // Measured 0.49, and 0.80 resolving only the 4 nearest rays with uncapped weights
+    // Measured 0.43; before the rays read the radiance pyramid, 0.49, and 0.80 resolving only the 4
+    // nearest rays with uncapped weights
     EXPECT_GT (level, 100.0);
     EXPECT_LT (noise, 0.6);
 }
@@ -806,7 +808,7 @@ TEST_F (SceneRendererMetalTests, SsrGlossyReflectionsHoldStillWhileTheSceneChang
     }
 
     RecordProperty ("shimmer", String (shimmer, 2).toStdString());
-    // Measured 0.91, and 2.23 without the resolve's history
+    // Measured 0.77; before the rays read the radiance pyramid, 0.91, and 2.23 without the history
     EXPECT_LT (shimmer, 1.4);
 }
 
@@ -845,7 +847,7 @@ TEST_F (SceneRendererMetalTests, SsrGlossyReflectionsStaySmoothWhileLightsAnimat
     }
 
     RecordProperty ("noise", String (noise, 2).toStdString());
-    // Measured 0.81, and 1.19 without the spatial denoise.
+    // Measured 0.72; before the rays read the radiance pyramid, 0.81, and 1.19 without the spatial denoise
     EXPECT_LT (noise, 1.0);
 }
 
@@ -890,8 +892,130 @@ TEST_F (SceneRendererMetalTests, SsrGlossyReflectionsFollowTheCamera)
 
     trail /= count;
     RecordProperty ("trail", String (trail, 2).toStdString());
-    // Measured 0.82, and 1.52 reprojecting the history by the floor's motion
+    // Measured 0.71; before the rays read the radiance pyramid, 0.82, and 1.52 reprojecting the
+    // history by the floor's motion
     EXPECT_LT (trail, 1.15);
+}
+
+TEST_F (SceneRendererMetalTests, SsrGlossyGlintsHoldStillWhileTheSceneChanges)
+{
+    // Few of the rays a glossy floor reflects reach the small bright emitters of buildGlintsScene().
+    // Reading a single texel, each of them took their whole light and the others none, and a frame
+    // whose rays all missed them clipped what the history had gathered: their reflection flashed with
+    // the rays, all the more while the scene changes and TemporalAA follows it. Read over the cone
+    // each ray stands for, and kept by what the pixels around find, it holds still and shows
+    const auto region = reflectedGlintsRegion();
+
+    const auto green = [&] (const Image& image)
+    {
+        std::vector<double> levels;
+        for (int y = region.getY(); y < region.getBottom(); ++y)
+            for (int x = region.getX(); x < region.getRight(); ++x)
+                levels.push_back (image.getPixelColor (x, y).getGreen());
+
+        return levels;
+    };
+
+    for (const auto roughness : { 0.3f, 0.45f })
+    {
+        Scene scene;
+        buildGlintsScene (scene, roughness);
+        auto& ambient = *scene.getRoot().get<AmbientLightNode>();
+
+        SceneRenderer renderer;
+        setFullTierTaa (renderer, 16);
+        ASSERT_TRUE (renderConverged (renderer, scene, 256).isValid()) << renderer.getLastError();
+
+        // The first frames lead TemporalAA from its converged mean to the frames that change
+        constexpr int numSettling = 8;
+        constexpr int numMeasured = 16;
+        std::vector<double> previous;
+        auto flicker = 0.0;
+        auto level = 0.0;
+
+        for (int frame = 0; frame < numSettling + numMeasured; ++frame)
+        {
+            ambient.color = (frame % 2) == 0 ? Color (0xff010101) : Colors::black;
+            const auto image = renderToImage (renderer, scene, 256);
+            ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+            ASSERT_FALSE (renderer.isConverged());
+
+            const auto levels = green (image);
+            if (frame >= numSettling)
+            {
+                for (size_t i = 0; i < levels.size(); ++i)
+                {
+                    flicker += std::abs (levels[i] - previous[i]);
+                    level += levels[i];
+                }
+            }
+
+            previous = levels;
+        }
+
+        flicker /= static_cast<double> (numMeasured * previous.size());
+        level /= static_cast<double> (numMeasured * previous.size());
+        RecordProperty ("flicker" + std::to_string (roundToInt (roughness * 100.0f)), String (flicker, 2).toStdString());
+        RecordProperty ("level" + std::to_string (roundToInt (roughness * 100.0f)), String (level, 1).toStdString());
+
+        // Measured 0.24 at a level of 42 for a roughness of 0.3 and 0.17 at 55 for 0.45; reading single
+        // texels, with the history clipped to the rays of its pixel, 2.08 and 1.96, both at a level of 2
+        EXPECT_LT (flicker, 0.6) << roughness;
+        EXPECT_GT (level, 20.0) << roughness;
+    }
+}
+
+TEST_F (SceneRendererMetalTests, SsrGlossyGlintsLeaveWithTheirEmitters)
+{
+    // The history of a reflection is clipped to what the rays of the pixels around it found. Once
+    // the emitters of buildGlintsScene() are gone none of them finds their light, so the history
+    // lets go of it at once: left alone it would fade over the very frames TemporalAA averages
+    // once the scene holds still, and their reflection would stay in the converged image
+    const auto region = reflectedGlintsRegion();
+
+    const auto meanGreen = [&] (const Image& image)
+    {
+        auto sum = 0.0;
+        for (int y = region.getY(); y < region.getBottom(); ++y)
+            for (int x = region.getX(); x < region.getRight(); ++x)
+                sum += image.getPixelColor (x, y).getGreen();
+
+        return sum / static_cast<double> (region.getWidth() * region.getHeight());
+    };
+
+    Scene scene;
+    auto glints = buildGlintsScene (scene, 0.45f);
+
+    SceneRenderer renderer;
+    setFullTierTaa (renderer, 16);
+    const auto lit = renderConverged (renderer, scene, 256);
+    ASSERT_TRUE (lit.isValid()) << renderer.getLastError();
+
+    for (auto& glint : glints)
+        glint.setVisible (false);
+
+    const auto after = renderConverged (renderer, scene, 256);
+    ASSERT_TRUE (after.isValid()) << renderer.getLastError();
+    ASSERT_TRUE (renderer.isConverged());
+
+    // A floor that never reflected them
+    Scene empty;
+    for (auto& glint : buildGlintsScene (empty, 0.45f))
+        glint.setVisible (false);
+
+    SceneRenderer fresh;
+    setFullTierTaa (fresh, 16);
+    const auto never = renderConverged (fresh, empty, 256);
+    ASSERT_TRUE (never.isValid()) << fresh.getLastError();
+
+    const auto reflected = meanGreen (lit) - meanGreen (never);
+    const auto ghost = meanGreen (after) - meanGreen (never);
+    RecordProperty ("reflected", String (reflected, 1).toStdString());
+    RecordProperty ("ghost", String (ghost, 1).toStdString());
+
+    // Measured 6.5 of 60.8, and 26.4 of 68.8 with the history left unclipped
+    EXPECT_GT (reflected, 30.0);
+    EXPECT_LT (ghost, 0.2 * reflected);
 }
 
 TEST_F (SceneRendererMetalTests, SsrOffReleasesItsTargets)

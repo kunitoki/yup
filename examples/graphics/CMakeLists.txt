@@ -97,6 +97,7 @@ graphics_demo (TouchTrails)
 graphics_demo (TreeView)
 graphics_demo (VariableFonts)
 graphics_demo (Widgets)
+graphics_demo (Yui3D MODULES yup::yup_renderer tinygltf RESOURCES yui3d gltf LIVE_SHADERS)
 graphics_demo (YuiDrawing RESOURCES yui)
 if (YUP_PLATFORM_DESKTOP OR YUP_PLATFORM_EMSCRIPTEN)
     graphics_demo (YdspSynths MODULES yup::yup_dsp_jit ${audio_modules} dr_libs RESOURCES audio synths)
@@ -162,6 +163,16 @@ if (YUP_PLATFORM_MOBILE OR YUP_PLATFORM_EMSCRIPTEN)
     foreach (resource IN LISTS demo_resources)
         list (APPEND bundle_resources "${CMAKE_CURRENT_LIST_DIR}/data/${resource}@data/${resource}")
     endforeach()
+
+    # The Yui3D demo compiles its materials from their sources, around the template of yup_renderer and the library
+    # it includes: the application tells where they are with MaterialShader::setSourceDirectory()
+    if ("Yui3D" IN_LIST selected_demo_ids)
+        get_filename_component (renderer_shaders "${CMAKE_CURRENT_LIST_DIR}/../../modules/yup_renderer/shaders" ABSOLUTE)
+        list (APPEND bundle_resources
+            "${renderer_shaders}/yup_MaterialShader.vert@data/yup_renderer/shaders/yup_MaterialShader.vert"
+            "${renderer_shaders}/yup_MaterialShader.frag@data/yup_renderer/shaders/yup_MaterialShader.frag"
+            "${renderer_shaders}/lib@data/yup_renderer/shaders/lib")
+    endif()
 endif()
 
 # ==== Precompile shaders at build time, bundled like the data files and read from the build tree

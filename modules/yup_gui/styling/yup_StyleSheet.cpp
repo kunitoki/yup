@@ -377,6 +377,42 @@ std::optional<YuiDiagnostic> readPalette (const DataTree& element, StyleSheet::P
     return std::nullopt;
 }
 
+std::optional<YuiDiagnostic> readShader (const DataTree& element, std::map<String, DataTree>& shaders)
+{
+    const auto name = element.getProperty ("name").toString().trim();
+
+    if (name.isEmpty())
+        return YuiDiagnostic { .message = "A shader block needs a name", .element = element };
+
+    for (int i = 0; i < element.getNumProperties(); ++i)
+    {
+        const auto propertyName = element.getPropertyName (i);
+        const auto propertyText = propertyName.toString();
+
+        if (propertyText != "name" && propertyText != "fragment" && propertyText != "material")
+            return YuiDiagnostic { .message = "The shader '" + name + "' has an unknown property '" + propertyText + "', expected 'fragment' or 'material'", .element = element, .property = propertyName };
+    }
+
+    const auto hasFragment = element.hasProperty ("fragment");
+    const auto hasMaterial = element.hasProperty ("material");
+
+    if (hasFragment && hasMaterial)
+        return YuiDiagnostic { .message = "The shader '" + name + "' can't have both a 'fragment' and a 'material'", .element = element, .property = "material" };
+
+    if (! hasFragment && ! hasMaterial)
+        return YuiDiagnostic { .message = "The shader '" + name + "' needs a 'fragment' or a 'material'", .element = element };
+
+    const auto* source = hasFragment ? "fragment" : "material";
+
+    if (element.getProperty (source).toString().trim().isEmpty())
+        return YuiDiagnostic { .message = "The shader '" + name + "' needs the path of its '" + source + "'", .element = element, .property = source };
+
+    if (! shaders.try_emplace (name, element).second)
+        return YuiDiagnostic { .message = "The shader '" + name + "' is already declared", .element = element };
+
+    return std::nullopt;
+}
+
 } // namespace
 
 //==============================================================================
@@ -391,6 +427,9 @@ ResultValue<StyleSheet::Ptr> StyleSheet::fromTree (const DataTree& tree, YuiDiag
     auto problem = tree.isValid() && (rootType == "yui" || rootType == "style")
                      ? sheet->addElements (tree)
                      : YuiDiagnostic { .message = "Expected a 'yui' document or a 'style' element" };
+
+    if (! problem.has_value())
+        problem = sheet->findSharedName();
 
     if (! problem.has_value())
         return makeResultValueOk (std::move (sheet));
@@ -476,6 +515,13 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
 
             collectDeclaredProperties (element);
         }
+        else if (type == "shader")
+        {
+            if (auto problem = readShader (element, shaders))
+                return problem;
+
+            collectDeclaredProperties (element);
+        }
         else if (type == "tokens" || type == "component")
         {
             collectDeclaredProperties (element);
@@ -516,6 +562,16 @@ std::optional<YuiDiagnostic> StyleSheet::addElements (const DataTree& parent)
     return std::nullopt;
 }
 
+// Shaders and drawings are both used by name, so they share their names, in whatever order they are declared
+std::optional<YuiDiagnostic> StyleSheet::findSharedName() const
+{
+    for (const auto& [name, shader] : shaders)
+        if (drawings.find (name) != drawings.end())
+            return YuiDiagnostic { .message = "The shader '" + name + "' has the same name as a drawing", .element = shader };
+
+    return std::nullopt;
+}
+
 ResultValue<StyleSheet::Ptr> StyleSheet::parse (const String& text)
 {
     const auto parsed = YuiParser::parse (text);
@@ -537,12 +593,13 @@ bool StyleSheet::isStyleElement (const DataTree& element) noexcept
     static const Identifier rule ("rule");
     static const Identifier palette ("palette");
     static const Identifier drawing ("drawing");
+    static const Identifier shader ("shader");
     static const Identifier tokens ("tokens");
     static const Identifier component ("component");
     static const Identifier keyframes ("keyframes");
 
     const auto type = element.getType();
-    return type == style || type == rule || type == palette || type == drawing
+    return type == style || type == rule || type == palette || type == drawing || type == shader
         || type == tokens || type == component || type == keyframes;
 }
 
@@ -596,6 +653,12 @@ DataTree StyleSheet::findDrawing (const String& name) const
 {
     const auto it = drawings.find (name);
     return it != drawings.end() ? it->second : DataTree();
+}
+
+DataTree StyleSheet::findShader (const String& name) const
+{
+    const auto it = shaders.find (name);
+    return it != shaders.end() ? it->second : DataTree();
 }
 
 const ComponentProperty* StyleSheet::findDeclaredProperty (const Identifier& name) const

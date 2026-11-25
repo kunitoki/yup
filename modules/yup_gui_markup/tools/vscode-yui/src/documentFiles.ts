@@ -1,0 +1,289 @@
+import * as fs from "fs";
+import * as path from "path";
+import { toolFilesFolder, YuiToolFile } from "./tool";
+
+/** A document as it is in its editor: its file and its text. */
+export interface EditedDocument {
+    uri: { fsPath: string };
+    getText (): string;
+}
+
+/** A document with the files it needs, at the paths the tool knows them by. */
+export interface DocumentFiles {
+    /** The path of the document. */
+    main: string;
+
+    /** The path of the models, empty without any. */
+    models: string;
+
+    files: YuiToolFile[];
+
+    /** Why files the document names were not given, for who looks at it to be told: they are too large. */
+    problems: string[];
+}
+
+// What a document can name: the documents it imports, and the images, fonts, models and data it reads
+const referenced = new Set ([".yui", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ttf", ".otf", ".riv", ".json", ".glb", ".gltf"]);
+const maximumFileBytes = 16 * 1024 * 1024;
+const maximumBytes = 64 * 1024 * 1024;
+
+// How many times what runs on a document runs at most, for the files the tool then tells it was not given
+const maximumRounds = 4;
+
+// The tool has no disk: each folder of documents is a folder of its own there, named by a number
+const folders: string[] = [];
+
+// The files the tool told a document reads beside those its texts name, and those the document was given or looked
+// for when it was last collected, both by the document
+const told = new Map<string, Set<string>> ();
+const named = new Map<string, Set<string>> ();
+
+let unsavedText: (file: string) => string | undefined = () => undefined;
+
+/** Sets who tells the text a file has in an editor while its changes are not saved, which is read in place of the file. */
+export function setUnsavedTexts (find: (file: string) => string | undefined): void {
+    unsavedText = find;
+}
+
+function folderName (folder: string): string {
+    const index = folders.indexOf (folder);
+    return String (index >= 0 ? index : folders.push (folder) - 1);
+}
+
+/** Gives a file the path the tool knows it by. */
+export function toolPathOf (file: string): string {
+    return `${folderName (path.dirname (file))}/${path.basename (file)}`;
+}
+
+/** Returns the file a path printed by the tool stands for. */
+export function realPathOf (toolPath: string): string | undefined {
+    const parts = (toolPath.startsWith (toolFilesFolder) ? toolPath.substring (toolFilesFolder.length) : toolPath).split ("/");
+    const folder = /^[0-9]+$/.test (parts[0]) ? folders[Number (parts[0])] : undefined;
+
+    return folder === undefined ? undefined : path.join (folder, ...parts.slice (1));
+}
+
+/** Blanks out comments, keeping the line structure of the document intact. */
+export function withoutComments (text: string): string {
+    return text.replace (/\/\*[\s\S]*?\*\//g, comment => comment.replace (/[^\n]/g, " ")).replace (/\/\/[^\n]*/g, "");
+}
+
+// The files a file names. A document names them between quotes, and they are of a kind it reads. A model written as
+// text names the buffers and the images it keeps in files of their own
+function namesIn (file: string, data: Uint8Array): string[] {
+    const kind = path.extname (file).toLowerCase ();
+    const text = () => Buffer.from (data).toString ("utf8");
+
+    if (kind === ".yui") {
+        return Array.from (withoutComments (text ()).matchAll (/"([^"\n\\]+)"/g), match => match[1])
+            .filter (name => referenced.has (path.extname (name).toLowerCase ()));
+    }
+
+    if (kind !== ".gltf")
+        return [];
+
+    try {
+        const model = JSON.parse (text ()) as { buffers?: unknown; images?: unknown } | null;
+        const parts = [model?.buffers, model?.images].flatMap (list => Array.isArray (list) ? list as ({ uri?: unknown } | null)[] : []);
+
+        // What a model holds itself, or reads from elsewhere than a file, is an address starting with what it is read by
+        return parts.map (part => part?.uri)
+            .filter ((uri): uri is string => typeof uri === "string" && ! /^[A-Za-z][A-Za-z0-9+.-]*:/.test (uri))
+            .map (uri => decodeURIComponent (uri));
+    }
+    catch {
+        return [];
+    }
+}
+
+/** A file as it is to be given: its size, and its bytes unless it has more of them than can be taken. */
+interface FileRead {
+    size: number;
+    data?: Uint8Array;
+}
+
+// A file with changes that are not saved in an editor is read from it, so that what is typed counts before it is saved
+async function read (file: string, mostBytes: number): Promise<FileRead | undefined> {
+    const unsaved = unsavedText (file);
+
+    try {
+        if (unsaved !== undefined) {
+            const data = Buffer.from (unsaved, "utf8");
+            return { size: data.length, data: data.length <= mostBytes ? data : undefined };
+        }
+
+        const status = await fs.promises.stat (file);
+
+        if (! status.isFile ())
+            return undefined;
+
+        return { size: status.size, data: status.size <= mostBytes ? await fs.promises.readFile (file) : undefined };
+    }
+    catch {
+        return undefined;
+    }
+}
+
+function megabytes (bytes: number): string {
+    return `${(bytes / (1024 * 1024)).toFixed (1)} MB`;
+}
+
+function isInside (folder: string, file: string): boolean {
+    const relative = path.relative (folder, file);
+    return ! relative.startsWith ("..") && ! path.isAbsolute (relative);
+}
+
+function commonFolder (files: string[]): string {
+    let folder = path.dirname (files[0]);
+
+    for (const file of files) {
+        while (! isInside (folder, file) && path.dirname (folder) !== folder)
+            folder = path.dirname (folder);
+    }
+
+    return folder;
+}
+
+/**
+    Collects a document with the files it names, followed through the documents it imports and the
+    models it shows, and with those the tool told it reads (see noteMissingFiles).
+
+    A name is looked for next to the file naming it, then next to the main document, which is where
+    the paths of a document are resolved from. A file is read as it is on disk, byte for byte,
+    unless an editor holds changes of it that are not saved.
+
+    @param isAllowed Tells whether a file a document names may be read, for who must not read them all.
+*/
+export async function collectDocumentFiles (document: EditedDocument, modelsPath: string | undefined, isAllowed: (file: string) => boolean = () => true): Promise<DocumentFiles> {
+    const main = document.uri.fsPath;
+    const contents = new Map<string, Uint8Array> ([[main, Buffer.from (document.getText (), "utf8")]]);
+    const pending = [main];
+    const missing = new Set<string> ();
+    const problems: string[] = [];
+    let total = 0;
+
+    // Takes a file that may be read, is there and fits in what the tool is given
+    const take = async (file: string): Promise<boolean> => {
+        if (missing.has (file))
+            return false;
+
+        const found = isAllowed (file) ? await read (file, Math.min (maximumFileBytes, maximumBytes - total)) : undefined;
+
+        if (found?.data === undefined) {
+            if (found !== undefined) {
+                problems.push (`'${path.relative (path.dirname (main), file)}' (${megabytes (found.size)}) is too large to be checked and shown here: `
+                               + `the tool is given the files of a document that have ${megabytes (maximumFileBytes)} at most, and ${megabytes (maximumBytes)} together. It is treated as missing`);
+            }
+
+            missing.add (file);
+            return false;
+        }
+
+        total += found.data.length;
+        contents.set (file, found.data);
+        pending.push (file);
+        return true;
+    };
+
+    for (const file of told.get (main) ?? []) {
+        if (! contents.has (file))
+            await take (file);
+    }
+
+    while (pending.length > 0) {
+        const file = pending.pop () as string;
+
+        for (const name of namesIn (file, contents.get (file) as Uint8Array)) {
+            if (path.isAbsolute (name))
+                continue;
+
+            for (const folder of [path.dirname (file), path.dirname (main)]) {
+                const candidate = path.resolve (folder, name);
+
+                if (contents.has (candidate) || await take (candidate))
+                    break;
+            }
+        }
+    }
+
+    // The files keep the places they have relative to each other, under the folder holding them all
+    const folder = commonFolder (Array.from (contents.keys ()));
+    const toolPath = (file: string) => `${folderName (folder)}/${path.relative (folder, file).split (path.sep).join ("/")}`;
+    const files: YuiToolFile[] = [];
+
+    for (const [file, data] of contents) {
+        if (isInside (folder, file))
+            files.push ({ path: toolPath (file), data });
+    }
+
+    // The tool keeps the files it was given: one a document names and that is gone is forgotten there too
+    for (const file of missing) {
+        if (isInside (folder, file) && ! contents.has (file))
+            files.push ({ path: toolPath (file), data: new Uint8Array (), removed: true });
+    }
+
+    // Who is told about the files that change finds here the documents to check and show again
+    named.set (main, new Set ([...contents.keys (), ...missing].filter (file => file !== main)));
+
+    const models = modelsPath === undefined ? undefined : (await read (modelsPath, maximumFileBytes))?.data;
+
+    if (modelsPath !== undefined && models !== undefined)
+        files.push ({ path: toolPathOf (modelsPath), data: models });
+
+    return { main: toolPath (main), models: modelsPath !== undefined && models !== undefined ? toolPathOf (modelsPath) : "", files, problems };
+}
+
+/**
+    Remembers the files the tool told a document reads without having been given them, which are
+    what its texts do not name: what a build compiles a shader into, a file of a kind a document
+    is not known to read, one named by an expression. The document is collected with them from
+    then on (see collectDocumentFiles).
+
+    @param main    The file of the document.
+    @param missing The files, by their paths in the folder of the tool.
+
+    @returns True when one of them was not told before and is there to be given: what ran on the
+             document then runs again. One that is not there is not asked for again, and is given
+             once it is there.
+*/
+export function noteMissingFiles (main: string, missing: string[]): boolean {
+    const known = told.get (main) ?? new Set<string> ();
+    let found = false;
+
+    told.set (main, known);
+
+    for (const toolPath of missing) {
+        const file = realPathOf (toolPath);
+
+        if (file === undefined || known.has (file))
+            continue;
+
+        known.add (file);
+        found = found || unsavedText (file) !== undefined || fs.existsSync (file);
+    }
+
+    return found;
+}
+
+/**
+    Runs something of the tool on a document, again for as long as the tool tells files the document
+    reads that it was not given and there are some of them to give (see noteMissingFiles).
+
+    @param run Collects the document and runs on it. It returns what ran, with the file of the
+               document and the files the tool told, or nothing when it could not run.
+
+    @returns What the last run returned.
+*/
+export async function runUntilFilesAreGiven<Ran extends { document?: string; missing: string[] }> (run: () => Promise<Ran | undefined>): Promise<Ran | undefined> {
+    for (let round = 1; ; ++round) {
+        const ran = await run ();
+
+        if (ran === undefined || ran.document === undefined || ! noteMissingFiles (ran.document, ran.missing) || round === maximumRounds)
+            return ran;
+    }
+}
+
+/** Tells whether a document was given a file when it was last collected, or named it while it was not there. */
+export function isNamedBy (main: string, file: string): boolean {
+    return named.get (main)?.has (file) === true;
+}

@@ -37,6 +37,13 @@ namespace yup
     Opaque and masked items are sorted by pipeline state (double-sided, then mirrored) and then
     by material, to limit state changes. Blended items are sorted back to front, so they are drawn over what is behind them.
 
+    With BuildOptions::materialShaders, the items under a MaterialShaderNode are colored by its
+    MaterialShader (DrawItem::materialShader), the nearest node up to the root winning as a
+    MaterialNode does, and their material stays the one resolved without it. Every tier shades them
+    forward: among the opaque and masked items they come last, sorted by shader as well, so
+    getDeferredItems() holds the ones a full tier shades deferred and getForwardOpaqueItems() the
+    others. Blended ones keep their place among the blended items.
+
     The items point into the meshes and materials of the tree: they stay valid until the tree
     changes or the list is built again.
 
@@ -74,6 +81,7 @@ public:
         int numLights = 0;                           ///< How many lightIndices are valid.
         std::array<int, 2> reflectionProbes { -1, -1 }; ///< Indices into getReflectionProbes(), the most influential first, -1 when unused, see BuildOptions::selectLightsPerDraw.
         int irradianceVolume = -1;                   ///< Index into getIrradianceVolumes(), -1 for none, see BuildOptions::selectLightsPerDraw.
+        const MaterialShaderNode* materialShader = nullptr; ///< The part whose MaterialShader colors the item instead of the lighting of its material, or nullptr, see BuildOptions::materialShaders.
     };
 
     /** One light, in world space. */
@@ -113,6 +121,16 @@ public:
             DrawItem::reflectionProbes with selectReflectionProbes() and DrawItem::irradianceVolume with selectIrradianceVolume().
         */
         bool selectLightsPerDraw = false;
+
+        /** Tells whether the meshes under a MaterialShaderNode are colored by its shader: called
+            with the shader of such a node of the visible tree, at most once per node and build.
+            The meshes of a node whose shader it refuses are left to their materials, as a
+            renderer does on a tier the shader has no variant for.
+
+            Without it, the default, every MaterialShaderNode is ignored and DrawItem::materialShader
+            stays nullptr, as the captures of reflection probes and irradiance volumes need.
+        */
+        std::function<bool (const MaterialShader::Ptr&)> materialShaders = nullptr;
     };
 
     //==============================================================================
@@ -138,8 +156,20 @@ public:
     void clear();
 
     //==============================================================================
-    /** Returns the opaque and masked items, sorted by pipeline state and material. */
+    /** Returns the opaque and masked items, sorted by pipeline state and material: getDeferredItems()
+        followed by getForwardOpaqueItems().
+    */
     Span<const DrawItem> getOpaqueItems() const noexcept { return opaqueItems; }
+
+    /** Returns the opaque and masked items shaded by their material: the ones a full tier draws
+        into its G-buffer and shades deferred.
+    */
+    Span<const DrawItem> getDeferredItems() const noexcept { return { opaqueItems.data(), numDeferredItems }; }
+
+    /** Returns the opaque and masked items colored by a material shader (DrawItem::materialShader),
+        which every tier shades forward. Empty without BuildOptions::materialShaders.
+    */
+    Span<const DrawItem> getForwardOpaqueItems() const noexcept { return { opaqueItems.data() + numDeferredItems, opaqueItems.size() - numDeferredItems }; }
 
     /** Returns the blended items, sorted from the farthest to the nearest. */
     Span<const DrawItem> getBlendItems() const noexcept { return blendItems; }
@@ -228,18 +258,22 @@ private:
     static int selectLights (const BoundingBox& worldBounds, Span<const Light> lights, Span<const LightRanking> rankings,
                              std::array<uint16, maxLightsPerDraw>& indices, std::array<float, maxLightsPerDraw>& weights);
 
-    /** Whether an entity is visible up to the root of the build, and the nearest MaterialNode override. */
+    /** Whether an entity is visible up to the root of the build, the nearest MaterialNode override
+        and the nearest MaterialShaderNode coloring its meshes.
+    */
     struct EntityState
     {
         uint32 stamp = 0;
         bool active = false;
         const Material* overrideMaterial = nullptr;
+        const MaterialShaderNode* materialShader = nullptr;
     };
 
-    void collect (Scene& scene, const Entity& root, const Matrix4& view);
-    const EntityState& resolveEntity (Entity entity, const Entity& root);
+    void collect (Scene& scene, const Entity& root, const Matrix4& view, const BuildOptions& options);
+    const EntityState& resolveEntity (Entity entity, const Entity& root, const BuildOptions& options);
 
     std::vector<DrawItem> opaqueItems;
+    size_t numDeferredItems = 0; // The opaque items without a material shader, first in opaqueItems
     std::vector<DrawItem> blendItems;
     std::vector<Light> lights;
     std::vector<LightRanking> lightRankings;

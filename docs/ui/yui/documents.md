@@ -111,8 +111,8 @@ and safe for the application:
 - A value the document no longer writes goes back to what a new component has,
   and the components of removed elements are destroyed.
 - Changing the type of an element creates a new component.
-- When the `style`, `palette`, `drawing` and `keyframes` blocks are unchanged
-  and in the same place, the stylesheet is kept: running transitions and
+- When the `style`, `palette`, `drawing`, `shader` and `keyframes` blocks are
+  unchanged and in the same place, the stylesheet is kept: running transitions and
   animations go on, and a class changed by the reload transitions as it would
   from code. Any change to them restyles the interface from scratch.
 
@@ -132,6 +132,48 @@ undoManager.undo(); // back to the previous document, keeping the components
 
 To load from files, reload when they change on disk, or load files embedded in
 the binary, use a `YuiLoader`, see [Hot reloading](hot-reload.md).
+
+## Reading files through the document
+
+A document also reads the files its elements name: the shaders of `shader`
+blocks, the models and the textures of a [3D scene](scenes.md). They are read
+through the document, so they come from where its text comes from, and code
+reads its own files the same way:
+
+```cpp
+// From anything that has a component of the document
+if (const auto bytes = YuiDocument::readAssetFor (&component, "tables/curve.bin"))
+    load (*bytes);
+
+// Reading again when the file changes
+struct CurveUser : YuiDocument::Listener
+{
+    void documentLoaded (YuiDocument&, const Result&) override {}
+
+    void documentAssetChanged (YuiDocument& document, const String& path) override
+    {
+        if (path != "tables/curve.bin")                 // the path as it was read
+            return;
+
+        if (const auto bytes = document.readAsset (path))
+            load (*bytes);
+    }
+};
+```
+
+- `readAsset (path)` asks the asset reader of the document first, which a
+  `YuiLoader` installs to serve its files, its overrides and its embedded
+  resources. Else it reads the file: an absolute path as it is, a relative one
+  under the folder of the main file, then under the working directory.
+- `setAssetReader()` serves files from anywhere else, an archive for example,
+  for a document loaded without a `YuiLoader`. Returning nothing leaves the
+  file to be read as usual.
+- `getAssetFile (path)` is the file a path stands for, for what has to follow
+  the references of a file. It is no file for a document loaded from embedded
+  resources.
+- `notifyAssetChanged (path)` tells the listeners that a file changed. A
+  `YuiLoader` calls it for the files it watches, and then loads the document
+  again. Call it yourself for what nobody else watches.
 
 ## Tokens
 
@@ -204,8 +246,8 @@ component LabeledKnob : Column {
   reaches it as a `ColumnComponent`.
 - `property name: type = default;` declares a typed property, such as a
   `number`, `integer`, `boolean`, `string`, `color`, `point`, `rectangle`,
-  `transform`, `font`, `drawing`, `any`, or an array of expression types
-  (`number[]`, `transform[]`, ...). Inside the block it is read as
+  `transform`, `font`, `drawing` (the name of a drawing or of a shader),
+  `any`, or an array of expression types (`number[]`, `transform[]`, ...). Inside the block it is read as
   `root.label`; from outside it is set like any other property.
 - `property alias value <=> knob.value;` exposes a property of a part under a
   new name, with the type of the original.

@@ -11,7 +11,7 @@ it runs.
 </p>
 
 **Modules covered:** `yup_gui` (the `Yui*` classes), with
-`yup_audio_gui` for parameter binding.
+`yup_audio_gui` for parameter binding and `yup_renderer` for 3D scenes.
 
 Everything YUI does is also reachable from C++ - it builds the same
 [`Component`](../component-basics.md) tree, sets the same
@@ -28,6 +28,7 @@ layout, look and wiring live in files you can edit without recompiling.
 | `palette` | Colors derived from a few source colors | [Stylesheets](styles.md#palettes) |
 | `style` | Selectors, the cascade, transitions and `@keyframes` | [Stylesheets](styles.md) |
 | `drawing` | Shapes painting a component from its properties | [Data-driven drawing](drawing.md) |
+| `shader` | A GLSL shader and its inputs, for effects, drawings, filters and 3D materials | [Shaders](shaders.md) |
 | `component` | A new composite component type | [Complete UIs](documents.md#composite-components) |
 | `Type { ... }` | The root component instance | [Complete UIs](documents.md) |
 
@@ -46,12 +47,18 @@ Start with the language, then pick the area you need.
   shadows, glows, CSS filters and cursors for any component tree.
 - [Data-driven drawing](drawing.md) - paint components from a tree of shapes
   whose values are expressions over the component's properties.
+- [Shaders](shaders.md) - GLSL shaders declared in a document: as the effect of
+  a component, painted by a drawing, in a filter, or as a 3D material.
+- [3D scenes](scenes.md) - `Scene3D`, cameras, lights, meshes, glTF models and
+  materials written as elements, with clips, picking, draggable parts and 2D
+  components on 3D objects.
 - [Reactive bindings](reactivity.md) - properties computed from other
   properties, re-evaluated whenever what they read changes.
 - [Complete UIs in `.yui`](documents.md) - `YuiDocument`, tokens, composite
   components, handlers, actions and models.
 - [Hot reloading `.yui` files](hot-reload.md) - `YuiLoader`, watching files
-  while developing and embedding them with `yup_add_yui_resources`.
+  while developing and embedding them, with the shaders, the models and the
+  textures they read, with `yup_add_yui_resources`.
 - [Tools for `.yui` files](tooling.md) - checking files from the command line
   and while configuring a build, the schema, importing SVGs and the VS Code
   extension.
@@ -65,6 +72,8 @@ Start with the language, then pick the area you need.
 - [Component layout](../component-layout.md) - `FlexBox` and `Grid` from C++.
 - [Drawables & SVG](../../graphics/svg.md) - the SVG importer feeding
   `drawing` blocks.
+- [3D](../../3d/index.md) - the scenes, the glTF loader and the renderer behind
+  `Scene3D`.
 - [Python bindings for YUI](../../scripting/python-yui.md) - loading and
   driving documents from Python.
 
@@ -77,6 +86,8 @@ architecture
 layout
 styles
 drawing
+shaders
+scenes
 reactivity
 documents
 hot-reload

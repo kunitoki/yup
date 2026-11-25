@@ -1,0 +1,12 @@
+shader Tint {
+    fragment: "fx/tint.frag";
+    property amount: number = 0.5;
+}
+
+style {
+    #display { effect: Tint; }
+}
+
+Component {
+    Component { id: display; }
+}

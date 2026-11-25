@@ -38,7 +38,7 @@ constexpr uint8_t toneMappingRadianceShaderBundle[] = {
 struct ToneMappingBlock
 {
     float options[4];    // x 1 when the source is reversibly tone mapped, y 1 with a glow
-    float background[4]; // the display-encoded background color
+    float background[4]; // the display-encoded background color, premultiplied by its alpha
 };
 
 } // namespace
@@ -93,13 +93,17 @@ bool ToneMapping::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
     if ((! blurredCoverage && prepareVariant (prepared, preparedFormat, false).failed()) || samplers == nullptr)
         return false;
 
+    // Premultiplied by its alpha, as the source is by its coverage: the shader's blend over it
+    // then leaves the destination premultiplied for any background alpha. Opaque, it is unchanged
+    const auto premultiplied = background.premultiplied();
+
     ToneMappingBlock block {};
     block.options[0] = sourceIsReversible ? 1.0f : 0.0f;
     block.options[1] = glow != nullptr ? 1.0f : 0.0f;
-    block.background[0] = background.getRedFloat();
-    block.background[1] = background.getGreenFloat();
-    block.background[2] = background.getBlueFloat();
-    block.background[3] = background.getAlphaFloat();
+    block.background[0] = premultiplied.getRedFloat();
+    block.background[1] = premultiplied.getGreenFloat();
+    block.background[2] = premultiplied.getBlueFloat();
+    block.background[3] = premultiplied.getAlphaFloat();
 
     // Every texel is written, so the previous contents are cleared rather than loaded
     return (blurredCoverage ? radiancePass : pass).draw (frame, destination, {}, [&] (GpuRenderPass& renderPass)

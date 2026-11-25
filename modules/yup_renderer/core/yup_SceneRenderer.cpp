@@ -71,6 +71,24 @@ void addMaterialSignature (FrameSignature& signature, const Material& material)
         signature.addPointer (texture->get());
 }
 
+/** The shader a MaterialShaderNode colors its meshes with, and the values of its uniform block. */
+void addMaterialShaderSignature (FrameSignature& signature, const MaterialShaderNode& node)
+{
+    // Not its address, which a shader replacing a destroyed one can be created at
+    const auto& shader = node.getShader();
+    signature.addBits (shader != nullptr ? shader->getIdentity() : 0u);
+
+    // A block is a multiple of 16 bytes
+    const auto& uniforms = node.getUniforms();
+
+    for (size_t offset = 0; offset + sizeof (uint64) <= uniforms.getSizeInBytes(); offset += sizeof (uint64))
+    {
+        uint64 bits = 0;
+        std::memcpy (&bits, uniforms.getData() + offset, sizeof (bits));
+        signature.addBits (bits);
+    }
+}
+
 } // namespace
 
 //==============================================================================
@@ -908,11 +926,15 @@ struct SceneRenderer::Impl
         {
             itemSignature.addMatrix (item.world);
             itemSignature.addPointer (item.mesh);
+            itemSignature.addBits (item.mesh->getChangeCount()); // Vertices changed in place, see Mesh::setVertices()
             itemSignature.addBits (static_cast<uint64> (item.primitiveIndex));
             addMaterialSignature (itemSignature, *item.material);
 
             for (const auto* texture : getMaterialTextures (*item.material))
                 itemSignature.addBits (*texture != nullptr ? (*texture)->getChangeCount() : 0u);
+
+            if (item.materialShader != nullptr)
+                addMaterialShaderSignature (itemSignature, *item.materialShader);
         };
 
         for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
@@ -958,9 +980,9 @@ struct SceneRenderer::Impl
 
     /** What every sun cascade depends on besides its fit and casters, which ShadowRenderer compares
         itself: the shadow settings of the tier and the shadow casting directional lights. Fills
-        shadowCasterSignatures with the signature of each caster (transform, mesh and what alpha
-        masking reads), in the order of the opaque items. The point and spot lights reach the atlas
-        through the matrices of their views.
+        shadowCasterSignatures with the signature of each caster (transform, mesh, the changes of
+        its vertices and what alpha masking reads), in the order of the opaque items. The point and
+        spot lights reach the atlas through the matrices of their views.
     */
     uint64 getShadowSignature (const RenderSettings& settings)
     {
@@ -989,6 +1011,7 @@ struct SceneRenderer::Impl
             FrameSignature itemSignature;
             itemSignature.addMatrix (item.world);
             itemSignature.addPointer (item.mesh);
+            itemSignature.addBits (item.mesh->getChangeCount());
             itemSignature.addBits (static_cast<uint64> (item.primitiveIndex));
 
             const auto& material = *item.material;
@@ -1510,8 +1533,16 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     impl->viewData.update (scene, sceneSettings, internalWidth, internalHeight, temporalAntiAliasing, temporalSamples, impl->frameIndex++);
 
     auto& drawList = impl->drawList;
+
+    // The meshes of a material shader are colored by it where the forward pass can draw it into
+    // these targets: otherwise their materials shade them, deferred on the full tier
+    const auto drawsMaterialShader = [&] (const MaterialShader::Ptr& shader)
+    {
+        return impl->forwardPass.prepareMaterialShader (device, shader, targets, forwardSamples);
+    };
+
     // The raster tier lights each draw with its own selection, the full tier through the clusters
-    drawList.build (scene.getRoot(), impl->viewData.getView(), { sceneSettings.useDefaultLight, ! full });
+    drawList.build (scene.getRoot(), impl->viewData.getView(), { sceneSettings.useDefaultLight, ! full, std::cref (drawsMaterialShader) });
 
     // A light with a radius selects the area light variants of the shading passes. Only a change
     // of the lights switches variants, and the restarting signature hashes every light radius
@@ -1601,8 +1632,9 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     lighting.lookupTables = impl->lookupTables;
 
     // A clearcoat or a sheen selects the variants compiling the layers: raster for any item, full
-    // for the opaque items of the lighting pass (its forward pass always compiles them)
-    lighting.materialLayers = LightingInputs::hasMaterialLayers (drawList.getOpaqueItems())
+    // for the opaque items of the lighting pass (its forward pass always compiles them). The opaque
+    // items of a material shader are shaded by neither
+    lighting.materialLayers = LightingInputs::hasMaterialLayers (drawList.getDeferredItems())
                            || (! full && LightingInputs::hasMaterialLayers (drawList.getBlendItems()));
 
     // One flag for every radiance texture of the device, whether or not the scene has an environment
@@ -1619,7 +1651,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     // failure tells why, the shadow filter variants in the passes, which fall back to the defaults
     if (! lighting.shadowFilters)
     {
-        if (auto result = impl->prepareDefaultShading (targets, forwardSamples, full, areaLights, ! full || ! drawList.getBlendItems().empty()); result.failed())
+        if (auto result = impl->prepareDefaultShading (targets, forwardSamples, full, areaLights, ! full || ! drawList.getBlendItems().empty() || ! drawList.getForwardOpaqueItems().empty()); result.failed())
             return failFrame (result.getErrorMessage());
     }
 
@@ -1636,7 +1668,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
             YUP_PROFILE_NAMED_INTERNAL_TRACE (gbuffer);
             impl->beginScope (frame, "gbuffer");
 
-            if (! impl->gbufferPass.render (frame, impl->viewData, drawList.getOpaqueItems(), impl->materialTable, gbuffer))
+            // The opaque items of a material shader are drawn by the forward pass instead
+            if (! impl->gbufferPass.render (frame, impl->viewData, drawList.getDeferredItems(), impl->materialTable, gbuffer))
                 return failFrame ("Unable to render the G-buffer");
         }
 
@@ -1705,11 +1738,15 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     }
 
     // Raster: every item over the cleared targets, HDR scene color starting transparent for tone
-    // mapping to composite the display-referred background under it. Full: the blended items over
-    // the shaded G-buffer, depth tested against it, writing their motion over its velocity
+    // mapping to composite the display-referred background under it. Full: the opaque items of
+    // material shaders, which write their depth too, then the blended items, over the shaded
+    // G-buffer, depth tested against it, writing their motion over its velocity.
+    // Inline, the background is cleared premultiplied by its alpha: opaque surfaces write alpha 1
+    // and blended ones blend straight colors over it while their alpha accumulates, so the
+    // resolved texture is premultiplied for any background alpha, as tone mapping leaves it too
     const auto clear = full ? std::optional<GpuColor>()
-                            : std::optional<GpuColor> (output == ForwardPass::Output::ldrInline ? GpuColor (sceneSettings.backgroundColor) : GpuColor::transparentBlack());
-    const auto opaque = full ? Span<const SceneDrawList::DrawItem>() : drawList.getOpaqueItems();
+                            : std::optional<GpuColor> (output == ForwardPass::Output::ldrInline ? GpuColor (sceneSettings.backgroundColor.premultiplied()) : GpuColor::transparentBlack());
+    const auto opaque = full ? drawList.getForwardOpaqueItems() : drawList.getOpaqueItems();
 
     if (failMaterialLayers)
         impl->forwardPass.failMaterialLayersForTesting();
@@ -1717,8 +1754,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     {
         YUP_PROFILE_NAMED_INTERNAL_TRACE (forward);
 
-        // Full: only the blended items, when there are any
-        if (! full || ! drawList.getBlendItems().empty())
+        // Full: only the opaque items of material shaders and the blended items, when there are any
+        if (! full || ! opaque.empty() || ! drawList.getBlendItems().empty())
             impl->beginScope (frame, "forward");
 
         if (! impl->forwardPass.render (device, frame, impl->viewData, lighting, opaque, drawList.getBlendItems(), targets, output, forwardSamples, clear))

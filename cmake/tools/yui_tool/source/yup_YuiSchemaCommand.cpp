@@ -334,7 +334,160 @@ var describeExpressionsTopic()
     return var (topic);
 }
 
+var describeShadersTopic()
+{
+    // The types a property of a shader is declared with: those a uniform takes, and the arrays of numbers
+    StringArray propertyTypes;
+
+    for (const auto& name : ComponentProperty::getDeclaredTypeNames())
+        if (ShaderEffect::getNumUniformComponents (ComponentProperty::getTypeFromName (name)) > 0)
+            propertyTypes.add (name);
+
+    propertyTypes.add ("number[]");
+
+    String notes ("A shader is a block at the top of a file. It names its GLSL file with 'fragment' or with 'material', by a path relative to the "
+                  "document, and can't have the name of a drawing. Each property fills the member of its name in the one uniform block of the "
+                  "shader, and is set where the shader is used: in the rule, the 'use' or the Material3D naming it, where it also takes bindings "
+                  "and transitions. A fragment shader reads up to two texture2D, each through a sampler declared apart: an effect and a drawing "
+                  "give it one. A member named resolution (vec2, in pixels), scale (float) or time (float, in seconds, which keeps what shows it "
+                  "repainting) is filled in when no property has its name. A material is one function with no #version and no main(): it colors "
+                  "a mesh unlit and declares no texture, and of these members only gets time. Both are compiled for every graphics API, so they "
+                  "keep to the GLSL its WGSL target takes.");
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    notes << " yui_check compiles every shader of a file, used or not, and reports the errors of the compiler.";
+#endif
+
+    auto* topic = new DynamicObject();
+    topic->setProperty ("block", "shader Name { fragment: \"fx/name.frag\"; property intensity: number = 0.5; property tint: color = palette.accent; }");
+    topic->setProperty ("uses", var (StringArray { "style { .display { effect: Name; intensity: 0.8; } } runs a fragment shader over what a component paints",
+                                                   "drawing Screen { use Name { bounds: bounds; intensity: 0.8; } } paints a fragment shader in a drawing",
+                                                   "layer { filter { use Name { intensity: 0.8; } } ... } runs a fragment shader over a layer of a drawing",
+                                                   "Material3D { shader: Name; rim: #00ffff; } colors the meshes of a scene with a material shader" }));
+    topic->setProperty ("propertyTypes", var (propertyTypes));
+    topic->setProperty ("fragment", String (R"glsl(#version 450
+
+layout(set = 0, binding = 0) uniform Parameters
+{
+    vec4 tint;          // property tint: color, sRGB encoded, alpha not premultiplied
+    float intensity;    // property intensity: number
+} params;
+
+layout(set = 0, binding = 1) uniform texture2D source;         // the picture, premultiplied by alpha
+layout(set = 0, binding = 2) uniform sampler sourceSampler;
+
+layout(location = 0) in vec2 uv;                               // (0, 0) at the top left
+layout(location = 0) out vec4 color;                           // premultiplied by alpha
+
+void main()
+{
+    vec4 pixel = texture (sampler2D (source, sourceSampler), uv);
+    vec4 tint = vec4 (params.tint.rgb * params.tint.a, params.tint.a);
+
+    color = mix (pixel, pixel * tint, params.intensity);
+}
+)glsl"));
+    topic->setProperty ("material", String (R"glsl(YUP_MATERIAL_PARAMS
+{
+    vec4 rim;           // property rim: color, linear, alpha not premultiplied
+} params;
+
+vec4 yupMaterial (YupSurface surface)
+{
+    float fresnel = pow (1.0 - max (dot (surface.normal, surface.view), 0.0), 3.0);
+
+    return vec4 (params.rim.rgb * fresnel, fresnel);            // linear, alpha not premultiplied
+}
+)glsl"));
+    topic->setProperty ("surface", var (StringArray { "vec3 position: where the fragment is, in the space of the scene",
+                                                      "vec3 normal: the unit normal the surface is shaded with",
+                                                      "vec3 view: the unit vector from the fragment to the camera",
+                                                      "vec2 uv: the texture coordinates of the mesh",
+                                                      "vec4 color: the color of the vertices of the mesh",
+                                                      "vec4 baseColor: the base color of the Material3D, its factor by its texture, linear",
+                                                      "vec3 emissive: the light the Material3D emits, linear",
+                                                      "float metallic, float roughness, float occlusion: those of the Material3D, its factors by its textures" }));
+    topic->setProperty ("notes", notes);
+    topic->setProperty ("docs", "docs/ui/yui/shaders.md");
+
+    return var (topic);
+}
+
+#if YUP_MODULE_AVAILABLE_yup_renderer
+var describeScenesTopic()
+{
+    static const std::pair<const char*, const char*> types[] {
+        { "Scene3D", "The component showing a scene, laid out as any other. It holds the 3D types, and paints what else it holds over the scene." },
+        { "Node3D", "A place of the scene, moving what it holds: position, rotation, scale and lookAt. With 'node' it is the part of that name of the Model3D it is in." },
+        { "Camera3D", "A Node3D seeing down its -z axis, y up. The scene is seen from the first one that is active." },
+        { "Light3D", "A Node3D that lights: directional down its -z axis, point, or spot." },
+        { "Mesh3D", "A Node3D drawing triangles: the x, y and z of each of its 'vertices', three 'indices' a triangle, counter-clockwise seen from its front." },
+        { "Model3D", "A Node3D drawing the model of a .glb or .gltf file, its 'source'." },
+        { "Material3D", "The material of the meshes of what it is written in, and of what that holds: the factors and textures of a PBR material, or a 'shader'. It is no Node3D." }
+    };
+
+    Array<var> described;
+
+    for (const auto& [name, what] : types)
+    {
+        auto* record = new DynamicObject();
+        record->setProperty ("name", name);
+        record->setProperty ("what", what);
+
+        described.add (var (record));
+    }
+
+    auto* topic = new DynamicObject();
+    topic->setProperty ("types", var (described));
+    topic->setProperty ("example", String (R"yui(Scene3D {
+    background: #101014; flexGrow: 1;
+
+    Camera3D { position: [0, 0.5, 4]; lookAt: [0, 0, 0]; fov: 45deg; }
+    Light3D { type: directional; rotation: [-45deg, 30deg, 0]; intensity: 3; }
+
+    Mesh3D {
+        position: [-1.5, 0, 0];
+        vertices: [-1, -1, 0,  1, -1, 0,  1, 1, 0,  -1, 1, 0];
+        indices: [0, 1, 2,  0, 2, 3];
+
+        Material3D { baseColor: #ff8800; metallic: 0; roughness: 0.6; }
+    }
+
+    Model3D {
+        source: "models/device.glb";
+
+        Node3D { node: "Knob"; rotation: [0, cutoff.value * 270deg, 0]; }
+    }
+
+    Slider { id: cutoff; x: 16; y: 16; width: 160; height: 24; }
+}
+)yui"));
+    topic->setProperty ("notes", "The 3D types are components: the components topic lists the properties of each, which take bindings, style rules and transitions "
+                                 "as those of a widget do. A Scene3D needs a size as any component does, a flexGrow or a width and a height. A position, a "
+                                 "scale and a lookAt are [x, y, z], and a rotation is the angle around each axis in radians, written 45deg. A component that "
+                                 "is no 3D type is painted over the scene when it is written in the Scene3D, and on the surface of a node when it is written "
+                                 "in one. A node answers the pointer as a widget does, with ':hover', ':pressed' and 'onClick', and a Model3D plays the clips "
+                                 "of its file with 'clip' and 'playing'. The 'source' of a Model3D and the textures of a Material3D are paths relative to the "
+                                 "document, read with it: a .glb, or a .gltf holding its buffers as data URIs, and PNG, JPEG or WebP images. yui_check "
+                                 "reports the files that can't be read or loaded, and yui_render draws the scene once it has settled.");
+    topic->setProperty ("docs", "docs/ui/yui/scenes.md");
+
+    return var (topic);
+}
+#endif
+
 } // namespace
+
+StringArray getYuiToolSchemaTopics()
+{
+    StringArray topics { "drawing", "styles", "expressions", "shaders" };
+
+#if YUP_MODULE_AVAILABLE_yup_renderer
+    topics.add ("scenes");
+#endif
+
+    return topics;
+}
 
 var describeYuiToolSchemaTopic (const String& topic)
 {
@@ -346,6 +499,14 @@ var describeYuiToolSchemaTopic (const String& topic)
 
     if (topic == "expressions")
         return describeExpressionsTopic();
+
+    if (topic == "shaders")
+        return describeShadersTopic();
+
+#if YUP_MODULE_AVAILABLE_yup_renderer
+    if (topic == "scenes")
+        return describeScenesTopic();
+#endif
 
     return {};
 }

@@ -73,7 +73,7 @@ layout(location = 5) in vec4 v_previousClip;
 // The material of a fragment, as materialEvaluate() samples it
 struct MaterialSurface
 {
-    vec4 baseColor;          // linear rgb within [0, 1]; alpha 1 unless the material blends
+    vec4 baseColor;          // linear rgb within [0, 1]; from materialEvaluate(), alpha 1 unless the material blends
     vec3 n;                  // unit shading normal after normal mapping, flipped on back faces
     vec3 geometricNormal;    // unit interpolated normal, flipped on back faces
     float metallic;
@@ -149,9 +149,27 @@ bool materialIsCutOut(float alpha)
     return alpha < material.emissiveFactor.w;
 }
 
-// Samples the material of the fragment, discarding it when an alpha masked material cuts it out.
-// The screen-space derivatives (normal mapping, kernel roughness) are taken before the discard
-MaterialSurface materialEvaluate()
+// The alpha a surface of alpha `alpha` is written with, by the alpha mode of its material: 1 when
+// it is opaque or alpha masked, discarding the fragment the mask cuts out, and `alpha` when it blends
+float materialAlpha(float alpha)
+{
+    if (material.flags.x < 0.5)
+        return 1.0;
+
+    if (material.flags.x < 1.5)
+    {
+        if (materialIsCutOut(alpha))
+            discard;
+
+        return 1.0;
+    }
+
+    return alpha;
+}
+
+// Samples the material of the fragment, its base color keeping the alpha of materialBaseColor():
+// no fragment is discarded, which is left to materialAlpha()
+MaterialSurface materialSample()
 {
     MaterialSurface s;
     s.baseColor = materialBaseColor();
@@ -175,18 +193,6 @@ MaterialSurface materialEvaluate()
     // Specular antialiasing: widen the highlight where the normal varies within the pixel
     s.kernelRoughness = bsdfKernelRoughness(s.n);
 
-    if (material.flags.x < 0.5)
-    {
-        s.baseColor.a = 1.0;
-    }
-    else if (material.flags.x < 1.5)
-    {
-        if (materialIsCutOut(s.baseColor.a))
-            discard;
-
-        s.baseColor.a = 1.0;
-    }
-
     vec4 metallicRoughness = texture(sampler2D(u_metallicRoughness, s_metallicRoughness), v_uv);
     s.metallic = clamp(material.params.x * metallicRoughness.b, 0.0, 1.0);
     s.roughness = clamp(material.params.y * metallicRoughness.g, 0.04, 1.0);
@@ -199,6 +205,16 @@ MaterialSurface materialEvaluate()
 
     s.emissive = emissive * material.emissiveFactor.rgb * material.extended.y;
 
+    return s;
+}
+
+// Samples the material of the fragment, discarding it when an alpha masked material cuts it out.
+// The screen-space derivatives (normal mapping, kernel roughness, texture lookups) are taken before
+// the discard
+MaterialSurface materialEvaluate()
+{
+    MaterialSurface s = materialSample();
+    s.baseColor.a = materialAlpha(s.baseColor.a);
     return s;
 }
 

@@ -1,0 +1,24 @@
+// size: 480 300
+drawing Backdrop {
+    rect { bounds: bounds; cornerRadius: 12;
+           fillGradient: linearGradient (palette.accent, point (0, 0), palette.surface, point (bounds.width, bounds.height)); }
+    text { bounds: bounds.reduced (24); text: "2D"; justification: centerLeft;
+           font: defaultFont.withHeight (bounds.height * 0.6); fill: palette.text.withAlpha (0.35); }
+}
+
+Stack {
+    Component { drawing: Backdrop; }
+
+    Scene3D {
+        background: colors.transparentBlack; toneMapping: aces;
+
+        Camera3D { position: [-1.1, 0.4, 5]; lookAt: [-1.1, 0, 0]; fov: 32deg; }
+        Light3D  { type: directional; position: [-3.5, 6, 3]; lookAt: [0, 0, 0]; intensity: 2.5; }
+
+        Model3D {
+            source: "../../../data/knot.glb"; rotation: [60deg, 30deg, 0]; scale: 0.6;
+
+            Material3D { baseColor: #ff8800; metallic: 0; roughness: 0.35; }
+        }
+    }
+}

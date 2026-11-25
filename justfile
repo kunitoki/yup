@@ -204,8 +204,8 @@ yui_tool_test:
 
 [doc("compile yup_yui_tool for the web, as the YUI VSCode extension runs it (needs the Emscripten SDK activated)")]
 [working-directory: 'cmake/tools/yui_tool']
-yui_tool_wasm CONFIG="Release":
-  emcmake cmake -G Ninja -S . -B build_wasm -DCMAKE_BUILD_TYPE={{CONFIG}}
+yui_tool_wasm CONFIG="Release" *CMAKE_ARGS:
+  emcmake cmake -G Ninja -S . -B build_wasm -DCMAKE_BUILD_TYPE={{CONFIG}} {{CMAKE_ARGS}}
   cmake --build build_wasm
 
 [doc("compile yup_yui_tool for the web and run its tests")]
@@ -214,10 +214,11 @@ yui_tool_wasm_test:
   @just yui_tool_wasm
   node --test tests/test_web.js
 
-[doc("run the tests of the YUI VSCode extension that need no editor")]
+[doc("check the types of the YUI VSCode extension and run its tests that need no editor")]
 [working-directory: 'modules/yup_gui/tools/vscode-yui']
 vscode_yui_test:
   npm install
+  npm run check
   npm test
 
 [doc("build and install the YUI VSCode extension (needs the Emscripten SDK activated)")]
@@ -313,6 +314,7 @@ update_emscripten_examples DEMOPATH="../yup-demos/demos":
   @just update_emscripten_example Themes themes {{DEMOPATH}}
   @just update_emscripten_example TreeView tree-view {{DEMOPATH}}
   @just update_emscripten_example Widgets widgets {{DEMOPATH}}
+  @just update_emscripten_example Yui3D yui-3d {{DEMOPATH}}
   @just update_emscripten_example YuiDrawing yui-drawing {{DEMOPATH}}
   @just update_emscripten_example YdspSynths ydsp-synths {{DEMOPATH}}
 

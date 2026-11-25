@@ -479,6 +479,216 @@ TEST_P (SceneRendererTierTests, PrepassIsNotCreatedByDefault)
     checkPrepassIsNotCreatedByDefault (GetParam());
 }
 
+TEST_P (SceneRendererTierTests, NewVerticesOfAMeshAreDrawn)
+{
+    // An emissive quad in the left half of the frame, which its new vertices move to the right half
+    const auto makeQuad = [] (float x)
+    {
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { x - 0.4f, -0.4f, 0.0f };
+        vertices[1].position = { x + 0.4f, -0.4f, 0.0f };
+        vertices[2].position = { x + 0.4f, 0.4f, 0.0f };
+        vertices[3].position = { x - 0.4f, 0.4f, 0.0f };
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+        return vertices;
+    };
+
+    auto material = Material::Ptr (new Material());
+    material->baseColorFactor = { 0.0f, 0.0f, 0.0f, 1.0f };
+    material->emissiveFactor = { 1.0f, 0.5f, 0.1f };
+
+    auto mesh = Mesh::Ptr (new Mesh ("quad"));
+    mesh->addPrimitive (makeQuad (-0.6f), { 0, 1, 2, 0, 2, 3 }, material);
+
+    Scene scene;
+    scene.createEntity ("quad").attach<MeshNode> (mesh);
+
+    SceneRenderer renderer;
+    setTier (renderer, GetParam());
+    auto image = renderConverged (renderer, scene, 64);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+    ASSERT_TRUE (renderer.isConverged());
+
+    const auto isOrange = [] (Color color) { return color.getRed() > color.getBlue() + 60; };
+    ASSERT_TRUE (isOrange (image.getPixelColor (20, 32)));
+    ASSERT_FALSE (isOrange (image.getPixelColor (44, 32)));
+
+    // The same mesh, node and transform: only the vertices moved
+    mesh->setVertices (0, makeQuad (0.6f));
+
+    // The full tier restarts its accumulation, as it does for a moved entity
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.isConverged(), GetParam() == RenderSettings::TierPreference::raster);
+
+    image = renderConverged (renderer, scene, 64);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+    EXPECT_FALSE (isOrange (image.getPixelColor (20, 32)));
+    EXPECT_TRUE (isOrange (image.getPixelColor (44, 32)));
+}
+
+TEST_P (SceneRendererTierTests, NewVerticesOfACasterDrawTheShadowMapsAgain)
+{
+    // A still scene keeps its shadow maps, until the vertices of a caster change
+    Scene scene;
+    buildLongGroundScene (scene, 2.0f);
+
+    SceneRenderer renderer;
+    setTier (renderer, GetParam());
+    for (int frame = 0; frame < 2; ++frame)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
+
+    auto caster = scene.getRoot().findChild ("caster");
+    ASSERT_TRUE (caster.isValid());
+    const auto mesh = caster.get<MeshNode>()->mesh;
+
+    // The cube mirrored keeps its bounds, and so the fit of the maps: only the change of its vertices tells
+    auto vertices = mesh->getPrimitive (0).vertices;
+    for (auto& vertex : vertices)
+        vertex.position = vertex.position.withX (-vertex.position.getX());
+
+    mesh->setVertices (0, vertices);
+
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
+
+    // Once: the next frame is still again
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_P (SceneRendererTierTests, TransparentBackgroundLeavesUncoveredTexelsEmpty)
+{
+    // The returned texture is premultiplied by alpha: nothing where no surface was drawn, alpha 1
+    // on the plates, and along their rotated silhouettes no channel above its coverage
+    Scene scene;
+    buildEdgesScene (scene);
+    scene.getRoot().attach<BackgroundNode> (Colors::transparentBlack);
+
+    SceneRenderer renderer;
+    setTier (renderer, GetParam());
+    const auto image = renderConverged (renderer, scene, 64);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+    EXPECT_EQ (image.getPixelColor (1, 1).getARGB(), 0u);
+    EXPECT_EQ (static_cast<int> (image.getPixelColor (32, 32).getAlpha()), 255);
+
+    int aboveAlpha = 0, partlyCovered = 0;
+    for (int y = 0; y < image.getHeight(); ++y)
+    {
+        for (int x = 0; x < image.getWidth(); ++x)
+        {
+            const auto color = image.getPixelColor (x, y);
+            const auto alpha = static_cast<int> (color.getAlpha());
+
+            aboveAlpha += jmax (color.getRed(), color.getGreen(), color.getBlue()) > alpha + 1 ? 1 : 0;
+            partlyCovered += alpha > 0 && alpha < 255 ? 1 : 0;
+        }
+    }
+
+    EXPECT_EQ (aboveAlpha, 0);
+    EXPECT_GT (partlyCovered, 0);
+}
+
+TEST_P (SceneRendererTierTests, TranslucentBackgroundCompositesTheSceneOverWhatLiesBehind)
+{
+    // The edges scene over an orange background of alpha 0.2 (51), with a half transparent blue
+    // quad over the background alone: at 64x64 it covers the pixels from 7 to 14 of the top left corner
+    Scene scene;
+    buildEdgesScene (scene);
+    auto& background = scene.getRoot().attach<BackgroundNode> (Color (0x33ff6400));
+
+    std::vector<Mesh::Vertex> vertices (4);
+    vertices[0].position = { -1.7f, 1.1f, 0.0f };
+    vertices[1].position = { -1.1f, 1.1f, 0.0f };
+    vertices[2].position = { -1.1f, 1.7f, 0.0f };
+    vertices[3].position = { -1.7f, 1.7f, 0.0f };
+    for (auto& vertex : vertices)
+        vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+    auto material = Material::Ptr (new Material());
+    material->baseColorFactor = { 0.0f, 0.0f, 1.0f, 0.5f };
+    material->alphaMode = Material::AlphaMode::blend;
+
+    auto mesh = Mesh::Ptr (new Mesh ("blended"));
+    mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
+    scene.createEntity ("blended").attach<MeshNode> (mesh);
+
+    SceneRenderer renderer;
+    setTier (renderer, GetParam());
+    const auto image = renderConverged (renderer, scene, 64);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+    // Where no surface was drawn the background is multiplied by its alpha, which is kept
+    const auto uncovered = image.getPixelColor (1, 1);
+    EXPECT_NEAR (uncovered.getRed(), 51, 1);
+    EXPECT_NEAR (uncovered.getGreen(), 20, 1);
+    EXPECT_NEAR (uncovered.getBlue(), 0, 1);
+    EXPECT_NEAR (uncovered.getAlpha(), 51, 1);
+
+    // The plates cover it, and the blended quad half of it: 0.5 + 0.5 * 0.2
+    EXPECT_EQ (static_cast<int> (image.getPixelColor (32, 32).getAlpha()), 255);
+    EXPECT_NEAR (image.getPixelColor (10, 10).getAlpha(), 153, 2);
+
+    // Drawn over a backdrop, as a component draws it over what lies behind
+    auto texture = renderer.render (device, scene, 64, 64);
+    ASSERT_NE (texture, nullptr) << renderer.getLastError();
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+
+    auto canvas = GpuCanvas::create (*context, 64, 64);
+    ASSERT_NE (canvas, nullptr);
+
+    auto& g = canvas->beginDraw();
+    g.setFillColor (Color (0xff0032c8));
+    g.fillAll();
+    g.drawTexture (texture, { 0.0f, 0.0f, 64.0f, 64.0f });
+
+    const auto composited = canvas->asImage();
+    ASSERT_TRUE (composited.isValid());
+
+    // The same image as the scene over 0.2 of the background and 0.8 of the backdrop, exact in 8
+    // bits, with its antialiased silhouettes and its blended quad. As many frames as the texture
+    // drawn above, so the full tier compares the same accumulation
+    background.color = Color (0xff333ca0);
+
+    SceneRenderer reference;
+    setTier (reference, GetParam());
+    renderConverged (reference, scene, 64);
+    const auto expected = renderToImage (reference, scene, 64);
+    ASSERT_TRUE (expected.isValid()) << reference.getLastError();
+
+    EXPECT_EQ (countDifferences (composited, expected), 0);
+}
+
+TEST_P (SceneRendererTierTests, OpaqueBackgroundLeavesEveryTexelOpaque)
+{
+    // With an opaque background the texture is what it always was: the color as picked where no
+    // surface was drawn, and alpha 1 everywhere, under the blended and the masked quad too
+    Scene scene;
+    buildMaterialsScene (scene);
+
+    const auto background = SceneSettings::resolve (scene).backgroundColor;
+    ASSERT_TRUE (background.isOpaque());
+
+    SceneRenderer renderer;
+    setTier (renderer, GetParam());
+    const auto image = renderConverged (renderer, scene, 64);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+    EXPECT_EQ (image.getPixelColor (1, 1).getARGB(), background.getARGB());
+
+    int translucent = 0;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x)
+            translucent += image.getPixelColor (x, y).getAlpha() != 255 ? 1 : 0;
+
+    EXPECT_EQ (translucent, 0);
+}
+
 INSTANTIATE_TEST_SUITE_P (SceneRendererTiers,
                           SceneRendererTierTests,
                           ::testing::Values (RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full),

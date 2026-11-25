@@ -1,0 +1,30 @@
+// size: 560 200
+shader Crt {
+    fragment: "fx/crt.frag";
+    property intensity: number = 0.5;
+    property tint: color = palette.accent;
+}
+
+drawing Panel {
+    rect { bounds: bounds; cornerRadius: 10; fill: palette.surface; }
+}
+
+style {
+    .panel   { drawing: Panel; }
+    .display { effect: Crt; intensity: 0.8; }
+}
+
+component Meter : Column {
+    class: panel; padding: 16; gap: 10;
+
+    Label      { text: "LEVEL"; preferredHeight: 20; }
+    Slider     { value: 0.7; flexGrow: 1; }
+    TextButton { text: "Play"; flexGrow: 1; }
+}
+
+Row {
+    gap: 24;
+
+    Meter { flexGrow: 1; }
+    Meter { class: display; flexGrow: 1; }
+}

@@ -5,6 +5,7 @@
 import base64
 import json
 from pathlib import Path
+import struct
 import subprocess
 import sys
 import tempfile
@@ -83,6 +84,93 @@ TYPED = ('import "parts.yui";\n\n'
          '    Slider { wid\n')
 PARTS = 'drawing Bar { rect { bounds: bounds; fill: #ff0000; } }\ncomponent Toolbar : Row { }\n'
 NEEDLE = "drawing Needle {\n    circle { center: bounds.center; radius: 4 * normalized; fill: #ff0000; }\n}\n"
+# An image shader tinting the picture it reads, and one whose third line does not compile
+TINT_FRAGMENT = ('#version 450\n'
+                 'layout(set = 0, binding = 0) uniform Parameters\n{\n    vec4 tint;\n    float intensity;\n} params;\n'
+                 'layout(set = 0, binding = 1) uniform texture2D source;\n'
+                 'layout(set = 0, binding = 2) uniform sampler sourceSampler;\n'
+                 'layout(location = 0) in vec2 uv;\n'
+                 'layout(location = 0) out vec4 color;\n'
+                 'void main()\n{\n    vec4 pixel = texture (sampler2D (source, sourceSampler), uv);\n'
+                 '    color = mix (pixel, pixel * params.tint, params.intensity);\n}\n')
+BROKEN_FRAGMENT = '#version 450\nlayout(location = 0) out vec4 color;\nvoid main() { color = vec4 (missingValue); }\n'
+# A material lit at its rim, and one whose third line does not compile
+RIM_MATERIAL = ('YUP_MATERIAL_PARAMS\n{\n    vec4 rim;\n    float strength;\n} params;\n\n'
+                'vec4 yupMaterial (YupSurface surface)\n{\n'
+                '    float fresnel = pow (1.0 - max (dot (surface.normal, surface.view), 0.0), 3.0);\n'
+                '    return vec4 (params.rim.rgb * fresnel, fresnel * params.strength);\n}\n')
+BROKEN_MATERIAL = 'vec4 yupMaterial (YupSurface surface)\n{\n    return vec4 (missingValue);\n}\n'
+# A shader two components are drawn through, where EXTRA is what else the shader declares
+EFFECT = ('shader Tint {\n'
+          '    fragment: "fx/tint.frag";\n'
+          '    property tint: color = #ff0000;\n'
+          '    property intensity: number = 0.5;\nEXTRA'
+          '}\n\n'
+          'style {\n    .tinted { effect: Tint; intensity: 0.8; }\n}\n\n'
+          'Component {\n    Component { class: tinted; }\n    Component { class: tinted; }\n}\n')
+# Shaders nothing uses, of a file other files import
+UNUSED = 'shader Tint {\n    fragment: "fx/tint.frag";\n}\n'
+MATERIAL = ('shader Rim {\n'
+            '    material: "fx/rim.glsl";\n'
+            '    property rim: color = #00ffff;\n'
+            '    property strength: number = 1;\nEXTRA'
+            '}\n\n'
+            'Component { }\n')
+# A red square facing the camera in the middle of a black scene, where GEOMETRY is what the square is made of
+QUAD = 'vertices: [-1, -1, 0,  1, -1, 0,  1, 1, 0,  -1, 1, 0]; indices: [0, 1, 2,  0, 2, 3];'
+SCENE = ('Scene3D {\n'
+         '    background: #000000;\n\n'
+         '    Camera3D { position: [0, 0, 3]; }\n\n'
+         '    Mesh3D {\n'
+         '        GEOMETRY\n\n'
+         '        Material3D { baseColor: #000000; emissive: #ff0000; doubleSided: true; }\n'
+         '    }\n'
+         '}\n')
+# A model of one triangle that holds its vertices itself, as a file a document embeds does
+MODEL = json.dumps({"asset": {"version": "2.0"},
+                    "scene": 0,
+                    "scenes": [{"name": "Main", "nodes": [0]}],
+                    "nodes": [{"name": "Knob", "mesh": 0}],
+                    "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+                    "buffers": [{"uri": "data:application/octet-stream;base64,"
+                                        + base64.b64encode(struct.pack("<9f", 0, 0, 0, 1, 0, 0, 0, 1, 0)).decode(),
+                                 "byteLength": 36}],
+                    "bufferViews": [{"buffer": 0, "byteLength": 36}],
+                    "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}]})
+# A document reading a file it imports, a shader and a model, all of the folder a build embeds them from
+EMBEDDED = ('import "parts/caption.yui";\n\n'
+            'shader Tint {\n'
+            '    fragment: "fx/tint.frag";\n'
+            '}\n\n'
+            'style {\n    #title { effect: Tint; }\n}\n\n'
+            'Scene3D {\n'
+            '    Model3D { source: "models/triangle.gltf"; }\n\n'
+            '    Caption { id: title; }\n'
+            '}\n')
+# An opaque red image of one pixel
+RED_PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==")
+# What an editor is asked about of shaders and of a scene: nothing of it is loaded
+SHADERS = ('shader Crt {\n'
+           '    fragment: "fx/crt.frag";\n'
+           '    property intensity: number = 0.5;\n'
+           '    property tint: color = #ff8800;\n'
+           '}\n\n'
+           'shader Hologram {\n'
+           '    material: "fx/hologram.glsl";\n'
+           '    property rim: color = #00ffff;\n'
+           '}\n\n'
+           'drawing Screen {\n'
+           '    use Crt { bounds: bounds; }\n'
+           '}\n\n'
+           'style {\n'
+           '    .display { effect: Crt; intensity: 0.8; }\n'
+           '}\n\n'
+           'Scene3D {\n'
+           '    toneMapping: agx;\n'
+           '    Mesh3D {\n'
+           '        Material3D { shader: "Hologram"; }\n'
+           '    }\n'
+           '}\n')
 SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#ff0000"/></svg>\n'
 
 
@@ -270,6 +358,235 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(self.diagnostics("lint", "--stdin", "--path", "unsaved.yui", stdin=STYLE_ONLY, code=0), [])
 
     # ==========================================================================
+    # Shaders
+
+    def test_verify_compiles_the_shader_an_effect_runs(self):
+        self.write("fx/tint.frag", TINT_FRAGMENT)
+        self.write("ui.yui", EFFECT.replace("EXTRA", ""))
+        self.assertEqual(self.diagnostics("verify", "ui.yui", code=0), [])
+
+    def test_verify_reports_what_the_compiler_of_a_shader_says(self):
+        self.write("fx/tint.frag", BROKEN_FRAGMENT)
+        path = self.write("ui.yui", EFFECT.replace("EXTRA", ""))
+
+        # Once, where the shader names its file, however many components it is the effect of
+        found = self.diagnostics("verify", "ui.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual((found[0]["file"], found[0]["line"], found[0]["column"], found[0]["severity"]), (str(path), 2, 5, "error"))
+
+        # The message of the compiler, with the line of the shader it is about, told on one line
+        message = found[0]["message"]
+        self.assertTrue(message.startswith("shader Tint: "), message)
+        self.assertRegex(message, r":3: .*missingValue")
+        self.assertNotIn("\n", message)
+
+        result = self.invoke("verify", "ui.yui")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        errors = [line for line in result.stderr.splitlines() if ": error: " in line]
+        self.assertEqual(len(errors), 1, result.stderr)
+        self.assertTrue(errors[0].startswith(f"{path}:2:5: error: shader Tint: "), errors[0])
+
+    def test_verify_reports_a_shader_file_that_is_missing(self):
+        self.write("ui.yui", EFFECT.replace("EXTRA", ""))
+        found = self.diagnostics("verify", "ui.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual((found[0]["line"], found[0]["column"]), (2, 5))
+        self.assertIn("'fx/tint.frag'", found[0]["message"])
+
+    def test_verify_reports_a_property_the_uniforms_of_a_shader_lack(self):
+        self.write("fx/tint.frag", TINT_FRAGMENT)
+        self.write("ui.yui", EFFECT.replace("EXTRA", "    property gain: number = 1;\n"))
+        found = self.diagnostics("verify", "ui.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual((found[0]["line"], found[0]["column"]), (5, 14))
+        self.assertIn("'gain'", found[0]["message"])
+
+    def test_verify_loads_the_shaders_nothing_uses(self):
+        self.write("fx/tint.frag", TINT_FRAGMENT)
+        path = self.write("parts/fx.yui", UNUSED)
+        self.write("ui.yui", 'import "parts/fx.yui";\n\nComponent { }\n')
+        self.assertEqual(self.diagnostics("verify", "ui.yui", "parts/fx.yui", code=0), [])
+
+        # A shader is told where it is declared, in the file imported
+        self.write("fx/tint.frag", BROKEN_FRAGMENT)
+        found = self.diagnostics("verify", "ui.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual((found[0]["file"], found[0]["line"], found[0]["column"]), (str(path), 2, 5))
+        self.assertIn("missingValue", found[0]["message"])
+
+        # A file of declarations names its files from the folder of the file importing it, so it is checked with that file
+        self.assertEqual(self.diagnostics("verify", "parts/fx.yui", code=0), [])
+
+    def test_verify_compiles_a_material(self):
+        self.write("fx/rim.glsl", RIM_MATERIAL)
+        self.write("ui.yui", MATERIAL.replace("EXTRA", ""))
+        self.assertEqual(self.diagnostics("verify", "ui.yui", code=0), [])
+
+        # A property fills the member of its name in the uniforms of the material
+        self.write("ui.yui", MATERIAL.replace("EXTRA", "    property glow: number = 1;\n"))
+        found = self.diagnostics("verify", "ui.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual((found[0]["line"], found[0]["column"]), (5, 14))
+        self.assertIn("'glow'", found[0]["message"])
+
+    def test_verify_reports_what_is_wrong_with_a_material(self):
+        path = self.write("ui.yui", MATERIAL.replace("EXTRA", ""))
+        found = self.diagnostics("verify", "ui.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual((found[0]["file"], found[0]["line"], found[0]["column"]), (str(path), 2, 5))
+        self.assertIn("'fx/rim.glsl'", found[0]["message"])
+
+        # The compiler tells the lines of the material from its first one
+        self.write("fx/rim.glsl", BROKEN_MATERIAL)
+        found = self.diagnostics("verify", "ui.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual((found[0]["line"], found[0]["column"]), (2, 5))
+        self.assertTrue(found[0]["message"].startswith("shader Rim: "), found[0]["message"])
+        self.assertIn("missingValue", found[0]["message"])
+        self.assertIn("material:3", found[0]["message"])
+        self.assertNotIn("\n", found[0]["message"])
+
+    def test_verify_checks_the_shader_a_material_is_drawn_by(self):
+        scene = SCENE.replace("GEOMETRY", QUAD).replace("Material3D {", 'Material3D { shader: "Rim";')
+        self.write("fx/rim.glsl", RIM_MATERIAL)
+        self.write("ui.yui", MATERIAL.replace("EXTRA", "").replace("Component { }\n", scene))
+        self.assertEqual(self.diagnostics("verify", "ui.yui", code=0), [])
+
+        # What is wrong with the shader is told once where it is declared, whatever the material it leaves undrawn tells
+        self.write("fx/rim.glsl", BROKEN_MATERIAL)
+        declared = [entry for entry in self.diagnostics("verify", "ui.yui", code=1) if (entry["line"], entry["column"]) == (2, 5)]
+        self.assertEqual(len(declared), 1, declared)
+        self.assertTrue(declared[0]["message"].startswith("shader Rim: "), declared[0]["message"])
+
+        # A material names a shader the document declares
+        self.write("fx/rim.glsl", RIM_MATERIAL)
+        self.write("ui.yui", MATERIAL.replace("EXTRA", "").replace("Component { }\n", scene.replace('"Rim"', '"Missing"')))
+        found = self.diagnostics("verify", "ui.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual(found[0]["line"], 15)
+        self.assertIn("'Missing'", found[0]["message"])
+
+    # ==========================================================================
+    # 3D scenes
+
+    def test_verify_accepts_a_scene(self):
+        self.write("ui.yui", SCENE.replace("GEOMETRY", QUAD))
+        self.assertEqual(self.diagnostics("verify", "ui.yui", code=0), [])
+
+    def test_verify_reports_the_arrays_of_a_mesh_that_dont_fit(self):
+        path = self.write("ui.yui", SCENE.replace("GEOMETRY", "vertices: [0, 0, 0,  1, 0, 0,  0, 1, 0]; indices: [0, 1, 7];"))
+        found = self.diagnostics("verify", "ui.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual((found[0]["file"], found[0]["line"], found[0]["severity"]), (str(path), 7, "error"))
+        self.assertTrue(found[0]["message"].startswith("Mesh3D.indices: "), found[0]["message"])
+
+    def test_verify_loads_the_models_and_the_textures_of_a_scene(self):
+        scene = ('Scene3D {\n'
+                 '    Model3D { source: "models/triangle.gltf"; }\n\n'
+                 '    Mesh3D {\n'
+                 '        ' + QUAD + '\n'
+                 '        Material3D { baseColorTexture: "textures/red.png"; }\n'
+                 '    }\n'
+                 '}\n')
+
+        self.write("models/triangle.gltf", MODEL)
+        (self.root / "textures").mkdir()
+        (self.root / "textures" / "red.png").write_bytes(RED_PNG)
+        self.write("ui.yui", scene)
+        self.assertEqual(self.diagnostics("verify", "ui.yui", code=0), [])
+
+        # What can't be read is told where it is named, and so is what is not what it is named as
+        self.write("ui.yui", scene.replace("triangle", "missing").replace("red.png", "missing.png"))
+        found = {entry["line"]: entry["message"] for entry in self.diagnostics("verify", "ui.yui", code=1)}
+        self.assertEqual(sorted(found), [2, 6], found)
+        self.assertIn("Model3D.source: ", found[2])
+        self.assertIn("'models/missing.gltf'", found[2])
+        self.assertIn("Material3D.baseColorTexture: ", found[6])
+        self.assertIn("'textures/missing.png'", found[6])
+
+        self.write("models/missing.gltf", "not a model")
+        (self.root / "textures" / "missing.png").write_bytes(b"not an image")
+        found = {entry["line"]: entry["message"] for entry in self.diagnostics("verify", "ui.yui", code=1)}
+        self.assertEqual(sorted(found), [2, 6], found)
+        self.assertNotIn("'models/missing.gltf'", found[2])
+        self.assertNotIn("'textures/missing.png'", found[6])
+
+    # ==========================================================================
+    # verify of what a build embeds
+
+    def embed(self, *listed):
+        """Writes a document and what it reads in the folder a build embeds them from, with the list of what is embedded."""
+        self.write("ui/main.yui", EMBEDDED)
+        self.write("ui/parts/caption.yui", 'component Caption : Label { text: "Imported"; }\n')
+        self.write("ui/fx/tint.frag", TINT_FRAGMENT)
+        self.write("ui/models/triangle.gltf", MODEL)
+        self.write("embedded.txt", "\n\n".join(listed) + "\n")
+
+    def embedded(self, *files, code=None):
+        return self.diagnostics("verify", "--embedded-base", "ui", "--embedded", "embedded.txt", *files, code=code)
+
+    def test_verify_checks_a_document_as_it_is_loaded_from_what_is_embedded(self):
+        everything = ("main.yui", "parts/caption.yui", "fx/tint.frag", "models/triangle.gltf")
+        main = str(self.root / "ui" / "main.yui")
+
+        self.embed(*everything)
+        self.assertEqual(self.embedded("ui/main.yui", "ui/parts/caption.yui", code=0), [])
+
+        # What the document reads that is there and is not embedded is told as that, before what follows from it
+        for left_out in everything[1:]:
+            with self.subTest(left_out=left_out):
+                self.embed(*(path for path in everything if path != left_out))
+                found = self.embedded("ui/main.yui", code=1)
+                self.assertGreater(len(found), 1, found)
+                self.assertEqual((found[0]["file"], found[0]["line"], found[0]["severity"]), (main, 0, "error"))
+                self.assertEqual(found[0]["message"], f"'{left_out}' is read by 'main.yui' but is not embedded")
+                self.assertEqual(len([entry for entry in found if "is not embedded" in entry["message"]]), 1, found)
+
+        result = self.invoke("verify", "--embedded-base", "ui", "--embedded", "embedded.txt", "ui/main.yui")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(f"{main}: error: 'models/triangle.gltf' is read by 'main.yui' but is not embedded\n", result.stderr)
+
+    def test_verify_of_what_is_embedded_compiles_the_shaders_from_their_source(self):
+        self.embed("main.yui", "parts/caption.yui", "fx/tint.frag", "models/triangle.gltf")
+        self.write("ui/fx/tint.frag", BROKEN_FRAGMENT)
+        found = self.embedded("ui/main.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual((found[0]["line"], found[0]["column"]), (4, 5))
+        self.assertIn("missingValue", found[0]["message"])
+
+        # A bundle is what a build makes of the source: one lying next to it is neither read nor told to be missing
+        self.write("ui/fx/tint.frag", TINT_FRAGMENT)
+        self.write("ui/fx/tint.frag.ysl", "not a bundle")
+        self.assertEqual(self.embedded("ui/main.yui", code=0), [])
+
+    def test_verify_of_what_is_embedded_leaves_what_is_missing_to_what_reads_it(self):
+        self.embed("main.yui", "parts/caption.yui", "fx/tint.frag", "models/triangle.gltf")
+        (self.root / "ui" / "models" / "triangle.gltf").unlink()
+        found = self.embedded("ui/main.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual(found[0]["line"], 12)
+        self.assertIn("'models/triangle.gltf'", found[0]["message"])
+        self.assertNotIn("is not embedded", found[0]["message"])
+
+    def test_verify_of_what_is_embedded_takes_the_files_embedded(self):
+        self.embed("main.yui", "parts/caption.yui", "fx/tint.frag", "models/triangle.gltf")
+        self.write("ui/spare.yui", VALID)
+        self.write("other.yui", VALID)
+
+        # A file is one of those embedded, which are in their folder
+        self.assertEqual([entry["message"] for entry in self.embedded("ui/spare.yui", code=1)], ["'spare.yui' is not one of the embedded files"])
+        found = self.embedded("other.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("the folder of the embedded files", found[0]["message"])
+
+        # The folder and the list go together, and are told to verify
+        self.assertEqual(self.invoke("verify", "--embedded-base", "ui", "ui/main.yui").returncode, 2)
+        self.assertEqual(self.invoke("verify", "--embedded", "embedded.txt", "ui/main.yui").returncode, 2)
+        self.assertEqual(self.invoke("verify", "--embedded-base", "ui", "--embedded", "missing.txt", "ui/main.yui").returncode, 2)
+        self.assertEqual(self.invoke("verify", "--embedded-base", "missing", "--embedded", "embedded.txt", "ui/main.yui").returncode, 2)
+        self.assertEqual(self.invoke("lint", "--embedded-base", "ui", "--embedded", "embedded.txt", "ui/main.yui").returncode, 2)
+
+    # ==========================================================================
     # schema
 
     def test_schema_describes_the_registered_types(self):
@@ -317,6 +634,19 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
         self.assertEqual(json.loads((self.root / "schema.json").read_text())["version"], 1)
+
+    def test_schema_describes_the_3d_types(self):
+        schema = json.loads(self.invoke("schema").stdout)
+        types = {entry["name"]: entry for entry in schema["types"]}
+
+        self.assertTrue({"Scene3D", "Node3D", "Camera3D", "Light3D", "Mesh3D", "Model3D", "Material3D"} <= set(types))
+        self.assertEqual((types["Scene3D"]["base"], types["Model3D"]["base"], types["Material3D"]["base"]), ("Component", "Node3D", "Component"))
+        self.assertTrue(types["Scene3D"]["instantiable"])
+
+        model = {entry["name"]: entry for entry in types["Model3D"]["properties"]}
+        self.assertEqual(model["source"]["type"], "string")
+        self.assertIn("agx", {entry["name"]: entry for entry in types["Scene3D"]["properties"]}["toneMapping"]["values"])
+        self.assertEqual({entry["name"]: entry for entry in types["Mesh3D"]["properties"]}["vertices"]["type"], "array")
 
     # ==========================================================================
     # import-svg
@@ -447,6 +777,21 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(self.render("ui.yui", "--guides", "first,1", "--scale", "1"), (100, 80))
         self.assertNotEqual((self.root / "out.png").read_bytes(), plain)
 
+    def test_render_draws_a_scene_once_it_has_settled(self):
+        self.write("scene.yui", SCENE.replace("GEOMETRY", QUAD))
+        self.assertEqual(self.render("scene.yui", "--size", "64x64", "--scale", "1"), (64, 64))
+
+        # The square shows in the middle of the scene, and the background of the scene around it
+        self.render("scene.yui", "--size", "64x64", "--scale", "1", "--region", "0,0,8,8")
+        corner = self.first_pixel()
+        self.render("scene.yui", "--size", "64x64", "--scale", "1", "--region", "28,28,8,8")
+        self.assertGreater(self.first_pixel()[0], corner[0])
+
+        # A scene standing still is drawn until it shows its final picture, so nothing is told about it
+        result = self.invoke("render", "scene.yui", "--output", "out.png", "--size", "64x64", "--scale", "1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("Scene3D", result.stderr)
+
     def test_render_reports_what_cant_be_drawn(self):
         self.write("broken.yui", UNKNOWN_TYPE)
         self.write("empty.yui", "")
@@ -514,6 +859,16 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(len(layout["warnings"]), 1, layout["warnings"])
         self.assertIn("Row #bar has no ", layout["warnings"][0]["message"])
         self.assertEqual((layout["warnings"][0]["path"], layout["warnings"][0]["line"]), ("0", 2))
+
+    def test_inspect_describes_a_scene(self):
+        self.write("scene.yui", SCENE.replace("GEOMETRY", QUAD))
+        layout = self.inspect("scene.yui", "--size", "64x64")
+
+        # What is of a scene is not laid out, so it is not told to lack a size
+        self.assertEqual(layout["warnings"], [])
+
+        camera, mesh = layout["root"]["children"]
+        self.assertEqual((layout["root"]["type"], camera["type"], mesh["type"], mesh["children"][0]["type"]), ("Scene3D", "Camera3D", "Mesh3D", "Material3D"))
 
     def test_inspect_lays_out_what_a_file_declares(self):
         self.write("dot.yui", "drawing Dot {\n    circle { center: bounds.center; radius: 20; fill: #ff0000; }\n}\n")
@@ -674,6 +1029,93 @@ class YuiToolCliTests(unittest.TestCase):
 
         # Only what a statement starts with is one
         self.assertEqual(self.ask("hover", "ui.yui", "--at", self.place(TYPED, "id: cutoff", 1)), {})
+
+    def test_editor_commands_tell_the_shaders_of_a_file(self):
+        path = self.write("fx.yui", SHADERS)
+        crt = 'shader Crt {\n    fragment: "fx/crt.frag";\n    property intensity: number;\n    property tint: color;\n}'
+
+        def ask(command, marker, inside=1):
+            return self.ask(command, "fx.yui", "--at", self.place(SHADERS, marker, inside))
+
+        # A shader is outlined with what it declares, and is nothing that is shown by itself
+        outline = self.ask("outline", "fx.yui")
+        symbols = outline["symbols"]
+        self.assertEqual([(symbol["name"], symbol["kind"]) for symbol in symbols],
+                         [("Crt", "shader"), ("Hologram", "shader"), ("Screen", "drawing"), ("style", "style"), ("Scene3D", "element")])
+        self.assertEqual([(child["name"], child["kind"], child["detail"]) for child in symbols[0]["children"]],
+                         [("intensity", "property", "number"), ("tint", "property", "color")])
+        self.assertEqual((symbols[0]["range"][:2], symbols[0]["selection"]), ([1, 1], [1, 1, 1, 11]))
+        self.assertEqual([target["id"] for target in outline["targets"]], ["root", "drawing:Screen"])
+
+        # It is declared where its name is written, wherever it is named from
+        declared = {"file": str(path), "line": 1, "column": 8}
+        self.assertEqual(ask("definition", ".display { effect: Crt"), declared)
+        self.assertEqual(ask("definition", "    use Crt"), declared)
+        self.assertEqual(ask("definition", 'Material3D { shader: "Hologram'), {"file": str(path), "line": 7, "column": 8})
+
+        # And told there as it is declared: the file it is made from and what it takes
+        told = ask("hover", ".display { effect: Crt")
+        self.assertEqual((told["code"], told["range"]), (crt, [17, 24, 17, 27]))
+        self.assertEqual(ask("hover", "    use Crt")["code"], crt)
+        self.assertEqual(ask("hover", "shader Crt")["code"], crt)
+        told = ask("hover", 'Material3D { shader: "Hologram')
+        self.assertEqual((told["code"], told["range"]),
+                         ('shader Hologram {\n    material: "fx/hologram.glsl";\n    property rim: color;\n}', [23, 31, 23, 39]))
+
+        # A string that names no shader is nothing
+        self.assertEqual(ask("hover", 'fragment: "fx/crt'), {})
+        self.assertEqual(ask("definition", 'fragment: "fx/crt'), {})
+
+    def test_complete_tells_the_shaders_and_what_they_take(self):
+        self.write("fx.yui", SHADERS)
+
+        def labels(marker):
+            found = self.ask("complete", "fx.yui", "--at", self.place(SHADERS, marker))
+            return {item["label"]: item for item in found["items"]}
+
+        # A shader is declared at the top of a file, and names in its block what it is made from and what it takes
+        self.assertIn("shader", {item["label"] for item in self.ask("complete", "fx.yui", "--at", "99:99")["items"]})
+        self.assertEqual(sorted(labels("property tint: color = #ff8800;\n")), ["fragment", "material", "property"])
+
+        # An effect and a drawing run a shader made from a fragment, a material is drawn by one made from a material
+        effects = labels(".display { effect: ")
+        self.assertEqual((effects["Crt"]["kind"], effects["Crt"]["detail"]), ("shader", 'fragment: "fx/crt.frag"'))
+        self.assertIn("none", effects)
+        self.assertNotIn("Hologram", effects)
+
+        used = labels("    use ")
+        self.assertTrue({"Crt", "Screen"} <= set(used))
+        self.assertNotIn("Hologram", used)
+
+        # Which it names bare, as a drawing is named, and still in a string being typed, where nothing else is told
+        materials = labels("Material3D { shader: ")
+        self.assertEqual((materials["Hologram"]["kind"], materials["Hologram"]["detail"]), ("shader", 'material: "fx/hologram.glsl"'))
+        self.assertNotIn("Crt", materials)
+        self.assertEqual(list(labels('Material3D { shader: "')), ["Hologram"])
+
+        # What a shader declares is set where it is used: in the rule picking it, in a `use` and on a material
+        self.assertEqual(labels("effect: Crt; intensity: 0.8;")["tint"]["detail"], "color")
+        self.assertTrue({"intensity", "tint", "bounds"} <= set(labels("use Crt { bounds: bounds;")))
+
+        material = labels('Material3D { shader: "Hologram";')
+        self.assertEqual(material["rim"]["detail"], "color")
+        self.assertIn("roughness", material)
+
+    def test_editor_commands_tell_the_3d_types(self):
+        self.write("fx.yui", SHADERS)
+
+        def ask(command, marker, inside=0):
+            return self.ask(command, "fx.yui", "--at", self.place(SHADERS, marker, inside))
+
+        # They are types as any other: what a scene holds, and the properties of each
+        labels = {item["label"]: item for item in ask("complete", "Scene3D {\n")["items"]}
+        self.assertEqual((labels["Mesh3D"]["kind"], labels["background"]["kind"], labels["background"]["detail"]), ("type", "property", "color"))
+        self.assertTrue({"Camera3D", "Light3D", "Model3D", "Node3D", "Material3D", "toneMapping"} <= set(labels))
+        self.assertIn("agx", {item["label"] for item in ask("complete", "toneMapping: ")["items"]})
+
+        told = ask("hover", "    toneMapping", 1)
+        self.assertEqual(told["code"], "toneMapping: enumeration")
+        self.assertIn("agx", told["values"])
 
     def test_editor_commands_usage_errors(self):
         self.write("ui.yui", VALID)
@@ -870,7 +1312,7 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertTrue(self.call("yui_schema", type="Slidr")[0])
 
     def test_mcp_describes_drawings_styles_and_expressions(self):
-        self.assertEqual(json.loads(self.call("yui_schema")[1])["topics"], ["components", "drawing", "styles", "expressions"])
+        self.assertEqual(json.loads(self.call("yui_schema")[1])["topics"], ["components", "drawing", "styles", "expressions", "shaders", "scenes"])
         self.assertIn("types", json.loads(self.call("yui_schema", topic="components")[1]))
 
         drawing = json.loads(self.call("yui_schema", topic="drawing")[1])
@@ -899,6 +1341,32 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertTrue(all(topic["docs"].endswith(".md") for topic in (drawing, styles, expressions)))
         self.assertTrue(self.call("yui_schema", topic="colors")[0])
         self.assertTrue(self.call("yui_schema", topic="drawing", type="Slider")[0])
+
+    def test_mcp_tells_how_shaders_and_scenes_are_written(self):
+        shaders = json.loads(self.call("yui_schema", topic="shaders")[1])
+        scenes = json.loads(self.call("yui_schema", topic="scenes")[1])
+
+        self.assertTrue({"number", "color", "number[]"} <= set(shaders["propertyTypes"]))
+        self.assertNotIn("string", shaders["propertyTypes"])
+        self.assertEqual(len(shaders["uses"]), 4)
+        self.assertIn("vec3 normal", " ".join(shaders["surface"]))
+        self.assertEqual([entry["name"] for entry in scenes["types"]], ["Scene3D", "Node3D", "Camera3D", "Light3D", "Mesh3D", "Model3D", "Material3D"])
+        self.assertTrue(all(topic["docs"].endswith(".md") and topic["notes"] for topic in (shaders, scenes)))
+
+        # What they give as an example is what the tool accepts
+        self.write("fx/name.frag", shaders["fragment"])
+        self.write("fx/glow.glsl", shaders["material"])
+        self.write("fx.yui", shaders["block"] + '\n\nshader Glow { material: "fx/glow.glsl"; property rim: color = #00ffff; }\n\nComponent { }\n')
+        self.assertEqual(self.diagnostics("verify", "fx.yui", code=0), [])
+
+        # They are compiled: the same document with nothing to compile from does not verify
+        (self.root / "fx" / "name.frag").unlink()
+        (self.root / "fx" / "glow.glsl").unlink()
+        self.assertEqual(len(self.diagnostics("verify", "fx.yui", code=1)), 2)
+
+        self.write("models/device.glb", MODEL)
+        self.write("scene.yui", scenes["example"])
+        self.assertEqual(self.diagnostics("verify", "scene.yui", code=0), [])
 
     def test_mcp_renders_an_image_in_the_states_asked(self):
         self.write("ui.yui", HOVER)
@@ -997,6 +1465,16 @@ class YuiToolCliTests(unittest.TestCase):
         self.write("ui.yui", HOVER)
         self.draw(file="ui.yui", size="8x8", events=[{"id": "panel", "type": "hover"}])
         self.assertEqual(self.first_pixel(), (255, 0, 0))
+
+    def test_mcp_renders_a_scene_once_it_has_settled(self):
+        self.write("scene.yui", SCENE.replace("GEOMETRY", QUAD))
+
+        told, _ = self.draw(file="scene.yui", size="64x64", region=[0, 0, 8, 8])
+        corner = self.first_pixel()
+        self.assertEqual(told["problems"], [])
+
+        self.draw(file="scene.yui", size="64x64", region=[28, 28, 8, 8])
+        self.assertGreater(self.first_pixel()[0], corner[0])
 
     def draw(self, **arguments):
         """Calls yui_render: returns what it tells and its image, skipping where nothing can draw."""

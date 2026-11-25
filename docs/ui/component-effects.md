@@ -1,7 +1,8 @@
 # Component Effects (Shaders)
 
 This guide explains how to apply GPU shader effects to a `Component` and its
-subtree via the `ComponentEffect` base class.
+subtree: with a `ShaderEffect`, which runs a fragment shader as it is, or with
+a subclass of the `ComponentEffect` base class.
 
 ## Overview
 
@@ -44,6 +45,72 @@ rectangle at the origin.
 A margin that shrinks keeps the texture it has, so a margin that is animated
 allocates nothing once it has been at its largest. `bounds` stay as large as the
 texture, and what the effect draws past the paint bounds is still cut.
+
+---
+
+## Shader Effects
+
+An effect that is one fragment shader needs no subclass. `ShaderEffect` runs a
+[`GpuImageShader`](../graphics/rhi/image-shaders.md) over what the component
+painted, and fills the uniform block of the shader from the properties of the
+component, by name:
+
+```cpp
+auto shader = yup::GpuImageShader::createFromData (data, size);    // a .ysl bundle, or GLSL with the transpiler
+
+if (shader.wasOk())
+{
+    display.setComponentEffect (new yup::ShaderEffect (display, shader.getValue(), { { "intensity", yup::ComponentProperty::Type::number },
+                                                                                      { "tint", yup::ComponentProperty::Type::color } }));
+
+    display.setProperty ("intensity", 0.4);
+    display.setColor ("tint", yup::Colors::orange);
+}
+```
+
+```glsl
+#version 450
+
+layout(set = 0, binding = 0) uniform Parameters
+{
+    vec4 tint;          // the property tint: sRGB, not multiplied by its alpha
+    float intensity;    // the property intensity
+    vec2 resolution;    // filled by the effect: the size of the picture in pixels
+} params;
+
+layout(set = 0, binding = 1) uniform texture2D source;
+layout(set = 0, binding = 2) uniform sampler sourceSampler;
+
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+
+void main()
+{
+    vec4 pixel = texture (sampler2D (source, sourceSampler), uv);
+    vec4 tint = vec4 (params.tint.rgb * params.tint.a, params.tint.a);    // multiplied by its alpha, as the picture is
+
+    color = mix (pixel, pixel * tint, params.intensity);
+}
+```
+
+- Each property named is read with `Component::findProperty()` at every paint,
+  so what sets it drives the shader and repaints the component: a stylesheet
+  rule, a transition, a binding or `setProperty()`.
+- A `number`, an `integer` and a `boolean` fill a scalar, a `color` a `vec4`
+  (or a `vec3`), a `point` a `vec2`, a `rectangle` a `vec4`, and an array of
+  numbers an array or a vector.
+- The effect fills `resolution`, `scale` (the pixels a unit takes) and `time`
+  (the seconds the component has been showing for) when the block has them and
+  no property takes their name. A shader with `time` repaints its component at
+  every frame.
+- An effect reads the properties of the component it was created for: create
+  one for each component. They can share the `GpuImageShader`.
+- Where the shader can't be drawn, the component is drawn as it is.
+
+In a `.yui` document the same effect is a `shader` block that a rule selects
+with `effect:`, with nothing to write in C++, see
+[Shaders](yui/shaders.md#as-the-effect-of-a-component). An effect that needs
+several passes, or a pipeline of its own, is a subclass:
 
 ---
 
@@ -154,6 +221,7 @@ needs no custom GLSL:
 | `GlowEffect` | Additive tinted bloom composited with the sharp subtree | `radius`, `intensity` (`0..1`), `color` |
 | `ColorMatrixEffect` | 4x5 RGBA color-matrix transform with CSS/SVG presets | `Matrix`, or `grayscale`, `sepia`, `invert`, `saturate`, `brightness`, `contrast`, `hueRotate`, `opacity` |
 | `FilterEffect` | Ordered chain of CSS `<filter-function>` operations | `blur`, `brightness`, `contrast`, `drop-shadow`, `grayscale`, `hue-rotate`, `invert`, `opacity`, `saturate`, `sepia` |
+| `ShaderEffect` | A fragment shader of your own, see [Shader Effects](#shader-effects) | The properties of the component the shader reads |
 
 ```cpp
 // Attach a built-in C++ effect directly:
@@ -193,9 +261,10 @@ Stylesheets separate built-in CSS filter chains from application-defined effects
   color arguments, automatically expands the component's paint margin for
   `blur(...)` and `drop-shadow(...)` outsets, and animates smoothly through
   `transition:` and `@keyframes`.
-- **`effect:`** looks up a custom effect factory by name in
-  `ComponentEffectRegistry` and calls `setComponentEffect`, so both `filter:`
-  and a custom `effect:` can be active on the same component:
+- **`effect:`** runs the `shader` block of that name through a `ShaderEffect`,
+  see [Shaders](yui/shaders.md), or else looks up a custom effect factory by
+  name in `ComponentEffectRegistry`. Either way it calls `setComponentEffect`,
+  so both `filter:` and an `effect:` can be active on the same component:
 
 ```cpp
 yup::ComponentEffectRegistry::getInstance().registerEffect ("crtScan", []
@@ -356,6 +425,9 @@ this way.
 - [Component caching](component-caching.md)
 - [Component snapshots](component-snapshots.md)
 - [Components in 3D](component-3d.md) — present a live component on a mesh
+- [Image shaders](../graphics/rhi/image-shaders.md) - `GpuImageShader` and
+  `ShaderUniforms`, what a `ShaderEffect` draws with
+- [Shaders in `.yui`](yui/shaders.md) - shader effects declared in a document
 - [RHI pipelines](../graphics/rhi/pipelines.md) — `GpuPipeline` and
   `GpuRenderPass` details
 - [Graphics `drawTexture`](../graphics/graphics-class.md)

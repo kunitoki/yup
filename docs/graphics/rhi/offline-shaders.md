@@ -303,10 +303,14 @@ yup_add_shader_bundle(my_shaders
 | `yup_add_shader_bundle` + `compileFromBundle` | **Recommended for shipping.** No transpiler in the final binary; cross-compile friendly; deterministic builds. |
 | `compileFromBundle` with a hand-built `.ysl` | Custom asset pipelines, or loading bundles from disk at runtime. |
 | `compileFromGlsl` | Live shader editing / prototyping. Requires `YUP_ENABLE_SHADER_TRANSPILER`. |
+| `yup_add_yui_resources (... SHADERS ... MATERIAL_SHADERS ...)` | The shaders of a `.yui` document: compiled with the application and embedded beside its files, see [Shaders](../../ui/yui/shaders.md#loading-and-shipping). |
 
 ## See also
 
 - [Pipelines & shaders](pipelines.md) - compiling and configuring pipelines.
+- [Image shaders](image-shaders.md) - a fragment shader drawn over a target,
+  paired with `shaders/yup_GpuImageShader.vert` of `yup_rhi` when it is built
+  ahead of time.
 - [Shader bundle binary format](shader-bundle-format.md) - the RIFF `YSLB` container
   specification for `.ysl` files.
 - [`yup_add_embedded_binary_resources`](../../build-system/cmake-api.md#yup_add_embedded_binary_resources) -

@@ -385,6 +385,9 @@ private:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Widgets
 #include "examples/Widgets.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Yui3D
+#include "examples/Yui3D.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_YuiDrawing
 #include "examples/YuiDrawing.h"
 #endif
@@ -664,6 +667,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Widgets
         addDemo ("Widgets", "Widgets", [] { return std::make_unique<WidgetsDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Yui3D
+        addDemo ("Yui3D", "YUI 3D", [] { return std::make_unique<Yui3DDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_YuiDrawing
         addDemo ("YuiDrawing", "YUI Drawing", [] { return std::make_unique<YuiDrawingDemo>(); });

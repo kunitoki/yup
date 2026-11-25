@@ -273,9 +273,17 @@ view.getRenderer().setRenderSettings (settings);
   good there.
 - Every reflection is traced at half resolution, one ray per 2 x 2 pixels around
   the sharpest part of the reflection, and each pixel combines the rays of its
-  neighbors. Glossy reflections are noisy at first and settle as the image
-  converges, like soft shadows: temporal anti-aliasing averages the rays, which
-  change every frame.
+  neighbors. A ray reads the image blurred over the part of the reflection it
+  stands for, wider on a rougher surface and farther from what it reflects: a
+  small bright thing, such as an LED or the patch a light leaves on a panel,
+  glows softly in a rough surface instead of sparkling in the few rays that
+  reach it.
+- The reflections are then filtered over neighboring pixels and over the
+  previous frames, so they hold still while lights and objects move. A glossy
+  reflection follows what moves within a few frames, trailing a little like
+  motion blur, and the reflection of something that disappeared leaves at once.
+  What noise is left changes every frame and is averaged by temporal
+  anti-aliasing as the image converges, like soft shadows.
 - What the reflection replaces is the reflected light itself: the surface keeps
   its reflectance, its ambient occlusion and its material occlusion. The flat
   ambient color is not a reflection and still adds to it.

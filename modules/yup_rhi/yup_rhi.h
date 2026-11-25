@@ -99,3 +99,5 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "rhi/yup_GpuTarget.h"
 #include "rhi/yup_GpuPipelineCache.h"
 #include "rhi/yup_ShaderBindingMap.h"
+#include "rhi/yup_ShaderUniforms.h"
+#include "rhi/yup_GpuImageShader.h"

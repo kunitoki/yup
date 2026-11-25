@@ -25,6 +25,7 @@
 #include "../source/yup_YuiToolSupport.h"
 
 #include <yup_gui/yup_gui.h>
+#include <yup_renderer/yup_renderer.h>
 
 #include <SDL3/SDL_hints.h>
 
@@ -35,6 +36,7 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 using namespace yup;
@@ -50,6 +52,62 @@ namespace
 File getFilesFolder()
 {
     return File ("/yui");
+}
+
+// Calls a function with a component, then with each of those it holds
+template <class Function>
+void forEachComponent (Component& component, Function&& call)
+{
+    call (component);
+
+    for (int index = 0; index < component.getNumChildComponents(); ++index)
+        forEachComponent (*component.getChildComponent (index), call);
+}
+
+// The files a document reads beside its texts, as it names them: those of its shaders, each after what a build compiles
+// it into, which is read in its place, then the models and the images of the scenes its interface shows
+StringArray findNamedFiles (YuiDocument& document)
+{
+    StringArray names;
+
+    for (const auto& element : document.getTree())
+    {
+        if (element.getType().toString() != "shader")
+            continue;
+
+        if (const auto fragment = element.getProperty ("fragment").toString(); fragment.isNotEmpty())
+        {
+            if (! fragment.endsWithIgnoreCase (".ysl"))
+                names.add (fragment + ".ysl");
+
+            names.add (fragment);
+        }
+
+        if (const auto material = element.getProperty ("material").toString(); material.isNotEmpty())
+        {
+            names.add (material + ".raster.ysl");
+            names.add (material + ".full.ysl");
+            names.add (material);
+        }
+    }
+
+    if (auto* root = document.getRoot())
+    {
+        forEachComponent (*root, [&names] (Component& component)
+        {
+            if (const auto* model = dynamic_cast<const SceneModelComponent*> (&component))
+                names.add (model->getSource());
+
+            if (dynamic_cast<const SceneMaterialComponent*> (&component) == nullptr)
+                return;
+
+            for (const auto* property : component.getTypeInfo().getAllProperties())
+                if (property->name.toString().endsWith ("Texture"))
+                    names.add (component.getProperty (property->name).toString());
+        });
+    }
+
+    return names;
 }
 
 // The values of the models as an agent reads them. A long list is the data of a meter rather than something
@@ -302,7 +360,8 @@ public:
 
         The page is told that part through Module.yuiPreviewFramed before the window takes its size,
         which is when the density of the display is read again: the page changes it there to zoom,
-        and answers how many times larger the interface is then seen.
+        and answers how many times larger the interface is then seen. Once the window drew,
+        Module.yuiPreviewDrawn is told why a scene of the interface could not be drawn, or nothing.
     */
     void setView (Size<int> size)
     {
@@ -342,6 +401,14 @@ public:
 
         // The browser cleared the canvas if it got other pixels, and would show it empty until the next frame
         yupRenderPrimaryWindow();
+
+        // A scene that could not be drawn shows why in its place: the page lists it with the problems of the document
+        // clang-format off
+        EM_ASM ({
+            if (Module.yuiPreviewDrawn)
+                Module.yuiPreviewDrawn (UTF8ToString ($0));
+        }, findSceneProblem().toRawUTF8());
+        // clang-format on
     }
 
     /** Shows or hides the guides over the interface. */
@@ -512,6 +579,26 @@ public:
     }
 
 private:
+    // Why the frame drawn last could not draw a scene of the interface, nothing when it drew them all
+    String findSceneProblem()
+    {
+        auto* root = session != nullptr ? session->view.getDocument().getRoot() : nullptr;
+        auto* native = getNativeComponent();
+        auto* context = native != nullptr ? native->getGraphicsContext() : nullptr;
+        String problem;
+
+        if (root == nullptr || context == nullptr)
+            return problem;
+
+        forEachComponent (*root, [&problem, context] (Component& component)
+        {
+            if (auto* scene = dynamic_cast<SceneComponent*> (&component); scene != nullptr && problem.isEmpty())
+                problem = context->isGpuAvailable() ? scene->getRenderer().getLastError() : String ("GPU rendering is not available");
+        });
+
+        return problem;
+    }
+
     // Measures the components the window holds now: those a load makes are measured once it made them
     void measurePainting()
     {
@@ -542,6 +629,9 @@ private:
 
 PreviewWindow* previewWindow = nullptr;
 MemoryBlock pendingFile;
+
+// The files the documents loaded since the host last asked name without having been given them, see yuiToolMissingFiles
+StringArray missingFiles;
 
 //==============================================================================
 // Sets the module up to work on the files of its host with no page to open a window in: once, as an
@@ -654,6 +744,27 @@ private:
 } // namespace
 
 //==============================================================================
+// Called by the tool with each document it loads from a file, see yup_YuiToolSupport.h. The files are those the host
+// gave: the ones the document names that are not among them are kept for the host to ask, by their path from the
+// folder of the files as the document names them from its own
+void noteYuiToolMissingFiles (YuiDocument& document)
+{
+    const auto folder = document.getBaseDirectory();
+
+    if (folder == File())
+        return;
+
+    for (const auto& name : findNamedFiles (document))
+    {
+        // An absolute path is no file of the host, which gives them by where they are from the document
+        if (name.isEmpty() || File::isAbsolutePath (name) || folder.getChildFile (name).existsAsFile())
+            continue;
+
+        missingFiles.addIfNotAlreadyThere (folder.getRelativePathFrom (getFilesFolder()) + "/" + name);
+    }
+}
+
+//==============================================================================
 // Called by the host of the module, which gives it the files to work on.
 extern "C"
 {
@@ -683,6 +794,18 @@ extern "C"
     void EMSCRIPTEN_KEEPALIVE yuiToolRemoveFile (const char* path)
     {
         getFilesFolder().getChildFile (String::fromUTF8 (path)).deleteFile();
+    }
+
+    // Returns the files the documents loaded since this was last called name without having been given them, and
+    // forgets them: a JSON array of paths from the folder of the files, each written as the folder of its document
+    // followed by the path the document names it by. They are what a document reads beside its texts: its shaders,
+    // each with what a build compiles it into, and the models and the images of its scenes. The host gives those it
+    // has, then runs again what it ran
+    const char* EMSCRIPTEN_KEEPALIVE yuiToolMissingFiles()
+    {
+        static std::string text;
+        text = JSON::toString (var (std::exchange (missingFiles, {})), true).toStdString();
+        return text.c_str();
     }
 
     // Runs a command of the tool in the folder of the files. The arguments are a JSON array of strings. A host
@@ -740,7 +863,8 @@ extern "C"
     }
 
     // Lays the interface shown out at a size in logical pixels, and gives the window the size of what is shown
-    // of it, which Module.yuiPreviewFramed (x, y, width, height) is called with first
+    // of it, which Module.yuiPreviewFramed (x, y, width, height) is called with first. Once it drew,
+    // Module.yuiPreviewDrawn (problem) is called with why a scene of the interface could not be drawn, empty when it was
     void EMSCRIPTEN_KEEPALIVE yuiPreviewSetView (int width, int height)
     {
         if (previewWindow != nullptr && width > 0 && height > 0)

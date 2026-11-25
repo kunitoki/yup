@@ -131,6 +131,15 @@ var describeEvents()
                                           "actions the interface called. The pointer stays where the last event left it." } });
 }
 
+// What yui_schema describes: the component types, then the topics telling what else a file can name
+StringArray listSchemaTopics()
+{
+    auto topics = getYuiToolSchemaTopics();
+    topics.insert (0, "components");
+
+    return topics;
+}
+
 //==============================================================================
 String describeProblems (const std::vector<YuiToolProblem>& problems)
 {
@@ -816,6 +825,23 @@ YuiAgentResult drawView (const var& arguments, const YuiAgentHost& host, YuiTool
 
     const auto hasMarks = drawn.grid > 0.0f || ! marked.empty();
 
+    // A scene only shows its final picture after some frames, which are drawn until it does. One that can't be drawn
+    // leaves no image, and why
+    String failure;
+
+    const auto draw = [&host, &drawn, &failure] (Component& component)
+    {
+        const auto result = drawYuiToolImage (component, [&]
+        {
+            return host.snapshot (component, drawn.scale);
+        });
+
+        if (result.failed())
+            failure = result.getErrorMessage();
+
+        return result.valueOr (Image());
+    };
+
     // Draws the interface, with the grid and the guides over it unless it is asked plain
     const auto snap = [&] (bool isPlain)
     {
@@ -823,7 +849,7 @@ YuiAgentResult drawView (const var& arguments, const YuiAgentHost& host, YuiTool
             return Image();
 
         if (! isPart && (isPlain || ! hasMarks))
-            return host.snapshot (*view.getComponent(), drawn.scale);
+            return draw (*view.getComponent());
 
         // Moving the interface into the frame may restyle it
         YuiToolFrame frame (*view.getComponent(), region);
@@ -849,13 +875,13 @@ YuiAgentResult drawView (const var& arguments, const YuiAgentHost& host, YuiTool
 
         view.settle();
 
-        return host.snapshot (frame, drawn.scale);
+        return draw (frame);
     };
 
     auto image = snap (false);
 
     if (! image.isValid())
-        return YuiAgentResult::fail ("there is no graphics device to render with here: yui_inspect describes the layout without one");
+        return YuiAgentResult::fail (failure.isNotEmpty() ? failure : "there is no graphics device to render with here: yui_inspect describes the layout without one");
 
     auto told = makeObject ({ { "file", options.input.getFullPathName() },
                               { "scale", drawn.scale },
@@ -1021,7 +1047,7 @@ YuiAgentResult describeSchema (const var& arguments)
 
         const auto described = describeYuiToolSchemaTopic (topic);
 
-        return described.isVoid() ? YuiAgentResult::fail ("'topic' is components, drawing, styles or expressions") : succeed (described);
+        return described.isVoid() ? YuiAgentResult::fail ("'topic' is one of " + listSchemaTopics().joinIntoString (", ")) : succeed (described);
     }
 
     if (typeName.isNotEmpty())
@@ -1060,7 +1086,7 @@ YuiAgentResult describeSchema (const var& arguments)
 
     return succeed (makeObject ({ { "types", var (names) },
                                   { "paletteRoles", var (ThemePalette::getRoleNames()) },
-                                  { "topics", var (StringArray { "components", "drawing", "styles", "expressions" }) } }));
+                                  { "topics", var (listSchemaTopics()) } }));
 }
 
 } // namespace
@@ -1079,7 +1105,8 @@ YuiAgentResult YuiAgentResult::fail (const String& reason)
 String getYuiAgentInstructions()
 {
     return "Tools for .yui files, the declarative UI language of the YUP library. After editing a file, yui_check reports its problems, "
-           "yui_inspect describes its layout as text and yui_render draws it. yui_schema tells what a file can name.";
+           "yui_inspect describes its layout as text and yui_render draws it. yui_schema tells what a file can name, and how its shaders "
+           "and its 3D scenes are written.";
 }
 
 var getYuiAgentTools (bool withPreview)
@@ -1132,10 +1159,11 @@ var getYuiAgentTools (bool withPreview)
     tools.add (describeTool (schemaTool,
                              "Tells what a .yui file can name, as the code checking it knows it. Without arguments, the component types and the palette roles. "
                              "With a type, the properties and signals it declares. With a topic, the elements of a drawing with their properties, what a "
-                             "style rule and a selector take, or the functions, members and enumerations of expressions.",
+                             "style rule and a selector take, the functions, members and enumerations of expressions, or how a shader and a 3D scene "
+                             "are written, each with an example.",
                              { { "type", describeText ("Name of a component type, such as Slider.") },
                                { "inherited", makeObject ({ { "type", "boolean" }, { "description", "True to also list the properties and signals a type inherits. They are left out when not given, as every type inherits about 40 of them from Component." } }) },
-                               { "topic", makeObject ({ { "type", "string" }, { "enum", var (StringArray { "components", "drawing", "styles", "expressions" }) }, { "description", "What to describe, components when not given." } }) } }));
+                               { "topic", makeObject ({ { "type", "string" }, { "enum", var (listSchemaTopics()) }, { "description", "What to describe, components when not given." } }) } }));
 
     if (withPreview)
     {

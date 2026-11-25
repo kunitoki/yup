@@ -111,7 +111,8 @@ Related [scene features](showing-a-scene.md#scene-features):
   like ACES.
 - **Background color** (`BackgroundNode`) is display-referred on both
   tiers: it is never tone mapped nor affected by exposure, and shows exactly as
-  set.
+  set. With an alpha below 1 the scene is drawn over what lies behind its
+  component, see [Scenes over 2D](showing-a-scene.md#scenes-over-2d).
 
 ## Frame statistics
 

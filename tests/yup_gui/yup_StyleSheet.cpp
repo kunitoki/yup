@@ -198,6 +198,85 @@ TEST_F (StyleSheetTests, ParsesWholeDocuments)
     EXPECT_EQ (parsed->getRules()[0].declarations[1].qualifier, Identifier ("Slider"));
 }
 
+TEST_F (StyleSheetTests, FindsTheShadersOfADocumentAndTypesTheirProperties)
+{
+    auto sheet = StyleSheet::parse (R"yui(
+        shader Crt {
+            fragment: "fx/crt.frag";
+            property intensity: number = 0.5;
+            property tint: color = palette.accent;
+            property steps: integer;
+            property offsets: number[];
+        }
+        shader Hologram { material: "fx/hologram.glsl"; property rim: color = #00ffff; }
+        drawing Knob { circle { center: bounds.center; radius: 4; } })yui");
+
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+
+    const auto& parsed = sheet.getReference();
+    const auto crt = parsed->findShader ("Crt");
+    ASSERT_TRUE (crt.isValid());
+    EXPECT_EQ (crt.getType(), Identifier ("shader"));
+    EXPECT_EQ (crt.getProperty ("fragment").toString(), "fx/crt.frag");
+    EXPECT_EQ (crt.getNumChildren(), 4);
+    EXPECT_EQ (crt.getRoot().getType(), Identifier ("yui"));
+
+    EXPECT_EQ (parsed->findShader ("Hologram").getProperty ("material").toString(), "fx/hologram.glsl");
+    EXPECT_FALSE (parsed->findShader ("Missing").isValid());
+
+    // A shader is no drawing, and a drawing no shader
+    EXPECT_FALSE (parsed->findShader ("Knob").isValid());
+    EXPECT_FALSE (parsed->findDrawing ("Crt").isValid());
+
+    const auto typeOf = [&parsed] (const char* name)
+    {
+        const auto* declared = parsed->findDeclaredProperty (Identifier (name));
+        return declared != nullptr ? declared->type : ComponentProperty::Type::any;
+    };
+
+    EXPECT_EQ (typeOf ("intensity"), ComponentProperty::Type::number);
+    EXPECT_EQ (typeOf ("tint"), ComponentProperty::Type::color);
+    EXPECT_EQ (typeOf ("steps"), ComponentProperty::Type::integer);
+    EXPECT_EQ (typeOf ("rim"), ComponentProperty::Type::color);
+
+    const auto* offsets = parsed->findDeclaredProperty (Identifier ("offsets"));
+    ASSERT_NE (offsets, nullptr);
+    EXPECT_EQ (offsets->type, ComponentProperty::Type::array);
+    EXPECT_EQ (offsets->elementType, ComponentProperty::Type::number);
+
+    EXPECT_EQ (parsed->findDeclaredProperty (Identifier ("fragment")), nullptr);
+}
+
+TEST_F (StyleSheetTests, ReportsTheShadersThatAreInvalid)
+{
+    const auto locate = [] (const String& text)
+    {
+        const auto parsed = YuiParser::parse (text);
+        EXPECT_TRUE (parsed.wasOk()) << text;
+
+        YuiDiagnostic failure;
+        EXPECT_TRUE (StyleSheet::fromTree (parsed.document, &failure).failed()) << text;
+        return parsed.sourceMap.locate (failure).toString();
+    };
+
+    EXPECT_EQ (locate ("shader Crt {\n  fragment: \"a.frag\";\n  vertex: \"a.vert\";\n}"), "3:3: The shader 'Crt' has an unknown property 'vertex', expected 'fragment' or 'material'");
+    EXPECT_EQ (locate ("\nshader Crt { property gain: number; }"), "2:1: The shader 'Crt' needs a 'fragment' or a 'material'");
+    EXPECT_EQ (locate ("shader Crt {\n  fragment: \"a.frag\";\n  material: \"a.glsl\";\n}"), "3:3: The shader 'Crt' can't have both a 'fragment' and a 'material'");
+    EXPECT_EQ (locate ("shader Crt {\n  fragment: \"\";\n}"), "2:3: The shader 'Crt' needs the path of its 'fragment'");
+    EXPECT_EQ (locate ("shader Crt {\n  material: \" \";\n}"), "2:3: The shader 'Crt' needs the path of its 'material'");
+    EXPECT_EQ (locate ("shader Crt { fragment: \"a.frag\"; }\nshader Crt { material: \"a.glsl\"; }"), "2:1: The shader 'Crt' is already declared");
+
+    // A shader and a drawing can't share a name, in whatever order they are declared
+    EXPECT_EQ (locate ("drawing Crt { }\nshader Crt { fragment: \"a.frag\"; }"), "2:1: The shader 'Crt' has the same name as a drawing");
+    EXPECT_EQ (locate ("shader Crt { fragment: \"a.frag\"; }\ndrawing Crt { }"), "1:1: The shader 'Crt' has the same name as a drawing");
+
+    // The parser always gives a shader its name, a tree made by hand may not
+    YuiDiagnostic failure;
+    EXPECT_TRUE (StyleSheet::fromTree (DataTree ("yui", { DataTree ("shader", { { "fragment", "a.frag" } }) }), &failure).failed());
+    EXPECT_EQ (failure.message, "A shader block needs a name");
+    EXPECT_EQ (failure.element.getType(), Identifier ("shader"));
+}
+
 TEST_F (StyleSheetTests, FailsForInvalidInput)
 {
     EXPECT_TRUE (StyleSheet::fromTree (DataTree ("other")).failed());

@@ -155,6 +155,53 @@ protected:
     void SetUp() override {}
 
     void TearDown() override {}
+
+    /** The bytes of an uncompressed bundle holding every kind of chunk the loader reads. */
+    static MemoryBlock makeBundleWithEveryChunk()
+    {
+        auto info = makeSyntheticShaderInfo (ShaderStage::fragment, ShaderLanguage::spirv);
+        info.inputSource = "void main() {}";
+        info.binary = MemoryBlock ("module", 6);
+
+        ShaderReflection::ResourceBinding storage;
+        storage.name = "Particles";
+        storage.type = ShaderReflection::ResourceType::storageBuffer;
+        storage.readOnly = true;
+        info.reflection.storageBuffers = { storage };
+
+        ShaderBundle bundle;
+        bundle.addShader (info);
+        bundle.setSPIRV (ShaderStage::fragment, ShaderLanguage::glsl, MemoryBlock ("spirv", 5));
+
+        MemoryBlock bytes;
+        EXPECT_TRUE (bundle.saveToMemoryBlock (bytes, ShaderBundle::Compression::none).wasOk());
+        return bytes;
+    }
+
+    /** Returns where the first chunk tagged @p fourcc starts in @p bundle, or 0 without one. */
+    static size_t findChunk (const MemoryBlock& bundle, const char* fourcc)
+    {
+        const auto* bytes = static_cast<const char*> (bundle.getData());
+
+        for (size_t offset = 12; offset + 8 <= bundle.getSize(); ++offset)
+        {
+            if (std::memcmp (bytes + offset, fourcc, 4) == 0)
+                return offset;
+        }
+
+        return 0;
+    }
+
+    static uint32 getUInt32 (const MemoryBlock& bundle, size_t offset)
+    {
+        return ByteOrder::littleEndianInt (static_cast<const char*> (bundle.getData()) + offset);
+    }
+
+    static void setUInt32 (MemoryBlock& bundle, size_t offset, uint32 value)
+    {
+        for (size_t i = 0; i < 4; ++i)
+            bundle[offset + i] = static_cast<char> (value >> (8 * i));
+    }
 };
 
 TEST_F (ShaderBundleTests, RoundtripEmptyBundle)
@@ -923,6 +970,171 @@ TEST_F (ShaderBundleTests, TruncatedCompressedBundleFails)
 
     for (size_t truncLen = 4; truncLen < full.getSize(); truncLen += 7)
         EXPECT_FALSE (ShaderBundle::loadFromData (full.getData(), truncLen).wasOk()) << "truncLen=" << truncLen;
+}
+
+TEST_F (ShaderBundleTests, RiffSizeBelowTheFormTypeFails)
+{
+    // The size counts the 4 bytes of the form type: without them there is no data to size
+    for (uint8 riffSize = 0; riffSize < 4; ++riffSize)
+    {
+        const uint8 header[] = { 'R', 'I', 'F', 'F', riffSize, 0, 0, 0, 'Y', 'S', 'L', 'B' };
+
+        const auto result = ShaderBundle::loadFromData (header, sizeof (header));
+        ASSERT_TRUE (result.failed()) << "RIFF size " << static_cast<int> (riffSize);
+        EXPECT_TRUE (result.getErrorMessage().contains ("RIFF size")) << result.getErrorMessage();
+    }
+}
+
+TEST_F (ShaderBundleTests, RiffSizeAboveTheBytesPresentFails)
+{
+    auto bundle = makeBundleWithEveryChunk();
+    ASSERT_TRUE (ShaderBundle::loadFromMemoryBlock (bundle).wasOk());
+
+    for (const auto riffSize : { static_cast<uint32> (bundle.getSize()), 0x7fffffffu, 0x80000000u, 0xffffffffu })
+    {
+        setUInt32 (bundle, 4, riffSize);
+
+        const auto result = ShaderBundle::loadFromMemoryBlock (bundle);
+        ASSERT_TRUE (result.failed()) << "RIFF size " << riffSize;
+        EXPECT_TRUE (result.getErrorMessage().contains ("truncated RIFF")) << result.getErrorMessage();
+    }
+}
+
+TEST_F (ShaderBundleTests, ChunkLongerThanItsContainerFails)
+{
+    const auto valid = makeBundleWithEveryChunk();
+    ASSERT_TRUE (ShaderBundle::loadFromMemoryBlock (valid).wasOk());
+
+    for (const auto* fourcc : { "VERS", "LIST", "SHDR", "SPVB", "VART", "ISRC", "BINY", "REFL", "SBRO" })
+    {
+        const auto chunk = findChunk (valid, fourcc);
+        ASSERT_NE (chunk, 0u) << fourcc;
+
+        for (const auto size : { static_cast<uint32> (valid.getSize()), 0x7fffffffu, 0x80000000u, 0xffffffffu })
+        {
+            auto bundle = valid;
+            setUInt32 (bundle, chunk + 4, size);
+
+            const auto result = ShaderBundle::loadFromMemoryBlock (bundle);
+            ASSERT_TRUE (result.failed()) << fourcc << " declaring " << size << " bytes";
+            EXPECT_TRUE (result.getErrorMessage().contains ("truncated chunk")) << result.getErrorMessage();
+        }
+    }
+}
+
+TEST_F (ShaderBundleTests, StringLongerThanItsChunkFails)
+{
+    const auto valid = makeBundleWithEveryChunk();
+
+    const auto variant = findChunk (valid, "VART");
+    ASSERT_NE (variant, 0u);
+
+    // A variant holds its language, then the entry point and the source, each after its length
+    const auto entryPointLength = variant + 12;
+    const auto sourceLength = entryPointLength + 4 + getUInt32 (valid, entryPointLength);
+
+    for (const auto lengthOffset : { entryPointLength, sourceLength })
+    {
+        for (const auto length : { static_cast<uint32> (valid.getSize()), 0x7fffffffu, 0x80000000u, 0xffffffffu })
+        {
+            auto bundle = valid;
+            setUInt32 (bundle, lengthOffset, length);
+
+            const auto result = ShaderBundle::loadFromMemoryBlock (bundle);
+            ASSERT_TRUE (result.failed()) << "length " << length << " at " << lengthOffset;
+            EXPECT_TRUE (result.getErrorMessage().contains ("truncated string")) << result.getErrorMessage();
+        }
+    }
+}
+
+TEST_F (ShaderBundleTests, CompressedRawSizeAboveWhatItsBytesExpandToFails)
+{
+    ShaderBundle original;
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
+
+    MemoryBlock valid;
+    ASSERT_TRUE (original.saveToMemoryBlock (valid).wasOk());
+    ASSERT_GT (valid.getSize(), 16u);
+
+    // The raw size follows the YSLZ form type: one the payload cannot expand to is refused before it is allocated
+    for (const auto rawSize : { 0x00100000u, 0x40000000u, 0x7fffffffu, 0x80000000u, 0xffffffffu })
+    {
+        auto bundle = valid;
+        setUInt32 (bundle, 12, rawSize);
+
+        const auto result = ShaderBundle::loadFromMemoryBlock (bundle);
+        ASSERT_TRUE (result.failed()) << "raw size " << rawSize;
+        EXPECT_TRUE (result.getErrorMessage().contains ("invalid compressed data size")) << result.getErrorMessage();
+    }
+}
+
+TEST_F (ShaderBundleTests, MoreVariantsThanABundleHoldsFail)
+{
+    const auto valid = makeBundleWithEveryChunk();
+    const auto version = getUInt32 (valid, findChunk (valid, "VERS") + 8);
+
+    // An empty variant takes 8 bytes of a bundle and far more once loaded, so their number is bounded
+    const auto makeBundle = [version] (int numVariants)
+    {
+        const auto writeChunk = [] (MemoryOutputStream& out, const char* fourcc, const MemoryOutputStream& content)
+        {
+            out.write (fourcc, 4);
+            out.writeInt (static_cast<int> (content.getDataSize()));
+            out.write (content.getData(), content.getDataSize());
+        };
+
+        MemoryOutputStream variants;
+        variants.write ("VARS", 4);
+
+        for (int i = 0; i < numVariants; ++i)
+        {
+            variants.write ("VART", 4);
+            variants.writeInt (0);
+        }
+
+        MemoryOutputStream shader;
+        shader.writeInt (static_cast<int> (ShaderStage::fragment));
+        shader.writeInt (static_cast<int> (ShaderLanguage::glsl));
+        writeChunk (shader, "LIST", variants);
+
+        MemoryOutputStream shaders;
+        shaders.write ("SHAD", 4);
+        writeChunk (shaders, "SHDR", shader);
+
+        MemoryOutputStream versionChunk;
+        versionChunk.writeInt (static_cast<int> (version));
+
+        MemoryOutputStream form;
+        form.write ("YSLB", 4);
+        writeChunk (form, "VERS", versionChunk);
+        writeChunk (form, "LIST", shaders);
+
+        MemoryOutputStream bundle;
+        writeChunk (bundle, "RIFF", form);
+        return bundle.getMemoryBlock();
+    };
+
+    const auto most = ShaderBundle::loadFromMemoryBlock (makeBundle (256));
+    ASSERT_TRUE (most.wasOk()) << most.getErrorMessage();
+    EXPECT_EQ (most.getReference().getShaders().size(), 256u);
+
+    const auto tooMany = ShaderBundle::loadFromMemoryBlock (makeBundle (257));
+    ASSERT_TRUE (tooMany.failed());
+    EXPECT_TRUE (tooMany.getErrorMessage().contains ("too many shader variants")) << tooMany.getErrorMessage();
+}
+
+TEST_F (ShaderBundleTests, BundleCutAnywhereFails)
+{
+    const auto valid = makeBundleWithEveryChunk();
+    ASSERT_TRUE (ShaderBundle::loadFromMemoryBlock (valid).wasOk());
+
+    // An uncompressed bundle ends with its last chunk, so every shorter length lost bytes it declares
+    for (size_t length = 0; length < valid.getSize(); ++length)
+    {
+        const auto result = ShaderBundle::loadFromData (valid.getData(), length);
+        ASSERT_TRUE (result.failed()) << "length " << length;
+        EXPECT_TRUE (result.getErrorMessage().isNotEmpty());
+    }
 }
 
 //==============================================================================

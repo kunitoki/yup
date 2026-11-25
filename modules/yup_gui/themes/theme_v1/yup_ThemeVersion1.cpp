@@ -109,26 +109,35 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 {
     const auto colors = getSliderColors (theme, slider);
 
-    auto bounds = sliderBounds.reduced (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryInset)));
+    // A dial is round whatever the shape of the slider: it takes the largest square in the middle of its bounds, and its
+    // geometry is in proportion to the smaller side of the slider
+    const auto dialSize = jmin (sliderBounds.getWidth(), sliderBounds.getHeight());
+    const auto shortSide = jmin (slider.getWidth(), slider.getHeight());
+    const auto proportionOfSide = [&] (const Identifier& property)
+    {
+        return shortSide * slider.findPropertyAs<float> (property);
+    };
+
+    auto bounds = sliderBounds.withSizeKeepingCenter (dialSize, dialSize).reduced (proportionOfSide (CuratedGeometry::rotaryInset));
     const auto center = bounds.getCenter();
 
     const auto fromRadians = rotaryStartAngle;
     const auto toRadians = rotaryEndAngle;
     const auto toCurrentRadians = fromRadians + (toRadians - fromRadians) * sliderValue;
 
-    const auto arcWidth = slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryArcWidth));
+    const auto arcWidth = proportionOfSide (CuratedGeometry::rotaryArcWidth);
 
     Path backgroundPath;
-    backgroundPath.addEllipse (bounds.reduced (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryDialInset))));
+    backgroundPath.addEllipse (bounds.reduced (proportionOfSide (CuratedGeometry::rotaryDialInset)));
 
     g.setFillColor (colors.background);
     g.fillPath (backgroundPath);
 
     g.setStrokeColor (colors.background.darker (0.3f));
-    g.setStrokeWidth (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryDialOutlineWidth)));
+    g.setStrokeWidth (proportionOfSide (CuratedGeometry::rotaryDialOutlineWidth));
     g.strokePath (backgroundPath);
 
-    const auto reducedBounds = bounds.reduced (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryPointerInset)));
+    const auto reducedBounds = bounds.reduced (proportionOfSide (CuratedGeometry::rotaryPointerInset));
     const auto pos = center.getPointOnCircumference (
         reducedBounds.getWidth() / 2.0f,
         reducedBounds.getHeight() / 2.0f,
@@ -139,7 +148,7 @@ void paintRotarySlider (Graphics& g, const ApplicationTheme& theme, const Slider
 
     g.setStrokeCap (StrokeCap::Round);
     g.setStrokeColor (colors.text);
-    g.setStrokeWidth (slider.proportionOfWidth (slider.findPropertyAs<float> (CuratedGeometry::rotaryPointerWidth)));
+    g.setStrokeWidth (proportionOfSide (CuratedGeometry::rotaryPointerWidth));
     g.strokePath (foregroundLine);
 
     Path backgroundArc;

@@ -1,0 +1,201 @@
+// Computer: a glTF model operated in its scene and from the widgets around it, with nothing written in C++.
+//
+// - The faders and the knobs are parts of the model made into controls: `travel` slides a part and `turn` turns
+//   it, as far as its `value` says. A fader is one value in three places, linked both ways: the part, a slider
+//   of the panel and a slider on the screen of the computer. Drag any of them.
+// - What they set is seen in the scene: the light of the lamp, how far its shade opens, the color of the ring of
+//   the stage, the side the camera stands on and the light of the room.
+// - The screen shows a 2D interface, used where it is shown. The pads answer the pointer, and the clips of the two
+//   models open the lid and sway the lamp.
+
+palette Console { colors: #14161c, #35e0c2, #e9edf3; }
+palette Display { colors: #071318, #35e0c2, #d9fff7; }
+
+shader Plasma {
+    fragment: "fx/plasma.frag";
+    property ink: color = #35e0c2;
+    property flow: number = 1;
+}
+
+// The glass of the screen, and a dim glow drifting under what is shown on it
+drawing Glass {
+    rect { bounds: bounds; fill: palette.background; }
+    use Plasma { bounds: bounds; ink: palette.accent; flow: 0.4; opacity: 0.35; }
+}
+
+// A row of the screen: a name, a slider and its value in hundredths
+component Strip : Row {
+    property label: string = "";
+    property alias value <=> slider.value;
+
+    gap: 12; flexGrow: 1;
+
+    Label  { text: root.label; preferredWidth: 86; textHeightProportion: 0.4; }
+    Slider { id: slider; flexGrow: 1; }
+    Label  { text: format ("%.0f", slider.value * 100); preferredWidth: 46; justification: centerRight; textHeightProportion: 0.4; }
+}
+
+style {
+    :root    { palette: Console; }
+    .panel   { cornerRadius: 12; shadow: 0 0 palette.surface.withAlpha (0.9), 0 8 22 #00000070; }
+    .title   { textFillColor: palette.text; textHeightProportion: 0.8; preferredHeight: 24; }
+    .hint    { textFillColor: palette.textMuted; textHeightProportion: 0.8; preferredHeight: 16; }
+    .caption { textFillColor: palette.textMuted; textHeightProportion: 0.85; preferredHeight: 14; }
+    .display { palette: Display; drawing: Glass; Slider.trackWidth: 8; Slider.thumbSize: 26; }
+
+    // The camera pulls back and returns: keyframes move it, and its `lookAt` keeps it aimed at the set
+    .camera { position: [3.3, 2.9, 5.2]; animation: drift 18s easeInOut infinite alternate; }
+
+    @keyframes drift {
+        from { position: [3.3, 2.9, 5.2]; }
+        to   { position: [3.75, 3.05, 5.55]; }
+    }
+
+    // A control grows under the pointer, and more while it is dragged
+    .control         { cursor: hand; scale: 1; transition: scale 120ms easeOut; }
+    .control:hover   { scale: 1.12; }
+    .control:pressed { scale: 1.25; }
+
+    // A pad glows under the pointer and flashes when it is pressed: the rules restyle its material
+    .pad                      { cursor: hand; }
+    .pad > Material3D         { emissiveStrength: 0; transition: emissiveStrength 260ms easeOut; }
+    .pad:hover > Material3D   { emissiveStrength: 0.7; }
+    .pad:pressed > Material3D { emissiveStrength: 5; transition: emissiveStrength 30ms; }
+}
+
+Scene3D {
+    background: #101116; ambient: #2a3040; toneMapping: aces;
+
+    // KnobA swings the camera around the set, from the front to the right side: the camera stands in a node,
+    // and the node turns
+    Node3D {
+        rotation: [0, orbit.value * 60deg - 15deg, 0];
+
+        Camera3D { class: camera; lookAt: [-0.4, 0.55, 0]; fov: 32deg; }
+    }
+
+    // KnobB dims the key light, the one casting the shadows of the room. A blue light behind keeps the edges
+    Light3D {
+        type: directional; position: [-3.5, 6, 3]; lookAt: [0, 0, 0]; intensity: key.value * 3; radius: 0.015;
+        castsShadows: true;
+    }
+
+    Light3D { type: point; position: [3.2, 2.2, -2.8]; color: #5c7cff; intensity: 40; range: 14; }
+
+    // FaderC turns the color of the ring: a material inside a node bound to a part replaces the one it had
+    Model3D {
+        source: "../gltf/stage.glb";
+
+        Node3D {
+            node: "StageRing";
+
+            Material3D {
+                baseColor: #333333; metallic: 0;
+                emissive: hsl (fmod (0.47 + ring.value * 0.6, 1), 0.9, 0.6); emissiveStrength: 3;
+            }
+        }
+    }
+
+    Model3D {
+        source: "../gltf/computer.glb";
+
+        // The lid starts open: a time past the end of the clip is its end. It plays while it is not at the end
+        // the toggle asks for, forwards to open and backwards to close, and tells when it gets there
+        clip: "Open"; time: 2;
+        speed: lid.checked ? 1 : -1;
+        playing: speed > 0 ? time < duration : time > 0;
+        onClipEnded: action ("lid", speed > 0 ? "open" : "closed");
+
+        // What is written inside a node is shown on its mesh and used there: these sliders are those of the panel
+        Node3D {
+            node: "Screen"; surface: emissive;
+
+            Column {
+                class: display; width: 416; height: 260; padding: "16 22"; gap: 6;
+
+                Label { text: "YUP-1"; preferredHeight: 34; textHeightProportion: 0.85; }
+                Strip { label: "LAMP"; value <=> lamp.value; }
+                Strip { label: "SHADE"; value <=> shade.value; }
+                Strip { label: "RING"; value <=> ring.value; }
+            }
+        }
+
+        // A part with `travel` is a slider and one with `turn` a knob, where the model put them: the faders at the
+        // front of their slots. A knob starts from the `rotation` it is given, its mark at seven o'clock
+        Node3D { node: "FaderA"; class: control; travel: [0, 0, -0.78]; value <=> lamp.value; }
+        Node3D { node: "FaderB"; class: control; travel: [0, 0, -0.78]; value <=> shade.value; }
+        Node3D { node: "FaderC"; class: control; travel: [0, 0, -0.78]; value <=> ring.value; }
+        Node3D { node: "KnobA"; class: control; rotation: [0, -30deg, 0]; turn: [0, -300deg, 0]; value <=> orbit.value; }
+        Node3D { node: "KnobB"; class: control; rotation: [0, -30deg, 0]; turn: [0, -300deg, 0]; value <=> key.value; }
+
+        // The eight pads, two rows of four: each gets a material in one of four hues, for the rules to light
+        repeat i in 0 .. 8 {
+            Node3D {
+                node: format ("Pad%d", i + 1); class: pad; onClick: action ("pad", i + 1);
+
+                Material3D {
+                    baseColor: hsl ([0.49, 0.02, 0.71, 0.12][(i + i / 4) % 4], 0.85, 0.55); emissive: baseColor;
+                    metallic: 0; roughness: 0.7;
+                }
+            }
+        }
+    }
+
+    Model3D {
+        source: "../gltf/lamp.glb"; position: [-2.03, 0, -0.54]; rotation: [0, 58deg, 0];
+        clip: "Sway"; loop: true; playing: sway.checked;
+
+        // FaderA lights the lamp and FaderB opens its shade: a morph target of the head, and the cone of the light
+        // with it. The light is written inside the head, so it shines where the arm points it
+        Node3D {
+            node: "LampHead"; morphWeights: [shade.value];
+
+            Light3D {
+                type: spot; color: #ffd9a8; intensity: lamp.value * 55; range: 9;
+                innerCone: 16deg + shade.value * 12deg; outerCone: 36deg + shade.value * 16deg; castsShadows: true;
+            }
+        }
+
+        Node3D {
+            node: "LampBulb";
+
+            Material3D {
+                baseColor: #f2ece0; metallic: 0; roughness: 0.6; doubleSided: true;
+                emissive: #ffd9a8; emissiveStrength: lamp.value * 3;
+            }
+        }
+    }
+
+    // What is written inside the scene itself is laid over it
+    Column {
+        x: 18; y: 14; width: 300; height: 42; gap: 2;
+
+        Label { class: title; text: "Computer"; }
+        Label { class: hint; text: "Drag the faders and the knobs, press the pads"; }
+    }
+
+    Row {
+        class: panel; x: 12; y: parent.height - 80; width: parent.width - 24; height: 68; padding: "8 14"; gap: 12;
+
+        ToggleButton { id: lid; text: "Lid"; checked: true; preferredWidth: 50; preferredHeight: 32; alignSelf: center; }
+        ToggleButton { id: sway; text: "Sway"; checked: true; preferredWidth: 56; preferredHeight: 32; alignSelf: center; }
+
+        Column { flexGrow: 1; gap: 2; Label { class: caption; text: "Lamp"; }  Slider { id: lamp; value: 0.6; flexGrow: 1; } }
+        Column { flexGrow: 1; gap: 2; Label { class: caption; text: "Shade"; } Slider { id: shade; value: 0.3; flexGrow: 1; } }
+        Column { flexGrow: 1; gap: 2; Label { class: caption; text: "Ring"; }  Slider { id: ring; flexGrow: 1; } }
+
+        Column {
+            preferredWidth: 46; gap: 2;
+
+            Label  { class: caption; text: "Orbit"; justification: center; }
+            Slider { id: orbit; sliderType: rotaryVerticalDrag; value: 0.25; flexGrow: 1; }
+        }
+
+        Column {
+            preferredWidth: 46; gap: 2;
+
+            Label  { class: caption; text: "Key"; justification: center; }
+            Slider { id: key; sliderType: rotaryVerticalDrag; value: 0.6; flexGrow: 1; }
+        }
+    }
+}

@@ -41,6 +41,12 @@ Identifier resolveStyleStorageId (const ComponentProperty* descriptor, const Ide
     return propertyName;
 }
 
+/* The compiled bundle of a shader is the file next to its source, with `.ysl` added to its name: nothing for a path that is a bundle already. */
+String getShaderBundlePath (const String& sourcePath)
+{
+    return sourcePath.endsWithIgnoreCase (".ysl") ? String() : sourcePath + ".ysl";
+}
+
 /* Tracks one component state property (style, cursor, effect, paint margin) owned by a
    stylesheet while leaving later explicit application overrides untouched. */
 template <class T>
@@ -241,6 +247,25 @@ struct StyleContext::PopupMap : std::map<Component*, std::pair<WeakReference<Com
 {
 };
 
+/* A shader of the stylesheet as it was loaded last, with the defaults of its properties as the declarations they are applied as, and what
+   prevented its last load. One that could not be loaded is kept too, without a compiled shader, so that it is read once. */
+struct StyleContext::ShaderEntry
+{
+    Shader loaded;
+    std::vector<StyleSheet::Declaration> defaults;
+    std::vector<YuiDiagnostic> problems;
+
+    // Set when a file of the shader changed, for the next restyle to load it again
+    bool isStale = false;
+
+    // Set when the problems of the stylesheet are found again, for the next restyle to report the ones kept here with them
+    bool reportsAgain = false;
+};
+
+struct StyleContext::ShaderMap : std::map<String, ShaderEntry>
+{
+};
+
 /* A transition the new style of a component declares, with the value shown before the restyle. */
 struct StyleContext::PendingTransition
 {
@@ -266,6 +291,7 @@ StyleContext::StyleContext (Component& rootToUse, StyleSheet::Ptr sheetToUse)
     , styleSheet (std::move (sheetToUse))
     , caches (std::make_unique<CacheMap>())
     , popups (std::make_unique<PopupMap>())
+    , shaders (std::make_unique<ShaderMap>())
 {
     observer.onChanged = [this] (Component& component, const Identifier& property)
     {
@@ -383,6 +409,10 @@ void StyleContext::resetCompiledValues()
         }
     }
 
+    // What prevents a shader from loading is reported with the values, so it is again once they are compiled again
+    for (auto& [name, entry] : *shaders)
+        entry.reportsAgain = true;
+
     if (observerDirty)
         rebuildObserver();
 
@@ -450,6 +480,7 @@ void StyleContext::restyleNow()
 
     const ScopedValueSetter<bool> restyling (isRestyling, true);
     diagnostics.clear();
+    refreshShaders();
 
     for (int pass = 0; pass < 4 && ! dirtyComponents.isEmpty(); ++pass)
     {
@@ -640,6 +671,16 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     bool firstStyle = false;
     auto& cache = getCache (component, firstStyle);
 
+    // A DrawingStyle set on the component itself takes precedence over the stylesheet rules. It runs the shaders of the
+    // sheet, whether a rule styles the component or not
+    static constexpr auto getComponentStyle = [] (const Component& c) { return c.getStyle(); };
+    const auto* explicitDrawing = ! cache.drawingOverride.isActive (component, getComponentStyle)
+                                    ? dynamic_cast<const DrawingStyle*> (component.getStyle().get())
+                                    : nullptr;
+
+    if (explicitDrawing != nullptr)
+        explicitDrawing = attachDrawingShaders (component, *explicitDrawing);
+
     using LayoutEffect = ComponentProperty::LayoutEffect;
     bool ownLayoutChanged = false;
     bool parentLayoutChanged = false;
@@ -760,19 +801,12 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
 
     changed |= paletteChanged;
 
-    // The drawing comes next, the properties it declares type the declarations setting them.
-    // An explicit DrawingStyle already installed on the component instance takes precedence over stylesheet rules.
-    static constexpr auto getComponentStyle = [] (const Component& c) { return c.getStyle(); };
-    const auto* explicitDrawing = ! cache.drawingOverride.isActive (component, getComponentStyle)
-                                    ? dynamic_cast<const DrawingStyle*> (component.getStyle().get())
-                                    : nullptr;
-    const DrawingStyle* drawing = nullptr;
+    // The drawing comes next, the properties it declares type the declarations setting them
+    const DrawingStyle* drawing = explicitDrawing;
 
-    if (explicitDrawing != nullptr)
-        drawing = explicitDrawing;
-    else if (drawingDecl != nullptr)
+    if (drawing == nullptr && drawingDecl != nullptr)
         drawing = installDrawing (component, cache, *drawingDecl);
-    else
+    else if (drawing == nullptr)
         restoreDrawing (component, cache);
 
     // The transitions of the new style apply, starting from the values shown before any is written
@@ -811,6 +845,17 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
 
                 pendingTransitions.push_back ({ transition, descriptor, storageId, std::move (from) });
             }
+        }
+    }
+
+    // The defaults of the shader selected as the effect are the declarations of lowest priority, for what the component doesn't hold itself
+    if (effectDecl != nullptr)
+    {
+        if (const auto* shaderEntry = findShaderEntry (effectDecl->parsedName))
+        {
+            for (const auto& fallback : shaderEntry->defaults)
+                if (! typeInfo.hasProperty (fallback.name))
+                    direct.try_emplace (fallback.name, ResolvedDeclaration { &fallback, -1, -1, false });
         }
     }
 
@@ -961,6 +1006,10 @@ bool StyleContext::evaluate (Component& component,
 
         const auto isEnum = type == ComponentProperty::Type::enumeration && descriptor != nullptr;
 
+        // The name of a drawing or of a shader of the sheet is written bare, as an element writes it
+        const auto isName = type == ComponentProperty::Type::drawing;
+        const auto named = isName ? valueText.unquoted().trim() : String();
+
         if (isEnum)
         {
             const auto enumValue = valueText.unquoted().trim();
@@ -974,7 +1023,20 @@ bool StyleContext::evaluate (Component& component,
             }
         }
 
-        const auto compileType = isEnum ? std::optional (ComponentProperty::Type::string) : type;
+        if (isName)
+        {
+            const bool isDeclared = styleSheet != nullptr && (styleSheet->findDrawing (named).isValid() || styleSheet->findShader (named).isValid());
+
+            if (isDeclared || named.isEmpty() || named == "none")
+            {
+                entry.constantValue = isDeclared ? named : String();
+                paletteDependent = false;
+                result = entry.constantValue;
+                return true;
+            }
+        }
+
+        const auto compileType = (isEnum || isName) ? std::optional (ComponentProperty::Type::string) : type;
         auto compiled = PropertyExpression::compile (component, valueText, compileType, componentResolver);
 
         if (compiled.failed())
@@ -993,7 +1055,8 @@ bool StyleContext::evaluate (Component& component,
                 label = String (prefix) + String (key.layer) + "]";
             }
 
-            const auto detail = isEnum ? ("expected one of " + descriptor->enumValues.joinIntoString (", ")) : compiled.getErrorMessage();
+            const auto detail = isEnum ? ("expected one of " + descriptor->enumValues.joinIntoString (", "))
+                                       : (isName ? ("unknown drawing or shader '" + named + "'") : compiled.getErrorMessage());
             report ({ .message = label + ": " + detail, .element = element });
             return false;
         }
@@ -1100,8 +1163,14 @@ const DrawingStyle* StyleContext::installDrawing (Component& component, Componen
 
     const auto& name = declaration.parsedName;
 
-    if (cache.drawingName == name && cache.drawingStyle != nullptr && cache.drawingOverride.isActive (component, getStyle))
+    // The drawing installed is kept while it runs the shaders the sheet has loaded
+    if (cache.drawingName == name
+        && cache.drawingStyle != nullptr
+        && cache.drawingOverride.isActive (component, getStyle)
+        && ! holdsOtherShaders (*cache.drawingStyle))
+    {
         return cache.drawingStyle.get();
+    }
 
     const auto drawing = styleSheet != nullptr ? styleSheet->findDrawing (name) : DataTree();
 
@@ -1112,11 +1181,13 @@ const DrawingStyle* StyleContext::installDrawing (Component& component, Componen
         return nullptr;
     }
 
-    YuiDiagnostic failure;
-    auto created = DrawingStyle::create (component, drawing, componentResolver, &failure, [this] (const String& drawingName)
+    const auto findDrawing = [this] (const String& drawingName)
     {
         return styleSheet != nullptr ? styleSheet->findDrawing (drawingName) : DataTree();
-    });
+    };
+
+    YuiDiagnostic failure;
+    auto created = DrawingStyle::create (component, drawing, componentResolver, &failure, findDrawing, bindFront (&StyleContext::findDrawingShader, this));
 
     if (created.failed())
     {
@@ -1181,6 +1252,59 @@ void StyleContext::restoreDrawing (Component& component, ComponentCache& cache)
                                    [] (Component& c, ComponentStyle::Ptr style) { c.setStyle (std::move (style)); });
     cache.drawingName = {};
     cache.drawingStyle = nullptr;
+}
+
+/* Finds a shader of the sheet for a drawing using it: its block, and the shader it is loaded as the first time it is asked
+   for, which reports what prevents it. One that is not loaded leaves the drawing running nothing where it uses it. */
+DrawingStyle::Shader StyleContext::findDrawingShader (const String& name)
+{
+    DrawingStyle::Shader found;
+    found.block = styleSheet != nullptr ? styleSheet->findShader (name) : DataTree();
+
+    if (const auto* loaded = findShader (name))
+        found.shader = loaded->shader;
+
+    return found;
+}
+
+/* Tells whether a drawing runs a shader of the sheet as another one than the sheet has loaded: none, for a drawing made
+   before the shader was there, or the one its file was loaded as before it changed. */
+bool StyleContext::holdsOtherShaders (const DrawingStyle& drawing)
+{
+    for (const auto& used : drawing.getShaders())
+    {
+        const auto name = used.block.getProperty ("name").toString();
+
+        // A shader of another block is not one of the sheet, whatever its name: nothing is loaded for it
+        if (styleSheet == nullptr || ! styleSheet->findShader (name).isEquivalentTo (used.block))
+            continue;
+
+        if (const auto* loaded = findShader (name); loaded != nullptr && loaded->shader != used.shader)
+            return true;
+    }
+
+    return false;
+}
+
+/* A drawing set on the component itself, by its element or from C++, runs the shaders of the sheet as one a rule selects
+   does: it is made again with the ones the sheet has loaded when it holds others, which repaints the component. The
+   builder of a document makes such a drawing before the sheet is there, with no shader at all. */
+const DrawingStyle* StyleContext::attachDrawingShaders (Component& component, const DrawingStyle& drawing)
+{
+    if (! holdsOtherShaders (drawing))
+        return &drawing;
+
+    YuiDiagnostic failure;
+    const auto remade = drawing.createWithShaders (bindFront (&StyleContext::findDrawingShader, this), &failure);
+
+    if (remade.failed())
+    {
+        report ({ .message = "drawing " + drawing.getName() + ": " + remade.getErrorMessage(), .element = failure.element, .property = failure.property });
+        return &drawing;
+    }
+
+    component.setStyle (remade.getReference());
+    return remade.getReference().get();
 }
 
 bool StyleContext::evaluateFilterDeclaration (Component& component,
@@ -1331,6 +1455,233 @@ bool StyleContext::syncStyledFilterAndMargins (Component& component, ComponentCa
     return changed;
 }
 
+//==============================================================================
+
+const StyleContext::Shader* StyleContext::findShader (const String& name)
+{
+    const auto* entry = findShaderEntry (name);
+    return entry != nullptr ? &entry->loaded : nullptr;
+}
+
+StyleContext::ShaderEntry* StyleContext::findShaderEntry (const String& name)
+{
+    auto found = shaders->find (name);
+
+    if (found == shaders->end())
+    {
+        const auto block = styleSheet != nullptr ? styleSheet->findShader (name) : DataTree();
+
+        // A material is not drawn over a picture: what uses one as such tells
+        if (! block.isValid() || ! block.hasProperty ("fragment"))
+            return nullptr;
+
+        found = shaders->try_emplace (name).first;
+
+        auto& entry = found->second;
+        entry.loaded.block = block;
+
+        for (const auto& property : block)
+        {
+            const auto propertyName = property.getProperty ("name").toString().trim();
+            const auto value = property.getProperty ("value").toString().trim();
+
+            if (property.getType().toString() != "property" || propertyName.isEmpty() || value.isEmpty())
+                continue;
+
+            auto& fallback = entry.defaults.emplace_back();
+            fallback.name = Identifier (propertyName);
+            fallback.cascadeKey = fallback.name;
+            fallback.value = value;
+            fallback.element = property;
+        }
+
+        loadShader (name, entry);
+    }
+
+    auto& entry = found->second;
+    return entry.loaded.shader != nullptr ? &entry : nullptr;
+}
+
+bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
+{
+    // What prevents the load is reported now, and kept for the restyles that report the problems of the sheet again
+    entry.problems.clear();
+    entry.isStale = false;
+    entry.reportsAgain = false;
+
+    const auto fail = [this, &entry] (YuiDiagnostic problem)
+    {
+        report (problem);
+        entry.problems.push_back (std::move (problem));
+        return false;
+    };
+
+    const auto& block = entry.loaded.block;
+    const auto path = block.getProperty ("fragment").toString();
+    const auto bundlePath = getShaderBundlePath (path);
+
+    auto bytes = YuiDocument::readAssetFor (&root, bundlePath);
+    const bool hasBundle = bytes.has_value();
+
+    if (! hasBundle)
+        bytes = YuiDocument::readAssetFor (&root, path);
+
+    if (! bytes.has_value())
+    {
+        const auto missing = bundlePath.isNotEmpty() ? "'" + path + "' nor its compiled bundle '" + bundlePath + "'" : "'" + path + "'";
+
+        return fail ({ .message = "The shader '" + name + "' can't read " + missing, .element = block, .property = "fragment" });
+    }
+
+    auto created = GpuImageShader::createFromData (bytes->getData(), bytes->getSize());
+
+    if (created.failed())
+    {
+        auto message = "shader " + name + ": " + created.getErrorMessage();
+
+#if ! YUP_ENABLE_SHADER_TRANSPILER
+        // A source is not compiled here, so what is missing is the bundle a build makes of it
+        if (! hasBundle && bundlePath.isNotEmpty())
+            message << ", and there is no '" << bundlePath << "'";
+#endif
+
+        return fail ({ .message = message, .element = block, .property = "fragment" });
+    }
+
+    const auto uniforms = created.getReference()->createUniforms();
+    std::vector<ShaderEffect::Property> properties;
+
+    for (const auto& property : block)
+    {
+        const auto propertyName = property.getProperty ("name").toString().trim();
+
+        if (property.getType().toString() != "property" || propertyName.isEmpty())
+            continue;
+
+        const auto typeName = property.getProperty ("type").toString().trim();
+        const auto type = ComponentProperty::getTypeFromName (typeName);
+
+        // Of the arrays, the one of numbers fills a uniform
+        const bool isFilling = type != ComponentProperty::Type::array
+                            || ComponentProperty::getElementTypeFromName (typeName) == ComponentProperty::Type::number;
+
+        const auto numComponents = isFilling ? ShaderEffect::getNumUniformComponents (type) : 0;
+        String problem;
+
+        if (numComponents == 0)
+            problem = "The property '" + propertyName + "' of the shader '" + name + "' can't be of type '" + typeName + "': a shader takes a number, an integer, a boolean, a color, a point, a rectangle or a number[]";
+        else if (! uniforms.hasMember (propertyName))
+            problem = "The uniform block of the shader '" + name + "' has no member '" + propertyName + "'";
+        else if (uniforms.getNumComponents (propertyName) < numComponents)
+            problem = "The member '" + propertyName + "' of the uniform block of the shader '" + name + "' is too small for a " + typeName;
+
+        if (problem.isEmpty())
+            properties.push_back ({ Identifier (propertyName), type });
+        else
+            fail ({ .message = problem, .element = property });
+    }
+
+    if (! entry.problems.empty())
+        return false;
+
+    entry.loaded.shader = created.getValue();
+    entry.loaded.properties = std::move (properties);
+    return true;
+}
+
+void StyleContext::refreshShaders()
+{
+    for (auto& [name, entry] : *shaders)
+    {
+        if (! entry.isStale)
+        {
+            if (std::exchange (entry.reportsAgain, false))
+            {
+                for (const auto& problem : entry.problems)
+                    report (problem);
+            }
+
+            continue;
+        }
+
+        // A shader that fails to load leaves the one it was to replace running
+        if (! loadShader (name, entry))
+            continue;
+
+        // The effects running the shader take the new one, unless it now reads more textures than an effect has: those are made again
+        const bool runsAsEffect = entry.loaded.shader->getNumInputTextures() <= 1;
+
+        for (auto& [component, cache] : *caches)
+        {
+            if (cache.effectName != name)
+                continue;
+
+            auto* effect = cache.effectOverride.applied.has_value() ? dynamic_cast<ShaderEffect*> (cache.effectOverride.applied->get()) : nullptr;
+
+            if (runsAsEffect && effect != nullptr)
+                effect->setShader (entry.loaded.shader);
+            else
+                cache.effectName = {};
+        }
+    }
+}
+
+void StyleContext::assetChanged (const String& path)
+{
+    if (path.isEmpty())
+        return;
+
+    for (auto& [name, entry] : *shaders)
+    {
+        const auto source = entry.loaded.block.getProperty ("fragment").toString();
+
+        if (path != source && path != getShaderBundlePath (source))
+            continue;
+
+        // Loaded by the next restyle: once, however many of its files changed, and after a document that tells before it loads
+        // cleared its problems, so that what prevents the load is one of them
+        entry.isStale = true;
+        markDirty (root);
+    }
+}
+
+ComponentEffect::Ptr StyleContext::createEffect (Component& component, const StyleSheet::Declaration& effectDecl)
+{
+    const auto& name = effectDecl.parsedName;
+    const auto block = styleSheet != nullptr ? styleSheet->findShader (name) : DataTree();
+
+    // A shader of the sheet comes before a registered effect of the same name
+    if (! block.isValid())
+    {
+        auto created = ComponentEffectRegistry::getInstance().createEffect (name);
+
+        if (created == nullptr)
+            report ({ .message = "Unknown effect '" + name + "'", .element = effectDecl.element });
+
+        return created;
+    }
+
+    if (block.hasProperty ("material"))
+    {
+        report ({ .message = "The shader '" + name + "' is a material, an effect takes a shader with a 'fragment'", .element = effectDecl.element });
+        return nullptr;
+    }
+
+    // What prevents a shader from loading was reported when it was loaded
+    const auto* loaded = findShader (name);
+
+    if (loaded == nullptr)
+        return nullptr;
+
+    if (loaded->shader->getNumInputTextures() > 1)
+    {
+        report ({ .message = "The shader '" + name + "' reads two textures, an effect gives it one", .element = effectDecl.element });
+        return nullptr;
+    }
+
+    return ComponentEffect::Ptr (new ShaderEffect (component, loaded->shader, loaded->properties));
+}
+
 bool StyleContext::applyEffects (Component& component,
                                  ComponentCache& cache,
                                  const StyleSheet::Declaration* cursorDecl,
@@ -1372,14 +1723,13 @@ bool StyleContext::applyEffects (Component& component,
                 cache.effectName = name;
                 changed |= cache.effectOverride.apply (component, ComponentEffect::Ptr {}, getEffect, setEffect);
             }
-            else if (auto created = ComponentEffectRegistry::getInstance().createEffect (name); created != nullptr)
+            else if (auto created = createEffect (component, *effectDecl); created != nullptr)
             {
                 cache.effectName = name;
                 changed |= cache.effectOverride.apply (component, std::move (created), getEffect, setEffect);
             }
             else
             {
-                report ({ .message = "Unknown effect '" + name + "'", .element = effectDecl->element });
                 cache.effectName = {};
                 changed |= cache.effectOverride.restore (component, getEffect, setEffect);
             }
@@ -1864,6 +2214,7 @@ void StyleContext::detach()
 
     popups->clear();
     clearAllCaches();
+    shaders->clear();
     animator.clear();
     dirtyComponents.clear();
     diagnostics.clear();

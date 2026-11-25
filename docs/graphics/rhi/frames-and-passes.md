@@ -238,6 +238,9 @@ pass.draw (3); // fullscreen triangle
 pass.finish();
 ```
 
+[`GpuImageShader::draw()`](image-shaders.md) records such a pass for a
+fragment shader, with its bindings and its uniforms.
+
 ### Sampling one mip level
 
 To read one level of a texture while rendering into another level of the same

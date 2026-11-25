@@ -23,6 +23,194 @@ namespace yup
 {
 
 //==============================================================================
+namespace
+{
+
+struct SceneComponentIds
+{
+    static inline const Identifier background { "background" };
+    static inline const Identifier ambient { "ambient" };
+    static inline const Identifier exposure { "exposure" };
+    static inline const Identifier toneMapping { "toneMapping" };
+    static inline const Identifier defaultLight { "defaultLight" };
+    static inline const Identifier continuous { "continuous" };
+};
+
+/* The first active camera below a component, depth first, whose entity is in a scene and is not the one going. */
+SceneCameraComponent* findActiveSceneCamera (const Component& parent, const Scene& scene, const Entity& leaving)
+{
+    for (int i = 0; i < parent.getNumChildComponents(); ++i)
+    {
+        auto* node = dynamic_cast<SceneNodeComponent*> (parent.getChildComponent (i));
+        if (node == nullptr)
+            continue;
+
+        if (auto* camera = dynamic_cast<SceneCameraComponent*> (node))
+        {
+            const auto entity = camera->getEntity();
+
+            // While the nodes move to another scene, the ones not there yet still have the entity they had
+            if (camera->isActive() && entity.isValid() && entity.getScene() == &scene && entity != leaving)
+                return camera;
+        }
+
+        if (auto* camera = findActiveSceneCamera (*node, scene, leaving))
+            return camera;
+    }
+
+    return nullptr;
+}
+
+/* The materials and the models below a component, which are told when a file changes. Kept weakly: telling one may destroy another. */
+void findSceneAssetUsers (const Component& parent, std::vector<WeakReference<Component>>& users)
+{
+    for (int i = 0; i < parent.getNumChildComponents(); ++i)
+    {
+        auto* child = parent.getChildComponent (i);
+
+        if (dynamic_cast<SceneMaterialComponent*> (child) != nullptr || dynamic_cast<SceneModelComponent*> (child) != nullptr)
+            users.emplace_back (child);
+
+        if (dynamic_cast<SceneNodeComponent*> (child) != nullptr)
+            findSceneAssetUsers (*child, users);
+    }
+}
+
+/* Calls a function with each node below a component, a node before the ones inside it. The function must not change the components. */
+template <class Function>
+void forEachSceneNode (const Component& parent, Function&& function)
+{
+    for (int i = 0; i < parent.getNumChildComponents(); ++i)
+    {
+        if (auto* node = dynamic_cast<SceneNodeComponent*> (parent.getChildComponent (i)))
+        {
+            function (*node);
+            forEachSceneNode (*node, function);
+        }
+    }
+}
+
+/* The node below a component whose entity is the given one: the first one met, depth first. */
+SceneNodeComponent* findSceneNode (const Component& parent, const Entity& entity)
+{
+    for (int i = 0; i < parent.getNumChildComponents(); ++i)
+    {
+        auto* node = dynamic_cast<SceneNodeComponent*> (parent.getChildComponent (i));
+        if (node == nullptr)
+            continue;
+
+        if (node->getEntity() == entity)
+            return node;
+
+        if (auto* found = findSceneNode (*node, entity))
+            return found;
+    }
+
+    return nullptr;
+}
+
+/* How a scene is seen in an area: through its active camera, or the one the renderer draws a scene without a camera through. */
+struct SceneViewpoint
+{
+    SceneViewpoint (const Scene& scene, Rectangle<float> areaToSeeIn)
+        : area (areaToSeeIn)
+    {
+        if (const auto* active = scene.getActiveCamera())
+        {
+            camera = active;
+            world = active->getEntity().isValid() ? active->getEntity().getWorldMatrix() : Matrix4();
+        }
+    }
+
+    std::optional<Ray> getRay (Point<float> position) const
+    {
+        auto ray = camera->getRay (position, area);
+
+        // A camera that has no entity gives the ray in its own space
+        if (ray.has_value() && camera == &fallback)
+            ray = ray->transformedBy (world);
+
+        return ray;
+    }
+
+    Matrix4 getViewProjection() const
+    {
+        const auto aspect = area.getWidth() > 0.0f && area.getHeight() > 0.0f ? area.getWidth() / area.getHeight() : 1.0f;
+
+        // A far plane at infinity can't be mapped back from. Where the points are shown does not depend on it: any plane does
+        const auto isInfinite = camera->projection == CameraNode::Projection::perspective && camera->zFar <= camera->zNear;
+        const auto projection = isInfinite ? Matrix4::perspective (camera->yFov, aspect, camera->zNear, camera->zNear * 2.0f)
+                                           : camera->getProjectionMatrix (aspect);
+
+        return world.inverted().followedBy (projection);
+    }
+
+    CameraNode fallback;
+    const CameraNode* camera = &fallback;
+    Matrix4 world = Matrix4::translation ({ 0.0f, 0.0f, 5.0f });
+    Rectangle<float> area;
+};
+
+} // namespace
+
+//==============================================================================
+/* Follows the document that built the component: its loads, and the files read through it that change. */
+struct SceneComponent::DocumentLink final : YuiDocument::Listener
+{
+    explicit DocumentLink (SceneComponent& ownerToUse)
+        : owner (ownerToUse)
+    {
+    }
+
+    ~DocumentLink() override
+    {
+        follow (nullptr);
+    }
+
+    void follow (YuiDocument* newDocument)
+    {
+        if (document.get() == newDocument)
+            return;
+
+        if (auto* previous = document.get())
+            previous->removeListener (this);
+
+        document = newDocument;
+
+        if (newDocument != nullptr)
+            newDocument->addListener (this);
+    }
+
+    void documentLoaded (YuiDocument&, const Result&) override
+    {
+        // The values of the load are in: the meshes they describe are built, the nodes find the one that shows the components
+        // inside them, and what is wrong is told with the rest. Who hears about a problem may destroy the scene
+        const BailOutChecker checker (&owner);
+
+        owner.lastPick.reset();
+        owner.updateMeshes();
+
+        if (! checker.shouldBailOut())
+            owner.updateSurfaces();
+
+        // The frames resolve the shaders of the materials: done here too, for what prevents one to be told with the load
+        if (! checker.shouldBailOut())
+            owner.updateAnimatedComponents (0.0);
+
+        if (! checker.shouldBailOut())
+            owner.sendProblems();
+    }
+
+    void documentAssetChanged (YuiDocument&, const String& path) override
+    {
+        owner.assetChanged (path);
+    }
+
+    SceneComponent& owner;
+    WeakReference<YuiDocument> document;
+};
+
+//==============================================================================
 
 SceneComponent::SceneComponent (StringRef componentID)
     : Component (componentID)
@@ -33,14 +221,590 @@ SceneComponent::SceneComponent (StringRef componentID)
     setWantsKeyboardFocus (true);
 }
 
-SceneComponent::~SceneComponent() = default;
+SceneComponent::~SceneComponent()
+{
+    // What the nodes rendered of the components inside them goes with the scene it was shown in: the nodes may outlive it
+    forEachSceneNode (*this, [] (SceneNodeComponent& node)
+    {
+        if (auto* surface = node.getSurface())
+            surface->release();
+    });
+}
 
 //==============================================================================
 
 void SceneComponent::setScene (Scene::Ptr newScene)
 {
-    scene = std::move (newScene);
+    // The scene shown before stays until the components below have left it
+    const auto previous = std::exchange (scene, std::move (newScene));
+
+    // A node that can't be in the new scene as it was says so, and who hears about it may destroy this component
+    const BailOutChecker checker (this);
+
+    if (previous != scene)
+        sceneChanged();
+
+    if (checker.shouldBailOut())
+        return;
+
+    updateOpaqueState();
     repaint();
+}
+
+Scene& SceneComponent::getOrCreateScene()
+{
+    if (scene == nullptr)
+    {
+        scene = new Scene();
+        watchScene();
+        updateOpaqueState();
+    }
+
+    return *scene;
+}
+
+void SceneComponent::sceneChanged()
+{
+    watchScene();
+    lastPick.reset();
+
+    // Their entities are made again in the scene, or in one made for them when it is nullptr
+    const BailOutChecker checker (this);
+    SceneNodeComponent::updateEntitiesBelow (*this);
+
+    if (checker.shouldBailOut())
+        return;
+
+    updateActiveCamera();
+    SceneMaterialComponent::updateHost (*this);
+}
+
+void SceneComponent::watchScene()
+{
+    activeCamera = {};
+    entityDestroyed = {};
+
+    if (scene == nullptr)
+        return;
+
+    // The scene falls back on the first camera it finds once the one it was given goes, a camera of a model included
+    entityDestroyed = scene->onDestroy().connect ([this] (Entity entity)
+    {
+        if (entity == activeCamera)
+            updateActiveCamera (entity);
+    });
+}
+
+void SceneComponent::updateActiveCamera (const Entity& leaving)
+{
+    if (scene == nullptr)
+        return;
+
+    const auto* camera = findActiveSceneCamera (*this, *scene, leaving);
+    const auto entity = camera != nullptr ? camera->getEntity() : Entity();
+
+    if (entity == activeCamera)
+        return;
+
+    activeCamera = entity;
+    scene->setActiveCamera (entity);
+    repaint();
+}
+
+//==============================================================================
+
+void SceneComponent::setContinuousUpdates (bool shouldUpdateContinuously)
+{
+    if (continuousUpdates == shouldUpdateContinuously)
+        return;
+
+    continuousUpdates = shouldUpdateContinuously;
+    featureChanged (SceneComponentIds::continuous);
+}
+
+//==============================================================================
+
+SceneSettings SceneComponent::getSettings() const
+{
+    return scene != nullptr ? SceneSettings::resolve (*scene) : SceneSettings();
+}
+
+void SceneComponent::featureChanged (const Identifier& property)
+{
+    // Told last: who hears about the change may destroy the component
+    repaint();
+    notifyPropertyChanged (property);
+}
+
+void SceneComponent::setBackgroundColor (Color newColor)
+{
+    if (getBackgroundColor() == newColor)
+        return;
+
+    getOrCreateScene().getRoot().getOrAttach<BackgroundNode>().color = newColor;
+    updateOpaqueState();
+    featureChanged (SceneComponentIds::background);
+}
+
+Color SceneComponent::getBackgroundColor() const
+{
+    return getSettings().backgroundColor;
+}
+
+void SceneComponent::setAmbientColor (Color newColor)
+{
+    if (getAmbientColor() == newColor)
+        return;
+
+    getOrCreateScene().getRoot().getOrAttach<AmbientLightNode>().color = newColor;
+    featureChanged (SceneComponentIds::ambient);
+}
+
+Color SceneComponent::getAmbientColor() const
+{
+    return getSettings().ambientColor;
+}
+
+void SceneComponent::setExposure (float newExposure)
+{
+    if (getExposure() == newExposure)
+        return;
+
+    getOrCreateScene().getRoot().getOrAttach<ExposureNode>().exposure = newExposure;
+    featureChanged (SceneComponentIds::exposure);
+}
+
+float SceneComponent::getExposure() const
+{
+    return getSettings().exposure;
+}
+
+void SceneComponent::setToneMapping (ToneMappingOperator newOperator)
+{
+    if (getToneMapping() == newOperator)
+        return;
+
+    getOrCreateScene().getRoot().getOrAttach<ToneMappingNode>().type = newOperator;
+    featureChanged (SceneComponentIds::toneMapping);
+}
+
+ToneMappingOperator SceneComponent::getToneMapping() const
+{
+    return getSettings().toneMapping;
+}
+
+void SceneComponent::setDefaultLightEnabled (bool shouldBeEnabled)
+{
+    if (isDefaultLightEnabled() == shouldBeEnabled)
+        return;
+
+    getOrCreateScene().getRoot().getOrAttach<DefaultLightNode>().enabled = shouldBeEnabled;
+    featureChanged (SceneComponentIds::defaultLight);
+}
+
+bool SceneComponent::isDefaultLightEnabled() const
+{
+    return getSettings().useDefaultLight;
+}
+
+//==============================================================================
+
+SceneComponent* SceneComponent::findFor (Component& component)
+{
+    for (auto* parent = component.getParentComponent(); parent != nullptr; parent = parent->getParentComponent())
+    {
+        if (auto* view = dynamic_cast<SceneComponent*> (parent))
+            return view;
+
+        if (dynamic_cast<SceneNodeComponent*> (parent) == nullptr)
+            break;
+    }
+
+    return nullptr;
+}
+
+YuiDocument* SceneComponent::findDocument()
+{
+    auto* document = YuiDocument::findDocumentFor (this);
+
+    if (document != nullptr && documentLink == nullptr)
+        documentLink = std::make_unique<DocumentLink> (*this);
+
+    if (documentLink != nullptr)
+        documentLink->follow (document);
+
+    return document;
+}
+
+//==============================================================================
+
+ResultValue<GltfModel> SceneComponent::loadModel (const String& path)
+{
+    if (const auto found = models.find (path); found != models.end())
+        return found->second;
+
+    // Followed before reading, to be told when the file changes
+    const auto* document = findDocument();
+    const auto bytes = YuiDocument::readAssetFor (this, path);
+
+    // What a .gltf keeps in other files is read next to it, when the document has files
+    const auto file = document != nullptr              ? document->getAssetFile (path)
+                    : File::isAbsolutePath (path)      ? File (path)
+                                                       : File::getCurrentWorkingDirectory().getChildFile (path);
+
+    auto model = bytes.has_value() ? GltfModel::loadFromData (bytes->asBytes(), file != File() ? file.getParentDirectory() : File())
+                                   : ResultValue<GltfModel>::fail ("the file '" + path + "' can't be read");
+
+    return models.emplace (path, std::move (model)).first->second;
+}
+
+ResultValue<Texture::Ptr> SceneComponent::loadTexture (const String& path, bool isSrgb)
+{
+    const auto key = std::make_pair (path, isSrgb);
+
+    if (const auto found = textures.find (key); found != textures.end())
+        return found->second;
+
+    findDocument();
+
+    const auto makeTexture = [&]() -> ResultValue<Texture::Ptr>
+    {
+        const auto bytes = YuiDocument::readAssetFor (this, path);
+        if (! bytes.has_value())
+            return makeResultValueFail ("the file '" + path + "' can't be read");
+
+        auto image = Image::loadFromData (bytes->asBytes());
+        if (image.failed())
+            return makeResultValueFail (image.getErrorMessage());
+
+        // As the textures of a glTF model are sampled when it says nothing
+        GpuSamplerDesc sampler (GpuFilter::linear, GpuWrapMode::repeat);
+        sampler.mipmapFilter = GpuFilter::linear;
+        sampler.maxAnisotropy = 16;
+
+        return makeResultValueOk (Texture::Ptr (new Texture (std::move (image.getReference()), sampler, isSrgb)));
+    };
+
+    return textures.emplace (key, makeTexture()).first->second;
+}
+
+ResultValue<MaterialShader::Ptr> SceneComponent::loadMaterialShader (const String& path)
+{
+    if (const auto found = materialShaders.find (path); found != materialShaders.end())
+        return found->second;
+
+    findDocument();
+
+    const auto makeShader = [&]() -> ResultValue<MaterialShader::Ptr>
+    {
+        // What a build compiles the material into comes first: a variant for each tier of the renderer, either of which can be missing
+        const auto raster = YuiDocument::readAssetFor (this, path + ".raster.ysl");
+        const auto full = YuiDocument::readAssetFor (this, path + ".full.ysl");
+
+        if (raster.has_value() || full.has_value())
+        {
+            const MemoryBlock missing;
+            const auto& rasterBytes = raster.has_value() ? *raster : missing;
+            const auto& fullBytes = full.has_value() ? *full : missing;
+
+            return MaterialShader::createFromData (rasterBytes.getData(), rasterBytes.getSize(), fullBytes.getData(), fullBytes.getSize());
+        }
+
+        const auto source = YuiDocument::readAssetFor (this, path);
+        if (! source.has_value())
+            return makeResultValueFail ("can't read '" + path + "' nor its compiled variants '" + path + ".raster.ysl' and '" + path + ".full.ysl'");
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+        return MaterialShader::createFromSource (source->toString());
+#else
+        return makeResultValueFail ("'" + path + "' is the source of a material, which this build can't compile, and there is no '" + path + ".raster.ysl' nor '" + path + ".full.ysl'");
+#endif
+    };
+
+    return materialShaders.emplace (path, makeShader()).first->second;
+}
+
+void SceneComponent::reportProblem (const DataTree& element, const Identifier& property, const String& message)
+{
+    // Where the problems of the components go, see sendProblem(): the document finds where the element is written
+    auto* document = findDocument();
+    if (document == nullptr)
+        return;
+
+    if (const auto& tell = document->getBuilder().onDiagnostic; tell != nullptr)
+        tell ({ .message = message, .element = element, .property = property });
+}
+
+void SceneComponent::assetChanged (const String& path)
+{
+    // Forgotten before anything asks for it again: the first to ask reads the file, the others share what it read
+    models.erase (path);
+    textures.erase (std::make_pair (path, true));
+    textures.erase (std::make_pair (path, false));
+
+    // A material shader is kept by the path of its source, whichever of its files changed: that one, or one of its two variants
+    for (const auto* suffix : { "", ".raster.ysl", ".full.ysl" })
+    {
+        if (path.endsWith (suffix))
+            materialShaders.erase (path.dropLastCharacters (static_cast<int> (std::strlen (suffix))));
+    }
+
+    // Found before any of them is told: one telling what is wrong with its file may be heard by something that
+    // destroys the others, or takes them away
+    std::vector<WeakReference<Component>> users;
+    findSceneAssetUsers (*this, users);
+
+    for (const auto& user : users)
+    {
+        if (auto* material = dynamic_cast<SceneMaterialComponent*> (user.get()))
+            material->assetChanged (path);
+        else if (auto* model = dynamic_cast<SceneModelComponent*> (user.get()))
+            model->assetChanged (path);
+    }
+}
+
+//==============================================================================
+
+void SceneComponent::reportProblem (Component& component, const Identifier& property, const String& message, YuiDiagnostic::Severity severity)
+{
+    problems.push_back ({ WeakReference<Component> (&component), property, message, severity });
+    sendProblem (problems.back());
+}
+
+void SceneComponent::clearProblems (const Component& component, const Identifier& property)
+{
+    // With those of the components that are gone: nothing else lets go of them while no document loads
+    std::erase_if (problems, [&] (const Problem& problem)
+    {
+        const auto* reported = problem.component.get();
+        return reported == nullptr || (reported == &component && problem.property == property);
+    });
+}
+
+void SceneComponent::sendProblem (const Problem& problem)
+{
+    auto* component = problem.component.get();
+    auto* document = findDocument();
+
+    if (component == nullptr || document == nullptr)
+        return;
+
+    // The document has no way in for the problems a component finds in its values: they go where
+    // the builder sends the ones its bindings meet, which the document drops while it loads
+    auto& builder = document->getBuilder();
+    if (builder.onDiagnostic == nullptr)
+        return;
+
+    auto subject = component->getTypeInfo().getTypeName().toString();
+    if (problem.property.isValid())
+        subject << "." << problem.property.toString();
+
+    builder.onDiagnostic ({ .message = subject + ": " + problem.message,
+                            .element = builder.findElementFor (component),
+                            .property = problem.property,
+                            .severity = problem.severity });
+}
+
+void SceneComponent::sendProblems()
+{
+    // What went away, or to another scene, has nothing left to tell here
+    std::erase_if (problems, [this] (const Problem& problem)
+    {
+        auto* component = problem.component.get();
+        return component == nullptr || findFor (*component) != this;
+    });
+
+    // A copy: who hears about a problem may change the scene, or destroy it
+    const BailOutChecker checker (this);
+
+    for (const auto& problem : std::vector<Problem> (problems))
+    {
+        sendProblem (problem);
+
+        if (checker.shouldBailOut())
+            return;
+    }
+}
+
+//==============================================================================
+
+void SceneComponent::deferMeshUpdate (SceneMeshComponent& mesh)
+{
+    // Once, and without the ones that are gone: nothing else empties the list while no frame is drawn nor document loaded
+    changedMeshes.removeIf ([&mesh] (const WeakReference<Component>& queued)
+    {
+        return queued.get() == nullptr || queued.get() == &mesh;
+    });
+
+    changedMeshes.add (WeakReference<Component> (&mesh));
+
+    // Followed, to build the mesh once the values the document is applying are all in
+    findDocument();
+}
+
+void SceneComponent::updateMeshes()
+{
+    for (const auto& changed : std::exchange (changedMeshes, {}))
+        if (auto* mesh = dynamic_cast<SceneMeshComponent*> (changed.get()))
+            mesh->getMesh();
+}
+
+void SceneComponent::deferSurfaceUpdate()
+{
+    // Followed, to find what shows the components once the values the document is applying are all in
+    findDocument();
+    sceneContentChanged();
+}
+
+void SceneComponent::updateSurfaces()
+{
+    std::vector<std::pair<WeakReference<Component>, String>> found;
+
+    forEachSceneNode (*this, [&found] (SceneNodeComponent& node)
+    {
+        if (auto* surface = node.getSurface())
+        {
+            if (const auto problem = surface->update(); problem.isNotEmpty())
+                found.emplace_back (&node, problem);
+        }
+    });
+
+    // Told last, once every node was seen: who hears about a problem may destroy the nodes, and the scene
+    const BailOutChecker checker (this);
+
+    for (const auto& [node, problem] : found)
+    {
+        if (auto* component = node.get())
+            reportProblem (*component, {}, problem);
+
+        if (checker.shouldBailOut())
+            return;
+    }
+}
+
+//==============================================================================
+
+SceneNodeComponent* SceneComponent::findNodeAt (Point<float> position)
+{
+    if (! lastPick.has_value() || lastPick->position != position)
+        lastPick = Pick { position, WeakReference<Component> (pickNode (position)) };
+
+    return static_cast<SceneNodeComponent*> (lastPick->node.get());
+}
+
+SceneNodeComponent* SceneComponent::pickNode (Point<float> position)
+{
+    const auto bounds = getLocalBounds();
+
+    if (scene == nullptr || ! bounds.contains (position))
+        return nullptr;
+
+    // What is written over the scene takes the pointer first, wherever it is among the components
+    for (int i = 0; i < getNumChildComponents(); ++i)
+    {
+        auto* child = getChildComponent (i);
+
+        if (! child->isVisible() || dynamic_cast<SceneNodeComponent*> (child) != nullptr)
+            continue;
+
+        if (const auto point = child->getLocalPointFromParent (position); point.has_value() && child->findComponentAtForMouseEvent (*point) != nullptr)
+            return nullptr;
+    }
+
+    const SceneViewpoint viewpoint (*scene, bounds);
+    const auto ray = viewpoint.getRay (position);
+
+    if (! ray.has_value())
+        return nullptr;
+
+    // Between the planes the camera clips at: a distance along its ray is a depth of its view
+    const auto& camera = *viewpoint.camera;
+    auto distance = camera.zFar > camera.zNear ? camera.zFar : std::numeric_limits<float>::max();
+    Entity nearest;
+
+    for (auto [entity, mesh] : scene->view<MeshNode>())
+    {
+        if (! entity.isActive())
+            continue;
+
+        if (const auto hit = mesh.intersectTriangles (*ray, camera.zNear, distance); hit.has_value())
+        {
+            nearest = entity;
+            distance = *hit;
+        }
+    }
+
+    // The node of the mesh, or of the nearest entity above it that a node made or is bound to
+    for (auto entity = nearest; entity.isValid(); entity = entity.getParent())
+    {
+        if (auto* node = findSceneNode (*this, entity))
+            return node;
+    }
+
+    return nullptr;
+}
+
+Matrix4 SceneComponent::getViewProjection() const
+{
+    return scene != nullptr ? SceneViewpoint (*scene, getLocalBounds()).getViewProjection() : Matrix4();
+}
+
+void SceneComponent::sceneContentChanged()
+{
+    lastPick.reset();
+
+    // What changes while the scene is brought up to date for a paint is drawn by that paint
+    if (isUpdatingScene)
+        return;
+
+    isSceneOutdated = true;
+    repaint();
+}
+
+void SceneComponent::updateScene()
+{
+    if (scene == nullptr || ! std::exchange (isSceneOutdated, false))
+        return;
+
+    // What the nodes changed is followed by what depends on it, a mesh by the joints a node turned, before it is drawn. No
+    // time elapses: a clip that plays is posed where it was
+    const ScopedValueSetter<bool> updating (isUpdatingScene, true);
+
+    scene->update (0.0);
+    lastPick.reset();
+}
+
+void SceneComponent::resized()
+{
+    lastPick.reset();
+}
+
+void SceneComponent::childrenChanged()
+{
+    lastPick.reset();
+}
+
+//==============================================================================
+
+const ComponentTypeInfo& SceneComponent::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<SceneComponent> (Identifier ("Scene3D"))
+                                 .styleableProperty (SceneComponentIds::background, &SceneComponent::getBackgroundColor, &SceneComponent::setBackgroundColor, SceneSettings().backgroundColor, "The color the scene is cleared to. With an alpha below 1 what lies behind the scene shows through where no surface is drawn.")
+                                 .styleableProperty (SceneComponentIds::ambient, &SceneComponent::getAmbientColor, &SceneComponent::setAmbientColor, SceneSettings().ambientColor, "The flat ambient light added to every surface.")
+                                 .styleableProperty (SceneComponentIds::exposure, &SceneComponent::getExposure, &SceneComponent::setExposure, SceneSettings().exposure, "The multiplier applied to the lit scene before tone mapping.")
+                                 .enumeration<ToneMappingOperator> (
+                                     SceneComponentIds::toneMapping,
+                                     { { "reinhard", ToneMappingOperator::reinhard },
+                                       { "aces", ToneMappingOperator::aces },
+                                       { "agx", ToneMappingOperator::agx } },
+                                     &SceneComponent::getToneMapping,
+                                     &SceneComponent::setToneMapping,
+                                     "The operator mapping the lit colors into the displayable range.")
+                                 .styleableProperty (SceneComponentIds::defaultLight, &SceneComponent::isDefaultLightEnabled, &SceneComponent::setDefaultLightEnabled, SceneSettings().useDefaultLight, "Whether a default directional light shines while the scene has no light.")
+                                 .property (SceneComponentIds::continuous, &SceneComponent::isUpdatingContinuously, &SceneComponent::setContinuousUpdates, false, "Updates and repaints the scene on every display frame, instead of when something in it changes.")
+                                 .build();
+
+    return info;
 }
 
 //==============================================================================
@@ -50,10 +814,20 @@ void SceneComponent::paint (Graphics& g)
     rendered = false;
 
     const auto bounds = getLocalBounds();
-    const auto background = scene != nullptr ? SceneSettings::resolve (*scene).backgroundColor : Color (0xff000000);
+    const auto background = getSettings().backgroundColor;
 
-    g.setFillColor (background);
-    g.fillAll();
+    // An opaque component paints all its pixels. One that is not draws the scene over what lies
+    // behind it: its translucent background is in the texture already, premultiplied, and a fill
+    // would count it twice. The fill is opaque even when the background turned translucent after
+    // the opaque state was resolved, which the frame being painted relies on
+    const auto opaqueBackground = background.withAlpha (1.0f);
+    const auto filled = isOpaque();
+
+    if (filled)
+    {
+        g.setFillColor (opaqueBackground);
+        g.fillAll();
+    }
 
     if (scene == nullptr)
         return;
@@ -72,6 +846,16 @@ void SceneComponent::paint (Graphics& g)
         if (width < 1 || height < 1)
             return;
 
+        // The scene follows what its nodes changed, and what they show of the components inside them is rendered: it is
+        // drawn with both
+        updateScene();
+
+        forEachSceneNode (*this, [&] (SceneNodeComponent& node)
+        {
+            if (auto* surface = node.getSurface())
+                surface->render (context, g.getContextScale());
+        });
+
         if (auto texture = renderer.render (context.getGpuDevice(), *scene, width, height))
         {
             g.drawTexture (texture, bounds);
@@ -82,22 +866,101 @@ void SceneComponent::paint (Graphics& g)
         error = renderer.getLastError();
     }
 
-    g.setFillColor (background.contrasting());
+    // The message has to be readable whatever lies behind the component: over the background made opaque
+    if (! filled)
+    {
+        g.setFillColor (opaqueBackground);
+        g.fillAll();
+    }
+
+    g.setFillColor (opaqueBackground.contrasting());
     g.fillFittedText (error, ApplicationTheme::getGlobalTheme()->getDefaultFont(), bounds.reduced (10.0f));
 }
 
 void SceneComponent::refreshDisplay (double lastFrameTimeSeconds)
 {
-    if (scene == nullptr)
+    // What was under the pointer may be something else in the frame to come
+    lastPick.reset();
+
+    // Here and not in paint(), as building a mesh, or finding that a node draws none for the components inside it, may
+    // report what is wrong: who hears about it may destroy the scene
+    const BailOutChecker checker (this);
+
+    updateMeshes();
+
+    if (! checker.shouldBailOut())
+        updateSurfaces();
+
+    if (checker.shouldBailOut() || scene == nullptr)
         return;
 
-    if (continuousUpdates)
-        scene->update (lastFrameTimeSeconds);
+    if (! updateAnimatedComponents (lastFrameTimeSeconds))
+        return;
+
+    // Nothing tells when the background of the scene changes, its color being a plain field, so
+    // it is resolved on every frame. Here and not in paint(): by then the frame has read which
+    // components are opaque, to skip painting what they cover
+    updateOpaqueState();
 
     // Frames still accumulating are requested here, as paint() must not call repaint(). Only after
     // a paint that rendered: a hidden or empty component would never converge
     if (continuousUpdates || (rendered && ! renderer.isConverged()))
         repaint();
+}
+
+bool SceneComponent::updateAnimatedComponents (double elapsedSeconds)
+{
+    // What the components tell while they are brought up to date, a clip that ended or a shader that can't be used, can
+    // reach a listener that lets go of the scene or deletes this component: the scene is kept, and false tells that the
+    // component went
+    const BailOutChecker checker (this);
+    const auto shown = scene;
+
+    if (shown == nullptr)
+        return true;
+
+    // The scene is updated once on a frame, when it is asked to be on every one or while a clip plays, which poses its
+    // model: whatever the number of models playing
+    const auto isUpdated = continuousUpdates || SceneModelComponent::isPlayingIn (*shown);
+
+    if (isUpdated)
+    {
+        // The update follows what the nodes changed too. What they change while it runs is followed by the paint
+        isSceneOutdated = false;
+        shown->update (elapsedSeconds);
+    }
+
+    // The shaders of the materials take the values their properties have by then, and tell when one changed
+    const auto isChanged = SceneMaterialComponent::updateShaders (*shown, elapsedSeconds) || isUpdated;
+
+    if (checker.shouldBailOut())
+        return false;
+
+    if (isChanged)
+        repaint();
+
+    return true;
+}
+
+void SceneComponent::updateOpaqueState()
+{
+    // Without a scene the component fills itself
+    setOpaque (scene == nullptr || SceneSettings::resolve (*scene).backgroundColor.isOpaque());
+}
+
+//==============================================================================
+
+void registerSceneComponentTypes()
+{
+    auto& registry = ComponentTypeRegistry::getInstance();
+
+    registry.registerType (SceneComponent::getClassTypeInfo());
+    registry.registerType (SceneNodeComponent::getClassTypeInfo());
+    registry.registerType (SceneCameraComponent::getClassTypeInfo());
+    registry.registerType (SceneLightComponent::getClassTypeInfo());
+    registry.registerType (SceneMeshComponent::getClassTypeInfo());
+    registry.registerType (SceneModelComponent::getClassTypeInfo());
+    registry.registerType (SceneMaterialComponent::getClassTypeInfo());
 }
 
 } // namespace yup

@@ -41,6 +41,7 @@
     shaderBundles:        ForwardPass AREA_LIGHTS? SOFT_SHADOWS?
                           ForwardPass AREA_LIGHTS? SOFT_SHADOWS? LOCAL_INDIRECT LAYERS?
                           ForwardPass TIER_FULL AREA_LIGHTS? SOFT_SHADOWS?
+                          MaterialShader TIER_FULL?
                           LightingPass TIER_FULL AREA_LIGHTS? SOFT_SHADOWS?
                           LightingPass TIER_FULL AREA_LIGHTS? SOFT_SHADOWS? LOCAL_INDIRECT LAYERS?
                           LightingClassify TIER_FULL LOCAL_INDIRECT?
@@ -52,7 +53,7 @@
                           GtaoTrace SCREEN_SPACE_GI?
                           GtaoDenoise SCREEN_SPACE_GI?
                           Background, GBufferBackground, DepthNormalPrepass, LightClusters, DebugView
-                          BloomDownsample, BloomUpsample, SsgiComposite, HiZCopy, HiZDownsample, SsrTrace, SsrResolve, SsrDenoise
+                          BloomDownsample, BloomUpsample, SsgiComposite, HiZCopy, HiZDownsample, SsrDownsample, SsrTrace, SsrResolve, SsrDenoise
                           DofSetup, DofTiles, DofGather, DofComposite, FogApply
                           MotionTileMax, MotionNeighborMax, MotionReconstruct
                           ProbeEquirectToCube, ProbeCubeDownsample, ProbePrefilter, ProbeCaptureResolve
@@ -73,6 +74,7 @@
 
 #include "resources/yup_SphericalHarmonics.h"
 #include "resources/yup_EnvironmentMap.h"
+#include "resources/yup_MaterialShader.h"
 #include "nodes/yup_ReflectionProbeNode.h"
 #include "nodes/yup_IrradianceVolumeNode.h"
 #include "nodes/yup_WorldFogNode.h"
@@ -82,6 +84,7 @@
 #include "nodes/yup_ToneMappingNode.h"
 #include "nodes/yup_DefaultLightNode.h"
 #include "nodes/yup_EnvironmentNode.h"
+#include "nodes/yup_MaterialShaderNode.h"
 #include "scene/yup_SceneSettings.h"
 #include "core/yup_RenderSettings.h"
 #include "core/yup_RenderCapabilities.h"
@@ -119,3 +122,9 @@
 #include "post/yup_PostChain.h"
 #include "core/yup_SceneRenderer.h"
 #include "core/yup_SceneComponent.h"
+#include "components/yup_SceneNodeComponent.h"
+#include "components/yup_SceneCameraComponent.h"
+#include "components/yup_SceneLightComponent.h"
+#include "components/yup_SceneMeshComponent.h"
+#include "components/yup_SceneModelComponent.h"
+#include "components/yup_SceneMaterialComponent.h"

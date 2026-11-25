@@ -158,6 +158,17 @@ public:
                 for (const auto& name : primitive.inputs)
                     inputs.push_back (findInput (name, i));
             }
+            else if (primitive.type == Type::shader)
+            {
+                // A shader reads as many pictures as it declares textures
+                const int numTextures = primitive.shader != nullptr ? primitive.shader->getNumInputTextures() : 0;
+
+                if (numTextures > 0)
+                    inputs.push_back (findInput (primitive.in, i));
+
+                if (numTextures > 1)
+                    inputs.push_back (findInput (primitive.in2, i));
+            }
             else if (primitive.type != Type::flood)
             {
                 inputs.push_back (findInput (primitive.in, i));
@@ -453,6 +464,10 @@ private:
                 release (blurred);
                 return done;
             }
+
+            case Type::shader:
+                return primitive.shader != nullptr
+                    && primitive.shader->draw (shared.device, frame, *shared.scratch[static_cast<size_t> (target)], primitive.uniforms, first, second).wasOk();
         }
 
         return false;

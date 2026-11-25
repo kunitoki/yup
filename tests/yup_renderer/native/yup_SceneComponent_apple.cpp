@@ -55,6 +55,47 @@ protected:
             GTEST_SKIP() << "No Metal graphics context available";
     }
 
+    /** A scene of an emissive orange quad 0.8 wide in front of the default camera, over @p background. */
+    static Scene::Ptr makeQuadScene (Color background)
+    {
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { -0.4f, -0.4f, 0.0f };
+        vertices[1].position = { 0.4f, -0.4f, 0.0f };
+        vertices[2].position = { 0.4f, 0.4f, 0.0f };
+        vertices[3].position = { -0.4f, 0.4f, 0.0f };
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+        auto material = Material::Ptr (new Material());
+        material->baseColorFactor = { 0.0f, 0.0f, 0.0f, 1.0f };
+        material->emissiveFactor = { 1.0f, 0.5f, 0.1f };
+
+        auto mesh = Mesh::Ptr (new Mesh ("quad"));
+        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
+
+        auto scene = Scene::Ptr (new Scene());
+        scene->createEntity ("quad").attach<MeshNode> (mesh);
+        scene->getRoot().attach<BackgroundNode> (background);
+        return scene;
+    }
+
+    /** Paints @p component over a 32 x 32 canvas filled with @p backdrop, as its parent would have left it. */
+    Image paintOverBackdrop (SceneComponent& component, Color backdrop)
+    {
+        auto canvas = GpuCanvas::create (*context, 32, 32);
+        if (canvas == nullptr)
+            return {};
+
+        auto& g = canvas->beginDraw();
+        g.setFillColor (backdrop);
+        g.fillAll();
+        component.paint (g);
+
+        EXPECT_TRUE (component.getRenderer().getLastError().isEmpty()) << component.getRenderer().getLastError();
+        EXPECT_TRUE (component.getRenderer().waitForGPU().wasOk());
+        return canvas->asImage();
+    }
+
     GpuDevice::Ptr device;
     std::unique_ptr<GraphicsContext> context;
 };
@@ -120,4 +161,97 @@ TEST_F (SceneComponentMetalTests, DoesNotRepaintWhenNothingWasRendered)
     Helper::takeRepaintRequest (component);
     component.refreshDisplay (0.0);
     EXPECT_FALSE (Helper::takeRepaintRequest (component));
+}
+
+TEST_F (SceneComponentMetalTests, DrawsASeeThroughSceneOverWhatLiesBehind)
+{
+    const Color backdrop (0xff28a0dc);
+
+    for (const auto tier : { RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full })
+    {
+        SCOPED_TRACE (tier == RenderSettings::TierPreference::full ? "full" : "raster");
+
+        SceneComponent component;
+        auto settings = component.getRenderer().getRenderSettings();
+        settings.tier = tier;
+        component.getRenderer().setRenderSettings (settings);
+        component.setVisible (true);
+        component.setBounds (0.0f, 0.0f, 32.0f, 32.0f);
+
+        // A transparent background leaves what lies behind as it is, around the quad
+        component.setScene (makeQuadScene (Colors::transparentBlack));
+        EXPECT_FALSE (component.isOpaque());
+
+        auto image = paintOverBackdrop (component, backdrop);
+        ASSERT_TRUE (image.isValid());
+
+        auto corner = image.getPixelColor (2, 2);
+        EXPECT_NEAR (corner.getRed(), 40, 2);
+        EXPECT_NEAR (corner.getGreen(), 160, 2);
+        EXPECT_NEAR (corner.getBlue(), 220, 2);
+
+        const auto center = image.getPixelColor (16, 16);
+        EXPECT_GT (center.getRed(), center.getBlue() + 60);
+
+        // An orange background of alpha 0.2 adds a fifth of its color to 0.8 of what lies behind
+        component.setScene (makeQuadScene (Color (0x33ff6400)));
+        EXPECT_FALSE (component.isOpaque());
+
+        image = paintOverBackdrop (component, backdrop);
+        ASSERT_TRUE (image.isValid());
+
+        corner = image.getPixelColor (2, 2);
+        EXPECT_NEAR (corner.getRed(), 83, 2);
+        EXPECT_NEAR (corner.getGreen(), 148, 2);
+        EXPECT_NEAR (corner.getBlue(), 176, 2);
+
+        // An opaque background covers it, and the component is opaque again
+        component.setScene (makeQuadScene (Color (0xff1a1a2e)));
+        EXPECT_TRUE (component.isOpaque());
+
+        image = paintOverBackdrop (component, backdrop);
+        ASSERT_TRUE (image.isValid());
+
+        corner = image.getPixelColor (2, 2);
+        EXPECT_NEAR (corner.getRed(), 26, 2);
+        EXPECT_NEAR (corner.getGreen(), 26, 2);
+        EXPECT_NEAR (corner.getBlue(), 46, 2);
+    }
+}
+
+TEST_F (SceneComponentMetalTests, PaintsAllItsPixelsWhileItIsStillOpaque)
+{
+    const Color backdrop (0xff28a0dc);
+
+    SceneComponent component;
+    component.setVisible (true);
+    component.setBounds (0.0f, 0.0f, 32.0f, 32.0f);
+
+    auto scene = makeQuadScene (Color (0xff1a1a2e));
+    component.setScene (scene);
+    ASSERT_TRUE (component.isOpaque());
+
+    // The background turns translucent without the component knowing. The frame painted next took
+    // it as opaque, so it covers what lies behind: with the scene over that background made opaque
+    scene->getRoot().get<BackgroundNode>()->color = Color (0x33ff6400);
+
+    auto image = paintOverBackdrop (component, backdrop);
+    ASSERT_TRUE (image.isValid());
+
+    auto corner = image.getPixelColor (2, 2);
+    EXPECT_NEAR (corner.getRed(), 255, 2);
+    EXPECT_NEAR (corner.getGreen(), 100, 2);
+    EXPECT_NEAR (corner.getBlue(), 0, 2);
+
+    // Its next display frame finds out, and what lies behind shows through
+    component.refreshDisplay (0.0);
+    EXPECT_FALSE (component.isOpaque());
+
+    image = paintOverBackdrop (component, backdrop);
+    ASSERT_TRUE (image.isValid());
+
+    corner = image.getPixelColor (2, 2);
+    EXPECT_NEAR (corner.getRed(), 83, 2);
+    EXPECT_NEAR (corner.getGreen(), 148, 2);
+    EXPECT_NEAR (corner.getBlue(), 176, 2);
 }

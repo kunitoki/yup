@@ -1,8 +1,9 @@
 # The `.yui` language
 
 A `.yui` file describes an interface as text: how components paint
-(`drawing`), how they look in each state (`palette` and `style`), and what the
-interface is made of (`tokens`, `component` and the root instance). This page
+(`drawing` and `shader`), how they look in each state (`palette` and `style`),
+and what the interface is made of (`tokens`, `component` and the root
+instance). This page
 is the reference of the syntax; the guides linked from each section describe
 what the blocks do.
 
@@ -40,6 +41,7 @@ A file is a sequence of blocks, in any order:
 |---|---|---|
 | `import "path";` | The blocks of another file | [below](#imports) |
 | `drawing Name { ... }` | Shapes painting a component | [Data-driven drawing](drawing.md) |
+| `shader Name { ... }` | A GLSL shader and its inputs | [Shaders](shaders.md) |
 | `palette Name { ... }` | A palette derived from source colors | [Stylesheets](styles.md#palettes) |
 | `style { ... }` | Rules and `@keyframes` | [Stylesheets](styles.md) |
 | `tokens { ... }` | Typed values shared by the document | [Tokens](documents.md#tokens) |
@@ -72,7 +74,9 @@ Column {
 A property can be set once per element. Inside a `drawing` the children are
 shapes and scopes (`circle`, `layer`, ...); in the instance tree and in
 `component` blocks they are components, named by their registered type
-(`Slider`, `Row`, ...) or by a `component` declared in the document.
+(`Slider`, `Row`, ...) or by a `component` declared in the document. The
+objects of a [3D scene](scenes.md) are such components too (`Scene3D`,
+`Model3D`, `Light3D`, ...).
 
 Two properties are special in the instance tree: `id` names an element so
 expressions and C++ (`findById`) can reach it, and `class` gives it style
@@ -136,7 +140,9 @@ A property that is an `integer` takes any number, cut to a whole one as
 
 The values of `style` and `palette` blocks are kept as written up to their `;`,
 because some aren't expressions (`transition: bezelSize 150ms easeOut;`,
-`drawing: Knob;`). They are compiled when the stylesheet applies them.
+`drawing: Knob;`). They are compiled when the stylesheet applies them. The
+`fragment` and the `material` of a `shader` block are kept as written too:
+they are paths, in quotes.
 
 ## Declarations
 
@@ -178,12 +184,16 @@ Title { titleFont: font ("fonts/Inter.ttf").withAxisValue ("wght", 700).withHeig
 
 Font files load in component property values (instances, `component`
 defaults, `tokens`, bindings), not in the property defaults at the top of a
-`drawing`. A document loaded from embedded resources has no folder, so its
-relative paths resolve against the working directory.
+`drawing`. A document loaded from embedded resources has no folder, so the
+relative paths of its fonts and images resolve against the working directory.
+The files a document reads through itself are found among the embedded
+resources instead: the shaders of `shader` blocks, and the models and textures
+of a [3D scene](scenes.md#assets-and-hot-reload).
 
 | Where | Declares |
 |---|---|
 | At the top of a `drawing` | An input the component, its parents or a stylesheet set ([Properties](drawing.md#properties)) |
+| In a `shader` | An input of the shader, the member of its uniform block that has this name ([Properties and uniforms](shaders.md#properties-and-uniforms)) |
 | In `tokens` | A value of the document root, read by bare name everywhere |
 | In a `component` | A property of the new type, read inside as `root.name` |
 | In a style rule | A default for the components the rule matches |
@@ -207,7 +217,9 @@ Inside a drawing, `drawing Name { ... }`, `pattern Name { ... }` and
 `marker Name { ... }` define a drawing, a tile and a marker for the elements
 after them, and `use Name { ... }` paints a drawing by name, see
 [Reusing drawings](drawing.md#reusing-drawings) and
-[Patterns and markers](drawing.md#patterns-and-markers).
+[Patterns and markers](drawing.md#patterns-and-markers). A `use` also paints a
+`shader` of the document, or runs it in a filter, see
+[Painting a shader](drawing.md#painting-a-shader).
 
 ## Bindings and handlers
 
@@ -280,6 +292,8 @@ files. Comments and the original layout are not preserved.
   transitions.
 - [Data-driven drawing](drawing.md) - shapes, scopes and drawing
   properties.
+- [Shaders](shaders.md) - the `shader` block and where a shader runs.
+- [3D scenes](scenes.md) - the elements of a `Scene3D`.
 - [Layout components](../component-layout.md#layout-components) - `Row`,
   `Column`, `Grid`, `Stack` and the item properties.
 - [Hot reloading `.yui` files](hot-reload.md) - loading files and

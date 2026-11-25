@@ -154,7 +154,8 @@ flowchart LR
 ### yup_rhi
 
 The low-level GPU abstraction layer: device management, compute and render
-pipelines, frames, render passes, buffers, textures, and offscreen targets.
+pipelines, frames, render passes, buffers, textures, offscreen targets, and
+image shaders drawn over a target with their parameters set by name.
 This is the foundation for GPU work that does not require a window or Rive
 vector rendering — use it directly for GPU compute (audio DSP, FFT) without
 pulling in the 2D graphics stack.
@@ -269,8 +270,8 @@ flowchart LR
 
 Scenes as a small entity-component system: entity trees with attached nodes
 (transforms, meshes, cameras, lights, material overrides), views, collections,
-signals and ordered systems, plus resources and glTF 2.0 loading through
-`tinygltf`. glTF textures are decoded
+signals and ordered systems, plus resources, animation (clips, CPU skinning
+and morph targets) and glTF 2.0 loading through `tinygltf`. glTF textures are decoded
 with the image formats `yup_graphics` has: link `libpng`, `libjpeg` and/or
 `libwebp` for the textures your assets use.
 
@@ -289,8 +290,10 @@ The PBR scene renderer for `yup_3d` scenes: `SceneRenderer`, `SceneComponent`,
 `RenderSettings` and `RenderCapabilities`, the scene feature nodes (background,
 ambient light, exposure, tone mapping, default light, environment and fog,
 resolved by `SceneSettings`), environment maps, reflection probes and
-irradiance volumes. Its shader bundles are compiled at
-build time from the permutations declared in its module header.
+irradiance volumes, custom material shaders, and the components a
+[`.yui` document](ui/yui/scenes.md) writes a scene with (`Scene3D`, `Node3D`,
+`Camera3D`, `Light3D`, `Mesh3D`, `Model3D`, `Material3D`). Its shader bundles
+are compiled at build time from the permutations declared in its module header.
 
 ```mermaid
 flowchart LR

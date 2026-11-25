@@ -47,7 +47,10 @@ Prefab::Part::~Part()
 
 Prefab::Part& Prefab::Part::addChild (const String& childName)
 {
-    return *children.emplace_back (std::make_unique<Part> (childName));
+    auto& child = *children.emplace_back (std::make_unique<Part> (childName));
+    child.rootPart = rootPart;
+    child.index = rootPart->numParts++;
+    return child;
 }
 
 Prefab::Part& Prefab::Part::getChild (int index) noexcept
@@ -69,9 +72,20 @@ Prefab::Prefab (const String& rootName)
 {
 }
 
+void Prefab::addLink (std::function<void (Span<const Entity>)> link)
+{
+    if (link == nullptr)
+    {
+        jassertfalse; // A link needs something to call
+        return;
+    }
+
+    links.push_back (std::move (link));
+}
+
 Entity Prefab::instantiate (Scene& scene, Entity parent) const
 {
-    Entity result;
+    std::vector<Entity> entities (static_cast<size_t> (root.numParts));
     std::vector<std::pair<const Part*, Entity>> pending { { &root, parent } };
 
     while (! pending.empty())
@@ -80,8 +94,7 @@ Entity Prefab::instantiate (Scene& scene, Entity parent) const
         pending.pop_back();
 
         auto entity = scene.createEntity (part->name, partParent);
-        if (! result.isValid())
-            result = entity;
+        entities[static_cast<size_t> (part->index)] = entity;
 
         for (const auto& factory : part->factories)
             factory (entity);
@@ -91,7 +104,10 @@ Entity Prefab::instantiate (Scene& scene, Entity parent) const
             pending.emplace_back (it->get(), entity);
     }
 
-    return result;
+    for (const auto& link : links)
+        link (entities);
+
+    return entities.front();
 }
 
 } // namespace yup

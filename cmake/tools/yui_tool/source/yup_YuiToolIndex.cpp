@@ -337,13 +337,13 @@ void YuiToolIndex::addDeclaration (const YuiToolBlock& block)
     }
     else
     {
-        // `drawing Name`, `palette Name` or `component Name : Base`, and nothing more
+        // `drawing Name`, `shader Name`, `palette Name` or `component Name : Base`, and nothing more
         auto position = block.start;
 
         if (readName (position, block.open, declaration.kind) < 0)
             return;
 
-        if (declaration.kind != "drawing" && declaration.kind != "palette" && declaration.kind != "component")
+        if (declaration.kind != "drawing" && declaration.kind != "shader" && declaration.kind != "palette" && declaration.kind != "component")
             return;
 
         declaration.offset = readName (position, block.open, declaration.name);
@@ -366,7 +366,7 @@ void YuiToolIndex::addMembers (YuiToolDeclaration& declaration) const
 {
     const auto isPalette = declaration.kind == "palette";
     const auto isComponent = declaration.kind == "component";
-    const auto declaresProperties = isComponent || declaration.kind == "drawing";
+    const auto declaresProperties = isComponent || declaration.kind == "drawing" || declaration.kind == "shader";
 
     for (const auto& statement : declaration.block->statements)
     {

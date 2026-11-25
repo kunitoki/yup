@@ -657,3 +657,105 @@ TEST_F (SliderStepperTest, TheValueIsDraggedUpAndDownBetweenTheButtons)
     pointer.drag (middle, middle.translated (0.0f, 24.0f));
     EXPECT_LT (stepper.getValue(), raised);
 }
+
+//==============================================================================
+TEST_F (SliderTest, TheTrackLeavesRoomForTheThumbAsLargeAsItIsStyled)
+{
+    Slider horizontal (Slider::LinearHorizontal);
+    horizontal.setBounds (0, 0, 200, 40);
+
+    // The thumb is drawn around both ends of the track: with the size it has by default the track is where it was
+    EXPECT_FLOAT_EQ (horizontal.getSliderBounds().getX(), 10.0f);
+    EXPECT_FLOAT_EQ (horizontal.getSliderBounds().getRight(), 190.0f);
+
+    // A larger one takes the track further in, so it stays inside the slider at both ends
+    horizontal.setProperty (Identifier ("thumbSize"), 30.0);
+    EXPECT_FLOAT_EQ (horizontal.getSliderBounds().getX(), 15.0f);
+    EXPECT_FLOAT_EQ (horizontal.getSliderBounds().getRight(), 185.0f);
+
+    Slider vertical (Slider::LinearVertical);
+    vertical.setBounds (0, 0, 40, 200);
+    vertical.setProperty (Identifier ("thumbSize"), 30.0);
+    EXPECT_FLOAT_EQ (vertical.getSliderBounds().getY(), 15.0f);
+    EXPECT_FLOAT_EQ (vertical.getSliderBounds().getBottom(), 185.0f);
+
+    // A slider too low for the thumb it is drawn with keeps it inside its ends too
+    Slider low (Slider::LinearHorizontal);
+    low.setBounds (0, 0, 200, 10);
+    EXPECT_FLOAT_EQ (low.getSliderBounds().getX(), 8.0f);
+    EXPECT_FLOAT_EQ (low.getSliderBounds().getRight(), 192.0f);
+}
+
+//==============================================================================
+class SliderGpuTest : public ::testing::Test
+{
+protected:
+    static void SetUpTestSuite()
+    {
+        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
+        if (gpuContext == nullptr)
+            return;
+
+        if (GpuCanvas::create (*gpuContext, 64, 64) == nullptr)
+            gpuContext.reset();
+    }
+
+    static void TearDownTestSuite()
+    {
+        gpuContext.reset();
+    }
+
+    void SetUp() override
+    {
+        if (gpuContext == nullptr)
+            GTEST_SKIP() << "No Metal GPU context available";
+
+        oldTheme = ApplicationTheme::getGlobalTheme();
+        ApplicationTheme::setGlobalTheme (createThemeVersion1());
+    }
+
+    void TearDown() override
+    {
+        if (gpuContext != nullptr)
+            ApplicationTheme::setGlobalTheme (oldTheme.get());
+
+        oldTheme = nullptr;
+    }
+
+    static std::unique_ptr<GraphicsContext> gpuContext;
+    ApplicationTheme::Ptr oldTheme;
+};
+
+std::unique_ptr<GraphicsContext> SliderGpuTest::gpuContext;
+
+TEST_F (SliderGpuTest, ARotaryDialIsRoundInBoundsThatAreNotSquare)
+{
+    const auto paints = [] (float width, float height, int x, int y)
+    {
+        Slider dial (Slider::RotaryVerticalDrag);
+        dial.setBounds (0.0f, 0.0f, width, height);
+        dial.setValue (0.5, dontSendNotification);
+
+        const auto image = dial.snapshotToImage (*gpuContext);
+        EXPECT_TRUE (image.isValid());
+
+        // The corner of a dial is never painted
+        return image.isValid() && image.getPixelColor (x, y) != image.getPixelColor (0, 0);
+    };
+
+    // Wider than high: the dial is the circle in the middle, as high as the slider, and paints nothing beside it
+    EXPECT_TRUE (paints (96.0f, 48.0f, 48, 24));
+    EXPECT_TRUE (paints (96.0f, 48.0f, 30, 24));
+    EXPECT_TRUE (paints (96.0f, 48.0f, 65, 24));
+    EXPECT_FALSE (paints (96.0f, 48.0f, 12, 24));
+    EXPECT_FALSE (paints (96.0f, 48.0f, 84, 24));
+
+    // Higher than wide: nothing above the circle either
+    EXPECT_TRUE (paints (48.0f, 96.0f, 24, 48));
+    EXPECT_TRUE (paints (48.0f, 96.0f, 24, 30));
+    EXPECT_FALSE (paints (48.0f, 96.0f, 24, 12));
+
+    // A square one is the circle it always was, to its sides
+    EXPECT_TRUE (paints (48.0f, 48.0f, 7, 24));
+    EXPECT_TRUE (paints (48.0f, 48.0f, 24, 7));
+}

@@ -1238,3 +1238,253 @@ TEST_F (SceneDrawListParityTests, RecordsCollectionAndChurnTimes)
     drawList.build (root, {});
     EXPECT_EQ (getDrawn().items, getReference().items);
 }
+
+//==============================================================================
+/** The meshes under a MaterialShaderNode, built as SceneRenderer builds its list on a tier. */
+class SceneDrawListMaterialShaderTests : public SceneDrawListTests
+{
+protected:
+    /** Builds the list of the raster tier, which selects the lights of each draw, or of the full
+        one, coloring the meshes of every material shader but @p refused. */
+    void buildForTier (bool raster)
+    {
+        drawList.build (root, {}, { false, raster, [this] (const MaterialShader::Ptr& asked)
+        {
+            ++numShadersAsked;
+            return asked != refused;
+        } });
+    }
+
+    /** The item of @p items drawing the mesh of @p entity, or one drawing nothing. */
+    static const SceneDrawList::DrawItem& findItem (Span<const SceneDrawList::DrawItem> items, const Entity& entity)
+    {
+        static const SceneDrawList::DrawItem none;
+
+        const auto* item = std::find_if (items.begin(), items.end(), [&entity] (const SceneDrawList::DrawItem& candidate)
+        {
+            return candidate.node == entity.get<MeshNode>();
+        });
+
+        return item != items.end() ? *item : none;
+    }
+
+    MaterialShader::Ptr shader = MaterialShader::createDefault();
+    MaterialShader::Ptr otherShader = MaterialShader::createDefault();
+    MaterialShader::Ptr refused;
+    int numShadersAsked = 0;
+};
+
+TEST_F (SceneDrawListMaterialShaderTests, ItemsUnderAMaterialShaderNodeAreShadedForwardOnBothTiers)
+{
+    auto group = makeEntity ("group");
+    auto solid = group.createChild ("solid");
+    auto glass = group.createChild ("glass");
+    auto outside = makeEntity ("outside");
+
+    auto& node = group.attach<MaterialShaderNode> (shader);
+    solid.attach<MeshNode> (makeTriangle (makeMaterial ("solid")));
+    glass.attach<MeshNode> (makeTriangle (makeMaterial ("glass", Material::AlphaMode::blend)));
+    outside.attach<MeshNode> (makeTriangle (makeMaterial ("solid")));
+
+    for (const auto raster : { true, false })
+    {
+        buildForTier (raster);
+
+        // Every opaque item is still listed, for the shadows and the depth prepass: the one of the shader last
+        ASSERT_EQ (drawList.getOpaqueItems().size(), 2u);
+        ASSERT_EQ (drawList.getDeferredItems().size(), 1u);
+        ASSERT_EQ (drawList.getForwardOpaqueItems().size(), 1u);
+        ASSERT_EQ (drawList.getBlendItems().size(), 1u);
+        EXPECT_EQ (drawList.getDeferredItems().data(), drawList.getOpaqueItems().data());
+        EXPECT_EQ (drawList.getForwardOpaqueItems().data(), drawList.getOpaqueItems().data() + 1);
+
+        // Out of the deferred items, into the forward ones
+        EXPECT_EQ (findItem (drawList.getDeferredItems(), solid).node, nullptr);
+        EXPECT_EQ (drawList.getDeferredItems()[0].node, outside.get<MeshNode>());
+        EXPECT_EQ (drawList.getDeferredItems()[0].materialShader, nullptr);
+        EXPECT_EQ (drawList.getForwardOpaqueItems()[0].node, solid.get<MeshNode>());
+        EXPECT_EQ (drawList.getForwardOpaqueItems()[0].materialShader, &node);
+        EXPECT_EQ (drawList.getBlendItems()[0].node, glass.get<MeshNode>());
+        EXPECT_EQ (drawList.getBlendItems()[0].materialShader, &node);
+    }
+}
+
+TEST_F (SceneDrawListMaterialShaderTests, MaterialOfTheMeshIsResolvedAsWithoutTheShader)
+{
+    auto overriding = makeMaterial ("override", Material::AlphaMode::mask);
+    auto own = makeMaterial ("own");
+
+    auto overridden = makeEntity ("overridden");
+    auto plain = makeEntity ("plain");
+    auto bare = makeEntity ("bare");
+
+    root.attach<MaterialShaderNode> (shader);
+    overridden.attach<MaterialNode> (overriding);
+    overridden.attach<MeshNode> (makeTriangle (own));
+    plain.attach<MeshNode> (makeTriangle (own));
+    bare.attach<MeshNode> (makeTriangle());
+
+    buildForTier (false);
+
+    ASSERT_EQ (drawList.getForwardOpaqueItems().size(), 3u);
+    EXPECT_TRUE (drawList.getDeferredItems().empty());
+    EXPECT_EQ (findItem (drawList.getForwardOpaqueItems(), overridden).material, overriding.get());
+    EXPECT_EQ (findItem (drawList.getForwardOpaqueItems(), plain).material, own.get());
+    EXPECT_EQ (findItem (drawList.getForwardOpaqueItems(), bare).material, &drawList.getDefaultMaterial());
+}
+
+TEST_F (SceneDrawListMaterialShaderTests, NearestMaterialShaderNodeWins)
+{
+    auto group = makeEntity ("group");
+    auto leafA = group.createChild ("a");
+    auto subGroup = group.createChild ("inner");
+    auto leafB = subGroup.createChild ("b");
+    auto emptyGroup = group.createChild ("empty");
+    auto leafC = emptyGroup.createChild ("c");
+
+    auto& outer = group.attach<MaterialShaderNode> (shader);
+    auto& inner = subGroup.attach<MaterialShaderNode> (otherShader);
+    emptyGroup.attach<MaterialShaderNode>();
+
+    for (auto leaf : { leafA, leafB, leafC })
+        leaf.attach<MeshNode> (makeTriangle());
+
+    buildForTier (true);
+
+    // A node without a shader changes nothing: the one above it still applies
+    ASSERT_EQ (drawList.getForwardOpaqueItems().size(), 3u);
+    EXPECT_EQ (findItem (drawList.getForwardOpaqueItems(), leafA).materialShader, &outer);
+    EXPECT_EQ (findItem (drawList.getForwardOpaqueItems(), leafB).materialShader, &inner);
+    EXPECT_EQ (findItem (drawList.getForwardOpaqueItems(), leafC).materialShader, &outer);
+
+    // Each node with a shader is asked about once
+    EXPECT_EQ (numShadersAsked, 2);
+}
+
+TEST_F (SceneDrawListMaterialShaderTests, MaterialShaderNodesAreIgnoredUnlessAsked)
+{
+    auto entity = makeEntity();
+    entity.attach<MaterialShaderNode> (shader);
+    entity.attach<MeshNode> (makeTriangle());
+    entity.createChild().attach<MeshNode> (makeTriangle (makeMaterial ("glass", Material::AlphaMode::blend)));
+
+    // As the captures of reflection probes and irradiance volumes build their list
+    for (const auto& options : { SceneDrawList::BuildOptions {}, SceneDrawList::BuildOptions { true, true } })
+    {
+        drawList.build (root, {}, options);
+
+        ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
+        ASSERT_EQ (drawList.getBlendItems().size(), 1u);
+        EXPECT_EQ (drawList.getDeferredItems().size(), 1u);
+        EXPECT_TRUE (drawList.getForwardOpaqueItems().empty());
+        EXPECT_EQ (drawList.getOpaqueItems()[0].materialShader, nullptr);
+        EXPECT_EQ (drawList.getBlendItems()[0].materialShader, nullptr);
+    }
+}
+
+TEST_F (SceneDrawListMaterialShaderTests, RefusedShaderLeavesItsMeshesToTheirMaterials)
+{
+    auto group = makeEntity ("group");
+    auto leafA = group.createChild ("a");
+    auto subGroup = group.createChild ("inner");
+    auto leafB = subGroup.createChild ("b");
+
+    auto& outer = group.attach<MaterialShaderNode> (shader);
+    subGroup.attach<MaterialShaderNode> (otherShader);
+    leafA.attach<MeshNode> (makeTriangle());
+    leafB.attach<MeshNode> (makeTriangle());
+
+    // As on a tier the shader has no variant for: not the shader of the node above either
+    refused = otherShader;
+    buildForTier (false);
+
+    ASSERT_EQ (drawList.getDeferredItems().size(), 1u);
+    ASSERT_EQ (drawList.getForwardOpaqueItems().size(), 1u);
+    EXPECT_EQ (drawList.getDeferredItems()[0].node, leafB.get<MeshNode>());
+    EXPECT_EQ (drawList.getDeferredItems()[0].materialShader, nullptr);
+    EXPECT_EQ (drawList.getForwardOpaqueItems()[0].node, leafA.get<MeshNode>());
+    EXPECT_EQ (drawList.getForwardOpaqueItems()[0].materialShader, &outer);
+}
+
+TEST_F (SceneDrawListMaterialShaderTests, RemovingTheNodeOrItsShaderRestoresTheStandardPath)
+{
+    auto group = makeEntity ("group");
+    auto leaf = group.createChild ("leaf");
+    auto& node = group.attach<MaterialShaderNode> (shader);
+    leaf.attach<MeshNode> (makeTriangle());
+
+    buildForTier (false);
+    ASSERT_EQ (drawList.getForwardOpaqueItems().size(), 1u);
+    EXPECT_TRUE (drawList.getDeferredItems().empty());
+
+    node.setShader (nullptr);
+    buildForTier (false);
+    ASSERT_EQ (drawList.getDeferredItems().size(), 1u);
+    EXPECT_TRUE (drawList.getForwardOpaqueItems().empty());
+    EXPECT_EQ (drawList.getDeferredItems()[0].materialShader, nullptr);
+
+    node.setShader (shader);
+    buildForTier (false);
+    ASSERT_EQ (drawList.getForwardOpaqueItems().size(), 1u);
+
+    group.detach<MaterialShaderNode>();
+    buildForTier (false);
+    ASSERT_EQ (drawList.getDeferredItems().size(), 1u);
+    EXPECT_TRUE (drawList.getForwardOpaqueItems().empty());
+    EXPECT_EQ (drawList.getDeferredItems()[0].materialShader, nullptr);
+
+    // An empty list has no item of either kind
+    drawList.clear();
+    EXPECT_TRUE (drawList.getDeferredItems().empty());
+    EXPECT_TRUE (drawList.getForwardOpaqueItems().empty());
+}
+
+TEST_F (SceneDrawListMaterialShaderTests, OpaqueItemsOfMaterialShadersComeLastOneShaderAfterTheOther)
+{
+    const MaterialShader::Ptr order[] = { shader, nullptr, otherShader, nullptr, shader, otherShader };
+
+    for (const auto& entityShader : order)
+    {
+        auto entity = makeEntity();
+        entity.attach<MeshNode> (makeTriangle (makeMaterial ("solid")));
+
+        if (entityShader != nullptr)
+            entity.attach<MaterialShaderNode> (entityShader);
+    }
+
+    buildForTier (true);
+
+    const auto items = drawList.getOpaqueItems();
+    ASSERT_EQ (items.size(), 6u);
+    ASSERT_EQ (drawList.getDeferredItems().size(), 2u);
+
+    const auto shaderOf = [&items] (size_t index)
+    {
+        return items[index].materialShader != nullptr ? items[index].materialShader->getShader().get() : nullptr;
+    };
+
+    EXPECT_EQ (shaderOf (0), nullptr);
+    EXPECT_EQ (shaderOf (1), nullptr);
+    EXPECT_NE (shaderOf (2), nullptr);
+    EXPECT_EQ (shaderOf (2), shaderOf (3));
+    EXPECT_NE (shaderOf (3), shaderOf (4));
+    EXPECT_EQ (shaderOf (4), shaderOf (5));
+}
+
+TEST_F (SceneDrawListMaterialShaderTests, LightsAreSelectedForTheItemsTheirMaterialsShadeOnly)
+{
+    auto colored = makeEntity ("colored");
+    auto lit = makeEntity ("lit");
+
+    colored.attach<MaterialShaderNode> (shader);
+    colored.attach<MeshNode> (makeTriangle());
+    lit.attach<MeshNode> (makeTriangle());
+    lit.attach<LightNode> (LightNode::Type::point);
+
+    buildForTier (true);
+
+    ASSERT_EQ (drawList.getDeferredItems().size(), 1u);
+    ASSERT_EQ (drawList.getForwardOpaqueItems().size(), 1u);
+    EXPECT_EQ (drawList.getDeferredItems()[0].numLights, 1);
+    EXPECT_EQ (drawList.getForwardOpaqueItems()[0].numLights, 0);
+}

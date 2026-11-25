@@ -38,8 +38,22 @@ default directional light is used unless you turn it off with a
 
 `SceneComponent` draws only when it repaints: call `repaint()` after changing the
 scene. For animated scenes, `setContinuousUpdates (true)` calls `Scene::update()`
-and repaints on every display frame. On the full tier it also keeps repainting by
+and repaints on every display frame, which is what plays the
+[clips](animation.md) of a model. On the full tier it also keeps repainting by
 itself until the image has converged, see [Platform tiers](platform-tiers.md).
+
+In a `.yui` document the component is the `Scene3D` element, and the scene is
+written inside it with no code: see [3D scenes](../ui/yui/scenes.md).
+
+```yui
+Scene3D {
+    background: #101014; exposure: 1.2; toneMapping: agx;
+
+    Camera3D { position: [0, 0.5, 4]; lookAt: [0, 0, 0]; }
+    Light3D  { type: point; position: [2, 3, 2]; intensity: 20; }
+    Model3D  { source: "models/coin.glb"; }
+}
+```
 
 ## Scene features
 
@@ -66,6 +80,11 @@ root.attach<yup::ToneMappingNode> (yup::ToneMappingOperator::agx);
 const auto settings = yup::SceneSettings::resolve (*scene); // what the renderer will use
 ```
 
+`SceneComponent` has a setter for the first five, which attaches the node to
+the root of its scene: `setBackgroundColor()`, `setAmbientColor()`,
+`setExposure()`, `setToneMapping()` and `setDefaultLightEnabled()`. They are
+the properties of a `Scene3D`.
+
 **Upgrading.** The `Scene` setters and getters for these features are removed:
 `setBackgroundColor`, `setAmbientColor`, `setExposure`, `setToneMapping`
 (`Scene::ToneMapping` is now `ToneMappingOperator`), `setUsingDefaultLight`,
@@ -74,14 +93,51 @@ const auto settings = yup::SceneSettings::resolve (*scene); // what the renderer
 `EnvironmentMap`, `SphericalHarmonics`, `WorldFog`, `ReflectionProbeNode` and
 `IrradianceVolumeNode` moved from `yup_3d` to `yup_renderer`.
 
+## Scenes over 2D
+
+A `BackgroundNode` color with an alpha below 1 lets what lies behind the
+`SceneComponent` show wherever no surface covers it, so a scene is one layer
+among the others of an interface:
+
+```cpp
+// No background at all: only the surfaces are drawn over what is behind
+scene->getRoot().attach<yup::BackgroundNode> (yup::Colors::transparentBlack);
+
+// Or a tinted pane: 20% of the color, 80% of what lies behind
+scene->getRoot().attach<yup::BackgroundNode> (yup::Colors::black.withAlpha (0.2f));
+
+view.setScene (scene);
+```
+
+[Scenes over 2D](../ui/yui/scenes.md#scenes-over-2d) shows one over a drawing,
+written in a `.yui` document.
+
+- The alpha of the background is how much of it is there. What is behind
+  shows through the rest, through the antialiased edges of the surfaces by
+  their coverage, and through blended materials by what their alpha lets
+  through. Opaque and masked materials are opaque.
+- The component follows the background: it is opaque while the background is,
+  and not otherwise. It keeps `isOpaque()` up to date by itself, when the scene
+  is set and at every display frame, so do not call `setOpaque()` on it.
+- A scene that is not opaque has its parent paint what is behind it each time
+  the scene repaints, which an opaque one spares.
+- A visible environment (`EnvironmentNode::visible`) covers everything, and
+  the world fog covers what it fills.
+- Bloom around a bright surface is added to what lies behind. Depth of field
+  and motion blur behave as described in [Post effects](post-effects.md).
+- `SceneRenderer::render()` returns a texture whose colors are multiplied by
+  their alpha, as `Graphics::drawTexture()` takes it, whatever the background.
+
 ## Rendering
 
 `SceneRenderer` renders a scene into a texture and can be used without a
 component. Shading follows the glTF BRDF (GGX, Smith, Schlick) with punctual
 and area lights, a flat ambient term, environment lighting, shadows, normal
 mapping, alpha masking and blending, and double-sided materials; the result is
-exposed, tone mapped and sRGB encoded. Skinning and animation are not available
-yet.
+exposed, tone mapped and sRGB encoded. Skinned and morphed meshes are deformed
+on the CPU before they are drawn, see [Animation](animation.md), and a mesh can
+be colored by a function of your own instead of this shading, see
+[Custom materials](custom-materials.md).
 
 **Deferred and forward.** On the full tier, opaque and masked materials are
 drawn once into a set of intermediate targets, then shaded in a single pass per

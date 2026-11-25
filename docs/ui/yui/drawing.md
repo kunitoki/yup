@@ -88,7 +88,7 @@ becomes a property of that element holding the expression text:
 | `let r: bounds.width / 2;`      | `let`, with `name` = `r` and `value` = `bounds.width / 2` |
 | `repeat i in 0 .. 11 { ... }`   | `repeat`, with `name` = `i`, `from` = `0`, `to` = `11` |
 | `pattern Dots { ... }`          | `pattern`, with `name` = `Dots` (`marker` and a nested `drawing` alike) |
-| `use Leaf { ... }`              | `use`, with `drawing` = `Leaf`                        |
+| `use Leaf { ... }`              | `use`, with `drawing` = `Leaf`, the name of a drawing or of a shader |
 
 The references below use the element and property names, which are the same in
 the text and in the tree.
@@ -257,7 +257,7 @@ overridden per component.
 | `clip`   | `bounds`/`rect`, `path`/`clipPath`, `visible` (optional) | yes | Clips its children to a rectangle and/or path. |
 | `group`  | `transform`, `opacity`, `blend`, `color`, `visible` and [paint](#paint-set-by-groups) (optional) | yes | Applies a transform, an opacity, a blend mode and a paint to all its children. |
 | `viewport` | `bounds`, `viewBox`, `fitting`, `justification`, `visible` (optional) | yes | Draws its children in a [view box](#view-boxes-and-viewports) mapped into `bounds`, clipped to them. |
-| `drawing`, `use` | see [Reusing drawings](#reusing-drawings) | yes, no | Defines a drawing inside another, and paints a drawing by name. |
+| `drawing`, `use` | see [Reusing drawings](#reusing-drawings) | yes, no | Defines a drawing inside another, and paints a drawing, or a [shader](#painting-a-shader), by name. |
 | `pattern`, `marker` | see [Patterns and markers](#patterns-and-markers) | yes | Define a tile to paint shapes with, and a shape drawn at the vertices of others. |
 | `clipPath` | none                             | shapes   | Inside a `clip` or a `layer`: the shapes to [clip to](#clipping-to-shapes). |
 | `repeat` | `name`, `from`, `to`               | yes      | Draws what it holds once per integer in `from .. to - 1`. |
@@ -282,8 +282,8 @@ overridden per component.
   cheap. One holding a `group`, a `clip`, a `viewport`, a `use` or another
   `repeat` is drawn turn after turn instead: everything it holds for the first
   index, then for the second. The turns of repeats inside one another count
-  together towards the `4096`. A `repeat` can't hold a `layer`, a `pattern` or
-  a `marker`, however deep, nor define a `drawing`:
+  together towards the `4096`. A `repeat` can't hold a `layer`, a `pattern`, a
+  `marker` or a `use` painting a shader, however deep, nor define a `drawing`:
 
   ```yui
   repeat i in 0 .. 12 {
@@ -456,6 +456,40 @@ drawing Toolbar {
   stylesheet, by name; from C++, `DrawingStyle::create` takes a function finding
   them. A drawing that ends up using itself fails to compile.
 
+## Painting a shader
+
+A `use` naming no drawing paints the [`shader`](shaders.md) of that name: a
+picture a fragment shader makes, among the shapes of the drawing.
+
+```yui
+shader Rings {
+    fragment: "fx/rings.frag";
+    property count: number = 4;
+    property tint: color = palette.accent;
+}
+
+drawing Sonar {
+    property level: number = 0.5;
+
+    rect { bounds: bounds; cornerRadius: 10; fill: palette.surface; }
+    use Rings { bounds: bounds.reduced (8); count: 2 + level * 6; }
+    circle { center: bounds.center; radius: 5; fill: palette.text; }
+}
+```
+
+- The `use` takes `bounds` (the bounds around it by default), `transform`,
+  `visible`, `opacity`, `blend`, `clip` and `clipPath`, as an `image` does, and
+  the properties the shader declares, as expressions. It has no paint.
+- The shader makes its picture alone: one that reads a picture runs in a
+  [filter](#filters), or as the `effect:` of a component.
+- The picture is drawn again only when one of its values or its size changes,
+  unless the shader is given the time, which repaints the component at every
+  frame.
+- It can't be painted inside a `repeat`.
+
+[Painted by a drawing](shaders.md#painted-by-a-drawing) has the fragment of
+this example, what it looks like, and what a shader is given.
+
 ## Patterns and markers
 
 A `pattern` is a tile, repeated to fill or stroke the shapes naming it with
@@ -566,6 +600,7 @@ layer {
 | `lighting`     | `scale`, `constant`, `specular`, `exponent`, `color`, `azimuth`, `elevation`, `position`, `height` | The alpha of its input lit as a surface `scale` high: matte, or its highlights with `specular: true`. The light is far away along `azimuth` and `elevation`, or at a `position` and a `height`. |
 | `displacement` | `in2`, `scale`, `xChannel`, `yChannel`               | Its input with every pixel moved by up to `scale`, following the `red`, `green`, `blue` or `alpha` of `in2`. |
 | `dropShadow`   | `offset` (point), `deviation`, `color`               | Its input over its shadow.                                |
+| `use Name`     | `in2` for a shader reading two pictures, and the properties the shader declares | What a [`shader`](shaders.md#in-a-filter) makes of its input, of two inputs, or alone. |
 
 - Every primitive accepts `in` and `result`. A primitive reads the result of
   the one before it, the first one reading the layer, unless `in` (and `in2`)
@@ -585,6 +620,10 @@ layer {
   picture or one of its values changes. It needs a GPU: without one the layer is
   drawn as it is.
 - A layer with a `filter` can't have a `mask`: put it inside the masked layer.
+- A `use` in a filter names a shader, never a drawing. Its properties are
+  expressions, its `resolution` and `scale` are in pixels of the screen, and it
+  is given no `time`. With `linearColors: true` it reads and writes linear
+  pictures, and converts its `color` properties itself.
 
 Some of them on the same star, the last one lighting a blurred copy of its
 alpha to raise its edges:
@@ -774,6 +813,7 @@ offending element and property:
 Knob/layer[0]/arc#value.to: Unknown symbol 'avv'
 drawing/circle[0]: missing the required property 'radius'
 drawing/repeat[0]/layer[0]: a 'layer' can't be nested inside a repeat
+Screen/use[0]: the shader 'Crt' reads a picture, run it in the 'filter' of a layer or as an 'effect:'
 ```
 
 Elements are numbered by type within their parent, or named by their `id`. The
@@ -823,6 +863,27 @@ style.getReference()->setImageResolver ([this] (const String& source) -> std::op
     return std::nullopt;
 });
 ```
+
+A drawing that paints or runs shaders is given them by a resolver, the last
+argument of `DrawingStyle::create`. It returns the `shader` block of a name
+and the shader compiled from its file, and is asked while the style is
+created, never while it paints:
+
+```cpp
+auto shader = GpuImageShader::createFromData (data, size);    // a .ysl bundle, or GLSL with the transpiler
+
+auto style = DrawingStyle::create (component, drawing, nullptr, nullptr, nullptr,
+                                   [&] (const String& name) -> DrawingStyle::Shader
+{
+    if (name != "Rings" || shader.failed())
+        return {};
+
+    return { ringsBlock, shader.getValue() };    // the DataTree of `shader Rings { ... }`
+});
+```
+
+A stylesheet does this by itself for the shaders of its document, which is the
+usual way: see [Shaders](shaders.md).
 
 A drawing is bound to the component it was created for, so install it on that
 component only. Creating it for many components is cheap: components that give
@@ -895,7 +956,8 @@ component paints, not its children.
 - A semi-transparent or masked `layer` is rendered offscreen at the logical size
   of the component, so it can look soft on high-density displays.
 - A `repeat` can't hold a `layer`, a `pattern` or a `marker`: a glow inside
-  one is the `feather` of a shape, not a filter.
+  one is the `feather` of a shape, not a filter. It can't hold a `use` painting
+  a shader either: the shader draws the repetition itself.
 - The tile of a `pattern` is an image: it is drawn at the size it has in the
   component, and looks soft when the shape it fills is scaled up much further.
 - Text has no outline: it can't be part of a `clipPath`, and has no
@@ -906,6 +968,8 @@ component paints, not its children.
 - [The `.yui` language](language.md) - the syntax of every block.
 - [Stylesheets](styles.md) - selecting drawings and setting their
   properties from rules.
+- [Shaders](shaders.md) - the shaders a drawing paints and runs in its
+  filters.
 - [How YUI fits together](architecture.md) - how drawings share their
   compilation and where their values come from.
 - [Reactive bindings](reactivity.md) - the same expressions keeping

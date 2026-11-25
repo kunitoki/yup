@@ -161,7 +161,13 @@ public:
     Result saveToMemoryBlock (MemoryBlock& block, Compression compression = Compression::high) const;
 
     //==========================================================================
-    /** Deserialise a bundle from an YSLB RIFF stream, compressed or not. */
+    /** Deserialise a bundle from an YSLB RIFF stream, compressed or not.
+
+        The bytes are not trusted: a bundle declaring a RIFF size, a chunk size or a string
+        length that its bytes do not hold, a raw size its compressed bytes cannot expand to,
+        or more than 256 variants, fails to load, with nothing allocated for it. This holds
+        for every load function.
+    */
     static ResultValue<ShaderBundle> loadFromStream (InputStream& stream);
 
     /** Deserialise a bundle from an YSLB RIFF file. */

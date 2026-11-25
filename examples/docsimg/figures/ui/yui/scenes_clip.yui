@@ -1,0 +1,30 @@
+// size: 560 368
+Column {
+    gap: 12;
+
+    Scene3D {
+        flexGrow: 1; background: #101116; ambient: #2a3040; toneMapping: aces;
+
+        Camera3D { position: [3.3, 2.9, 5.2]; lookAt: [-0.25, 0.8, 0]; fov: 32deg; }
+        Light3D  { type: directional; position: [-3.5, 6, 3]; lookAt: [0, 0, 0]; intensity: 1.8; radius: 0.015; castsShadows: true; }
+        Light3D  { type: point; position: [3.2, 2.2, -2.8]; color: #5c7cff; intensity: 40; range: 14; }
+
+        Model3D { source: "../../../data/stage.glb"; }
+        Model3D { source: "../../../data/computer.glb"; clip: "Open"; time: 1.2; }
+
+        Model3D {
+            id: lamp; source: "../../../data/lamp.glb"; position: [-2.03, 0, -0.54]; rotation: [0, 58deg, 0];
+            clip: "Bow"; time: 0.7;
+
+            // The weight of the morph target opening the shade, and a light shining out of it
+            Node3D {
+                node: "LampHead"; morphWeights: [1];
+
+                Light3D { type: spot; color: #ffd9a8; intensity: 30; range: 9; innerCone: 22deg; outerCone: 46deg; castsShadows: true; }
+            }
+        }
+    }
+
+    // A scrub bar: it follows the clip while it plays, and moves it when dragged
+    Slider { preferredHeight: 28; maximum: lamp.duration; value <=> lamp.time; }
+}

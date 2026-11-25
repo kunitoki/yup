@@ -33,6 +33,8 @@ int runYuiVerifyCommand (int argc, char** argv, bool includeWarnings)
 {
     StringArray paths;
     String unsavedPath;
+    String embeddedBase;
+    String embeddedList;
     YuiToolModels models;
     bool json = false;
     bool strict = false;
@@ -53,6 +55,18 @@ int runYuiVerifyCommand (int argc, char** argv, bool includeWarnings)
             if (! models.load (argv[++i]))
                 return 2;
 
+            continue;
+        }
+
+        if (! includeWarnings && argument == "--embedded-base" && i + 1 < argc)
+        {
+            embeddedBase = argv[++i];
+            continue;
+        }
+
+        if (! includeWarnings && argument == "--embedded" && i + 1 < argc)
+        {
+            embeddedList = argv[++i];
             continue;
         }
 
@@ -89,8 +103,31 @@ int runYuiVerifyCommand (int argc, char** argv, bool includeWarnings)
         return 2;
     }
 
+    if (embeddedBase.isEmpty() != embeddedList.isEmpty())
+    {
+        std::cerr << "--embedded-base <dir> and --embedded <list file> go together\n";
+        return 2;
+    }
+
     const auto workingDirectory = File::getCurrentWorkingDirectory();
     std::optional<String> unsavedText;
+    std::optional<YuiToolEmbedded> embedded;
+
+    // The files a build embeds: one path a line, from the folder they are embedded from
+    if (embeddedList.isNotEmpty())
+    {
+        const auto listFile = workingDirectory.getChildFile (embeddedList);
+
+        if (! listFile.existsAsFile() || ! workingDirectory.getChildFile (embeddedBase).isDirectory())
+        {
+            std::cerr << "can't read '" << (listFile.existsAsFile() ? embeddedBase : embeddedList) << "'\n";
+            return 2;
+        }
+
+        embedded = YuiToolEmbedded { workingDirectory.getChildFile (embeddedBase), StringArray::fromLines (listFile.loadFileAsString()) };
+        embedded->paths.trim();
+        embedded->paths.removeEmptyStrings();
+    }
 
     if (readStdin)
     {
@@ -117,7 +154,7 @@ int runYuiVerifyCommand (int argc, char** argv, bool includeWarnings)
 
     for (const auto& path : paths)
     {
-        for (const auto& problem : findYuiToolFileProblems (workingDirectory.getChildFile (path), unsavedText, models))
+        for (const auto& problem : findYuiToolFileProblems (workingDirectory.getChildFile (path), unsavedText, models, embedded.has_value() ? &*embedded : nullptr))
         {
             if (! problem.isError && ! includeWarnings)
                 continue;

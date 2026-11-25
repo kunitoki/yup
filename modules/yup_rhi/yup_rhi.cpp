@@ -142,4 +142,6 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "rhi/yup_GpuTexture.cpp"
 #include "rhi/yup_GpuSampler.cpp"
 #include "rhi/yup_ShaderBindingMap.cpp"
+#include "rhi/yup_ShaderUniforms.cpp"
+#include "rhi/yup_GpuImageShader.cpp"
 #include "context/yup_GpuDevice.cpp"

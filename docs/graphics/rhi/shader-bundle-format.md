@@ -403,3 +403,16 @@ Within a given version, the loader is tolerant of unknown chunks inside `VART`:
 does not recognise, consuming pad bytes between chunks. Adding new optional
 sub-chunks to `VART` in a future version is safe as long as the `VERS` value is
 bumped and old bundles are regenerated.
+
+A bundle can come from a file a user edits, so the loader does not trust the
+sizes it states. It fails with a message, before allocating or reading
+anything for them, when:
+
+| Problem | Message |
+|---|---|
+| The RIFF size is smaller than its form type | `ShaderBundle: invalid RIFF size` |
+| The RIFF size is larger than the bytes present | `ShaderBundle: truncated RIFF data` |
+| The bundle holds more than 2 GiB | `ShaderBundle: bundle too large` |
+| A chunk is longer than what is left of its container | `ShaderBundle: truncated chunk data` |
+| A string is longer than what is left of its chunk | `ShaderBundle: truncated string data` |
+| A compressed bundle states a size its bytes can't expand to | `ShaderBundle: invalid compressed data size` |

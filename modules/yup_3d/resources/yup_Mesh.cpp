@@ -27,6 +27,29 @@ static_assert (std::is_standard_layout_v<Mesh::Vertex>);
 
 //==============================================================================
 
+namespace
+{
+
+/** Gives every index its own copy of what its vertex comes with, if there is any. */
+template <class Type>
+void unshareVertexData (std::vector<Type>& perVertex, const std::vector<uint32>& indices)
+{
+    if (perVertex.empty())
+        return;
+
+    std::vector<Type> unshared;
+    unshared.reserve (indices.size());
+
+    for (const auto index : indices)
+        unshared.push_back (perVertex[index]);
+
+    perVertex = std::move (unshared);
+}
+
+} // namespace
+
+//==============================================================================
+
 Mesh::Mesh (const String& meshName)
     : name (meshName)
 {
@@ -36,7 +59,7 @@ Mesh::~Mesh() = default;
 
 //==============================================================================
 
-void Mesh::addPrimitive (std::vector<Vertex> vertices, std::vector<uint32> indices, Material::Ptr material)
+void Mesh::addPrimitive (std::vector<Vertex> vertices, std::vector<uint32> indices, Material::Ptr material, std::vector<Influences> influences, std::vector<MorphTarget> morphTargets)
 {
     if (indices.empty())
     {
@@ -50,9 +73,20 @@ void Mesh::addPrimitive (std::vector<Vertex> vertices, std::vector<uint32> indic
         return index < numVertices;
     });
 
-    if (vertices.size() < 3 || indices.size() < 3 || indices.size() % 3 != 0 || ! indicesValid)
+    // What comes with the vertices holds one element for each of them, or none
+    const auto fitsVertices = [numVertices] (const auto& perVertex)
     {
-        jassertfalse; // Primitives need at least one triangle, three indices per triangle, all in range
+        return perVertex.empty() || perVertex.size() == numVertices;
+    };
+
+    const auto targetsValid = std::all_of (morphTargets.begin(), morphTargets.end(), [&fitsVertices] (const MorphTarget& target)
+    {
+        return fitsVertices (target.positions) && fitsVertices (target.normals) && fitsVertices (target.tangents);
+    });
+
+    if (vertices.size() < 3 || indices.size() < 3 || indices.size() % 3 != 0 || ! indicesValid || ! fitsVertices (influences) || ! targetsValid)
+    {
+        jassertfalse; // Primitives need at least one triangle, three indices per triangle, all in range, and influences and morph deltas for every vertex
         return;
     }
 
@@ -83,21 +117,57 @@ void Mesh::addPrimitive (std::vector<Vertex> vertices, std::vector<uint32> indic
         }
 
         vertices = std::move (unshared);
+
+        // What comes with the vertices follows them
+        unshareVertexData (influences, indices);
+
+        for (auto& target : morphTargets)
+        {
+            unshareVertexData (target.positions, indices);
+
+            // glTF: a primitive without normals is flat in every morph target too. As for the vertices,
+            // deltas authored for other normals and tangents can't be trusted with the generated ones
+            target.normals.clear();
+            target.tangents.clear();
+
+            if (! target.positions.empty())
+                target.normals.resize (vertices.size());
+
+            for (size_t i = 0; i < target.normals.size(); i += 3)
+            {
+                const auto a = vertices[i].position + target.positions[i];
+                const auto b = vertices[i + 1].position + target.positions[i + 1];
+                const auto c = vertices[i + 2].position + target.positions[i + 2];
+
+                const auto delta = (b - a).crossProduct (c - a).normalized() - vertices[i].normal;
+                target.normals[i] = target.normals[i + 1] = target.normals[i + 2] = delta;
+            }
+        }
+
         indices.resize (vertices.size());
         std::iota (indices.begin(), indices.end(), 0u);
     }
 
+    for (const auto& vertex : influences)
+    {
+        for (size_t i = 0; i < vertex.joints.size(); ++i)
+        {
+            if (vertex.weights[i] != 0.0f)
+                numJoints = jmax (numJoints, vertex.joints[i] + 1);
+        }
+    }
+
+    numMorphTargets = jmax (numMorphTargets, static_cast<int> (morphTargets.size()));
+
     Primitive primitive;
-
-    for (const auto& vertex : vertices)
-        primitive.bounds.expand (vertex.position);
-
     primitive.vertices = std::move (vertices);
     primitive.indices = std::move (indices);
     primitive.material = std::move (material);
+    primitive.influences = std::move (influences);
+    primitive.morphTargets = std::move (morphTargets);
 
-    bounds.expand (primitive.bounds);
     primitives.push_back (std::move (primitive));
+    updateBounds (primitives.back());
 
     cachedDevice = nullptr;
     gpuBuffers.clear();
@@ -109,15 +179,105 @@ const Mesh::Primitive& Mesh::getPrimitive (int index) const noexcept
     return primitives[static_cast<size_t> (index)];
 }
 
+void Mesh::setVertices (int primitiveIndex, Span<const Vertex> vertices)
+{
+    const auto index = static_cast<size_t> (primitiveIndex);
+
+    if (! isPositiveAndBelow (primitiveIndex, getNumPrimitives()) || vertices.size() != primitives[index].vertices.size())
+    {
+        jassertfalse; // The primitive must exist and keep its number of vertices, which its indices refer to
+        return;
+    }
+
+    auto& primitive = primitives[index];
+    std::copy (vertices.begin(), vertices.end(), primitive.vertices.begin());
+    updateBounds (primitive);
+
+    // Uploaded when the buffer is next asked for: before the first use there is none yet
+    if (index < gpuBuffers.size())
+        gpuBuffers[index].verticesStale = true;
+
+    ++changeCount;
+}
+
+void Mesh::updateBounds (Primitive& changed)
+{
+    changed.bounds = {};
+
+    for (const auto& vertex : changed.vertices)
+        changed.bounds.expand (vertex.position);
+
+    // The union of every primitive again: new vertices can shrink the one they replace
+    bounds = {};
+
+    for (const auto& primitive : primitives)
+        bounds.expand (primitive.bounds);
+}
+
+std::optional<float> Mesh::intersectTriangles (const Ray& ray, float minDistance, float maxDistance, const Material* overrideMaterial) const noexcept
+{
+    const auto length = ray.getDirection().length();
+    std::optional<float> nearest;
+
+    for (const auto& primitive : primitives)
+    {
+        const auto size = primitive.bounds.getMax() - primitive.bounds.getMin();
+        const auto reach = jmax (size.getX(), size.getY(), size.getZ());
+
+        if (! (reach > 0.0f && length > 0.0f) || ! ray.intersectBox (primitive.bounds, minDistance, nearest.value_or (maxDistance)).has_value())
+            continue;
+
+        const auto* material = overrideMaterial != nullptr ? overrideMaterial : primitive.material.get();
+        const auto cullBackFaces = material == nullptr || ! material->doubleSided;
+
+        // Ray::intersectTriangle() takes a triangle as parallel to the ray under an absolute threshold, which the
+        // small triangles of a detailed part would all be under whatever the ray: the ray is given the length
+        // that takes them away from it, for the size of the primitive and the number of its triangles. A
+        // distance along it is that many times shorter
+        const auto scale = static_cast<float> (primitive.indices.size() / 3) / (reach * reach * length);
+        const Ray scaled (ray.getOrigin(), ray.getDirection() * scale);
+
+        // shortcut: every triangle of a primitive whose bounds the ray enters is tested, which gets slow with
+        // hundreds of thousands of them. The upgrade is a bounding volume hierarchy for each primitive, built
+        // when it is first asked for and again when setVertices() changes it
+        for (size_t i = 0; i + 2 < primitive.indices.size(); i += 3)
+        {
+            const auto hit = scaled.intersectTriangle (primitive.vertices[primitive.indices[i]].position,
+                                                       primitive.vertices[primitive.indices[i + 1]].position,
+                                                       primitive.vertices[primitive.indices[i + 2]].position,
+                                                       cullBackFaces);
+            if (! hit.has_value())
+                continue;
+
+            if (const auto distance = hit->distance * scale; distance >= minDistance && distance <= nearest.value_or (maxDistance))
+                nearest = distance;
+        }
+    }
+
+    return nearest;
+}
+
 //==============================================================================
 
 GpuBuffer::Ptr Mesh::getVertexBuffer (const GpuDevice::Ptr& device, int primitiveIndex)
 {
     prepareGpuBuffers (device);
 
-    return isPositiveAndBelow (primitiveIndex, static_cast<int> (gpuBuffers.size()))
-             ? gpuBuffers[static_cast<size_t> (primitiveIndex)].vertices
-             : nullptr;
+    if (! isPositiveAndBelow (primitiveIndex, static_cast<int> (gpuBuffers.size())))
+        return nullptr;
+
+    auto& buffers = gpuBuffers[static_cast<size_t> (primitiveIndex)];
+
+    if (std::exchange (buffers.verticesStale, false))
+    {
+        // Rewritten in place, the size being the same. Frames in flight still draw the vertices
+        // they bound: a buffer bound since its last update is written through another backing
+        // (OpenGL orders the write after the draws instead)
+        const auto& vertices = primitives[static_cast<size_t> (primitiveIndex)].vertices;
+        device->updateBuffer (buffers.vertices, vertices.data(), vertices.size() * sizeof (Vertex));
+    }
+
+    return buffers.vertices;
 }
 
 GpuBuffer::Ptr Mesh::getIndexBuffer (const GpuDevice::Ptr& device, int primitiveIndex)

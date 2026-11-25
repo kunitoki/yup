@@ -28,6 +28,7 @@ project (${target_name} VERSION ${target_version})
 # ==== Prepare target
 # Renders the figures of the documentation into docs/_static/images, see `just docs_images`.
 # The modules are compiled into the target: changing this list rebuilds all of it.
+# glslang and spirv_cross compile the GLSL of the shader figures when they are drawn.
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
@@ -46,7 +47,9 @@ yup_standalone_app (
         tinygltf
         pffft_library
         libjpeg
-        libpng)
+        libpng
+        glslang
+        spirv_cross)
 
 # ==== Prepare sources
 # Listed rather than globbed: `just docs_images` regenerates the project when this file changes.

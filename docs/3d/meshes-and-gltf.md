@@ -1,7 +1,8 @@
 # Meshes, textures and glTF
 
 Resources that entities share: meshes and textures built from code, and
-glTF 2.0 assets turned into entity trees.
+glTF 2.0 assets turned into entity trees, with their skins, their morph
+targets and their animations.
 
 ## Building meshes from code
 
@@ -25,6 +26,51 @@ Triangles are counter-clockwise when front facing. When every normal is zero,
 flat normals are generated. Materials follow the glTF metallic-roughness model:
 factors multiply their textures, the base color and emissive textures are sRGB,
 and alpha can be opaque, masked or blended.
+
+`addPrimitive()` also takes the joints and weights of a skinned primitive and
+its morph targets, see [Animation](animation.md#skins).
+
+## Changing a mesh
+
+`setVertices()` gives a primitive new vertices, keeping its indices and its
+material: for a flag, a wave, anything computed on the CPU. The renderer
+follows by itself.
+
+```cpp
+auto mesh = yup::Mesh::Ptr (new yup::Mesh ("flag"));
+mesh->addPrimitive (std::move (vertices), std::move (indices), material);
+
+// Later, each time the shape changes. The vertices as the mesh keeps them: addPrimitive()
+// gives each triangle its own vertices when it generates flat normals
+auto deformed = mesh->getPrimitive (0).vertices;
+
+for (auto& vertex : deformed)
+    vertex.position = wave (vertex.position, time);
+
+mesh->setVertices (0, deformed);
+view.repaint();                                      // a SceneComponent draws when it repaints
+```
+
+- **Same count, same order.** The indices refer to the vertices, so their
+  number can't change: another count asserts and changes nothing. To change
+  the topology, build another mesh.
+- **Taken as they are.** Nothing is generated: the caller writes the
+  positions, the normals and the tangents.
+- **They are copied** into the storage the primitive already has, so a call
+  allocates nothing and a caller deforming at every frame keeps its own buffer.
+- **The bounds follow**, and with them picking, culling and the shadow fits.
+- **The renderer sees it.** `getChangeCount()` counts the calls: when it
+  changes, the shadow maps the mesh casts into are drawn again and the
+  accumulation of the full tier restarts, as for an entity that moved. So only
+  call `setVertices()` when the vertices really changed, or the view keeps
+  repainting.
+- **A mesh is shared**: every entity drawing it shows the new vertices. Give
+  each deformed instance a mesh of its own, as a
+  [`DeformNode`](animation.md#skins) does.
+- A mesh that changes shape has no motion of its own: the temporal
+  anti-aliasing does not reproject it and motion blur does not smear it.
+  Reflection probes and irradiance volumes do not bake again: call their
+  `requestBake()`.
 
 ## Textures from the GPU
 
@@ -53,8 +99,9 @@ a `MeshSurfaceMapper`, as the Scene 3D example does for the screen of its model.
 ## Loading glTF
 
 `GltfModel` loads `.gltf` and `.glb` files and converts them into meshes,
-materials, textures and one [prefab](entities-and-nodes.md#prefabs) per glTF
-scene, returned by `getPrefab()`. `instantiate()` builds a fresh entity tree in a
+materials, textures, skins, animation clips and one
+[prefab](entities-and-nodes.md#prefabs) per glTF scene, returned by
+`getPrefab()`. `instantiate()` builds a fresh entity tree in a
 scene each time it is called, and all the trees share the same resources, so a
 model can be instanced many times, in one or several scenes:
 
@@ -92,11 +139,18 @@ What is converted:
 - images stored in buffer views, data URIs or external files, including
   `EXT_texture_webp` sources;
 - nodes with their transforms (a `matrix` is split into translation, rotation and
-  scale), meshes, cameras and `KHR_lights_punctual` lights.
+  scale), meshes, cameras and `KHR_lights_punctual` lights;
+- skins, with the `JOINTS_0` and `WEIGHTS_0` of the primitives they move, and
+  morph targets, as `POSITION`, `NORMAL` and `TANGENT` deltas. An instance draws
+  such a mesh deformed, in the pose its nodes have;
+- animations, each as an `AnimationClip`. An asset that has some gets an
+  `AnimationNode` on the root entity of each instance, paused: see
+  [Animation](animation.md).
 
-Skinning, morph targets and animations are ignored, and primitives that are not
-triangles are skipped with a warning. Files that require an extension `yup_3d`
-does not support fail to load.
+Primitives that are not triangles are skipped with a warning, and so are the
+joints beyond the four of `JOINTS_0` and the morph targets of texture
+coordinates and colors. Files that require an extension `yup_3d` does not
+support fail to load.
 
 ```{note}
 Images are decoded with the image formats of `yup_graphics`. Link `libpng`,
@@ -109,3 +163,7 @@ available.
 External buffers and images are only read from the folder of the file (or the
 `baseDirectory` passed to `loadFromData()`) and its subdirectories: absolute
 paths and `..` segments are rejected.
+
+Files are not trusted in what they state either: what a model keeps is bounded
+by the size of its buffers, and what would take it over is left out with a
+warning, see [The budget of a model](animation.md#the-budget-of-a-model).

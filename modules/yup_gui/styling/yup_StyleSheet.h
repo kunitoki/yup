@@ -34,8 +34,8 @@ namespace yup
 
     Build one straight from `.yui` text with @ref parse, or from a parsed document with
     @ref fromTree. A sheet collects everything a document declares for styling: the rules
-    and keyframes of its `style` blocks, its palettes, and its named drawings, which rules
-    select with `drawing:`.
+    and keyframes of its `style` blocks, its palettes, its named drawings, which rules
+    select with `drawing:`, and its shaders.
 
     @code
     palette Ember { colors: "#1b1b1e, #ff8800"; mode: dark; accent: #ff9a1f; }
@@ -214,7 +214,7 @@ public:
     */
     static ResultValue<Ptr> parse (const String& text);
 
-    /** Returns true when the element is a style, rule, palette, drawing or keyframes block. */
+    /** Returns true when the element is a style, rule, palette, drawing, shader or keyframes block. */
     static bool isStyleElement (const DataTree& element) noexcept;
 
     /** Returns the names of the declarations a rule takes on top of the properties of the
@@ -262,6 +262,17 @@ public:
     */
     DataTree findDrawing (const String& name) const;
 
+    /** Returns the shader declared under a given name, or an invalid tree.
+
+        The tree is the `shader` element: its `fragment` or `material` property holds the path of
+        the source, and each of its `property` children declares an input with its `name`, its
+        `type` and, when it has a default, the expression of its `value`. A name is declared by
+        one shader, and by no drawing.
+
+        @param name The shader name, as written after `shader`.
+    */
+    DataTree findShader (const String& name) const;
+
     /** Returns a custom property declared inside a rule of this sheet (`property name: type`), or nullptr. */
     const ComponentProperty* findDeclaredProperty (const Identifier& name) const;
 
@@ -277,12 +288,14 @@ private:
     StyleSheet() = default;
 
     std::optional<YuiDiagnostic> addElements (const DataTree& parent);
+    std::optional<YuiDiagnostic> findSharedName() const;
 
     DataTree tree;
     std::vector<Rule> rules;
     std::vector<KeyframeSequence> keyframes;
     Palettes palettes;
     std::map<String, DataTree> drawings;
+    std::map<String, DataTree> shaders;
     std::map<Identifier, ComponentProperty> declaredProperties;
     Array<Identifier> watchedProperties;
 

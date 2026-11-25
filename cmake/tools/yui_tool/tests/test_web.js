@@ -25,17 +25,28 @@ function write (name, data) {
     tool.ccall ("yuiToolWriteFile", null, ["string"], [name]);
 }
 
+// The files the documents loaded since this was last asked name without having been given them
+function missingFiles () {
+    return JSON.parse (tool.ccall ("yuiToolMissingFiles", "string", [], []));
+}
+
 function run (...args) {
     output = [];
     errors = [];
 
     const code = tool.ccall ("yuiToolRun", "number", ["string"], [JSON.stringify (args)]);
-    return { code, stdout: output.join ("\n"), stderr: errors.join ("\n") };
+    return { code, stdout: output.join ("\n"), stderr: errors.join ("\n"), missing: missingFiles () };
 }
 
 function lint (...args) {
     const result = run ("lint", "--json", ...args);
     return { code: result.code, diagnostics: JSON.parse (result.stdout).diagnostics };
+}
+
+// Checks a file as an application loading it would find it, and tells the files it names that were not given
+function verify (file) {
+    const result = run ("verify", "--json", file);
+    return { code: result.code, diagnostics: JSON.parse (result.stdout).diagnostics, missing: result.missing };
 }
 
 function agent (name, args = {}) {
@@ -266,4 +277,229 @@ test ("an agent is told why a tool can't answer", () => {
     assert.match (agent ("yui_render", { file: "agent/plain.yui", output: "agent/plain.png" }).text, /nowhere to write/);
     assert.equal (agent ("yui_render", { file: "agent/plain.yui", reference: "agent/missing.png" }).isError, true);
     assert.match (agent ("yui_capture_preview").text, /no live preview/);
+});
+
+//==============================================================================
+// Shaders and 3D scenes
+
+// A scene with a camera, a light and a mesh written as numbers, as the snippet of the VS Code extension writes it
+const scene = `Scene3D {
+    background: #101014; flexGrow: 1;
+
+    Camera3D { position: [0, 0.5, 4]; lookAt: [0, 0, 0]; }
+    Light3D { type: directional; rotation: [-45deg, 30deg, 0]; intensity: 3; }
+
+    Mesh3D {
+        vertices: [-1, -1, 0,  1, -1, 0,  1, 1, 0,  -1, 1, 0];
+        indices: [0, 1, 2,  0, 2, 3];
+
+        Material3D { baseColor: #ff8800; metallic: 0; roughness: 0.6; }
+    }
+}
+`;
+
+// An image shader tinting the picture it reads, and one whose third line does not compile
+const tintFragment = `#version 450
+layout(set = 0, binding = 0) uniform Parameters
+{
+    vec4 tint;
+    float intensity;
+} params;
+layout(set = 0, binding = 1) uniform texture2D source;
+layout(set = 0, binding = 2) uniform sampler sourceSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    vec4 pixel = texture (sampler2D (source, sourceSampler), uv);
+    color = mix (pixel, pixel * params.tint, params.intensity);
+}
+`;
+
+const brokenFragment = "#version 450\nlayout(location = 0) out vec4 color;\nvoid main() { color = vec4 (missingValue); }\n";
+
+// A shader two components are drawn through
+const effect = `shader Tint {
+    fragment: "fx/tint.frag";
+    property tint: color = #ff0000;
+    property intensity: number = 0.5;
+}
+
+style {
+    .tinted { effect: Tint; intensity: 0.8; }
+}
+
+Component {
+    Component { class: tinted; }
+    Component { class: tinted; }
+}
+`;
+
+// A material lit at its rim, and one whose third line does not compile
+const rimMaterial = `YUP_MATERIAL_PARAMS
+{
+    vec4 rim;
+    float strength;
+} params;
+
+vec4 yupMaterial (YupSurface surface)
+{
+    float fresnel = pow (1.0 - max (dot (surface.normal, surface.view), 0.0), 3.0);
+    return vec4 (params.rim.rgb * fresnel, fresnel * params.strength);
+}
+`;
+
+const brokenMaterial = "vec4 yupMaterial (YupSurface surface)\n{\n    return vec4 (missingValue);\n}\n";
+
+const material = `shader Rim {
+    material: "fx/rim.glsl";
+    property rim: color = #00ffff;
+    property strength: number = 1;
+}
+
+Component { }
+`;
+
+// A model of one triangle that holds its vertices itself
+const model = JSON.stringify ({
+    asset: { version: "2.0" },
+    scene: 0,
+    scenes: [{ name: "Main", nodes: [0] }],
+    nodes: [{ name: "Knob", mesh: 0 }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+    buffers: [{ uri: "data:application/octet-stream;base64," + Buffer.from (new Float32Array ([0, 0, 0, 1, 0, 0, 0, 1, 0]).buffer).toString ("base64"), byteLength: 36 }],
+    bufferViews: [{ buffer: 0, byteLength: 36 }],
+    accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: "VEC3" }]
+});
+
+// Whether the module compiles the shaders written in GLSL. One built with YUP_YUI_TOOL_WEB_SHADER_COMPILER=OFF only
+// loads the bundles a build compiled them into, and says so of a source
+let compiles;
+
+function compilesShaders () {
+    if (compiles === undefined) {
+        write ("compiler/main.yui", effect);
+        write ("compiler/fx/tint.frag", tintFragment);
+
+        compiles = ! verify ("compiler/main.yui").diagnostics.some (diagnostic => diagnostic.message.includes ("only compiled when the shader transpiler is built in"));
+    }
+
+    return compiles;
+}
+
+test ("a scene written as elements loads, and the schema describes the 3D types", () => {
+    write ("scene/main.yui", scene);
+
+    assert.deepEqual (lint ("scene/main.yui"), { code: 0, diagnostics: [] });
+
+    const types = JSON.parse (run ("schema").stdout).types;
+
+    for (const name of ["Scene3D", "Node3D", "Camera3D", "Light3D", "Mesh3D", "Model3D", "Material3D"])
+        assert.ok (types.some (type => type.name === name && type.instantiable), name);
+
+    // A drawing is shown alone as a widget, not as a part of a scene
+    const hosts = JSON.parse (run ("outline", "scene/main.yui").stdout).hosts;
+
+    assert.ok (hosts.includes ("Slider"));
+    assert.deepEqual (hosts.filter (host => host.endsWith ("3D")), []);
+});
+
+test ("a mesh whose arrays do not fit is reported at the line of the one that does not", () => {
+    write ("mesh/main.yui", scene.replace ("indices: [0, 1, 2,  0, 2, 3];", "indices: [0, 1, 7];"));
+
+    const { code, diagnostics } = lint ("mesh/main.yui");
+
+    assert.equal (code, 1);
+    assert.equal (diagnostics.length, 1, JSON.stringify (diagnostics));
+    assert.deepEqual ([diagnostics[0].file, diagnostics[0].line, diagnostics[0].severity], ["/yui/mesh/main.yui", 9, "error"]);
+    assert.match (diagnostics[0].message, /^Mesh3D[.]indices: /);
+});
+
+test ("a shader written in GLSL is compiled, and what its compiler says is reported where it names its file", t => {
+    if (! compilesShaders ())
+        return t.skip ("the module was built without the compiler of shaders");
+
+    write ("effect/main.yui", effect);
+    write ("effect/fx/tint.frag", tintFragment);
+
+    // The bundle a build compiles the shader into is read first, as an application reads it: the host is asked for it
+    assert.deepEqual (verify ("effect/main.yui"), { code: 0, diagnostics: [], missing: ["effect/fx/tint.frag.ysl"] });
+
+    write ("effect/fx/tint.frag", brokenFragment);
+
+    // Once, however many components the shader is the effect of, and on one line
+    const { code, diagnostics } = verify ("effect/main.yui");
+
+    assert.equal (code, 1);
+    assert.equal (diagnostics.length, 1, JSON.stringify (diagnostics));
+    assert.deepEqual ([diagnostics[0].file, diagnostics[0].line, diagnostics[0].column, diagnostics[0].severity], ["/yui/effect/main.yui", 2, 5, "error"]);
+    assert.match (diagnostics[0].message, /^shader Tint: .*:3: .*missingValue/);
+});
+
+test ("a module built without the compiler of shaders tells the bundle the source of a shader needs", t => {
+    if (compilesShaders ())
+        return t.skip ("the module compiles the shaders written in GLSL");
+
+    const { code, diagnostics, missing } = verify ("compiler/main.yui");
+
+    assert.equal (code, 1);
+    assert.deepEqual (diagnostics.map (diagnostic => [diagnostic.line, diagnostic.column]), [[2, 5]]);
+    assert.match (diagnostics[0].message, /^shader Tint: .*there is no 'fx\/tint[.]frag[.]ysl'$/);
+    assert.deepEqual (missing, ["compiler/fx/tint.frag.ysl"]);
+});
+
+test ("a material is compiled from its source, around the template of the renderer the module holds", t => {
+    if (! compilesShaders ())
+        return t.skip ("the module was built without the compiler of shaders");
+
+    write ("material/main.yui", material);
+    write ("material/fx/rim.glsl", rimMaterial);
+
+    // What a build compiles the material into, for each tier of the renderer, is read first
+    assert.deepEqual (verify ("material/main.yui"), { code: 0, diagnostics: [], missing: ["material/fx/rim.glsl.raster.ysl", "material/fx/rim.glsl.full.ysl"] });
+
+    write ("material/fx/rim.glsl", brokenMaterial);
+
+    // The compiler tells the lines of the material from its first one
+    const { code, diagnostics } = verify ("material/main.yui");
+
+    assert.equal (code, 1);
+    assert.equal (diagnostics.length, 1, JSON.stringify (diagnostics));
+    assert.deepEqual ([diagnostics[0].line, diagnostics[0].column], [2, 5]);
+    assert.match (diagnostics[0].message, /^shader Rim: /);
+    assert.match (diagnostics[0].message, /material:3/);
+    assert.match (diagnostics[0].message, /missingValue/);
+});
+
+test ("a model the host did not give is reported and told as missing, and loads once it is given", () => {
+    write ("model/main.yui", "Scene3D {\n    Model3D { source: \"models/triangle.gltf\"; }\n}\n");
+
+    const lacking = verify ("model/main.yui");
+
+    assert.equal (lacking.code, 1);
+    assert.ok (lacking.diagnostics.length > 0);
+
+    for (const diagnostic of lacking.diagnostics) {
+        assert.equal (diagnostic.line, 2);
+        assert.match (diagnostic.message, /Model3D[.]source: .*'models\/triangle[.]gltf'/);
+    }
+
+    // The file is told by the folder of the document followed by the path the document names it by
+    assert.deepEqual (lacking.missing, ["model/models/triangle.gltf"]);
+
+    write ("model/models/triangle.gltf", model);
+
+    assert.deepEqual (verify ("model/main.yui"), { code: 0, diagnostics: [], missing: [] });
+});
+
+test ("the files a document names are told once to who asks, and not those it was given", () => {
+    write ("asked/main.yui", material.replace ("Component { }", "Scene3D {\n    Mesh3D {\n        Material3D { baseColorTexture: \"../shared/wood.png\"; normalTexture: \"textures/bumps.png\"; }\n    }\n}"));
+    write ("asked/textures/bumps.png", "not an image, but given");
+    write ("asked/fx/rim.glsl", rimMaterial);
+
+    // The shaders first, each after what a build compiles it into, then the files of the scenes
+    assert.deepEqual (run ("lint", "--json", "asked/main.yui").missing,
+                      ["asked/fx/rim.glsl.raster.ysl", "asked/fx/rim.glsl.full.ysl", "asked/../shared/wood.png"]);
+
+    assert.deepEqual (missingFiles (), []);
 });

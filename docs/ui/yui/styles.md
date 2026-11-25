@@ -170,7 +170,7 @@ stylesheet can reshape the built-in widgets without a drawing:
 
 | Widget | Properties (default) |
 |---|---|
-| `Slider` | `trackWidth` (4) and `thumbSize` (16) for linear sliders; for rotary ones, as proportions of the width, `rotaryInset` (0.1), `rotaryArcWidth` (0.075), `rotaryDialInset` (0.105), `rotaryDialOutlineWidth` (0.0175), `rotaryPointerInset` (0.175) and `rotaryPointerWidth` (0.03) |
+| `Slider` | `trackWidth` (4) and `thumbSize` (16) for linear sliders; for rotary ones, whose dial is a circle as large as the smaller side allows, as proportions of that side, `rotaryInset` (0.1), `rotaryArcWidth` (0.075), `rotaryDialInset` (0.105), `rotaryDialOutlineWidth` (0.0175), `rotaryPointerInset` (0.175) and `rotaryPointerWidth` (0.03) |
 | `TextButton`, `ToggleButton`, `TextEditor`, `ComboBox` | `cornerRadius` (4), `outlineWidth` (1), `focusedOutlineWidth` (2) |
 | `PopupMenu` | `cornerRadius` (4), `outlineWidth` (1), `itemCornerRadius` (2), `itemHeight` (22), `verticalPadding` (4) |
 | `SwitchButton` | `cornerRadius` (unset: a pill), `thumbInset` (4) |
@@ -242,8 +242,8 @@ Row {
 
 ### Declaring properties
 
-A rule (or a `style`, `drawing`, `tokens` or `component` block) can declare a
-typed property, giving matched components a known type and optional default that
+A rule (or a `style`, `drawing`, `shader`, `tokens` or `component` block) can
+declare a typed property, giving matched components a known type and optional default that
 other rules and expressions can use without emitting an undeclared-property
 warning (`YuiDiagnostic::Severity::warning`):
 
@@ -501,6 +501,11 @@ and a fill mode (`none`, `forwards`, `backwards`, `both`).
   affecting parent layout bounds.
 - Animated values sit between explicit values and stylesheet values, so a
   value set from C++ still wins.
+- The inputs of a [shader](shaders.md#animating-a-shader) and the properties
+  of the [3D elements](scenes.md#styling-and-animating) are properties like the
+  others: a transition or an animation blends the uniform of an effect, the
+  position of a `Node3D`, the color of a `Light3D` or a factor of a
+  `Material3D`.
 
 ## Shadows, glows, filters, effects and cursors
 
@@ -548,8 +553,22 @@ style {
   runs in its own style layer so it never overwrites a C++ `setComponentEffect()`.
   The filter covers what the component paints in its paint margin and its
   `shadow:` and `glow:` layers too, as in CSS.
-- `effect:` is strictly for user-defined `ComponentEffect` factories registered
-  by the application in `ComponentEffectRegistry`, or `none`:
+- `effect:` draws the component through a shader, or `none`. It takes the name
+  of a [`shader` block](shaders.md#as-the-effect-of-a-component) of the
+  document, whose inputs are then properties the rules set and transition:
+
+  ```yui
+  shader Crt { fragment: "fx/crt.frag"; property intensity: number = 0.5; }
+
+  style {
+      .display       { effect: Crt; transition: intensity 200ms; }
+      .display:hover { intensity: 0.9; }
+  }
+  ```
+
+  or the name of a `ComponentEffect` factory registered by the application in
+  `ComponentEffectRegistry`. A shader of the document wins over a registered
+  effect of the same name:
 
   ```cpp
   ComponentEffectRegistry::getInstance().registerEffect ("customHalftone", []
@@ -654,6 +673,8 @@ between. Unknown names and malformed declarations are reported as diagnostics.
 
 - [The `.yui` language](language.md) - the syntax of every block.
 - [Data-driven drawing](drawing.md) - the drawings a rule selects.
+- [Shaders](shaders.md) - the shaders `effect:` runs, and their inputs.
+- [3D scenes](scenes.md) - styling and animating the elements of a `Scene3D`.
 - [How YUI fits together](architecture.md) - where stylesheet values sit in
   the property cascade.
 - [Component styling](../component-styling.md) - properties, the theme and

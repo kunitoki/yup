@@ -81,9 +81,9 @@ services of the operating system.
 
 ## YUI, the declarative UI language
 
-[YUI](yui/index.md) describes a whole interface - layout, stylesheet, drawings
-and bindings - in `.yui` text that is loaded at startup and hot reloaded while
-you edit it.
+[YUI](yui/index.md) describes a whole interface - layout, stylesheet, drawings,
+shaders, 3D scenes and bindings - in `.yui` text that is loaded at startup and
+hot reloaded while you edit it.
 
 - [The `.yui` language](yui/language.md) - blocks, elements, values,
   declarations and imports.
@@ -95,6 +95,10 @@ you edit it.
   shadows, glows, filters and cursors.
 - [Data-driven drawing](yui/drawing.md) - shapes whose values are expressions
   over the component's properties.
+- [Shaders](yui/shaders.md) - GLSL shaders as component effects, in drawings,
+  in filters and as 3D materials.
+- [3D scenes](yui/scenes.md) - cameras, lights, meshes, glTF models and
+  materials written as elements, styled, animated and interactive.
 - [Reactive bindings](yui/reactivity.md) - properties recomputed whenever what
   they read changes.
 - [Complete UIs in `.yui`](yui/documents.md) - `YuiDocument`, tokens, composite
@@ -116,9 +120,10 @@ the screen, and how to make it cheaper.
 - [Component snapshots](component-snapshots.md) - `snapshotToImage` and
   `snapshotToTexture` for pixel capture.
 - [Component effects (shaders)](component-effects.md) - GPU shader effects
-  applied to a `Component` subtree.
+  applied to a `Component` subtree, with `ShaderEffect` or a subclass.
 - [Components in 3D](component-3d.md) - live, interactive components on 3D
-  geometry with `setManuallyComposited` and `MeshSurfaceMapper`.
+  geometry, inside a `Scene3D` node or with `setManuallyComposited` and
+  `MeshSurfaceMapper`.
 
 ## Related areas
 

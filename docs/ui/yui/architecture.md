@@ -37,7 +37,8 @@ flowchart LR
 - `YuiParser` turns the text, and the files it imports, into one `DataTree`.
   On a reload, `YuiTreeDiff` patches the live tree with it, so the builder keeps
   the components of the elements still there.
-- `StyleSheet` collects the `style`, `palette` and `drawing` blocks of that tree.
+- `StyleSheet` collects the `style`, `palette`, `drawing` and `shader` blocks of
+  that tree.
 - `YuiBuilder` creates the components, applies their properties and routes every
   expression through a `BindingGraph`.
 - `Component::setStyleSheet` attaches the sheet to the root, which creates the
@@ -45,6 +46,8 @@ flowchart LR
 - `YuiDocument` runs these steps in order and owns the results.
 - `YuiLoader` feeds a document the text of files or embedded resources, with
   in-memory overrides for unsaved edits, and reloads it when the files change.
+  It serves the shaders, the models and the textures the document reads the
+  same way.
   `YuiView` owns a document and its loader, and hosts the root as a child
   filling its bounds.
 
@@ -175,6 +178,7 @@ classDiagram
         getRules()
         findPalette()
         findDrawing()
+        findShader()
         findKeyframes()
     }
     class Rule {
@@ -188,6 +192,7 @@ classDiagram
     class StyleContext {
         refresh()
         propertyChanged()
+        findShader()
     }
     class StyleAnimator {
         parseTransitions()
@@ -214,12 +219,13 @@ classDiagram
     StyleContext ..> StyleState : writes
     StyleContext ..> DrawingStyle : installs
     StyleContext ..> ComponentEffectRegistry : effect
+    StyleContext ..> ShaderEffect : effect
     ComponentStyle <|-- DrawingStyle
     Component o-- ComponentStyle : setStyle
 ```
 
 - A `StyleSheet` is immutable and shared. It holds rules (a `StyleSelector` and
-  its declarations), `@keyframes`, palettes and drawings.
+  its declarations), `@keyframes`, palettes, drawings and shaders.
 - The component the sheet is attached to owns the `StyleContext`. The context
   marks components dirty when their classes, interaction state, children or a
   property a selector watches change.
@@ -233,8 +239,12 @@ classDiagram
   `StyleAnimator`. While something runs, every frame writes the values to show
   into the animated layer of the `StyleState`.
 - `shadow:` layers are kept in the `StyleState` and painted by the component
-  before its content. `effect:` creates a `ComponentEffect` through the
-  `ComponentEffectRegistry`, `cursor:` sets the mouse cursor.
+  before its content. `effect:` runs a `shader` of the sheet through a
+  `ShaderEffect`, or creates a `ComponentEffect` through the
+  `ComponentEffectRegistry`, and `cursor:` sets the mouse cursor.
+- The context loads the shaders of its sheet once, when they are first used,
+  and gives the same `GpuImageShader` to the effects, the drawings and the
+  filters naming it. It loads one again when its file changes.
 
 ### One frame
 
@@ -403,6 +413,11 @@ flowchart LR
   handler runs document actions or emits signals declared by composites, reading
   the signal's arguments through the names it gives them. `changed property:`
   handlers run the same way when a property changes.
+- The elements of a [3D scene](scenes.md) are component types too, registered
+  by `yup_renderer` when the application links it. The builder creates them as
+  it creates widgets, and each one stands for an entity of the `Scene` its
+  `Scene3D` shows, so bindings, stylesheets and reloads reach 3D objects with
+  no machinery of their own.
 
 ## See also
 

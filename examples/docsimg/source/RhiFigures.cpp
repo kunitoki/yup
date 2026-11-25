@@ -99,4 +99,58 @@ void addRhiFigures (Figures& f)
 
         g.drawTexture (target->asTexture(), bounds);
     });
+
+    f.paint ("graphics/rhi/image-shaders_draw", { 560.0f, 190.0f }, [] (Graphics& g, Rectangle<float> area)
+    {
+        const auto scale = g.getContextScale();
+        const auto device = g.getGraphicsContext().getGpuDevice();
+
+        // The picture the shader reads: a canvas drawn with the 2D API
+        auto canvas = GpuCanvas::create (g.getGraphicsContext(), roundToInt (200.0f * scale), roundToInt (112.0f * scale));
+        if (canvas == nullptr)
+            return failFigure ("The canvas cannot be created");
+
+        auto& c = canvas->beginDraw ({}, scale);
+        c.setFillColor (Colors::darkslateblue);
+        c.fillAll();
+        c.setFillColor (Colors::gold);
+        c.fillEllipse ({ 16.0f, 16.0f, 80.0f, 80.0f });
+        c.setFillColor (Colors::white);
+        c.fillFittedText ("2D", font (34.0f), { 104.0f, 0.0f, 88.0f, 112.0f }, Justification::center);
+
+        const auto input = canvas->asTexture();
+        if (input == nullptr)
+            return failFigure ("The canvas has no texture");
+
+        // Compiled from its GLSL when the figure is drawn
+        MemoryBlock source;
+        docsimgFile ("data/duotone.frag").loadFileAsData (source);
+
+        const auto created = GpuImageShader::createFromData (source.getData(), source.getSize());
+        if (created.failed())
+            return failFigure (created.getErrorMessage());
+
+        const auto shader = created.getValue();
+
+        auto uniforms = shader->createUniforms();
+        uniforms.set ("shadows", { 0.1f, 0.0f, 0.25f, 1.0f });
+        uniforms.set ("highlights", { 1.0f, 0.8f, 0.5f, 1.0f });
+        uniforms.set ("amount", 1.0f);
+
+        auto target = GpuTarget::create (device, input->getWidth(), input->getHeight());
+        if (target == nullptr)
+            return failFigure ("The target cannot be created");
+
+        auto frame = GpuFrame::begin (device);
+        const auto drawn = shader->draw (device, frame, *target, uniforms, input);
+        frame.submit();
+
+        if (drawn.failed())
+            return failFigure (drawn.getErrorMessage());
+
+        labelled (g, area, { "the input", "drawn through the shader" }, 2, [&] (int index, Rectangle<float> cell)
+        {
+            g.drawTexture (index == 0 ? input : target->asTexture(), cell.withSizeKeepingCenter (200.0f, 112.0f));
+        });
+    });
 }

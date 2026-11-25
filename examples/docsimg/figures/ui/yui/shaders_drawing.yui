@@ -1,0 +1,26 @@
+// size: 560 200
+shader Rings {
+    fragment: "fx/rings.frag";
+    property count: number = 4;
+    property tint: color = palette.accent;
+}
+
+drawing Sonar {
+    property level: number = 0.5;
+
+    rect { bounds: bounds; cornerRadius: 10; fill: palette.surface; }
+    use Rings { bounds: bounds.reduced (8); count: 2 + level * 6; }
+    circle { center: bounds.center; radius: 5; fill: palette.text; }
+}
+
+style {
+    .sonar { drawing: Sonar; }
+}
+
+Row {
+    gap: 16;
+
+    Component { class: sonar; level: 0; flexGrow: 1; }
+    Component { class: sonar; level: 0.5; flexGrow: 1; }
+    Component { class: sonar; level: 1; flexGrow: 1; }
+}

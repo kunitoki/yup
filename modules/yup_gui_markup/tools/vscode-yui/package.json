@@ -1,0 +1,166 @@
+{
+  "name": "vscode-yui",
+  "displayName": "YUI - YUP UI Language",
+  "description": "Syntax highlighting, snippets, diagnostics, completions, navigation, live preview, SVG import and tools for coding agents for YUI, the declarative UI language of the YUP library.",
+  "version": "2.0.1",
+  "publisher": "yup-audio",
+  "license": "ISC",
+  "icon": "images/yui-icon.png",
+  "main": "./out/extension.js",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "yui",
+    "yup",
+    "ui",
+    "markup",
+    "syntax"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kunitoki/yup"
+  },
+  "homepage": "https://github.com/kunitoki/yup",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "YUI",
+      "properties": {
+        "yui.lint.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Report the problems of .yui documents while editing them."
+        },
+        "yui.lint.models": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a JSON file declaring the application models bound by the documents, absolute or relative to the workspace folder of the linted file. Without it, bindings such as 'value <=> params.cutoff' are reported as unknown elements."
+        },
+        "yui.preview.size": {
+          "type": "string",
+          "default": "auto",
+          "pattern": "^(auto|panel|[1-9][0-9]{0,3}x[1-9][0-9]{0,3})$",
+          "patternErrorMessage": "Expected auto, panel or <width>x<height> in logical pixels, such as 640x400.",
+          "description": "The size of the preview, also chosen in its toolbar. 'auto' shows an interface at the width and height its root sets, and otherwise at the size of the preview panel. 'panel' is always the size of the panel. Both follow the panel when it is resized. '<width>x<height>' is a fixed size in logical pixels, such as 640x400."
+        },
+        "yui.preview.theme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "light",
+            "dark"
+          ],
+          "enumDescriptions": [
+            "Follow the active color theme.",
+            "Always show the light theme.",
+            "Always show the dark theme."
+          ],
+          "default": "auto",
+          "description": "The theme the preview is shown with, also chosen in its toolbar."
+        },
+        "yui.mcp.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Serve the tools for coding agents on this machine: the problems, the layout and an image of a .yui document, over the Model Context Protocol. 'YUI: Set Up Agent Tools' turns it on for a workspace and lists the server in its .mcp.json."
+        },
+        "yui.mcp.port": {
+          "type": "integer",
+          "default": 7391,
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "The port the tools for coding agents are served on, at http://127.0.0.1:<port>/mcp. Each window serving them needs its own, which 'YUI: Set Up Agent Tools' finds."
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "yui",
+        "aliases": [
+          "YUI",
+          "yui"
+        ],
+        "extensions": [
+          ".yui"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./images/yui-icon.png",
+          "dark": "./images/yui-icon.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "yui",
+        "scopeName": "source.yui",
+        "path": "./syntaxes/yui.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "yui",
+        "path": "./snippets/yui.code-snippets"
+      }
+    ],
+    "commands": [
+      {
+        "command": "yui.preview",
+        "title": "YUI: Open Preview",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "yui.importSvg",
+        "title": "YUI: Import SVG as Drawing"
+      },
+      {
+        "command": "yui.setUpAgentTools",
+        "title": "YUI: Set Up Agent Tools"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "yui.preview",
+          "when": "resourceExtname == .yui",
+          "group": "navigation@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "yui.preview",
+          "when": "resourceLangId == yui"
+        },
+        {
+          "command": "yui.importSvg",
+          "when": "yui.hasTool"
+        },
+        {
+          "command": "yui.setUpAgentTools",
+          "when": "yui.hasTool"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "check": "tsc -p ./tsconfig.json",
+    "compile": "npm run check && node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "test": "node esbuild.js --test && node --test out-test/agentServer.test.js out-test/agentFiles.test.js out-test/documentFiles.test.js out-test/syntax.test.js",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
+    "@modelcontextprotocol/node": "^2.1.2",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.75.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.0.0"
+  }
+}

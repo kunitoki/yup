@@ -212,7 +212,14 @@ if ("yup_gui" IN_LIST target_modules)
         BASE_DIR "${yui_resources_dir}"
         FILES
             "${yui_resources_dir}/ui.yui"
-            "${yui_resources_dir}/parts/style.yui")
+            "${yui_resources_dir}/parts/style.yui"
+            "${yui_resources_dir}/effects.yui"
+        ASSETS
+            "${yui_resources_dir}/assets/blob.bin"
+        SHADERS
+            "${yui_resources_dir}/fx/tint.frag"
+        MATERIAL_SHADERS
+            "${yui_resources_dir}/fx/rim.glsl")
 
     yup_add_yui_resources (yui-nested-resources
         BASE_DIR "${yui_resources_dir}"

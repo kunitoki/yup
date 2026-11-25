@@ -21,12 +21,29 @@
 
 #include "Figures.h"
 
+#include <yup_renderer/yup_renderer.h>
+
+#include <algorithm>
 #include <iostream>
 
 namespace
 {
 
 yup::String figureFailure;
+
+/** The most a figure is drawn for the scenes it shows to settle: four times the frames the renderer accumulates. */
+constexpr int maximumFrames = 64;
+
+//==============================================================================
+/** The scenes a component shows, in the order of its tree. */
+void collectScenes (yup::Component& component, std::vector<yup::SceneComponent*>& scenes)
+{
+    if (auto* scene = dynamic_cast<yup::SceneComponent*> (&component))
+        scenes.push_back (scene);
+
+    for (int index = 0; index < component.getNumChildComponents(); ++index)
+        collectScenes (*component.getChildComponent (index), scenes);
+}
 
 //==============================================================================
 
@@ -261,15 +278,38 @@ private:
 
     void capture (const Job& job)
     {
+        std::vector<yup::SceneComponent*> scenes;
+        collectScenes (*frame, scenes);
+
+        const auto isSettled = [&scenes]
+        {
+            return std::all_of (scenes.begin(), scenes.end(), [] (yup::SceneComponent* scene)
+            {
+                return scene->getRenderer().isConverged();
+            });
+        };
+
+        // A scene refines its picture over frames, so it is drawn until it has settled. Each time it runs the frame a
+        // window runs before painting, with no time elapsed: what is animated stands where it starts, in every run
         yup::Image image;
-        for (int i = 0; i < job.figure->frames; ++i)
+        for (int i = 0; i < job.figure->frames || (i < maximumFrames && ! isSettled()); ++i)
+        {
+            for (auto* scene : scenes)
+                scene->refreshDisplay (0.0);
+
             image = frame->snapshotToImage (*context, true, 2.0f);
+        }
 
         if (! image.isValid())
             return fail (job, "cannot be drawn");
 
         if (figureFailure.isNotEmpty())
             return fail (job, std::exchange (figureFailure, {}));
+
+        // A scene that could not be rendered shows why in its place, which is not the figure
+        for (auto* scene : scenes)
+            if (const auto& error = scene->getRenderer().getLastError(); error.isNotEmpty())
+                return fail (job, "shows a scene that cannot be rendered: " + error);
 
         const auto file = outputFolder.getChildFile (job.figure->id + job.suffix + ".jpg");
         file.getParentDirectory().createDirectory();

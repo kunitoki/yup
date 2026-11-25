@@ -913,6 +913,7 @@ protected:
 
 private:
     friend class GpuFrame;
+    friend class GpuImageShader;
     friend class GpuPipeline;
 
     //==============================================================================
@@ -963,6 +964,50 @@ private:
 
     CriticalSection embeddedBundlesLock;
     std::map<std::pair<const void*, size_t>, EmbeddedBundle> embeddedBundles;
+
+    //==============================================================================
+    /** A pipeline compiled for an owner that draws with the device without keeping it alive.
+
+        A shader drawn by several devices, as a GpuImageShader shared by the windows of an
+        application, cannot keep its pipelines itself: a pipeline must not outlive the
+        device it was compiled for, so the shader would have to keep alive every device it
+        was drawn with, and a device that outlives its window releases its GPU objects
+        without the rendering context they belong to. The device keeps them instead, under
+        a token of their owner, which it does not keep alive. They are always released
+        while the backend is alive: by releasePooledResources(), or once their owner is
+        gone by the next lookup, which a thread drawing with the device makes.
+
+        A GpuPipeline holds no reference to its device, so the device keeping one makes no cycle.
+    */
+    struct OwnerPipeline
+    {
+        std::weak_ptr<void> owner;
+        GpuTextureFormat format = GpuTextureFormat::rgba8unorm;
+
+        /** Null when the pipeline could not be compiled, for the reason error gives. */
+        ReferenceCountedObjectPtr<GpuPipeline> pipeline;
+        String error;
+    };
+
+    /** @internal Returns the pipeline the device keeps for @p owner and the color targets of
+        @p format, compiling it with @p compile the first time.
+
+        What @p compile returns is kept, a failure as well, so a pipeline that cannot be
+        compiled is not compiled again by every draw. It runs with the lock of the kept
+        pipelines held, once for an owner and a format. Thread safe.
+
+        @param owner    The token of what draws with the pipeline, alive during the call.
+        @param format   The format of the color target the pipeline draws into.
+        @param compile  Compiles the pipeline for this device and the format it is given.
+
+        @returns What @p compile returned, now or the first time.
+    */
+    ResultValue<ReferenceCountedObjectPtr<GpuPipeline>> getOrCompilePipelineFor (const std::shared_ptr<void>& owner,
+                                                                                 GpuTextureFormat format,
+                                                                                 const std::function<ResultValue<ReferenceCountedObjectPtr<GpuPipeline>> (GpuTextureFormat)>& compile);
+
+    CriticalSection ownerPipelinesLock;
+    std::vector<OwnerPipeline> ownerPipelines;
 
     //==============================================================================
     /** Pool of small uniform buffers recycled across frames.

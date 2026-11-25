@@ -37,6 +37,10 @@ namespace yup
     raster output. The background color is display-referred, shown exactly as picked, never tone
     mapped. HDR effects running before this pass must therefore carry the alpha through.
 
+    The destination is premultiplied by alpha, as Graphics::drawTexture() takes a texture. The
+    background is premultiplied by its own alpha before the blend, so a background of alpha below 1
+    lets what the destination is then drawn over show through; an opaque one is unchanged.
+
     On frames blurred by the depth of field or motion blur, the partial coverage the blur spread is
     light rather than the edge of a surface: a second pipeline then tone maps the premultiplied
     radiance and adds the background over the uncovered share (preflight R20), so a blurred
@@ -67,6 +71,7 @@ public:
 
         @param resources          The pool the shared samplers come from.
         @param glow               A linear rgba16float glow of the size of @p source, or nullptr for none.
+        @param background         The background color, not premultiplied: the pass premultiplies it.
         @param blurAmount         For a @p source blurred by the depth of field or motion blur, the
                                   share of each pixel's coverage the blur moved
                                   (DepthOfField::getBlurAmount() or MotionBlur::getBlurAmount()),

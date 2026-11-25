@@ -21,10 +21,15 @@
 
 #include "yup_YuiToolSupport.h"
 
+#if YUP_MODULE_AVAILABLE_yup_renderer
+#include <yup_renderer/yup_renderer.h>
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <set>
 
 using namespace yup;
@@ -186,13 +191,23 @@ std::vector<YuiToolProblem> findYuiToolProblems (const YuiDocument& document, co
 {
     std::vector<YuiToolProblem> problems;
 
+    // A problem is told on one line, which the errors of a shader compiler are not
+    const auto onOneLine = [] (const String& message)
+    {
+        auto lines = StringArray::fromLines (message);
+        lines.trim();
+        lines.removeEmptyStrings();
+
+        return lines.joinIntoString (" ");
+    };
+
     for (const auto& diagnostic : document.getDiagnostics())
     {
         problems.push_back ({ .file = diagnostic.source.isEmpty() ? file : file.getParentDirectory().getChildFile (diagnostic.source),
                               .line = diagnostic.line,
                               .column = diagnostic.column,
                               .isError = diagnostic.isError(),
-                              .message = diagnostic.message });
+                              .message = onOneLine (diagnostic.message) });
     }
 
     const auto hasError = std::any_of (problems.begin(), problems.end(), [] (const YuiToolProblem& problem)
@@ -209,46 +224,301 @@ std::vector<YuiToolProblem> findYuiToolProblems (const YuiDocument& document, co
 namespace
 {
 
-// A file holding only declarations (styles, drawings, components) is written to be imported
-bool hasNoRootComponent (const String& text, const YuiLoader& loader)
+#if YUP_MODULE_AVAILABLE_yup_renderer
+
+// The frames a scene is given to show its final picture: four times those it accumulates when nothing changes
+constexpr int maximumSceneFrames = 64;
+
+// Adds a problem the tool finds to those of a document, which tells where it is written
+void report (YuiDocument& document, const YuiDiagnostic& problem)
 {
-    const auto parsed = YuiParser::parse (text, [&loader] (const String& path)
+    if (const auto& tell = document.getBuilder().onDiagnostic; tell != nullptr)
+        tell (problem);
+}
+
+// The scenes an interface shows, in the order of its tree
+void collectScenes (Component& component, std::vector<SceneComponent*>& scenes)
+{
+    if (auto* scene = dynamic_cast<SceneComponent*> (&component))
+        scenes.push_back (scene);
+
+    for (int index = 0; index < component.getNumChildComponents(); ++index)
+        collectScenes (*component.getChildComponent (index), scenes);
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+
+// Loads a shader a document makes from a `material`, which only a scene drawing with it loads, and tells what prevents it:
+// its file, the errors of its compiler, and the properties its uniform block has no member for
+void checkMaterialShader (YuiDocument& document, const DataTree& block)
+{
+    const auto name = block.getProperty ("name").toString().trim();
+    const auto path = block.getProperty ("material").toString();
+
+    // The variants a build compiles the material into are next to it, either or both: without them its source is compiled here
+    const auto raster = document.readAsset (path + ".raster.ysl");
+    const auto full = document.readAsset (path + ".full.ysl");
+    const auto source = raster.has_value() || full.has_value() ? std::optional<MemoryBlock>() : document.readAsset (path);
+
+    if (! raster.has_value() && ! full.has_value() && ! source.has_value())
     {
-        return loader.getLoadedText (path);
+        report (document, { .message = "The shader '" + name + "' can't read '" + path + "' nor its compiled variants '" + path + ".raster.ysl' and '" + path + ".full.ysl'",
+                            .element = block,
+                            .property = "material" });
+        return;
+    }
+
+    const auto created = source.has_value() ? MaterialShader::createFromSource (source->toString())
+                                            : MaterialShader::createFromData (raster.has_value() ? raster->getData() : nullptr,
+                                                                              raster.has_value() ? raster->getSize() : size_t (0),
+                                                                              full.has_value() ? full->getData() : nullptr,
+                                                                              full.has_value() ? full->getSize() : size_t (0));
+
+    if (created.failed())
+    {
+        report (document, { .message = "shader " + name + ": " + created.getErrorMessage(), .element = block, .property = "material" });
+        return;
+    }
+
+    // A property fills the member of its name, as the one of a shader made from a fragment does
+    const auto uniforms = created.getReference()->createUniforms();
+
+    for (const auto& property : block)
+    {
+        const auto propertyName = property.getProperty ("name").toString().trim();
+
+        if (property.getType().toString() != "property" || propertyName.isEmpty())
+            continue;
+
+        const auto typeName = property.getProperty ("type").toString().trim();
+        const auto type = ComponentProperty::getTypeFromName (typeName);
+
+        // Of the arrays, the one of numbers fills a uniform
+        const auto isFilling = type != ComponentProperty::Type::array || ComponentProperty::getElementTypeFromName (typeName) == ComponentProperty::Type::number;
+        const auto numComponents = isFilling ? ShaderEffect::getNumUniformComponents (type) : 0;
+
+        if (numComponents == 0)
+            report (document, { .message = "The property '" + propertyName + "' of the shader '" + name + "' can't be of type '" + typeName + "': a shader takes a number, an integer, a boolean, a color, a point, a rectangle or a number[]", .element = property });
+        else if (! uniforms.hasMember (propertyName))
+            report (document, { .message = "The uniform block of the shader '" + name + "' has no member '" + propertyName + "'", .element = property });
+        else if (uniforms.getNumComponents (propertyName) < numComponents)
+            report (document, { .message = "The member '" + propertyName + "' of the uniform block of the shader '" + name + "' is too small for a " + typeName, .element = property });
+    }
+}
+
+#endif
+
+#endif
+
+// Checks what a document needs that only shows once it is used or shown, for one that is checked with no window: its
+// shaders are loaded whether a component uses them or not, and its scenes run the frame a window showing them starts with
+void checkResources (YuiDocument& document)
+{
+    auto* root = document.getRoot();
+
+    if (root == nullptr)
+        return;
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    for (const auto& element : document.getTree())
+    {
+        if (element.getType().toString() != "shader")
+            continue;
+
+        // One made from a fragment is loaded by the styles, which tell what prevents it once, however many components use it
+        if (auto* context = root->getStyleContext(); context != nullptr && element.hasProperty ("fragment"))
+            context->findShader (element.getProperty ("name").toString().trim());
+
+#if YUP_MODULE_AVAILABLE_yup_renderer
+        if (element.hasProperty ("material"))
+            checkMaterialShader (document, element);
+#endif
+    }
+#endif
+
+#if YUP_MODULE_AVAILABLE_yup_renderer
+    std::vector<SceneComponent*> scenes;
+    collectScenes (*root, scenes);
+
+    // What a scene left to its first frame is built there, and tells what is wrong with it
+    for (auto* scene : scenes)
+        scene->refreshDisplay (0.0);
+#endif
+}
+
+//==============================================================================
+/** Serves the files a build embeds as the function it generates does for an application, which loads a document with
+    YuiLoader::loadResource: by their path, from the folder they are embedded from. Anything else is not found, and
+    remembered.
+*/
+class EmbeddedFiles
+{
+public:
+    EmbeddedFiles (const YuiToolEmbedded& embeddedFiles, const File& documentFile)
+        : embedded (embeddedFiles)
+        , document (documentFile)
+        , path (documentFile.getRelativePathFrom (embeddedFiles.base).replaceCharacter ('\\', '/'))
+    {
+    }
+
+    /** Returns the path the document is embedded under. */
+    const String& getPath() const noexcept { return path; }
+
+    /** Returns why the document is not one of the files, nothing when it is. */
+    String findWhyNotEmbedded() const
+    {
+        if (! document.isAChildOf (embedded.base))
+            return "this file is not in '" + embedded.base.getFullPathName() + "', the folder of the embedded files";
+
+        return embedded.paths.contains (path) ? String() : "'" + path + "' is not one of the embedded files";
+    }
+
+    YuiLoader::ResourceFinder getFinder()
+    {
+        return [this] (const char* asked, std::size_t& size)
+        {
+            return find (asked, size);
+        };
+    }
+
+    /** Returns what the document read that is in the folder of the files without being one of them. */
+    std::vector<YuiToolProblem> findProblems() const
+    {
+        std::vector<YuiToolProblem> problems;
+
+        for (const auto& asked : refused)
+        {
+            // The bundles a build compiles a shader into are asked for before its source, which is what stands for them
+            if (isBundleOf (asked, ".ysl") || isBundleOf (asked, ".raster.ysl") || isBundleOf (asked, ".full.ysl"))
+                continue;
+
+            // What is not there either is told by who could not read it
+            if (const auto file = embedded.base.getChildFile (asked); file.existsAsFile() && file.isAChildOf (embedded.base))
+                problems.push_back ({ .file = document, .message = "'" + asked + "' is read by '" + path + "' but is not embedded" });
+        }
+
+        return problems;
+    }
+
+private:
+    const uint8* find (const char* asked, std::size_t& size)
+    {
+        const auto name = String::fromUTF8 (asked);
+        size = 0;
+
+        if (! embedded.paths.contains (name))
+        {
+            refused.addIfNotAlreadyThere (name);
+            return nullptr;
+        }
+
+        // Read once and kept, as the bytes of an embedded file stay where they are
+        auto found = served.find (name);
+
+        if (found == served.end())
+        {
+            MemoryBlock bytes;
+
+            if (! embedded.base.getChildFile (name).loadFileAsData (bytes) || bytes.isEmpty())
+                return nullptr;
+
+            found = served.emplace (name, std::move (bytes)).first;
+        }
+
+        size = found->second.getSize();
+        return static_cast<const uint8*> (found->second.getData());
+    }
+
+    bool isBundleOf (const String& asked, const char* extension) const
+    {
+        const auto source = asked.endsWith (extension) ? asked.dropLastCharacters (String (extension).length()) : String();
+
+        return source.isNotEmpty() && (embedded.paths.contains (source) || refused.contains (source));
+    }
+
+    const YuiToolEmbedded& embedded;
+    const File document;
+    const String path;
+    StringArray refused;
+    std::map<String, MemoryBlock> served;
+};
+
+//==============================================================================
+// A file holding only declarations (styles, drawings, components) is written to be imported
+bool hasNoRootComponent (const String& text, const YuiLoader& loader, const String& mainPath)
+{
+    // The loader knows what a file imports by its path in the source, which starts with the folder of the file
+    const auto folder = mainPath.substring (0, mainPath.lastIndexOfChar ('/') + 1);
+
+    const auto parsed = YuiParser::parse (text, [&loader, &folder] (const String& path)
+    {
+        return loader.getLoadedText (folder + path);
     });
 
     return parsed.wasOk() && findYuiToolRootIndex (parsed.document) < 0;
 }
 
-// Loads a file as it is checked: with the text given in place of its own, and what only declares as an empty interface
-Result loadForChecking (YuiLoader& loader, const File& file, const std::optional<String>& unsavedText)
+// Loads a file as it is checked: from its folder, or from the files a build embeds as an application loads it, with the
+// text given in place of its own, and what only declares as an empty interface
+Result loadForChecking (YuiDocument& document, YuiLoader& loader, const File& file, const std::optional<String>& unsavedText, EmbeddedFiles* embedded = nullptr)
 {
-    auto result = loader.loadFile (file);
+    const auto mainPath = embedded != nullptr ? embedded->getPath() : file.getFileName();
+    auto result = embedded != nullptr ? loader.loadResource (mainPath, embedded->getFinder()) : loader.loadFile (file);
 
     if (unsavedText.has_value())
         result = loader.reloadFromString (*unsavedText);
 
     if (result.failed())
     {
-        // There is no interface to build from declarations alone, so they are checked as those of an empty one
-        if (const auto text = loader.getLoadedText (file.getFileName()); text.has_value() && hasNoRootComponent (*text, loader))
-            result = loader.reloadFromString (*text + "\nComponent {}\n");
+        // There is no interface to build from declarations alone, so they are checked as those of an empty one. What they
+        // need is read from the folder of the file importing them, so it is checked with that file
+        if (const auto text = loader.getLoadedText (mainPath); text.has_value() && hasNoRootComponent (*text, loader, mainPath))
+            return loader.reloadFromString (*text + "\nComponent {}\n");
     }
+
+    // What an interface needs is checked whether it is used or not
+    if (result.wasOk())
+        checkResources (document);
+
+#if YUP_WASM
+    // The host of the module gave it the files: it is told those the document names that it was not given
+    if (result.wasOk())
+        noteYuiToolMissingFiles (document);
+#endif
 
     return result;
 }
 
 } // namespace
 
-std::vector<YuiToolProblem> findYuiToolFileProblems (const File& file, const std::optional<String>& unsavedText, const YuiToolModels& models)
+std::vector<YuiToolProblem> findYuiToolFileProblems (const File& file, const std::optional<String>& unsavedText, const YuiToolModels& models, const YuiToolEmbedded* embedded)
 {
+    // Outlives the loader, which finds its files with it
+    std::optional<EmbeddedFiles> files;
+
+    if (embedded != nullptr)
+    {
+        files.emplace (*embedded, file);
+
+        if (const auto reason = files->findWhyNotEmbedded(); reason.isNotEmpty())
+            return { YuiToolProblem { .file = file, .message = reason } };
+    }
+
     YuiDocument document;
     YuiLoader loader (document);
     models.attachTo (document);
 
-    const auto result = loadForChecking (loader, file, unsavedText);
+    const auto result = loadForChecking (document, loader, file, unsavedText, files.has_value() ? &*files : nullptr);
+    auto problems = findYuiToolProblems (document, file, result);
 
-    return findYuiToolProblems (document, file, result);
+    // What is not embedded comes first: it is the cause of what could not be read
+    if (files.has_value())
+    {
+        const auto missing = files->findProblems();
+        problems.insert (problems.begin(), missing.begin(), missing.end());
+    }
+
+    return problems;
 }
 
 //==============================================================================
@@ -615,7 +885,7 @@ YuiToolMissingModels findYuiToolMissingModels (const File& file, const YuiToolMo
         YuiLoader loader (document);
         combined.attachTo (document);
 
-        const auto result = loadForChecking (loader, file, std::nullopt);
+        const auto result = loadForChecking (document, loader, file, std::nullopt);
 
         StringArray ids;
         collectIds (document.getTree(), ids);
@@ -888,6 +1158,11 @@ YuiToolShown loadYuiToolTarget (YuiDocument& document, YuiLoader& loader, const 
 {
     YuiToolShown shown;
     shown.result = loader.loadFile (input);
+
+#if YUP_WASM
+    // The host of the module gave it the files: it is told those the document names that it was not given
+    noteYuiToolMissingFiles (document);
+#endif
 
     const auto parsed = YuiParser::parse (loader.getLoadedText (input.getFileName()).value_or (String()), [&loader] (const String& path)
     {
@@ -1275,6 +1550,58 @@ std::unique_ptr<GraphicsContext> createYuiToolGraphicsContext()
     return GraphicsContext::createContext (GpuPlatform::Direct3D, options);
 #else
     return nullptr;
+#endif
+}
+
+ResultValue<Image> drawYuiToolImage (Component& component, const std::function<Image()>& snapshot)
+{
+#if YUP_MODULE_AVAILABLE_yup_renderer
+    std::vector<SceneComponent*> scenes;
+    collectScenes (component, scenes);
+
+    Image image;
+
+    for (int frame = 0; frame < maximumSceneFrames; ++frame)
+    {
+        // The frame a window runs before it paints. No time goes by, so what is animated stands where it starts
+        for (auto* scene : scenes)
+            scene->refreshDisplay (0.0);
+
+        image = snapshot();
+
+        const auto isFinal = std::all_of (scenes.begin(), scenes.end(), [] (SceneComponent* scene)
+        {
+            return scene->getRenderer().isConverged();
+        });
+
+        if (! image.isValid() || isFinal)
+            break;
+    }
+
+    for (auto* scene : scenes)
+    {
+        const auto& renderer = scene->getRenderer();
+
+        // A scene that could not be drawn shows why in its place, which is not the picture asked for
+        if (const auto& error = renderer.getLastError(); error.isNotEmpty())
+            return makeResultValueFail ("a Scene3D can't be drawn: " + error);
+
+        if (renderer.isConverged())
+            continue;
+
+        if (auto* document = YuiDocument::findDocumentFor (scene))
+        {
+            report (*document, { .message = "Scene3D: still changing after " + String (maximumSceneFrames) + " frames, the image shows it as it was at the last of them",
+                                 .element = document->getBuilder().findElementFor (scene),
+                                 .severity = YuiDiagnostic::Severity::warning });
+        }
+    }
+
+    return makeResultValueOk (image);
+#else
+    ignoreUnused (component);
+
+    return makeResultValueOk (snapshot());
 #endif
 }
 

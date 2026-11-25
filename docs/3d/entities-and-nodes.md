@@ -93,6 +93,22 @@ to `raycast()` to skip such entities, or test the candidates one by one with
 `Entity::intersectRay()`, which returns the nearest hit in the visible subtree
 of an entity. `Ray::intersectBox()` tests a single box.
 
+`MeshNode::intersectTriangles()` tests the triangles of a mesh instead of its
+bounds, and returns the distance of the nearest one hit. It tells a part from
+the box that encloses it, follows a mesh that is [deformed](animation.md), and
+skips the triangles seen from behind unless their material is double sided, as
+the renderer does:
+
+```cpp
+if (const auto distance = entity.get<yup::MeshNode>()->intersectTriangles (*ray, camera->zNear))
+    select (entity, ray->getPointAt (*distance));
+```
+
+Every triangle of the primitives the ray enters is tested, which suits panels
+and product models rather than scanned meshes of hundreds of thousands of
+triangles. It is how the elements of a
+[`.yui` scene](../ui/yui/scenes.md#interaction) take the pointer.
+
 ## Identifiers
 
 Every entity and node has a `Uuid`, to refer to them from saved files, the
@@ -224,6 +240,11 @@ also orders node types against each other:
 scene->addSystemRule<Spinner, Follower>(); // spinners update before followers
 ```
 
+The nodes of the library follow such rules too: a node that moves the joints
+of a skinned model from its `update()` asks for
+`scene->addSystemRule<MyNode, yup::DeformNode>()`, so that the mesh follows in
+the same update, see [Animation](animation.md#the-order-of-an-update).
+
 Rules are about types: they hold for every system or node of those types,
 including ones added later, and chain (A before B and B before C put A before C).
 Otherwise systems run in the order they were added, and node types in the order
@@ -257,3 +278,29 @@ every lamp draws the same `lampMesh`. `attachWith<T> (setup)` default-constructs
 the node and lets `setup` configure it. Build a prefab completely before using
 it: instances don't follow later changes. glTF assets are loaded as prefabs, see
 [Loading glTF](meshes-and-gltf.md#loading-gltf).
+
+A part only sees its own entity. A node that needs other entities of the same
+instance, as a dimmer needs its bulb or an animation the entities it moves, is
+attached by a link: a step `instantiate()` runs once the whole tree of the
+instance is built, with the entity each part became.
+
+```cpp
+auto& bulb = lamp->getRoot().addChild ("bulb");
+bulb.attach<yup::LightNode> (yup::LightNode::Type::point);
+
+// Dimmer is a node of the lamp that keeps the entity of its bulb
+lamp->addLink ([index = static_cast<size_t> (bulb.getIndex())] (yup::Span<const yup::Entity> entities)
+{
+    auto root = entities.front();           // the entity made by the root part
+    root.attach<Dimmer> (entities[index]);  // the entity made by the bulb part, of this instance
+});
+```
+
+- `Part::getIndex()` is 0 for the root, then one more for each part in the
+  order they were added, wherever they are in the tree. It never changes.
+- A link gets one entity for each part, at the index of the part. The span is
+  only good during the call: copy the entities to keep.
+- Links run once per `instantiate()`, in the order they were added, after
+  every part made its entity and attached its nodes.
+- `GltfModel` uses links to give each instance its `AnimationNode` and its
+  `DeformNode`s.

@@ -1717,6 +1717,17 @@ TEST_F (CodeTokeniserRuleTests, BuiltInYuiScopes)
     EXPECT_EQ (String ("identifier.function"), scopeOf (6, "darker"));
 }
 
+TEST_F (CodeTokeniserRuleTests, BuiltInYuiScopesTheNameOfAShader)
+{
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("yui"));
+    document.setText ("shader Crt {\n"
+                      "    fragment: \"fx/crt.frag\";\n"
+                      "}\n");
+
+    EXPECT_EQ (String ("keyword"), scopeOf (0, "shader"));
+    EXPECT_EQ (String ("type.class"), scopeOf (0, "Crt"));
+}
+
 TEST_F (CodeTokeniserRuleTests, BuiltInYdspScopes)
 {
     tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("ydsp"));

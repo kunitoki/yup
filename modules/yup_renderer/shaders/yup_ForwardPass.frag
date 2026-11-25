@@ -55,6 +55,7 @@
 #include "lib/lighting.glsl"
 #include "lib/lights.glsl"
 #include "lib/material.glsl"
+#include "lib/forward.glsl"
 
 // glTF metallic-roughness shading (the material from lib/material.glsl) with KHR_lights_punctual
 // lights (the draw's own list, see lib/lights.glsl) and a flat ambient term.
@@ -63,13 +64,7 @@
 // (lib/probes.glsl), and diffuse light from nine spherical harmonics coefficients. The sun is
 // shadowed from its cascades (lib/shadows.glsl).
 // The result is exposed, then written per output mode: tone mapped (Reinhard, ACES or AgX) and
-// sRGB encoded for an rgba8unorm target, reversibly tone mapped, or linear.
-
-layout(location = 0) out vec4 fragColor;
-
-#ifdef YUP_3D_TIER_FULL
-layout(location = 1) out vec2 outVelocity;
-#endif
+// sRGB encoded for an rgba8unorm target, reversibly tone mapped, or linear (lib/forward.glsl).
 
 #ifdef YUP_3D_AMBIENT_OCCLUSION
 // Raster frames with ambient occlusion only (the variant YUP_3D_LOCAL_INDIRECT): the
@@ -124,16 +119,5 @@ void main()
     color += m.emissive;
 #endif
 
-    vec3 exposed = color * view.cameraPosition.w;
-
-    if (lighting.environmentInfo.w < 0.5)
-        fragColor = vec4(yupLinearToSrgb(yupToneMap(exposed, view.clipPlanes.w)), baseColor.a);
-    else if (lighting.environmentInfo.w < 1.5)
-        fragColor = vec4(yupReversibleToneMap(min(exposed, vec3(yupMaxHalf))), baseColor.a);
-    else
-        fragColor = vec4(min(exposed, vec3(yupMaxHalf)), baseColor.a);
-
-#ifdef YUP_3D_TIER_FULL
-    outVelocity = viewVelocity(v_currentClip, v_previousClip);
-#endif
+    forwardWrite(color, baseColor.a);
 }

@@ -168,7 +168,9 @@ int runYuiRenderCommand (int argc, char** argv)
         return 2;
     }
 
-    for (const auto& problem : view.findProblems())
+    const auto problems = view.findProblems();
+
+    for (const auto& problem : problems)
         if (problem.isError)
             problem.print();
 
@@ -223,11 +225,20 @@ int runYuiRenderCommand (int argc, char** argv)
     }
 
     const auto context = createYuiToolGraphicsContext();
-    Image image;
+    auto drawn = ResultValue<Image>::ok (Image());
+
+    // A scene only shows its final picture after some frames, which are drawn until it does
+    const auto draw = [&context, scale] (Component& component)
+    {
+        return drawYuiToolImage (component, [&]
+        {
+            return component.snapshotToImage (*context, true, scale);
+        });
+    };
 
     if (context != nullptr && part == whole && marked.empty())
     {
-        image = view.getComponent()->snapshotToImage (*context, true, scale);
+        drawn = draw (*view.getComponent());
     }
     else if (context != nullptr)
     {
@@ -247,8 +258,22 @@ int runYuiRenderCommand (int argc, char** argv)
 
         view.settle();
 
-        image = frame.snapshotToImage (*context, true, scale);
+        drawn = draw (frame);
     }
+
+    // What drawing found: what a scene left to its first frame, and one still changing at its last
+    const auto found = view.findProblems();
+
+    for (auto index = jmin (problems.size(), found.size()); index < found.size(); ++index)
+        found[index].print();
+
+    if (drawn.failed())
+    {
+        std::cerr << options.input.getFullPathName() << ": error: " << drawn.getErrorMessage() << "\n";
+        return 1;
+    }
+
+    const auto image = drawn.getValue();
 
     if (! image.isValid())
     {

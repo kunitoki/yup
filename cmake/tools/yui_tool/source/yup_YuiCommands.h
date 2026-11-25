@@ -32,7 +32,10 @@ std::optional<int> checkYuiToolCommand (int argc, char** argv);
 /** Runs the command `argv[1]` names, once the application is set up as one with a theme is. */
 int runYuiToolCommand (int argc, char** argv);
 
-/** Checks `.yui` files: `verify` reports the errors, `lint` the warnings too. */
+/** Checks `.yui` files: `verify` reports the errors, `lint` the warnings too.
+
+    `verify` also checks them as an application loads them from the files a build embeds, when it is given these.
+*/
 int runYuiVerifyCommand (int argc, char** argv, bool includeWarnings);
 
 /** Writes the registered component types, their properties and signals as JSON. */

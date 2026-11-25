@@ -23,6 +23,7 @@
 
 #include <yup_gui/yup_gui.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -94,11 +95,47 @@ struct YuiToolProblem
 /** Returns the problems of a document loaded from a file, the failure of the load included. */
 std::vector<YuiToolProblem> findYuiToolProblems (const yup::YuiDocument& document, const yup::File& file, const yup::Result& loadResult);
 
+#if YUP_WASM
+/** Notes the files a document names that the tool was not given, in the tool built for the web.
+
+    That tool is a module reading the files its host gave it in memory. It calls this with each
+    document it loaded from one of them, and the host then asks for the files that document reads
+    beside its texts and that are not there, to give those it has. It is defined with the entry
+    points of the module, see web/main.cpp.
+*/
+void noteYuiToolMissingFiles (yup::YuiDocument& document);
+#endif
+
+/** The files a build embeds for the documents an application loads with YuiLoader::loadResource. */
+struct YuiToolEmbedded
+{
+    /** The folder the paths of the files are relative to. */
+    yup::File base;
+
+    /** The paths of the files from that folder, separated by slashes. A shader is listed as the
+        source its document names, which stands for the bundles a build compiles from it.
+    */
+    yup::StringArray paths;
+};
+
 /** Returns the problems of a file, checked as `verify` and `lint` check it.
 
+    What a file with an interface needs is checked whether it is used or not: every shader it
+    declares is loaded, from its source where the tool compiles shaders, and its scenes run the
+    frame a window showing them starts with, where they build what they left to it. A file of
+    declarations is checked without them: what it needs is read from the folder of the file
+    importing it, so it is checked with that file.
+
     @param unsavedText The text to check in place of the one of the file, when given.
+    @param embedded    The files a build embeds, to check the file as an application loads it from
+                       them: as the resource of its path, reading nothing but the files listed.
+                       What it reads that is in their folder without being listed is a problem,
+                       and so is a file that is not one of them. Null to read the folder of the file.
 */
-std::vector<YuiToolProblem> findYuiToolFileProblems (const yup::File& file, const std::optional<yup::String>& unsavedText, const YuiToolModels& models);
+std::vector<YuiToolProblem> findYuiToolFileProblems (const yup::File& file,
+                                                     const std::optional<yup::String>& unsavedText,
+                                                     const YuiToolModels& models,
+                                                     const YuiToolEmbedded* embedded = nullptr);
 
 /** What a document binds to that its models lack. */
 struct YuiToolMissingModels
@@ -376,14 +413,36 @@ yup::var describeYuiToolComponentType (const yup::ComponentTypeInfo& info, bool 
 
 /** Describes what a document can name beyond its component types, as the code checking documents
     knows it: `drawing` for the elements of a drawing with their properties, `styles` for what a
-    rule and a selector take, `expressions` for the functions, members and enumerations.
+    rule and a selector take, `expressions` for the functions, members and enumerations, `shaders`
+    for how a shader is declared, written and used and, in a tool that has the 3D component types,
+    `scenes` for how a scene is written.
 
     @returns The description, or nothing for a name that is none of these topics.
 */
 yup::var describeYuiToolSchemaTopic (const yup::String& topic);
 
+/** Returns the names of the topics describeYuiToolSchemaTopic() describes in this tool. */
+yup::StringArray getYuiToolSchemaTopics();
+
 /** Creates what draws with no window, or nullptr on a platform that has no such device. */
 std::unique_ptr<yup::GraphicsContext> createYuiToolGraphicsContext();
+
+/** Draws a component with no window, as a window showing it ends up drawing it.
+
+    A window draws frame after frame, and a `Scene3D` only shows its final picture after some of
+    them: it builds what it left to its first frame, then refines what it shows over the next ones.
+    So the component is drawn a frame at a time until every scene in it is final, for a bounded
+    number of frames. They are given no time, so what is animated stands where it starts. A scene
+    still changing after them is reported as a warning of its document. A component holding no
+    scene is drawn once.
+
+    @param component What to draw: the component of a view, or a frame showing a part of it.
+    @param snapshot  Draws the component once, into an image that is not valid where nothing can draw.
+
+    @returns The image, which is not valid where nothing can draw, or why a scene could not be
+             drawn: it then shows that in its place, which is not the picture asked for.
+*/
+yup::ResultValue<yup::Image> drawYuiToolImage (yup::Component& component, const std::function<yup::Image()>& snapshot);
 
 /** Encodes an image as a PNG. */
 bool encodeYuiToolPng (const yup::Image& image, yup::MemoryBlock& data);

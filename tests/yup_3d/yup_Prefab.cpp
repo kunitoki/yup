@@ -40,6 +40,16 @@ protected:
         int value = 0;
     };
 
+    struct LinkNode : Node
+    {
+        explicit LinkNode (Entity entityToKeep)
+            : linked (entityToKeep)
+        {
+        }
+
+        Entity linked;
+    };
+
     static Prefab::Ptr makeLamp()
     {
         auto prefab = Prefab::Ptr (new Prefab ("lamp"));
@@ -169,4 +179,71 @@ TEST_F (PrefabTests, PartsReportTheirNameAndChildren)
     ASSERT_EQ (root.getNumChildren(), 2);
     EXPECT_EQ (root.getChild (0).getName(), "bulb");
     EXPECT_EQ (root.getChild (0).getNumChildren(), 1);
+}
+
+TEST_F (PrefabTests, PartsAreIndexedInTheOrderTheyWereAdded)
+{
+    const auto lamp = makeLamp();
+    auto& root = lamp->getRoot();
+
+    EXPECT_EQ (root.getIndex(), 0);
+    EXPECT_EQ (root.getChild (0).getIndex(), 1);
+    EXPECT_EQ (root.getChild (0).getChild (0).getIndex(), 2);
+    EXPECT_EQ (root.getChild (1).getIndex(), 3);
+
+    // A part added later, anywhere in the tree, gets the next index and moves no other
+    EXPECT_EQ (root.getChild (0).addChild ("socket").getIndex(), 4);
+    EXPECT_EQ (root.getChild (0).getChild (0).getIndex(), 2);
+    EXPECT_EQ (root.getChild (1).getIndex(), 3);
+}
+
+TEST_F (PrefabTests, LinksRunOncePerInstanceWithTheEntityOfEveryPart)
+{
+    const auto lamp = makeLamp();
+    const auto bulb = static_cast<size_t> (lamp->getRoot().getChild (0).getIndex());
+    const auto filament = static_cast<size_t> (lamp->getRoot().getChild (0).getChild (0).getIndex());
+    int runs = 0;
+
+    lamp->addLink ([&runs, bulb, filament] (Span<const Entity> entities)
+    {
+        ++runs;
+        ASSERT_EQ (entities.size(), 4u);
+
+        // The whole tree is built, and its nodes are attached
+        EXPECT_EQ (entities.front().getName(), "lamp");
+        EXPECT_EQ (entities[filament].getName(), "filament");
+        EXPECT_EQ (entities[filament].getParent(), entities[bulb]);
+        ASSERT_NE (entities[bulb].get<CounterNode>(), nullptr);
+        EXPECT_EQ (entities[bulb].get<CounterNode>()->value, 42);
+
+        auto root = entities.front();
+        root.attach<LinkNode> (entities[bulb]);
+    });
+
+    const auto first = lamp->instantiate (scene);
+    const auto second = lamp->instantiate (scene, first);
+
+    EXPECT_EQ (runs, 2);
+    ASSERT_NE (first.get<LinkNode>(), nullptr);
+    ASSERT_NE (second.get<LinkNode>(), nullptr);
+
+    // Every instance is linked to its own entities
+    EXPECT_EQ (first.get<LinkNode>()->linked, first.getChild (0));
+    EXPECT_EQ (second.get<LinkNode>()->linked, second.getChild (0));
+    EXPECT_NE (first.get<LinkNode>()->linked, second.get<LinkNode>()->linked);
+}
+
+TEST_F (PrefabTests, LinksRunInTheOrderTheyWereAdded)
+{
+    auto prefab = Prefab::Ptr (new Prefab());
+    std::vector<int> order;
+
+    prefab->addLink ([&order] (Span<const Entity>) { order.push_back (1); });
+    prefab->addLink ([&order] (Span<const Entity>) { order.push_back (2); });
+
+    prefab->instantiate (scene);
+    EXPECT_EQ (order, (std::vector<int> { 1, 2 }));
+
+    prefab->instantiate (scene);
+    EXPECT_EQ (order, (std::vector<int> { 1, 2, 1, 2 }));
 }

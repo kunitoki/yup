@@ -1,0 +1,31 @@
+// size: 560 368
+Column {
+    gap: 12;
+
+    Scene3D {
+        flexGrow: 1; background: #101116; ambient: #2a3040; toneMapping: aces;
+
+        Camera3D { position: [3.3, 2.9, 5.2]; lookAt: [-0.25, 0.8, 0]; fov: 32deg; }
+        Light3D  { type: directional; position: [-3.5, 6, 3]; lookAt: [0, 0, 0]; intensity: 1.8; radius: 0.015; castsShadows: true; }
+        Light3D  { type: point; position: [3.2, 2.2, -2.8]; color: #5c7cff; intensity: 40; range: 14; }
+
+        Model3D { source: "../../../data/stage.glb"; }
+
+        Model3D {
+            source: "../../../data/computer.glb";
+
+            // Each node drives the part of the model its `node` names, and only what it sets
+            Node3D { node: "Lid"; rotation: [-108deg * lid.value, 0, 0]; }
+            Node3D { node: "KnobA"; rotation: [0, -45deg - 270deg * knob.value, 0]; }
+            Node3D { node: "Pad3"; visible: pad.checked; }
+        }
+    }
+
+    Row {
+        gap: 12; preferredHeight: 28;
+
+        Slider       { id: lid; value: 0.75; flexGrow: 1; }
+        Slider       { id: knob; value: 0.5; flexGrow: 1; }
+        ToggleButton { id: pad; text: "Pad 3"; preferredWidth: 80; }
+    }
+}

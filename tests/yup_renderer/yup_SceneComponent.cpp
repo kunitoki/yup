@@ -51,3 +51,50 @@ TEST_F (SceneComponentTests, KeepsSceneAndUpdateMode)
     EXPECT_EQ (component.getScene(), scene);
     EXPECT_TRUE (component.isUpdatingContinuously());
 }
+
+TEST_F (SceneComponentTests, SetSceneMakesTheComponentOpaqueOrNotAfterItsBackground)
+{
+    SceneComponent component;
+
+    // The default background is opaque
+    component.setScene (Scene::Ptr (new Scene()));
+    EXPECT_TRUE (component.isOpaque());
+
+    auto seeThrough = Scene::Ptr (new Scene());
+    seeThrough->getRoot().attach<BackgroundNode> (Colors::transparentBlack);
+    component.setScene (seeThrough);
+    EXPECT_FALSE (component.isOpaque());
+
+    // Without a scene the component fills itself
+    component.setScene (nullptr);
+    EXPECT_TRUE (component.isOpaque());
+}
+
+TEST_F (SceneComponentTests, OpaqueStateFollowsTheBackgroundOnEveryDisplayFrame)
+{
+    SceneComponent component;
+    auto scene = Scene::Ptr (new Scene());
+    component.setScene (scene);
+    ASSERT_TRUE (component.isOpaque());
+
+    // Nothing tells the component that the scene changed: its next display frame finds out
+    auto& background = scene->getRoot().attach<BackgroundNode> (Colors::black.withAlpha (0.5f));
+    EXPECT_TRUE (component.isOpaque());
+
+    component.refreshDisplay (0.0);
+    EXPECT_FALSE (component.isOpaque());
+
+    // So does a color edited in place
+    background.color = Colors::black;
+    component.refreshDisplay (0.0);
+    EXPECT_TRUE (component.isOpaque());
+
+    background.color = Colors::transparentBlack;
+    component.refreshDisplay (0.0);
+    EXPECT_FALSE (component.isOpaque());
+
+    // Without its node the background is the default one again
+    EXPECT_TRUE (scene->getRoot().detach<BackgroundNode>());
+    component.refreshDisplay (0.0);
+    EXPECT_TRUE (component.isOpaque());
+}

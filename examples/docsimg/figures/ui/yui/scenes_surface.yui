@@ -1,0 +1,39 @@
+// size: 560 368
+palette Display { colors: "#071318 #35e0c2 #d9fff7"; }
+
+drawing Glass {
+    rect { bounds: bounds; fill: palette.background; }
+}
+
+style {
+    .display { palette: Display; drawing: Glass; }
+}
+
+Scene3D {
+    background: #101116; ambient: #2a3040; toneMapping: aces;
+
+    Camera3D { position: [3.3, 2.9, 5.2]; lookAt: [-0.25, 0.8, 0]; fov: 32deg; }
+    Light3D  { type: directional; position: [-3.5, 6, 3]; lookAt: [0, 0, 0]; intensity: 1.8; radius: 0.015; castsShadows: true; }
+    Light3D  { type: point; position: [3.2, 2.2, -2.8]; color: #5c7cff; intensity: 40; range: 14; }
+
+    Model3D { source: "../../../data/stage.glb"; }
+
+    Model3D {
+        source: "../../../data/computer.glb"; clip: "Open"; time: 1.2;
+
+        // What is written inside a node is shown on its mesh, and used there
+        Node3D {
+            node: "Screen";
+
+            Column {
+                class: display; width: 416; height: 260; padding: 22; gap: 10;
+
+                Label  { text: format ("%.0f Hz", 20 + cutoff.value * 980); flexGrow: 1; textHeightProportion: 0.6; }
+                Slider { id: cutoff; value: 0.4; preferredHeight: 28; }
+            }
+        }
+
+        // The fader of the model and the slider on its screen are one value
+        Node3D { node: "FaderA"; travel: [0, 0, -0.78]; value <=> cutoff.value; }
+    }
+}

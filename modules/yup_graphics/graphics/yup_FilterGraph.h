@@ -77,7 +77,8 @@ public:
         merge,        /**< Stacks the `inputs`, the last one on top. */
         lighting,     /**< Lights the alpha of `in`, taken as a height map. */
         displacement, /**< Moves the pixels of `in` by the colors of `in2`. */
-        dropShadow    /**< Puts `in` over its shadow: its alpha blurred, moved and colored. */
+        dropShadow,   /**< Puts `in` over its shadow: its alpha blurred, moved and colored. */
+        shader        /**< Draws `shader` with its `uniforms`, reading `in`, and `in2` when it declares two textures. */
     };
 
     /** How a `composite` primitive combines `in` with `in2`. */
@@ -118,7 +119,7 @@ public:
         /** The picture read, the result of the primitive before when empty. */
         String in;
 
-        /** The second picture read by `composite`, `blend` and `displacement`. */
+        /** The second picture read by `composite`, `blend` and `displacement`, and by a `shader` declaring two textures. */
         String in2;
 
         /** The name later primitives read this result with. */
@@ -182,6 +183,17 @@ public:
 
         /** The channels of `in2` a `displacement` moves the pixels along x and along y with. */
         Channel xChannel = Channel::alpha, yChannel = Channel::alpha;
+
+        /** What a `shader` primitive draws. Its first texture reads `in` and its second one `in2`,
+            both as large as the picture and premultiplied, as what it writes is: one declaring
+            no texture makes a picture of its own, as a `flood` does. With `linearColors` the
+            colors it reads and writes are linear. Without a shader, or with one the device can't
+            draw, the primitive fails and the filter leaves the picture as it is.
+        */
+        GpuImageShader::Ptr shader;
+
+        /** The uniforms `shader` is drawn with, from GpuImageShader::createUniforms(). */
+        ShaderUniforms uniforms;
 
         bool operator== (const Primitive&) const = default;
     };

@@ -1,0 +1,147 @@
+// Materials: surfaces colored by GLSL functions, the files of fx/, instead of the lighting of the renderer.
+//
+// - A shader block names the file of a material and declares its inputs. A Material3D runs it, and gives it the
+//   properties of those names as its uniforms: they are bound, styled and animated like any other value.
+// - The flow and the amount are set once on the scene, for every material in it. Each material has a tint of
+//   its own, and turns brighter under the pointer, through a transition.
+// - The toggles name a shot. In the three closer ones a transition glides the camera to one object, and the two
+//   others step out of the picture: from in front of an object the next one always shows beside it.
+// - A function that is edited while the document is shown is compiled again, and the scene follows.
+
+palette Console { colors: #14161c, #35e0c2, #e9edf3; }
+
+shader Iridescent {
+    material: "fx/iridescent.glsl";
+    property tint: color = #7a4dff;
+    property flow: number = 1;
+    property amount: number = 0.5;
+    property energy: number = 1;
+}
+
+shader Hologram {
+    material: "fx/hologram.glsl";
+    property tint: color = #35e0ff;
+    property flow: number = 1;
+    property amount: number = 0.5;
+    property energy: number = 1;
+}
+
+shader Lava {
+    material: "fx/lava.glsl";
+    property tint: color = #ff7a1a;
+    property flow: number = 1;
+    property amount: number = 0.5;
+    property energy: number = 1;
+}
+
+style {
+    :root    { palette: Console; }
+    .panel   { cornerRadius: 12; shadow: 0 0 palette.surface.withAlpha (0.9), 0 8 22 #00000070; }
+    .title   { textFillColor: palette.text; textHeightProportion: 0.8; preferredHeight: 24; }
+    .hint    { textFillColor: palette.textMuted; textHeightProportion: 0.8; preferredHeight: 16; }
+    .caption { textFillColor: palette.textMuted; textHeightProportion: 0.85; preferredHeight: 14; }
+
+    // The toggles name the shot on the scene: the rules place the camera for it, and the objects
+    Scene3D { property shot: string = "all"; }
+
+    // The shot that shows the three of them, then one for each, from in front of it
+    Camera3D {
+        position: [0, 3.1, 6.6]; lookAt: [0, 0.8, -0.1]; fov: 32deg;
+        transition: position 1s easeInOut, lookAt 1s easeInOut, fov 1s easeInOut;
+    }
+
+    Scene3D[shot=knot] Camera3D     { position: [-2.35, 1.55, 4.3]; lookAt: [-1.75, 0.88, 0.5]; fov: 36deg; }
+    Scene3D[shot=computer] Camera3D { position: [0.4, 2.05, 3.8]; lookAt: [0, 0.44, -1]; fov: 38deg; }
+    Scene3D[shot=sphere] Camera3D   { position: [2.3, 1.2, 3.9]; lookAt: [1.7, 0.68, 0.5]; fov: 34deg; }
+
+    // In the shot of one object the two others shrink to nothing, and grow again for the next shot
+    .stand { scale: 1; transition: scale 500ms easeInOut; }
+
+    Scene3D[shot=knot] .computer, Scene3D[shot=knot] .sphere,
+    Scene3D[shot=computer] .knot, Scene3D[shot=computer] .sphere,
+    Scene3D[shot=sphere] .knot, Scene3D[shot=sphere] .computer { scale: 0.001; }
+
+    // The knot turns, the computer shows one side then the other, and the sphere rises and falls through its lava
+    .spin  { animation: turn 20s linear infinite; }
+    .sway  { rotation: [0, -24deg, 0]; animation: sway 9s easeInOut infinite alternate; }
+    .drift { animation: bob 5s easeInOut infinite alternate; }
+
+    @keyframes turn { from { rotation: [0, 0, 0]; } to { rotation: [0, 360deg, 0]; } }
+    @keyframes sway { from { rotation: [0, -24deg, 0]; } to { rotation: [0, 24deg, 0]; } }
+    @keyframes bob  { from { position: [0, -0.1, 0]; } to { position: [0, 0.1, 0]; } }
+
+    // The defaults of a shader block are not styled values: the brightness at rest is given here, for the
+    // transition to have both its ends
+    .subject > Material3D       { energy: 1; transition: energy 250ms easeOut; }
+    .subject:hover > Material3D { energy: 2.2; }
+}
+
+Scene3D {
+    background: #101116; ambient: #2a3040; toneMapping: aces;
+
+    // Read by every material inside the scene that has no value of its own
+    flow: rate.value; amount: strength.value;
+
+    shot: shotKnot.checked ? "knot" : shotComputer.checked ? "computer" : shotSphere.checked ? "sphere" : "all";
+
+    // The camera has no value of its own: the rules of the shot give it all three
+    Camera3D { }
+
+    // The stage is lit as usual. A material function is not: it shows the color it returns
+    Light3D { type: directional; position: [-3.5, 6, 3]; lookAt: [0, 0, 0]; intensity: 1.8; radius: 0.015; castsShadows: true; }
+    Light3D { type: point; position: [3.2, 2.2, -2.8]; color: #5c7cff; intensity: 40; range: 14; }
+
+    Model3D { source: "../gltf/stage.glb"; }
+
+    // The colors of a film depend on the angle it is seen at: they run over the knot as it turns
+    Node3D {
+        class: "stand knot spin"; position: [-1.75, 1, 0.5];
+
+        Model3D {
+            class: subject; source: "../gltf/knot.glb"; rotation: [75deg, 0, 0]; scale: 0.45;
+
+            Material3D { shader: Iridescent; tint: hsl (fmod (hue.value + 0.25, 1), 0.8, 0.5); }
+        }
+    }
+
+    // One material for a whole model, its lid open at the end of its clip: it blends, and shows both sides
+    Node3D {
+        class: "stand computer"; position: [0, 0, -1];
+
+        Model3D {
+            class: "subject sway"; source: "../gltf/computer.glb"; scale: 0.72; clip: "Open"; time: 2;
+
+            Material3D { shader: Hologram; tint: hsl (hue.value, 0.9, 0.6); alphaMode: blend; doubleSided: true; }
+        }
+    }
+
+    Node3D {
+        class: "stand sphere"; position: [1.7, 0.75, 0.5];
+
+        Model3D {
+            class: "subject drift"; source: "../gltf/sphere.glb"; scale: 0.62;
+
+            Material3D { shader: Lava; tint: hsl (fmod (hue.value + 0.58, 1), 0.9, 0.55); }
+        }
+    }
+
+    Column {
+        x: 18; y: 14; width: 360; height: 42; gap: 2;
+
+        Label { class: title; text: "Materials"; }
+        Label { class: hint; text: "Point at an object to light it up, edit a shader in its tab"; }
+    }
+
+    Row {
+        class: panel; x: 12; y: parent.height - 80; width: parent.width - 24; height: 68; padding: "8 14"; gap: 10;
+
+        ToggleButton { text: "All"; radioGroup: 1; checked: true; preferredWidth: 44; preferredHeight: 32; alignSelf: center; }
+        ToggleButton { id: shotKnot; text: "Knot"; radioGroup: 1; preferredWidth: 52; preferredHeight: 32; alignSelf: center; }
+        ToggleButton { id: shotComputer; text: "Computer"; radioGroup: 1; preferredWidth: 78; preferredHeight: 32; alignSelf: center; }
+        ToggleButton { id: shotSphere; text: "Sphere"; radioGroup: 1; preferredWidth: 62; preferredHeight: 32; alignSelf: center; }
+
+        Column { flexGrow: 1; gap: 2; Label { class: caption; text: "Hue"; }    Slider { id: hue; value: 0.47; flexGrow: 1; } }
+        Column { flexGrow: 1; gap: 2; Label { class: caption; text: "Flow"; }   Slider { id: rate; maximum: 3; value: 1; flexGrow: 1; } }
+        Column { flexGrow: 1; gap: 2; Label { class: caption; text: "Amount"; } Slider { id: strength; value: 0.5; flexGrow: 1; } }
+    }
+}

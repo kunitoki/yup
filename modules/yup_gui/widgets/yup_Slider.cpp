@@ -44,6 +44,7 @@ struct SliderIds
     static inline const Identifier minValue { "minValue" };
     static inline const Identifier maxValue { "maxValue" };
     static inline const Identifier dragging { "dragging" };
+    static inline const Identifier thumbSize { "thumbSize" };
 };
 
 void setSliderRangeBound (Slider& slider, double bound, bool isMinimum)
@@ -102,12 +103,12 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
                                  .color ("textColor", Style::textColorId)
                                  .number ("trackWidth", Style::trackWidthId, 4.0, "The thickness of the linear track.")
                                  .number ("thumbSize", Style::thumbSizeId, 16.0, "The diameter of the linear thumbs.")
-                                 .number ("rotaryInset", Style::rotaryInsetId, 0.1, "The inset of the rotary dial, as a proportion of the width.")
-                                 .number ("rotaryDialInset", Style::rotaryDialInsetId, 0.105, "The inset of the rotary dial body inside the arc bounds, as a proportion of the width.")
-                                 .number ("rotaryDialOutlineWidth", Style::rotaryDialOutlineWidthId, 0.0175, "The stroke width of the rotary dial outline, as a proportion of the width.")
-                                 .number ("rotaryPointerInset", Style::rotaryPointerInsetId, 0.175, "The inset of the rotary pointer tip inside the arc bounds, as a proportion of the width.")
-                                 .number ("rotaryPointerWidth", Style::rotaryPointerWidthId, 0.03, "The stroke width of the rotary pointer, as a proportion of the width.")
-                                 .number ("rotaryArcWidth", Style::rotaryArcWidthId, 0.075, "The stroke width of the rotary track and value arcs, as a proportion of the width.")
+                                 .number ("rotaryInset", Style::rotaryInsetId, 0.1, "The inset of the rotary dial, as a proportion of the smaller side.")
+                                 .number ("rotaryDialInset", Style::rotaryDialInsetId, 0.105, "The inset of the rotary dial body inside the arc bounds, as a proportion of the smaller side.")
+                                 .number ("rotaryDialOutlineWidth", Style::rotaryDialOutlineWidthId, 0.0175, "The stroke width of the rotary dial outline, as a proportion of the smaller side.")
+                                 .number ("rotaryPointerInset", Style::rotaryPointerInsetId, 0.175, "The inset of the rotary pointer tip inside the arc bounds, as a proportion of the smaller side.")
+                                 .number ("rotaryPointerWidth", Style::rotaryPointerWidthId, 0.03, "The stroke width of the rotary pointer, as a proportion of the smaller side.")
+                                 .number ("rotaryArcWidth", Style::rotaryArcWidthId, 0.075, "The stroke width of the rotary track and value arcs, as a proportion of the smaller side.")
                                  .enumeration (
                                      SliderIds::sliderType,
                                      { "linearHorizontal", "linearVertical", "linearBarHorizontal", "linearBarVertical", "rotary", "rotaryHorizontalDrag",
@@ -944,13 +945,14 @@ Rectangle<float> Slider::getSliderBounds() const
     // Add margin and account for thumb size to prevent clipping
     float margin = 2.0f;
 
-    // For linear sliders, add extra margin based on thumb size to prevent clipping
+    // For linear sliders, add extra margin based on thumb size to prevent clipping: the thumb is drawn around both ends
+    // of the track, as large as it is styled
     switch (sliderType)
     {
         case LinearHorizontal:
         case LinearBarHorizontal:
         {
-            const float thumbSize = std::min (20.0f, bounds.getHeight() * 0.8f);
+            const float thumbSize = jmax (std::min (20.0f, bounds.getHeight() * 0.8f), findPropertyAs<float> (SliderIds::thumbSize));
             const float thumbMargin = thumbSize * 0.5f;
             return Rectangle<float> (bounds.getX() + thumbMargin, bounds.getY() + margin, bounds.getWidth() - (thumbMargin * 2), bounds.getHeight() - (margin * 2));
         }
@@ -958,7 +960,7 @@ Rectangle<float> Slider::getSliderBounds() const
         case LinearVertical:
         case LinearBarVertical:
         {
-            const float thumbSize = std::min (20.0f, bounds.getWidth() * 0.8f);
+            const float thumbSize = jmax (std::min (20.0f, bounds.getWidth() * 0.8f), findPropertyAs<float> (SliderIds::thumbSize));
             const float thumbMargin = thumbSize * 0.5f;
             return Rectangle<float> (bounds.getX() + margin, bounds.getY() + thumbMargin, bounds.getWidth() - (margin * 2), bounds.getHeight() - (thumbMargin * 2));
         }

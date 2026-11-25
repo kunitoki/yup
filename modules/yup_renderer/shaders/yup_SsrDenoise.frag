@@ -25,48 +25,90 @@
 #include "lib/color.glsl"
 #include "lib/ssr.glsl"
 
-// The spatial denoise of the screen-space reflections (ReflectionPass), after the resolve and its
-// history, as the denoisers of stochastic reflections do (Schied et al. 2017, "Spatiotemporal
-// Variance-Guided Filtering"; AMD FidelityFX SSSR 2020): a bilateral 3 x 3 filter whose taps spread
-// with the roughness, by a pixel per 0.15 of perceptual roughness up to 3, so mirrors keep every
-// detail and glossy surfaces, whose few rays per pixel scatter the most, average a neighborhood of
-// up to 7 x 7 pixels. A tap counts by a binomial weight, by how close its depth and normal are to
-// the pixel's, as in the resolve, and by how close its roughness is, so the reflections do not
-// bleed across edges or between materials. The radiance averages reversibly tone mapped (Karis
-// 2014) and weighted by its confidence, so a confident reflection is not darkened by neighbors
-// without one; the confidence averages on its own.
-// Output: the exposed radiance in rgb, the confidence in a, as the resolve.
+// The denoise of the screen-space reflections (ReflectionPass), after the resolve, at full
+// resolution: a spatial filter of the reflections of this frame, which then join their history, in
+// the order of the denoisers of stochastic reflections (Schied et al. 2017, "Spatiotemporal
+// Variance-Guided Filtering"; AMD FidelityFX reflection denoiser 2021).
+// The filter is bilateral, 3 x 3, its taps spread with the roughness, by a pixel per 0.15 of
+// perceptual roughness up to 3, so mirrors keep every detail and glossy surfaces, whose few rays
+// per pixel scatter the most, average a neighborhood of up to 7 x 7 pixels. A tap counts by a
+// binomial weight, by how close its depth and normal are to the pixel's, as in the resolve, and by
+// how close its roughness is, so the reflections do not bleed across edges or between materials.
+// The radiance averages reversibly tone mapped (Karis 2014) and weighted by its confidence, so a
+// confident reflection is not darkened by neighbors without one; the confidence averages on its own.
+// The result then joins the denoise of the previous frame, reprojected by the motion of the
+// reflected point (the pixel's motion plus the parallax of the mean hit distance behind it,
+// Stachowiak 2015) and rescaled to this exposure, by an exponential blend of ssrHistoryWeight
+// (Karis 2014). The history is first clipped to the range of the taps, taken at least a pixel apart:
+// the 81 rays behind them bound what the reflection may be, where the 9 of one pixel do not, since
+// a frame of them may all miss a surface the lobe mostly leaves out, and would take from the
+// history the light it gathered there. So a reflection the scene no longer shows leaves at once,
+// the others hold still while the scene changes, and TemporalAA, whose clipping follows the noise
+// of a single frame, restarts its running mean.
+// Output: the exposed radiance in rgb, the confidence in a, exactly 0 without any. It is also the
+// history of the next frame.
+
+layout(set = 0, binding = 1) uniform sampler linearClamp;
 
 layout(set = 1, binding = 3) uniform texture2D u_resolved;
+layout(set = 1, binding = 4) uniform texture2D u_velocity;
+layout(set = 1, binding = 5) uniform texture2D u_hitDistance;
+layout(set = 1, binding = 6) uniform texture2D u_history;
+
+// The share of this frame against the history
+const float ssrHistoryWeight = 0.125;
 
 layout(location = 0) in vec2 uv;
 
 layout(location = 0) out vec4 fragColor;
 
+// The motion of a reflection beyond the motion of its surface, from the camera alone: the motion of
+// the reflected point, seen at its distance along the view ray behind the surface, minus the
+// motion of the surface's own position (Stachowiak 2015). Both in view space, of this frame
+vec2 reflectionParallax(vec3 surface, vec3 reflected)
+{
+    mat3 rotation = transpose(mat3(view.view));
+    vec4 surfaceWorld = vec4(rotation * (surface - view.view[3].xyz), 1.0);
+    vec4 reflectedWorld = vec4(rotation * (reflected - view.view[3].xyz), 1.0);
+
+    vec4 surfaceNow = view.unjitteredViewProjection * surfaceWorld;
+    vec4 surfaceBefore = view.previousViewProjection * surfaceWorld;
+    vec4 reflectedNow = view.unjitteredViewProjection * reflectedWorld;
+    vec4 reflectedBefore = view.previousViewProjection * reflectedWorld;
+    if (min(min(surfaceNow.w, surfaceBefore.w), min(reflectedNow.w, reflectedBefore.w)) <= 1.0e-6)
+        return vec2(0.0);
+
+    return viewVelocity(reflectedNow, reflectedBefore) - viewVelocity(surfaceNow, surfaceBefore);
+}
+
 void main()
 {
     ivec2 pixel = ivec2(gl_FragCoord.xy);
-    vec4 center = texelFetch(sampler2D(u_resolved, pointClamp), pixel, 0);
-    fragColor = center;
-
     float depth = ssrDepth(pixel);
     vec4 normalRoughness = ssrNormalRoughness(pixel);
-    int stride = int(min(floor(normalRoughness.w / 0.15 + 0.5), 3.0));
-    if (depth >= 1.0 || stride == 0)
+    fragColor = vec4(0.0);
+
+    if (depth >= 1.0 || normalRoughness.w >= ssr.params.y)
         return;
 
     vec3 position = ssrViewPosition((vec2(pixel) + 0.5) * view.viewport.zw, depth);
     ivec2 last = ivec2(view.viewport.xy) - 1;
 
+    // Without a spread only the pixel itself is filtered, and its neighbors still bound the history
+    int stride = int(min(floor(normalRoughness.w / 0.15 + 0.5), 3.0));
+    int spread = max(stride, 1);
+
     vec3 radiance = vec3(0.0);
     float radianceWeight = 0.0;
     float confidence = 0.0;
     float weights = 0.0;
+    vec3 boxMin = vec3(yupMaxHalf);
+    vec3 boxMax = vec3(-yupMaxHalf);
 
     for (int i = 0; i < 9; ++i)
     {
         ivec2 offset = ivec2(i % 3 - 1, i / 3 - 1);
-        ivec2 tap = clamp(pixel + offset * stride, ivec2(0), last);
+        ivec2 tap = clamp(pixel + offset * spread, ivec2(0), last);
 
         float tapDepth = ssrDepth(tap);
         if (tapDepth >= 1.0)
@@ -86,15 +128,49 @@ void main()
             continue;
 
         vec4 value = texelFetch(sampler2D(u_resolved, pointClamp), tap, 0);
-        radiance += yupReversibleToneMap(value.rgb) * (value.a * weight);
+        vec3 mapped = yupReversibleToneMap(value.rgb);
+
+        if (value.a > 0.0)
+        {
+            vec3 ycocg = yupToYCoCg(mapped);
+            boxMin = min(boxMin, ycocg);
+            boxMax = max(boxMax, ycocg);
+        }
+
+        if (stride == 0 && offset != ivec2(0))
+            continue;
+
+        radiance += mapped * (value.a * weight);
         radianceWeight += value.a * weight;
         confidence += value.a * weight;
         weights += weight;
     }
 
-    if (weights <= 0.0)
+    vec3 current = radianceWeight > 0.0 ? radiance / radianceWeight : vec3(0.0);
+    float currentConfidence = weights > 0.0 ? confidence / weights : 0.0;
+
+    // The history, where the previous frame saw the reflected point
+    vec2 velocity = texelFetch(sampler2D(u_velocity, pointClamp), pixel, 0).xy;
+    float hitDistance = texelFetch(sampler2D(u_hitDistance, pointClamp), pixel, 0).r;
+    if (hitDistance > 0.0)
+        velocity += reflectionParallax(position, position - ssrViewVector(position) * hitDistance);
+
+    vec2 previousUv = (vec2(pixel) + 0.5) * view.viewport.zw - velocity;
+    vec4 history = vec4(0.0);
+    if (ssr.frame.w > 0.5 && all(greaterThanEqual(previousUv, vec2(0.0))) && all(lessThanEqual(previousUv, vec2(1.0))))
+        history = yupSanitize(textureLod(sampler2D(u_history, linearClamp), previousUv, 0.0));
+
+    vec3 kept = yupReversibleToneMap(history.rgb * (ssr.frame.x * view.cameraPosition.w));
+    if (boxMin.x <= boxMax.x)
+        kept = yupFromYCoCg(yupClipToBox(yupToYCoCg(kept), boxMin, boxMax));
+
+    float historyShare = (1.0 - ssrHistoryWeight) * history.a;
+    float currentShare = ssrHistoryWeight * currentConfidence;
+    float shares = historyShare + currentShare;
+    if (shares <= 0.0)
         return;
 
-    vec3 filtered = radianceWeight > 0.0 ? yupReversibleToneMapInverse(radiance / radianceWeight) : vec3(0.0);
-    fragColor = vec4(min(filtered, vec3(yupMaxHalf)), confidence / weights);
+    vec3 blended = (kept * historyShare + current * currentShare) / shares;
+    float blendedConfidence = history.a > 0.0 ? mix(history.a, currentConfidence, ssrHistoryWeight) : currentConfidence;
+    fragColor = vec4(min(yupReversibleToneMapInverse(blended), vec3(yupMaxHalf)), blendedConfidence);
 }

@@ -48,7 +48,7 @@ std::optional<int> checkYuiToolCommand (int argc, char** argv)
         return std::nullopt;
 #endif
 
-    std::cerr << "yup_yui_tool verify [--json] [--models <models.json>] <file.yui>...\n"
+    std::cerr << "yup_yui_tool verify [--json] [--models <models.json>] [--embedded-base <dir> --embedded <list file>] <file.yui>...\n"
               << "yup_yui_tool lint [--json] [--strict] [--models <models.json>] <file.yui>...\n"
               << "yup_yui_tool lint [--json] [--strict] [--models <models.json>] --stdin --path <file.yui>\n"
               << "yup_yui_tool schema [--output <file.json>]\n"

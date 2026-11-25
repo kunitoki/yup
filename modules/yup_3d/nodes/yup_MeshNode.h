@@ -54,6 +54,29 @@ public:
                                        float minDistance = 0.0f,
                                        float maxDistance = std::numeric_limits<float>::max()) const noexcept;
 
+    /** Returns where a world space ray first hits a triangle of the mesh, placed by the entity.
+
+        Where intersectRay() tests the bounds of the mesh, this tests its triangles with
+        Mesh::intersectTriangles(), in the space of the mesh: it tells apart a part standing on
+        another one, whose bounds enclose it. The mesh is the one the node holds, so the copy a
+        DeformNode deforms for its entity. A triangle seen from behind is hit only where it is
+        drawn: when the material drawing it is double sided, which is the one of the nearest
+        MaterialNode up the tree, or else the one of its primitive. Visibility is ignored.
+
+        @param ray          The ray, from CameraNode::getRay() for example.
+        @param minDistance  The smallest distance to consider, the near plane of the camera for example.
+        @param maxDistance  The largest distance to consider.
+
+        @return The distance along the ray, or nothing without a mesh, without an entity, for a
+                mesh flattened by a zero scale, or when the ray hits no triangle between the two
+                distances.
+
+        @see intersectRay, Mesh::intersectTriangles
+    */
+    std::optional<float> intersectTriangles (const Ray& ray,
+                                             float minDistance = 0.0f,
+                                             float maxDistance = std::numeric_limits<float>::max()) const noexcept;
+
     Mesh::Ptr mesh; ///< The mesh to draw, or nullptr to draw nothing.
 
     /** @internal The world matrix a SceneRenderer drew last frame, for motion vectors. */

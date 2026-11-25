@@ -1,0 +1,115 @@
+// Timeline: a player for the clips of two glTF models.
+//
+// - A model tells the names of its clips, how long the one it plays is and where it is. The lamp has two clips:
+//   the list is filled with their names, and the one that is picked plays.
+// - A bar is linked to `time` both ways: it follows the clip while it plays, and moves it when it is dragged.
+//   What reads `time` follows it too, as the screen of the computer does.
+// - A negative speed plays backwards, which closes the lid. A clip that does not loop stops at the end it plays
+//   towards and raises an action: turn Play off and on to play it again, from its other end.
+
+palette Console { colors: #14161c, #35e0c2, #e9edf3; }
+palette Display { colors: #071318, #35e0c2, #d9fff7; }
+
+drawing Glass {
+    rect { bounds: bounds; fill: palette.background; }
+}
+
+style {
+    :root    { palette: Console; }
+    .panel   { cornerRadius: 12; shadow: 0 0 palette.surface.withAlpha (0.9), 0 8 22 #00000070; }
+    .title   { textFillColor: palette.text; textHeightProportion: 0.8; preferredHeight: 24; }
+    .hint    { textFillColor: palette.textMuted; textHeightProportion: 0.8; preferredHeight: 16; }
+    .caption { textFillColor: palette.textMuted; }
+    .display { palette: Display; drawing: Glass; }
+    .clock   { textFillColor: palette.accent; }
+
+    // The camera stays where it is and sees a little wider, then narrower again
+    .camera { fov: 36deg; animation: breathe 14s easeInOut infinite alternate; }
+
+    @keyframes breathe {
+        from { fov: 36deg; }
+        to   { fov: 40deg; }
+    }
+}
+
+Scene3D {
+    background: #101116; ambient: #2a3040; toneMapping: aces;
+
+    Camera3D { class: camera; position: [3.6, 3.3, 5.9]; lookAt: [-0.4, 0.2, 0]; }
+
+    Light3D { type: directional; position: [-3.5, 6, 3]; lookAt: [0, 0, 0]; intensity: 1.8; radius: 0.015; castsShadows: true; }
+    Light3D { type: point; position: [3.2, 2.2, -2.8]; color: #5c7cff; intensity: 40; range: 14; }
+
+    Model3D { source: "../gltf/stage.glb"; }
+
+    // "Sway" ends as it starts and is made to loop. "Bow" leans the arm until its head is just above the pads,
+    // looking straight down, and stays there. The light is inside the head, so the clips move it with the arm
+    Model3D {
+        id: lamp; source: "../gltf/lamp.glb"; position: [-2.03, 0, -0.54]; rotation: [0, 58deg, 0];
+
+        clip: picker.text; loop: lampLoop.checked; playing: lampPlay.checked;
+        onClipEnded: action ("ended", picker.text);
+
+        Node3D {
+            node: "LampHead";
+
+            Light3D { type: spot; color: #ffd9a8; intensity: 32; range: 9; innerCone: 22deg; outerCone: 46deg; castsShadows: true; }
+        }
+    }
+
+    // "Open" turns the lid up once. It is put at its end, where the lid is open, until something plays
+    Model3D {
+        id: computer; source: "../gltf/computer.glb";
+
+        clip: "Open"; time: 2; speed: (lidBack.checked ? -1 : 1) * rate.value; playing: lidPlay.checked;
+        onClipEnded: action ("ended", "Open");
+
+        // A transport on the screen: the clip of the lamp, where it is, and how far each of the two clips has gone
+        Node3D {
+            node: "Screen"; surface: emissive;
+
+            Column {
+                class: display; width: 416; height: 260; padding: "20 26"; gap: 10;
+
+                Label       { text: picker.text; preferredHeight: 32; textHeightProportion: 0.8; }
+                Label       { class: clock; text: format ("%.2f", lamp.time); flexGrow: 1; textHeightProportion: 0.8; }
+                ProgressBar { progress: lamp.time / max (lamp.duration, 0.01); preferredHeight: 14; }
+                ProgressBar { progress: computer.time / max (computer.duration, 0.01); preferredHeight: 14; foregroundColor: #f56b1a; }
+            }
+        }
+    }
+
+    Column {
+        x: 18; y: 14; width: 300; height: 42; gap: 2;
+
+        Label { class: title; text: "Timeline"; }
+        Label { class: hint; text: "Play the clips and drag their bars"; }
+    }
+
+    Column {
+        class: panel; x: 12; y: parent.height - 112; width: parent.width - 24; height: 100; padding: "10 14"; gap: 8;
+
+        Row {
+            gap: 8; flexGrow: 1;
+
+            Label        { class: caption; text: "Lamp"; preferredWidth: 62; }
+            ToggleButton { id: lampPlay; text: "Play"; preferredWidth: 52; }
+            ToggleButton { id: lampLoop; text: "Loop"; checked: true; preferredWidth: 66; }
+            ComboBox     { id: picker; items: lamp.clips; selectedIndex: 0; preferredWidth: 110; }
+            Slider       { maximum: lamp.duration; value <=> lamp.time; flexGrow: 1; }
+            Label        { text: format ("%.2f / %.2f s", lamp.time, lamp.duration); preferredWidth: 96; justification: centerRight; }
+        }
+
+        Row {
+            gap: 8; flexGrow: 1;
+
+            Label        { class: caption; text: "Computer"; preferredWidth: 62; }
+            ToggleButton { id: lidPlay; text: "Play"; preferredWidth: 52; }
+            ToggleButton { id: lidBack; text: "Reverse"; preferredWidth: 66; }
+            Label        { class: caption; text: "Speed"; preferredWidth: 40; }
+            Slider       { id: rate; minimum: 0.25; maximum: 2; value: 1; preferredWidth: 62; }
+            Slider       { maximum: computer.duration; value <=> computer.time; flexGrow: 1; }
+            Label        { text: format ("%.2f / %.2f s", computer.time, computer.duration); preferredWidth: 96; justification: centerRight; }
+        }
+    }
+}

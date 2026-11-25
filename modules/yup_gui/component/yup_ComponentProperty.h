@@ -66,7 +66,7 @@ struct ComponentProperty
         transform,   /**< A 2D affine transform. */
         enumeration, /**< One of a fixed set of string values (see @ref enumValues). */
         font,        /**< A font. */
-        drawing,     /**< The name of a drawing program. */
+        drawing,     /**< The name of a drawing or of a shader, as a `.yui` document declares them. */
         array,       /**< A list of values, stored as a var array (see @ref elementType). */
         any          /**< An untyped value. */
     };

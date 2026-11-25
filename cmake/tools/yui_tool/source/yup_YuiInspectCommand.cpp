@@ -265,6 +265,11 @@ private:
                 if (const auto elements = describeDrawing (*drawing, component, described.origin); ! elements.isEmpty())
                     record->setProperty ("drawing", var (elements));
 
+        // One kept out of the layout of what holds it has no place in the interface, nor has what it holds: a part of a
+        // 3D scene, and what it shows on its surface
+        if (component.isExcludedFromParentLayout())
+            checkPlace = false;
+
         // What is wrong with a component is wrong with all it holds, which is then not told again
         if (checkPlace && described.isShown)
         {

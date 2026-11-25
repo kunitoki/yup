@@ -789,11 +789,12 @@ TEST_F (SceneRendererBundleTests, ScreenSpaceReflectionsAreReadByTheLightingPass
     }
 
     // The trace reads the Hi-Z pyramid and the normals (set 1 bindings 1 and 2), the resolve the
-    // trace, the velocity, the previous scene color and its own history too (3 to 6), the denoise the
-    // resolved reflections (3); the trace and the resolve read the pass block (0), the denoise does not
+    // trace, the velocity, the previous scene color and its radiance pyramid too (3 to 6), the
+    // denoise the resolved reflections, the velocity, the hit distances and its own history (3 to
+    // 6); all three read the pass block (0)
     for (const auto& [name, bundle, images, block] : { std::tuple { "SsrTrace", ssrTrace(), 2, true },
                                                        std::tuple { "SsrResolve", ssrResolve(), 6, true },
-                                                       std::tuple { "SsrDenoise", ssrDenoise(), 3, false } })
+                                                       std::tuple { "SsrDenoise", ssrDenoise(), 6, true } })
     {
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
         ASSERT_NE (fragment, nullptr) << name;
