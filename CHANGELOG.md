@@ -43,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - LV2: plugins with an editor now ship an LV2 UI, the TTL describes parameter units, integer, toggle and enumeration ranges and non-automatable parameters, and plugins require bounded block lengths so `run()` never allocates. Fixed URIDs not being mapped through the host `urid:map` (which made hosts misread state and events) and `time:Position` fields sent as `atom:Long` being ignored.
 - Fixed CLAP plugins declaring the in-place pair on the output port only, which clap-validator rejects: the main input and output ports now name each other when their layouts match. `PLUGIN_CLAP_FEATURES` accepts every standard CLAP feature (`mixing`, `mastering`, `filter`, ...) instead of only ten of them.
 - Every plugin wrapper (CLAP, VST3, AU, AUv3, LV2, AAX and standalone) now calls `processBlock` and `processBlockBypassed` with denormals disabled, as `AudioGraphProcessor` and the plugin hosts already did, and restores the host thread's floating point mode afterwards.
+- The RETRACE synthesiser moved to a repository of its own, [kunitoki/retrace](https://github.com/kunitoki/retrace). `examples/plugin` is now a small polyphonic instrument (`YupSynth`) with four parameters, saved state and a resizable editor; the `example_plugin` targets keep their names.
 
 ### Core
 

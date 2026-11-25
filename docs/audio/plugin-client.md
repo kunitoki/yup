@@ -11,7 +11,7 @@ browser build) see [Building plugins](../build-system/building-plugins.md) and t
 **Module:** `yup_audio_plugin_client`
 
 <p align="center">
-  <img class="rounded" src="../_static/images/yup_retrace_plugin.jpg" alt="RETRACE, the spectral synthesizer of the plugin example, running as a plugin" width="640">
+  <img class="rounded" src="../_static/images/yup_retrace_plugin.jpg" alt="RETRACE, a spectral synthesizer built with YUP, running as a plugin" width="640">
 </p>
 
 ## One processor, many formats
