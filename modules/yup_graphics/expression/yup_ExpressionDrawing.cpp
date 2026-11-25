@@ -159,8 +159,7 @@ void paintWithDrawingOpacity (Graphics& g, const std::optional<float>& opacity, 
 template <class T>
 void findDrawingOutput (const CompiledExpression& program, const char* name, ExpressionOutput<T>& output)
 {
-    const auto result = program.getOutput<T> (name);
-    output = result.wasOk() ? result.getValue() : ExpressionOutput<T> {};
+    output = program.findTypedOutput<T> (name);
 }
 
 template <class T>

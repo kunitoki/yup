@@ -629,6 +629,90 @@ TEST_F (CompiledExpressionTests, CompilesExpressionObjects)
     EXPECT_DOUBLE_EQ (7.0, (double) state.getVar (0));
 }
 
+TEST_F (CompiledExpressionTests, CompilesBuiltProgramsLikeTheParsedOnes)
+{
+    const auto built = Expression::block ({
+        Expression::let ("w", Expression::symbol ("x") * Expression (2)),
+        Expression::output ("a", Expression::symbol ("w") + Expression (1)),
+        Expression::output ("b", Expression::ternary (Expression::symbol ("n"), Expression::symbol ("a"), Expression (0.0f)))
+    });
+
+    const auto fromTree = CompiledExpression::compile (built, context);
+    ASSERT_TRUE (fromTree.wasOk());
+
+    const auto fromText = compile (built.toString());
+    ASSERT_EQ (fromText.getNumOutputs(), fromTree.getValue().getNumOutputs());
+    EXPECT_EQ (fromText.getNumInstructions(), fromTree.getValue().getNumInstructions());
+
+    ExpressionState treeState (fromTree.getValue()), textState (fromText);
+
+    for (auto* state : { &treeState, &textState })
+    {
+        state->set (x, 1.5f);
+        state->set (n, 1);
+        state->evaluate();
+    }
+
+    for (int i = 0; i < fromText.getNumOutputs(); ++i)
+    {
+        EXPECT_EQ (fromText.getOutputName (i), fromTree.getValue().getOutputName (i));
+        EXPECT_EQ (fromText.getOutputType (i), fromTree.getValue().getOutputType (i));
+        EXPECT_DOUBLE_EQ ((double) textState.getVar (i), (double) treeState.getVar (i));
+    }
+
+    EXPECT_DOUBLE_EQ (4.0, (double) treeState.getVar (0));
+}
+
+TEST_F (CompiledExpressionTests, ReportsTheStatementThatFailed)
+{
+    const auto failedStatement = [this] (const Expression& program, String* message = nullptr)
+    {
+        int index = 100;
+        const auto result = CompiledExpression::compile (program, context, index);
+        EXPECT_TRUE (result.failed());
+
+        if (message != nullptr && result.failed())
+            *message = result.getErrorMessage();
+
+        return index;
+    };
+
+    const auto missing = Expression::symbol ("missing");
+
+    // A let, an output and the last plain expression
+    EXPECT_EQ (1, failedStatement (Expression::block ({ Expression::let ("a", Expression (1)), Expression::let ("b", missing), Expression::output ("c", Expression (2)) })));
+    EXPECT_EQ (2, failedStatement (Expression::block ({ Expression::let ("a", Expression (1)), Expression::output ("b", Expression (2)), Expression::output ("c", missing) })));
+    EXPECT_EQ (1, failedStatement (Expression::block ({ Expression::output ("a", Expression (1)), missing })));
+    EXPECT_EQ (0, failedStatement (missing));
+
+    // Built nodes have no position, so the message has none either
+    String message;
+    EXPECT_EQ (1, failedStatement (Expression::block ({ Expression::output ("a", Expression (1)), Expression::output ("a", Expression (2)) }), &message));
+    EXPECT_EQ (String ("The output 'a' is already assigned"), message);
+
+    // Parsed programs report the statement as well as the position
+    EXPECT_EQ (2, failedStatement (Expression::parse ("let a = 1;\nb = a;\nc = a + missing").getValue(), &message));
+    EXPECT_EQ (String ("3:9: Unknown symbol 'missing'"), message);
+
+    // A failure of the program as a whole is not the one of a statement
+    EXPECT_EQ (-1, failedStatement (Expression::block ({ Expression::let ("a", Expression (1)) }), &message));
+    EXPECT_EQ (String ("The expression has no outputs"), message);
+
+    int index = 100;
+    EXPECT_TRUE (CompiledExpression::compile (Expression::parse ("a = x + 1").getValue(), context, index).wasOk());
+    EXPECT_EQ (-1, index);
+}
+
+TEST_F (CompiledExpressionTests, FindsTypedOutputsWithoutFailing)
+{
+    const auto program = compile ("a = 1; b = x");
+
+    EXPECT_EQ (0, program.findTypedOutput<int> ("a").index);
+    EXPECT_EQ (1, program.findTypedOutput<float> ("b").index);
+    EXPECT_FALSE (program.findTypedOutput<float> ("a").isValid());
+    EXPECT_FALSE (program.findTypedOutput<float> ("missing").isValid());
+}
+
 TEST_F (CompiledExpressionTests, DeepNestingFailsGracefully)
 {
     const auto text = String::repeatedString ("(", 100) + "x" + String::repeatedString (" + 1)", 100);

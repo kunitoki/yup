@@ -129,6 +129,24 @@ TEST_F (ExpressionTests, ToStringRoundTrips)
     }
 }
 
+TEST_F (ExpressionTests, ToStringWritesTheShortestFloatsReadingBack)
+{
+    EXPECT_EQ (String ("1.0"), Expression (1.0).toString());
+    EXPECT_EQ (String ("125.0"), Expression (125.0).toString());
+    EXPECT_EQ (String ("125.0f"), Expression (125.0f).toString());
+    EXPECT_EQ (String ("0.1f"), Expression (0.1f).toString());
+    EXPECT_EQ (String ("1e+21"), Expression (1.0e21).toString());
+    EXPECT_EQ (String ("-0.0"), Expression (-0.0).toString());
+    EXPECT_EQ (String ("0.33333334f"), Expression (1.0f / 3.0f).toString());
+    EXPECT_EQ (String ("0.3333333333333333"), Expression (1.0 / 3.0).toString());
+
+    for (const double value : { 1.0 / 3.0, 0.1, 2.5e-300, 6.02214076e23, -123456.789, std::numeric_limits<double>::max() })
+        EXPECT_EQ (value, (double) parse (Expression (value).toString()).getConstantValue());
+
+    for (const float value : { 1.0f / 3.0f, 0.1f, 1.0e-45f, 6.02214076e23f, -123456.789f, std::numeric_limits<float>::max() })
+        EXPECT_EQ (value, (float) (double) parse (Expression (value).toString()).getConstantValue());
+}
+
 TEST_F (ExpressionTests, ParsesUnits)
 {
     EXPECT_DOUBLE_EQ (MathConstants<double>::halfPi, (double) parse ("90deg").getConstantValue());
@@ -290,6 +308,36 @@ TEST_F (ExpressionTests, BuildsExpressions)
     EXPECT_EQ (String ("max (1, 2)"), Expression::call ("max", { Expression (1), Expression (2) }).toString());
     EXPECT_EQ (String ("\"hi\""), Expression::text ("hi").toString());
     EXPECT_EQ (String ("(1 + 2) * 3"), ((Expression (1) + Expression (2)) * Expression (3)).toString());
+}
+
+TEST_F (ExpressionTests, BuildsProgramsLikeTheParsedOnes)
+{
+    const auto built = Expression::block ({
+        Expression::let ("w", Expression::symbol ("width") / Expression (2)),
+        Expression::output ("size", Expression::ternary (Expression::symbol ("w") + Expression (1), Expression::symbol ("w"), Expression (0))),
+        Expression::call ("max", { Expression::symbol ("size"), Expression (3) })
+    });
+
+    const String text ("let w = width / 2; size = w + 1 ? w : 0; max (size, 3)");
+    const auto parsed = parse (text);
+
+    EXPECT_EQ (text, built.toString());
+    EXPECT_EQ (parsed.toString(), built.toString());
+    EXPECT_EQ (Expression::Kind::block, built.getKind());
+    ASSERT_EQ (parsed.getNumInputs(), built.getNumInputs());
+
+    for (int i = 0; i < built.getNumInputs(); ++i)
+    {
+        EXPECT_EQ (parsed.getInput (i).getKind(), built.getInput (i).getKind());
+        EXPECT_EQ (parsed.getInput (i).getName(), built.getInput (i).getName());
+    }
+
+    EXPECT_EQ (parsed.getReferencedSymbols(), built.getReferencedSymbols());
+    EXPECT_EQ (String ("a ? b : c"), Expression::ternary (Expression::symbol ("a"), Expression::symbol ("b"), Expression::symbol ("c")).toString());
+    EXPECT_EQ (String ("(a ? b : c) + 1"), (Expression::ternary (Expression::symbol ("a"), Expression::symbol ("b"), Expression::symbol ("c")) + Expression (1)).toString());
+    EXPECT_EQ (String ("let a = 1"), Expression::let ("a", Expression (1)).toString());
+    EXPECT_EQ (String ("a = 1"), Expression::output ("a", Expression (1)).toString());
+    EXPECT_EQ (std::make_pair (0, 0), built.getPosition());
 }
 
 TEST_F (ExpressionTests, EvaluatesWithoutContext)

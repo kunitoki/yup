@@ -80,31 +80,19 @@ int getBinaryPrecedence (ExpressionOperator op) noexcept
     }
 }
 
-String formatExpressionFloat (double value, int maxPrecision)
+template <class T>
+String formatExpressionFloat (T value)
 {
-    std::string text;
+    char text[CharacterFunctions::shortestFloatBufferSize + 2];
+    auto length = CharacterFunctions::writeShortestFloat (value, text);
 
-    for (int precision = 1; precision <= maxPrecision; ++precision)
+    if (std::strpbrk (text, ".en") == nullptr)
     {
-        std::ostringstream out;
-        out.imbue (std::locale::classic());
-        out << std::setprecision (precision) << value;
-        text = out.str();
-
-        std::istringstream in (text);
-        in.imbue (std::locale::classic());
-
-        double parsed = 0.0;
-        in >> parsed;
-
-        if (maxPrecision > 9 ? parsed == value : (float) parsed == (float) value)
-            break;
+        text[length++] = '.';
+        text[length++] = '0';
     }
 
-    if (text.find_first_of (".en") == std::string::npos)
-        text += ".0";
-
-    return String (text.c_str());
+    return String (text, length);
 }
 
 String quoteExpressionString (const String& text)
@@ -874,6 +862,26 @@ Expression Expression::call (const String& functionName, std::vector<Expression>
     return make (Kind::call, ExpressionOperator::none, functionName, {}, std::move (arguments));
 }
 
+Expression Expression::ternary (const Expression& condition, const Expression& whenTrue, const Expression& whenFalse)
+{
+    return make (Kind::ternary, ExpressionOperator::none, {}, {}, { condition, whenTrue, whenFalse });
+}
+
+Expression Expression::let (const String& name, const Expression& value)
+{
+    return make (Kind::let, ExpressionOperator::none, name, {}, { value });
+}
+
+Expression Expression::output (const String& name, const Expression& value)
+{
+    return make (Kind::output, ExpressionOperator::none, name, {}, { value });
+}
+
+Expression Expression::block (std::vector<Expression> statements)
+{
+    return make (Kind::block, ExpressionOperator::none, {}, {}, std::move (statements));
+}
+
 //==============================================================================
 ResultValue<Expression> Expression::parse (StringRef text)
 {
@@ -1045,9 +1053,9 @@ void Expression::write (String& out, int parentPrecedence) const
             else if (const auto* i = std::get_if<int> (&n.value))
                 literal = String (*i);
             else if (const auto* f = std::get_if<float> (&n.value))
-                literal = formatExpressionFloat (*f, 9) + "f";
+                literal = formatExpressionFloat (*f) + "f";
             else if (const auto* d = std::get_if<double> (&n.value))
-                literal = formatExpressionFloat (*d, 17);
+                literal = formatExpressionFloat (*d);
             else
                 literal = quoteExpressionString (std::get<String> (n.value));
 

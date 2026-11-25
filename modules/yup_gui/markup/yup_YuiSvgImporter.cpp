@@ -152,18 +152,26 @@ private:
             if (opacity)
                 written.emplace_back ("opacity", numberText (*opacity));
 
-            const auto getRank = [] (const String& name)
-            {
-                const auto index = order.indexOf (name);
-                return index >= 0 ? index : order.size();
-            };
+            // The rank of each property is looked up once, not at every comparison
+            std::vector<std::pair<int, size_t>> ranks;
+            ranks.reserve (written.size());
 
-            std::stable_sort (written.begin(), written.end(), [&getRank] (const auto& a, const auto& b)
+            for (size_t i = 0; i < written.size(); ++i)
             {
-                return getRank (a.first) < getRank (b.first);
-            });
+                const auto index = order.indexOf (written[i].first);
+                ranks.emplace_back (index >= 0 ? index : order.size(), i);
+            }
 
-            return written;
+            // The pairs are unique, so sorting them keeps the properties of one rank in the order they were set
+            std::sort (ranks.begin(), ranks.end());
+
+            std::vector<std::pair<String, String>> sorted;
+            sorted.reserve (written.size());
+
+            for (const auto& rank : ranks)
+                sorted.push_back (std::move (written[rank.second]));
+
+            return sorted;
         }
 
         /* Appends what the element is made of, apart from its name, to tell the definitions that are the same. */
@@ -272,23 +280,27 @@ private:
     /* Returns the shortest text giving back the same number. */
     static String numberText (float value)
     {
+        std::string text;
+        appendNumber (text, value);
+        return String::fromUTF8 (text.data(), static_cast<int> (text.size()));
+    }
+
+    /* Appends the text of numberText, without making a String of it. */
+    static void appendNumber (std::string& text, float value)
+    {
         if (! std::isfinite (value) || value == 0.0f)
-            return "0";
-
-        if (value == std::floor (value) && std::abs (value) < 1.0e7f)
-            return String (static_cast<int> (value));
-
-        char buffer[64] = {};
-
-        for (int precision = 1; precision <= 9; ++precision)
         {
-            std::snprintf (buffer, sizeof (buffer), "%.*g", precision, static_cast<double> (value));
-
-            if (std::strtof (buffer, nullptr) == value)
-                break;
+            text += '0';
         }
-
-        return String (buffer).replaceCharacter (',', '.');
+        else if (value == std::floor (value) && std::abs (value) < 1.0e7f)
+        {
+            text += std::to_string (static_cast<int> (value));
+        }
+        else
+        {
+            char buffer[CharacterFunctions::shortestFloatBufferSize];
+            text.append (buffer, CharacterFunctions::writeShortestFloat (value, buffer));
+        }
     }
 
     static String pointText (Point<float> point)
@@ -346,16 +358,21 @@ private:
 
     static String pathText (const Path& path)
     {
-        String text;
+        std::string text;
 
-        const auto add = [&text] (const char* verb, std::initializer_list<Point<float>> points)
+        const auto add = [&text] (char verb, std::initializer_list<Point<float>> points)
         {
-            text << verb;
+            text += verb;
 
             for (const auto& point : points)
-                text << " " << numberText (point.getX()) << " " << numberText (point.getY());
+            {
+                text += ' ';
+                appendNumber (text, point.getX());
+                text += ' ';
+                appendNumber (text, point.getY());
+            }
 
-            text << " ";
+            text += ' ';
         };
 
         for (const auto& segment : path)
@@ -363,28 +380,31 @@ private:
             switch (segment.verb)
             {
                 case Path::Verb::MoveTo:
-                    add ("M", { segment.point });
+                    add ('M', { segment.point });
                     break;
 
                 case Path::Verb::LineTo:
-                    add ("L", { segment.point });
+                    add ('L', { segment.point });
                     break;
 
                 case Path::Verb::QuadTo:
-                    add ("Q", { segment.controlPoint1, segment.point });
+                    add ('Q', { segment.controlPoint1, segment.point });
                     break;
 
                 case Path::Verb::CubicTo:
-                    add ("C", { segment.controlPoint1, segment.controlPoint2, segment.point });
+                    add ('C', { segment.controlPoint1, segment.controlPoint2, segment.point });
                     break;
 
                 case Path::Verb::Close:
-                    text << "Z ";
+                    text += "Z ";
                     break;
             }
         }
 
-        return text.trimEnd();
+        if (! text.empty())
+            text.pop_back();
+
+        return String::fromUTF8 (text.data(), static_cast<int> (text.size()));
     }
 
     static String blendText (BlendMode blend)
@@ -680,16 +700,27 @@ private:
     /* Replaces the colors of an expression, but not what its strings hold, with the names given for them. */
     static String replaceColors (const String& expression, const std::function<String (const String&)>& getName)
     {
-        String text;
+        // What is not a color is copied as the bytes it is made of, a run at a time
+        std::string text;
+        text.reserve (expression.getNumBytesAsUTF8());
+
         bool isQuoted = false;
+        auto copied = expression.getCharPointer();
+
+        const auto copyUpTo = [&text, &copied] (String::CharPointerType end)
+        {
+            text.append (copied.getAddress(), static_cast<size_t> (end.getAddress() - copied.getAddress()));
+            copied = end;
+        };
 
         for (auto reader = expression.getCharPointer(); ! reader.isEmpty();)
         {
+            const auto start = reader;
             const auto character = reader.getAndAdvance();
 
             if (isQuoted && character == '\\' && ! reader.isEmpty())
             {
-                text << String::charToString (character) << String::charToString (reader.getAndAdvance());
+                reader.getAndAdvance();
                 continue;
             }
 
@@ -704,16 +735,15 @@ private:
                     ++numDigits;
 
             if (numDigits != 6 && numDigits != 8)
-            {
-                text << String::charToString (character);
                 continue;
-            }
 
-            text << getName ("#" + String (reader, end));
-            reader = end;
+            copyUpTo (start);
+            text.append (getName ("#" + String (reader, end)).toRawUTF8());
+            reader = copied = end;
         }
 
-        return text;
+        copyUpTo (expression.getCharPointer().findTerminatingNull());
+        return String::fromUTF8 (text.data(), static_cast<int> (text.size()));
     }
 
     //==============================================================================

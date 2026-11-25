@@ -463,6 +463,68 @@ int CharacterFunctions::getHexDigitValue (const yup_wchar digit) noexcept
     return -1;
 }
 
+namespace
+{
+
+template <class T>
+size_t writeShortestFloatText (T value, int maxPrecision, char* buffer) noexcept
+{
+    int printed = 0;
+
+    const auto print = [&] (int precision)
+    {
+        printed = precision;
+        return (size_t) jmax (0, std::snprintf (buffer, CharacterFunctions::shortestFloatBufferSize, "%.*g", precision, (double) value));
+    };
+
+    size_t length = 0;
+
+    if (! std::isfinite (value))
+    {
+        length = print (1);
+    }
+    else
+    {
+        // A text giving the value back keeps doing so with more digits, so the fewest are found by bisection.
+        // Printing and reading go through the same locale, the separator is fixed once the text is found
+        int low = 1, high = maxPrecision;
+
+        while (low < high)
+        {
+            const auto middle = (low + high) / 2;
+            length = print (middle);
+
+            if ((T) std::strtod (buffer, nullptr) == value)
+                high = middle;
+            else
+                low = middle + 1;
+        }
+
+        if (printed != low)
+            length = print (low);
+    }
+
+    length = jmin (length, CharacterFunctions::shortestFloatBufferSize - 1);
+
+    for (size_t i = 0; i < length; ++i)
+        if (buffer[i] == ',')
+            buffer[i] = '.';
+
+    return length;
+}
+
+} // namespace
+
+size_t CharacterFunctions::writeShortestFloat (float value, char* buffer) noexcept
+{
+    return writeShortestFloatText (value, std::numeric_limits<float>::max_digits10, buffer);
+}
+
+size_t CharacterFunctions::writeShortestFloat (double value, char* buffer) noexcept
+{
+    return writeShortestFloatText (value, std::numeric_limits<double>::max_digits10, buffer);
+}
+
 yup_wchar CharacterFunctions::getUnicodeCharFromWindows1252Codepage (const uint8 c) noexcept
 {
     if (c < 0x80 || c >= 0xa0)

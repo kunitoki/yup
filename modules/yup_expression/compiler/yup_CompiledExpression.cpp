@@ -194,13 +194,16 @@ struct ExpressionCompiler
     {
         if (root.getKind() == Kind::block)
         {
-            for (int i = 0; i < root.getNumInputs(); ++i)
-                compileStatement (root.getInput (i));
+            for (currentStatement = 0; currentStatement < root.getNumInputs(); ++currentStatement)
+                compileStatement (root.getInput (currentStatement));
         }
         else
         {
+            currentStatement = 0;
             compileStatement (root);
         }
+
+        currentStatement = -1;
 
         if (program.outputs.empty())
             fail (root, "The expression has no outputs");
@@ -1385,6 +1388,7 @@ struct ExpressionCompiler
     std::vector<int> namedExpressionStack;
     const ExpressionType* expectedType = nullptr;
     int depth = 0;
+    int currentStatement = -1;
 };
 
 //==============================================================================
@@ -1405,15 +1409,25 @@ ResultValue<CompiledExpression> CompiledExpression::compile (StringRef text, con
 
 ResultValue<CompiledExpression> CompiledExpression::compile (const Expression& expression, const ExpressionContext& context)
 {
+    int failedStatement = -1;
+    return compile (expression, context, failedStatement);
+}
+
+ResultValue<CompiledExpression> CompiledExpression::compile (const Expression& expression, const ExpressionContext& context, int& failedStatement)
+{
     auto newProgram = std::make_shared<Program>();
+    ExpressionCompiler compiler (context, *newProgram);
+
+    failedStatement = -1;
 
     try
     {
-        ExpressionCompiler compiler (context, *newProgram);
         compiler.compileProgram (expression);
     }
     catch (const ExpressionCompiler::Error& error)
     {
+        failedStatement = compiler.currentStatement;
+
         if (error.position.first <= 0)
             return makeResultValueFail (error.message);
 
