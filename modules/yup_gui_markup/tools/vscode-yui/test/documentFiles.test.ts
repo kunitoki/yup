@@ -69,7 +69,7 @@ class StandInTool {
         const ran = await runUntilFilesAreGiven (async () => {
             const collected = await collectDocumentFiles (document, undefined);
 
-            return { document: document.uri.fsPath, missing: this.run (collected), collected };
+            return { document: document.uri.fsPath, sought: collected.sought, missing: this.run (collected), collected };
         });
 
         return ran?.collected;
@@ -145,18 +145,26 @@ test ("the files the tool tells a document reads are given once, and those that 
     assert.equal (tool.runs.length, 4);
 });
 
-test ("a file told by the tool is only run for again when it is new and there", async () => {
+test ("a file told by the tool is only run for again when it is there and the document was collected without it", async () => {
     const folder = write ("noted", { "main.yui": "Component { }\n", "there.frag": "void main() { }\n" });
     const main = path.join (folder, "main.yui");
     const collected = await collectDocumentFiles (edited (main), undefined);
     const told = (name: string) => `${path.posix.dirname (collected.main)}/${name}`;
 
-    assert.equal (noteMissingFiles (main, [told ("absent.frag")]), false);
-    assert.equal (noteMissingFiles (main, [told ("there.frag")]), true);
-    assert.equal (noteMissingFiles (main, [told ("there.frag"), told ("absent.frag")]), false);
+    assert.equal (noteMissingFiles (main, [told ("absent.frag")], collected.sought), false);
+    assert.equal (noteMissingFiles (main, [told ("there.frag")], collected.sought), true);
+
+    // What checks a document and what shows it collect it apart: the second to be told ran without the file too
+    assert.equal (noteMissingFiles (main, [told ("there.frag"), told ("absent.frag")], collected.sought), true);
+
+    // Collected again, the document has the file and looked for the other one: neither makes it run again
+    const again = await collectDocumentFiles (edited (main), undefined);
+
+    assert.deepEqual (names (again), ["main.yui", "there.frag"]);
+    assert.equal (noteMissingFiles (main, [told ("there.frag"), told ("absent.frag")], again.sought), false);
 
     // What is not of the folders the tool was given files from stands for no file
-    assert.equal (noteMissingFiles (main, ["/yui/there.frag", "unknown/there.frag", "999/there.frag"]), false);
+    assert.equal (noteMissingFiles (main, ["/yui/there.frag", "unknown/there.frag", "999/there.frag"], again.sought), false);
 });
 
 test ("the text a file has in an editor counts before the one saved", async () => {

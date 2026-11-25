@@ -198,7 +198,7 @@ class YuiSession {
 
             const ran = await this.run (args, collected.files);
 
-            return ran === undefined ? undefined : { ...ran, document: document.uri.fsPath, problems: collected.problems };
+            return ran === undefined ? undefined : { ...ran, document: document.uri.fsPath, sought: collected.sought, problems: collected.problems };
         });
 
         if (this.sequences.get (key) !== sequence)

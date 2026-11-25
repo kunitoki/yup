@@ -100,6 +100,7 @@ export class YuiPreview {
     private zoom = "fit";
     private shown: string | undefined;
     private modelsFile: string | undefined;
+    private sought: ReadonlySet<string> = new Set<string> ();
     private ready = false;
     private sequence = 0;
     private readonly agentCalls = new Map<number, AgentCall> ();
@@ -330,7 +331,7 @@ export class YuiPreview {
     private filesMissing (main: string, files: string[]): void {
         const file = this.document?.uri.fsPath;
 
-        if (file !== undefined && realPathOf (main) === file && noteMissingFiles (file, files))
+        if (file !== undefined && realPathOf (main) === file && noteMissingFiles (file, files, this.sought))
             void this.render ();
     }
 
@@ -485,6 +486,9 @@ export class YuiPreview {
         catch {
             modelsValues = null;
         }
+
+        // What the page shows it with, for the files it then tells it was not given (see filesMissing)
+        this.sought = collected.sought;
 
         const files = this.unsent (collected.files);
 

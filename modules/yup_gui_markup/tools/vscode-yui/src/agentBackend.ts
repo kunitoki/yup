@@ -26,6 +26,9 @@ interface Prepared {
     /** The file of the document the call names, when it names one. */
     document?: string;
 
+    /** The files that document was collected with (see DocumentFiles). */
+    sought?: ReadonlySet<string>;
+
     /** The file the image of the answer is written to, which the tool can't do as it has no disk. */
     output?: string;
 }
@@ -34,6 +37,7 @@ interface Prepared {
 interface Ran extends YuiAgentAnswer {
     refused?: string;
     document?: string;
+    sought?: ReadonlySet<string>;
     output?: string;
 }
 
@@ -124,7 +128,7 @@ export class YuiAgentBackend implements AgentBackend {
                     ? await this.preview.agentCall (name, argumentsJson, prepared.files, name !== captureTool)
                     : await tool.agentCall (name, argumentsJson, prepared.files);
 
-                return answer === undefined ? undefined : { ...answer, document: prepared.document, output: prepared.output };
+                return answer === undefined ? undefined : { ...answer, document: prepared.document, sought: prepared.sought, output: prepared.output };
             });
 
             if (ran === undefined)
@@ -270,6 +274,6 @@ export class YuiAgentBackend implements AgentBackend {
             prepared["reference"] = toolPathOf (reference);
         }
 
-        return { args: prepared, files: collected.files, document: uri.fsPath, output };
+        return { args: prepared, files: collected.files, document: uri.fsPath, sought: collected.sought, output };
     }
 }

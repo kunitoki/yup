@@ -20,6 +20,9 @@ export interface DocumentFiles {
 
     /** Why files the document names were not given, for who looks at it to be told: they are too large. */
     problems: string[];
+
+    /** The files the document was given or looked for, which are no reason to run on it again (see noteMissingFiles). */
+    sought: ReadonlySet<string>;
 }
 
 // What a document can name: the documents it imports, and the images, fonts, models and data it reads
@@ -223,14 +226,15 @@ export async function collectDocumentFiles (document: EditedDocument, modelsPath
     }
 
     // Who is told about the files that change finds here the documents to check and show again
-    named.set (main, new Set ([...contents.keys (), ...missing].filter (file => file !== main)));
+    const sought = new Set ([...contents.keys (), ...missing].filter (file => file !== main));
+    named.set (main, sought);
 
     const models = modelsPath === undefined ? undefined : (await read (modelsPath, maximumFileBytes))?.data;
 
     if (modelsPath !== undefined && models !== undefined)
         files.push ({ path: toolPathOf (modelsPath), data: models });
 
-    return { main: toolPath (main), models: modelsPath !== undefined && models !== undefined ? toolPathOf (modelsPath) : "", files, problems };
+    return { main: toolPath (main), models: modelsPath !== undefined && models !== undefined ? toolPathOf (modelsPath) : "", files, problems, sought };
 }
 
 /**
@@ -241,12 +245,14 @@ export async function collectDocumentFiles (document: EditedDocument, modelsPath
 
     @param main    The file of the document.
     @param missing The files, by their paths in the folder of the tool.
+    @param sought  The files the document was collected with for the run telling them (see DocumentFiles).
 
-    @returns True when one of them was not told before and is there to be given: what ran on the
-             document then runs again. One that is not there is not asked for again, and is given
-             once it is there.
+    @returns True when one of them is there to be given and the document was collected without it:
+             what ran on the document then runs again, whether or not something else running on
+             it was told the file first. One that is not there is not asked for again, and is
+             given once it is there.
 */
-export function noteMissingFiles (main: string, missing: string[]): boolean {
+export function noteMissingFiles (main: string, missing: string[], sought: ReadonlySet<string>): boolean {
     const known = told.get (main) ?? new Set<string> ();
     let found = false;
 
@@ -255,11 +261,11 @@ export function noteMissingFiles (main: string, missing: string[]): boolean {
     for (const toolPath of missing) {
         const file = realPathOf (toolPath);
 
-        if (file === undefined || known.has (file))
+        if (file === undefined)
             continue;
 
         known.add (file);
-        found = found || unsavedText (file) !== undefined || fs.existsSync (file);
+        found = found || (! sought.has (file) && (unsavedText (file) !== undefined || fs.existsSync (file)));
     }
 
     return found;
@@ -270,15 +276,16 @@ export function noteMissingFiles (main: string, missing: string[]): boolean {
     reads that it was not given and there are some of them to give (see noteMissingFiles).
 
     @param run Collects the document and runs on it. It returns what ran, with the file of the
-               document and the files the tool told, or nothing when it could not run.
+               document, the files it was collected with and the files the tool told, or nothing
+               when it could not run.
 
     @returns What the last run returned.
 */
-export async function runUntilFilesAreGiven<Ran extends { document?: string; missing: string[] }> (run: () => Promise<Ran | undefined>): Promise<Ran | undefined> {
+export async function runUntilFilesAreGiven<Ran extends { document?: string; sought?: ReadonlySet<string>; missing: string[] }> (run: () => Promise<Ran | undefined>): Promise<Ran | undefined> {
     for (let round = 1; ; ++round) {
         const ran = await run ();
 
-        if (ran === undefined || ran.document === undefined || ! noteMissingFiles (ran.document, ran.missing) || round === maximumRounds)
+        if (ran === undefined || ran.document === undefined || ran.sought === undefined || ! noteMissingFiles (ran.document, ran.missing, ran.sought) || round === maximumRounds)
             return ran;
     }
 }
