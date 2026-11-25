@@ -30,11 +30,11 @@ namespace yup
 
     `WindowComponent` is registered in @ref ComponentTypeRegistry under the `Window` type name.
     Unlike @ref DocumentWindow, constructing a `WindowComponent` does not open a native desktop
-    window, so `.yui` documents rooted at `Window { ... }` can be embedded inside @ref YuiView,
+    window, so `.yui` documents rooted at `Window { ... }` can be embedded inside other components,
     plugin editors, previews and headless tests while stacking and laying out their children across
     the window bounds and optionally painting a `backgroundColor`.
 
-    @see StackComponent, DocumentWindow, YuiView
+    @see StackComponent, DocumentWindow
 
     @tags{GUI}
 */

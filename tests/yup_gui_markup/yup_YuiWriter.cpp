@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -245,7 +245,7 @@ TEST_F (YuiWriterTests, RoundTripsStringsWithBothQuoteKindsAndEscapes)
 
     const auto written = YuiWriter::write (document);
     const auto reparsed = YuiParser::parse (written);
-    ASSERT_TRUE (reparsed.wasOk()) << YuiDiagnostic::join (reparsed.diagnostics) << "\n" << written;
+    ASSERT_TRUE (reparsed.wasOk()) << DataTreeDiagnostic::join (reparsed.diagnostics) << "\n" << written;
     EXPECT_TRUE (reparsed.document.isEquivalentTo (document)) << written;
     EXPECT_EQ (YuiWriter::write (reparsed.document), written);
 

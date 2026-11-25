@@ -20,6 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -142,7 +143,7 @@ protected:
     static DrawingStyle::ShaderResolver findShaders (const String& text, std::map<String, GpuImageShader::Ptr> shaders)
     {
         const auto parsed = YuiParser::parse (text);
-        EXPECT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+        EXPECT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
         return [document = parsed.document, shaders = std::move (shaders)] (const String& name)
         {
@@ -498,7 +499,7 @@ TEST_F (DrawingStyleTest, CompilesAndPaintsDashedStrokesClipLayerMasksImagesAndS
             }
         }
     )yui");
-    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
     auto style = DrawingStyle::create (slider, parsed.document.getChildWithName ("drawing"));
     ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
@@ -521,12 +522,12 @@ TEST_F (DrawingStyleTest, ReportsStructuredChildElementAndPropertyLocations)
         "        fill: unknownSymbol + 1;\n"
         "    }\n"
         "}\n");
-    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
     Slider slider (Slider::RotaryVerticalDrag);
     configure (slider);
 
-    YuiDiagnostic failure;
+    DataTreeDiagnostic failure;
     auto created = DrawingStyle::create (slider, parsed.document.getChildWithName ("drawing"), nullptr, &failure);
     EXPECT_TRUE (created.failed());
     EXPECT_TRUE (failure.element.isValid());
@@ -552,7 +553,7 @@ protected:
     static DataTree parseYuiDrawing (const String& text, const String& name = {})
     {
         const auto parsed = YuiParser::parse (text);
-        EXPECT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+        EXPECT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
         for (const auto& block : parsed.document)
             if (block.getType() == Identifier ("drawing") && (name.isEmpty() || block.getProperty ("name").toString() == name))
@@ -1892,7 +1893,7 @@ TEST_F (DrawingStyleShaderTest, UsePaintsTheShaderOfANameNoDrawingHas)
     EXPECT_EQ (measure (*found.getReference(), "painted").type, String ("rect"));
 
     // A stylesheet has one of them only
-    const auto sheet = StyleSheet::parse (outside);
+    const auto sheet = YuiParser::parseStyleSheet (outside);
     ASSERT_TRUE (sheet.failed());
     EXPECT_EQ (sheet.getErrorMessage(), String ("The shader 'Plasma' has the same name as a drawing"));
 }
@@ -1950,7 +1951,7 @@ TEST_F (DrawingStyleShaderTest, ReportsTheShadersAUseCantPaint)
     EXPECT_EQ (errorOf ("drawing { repeat i in 0 .. 2 { group { use Plasma {} } } }"), "drawing/repeat[0]/group[0]/use[0]: the shader 'Plasma' can't be painted inside a repeat");
 
     // The failure tells the element and the property it is about: the use, or the default of the block
-    YuiDiagnostic failure;
+    DataTreeDiagnostic failure;
     ASSERT_TRUE (DrawingStyle::create (component, parseYuiDrawing (blocks + "drawing { use Plasma { speed: #ff0000; } }"), nullptr, &failure, nullptr, findShaders (blocks, shaders)).failed());
     EXPECT_EQ (failure.element.getType(), Identifier ("use"));
     EXPECT_EQ (failure.property, Identifier ("speed"));
@@ -2154,7 +2155,7 @@ TEST_F (DrawingStyleShaderTest, AStyleMadeBeforeItsShadersAreLoadedIsMadeAgainWi
     EXPECT_EQ (measure (*loaded.getReference(), "card").type, String ("rect"));
 
     // What a shader reads decides what compiles: one reading a picture can't be painted, and a second picture is for one reading two
-    YuiDiagnostic failure;
+    DataTreeDiagnostic failure;
     const auto reading = style.createWithShaders (findShaders (text, { { "Plasma", makeShader ({ { "speed", 1 } }, 1) }, { "Crt", crt } }), &failure);
     ASSERT_TRUE (reading.failed());
     EXPECT_EQ (reading.getErrorMessage(), "Screen/use#plasma: the shader 'Plasma' reads a picture, run it in the 'filter' of a layer or as an 'effect:'");

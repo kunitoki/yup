@@ -19,7 +19,7 @@ gradients, feathered shadows, clipped notches and a repeated scale that follow
 the value, with no image and no paint code.
 
 ```cpp
-#include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 ```
 
 Drawings are written in `.yui` files as `drawing` blocks. The `.yui` parser
@@ -818,10 +818,10 @@ Screen/use[0]: the shader 'Crt' reads a picture, run it in the 'filter' of a lay
 
 Elements are numbered by type within their parent, or named by their `id`. The
 root is named by its `name` property, or `drawing`. Passing an optional
-`YuiDiagnostic*` to `DrawingStyle::create` also populates the offending child
+`DataTreeDiagnostic*` to `DrawingStyle::create` also populates the offending child
 `DataTree` element and property `Identifier`, so `YuiDocument`, `YuiBuilder` and
 `StyleContext` resolve errors to the exact child line and column through the
-parser's `SourceMap`.
+parser's `DataTreeSourceMap`.
 
 ## Using a drawing from C++
 

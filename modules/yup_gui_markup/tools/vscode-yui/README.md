@@ -281,7 +281,7 @@ of the YUP repository.
 ## Source and license
 
 The extension is part of the YUP repository, in
-[`modules/yup_gui/tools/vscode-yui`](https://github.com/kunitoki/yup/tree/main/modules/yup_gui/tools/vscode-yui),
+[`modules/yup_gui_markup/tools/vscode-yui`](https://github.com/kunitoki/yup/tree/main/modules/yup_gui_markup/tools/vscode-yui),
 where `DEVELOPMENT.md` tells how to build it. Problems are reported in its
 [issues](https://github.com/kunitoki/yup/issues).
 

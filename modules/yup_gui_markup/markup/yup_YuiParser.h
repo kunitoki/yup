@@ -59,10 +59,10 @@ public:
         DataTree document;
 
         /** The problems found, at their line and column, empty when the text was parsed. */
-        std::vector<YuiDiagnostic> diagnostics;
+        std::vector<DataTreeDiagnostic> diagnostics;
 
         /** Where each element of the document, and each of their properties, was written. */
-        YuiSourceMap sourceMap;
+        DataTreeSourceMap sourceMap;
 
         /** Returns true if the text was parsed without errors. */
         bool wasOk() const noexcept { return diagnostics.empty(); }
@@ -96,6 +96,24 @@ public:
                  the source map carry the import path of the elements coming from imports.
     */
     static ParseResult parse (const String& text, const ImportResolver& resolveImport);
+
+    /** Parses a `.yui` text and builds the stylesheet of its blocks.
+
+        This gives a hand-written interface its stylesheet from text, with no document:
+
+        @code
+        auto sheet = YuiParser::parseStyleSheet (text);
+        if (sheet.wasOk())
+            editor.setStyleSheet (sheet.getReference());
+        @endcode
+
+        @param text  The text to parse.
+
+        @returns The sheet, or a failure with the first diagnostic.
+
+        @see StyleSheet::fromTree
+    */
+    static ResultValue<StyleSheet::Ptr> parseStyleSheet (const String& text);
 
     YuiParser() = delete;
 };

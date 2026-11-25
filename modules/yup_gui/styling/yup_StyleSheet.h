@@ -32,10 +32,10 @@ namespace yup
     the StyleContext that matches its rules and computes the values. Sheets are immutable
     once built and reference counted, so the same sheet can style several trees.
 
-    Build one straight from `.yui` text with @ref parse, or from a parsed document with
-    @ref fromTree. A sheet collects everything a document declares for styling: the rules
-    and keyframes of its `style` blocks, its palettes, its named drawings, which rules
-    select with `drawing:`, and its shaders.
+    Build one with @ref fromTree, from the tree of a document. The yup_gui_markup module parses
+    that tree from `.yui` text, and without it the tree is written in code. A sheet collects
+    everything a document declares for styling: the rules and keyframes of its `style` blocks,
+    its palettes, its named drawings, which rules select with `drawing:`, and its shaders.
 
     @code
     palette Ember { colors: "#1b1b1e, #ff8800"; mode: dark; accent: #ff9a1f; }
@@ -196,23 +196,16 @@ public:
     /** Builds a sheet from a parsed document.
 
         The sheet keeps the tree, so the elements of its declarations and drawings stay in
-        their document and the diagnostics about them can be located with a YuiSourceMap.
+        their document and the diagnostics about them can be located with a DataTreeSourceMap.
 
-        @param tree     A `yui` document (see YuiParser), or a single `style` element.
+        @param tree     A `yui` document, as the parser of a `.yui` text returns it, or a single
+                        `style` element.
         @param failure  When not null, receives the first problem along with its element and
                         property, ready to be located.
 
         @returns The sheet, or a failure describing the first offending element.
     */
-    static ResultValue<Ptr> fromTree (const DataTree& tree, YuiDiagnostic* failure = nullptr);
-
-    /** Parses `.yui` text and builds a sheet from it.
-
-        @param text The `.yui` text.
-
-        @returns The sheet, or a failure with the first diagnostic.
-    */
-    static ResultValue<Ptr> parse (const String& text);
+    static ResultValue<Ptr> fromTree (const DataTree& tree, DataTreeDiagnostic* failure = nullptr);
 
     /** Returns true when the element is a style, rule, palette, drawing, shader or keyframes block. */
     static bool isStyleElement (const DataTree& element) noexcept;
@@ -226,7 +219,7 @@ public:
 
         A name can be declared once for each mode: a second palette of the same mode is invalid.
     */
-    static std::optional<YuiDiagnostic> readPaletteElement (const DataTree& element, Palettes& palettes);
+    static std::optional<DataTreeDiagnostic> readPaletteElement (const DataTree& element, Palettes& palettes);
 
     //==============================================================================
     /** Returns the rules of the sheet, in source order. */
@@ -287,8 +280,8 @@ private:
     //==============================================================================
     StyleSheet() = default;
 
-    std::optional<YuiDiagnostic> addElements (const DataTree& parent);
-    std::optional<YuiDiagnostic> findSharedName() const;
+    std::optional<DataTreeDiagnostic> addElements (const DataTree& parent);
+    std::optional<DataTreeDiagnostic> findSharedName() const;
 
     DataTree tree;
     std::vector<Rule> rules;

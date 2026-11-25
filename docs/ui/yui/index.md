@@ -10,14 +10,29 @@ it runs.
   <img class="dark-only rounded" src="../../_static/images/ui/yui/drawing_fluted-knob_dark.jpg#gh-dark-mode-only" alt="Three glossy black knobs at different values, each one a slider painted by the FlutedKnob drawing" width="640">
 </p>
 
-**Modules covered:** `yup_gui` (the `Yui*` classes), with
-`yup_audio_gui` for parameter binding and `yup_renderer` for 3D scenes.
+**Modules covered:** `yup_gui_markup` (the `Yui*` classes) on top of `yup_gui`,
+with `yup_audio_gui` for parameter binding and `yup_renderer` for 3D scenes.
 
 Everything YUI does is also reachable from C++ - it builds the same
 [`Component`](../component-basics.md) tree, sets the same
 [properties](../component-styling.md) and paints with the same
 [`Graphics`](../../graphics/graphics-class.md) API. The language exists so that
 layout, look and wiring live in files you can edit without recompiling.
+
+YUI is opt-in: an interface written in C++ needs `yup_gui` only. To use it, add
+the module to your target and include its header, which brings `yup_gui` along:
+
+```cmake
+yup_standalone_app (
+    # ...
+    MODULES
+        yup::yup_gui
+        yup::yup_gui_markup)
+```
+
+```cpp
+#include <yup_gui_markup/yup_gui_markup.h>
+```
 
 ## What a document is made of
 

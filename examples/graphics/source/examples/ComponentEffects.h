@@ -1252,24 +1252,32 @@ private:
     /** Gives the subject the `shadow:`, `glow:` and `filter:` chosen through a stylesheet. */
     void applyStyle()
     {
-        yup::String declarations;
+        // The sheet is written as the tree a `.yui` text is parsed into, so no parser is needed
+        yup::DataTree rule ("rule", { { "selector", "#subject" } });
+
+        const auto declare = [&rule] (const char* name, const yup::String& value)
+        {
+            rule.beginTransaction().addChild (yup::DataTree ("declaration", { { "name", name }, { "value", value } }));
+        };
 
         if (shadowToggle.getToggleState())
-            declarations << "shadow: 0 10 20 #000000b0; ";
+            declare ("shadow", "0 10 20 #000000b0");
 
         if (glowToggle.getToggleState())
-            declarations << "glow: 16 2 palette.accent.withAlpha (0.6); ";
+            declare ("glow", "16 2 palette.accent.withAlpha (0.6)");
 
         if (filterToggle.getToggleState())
-            declarations << "filter: hue-rotate(120deg) saturate(130%); ";
+            declare ("filter", "hue-rotate(120deg) saturate(130%)");
 
-        if (declarations.isEmpty())
+        if (rule.getNumChildren() == 0)
         {
             stage.setStyleSheet (nullptr);
             return;
         }
 
-        auto sheet = yup::StyleSheet::parse ("style { #subject { cornerRadius: " + yup::String (Subject::cornerRadius) + "; " + declarations + "} }");
+        declare ("cornerRadius", yup::String (Subject::cornerRadius));
+
+        auto sheet = yup::StyleSheet::fromTree (yup::DataTree ("style", { rule }));
 
         if (sheet.failed())
         {

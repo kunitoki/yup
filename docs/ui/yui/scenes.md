@@ -6,8 +6,8 @@ is a component with properties, so what the language does with a widget it
 does with a 3D object: bindings, links, style rules, classes, transitions,
 `@keyframes`, composites and `id`s.
 
-**Modules covered:** `yup_renderer`, with `yup_gui`. The 3D elements exist in
-every application that links both, and need no code.
+**Modules covered:** `yup_renderer`, with `yup_gui_markup`. The 3D elements
+exist in every application that links both, and need no code.
 
 ## A first scene
 

@@ -1,4 +1,4 @@
-# Publishes the YUI extension of modules/yup_gui/tools/vscode-yui to the Visual Studio Marketplace.
+# Publishes the YUI extension of modules/yup_gui_markup/tools/vscode-yui to the Visual Studio Marketplace.
 #
 # It publishes with Trusted Publishing, so there is no token to store. Set up once, at
 # https://marketplace.visualstudio.com/manage:
@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: modules/yup_gui/tools/vscode-yui
+        working-directory: modules/yup_gui_markup/tools/vscode-yui
     steps:
       - uses: actions/checkout@v6
 
@@ -56,7 +56,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: modules/yup_gui/tools/vscode-yui/package-lock.json
+          cache-dependency-path: modules/yup_gui_markup/tools/vscode-yui/package-lock.json
 
       - name: Test the tool for the web
         working-directory: cmake/tools/yui_tool
@@ -72,7 +72,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: vscode-yui
-          path: modules/yup_gui/tools/vscode-yui/vscode-yui.vsix
+          path: modules/yup_gui_markup/tools/vscode-yui/vscode-yui.vsix
           if-no-files-found: error
 
   # Only this job can publish, and it runs nothing of the build: it takes the package as it was made

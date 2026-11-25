@@ -1,0 +1,191 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#pragma once
+
+namespace yup
+{
+
+//==============================================================================
+/**
+    What a tree of components was built from, as its components see it.
+
+    A component that reads a file, or finds something wrong with one of its values, asks the
+    document that built it, found with @ref findFor. The file then comes from where the
+    document does: a folder, embedded resources or the unsaved text of an editor. The problem
+    is listed with the ones of the document, at the line its value was written at.
+
+    @code
+    // In a component: read through the document that built it, or from the file when none did
+    if (const auto bytes = ComponentDocument::readAssetFor (this, "images/logo.png"))
+        image = Image::loadFromData (bytes->asBytes());
+
+    // Tell what is wrong with a value, where the document lists its problems
+    if (auto* document = ComponentDocument::findFor (this))
+        document->reportDiagnostic ({ .message = "The source can't be read", .property = "source" }, this);
+    @endcode
+
+    Code building components from a description of its own implements the interface, and calls
+    @ref registerDocument and @ref unregisterDocument around the time its root can be asked for.
+
+    @see Component, DataTreeDiagnostic, DataTreeSourceMap
+
+    @tags{UI}
+*/
+class YUP_API ComponentDocument
+{
+public:
+    //==============================================================================
+    /** Destructor. */
+    virtual ~ComponentDocument();
+
+    //==============================================================================
+    /** Returns the root of the components the document built, or nullptr when it built none. */
+    virtual Component* getRoot() const = 0;
+
+    /** Returns the folder the relative paths of the document are resolved from, or a default File. */
+    virtual const File& getBaseDirectory() const = 0;
+
+    /** Returns the bytes of a file the document refers to, or nothing when it can't be read.
+
+        @param path  The path of the file, as written in the document.
+
+        @see readAssetFor, getAssetFile
+    */
+    virtual std::optional<MemoryBlock> readAsset (const String& path) const = 0;
+
+    /** Returns the file on disk an asset path stands for, without reading it.
+
+        This is for what has to follow the references a file makes to the ones next to it.
+
+        @param path  The path of the file, as written in the document.
+
+        @returns The file, which may not exist, or a default File when the assets of the document
+                 are not the files of a folder.
+    */
+    virtual File getAssetFile (const String& path) const = 0;
+
+    /** Returns where the elements of the document were written, or nullptr when it is not known.
+
+        Each load gives the document another map, which also tells one load from the next.
+    */
+    virtual std::shared_ptr<const DataTreeSourceMap> getSourceMap() const = 0;
+
+    /** Returns the function finding the components and the models an expression names, as the
+        values of the document find them.
+    */
+    virtual DrawingScope::ComponentResolver getComponentResolver() const = 0;
+
+    /** Adds a problem to the ones the document lists.
+
+        @param diagnostic  The problem. Its position is found from its element and its property.
+        @param subject     The component the problem is about, or nullptr. A diagnostic with no
+                           element is given the one the component was built from.
+    */
+    virtual void reportDiagnostic (DataTreeDiagnostic diagnostic, const Component* subject = nullptr) = 0;
+
+    //==============================================================================
+    /** Receives what happens to a document, for the components that were built from it. */
+    class YUP_API Listener
+    {
+    public:
+        virtual ~Listener() = default;
+
+        /** Called after each load of the document, successful or not. */
+        virtual void documentLoaded (ComponentDocument& document) {}
+
+        /** Called when a file the document refers to changed, for what read it to read it again.
+
+            @param path  The path of the file, as it was given to ComponentDocument::readAsset.
+        */
+        virtual void documentAssetChanged (ComponentDocument& document, const String& path) {}
+    };
+
+    /** Adds a listener, which must be removed before it is destroyed. */
+    void addListener (Listener* listener) { documentListeners.add (listener); }
+
+    /** Removes a listener. */
+    void removeListener (Listener* listener) { documentListeners.remove (listener); }
+
+    //==============================================================================
+    /** Returns the document that built a component, or the closest ancestor of it, or nullptr.
+
+        The search walks up the parents, so a child added in code to a component built from a
+        document finds that document.
+
+        @param component  The component to look up, which can be null.
+    */
+    static ComponentDocument* findFor (const Component* component);
+
+    /** Returns the bytes of a file a component refers to, read through the document of the component.
+
+        This is for the code that only has a component, such as an effect, a drawing or a component
+        loading a model. A component of no document reads the file: an absolute path as it is, a
+        relative one from the working directory.
+
+        @param component  The component the path was written for, which can be null.
+        @param path       The path of the file. An empty path gives nothing.
+    */
+    static std::optional<MemoryBlock> readAssetFor (const Component* component, const String& path);
+
+protected:
+    //==============================================================================
+    ComponentDocument() = default;
+
+    /** Makes the document the one @ref findFor returns for its components.
+
+        Call it once @ref getRoot can be called: at the end of a constructor, not from this one.
+    */
+    void registerDocument();
+
+    /** Stops @ref findFor from returning the document.
+
+        Call it first thing in a destructor: the components destroyed with the document may look
+        for it, and would ask for the root of a document that is going.
+    */
+    void unregisterDocument();
+
+    /** Returns the registered documents, in the order they were registered. */
+    static const std::vector<ComponentDocument*>& getRegisteredDocuments();
+
+    /** Tells the listeners that the document was loaded. */
+    void notifyDocumentLoaded();
+
+    /** Tells the listeners that a file the document refers to changed. */
+    void notifyDocumentAssetChanged (const String& path);
+
+    /** Returns the file a path stands for: an absolute path as it is, a relative one from the
+        base directory when that has the file, else from the working directory.
+    */
+    static File resolveAssetFile (const String& path, const File& baseDirectory);
+
+    /** Returns the bytes of a file, or nothing when it can't be read. */
+    static std::optional<MemoryBlock> readAssetFile (const File& file);
+
+private:
+    //==============================================================================
+    ListenerList<Listener> documentListeners;
+
+    YUP_DECLARE_WEAK_REFERENCEABLE (ComponentDocument)
+    YUP_DECLARE_NON_COPYABLE (ComponentDocument)
+};
+
+} // namespace yup

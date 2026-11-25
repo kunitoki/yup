@@ -20,6 +20,7 @@
 */
 
 #include <yup_audio_gui/yup_audio_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -332,7 +333,7 @@ TEST_F (ThemeVersion1GeometryTests, StylesheetSetsGeometryThroughQualifiedNames)
     root.addChildComponent (switchButton);
     root.addChildComponent (progressBar);
 
-    auto sheet = StyleSheet::parse ("style { :root { SwitchButton.thumbInset: 2; ProgressBar.cornerRadius: 3; } }");
+    auto sheet = YuiParser::parseStyleSheet ("style { :root { SwitchButton.thumbInset: 2; ProgressBar.cornerRadius: 3; } }");
     ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
     root.setStyleSheet (sheet.getReference());
     root.getStyleContext()->restyleNow();

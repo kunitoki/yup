@@ -20,6 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -1254,7 +1255,7 @@ TEST_F (PopupMenuTest, StyleSheetStylesPopupOpenedOutsideStyledRoot)
     combo.setBounds (10, 10, 160, 28);
     styledPanel.addAndMakeVisible (combo);
 
-    auto sheet = StyleSheet::parse (R"(
+    auto sheet = YuiParser::parseStyleSheet (R"(
         palette Warm {
             colors: "#14161a #1e222a #ff8844 #f0f4f8";
             surfaceRaised: #1e222a;
@@ -1309,7 +1310,7 @@ TEST_F (PopupMenuTest, StyleSheetStylesPopupOpenedOutsideStyledRoot)
 
 TEST_F (PopupMenuTest, SubmenuAndNestedSubmenuInheritStyleFromParentPopupMenu)
 {
-    auto sheet = StyleSheet::parse (R"(
+    auto sheet = YuiParser::parseStyleSheet (R"(
         style {
             PopupMenu {
                 backgroundColor: #aa0000;
@@ -1398,7 +1399,7 @@ TEST_F (PopupMenuTest, QualifiedDeclarationsAndLiveRestylePropagateToPopupAndSub
     trigger.setBounds (10, 10, 80, 24);
     toolbar.addAndMakeVisible (trigger);
 
-    auto sheet = StyleSheet::parse (R"(
+    auto sheet = YuiParser::parseStyleSheet (R"(
         style {
             .toolbar {
                 PopupMenu.backgroundColor: #224466;

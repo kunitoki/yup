@@ -1034,7 +1034,7 @@ YuiAgentResult show (const var& arguments, const YuiAgentHost& host, bool draw)
 
 YuiAgentResult describeSchema (const var& arguments)
 {
-    registerBuiltInComponentTypes();
+    registerYuiComponentTypes();
 
     const auto types = ComponentTypeRegistry::getInstance().getRegisteredTypes();
     const auto typeName = arguments["type"].toString();

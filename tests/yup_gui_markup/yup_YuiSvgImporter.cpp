@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -838,7 +838,7 @@ TEST_F (YuiSvgImporterTests, EverythingItWritesCompilesAndIsReadBackFromItsText)
 
     // The text of the drawing is the drawing again
     const auto parsed = YuiParser::parse (imported.toText());
-    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics) << "\n"
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics) << "\n"
                                  << imported.toText();
 
     const auto drawing = parsed.document.getChildWithName ("drawing");
@@ -899,7 +899,7 @@ TEST_F (YuiSvgImporterTests, ColorsBecomePropertiesWhenAsked)
     EXPECT_TRUE (properties[0].type == ComponentProperty::Type::color);
 
     const auto parsed = YuiParser::parse (imported.toText());
-    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics) << "\n"
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics) << "\n"
                                  << imported.toText();
     EXPECT_TRUE (parsed.document.getChildWithName ("drawing").isEquivalentTo (imported.drawing)) << imported.toText();
 }

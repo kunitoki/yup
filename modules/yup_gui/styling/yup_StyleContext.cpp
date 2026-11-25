@@ -253,7 +253,7 @@ struct StyleContext::ShaderEntry
 {
     Shader loaded;
     std::vector<StyleSheet::Declaration> defaults;
-    std::vector<YuiDiagnostic> problems;
+    std::vector<DataTreeDiagnostic> problems;
 
     // Set when a file of the shader changed, for the next restyle to load it again
     bool isStale = false;
@@ -903,7 +903,7 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
             report ({
                 .message = "Undeclared property '" + name.toString() + "' on " + typeInfo.getTypeName().toString(),
                 .element = declaration.element,
-                .severity = YuiDiagnostic::Severity::warning
+                .severity = DataTreeDiagnostic::Severity::warning
             });
         }
 
@@ -1186,7 +1186,7 @@ const DrawingStyle* StyleContext::installDrawing (Component& component, Componen
         return styleSheet != nullptr ? styleSheet->findDrawing (drawingName) : DataTree();
     };
 
-    YuiDiagnostic failure;
+    DataTreeDiagnostic failure;
     auto created = DrawingStyle::create (component, drawing, componentResolver, &failure, findDrawing, bindFront (&StyleContext::findDrawingShader, this));
 
     if (created.failed())
@@ -1294,7 +1294,7 @@ const DrawingStyle* StyleContext::attachDrawingShaders (Component& component, co
     if (! holdsOtherShaders (drawing))
         return &drawing;
 
-    YuiDiagnostic failure;
+    DataTreeDiagnostic failure;
     const auto remade = drawing.createWithShaders (bindFront (&StyleContext::findDrawingShader, this), &failure);
 
     if (remade.failed())
@@ -1509,7 +1509,7 @@ bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
     entry.isStale = false;
     entry.reportsAgain = false;
 
-    const auto fail = [this, &entry] (YuiDiagnostic problem)
+    const auto fail = [this, &entry] (DataTreeDiagnostic problem)
     {
         report (problem);
         entry.problems.push_back (std::move (problem));
@@ -1520,11 +1520,11 @@ bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
     const auto path = block.getProperty ("fragment").toString();
     const auto bundlePath = getShaderBundlePath (path);
 
-    auto bytes = YuiDocument::readAssetFor (&root, bundlePath);
+    auto bytes = ComponentDocument::readAssetFor (&root, bundlePath);
     const bool hasBundle = bytes.has_value();
 
     if (! hasBundle)
-        bytes = YuiDocument::readAssetFor (&root, path);
+        bytes = ComponentDocument::readAssetFor (&root, path);
 
     if (! bytes.has_value())
     {
@@ -2334,7 +2334,7 @@ void StyleContext::invalidateDependencies (const Component& sourceComponent, con
     }
 }
 
-void StyleContext::report (const YuiDiagnostic& diagnostic)
+void StyleContext::report (const DataTreeDiagnostic& diagnostic)
 {
     diagnostics.push_back (diagnostic);
 

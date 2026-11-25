@@ -149,7 +149,8 @@ shader that does not compile does, instead of being missing when the
 application runs.
 
 The tool is built for the host into the build tree the first time, which takes
-as long as building `yup_gui`, `yup_renderer` and the shader compiler. See the
+as long as building `yup_gui`, `yup_gui_markup`, `yup_renderer` and the shader
+compiler. See the
 [CMake API](../../build-system/cmake-api.md#yup_add_yui_resources).
 
 The same check is available on the command line:
@@ -706,7 +707,7 @@ cross-origin isolated, which the webview of an editor is.
 
 ## VS Code
 
-The `vscode-yui` extension in `modules/yup_gui/tools/vscode-yui` adds `.yui`
+The `vscode-yui` extension in `modules/yup_gui_markup/tools/vscode-yui` adds `.yui`
 support to VS Code:
 
 - syntax highlighting, `shader` blocks included, and snippets, among them

@@ -126,7 +126,7 @@ TEST_F (SceneMaterialShaderMetalTests, AMaterialShowsTheColorItsPropertyGivesIts
         // The frame of the scene compiles the material and gives it the default of the block
         auto image = paintFrame (*view);
         ASSERT_TRUE (image.isValid());
-        ASSERT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+        ASSERT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
         EXPECT_EQ (leadingChannel (image, 16, 16), "r");
 
         // Another color shows by the frames that follow, which start accumulating over

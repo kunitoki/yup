@@ -6,8 +6,8 @@ does for who installs it is told by the [README](README.md).
 ## From source
 
 1. Package the tool once, from the repository root: `just yui_tool_wasm`, then
-   `sh modules/yup_gui/tools/vscode-yui/tools/package-tool.sh`.
-2. Open this folder (`modules/yup_gui/tools/vscode-yui`) in VSCode.
+   `sh modules/yup_gui_markup/tools/vscode-yui/tools/package-tool.sh`.
+2. Open this folder (`modules/yup_gui_markup/tools/vscode-yui`) in VSCode.
 3. Press <kbd>F5</kbd> - a new Extension Development Host window opens with the
    extension loaded.
 
@@ -28,7 +28,7 @@ Or manually:
 
 ```sh
 just yui_tool_wasm
-cd modules/yup_gui/tools/vscode-yui
+cd modules/yup_gui_markup/tools/vscode-yui
 sh tools/package-tool.sh
 npm install
 npm run compile

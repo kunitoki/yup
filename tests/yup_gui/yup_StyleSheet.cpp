@@ -20,6 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -180,7 +181,7 @@ TEST_F (StyleSheetTests, CollectsWatchedProperties)
 
 TEST_F (StyleSheetTests, ParsesWholeDocuments)
 {
-    auto sheet = StyleSheet::parse (R"yui(
+    auto sheet = YuiParser::parseStyleSheet (R"yui(
         palette Ember { colors: "#100b00-#85cb33-#efffc8-#a5cbc3-#3b341f"; accent: #ff9a1f; }
         drawing Knob { circle { center: bounds.center; radius: 4; fill: thumbColor; } }
         style {
@@ -200,7 +201,7 @@ TEST_F (StyleSheetTests, ParsesWholeDocuments)
 
 TEST_F (StyleSheetTests, FindsTheShadersOfADocumentAndTypesTheirProperties)
 {
-    auto sheet = StyleSheet::parse (R"yui(
+    auto sheet = YuiParser::parseStyleSheet (R"yui(
         shader Crt {
             fragment: "fx/crt.frag";
             property intensity: number = 0.5;
@@ -254,7 +255,7 @@ TEST_F (StyleSheetTests, ReportsTheShadersThatAreInvalid)
         const auto parsed = YuiParser::parse (text);
         EXPECT_TRUE (parsed.wasOk()) << text;
 
-        YuiDiagnostic failure;
+        DataTreeDiagnostic failure;
         EXPECT_TRUE (StyleSheet::fromTree (parsed.document, &failure).failed()) << text;
         return parsed.sourceMap.locate (failure).toString();
     };
@@ -271,7 +272,7 @@ TEST_F (StyleSheetTests, ReportsTheShadersThatAreInvalid)
     EXPECT_EQ (locate ("shader Crt { fragment: \"a.frag\"; }\ndrawing Crt { }"), "1:1: The shader 'Crt' has the same name as a drawing");
 
     // The parser always gives a shader its name, a tree made by hand may not
-    YuiDiagnostic failure;
+    DataTreeDiagnostic failure;
     EXPECT_TRUE (StyleSheet::fromTree (DataTree ("yui", { DataTree ("shader", { { "fragment", "a.frag" } }) }), &failure).failed());
     EXPECT_EQ (failure.message, "A shader block needs a name");
     EXPECT_EQ (failure.element.getType(), Identifier ("shader"));
@@ -295,7 +296,7 @@ TEST_F (StyleSheetTests, ReportsTheElementOfTheFirstProblem)
         const auto parsed = YuiParser::parse (text);
         EXPECT_TRUE (parsed.wasOk());
 
-        YuiDiagnostic failure;
+        DataTreeDiagnostic failure;
         EXPECT_TRUE (StyleSheet::fromTree (parsed.document, &failure).failed());
         return parsed.sourceMap.locate (failure).toString();
     };
@@ -306,7 +307,7 @@ TEST_F (StyleSheetTests, ReportsTheElementOfTheFirstProblem)
     EXPECT_EQ (locate ("palette P { colors: \"#100b00-#85cb33\"; }\npalette P { colors: \"#efffc8-#85cb33\"; }"), "2:1: The palette 'P' already has a dark version");
     EXPECT_EQ (locate ("style {\n  Slider::before { opacity: 1; }\n}"), "2:3: Pseudo-elements are not supported in selector 'Slider::before'");
 
-    YuiDiagnostic failure;
+    DataTreeDiagnostic failure;
     EXPECT_TRUE (StyleSheet::fromTree (DataTree ("style", { DataTree ("keyframes") }), &failure).failed());
     EXPECT_EQ (failure.element.getType(), Identifier ("keyframes"));
 
@@ -317,7 +318,7 @@ TEST_F (StyleSheetTests, ReportsTheElementOfTheFirstProblem)
 
 TEST_F (StyleSheetTests, KeepsTheElementsOfDeclarationsInTheirDocument)
 {
-    auto sheet = StyleSheet::parse ("style {\n  Slider { opacity: 0.5; }\n}");
+    auto sheet = YuiParser::parseStyleSheet ("style {\n  Slider { opacity: 0.5; }\n}");
     ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
 
     const auto& element = sheet.getReference()->getRules().front().declarations.front().element;
@@ -327,7 +328,7 @@ TEST_F (StyleSheetTests, KeepsTheElementsOfDeclarationsInTheirDocument)
 
 TEST_F (StyleSheetTests, ExpandsCommaSeparatedSelectorBlocksWithPerBranchSpecificity)
 {
-    auto sheet = StyleSheet::parse (R"yui(
+    auto sheet = YuiParser::parseStyleSheet (R"yui(
         style {
             TextButton,
             ComboBox:open {

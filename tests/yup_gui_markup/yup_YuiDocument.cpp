@@ -19,9 +19,11 @@
   ==============================================================================
 */
 
-#include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
+
+#include "yup_YuiTestHelpers.h"
 
 using namespace yup;
 
@@ -90,7 +92,7 @@ TEST_F (YuiDocumentTests, LoadsTheInterfaceAndAttachesItsStyleSheet)
         })yui");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_TRUE (document.getTree().isValid());
 
     auto* root = document.getRoot();
@@ -118,7 +120,7 @@ TEST_F (YuiDocumentTests, CachesToTextureTheComponentsAnElementOrAStyleRuleAsksT
         })yui");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* plate = document.findById ("plate");
     ASSERT_NE (plate, nullptr);
@@ -152,7 +154,7 @@ TEST_F (YuiDocumentTests, APaletteWithADarkAndALightVersionFollowsTheTheme)
         })yui");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto& context = *document.getRoot()->getStyleContext();
     const auto* inStyled = document.findById ("inStyled");
@@ -201,7 +203,7 @@ TEST_F (YuiDocumentTests, ARepeatOfComponentsFollowsItsModelAndKeepsTheStyles)
         })yui");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
     ASSERT_EQ (document.findById ("row")->getNumChildComponents(), 2);
 
     const auto sheet = document.getRoot()->getStyleSheet();
@@ -211,7 +213,7 @@ TEST_F (YuiDocumentTests, ARepeatOfComponentsFollowsItsModelAndKeepsTheStyles)
 
     auto* row = document.findById ("row");
     ASSERT_EQ (row->getNumChildComponents(), 3);
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     // The document is as it was, so its stylesheet is kept and what it runs goes on
     EXPECT_EQ (document.getRoot()->getStyleSheet(), sheet);
@@ -430,7 +432,7 @@ TEST_F (YuiDocumentTests, ReportsWhereTheProblemsOfALoadAreWritten)
     {
         void documentLoaded (YuiDocument& document, const Result& result) override {}
 
-        void documentDiagnosed (YuiDocument& document, const YuiDiagnostic& diagnostic) override
+        void documentDiagnosed (YuiDocument& document, const DataTreeDiagnostic& diagnostic) override
         {
             diagnosed.add (diagnostic.toString());
         }
@@ -450,7 +452,7 @@ TEST_F (YuiDocumentTests, ReportsWhereTheProblemsOfALoadAreWritten)
                                                  "}");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    ASSERT_EQ (document.getDiagnostics().size(), 2u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 2u) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_TRUE (document.getDiagnostics()[0].toString().startsWith ("5:29: Slider.value: "));
     EXPECT_EQ (document.getDiagnostics()[1].toString(), "2:13: Unknown cursor 'finger'");
 
@@ -478,7 +480,7 @@ TEST_F (YuiDocumentTests, TellsListenersAboutStyleProblemsMetLater)
     {
         void documentLoaded (YuiDocument& document, const Result& result) override {}
 
-        void documentDiagnosed (YuiDocument& document, const YuiDiagnostic& diagnostic) override
+        void documentDiagnosed (YuiDocument& document, const DataTreeDiagnostic& diagnostic) override
         {
             diagnosed.add (diagnostic.toString());
             counts.add (static_cast<int> (document.getDiagnostics().size()));
@@ -599,7 +601,7 @@ TEST_F (YuiDocumentTests, BoundEnabledHoldsUnderAnAncestorEnabledByALaterSibling
         })yui");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* deck = document.findById ("deck");
     auto* section = document.findById ("section");
@@ -650,7 +652,7 @@ TEST_F (YuiDocumentTests, UndoesTheGesturesMadeOnACompositeLinkedToAModel)
         Row { LabeledKnob { id: cutoff; value <=> params.cutoff; } })yui");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* cutoff = document.findById ("cutoff");
     ASSERT_NE (cutoff, nullptr);
@@ -658,10 +660,10 @@ TEST_F (YuiDocumentTests, UndoesTheGesturesMadeOnACompositeLinkedToAModel)
     ASSERT_NE (knob, nullptr);
     EXPECT_FLOAT_EQ (static_cast<float> (knob->getValue()), 0.4f);
 
-    ComponentTestHelper<Slider>::triggerMouseDown (*knob, MouseEvent {});
+    ComponentTestHelper<YuiBuilder>::triggerMouseDown (*knob, MouseEvent {});
     knob->setValue (0.6);
     knob->setValue (0.8);
-    ComponentTestHelper<Slider>::triggerMouseUp (*knob, MouseEvent {});
+    ComponentTestHelper<YuiBuilder>::triggerMouseUp (*knob, MouseEvent {});
 
     EXPECT_FLOAT_EQ (static_cast<float> (params.getProperty ("cutoff")), 0.8f);
     EXPECT_EQ (undoManager.getNumTransactions(), 1);
@@ -681,7 +683,7 @@ TEST_F (YuiDocumentTests, ClearNotifiesListenersAndFailedLoadClearsStaleSourceMa
             roots.add (doc.getRoot());
         }
 
-        void documentDiagnosed (YuiDocument&, const YuiDiagnostic& diagnostic) override
+        void documentDiagnosed (YuiDocument&, const DataTreeDiagnostic& diagnostic) override
         {
             lateDiagnostics.add (diagnostic.toString());
         }
@@ -739,7 +741,7 @@ TEST_F (YuiDocumentTests, DrawingsReadBindingProviderModelsDirectly)
         })yui");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     params.beginTransaction().setProperty ("cutoff", 0.9);
     EXPECT_TRUE (document.getDiagnostics().empty());
@@ -759,7 +761,7 @@ TEST_F (YuiDocumentTests, ReportsBindingCyclesDuringLoadAndAtRuntimeWithSourceLo
                                                      "}");
 
         ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-        ASSERT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+        ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
         EXPECT_TRUE (document.getDiagnostics().front().line == 2 || document.getDiagnostics().front().line == 3);
         EXPECT_TRUE (document.getDiagnostics().front().toString().contains ("Binding cycle detected"));
     }
@@ -768,7 +770,7 @@ TEST_F (YuiDocumentTests, ReportsBindingCyclesDuringLoadAndAtRuntimeWithSourceLo
     {
         void documentLoaded (YuiDocument&, const Result&) override {}
 
-        void documentDiagnosed (YuiDocument&, const YuiDiagnostic& diagnostic) override
+        void documentDiagnosed (YuiDocument&, const DataTreeDiagnostic& diagnostic) override
         {
             diagnosed.add (diagnostic.toString());
         }
@@ -787,7 +789,7 @@ TEST_F (YuiDocumentTests, ReportsBindingCyclesDuringLoadAndAtRuntimeWithSourceLo
                                                  "}");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* gate = document.findById<ToggleButton> ("gate");
     ASSERT_NE (gate, nullptr);
@@ -845,7 +847,7 @@ TEST_F (YuiDocumentTests, ValidatesDocumentTreesAgainstSchemaAndReportsLocations
 
     EXPECT_TRUE (schema->validate (brokenDoc).failed());
 
-    YuiSourceMap map;
+    DataTreeSourceMap map;
     map.add (badRule, {}, 7, 5, "broken.yui");
 
     const auto badLoad = document.load (brokenDoc, map);
@@ -906,7 +908,7 @@ TEST_F (YuiDocumentTests, ADrawingTakesArraysForTheValuesNumbersMake)
         })yui");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* painted = document.findById ("painted");
     auto* style = painted != nullptr ? dynamic_cast<DrawingStyle*> (painted->getStyle().get()) : nullptr;
@@ -1005,7 +1007,7 @@ TEST_F (YuiDocumentTests, AnElementLosesTheDrawingItCantSelectAnymore)
 
         // What prevents the drawing is told once, by the build
         const auto& diagnostics = document.getDiagnostics();
-        ASSERT_EQ (diagnostics.size(), problem.isEmpty() ? 0u : 1u) << YuiDiagnostic::join (diagnostics);
+        ASSERT_EQ (diagnostics.size(), problem.isEmpty() ? 0u : 1u) << DataTreeDiagnostic::join (diagnostics);
 
         if (problem.isNotEmpty())
             EXPECT_TRUE (diagnostics.front().message.startsWith (problem)) << diagnostics.front().message;
@@ -1048,7 +1050,7 @@ TEST_F (YuiDocumentTests, LoadingTheDocumentThatIsLoadedIsNoStepToUndo)
 
     ASSERT_TRUE (document.loadFromString (broken).wasOk());
     ASSERT_TRUE (document.loadFromString (fixed).wasOk());
-    ASSERT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     document.getBuilder().onDiagnostic ({ .message = "told since the load" });
     ASSERT_EQ (document.getDiagnostics().size(), 2u);
@@ -1060,7 +1062,7 @@ TEST_F (YuiDocumentTests, LoadingTheDocumentThatIsLoadedIsNoStepToUndo)
     ASSERT_TRUE (document.loadFromString (fixed).wasOk());
     EXPECT_EQ (recorder.loads, 3);
     EXPECT_EQ (undoManager.getNumTransactions(), numTransactions);
-    ASSERT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_EQ (document.getDiagnostics().front().message, "Unknown cursor 'finger'");
 
     // So one step back is the text before
@@ -1112,13 +1114,13 @@ TEST_F (YuiDocumentTests, ARangeChangeKeepsTheProblemsTheBuilderDidNotTell)
     {
         const auto& diagnostics = document.getDiagnostics();
 
-        return std::count_if (diagnostics.begin(), diagnostics.end(), [&start] (const YuiDiagnostic& diagnostic)
+        return std::count_if (diagnostics.begin(), diagnostics.end(), [&start] (const DataTreeDiagnostic& diagnostic)
         {
             return diagnostic.message.startsWith (start);
         });
     };
 
-    ASSERT_EQ (document.getDiagnostics().size(), 3u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 3u) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_EQ (countOf ("Slider.value: "), 1);
     EXPECT_EQ (countOf ("Unknown cursor 'finger'"), 1);
     EXPECT_EQ (countOf ("Model3D.source: "), 1);
@@ -1128,7 +1130,7 @@ TEST_F (YuiDocumentTests, ARangeChangeKeepsTheProblemsTheBuilderDidNotTell)
     document.applyPendingChanges();
 
     ASSERT_EQ (document.findById ("row")->getNumChildComponents(), 0);
-    EXPECT_EQ (document.getDiagnostics().size(), 2u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 2u) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_EQ (countOf ("Unknown cursor 'finger'"), 1);
     EXPECT_EQ (countOf ("Model3D.source: "), 1);
 
@@ -1136,7 +1138,7 @@ TEST_F (YuiDocumentTests, ARangeChangeKeepsTheProblemsTheBuilderDidNotTell)
     tree.beginTransaction().setProperty ("length", 2);
     document.applyPendingChanges();
 
-    EXPECT_EQ (document.getDiagnostics().size(), 3u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 3u) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_EQ (countOf ("Slider.value: "), 1);
 }
 
@@ -1151,7 +1153,7 @@ TEST_F (YuiDocumentTests, RepeatsInsideOneAnotherShareTheTurnsARepeatRuns)
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
     EXPECT_EQ (document.findById ("grid")->getNumChildComponents(), 1024);
-    EXPECT_TRUE (YuiDiagnostic::join (document.getDiagnostics()).contains ("A repeat runs at most 16 times")) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (DataTreeDiagnostic::join (document.getDiagnostics()).contains ("A repeat runs at most 16 times")) << DataTreeDiagnostic::join (document.getDiagnostics());
 }
 
 TEST_F (YuiDocumentTests, ARepeatStillFollowsItsModelAfterALoadThatFailed)
@@ -1328,6 +1330,73 @@ TEST_F (YuiDocumentTests, ReadsTheAssetsOfAComponentThroughItsDocument)
     EXPECT_FALSE (YuiDocument::readAssetFor (nullptr, String()).has_value());
 }
 
+TEST_F (YuiDocumentTests, ListsTheProblemsItsComponentsReportWhereTheyAreWritten)
+{
+    YuiDocument document;
+    ASSERT_TRUE (document.loadFromString ("Component {\n    Slider { id: knob; }\n}").wasOk());
+
+    auto* knob = document.findById ("knob");
+    ASSERT_NE (knob, nullptr);
+
+    // A component finds its document and reports through it, with no element of its own to give
+    auto* found = ComponentDocument::findFor (knob);
+    ASSERT_EQ (found, static_cast<ComponentDocument*> (&document));
+
+    found->reportDiagnostic ({ .message = "Slider.value: out of range", .property = "value" }, knob);
+    found->reportDiagnostic ({ .message = "Looks odd", .severity = DataTreeDiagnostic::Severity::warning });
+
+    ASSERT_EQ (document.getDiagnostics().size(), 2u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics()[0].toString(), "2:5: Slider.value: out of range");
+    EXPECT_EQ (document.getDiagnostics()[1].toString(), "warning: Looks odd");
+}
+
+TEST_F (YuiDocumentTests, TellsTheListenersOfItsComponentsAfterItsOwn)
+{
+    struct Own final : YuiDocument::Listener
+    {
+        explicit Own (StringArray& callsToAddTo)
+            : calls (callsToAddTo)
+        {
+        }
+
+        void documentLoaded (YuiDocument&, const Result&) override { calls.add ("own loaded"); }
+
+        void documentAssetChanged (YuiDocument&, const String& path) override { calls.add ("own " + path); }
+
+        StringArray& calls;
+    };
+
+    struct OfComponent final : ComponentDocument::Listener
+    {
+        explicit OfComponent (StringArray& callsToAddTo)
+            : calls (callsToAddTo)
+        {
+        }
+
+        void documentLoaded (ComponentDocument&) override { calls.add ("component loaded"); }
+
+        void documentAssetChanged (ComponentDocument&, const String& path) override { calls.add ("component " + path); }
+
+        StringArray& calls;
+    };
+
+    StringArray calls;
+    Own own (calls);
+    OfComponent ofComponent (calls);
+
+    YuiDocument document;
+    document.addListener (&ofComponent);
+    document.addListener (&own);
+
+    ASSERT_TRUE (document.loadFromString ("Component { }").wasOk());
+    document.notifyAssetChanged ("fx/crt.frag");
+
+    EXPECT_EQ (calls.joinIntoString (", "), "own loaded, component loaded, own fx/crt.frag, component fx/crt.frag");
+
+    document.removeListener (&own);
+    document.removeListener (&ofComponent);
+}
+
 TEST_F (YuiDocumentTests, TellsListenersAboutTheAssetsThatChanged)
 {
     struct Recorder final : YuiDocument::Listener
@@ -1371,7 +1440,7 @@ TEST_F (YuiDocumentTests, LoadsShadersAndMakesTheStyleSheetAgainWhenOneChanges)
     const auto result = document.loadFromString (crt ("0.5") + rest);
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     const auto sheet = document.getStyleSheet();
     ASSERT_NE (sheet, nullptr);
@@ -1450,7 +1519,7 @@ TEST_F (YuiDocumentTests, AFilterTakesTheShadersItRunsAndWritesThemBack)
     EXPECT_TRUE (schema->getChildConstraints (Identifier ("filter")).allowedTypes.contains ("use"));
 
     const auto parsed = YuiParser::parse (text);
-    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
     const auto filter = parsed.document.getChildWithName ("drawing").getChildWithName ("layer").getChildWithName ("filter");
     ASSERT_EQ (filter.getNumChildren(), 2);
@@ -1474,7 +1543,7 @@ TEST_F (YuiDocumentTests, AFilterTakesTheShadersItRunsAndWritesThemBack)
     const auto result = document.loadFromString (text);
 
     EXPECT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 }
 
 

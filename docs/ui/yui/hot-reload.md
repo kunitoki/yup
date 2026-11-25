@@ -142,6 +142,7 @@ yup_standalone_app (
     # ...
     MODULES
         yup::yup_gui
+        yup::yup_gui_markup
         MyAppUi)
 ```
 

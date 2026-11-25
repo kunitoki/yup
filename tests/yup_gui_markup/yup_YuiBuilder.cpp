@@ -19,9 +19,11 @@
   ==============================================================================
 */
 
-#include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
+
+#include "yup_YuiTestHelpers.h"
 
 using namespace yup;
 
@@ -53,7 +55,7 @@ protected:
     static StringArray buildAndLocate (const String& text, bool shouldBuild)
     {
         const auto parsed = YuiParser::parse (text);
-        EXPECT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+        EXPECT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
         YuiBuilder builder;
         EXPECT_EQ (builder.build (parsed.document).wasOk(), shouldBuild) << text;
@@ -122,7 +124,7 @@ TEST_F (YuiBuilderTests, BuildsTheComponentTree)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* root = builder.getRoot();
     ASSERT_NE (root, nullptr);
@@ -259,7 +261,7 @@ TEST_F (YuiBuilderTests, LinksTwoPropertiesBothWays)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* follower = builder.findById<Slider> ("follower");
     auto* knob = builder.findById<Slider> ("knob");
@@ -289,7 +291,7 @@ TEST_F (YuiBuilderTests, AppliesValuesInTheOrderTheTypeDeclaresThem)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* constant = builder.findById<Slider> ("constant");
     ASSERT_NE (constant, nullptr);
@@ -454,7 +456,7 @@ TEST_F (YuiBuilderTests, BuildsALayoutContainerThatPositionsItsChildren)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* left = builder.findById ("left");
     auto* right = builder.findById ("right");
@@ -476,7 +478,7 @@ TEST_F (YuiBuilderTests, KeepsPropertiesUpToDateWithBindings)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* knob = builder.findById<Slider> ("knob");
     auto* follower = builder.findById<Slider> ("follower");
@@ -500,7 +502,7 @@ TEST_F (YuiBuilderTests, ResolvesAnElementDeclaredLater)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* follower = builder.findById<Slider> ("follower");
     ASSERT_NE (follower, nullptr);
@@ -518,7 +520,7 @@ TEST_F (YuiBuilderTests, FollowsTheInteractionStatesOfAnotherElement)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* volume = builder.findById<Slider> ("volume");
     auto* readout = builder.findById<Label> ("readout");
@@ -526,10 +528,10 @@ TEST_F (YuiBuilderTests, FollowsTheInteractionStatesOfAnotherElement)
     ASSERT_NE (readout, nullptr);
     EXPECT_NEAR (readout->getOpacity(), 0.5f, 0.01f);
 
-    ComponentTestHelper<Slider>::triggerMouseDown (*volume, MouseEvent {});
+    ComponentTestHelper<YuiBuilder>::triggerMouseDown (*volume, MouseEvent {});
     EXPECT_NEAR (readout->getOpacity(), 1.0f, 0.01f);
 
-    ComponentTestHelper<Slider>::triggerMouseUp (*volume, MouseEvent {});
+    ComponentTestHelper<YuiBuilder>::triggerMouseUp (*volume, MouseEvent {});
     EXPECT_NEAR (readout->getOpacity(), 0.5f, 0.01f);
 }
 
@@ -550,7 +552,7 @@ TEST_F (YuiBuilderTests, RepeatsComponentsWithTheirIndex)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* row = builder.findById ("row");
     ASSERT_NE (row, nullptr);
@@ -585,7 +587,7 @@ TEST_F (YuiBuilderTests, ARepeatInsideARepeatReadsTheIndexAroundIt)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* grid = builder.findById ("grid");
     StringArray texts;
@@ -668,7 +670,7 @@ TEST_F (YuiBuilderTests, ARepeatFollowsTheModelItsRangeReads)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* row = builder.findById ("row");
     ASSERT_EQ (row->getNumChildComponents(), 2);
@@ -702,7 +704,7 @@ TEST_F (YuiBuilderTests, ARepeatFollowsTheModelItsRangeReads)
     tree.beginTransaction().setProperty ("length", 1);
     builder.applyPendingChanges();
     EXPECT_EQ (builder.findById ("row")->getNumChildComponents(), 1);
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     // With nothing changed there is nothing to apply
     builder.applyPendingChanges();
@@ -779,7 +781,7 @@ TEST_F (YuiBuilderTests, ARepeatWorksInTheBodyOfADeclaredComponent)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
     EXPECT_EQ (builder.findById ("three")->getNumChildComponents(), 3);
     EXPECT_EQ (builder.findById ("five")->getNumChildComponents(), 5);
 }
@@ -801,7 +803,7 @@ TEST_F (YuiBuilderTests, AnIntegerPropertyTakesTheNumberOfAModel)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     // The numbers of a model are never integers by type
     auto* button = builder.findById<ToggleButton> ("button");
@@ -824,7 +826,7 @@ TEST_F (YuiBuilderTests, ButtonsOfARadioGroupAreExclusive)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* lfo = builder.findById<ToggleButton> ("lfo");
     auto* step = builder.findById<ToggleButton> ("step");
@@ -849,7 +851,7 @@ TEST_F (YuiBuilderTests, SetsThePaintMarginOfAComponent)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     EXPECT_EQ (builder.findById ("glow")->getPaintMargin(), EdgeSpacing<float> (12.0f));
     EXPECT_EQ (builder.findById ("sides")->getPaintMargin(), EdgeSpacing<float> (6.0f, 0.0f, 6.0f, 0.0f));
@@ -912,7 +914,7 @@ TEST_F (YuiBuilderTests, RunsAnActionWhenASignalIsEmitted)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* go = builder.findById<TextButton> ("go");
     auto* knob = builder.findById<Slider> ("knob");
@@ -946,7 +948,7 @@ TEST_F (YuiBuilderTests, ReportsHandlersThatArentCalls)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_EQ (builder.getDiagnostics().size(), 3u) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_EQ (builder.getDiagnostics().size(), 3u) << DataTreeDiagnostic::join (builder.getDiagnostics());
 }
 
 TEST_F (YuiBuilderTests, NamesTheArgumentsOfASignalInItsHandler)
@@ -968,7 +970,7 @@ TEST_F (YuiBuilderTests, NamesTheArgumentsOfASignalInItsHandler)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     // A named argument hides the property of the same name
     builder.findById<Slider> ("knob")->setValue (0.25);
@@ -1015,7 +1017,7 @@ TEST_F (YuiBuilderTests, RunsTheCallsOfAHandlerBlockInOrder)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     dynamic_cast<TextButton*> (builder.findById ("panel")->getChildComponent (0))->onClick();
     builder.findById<TextButton> ("idle")->onClick();
@@ -1040,7 +1042,7 @@ TEST_F (YuiBuilderTests, RunsChangedHandlersWhenTheirPropertyChanges)
     // Building again replaces the handlers instead of adding to them
     ASSERT_TRUE (builder.build (document).wasOk());
     ASSERT_TRUE (builder.build (document).wasOk());
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* knob = builder.findById<Slider> ("knob");
     auto* caption = builder.findById<Label> ("caption");
@@ -1100,7 +1102,7 @@ TEST_F (YuiBuilderTests, UnescapesActionNamesThroughExpressionAst)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* button = builder.findById<TextButton> ("button");
     ASSERT_NE (button, nullptr);
@@ -1137,7 +1139,7 @@ TEST_F (YuiBuilderTests, InstantiatesADeclaredComponent)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* cutoff = builder.findById ("cutoff");
     ASSERT_NE (dynamic_cast<ColumnComponent*> (cutoff), nullptr);
@@ -1201,7 +1203,7 @@ TEST_F (YuiBuilderTests, DeclaresArrayAndPointProperties)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* plain = builder.findById ("plain");
     auto* filled = builder.findById ("filled");
@@ -1251,7 +1253,7 @@ TEST_F (YuiBuilderTests, DeclaresTransformProperties)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     ASSERT_NE (builder.getRoot(), nullptr);
     EXPECT_EQ (builder.getRoot()->getTransform(), AffineTransform::translation (6.0f, 12.0f));
@@ -1290,7 +1292,7 @@ TEST_F (YuiBuilderTests, NestsDeclaredComponents)
         Card { id: card; title: "Filter"; })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* card = builder.getRoot();
     ASSERT_NE (card, nullptr);
@@ -1326,7 +1328,7 @@ TEST_F (YuiBuilderTests, ResolvesTokensFromAnyDescendant)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* root = builder.getRoot();
     auto* caption = builder.findById ("caption");
@@ -1359,7 +1361,7 @@ TEST_F (YuiBuilderTests, LinksPropertiesToAModel)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* knob = builder.findById<Slider> ("knob");
     auto* readout = builder.findById<Label> ("readout");
@@ -1393,7 +1395,7 @@ TEST_F (YuiBuilderTests, ReadsTheArrayPropertiesOfAModel)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* caption = builder.findById<Label> ("caption");
     auto* knob = builder.findById<Slider> ("knob");
@@ -1419,15 +1421,15 @@ TEST_F (YuiBuilderTests, FollowsTheGesturesOfTheComponentsLinkedToAModel)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* knob = builder.findById<Slider> ("knob");
     ASSERT_NE (knob, nullptr);
     EXPECT_FLOAT_EQ (static_cast<float> (knob->getValue()), 0.5f);
 
-    ComponentTestHelper<Slider>::triggerMouseDown (*knob, MouseEvent {});
+    ComponentTestHelper<YuiBuilder>::triggerMouseDown (*knob, MouseEvent {});
     knob->setValue (0.9);
-    ComponentTestHelper<Slider>::triggerMouseUp (*knob, MouseEvent {});
+    ComponentTestHelper<YuiBuilder>::triggerMouseUp (*knob, MouseEvent {});
 
     EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.9f);
     EXPECT_EQ (provider.gestures.joinIntoString (", "), "begin gain, end gain");
@@ -1459,9 +1461,9 @@ TEST_F (YuiBuilderTests, MakesEachChangeOutsideAGestureAGestureOfItsOwn)
     EXPECT_EQ (provider.gestures.joinIntoString (", "), "begin gain, end gain");
 
     provider.gestures.clear();
-    ComponentTestHelper<Slider>::triggerMouseDown (*knob, MouseEvent {});
+    ComponentTestHelper<YuiBuilder>::triggerMouseDown (*knob, MouseEvent {});
     other->setValue (0.3);
-    ComponentTestHelper<Slider>::triggerMouseUp (*knob, MouseEvent {});
+    ComponentTestHelper<YuiBuilder>::triggerMouseUp (*knob, MouseEvent {});
 
     EXPECT_FLOAT_EQ (static_cast<float> (provider.gain), 0.3f);
     EXPECT_EQ (provider.gestures.joinIntoString (", "), "begin gain, end gain");
@@ -1479,7 +1481,7 @@ TEST_F (YuiBuilderTests, PlacesTheChildOfAViewportAsItsContent)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* viewport = builder.findById<Viewport> ("scroller");
     ASSERT_NE (viewport, nullptr);
@@ -1501,7 +1503,7 @@ TEST_F (YuiBuilderTests, TurnsTheChildrenOfATabComponentIntoTabs)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* tabs = builder.findById<TabComponent> ("tabs");
     ASSERT_NE (tabs, nullptr);
@@ -1602,7 +1604,7 @@ TEST_F (YuiBuilderTests, BuildsWindowImageAndAdditionalGuiWidgets)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* window = builder.findById<WindowComponent> ("win");
     ASSERT_NE (window, nullptr);
@@ -1667,7 +1669,7 @@ TEST_F (YuiBuilderTests, SupportsFontAndDrawingPropertiesPlusInstancePaletteAndD
     )yui");
 
     ASSERT_TRUE (builder.build (document).wasOk());
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* panel = builder.findById ("panel");
     ASSERT_NE (panel, nullptr);
@@ -1703,7 +1705,7 @@ TEST_F (YuiBuilderTests, EmitsWarningForUndeclaredInstancePropertiesAndErrorsFor
                      .wasOk());
 
     const auto& diagnostics = builder.getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 3u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 3u) << DataTreeDiagnostic::join (diagnostics);
 
     int warnings = 0;
     int errors = 0;
@@ -1750,7 +1752,7 @@ TEST_F (YuiBuilderTests, SetsThePropertiesAShaderDeclaresOnAComponentWithTheirTy
 
     // Only the property nothing declares is reported
     const auto& diagnostics = builder.getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_TRUE (diagnostics.front().isWarning());
     EXPECT_TRUE (diagnostics.front().message.contains ("sharpness")) << diagnostics.front().message;
 }
@@ -1797,7 +1799,7 @@ TEST_F (YuiBuilderTests, APropertyNamingADrawingTakesTheNameOfAShaderToo)
 
     // A bare name the document declares neither a drawing nor a shader of is reported
     const auto& diagnostics = builder.getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_TRUE (diagnostics.front().isError());
     EXPECT_EQ (diagnostics.front().message, "Tile.look: unknown drawing or shader 'Missing'");
 }
@@ -1862,7 +1864,7 @@ TEST_F (YuiBuilderTests, LiveDataTreeMutationsPatchBuiltComponentsWithoutManualR
 
     YuiBuilder builder;
     ASSERT_TRUE (builder.build (document).wasOk());
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* rootCol = builder.findById ("rootCol");
     auto* knob = builder.findById<Slider> ("knob");
@@ -1931,7 +1933,7 @@ TEST_F (YuiBuilderTests, LoadsFontFilesRelativeToTheBaseDirectory)
         })yui"));
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     const auto titleOf = [&] (const String& id) { return VariantConverter<Font>::fromVar (builder.findById (id)->findProperty (Identifier ("title"))); };
 

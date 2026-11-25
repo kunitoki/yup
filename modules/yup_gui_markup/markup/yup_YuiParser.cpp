@@ -161,7 +161,7 @@ public:
         return document;
     }
 
-    YuiDiagnostic locate (const Error& error) const
+    DataTreeDiagnostic locate (const Error& error) const
     {
         const auto nextLine = std::upper_bound (lineStarts.begin(), lineStarts.end(), error.offset);
         int column = 1;
@@ -174,7 +174,7 @@ public:
     }
 
     /** Returns where each element and property was written, as diagnostics without a message. */
-    const std::vector<YuiDiagnostic>& getPositions() const noexcept { return positions; }
+    const std::vector<DataTreeDiagnostic>& getPositions() const noexcept { return positions; }
 
 private:
     DataTree mark (const DataTree& element, int offset, const Identifier& property = {})
@@ -1009,7 +1009,7 @@ private:
     const String sourceName;
     const char* text;
     std::vector<int> lineStarts;
-    std::vector<YuiDiagnostic> positions;
+    std::vector<DataTreeDiagnostic> positions;
     int position = 0;
     int nestingDepth = 0;
     bool insideDrawing = false;
@@ -1022,7 +1022,7 @@ private:
 struct ParsedText
 {
     YuiParser::ParseResult result;
-    std::vector<YuiDiagnostic> positions;
+    std::vector<DataTreeDiagnostic> positions;
 };
 
 ParsedText parseText (const String& text, const String& sourceName)
@@ -1041,9 +1041,9 @@ ParsedText parseText (const String& text, const String& sourceName)
 }
 
 // Only the positions of elements still in the document are kept, the imports are dropped by the merge
-YuiSourceMap makeSourceMap (const std::vector<YuiDiagnostic>& positions, const DataTree& document)
+DataTreeSourceMap makeSourceMap (const std::vector<DataTreeDiagnostic>& positions, const DataTree& document)
 {
-    YuiSourceMap sourceMap;
+    DataTreeSourceMap sourceMap;
 
     for (const auto& position : positions)
     {
@@ -1075,7 +1075,7 @@ YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolve
     std::vector<DataTree> elements;
     auto positions = std::move (parsed.positions);
 
-    std::function<std::optional<YuiDiagnostic> (const DataTree&, const String&)> collect = [&] (const DataTree& document, const String& currentSource) -> std::optional<YuiDiagnostic>
+    std::function<std::optional<DataTreeDiagnostic> (const DataTree&, const String&)> collect = [&] (const DataTree& document, const String& currentSource) -> std::optional<DataTreeDiagnostic>
     {
         for (const auto& element : document)
         {
@@ -1105,7 +1105,7 @@ YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolve
                 });
 
                 jassert (importPosition != positions.end());
-                return YuiDiagnostic { .message = "Can't import '" + path + "'", .source = importPosition->source, .line = importPosition->line, .column = importPosition->column };
+                return DataTreeDiagnostic { .message = "Can't import '" + path + "'", .source = importPosition->source, .line = importPosition->line, .column = importPosition->column };
             }
 
             auto importedResult = parseText (*importedText, path);
@@ -1134,6 +1134,16 @@ YuiParser::ParseResult YuiParser::parse (const String& text, const ImportResolve
 
     transaction.commit();
     return { .document = merged, .sourceMap = makeSourceMap (positions, merged) };
+}
+
+ResultValue<StyleSheet::Ptr> YuiParser::parseStyleSheet (const String& text)
+{
+    const auto parsed = parse (text);
+
+    if (! parsed.wasOk())
+        return makeResultValueFail (parsed.diagnostics.front().toString());
+
+    return StyleSheet::fromTree (parsed.document);
 }
 
 } // namespace yup

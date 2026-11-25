@@ -464,7 +464,7 @@ TEST_F (SceneModelComponentTests, ANameTheModelDoesNotHaveIsReported)
     expectDiagnostic (document, "Node3D.node: the model has no entity 'Lid/Body'");
     expectDiagnostic (document, "Node3D.node: a node is bound to an entity of the Model3D it is in");
     expectDiagnostic (document, "Light3D.node: only a Node3D can be bound");
-    EXPECT_EQ (document.getDiagnostics().size(), 4u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 4u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     const auto* diagnostic = findDiagnostic (document, "'Handle'");
     ASSERT_NE (diagnostic, nullptr);
@@ -528,7 +528,7 @@ TEST_F (SceneModelComponentTests, TheModelIsLoadedAgainWhenItsFileChanges)
     files["device.gltf"] = modelFile ("4, 5, 6");
     document.notifyAssetChanged ("device.gltf");
 
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     // Read once more, for the two models that share it
     EXPECT_EQ (reads["device.gltf"], 2);
@@ -571,10 +571,10 @@ TEST_F (SceneModelComponentTests, AFileThatCanNotBeLoadedIsReported)
 
     expectDiagnostic (document, "Model3D.source: the file 'nowhere.gltf' can't be read");
     expectDiagnostic (document, "Model3D.scene: the model has no scene 3");
-    EXPECT_EQ (document.getDiagnostics().size(), 3u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 3u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     // The loader tells what is wrong with the file it was given
-    const auto broken = std::find_if (document.getDiagnostics().begin(), document.getDiagnostics().end(), [] (const YuiDiagnostic& diagnostic)
+    const auto broken = std::find_if (document.getDiagnostics().begin(), document.getDiagnostics().end(), [] (const DataTreeDiagnostic& diagnostic)
     {
         return diagnostic.line == 3;
     });
@@ -656,7 +656,7 @@ TEST_F (SceneModelComponentTests, ChangingTheSourceOrTheSceneInstantiatesAgain)
     EXPECT_TRUE (extra.isValid());
     EXPECT_EQ (model->getInstance(), extra);
 
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 }
 
 TEST_F (SceneModelComponentTests, DestroyingTheModelDestroysItsInstance)
@@ -1144,7 +1144,7 @@ TEST_F (SceneModelComponentTests, AClipIsNamedOrCountedAndOneTheModelDoesNotHave
     expectDiagnostic (document, "Model3D.clip: the model has no clip 'Jump'");
     expectDiagnostic (document, "Model3D.clip: the model has no clip 'Open'");
     expectDiagnostic (document, "Model3D.source: the file 'nowhere.gltf' can't be read");
-    EXPECT_EQ (document.getDiagnostics().size(), 3u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 3u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     const auto* diagnostic = findDiagnostic (document, "'Jump'");
     ASSERT_NE (diagnostic, nullptr);
@@ -1252,7 +1252,7 @@ TEST_F (SceneModelComponentTests, AModelInstantiatedAgainPlaysOnAsItWas)
     robot.view->refreshDisplay (0.25);
     expectPlaying (1.5);
 
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 }
 
 TEST_F (SceneModelComponentTests, ModelsPlayingTogetherUpdateTheirSceneOnceForEachFrame)

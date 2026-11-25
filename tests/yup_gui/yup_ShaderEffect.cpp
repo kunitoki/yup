@@ -20,6 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -435,7 +436,7 @@ TEST_F (ShaderEffectMetalTests, TintsAComponentByAColorFromARuleAnExplicitValueA
     root->addAndMakeVisible (screen);
     root->getStyleContext()->restyleNow();
 
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
     ASSERT_NE (dynamic_cast<ShaderEffect*> (screen.getComponentEffect().get()), nullptr);
 
     // The default of the block

@@ -155,12 +155,12 @@ public:
 
         There is one per value that couldn't be applied, plus the error that made the build fail.
         Each holds the element of the document and the property it is about, which the
-        YuiSourceMap of the parsed document turns into a line and a column.
+        DataTreeSourceMap of the parsed document turns into a line and a column.
     */
-    const std::vector<YuiDiagnostic>& getDiagnostics() const noexcept { return diagnostics; }
+    const std::vector<DataTreeDiagnostic>& getDiagnostics() const noexcept { return diagnostics; }
 
     /** Optional sink notified when a live binding reports a problem after or during build. */
-    std::function<void (const YuiDiagnostic&)> onDiagnostic;
+    std::function<void (const DataTreeDiagnostic&)> onDiagnostic;
 
     /** Optional hook invoked when the built DataTree is mutated in place.
         When null, the builder automatically rebuilds from its watched DataTree.
@@ -384,7 +384,7 @@ private:
     FallbackAction fallbackAction;
     std::map<String, std::unique_ptr<BindingModel>> models;
     BindingGraph bindings;
-    std::vector<YuiDiagnostic> diagnostics;
+    std::vector<DataTreeDiagnostic> diagnostics;
     File baseDirectory;
     bool ignoreTreeChanges = false;
     bool isBuilding = false;
@@ -393,5 +393,17 @@ private:
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YuiBuilder)
 };
+
+//==============================================================================
+/** Registers the component types a `.yui` document can be written with.
+
+    These are the built-in types of yup_gui (see registerBuiltInComponentTypes), and, in the
+    applications linking yup_renderer too, its 3D components: `Scene3D`, `Node3D`, `Camera3D`,
+    `Light3D`, `Mesh3D`, `Model3D` and `Material3D`.
+
+    YuiBuilder calls it, so a document needs no call. It is for the code listing the types
+    before anything is built, such as a schema or a tool.
+*/
+YUP_API void registerYuiComponentTypes();
 
 } // namespace yup

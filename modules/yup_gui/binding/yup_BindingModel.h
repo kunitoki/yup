@@ -42,7 +42,7 @@ namespace yup
     // so expressions like `params.cutoff` read and observe it like any component.
     @endcode
 
-    @see BindingProvider, DataTreeBindingProvider, BindingGraph, DrawingScope, YuiBuilder
+    @see BindingProvider, DataTreeBindingProvider, BindingGraph, DrawingScope
 
     @tags{UI}
 */

@@ -25,7 +25,6 @@ namespace yup
 {
 
 class DependencyObserver;
-struct YuiDiagnostic;
 
 //==============================================================================
 /**
@@ -109,7 +108,7 @@ struct YuiDiagnostic;
     as long as their components resolve every name the drawing reads to the same type.
     The style is bound to the component it was created for: install it on that component only.
 
-    @see DrawingScope, ComponentStyle, ExpressionDrawing, YuiSvgImporter, GpuImageShader, ShaderEffect
+    @see DrawingScope, ComponentStyle, ExpressionDrawing, GpuImageShader, ShaderEffect
 
     @tags{UI}
 */
@@ -170,7 +169,7 @@ public:
     static ResultValue<DrawingStyle::Ptr> create (Component& target,
                                                   const DataTree& drawing,
                                                   DrawingScope::ComponentResolver componentResolver = nullptr,
-                                                  YuiDiagnostic* failure = nullptr,
+                                                  DataTreeDiagnostic* failure = nullptr,
                                                   const DrawingResolver& drawingResolver = nullptr,
                                                   const ShaderResolver& shaderResolver = nullptr);
 
@@ -241,7 +240,7 @@ public:
         @return The new style, or a failure as create() gives one: a drawing may not compile with
                 a shader reading other pictures than the one it was created with.
     */
-    ResultValue<DrawingStyle::Ptr> createWithShaders (const ShaderResolver& shaderResolver, YuiDiagnostic* failure = nullptr) const;
+    ResultValue<DrawingStyle::Ptr> createWithShaders (const ShaderResolver& shaderResolver, DataTreeDiagnostic* failure = nullptr) const;
 
     //==============================================================================
     /** Finds the image a `source` names, or returns nothing for it to be loaded as usual. */

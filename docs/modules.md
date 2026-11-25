@@ -245,6 +245,23 @@ flowchart LR
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
+### yup_gui_markup
+
+[YUI](ui/yui/index.md), the declarative language of `.yui` files: the parser
+and the writer, the builder turning a document into components, `YuiDocument`,
+`YuiLoader` and `YuiView` with hot reload, and the SVG importer. It is opt-in:
+an interface written in C++ needs `yup_gui` only. Link `yup_renderer` next to
+it and a document can write [3D scenes](ui/yui/scenes.md) too.
+
+```mermaid
+flowchart LR
+    yup_gui_markup:::self --> yup_gui
+    yup_gui_markup -. optional .-> yup_renderer:::opt
+    classDef self fill:#005aff,color:#fff,stroke:#003db3;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+    classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
+```
+
 ### yup_audio_gui
 
 Audio-specific GUI components - waveforms, meters, spectrum analyzers, and
@@ -451,7 +468,7 @@ Bindings for driving YUP from scripts. See the [Scripting](scripting/index.md) a
 
 Python bindings for creating and driving YUP applications from scripts. Its only
 hard dependency is `yup_core`; it additionally generates bindings for
-`yup_events`, `yup_expression`, `yup_data_model`, `yup_graphics`, `yup_gui`, `yup_ai`,
+`yup_events`, `yup_expression`, `yup_data_model`, `yup_graphics`, `yup_gui`, `yup_gui_markup`, `yup_ai`,
 `yup_audio_basics`, `yup_audio_devices`, and `yup_audio_processors` when those modules are present in
 the build.
 
@@ -468,6 +485,7 @@ flowchart LR
     yup_python -. optional .-> yup_expression:::opt
     yup_python -. optional .-> yup_graphics:::opt
     yup_python -. optional .-> yup_gui:::opt
+    yup_python -. optional .-> yup_gui_markup:::opt
     classDef self fill:#005aff,color:#fff,stroke:#003db3;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
@@ -504,6 +522,8 @@ flowchart TD
     gui[yup_gui] --> events
     gui --> data
     gui --> graphics
+
+    markup[yup_gui_markup] --> gui
 
     three[yup_3d] --> rhi
     three --> graphics

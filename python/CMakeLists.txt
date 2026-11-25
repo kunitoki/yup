@@ -64,6 +64,7 @@ yup_standalone_app (
         yup::yup_expression
         yup::yup_graphics
         yup::yup_gui
+        yup::yup_gui_markup
         yup::yup_python
         yup::yup_shading
         yup::yup_simd

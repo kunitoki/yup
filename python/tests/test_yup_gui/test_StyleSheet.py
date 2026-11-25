@@ -35,7 +35,7 @@ def style_classes(component):
 # ==============================================================================
 
 def test_parse_builds_a_sheet_from_text():
-    sheet = yup.StyleSheet.parse(SHEET)
+    sheet = yup.YuiParser.parseStyleSheet(SHEET)
 
     assert isinstance(sheet, yup.StyleSheet)
 
@@ -47,7 +47,7 @@ def test_parse_builds_a_sheet_from_text():
 
 
 def test_parse_reads_the_properties_its_selectors_watch():
-    sheet = yup.StyleSheet.parse("""
+    sheet = yup.YuiParser.parseStyleSheet("""
         style {
             TextButton,
             ComboBox:open {
@@ -68,14 +68,14 @@ def test_parse_reads_the_properties_its_selectors_watch():
 
 def test_parse_failure_raises_with_the_syntax_error():
     with pytest.raises(ValueError) as error:
-        yup.StyleSheet.parse("drawing {")
+        yup.YuiParser.parseStyleSheet("drawing {")
 
     assert str(error.value) == "1:10: Expected '}'"
 
 
 def test_parse_failure_raises_with_the_style_error():
     with pytest.raises(ValueError) as error:
-        yup.StyleSheet.parse("style {\n  Slider::before { opacity: 1; }\n}")
+        yup.YuiParser.parseStyleSheet("style {\n  Slider::before { opacity: 1; }\n}")
 
     assert "Pseudo-elements are not supported in selector 'Slider::before'" in str(error.value)
 
@@ -134,7 +134,7 @@ def test_component_has_no_sheet_by_default():
 
 
 def test_sheet_is_attached_and_detached():
-    sheet = yup.StyleSheet.parse(SHEET)
+    sheet = yup.YuiParser.parseStyleSheet(SHEET)
     root = yup.Component()
 
     root.setStyleSheet(sheet)
@@ -149,7 +149,7 @@ def test_sheet_is_attached_to_the_root_only():
     child = yup.Slider(yup.SliderType.LinearHorizontal)
     root.addChildComponent(child)
 
-    root.setStyleSheet(yup.StyleSheet.parse(SHEET))
+    root.setStyleSheet(yup.YuiParser.parseStyleSheet(SHEET))
 
     # The sheet styles everything inside the root, but is only attached to it.
     assert root.getStyleSheet() is not None
@@ -160,13 +160,13 @@ def test_component_keeps_its_sheet_alive():
     root = yup.Component()
 
     # The sheet is reference counted, so it outlives the Python object the call was made with.
-    root.setStyleSheet(yup.StyleSheet.parse(SHEET))
+    root.setStyleSheet(yup.YuiParser.parseStyleSheet(SHEET))
 
     assert root.getStyleSheet().getPaletteNames().contains("Ember")
 
 
 def test_sheet_styles_several_trees():
-    sheet = yup.StyleSheet.parse(SHEET)
+    sheet = yup.YuiParser.parseStyleSheet(SHEET)
     first = yup.Component()
     second = yup.Component()
 

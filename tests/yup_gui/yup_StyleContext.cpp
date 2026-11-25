@@ -20,6 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -70,7 +71,7 @@ protected:
 
     static void attach (Component& root, const String& text)
     {
-        auto sheet = StyleSheet::parse (text);
+        auto sheet = YuiParser::parseStyleSheet (text);
         ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
         root.setStyleSheet (sheet.getReference());
         restyle (root);
@@ -94,7 +95,7 @@ protected:
             if (diagnostic.message.startsWith (prefix))
                 return;
 
-        ADD_FAILURE() << "No diagnostic starting with '" << prefix << "' in: " << YuiDiagnostic::join (diagnostics);
+        ADD_FAILURE() << "No diagnostic starting with '" << prefix << "' in: " << DataTreeDiagnostic::join (diagnostics);
     }
 
     class StyleTestEffect : public ComponentEffect
@@ -507,7 +508,7 @@ TEST_F (StyleContextTests, InstallsAndRestoresDrawings)
 
     const auto previousStyle = child.getStyle();
 
-    auto sheet = StyleSheet::parse (R"yui(
+    auto sheet = YuiParser::parseStyleSheet (R"yui(
         drawing Dot { circle { center: bounds.center; radius: 2; fill: #ff0000; } }
         style { .dot { drawing: Dot; } })yui");
 
@@ -546,7 +547,7 @@ TEST_F (StyleContextTests, TypesTheDeclarationsOfDrawingProperties)
     root.addChildComponent (first);
     root.addChildComponent (second);
 
-    auto sheet = StyleSheet::parse (R"yui(
+    auto sheet = YuiParser::parseStyleSheet (R"yui(
         drawing Dot {
             property dotRadius: number = 2;
             circle { center: bounds.center; radius: dotRadius; fill: #ff0000; }
@@ -764,7 +765,7 @@ style {
     @keyframes bad { from { text: "y"; } to { glow: notAKnownSymbol; } }
 })yui");
 
-    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
     TextButton root ("root");
     Component a ("a");
@@ -774,7 +775,7 @@ style {
     root.setStyleSheet (build (parsed.document));
 
     StringArray reported;
-    root.getStyleContext()->onDiagnostic = [&] (const YuiDiagnostic& diagnostic)
+    root.getStyleContext()->onDiagnostic = [&] (const DataTreeDiagnostic& diagnostic)
     {
         reported.add (parsed.sourceMap.locate (diagnostic).toString());
     };
@@ -811,8 +812,8 @@ TEST_F (StyleContextTests, ReportsDiagnosticsOfRulesMatchingLater)
     Component root ("root");
     attach (root, "style { #root.late { glow: notAKnownSymbol; } }");
 
-    std::vector<YuiDiagnostic> reported;
-    root.getStyleContext()->onDiagnostic = [&] (const YuiDiagnostic& diagnostic)
+    std::vector<DataTreeDiagnostic> reported;
+    root.getStyleContext()->onDiagnostic = [&] (const DataTreeDiagnostic& diagnostic)
     {
         reported.push_back (diagnostic);
     };
@@ -1450,7 +1451,7 @@ TEST_F (StyleContextTests, DeclarationValuesFollowTokensParentsSiblingsAndModels
     panel.addAndMakeVisible (target);
     root.addAndMakeVisible (panel);
 
-    auto sheet = StyleSheet::parse ("style { #target { glow: unit + parent.x + source.value * params.scale; } }");
+    auto sheet = YuiParser::parseStyleSheet ("style { #target { glow: unit + parent.x + source.value * params.scale; } }");
     ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
     root.setStyleSheet (sheet.getReference());
     root.getStyleContext()->setComponentResolver ([&] (const String& name) -> Component*
@@ -1547,7 +1548,7 @@ TEST_F (StyleContextTests, EmitsWarningDiagnosticsForUndeclaredCustomPropertiesU
             #withDrawing { drawing: Ring; ringThickness: 5; }
         }
     )yui");
-    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
     Component root ("root");
     Component undeclared ("undeclared");
@@ -1569,8 +1570,8 @@ TEST_F (StyleContextTests, EmitsWarningDiagnosticsForUndeclaredCustomPropertiesU
     EXPECT_DOUBLE_EQ (static_cast<double> (withDrawing.findProperty (Identifier ("ringThickness"))), 5.0);
 
     const auto& diagnostics = root.getStyleContext()->getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
-    EXPECT_EQ (diagnostics[0].severity, YuiDiagnostic::Severity::warning);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
+    EXPECT_EQ (diagnostics[0].severity, DataTreeDiagnostic::Severity::warning);
     EXPECT_TRUE (diagnostics[0].isWarning());
     EXPECT_FALSE (diagnostics[0].isError());
     EXPECT_TRUE (diagnostics[0].message.contains ("mysteryValue")) << diagnostics[0].message;
@@ -1591,7 +1592,7 @@ TEST_F (StyleContextTests, RulesSetThePropertiesAShaderDeclaresWithTheirType)
             #screen { intensity: 0.25 + 0.5; steps: 2.7; sharpness: 3; }
         }
     )yui");
-    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
     Component root ("root");
     Component screen ("screen");
@@ -1606,7 +1607,7 @@ TEST_F (StyleContextTests, RulesSetThePropertiesAShaderDeclaresWithTheirType)
 
     // Only the property nothing declares is reported
     const auto& diagnostics = root.getStyleContext()->getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_TRUE (diagnostics[0].isWarning());
     EXPECT_TRUE (diagnostics[0].message.contains ("sharpness")) << diagnostics[0].message;
 }
@@ -1629,7 +1630,7 @@ TEST_F (StyleContextTests, ExplicitInstanceDrawingStyleBeatsStylesheetDrawingAnd
             }
         }
     )yui");
-    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
     auto sheet = build (parsed.document);
 
@@ -1673,7 +1674,7 @@ TEST_F (StyleContextTests, DrawingPropertiesReachStyleRulesWhenMoreSpecificSelec
             }
         }
     )yui");
-    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
     Component root ("root");
     Component synthSection ("synth");
@@ -1693,7 +1694,7 @@ TEST_F (StyleContextTests, DrawingPropertiesReachStyleRulesWhenMoreSpecificSelec
     restyle (root);
 
     EXPECT_TRUE (root.getStyleContext()->getDiagnostics().empty())
-        << YuiDiagnostic::join (root.getStyleContext()->getDiagnostics());
+        << DataTreeDiagnostic::join (root.getStyleContext()->getDiagnostics());
     EXPECT_FLOAT_EQ (static_cast<float> (porcelain.findProperty (Identifier ("bezelSize"))), 0.8f);
     EXPECT_FLOAT_EQ (static_cast<float> (synth.findProperty (Identifier ("bezelSize"))), 0.8f);
 }
@@ -1710,7 +1711,7 @@ TEST_F (StyleContextTests, DrawingCompilationFailureLocatesChildPropertyLineInSo
         "style {\n"
         "    Slider { drawing: BrokenDial; }\n"
         "}\n");
-    ASSERT_TRUE (parsed.wasOk()) << YuiDiagnostic::join (parsed.diagnostics);
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
 
     Component root ("root");
     Slider slider (Slider::RotaryVerticalDrag);
@@ -1740,7 +1741,7 @@ TEST_F (StyleContextTests, ReportsAMaterialShaderSelectedAsAnEffect)
 
     // One problem, where the effect is selected: the name is not looked for among the registered effects
     const auto& diagnostics = document.getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_TRUE (diagnostics[0].message.startsWith ("The shader 'Hologram' is a material")) << diagnostics[0].message;
     EXPECT_EQ (diagnostics[0].line, 2);
     EXPECT_EQ (diagnostics[0].element.getProperty ("name").toString(), "effect");
@@ -1768,7 +1769,7 @@ TEST_F (StyleContextTests, ReportsOnceAShaderWhoseFileIsMissing)
     EXPECT_EQ (root->getStyleContext()->getDiagnostics().size(), 1u);
 
     const auto& diagnostics = document.getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_EQ (diagnostics[0].message, "The shader 'Crt' can't read 'fx/missing.frag' nor its compiled bundle 'fx/missing.frag.ysl'");
     EXPECT_EQ (diagnostics[0].line, 1);
     EXPECT_EQ (diagnostics[0].property, Identifier ("fragment"));
@@ -1814,7 +1815,7 @@ TEST_F (StyleContextTests, ReportsAShaderADrawingCantPaintWhereItIsUsedAndOneTha
 
     // A material is told where it is used. A shader whose file is missing is told once, where the file is named, whatever
     // selects the drawings using it: a rule, or the element of a component
-    EXPECT_EQ (diagnostics.size(), 2u) << YuiDiagnostic::join (diagnostics);
+    EXPECT_EQ (diagnostics.size(), 2u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_EQ (lineOf ("drawing Lit: Lit/use[0]: the shader 'Hologram' is a material, a drawing takes a shader with a 'fragment'"), 3);
     EXPECT_EQ (lineOf ("The shader 'Missing' can't read 'fx/missing.frag' nor its compiled bundle 'fx/missing.frag.ysl'"), 2);
     EXPECT_EQ (assetReads.count ("fx/hologram.glsl"), 0u);
@@ -1841,7 +1842,7 @@ TEST_F (StyleContextTests, ReportsAShaderADrawingCantPaintWhereItIsUsedAndOneTha
     EXPECT_EQ (assetReads["fx/missing.frag"], 1);
 
     const auto& restyled = document.getRoot()->getStyleContext()->getDiagnostics();
-    ASSERT_EQ (restyled.size(), 1u) << YuiDiagnostic::join (restyled);
+    ASSERT_EQ (restyled.size(), 1u) << DataTreeDiagnostic::join (restyled);
     EXPECT_TRUE (restyled.front().message.startsWith ("drawing Lit: ")) << restyled.front().message;
 }
 
@@ -1875,7 +1876,7 @@ TEST_F (StyleContextTests, ARuleNamesTheDrawingOrTheShaderOfAPropertyTakingAName
 
     // A bare name it does not declare names nothing
     const auto& diagnostics = document.getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_EQ (diagnostics[0].message, "look: unknown drawing or shader 'Missing'");
     EXPECT_EQ (diagnostics[0].line, 8);
     EXPECT_EQ (lookOf ("unknown"), String());
@@ -1908,7 +1909,7 @@ TEST_F (StyleContextTests, EffectInstallsAShaderOfTheSheetAndRestoresTheOriginal
         })yui");
 
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* root = document.getRoot();
     auto* screen = document.findById ("screen");
@@ -1984,7 +1985,7 @@ TEST_F (StyleContextTests, AShaderOfTheSheetComesBeforeARegisteredEffectOfItsNam
     registry.unregisterEffect (Identifier ("styleTestEffect"));
 
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     EXPECT_NE (getShaderEffect (document.findById ("screen")), nullptr);
     EXPECT_NE (dynamic_cast<StyleTestEffect*> (document.findById ("plain")->getComponentEffect().get()), nullptr);
@@ -2007,7 +2008,7 @@ TEST_F (StyleContextTests, ReportsOnceWhatPreventsAShaderFromLoading)
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
 
     const auto& diagnostics = document.getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 4u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 4u) << DataTreeDiagnostic::join (diagnostics);
 
     // The message of the compiler, where the file is named
     EXPECT_TRUE (diagnostics[0].message.startsWith ("shader Broken: ")) << diagnostics[0].message;
@@ -2051,7 +2052,7 @@ TEST_F (StyleContextTests, ReportsAShaderReadingTwoTexturesSelectedAsAnEffect)
     auto* screen = document.findById ("screen");
 
     const auto& diagnostics = document.getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_EQ (diagnostics[0].message, "The shader 'Mix' reads two textures, an effect gives it one");
     EXPECT_EQ (diagnostics[0].line, 2);
     EXPECT_EQ (screen->getComponentEffect(), nullptr);
@@ -2104,7 +2105,7 @@ TEST_F (StyleContextTests, TheDefaultsOfAShaderAreStyledValuesOfTheComponentItIs
         })yui");
 
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* root = document.getRoot();
     auto* screen = document.findById ("screen");
@@ -2167,7 +2168,7 @@ TEST_F (StyleContextTests, TransitionsAPropertyOfAShaderFromItsDefaultAndBack)
         Component { Component { id: screen; } })yui");
 
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* root = document.getRoot();
     auto* screen = document.findById ("screen");
@@ -2218,7 +2219,7 @@ TEST_F (StyleContextTests, TheCompiledBundleNextToAShaderIsLoadedInsteadOfItsSou
         Component { Component { id: screen; } Component { id: other; } })yui");
 
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* effect = getShaderEffect (document.findById ("screen"));
     ASSERT_NE (effect, nullptr);
@@ -2269,7 +2270,7 @@ TEST_F (StyleContextTests, AnAssetThatChangesLoadsItsShaderAgainAndOneThatFailsK
     EXPECT_NE (second, first);
     EXPECT_EQ (second->getNumInputTextures(), 0);
     EXPECT_EQ (root->getStyleContext()->findShader ("Crt")->shader, second);
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     // Another file changing is nothing to it
     const auto reads = assetReads["fx/crt.frag"];
@@ -2287,7 +2288,7 @@ TEST_F (StyleContextTests, AnAssetThatChangesLoadsItsShaderAgainAndOneThatFailsK
     EXPECT_EQ (root->getStyleContext()->getDiagnostics().size(), 1u);
 
     const auto& diagnostics = document.getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_TRUE (diagnostics[0].message.startsWith ("shader Crt: ")) << diagnostics[0].message;
     EXPECT_EQ (diagnostics[0].line, 1);
     EXPECT_EQ (diagnostics[0].property, Identifier ("fragment"));
@@ -2300,7 +2301,7 @@ TEST_F (StyleContextTests, AnAssetThatChangesLoadsItsShaderAgainAndOneThatFailsK
     ASSERT_TRUE (document.loadFromString (text).wasOk());
     screen = document.findById ("screen");
 
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_TRUE (diagnostics[0].message.startsWith ("shader Crt: ")) << diagnostics[0].message;
     EXPECT_EQ (assetReads["fx/crt.frag"], reads + 1);
     ASSERT_EQ (getShaderEffect (screen), effect);
@@ -2329,7 +2330,7 @@ TEST_F (StyleContextTests, AShaderThatCouldNotBeLoadedIsInstalledOnceItsFileIsTh
 
     auto* screen = document.findById ("screen");
     EXPECT_EQ (screen->getComponentEffect(), nullptr);
-    EXPECT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     setAsset ("fx/crt.frag", crtFragment);
     document.notifyAssetChanged ("fx/crt.frag");
@@ -2346,7 +2347,7 @@ TEST_F (StyleContextTests, AShaderBrokenByAnOverrideIsReportedByEachReloadAndKee
 
     const auto loaded = loader.loadResource ("ui.yui", findShaderResource);
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* effect = getShaderEffect (document.findById ("screen"));
     ASSERT_NE (effect, nullptr);
@@ -2360,7 +2361,7 @@ TEST_F (StyleContextTests, AShaderBrokenByAnOverrideIsReportedByEachReloadAndKee
     ASSERT_TRUE (loader.reload().wasOk());
 
     const auto& diagnostics = document.getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_TRUE (diagnostics[0].message.startsWith ("shader Crt: ")) << diagnostics[0].message;
     EXPECT_TRUE (diagnostics[0].message.contains ("missingValue")) << diagnostics[0].message;
     EXPECT_EQ (diagnostics[0].line, 1);
@@ -2371,7 +2372,7 @@ TEST_F (StyleContextTests, AShaderBrokenByAnOverrideIsReportedByEachReloadAndKee
     // It stands for as long as the source is broken, whatever is loaded again meanwhile
     ASSERT_TRUE (loader.reload().wasOk());
 
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_TRUE (diagnostics[0].message.startsWith ("shader Crt: ")) << diagnostics[0].message;
     EXPECT_EQ (diagnostics[0].property, Identifier ("fragment"));
     EXPECT_EQ (effect->getShader(), first);
@@ -2380,7 +2381,7 @@ TEST_F (StyleContextTests, AShaderBrokenByAnOverrideIsReportedByEachReloadAndKee
     loader.setOverride ("fx/crt.frag", proceduralFragment);
     ASSERT_TRUE (loader.reload().wasOk());
 
-    EXPECT_TRUE (diagnostics.empty()) << YuiDiagnostic::join (diagnostics);
+    EXPECT_TRUE (diagnostics.empty()) << DataTreeDiagnostic::join (diagnostics);
     ASSERT_EQ (getShaderEffect (document.findById ("screen")), effect);
     ASSERT_NE (effect->getShader(), nullptr);
     EXPECT_NE (effect->getShader(), first);
@@ -2501,7 +2502,7 @@ TEST_F (StyleContextTests, ADrawingPaintsAShaderOfTheSheetWithTheValuesItsUseSet
     )yui");
 
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* first = document.findById ("first");
     auto* second = document.findById ("second");
@@ -2565,7 +2566,7 @@ TEST_F (StyleContextTests, AnAssetThatChangesMakesTheDrawingsPaintingItsShaderAg
     EXPECT_NE (screen->getStyle(), screenStyle);
     EXPECT_EQ (plain->getStyle(), plainStyle);
     EXPECT_GT (native.getRepaintAreas().getNumRectangles(), 0);
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     // The new drawing fills the uniforms as the new shader lays them out
     auto expected = second->createUniforms();
@@ -2581,7 +2582,7 @@ TEST_F (StyleContextTests, AnAssetThatChangesMakesTheDrawingsPaintingItsShaderAg
 
     EXPECT_EQ (screen->getStyle(), kept);
     EXPECT_TRUE (getShaderUniforms (screen) == expected);
-    ASSERT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_TRUE (document.getDiagnostics()[0].message.startsWith ("shader Plasma: ")) << document.getDiagnostics()[0].message;
 
     // A source reading a picture is no shader for a drawing to paint: the component is left without its drawing. The
@@ -2591,7 +2592,7 @@ TEST_F (StyleContextTests, AnAssetThatChangesMakesTheDrawingsPaintingItsShaderAg
     restyle (*root);
 
     EXPECT_EQ (getDrawingStyle (screen), nullptr);
-    ASSERT_EQ (document.getDiagnostics().size(), 2u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 2u) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_EQ (document.getDiagnostics()[1].message, "drawing Screen: Screen/use[0]: the shader 'Plasma' reads a picture, run it in the 'filter' of a layer or as an 'effect:'");
     EXPECT_EQ (document.getDiagnostics()[1].line, 2);
 
@@ -2601,8 +2602,8 @@ TEST_F (StyleContextTests, AnAssetThatChangesMakesTheDrawingsPaintingItsShaderAg
     restyle (*root);
 
     EXPECT_NE (getDrawingStyle (screen), nullptr);
-    EXPECT_TRUE (context->getDiagnostics().empty()) << YuiDiagnostic::join (context->getDiagnostics());
-    EXPECT_EQ (document.getDiagnostics().size(), 2u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (context->getDiagnostics().empty()) << DataTreeDiagnostic::join (context->getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 2u) << DataTreeDiagnostic::join (document.getDiagnostics());
 }
 
 TEST_F (StyleContextTests, AFilterOfADrawingRunsAShaderOfTheSheet)
@@ -2632,7 +2633,7 @@ TEST_F (StyleContextTests, AFilterOfADrawingRunsAShaderOfTheSheet)
     )yui");
 
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* screen = document.findById ("screen");
     ASSERT_NE (getDrawingStyle (screen), nullptr);
@@ -2691,7 +2692,7 @@ TEST_F (StyleContextTests, ADrawingSelectedOnAnElementRunsTheShadersOfTheSheet)
 
     const auto expectShaders = [&]
     {
-        EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+        EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
         auto* context = document.getRoot()->getStyleContext();
         const auto* plasma = context->findShader ("Plasma");
@@ -2775,7 +2776,7 @@ TEST_F (StyleContextTests, ADrawingSelectedOnAnElementFollowsTheFileOfItsShader)
 
     // A source that does not compile is told once, where the file is named: the drawing is there, without its shader
     const auto& diagnostics = document.getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_TRUE (diagnostics[0].message.startsWith ("shader Plasma: ")) << diagnostics[0].message;
     EXPECT_EQ (diagnostics[0].line, 1);
     EXPECT_EQ (diagnostics[0].property, Identifier ("fragment"));
@@ -2805,7 +2806,7 @@ TEST_F (StyleContextTests, ADrawingSelectedOnAnElementFollowsTheFileOfItsShader)
     ASSERT_NE (getDrawingStyle (screen), nullptr);
     EXPECT_EQ (getDrawingStyle (screen)->getShaders().front().shader, first);
     EXPECT_GT (native.getRepaintAreas().getNumRectangles(), 0);
-    EXPECT_TRUE (context->getDiagnostics().empty()) << YuiDiagnostic::join (context->getDiagnostics());
+    EXPECT_TRUE (context->getDiagnostics().empty()) << DataTreeDiagnostic::join (context->getDiagnostics());
 
     // Then follows the file: another source is another shader, laying its uniforms out its way
     setAsset ("fx/plasma.frag", reorderedFragment);
@@ -2830,7 +2831,7 @@ TEST_F (StyleContextTests, ADrawingSelectedOnAnElementFollowsTheFileOfItsShader)
     restyle (*root);
 
     EXPECT_EQ (screen->getStyle(), kept);
-    ASSERT_EQ (context->getDiagnostics().size(), 1u) << YuiDiagnostic::join (context->getDiagnostics());
+    ASSERT_EQ (context->getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (context->getDiagnostics());
     EXPECT_TRUE (context->getDiagnostics().front().message.startsWith ("shader Plasma: ")) << context->getDiagnostics().front().message;
 
     // A source reading a picture is no shader for the drawing to paint: told where it is used, as for a drawing a rule selects
@@ -2838,7 +2839,7 @@ TEST_F (StyleContextTests, ADrawingSelectedOnAnElementFollowsTheFileOfItsShader)
     document.notifyAssetChanged ("fx/plasma.frag");
     restyle (*root);
 
-    ASSERT_EQ (context->getDiagnostics().size(), 1u) << YuiDiagnostic::join (context->getDiagnostics());
+    ASSERT_EQ (context->getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (context->getDiagnostics());
     EXPECT_EQ (context->getDiagnostics().front().message, "drawing Screen: Screen/use[0]: the shader 'Plasma' reads a picture, run it in the 'filter' of a layer or as an 'effect:'");
     EXPECT_EQ (screen->getStyle(), kept);
 }
@@ -2862,7 +2863,7 @@ TEST_F (StyleContextTests, ADrawingAnElementCantSelectAnymoreIsNotMadeAgainWithT
     };
 
     ASSERT_TRUE (document.loadFromString (textOf ("use Plasma { intensity: root.level * 2; }")).wasOk());
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* meter = document.findById ("low");
     ASSERT_TRUE (meter != nullptr && meter->getNumChildComponents() == 1);
@@ -2881,7 +2882,7 @@ TEST_F (StyleContextTests, ADrawingAnElementCantSelectAnymoreIsNotMadeAgainWithT
 
     // What prevents it is told once, by the build
     const auto& diagnostics = document.getDiagnostics();
-    ASSERT_EQ (diagnostics.size(), 1u) << YuiDiagnostic::join (diagnostics);
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
     EXPECT_TRUE (diagnostics[0].message.startsWith ("Component.drawing: Screen/rect[0].fill: ")) << diagnostics[0].message;
     EXPECT_EQ (diagnostics[0].line, 2);
 
@@ -2906,7 +2907,7 @@ TEST_F (StyleContextTests, ADrawingAnElementCantSelectAnymoreIsNotMadeAgainWithT
     EXPECT_NE (second, first);
     EXPECT_EQ (getDrawingStyle (other)->getShaders().front().shader, second);
     EXPECT_EQ (painted->getStyle(), nullptr);
-    EXPECT_TRUE (context->getDiagnostics().empty()) << YuiDiagnostic::join (context->getDiagnostics());
+    EXPECT_TRUE (context->getDiagnostics().empty()) << DataTreeDiagnostic::join (context->getDiagnostics());
 }
 
 #endif // YUP_ENABLE_SHADER_TRANSPILER

@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <yup_gui_markup/yup_gui_markup.h>
+
 //==============================================================================
 
 class YuiDrawingDemo
@@ -244,7 +246,7 @@ private:
     // Loads are reported by the loader, style problems met later, when a rule starts matching, are marked too
     void documentLoaded (yup::YuiDocument&, const yup::Result&) override {}
 
-    void documentDiagnosed (yup::YuiDocument&, const yup::YuiDiagnostic&) override
+    void documentDiagnosed (yup::YuiDocument&, const yup::DataTreeDiagnostic&) override
     {
         report();
     }
@@ -269,7 +271,7 @@ private:
         if (lastLoad.failed())
             setStatus ("Error: " + lastLoad.getErrorMessage());
         else if (! problems.empty())
-            setStatus (yup::YuiDiagnostic::join (problems, "\n"));
+            setStatus (yup::DataTreeDiagnostic::join (problems, "\n"));
         else
             setStatus ("Built with " + yup::String (view.getDocument().getBuilder().getBindings().getNumBindings()) + " bindings. Drag a knob, undo, or edit any tab"
                        + (view.getLoader().isWatching() ? " or file." : "."));

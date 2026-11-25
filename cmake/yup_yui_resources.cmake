@@ -74,7 +74,7 @@
 # their sources, with the shader transpiler it is built with: one that does
 # not compile fails as well, and editing one configures again. The tool is
 # built for the host the first time, into the build tree, so the option costs a
-# build of yup_gui, of yup_renderer and of that transpiler. VERIFY_MODELS is
+# build of yup_gui, of yup_gui_markup, of yup_renderer and of that transpiler. VERIFY_MODELS is
 # the JSON file declaring the models the files bind to (see `--models`).
 
 function (_yup_build_yui_tool output_variable)

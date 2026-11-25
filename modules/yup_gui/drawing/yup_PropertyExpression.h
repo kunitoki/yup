@@ -47,7 +47,7 @@ namespace yup
         slider.setProperty ("thumbColor", expression.getReference()->evaluate());
     @endcode
 
-    @see DrawingScope, ComponentProperty, StyleContext, YuiBuilder
+    @see DrawingScope, ComponentProperty, StyleContext
 
     @tags{UI}
 */

@@ -609,7 +609,7 @@ TEST_F (SceneSurfaceTests, ANodeThatDrawsNoMeshOfItsOwnSaysItCanNotShowItsCompon
 
             const auto result = document.loadFromString (test.text);
             ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-            ASSERT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+            ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
             const auto& diagnostic = document.getDiagnostics().front();
             EXPECT_EQ (diagnostic.message, String (test.type) + ": " + problem);
@@ -704,7 +704,7 @@ TEST_F (SceneSurfaceTests, AMeshWhoseTextureCoordinatesSpanNoAreaShowsNoComponen
                                                  "}");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    ASSERT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     const auto& diagnostic = document.getDiagnostics().front();
     EXPECT_EQ (diagnostic.message, "Mesh3D: " + problem);
@@ -763,7 +763,7 @@ TEST_F (SceneSurfaceTests, AMeshWhoseTextureCoordinatesSpanNoAreaShowsNoComponen
                                                "}");
 
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
-    ASSERT_EQ (device.getDiagnostics().size(), 1u) << YuiDiagnostic::join (device.getDiagnostics());
+    ASSERT_EQ (device.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (device.getDiagnostics());
     EXPECT_EQ (device.getDiagnostics().front().message, "Node3D: " + problem);
     EXPECT_EQ (device.getDiagnostics().front().line, 4);
 }

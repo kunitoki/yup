@@ -34,7 +34,7 @@ class Scene3DTests : public SceneDocumentTests
 
 TEST_F (Scene3DTests, RegistersTheTypesWithTheirBasesAndFactories)
 {
-    registerBuiltInComponentTypes();
+    registerYuiComponentTypes();
 
     const auto& registry = ComponentTypeRegistry::getInstance();
 
@@ -424,7 +424,7 @@ TEST_F (Scene3DTests, AFileThatChangesIsToldToAllThatUseItWhateverTheFirstOnesDo
 
     int told = 0;
 
-    const DiagnosticListener listener (document, [&] (const YuiDiagnostic&)
+    const DiagnosticListener listener (document, [&] (const DataTreeDiagnostic&)
     {
         ++told;
         view->removeChildComponent (first);

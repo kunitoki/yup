@@ -384,7 +384,7 @@ bool SceneMaterialComponent::updateShaders (Scene& shownScene, double elapsedSec
 bool SceneMaterialComponent::refreshShader (double elapsedSeconds, std::vector<ShaderProblem>& problems)
 {
     const auto* context = findStyleContext();
-    const auto* document = YuiDocument::findDocumentFor (this);
+    const auto* document = ComponentDocument::findFor (this);
 
     auto sheet = context != nullptr ? context->getStyleSheet() : StyleSheet::Ptr();
     const auto load = document != nullptr ? document->getSourceMap() : nullptr;
@@ -488,8 +488,8 @@ void SceneMaterialComponent::updateShader (StyleSheet::Ptr sheet, std::vector<Sh
 bool SceneMaterialComponent::readShaderInputs (const DataTree& block, const ShaderUniforms& uniforms, std::vector<ShaderInput>& inputs, std::vector<ShaderProblem>& problems)
 {
     // What a default names is found as the values of the document find it: its elements by their id, and its models
-    auto* document = YuiDocument::findDocumentFor (this);
-    const auto resolver = document != nullptr ? document->getBuilder().getComponentResolver() : DrawingScope::ComponentResolver();
+    const auto* document = ComponentDocument::findFor (this);
+    const auto resolver = document != nullptr ? document->getComponentResolver() : DrawingScope::ComponentResolver();
     bool isUsable = true;
 
     for (const auto& property : block)

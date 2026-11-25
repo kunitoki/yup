@@ -435,7 +435,7 @@ public:
     {
     }
 
-    Result compile (const DataTree& drawing, YuiDiagnostic* failure = nullptr)
+    Result compile (const DataTree& drawing, DataTreeDiagnostic* failure = nullptr)
     {
         context.setSymbolResolver ([this] (const String& name)
         {
@@ -465,7 +465,7 @@ public:
         {
             if (failure != nullptr)
             {
-                *failure = YuiDiagnostic {
+                *failure = DataTreeDiagnostic {
                     .message = error.message,
                     .element = error.element.isValid() ? error.element : drawing,
                     .property = error.property
@@ -2773,7 +2773,7 @@ DrawingStyle::~DrawingStyle() = default;
 ResultValue<DrawingStyle::Ptr> DrawingStyle::create (Component& target,
                                                      const DataTree& drawing,
                                                      DrawingScope::ComponentResolver componentResolver,
-                                                     YuiDiagnostic* failure,
+                                                     DataTreeDiagnostic* failure,
                                                      const DrawingResolver& drawingResolver,
                                                      const ShaderResolver& shaderResolver)
 {
@@ -2933,7 +2933,7 @@ std::vector<DrawingStyle::Shader> DrawingStyle::getShaders() const
     return used;
 }
 
-ResultValue<DrawingStyle::Ptr> DrawingStyle::createWithShaders (const ShaderResolver& shaderResolver, YuiDiagnostic* failure) const
+ResultValue<DrawingStyle::Ptr> DrawingStyle::createWithShaders (const ShaderResolver& shaderResolver, DataTreeDiagnostic* failure) const
 {
     auto* target = targetComponent.get();
     if (target == nullptr)
@@ -3482,7 +3482,7 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
     if (node.kind == Node::Kind::image || node.kind == Node::Kind::svg)
     {
         File baseDirectory;
-        if (const auto* document = YuiDocument::findDocumentFor (targetComponent.get()))
+        if (const auto* document = ComponentDocument::findFor (targetComponent.get()))
             baseDirectory = document->getBaseDirectory();
 
         for (int startRow = 0; startRow < numRows;)

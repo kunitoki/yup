@@ -27,7 +27,7 @@ For a hand-written UI, parse a sheet and attach it to any component. It styles
 that component and everything inside it, including children added later:
 
 ```cpp
-auto sheet = StyleSheet::parse (text);
+auto sheet = YuiParser::parseStyleSheet (text);
 if (sheet.failed())
     DBG (sheet.getErrorMessage());
 else
@@ -37,11 +37,21 @@ cutoff.setComponentID ("cutoff");
 cutoff.addStyleClass ("knob");
 ```
 
+The text is parsed by `yup_gui_markup`. `yup_gui` alone takes a sheet as the
+tree that text is parsed into, so an application leaving the module out writes
+the tree in code and gives it to `StyleSheet::fromTree`:
+
+```cpp
+auto sheet = StyleSheet::fromTree (DataTree ("style", {
+    DataTree ("rule", { { "selector", "Slider:hover" } }, {
+        DataTree ("declaration", { { "name", "opacity" }, { "value", "0.5" } }) }) }));
+```
+
 `setStyleSheet (nullptr)` detaches it, removing every value it computed. A
 sheet is immutable and reference counted, so several trees can share it.
 `getStyleContext()->getDiagnostics()` lists the declarations that failed in the
 last restyle, such as an unknown palette or a value that doesn't compile, and
-`onDiagnostic` is called for each as it is met. Each `YuiDiagnostic` points at
+`onDiagnostic` is called for each as it is met. Each `DataTreeDiagnostic` points at
 the declaration element, which a `YuiDocument` turns into a line and column.
 
 In `.yui`, `id` and `class` set the same thing; `class` takes several names
@@ -245,7 +255,7 @@ Row {
 A rule (or a `style`, `drawing`, `shader`, `tokens` or `component` block) can
 declare a typed property, giving matched components a known type and optional default that
 other rules and expressions can use without emitting an undeclared-property
-warning (`YuiDiagnostic::Severity::warning`):
+warning (`DataTreeDiagnostic::Severity::warning`):
 
 ```yui
 style { .knob { property glowAmount: number = 0; } }

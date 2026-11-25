@@ -20,6 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 #include <yup_graphics/yup_graphics.h>
 
 #include <gtest/gtest.h>
@@ -1581,7 +1582,7 @@ protected:
 
         void style (const String& text)
         {
-            auto sheet = StyleSheet::parse (text);
+            auto sheet = YuiParser::parseStyleSheet (text);
             ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
 
             root.setStyleSheet (sheet.getReference());

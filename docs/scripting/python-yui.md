@@ -4,7 +4,8 @@ The classes that load and drive `.yui` documents are bound more or less
 one-to-one with the C++ API described under
 [Complete UIs in `.yui`](../ui/yui/documents.md), so those pages remain the
 reference for what each call means. This page covers only what is different in
-Python.
+Python. The `Yui*` classes are bound when `yup_gui_markup` is part of the build,
+as it is in the wheel.
 
 ```python
 import yup
@@ -19,7 +20,7 @@ result = document.loadFromString("""
     }""")
 
 if result.failed():
-    print(yup.YuiDiagnostic.join(document.getDiagnostics()))
+    print(yup.DataTreeDiagnostic.join(document.getDiagnostics()))
 
 cutoff = document.findById("cutoff")      # a yup.Slider
 cutoff.setProperty("value", 0.8)
@@ -100,7 +101,7 @@ given to `setUndoManager`. A `YuiLoader` keeps its document alive.
 - `loadFromString`, `load` and the loader return a `Result`, as in C++. The
   problems are in `document.getDiagnostics()`, each with its `message`, `line`,
   `column`, `source` and `severity`.
-- `yup.StyleSheet.parse (text)` returns the stylesheet and raises a
+- `yup.YuiParser.parseStyleSheet (text)` returns the stylesheet and raises a
   `ValueError` carrying the first problem, where C++ returns a `ResultValue`.
 - `yup.YuiParser.parse (text)` returns a `ParseResult` with its `document`,
   `diagnostics` and `wasOk()`.

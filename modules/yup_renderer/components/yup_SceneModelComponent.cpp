@@ -491,7 +491,7 @@ void SceneModelComponent::instantiate()
     }
 
     for (const auto& warning : model.getReference().getWarnings())
-        view->reportProblem (*this, SceneModelComponentIds::source, warning, YuiDiagnostic::Severity::warning);
+        view->reportProblem (*this, SceneModelComponentIds::source, warning, DataTreeDiagnostic::Severity::warning);
 
     instance = model.getReference().instantiate (*entity.getScene(), entity, sceneIndex);
 

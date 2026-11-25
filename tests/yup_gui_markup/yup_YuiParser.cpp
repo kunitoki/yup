@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -708,6 +708,21 @@ drawing D { let r: 1; repeat i in 0 .. 2 { circle { radius: r; } } })yui");
     EXPECT_EQ (locate (result, drawing.getChild (1)), "16:23: here");
     EXPECT_EQ (locate (result, drawing.getChild (1).getChild (0)), "16:44: here");
     EXPECT_EQ (locate (result, drawing.getChild (1).getChild (0), "radius"), "16:53: here");
+}
+
+TEST_F (YuiParserTest, BuildsTheStyleSheetOfATextOrTellsItsFirstProblem)
+{
+    auto sheet = YuiParser::parseStyleSheet ("drawing Knob { circle { center: bounds.center; radius: 4; } }\nstyle { Slider { drawing: Knob; } }");
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+    EXPECT_TRUE (sheet.getReference()->findDrawing ("Knob").isValid());
+    EXPECT_EQ (sheet.getReference()->getRules().size(), 1u);
+
+    // A text that can't be parsed fails with where, one whose sheet can't be built with why
+    EXPECT_EQ (YuiParser::parseStyleSheet ("style {").getErrorMessage(), "1:8: Expected '}'");
+
+    const auto unsupported = YuiParser::parseStyleSheet ("style { Slider::before { opacity: 1; } }");
+    EXPECT_TRUE (unsupported.failed());
+    EXPECT_TRUE (unsupported.getErrorMessage().contains ("Pseudo-elements are not supported")) << unsupported.getErrorMessage();
 }
 
 TEST_F (YuiParserTest, ReturnsNoDocumentOnErrors)

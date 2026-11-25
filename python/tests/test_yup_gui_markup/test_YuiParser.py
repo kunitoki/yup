@@ -1,7 +1,7 @@
 import yup
 
 """
-YuiParser, YuiWriter and the YuiDiagnostic a failed parse reports.
+YuiParser, YuiWriter and the DataTreeDiagnostic a failed parse reports.
 
 Parsing only checks the syntax and builds a DataTree, so nothing here needs an application.
 
@@ -95,7 +95,7 @@ def test_parse_keeps_the_imports_without_a_resolver():
 def test_parse_merges_the_imported_files():
     result = yup.YuiParser.parse('import "style.yui"; import "palette.yui"; Component { }', resolve_import)
 
-    assert result.wasOk(), yup.YuiDiagnostic.join(result.diagnostics)
+    assert result.wasOk(), yup.DataTreeDiagnostic.join(result.diagnostics)
 
     # Each file is imported once, the first time it is met, and no import element is left.
     document = result.document
@@ -141,7 +141,7 @@ def test_diagnostic_tells_where_the_error_is():
     assert diagnostic.message == "Expected ';'"
     assert diagnostic.source == ""
     assert (diagnostic.line, diagnostic.column) == (2, 24)
-    assert diagnostic.severity == yup.YuiDiagnostic.Severity.error
+    assert diagnostic.severity == yup.DataTreeDiagnostic.Severity.error
     assert diagnostic.isError()
     assert not diagnostic.isWarning()
 
@@ -151,7 +151,7 @@ def test_diagnostic_is_printed_with_its_position():
 
     assert diagnostic.toString() == "2:24: Expected ';'"
     assert str(diagnostic) == "2:24: Expected ';'"
-    assert repr(diagnostic).startswith("<yup.YuiDiagnostic")
+    assert repr(diagnostic).startswith("<yup.DataTreeDiagnostic")
     assert "2:24: Expected ';'" in repr(diagnostic)
 
 
@@ -162,9 +162,9 @@ def test_diagnostics_are_joined():
     assert first.toString() == "1:10: Expected '}'"
     assert second.toString() == "1:17: Expected ':'"
 
-    assert yup.YuiDiagnostic.join([first, second]) == "1:10: Expected '}'\n1:17: Expected ':'"
-    assert yup.YuiDiagnostic.join([first, second], "; ") == "1:10: Expected '}'; 1:17: Expected ':'"
-    assert yup.YuiDiagnostic.join([]) == ""
+    assert yup.DataTreeDiagnostic.join([first, second]) == "1:10: Expected '}'\n1:17: Expected ':'"
+    assert yup.DataTreeDiagnostic.join([first, second], "; ") == "1:10: Expected '}'; 1:17: Expected ':'"
+    assert yup.DataTreeDiagnostic.join([]) == ""
 
 
 # ==============================================================================
@@ -184,14 +184,14 @@ def test_write_uses_the_canonical_layout():
 
 def test_write_round_trips_a_document():
     parsed = yup.YuiParser.parse(COMPONENTS)
-    assert parsed.wasOk(), yup.YuiDiagnostic.join(parsed.diagnostics)
+    assert parsed.wasOk(), yup.DataTreeDiagnostic.join(parsed.diagnostics)
 
     document = parsed.document
     written = yup.YuiWriter.write(document)
 
     reparsed = yup.YuiParser.parse(written)
 
-    assert reparsed.wasOk(), yup.YuiDiagnostic.join(reparsed.diagnostics)
+    assert reparsed.wasOk(), yup.DataTreeDiagnostic.join(reparsed.diagnostics)
     assert reparsed.document.isEquivalentTo(document)
     assert yup.YuiWriter.write(reparsed.document) == written
 

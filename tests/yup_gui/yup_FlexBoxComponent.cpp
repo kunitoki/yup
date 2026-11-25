@@ -20,6 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -123,7 +124,7 @@ TEST_F (FlexBoxComponentTests, ColumnDirectionCanBeOverriddenByStyleSheet)
     EXPECT_EQ (column.getDirection(), FlexBox::Direction::column);
     EXPECT_EQ (second.getBounds(), Rectangle<float> (0.0f, 20.0f, 100.0f, 20.0f));
 
-    auto parsed = StyleSheet::parse ("style { Column { direction: row; } }");
+    auto parsed = YuiParser::parseStyleSheet ("style { Column { direction: row; } }");
     ASSERT_TRUE (parsed.wasOk()) << parsed.getErrorMessage();
     column.setStyleSheet (parsed.getReference());
     column.getStyleContext()->restyleNow();

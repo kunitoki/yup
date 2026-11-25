@@ -173,7 +173,7 @@ private:
         if (sourceMap == nullptr || ! element.isValid())
             return;
 
-        YuiDiagnostic probe;
+        DataTreeDiagnostic probe;
         probe.element = element;
 
         const auto located = sourceMap->locate (probe);
@@ -304,7 +304,7 @@ private:
     YuiDocument& document;
     const File input;
     const YuiBuilder& builder;
-    std::shared_ptr<const YuiSourceMap> sourceMap;
+    std::shared_ptr<const DataTreeSourceMap> sourceMap;
     Component& root;
     const bool describesDrawings;
     Array<var> warnings;

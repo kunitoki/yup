@@ -21,6 +21,7 @@
 
 #include "Figures.h"
 
+#include <yup_gui_markup/yup_gui_markup.h>
 #include <yup_renderer/yup_renderer.h>
 
 #include <algorithm>

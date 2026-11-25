@@ -122,7 +122,7 @@
       ],
       "deps": ["wasmDeps"],
       "tests": true,
-      "untested": ["yup_audio_plugin_host", "yup_audio_plugin_client", "yup_gui", "yup_audio_gui", "yup_3d", "yup_renderer", "yup_python"],
+      "untested": ["yup_audio_plugin_host", "yup_audio_plugin_client", "yup_gui", "yup_gui_markup", "yup_audio_gui", "yup_3d", "yup_renderer", "yup_python"],
       "skip": [
         "/native/(generated|java[^/]*)/",
         "/native/[^/]*_(android|apple|linux|mac|vulkan|windows)\\.",

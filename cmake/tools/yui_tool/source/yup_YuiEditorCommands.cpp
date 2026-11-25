@@ -1101,7 +1101,7 @@ int runYuiOutlineCommand (int argc, char** argv)
     if (! readAsked (argc, argv, false, asked))
         return 2;
 
-    registerBuiltInComponentTypes();
+    registerYuiComponentTypes();
 
     return answer (describeOutline (readYuiToolSources (asked.file)));
 }
@@ -1113,7 +1113,7 @@ int runYuiCompleteCommand (int argc, char** argv)
     if (! readAsked (argc, argv, true, asked))
         return 2;
 
-    registerBuiltInComponentTypes();
+    registerYuiComponentTypes();
 
     const auto sources = readYuiToolSources (asked.file);
 
@@ -1139,7 +1139,7 @@ int runYuiHoverCommand (int argc, char** argv)
     if (! readAsked (argc, argv, true, asked))
         return 2;
 
-    registerBuiltInComponentTypes();
+    registerYuiComponentTypes();
 
     const auto sources = readYuiToolSources (asked.file);
 

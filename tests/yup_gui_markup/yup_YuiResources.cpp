@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -104,7 +104,7 @@ TEST_F (YuiResourcesTests, ADocumentRunsAShaderFromItsEmbeddedBundle)
     const auto loaded = loader.loadResource ("effects.yui", findRecording);
 
     ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     auto* display = document.findById ("display");
     ASSERT_NE (display, nullptr);

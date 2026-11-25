@@ -215,14 +215,14 @@ yui_tool_wasm_test:
   node --test tests/test_web.js
 
 [doc("check the types of the YUI VSCode extension and run its tests that need no editor")]
-[working-directory: 'modules/yup_gui/tools/vscode-yui']
+[working-directory: 'modules/yup_gui_markup/tools/vscode-yui']
 vscode_yui_test:
   npm install
   npm run check
   npm test
 
 [doc("build and install the YUI VSCode extension (needs the Emscripten SDK activated)")]
-[working-directory: 'modules/yup_gui/tools/vscode-yui']
+[working-directory: 'modules/yup_gui_markup/tools/vscode-yui']
 vscode_yui:
   @just yui_tool_wasm
   sh tools/package-tool.sh

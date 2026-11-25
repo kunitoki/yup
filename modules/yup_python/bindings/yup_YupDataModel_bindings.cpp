@@ -298,6 +298,36 @@ void registerYupDataModelBindings (py::module_& m)
             return result;
         });
 
+    // ============================================================================================ yup::DataTreeDiagnostic
+
+    py::class_<DataTreeDiagnostic> classDataTreeDiagnostic (m, "DataTreeDiagnostic");
+
+    py::enum_<DataTreeDiagnostic::Severity> (classDataTreeDiagnostic, "Severity")
+        .value ("error", DataTreeDiagnostic::Severity::error)
+        .value ("warning", DataTreeDiagnostic::Severity::warning);
+
+    classDataTreeDiagnostic
+        .def_readonly ("message", &DataTreeDiagnostic::message)
+        .def_readonly ("property", &DataTreeDiagnostic::property, "The property the problem is about, null when it is about the whole element.")
+        .def_readonly ("source", &DataTreeDiagnostic::source, "The text the problem is in when the tree was parsed from several, such as an imported file, empty for the main text.")
+        .def_readonly ("line", &DataTreeDiagnostic::line, "The 1-based line of the problem, 0 when the position is unknown.")
+        .def_readonly ("column", &DataTreeDiagnostic::column, "The 1-based column of the problem, counted in characters.")
+        .def_readonly ("severity", &DataTreeDiagnostic::severity)
+        .def ("isError", &DataTreeDiagnostic::isError)
+        .def ("isWarning", &DataTreeDiagnostic::isWarning)
+        .def ("toString", &DataTreeDiagnostic::toString, "Returns the diagnostic as source:line:column: message, omitting the unknown parts.")
+        .def_static ("join", &DataTreeDiagnostic::join, "diagnostics"_a, "separator"_a = "\n",
+                     "Returns the diagnostics as strings, joined by a separator.")
+        .def ("__str__", &DataTreeDiagnostic::toString)
+        .def ("__repr__", [] (const DataTreeDiagnostic& self)
+        {
+            String result;
+            result
+                << "<" << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name(), 1)
+                << " \"" << self.toString() << "\">";
+            return result;
+        });
+
     // clang-format on
 }
 

@@ -155,7 +155,7 @@ struct SceneViewpoint
 
 //==============================================================================
 /* Follows the document that built the component: its loads, and the files read through it that change. */
-struct SceneComponent::DocumentLink final : YuiDocument::Listener
+struct SceneComponent::DocumentLink final : ComponentDocument::Listener
 {
     explicit DocumentLink (SceneComponent& ownerToUse)
         : owner (ownerToUse)
@@ -167,7 +167,7 @@ struct SceneComponent::DocumentLink final : YuiDocument::Listener
         follow (nullptr);
     }
 
-    void follow (YuiDocument* newDocument)
+    void follow (ComponentDocument* newDocument)
     {
         if (document.get() == newDocument)
             return;
@@ -181,7 +181,7 @@ struct SceneComponent::DocumentLink final : YuiDocument::Listener
             newDocument->addListener (this);
     }
 
-    void documentLoaded (YuiDocument&, const Result&) override
+    void documentLoaded (ComponentDocument&) override
     {
         // The values of the load are in: the meshes they describe are built, the nodes find the one that shows the components
         // inside them, and what is wrong is told with the rest. Who hears about a problem may destroy the scene
@@ -201,13 +201,13 @@ struct SceneComponent::DocumentLink final : YuiDocument::Listener
             owner.sendProblems();
     }
 
-    void documentAssetChanged (YuiDocument&, const String& path) override
+    void documentAssetChanged (ComponentDocument&, const String& path) override
     {
         owner.assetChanged (path);
     }
 
     SceneComponent& owner;
-    WeakReference<YuiDocument> document;
+    WeakReference<ComponentDocument> document;
 };
 
 //==============================================================================
@@ -423,9 +423,9 @@ SceneComponent* SceneComponent::findFor (Component& component)
     return nullptr;
 }
 
-YuiDocument* SceneComponent::findDocument()
+ComponentDocument* SceneComponent::findDocument()
 {
-    auto* document = YuiDocument::findDocumentFor (this);
+    auto* document = ComponentDocument::findFor (this);
 
     if (document != nullptr && documentLink == nullptr)
         documentLink = std::make_unique<DocumentLink> (*this);
@@ -445,7 +445,7 @@ ResultValue<GltfModel> SceneComponent::loadModel (const String& path)
 
     // Followed before reading, to be told when the file changes
     const auto* document = findDocument();
-    const auto bytes = YuiDocument::readAssetFor (this, path);
+    const auto bytes = ComponentDocument::readAssetFor (this, path);
 
     // What a .gltf keeps in other files is read next to it, when the document has files
     const auto file = document != nullptr              ? document->getAssetFile (path)
@@ -469,7 +469,7 @@ ResultValue<Texture::Ptr> SceneComponent::loadTexture (const String& path, bool 
 
     const auto makeTexture = [&]() -> ResultValue<Texture::Ptr>
     {
-        const auto bytes = YuiDocument::readAssetFor (this, path);
+        const auto bytes = ComponentDocument::readAssetFor (this, path);
         if (! bytes.has_value())
             return makeResultValueFail ("the file '" + path + "' can't be read");
 
@@ -498,8 +498,8 @@ ResultValue<MaterialShader::Ptr> SceneComponent::loadMaterialShader (const Strin
     const auto makeShader = [&]() -> ResultValue<MaterialShader::Ptr>
     {
         // What a build compiles the material into comes first: a variant for each tier of the renderer, either of which can be missing
-        const auto raster = YuiDocument::readAssetFor (this, path + ".raster.ysl");
-        const auto full = YuiDocument::readAssetFor (this, path + ".full.ysl");
+        const auto raster = ComponentDocument::readAssetFor (this, path + ".raster.ysl");
+        const auto full = ComponentDocument::readAssetFor (this, path + ".full.ysl");
 
         if (raster.has_value() || full.has_value())
         {
@@ -510,7 +510,7 @@ ResultValue<MaterialShader::Ptr> SceneComponent::loadMaterialShader (const Strin
             return MaterialShader::createFromData (rasterBytes.getData(), rasterBytes.getSize(), fullBytes.getData(), fullBytes.getSize());
         }
 
-        const auto source = YuiDocument::readAssetFor (this, path);
+        const auto source = ComponentDocument::readAssetFor (this, path);
         if (! source.has_value())
             return makeResultValueFail ("can't read '" + path + "' nor its compiled variants '" + path + ".raster.ysl' and '" + path + ".full.ysl'");
 
@@ -527,12 +527,8 @@ ResultValue<MaterialShader::Ptr> SceneComponent::loadMaterialShader (const Strin
 void SceneComponent::reportProblem (const DataTree& element, const Identifier& property, const String& message)
 {
     // Where the problems of the components go, see sendProblem(): the document finds where the element is written
-    auto* document = findDocument();
-    if (document == nullptr)
-        return;
-
-    if (const auto& tell = document->getBuilder().onDiagnostic; tell != nullptr)
-        tell ({ .message = message, .element = element, .property = property });
+    if (auto* document = findDocument())
+        document->reportDiagnostic ({ .message = message, .element = element, .property = property });
 }
 
 void SceneComponent::assetChanged (const String& path)
@@ -565,7 +561,7 @@ void SceneComponent::assetChanged (const String& path)
 
 //==============================================================================
 
-void SceneComponent::reportProblem (Component& component, const Identifier& property, const String& message, YuiDiagnostic::Severity severity)
+void SceneComponent::reportProblem (Component& component, const Identifier& property, const String& message, DataTreeDiagnostic::Severity severity)
 {
     problems.push_back ({ WeakReference<Component> (&component), property, message, severity });
     sendProblem (problems.back());
@@ -589,20 +585,15 @@ void SceneComponent::sendProblem (const Problem& problem)
     if (component == nullptr || document == nullptr)
         return;
 
-    // The document has no way in for the problems a component finds in its values: they go where
-    // the builder sends the ones its bindings meet, which the document drops while it loads
-    auto& builder = document->getBuilder();
-    if (builder.onDiagnostic == nullptr)
-        return;
-
     auto subject = component->getTypeInfo().getTypeName().toString();
     if (problem.property.isValid())
         subject << "." << problem.property.toString();
 
-    builder.onDiagnostic ({ .message = subject + ": " + problem.message,
-                            .element = builder.findElementFor (component),
-                            .property = problem.property,
-                            .severity = problem.severity });
+    // The document finds the element the component was built from, and drops what it is told while it loads
+    document->reportDiagnostic ({ .message = subject + ": " + problem.message,
+                                  .property = problem.property,
+                                  .severity = problem.severity },
+                                component);
 }
 
 void SceneComponent::sendProblems()

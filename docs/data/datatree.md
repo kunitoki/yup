@@ -217,6 +217,26 @@ listener can log it. This includes a
 - Only the nodes a transaction edits are told. A node that loses a child to
   another parent gets `childRemoved` with no transaction around it.
 
+## Reporting problems
+
+A tree parsed from text can tell where its elements were written. The parser
+records them in a `DataTreeSourceMap`. The code reading the tree later describes
+a problem with a `DataTreeDiagnostic` naming the element and the property it is
+about, which the map turns into a line and a column:
+
+```cpp
+DataTreeSourceMap sourceMap;
+sourceMap.add (slider, "value", 12, 9, "ui.yui");    // done by the parser
+
+DataTreeDiagnostic problem { .message = "Expected a number", .element = slider, .property = "value" };
+
+DBG (sourceMap.locate (problem).toString());         // "ui.yui:12:9: Expected a number"
+```
+
+Positions are keyed by the place of an element in its tree, so they also apply
+to a copy of the tree. [`.yui` documents](../ui/yui/documents.md) report their
+problems this way.
+
 ## See also
 
 - [Transactions](transactions.md) - how to mutate a tree.

@@ -26,36 +26,40 @@ namespace yup
 
 //==============================================================================
 /**
-    A problem found in a `.yui` document.
+    A problem found in a tree that was parsed from text, such as a `.yui` document.
 
-    Syntax errors carry the position where parsing stopped. The problems found later, by the
-    builder or the stylesheet, carry the element of the document tree they come from, and the
-    property of that element when they are about a value, which a YuiSourceMap turns into a
-    position in the text.
+    A syntax error carries the position where parsing stopped. The problems found later, by
+    the code reading the tree, carry the element they come from, and the property of that
+    element when they are about a value, which a DataTreeSourceMap turns into a position in
+    the text.
 
-    @see YuiParser, YuiSourceMap, YuiDocument
+    @code
+    DataTreeDiagnostic problem { .message = "Expected a number", .element = slider, .property = "value" };
 
-    @tags{UI}
+    DBG (sourceMap.locate (problem).toString());   // "ui.yui:12:9: Expected a number"
+    @endcode
+
+    @see DataTreeSourceMap, DataTree
 */
-struct YUP_API YuiDiagnostic
+struct YUP_API DataTreeDiagnostic
 {
-    /** Severity level of a `.yui` diagnostic. */
+    /** Severity level of a diagnostic. */
     enum class Severity
     {
-        error,  /**< Prevents a declaration, binding or document load from succeeding. */
+        error,  /**< Prevents what the tree describes from being loaded or applied. */
         warning /**< Advisory problem that does not block evaluation or loading. */
     };
 
     /** What went wrong. */
     String message;
 
-    /** The element of the document tree the problem comes from, if known. */
+    /** The element of the tree the problem comes from, if known. */
     DataTree element;
 
     /** The property of the element the problem is about, null when it is about the whole element. */
     Identifier property;
 
-    /** The imported file the problem is in, empty for the main text. */
+    /** The text the problem is in when the tree was parsed from several, such as an imported file, empty for the main text. */
     String source;
 
     /** The 1-based line of the problem, 0 when the position is unknown. */
@@ -77,63 +81,7 @@ struct YUP_API YuiDiagnostic
     String toString() const;
 
     /** Returns the diagnostics as strings, joined by a separator. */
-    static String join (const std::vector<YuiDiagnostic>& diagnostics, StringRef separator = "\n");
-};
-
-//==============================================================================
-/**
-    Maps the elements of a parsed document to their position in the text.
-
-    YuiParser records where each element and each property was written. Positions are keyed by
-    the place of the element in its document rather than by the element itself, so they also
-    apply to a copy of the document or to a tree patched to match it with YuiTreeDiff.
-
-    @see YuiParser::ParseResult, YuiDiagnostic
-
-    @tags{UI}
-*/
-class YUP_API YuiSourceMap
-{
-public:
-    //==============================================================================
-    /** Records where an element or one of its properties was written.
-
-        @param element   An element, already part of the document it will be looked up in.
-        @param property  The property of the element, or null for the element itself.
-        @param line      The 1-based line.
-        @param column    The 1-based column, in characters.
-        @param source    The imported file the element comes from, empty for the main text.
-    */
-    void add (const DataTree& element, const Identifier& property, int line, int column, const String& source = {});
-
-    /** Fills in the position of a diagnostic from its element and property.
-
-        The position of the property is used when known, otherwise the one of the element, or
-        of its closest ancestor with a known position. A diagnostic which already has a
-        position, or has no element, is returned unchanged.
-    */
-    YuiDiagnostic locate (YuiDiagnostic diagnostic) const;
-
-    /** Returns true when the two maps hold the same positions: those of a text, and of that text
-        parsed again.
-    */
-    bool operator== (const YuiSourceMap& other) const;
-
-private:
-    struct Position
-    {
-        String source;
-        int line = 0;
-        int column = 0;
-
-        bool operator== (const Position& other) const = default;
-    };
-
-    using Key = std::pair<std::vector<int>, String>;
-
-    static std::vector<int> getPath (const DataTree& element);
-
-    std::map<Key, Position> positions;
+    static String join (const std::vector<DataTreeDiagnostic>& diagnostics, StringRef separator = "\n");
 };
 
 } // namespace yup

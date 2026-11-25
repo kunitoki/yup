@@ -33,7 +33,7 @@
     license:              ISC
 
     dependencies:         yup_3d yup_gui
-    testDeps:             libpng
+    testDeps:             libpng yup_gui_markup
 
     shaderDirectory:      shaders
     shaderIncludes:       shaders/lib

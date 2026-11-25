@@ -108,7 +108,7 @@ if (YUP_PLATFORM_DESKTOP OR YUP_PLATFORM_EMSCRIPTEN)
 endif()
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
-    list (APPEND target_modules yup_gui yup_audio_gui yup_3d yup_renderer tinygltf)
+    list (APPEND target_modules yup_gui yup_gui_markup yup_audio_gui yup_3d yup_renderer tinygltf)
     if (YUP_PLATFORM_DESKTOP AND NOT YUP_PLATFORM_WINDOWS)
         list (APPEND target_modules yup_python)
     endif()
@@ -205,7 +205,7 @@ if (YUP_PLATFORM_MAC AND "yup_python" IN_LIST target_modules)
     list (APPEND target_modules "${target_name}_python_stdlib_binary")
 endif()
 
-if ("yup_gui" IN_LIST target_modules)
+if ("yup_gui_markup" IN_LIST target_modules)
     set (yui_resources_dir "${CMAKE_CURRENT_LIST_DIR}/data/yui")
 
     yup_add_yui_resources (YuiTestResources

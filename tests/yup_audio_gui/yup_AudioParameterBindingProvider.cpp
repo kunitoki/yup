@@ -20,6 +20,7 @@
 */
 
 #include <yup_audio_gui/yup_audio_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <gtest/gtest.h>
 
@@ -214,7 +215,7 @@ TEST_F (AudioParameterBindingProviderTests, DrivesABuiltUserInterface)
 
     const auto result = builder.build (parsed.document);
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    EXPECT_TRUE (builder.getDiagnostics().empty()) << YuiDiagnostic::join (builder.getDiagnostics());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
 
     auto* knob = builder.findById<Slider> ("knob");
     ASSERT_NE (knob, nullptr);

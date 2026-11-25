@@ -149,7 +149,7 @@ TEST_F (SceneMeshComponentTests, ArraysThatDoNotFitTogetherDrawNothingAndAreRepo
         ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
         expectDiagnostic (document, test.diagnostic);
-        EXPECT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+        EXPECT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
         auto* broken = document.findById<SceneMeshComponent> ("broken");
         ASSERT_NE (broken, nullptr);
@@ -169,7 +169,7 @@ TEST_F (SceneMeshComponentTests, AProblemIsReportedWhereItsArrayIsWritten)
                                                  "}");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    ASSERT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     const auto& diagnostic = document.getDiagnostics().front();
     EXPECT_EQ (diagnostic.message, "Mesh3D.indices: the index 7 is not the one of a vertex, there are 3");
@@ -185,7 +185,7 @@ TEST_F (SceneMeshComponentTests, AProblemIsReportedWhereItsArrayIsWritten)
                                           "}")
                      .wasOk());
 
-    ASSERT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_EQ (document.getDiagnostics().front().line, 4);
 
     load (document, "Scene3D {\n"
@@ -344,7 +344,7 @@ TEST_F (SceneMeshComponentTests, WhatIsWrongWithTheArraysIsToldOnceTheMeshIsTheO
     auto drawnWhenTold = meshOf (*quad);
     StringArray told;
 
-    const DiagnosticListener listener (document, [&] (const YuiDiagnostic& diagnostic)
+    const DiagnosticListener listener (document, [&] (const DataTreeDiagnostic& diagnostic)
     {
         told.add (diagnostic.message);
         drawnWhenTold = meshOf (*quad);

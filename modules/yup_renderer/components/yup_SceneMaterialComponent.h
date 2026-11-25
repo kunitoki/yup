@@ -220,7 +220,7 @@ private:
     String shaderName;
     String shaderPath;           // The file of the shader the meshes are colored with
     StyleSheet::Ptr shaderSheet; // The stylesheet the shader was looked for in, nullptr to look for it again
-    std::weak_ptr<const YuiSourceMap> shaderLoad; // The source map of the load of the document it was last looked for after
+    std::weak_ptr<const DataTreeSourceMap> shaderLoad; // The source map of the load of the document it was last looked for after
     std::vector<ShaderInput> shaderInputs;
     double shaderTime = 0.0;
     bool fillsShaderTime = false;

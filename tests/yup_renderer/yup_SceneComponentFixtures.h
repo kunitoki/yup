@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include <yup_renderer/yup_renderer.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 #include <map>
 
@@ -89,11 +90,11 @@ protected:
         const auto result = document.loadFromString (text);
 
         ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-        EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+        EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
     }
 
     /** Returns the first diagnostic of a document holding a text, or nullptr. */
-    static const YuiDiagnostic* findDiagnostic (const YuiDocument& document, const String& text)
+    static const DataTreeDiagnostic* findDiagnostic (const YuiDocument& document, const String& text)
     {
         for (const auto& diagnostic : document.getDiagnostics())
             if (diagnostic.message.contains (text))
@@ -102,11 +103,11 @@ protected:
         return nullptr;
     }
 
-    static void expectDiagnostic (const YuiDocument& document, const String& text, YuiDiagnostic::Severity severity = YuiDiagnostic::Severity::error)
+    static void expectDiagnostic (const YuiDocument& document, const String& text, DataTreeDiagnostic::Severity severity = DataTreeDiagnostic::Severity::error)
     {
         const auto* diagnostic = findDiagnostic (document, text);
 
-        ASSERT_NE (diagnostic, nullptr) << "No diagnostic holding '" << text << "' in: " << YuiDiagnostic::join (document.getDiagnostics());
+        ASSERT_NE (diagnostic, nullptr) << "No diagnostic holding '" << text << "' in: " << DataTreeDiagnostic::join (document.getDiagnostics());
         EXPECT_EQ (diagnostic->severity, severity) << diagnostic->toString();
     }
 
@@ -363,7 +364,7 @@ protected:
     /** Hears the problems a document is told about after a load, when they are told. */
     struct DiagnosticListener final : YuiDocument::Listener
     {
-        DiagnosticListener (YuiDocument& documentToHear, std::function<void (const YuiDiagnostic&)> functionToCall)
+        DiagnosticListener (YuiDocument& documentToHear, std::function<void (const DataTreeDiagnostic&)> functionToCall)
             : document (documentToHear)
             , function (std::move (functionToCall))
         {
@@ -377,13 +378,13 @@ protected:
 
         void documentLoaded (YuiDocument&, const Result&) override {}
 
-        void documentDiagnosed (YuiDocument&, const YuiDiagnostic& diagnostic) override
+        void documentDiagnosed (YuiDocument&, const DataTreeDiagnostic& diagnostic) override
         {
             function (diagnostic);
         }
 
         YuiDocument& document;
-        std::function<void (const YuiDiagnostic&)> function;
+        std::function<void (const DataTreeDiagnostic&)> function;
     };
 
     /** Records the colors a component fills areas with when it paints. */

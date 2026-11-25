@@ -30,7 +30,7 @@ Row {
 ## Loading a document
 
 ```cpp
-#include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 
 YuiDocument document;
 document.setModel ("params", paramsProvider);
@@ -54,14 +54,14 @@ When the text has a syntax error, an invalid stylesheet or an unknown component
 type, the interface already loaded is kept, so a live editor keeps showing the
 last good version, and the failed result carries the error with its location.
 Values that can't be applied, such as an unknown property, don't make loading
-fail. Both are listed by `getDiagnostics()`, each a `YuiDiagnostic` holding the
+fail. Both are listed by `getDiagnostics()`, each a `DataTreeDiagnostic` holding the
 message, the import path (empty for the main text), the line and the column:
 
 ```cpp
 for (const auto& problem : document.getDiagnostics())
     editor.setErrorLine (problem.line - 1, true); // lines and columns start at 1
 
-DBG (YuiDiagnostic::join (document.getDiagnostics())); // "style.yui:7:9: Unknown cursor 'finger'"
+DBG (DataTreeDiagnostic::join (document.getDiagnostics())); // "style.yui:7:9: Unknown cursor 'finger'"
 ```
 
 Style rules are checked when they start matching, so a `:hover` rule with a bad

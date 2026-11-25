@@ -186,7 +186,7 @@ public:
     /** Loads a glTF model for the components of this scene, once for each path.
 
         The file is read through the document the component belongs to (see
-        YuiDocument::readAssetFor), so from a folder, from embedded resources or from the
+        ComponentDocument::readAssetFor), so from a folder, from embedded resources or from the
         unsaved text of an editor, and the model is kept: the Model3D components naming the
         same path share its meshes, its materials and its textures. A path is read again once
         the document tells that its file changed.
@@ -257,7 +257,7 @@ public:
     /** Reports a problem with a value of a component below this one.
 
         The problem is added to the diagnostics of the document that built the component (see
-        YuiDocument::getDiagnostics), at the line its property is written at, and reported
+        ComponentDocument::reportDiagnostic), at the line its property is written at, and reported
         again after each load for as long as it stands: withdraw it with clearProblems() once
         the value is right. Nothing is reported for a component that no document built.
 
@@ -270,7 +270,7 @@ public:
     void reportProblem (Component& component,
                         const Identifier& property,
                         const String& message,
-                        YuiDiagnostic::Severity severity = YuiDiagnostic::Severity::error);
+                        DataTreeDiagnostic::Severity severity = DataTreeDiagnostic::Severity::error);
 
     /** Withdraws the problems reported about a property of a component.
 
@@ -355,7 +355,7 @@ private:
         WeakReference<Component> component;
         Identifier property;
         String message;
-        YuiDiagnostic::Severity severity = YuiDiagnostic::Severity::error;
+        DataTreeDiagnostic::Severity severity = DataTreeDiagnostic::Severity::error;
     };
 
     struct Pick
@@ -369,7 +369,7 @@ private:
     void watchScene();
     SceneSettings getSettings() const;
     void featureChanged (const Identifier& property);
-    YuiDocument* findDocument();
+    ComponentDocument* findDocument();
     void sendProblem (const Problem& problem);
     void sendProblems();
     void updateMeshes();
@@ -405,8 +405,9 @@ private:
 /** Registers the type infos of the 3D components a `.yui` document is written with: `Scene3D`,
     `Node3D`, `Camera3D`, `Light3D`, `Mesh3D`, `Model3D` and `Material3D`.
 
-    registerBuiltInComponentTypes() calls it in the applications linking this module, so there
-    is no need to call it.
+    The yup_gui_markup module calls it in the applications linking both, so a `.yui` document
+    needs no call. Call it to create the 3D components by their type name without that module,
+    through the ComponentTypeRegistry.
 */
 YUP_API void registerSceneComponentTypes();
 

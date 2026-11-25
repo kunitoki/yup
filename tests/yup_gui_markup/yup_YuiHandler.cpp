@@ -19,8 +19,8 @@
   ==============================================================================
 */
 
-#include <yup_gui/yup_gui.h>
-#include <yup_gui/markup/yup_YuiHandler.h>
+#include <yup_gui_markup/yup_gui_markup.h>
+#include <yup_gui_markup/markup/yup_YuiHandler.h>
 
 #include <gtest/gtest.h>
 

@@ -230,7 +230,7 @@ namespace
 constexpr int maximumSceneFrames = 64;
 
 // Adds a problem the tool finds to those of a document, which tells where it is written
-void report (YuiDocument& document, const YuiDiagnostic& problem)
+void report (YuiDocument& document, const DataTreeDiagnostic& problem)
 {
     if (const auto& tell = document.getBuilder().onDiagnostic; tell != nullptr)
         tell (problem);
@@ -703,7 +703,7 @@ void collectIds (const DataTree& element, StringArray& ids)
 }
 
 // What a problem tells a model lacks, nothing when it is about something else
-std::optional<MissingProperty> readMissingProperty (YuiDocument& document, const YuiDiagnostic& diagnostic, const StringArray& ids)
+std::optional<MissingProperty> readMissingProperty (YuiDocument& document, const DataTreeDiagnostic& diagnostic, const StringArray& ids)
 {
     // The names an expression reads that are neither components nor models
     static const StringArray reserved { "palette", "tokens", "parent", "root", "self", "colors", "bounds" };
@@ -816,7 +816,7 @@ int findReference (const String& text, const Lacking& lacking)
 }
 
 // The text a problem is about: the value of the property it names, or all those of its element
-String findTextOf (const YuiDiagnostic& diagnostic)
+String findTextOf (const DataTreeDiagnostic& diagnostic)
 {
     const auto& element = diagnostic.element;
 
@@ -1261,12 +1261,12 @@ YuiToolShown loadYuiToolTarget (YuiDocument& document, YuiLoader& loader, const 
             }
 
             // The positions of the text only hold while its elements keep their place
-            shown.result = document.load (withRoot (parsed.document, host.document.getChild (0)), hasRoot ? YuiSourceMap() : parsed.sourceMap);
+            shown.result = document.load (withRoot (parsed.document, host.document.getChild (0)), hasRoot ? DataTreeSourceMap() : parsed.sourceMap);
 
             const auto& diagnostics = document.getDiagnostics();
 
             shown.needsHost = target.drawing.isNotEmpty() && target.hostType.isEmpty()
-                           && std::any_of (diagnostics.begin(), diagnostics.end(), [] (const YuiDiagnostic& diagnostic)
+                           && std::any_of (diagnostics.begin(), diagnostics.end(), [] (const DataTreeDiagnostic& diagnostic)
             {
                 return diagnostic.isError() && diagnostic.message.startsWith ("Component.drawing: ") && diagnostic.message.contains ("Unknown symbol '");
             });
@@ -1593,7 +1593,7 @@ ResultValue<Image> drawYuiToolImage (Component& component, const std::function<I
         {
             report (*document, { .message = "Scene3D: still changing after " + String (maximumSceneFrames) + " frames, the image shows it as it was at the last of them",
                                  .element = document->getBuilder().findElementFor (scene),
-                                 .severity = YuiDiagnostic::Severity::warning });
+                                 .severity = DataTreeDiagnostic::Severity::warning });
         }
     }
 

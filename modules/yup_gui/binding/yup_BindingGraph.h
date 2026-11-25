@@ -57,7 +57,7 @@ namespace yup
     run. Symbols resolve through DrawingScope: bare names and `self.` on the target, `parent.`
     on its parent, `palette.` on the palette, and any other prefix through the resolver.
 
-    @see PropertyExpression, DrawingScope, YuiBuilder
+    @see PropertyExpression, DrawingScope
 
     @tags{UI}
 */

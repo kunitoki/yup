@@ -636,7 +636,7 @@ TEST_F (SceneDraggablePartTests, ATravelOrATurnThatIsNotThreeNumbersIsReported)
                                                  "}");
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
-    ASSERT_EQ (document.getDiagnostics().size(), 2u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 2u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     expectDiagnostic (document, "Node3D.travel: expected 3 numbers");
     expectDiagnostic (document, "Node3D.turn: expected 3 numbers");

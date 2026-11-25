@@ -34,6 +34,7 @@ coverage:
           - yup_expression
           - yup_graphics
           - yup_gui
+          - yup_gui_markup
           - yup_python
           - yup_renderer
           - yup_rhi
@@ -65,6 +66,7 @@ flags:
   yup_expression:            { paths: [modules/yup_expression/], carryforward: true }
   yup_graphics:              { paths: [modules/yup_graphics/], carryforward: true }
   yup_gui:                   { paths: [modules/yup_gui/], carryforward: true }
+  yup_gui_markup:            { paths: [modules/yup_gui_markup/], carryforward: true }
   yup_python:                { paths: [modules/yup_python/], carryforward: true }
   yup_renderer:              { paths: [modules/yup_renderer/], carryforward: true }
   yup_rhi:                   { paths: [modules/yup_rhi/], carryforward: true }

@@ -27,6 +27,10 @@
 #include <yup_gui/yup_gui.h>
 #endif
 
+#if YUP_MODULE_AVAILABLE_yup_gui_markup
+#include <yup_gui_markup/yup_gui_markup.h>
+#endif
+
 #include "yup_YupCore_bindings.h"
 
 #define YUP_PYTHON_INCLUDE_PYBIND11_FUNCTIONAL

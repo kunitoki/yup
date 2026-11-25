@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <yup_gui_markup/yup_gui_markup.h>
 #include <yup_renderer/yup_renderer.h>
 
 //==============================================================================
@@ -288,7 +289,7 @@ private:
     // material compiled by the frame after the load
     void documentLoaded (yup::YuiDocument&, const yup::Result&) override {}
 
-    void documentDiagnosed (yup::YuiDocument&, const yup::YuiDiagnostic&) override
+    void documentDiagnosed (yup::YuiDocument&, const yup::DataTreeDiagnostic&) override
     {
         report();
     }
@@ -318,7 +319,7 @@ private:
         if (lastLoad.failed())
             lines.add ("Error: " + lastLoad.getErrorMessage());
         else if (! problems.empty())
-            lines.add (yup::YuiDiagnostic::join (problems, "\n"));
+            lines.add (yup::DataTreeDiagnostic::join (problems, "\n"));
         else
             lines.add ("Built with " + yup::String (view->getDocument().getBuilder().getBindings().getNumBindings()) + " bindings. Edit any tab"
                        + (view->getLoader().isWatching() ? " or file." : "."));

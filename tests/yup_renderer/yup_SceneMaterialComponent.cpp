@@ -419,7 +419,7 @@ TEST_F (SceneMaterialComponentTests, ATextureThatCanNotBeLoadedIsReported)
 
     expectDiagnostic (document, "Material3D.baseColorTexture: the file 'nowhere.png' can't be read");
     expectDiagnostic (document, "Material3D.normalTexture: ");
-    EXPECT_EQ (document.getDiagnostics().size(), 2u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 2u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     const auto* diagnostic = findDiagnostic (document, "Material3D.normalTexture");
     ASSERT_NE (diagnostic, nullptr);
@@ -476,7 +476,7 @@ TEST_F (SceneMaterialComponentTests, AParentTakesItsFirstMaterialAndReportsTheOt
     ASSERT_NE (first, nullptr);
     ASSERT_NE (second, nullptr);
 
-    ASSERT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_EQ (document.getDiagnostics().front().message, "Material3D: the parent already has a Material3D, this one is not used");
     EXPECT_EQ (document.getDiagnostics().front().line, 3);
 
@@ -612,7 +612,7 @@ TEST_F (SceneMaterialComponentTests, AMaterialNamingAShaderOfTheStylesheetColors
     ASSERT_NE (node->getShader(), nullptr);
     EXPECT_NE (node->getShader()->getRasterBundle(), nullptr);
     EXPECT_NE (node->getShader()->getFullBundle(), nullptr);
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     // The variants a build compiles the material into come first: its source is not read
     EXPECT_EQ (reads["fx/glow.glsl.raster.ysl"], 1);
@@ -666,7 +666,7 @@ TEST_F (SceneMaterialComponentTests, AShaderTheStylesheetDoesNotHaveOrThatIsNotA
 
     expectDiagnostic (document, "Material3D.shader: the stylesheet has no shader 'Nothing'");
     expectDiagnostic (document, "Material3D.shader: the shader 'Wave' has a 'fragment', a material takes a shader with a 'material'");
-    EXPECT_EQ (document.getDiagnostics().size(), 2u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 2u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     const auto* unknown = findDiagnostic (document, "'Nothing'");
     ASSERT_NE (unknown, nullptr);
@@ -685,7 +685,7 @@ TEST_F (SceneMaterialComponentTests, AShaderTheStylesheetDoesNotHaveOrThatIsNotA
 
     // What is wrong was told once: the frames that follow have nothing to add
     view->refreshDisplay (0.0);
-    EXPECT_EQ (document.getDiagnostics().size(), 2u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 2u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     // A document forgets what it was told when it loads: the first frame after it tells what is still wrong
     const auto again = document.loadFromString ("shader Glow { material: \"fx/glow.glsl\"; }\n"
@@ -701,7 +701,7 @@ TEST_F (SceneMaterialComponentTests, AShaderTheStylesheetDoesNotHaveOrThatIsNotA
     view->refreshDisplay (0.0);
 
     expectDiagnostic (document, "Material3D.shader: the stylesheet has no shader 'Nothing'");
-    EXPECT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_NE (shaderNodeOf (*document.findById<SceneMeshComponent> ("second")), nullptr);
 }
 
@@ -764,7 +764,7 @@ TEST_F (SceneMaterialComponentTests, AMaterialLoadsFromEitherOfItsVariantsAndRep
     EXPECT_EQ (nodeOf ("broken"), nullptr);
     EXPECT_EQ (nodeOf ("swapped"), nullptr);
 
-    EXPECT_EQ (document.getDiagnostics().size(), 3u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 3u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     const auto* missing = findDiagnostic (document, "'Missing'");
     ASSERT_NE (missing, nullptr);
@@ -891,7 +891,7 @@ TEST_F (SceneMaterialComponentTests, AMaterialIsLoadedAgainWhenOneOfItsFilesChan
     EXPECT_EQ (reads["fx/glow.glsl.raster.ysl"], 2);
     EXPECT_EQ (reads["fx/glow.glsl.full.ysl"], 2);
     expectFloats (floatsAt (shown.shaderNode(), 16), { 2.0f });
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     // A file that can't be loaded anymore, as one being edited, leaves the shader as it was and is reported
     files["fx/glow.glsl.raster.ysl"] = bytesOf ("this is not a shader bundle");
@@ -901,7 +901,7 @@ TEST_F (SceneMaterialComponentTests, AMaterialIsLoadedAgainWhenOneOfItsFilesChan
     ASSERT_NE (shown.shaderNode(), nullptr);
     EXPECT_EQ (shown.shaderNode()->getShader(), second);
     expectDiagnostic (document, "shader Glow: ");
-    EXPECT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_EQ (document.getDiagnostics().front().line, 1);
 
     // Its values still follow the properties
@@ -1186,7 +1186,7 @@ TEST_F (SceneMaterialComponentTests, TheDefaultsOfABlockFillTheInputsOfEveryType
     ASSERT_TRUE (shown.isValid());
 
     shown.view->refreshDisplay (0.0);
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     const auto* node = shown.shaderNode();
     ASSERT_NE (node, nullptr);
@@ -1231,7 +1231,7 @@ TEST_F (SceneMaterialComponentTests, ADefaultCanBeAnExpressionEvaluatedForTheMat
     ASSERT_NE (knob, nullptr);
 
     shown.view->refreshDisplay (0.0);
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     const auto* node = shown.shaderNode();
     ASSERT_NE (node, nullptr);
@@ -1288,7 +1288,7 @@ TEST_F (SceneMaterialComponentTests, APropertyThatDoesNotFitTheUniformBlockIsRep
     {
         const auto* diagnostic = findDiagnostic (document, message);
 
-        ASSERT_NE (diagnostic, nullptr) << "No diagnostic holding '" << message << "' in: " << YuiDiagnostic::join (document.getDiagnostics());
+        ASSERT_NE (diagnostic, nullptr) << "No diagnostic holding '" << message << "' in: " << DataTreeDiagnostic::join (document.getDiagnostics());
         EXPECT_TRUE (diagnostic->message.startsWith (message)) << diagnostic->message;
         EXPECT_EQ (diagnostic->line, line) << diagnostic->toString();
         EXPECT_TRUE (diagnostic->isError());
@@ -1299,7 +1299,7 @@ TEST_F (SceneMaterialComponentTests, APropertyThatDoesNotFitTheUniformBlockIsRep
     expectAt (4, "The uniform block of the shader 'Glow' has no member 'missing'");
     expectAt (5, "The member 'strength' of the uniform block of the shader 'Glow' is too small for a color");
     expectAt (6, "The default of the property 'rim' of the shader 'Glow' can't be used: ");
-    EXPECT_EQ (document.getDiagnostics().size(), 4u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 4u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     // A block that does not fit the material is not used
     EXPECT_EQ (shown.shaderNode(), nullptr);
@@ -1316,7 +1316,7 @@ TEST_F (SceneMaterialComponentTests, APropertyThatDoesNotFitTheUniformBlockIsRep
     shown.view->refreshDisplay (0.0);
 
     expectAt (4, "The default of the property 'rim' of the shader 'Glow' can't be used: ");
-    EXPECT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     ASSERT_NE (shown.shaderNode(), nullptr);
     expectFloats (floatsAt (shown.shaderNode(), 0, 4), { 0.0f, 0.0f, 0.0f, 0.0f });
@@ -1340,7 +1340,7 @@ TEST_F (SceneMaterialComponentTests, WhatPreventsAMaterialFromLoadingIsReportedO
     serve (document);
 
     int numTold = 0;
-    DiagnosticListener listener (document, [&numTold] (const YuiDiagnostic&)
+    DiagnosticListener listener (document, [&numTold] (const DataTreeDiagnostic&)
     {
         ++numTold;
     });
@@ -1353,7 +1353,7 @@ TEST_F (SceneMaterialComponentTests, WhatPreventsAMaterialFromLoadingIsReportedO
     shown.view->refreshDisplay (0.0);
 
     // Three materials name the shader: one problem, where its block names the file, and nothing from the materials
-    ASSERT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     const auto problem = document.getDiagnostics().front();
     EXPECT_EQ (problem.message, "The shader 'Broken' can't read 'fx/broken.glsl' nor its compiled variants 'fx/broken.glsl.raster.ysl' and 'fx/broken.glsl.full.ysl'");
@@ -1374,7 +1374,7 @@ TEST_F (SceneMaterialComponentTests, WhatPreventsAMaterialFromLoadingIsReportedO
 
     shown.view->refreshDisplay (0.0);
 
-    ASSERT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_EQ (document.getDiagnostics().front().message, problem.message);
     EXPECT_EQ (document.getDiagnostics().front().line, 2);
 
@@ -1389,7 +1389,7 @@ TEST_F (SceneMaterialComponentTests, WhatPreventsAMaterialFromLoadingIsReportedO
 
     ASSERT_TRUE (document.loadFromString (text).wasOk());
     shown.view->refreshDisplay (0.0);
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 }
 
 TEST_F (SceneMaterialComponentTests, TheTimeOfAShaderHasTheSceneDrawnAgainOnEveryFrame)
@@ -1484,7 +1484,7 @@ TEST_F (SceneMaterialComponentTests, AMaterialABuildCompiledIsLoadedFromItsEmbed
     ASSERT_TRUE (shown.isValid());
 
     shown.view->refreshDisplay (0.0);
-    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 
     const auto* node = shown.shaderNode();
     ASSERT_NE (node, nullptr);
@@ -1563,7 +1563,7 @@ vec4 yupMaterial (YupSurface surface)
     // What the compiler says of a source it can't compile is told once, at the block, for the two materials naming it
     EXPECT_EQ (shaderNodeOf (*wrong), nullptr);
     expectDiagnostic (document, "shader Wrong: ");
-    ASSERT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
     EXPECT_EQ (document.getDiagnostics().front().line, 2);
     EXPECT_EQ (document.getDiagnostics().front().property.toString(), "material");
 
@@ -1593,7 +1593,7 @@ TEST_F (SceneMaterialComponentTests, AMaterialWithoutVariantsCanNotBeCompiledWit
 
     EXPECT_EQ (shown.shaderNode(), nullptr);
     expectDiagnostic (document, "shader Hologram: 'fx/hologram.glsl' is the source of a material, which this build can't compile, and there is no 'fx/hologram.glsl.raster.ysl' nor 'fx/hologram.glsl.full.ysl'");
-    EXPECT_EQ (document.getDiagnostics().size(), 1u) << YuiDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
 }
 
 #endif

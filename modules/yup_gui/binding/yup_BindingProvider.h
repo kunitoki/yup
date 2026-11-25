@@ -30,7 +30,7 @@ namespace yup
 
     A provider is the model side of a data-driven UI: a set of typed values, such as the
     parameters of a synth or the settings of an application, that `.yui` reads and writes by
-    name once it is registered with YuiBuilder::setModel or YuiDocument::setModel:
+    name once it is registered as a model of the document, with its `setModel`:
 
     @code
     Slider { value <=> params.cutoff; }
@@ -40,11 +40,11 @@ namespace yup
     Implementations report every change of a value with @ref notifyValueChanged, whoever made
     it, so bound components stay up to date. A continuous edit, such as dragging a knob, is
     wrapped in @ref beginGesture and @ref endGesture, which lets the provider group it into one
-    undoable step or tell a host that a parameter is being automated. YuiBuilder wraps any other
+    undoable step or tell a host that a parameter is being automated. A BindingModel wraps any other
     change, from the keyboard, the mouse wheel or code, in a gesture of its own, and doesn't write
     a value equal to the current one.
 
-    @see DataTreeBindingProvider, YuiBuilder, BindingGraph
+    @see DataTreeBindingProvider, BindingModel, BindingGraph
 
     @tags{UI}
 */

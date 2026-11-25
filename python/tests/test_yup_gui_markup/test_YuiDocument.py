@@ -240,7 +240,7 @@ def test_failed_load_keeps_the_interface_and_reports_the_error():
     assert diagnostics[0].line == 2
     assert diagnostics[0].isError()
     assert not diagnostics[0].isWarning()
-    assert diagnostics[0].severity == yup.YuiDiagnostic.Severity.error
+    assert diagnostics[0].severity == yup.DataTreeDiagnostic.Severity.error
     assert result.getErrorMessage() == diagnostics[0].toString()
 
 
@@ -282,7 +282,7 @@ def test_diagnostics_tell_where_the_problems_are_written():
                     "}")
 
     diagnostics = document.getDiagnostics()
-    assert len(diagnostics) == 2, yup.YuiDiagnostic.join(diagnostics)
+    assert len(diagnostics) == 2, yup.DataTreeDiagnostic.join(diagnostics)
 
     assert diagnostics[0].toString().startswith("5:29: Slider.value: ")
     assert (diagnostics[0].line, diagnostics[0].column) == (5, 29)
@@ -293,7 +293,7 @@ def test_diagnostics_tell_where_the_problems_are_written():
     assert (diagnostics[1].line, diagnostics[1].column) == (2, 13)
     assert str(diagnostics[1]) == diagnostics[1].toString()
 
-    joined = yup.YuiDiagnostic.join(diagnostics)
+    joined = yup.DataTreeDiagnostic.join(diagnostics)
     assert joined == diagnostics[0].toString() + "\n" + diagnostics[1].toString()
 
 

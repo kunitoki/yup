@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 
-String YuiDiagnostic::toString() const
+String DataTreeDiagnostic::toString() const
 {
     String prefix;
 
@@ -39,7 +39,7 @@ String YuiDiagnostic::toString() const
     return prefix.isEmpty() ? body : prefix + " " + body;
 }
 
-String YuiDiagnostic::join (const std::vector<YuiDiagnostic>& diagnostics, StringRef separator)
+String DataTreeDiagnostic::join (const std::vector<DataTreeDiagnostic>& diagnostics, StringRef separator)
 {
     StringArray lines;
 
@@ -47,55 +47,6 @@ String YuiDiagnostic::join (const std::vector<YuiDiagnostic>& diagnostics, Strin
         lines.add (diagnostic.toString());
 
     return lines.joinIntoString (separator);
-}
-
-//==============================================================================
-
-void YuiSourceMap::add (const DataTree& element, const Identifier& property, int line, int column, const String& source)
-{
-    positions[{ getPath (element), property.toString() }] = { source, line, column };
-}
-
-YuiDiagnostic YuiSourceMap::locate (YuiDiagnostic diagnostic) const
-{
-    if (diagnostic.line > 0 || ! diagnostic.element.isValid())
-        return diagnostic;
-
-    // The path goes from the element up, so dropping its front moves to the parent
-    Key key { getPath (diagnostic.element), diagnostic.property.toString() };
-
-    for (;;)
-    {
-        if (const auto found = positions.find (key); found != positions.end())
-        {
-            diagnostic.source = found->second.source;
-            diagnostic.line = found->second.line;
-            diagnostic.column = found->second.column;
-            return diagnostic;
-        }
-
-        if (key.second.isNotEmpty())
-            key.second = {};
-        else if (! key.first.empty())
-            key.first.erase (key.first.begin());
-        else
-            return diagnostic;
-    }
-}
-
-bool YuiSourceMap::operator== (const YuiSourceMap& other) const
-{
-    return positions == other.positions;
-}
-
-std::vector<int> YuiSourceMap::getPath (const DataTree& element)
-{
-    std::vector<int> path;
-
-    for (auto child = element, parent = element.getParent(); parent.isValid(); child = parent, parent = parent.getParent())
-        path.push_back (parent.indexOf (child));
-
-    return path;
 }
 
 } // namespace yup

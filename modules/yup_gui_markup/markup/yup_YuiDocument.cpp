@@ -106,10 +106,10 @@ bool isGrammarNodeType (const Identifier& type) noexcept
     return grammarTypes.contains (type.toString());
 }
 
-std::optional<YuiDiagnostic> validateGrammarNodes (const DataTreeSchema& schema, const DataTree& node, bool isAmongComponents = false)
+std::optional<DataTreeDiagnostic> validateGrammarNodes (const DataTreeSchema& schema, const DataTree& node, bool isAmongComponents = false)
 {
     if (! node.isValid())
-        return YuiDiagnostic { .message = "Invalid DataTree" };
+        return DataTreeDiagnostic { .message = "Invalid DataTree" };
 
     const auto nodeType = node.getType();
     static const Identifier repeatType ("repeat");
@@ -127,13 +127,13 @@ std::optional<YuiDiagnostic> validateGrammarNodes (const DataTreeSchema& schema,
             const auto info = schema.getPropertyInfo (nodeType, propName);
 
             if (info.required && ! node.hasProperty (propName))
-                return YuiDiagnostic { .message = "Required property '" + propNameText + "' is missing on '" + nodeType.toString() + "'", .element = node };
+                return DataTreeDiagnostic { .message = "Required property '" + propNameText + "' is missing on '" + nodeType.toString() + "'", .element = node };
 
             if (node.hasProperty (propName))
             {
                 const auto check = schema.validatePropertyValue (nodeType, propName, node.getProperty (propName));
                 if (check.failed())
-                    return YuiDiagnostic { .message = check.getErrorMessage(), .element = node, .property = propName };
+                    return DataTreeDiagnostic { .message = check.getErrorMessage(), .element = node, .property = propName };
             }
         }
 
@@ -142,7 +142,7 @@ std::optional<YuiDiagnostic> validateGrammarNodes (const DataTreeSchema& schema,
             for (const auto& child : node)
             {
                 if (child.getType() != repeatType && ! detail::isYuiComponentElement (child))
-                    return YuiDiagnostic { .message = "A repeat of components holds components and other repeats, not '" + child.getType().toString() + "'", .element = child };
+                    return DataTreeDiagnostic { .message = "A repeat of components holds components and other repeats, not '" + child.getType().toString() + "'", .element = child };
             }
         }
         else if (nodeType.toString() != "yui" && nodeType.toString() != "component")
@@ -152,7 +152,7 @@ std::optional<YuiDiagnostic> validateGrammarNodes (const DataTreeSchema& schema,
                 const auto child = node.getChild (i);
                 const auto childCheck = schema.validateChildAddition (nodeType, child.getType(), i);
                 if (childCheck.failed())
-                    return YuiDiagnostic { .message = childCheck.getErrorMessage(), .element = child };
+                    return DataTreeDiagnostic { .message = childCheck.getErrorMessage(), .element = child };
             }
         }
     }
@@ -166,36 +166,8 @@ std::optional<YuiDiagnostic> validateGrammarNodes (const DataTreeSchema& schema,
     return std::nullopt;
 }
 
-// The file of an asset is found as Image and the drawings find theirs
-File resolveAssetFile (const String& path, const File& baseDirectory)
-{
-    if (path.isEmpty())
-        return {};
-
-    if (File::isAbsolutePath (path))
-        return File (path);
-
-    if (baseDirectory != File())
-    {
-        if (const auto candidate = baseDirectory.getChildFile (path); candidate.existsAsFile())
-            return candidate;
-    }
-
-    return File::getCurrentWorkingDirectory().getChildFile (path);
-}
-
-std::optional<MemoryBlock> readAssetFile (const File& file)
-{
-    MemoryBlock bytes;
-
-    if (! file.loadFileAsData (bytes))
-        return std::nullopt;
-
-    return bytes;
-}
-
 // A problem is listed once: what it says and where it is written tell it from the others
-bool isSameProblem (const YuiDiagnostic& a, const YuiDiagnostic& b)
+bool isSameProblem (const DataTreeDiagnostic& a, const DataTreeDiagnostic& b)
 {
     return a.line == b.line
         && a.column == b.column
@@ -209,7 +181,7 @@ bool isSameProblem (const YuiDiagnostic& a, const YuiDiagnostic& b)
 
 DataTreeSchema::Ptr YuiDocument::createSchema()
 {
-    registerBuiltInComponentTypes();
+    registerYuiComponentTypes();
 
     const auto registeredTypes = ComponentTypeRegistry::getInstance().getRegisteredTypes();
 
@@ -427,9 +399,9 @@ DataTreeSchema::Ptr YuiDocument::createSchema()
 
 YuiDocument::YuiDocument()
 {
-    getLiveDocuments().push_back (this);
+    registerDocument();
 
-    builder.onDiagnostic = [this] (const YuiDiagnostic& diagnostic)
+    builder.onDiagnostic = [this] (const DataTreeDiagnostic& diagnostic)
     {
         if (! isLoading && lastLoadSucceeded)
             report (sourceMap, diagnostic);
@@ -450,35 +422,28 @@ YuiDocument::YuiDocument()
 
 YuiDocument::~YuiDocument()
 {
-    auto& live = getLiveDocuments();
-    live.erase (std::remove (live.begin(), live.end(), this), live.end());
+    // First: the components destroyed below may look for their document
+    unregisterDocument();
 
     resetState();
 }
 
-std::vector<YuiDocument*>& YuiDocument::getLiveDocuments()
-{
-    static std::vector<YuiDocument*> documents;
-    return documents;
-}
-
 YuiDocument* YuiDocument::findDocumentFor (const Component* component)
 {
-    for (; component != nullptr; component = component->getParentComponent())
-    {
-        for (auto* document : getLiveDocuments())
-        {
-            if (document->getRoot() == component)
-                return document;
-        }
-    }
-
-    return nullptr;
+    return dynamic_cast<YuiDocument*> (findFor (component));
 }
 
 std::vector<YuiDocument*> YuiDocument::getAllDocuments()
 {
-    return getLiveDocuments();
+    std::vector<YuiDocument*> documents;
+
+    for (auto* registered : getRegisteredDocuments())
+    {
+        if (auto* document = dynamic_cast<YuiDocument*> (registered))
+            documents.push_back (document);
+    }
+
+    return documents;
 }
 
 //==============================================================================
@@ -513,18 +478,28 @@ void YuiDocument::notifyAssetChanged (const String& path)
         if (auto* context = root->getStyleContext())
             context->assetChanged (path);
 
+    // A listener may destroy the document
+    const WeakReference<YuiDocument> self (this);
+
     listeners.call ([&] (Listener& listener)
     {
         listener.documentAssetChanged (*this, path);
     });
+
+    if (self != nullptr)
+        notifyDocumentAssetChanged (path);
 }
 
-std::optional<MemoryBlock> YuiDocument::readAssetFor (const Component* component, const String& path)
+void YuiDocument::reportDiagnostic (DataTreeDiagnostic diagnostic, const Component* subject)
 {
-    if (const auto* document = findDocumentFor (component))
-        return document->readAsset (path);
+    // Where the builder sends the problems its bindings meet, which are dropped while the document loads
+    if (builder.onDiagnostic == nullptr)
+        return;
 
-    return readAssetFile (resolveAssetFile (path, {}));
+    if (subject != nullptr && ! diagnostic.element.isValid())
+        diagnostic.element = builder.findElementFor (subject);
+
+    builder.onDiagnostic (diagnostic);
 }
 
 //==============================================================================
@@ -549,9 +524,9 @@ class YuiDocument::LoadAction final : public UndoableAction
 public:
     LoadAction (YuiDocument& documentToLoad,
                 DataTree before,
-                std::shared_ptr<const YuiSourceMap> beforeMap,
+                std::shared_ptr<const DataTreeSourceMap> beforeMap,
                 DataTree after,
-                std::shared_ptr<const YuiSourceMap> afterMap)
+                std::shared_ptr<const DataTreeSourceMap> afterMap)
         : document (&documentToLoad)
         , previousTree (std::move (before))
         , previousMap (std::move (beforeMap))
@@ -588,16 +563,16 @@ public:
 private:
     WeakReference<YuiDocument> document;
     DataTree previousTree;
-    std::shared_ptr<const YuiSourceMap> previousMap;
+    std::shared_ptr<const DataTreeSourceMap> previousMap;
     DataTree loadedTree;
-    std::shared_ptr<const YuiSourceMap> loadedMap;
+    std::shared_ptr<const DataTreeSourceMap> loadedMap;
 };
 
 //==============================================================================
 
-Result YuiDocument::load (const DataTree& document, const YuiSourceMap& map)
+Result YuiDocument::load (const DataTree& document, const DataTreeSourceMap& map)
 {
-    auto sharedMap = std::make_shared<const YuiSourceMap> (map);
+    auto sharedMap = std::make_shared<const DataTreeSourceMap> (map);
 
     // The document that is loaded, the same elements written at the same places, is loaded again for what it reads
     // to be read again: no step to undo
@@ -617,7 +592,7 @@ Result YuiDocument::load (const DataTree& document, const YuiSourceMap& map)
     return action->result;
 }
 
-Result YuiDocument::loadTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map)
+Result YuiDocument::loadTree (const DataTree& document, const std::shared_ptr<const DataTreeSourceMap>& map)
 {
     return notifyLoaded (buildTree (document, map));
 }
@@ -630,20 +605,26 @@ Result YuiDocument::fail (const String& message)
 
 Result YuiDocument::notifyLoaded (Result result)
 {
+    // A listener may destroy the document
+    const WeakReference<YuiDocument> self (this);
+
     listeners.call ([&] (Listener& listener)
     {
         listener.documentLoaded (*this, result);
     });
 
+    if (self != nullptr)
+        notifyDocumentLoaded();
+
     return result;
 }
 
-void YuiDocument::report (const std::shared_ptr<const YuiSourceMap>& map, const YuiDiagnostic& diagnostic)
+void YuiDocument::report (const std::shared_ptr<const DataTreeSourceMap>& map, const DataTreeDiagnostic& diagnostic)
 {
     const auto located = map != nullptr ? map->locate (diagnostic) : diagnostic;
 
     // Styling reports the same problem again each time a component is restyled
-    const auto isKnown = std::any_of (diagnostics.begin(), diagnostics.end(), [&located] (const YuiDiagnostic& known)
+    const auto isKnown = std::any_of (diagnostics.begin(), diagnostics.end(), [&located] (const DataTreeDiagnostic& known)
     {
         return isSameProblem (known, located);
     });
@@ -662,7 +643,7 @@ void YuiDocument::report (const std::shared_ptr<const YuiSourceMap>& map, const 
     }
 }
 
-Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map)
+Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<const DataTreeSourceMap>& map)
 {
     const ScopedValueSetter<bool> loading (isLoading, true);
     const auto previousIgnore = builder.isIgnoringTreeChanges();
@@ -691,7 +672,7 @@ Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<c
 
     if (sheet == nullptr || ! hasSameStyle (tree, document))
     {
-        YuiDiagnostic failure;
+        DataTreeDiagnostic failure;
         auto parsed = StyleSheet::fromTree (document, &failure);
 
         if (parsed.failed())
@@ -759,7 +740,7 @@ void YuiDocument::attachStyleContext (Component& root)
         builder.refreshThemePalettes();
         builder.getBindings().refreshPaletteBindings();
     };
-    context.onDiagnostic = [this] (const YuiDiagnostic& diagnostic)
+    context.onDiagnostic = [this] (const DataTreeDiagnostic& diagnostic)
     {
         if (lastLoadSucceeded)
             report (sourceMap, diagnostic);
@@ -786,7 +767,7 @@ void YuiDocument::handleLiveTreeMutation()
         }
     }
 
-    YuiDiagnostic failure;
+    DataTreeDiagnostic failure;
     auto parsedSheet = StyleSheet::fromTree (tree, &failure);
     if (parsedSheet.failed())
     {
@@ -833,7 +814,7 @@ void YuiDocument::handleRangeChange()
         {
             const auto located = sourceMap != nullptr ? sourceMap->locate (told) : told;
 
-            std::erase_if (diagnostics, [&located] (const YuiDiagnostic& known)
+            std::erase_if (diagnostics, [&located] (const DataTreeDiagnostic& known)
             {
                 return isSameProblem (known, located);
             });

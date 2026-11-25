@@ -59,7 +59,7 @@ def load(document, text):
     result = document.loadFromString(text)
 
     assert result.wasOk(), result.getErrorMessage()
-    assert document.getDiagnostics() == [], yup.YuiDiagnostic.join(document.getDiagnostics())
+    assert document.getDiagnostics() == [], yup.DataTreeDiagnostic.join(document.getDiagnostics())
 
 
 class GainProvider(yup.BindingProvider):

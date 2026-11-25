@@ -24,7 +24,7 @@
 #include "../source/yup_YuiToolGuides.h"
 #include "../source/yup_YuiToolSupport.h"
 
-#include <yup_gui/yup_gui.h>
+#include <yup_gui_markup/yup_gui_markup.h>
 #include <yup_renderer/yup_renderer.h>
 
 #include <SDL3/SDL_hints.h>

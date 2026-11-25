@@ -622,7 +622,7 @@ TEST_F (SceneNodeComponentTests, ANodeThatCanNotBeBoundSaysSoOnceItLetGoOfTheEnt
     bool hadEntityWhenTold = true;
     Vector3<float> positionWhenTold;
 
-    const DiagnosticListener listener (document, [&] (const YuiDiagnostic& diagnostic)
+    const DiagnosticListener listener (document, [&] (const DataTreeDiagnostic& diagnostic)
     {
         told.add (diagnostic.message);
         hadEntityWhenTold = knob->getEntity().isValid();

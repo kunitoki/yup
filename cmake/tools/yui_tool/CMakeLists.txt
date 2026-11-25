@@ -35,7 +35,7 @@ include ("${yup_root}/cmake/yup.cmake")
 # about half as large again. Without them it only loads the shaders a build compiled into .ysl bundles
 option (YUP_YUI_TOOL_WEB_SHADER_COMPILER "Compile the shaders written in GLSL in the tool built for the web" ON)
 
-# Only add yup_gui and the modules it depends on.
+# Only add yup_gui_markup, the modules it depends on and the ones its documents show 3D scenes with.
 set (yup_modules
     yup_core
     yup_events
@@ -46,6 +46,7 @@ set (yup_modules
     yup_rhi
     yup_graphics
     yup_gui
+    yup_gui_markup
     yup_3d
     yup_renderer)
 
@@ -134,6 +135,7 @@ if (YUP_PLATFORM_EMSCRIPTEN)
             yup::yup_events
             yup::yup_graphics
             yup::yup_gui
+            yup::yup_gui_markup
             yup::yup_3d
             yup::yup_renderer
             tinygltf
@@ -158,6 +160,7 @@ else()
             yup::yup_events
             yup::yup_graphics
             yup::yup_gui
+            yup::yup_gui_markup
             yup::yup_ai
             yup::yup_3d
             yup::yup_renderer

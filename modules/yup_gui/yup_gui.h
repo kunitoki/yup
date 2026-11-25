@@ -33,7 +33,8 @@
     license:              ISC
 
     dependencies:         yup_events yup_data_model yup_graphics rive
-    optionalDeps:         yup_audio_gui yup_renderer
+    optionalDeps:         yup_audio_gui
+    testDeps:             yup_gui_markup
     appleFrameworks:      Metal
     appleWeakFrameworks:  UniformTypeIdentifiers
     iosFrameworks:        CoreMotion
@@ -195,20 +196,12 @@ class DeferredReplayer;
 #include "binding/yup_BindingModel.h"
 #include "binding/yup_DependencyObserver.h"
 #include "binding/yup_BindingGraph.h"
-#include "markup/yup_YuiDiagnostic.h"
+#include "component/yup_ComponentDocument.h"
 #include "styling/yup_StyleState.h"
 #include "styling/yup_StyleAnimator.h"
 #include "styling/yup_StyleSelector.h"
 #include "styling/yup_StyleSheet.h"
 #include "styling/yup_StyleContext.h"
-#include "markup/yup_YuiParser.h"
-#include "markup/yup_YuiWriter.h"
-#include "markup/yup_YuiSvgImporter.h"
-#include "markup/yup_YuiTreeDiff.h"
-#include "markup/yup_YuiBuilder.h"
-#include "markup/yup_YuiDocument.h"
-#include "markup/yup_YuiLoader.h"
-#include "markup/yup_YuiView.h"
 #include "dragdrop/yup_DragAndDropData.h"
 #include "dragdrop/yup_DragAndDropTarget.h"
 #include "dragdrop/yup_NativeDragAndDrop.h"

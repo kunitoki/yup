@@ -49,7 +49,7 @@ File resolveImageComponentSourceFile (const String& path, const File& baseDirect
 
     if (owner != nullptr)
     {
-        if (const auto* document = YuiDocument::findDocumentFor (owner); document != nullptr && document->getBaseDirectory() != File())
+        if (const auto* document = ComponentDocument::findFor (owner); document != nullptr && document->getBaseDirectory() != File())
         {
             if (const auto candidate = document->getBaseDirectory().getChildFile (path); candidate.existsAsFile())
                 return candidate;

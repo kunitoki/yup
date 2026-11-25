@@ -529,7 +529,7 @@ int runYuiSchemaCommand (int argc, char** argv)
         return 2;
     }
 
-    registerBuiltInComponentTypes();
+    registerYuiComponentTypes();
 
     Array<var> types;
 

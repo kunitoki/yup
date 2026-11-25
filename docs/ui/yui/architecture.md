@@ -51,7 +51,8 @@ flowchart LR
   `YuiView` owns a document and its loader, and hosts the root as a child
   filling its bounds.
 
-Only the parser, the builder and the document are specific to `.yui`. A
+Only the `Yui*` classes are specific to `.yui`, and they are the
+`yup_gui_markup` module. Everything else on this page is part of `yup_gui`: a
 hand-written C++ tree can take a stylesheet, drawings and a `BindingGraph` too.
 
 ## Properties, the shared language
@@ -174,7 +175,6 @@ classDiagram
     direction LR
     class StyleSheet {
         fromTree()
-        parse()
         getRules()
         findPalette()
         findDrawing()
@@ -226,6 +226,9 @@ classDiagram
 
 - A `StyleSheet` is immutable and shared. It holds rules (a `StyleSelector` and
   its declarations), `@keyframes`, palettes, drawings and shaders.
+- A sheet is built from a tree with `StyleSheet::fromTree`. `yup_gui` reads no
+  text: `YuiParser` turns it into that tree, and an application without
+  `yup_gui_markup` writes the tree in code.
 - The component the sheet is attached to owns the `StyleContext`. The context
   marks components dirty when their classes, interaction state, children or a
   property a selector watches change.
@@ -413,11 +416,18 @@ flowchart LR
   handler runs document actions or emits signals declared by composites, reading
   the signal's arguments through the names it gives them. `changed property:`
   handlers run the same way when a property changes.
-- The elements of a [3D scene](scenes.md) are component types too, registered
-  by `yup_renderer` when the application links it. The builder creates them as
-  it creates widgets, and each one stands for an entity of the `Scene` its
-  `Scene3D` shows, so bindings, stylesheets and reloads reach 3D objects with
-  no machinery of their own.
+- The elements of a [3D scene](scenes.md) are component types too, declared by
+  `yup_renderer` and registered by `registerYuiComponentTypes()` when the
+  application links it. The builder creates them as it creates widgets, and
+  each one stands for an entity of the `Scene` its `Scene3D` shows, so
+  bindings, stylesheets and reloads reach 3D objects with no machinery of their
+  own.
+- Components reach the document they were built by through
+  `ComponentDocument`, the interface of `yup_gui` that `YuiDocument`
+  implements: `ComponentDocument::findFor (component)` finds it, to read the
+  files next to it, to listen to its reloads and to report problems where they
+  are written. This is how the 3D elements and `ImageComponent` work with
+  documents without depending on `yup_gui_markup`.
 
 ## See also
 

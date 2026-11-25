@@ -60,9 +60,9 @@ namespace yup
         cutoff->setSkewFactor (0.5);
     @endcode
 
-    @see YuiBuilder, YuiParser, StyleSheet
+    @see YuiBuilder, YuiParser, StyleSheet, ComponentDocument
 */
-class YUP_API YuiDocument
+class YUP_API YuiDocument : public ComponentDocument
 {
 public:
     //==============================================================================
@@ -70,7 +70,7 @@ public:
     YuiDocument();
 
     /** Destroys the document and every component it created. */
-    ~YuiDocument();
+    ~YuiDocument() override;
 
     //==============================================================================
     /** Creates a DataTreeSchema describing the `.yui` document grammar and all registered component types. */
@@ -95,7 +95,7 @@ public:
 
         @returns A failure when the stylesheet or the components are invalid.
     */
-    Result load (const DataTree& document, const YuiSourceMap& sourceMap = {});
+    Result load (const DataTree& document, const DataTreeSourceMap& sourceMap = {});
 
     /** Destroys the interface. Actions and models are kept. */
     void clear();
@@ -104,7 +104,7 @@ public:
     void setBaseDirectory (const File& directory) { builder.setBaseDirectory (directory); }
 
     /** Returns the base directory used to resolve relative asset paths in components and drawings. */
-    const File& getBaseDirectory() const noexcept { return builder.getBaseDirectory(); }
+    const File& getBaseDirectory() const noexcept override { return builder.getBaseDirectory(); }
 
     /** Records each successful load as a transaction of an undo manager, or stops when null.
 
@@ -144,7 +144,7 @@ public:
 
         @see readAssetFor, getAssetFile
     */
-    std::optional<MemoryBlock> readAsset (const String& path) const;
+    std::optional<MemoryBlock> readAsset (const String& path) const override;
 
     /** Returns the file on disk an asset path stands for, without reading it.
 
@@ -157,7 +157,7 @@ public:
                  aren't the files of a folder: a relative path with an asset reader set and no base
                  directory, as in a document loaded from embedded resources.
     */
-    File getAssetFile (const String& path) const;
+    File getAssetFile (const String& path) const override;
 
     /** Tells the listeners that a file the document refers to changed (see Listener::documentAssetChanged).
 
@@ -170,24 +170,12 @@ public:
     */
     void notifyAssetChanged (const String& path);
 
-    /** Returns the bytes of a file a component refers to, read through the document of the component.
-
-        This is for the code that only has a component, such as an effect, a drawing or a component
-        loading a model. The document is found with @ref findDocumentFor, so a child added in code to
-        a component built from a document reads through that document. A component of no document
-        reads the file as @ref readAsset does with no asset reader and no base directory.
-
-        @param component  The component the path was written for, which can be null.
-        @param path       The path of the file.
-    */
-    static std::optional<MemoryBlock> readAssetFor (const Component* component, const String& path);
-
     //==============================================================================
     /** Returns the parsed document of the interface loaded last. */
     const DataTree& getTree() const noexcept { return tree; }
 
     /** Returns the root component, or nullptr if nothing is loaded. */
-    Component* getRoot() const noexcept { return builder.getRoot(); }
+    Component* getRoot() const noexcept override { return builder.getRoot(); }
 
     /** Returns the component with the given ID, or nullptr (see YuiBuilder::findById). */
     Component* findById (const String& id) const { return builder.findById (id); }
@@ -230,7 +218,7 @@ public:
         A failed parse leaves its error as the only entry. Each problem is listed once, with
         the line and column it was written at when known.
     */
-    const std::vector<YuiDiagnostic>& getDiagnostics() const noexcept { return diagnostics; }
+    const std::vector<DataTreeDiagnostic>& getDiagnostics() const noexcept { return diagnostics; }
 
     /** Returns the builder creating the components, to inspect its bindings. */
     YuiBuilder& getBuilder() noexcept { return builder; }
@@ -240,7 +228,21 @@ public:
         The map turns an element or a property of the tree into the line and column it was
         written at, which is how a development tool jumps from a component to its markup.
     */
-    std::shared_ptr<const YuiSourceMap> getSourceMap() const noexcept { return sourceMap; }
+    std::shared_ptr<const DataTreeSourceMap> getSourceMap() const noexcept override { return sourceMap; }
+
+    /** Returns the resolver finding the components and the models of the document (see YuiBuilder::getComponentResolver). */
+    DrawingScope::ComponentResolver getComponentResolver() const override { return builder.getComponentResolver(); }
+
+    /** Adds a problem to the diagnostics, as the ones the bindings meet after a load are.
+
+        This is how a component tells what is wrong with one of its values. Nothing is added while
+        the document loads, nor after a load that failed.
+
+        @param diagnostic  The problem, located with the source map of the document.
+        @param subject     The component the problem is about, or nullptr. A diagnostic with no
+                           element is given the one the component was built from.
+    */
+    void reportDiagnostic (DataTreeDiagnostic diagnostic, const Component* subject = nullptr) override;
 
     /** Returns the stylesheet built from the document, or nullptr when it declares no style.
 
@@ -286,7 +288,7 @@ public:
             This happens when a rule starts matching later, such as a `:hover` rule with an
             invalid value. The problems met while loading are reported by documentLoaded.
         */
-        virtual void documentDiagnosed (YuiDocument& document, const YuiDiagnostic& diagnostic) {}
+        virtual void documentDiagnosed (YuiDocument& document, const DataTreeDiagnostic& diagnostic) {}
 
         /** Called when a file the document refers to changed, for what read it to read it again.
 
@@ -304,27 +306,28 @@ public:
     /** Removes a listener. */
     void removeListener (Listener* listener) { listeners.remove (listener); }
 
+    using ComponentDocument::addListener;
+    using ComponentDocument::removeListener;
+
 private:
     //==============================================================================
     class LoadAction;
 
-    static std::vector<YuiDocument*>& getLiveDocuments();
-
-    Result loadTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map);
-    Result buildTree (const DataTree& document, const std::shared_ptr<const YuiSourceMap>& map);
+    Result loadTree (const DataTree& document, const std::shared_ptr<const DataTreeSourceMap>& map);
+    Result buildTree (const DataTree& document, const std::shared_ptr<const DataTreeSourceMap>& map);
     void handleLiveTreeMutation();
     void handleRangeChange();
     void attachStyleContext (Component& root);
     Result fail (const String& message);
     void resetState();
     Result notifyLoaded (Result result);
-    void report (const std::shared_ptr<const YuiSourceMap>& map, const YuiDiagnostic& diagnostic);
+    void report (const std::shared_ptr<const DataTreeSourceMap>& map, const DataTreeDiagnostic& diagnostic);
 
     YuiBuilder builder;
     DataTree tree;
-    std::shared_ptr<const YuiSourceMap> sourceMap;
+    std::shared_ptr<const DataTreeSourceMap> sourceMap;
     StyleSheet::Ptr styleSheet;
-    std::vector<YuiDiagnostic> diagnostics;
+    std::vector<DataTreeDiagnostic> diagnostics;
     AssetReader assetReader;
     UndoManager* undoManager = nullptr;
     bool isLoading = false;

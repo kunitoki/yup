@@ -2676,14 +2676,6 @@ void registerYupGuiBindings (py::module_& m)
     py::class_<StyleSheet, ReferenceCountedObjectPtr<StyleSheet>> classStyleSheet (m, "StyleSheet");
 
     classStyleSheet
-        .def_static ("parse", [] (const String& text) -> StyleSheet::Ptr
-        {
-            auto sheet = StyleSheet::parse (text);
-            if (sheet.failed())
-                throw py::value_error (sheet.getErrorMessage().toRawUTF8());
-
-            return sheet.getValue();
-        }, "text"_a, "Parses .yui text and builds a stylesheet from it, raising ValueError with the first problem when it can't.")
         .def ("getPaletteNames", &StyleSheet::getPaletteNames, "Returns the names of the palettes the sheet declares.")
         .def ("findDrawing", &StyleSheet::findDrawing, "name"_a, "Returns the drawing declared under a name, or an invalid tree.")
         .def ("watchesProperty", &StyleSheet::watchesProperty, "name"_a,
@@ -2723,36 +2715,7 @@ void registerYupGuiBindings (py::module_& m)
               "Attaches a stylesheet to this component and everything inside it; pass None to detach it.")
         .def ("getStyleSheet", &Component::getStyleSheet);
 
-    // ============================================================================================ yup::YuiDiagnostic
-
-    py::class_<YuiDiagnostic> classYuiDiagnostic (m, "YuiDiagnostic");
-
-    py::enum_<YuiDiagnostic::Severity> (classYuiDiagnostic, "Severity")
-        .value ("error", YuiDiagnostic::Severity::error)
-        .value ("warning", YuiDiagnostic::Severity::warning);
-
-    classYuiDiagnostic
-        .def_readonly ("message", &YuiDiagnostic::message)
-        .def_readonly ("property", &YuiDiagnostic::property, "The property the problem is about, null when it is about the whole element.")
-        .def_readonly ("source", &YuiDiagnostic::source, "The imported file the problem is in, empty for the main text.")
-        .def_readonly ("line", &YuiDiagnostic::line, "The 1-based line of the problem, 0 when the position is unknown.")
-        .def_readonly ("column", &YuiDiagnostic::column, "The 1-based column of the problem, counted in characters.")
-        .def_readonly ("severity", &YuiDiagnostic::severity)
-        .def ("isError", &YuiDiagnostic::isError)
-        .def ("isWarning", &YuiDiagnostic::isWarning)
-        .def ("toString", &YuiDiagnostic::toString, "Returns the diagnostic as source:line:column: message, omitting the unknown parts.")
-        .def_static ("join", &YuiDiagnostic::join, "diagnostics"_a, "separator"_a = "\n",
-                     "Returns the diagnostics as strings, joined by a separator.")
-        .def ("__str__", &YuiDiagnostic::toString)
-        .def ("__repr__", [] (const YuiDiagnostic& self)
-        {
-            String result;
-            result
-                << "<" << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name(), 1)
-                << " \"" << self.toString() << "\">";
-            return result;
-        });
-
+#if YUP_MODULE_AVAILABLE_yup_gui_markup
     // ============================================================================================ yup::YuiParser
 
     py::class_<YuiParser> classYuiParser (m, "YuiParser");
@@ -2768,7 +2731,15 @@ void registerYupGuiBindings (py::module_& m)
                      "Parses .yui text, stopping at the first error. Imports are kept as import elements.")
         .def_static ("parse", py::overload_cast<const String&, const YuiParser::ImportResolver&> (&YuiParser::parse), "text"_a, "resolveImport"_a,
                      "Parses .yui text along with the files it imports. resolveImport is called with each\n"
-                     "imported path and returns its text, or None when it can't be found.");
+                     "imported path and returns its text, or None when it can't be found.")
+        .def_static ("parseStyleSheet", [] (const String& text) -> StyleSheet::Ptr
+        {
+            auto sheet = YuiParser::parseStyleSheet (text);
+            if (sheet.failed())
+                throw py::value_error (sheet.getErrorMessage().toRawUTF8());
+
+            return sheet.getValue();
+        }, "text"_a, "Parses .yui text and builds a stylesheet from it, raising ValueError with the first problem when it can't.");
 
     // ============================================================================================ yup::YuiWriter
 
@@ -2804,6 +2775,7 @@ void registerYupGuiBindings (py::module_& m)
         {
             return YuiSvgImporter::importSvg (svgFile, options);
         }, "svgFile"_a, "options"_a = YuiSvgImporter::Options(), "Parses and converts an SVG file.");
+#endif // YUP_MODULE_AVAILABLE_yup_gui_markup
 
     // ============================================================================================ yup::BindingProvider
 
@@ -2844,6 +2816,7 @@ void registerYupGuiBindings (py::module_& m)
         .def (py::init<DataTree, UndoManager*>(), "tree"_a, "undoManager"_a = nullptr, py::keep_alive<1, 3>())
         .def ("getTree", &DataTreeBindingProvider::getTree);
 
+#if YUP_MODULE_AVAILABLE_yup_gui_markup
     // ============================================================================================ yup::YuiDocument
 
     // The components of a document are created in C++, and Component's polymorphic_type_hook only
@@ -2979,6 +2952,7 @@ void registerYupGuiBindings (py::module_& m)
               "Returns the document whose interface the view shows, which lives as long as the view.")
         .def ("getLoader", &YuiView::getLoader, py::return_value_policy::reference_internal,
               "Returns the loader filling the document, which lives as long as the view.");
+#endif // YUP_MODULE_AVAILABLE_yup_gui_markup
 }
 
 } // namespace Bindings
