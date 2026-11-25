@@ -25,7 +25,25 @@ namespace yup
 namespace
 {
 
-//==============================================================================
+struct MidiKeyboardComponentIds
+{
+    static inline const Identifier orientation { "orientation" };
+    static inline const Identifier velocity { "velocity" };
+    static inline const Identifier velocitySensitive { "velocitySensitive" };
+    static inline const Identifier midiChannel { "midiChannel" };
+    static inline const Identifier midiChannelsToDisplay { "midiChannelsToDisplay" };
+    static inline const Identifier octaveForMiddleC { "octaveForMiddleC" };
+    static inline const Identifier keyPressBaseOctave { "keyPressBaseOctave" };
+    static inline const Identifier keyboardKeys { "keyboardKeys" };
+    static inline const Identifier rangeStart { "rangeStart" };
+    static inline const Identifier rangeEnd { "rangeEnd" };
+    static inline const Identifier lowestVisibleKey { "lowestVisibleKey" };
+    static inline const Identifier highestVisibleKey { "highestVisibleKey" };
+    static inline const Identifier scrollButtonsVisible { "scrollButtonsVisible" };
+    static inline const Identifier scrollButtonWidth { "scrollButtonWidth" };
+    static inline const Identifier blackNoteLengthProportion { "blackNoteLengthProportion" };
+    static inline const Identifier blackNoteWidthProportion { "blackNoteWidthProportion" };
+};
 
 } // namespace
 
@@ -40,6 +58,60 @@ const Identifier MidiKeyboardComponent::Style::blackKeyShadowColorId ("midiKeybo
 const Identifier MidiKeyboardComponent::Style::keyOutlineColorId ("midiKeyboardKeyOutline");
 const Identifier MidiKeyboardComponent::Style::scrollButtonBackgroundColorId ("midiKeyboardScrollButtonBackground");
 const Identifier MidiKeyboardComponent::Style::scrollButtonArrowColorId ("midiKeyboardScrollButtonArrow");
+
+//==============================================================================
+const ComponentTypeInfo& MidiKeyboardComponent::getClassTypeInfo()
+{
+    using K = MidiKeyboardComponent;
+
+    // A range comes before the keys it holds, the builder applies values in declaration order. An end of a range
+    // written past the other one moves it out of its way, so that they can be written in any order
+    static const auto info = ComponentTypeBuilder<K> (Identifier ("MidiKeyboard"))
+                                 .color ("whiteKeyColor", Style::whiteKeyColorId)
+                                 .color ("whiteKeyPressedColor", Style::whiteKeyPressedColorId)
+                                 .color ("whiteKeyShadowColor", Style::whiteKeyShadowColorId)
+                                 .color ("blackKeyColor", Style::blackKeyColorId)
+                                 .color ("blackKeyPressedColor", Style::blackKeyPressedColorId)
+                                 .color ("blackKeyShadowColor", Style::blackKeyShadowColorId)
+                                 .color ("keyOutlineColor", Style::keyOutlineColorId)
+                                 .color ("scrollButtonBackgroundColor", Style::scrollButtonBackgroundColorId)
+                                 .color ("scrollButtonArrowColor", Style::scrollButtonArrowColorId)
+                                 .enumeration<Orientation> (
+                                     MidiKeyboardComponentIds::orientation,
+                                     { { "horizontal", horizontalKeyboard },
+                                       { "verticalFacingLeft", verticalKeyboardFacingLeft },
+                                       { "verticalFacingRight", verticalKeyboardFacingRight } },
+                                     &K::getOrientation,
+                                     &K::setOrientation,
+                                     "Where the keys hang from: the top edge, the right edge with the low notes at the top, or the left edge with the low notes at the bottom.")
+                                 .property (MidiKeyboardComponentIds::velocity, &K::getVelocity, &K::setVelocity, 1.0f, "The velocity of the notes played, from 0 to 1: the one of a press at the front edge of a key when the keyboard is velocity sensitive.")
+                                 .property (MidiKeyboardComponentIds::velocitySensitive, &K::isMidiVelocitySensitive, &K::setMidiVelocitySensitive, true, "Whether the position of a press on a key sets its velocity.")
+                                 .property (MidiKeyboardComponentIds::midiChannel, &K::getMidiChannel, [] (K& k, int v) { k.setMidiChannel (jlimit (1, 16, v)); }, 1, "The midi channel of the notes played, from 1 to 16.")
+                                 .property (MidiKeyboardComponentIds::midiChannelsToDisplay, &K::getMidiChannelsToDisplay, &K::setMidiChannelsToDisplay, 0xffff, "The midi channels shown as pressed, as a bitmask where bit 0 is channel 1.")
+                                 .property (MidiKeyboardComponentIds::octaveForMiddleC, &K::getOctaveForMiddleC, &K::setOctaveForMiddleC, 3, "The octave number naming middle C in the key labels.")
+                                 .property (MidiKeyboardComponentIds::keyPressBaseOctave, &K::getKeyPressBaseOctave, &K::setKeyPressBaseOctave, 3, "The octave played by the first key of the computer keyboard mapping.")
+                                 .property (MidiKeyboardComponentIds::keyboardKeys, &K::getKeyboardKeys, &K::setKeyboardKeys, String ("zsxdcvgbhnjmq2w3er5t6y7ui9o0p"), "The computer keys playing notes, one character for each semitone from the base octave.")
+                                 .property (MidiKeyboardComponentIds::rangeStart, &K::getRangeStart, [] (K& k, int v)
+                                 {
+                                     const auto start = jlimit (0, 127, v);
+                                     k.setAvailableRange (start, jmax (start, k.getRangeEnd()));
+                                 }, 0, "The lowest key the keyboard can show, from 0 to 127. Setting it shows the whole available range.")
+                                 .property (MidiKeyboardComponentIds::rangeEnd, &K::getRangeEnd, [] (K& k, int v)
+                                 {
+                                     const auto end = jlimit (0, 127, v);
+                                     k.setAvailableRange (jmin (end, k.getRangeStart()), end);
+                                 }, 127, "The highest key the keyboard can show, from 0 to 127. Setting it shows the whole available range.")
+                                 .property (MidiKeyboardComponentIds::lowestVisibleKey, &K::getLowestVisibleKey, [] (K& k, int v) { k.setVisibleRange (v, jmax (v, k.getHighestVisibleKey())); }, 12, "The lowest key shown, inside the available range.")
+                                 .property (MidiKeyboardComponentIds::highestVisibleKey, &K::getHighestVisibleKey, [] (K& k, int v) { k.setVisibleRange (jmin (v, k.getLowestVisibleKey()), v); }, 96, "The highest key shown, inside the available range.")
+                                 .property (MidiKeyboardComponentIds::scrollButtonsVisible, &K::areScrollButtonsVisible, &K::setScrollButtonsVisible, true, "Whether the buttons scrolling by an octave are shown while the visible range doesn't cover the available one.")
+                                 .property (MidiKeyboardComponentIds::scrollButtonWidth, &K::getScrollButtonWidth, &K::setScrollButtonWidth, 16.0f, "The size of the scroll buttons along the keyboard.")
+                                 .property (MidiKeyboardComponentIds::blackNoteLengthProportion, &K::getBlackNoteLengthProportion, &K::setBlackNoteLengthProportion, 0.6f, "The length of the black keys, as a proportion of the one of the white keys.")
+                                 .property (MidiKeyboardComponentIds::blackNoteWidthProportion, &K::getBlackNoteWidthProportion, &K::setBlackNoteWidthProportion, 0.7f, "The width of the black keys, as a proportion of the one of the white keys.")
+                                 .signal ("onVisibleRangeChanged", &K::onVisibleRangeChanged, "Emitted when the visible range changes.")
+                                 .build();
+
+    return info;
+}
 
 //==============================================================================
 MidiKeyboardComponent::ScrollButton::ScrollButton (MidiKeyboardComponent& ownerToUse, bool shouldScrollUp)
@@ -58,13 +130,11 @@ void MidiKeyboardComponent::ScrollButton::paintButton (Graphics& g)
 }
 
 //==============================================================================
-MidiKeyboardComponent::MidiKeyboardComponent (MidiKeyboardState& stateToUse, Orientation orientationToUse)
-    : state (stateToUse)
-    , orientation (orientationToUse)
+MidiKeyboardComponent::MidiKeyboardComponent (Orientation orientationToUse)
+    : orientation (orientationToUse)
     , scrollDownButton (*this, false)
     , scrollUpButton (*this, true)
 {
-    state.addListener (this);
     setWantsKeyboardFocus (true);
     setMouseCursor (MouseCursor::Hand);
     //setMouseClickGrabsKeyboardFocus (true);
@@ -86,9 +156,36 @@ MidiKeyboardComponent::MidiKeyboardComponent (MidiKeyboardState& stateToUse, Ori
     updateScrollButtons();
 }
 
+MidiKeyboardComponent::MidiKeyboardComponent (MidiKeyboardState& stateToUse, Orientation orientationToUse)
+    : MidiKeyboardComponent (orientationToUse)
+{
+    setState (&stateToUse);
+}
+
 MidiKeyboardComponent::~MidiKeyboardComponent()
 {
-    state.removeListener (this);
+    if (state != nullptr)
+        state->removeListener (this);
+}
+
+//==============================================================================
+void MidiKeyboardComponent::setState (MidiKeyboardState* newState)
+{
+    if (state == newState)
+        return;
+
+    // The notes held are released on the state they were played into
+    resetAnyKeysInUse();
+
+    if (state != nullptr)
+        state->removeListener (this);
+
+    state = newState;
+
+    if (state != nullptr)
+        state->addListener (this);
+
+    repaint();
 }
 
 //==============================================================================
@@ -177,13 +274,21 @@ void MidiKeyboardComponent::setVisibleRange (int lowestNote, int highestNote)
     if (newLowest == lowestVisibleKey && newHighest == highestVisibleKey)
         return;
 
-    lowestVisibleKey = newLowest;
-    highestVisibleKey = newHighest;
+    const auto lowestChanged = std::exchange (lowestVisibleKey, newLowest) != newLowest;
+    const auto highestChanged = std::exchange (highestVisibleKey, newHighest) != newHighest;
 
     updateScrollButtons();
     repaint();
 
-    if (onVisibleRangeChanged)
+    const BailOutChecker bailOutChecker (this);
+
+    if (lowestChanged)
+        notifyPropertyChanged (MidiKeyboardComponentIds::lowestVisibleKey);
+
+    if (highestChanged && ! bailOutChecker.shouldBailOut())
+        notifyPropertyChanged (MidiKeyboardComponentIds::highestVisibleKey);
+
+    if (! bailOutChecker.shouldBailOut() && onVisibleRangeChanged)
         onVisibleRangeChanged();
 }
 
@@ -443,13 +548,13 @@ bool MidiKeyboardComponent::handleNoteKey (const KeyPress& key, bool isDown)
     {
         if (midiNote >= 0 && midiNote < 128 && ! keyDownNotes.contains (midiNote))
         {
-            state.noteOn (midiChannel, midiNote, velocity);
+            sendNoteOn (midiNote, velocity);
             keyDownNotes.add (midiNote);
         }
     }
     else if (keyDownNotes.removeFirstMatchingValue (midiNote) >= 0)
     {
-        state.noteOff (midiChannel, midiNote, 0.0f);
+        sendNoteOff (midiNote, 0.0f);
     }
 
     return true;
@@ -541,7 +646,7 @@ int MidiKeyboardComponent::whiteKeyToNote (int whiteKeyIndex) const
 //==============================================================================
 bool MidiKeyboardComponent::isNoteOn (int midiNoteNumber) const
 {
-    return state.isNoteOnForChannels (midiInChannelMask, midiNoteNumber);
+    return state != nullptr && state->isNoteOnForChannels (midiInChannelMask, midiNoteNumber);
 }
 
 //==============================================================================
@@ -676,6 +781,18 @@ void MidiKeyboardComponent::repaintNote (int midiNoteNumber)
         repaint (getRectangleForKey (midiNoteNumber).roundToInt().enlarged (1)); // getSmallestIntegerContainer
 }
 
+void MidiKeyboardComponent::sendNoteOn (int midiNoteNumber, float noteVelocity)
+{
+    if (state != nullptr)
+        state->noteOn (midiChannel, midiNoteNumber, noteVelocity);
+}
+
+void MidiKeyboardComponent::sendNoteOff (int midiNoteNumber, float noteVelocity)
+{
+    if (state != nullptr)
+        state->noteOff (midiChannel, midiNoteNumber, noteVelocity);
+}
+
 void MidiKeyboardComponent::updateNoteUnderMouse (Point<float> pos, bool isDown, int pointerSlot)
 {
     const auto noteInfo = getNoteAndVelocityAtPosition (pos);
@@ -700,10 +817,10 @@ void MidiKeyboardComponent::updateNoteUnderMouse (Point<float> pos, bool isDown,
     pointerDownNotes[(size_t) pointerSlot] = -1;
 
     if (oldNoteDown >= 0 && ! isNoteHeldByPointer (oldNoteDown))
-        state.noteOff (midiChannel, oldNoteDown, eventVelocity);
+        sendNoteOff (oldNoteDown, eventVelocity);
 
     if (newNoteDown >= 0 && ! isNoteHeldByPointer (newNoteDown))
-        state.noteOn (midiChannel, newNoteDown, eventVelocity);
+        sendNoteOn (newNoteDown, eventVelocity);
 
     pointerDownNotes[(size_t) pointerSlot] = newNoteDown;
 }
@@ -734,7 +851,7 @@ void MidiKeyboardComponent::resetAnyKeysInUse()
         const auto note = std::exchange (noteDown, -1);
 
         if (note >= 0 && ! isNoteHeldByPointer (note))
-            state.noteOff (midiChannel, note, velocity);
+            sendNoteOff (note, velocity);
     }
 
     releaseKeyPressNotes();
@@ -745,7 +862,7 @@ void MidiKeyboardComponent::resetAnyKeysInUse()
 void MidiKeyboardComponent::releaseKeyPressNotes()
 {
     for (auto noteDown : keyDownNotes)
-        state.noteOff (midiChannel, noteDown, 0.0f);
+        sendNoteOff (noteDown, 0.0f);
 
     keyDownNotes.clear();
 }

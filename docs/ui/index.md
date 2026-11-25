@@ -102,7 +102,7 @@ hot reloaded while you edit it.
 - [Reactive bindings](yui/reactivity.md) - properties recomputed whenever what
   they read changes.
 - [Complete UIs in `.yui`](yui/documents.md) - `YuiDocument`, tokens, composite
-  components, handlers, actions and models.
+  components, handlers, actions, models and components set up from C++.
 - [Hot reloading `.yui` files](yui/hot-reload.md) - `YuiLoader` and embedded
   resources.
 - [Tools for `.yui` files](yui/tooling.md) - the checker, the schema, the SVG

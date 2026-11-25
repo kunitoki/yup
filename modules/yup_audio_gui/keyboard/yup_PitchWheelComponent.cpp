@@ -22,6 +22,20 @@
 namespace yup
 {
 
+namespace
+{
+
+struct PitchWheelComponentIds
+{
+    static inline const Identifier value { "value" };
+    static inline const Identifier defaultValue { "defaultValue" };
+    static inline const Identifier midiChannel { "midiChannel" };
+    static inline const Identifier mouseDragSensitivity { "mouseDragSensitivity" };
+    static inline const Identifier resetOnRelease { "resetOnRelease" };
+};
+
+} // namespace
+
 //==============================================================================
 const Identifier PitchWheelComponent::Style::bodyTopColorId { "PitchWheel_bodyTopColorId" };
 const Identifier PitchWheelComponent::Style::bodyBottomColorId { "PitchWheel_bodyBottomColorId" };
@@ -31,18 +45,64 @@ const Identifier PitchWheelComponent::Style::gripOverColorId { "PitchWheel_gripO
 const Identifier PitchWheelComponent::Style::gripDownColorId { "PitchWheel_gripDownColorId" };
 
 //==============================================================================
-PitchWheelComponent::PitchWheelComponent (MidiKeyboardState& stateToUse, StringRef componentID)
-    : Component (componentID)
-    , state (stateToUse)
+const ComponentTypeInfo& PitchWheelComponent::getClassTypeInfo()
 {
-    state.addListener (this);
+    using W = PitchWheelComponent;
+
+    static const auto info = ComponentTypeBuilder<W> (Identifier ("PitchWheel"))
+                                 .color ("bodyTopColor", Style::bodyTopColorId)
+                                 .color ("bodyBottomColor", Style::bodyBottomColorId)
+                                 .color ("outlineColor", Style::outlineColorId)
+                                 .color ("gripColor", Style::gripColorId)
+                                 .color ("gripOverColor", Style::gripOverColorId)
+                                 .color ("gripDownColor", Style::gripDownColorId)
+                                 .property (PitchWheelComponentIds::defaultValue, &W::getDefaultValue, &W::setDefaultValue, 0.0, "The position the wheel returns to on a double click, and on release when it resets.")
+                                 .property (PitchWheelComponentIds::value, &W::getValue, [] (W& w, double v) { w.setValue (v); }, 0.0, "The position of the wheel, from -1 to 1.")
+                                 .property (PitchWheelComponentIds::midiChannel, &W::getMidiChannel, [] (W& w, int v) { w.setMidiChannel (jlimit (1, 16, v)); }, 1, "The midi channel whose pitch-wheel position the wheel follows, from 1 to 16.")
+                                 .property (PitchWheelComponentIds::mouseDragSensitivity, &W::getMouseDragSensitivity, &W::setMouseDragSensitivity, 1.0, "How far a drag moves the wheel: 1 takes the height of the wheel across its whole range.")
+                                 .property (PitchWheelComponentIds::resetOnRelease, &W::getResetOnRelease, &W::setResetOnRelease, true, "Whether the wheel springs back to its default position when released.")
+                                 .signal ("onValueChanged", &W::onValueChanged, "Emitted with the new position of the wheel, except when it follows its state.", { { Identifier ("value"), ComponentProperty::Type::number } })
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
+PitchWheelComponent::PitchWheelComponent (StringRef componentID)
+    : Component (componentID)
+{
     setOpaque (true); // paint() always fully covers its bounds
     setMouseCursor (MouseCursor::Hand);
 }
 
+PitchWheelComponent::PitchWheelComponent (MidiKeyboardState& stateToUse, StringRef componentID)
+    : PitchWheelComponent (componentID)
+{
+    setState (&stateToUse);
+}
+
 PitchWheelComponent::~PitchWheelComponent()
 {
-    state.removeListener (this);
+    if (state != nullptr)
+        state->removeListener (this);
+}
+
+//==============================================================================
+void PitchWheelComponent::setState (MidiKeyboardState* newState)
+{
+    if (state == newState)
+        return;
+
+    if (state != nullptr)
+        state->removeListener (this);
+
+    // What the previous state reported and isn't shown yet is not read from the new one
+    cancelPendingUpdate();
+
+    state = newState;
+
+    if (state != nullptr)
+        state->addListener (this);
 }
 
 //==============================================================================
@@ -53,6 +113,12 @@ void PitchWheelComponent::setValue (double newValue, NotificationType notificati
     if (! approximatelyEqual (value, newValue))
     {
         value = newValue;
+
+        const BailOutChecker bailOutChecker (this);
+
+        notifyPropertyChanged (PitchWheelComponentIds::value);
+        if (bailOutChecker.shouldBailOut())
+            return;
 
         sendChangeNotification (notification, [this]
         {
@@ -173,7 +239,8 @@ void PitchWheelComponent::handlePitchWheelMoved (MidiKeyboardState*, int midiCha
 
 void PitchWheelComponent::handleAsyncUpdate()
 {
-    setValue ((state.getPitchWheelPosition (midiChannel.load()) - 8192.0) / 8191.0, dontSendNotification);
+    if (state != nullptr)
+        setValue ((state->getPitchWheelPosition (midiChannel.load()) - 8192.0) / 8191.0, dontSendNotification);
 }
 
 } // namespace yup

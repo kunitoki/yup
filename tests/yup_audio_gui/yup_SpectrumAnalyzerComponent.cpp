@@ -991,3 +991,91 @@ TEST_F (SpectrumAnalyzerComponentTests, PaintAfterEveryMappingChangingConfigurat
         }
     }
 }
+
+//==============================================================================
+// State Tests
+//==============================================================================
+
+TEST_F (SpectrumAnalyzerComponentTests, AnAnalyzerWithoutAStateIsConfiguredAndPainted)
+{
+    SpectrumAnalyzerComponent stateless;
+    stateless.setBounds (0.0f, 0.0f, 300.0f, 150.0f);
+
+    EXPECT_EQ (nullptr, stateless.getState());
+    EXPECT_EQ (4096, stateless.getFFTSize());
+    EXPECT_FLOAT_EQ (0.0f, stateless.getOverlapFactor());
+
+    // What belongs to the state is ignored, the size of the FFT is the one of the analyzer alone
+    stateless.setOverlapFactor (0.5f);
+    stateless.setFFTSize (1024);
+
+    EXPECT_FLOAT_EQ (0.0f, stateless.getOverlapFactor());
+    EXPECT_EQ (1024, stateless.getFFTSize());
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (300, 150);
+    Graphics g (*context, *renderer);
+
+    stateless.refreshDisplay (1.0 / 60.0);
+    stateless.timerCallback();
+    stateless.paint (g);
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, SetStateTakesTheFFTSizeOfTheNewState)
+{
+    SpectrumAnalyzerState other (1024);
+
+    analyzer->setState (&other);
+
+    EXPECT_EQ (&other, analyzer->getState());
+    EXPECT_EQ (1024, analyzer->getFFTSize());
+
+    // The size set on the analyzer is the one of the state it has
+    analyzer->setFFTSize (512);
+
+    EXPECT_EQ (512, other.getFftSize());
+    EXPECT_EQ (2048, state->getFftSize());
+
+    analyzer->setState (nullptr);
+
+    EXPECT_EQ (nullptr, analyzer->getState());
+    EXPECT_EQ (512, analyzer->getFFTSize());
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, TheTypeInfoSetsTheRangesInAnyOrder)
+{
+    const auto& type = SpectrumAnalyzerComponent::getClassTypeInfo();
+    EXPECT_EQ (type.getTypeName().toString(), "SpectrumAnalyzer");
+    EXPECT_EQ (&analyzer->getTypeInfo(), &type);
+
+    const auto created = type.createInstance();
+    auto* instance = dynamic_cast<SpectrumAnalyzerComponent*> (created.get());
+    ASSERT_NE (nullptr, instance);
+    EXPECT_EQ (nullptr, instance->getState());
+    EXPECT_EQ (instance->getProperty ("displayType").toString(), "filled");
+    EXPECT_EQ (instance->getProperty ("windowType").toString(), "hann");
+
+    // An end written past the other one moves it out of its way, one written before it leaves it alone
+    instance->setProperty ("minFrequency", 30000.0);
+    instance->setProperty ("maxFrequency", 40000.0);
+    EXPECT_FLOAT_EQ (30000.0f, instance->getMinFrequency());
+    EXPECT_FLOAT_EQ (40000.0f, instance->getMaxFrequency());
+
+    instance->setProperty ("maxDecibels", -120.0);
+    instance->setProperty ("minDecibels", -140.0);
+    EXPECT_FLOAT_EQ (-140.0f, instance->getMinDecibels());
+    EXPECT_FLOAT_EQ (-120.0f, instance->getMaxDecibels());
+
+    // A value a range can't take is ignored
+    instance->setProperty ("minFrequency", -5.0);
+    instance->setProperty ("sampleRate", 0.0);
+    EXPECT_FLOAT_EQ (30000.0f, instance->getMinFrequency());
+    EXPECT_DOUBLE_EQ (44100.0, instance->getSampleRate());
+
+    instance->setProperty ("windowType", "blackmanHarris");
+    instance->setProperty ("levelMode", "rmsDecibels");
+    instance->setProperty ("displayType", "lines");
+    EXPECT_EQ (WindowType::blackmanHarris, instance->getWindowType());
+    EXPECT_EQ (SpectrumAnalyzerComponent::LevelMode::rmsDecibels, instance->getLevelMode());
+    EXPECT_EQ (SpectrumAnalyzerComponent::DisplayType::lines, instance->getDisplayType());
+}

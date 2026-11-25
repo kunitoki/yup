@@ -32,3 +32,4 @@
 #include "yup_SpectrogramComponent.cpp"
 #include "yup_AudioDeviceManagerPanel.cpp"
 #include "yup_AudioParameterBindingProvider.cpp"
+#include "yup_ModuleIntegration.cpp"

@@ -924,3 +924,43 @@ TEST_F (CartesianPlaneTests, ZeroRangeHandling)
     // Should handle gracefully
     EXPECT_TRUE (true);
 }
+
+//==============================================================================
+// Type Info Tests
+//==============================================================================
+
+TEST_F (CartesianPlaneTests, TheTypeInfoSetsTheRangesInAnyOrderAndTheScalesAfterThem)
+{
+    const auto& type = CartesianPlane::getClassTypeInfo();
+    EXPECT_EQ (type.getTypeName().toString(), "CartesianPlane");
+    EXPECT_EQ (&plane->getTypeInfo(), &type);
+
+    const auto created = type.createInstance();
+    auto* instance = dynamic_cast<CartesianPlane*> (created.get());
+    ASSERT_NE (nullptr, instance);
+
+    // The title is the one the plane draws
+    instance->setProperty ("title", "Response");
+    EXPECT_EQ (instance->getTitle(), "Response");
+    EXPECT_EQ (instance->getProperty ("title").toString(), "Response");
+
+    // An end written past the other one moves it out of its way, one written before it leaves it alone
+    instance->setProperty ("xMin", 20.0);
+    instance->setProperty ("xMax", 20000.0);
+    EXPECT_DOUBLE_EQ (20.0, instance->getXRange().getStart());
+    EXPECT_DOUBLE_EQ (20000.0, instance->getXRange().getEnd());
+
+    instance->setProperty ("yMax", -6.0);
+    instance->setProperty ("yMin", -60.0);
+    EXPECT_DOUBLE_EQ (-60.0, instance->getYRange().getStart());
+    EXPECT_DOUBLE_EQ (-6.0, instance->getYRange().getEnd());
+
+    // A scale is logarithmic for a range above zero only
+    instance->setProperty ("xScaleType", "logarithmic");
+    instance->setProperty ("yScaleType", "logarithmic");
+    EXPECT_EQ (CartesianPlane::AxisScaleType::logarithmic, instance->getXScaleType());
+    EXPECT_EQ (CartesianPlane::AxisScaleType::linear, instance->getYScaleType());
+
+    instance->setProperty ("legendVisible", false);
+    EXPECT_FALSE (instance->isLegendVisible());
+}

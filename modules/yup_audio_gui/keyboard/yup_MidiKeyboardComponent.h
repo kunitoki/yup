@@ -57,6 +57,10 @@ namespace yup
     input callback via MidiKeyboardState::processNextMidiEvent()); note repaints are
     coalesced and applied on the message thread.
 
+    The state can be given after construction with setState(), which is how a keyboard
+    created by a `.yui` document as `MidiKeyboard` gets it (see YuiDocument::setInitializer).
+    Without a state the keyboard shows no pressed key and plays nothing.
+
     @tags{AudioGUI}
 */
 class YUP_API MidiKeyboardComponent
@@ -122,6 +126,12 @@ public:
     };
 
     //==============================================================================
+    /** Creates a MidiKeyboardComponent with no state, to be given one with setState().
+
+        @param orientation     whether the keyboard is horizontal or vertical
+    */
+    explicit MidiKeyboardComponent (Orientation orientation = horizontalKeyboard);
+
     /** Creates a MidiKeyboardComponent.
 
         @param state           the MidiKeyboardState object that this keyboard will use to show
@@ -132,6 +142,27 @@ public:
 
     /** Destructor. */
     ~MidiKeyboardComponent() override;
+
+    //==============================================================================
+    /** Changes the state the keyboard plays into and shows the pressed keys of.
+
+        Any notes currently held down are released on the previous state. Call it on the
+        message thread. The state must outlive the keyboard, or be removed first by
+        setting a null one.
+
+        @param newState   the state to use, or nullptr for none
+    */
+    void setState (MidiKeyboardState* newState);
+
+    /** Returns the state the keyboard uses, or nullptr if it has none. */
+    MidiKeyboardState* getState() const noexcept { return state; }
+
+    //==============================================================================
+    /** Returns the static type info describing the MidiKeyboardComponent type, `MidiKeyboard` in `.yui`. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
     /** Changes the velocity used in midi note-on messages that are triggered by clicking
@@ -508,6 +539,8 @@ private:
     static constexpr int maxPointers = 32;
 
     void repaintNote (int midiNoteNumber);
+    void sendNoteOn (int midiNoteNumber, float noteVelocity);
+    void sendNoteOff (int midiNoteNumber, float noteVelocity);
     void updateNoteUnderMouse (Point<float> pos, bool isDown, int pointerSlot);
     void updateNoteUnderMouse (const MouseEvent& e, bool isDown);
     bool isNoteHeldByPointer (int midiNoteNumber) const;
@@ -521,7 +554,7 @@ private:
     void zoomBy (float zoomDelta, int anchorNote);
     int whiteKeyToNote (int whiteKeyIndex) const;
 
-    MidiKeyboardState& state;
+    MidiKeyboardState* state = nullptr;
 
     int midiChannel = 1;
     int midiInChannelMask = 0xffff;

@@ -60,10 +60,15 @@ class YuiHandlerArguments;
     applied again. The values the document no longer writes go back to what a new component
     has, and the components whose elements are gone are destroyed.
 
+    What a component needs from the application and a document can't write, such as the state a
+    keyboard or a meter shows, is given by an initializer each time the component is created
+    (see @ref setInitializer).
+
     @code
     YuiBuilder builder;
     builder.setAction ("reset", [this] (const Array<var>&) { reset(); });
     builder.setModel ("params", paramsProvider);
+    builder.setInitializer<MyMeter> ([this] (MyMeter& meter) { meter.setSource (&levels); });
 
     const auto parsed = YuiParser::parse (text);
     if (parsed.wasOk() && builder.build (parsed.document).wasOk())
@@ -97,7 +102,7 @@ public:
     */
     Result build (const DataTree& document);
 
-    /** Destroys every component the builder created. Actions and models are kept. */
+    /** Destroys every component the builder created. Actions, models and initializers are kept. */
     void clear();
 
     //==============================================================================
@@ -218,6 +223,80 @@ public:
     void removeModel (const String& name);
 
     //==============================================================================
+    /** A function setting up a component of a type the builder created. */
+    template <class ComponentType>
+    using Initializer = std::function<void (ComponentType&)>;
+
+    /** Sets the function setting up every component of a type the builder creates, or removes it when null.
+
+        This is how a component is given what a document can't write, such as the object of the
+        application it shows. The builder creates the components again when the document changes,
+        so they are handed it each time, which a call made once after building wouldn't do.
+
+        @code
+        builder.setInitializer<MidiKeyboardComponent> ([this] (MidiKeyboardComponent& keyboard)
+        {
+            keyboard.setState (&processor.getKeyboardState());
+        });
+        @endcode
+
+        The function runs for the components of the type and of the ones derived from it, which
+        the instances of a `component` block based on the type are. It runs once the whole tree is
+        created and before any value of the document is applied, so the document has the last
+        word on what both set. A component kept by a build isn't set up again, unless its ID
+        changed, in which case it is given all its values again too.
+
+        Initializers can be set before or after building: one set later runs right away on the
+        components already built. They run in the order they were set, the ones of an ID after
+        the others, and are kept by @ref clear. What a function captures must outlive the builder,
+        or the function be removed first. Don't build, clear or set an initializer from inside one.
+
+        @param initializer  The function, given each component of the type.
+    */
+    template <class ComponentType>
+    void setInitializer (Initializer<ComponentType> initializer)
+    {
+        setInitializer<ComponentType> (String(), std::move (initializer));
+    }
+
+    /** Sets the function setting up the components of a type that have a given ID, or removes it when null.
+
+        It runs after the initializers of the type that name no ID, whatever the order they were
+        set in, so it wins over them. The ID is the one the element is written with, which makes
+        it reach the components `findById` can't: those inside a `component` block or a `repeat`.
+
+        @code
+        builder.setInitializer<SpectrumAnalyzerComponent> ("output", [this] (SpectrumAnalyzerComponent& analyzer)
+        {
+            analyzer.setState (&processor.getOutputAnalyzerState());
+        });
+        @endcode
+
+        @param id           The ID of the components to set up.
+        @param initializer  The function, given each component of the type with that ID.
+    */
+    template <class ComponentType>
+    void setInitializer (const String& id, Initializer<ComponentType> initializer)
+    {
+        ComponentInitializer::Function function;
+
+        if (initializer != nullptr)
+        {
+            function = [initializer = std::move (initializer)] (Component& component)
+            {
+                auto* target = dynamic_cast<ComponentType*> (&component);
+
+                if (target != nullptr)
+                    initializer (*target);
+
+                return target != nullptr;
+            };
+        }
+
+        setComponentInitializer ({ std::type_index (typeid (ComponentType)), id, std::move (function) });
+    }
+
+    //==============================================================================
     /** Returns the bindings keeping the built properties up to date. */
     BindingGraph& getBindings() noexcept { return bindings; }
 
@@ -269,7 +348,8 @@ private:
     };
 
     // A component, identified by the element it was built from (the use site for a composite), its parent
-    // and, for one a repeat makes, the turn of the repeat it is made in
+    // and, for one a repeat makes, the turn of the repeat it is made in. A kept one tells the id it had,
+    // which is the one the initializers set it up with
     struct Record
     {
         DataTree element;
@@ -277,6 +357,18 @@ private:
         const ComponentTypeInfo* type = nullptr;
         std::unique_ptr<Component> component;
         String turn;
+        std::optional<String> previousId;
+    };
+
+    // What sets up the components of a type, the ones of an id when it names one. The function tells
+    // whether the component is of the type
+    struct ComponentInitializer
+    {
+        using Function = std::function<bool (Component&)>;
+
+        std::type_index type;
+        String id;
+        Function function;
     };
 
     // The range of a repeat of components: the properties of the parent holding its ends, which are
@@ -346,6 +438,8 @@ private:
     void rangeChanged();
     std::unique_ptr<Component> reuseComponent (const DataTree& element, Component* parent, const ComponentTypeInfo& type, const String& turn);
     void placeChild (Component& parent, Component& child, bool isReused);
+    void setComponentInitializer (ComponentInitializer initializer);
+    bool initialize (Component& component, bool onlyWithId) const;
     void applyIdentity (Component& component, const DataTree& element, Scope& scope, bool isUseSite);
     void applyTokens (Component& root, Scope& scope);
     void applyValues (const AppliedValues& previous);
@@ -382,6 +476,7 @@ private:
     std::unique_ptr<RangeUpdater> rangeUpdater;
     std::map<String, Action> actions;
     FallbackAction fallbackAction;
+    std::vector<ComponentInitializer> initializers;
     std::map<String, std::unique_ptr<BindingModel>> models;
     BindingGraph bindings;
     std::vector<DataTreeDiagnostic> diagnostics;
@@ -400,6 +495,11 @@ private:
     These are the built-in types of yup_gui (see registerBuiltInComponentTypes), and, in the
     applications linking yup_renderer too, its 3D components: `Scene3D`, `Node3D`, `Camera3D`,
     `Light3D`, `Mesh3D`, `Model3D` and `Material3D`.
+
+    In the applications linking yup_audio_gui they are its components too: `MidiKeyboard`,
+    `PitchWheel`, `ModWheel`, `SpectrumAnalyzer`, `Spectrogram`, `KMeter`, `AudioView` and
+    `CartesianPlane`, which are given their state or their data in C++ (see
+    YuiBuilder::setInitializer).
 
     YuiBuilder calls it, so a document needs no call. It is for the code listing the types
     before anything is built, such as a schema or a tool.

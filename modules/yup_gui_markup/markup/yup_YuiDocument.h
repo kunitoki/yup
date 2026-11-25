@@ -97,7 +97,7 @@ public:
     */
     Result load (const DataTree& document, const DataTreeSourceMap& sourceMap = {});
 
-    /** Destroys the interface. Actions and models are kept. */
+    /** Destroys the interface. Actions, models and initializers are kept. */
     void clear();
 
     /** Sets the base directory used to resolve relative asset paths in components and drawings. */
@@ -205,6 +205,34 @@ public:
 
     /** Removes a model, dropping the bindings and links made to it. */
     void removeModel (const String& name);
+
+    /** Sets the function setting up every component of a type the document creates, or removes it when null.
+
+        This is how a component is given what a document can't write, such as the state it shows,
+        each time a load creates it (see YuiBuilder::setInitializer). It can be set before or after loading.
+
+        @code
+        document.setInitializer<MidiKeyboardComponent> ([this] (MidiKeyboardComponent& keyboard)
+        {
+            keyboard.setState (&processor.getKeyboardState());
+        });
+        @endcode
+    */
+    template <class ComponentType>
+    void setInitializer (YuiBuilder::Initializer<ComponentType> initializer)
+    {
+        builder.setInitializer<ComponentType> (std::move (initializer));
+    }
+
+    /** Sets the function setting up the components of a type that have a given ID, or removes it when null.
+
+        It runs after the initializers of the type that name no ID (see YuiBuilder::setInitializer).
+    */
+    template <class ComponentType>
+    void setInitializer (const String& id, YuiBuilder::Initializer<ComponentType> initializer)
+    {
+        builder.setInitializer<ComponentType> (id, std::move (initializer));
+    }
 
     /** Makes again, now, the components of the `repeat` blocks whose range changed (see YuiBuilder::applyPendingChanges).
 

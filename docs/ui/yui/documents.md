@@ -418,6 +418,79 @@ read-only parameters, such as meters, are ignored. Give a slider the range of it
 `maximum`, `interval` and `skew`; `minValue` and `maxValue` are the thumbs of a
 two-value slider, not its range.
 
+## Setting up components from C++
+
+Some components show something a document can't write: the state a keyboard
+plays into, the levels a meter reads, the audio a waveform draws. It belongs to
+the application, which hands it over with an *initializer*, a function run on
+each component of a type when the document creates it:
+
+```cpp
+document.setInitializer<MidiKeyboardComponent> ([this] (MidiKeyboardComponent& keyboard)
+{
+    keyboard.setState (&processor.getKeyboardState());
+});
+```
+
+```yui
+Row {
+    gap: 8;
+
+    ModWheel   { preferredWidth: 36; }
+    PitchWheel { preferredWidth: 36; }
+
+    MidiKeyboard { rangeStart: 48; rangeEnd: 84; flexGrow: 1; }
+}
+```
+
+A call made once after loading, on what `findById` returns, would not last: a
+reload, or a `repeat` whose range changes, creates components again, and the
+new ones would be left without what the first ones were given.
+
+With an ID, the initializer only runs on the components written with it, which
+tells apart two components of one type:
+
+```cpp
+document.setInitializer<SpectrumAnalyzerComponent> ("input", [this] (SpectrumAnalyzerComponent& analyzer)
+{
+    analyzer.setState (&processor.getInputAnalyzerState());
+});
+
+document.setInitializer<SpectrumAnalyzerComponent> ("output", [this] (SpectrumAnalyzerComponent& analyzer)
+{
+    analyzer.setState (&processor.getOutputAnalyzerState());
+});
+```
+
+```yui
+Row {
+    SpectrumAnalyzer { id: input; }
+    SpectrumAnalyzer { id: output; displayType: lines; }
+}
+```
+
+- An initializer runs once the whole tree is created and before the values of
+  the document are applied, so what the document writes wins over what the
+  initializer sets.
+- It runs on the components of the type and of the types derived from it,
+  which the instances of a `component` block based on the type are.
+- The initializers of an ID run after the ones without, whatever the order
+  they were set in, so the more specific one wins. Those of one kind run in
+  the order they were set.
+- The ID is the one the element is written with, so an initializer reaches the
+  components inside a `component` block or a `repeat`, which `findById` does
+  not.
+- A component a reload keeps isn't set up again, unless its ID changed.
+- Initializers are set before or after loading: one set later runs right away
+  on the components already there. `clear()` keeps them, and setting a null
+  function removes one.
+- What a function captures must outlive the document.
+
+Initializers work for any component, yours included once its type is
+registered with `ComponentTypeRegistry`. The components of `yup_audio_gui` a
+document creates are listed in
+[Audio GUI](../../audio/audio-gui.md#in-yui-documents).
+
 ## Repeating components
 
 `repeat name in from .. to { ... }` makes the components it holds once for

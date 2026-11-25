@@ -46,6 +46,10 @@ namespace yup
     leftMeter.setBounds (0, 0, 40, 300);
     @endcode
 
+    The state can be given after construction with setState(), which is how a meter created
+    by a `.yui` document as `KMeter` gets it (see YuiDocument::setInitializer). Without a
+    state the meter shows silence.
+
     @see KMeterState, KMeterScale, Component
 
     @tags{GUI, Metering}
@@ -91,6 +95,12 @@ public:
     };
 
     //==============================================================================
+    /** Creates a KMeterComponent with no state, to be given one with setState().
+
+        @param componentID  An optional identifier for this component
+    */
+    explicit KMeterComponent (StringRef componentID = {});
+
     /** Creates a KMeterComponent.
 
         @param state     Reference to the KMeterState to read levels from
@@ -103,6 +113,32 @@ public:
     ~KMeterComponent() override;
 
     //==============================================================================
+    /** Changes the state the levels are read from.
+
+        Call it on the message thread. The state must outlive the meter, or be removed
+        first by setting a null one.
+
+        @param newState  the state to read, or nullptr for none
+    */
+    void setState (KMeterState* newState);
+
+    /** Returns the state the levels are read from, or nullptr if the meter has none. */
+    KMeterState* getState() const noexcept { return meterState; }
+
+    //==============================================================================
+    /** Returns the static type info describing the KMeterComponent type, `KMeter` in `.yui`. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
+    /** Sets the channel of the state this meter is displaying.
+
+        @param channel  channel index, or -1 for the loudest of all the channels
+    */
+    void setChannel (int channel);
+
     /** Returns the channel index this meter is displaying.
 
         @returns  channel index, or -1 for combined mode
@@ -142,14 +178,17 @@ public:
     /** Returns the scale mapping mode. */
     ScaleMapping getScaleMapping() const noexcept { return scaleMapping; }
 
-    /** Sets how the OVER counter is computed (passes through to the meter state).
+    /** Sets how the OVER counter is computed (passes through to the meter state, ignored while the meter has none).
 
         @param mode  counter mode (contiguous or total)
     */
     void setOverCounterMode (KMeterState::OverCounterMode mode);
 
-    /** Returns the current OVER counter mode. */
-    KMeterState::OverCounterMode getOverCounterMode() const noexcept { return meterState.getOverCounterMode(); }
+    /** Returns the current OVER counter mode, the contiguous one while the meter has no state. */
+    KMeterState::OverCounterMode getOverCounterMode() const noexcept
+    {
+        return meterState != nullptr ? meterState->getOverCounterMode() : KMeterState::OverCounterMode::contiguous;
+    }
 
     /** Sets the refresh rate for meter updates.
 
@@ -166,19 +205,19 @@ public:
     int getRefreshRate() const noexcept { return refreshRate; }
 
     //==============================================================================
-    /** Sets the average integration time in seconds (passes through to the meter state).
+    /** Sets the average integration time in seconds (passes through to the meter state, ignored while the meter has none).
 
         @param seconds  integration time in seconds
     */
     void setAverageIntegrationTime (double seconds);
 
-    /** Sets the average fall time in seconds (passes through to the meter state).
+    /** Sets the average fall time in seconds (passes through to the meter state, ignored while the meter has none).
 
         @param seconds  fall time in seconds
     */
     void setAverageFallTime (double seconds);
 
-    /** Sets the peak hold time in seconds (passes through to the meter state).
+    /** Sets the peak hold time in seconds (passes through to the meter state, ignored while the meter has none).
 
         @param seconds  hold time in seconds (-1.0 = infinite)
     */
@@ -224,7 +263,7 @@ private:
     void checkForCallbacks();
 
     //==============================================================================
-    KMeterState& meterState;
+    KMeterState* meterState = nullptr;
     int channelIndex = -1;
 
     // Display state (read from KMeterState via atomics)

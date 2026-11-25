@@ -11,6 +11,9 @@ component.
 
 ## Device settings
 
+The device settings are compiled when `yup_audio_devices` is linked too: list
+it in the `MODULES` of your target next to `yup_audio_gui`.
+
 `AudioDeviceManagerPanel` lets the user pick the device type, the output and
 input devices, the sample rate, the buffer size, the active channels and the MIDI
 devices of an `AudioDeviceManager`. Changes are applied to the manager as soon as
@@ -460,6 +463,64 @@ Each parameter holds its real (not normalized) value. Edits from the UI become
 change gestures that the host records as automation, and read-only parameters
 ignore them. The editor must outlive the provider, and parameter IDs must be
 valid identifiers.
+
+## In `.yui` documents
+
+Linked next to `yup_gui_markup`, the module registers its components as types
+a [`.yui` document](../ui/yui/documents.md) creates:
+
+| Type | Component | Given in C++ |
+|---|---|---|
+| `MidiKeyboard` | `MidiKeyboardComponent` | `setState()` with a `MidiKeyboardState` |
+| `PitchWheel`, `ModWheel` | `PitchWheelComponent`, `ModWheelComponent` | `setState()` with a `MidiKeyboardState` |
+| `SpectrumAnalyzer` | `SpectrumAnalyzerComponent` | `setState()` with a `SpectrumAnalyzerState` |
+| `Spectrogram` | `SpectrogramComponent` | `setState()` with a `SpectrumAnalyzerState` |
+| `KMeter` | `KMeterComponent` | `setState()` with a `KMeterState` |
+| `AudioView` | `AudioViewComponent` | `setSource()` with a buffer or a reader |
+| `CartesianPlane` | `CartesianPlane` | The signals, the grid lines and the axis labels |
+
+The document writes how a component looks and behaves. What it shows belongs
+to the application, which gives it with an
+[initializer](../ui/yui/documents.md#setting-up-components-from-c), run each
+time the document creates the component:
+
+```cpp
+document.setInitializer<yup::KMeterComponent> ([this] (yup::KMeterComponent& meter)
+{
+    meter.setState (&processor.getMeterState());
+});
+
+document.setInitializer<yup::SpectrumAnalyzerComponent> ("output", [this] (yup::SpectrumAnalyzerComponent& analyzer)
+{
+    analyzer.setState (&processor.getOutputAnalyzerState());
+    analyzer.setSampleRate (processor.getSampleRate());
+});
+```
+
+```yui
+Row {
+    KMeter { channel: 0; preferredWidth: 24; }
+    KMeter { channel: 1; preferredWidth: 24; }
+
+    SpectrumAnalyzer { id: output; displayType: lines; minFrequency: 30; maxFrequency: 18000; flexGrow: 1; }
+}
+```
+
+Until it is given a state a component is idle: the keyboard plays nothing, the
+wheels are moved by the user alone, the analyzers draw their grid and the meter
+shows silence. That is how they appear in the
+[tools](../ui/yui/tooling.md) previewing a document, which have no application
+to ask.
+
+`setState()` swaps or removes the state of a component built in C++ as well.
+Call it on the message thread, and keep the state alive as long as a component
+has it, or remove it first with `setState (nullptr)`.
+
+What belongs to a state is set on the state in C++, not written in the
+document: the FFT size and the overlap of a `SpectrumAnalyzerState`, which the
+audio thread fills, and the scale and the ballistics of a `KMeterState`, which
+several meters share. The properties a document writes on each type are listed
+by the [schema](../ui/yui/tooling.md#the-schema).
 
 ## Threading rules
 

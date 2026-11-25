@@ -116,7 +116,11 @@ changes.
 ### What the tool can't know
 
 - Component types registered by the application with `ComponentTypeRegistry`
-  are unknown to the tool, which only has the types of `yup_gui`.
+  are unknown to the tool, which only has the types of `yup_gui`,
+  `yup_renderer` and `yup_audio_gui`.
+- What the application gives a component in C++ isn't there: the
+  [audio components](../../audio/audio-gui.md#in-yui-documents) are checked
+  and shown with no state.
 - Values are checked against the default theme: properties an application adds
   to its own theme aren't there.
 - Textures and the images of models are decoded as PNG, JPEG and WebP, the
@@ -149,8 +153,8 @@ shader that does not compile does, instead of being missing when the
 application runs.
 
 The tool is built for the host into the build tree the first time, which takes
-as long as building `yup_gui`, `yup_gui_markup`, `yup_renderer` and the shader
-compiler. See the
+as long as building `yup_gui`, `yup_gui_markup`, `yup_renderer`,
+`yup_audio_gui` and the shader compiler. See the
 [CMake API](../../build-system/cmake-api.md#yup_add_yui_resources).
 
 The same check is available on the command line:
@@ -217,7 +221,9 @@ palette roles and the names of the `colors.` constants. Editors build their comp
   `enumeration` lists its `values`, and a `drawing` is the name of a drawing
   or of a shader.
 - The elements of a [3D scene](scenes.md), from `Scene3D` to `Material3D`, are
-  types like the others.
+  types like the others, and so are the
+  [audio components](../../audio/audio-gui.md#in-yui-documents), from
+  `MidiKeyboard` to `CartesianPlane`.
 - `default` is given when it can be written as a `.yui` literal, colors as
   `#rrggbbaa`.
 - `state` marks a boolean usable as a pseudo-class in a selector (`:dragging`),
@@ -677,7 +683,8 @@ The module links the renderer, the glTF loader, the PNG, JPEG and WebP decoders
 and the shader compiler, so it loads the [shaders](shaders.md) and the
 [scenes](scenes.md) of a document as the native tool does: `lint` compiles
 the GLSL of the `shader` blocks, materials included, and reads the models and
-the textures. The module is 22.9 MB as it is built by default, and 16.1 MB
+the textures. It links `yup_audio_gui` too, without the device settings that
+need `yup_audio_devices` and its threads. The module is 22.9 MB as it is built by default, and 16.1 MB
 without the shader compiler, which an option leaves out:
 
 ```sh

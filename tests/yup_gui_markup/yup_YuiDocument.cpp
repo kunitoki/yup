@@ -349,6 +349,29 @@ TEST_F (YuiDocumentTests, ReloadingUpdatesTheInterfaceInPlace)
     EXPECT_EQ (document.findById<Label> ("caption")->getText(), "b");
 }
 
+TEST_F (YuiDocumentTests, InitializersSetUpTheComponentsEachLoadCreates)
+{
+    YuiDocument document;
+    StringArray initialized;
+
+    document.setInitializer<Label> ("title", [&] (Label& label) { initialized.add ("the " + label.getComponentID()); });
+    document.setInitializer<Label> ([&] (Label& label) { initialized.add ("any " + label.getComponentID()); });
+
+    ASSERT_TRUE (document.loadFromString ("Component { Label { id: title; } }").wasOk());
+    EXPECT_EQ (initialized.joinIntoString (", "), "any title, the title");
+
+    // A reload keeps the component it still describes, and sets up the one it creates
+    ASSERT_TRUE (document.loadFromString ("Component { Label { id: title; } Label { id: caption; } }").wasOk());
+    EXPECT_EQ (initialized.joinIntoString (", "), "any title, the title, any caption");
+
+    document.setInitializer<Label> ("title", nullptr);
+    document.setInitializer<Label> (nullptr);
+    document.clear();
+
+    ASSERT_TRUE (document.loadFromString ("Component { Label { id: title; } }").wasOk());
+    EXPECT_EQ (initialized.size(), 3);
+}
+
 TEST_F (YuiDocumentTests, ReloadingWithTheSameStyleKeepsTheStyleSheetAndItsTransitions)
 {
     const String style = "style { .knob { glow: 0; transition: glow 1s; } .lit { glow: 10; } }";

@@ -582,8 +582,8 @@ a document reads that is not listed fails the configuration, and it compiles
 the shaders they name from their sources, so one that does not compile fails
 as well. Editing a shader then configures again. The tool is built for the
 host into the build tree the first time it is needed. It links `yup_gui_markup`,
-`yup_renderer` and the shader transpiler, so that first configuration takes as
-long as building them. Files binding to the models of the application
+`yup_renderer`, `yup_audio_gui` and the shader transpiler, so that first
+configuration takes as long as building them. Files binding to the models of the application
 (`value <=> params.cutoff`) need `VERIFY_MODELS`, the JSON file declaring them.
 
 #### Arguments

@@ -2322,8 +2322,9 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
         g.fillRect (bounds);
     }
 
-    // Get K-System scale range for the meter state
-    const auto scale = meter.meterState.getScale();
+    // Get K-System scale range for the meter state, the one of K-20 without a state
+    const auto* meterState = meter.getState();
+    const auto scale = meterState != nullptr ? meterState->getScale() : KMeterState::Scale::k20;
     const float rangeMin = KMeterState::rangeMinForScale (scale);
     const float rangeMax = KMeterState::rangeMaxForScale (scale);
     const float rangeSpan = rangeMax - rangeMin;

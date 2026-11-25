@@ -43,7 +43,7 @@ macro (graphics_demo demo_id)
 endmacro()
 
 set (base_modules yup::yup_core yup::yup_events yup::yup_graphics yup::yup_gui libpng)
-set (audio_modules yup::yup_audio_gui pffft_library)
+set (audio_modules yup::yup_audio_devices yup::yup_audio_gui pffft_library)
 
 graphics_demo (AI MODULES yup::yup_ai)
 graphics_demo (Artboard RESOURCES rive)

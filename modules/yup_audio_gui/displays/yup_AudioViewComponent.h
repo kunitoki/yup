@@ -27,6 +27,9 @@ namespace yup
 //==============================================================================
 /**
     View component that renders an AudioThumbnail with zooming, scrolling, and progress display.
+
+    A `.yui` document creates one as `AudioView`, showing nothing until it is given what to
+    render with setSource() (see YuiDocument::setInitializer).
 */
 class YUP_API AudioViewComponent : public Component
     , private AudioThumbnail::Listener
@@ -44,6 +47,13 @@ public:
 
     /** Destructor. */
     ~AudioViewComponent() override;
+
+    //==============================================================================
+    /** Returns the static type info describing the AudioViewComponent type, `AudioView` in `.yui`. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
     /** Assigns the buffer to render and refreshes the peak cache. */

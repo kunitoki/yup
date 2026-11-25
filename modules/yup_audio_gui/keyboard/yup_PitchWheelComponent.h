@@ -48,6 +48,10 @@ namespace yup
     latest position is applied, and no update is applied while the user is
     dragging the wheel.
 
+    The state can be given after construction with setState(), which is how a wheel
+    created by a `.yui` document as `PitchWheel` gets it (see YuiDocument::setInitializer).
+    Without a state the wheel is moved by the user alone.
+
     @see Component, Slider, MidiKeyboardComponent
 
     @tags{GUI, Keyboard}
@@ -59,6 +63,12 @@ class YUP_API PitchWheelComponent
 {
 public:
     //==============================================================================
+    /** Creates a PitchWheelComponent with no state, to be given one with setState().
+
+        @param componentID    an optional identifier for this component
+    */
+    explicit PitchWheelComponent (StringRef componentID = {});
+
     /** Creates a PitchWheelComponent.
 
         @param state          the MidiKeyboardState whose pitch-wheel position this
@@ -73,6 +83,26 @@ public:
 
     /** Destructor. */
     ~PitchWheelComponent() override;
+
+    //==============================================================================
+    /** Changes the state whose pitch-wheel position the wheel follows.
+
+        The wheel keeps its value until the state reports a new one. Call it on the message
+        thread. The state must outlive the wheel, or be removed first by setting a null one.
+
+        @param newState   the state to follow, or nullptr for none
+    */
+    void setState (MidiKeyboardState* newState);
+
+    /** Returns the state the wheel follows, or nullptr if it has none. */
+    MidiKeyboardState* getState() const noexcept { return state; }
+
+    //==============================================================================
+    /** Returns the static type info describing the PitchWheelComponent type, `PitchWheel` in `.yui`. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
     /** Sets the current value.
@@ -185,7 +215,7 @@ private:
 
     double constrainValue (double newValue) const noexcept;
 
-    MidiKeyboardState& state;
+    MidiKeyboardState* state = nullptr;
     std::atomic<int> midiChannel { 1 };
 
     double value = 0.0;

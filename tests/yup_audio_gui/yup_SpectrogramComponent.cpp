@@ -431,6 +431,82 @@ TEST_F (SpectrogramComponentTests, CompleteWorkflow)
 }
 
 //==============================================================================
+// State Tests
+//==============================================================================
+
+TEST_F (SpectrogramComponentTests, ASpectrogramWithoutAStateIsConfiguredAndPainted)
+{
+    SpectrogramComponent stateless;
+    stateless.setBounds (0.0f, 0.0f, 300.0f, 150.0f);
+
+    EXPECT_EQ (nullptr, stateless.getState());
+    EXPECT_EQ (4096, stateless.getFFTSize());
+    EXPECT_FLOAT_EQ (0.0f, stateless.getOverlapFactor());
+
+    // What belongs to the state is ignored, the size of the FFT is the one of the spectrogram alone
+    stateless.setOverlapFactor (0.5f);
+    stateless.setFFTSize (1024);
+
+    EXPECT_FLOAT_EQ (0.0f, stateless.getOverlapFactor());
+    EXPECT_EQ (1024, stateless.getFFTSize());
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (300, 150);
+    Graphics g (*context, *renderer);
+
+    stateless.refreshDisplay (1.0 / 60.0);
+    stateless.paint (g);
+}
+
+TEST_F (SpectrogramComponentTests, SetStateTakesTheFFTSizeOfTheNewState)
+{
+    SpectrumAnalyzerState other (1024);
+
+    spectrogram->setState (&other);
+
+    EXPECT_EQ (&other, spectrogram->getState());
+    EXPECT_EQ (1024, spectrogram->getFFTSize());
+
+    // The size set on the spectrogram is the one of the state it has
+    spectrogram->setFFTSize (512);
+
+    EXPECT_EQ (512, other.getFftSize());
+    EXPECT_EQ (2048, state->getFftSize());
+
+    spectrogram->setState (nullptr);
+
+    EXPECT_EQ (nullptr, spectrogram->getState());
+    EXPECT_EQ (512, spectrogram->getFFTSize());
+}
+
+TEST_F (SpectrogramComponentTests, TheTypeInfoSetsTheColorMapAndTheRanges)
+{
+    const auto& type = SpectrogramComponent::getClassTypeInfo();
+    EXPECT_EQ (type.getTypeName().toString(), "Spectrogram");
+    EXPECT_EQ (&spectrogram->getTypeInfo(), &type);
+
+    const auto created = type.createInstance();
+    auto* instance = dynamic_cast<SpectrogramComponent*> (created.get());
+    ASSERT_NE (nullptr, instance);
+    EXPECT_EQ (nullptr, instance->getState());
+    EXPECT_EQ (instance->getProperty ("colorMap").toString(), "heatmap");
+
+    instance->setProperty ("colorMap", "viridis");
+    EXPECT_EQ (SpectrogramColorMap::Type::viridis, instance->getColorMap().getType());
+    EXPECT_EQ (instance->getProperty ("colorMap").toString(), "viridis");
+
+    instance->setProperty ("maxFrequency", 10.0);
+    instance->setProperty ("minFrequency", 2.0);
+    EXPECT_FLOAT_EQ (2.0f, instance->getMinFrequency());
+    EXPECT_FLOAT_EQ (10.0f, instance->getMaxFrequency());
+
+    instance->setProperty ("historyFrames", 64);
+    instance->setProperty ("scrollSpeed", 0.5);
+    EXPECT_EQ (64, instance->getNumHistoryFrames());
+    EXPECT_FLOAT_EQ (0.5f, instance->getScrollSpeed());
+}
+
+//==============================================================================
 // GPU Path Tests (skipped when no GPU backend is available)
 //==============================================================================
 

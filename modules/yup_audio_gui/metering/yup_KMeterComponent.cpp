@@ -33,16 +33,77 @@ const Identifier KMeterComponent::Style::peakLevelClipColorId { "peakLevelClipCo
 const Identifier KMeterComponent::Style::peakHoldColorId { "peakHoldColorId" };
 
 //==============================================================================
-KMeterComponent::KMeterComponent (KMeterState& state, int channel, StringRef componentID)
+const ComponentTypeInfo& KMeterComponent::getClassTypeInfo()
+{
+    using M = KMeterComponent;
+
+    static const auto info = ComponentTypeBuilder<M> (Identifier ("KMeter"))
+                                 .color ("backgroundColor", Style::backgroundColorId)
+                                 .color ("greenZoneColor", Style::greenZoneColorId)
+                                 .color ("amberZoneColor", Style::amberZoneColorId)
+                                 .color ("redZoneColor", Style::redZoneColorId)
+                                 .color ("averageLevelColor", Style::averageLevelColorId)
+                                 .color ("peakLevelColor", Style::peakLevelColorId)
+                                 .color ("peakLevelClipColor", Style::peakLevelClipColorId)
+                                 .color ("peakHoldColor", Style::peakHoldColorId)
+                                 .property ("channel", &M::getChannel, &M::setChannel, -1, "The channel of the state shown, -1 for the loudest of all its channels.")
+                                 .property ("showPeak", &M::getShowPeak, &M::setShowPeak, true, "Whether the moving peak indicator is shown.")
+                                 .property ("showPeakHold", &M::getShowPeakHold, &M::setShowPeakHold, true, "Whether the peak hold marker is shown.")
+                                 .enumeration<ScaleMapping> (
+                                     "scaleMapping",
+                                     { { "segmented", ScaleMapping::segmented },
+                                       { "linear", ScaleMapping::linear } },
+                                     &M::getScaleMapping,
+                                     &M::setScaleMapping,
+                                     "How the levels are placed along the meter: with the segments of the K-System, or linearly in dB.")
+                                 .property ("refreshRate", &M::getRefreshRate, &M::setRefreshRate, 30, "The updates a second, from 10 to 60.")
+                                 .signal ("onLevelChanged", &M::onLevelChanged, "Emitted with the peak and the average level, in dB, when either moved by half a dB.", { { Identifier ("peakDb"), ComponentProperty::Type::number }, { Identifier ("averageDb"), ComponentProperty::Type::number } })
+                                 .signal ("onClippingChanged", &M::onClippingChanged, "Emitted when the signal starts or stops clipping.", { { Identifier ("clipping"), ComponentProperty::Type::boolean } })
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
+KMeterComponent::KMeterComponent (StringRef componentID)
     : Component (componentID)
-    , meterState (state)
-    , channelIndex (channel)
 {
     setOpaque (true);
 }
 
+KMeterComponent::KMeterComponent (KMeterState& state, int channel, StringRef componentID)
+    : KMeterComponent (componentID)
+{
+    channelIndex = channel;
+    setState (&state);
+}
+
 KMeterComponent::~KMeterComponent()
 {
+}
+
+//==============================================================================
+void KMeterComponent::setState (KMeterState* newState)
+{
+    if (meterState == newState)
+        return;
+
+    meterState = newState;
+
+    // The levels shown are the ones of the previous state
+    updateLevels();
+    repaint();
+}
+
+void KMeterComponent::setChannel (int channel)
+{
+    if (channelIndex == channel)
+        return;
+
+    channelIndex = channel;
+
+    updateLevels();
+    repaint();
 }
 
 //==============================================================================
@@ -75,7 +136,8 @@ void KMeterComponent::setScaleMapping (ScaleMapping mapping)
 
 void KMeterComponent::setOverCounterMode (KMeterState::OverCounterMode mode)
 {
-    meterState.setOverCounterMode (mode);
+    if (meterState != nullptr)
+        meterState->setOverCounterMode (mode);
 }
 
 void KMeterComponent::setRefreshRate (int hz)
@@ -85,17 +147,20 @@ void KMeterComponent::setRefreshRate (int hz)
 
 void KMeterComponent::setAverageIntegrationTime (double seconds)
 {
-    meterState.setIntegrationTime (seconds);
+    if (meterState != nullptr)
+        meterState->setIntegrationTime (seconds);
 }
 
 void KMeterComponent::setAverageFallTime (double seconds)
 {
-    meterState.setAverageFallTime (seconds);
+    if (meterState != nullptr)
+        meterState->setAverageFallTime (seconds);
 }
 
 void KMeterComponent::setPeakHoldTime (double seconds)
 {
-    meterState.setPeakHoldTime (seconds);
+    if (meterState != nullptr)
+        meterState->setPeakHoldTime (seconds);
 }
 
 //==============================================================================
@@ -109,6 +174,9 @@ void KMeterComponent::paint (Graphics& g)
 
 void KMeterComponent::refreshDisplay (double lastFrameTimeSeconds)
 {
+    if (meterState == nullptr)
+        return;
+
     timeSinceLastUpdate += lastFrameTimeSeconds;
 
     // Update at configured refresh rate
@@ -125,11 +193,13 @@ void KMeterComponent::refreshDisplay (double lastFrameTimeSeconds)
 //==============================================================================
 void KMeterComponent::updateLevels()
 {
-    // Read levels from KMeterState (thread-safe via atomics)
-    const float peakDb = meterState.getPeakLevel (channelIndex);
-    const float averageDb = meterState.getAverageLevel (channelIndex);
-    const float peakHoldDb = meterState.getPeakHoldLevel (channelIndex);
-    const bool clipping = meterState.isClipping();
+    constexpr float silenceDb = -100.0f;
+
+    // Read levels from KMeterState (thread-safe via atomics), silence without one
+    const float peakDb = meterState != nullptr ? meterState->getPeakLevel (channelIndex) : silenceDb;
+    const float averageDb = meterState != nullptr ? meterState->getAverageLevel (channelIndex) : silenceDb;
+    const float peakHoldDb = meterState != nullptr ? meterState->getPeakHoldLevel (channelIndex) : silenceDb;
+    const bool clipping = meterState != nullptr && meterState->isClipping();
 
     // Store in atomics for paint thread (no additional smoothing needed)
     currentPeakDb.set (peakDb);

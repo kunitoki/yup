@@ -22,6 +22,19 @@
 namespace yup
 {
 
+namespace
+{
+
+struct SpectrumAnalyzerComponentIds
+{
+    static inline const Identifier displayType { "displayType" };
+    static inline const Identifier levelMode { "levelMode" };
+    static inline const Identifier releaseTime { "releaseTime" };
+    static inline const Identifier updateRate { "updateRate" };
+};
+
+} // namespace
+
 //==============================================================================
 const Identifier SpectrumAnalyzerComponent::Style::backgroundTopColorId { "SpectrumAnalyzer_backgroundTopColorId" };
 const Identifier SpectrumAnalyzerComponent::Style::backgroundBottomColorId { "SpectrumAnalyzer_backgroundBottomColorId" };
@@ -31,20 +44,84 @@ const Identifier SpectrumAnalyzerComponent::Style::gridColorId { "SpectrumAnalyz
 const Identifier SpectrumAnalyzerComponent::Style::textColorId { "SpectrumAnalyzer_textColorId" };
 
 //==============================================================================
-SpectrumAnalyzerComponent::SpectrumAnalyzerComponent (SpectrumAnalyzerState& state)
-    : analyzerState (state)
-    , scopeData (scopeSize, 0.0f)
+const ComponentTypeInfo& SpectrumAnalyzerComponent::getClassTypeInfo()
+{
+    using A = SpectrumAnalyzerComponent;
+
+    static const auto info = []
+    {
+        auto builder = ComponentTypeBuilder<A> (Identifier ("SpectrumAnalyzer"));
+
+        builder.color ("backgroundTopColor", Style::backgroundTopColorId)
+            .color ("backgroundBottomColor", Style::backgroundBottomColorId)
+            .color ("outlineColor", Style::outlineColorId)
+            .color ("fillColor", Style::fillColorId)
+            .color ("gridColor", Style::gridColorId)
+            .color ("textColor", Style::textColorId)
+            .enumeration<DisplayType> (
+                SpectrumAnalyzerComponentIds::displayType,
+                { { "filled", DisplayType::filled },
+                  { "lines", DisplayType::lines } },
+                &A::getDisplayType,
+                &A::setDisplayType,
+                "Whether the spectrum is drawn as a filled area or as a line.")
+            .enumeration<LevelMode> (
+                SpectrumAnalyzerComponentIds::levelMode,
+                { { "peakDecibels", LevelMode::peakDecibels },
+                  { "rmsDecibels", LevelMode::rmsDecibels },
+                  { "powerDecibels", LevelMode::powerDecibels },
+                  { "powerSpectralDensity", LevelMode::powerSpectralDensity } },
+                &A::getLevelMode,
+                &A::setLevelMode,
+                "How the levels are measured: the peak or the RMS amplitude, the power summed across each band, or the power spectral density.");
+
+        detail::addSpectrumDisplayProperties (builder);
+
+        return builder.property (SpectrumAnalyzerComponentIds::releaseTime, &A::getReleaseTimeSeconds, &A::setReleaseTimeSeconds, 1.0f, "The time the spectrum takes to fall, in seconds.")
+            .property (SpectrumAnalyzerComponentIds::updateRate, &A::getUpdateRate, &A::setUpdateRate, 0, "The updates a second, 0 to follow the display refresh rate.")
+            .build();
+    }();
+
+    return info;
+}
+
+//==============================================================================
+SpectrumAnalyzerComponent::SpectrumAnalyzerComponent()
+    : scopeData (scopeSize, 0.0f)
     , targetData (scopeSize, 0.0f)
-    , fftSize (analyzerState.getFftSize())
 {
     initializeFFTBuffers();
     generateWindow();
     updateBinMapping();
 }
 
+SpectrumAnalyzerComponent::SpectrumAnalyzerComponent (SpectrumAnalyzerState& state)
+    : SpectrumAnalyzerComponent()
+{
+    setState (&state);
+}
+
 SpectrumAnalyzerComponent::~SpectrumAnalyzerComponent()
 {
     stopTimer();
+}
+
+//==============================================================================
+void SpectrumAnalyzerComponent::setState (SpectrumAnalyzerState* newState)
+{
+    if (analyzerState == newState)
+        return;
+
+    analyzerState = newState;
+
+    // What is shown is the spectrum of the previous state
+    std::fill (scopeData.begin(), scopeData.end(), 0.0f);
+    std::fill (targetData.begin(), targetData.end(), 0.0f);
+
+    if (analyzerState != nullptr && analyzerState->getFftSize() != fftSize)
+        resizeFFT (analyzerState->getFftSize());
+
+    repaint();
 }
 
 //==============================================================================
@@ -78,7 +155,7 @@ void SpectrumAnalyzerComponent::updateSpectrum()
 {
     constexpr int maxFFTsPerFrame = 4;
 
-    if (! isShowing())
+    if (analyzerState == nullptr || ! isShowing())
         return;
 
     const double nowSeconds = Time::getMillisecondCounterHiRes() / 1000.0;
@@ -89,17 +166,17 @@ void SpectrumAnalyzerComponent::updateSpectrum()
     for (size_t i = 0; i < scopeData.size(); ++i)
         scopeData[i] = targetData[i] + (scopeData[i] - targetData[i]) * releaseRate;
 
-    const int hopSize = analyzerState.getHopSize();
-    const int numReady = analyzerState.getNumAvailableSamples();
+    const int hopSize = analyzerState->getHopSize();
+    const int numReady = analyzerState->getNumAvailableSamples();
 
     if (hopSize > 0 && numReady >= fftSize)
     {
         const int numFrames = (numReady - fftSize) / hopSize + 1;
-        for (int i = numFrames - maxFFTsPerFrame; i > 0 && analyzerState.isFFTDataReady(); --i)
-            analyzerState.getFFTData (fftInputBuffer.data());
+        for (int i = numFrames - maxFFTsPerFrame; i > 0 && analyzerState->isFFTDataReady(); --i)
+            analyzerState->getFFTData (fftInputBuffer.data());
     }
 
-    for (int fftCount = 0; fftCount < maxFFTsPerFrame && analyzerState.isFFTDataReady(); ++fftCount)
+    for (int fftCount = 0; fftCount < maxFFTsPerFrame && analyzerState->isFFTDataReady(); ++fftCount)
     {
         processFFT();
         updateTargets();
@@ -116,7 +193,7 @@ void SpectrumAnalyzerComponent::updateSpectrum()
 
 void SpectrumAnalyzerComponent::processFFT()
 {
-    if (! analyzerState.getFFTData (fftInputBuffer.data()))
+    if (analyzerState == nullptr || ! analyzerState->getFFTData (fftInputBuffer.data()))
         return;
 
     if (needsWindowUpdate)
@@ -643,30 +720,37 @@ void SpectrumAnalyzerComponent::setReleaseTimeSeconds (float timeSeconds)
 
 void SpectrumAnalyzerComponent::setOverlapFactor (float overlapFactor)
 {
-    analyzerState.setOverlapFactor (overlapFactor);
+    if (analyzerState != nullptr)
+        analyzerState->setOverlapFactor (overlapFactor);
 }
 
 float SpectrumAnalyzerComponent::getOverlapFactor() const noexcept
 {
-    return analyzerState.getOverlapFactor();
+    return analyzerState != nullptr ? analyzerState->getOverlapFactor() : 0.0f;
 }
 
 void SpectrumAnalyzerComponent::setFFTSize (int size)
 {
     jassert (isPowerOfTwo (size) && size >= 64 && size <= 65536);
 
-    if (fftSize != size)
-    {
-        fftSize = size;
+    if (fftSize == size)
+        return;
 
-        analyzerState.setFftSize (size);
+    if (analyzerState != nullptr)
+        analyzerState->setFftSize (size);
 
-        initializeFFTBuffers();
-        generateWindow();
-        updateBinMapping();
+    resizeFFT (size);
+}
 
-        repaint();
-    }
+void SpectrumAnalyzerComponent::resizeFFT (int size)
+{
+    fftSize = size;
+
+    initializeFFTBuffers();
+    generateWindow();
+    updateBinMapping();
+
+    repaint();
 }
 
 } // namespace yup

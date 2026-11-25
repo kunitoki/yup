@@ -35,7 +35,8 @@ include ("${yup_root}/cmake/yup.cmake")
 # about half as large again. Without them it only loads the shaders a build compiled into .ysl bundles
 option (YUP_YUI_TOOL_WEB_SHADER_COMPILER "Compile the shaders written in GLSL in the tool built for the web" ON)
 
-# Only add yup_gui_markup, the modules it depends on and the ones its documents show 3D scenes with.
+# Only add yup_gui_markup, the modules it depends on and the ones its documents show 3D scenes and audio components
+# with. yup_audio_gui comes without yup_audio_devices, which needs the threads the tool for the web is built without
 set (yup_modules
     yup_core
     yup_events
@@ -48,7 +49,13 @@ set (yup_modules
     yup_gui
     yup_gui_markup
     yup_3d
-    yup_renderer)
+    yup_renderer
+    yup_audio_basics
+    yup_dsp
+    yup_audio_formats
+    yup_audio_processors
+    yup_audio_graph
+    yup_audio_gui)
 
 set (thirdparty_modules
     zlib
@@ -138,6 +145,7 @@ if (YUP_PLATFORM_EMSCRIPTEN)
             yup::yup_gui_markup
             yup::yup_3d
             yup::yup_renderer
+            yup::yup_audio_gui
             tinygltf
             libpng
             libjpeg
@@ -164,6 +172,7 @@ else()
             yup::yup_ai
             yup::yup_3d
             yup::yup_renderer
+            yup::yup_audio_gui
             tinygltf
             libpng
             libjpeg

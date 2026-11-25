@@ -1985,3 +1985,132 @@ TEST_F (YuiBuilderTests, LoadsFontFilesRelativeToTheBaseDirectory)
     EXPECT_EQ (large.getFont().get(), plain.getFont().get());
     EXPECT_FLOAT_EQ (large.getHeight(), 20.0f);
 }
+
+TEST_F (YuiBuilderTests, AnInitializerSetsUpTheNewComponentsOfATypeBeforeTheirValues)
+{
+    YuiBuilder builder;
+    StringArray initialized;
+
+    builder.setInitializer<Label> ([&] (Label& label)
+    {
+        initialized.add (label.getComponentID());
+        label.setText ("from the code");
+    });
+
+    auto document = parse (R"yui(
+        Component {
+            Label { id: plain; }
+            Label { id: written; text: "from the document"; }
+            Slider { id: knob; }
+        })yui");
+
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    // The components of the type are set up once they have their id, and the document has the last word
+    EXPECT_EQ (initialized.joinIntoString (", "), "plain, written");
+    EXPECT_EQ (builder.findById<Label> ("plain")->getText(), "from the code");
+    EXPECT_EQ (builder.findById<Label> ("written")->getText(), "from the document");
+
+    builder.findById<Label> ("plain")->setText ("from the user");
+
+    YuiTreeDiff::apply (document, parse (R"yui(
+        Component {
+            Label { id: plain; }
+            Label { id: renamed; text: "from the document"; }
+            Slider { id: knob; }
+            Label { id: added; }
+        })yui"));
+
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    // A kept component isn't set up again, unless its id changed, and a new one is
+    EXPECT_EQ (initialized.size(), 4);
+    EXPECT_TRUE (initialized.contains ("renamed"));
+    EXPECT_TRUE (initialized.contains ("added"));
+    EXPECT_EQ (builder.findById<Label> ("plain")->getText(), "from the user");
+    EXPECT_EQ (builder.findById<Label> ("renamed")->getText(), "from the document");
+    EXPECT_EQ (builder.findById<Label> ("added")->getText(), "from the code");
+}
+
+TEST_F (YuiBuilderTests, AnInitializerOfAnIdRunsAfterTheOnesOfItsType)
+{
+    YuiBuilder builder;
+    int numStrips = 0;
+
+    // Set first, it still runs last
+    builder.setInitializer<Label> ("name", [] (Label& label) { label.setText (label.getText() + " named"); });
+    builder.setInitializer<Label> ([] (Label& label) { label.setText ("any"); });
+    builder.setInitializer<RowComponent> ("strip", [&] (RowComponent&) { ++numStrips; });
+
+    const auto result = builder.build (parse (R"yui(
+        component Strip : Row {
+            Label { id: name; }
+        }
+
+        Column {
+            id: list;
+            Strip { id: strip; }
+            Label { id: other; }
+
+            repeat i in 0 .. 2 {
+                Label { id: name; }
+            }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    auto* list = builder.findById ("list");
+    ASSERT_EQ (list->getNumChildComponents(), 4);
+
+    const auto textOf = [] (Component* label) { return dynamic_cast<Label*> (label)->getText(); };
+
+    // An id reaches the components inside a declared component and a repeat, and a type the ones declared from it
+    EXPECT_EQ (numStrips, 1);
+    EXPECT_EQ (textOf (list->getChildComponent (0)->getChildComponent (0)), "any named");
+    EXPECT_EQ (textOf (list->getChildComponent (1)), "any");
+    EXPECT_EQ (textOf (list->getChildComponent (2)), "any named");
+    EXPECT_EQ (textOf (list->getChildComponent (3)), "any named");
+}
+
+TEST_F (YuiBuilderTests, AnInitializerSetAfterABuildSetsUpTheComponentsAlreadyBuilt)
+{
+    YuiBuilder builder;
+    ASSERT_TRUE (builder.build (parse ("Component { Label { id: title; } Label { id: other; } }")).wasOk());
+
+    auto* title = builder.findById<Label> ("title");
+    auto* other = builder.findById<Label> ("other");
+
+    builder.setInitializer<Label> ("title", [] (Label& label) { label.setText ("the title"); });
+    EXPECT_EQ (title->getText(), "the title");
+    EXPECT_EQ (other->getText(), String());
+
+    // The one of the id keeps the last word over the one of the type set after it
+    builder.setInitializer<Label> ([] (Label& label) { label.setText ("any"); });
+    EXPECT_EQ (title->getText(), "the title");
+    EXPECT_EQ (other->getText(), "any");
+}
+
+TEST_F (YuiBuilderTests, AnInitializerIsReplacedRemovedAndKeptByClear)
+{
+    YuiBuilder builder;
+    StringArray calls;
+
+    builder.setInitializer<Label> ([&] (Label&) { calls.add ("first"); });
+    builder.setInitializer<Label> ([&] (Label&) { calls.add ("second"); });
+    builder.setInitializer<Slider> ([&] (Slider&) { calls.add ("slider"); });
+    builder.setInitializer<Slider> (nullptr);
+
+    const auto document = parse ("Component { Label { } Slider { } }");
+    ASSERT_TRUE (builder.build (document).wasOk());
+    EXPECT_EQ (calls.joinIntoString (", "), "second");
+
+    builder.clear();
+    ASSERT_TRUE (builder.build (document).wasOk());
+    EXPECT_EQ (calls.joinIntoString (", "), "second, second");
+
+    builder.setInitializer<Label> (nullptr);
+    builder.clear();
+    ASSERT_TRUE (builder.build (document).wasOk());
+    EXPECT_EQ (calls.size(), 2);
+}

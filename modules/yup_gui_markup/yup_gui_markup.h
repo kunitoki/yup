@@ -33,7 +33,7 @@
     license:              ISC
 
     dependencies:         yup_gui
-    optionalDeps:         yup_renderer
+    optionalDeps:         yup_renderer yup_audio_gui
 
   END_YUP_MODULE_DECLARATION
 

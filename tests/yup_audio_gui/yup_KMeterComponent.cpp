@@ -133,3 +133,77 @@ TEST (KMeterComponentTests, PaintWithShowPeakFalseDoesNotCrash)
 
     EXPECT_NO_THROW ({ meter.paint (g); });
 }
+
+TEST (KMeterComponentTests, AMeterWithoutAStateIsConfiguredAndPainted)
+{
+    KMeterComponent meter;
+    meter.setBounds (0.0f, 0.0f, 30.0f, 120.0f);
+
+    EXPECT_EQ (nullptr, meter.getState());
+    EXPECT_EQ (-1, meter.getChannel());
+    EXPECT_EQ (KMeterState::OverCounterMode::contiguous, meter.getOverCounterMode());
+
+    // What belongs to the state is ignored
+    meter.setOverCounterMode (KMeterState::OverCounterMode::total);
+    meter.setAverageIntegrationTime (0.2);
+    meter.setAverageFallTime (0.9);
+    meter.setPeakHoldTime (1.5);
+
+    EXPECT_EQ (KMeterState::OverCounterMode::contiguous, meter.getOverCounterMode());
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (30, 120);
+    Graphics g (*context, *renderer);
+
+    meter.refreshDisplay (1.0);
+    EXPECT_NO_THROW ({ meter.paint (g); });
+}
+
+TEST (KMeterComponentTests, SetStateMovesTheMeterToAnotherState)
+{
+    KMeterState first (48000.0, 2);
+    KMeterState second (48000.0, 2);
+    KMeterComponent meter (first, 1);
+
+    EXPECT_EQ (&first, meter.getState());
+    EXPECT_EQ (1, meter.getChannel());
+
+    meter.setState (&second);
+    meter.setOverCounterMode (KMeterState::OverCounterMode::total);
+
+    EXPECT_EQ (&second, meter.getState());
+    EXPECT_EQ (KMeterState::OverCounterMode::contiguous, first.getOverCounterMode());
+    EXPECT_EQ (KMeterState::OverCounterMode::total, second.getOverCounterMode());
+
+    meter.setChannel (0);
+    EXPECT_EQ (0, meter.getChannel());
+
+    meter.setState (nullptr);
+    EXPECT_EQ (nullptr, meter.getState());
+}
+
+TEST (KMeterComponentTests, TheTypeInfoCreatesAMeterAndSetsItsChannel)
+{
+    const auto& type = KMeterComponent::getClassTypeInfo();
+    EXPECT_EQ (type.getTypeName().toString(), "KMeter");
+
+    const auto created = type.createInstance();
+    auto* instance = dynamic_cast<KMeterComponent*> (created.get());
+    ASSERT_NE (nullptr, instance);
+    EXPECT_EQ (nullptr, instance->getState());
+    EXPECT_EQ (&instance->getTypeInfo(), &type);
+    EXPECT_EQ (instance->getProperty ("scaleMapping").toString(), "segmented");
+
+    instance->setProperty ("channel", 1);
+    instance->setProperty ("scaleMapping", "linear");
+    instance->setProperty ("showPeakHold", false);
+    instance->setProperty ("refreshRate", 200);
+
+    EXPECT_EQ (1, instance->getChannel());
+    EXPECT_EQ (KMeterComponent::ScaleMapping::linear, instance->getScaleMapping());
+    EXPECT_FALSE (instance->getShowPeakHold());
+    EXPECT_EQ (60, instance->getRefreshRate());
+
+    EXPECT_TRUE (type.hasSignal ("onLevelChanged"));
+    EXPECT_TRUE (type.hasSignal ("onClippingChanged"));
+}

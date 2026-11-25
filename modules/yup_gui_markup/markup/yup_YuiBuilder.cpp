@@ -27,6 +27,11 @@ namespace yup
 YUP_API void registerSceneComponentTypes();
 #endif
 
+#if YUP_MODULE_AVAILABLE_yup_audio_gui
+// Defined by yup_audio_gui: declared here rather than including that module for one function
+YUP_API void registerAudioGuiComponentTypes();
+#endif
+
 void registerYuiComponentTypes()
 {
     registerBuiltInComponentTypes();
@@ -34,6 +39,11 @@ void registerYuiComponentTypes()
 #if YUP_MODULE_AVAILABLE_yup_renderer
     static std::once_flag once;
     std::call_once (once, registerSceneComponentTypes);
+#endif
+
+#if YUP_MODULE_AVAILABLE_yup_audio_gui
+    static std::once_flag audioOnce;
+    std::call_once (audioOnce, registerAudioGuiComponentTypes);
 #endif
 }
 
@@ -437,6 +447,22 @@ Result YuiBuilder::build (const DataTree& document)
             scope.root = &createComponent (root, nullptr, scope, {});
             applyTokens (*scope.root, scope);
 
+            // What the code sets up comes before the values of the document, on the components that are new and on
+            // the ones kept under another id, which are then given all their values again
+            for (const auto& record : components)
+            {
+                auto& component = *record.component;
+
+                if (record.previousId == component.getComponentID() || ! initialize (component, false))
+                    continue;
+
+                if (const auto values = applied.find (&component); values != applied.end())
+                {
+                    for (auto& [name, value] : values->second)
+                        value.isConstant = false;
+                }
+            }
+
             // The tree exists before any value is applied, so expressions can reference any element
             applyValues (std::exchange (applied, {}));
 
@@ -639,6 +665,52 @@ void YuiBuilder::setModel (const String& name, BindingProvider& provider)
 void YuiBuilder::removeModel (const String& name)
 {
     models.erase (name);
+}
+
+void YuiBuilder::setComponentInitializer (ComponentInitializer initializer)
+{
+    std::erase_if (initializers, [&] (const ComponentInitializer& other)
+    {
+        return other.type == initializer.type && other.id == initializer.id;
+    });
+
+    if (initializer.function == nullptr)
+        return;
+
+    const auto& added = initializers.emplace_back (std::move (initializer));
+
+    // The components built already are set up as the ones made later will be: after an initializer of the type,
+    // the ones of their id run again to keep the last word
+    for (const auto& record : components)
+    {
+        auto& component = *record.component;
+
+        if (added.id.isNotEmpty() && added.id != component.getComponentID())
+            continue;
+
+        if (added.function (component) && added.id.isEmpty())
+            initialize (component, true);
+    }
+}
+
+bool YuiBuilder::initialize (Component& component, bool onlyWithId) const
+{
+    bool hasRun = false;
+
+    // The initializers of an id run after the others, whatever the order they were set in
+    for (const auto withId : { false, true })
+    {
+        if (onlyWithId && ! withId)
+            continue;
+
+        for (const auto& initializer : initializers)
+        {
+            if (initializer.id.isNotEmpty() == withId && (! withId || initializer.id == component.getComponentID()))
+                hasRun = initializer.function (component) || hasRun;
+        }
+    }
+
+    return hasRun;
 }
 
 //==============================================================================
@@ -952,6 +1024,7 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
 
         auto created = reuseComponent (key, parent, type, turn);
         const auto isReused = created != nullptr;
+        const auto previousId = isReused ? std::optional<String> (created->getComponentID()) : std::nullopt;
 
         if (! isReused)
             created = type.createInstance();
@@ -964,7 +1037,7 @@ Component& YuiBuilder::createComponent (const DataTree& element, Component* pare
         if (parent != nullptr)
             placeChild (*parent, *component, isReused);
 
-        components.push_back ({ key, parent, &type, std::move (created), turn });
+        components.push_back ({ key, parent, &type, std::move (created), turn, previousId });
     }
 
     static const Identifier bindType ("bind");

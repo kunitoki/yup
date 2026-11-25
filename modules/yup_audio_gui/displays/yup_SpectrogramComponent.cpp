@@ -49,8 +49,9 @@ struct WaterfallParams
 // SpectrogramColorMap
 //==============================================================================
 
-SpectrogramColorMap::SpectrogramColorMap (Type type, int numStops)
-    : numColorStops (jmax (2, numStops))
+SpectrogramColorMap::SpectrogramColorMap (Type typeToUse, int numStops)
+    : type (typeToUse)
+    , numColorStops (jmax (2, numStops))
 {
     switch (type)
     {
@@ -172,13 +173,40 @@ void SpectrogramColorMap::buildViridis()
 // SpectrogramComponent
 //==============================================================================
 
-SpectrogramComponent::SpectrogramComponent (SpectrumAnalyzerState& state)
-    : analyzerState (state)
-    , displayMagnitudes (defaultSpectrogramWidth, 0.0f)
+const ComponentTypeInfo& SpectrogramComponent::getClassTypeInfo()
+{
+    using S = SpectrogramComponent;
+
+    static const auto info = []
+    {
+        auto builder = ComponentTypeBuilder<S> (Identifier ("Spectrogram"));
+
+        detail::addSpectrumDisplayProperties (builder);
+
+        return builder
+            .enumeration<SpectrogramColorMap::Type> (
+                "colorMap",
+                { { "heatmap", SpectrogramColorMap::Type::heatmap },
+                  { "grayscale", SpectrogramColorMap::Type::grayscale },
+                  { "cool", SpectrogramColorMap::Type::cool },
+                  { "warm", SpectrogramColorMap::Type::warm },
+                  { "viridis", SpectrogramColorMap::Type::viridis } },
+                [] (const S& s) { return s.getColorMap().getType(); },
+                &S::setColorMap,
+                "The colors the levels are drawn with.")
+            .property ("scrollSpeed", &S::getScrollSpeed, &S::setScrollSpeed, 1.0f, "How fast the waterfall scrolls: 1 follows the audio, 0 pauses it.")
+            .property ("historyFrames", &S::getNumHistoryFrames, &S::setNumHistoryFrames, 256, "The rows of spectrum the waterfall keeps.")
+            .build();
+    }();
+
+    return info;
+}
+
+//==============================================================================
+SpectrogramComponent::SpectrogramComponent()
+    : displayMagnitudes (defaultSpectrogramWidth, 0.0f)
     , colorMap (SpectrogramColorMap::Type::heatmap)
 {
-    fftSize = analyzerState.getFftSize();
-
     initializeFFTBuffers();
     generateWindow();
     updateFrequencyMapping();
@@ -187,8 +215,29 @@ SpectrogramComponent::SpectrogramComponent (SpectrumAnalyzerState& state)
     lutDataCache.resize (defaultColorLutSize, 0u);
 }
 
+SpectrogramComponent::SpectrogramComponent (SpectrumAnalyzerState& state)
+    : SpectrogramComponent()
+{
+    setState (&state);
+}
+
 SpectrogramComponent::~SpectrogramComponent()
 {
+}
+
+//==============================================================================
+void SpectrogramComponent::setState (SpectrumAnalyzerState* newState)
+{
+    if (analyzerState == newState)
+        return;
+
+    analyzerState = newState;
+
+    // The rows shown are the ones of the previous state
+    if (analyzerState != nullptr && analyzerState->getFftSize() != fftSize)
+        resizeFFT (analyzerState->getFftSize());
+    else
+        clearHistory();
 }
 
 //==============================================================================
@@ -380,22 +429,25 @@ bool SpectrogramComponent::isAnimationRunning() const noexcept
 
 void SpectrogramComponent::refreshDisplay (double lastFrameTimeSeconds)
 {
+    if (analyzerState == nullptr)
+        return;
+
     if (! isShowing())
     {
-        analyzerState.reset();
+        analyzerState->reset();
         return;
     }
 
     // If the analysis fell behind the audio (e.g. slow frames), skip the stale
     // rows so the display keeps tracking the most recent audio instead of the
     // latency accumulating over time.
-    const int numReady = analyzerState.getNumAvailableSamples();
-    const int hopSize = analyzerState.getHopSize();
+    const int numReady = analyzerState->getNumAvailableSamples();
+    const int hopSize = analyzerState->getHopSize();
     if (hopSize > 0 && numReady > fftSize)
     {
         const int skipRows = (numReady - fftSize) / hopSize;
-        for (int i = 0; i < skipRows && analyzerState.isFFTDataReady(); ++i)
-            analyzerState.getFFTData (fftInputBuffer.data());
+        for (int i = 0; i < skipRows && analyzerState->isFFTDataReady(); ++i)
+            analyzerState->getFFTData (fftInputBuffer.data());
     }
 
     bool hasNewData = false;
@@ -403,7 +455,7 @@ void SpectrogramComponent::refreshDisplay (double lastFrameTimeSeconds)
 
     constexpr int maxFFTsPerFrame = 4;
 
-    while (analyzerState.isFFTDataReady() && fftCount < maxFFTsPerFrame)
+    while (analyzerState->isFFTDataReady() && fftCount < maxFFTsPerFrame)
     {
         processFFT();
 
@@ -427,13 +479,13 @@ void SpectrogramComponent::refreshDisplay (double lastFrameTimeSeconds)
 
 float SpectrogramComponent::getRowRate() const noexcept
 {
-    const int hopSize = analyzerState.getHopSize();
+    const int hopSize = analyzerState != nullptr ? analyzerState->getHopSize() : 0;
     return hopSize > 0 ? static_cast<float> (sampleRate) / static_cast<float> (hopSize) : 0.0f;
 }
 
 void SpectrogramComponent::processFFT()
 {
-    if (! analyzerState.getFFTData (fftInputBuffer.data()))
+    if (analyzerState == nullptr || ! analyzerState->getFFTData (fftInputBuffer.data()))
         return;
 
     if (needsWindowUpdate)
@@ -720,18 +772,24 @@ void SpectrogramComponent::setFFTSize (int size)
 {
     jassert (isPowerOfTwo (size) && size >= 64 && size <= 65536);
 
-    if (fftSize != size)
-    {
-        fftSize = size;
-        analyzerState.setFftSize (size);
+    if (fftSize == size)
+        return;
 
-        initializeFFTBuffers();
-        generateWindow();
-        updateFrequencyMapping();
+    if (analyzerState != nullptr)
+        analyzerState->setFftSize (size);
 
-        clearHistory();
-        repaint();
-    }
+    resizeFFT (size);
+}
+
+void SpectrogramComponent::resizeFFT (int size)
+{
+    fftSize = size;
+
+    initializeFFTBuffers();
+    generateWindow();
+    updateFrequencyMapping();
+
+    clearHistory();
 }
 
 void SpectrogramComponent::setWindowType (WindowType type)
@@ -820,12 +878,13 @@ void SpectrogramComponent::setNumHistoryFrames (int numFrames)
 
 void SpectrogramComponent::setOverlapFactor (float overlapFactor)
 {
-    analyzerState.setOverlapFactor (overlapFactor);
+    if (analyzerState != nullptr)
+        analyzerState->setOverlapFactor (overlapFactor);
 }
 
 float SpectrogramComponent::getOverlapFactor() const noexcept
 {
-    return analyzerState.getOverlapFactor();
+    return analyzerState != nullptr ? analyzerState->getOverlapFactor() : 0.0f;
 }
 
 void SpectrogramComponent::clearHistory()

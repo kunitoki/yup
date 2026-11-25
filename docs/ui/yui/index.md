@@ -11,7 +11,8 @@ it runs.
 </p>
 
 **Modules covered:** `yup_gui_markup` (the `Yui*` classes) on top of `yup_gui`,
-with `yup_audio_gui` for parameter binding and `yup_renderer` for 3D scenes.
+with `yup_audio_gui` for parameter binding and audio components, and
+`yup_renderer` for 3D scenes.
 
 Everything YUI does is also reachable from C++ - it builds the same
 [`Component`](../component-basics.md) tree, sets the same
@@ -70,7 +71,7 @@ Start with the language, then pick the area you need.
 - [Reactive bindings](reactivity.md) - properties computed from other
   properties, re-evaluated whenever what they read changes.
 - [Complete UIs in `.yui`](documents.md) - `YuiDocument`, tokens, composite
-  components, handlers, actions and models.
+  components, handlers, actions, models and components set up from C++.
 - [Hot reloading `.yui` files](hot-reload.md) - `YuiLoader`, watching files
   while developing and embedding them, with the shaders, the models and the
   textures they read, with `yup_add_yui_resources`.
@@ -89,6 +90,8 @@ Start with the language, then pick the area you need.
   `drawing` blocks.
 - [3D](../../3d/index.md) - the scenes, the glTF loader and the renderer behind
   `Scene3D`.
+- [Audio GUI](../../audio/audio-gui.md#in-yui-documents) - the keyboard, the
+  meters and the analyzers a document creates, and how they get their state.
 - [Python bindings for YUI](../../scripting/python-yui.md) - loading and
   driving documents from Python.
 

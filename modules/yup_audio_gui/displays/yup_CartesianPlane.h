@@ -111,6 +111,17 @@ public:
     ~CartesianPlane() override = default;
 
     //==============================================================================
+    /** Returns the static type info describing the CartesianPlane type, of the same name in `.yui`.
+
+        A document writes the axes, the title and the legend. The signals, the grid lines and
+        the axis labels are data, given in C++ (see YuiDocument::setInitializer).
+    */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
     // Axis configuration
 
     /** Set the range for the X axis */

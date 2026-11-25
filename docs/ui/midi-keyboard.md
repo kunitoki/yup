@@ -90,3 +90,27 @@ the focus, `releaseKeyPressNotes()` lets every held note go.
 Colors come from `MidiKeyboardComponent::Style`, see
 [Component styling](component-styling.md). The scroll buttons are
 `MidiKeyboardComponent::ScrollButton` components, with a theme style of their own.
+
+## In a `.yui` document
+
+With `yup_gui_markup` linked, a [`.yui` document](yui/documents.md) creates the
+keyboard as `MidiKeyboard` and writes its ranges, its orientation and its
+colors:
+
+```yui
+MidiKeyboard { rangeStart: 36; rangeEnd: 84; lowestVisibleKey: 48; midiChannel: 1; velocity: 0.7; }
+```
+
+The state comes from the application, through an
+[initializer](yui/documents.md#setting-up-components-from-c) run each time the
+document creates the keyboard:
+
+```cpp
+document.setInitializer<yup::MidiKeyboardComponent> ([this] (yup::MidiKeyboardComponent& keyboard)
+{
+    keyboard.setState (&keyboardState);
+});
+```
+
+A keyboard with no state shows no pressed key and plays nothing. `setState()`
+releases the notes held on the previous state, and a null state removes it.

@@ -24,6 +24,62 @@ namespace yup
 
 //==============================================================================
 
+const ComponentTypeInfo& CartesianPlane::getClassTypeInfo()
+{
+    using C = CartesianPlane;
+
+    // The ranges come before the scales, which are logarithmic for the ranges above zero only: the builder applies
+    // values in declaration order. An end of a range written past the other one moves it out of its way, so that
+    // they can be written in any order
+    static const auto info = ComponentTypeBuilder<C> (Identifier ("CartesianPlane"))
+                                 .property ("title", &C::getTitle, &C::setTitle, String(), "The title drawn above the plot.")
+                                 .styleableProperty ("titleColor", &C::getTitleColor, &C::setTitleColor, Colors::white, "The color of the title.")
+                                 .styleableProperty ("backgroundColor", &C::getBackgroundColor, &C::setBackgroundColor, Color (0xFF1E1E1E), "The color behind the plot.")
+                                 .property ("xMin", [] (const C& c) { return c.getXRange().getStart(); }, [] (C& c, double v)
+                                 {
+                                     if (std::isfinite (v))
+                                         c.setXRange (v, c.getXRange().getEnd() > v ? c.getXRange().getEnd() : v + 1.0);
+                                 }, 0.0, "The value at the left of the plot.")
+                                 .property ("xMax", [] (const C& c) { return c.getXRange().getEnd(); }, [] (C& c, double v)
+                                 {
+                                     if (std::isfinite (v))
+                                         c.setXRange (c.getXRange().getStart() < v ? c.getXRange().getStart() : v - 1.0, v);
+                                 }, 1.0, "The value at the right of the plot.")
+                                 .property ("yMin", [] (const C& c) { return c.getYRange().getStart(); }, [] (C& c, double v)
+                                 {
+                                     if (std::isfinite (v))
+                                         c.setYRange (v, c.getYRange().getEnd() > v ? c.getYRange().getEnd() : v + 1.0);
+                                 }, 0.0, "The value at the bottom of the plot.")
+                                 .property ("yMax", [] (const C& c) { return c.getYRange().getEnd(); }, [] (C& c, double v)
+                                 {
+                                     if (std::isfinite (v))
+                                         c.setYRange (c.getYRange().getStart() < v ? c.getYRange().getStart() : v - 1.0, v);
+                                 }, 1.0, "The value at the top of the plot.")
+                                 .enumeration<AxisScaleType> (
+                                     "xScaleType",
+                                     { { "linear", AxisScaleType::linear },
+                                       { "logarithmic", AxisScaleType::logarithmic } },
+                                     &C::getXScaleType,
+                                     &C::setXScaleType,
+                                     "How the values are placed along the x axis. It is logarithmic for a range above zero only.")
+                                 .enumeration<AxisScaleType> (
+                                     "yScaleType",
+                                     { { "linear", AxisScaleType::linear },
+                                       { "logarithmic", AxisScaleType::logarithmic } },
+                                     &C::getYScaleType,
+                                     &C::setYScaleType,
+                                     "How the values are placed along the y axis. It is logarithmic for a range above zero only.")
+                                 .property ("legendVisible", &C::isLegendVisible, &C::setLegendVisible, true, "Whether the legend naming the signals is shown.")
+                                 .property ("legendPosition", &C::getLegendPosition, &C::setLegendPosition, Point<float> (0.8f, 0.1f), "Where the legend is, as a fraction of the plot area.")
+                                 .styleableProperty ("legendBackgroundColor", &C::getLegendBackgroundColor, &C::setLegendBackgroundColor, Color (0x80000000), "The color behind the legend.")
+                                 .styleableProperty ("legendTextColor", &C::getLegendTextColor, &C::setLegendTextColor, Colors::white, "The color of the legend text, and of its border with a lower alpha.")
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
+
 CartesianPlane::CartesianPlane()
 {
     setOpaque (true);

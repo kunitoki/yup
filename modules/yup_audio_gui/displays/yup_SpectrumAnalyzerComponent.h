@@ -51,6 +51,9 @@ namespace yup
         analyzerState.pushSamples(audioData, numSamples);
     @endcode
 
+    The state can be given after construction with setState(), which is how an analyzer created by a `.yui` document
+    as `SpectrumAnalyzer` gets it (see YuiDocument::setInitializer). Without a state the analyzer draws its grid alone.
+
     @see SpectrumAnalyzerState, FFTProcessor, WindowFunctions
 */
 class YUP_API SpectrumAnalyzerComponent
@@ -106,6 +109,9 @@ public:
     };
 
     //==============================================================================
+    /** Creates a SpectrumAnalyzerComponent with no state, to be given one with setState(). */
+    SpectrumAnalyzerComponent();
+
     /** Creates a SpectrumAnalyzerComponent.
 
         @param state    the SpectrumAnalyzerState that provides audio data
@@ -116,14 +122,34 @@ public:
     ~SpectrumAnalyzerComponent() override;
 
     //==============================================================================
-    /** Sets the FFT size for analysis.
+    /** Changes the state providing the audio data.
+
+        The analyzer takes the FFT size of the state and starts from an empty spectrum. Call it on the message thread.
+        The state must outlive the analyzer, or be removed first by setting a null one.
+
+        @param newState    the state to read, or nullptr for none
+    */
+    void setState (SpectrumAnalyzerState* newState);
+
+    /** Returns the state providing the audio data, or nullptr if the analyzer has none. */
+    SpectrumAnalyzerState* getState() const noexcept { return analyzerState; }
+
+    //==============================================================================
+    /** Returns the static type info describing the SpectrumAnalyzerComponent type, `SpectrumAnalyzer` in `.yui`. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
+    /** Sets the FFT size for analysis, which is the one of the analyzer state too.
 
         @param size    FFT size (must be a power of 2)
     */
     void setFFTSize (int size);
 
-    /** Returns the current FFT size from the analyzer state. */
-    int getFFTSize() const noexcept { return analyzerState.getFftSize(); }
+    /** Returns the current FFT size, the one of the analyzer state when there is one. */
+    int getFFTSize() const noexcept { return analyzerState != nullptr ? analyzerState->getFftSize() : fftSize; }
 
     //==============================================================================
     /** Sets the window function used for FFT processing.
@@ -225,13 +251,15 @@ public:
     float getReleaseTimeSeconds() const noexcept { return releaseTimeSeconds; }
 
     //==============================================================================
-    /** Sets the overlap factor for more responsive spectrum analysis.
-    
+    /** Sets the overlap factor of the analyzer state, for more responsive spectrum analysis.
+
+        It is ignored while the analyzer has no state.
+
         @param overlapFactor    overlap factor (0.0 = no overlap, 0.75 = 75% overlap)
     */
     void setOverlapFactor (float overlapFactor);
 
-    /** Returns the current overlap factor. */
+    /** Returns the overlap factor of the analyzer state, 0 while the analyzer has none. */
     float getOverlapFactor() const noexcept;
 
     //==============================================================================
@@ -266,6 +294,7 @@ private:
     void updateTargets();
     void generateWindow();
     void initializeFFTBuffers();
+    void resizeFFT (int size);
     void updateBinMapping();
     Path createSpectrumPath (const Rectangle<float>& bounds, bool closePath) const;
     void drawLinesSpectrum (Graphics& g, const Rectangle<float>& bounds);
@@ -288,7 +317,7 @@ private:
     float getDisplayLevelForPosition (float displayPoint) const noexcept;
 
     //==============================================================================
-    SpectrumAnalyzerState& analyzerState;
+    SpectrumAnalyzerState* analyzerState = nullptr;
 
     // FFT processing (performed on UI thread)
     std::unique_ptr<FFTProcessor<float>> fftProcessor;

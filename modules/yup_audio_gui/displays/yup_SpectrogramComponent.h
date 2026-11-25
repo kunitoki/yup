@@ -65,6 +65,9 @@ public:
     */
     uint32 map (float normalizedMagnitude) const noexcept;
 
+    /** Returns the predefined type the color map was created with. */
+    Type getType() const noexcept { return type; }
+
     /** Returns the number of color stops in the lookup table. */
     int getNumColorStops() const noexcept { return numColorStops; }
 
@@ -89,6 +92,7 @@ private:
 
     //==============================================================================
     std::vector<uint32> colorTable;
+    Type type;
     int numColorStops;
 };
 
@@ -116,6 +120,10 @@ private:
         analyzerState.pushSamples (audioData, numSamples);
     @endcode
 
+    The state can be given after construction with setState(), which is how a spectrogram
+    created by a `.yui` document as `Spectrogram` gets it (see YuiDocument::setInitializer).
+    Without a state the spectrogram draws its grid alone.
+
     @see SpectrumAnalyzerState, SpectrumAnalyzerComponent, SpectrogramColorMap
 */
 class YUP_API SpectrogramComponent : public Component
@@ -132,6 +140,9 @@ public:
     };
 
     //==============================================================================
+    /** Creates a SpectrogramComponent with no state, to be given one with setState(). */
+    SpectrogramComponent();
+
     /** Creates a SpectrogramComponent.
 
         @param state    the SpectrumAnalyzerState that provides audio data
@@ -142,14 +153,35 @@ public:
     ~SpectrogramComponent() override;
 
     //==============================================================================
-    /** Sets the FFT size for analysis.
+    /** Changes the state providing the audio data.
+
+        The spectrogram takes the FFT size of the state and starts from an empty history.
+        Call it on the message thread. The state must outlive the spectrogram, or be removed
+        first by setting a null one.
+
+        @param newState    the state to read, or nullptr for none
+    */
+    void setState (SpectrumAnalyzerState* newState);
+
+    /** Returns the state providing the audio data, or nullptr if the spectrogram has none. */
+    SpectrumAnalyzerState* getState() const noexcept { return analyzerState; }
+
+    //==============================================================================
+    /** Returns the static type info describing the SpectrogramComponent type, `Spectrogram` in `.yui`. */
+    static const ComponentTypeInfo& getClassTypeInfo();
+
+    /** @internal */
+    const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+    //==============================================================================
+    /** Sets the FFT size for analysis, which is the one of the analyzer state too.
 
         @param size    FFT size (must be a power of 2)
     */
     void setFFTSize (int size);
 
     /** Returns the current FFT size. */
-    int getFFTSize() const noexcept { return analyzerState.getFftSize(); }
+    int getFFTSize() const noexcept { return analyzerState != nullptr ? analyzerState->getFftSize() : fftSize; }
 
     //==============================================================================
     /** Sets the window function used for FFT processing.
@@ -239,13 +271,15 @@ public:
     int getNumHistoryFrames() const noexcept { return numHistoryFrames; }
 
     //==============================================================================
-    /** Sets the overlap factor for more responsive spectrum analysis.
+    /** Sets the overlap factor of the analyzer state, for more responsive spectrum analysis.
+
+        It is ignored while the spectrogram has no state.
 
         @param overlapFactor    overlap factor (0.0 = no overlap, 0.75 = 75% overlap)
     */
     void setOverlapFactor (float overlapFactor);
 
-    /** Returns the current overlap factor. */
+    /** Returns the overlap factor of the analyzer state, 0 while the spectrogram has none. */
     float getOverlapFactor() const noexcept;
 
     //==============================================================================
@@ -285,6 +319,7 @@ private:
     bool isAnimationRunning() const noexcept;
     float getRowRate() const noexcept;
     void initializeFFTBuffers();
+    void resizeFFT (int size);
     void generateWindow();
 
     float frequencyToX (float frequency, float width) const noexcept;
@@ -292,7 +327,7 @@ private:
     void drawFrequencyGridCached (Graphics& g, const Rectangle<float>& bounds);
 
     //==============================================================================
-    SpectrumAnalyzerState& analyzerState;
+    SpectrumAnalyzerState* analyzerState = nullptr;
 
     std::unique_ptr<FFTProcessor<float>> fftProcessor;
     std::vector<float> fftInputBuffer;

@@ -45,12 +45,17 @@
 #include "keyboard/yup_ModWheelComponent.cpp"
 #include "displays/yup_AudioViewComponent.cpp"
 #include "displays/yup_SpectrumBinMapping.cpp"
+#include "displays/yup_SpectrumDisplayHelpers.h"
 #include "displays/yup_SpectrumAnalyzerComponent.cpp"
 #include "displays/yup_SpectrogramComponent.cpp"
 #include "displays/yup_CartesianPlane.cpp"
 #include "metering/yup_KMeterComponent.cpp"
 #include "graph/yup_AudioGraphNodeView.cpp"
 #include "graph/yup_AudioGraphComponent.cpp"
+#include "binding/yup_AudioParameterBindingProvider.cpp"
+#include "binding/yup_AudioGuiComponentTypes.cpp"
+
+#if YUP_MODULE_AVAILABLE_yup_audio_devices
 #include "device_manager/yup_DeviceTypeSelector.cpp"
 #include "device_manager/yup_DeviceIOSelector.cpp"
 #include "device_manager/yup_RateBufferSelector.cpp"
@@ -58,4 +63,4 @@
 #include "device_manager/yup_MidiSection.cpp"
 #include "device_manager/yup_AudioDeviceManagerPanel.cpp"
 #include "device_manager/yup_AudioDeviceManagerWindow.cpp"
-#include "binding/yup_AudioParameterBindingProvider.cpp"
+#endif

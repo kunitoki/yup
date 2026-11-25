@@ -1044,6 +1044,130 @@ TEST_F (MidiKeyboardComponentTests, KeyHooksCanSuppressNotes)
     EXPECT_EQ (62, hooked.releasedKeys[0]);
 }
 
+TEST_F (MidiKeyboardComponentTests, AKeyboardWithoutAStatePlaysNothing)
+{
+    MidiKeyboardComponent stateless;
+    stateless.setBounds (0.0f, 0.0f, 1000.0f, 200.0f);
+
+    EXPECT_EQ (nullptr, stateless.getState());
+    EXPECT_EQ (MidiKeyboardComponent::horizontalKeyboard, stateless.getOrientation());
+
+    EXPECT_TRUE (stateless.handleNoteKey (KeyPress ('z'), true));
+    stateless.mouseDown (makePointerEvent (stateless.getRectangleForKey (60).getCenter(), -1, true));
+
+    EXPECT_FALSE (stateless.isNoteOn (60));
+    EXPECT_FALSE (stateless.isNoteOn (kDefaultOctaveOffset));
+
+    // What was pressed before a state is there isn't played into it, nor released on it
+    stateless.setState (state.get());
+
+    EXPECT_EQ (state.get(), stateless.getState());
+    EXPECT_TRUE (listener->noteOnCalls.empty());
+    EXPECT_TRUE (listener->noteOffCalls.empty());
+
+    stateless.handleNoteKey (KeyPress ('z'), true);
+
+    ASSERT_EQ (1, (int) listener->noteOnCalls.size());
+    EXPECT_TRUE (stateless.isNoteOn (kDefaultOctaveOffset));
+}
+
+TEST_F (MidiKeyboardComponentTests, SetStateReleasesTheHeldNotesAndFollowsTheNewState)
+{
+    MidiKeyboardState other;
+    TestListener otherListener;
+    other.addListener (&otherListener);
+
+    press (60);
+    keyboard->handleNoteKey (KeyPress ('z'), true);
+    ASSERT_EQ (2, (int) listener->noteOnCalls.size());
+
+    keyboard->setState (&other);
+
+    // The notes held are released on the state they were played into
+    EXPECT_EQ (&other, keyboard->getState());
+    EXPECT_EQ (2, (int) listener->noteOffCalls.size());
+    EXPECT_FALSE (state->isNoteOn (1, 60));
+    EXPECT_TRUE (otherListener.noteOffCalls.empty());
+
+    press (62);
+
+    EXPECT_EQ (2, (int) listener->noteOnCalls.size());
+    ASSERT_EQ (1, (int) otherListener.noteOnCalls.size());
+    EXPECT_EQ (62, otherListener.noteOnCalls[0].note);
+    EXPECT_TRUE (keyboard->isNoteOn (62));
+
+    // The keys show the notes of the new state only
+    state->noteOn (1, 64, 1.0f);
+    EXPECT_FALSE (keyboard->isNoteOn (64));
+
+    keyboard->setState (nullptr);
+
+    EXPECT_EQ (nullptr, keyboard->getState());
+    EXPECT_FALSE (other.isNoteOn (1, 62));
+    EXPECT_FALSE (keyboard->isNoteOn (62));
+
+    other.removeListener (&otherListener);
+}
+
+TEST_F (MidiKeyboardComponentTests, TheTypeInfoCreatesAKeyboardAndSetsItsRangesInAnyOrder)
+{
+    const auto& type = MidiKeyboardComponent::getClassTypeInfo();
+    EXPECT_EQ (type.getTypeName().toString(), "MidiKeyboard");
+    EXPECT_EQ (&keyboard->getTypeInfo(), &type);
+
+    const auto created = type.createInstance();
+    auto* instance = dynamic_cast<MidiKeyboardComponent*> (created.get());
+    ASSERT_NE (nullptr, instance);
+    EXPECT_EQ (nullptr, instance->getState());
+
+    // Each end of the visible range moves the other one out of its way
+    instance->setProperty ("lowestVisibleKey", 100);
+    instance->setProperty ("highestVisibleKey", 110);
+    EXPECT_EQ (100, instance->getLowestVisibleKey());
+    EXPECT_EQ (110, instance->getHighestVisibleKey());
+
+    instance->setProperty ("highestVisibleKey", 40);
+    EXPECT_EQ (40, instance->getLowestVisibleKey());
+    EXPECT_EQ (40, instance->getHighestVisibleKey());
+
+    // So does each end of the available range, which is then shown whole
+    instance->setProperty ("rangeEnd", 60);
+    instance->setProperty ("rangeStart", 24);
+    EXPECT_EQ (24, instance->getRangeStart());
+    EXPECT_EQ (60, instance->getRangeEnd());
+    EXPECT_EQ (24, instance->getLowestVisibleKey());
+    EXPECT_EQ (60, instance->getHighestVisibleKey());
+
+    instance->setProperty ("orientation", "verticalFacingRight");
+    EXPECT_EQ (MidiKeyboardComponent::verticalKeyboardFacingRight, instance->getOrientation());
+    EXPECT_EQ (instance->getProperty ("orientation").toString(), "verticalFacingRight");
+
+    // A value a document writes is brought into the range the keyboard takes
+    instance->setProperty ("midiChannel", 40);
+    EXPECT_EQ (16, instance->getMidiChannel());
+}
+
+TEST_F (MidiKeyboardComponentTests, ChangingTheVisibleRangeTellsWhichOfItsEndsMoved)
+{
+    struct PropertyRecorder : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override { names.add (name.toString()); }
+
+        StringArray names;
+    };
+
+    PropertyRecorder recorder;
+    keyboard->addComponentListener (&recorder);
+
+    keyboard->setVisibleRange (24, keyboard->getHighestVisibleKey());
+    EXPECT_EQ (recorder.names.joinIntoString (", "), "lowestVisibleKey");
+
+    keyboard->setVisibleRange (36, 72);
+    EXPECT_EQ (recorder.names.joinIntoString (", "), "lowestVisibleKey, lowestVisibleKey, highestVisibleKey");
+
+    keyboard->removeComponentListener (&recorder);
+}
+
 //==============================================================================
 class MidiKeyboardComponentAsyncTests : public ::testing::Test
 {

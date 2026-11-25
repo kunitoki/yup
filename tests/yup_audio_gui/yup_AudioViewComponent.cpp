@@ -703,3 +703,30 @@ TEST_F (AudioViewComponentTests, ViewRangeAfterMultipleZoomChanges)
 
     EXPECT_DOUBLE_EQ (3.0, view->getZoomFactor());
 }
+
+//==============================================================================
+// Type Info Tests
+//==============================================================================
+
+TEST_F (AudioViewComponentTests, TheTypeInfoCreatesAViewAndSetsItsProperties)
+{
+    const auto& type = AudioViewComponent::getClassTypeInfo();
+    EXPECT_EQ (type.getTypeName().toString(), "AudioView");
+
+    const auto created = type.createInstance();
+    auto* instance = dynamic_cast<AudioViewComponent*> (created.get());
+    ASSERT_NE (nullptr, instance);
+    EXPECT_EQ (&instance->getTypeInfo(), &type);
+
+    instance->setProperty ("labelWidth", 20);
+    instance->setProperty ("channelLabelsVisible", false);
+    instance->setProperty ("selectable", true);
+
+    EXPECT_EQ (20, instance->getLabelWidth());
+    EXPECT_FALSE (instance->isChannelLabelsVisible());
+    EXPECT_TRUE (instance->isSelectable());
+
+    // Without audio there is nothing to zoom into
+    instance->setProperty ("zoomFactor", 4.0);
+    EXPECT_DOUBLE_EQ (1.0, instance->getZoomFactor());
+}

@@ -17,6 +17,19 @@ BINARY = str(Path(sys.argv.pop(1)).resolve())
 VALID = "Component { Slider { id: knob; } }\n"
 SYNTAX_ERROR = "Component {\n    Slider { id: ; }\n}\n"
 UNKNOWN_TYPE = "Component { Slidr { id: knob; } }\n"
+# The audio components, which are shown with no state when nothing gives them one
+AUDIO = ('Column {\n'
+         '    SpectrumAnalyzer { displayType: lines; minFrequency: 30; maxFrequency: 18000; }\n'
+         '    Spectrogram { colorMap: viridis; }\n'
+         '    CartesianPlane { title: "Response"; xMin: 20; xMax: 20000; xScaleType: logarithmic; }\n'
+         '    AudioView { channelLabelsVisible: false; }\n'
+         '    Row {\n'
+         '        KMeter { channel: 0; }\n'
+         '        ModWheel { }\n'
+         '        PitchWheel { resetOnRelease: false; }\n'
+         '        MidiKeyboard { id: keys; lowestVisibleKey: 36; highestVisibleKey: 84; onVisibleRangeChanged: action ("scrolled"); }\n'
+         '    }\n'
+         '}\n')
 UNDECLARED_PROPERTY = "Column {\n    Slider { id: a; mysterySetting: 123; }\n}\n"
 STYLE_ONLY = "style {\n    .knob { trackWidth: 4; }\n}\n"
 STYLE_ERROR = "style {\n    Slider::before { opacity: 1; }\n}\n"
@@ -225,6 +238,10 @@ class YuiToolCliTests(unittest.TestCase):
         result = self.invoke("verify", "ui.yui")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("ui.yui", result.stderr)
+        self.assertEqual(self.diagnostics("verify", "ui.yui", code=0), [])
+
+    def test_verify_accepts_the_audio_components(self):
+        self.write("ui.yui", AUDIO)
         self.assertEqual(self.diagnostics("verify", "ui.yui", code=0), [])
 
     def test_verify_reports_where_a_syntax_error_is(self):
@@ -634,6 +651,21 @@ class YuiToolCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
         self.assertEqual(json.loads((self.root / "schema.json").read_text())["version"], 1)
+
+    def test_schema_describes_the_audio_types(self):
+        schema = json.loads(self.invoke("schema").stdout)
+        types = {entry["name"]: entry for entry in schema["types"]}
+
+        self.assertTrue({"MidiKeyboard", "PitchWheel", "ModWheel", "SpectrumAnalyzer", "Spectrogram", "KMeter", "AudioView", "CartesianPlane"} <= set(types))
+        self.assertEqual((types["MidiKeyboard"]["base"], types["KMeter"]["base"]), ("Component", "Component"))
+        self.assertTrue(types["MidiKeyboard"]["instantiable"])
+
+        keyboard = {entry["name"]: entry for entry in types["MidiKeyboard"]["properties"]}
+        self.assertEqual(keyboard["lowestVisibleKey"]["type"], "integer")
+        self.assertIn("verticalFacingLeft", keyboard["orientation"]["values"])
+
+        signals = {entry["name"]: entry for entry in types["PitchWheel"]["signals"]}
+        self.assertEqual([argument["name"] for argument in signals["onValueChanged"]["arguments"]], ["value"])
 
     def test_schema_describes_the_3d_types(self):
         schema = json.loads(self.invoke("schema").stdout)

@@ -251,12 +251,15 @@ flowchart LR
 and the writer, the builder turning a document into components, `YuiDocument`,
 `YuiLoader` and `YuiView` with hot reload, and the SVG importer. It is opt-in:
 an interface written in C++ needs `yup_gui` only. Link `yup_renderer` next to
-it and a document can write [3D scenes](ui/yui/scenes.md) too.
+it and a document can write [3D scenes](ui/yui/scenes.md) too, link
+`yup_audio_gui` and it can write its
+[audio components](audio/audio-gui.md#in-yui-documents).
 
 ```mermaid
 flowchart LR
     yup_gui_markup:::self --> yup_gui
     yup_gui_markup -. optional .-> yup_renderer:::opt
+    yup_gui_markup -. optional .-> yup_audio_gui:::opt
     classDef self fill:#005aff,color:#fff,stroke:#003db3;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
@@ -265,7 +268,8 @@ flowchart LR
 ### yup_audio_gui
 
 Audio-specific GUI components - waveforms, meters, spectrum analyzers, and
-audio-graph editor views - bridging the UI and audio stacks.
+audio-graph editor views - bridging the UI and audio stacks. Link
+`yup_audio_devices` next to it for the device settings panels.
 
 ```mermaid
 flowchart LR
@@ -275,8 +279,10 @@ flowchart LR
     yup_audio_gui --> yup_audio_graph
     yup_audio_gui --> yup_dsp
     yup_audio_gui --> yup_gui
+    yup_audio_gui -. optional .-> yup_audio_devices:::opt
     classDef self fill:#005aff,color:#fff,stroke:#003db3;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+    classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
 ## 3D

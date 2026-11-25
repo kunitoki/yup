@@ -32,7 +32,8 @@
     website:              https://github.com/kunitoki/yup
     license:              ISC
 
-    dependencies:         yup_audio_basics yup_audio_devices yup_audio_formats yup_audio_processors yup_audio_graph yup_dsp yup_gui
+    dependencies:         yup_audio_basics yup_audio_formats yup_audio_processors yup_audio_graph yup_dsp yup_gui
+    optionalDeps:         yup_audio_devices
     testDeps:             yup_gui_markup
 
     shaderDirectory:      displays
@@ -51,8 +52,11 @@
 #include <yup_audio_processors/yup_audio_processors.h>
 #include <yup_audio_graph/yup_audio_graph.h>
 #include <yup_dsp/yup_dsp.h>
-#include <yup_audio_devices/yup_audio_devices.h>
 #include <yup_gui/yup_gui.h>
+
+#if YUP_MODULE_AVAILABLE_yup_audio_devices
+#include <yup_audio_devices/yup_audio_devices.h>
+#endif
 
 //==============================================================================
 
@@ -70,6 +74,10 @@
 #include "metering/yup_KMeterComponent.h"
 #include "graph/yup_AudioGraphNodeView.h"
 #include "graph/yup_AudioGraphComponent.h"
+#include "binding/yup_AudioParameterBindingProvider.h"
+#include "binding/yup_AudioGuiComponentTypes.h"
+
+#if YUP_MODULE_AVAILABLE_yup_audio_devices
 #include "device_manager/yup_DeviceTypeSelector.h"
 #include "device_manager/yup_DeviceIOSelector.h"
 #include "device_manager/yup_RateBufferSelector.h"
@@ -77,4 +85,4 @@
 #include "device_manager/yup_MidiSection.h"
 #include "device_manager/yup_AudioDeviceManagerPanel.h"
 #include "device_manager/yup_AudioDeviceManagerWindow.h"
-#include "binding/yup_AudioParameterBindingProvider.h"
+#endif

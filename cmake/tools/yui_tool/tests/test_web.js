@@ -404,6 +404,19 @@ test ("a scene written as elements loads, and the schema describes the 3D types"
     assert.deepEqual (hosts.filter (host => host.endsWith ("3D")), []);
 });
 
+test ("the audio components load with no state, and the schema describes their types", () => {
+    write ("audio/main.yui", "Column {\n    SpectrumAnalyzer { displayType: lines; }\n    Spectrogram { colorMap: viridis; }\n    CartesianPlane { title: \"Response\"; }\n    AudioView { }\n\n    Row {\n        KMeter { channel: 0; }\n        ModWheel { }\n        PitchWheel { }\n        MidiKeyboard { lowestVisibleKey: 36; highestVisibleKey: 84; }\n    }\n}\n");
+
+    const checked = verify ("audio/main.yui");
+
+    assert.deepEqual ({ code: checked.code, diagnostics: checked.diagnostics }, { code: 0, diagnostics: [] });
+
+    const types = JSON.parse (run ("schema").stdout).types;
+
+    for (const name of ["MidiKeyboard", "PitchWheel", "ModWheel", "SpectrumAnalyzer", "Spectrogram", "KMeter", "AudioView", "CartesianPlane"])
+        assert.ok (types.some (type => type.name === name && type.instantiable), name);
+});
+
 test ("a mesh whose arrays do not fit is reported at the line of the one that does not", () => {
     write ("mesh/main.yui", scene.replace ("indices: [0, 1, 2,  0, 2, 3];", "indices: [0, 1, 7];"));
 

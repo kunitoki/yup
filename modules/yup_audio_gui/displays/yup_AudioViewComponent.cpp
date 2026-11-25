@@ -23,6 +23,21 @@ namespace yup
 {
 
 //==============================================================================
+const ComponentTypeInfo& AudioViewComponent::getClassTypeInfo()
+{
+    using V = AudioViewComponent;
+
+    static const auto info = ComponentTypeBuilder<V> (Identifier ("AudioView"))
+                                 .property ("zoomFactor", &V::getZoomFactor, &V::setZoomFactor, 1.0, "How far the view is zoomed in: 1 fits the whole audio, which it is brought back to while there is none.")
+                                 .property ("labelWidth", &V::getLabelWidth, &V::setLabelWidth, 48, "The width of the channel labels.")
+                                 .property ("channelLabelsVisible", &V::isChannelLabelsVisible, &V::setChannelLabelsVisible, true, "Whether the channel labels are shown.")
+                                 .property ("selectable", &V::isSelectable, &V::setSelectable, false, "Whether the view takes the keyboard focus, to be scrolled and zoomed with the keys.")
+                                 .build();
+
+    return info;
+}
+
+//==============================================================================
 AudioViewComponent::AudioViewComponent (std::shared_ptr<AudioPeakProfileCache> cacheToUse)
 {
     ownedThumbnail = std::make_unique<AudioThumbnail> (cacheToUse);
