@@ -191,6 +191,48 @@ void forEachValueUse (const YdspIrFunction& fn, F&& visitor)
     }
 }
 
+//==============================================================================
+
+bool isConstantOp (YdspIrOp op)
+{
+    return op == YdspIrOp::constF || op == YdspIrOp::constI || op == YdspIrOp::constB;
+}
+
+bool isCseEligible (YdspIrOp op) noexcept
+{
+    // Input streams are read-only. Array reads are reusable until an array
+    // store invalidates the cache below; index redefinitions also invalidate it.
+    // Other mutable loads remain excluded.
+    if (! hasValueResult (op) || isConstantOp (op) || op == YdspIrOp::phi
+        || op == YdspIrOp::loadBlockSize || op == YdspIrOp::loadSampleRate
+        || op == YdspIrOp::loadParam || op == YdspIrOp::loadParamOut
+        || op == YdspIrOp::loadStateF || op == YdspIrOp::loadStateI
+        || op == YdspIrOp::loadOutput
+        || op == YdspIrOp::loadEventFieldF || op == YdspIrOp::loadEventFieldI)
+        return false;
+
+    return true;
+}
+
+bool sameCseExpression (const YdspIrInst& a, YdspValueType aType, const YdspIrInst& b, YdspValueType bType) noexcept
+{
+    return a.op == b.op && aType == bType && a.a == b.a && a.b == b.b && a.c == b.c
+        && a.memIndex == b.memIndex && a.ivalue == b.ivalue && a.bvalue == b.bvalue
+        && a.saturatingIntegerArithmetic == b.saturatingIntegerArithmetic
+        && a.overflowFreeIntegerArithmetic == b.overflowFreeIntegerArithmetic
+        && a.boundedFloatToInt == b.boundedFloatToInt
+        && std::bit_cast<uint64_t> (a.fvalue) == std::bit_cast<uint64_t> (b.fvalue);
+}
+
+} // namespace
+
+namespace detail
+{
+
+/* Deliberately not in the anonymous namespace: it is captured by lambdas of the externally
+   linked YdspAsmJitCodegenImpl template, and an internal-linkage type in one of those is an
+   ODR hazard.
+*/
 struct YdspValueUseCounts
 {
     std::vector<int> definitions;
@@ -230,44 +272,6 @@ struct YdspValueUseCounts
                  : 0;
     }
 };
-
-//==============================================================================
-
-bool isConstantOp (YdspIrOp op)
-{
-    return op == YdspIrOp::constF || op == YdspIrOp::constI || op == YdspIrOp::constB;
-}
-
-bool isCseEligible (YdspIrOp op) noexcept
-{
-    // Input streams are read-only. Array reads are reusable until an array
-    // store invalidates the cache below; index redefinitions also invalidate it.
-    // Other mutable loads remain excluded.
-    if (! hasValueResult (op) || isConstantOp (op) || op == YdspIrOp::phi
-        || op == YdspIrOp::loadBlockSize || op == YdspIrOp::loadSampleRate
-        || op == YdspIrOp::loadParam || op == YdspIrOp::loadParamOut
-        || op == YdspIrOp::loadStateF || op == YdspIrOp::loadStateI
-        || op == YdspIrOp::loadOutput
-        || op == YdspIrOp::loadEventFieldF || op == YdspIrOp::loadEventFieldI)
-        return false;
-
-    return true;
-}
-
-bool sameCseExpression (const YdspIrInst& a, YdspValueType aType, const YdspIrInst& b, YdspValueType bType) noexcept
-{
-    return a.op == b.op && aType == bType && a.a == b.a && a.b == b.b && a.c == b.c
-        && a.memIndex == b.memIndex && a.ivalue == b.ivalue && a.bvalue == b.bvalue
-        && a.saturatingIntegerArithmetic == b.saturatingIntegerArithmetic
-        && a.overflowFreeIntegerArithmetic == b.overflowFreeIntegerArithmetic
-        && a.boundedFloatToInt == b.boundedFloatToInt
-        && std::bit_cast<uint64_t> (a.fvalue) == std::bit_cast<uint64_t> (b.fvalue);
-}
-
-} // namespace
-
-namespace detail
-{
 
 inline void collectCfgSuccessors (const YdspIrFunction& fn, int blockIndex, std::vector<int>& out)
 {
@@ -520,6 +524,8 @@ struct YdspDomTree
 };
 
 } // namespace detail
+
+using YdspValueUseCounts = detail::YdspValueUseCounts;
 
 //==============================================================================
 

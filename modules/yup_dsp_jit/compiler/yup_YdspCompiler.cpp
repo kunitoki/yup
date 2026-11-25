@@ -365,9 +365,11 @@ void mergeImportedDecls (YdspProgram& prog, YdspProgram& importedProg, const Str
 
 // YdspCompiler
 
-namespace
+namespace detail
 {
-
+/* Deliberately not in the anonymous namespace: it is a field of the externally linked
+   YdspCompiler::Pimpl, and an internal-linkage type in one of those is an ODR hazard.
+*/
 struct YdspHostTargetInfo
 {
     YdspNativeTarget preferredTarget = YdspNativeTarget::scalar;
@@ -377,6 +379,12 @@ struct YdspHostTargetInfo
     bool supportsAvx512 = false;
     String microarchitecture;
 };
+} // namespace detail
+
+using YdspHostTargetInfo = detail::YdspHostTargetInfo;
+
+namespace
+{
 
 struct YdspTargetSelection
 {
