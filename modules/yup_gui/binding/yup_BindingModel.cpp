@@ -104,13 +104,15 @@ void BindingModel::write (const Identifier& name, const var& value)
         return entry.property == name && entry.isInGesture;
     });
 
-    if (! isInGesture)
-        provider->beginGesture (name);
-
-    provider->setValue (name, value);
+    const auto nameCopy = name;
 
     if (! isInGesture)
-        provider->endGesture (name);
+        provider->beginGesture (nameCopy);
+
+    provider->setValue (nameCopy, value);
+
+    if (! isInGesture)
+        provider->endGesture (nameCopy);
 }
 
 void BindingModel::stopTracking (Component& component)

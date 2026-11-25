@@ -41,7 +41,7 @@ ExpressionState::ExpressionState (const CompiledExpression& compiledProgram, int
         const auto alignment = jmax ((size_t) 16, reg.type->getAlignment());
         totalSize = (totalSize + alignment - 1) / alignment * alignment;
         offsets.push_back (totalSize);
-        totalSize += reg.type->getSize() * (size_t) numValues;
+        totalSize += reg.type->getSize() * (size_t) (numValues * reg.count);
     }
 
     storage = std::make_unique<uint8[]> (totalSize + baseAlignment);
@@ -51,7 +51,7 @@ ExpressionState::ExpressionState (const CompiledExpression& compiledProgram, int
     {
         const auto& reg = p.registers[i];
         lanes.push_back (base + offsets[i]);
-        reg.type->construct (lanes.back(), numValues);
+        reg.type->construct (lanes.back(), numValues * reg.count);
 
         if (reg.constant != nullptr)
             reg.type->copy (lanes.back(), reg.type->getSize(), reg.constant.get(), 0, blockSize);
@@ -106,7 +106,7 @@ ExpressionState::~ExpressionState()
     const auto& p = *program.program;
 
     for (size_t i = 0; i < p.registers.size(); ++i)
-        p.registers[i].type->destroy (lanes[i], blockSize + 1);
+        p.registers[i].type->destroy (lanes[i], (blockSize + 1) * p.registers[i].count);
 }
 
 //==============================================================================
@@ -324,6 +324,13 @@ void ExpressionState::runUniformCalls() noexcept
 bool ExpressionState::runUniformCall (const Call& call) noexcept
 {
     const auto* type = call.outputType;
+
+    // An array is a view that stays the same while the values it shows change
+    if (type->getElementType() != nullptr)
+    {
+        call.thunk (call.state, call.output, call.args, 1);
+        return true;
+    }
 
     if (type->isTriviallyCopyable())
     {

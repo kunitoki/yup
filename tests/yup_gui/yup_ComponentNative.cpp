@@ -163,6 +163,9 @@ public:
 
     Flags getFlags() const { return flags; }
 
+    using ComponentNative::callFrameListeners;
+    using ComponentNative::hasFrameListeners;
+
     RectangleList<float> repaintAreas;
     std::optional<float> requestedFrameRate;
     float displayRefreshRate = 120.0f;

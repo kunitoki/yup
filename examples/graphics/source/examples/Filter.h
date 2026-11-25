@@ -870,7 +870,7 @@ public:
         g.fillAll();
     }
 
-    void refreshDisplay (double lastFrameTimeSeconds) override
+    void refreshDisplay (double lastFrameTimeSeconds)
     {
         // Update oscilloscope
         {
@@ -2030,4 +2030,5 @@ private:
     yup::AudioLockType renderMutex;
     std::atomic_int readPos { 0 };
     std::atomic_bool analysisUpdatePending { false };
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&FilterDemo::refreshDisplay, this) };
 };

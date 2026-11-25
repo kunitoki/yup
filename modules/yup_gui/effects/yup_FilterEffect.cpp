@@ -761,12 +761,21 @@ EdgeSpacing<float> FilterEffect::getRequiredMargin() const noexcept
 
     for (const auto& op : ops)
     {
-        if (op.type == Type::dropShadow && ! op.color.isTransparent())
+        const auto spread = detail::getBlurReach (op.amount);
+
+        if (op.type == Type::blur)
         {
-            left = jmax (left, -op.offset.getX());
-            top = jmax (top, -op.offset.getY());
-            right = jmax (right, op.offset.getX());
-            bottom = jmax (bottom, op.offset.getY());
+            left += spread;
+            top += spread;
+            right += spread;
+            bottom += spread;
+        }
+        else if (op.type == Type::dropShadow && ! op.color.isTransparent())
+        {
+            left += spread + jmax (0.0f, -op.offset.getX());
+            top += spread + jmax (0.0f, -op.offset.getY());
+            right += spread + jmax (0.0f, op.offset.getX());
+            bottom += spread + jmax (0.0f, op.offset.getY());
         }
     }
 

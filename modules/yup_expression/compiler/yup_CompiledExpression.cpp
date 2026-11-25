@@ -29,6 +29,7 @@ struct CompiledExpression::Program
     {
         const ExpressionType* type = nullptr;
         std::shared_ptr<void> constant;
+        int count = 1; // Values held per row: more than one for the elements of an array made by the program
     };
 
     struct Instruction
@@ -52,6 +53,7 @@ struct CompiledExpression::Program
     std::vector<Instruction> code;
     std::vector<Variable> inputs, outputs;
     std::vector<std::shared_ptr<ExpressionType>> types;
+    std::vector<std::shared_ptr<void>> arrayValues; // The values of the constant arrays written in the program
 };
 
 //==============================================================================
@@ -174,6 +176,7 @@ struct ExpressionCompiler
         int reg = -1;
         const ExpressionType* type = nullptr;
         bool isAbstract = false;
+        std::shared_ptr<const std::vector<Value>> elements; // The values of an array written in place
     };
 
     ExpressionCompiler (const ExpressionContext& c, Program& p)
@@ -254,7 +257,7 @@ struct ExpressionCompiler
         if (const auto* declaredType = context.findOutputType (name))
         {
             if (conversionCost (value, declaredType) < 0)
-                fail (where, "Cannot convert '" + value.type->getName() + "' to '" + declaredType->getName() + "' for the output '" + name + "'");
+                fail (where, "Cannot convert '" + describeType (value) + "' to '" + declaredType->getName() + "' for the output '" + name + "'");
 
             value = convert (value, declaredType, where);
         }
@@ -526,8 +529,16 @@ struct ExpressionCompiler
         for (int i = 0; i < e.getNumInputs(); ++i)
             args.push_back (compile (e.getInput (i)));
 
+        if (name == "array")
+            return makeArray (std::move (args), e);
+
         if (name == "len" && args.size() == 1 && args[0].type->getElementType() != nullptr)
+        {
+            if (args[0].elements != nullptr)
+                return makeConstant ((int) args[0].elements->size());
+
             return emit (args[0].type->getLengthThunk(), {}, &ExpressionType::intType(), args, true);
+        }
 
         if ((name == "min" || name == "max") && args.size() > 2)
         {
@@ -543,6 +554,71 @@ struct ExpressionCompiler
             fail (e, "Unknown function 'color', color literals need a 'color' type in the context");
 
         return callFunction (name, std::move (args), e);
+    }
+
+    // The array of [a, b, ...]: numbers make a float[], other values the array of their type
+    Value makeArray (std::vector<Value> elements, const Expression& e)
+    {
+        if (elements.empty())
+            fail (e, "An array needs at least one value");
+
+        const auto isNumeric = std::all_of (elements.begin(), elements.end(), [] (const auto& element) { return element.type->isNumeric(); });
+        const auto* elementType = isNumeric ? &ExpressionType::floatType() : elements.front().type;
+
+        for (auto& element : elements)
+        {
+            if (! isNumeric && element.type != elementType)
+                fail (e, "The values of an array must be of one type, not '" + elementType->getName() + "' and '" + element.type->getName() + "'");
+
+            element = convert (element, elementType, e);
+        }
+
+        const auto* arrayType = findArrayType (elementType, e);
+        const auto numElements = (int) elements.size();
+        auto values = std::make_shared<const std::vector<Value>> (elements);
+        auto count = std::make_shared<const int> (numElements);
+
+        const auto isConstant = std::all_of (elements.begin(), elements.end(), [this] (const auto& element) { return getConstant (element) != nullptr; });
+
+        if (! isConstant)
+        {
+            // The array views a register holding its values for every row. Nothing is left of both when
+            // the array is only converted or read at a known index, as these take the values themselves
+            elements.push_back ({ addRegister (elementType, {}, numElements), elementType });
+
+            auto array = emit (arrayType->getMakeThunk(), std::move (count), arrayType, elements, true);
+            array.elements = std::move (values);
+            return array;
+        }
+
+        std::vector<const void*> args;
+
+        for (const auto& element : elements)
+            args.push_back (getConstant (element));
+
+        auto storage = elementType->createValue (numElements);
+        args.push_back (storage.get());
+
+        auto view = arrayType->createValue();
+        arrayType->getMakeThunk() (count.get(), view.get(), args.data(), 1);
+
+        // The program owns the values, as what a function makes of the array may still view them once the array is gone
+        program.arrayValues.push_back (std::move (storage));
+
+        return { addRegister (arrayType, std::move (view)), arrayType, false, std::move (values) };
+    }
+
+    const ExpressionType* findArrayType (const ExpressionType* elementType, const Expression& e)
+    {
+        for (const auto& type : program.types)
+            if (type->getElementType() == elementType)
+                return type.get();
+
+        if (elementType != &ExpressionType::floatType())
+            fail (e, "The context has no array type for '" + elementType->getName() + "'");
+
+        program.types.push_back (ExpressionType::createArray<float> (ExpressionType::floatType()));
+        return program.types.back().get();
     }
 
     Value compileMethod (const Expression& e)
@@ -563,12 +639,22 @@ struct ExpressionCompiler
         }
 
         args.insert (args.begin(), compile (object));
+
+        if (args.front().type->getElementType() != nullptr && ! isOwnMember (args.front(), findOverload ("." + e.getName(), args).function))
+            fail (e, "The type '" + args.front().type->getName() + "' has no method '" + e.getName() + "'");
+
         return callFunction ("." + e.getName(), std::move (args), e);
+    }
+
+    // An array isn't the point or the rect its values make until it is given to one, so it has none of their members
+    static bool isOwnMember (const Value& object, const ExpressionFunction* function) noexcept
+    {
+        return object.type->getElementType() == nullptr || function == nullptr || function->parameterTypes[0] == object.type;
     }
 
     Value compileMember (Value object, const String& name, const Expression& e)
     {
-        if (findOverload ("." + name, { object }).function != nullptr)
+        if (const auto* member = findOverload ("." + name, { object }).function; member != nullptr && isOwnMember (object, member))
             return callFunction ("." + name, { object }, e);
 
         const auto& components = object.type->getComponentNames();
@@ -606,6 +692,11 @@ struct ExpressionCompiler
             fail (e.getInput (1), "An array index must be an 'int', not '" + index.type->getName() + "'");
 
         index = convert (index, &ExpressionType::intType(), e);
+
+        // An array written in place gives the value it holds at a known index, with no array to make
+        if (const auto* known = array.elements != nullptr ? getConstant (index) : nullptr)
+            return (*array.elements)[(size_t) jlimit (0, (int) array.elements->size() - 1, *static_cast<const int*> (known))];
+
         return emit (array.type->getIndexThunk(), {}, array.type->getElementType(), { array, index }, true);
     }
 
@@ -756,7 +847,13 @@ struct ExpressionCompiler
         const auto overload = findOverload (name, args);
 
         if (overload.function == nullptr)
+        {
+            // A type named around a value none of its constructors take converts it, as rect ([x, y, width, height])
+            if (const auto* type = args.size() == 1 ? context.findType (name) : nullptr; type != nullptr && conversionCost (args[0], type) >= 0)
+                return convert (args[0], type, e);
+
             fail (e, describeMissingOverload (name, args));
+        }
 
         if (overload.numBest > 1)
             fail (e, "The call to " + describeCall (name, args) + " is ambiguous");
@@ -772,7 +869,7 @@ struct ExpressionCompiler
         StringArray types;
 
         for (const auto& arg : args)
-            types.add (arg.type->getName());
+            types.add (describeType (arg));
 
         if (name.startsWith ("operator"))
             return "'" + name.substring (8) + "' with '" + types.joinIntoString ("' and '") + "'";
@@ -847,7 +944,26 @@ struct ExpressionCompiler
                 return 10;
         }
 
-        return findConversion (value.type, target) != nullptr ? 20 : -1;
+        if (findConversion (value.type, target) == nullptr)
+            return -1;
+
+        // An array written in place has to hold the values the type is made of
+        return value.elements == nullptr || findConstructor (target, *value.elements) != nullptr ? 20 : -1;
+    }
+
+    const ExpressionFunction* findConstructor (const ExpressionType* type, const std::vector<Value>& values) const
+    {
+        const auto overload = findOverload (type->getName(), values);
+        return overload.numBest == 1 && overload.function->resultType == type ? overload.function : nullptr;
+    }
+
+    // Tells how many values an array written in place holds, as float[3]
+    static String describeType (const Value& value)
+    {
+        if (value.elements == nullptr)
+            return value.type->getName();
+
+        return value.type->getElementType()->getName() + "[" + String ((int) value.elements->size()) + "]";
     }
 
     const ExpressionFunction* findConversion (const ExpressionType* from, const ExpressionType* to) const
@@ -873,7 +989,11 @@ struct ExpressionCompiler
             return makeConstant ((float) *static_cast<const double*> (getConstant (value)));
 
         if (conversionCost (value, target) < 0)
-            fail (e, "Cannot convert '" + value.type->getName() + "' to '" + target->getName() + "'");
+            fail (e, "Cannot convert '" + describeType (value) + "' to '" + target->getName() + "'");
+
+        // An array written in place gives its values to the constructor taking them, with no array to make
+        if (value.elements != nullptr)
+            return emitFunction (*findConstructor (target, *value.elements), *value.elements, e);
 
         const auto* function = findConversion (value.type, target);
         jassert (function != nullptr);
@@ -939,9 +1059,9 @@ struct ExpressionCompiler
         return { addRegister (type, std::move (box)), type, isAbstract };
     }
 
-    int addRegister (const ExpressionType* type, std::shared_ptr<void> constant = {})
+    int addRegister (const ExpressionType* type, std::shared_ptr<void> constant = {}, int count = 1)
     {
-        program.registers.push_back ({ type, std::move (constant) });
+        program.registers.push_back ({ type, std::move (constant), count });
         return (int) program.registers.size() - 1;
     }
 

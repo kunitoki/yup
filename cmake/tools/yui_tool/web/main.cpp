@@ -19,7 +19,9 @@
   ==============================================================================
 */
 
+#include "../source/yup_YuiAgentTools.h"
 #include "../source/yup_YuiCommands.h"
+#include "../source/yup_YuiToolGuides.h"
 #include "../source/yup_YuiToolSupport.h"
 
 #include <yup_gui/yup_gui.h>
@@ -29,12 +31,16 @@
 #include <emscripten/emscripten.h>
 #include <emscripten/eventloop.h>
 
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <vector>
 
 using namespace yup;
+
+// Of the windowing of YUP for the web: draws the window now instead of at its next animation frame
+extern "C" void yupRenderPrimaryWindow();
 
 namespace
 {
@@ -46,21 +52,103 @@ File getFilesFolder()
     return File ("/yui");
 }
 
-// The size an interface sets for its root with plain numbers, which is the one it asks to be shown at
-Size<float> findDeclaredSize (const DataTree& tree)
+// The values of the models as an agent reads them. A long list is the data of a meter rather than something
+// set by hand, and is told by its length
+var summarizeModels (const var& models)
 {
-    const auto rootIndex = findYuiToolRootIndex (tree);
+    constexpr int longestListShown = 16;
 
-    if (rootIndex < 0)
-        return {};
+    auto* summary = new DynamicObject();
+    const auto* declared = models.getDynamicObject();
 
-    const auto read = [root = tree.getChild (rootIndex)] (const Identifier& name)
+    if (declared == nullptr)
+        return var (summary);
+
+    for (const auto& model : declared->getProperties())
     {
-        const auto text = root.getProperty (name).toString();
-        return text.containsOnly ("0123456789.") ? text.getFloatValue() : 0.0f;
-    };
+        auto* values = new DynamicObject();
 
-    return { read ("width"), read ("height") };
+        if (const auto* properties = model.value.getDynamicObject())
+        {
+            for (const auto& property : properties->getProperties())
+            {
+                const auto* list = property.value.getArray();
+
+                values->setProperty (property.name, list != nullptr && list->size() > longestListShown ? var (String (list->size()) + " values") : property.value);
+            }
+        }
+
+        summary->setProperty (model.name, var (values));
+    }
+
+    return var (summary);
+}
+
+//==============================================================================
+// How many of the last frames painted the statistics tell about
+constexpr int statsFrames = 120;
+
+/** What a component took to paint itself in the frames the statistics tell about. */
+struct PaintCost
+{
+    String name;
+    double micros = 0.0;
+};
+
+// Adds the components of an interface that painted themselves since a frame, with the time it took them
+void collectPaintCosts (const Component& component, uint64 sinceFrame, std::vector<PaintCost>& costs)
+{
+    double micros = 0.0;
+
+    if (const auto* stats = PaintProfiler::getInstance().getStatsForComponent (component))
+        for (const auto& sample : stats->copySamples())
+            if (sample.frameIndex >= sinceFrame)
+                micros += sample.selfMicros;
+
+    if (micros > 0.0)
+        costs.push_back ({ describeYuiToolName (component), micros });
+
+    for (int index = 0; index < component.getNumChildComponents(); ++index)
+        collectPaintCosts (*component.getChildComponent (index), sinceFrame, costs);
+}
+
+String describePlatform (GpuPlatform platform)
+{
+    switch (platform)
+    {
+        case GpuPlatform::OpenGLES:
+            return "WebGL 2";
+
+        case GpuPlatform::WebGPU:
+            return "WebGPU";
+
+        default:
+            return "no GPU";
+    }
+}
+
+// How the renderer draws paths, which depends on what the GPU of the page can do
+String describePathRendering (rive::gpu::InterlockMode mode)
+{
+    switch (mode)
+    {
+        case rive::gpu::InterlockMode::rasterOrdering:
+            return "raster ordering";
+
+        case rive::gpu::InterlockMode::atomics:
+            return "atomics";
+
+        case rive::gpu::InterlockMode::clockwise:
+            return "clockwise";
+
+        case rive::gpu::InterlockMode::clockwiseAtomic:
+            return "clockwise atomics";
+
+        case rive::gpu::InterlockMode::depthStencil:
+            return "depth and stencil";
+    }
+
+    return "another way";
 }
 
 //==============================================================================
@@ -68,14 +156,23 @@ Size<float> findDeclaredSize (const DataTree& tree)
 class PreviewWindow final : public DocumentWindow
 {
 public:
-    PreviewWindow() = default;
+    // The page gives the window its size and the canvas the size it is seen at, which a window the browser
+    // may resize would take back from it
+    PreviewWindow()
+        : DocumentWindow (ComponentNative::Options().withResizableWindow (false))
+    {
+        addChildComponent (guides);
+    }
 
     /** Shows a target of a file and tells the page what the load gave.
 
         The document is reloaded in place, keeping the state of its components, for as long as the
         file, the target and the models stay the same. The theme is switched under it.
+
+        @param chosenUse The path of the component a drawing or a type shown in context is framed on,
+                         the first one when empty or when it is no longer one of them.
     */
-    void show (const File& input, const YuiToolTarget& target, const File& modelsFile, bool lightTheme)
+    void show (const File& input, const YuiToolTarget& target, const String& chosenUse, const File& modelsFile, bool lightTheme)
     {
         const auto modelsText = modelsFile.existsAsFile() ? modelsFile.loadFileAsString() : String();
         const auto key = StringArray { input.getFullPathName(), target.drawing, target.palette, target.hostType, modelsText }
@@ -89,6 +186,7 @@ public:
 
         if (session == nullptr || key != sessionKey)
         {
+            guides.setDocument (nullptr);
             session.reset();
             sessionKey = key;
 
@@ -108,11 +206,33 @@ public:
             };
 
             addAndMakeVisible (session->view);
+            guides.toFront (false);
             resized();
         }
 
         auto& document = session->view.getDocument();
         const auto shown = loadYuiToolTarget (document, session->view.getLoader(), input, target);
+
+        shownInput = input;
+        shownTarget = shown.target;
+
+        const auto uses = shown.isInContext ? findYuiToolUses (document, shown.target) : std::vector<Component*>();
+        auto* chosen = chosenUse.isNotEmpty() ? findYuiToolComponent (document, chosenUse) : nullptr;
+
+        use = std::find (uses.begin(), uses.end(), chosen) != uses.end() ? chosen : (uses.empty() ? nullptr : uses.front());
+
+        Array<var> usesTold;
+
+        for (const auto* component : uses)
+            usesTold.add (describeYuiToolComponent (document, *component));
+
+        // The uses were looked for in the interface at the size it sets: it gets back the one it is shown at
+        session->view.resized();
+
+        if (showsStats)
+            measurePainting();
+
+        guides.setDocument (&document, input);
 
         Array<var> problems;
 
@@ -127,7 +247,7 @@ public:
             problems.add (record);
         }
 
-        const auto declaredSize = shown.status == YuiToolShown::Status::loaded ? findDeclaredSize (document.getTree()) : Size<float>();
+        const auto declaredSize = shown.status == YuiToolShown::Status::loaded ? findYuiToolDeclaredSize (document.getTree()) : Size<float>();
 
         auto* report = new DynamicObject();
         report->setProperty ("status", shown.status != YuiToolShown::Status::loaded ? "nothing" : (shown.result.failed() ? "failed" : "shown"));
@@ -138,6 +258,10 @@ public:
         report->setProperty ("height", declaredSize.getHeight());
         report->setProperty ("defaultWidth", shown.defaultSize.getWidth());
         report->setProperty ("defaultHeight", shown.defaultSize.getHeight());
+        report->setProperty ("inContext", shown.isInContext);
+        report->setProperty ("uses", var (usesTold));
+        report->setProperty ("use", use != nullptr ? describeYuiToolComponent (document, *use.get())["path"] : var());
+        report->setProperty ("needsHost", shown.needsHost);
         report->setProperty ("models", session->models.toJson());
 
         repaint();
@@ -161,8 +285,167 @@ public:
 
     void resized() override
     {
-        if (session != nullptr)
+        guides.setBounds (getLocalBounds());
+
+        if (session == nullptr)
+            return;
+
+        // Until the page says the size of the interface, it is the one of the window
+        if (interfaceSize.getWidth() < 1.0f)
             session->view.setBounds (getLocalBounds());
+        else
+            session->view.setBounds (Rectangle<float> (-frame.getX(), -frame.getY(), interfaceSize.getWidth(), interfaceSize.getHeight()));
+    }
+
+    /** Lays the interface out at a size and gives the window the size of what is shown of it: the
+        component a drawing or a type shown in context is framed on, else all of it.
+
+        The page is told that part through Module.yuiPreviewFramed before the window takes its size,
+        which is when the density of the display is read again: the page changes it there to zoom,
+        and answers how many times larger the interface is then seen.
+    */
+    void setView (Size<int> size)
+    {
+        interfaceSize = size.to<float>();
+        frame = Rectangle<float> (0.0f, 0.0f, interfaceSize.getWidth(), interfaceSize.getHeight());
+
+        if (session != nullptr)
+        {
+            session->view.setSize (interfaceSize);
+
+            const auto* root = session->view.getDocument().getRoot();
+            const auto area = use != nullptr && root != nullptr ? findYuiToolPaintArea (*use.get(), *root) : frame;
+
+            // A use that lost its size since it was found leaves all of the interface to show
+            if (area.getWidth() >= 1.0f && area.getHeight() >= 1.0f)
+                frame = area;
+        }
+
+        // clang-format off
+        const auto zoom = EM_ASM_DOUBLE ({
+            return (Module.yuiPreviewFramed && Module.yuiPreviewFramed ($0, $1, $2, $3)) || 1;
+        }, frame.getX(), frame.getY(), frame.getWidth(), frame.getHeight());
+        // clang-format on
+
+        guides.setView (frame.getPosition(), static_cast<float> (zoom));
+
+        const auto isSameSize = getWidth() == frame.getWidth() && getHeight() == frame.getHeight();
+
+        setSize (frame.getSize());
+        resized();
+
+        // A window keeping its size is given the pixels of its canvas again, as their density may have changed
+        if (auto* native = isSameSize ? getNativeComponent() : nullptr)
+            native->setBounds (frame.withZeroPosition().to<int>());
+
+        repaint();
+
+        // The browser cleared the canvas if it got other pixels, and would show it empty until the next frame
+        yupRenderPrimaryWindow();
+    }
+
+    /** Shows or hides the guides over the interface. */
+    void setGuidesShown (bool shouldShow)
+    {
+        guides.setVisible (shouldShow);
+    }
+
+    /** Tells the guides the place of the file shown the caret of the editor is at. */
+    void setCaret (YuiToolPlace caret)
+    {
+        guides.setCaret (caret);
+    }
+
+    /** Starts or stops measuring how long the components take to paint, which describeStats() tells.
+
+        Measuring costs a little for each component painted, so nothing is measured until this is on.
+    */
+    void setStatsShown (bool shouldShow)
+    {
+        showsStats = shouldShow;
+
+        if (shouldShow)
+            measurePainting();
+        else
+            PaintProfiler::getInstance().disableSubtree (*this);
+    }
+
+    /** Tells how the interface is drawn, in three lines: how often and for how long, at what size and with
+        what, and the components that take the longest to paint themselves.
+
+        The times are those of the last frames painted while setStatsShown() is on, and tell what painting
+        asks of the processor: what the GPU then does with it is not in them.
+    */
+    String describeStats()
+    {
+        auto* native = getNativeComponent();
+
+        if (native == nullptr)
+            return {};
+
+        // The window holds all that is painted, so the time it took is the one of the frame
+        const auto* painted = PaintProfiler::getInstance().getStatsForComponent (*this);
+        const auto samples = painted != nullptr ? painted->copySamples() : std::vector<PaintProfileSample>();
+        const auto numFrames = static_cast<double> (samples.size());
+        double total = 0.0;
+        double longest = 0.0;
+
+        for (const auto& sample : samples)
+        {
+            total += sample.totalMicros;
+            longest = jmax (longest, sample.totalMicros);
+        }
+
+        String told;
+        told << roundToInt (native->getCurrentFrameRate()) << " fps of " << roundToInt (native->getDesiredFrameRate());
+
+        if (samples.empty())
+            told << " | nothing painted yet";
+        else
+            told << " | paint " << String (total / (1000.0 * numFrames), 2) << " ms, " << String (longest / 1000.0, 2) << " at most";
+
+        // What the last frame had to paint again of the window
+        const auto bounds = getLocalBounds();
+        const auto& areas = native->getFrameRepaintAreas();
+        float repainted = 0.0f;
+
+        for (const auto& area : areas.getRectangles())
+            repainted += area.intersection (bounds).area();
+
+        if (bounds.area() > 0.0f)
+            told << " | repainted " << roundToInt (jmin (100.0f, 100.0f * repainted / bounds.area())) << "% in "
+                 << areas.getNumRectangles() << (areas.getNumRectangles() == 1 ? " area" : " areas");
+
+        const auto pixels = native->getContentSize();
+        told << "\n" << pixels.getWidth() << " x " << pixels.getHeight() << " px at " << String (native->getScaleDpi(), 2) << "x";
+
+        if (auto* context = native->getGraphicsContext())
+        {
+            told << " | " << describePlatform (context->getPlatform());
+
+            if (const auto* renderer = context->getRenderContext())
+                told << " | paths by " << describePathRendering (renderer->frameInterlockMode());
+        }
+
+        // The components of the interface by what painting them asks of a frame, the tool's own left out
+        std::vector<PaintCost> costs;
+
+        if (const auto* root = session != nullptr ? session->view.getDocument().getRoot() : nullptr; root != nullptr && ! samples.empty())
+            collectPaintCosts (*root, samples.front().frameIndex, costs);
+
+        std::sort (costs.begin(), costs.end(), [] (const PaintCost& first, const PaintCost& second)
+        {
+            return first.micros > second.micros;
+        });
+
+        StringArray slowest;
+
+        for (size_t index = 0; index < jmin (costs.size(), size_t (5)); ++index)
+            slowest.add (costs[index].name + " " + String (costs[index].micros / (1000.0 * numFrames), 2) + " ms");
+
+        told << "\nslowest: " << (slowest.isEmpty() ? String ("-") : slowest.joinIntoString (" | "));
+
+        return told;
     }
 
     // The page owns the window
@@ -180,7 +463,64 @@ public:
         return session != nullptr ? session->models.toJson() : var (new DynamicObject());
     }
 
+    /** Captures the interface as it is shown now, for an agent: its image, with what it is an image of. */
+    YuiAgentResult capture (const var& arguments)
+    {
+        if (session == nullptr || session->view.getDocument().getRoot() == nullptr)
+            return YuiAgentResult::fail ("the preview shows no interface: open a .yui document and run 'YUI: Open Preview'");
+
+        double scale = 1.0;
+
+        if (const auto read = readYuiAgentScale (arguments, scale); read.failed())
+            return YuiAgentResult::fail (read.getErrorMessage());
+
+        if (jmax (getWidth(), getHeight()) * scale > maximumYuiAgentImageSide)
+            return YuiAgentResult::fail ("the image would be more than " + String (maximumYuiAgentImageSide) + " pixels a side: lower 'scale'");
+
+        auto* native = getNativeComponent();
+        auto* context = native != nullptr ? native->getGraphicsContext() : nullptr;
+        const auto image = context != nullptr ? snapshotToImage (*context, true, static_cast<float> (scale)) : Image();
+
+        YuiAgentResult result;
+
+        if (! encodeYuiToolPng (image, result.image))
+            return YuiAgentResult::fail ("the preview has no graphics device to capture with");
+
+        auto* captured = new DynamicObject();
+        captured->setProperty ("file", shownInput.getFullPathName());
+
+        if (shownTarget.drawing.isNotEmpty())
+            captured->setProperty ("drawing", shownTarget.drawing);
+
+        if (shownTarget.palette.isNotEmpty())
+            captured->setProperty ("palette", shownTarget.palette);
+
+        if (shownTarget.hostType.isNotEmpty())
+            captured->setProperty ("as", shownTarget.hostType);
+
+        if (use != nullptr)
+            captured->setProperty ("use", describeYuiToolComponent (session->view.getDocument(), *use.get()));
+
+        captured->setProperty ("width", image.getWidth());
+        captured->setProperty ("height", image.getHeight());
+        captured->setProperty ("scale", scale);
+        captured->setProperty ("theme", shownLight.value_or (false) ? "light" : "dark");
+        captured->setProperty ("models", summarizeModels (session->models.toJson()));
+
+        result.text = JSON::toString (var (captured));
+        return result;
+    }
+
 private:
+    // Measures the components the window holds now: those a load makes are measured once it made them
+    void measurePainting()
+    {
+        PaintProfileOptions options;
+        options.sampleCapacity = statsFrames;
+
+        PaintProfiler::getInstance().enableSubtree (*this, options);
+    }
+
     // The models outlive the document they are set on
     struct Session
     {
@@ -190,11 +530,84 @@ private:
 
     std::unique_ptr<Session> session;
     String sessionKey;
+    File shownInput;
+    YuiToolTarget shownTarget;
     std::optional<bool> shownLight;
+    WeakReference<Component> use;
+    Size<float> interfaceSize;
+    Rectangle<float> frame;
+    YuiToolGuides guides;
+    bool showsStats = false;
 };
 
 PreviewWindow* previewWindow = nullptr;
 MemoryBlock pendingFile;
+
+//==============================================================================
+// Sets the module up to work on the files of its host with no page to open a window in: once, as an
+// application is, default theme included
+bool prepareToRunWithoutPage()
+{
+    static const bool hasDriver = SDL_SetHint (SDL_HINT_VIDEO_DRIVER, "dummy");
+    static const ScopedYupInitialiser_GUI gui;
+    static const ScopedYupInitialiser_Windowing windowing;
+
+    if (! hasDriver || ApplicationTheme::getGlobalTheme() == nullptr)
+        return false;
+
+    // A command runs to its end, so the loop the message manager started has nothing to do but keep the
+    // host awake: it is stopped, and the runtime that would end with it is kept for the next commands.
+    // The loop of a running application is left alone
+    static const bool isLoopStopped = []
+    {
+        if (YUPApplicationBase::getInstance() != nullptr)
+            return false;
+
+        emscripten_runtime_keepalive_push();
+        emscripten_cancel_main_loop();
+        return true;
+    }();
+
+    ignoreUnused (isLoopStopped);
+
+    getFilesFolder().createDirectory();
+    getFilesFolder().setAsCurrentWorkingDirectory();
+
+    return true;
+}
+
+// What the tools of an agent get here: the files of the host and, in a page, the window it shows to draw with
+YuiAgentHost makeAgentHost()
+{
+    YuiAgentHost host;
+    host.baseFolder = getFilesFolder();
+
+    if (previewWindow == nullptr)
+        return host;
+
+    host.snapshot = [] (Component& component, double scale)
+    {
+        Image image;
+        auto* native = previewWindow != nullptr ? previewWindow->getNativeComponent() : nullptr;
+
+        if (auto* context = native != nullptr ? native->getGraphicsContext() : nullptr)
+        {
+            native->runWithGraphicsContext ([&]
+            {
+                image = component.snapshotToImage (*context, true, static_cast<float> (scale));
+            });
+        }
+
+        return image;
+    };
+
+    host.capturePreview = [] (const var& arguments)
+    {
+        return previewWindow != nullptr ? previewWindow->capture (arguments) : YuiAgentResult::fail ("the preview is closed");
+    };
+
+    return host;
+}
 
 //==============================================================================
 class PreviewApplication final : public YUPApplication
@@ -257,13 +670,19 @@ extern "C"
 
         file.getParentDirectory().createDirectory();
 
-        // An empty file is still a file, while replacing one with nothing deletes it
+        file.replaceWithData (pendingFile.getData(), pendingFile.getSize());
+
+        // Replacing a file with nothing deletes it, and an empty file is still a file
         if (pendingFile.isEmpty())
             file.create();
-        else
-            file.replaceWithData (pendingFile.getData(), pendingFile.getSize());
 
         pendingFile.reset();
+    }
+
+    // Forgets a file the host no longer has
+    void EMSCRIPTEN_KEEPALIVE yuiToolRemoveFile (const char* path)
+    {
+        getFilesFolder().getChildFile (String::fromUTF8 (path)).deleteFile();
     }
 
     // Runs a command of the tool in the folder of the files. The arguments are a JSON array of strings. A host
@@ -289,34 +708,11 @@ extern "C"
         if (const auto exitCode = checkYuiToolCommand (argc, argv.data()))
             return *exitCode;
 
-        // Set up once as an application is, default theme included, with no page to open a window in
-        static const bool hasDriver = SDL_SetHint (SDL_HINT_VIDEO_DRIVER, "dummy");
-        static const ScopedYupInitialiser_GUI gui;
-        static const ScopedYupInitialiser_Windowing windowing;
-
-        if (! hasDriver || ApplicationTheme::getGlobalTheme() == nullptr)
+        if (! prepareToRunWithoutPage())
         {
             std::cerr << "yup_yui_tool: can't initialise the windowing system\n";
             return 2;
         }
-
-        // A command runs to its end, so the loop the message manager started has nothing to do but keep the
-        // host awake: it is stopped, and the runtime that would end with it is kept for the next commands.
-        // The loop of a running application is left alone
-        static const bool isLoopStopped = []
-        {
-            if (YUPApplicationBase::getInstance() != nullptr)
-                return false;
-
-            emscripten_runtime_keepalive_push();
-            emscripten_cancel_main_loop();
-            return true;
-        }();
-
-        ignoreUnused (isLoopStopped);
-
-        getFilesFolder().createDirectory();
-        getFilesFolder().setAsCurrentWorkingDirectory();
 
         const auto exitCode = runYuiToolCommand (argc, argv.data());
 
@@ -327,8 +723,9 @@ extern "C"
     }
 
     // Shows a file in the window of the application, once Module.yuiPreviewReady was called. The names are
-    // empty for what is not asked, and Module.yuiPreviewShown is called with the outcome
-    void EMSCRIPTEN_KEEPALIVE yuiPreviewShow (const char* path, const char* drawing, const char* palette, const char* hostType, const char* modelsPath, int lightTheme)
+    // empty for what is not asked, `use` is the path of the component a drawing or a type shown in context is
+    // framed on, and Module.yuiPreviewShown is called with the outcome
+    void EMSCRIPTEN_KEEPALIVE yuiPreviewShow (const char* path, const char* drawing, const char* palette, const char* hostType, const char* use, const char* modelsPath, int lightTheme)
     {
         if (previewWindow == nullptr)
             return;
@@ -337,8 +734,50 @@ extern "C"
 
         previewWindow->show (getFilesFolder().getChildFile (String::fromUTF8 (path)),
                              { String::fromUTF8 (drawing), String::fromUTF8 (palette), String::fromUTF8 (hostType) },
+                             String::fromUTF8 (use),
                              models.isNotEmpty() ? getFilesFolder().getChildFile (models) : File(),
                              lightTheme != 0);
+    }
+
+    // Lays the interface shown out at a size in logical pixels, and gives the window the size of what is shown
+    // of it, which Module.yuiPreviewFramed (x, y, width, height) is called with first
+    void EMSCRIPTEN_KEEPALIVE yuiPreviewSetView (int width, int height)
+    {
+        if (previewWindow != nullptr && width > 0 && height > 0)
+            previewWindow->setView ({ width, height });
+    }
+
+    // Shows or hides the guides over the interface shown: the bounds of the components picked by clicking them,
+    // or else of the one the caret of the editor is in, with their paint margin and their distances to what
+    // holds them. While they show, the pointer picks components instead of reaching the interface
+    void EMSCRIPTEN_KEEPALIVE yuiPreviewSetGuides (int shouldShow)
+    {
+        if (previewWindow != nullptr)
+            previewWindow->setGuidesShown (shouldShow != 0);
+    }
+
+    // Tells the place of the file shown the caret of the editor is at, a line and a column from 1, or 0 for none
+    void EMSCRIPTEN_KEEPALIVE yuiPreviewSetCaret (int line, int column)
+    {
+        if (previewWindow != nullptr)
+            previewWindow->setCaret ({ line, column });
+    }
+
+    // Starts or stops measuring how long the components of the interface shown take to paint. It costs a little
+    // for each of them, so it is off until asked for
+    void EMSCRIPTEN_KEEPALIVE yuiPreviewSetStats (int shouldMeasure)
+    {
+        if (previewWindow != nullptr)
+            previewWindow->setStatsShown (shouldMeasure != 0);
+    }
+
+    // Returns how the interface shown is drawn, in three lines of text: the frames a second and the time painting
+    // one takes, the pixels and the GPU it is drawn with, and the components taking the longest to paint
+    const char* EMSCRIPTEN_KEEPALIVE yuiPreviewStats()
+    {
+        static std::string text;
+        text = previewWindow != nullptr ? previewWindow->describeStats().toStdString() : std::string();
+        return text.c_str();
     }
 
     // Changes a value of a model of the interface shown, given as JSON. Values the interface changes itself are
@@ -357,6 +796,48 @@ extern "C"
     {
         static std::string text;
         text = previewWindow != nullptr ? JSON::toString (previewWindow->getModels(), true).toStdString() : std::string ("{}");
+        return text.c_str();
+    }
+
+    // Returns the tools of an agent as JSON: `tools`, each with its name, description and inputSchema, `drawing`,
+    // the names of those only a page can run as they draw, and `instructions`, how they are meant to be used
+    const char* EMSCRIPTEN_KEEPALIVE yuiAgentTools()
+    {
+        static std::string text;
+
+        const auto tools = getYuiAgentTools (true);
+        Array<var> drawing;
+
+        for (const auto& tool : *tools.getArray())
+            if (doesYuiAgentToolDraw (tool["name"].toString()))
+                drawing.add (tool["name"]);
+
+        auto* listed = new DynamicObject();
+        listed->setProperty ("tools", tools);
+        listed->setProperty ("drawing", var (drawing));
+        listed->setProperty ("instructions", getYuiAgentInstructions());
+
+        text = JSON::toString (var (listed), true).toStdString();
+        return text.c_str();
+    }
+
+    // Runs a tool of an agent on the files given, with its arguments as a JSON object. The answer is JSON too:
+    // `text`, `isError`, and `image`, a PNG in base64 which is empty when the tool gives none
+    const char* EMSCRIPTEN_KEEPALIVE yuiAgentCall (const char* name, const char* arguments)
+    {
+        static std::string text;
+
+        // A page set itself up as the application it runs
+        const auto isReady = YUPApplicationBase::getInstance() != nullptr || prepareToRunWithoutPage();
+        const auto answer = isReady ? callYuiAgentTool (String::fromUTF8 (name), JSON::fromString (String::fromUTF8 (arguments)), makeAgentHost())
+                                    : YuiAgentResult::fail ("the windowing system can't be initialised");
+
+        auto* record = new DynamicObject();
+        record->setProperty ("text", answer.text);
+        record->setProperty ("isError", answer.isError);
+        record->setProperty ("image", answer.image.isEmpty() ? String() : Base64::toBase64 (answer.image.getData(), answer.image.getSize()));
+
+        text = JSON::toString (var (record), true).toStdString();
         return text.c_str();
     }
 }

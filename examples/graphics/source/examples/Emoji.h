@@ -115,7 +115,7 @@ public:
         shapeSamples();
     }
 
-    void refreshDisplay (double lastFrameTimeSeconds) override
+    void refreshDisplay (double lastFrameTimeSeconds)
     {
         time += static_cast<float> (yup::jlimit (0.0, 0.1, lastFrameTimeSeconds));
         repaint (effectsArea);
@@ -433,4 +433,5 @@ private:
     std::array<yup::StyledText, numEffects> effectCaptionTexts;
     float textSize = 18.0f;
     float time = 0.0f;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&EmojiDemo::refreshDisplay, this) };
 };

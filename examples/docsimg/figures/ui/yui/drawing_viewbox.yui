@@ -1,0 +1,26 @@
+// size: 480 144
+drawing Icon {
+    viewBox: rect (0, 0, 24, 24);
+
+    circle { center: bounds.center; radius: 10; fill: palette.accent; }
+
+    viewport {
+        bounds: rect (14, 14, 8, 8);
+        viewBox: rect (0, 0, 100, 100);
+        fitting: scaleToFill;
+        rect { bounds: bounds; fill: palette.text; }
+    }
+}
+
+style {
+    .icon { drawing: Icon; }
+}
+
+Row {
+    gap: 24; justify: center; align: center;
+
+    Component { class: icon; preferredWidth: 24;  preferredHeight: 24; }
+    Component { class: icon; preferredWidth: 48;  preferredHeight: 48; }
+    Component { class: icon; preferredWidth: 96;  preferredHeight: 96; }
+    Component { class: icon; preferredWidth: 160; preferredHeight: 64; }
+}

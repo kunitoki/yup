@@ -1,0 +1,35 @@
+// size: 480 172
+drawing Scale {
+    repeat i in 0 .. 41 {
+        line { from: point (4 + i * 5, bounds.height); to: point (4 + i * 5, bounds.height - (i % 5 == 0 ? 28 : 14));
+               stroke: i < 26 ? palette.accent : palette.outline; strokeWidth: 2; cap: round; }
+    }
+}
+
+drawing Ring {
+    property lit: integer = 8;
+
+    drawing Led {
+        property on: boolean = false;
+        circle { center: bounds.center; radius: 5; fill: on ? palette.accent : palette.outline; feather: on ? 3 : 0; }
+    }
+
+    repeat i in 0 .. 12 {
+        group {
+            transform: transform.rotation (rad (i * 30), bounds.center.x, bounds.center.y);
+            use Led { bounds: rect (bounds.center.x - 7, 8, 14, 14); on: i < lit; }
+        }
+    }
+}
+
+style {
+    .scale { drawing: Scale; }
+    .ring  { drawing: Ring; }
+}
+
+Row {
+    gap: 32; justify: center; align: center;
+
+    Component { class: scale; preferredWidth: 212; preferredHeight: 44; }
+    Component { class: ring;  preferredWidth: 124; preferredHeight: 124; }
+}

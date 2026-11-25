@@ -152,6 +152,35 @@ so changing one from C++ updates everything reading it:
 document.getRoot()->setProperty ("spacing", 16);
 ```
 
+Style rules read them too, so a document keeps its sizes and colors in one
+place:
+
+```yui
+tokens {
+    property spacing: number = 12;
+    property radius: number = 14;
+    property brand: color = #ff8800;
+}
+
+style {
+    TextButton { cornerRadius: radius; }
+    .brand     { backgroundColor: brand; textColor: #1b1b1e; }
+}
+
+Row {
+    gap: spacing;
+
+    TextButton { text: "Open"; flexGrow: 1; }
+    TextButton { text: "Save"; flexGrow: 1; }
+    TextButton { text: "Export"; class: brand; flexGrow: 1; }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/documents_tokens_light.jpg#gh-light-mode-only" alt="Three buttons whose gap, corner radius and one color come from the tokens of the document" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/documents_tokens_dark.jpg#gh-dark-mode-only" alt="Three buttons whose gap, corner radius and one color come from the tokens of the document" width="560">
+</p>
+
 ## Composite components
 
 A `component` block declares a new type made of other components:
@@ -272,6 +301,11 @@ bindings](reactivity.md), a link is not broken when either property is
 written: dragging either slider moves the other. It goes away with either
 component.
 
+The other side can be one element of a list, as in
+`checked <=> seq.steps[2];`. The index is any expression, read once when the
+link is made, and a change of the property replaces that element only. An
+index outside the list links to nothing.
+
 ## Models
 
 A model exposes application data to the document under a name, so widgets bind
@@ -341,6 +375,112 @@ thread reach the UI on the editor's parameter dispatch. Writes and gestures on
 read-only parameters, such as meters, are ignored. Give a slider the range of its parameter with `minimum`,
 `maximum`, `interval` and `skew`; `minValue` and `maxValue` are the thumbs of a
 two-value slider, not its range.
+
+## Repeating components
+
+`repeat name in from .. to { ... }` makes the components it holds once for
+each integer from `from` to `to - 1`, where it is written among the children
+of its parent:
+
+```yui
+Row {
+    repeat i in 0 .. seq.length {
+        ToggleButton {
+            class: step;
+            text: format ("%d", i + 1);
+            checked <=> seq.steps[i];
+            onClick: action ("step", i);
+        }
+    }
+}
+```
+
+- The index is an integer, read by its name in every value, link and handler
+  of the body, and in the range of a `repeat` inside it. The body holds
+  components and other `repeat`s.
+- An `id` in the body is local to its turn: what the turn holds reads the
+  component of that turn, nothing outside the `repeat` sees it and `findById`
+  does not find it. The ids around the `repeat` are read from inside.
+- The range reads whatever an expression reads, such as a model, a token or a
+  property. When it changes, the components are made again once the change is
+  over, from the message loop: those still described are kept as they are,
+  the others are added or removed.
+- A `repeat` runs at most 1024 times, counted together for repeats inside one
+  another: 32 turns of 32. A longer range is reported as a problem and cut
+  there.
+- In the body of a `component`, the range can read the properties of the
+  component, as in `repeat i in 0 .. root.count`.
+
+Here the range reads a stepper, so its buttons add and remove the ones below
+it:
+
+```yui
+Column {
+    gap: 10;
+
+    Slider { id: steps; sliderType: incDecButtons; minimum: 1; maximum: 8; interval: 1; value: 6; preferredHeight: 28; }
+
+    Row {
+        gap: 4; flexGrow: 1;
+
+        repeat i in 0 .. steps.value {
+            ToggleButton { text: format ("%d", i + 1); checked: i % 3 == 0; flexGrow: 1; }
+        }
+    }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/documents_repeat_light.jpg#gh-light-mode-only" alt="A stepper showing 6 over a row of six numbered toggle buttons made by a repeat" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/documents_repeat_dark.jpg#gh-dark-mode-only" alt="A stepper showing 6 over a row of six numbered toggle buttons made by a repeat" width="560">
+</p>
+
+A tool or a test with no message loop calls
+`document.applyPendingChanges()` to have the components made again at once.
+
+## Exclusive buttons and steppers
+
+Buttons with the same `radioGroup` in the same parent are exclusive: turning
+one on turns the others off, and a click on the one that is on leaves it on.
+Each keeps its own `checked`, so each binds to a property of its own. It works
+for `ToggleButton` and `SwitchButton`, together or apart:
+
+```yui
+Row {
+    ToggleButton { text: "LFO";  radioGroup: 1; checked <=> mod.lfo; }
+    ToggleButton { text: "STEP"; radioGroup: 1; checked <=> mod.step; }
+}
+```
+
+A `Slider` of type `incDecButtons` is a stepper: a button at each end with the
+value between them, on a line when it is wider than tall and one above the
+other otherwise. A press steps the value by the `interval`, or by a hundredth
+of the range when there is none, and keeps stepping while it is held. The
+wheel, and a drag up or down between the buttons, change it as on other
+sliders:
+
+```yui
+Slider { sliderType: incDecButtons; minimum: 1; maximum: 16; interval: 1; value <=> seq.length; }
+```
+
+Both in a row, with no model:
+
+```yui
+Row {
+    gap: 8;
+
+    ToggleButton { text: "LFO";  radioGroup: 1; checked: true; flexGrow: 1; }
+    ToggleButton { text: "STEP"; radioGroup: 1; flexGrow: 1; }
+    ToggleButton { text: "ENV";  radioGroup: 1; flexGrow: 1; }
+
+    Slider { sliderType: incDecButtons; minimum: 1; maximum: 16; interval: 1; value: 8; preferredWidth: 150; }
+}
+```
+
+<p align="center">
+  <img class="light-only rounded" src="../../_static/images/ui/yui/documents_radio_light.jpg#gh-light-mode-only" alt="Three exclusive toggle buttons, the first one on, beside a stepper showing 8" width="560">
+  <img class="dark-only rounded" src="../../_static/images/ui/yui/documents_radio_dark.jpg#gh-dark-mode-only" alt="Three exclusive toggle buttons, the first one on, beside a stepper showing 8" width="560">
+</p>
 
 ## See also
 

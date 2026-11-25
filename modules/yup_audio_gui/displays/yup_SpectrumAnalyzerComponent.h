@@ -255,7 +255,7 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
     /** @internal */
     void timerCallback() override;
 
@@ -323,6 +323,7 @@ private:
     float windowCoherentGain = 1.0f;
     float equivalentNoiseBandwidthBins = 1.0f;
     bool needsWindowUpdate = true;
+    FrameAttachment frameAttachment { *this, bindFront (&SpectrumAnalyzerComponent::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpectrumAnalyzerComponent)
 };

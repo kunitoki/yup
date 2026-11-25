@@ -1365,19 +1365,14 @@ bool AudioPluginProcessorCLAP::initialise()
 
         info->port_type = audioBus->isStereo() ? CLAP_PORT_STEREO : CLAP_PORT_MONO;
 
-        // For output ports, advertise in-place processing when a corresponding input bus exists
-        if (! isInput)
-        {
-            uint32_t inputAudioCount = 0;
-            for (const auto& bus : audioProcessor->getBusLayout().getInputBuses())
-                if (bus.getType() == AudioBus::Type::Audio)
-                    ++inputAudioCount;
-            info->in_place_pair = (inputAudioCount > index) ? static_cast<clap_id> (index) : CLAP_INVALID_ID;
-        }
-        else
-        {
-            info->in_place_pair = CLAP_INVALID_ID;
-        }
+        const auto& busLayout = audioProcessor->getBusLayout();
+        const auto busIndex = static_cast<int> (index);
+        const bool canProcessInPlace = audioBus->getRole() == AudioBus::Role::Main
+                                    && busIndex < busLayout.getNumAudioBuses (! isInput)
+                                    && busLayout.getAudioBusRole (busIndex, ! isInput) == AudioBus::Role::Main
+                                    && busLayout.getAudioBusNumChannels (busIndex, ! isInput) == audioBus->getNumChannels();
+
+        info->in_place_pair = canProcessInPlace ? static_cast<clap_id> (index) : CLAP_INVALID_ID;
 
         audioBus->getName().copyToUTF8 (info->name, sizeof (info->name));
 

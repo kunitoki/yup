@@ -44,7 +44,7 @@ public:
         peakLevel.store (newPeak, std::memory_order_relaxed);
     }
 
-    void refreshDisplay (double /*lastFrameTimeSeconds*/) override
+    void refreshDisplay (double /*lastFrameTimeSeconds*/)
     {
         repaint();
     }
@@ -63,6 +63,7 @@ public:
 
 private:
     std::atomic<float> peakLevel { 0.0f };
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&GpuPeakMeterComponent::refreshDisplay, this) };
 };
 
 //==============================================================================

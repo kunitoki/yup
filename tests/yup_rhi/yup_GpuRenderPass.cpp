@@ -403,6 +403,63 @@ TEST_P (GpuPipelineSharedModuleTests, PipelinesSharingModulesRenderTheirOwnState
     }
 }
 
+TEST_P (GpuPipelineSharedModuleTests, StagesSharingATextureDeclarationCompileWhenOnlyOneSamplesIt)
+{
+    // Shaders built on a common prelude declare every resource in both stages, and the vertex
+    // stage, which never samples the texture, must not have the pipeline take it for unfilterable
+    constexpr const char* vertex = R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D source;
+layout(set = 0, binding = 1) uniform sampler sourceSampler;
+layout(location = 0) out vec2 uv;
+void main()
+{
+    uv = vec2 ((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
+    gl_Position = vec4 (uv * 2.0 - 1.0, 0.0, 1.0);
+})";
+
+    constexpr const char* fragment = R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D source;
+layout(set = 0, binding = 1) uniform sampler sourceSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main() { color = texture (sampler2D (source, sourceSampler), uv); })";
+
+    GpuPipelineOptions options;
+    auto& colorTarget = options.colorTargets.emplace_back();
+    colorTarget.format = GpuTextureFormat::rgba8unorm;
+    colorTarget.blendEnabled = false;
+
+    auto compiled = GpuPipeline::compileFromGlsl (device, vertex, fragment, options);
+    ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+
+    const uint8 green[4] = { 0, 255, 0, 255 };
+    auto texture = GpuTexture::create (device, GpuTextureDesc (1, 1, GpuTextureFormat::rgba8unorm));
+    ASSERT_NE (texture, nullptr);
+
+    GpuTextureDataDesc data;
+    data.data = green;
+    ASSERT_TRUE (texture->upload (data));
+
+    auto target = GpuTarget::create (device, 1, 1);
+    ASSERT_NE (target, nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+    pass.setPipeline (compiled.getValue());
+    pass.setTexture (0, 0, texture);
+    EXPECT_TRUE (pass.draw (3));
+    pass.finish();
+    EXPECT_TRUE (frame.submit());
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    std::vector<uint8> pixels (4);
+    if (! readbackCompleted (target->readPixels (pixels.data(), pixels.size())))
+        return;
+
+    EXPECT_LE (pixels[0], 5);
+    EXPECT_GE (pixels[1], 250);
+}
+
 INSTANTIATE_TEST_SUITE_P (GpuPipeline,
                           GpuPipelineSharedModuleTests,
                           ::testing::ValuesIn (GpuComputePassBackendTests::getCompiledPlatforms()),

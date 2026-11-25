@@ -72,6 +72,11 @@ TEST_F (ComboBoxTest, ConstructorInitializesCorrectly)
     EXPECT_FALSE (comboBox->isTextEditable());
 }
 
+TEST_F (ComboBoxTest, LetsWhatIsBehindItsRoundedBoxShow)
+{
+    EXPECT_FALSE (comboBox->isOpaque());
+}
+
 TEST_F (ComboBoxTest, UsesHandCursor)
 {
     EXPECT_EQ (MouseCursor::Hand, comboBox->getMouseCursor().getType());

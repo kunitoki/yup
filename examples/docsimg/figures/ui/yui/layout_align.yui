@@ -1,0 +1,20 @@
+// size: 560 120
+component Tray : Row {
+    property name: string = "";
+    property tall: number = -1;
+
+    gap: 4; flexGrow: 1;
+
+    TextButton { text: root.name; flexGrow: 1; preferredHeight: root.tall < 0 ? -1 : 24; }
+    TextButton { preferredWidth: 14; preferredHeight: root.tall * 0.7; }
+    TextButton { preferredWidth: 14; preferredHeight: root.tall; }
+}
+
+Row {
+    gap: 20;
+
+    Tray { name: "start";   align: start;  tall: 56; }
+    Tray { name: "center";  align: center; tall: 56; }
+    Tray { name: "end";     align: end;    tall: 56; }
+    Tray { name: "stretch"; align: stretch; }
+}

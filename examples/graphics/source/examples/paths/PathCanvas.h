@@ -106,7 +106,7 @@ public:
 
     //==============================================================================
     /** Moves the animated paints drawn in the last frame; idle documents are not repainted. */
-    void refreshDisplay (double lastFrameTimeSeconds) override
+    void refreshDisplay (double lastFrameTimeSeconds)
     {
         if (advanceAnimatedPaints (lastFrameTimeSeconds))
             repaint();
@@ -874,6 +874,7 @@ private:
     DragState drag;
     yup::DataTree penContour;
     yup::Point<float> hoverPosition;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&PathCanvas::refreshDisplay, this) };
 };
 
 } // namespace PathEditor

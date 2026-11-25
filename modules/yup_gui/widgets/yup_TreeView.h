@@ -287,7 +287,7 @@ public:
     /** @internal */
     void paintOverChildren (Graphics& g) override;
     /** @internal */
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
     /** @internal */
     bool keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
@@ -428,6 +428,7 @@ private:
     TreeViewItem* notifyingHoverItem = nullptr;
     double hoverExpandSeconds = 0.0;
     float autoScrollSpeed = 0.0f;
+    FrameAttachment frameAttachment { *this, bindFront (&TreeView::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TreeView)
 };

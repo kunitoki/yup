@@ -249,7 +249,7 @@ private:
             { outputViews.data(), outputViews.size() }
         };
 
-        processor.processBlock (context);
+        processAudioBlock (processor, context, false);
 
         for (int ch = 0; ch < numOutputChannels; ++ch)
         {

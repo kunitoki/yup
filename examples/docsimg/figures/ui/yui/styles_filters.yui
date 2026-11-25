@@ -1,0 +1,25 @@
+// size: 560 156
+style {
+    TextButton { backgroundColor: palette.accent; textColor: palette.onAccent; cornerRadius: 8; }
+
+    .blur   { filter: blur(2px); }
+    .shadow { filter: drop-shadow(0 6 8 palette.accent.withAlpha (0.7)); }
+    .bright { filter: brightness(150%); }
+    .gray   { filter: grayscale(100%); }
+    .sepia  { filter: sepia(100%); }
+    .hue    { filter: hue-rotate(120deg); }
+    .invert { filter: invert(100%); }
+}
+
+Grid {
+    columns: 4; rows: 2; gap: 16;
+
+    TextButton { text: "none"; }
+    TextButton { text: "blur"; class: blur; }
+    TextButton { text: "drop-shadow"; class: shadow; }
+    TextButton { text: "brightness"; class: bright; }
+    TextButton { text: "grayscale"; class: gray; }
+    TextButton { text: "sepia"; class: sepia; }
+    TextButton { text: "hue-rotate"; class: hue; }
+    TextButton { text: "invert"; class: invert; }
+}

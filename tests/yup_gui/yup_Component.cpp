@@ -270,11 +270,6 @@ public:
         comp.internalUserTriedToCloseWindow();
     }
 
-    static void triggerRefreshDisplay (Component& comp, double lastFrameTimeSeconds)
-    {
-        comp.internalRefreshDisplay (lastFrameTimeSeconds);
-    }
-
     static bool triggerKeyDown (Component& comp, const KeyPress& keys, const Point<float>& position)
     {
         return comp.internalKeyDown (keys, position);
@@ -2190,11 +2185,6 @@ TEST_F (ComponentMockTest, AdditionalVirtualMethodTests)
     mockComponent->takeKeyboardFocus();
     mockComponent->leaveKeyboardFocus();
 
-    // Test refresh display
-    EXPECT_CALL (*mockComponent, refreshDisplay (0.016));
-    mockComponent->refreshDisplay (0.016);
-    ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
-
     // Test userTriedToCloseWindow
     EXPECT_CALL (*mockComponent, userTriedToCloseWindow());
     mockComponent->userTriedToCloseWindow();
@@ -2853,9 +2843,6 @@ TEST_F (ComponentTest, InternalDisplayAndCloseDispatch)
 {
     ComponentHelper::triggerDisplayChanged (*root);
     ComponentHelper::triggerUserTriedToCloseWindow (*root);
-
-    // refreshDisplay recurses into children.
-    ComponentHelper::triggerRefreshDisplay (*root, 0.016);
 }
 
 TEST_F (ComponentTest, InternalKeyboardDispatch)
@@ -3508,6 +3495,32 @@ TEST_F (ComponentRepaintRegionTest, ANonOpaqueChildDoesNotHideTheParent)
     ComponentHelper::triggerPaint (*root, g, region ({ { 200, 200, 10, 10 } }), false);
 
     // Nothing opaque covers the parent any more, so it has to paint its own background.
+    EXPECT_EQ (1, root->paintCount);
+}
+
+TEST_F (ComponentRepaintRegionTest, AnOpaqueChildWithAnEffectDoesNotHideTheParent)
+{
+    struct NoOpEffect : ComponentEffect
+    {
+        void apply (Graphics&, GpuTexture::Ptr, Rectangle<float>) override {}
+    };
+
+    // The effect decides what is shown of the child, a fade or a blur lets the parent through
+    left->setComponentEffect (new NoOpEffect());
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, region ({ { 0, 0, 5, 5 } }), false);
+
+    EXPECT_EQ (1, root->paintCount);
+}
+
+TEST_F (ComponentRepaintRegionTest, AnOpaqueChildDrawnTranslucentDoesNotHideTheParent)
+{
+    left->setOpacity (0.5f);
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, region ({ { 0, 0, 5, 5 } }), false);
+
     EXPECT_EQ (1, root->paintCount);
 }
 
@@ -5014,6 +5027,22 @@ TEST_F (ComponentEffectDamageTests, AManuallyCompositedChildDamagesTheWholeParen
     ASSERT_TRUE (region.has_value());
     ASSERT_EQ (1, region->getNumRectangles());
     EXPECT_EQ (region->getRectangle (0), comp.getLocalBounds());
+}
+
+TEST_F (ComponentEffectDamageTests, DamageReachingIntoThePaintMarginRepaintsEverything)
+{
+    comp.setPaintMargin (10.0f);
+    ComponentHelper::takeEffectDirtyRegion (comp, false);
+
+    comp.repaint (Rectangle<float> (10.0f, 10.0f, 5.0f, 5.0f));
+
+    const auto inside = ComponentHelper::takeEffectDirtyRegion (comp, false);
+    ASSERT_TRUE (inside.has_value());
+    EXPECT_EQ (1, inside->getNumRectangles());
+
+    // The margin is not covered by an opaque fill, so it cannot be painted over
+    comp.repaint (Rectangle<float> (95.0f, 10.0f, 10.0f, 5.0f));
+    EXPECT_FALSE (ComponentHelper::takeEffectDirtyRegion (comp, false).has_value());
 }
 
 // =============================================================================

@@ -52,6 +52,42 @@ const Identifier LayoutComponent::Properties::gridColumnSpanId ("gridColumnSpan"
 const Identifier LayoutComponent::Properties::gridRowSpanId ("gridRowSpan");
 
 //==============================================================================
+namespace
+{
+
+/* The layouts the batches of a thread hold back: how many batches there are, and the components to lay out when the last ends. */
+struct HeldLayouts
+{
+    int numBatches = 0;
+    std::vector<WeakReference<Component>> waiting;
+};
+
+HeldLayouts& getHeldLayouts()
+{
+    thread_local HeldLayouts held;
+    return held;
+}
+
+} // namespace
+
+LayoutComponent::ScopedLayoutBatch::ScopedLayoutBatch()
+{
+    ++getHeldLayouts().numBatches;
+}
+
+LayoutComponent::ScopedLayoutBatch::~ScopedLayoutBatch()
+{
+    auto& held = getHeldLayouts();
+
+    if (--held.numBatches > 0)
+        return;
+
+    for (const auto& waiting : std::exchange (held.waiting, {}))
+        if (auto* layout = static_cast<LayoutComponent*> (waiting.get()); layout != nullptr && layout->isLayoutHeld)
+            layout->updateLayout();
+}
+
+//==============================================================================
 
 void LayoutComponent::setPadding (const EdgeSpacing<float>& newPadding)
 {
@@ -79,6 +115,16 @@ void LayoutComponent::updateLayout()
 {
     if (isPerformingLayout)
         return;
+
+    if (auto& held = getHeldLayouts(); held.numBatches > 0)
+    {
+        if (! std::exchange (isLayoutHeld, true))
+            held.waiting.emplace_back (this);
+
+        return;
+    }
+
+    isLayoutHeld = false;
 
     const ScopedValueSetter<bool> scope (isPerformingLayout, true);
     performLayout (getLocalBounds().reduced (getPadding()));

@@ -55,7 +55,7 @@ class ArtboardViewModel;
     so a property literally named "2" cannot be addressed through a path.
 
     Instances are not internally synchronized. They are safe to use from the
-    message thread and from Component::refreshDisplay (which YUP serialises
+    message thread and from a FrameAttachment callback (which YUP serialises
     against the message thread), but not concurrently from both.
 
     @see ArtboardFile::createArtboardViewModelInstance, Artboard::bindViewModelInstance
@@ -285,8 +285,8 @@ public:
 
         Pass an empty callback to remove the listener. Callbacks are delivered
         synchronously on the thread that performed the write; when the write comes
-        from the artboard's data bindings, that is the thread running
-        Artboard::refreshDisplay, on the thread described above.
+        from the artboard's data bindings, that is the thread advancing the artboard
+        every frame, described above.
 
         Mutating this instance from within the callback (writing values or
         resizing lists) is supported, as is replacing or clearing the callback

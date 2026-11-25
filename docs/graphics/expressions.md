@@ -11,9 +11,9 @@ visualizations, or any data-driven vector content.
 
 | Type | C++ type | Constructors | Highlights |
 |---|---|---|---|
-| `point` | `Point<float>` | `point (x, y)` | `x y length`, `distanceTo angleTo dot normalized translated scaled lerp transformed onCircle`, `+ - * /`, swizzles `p.yx` |
-| `size` | `Size<float>` | `size (w, h)` | `width height`, `* /` by a number |
-| `rect` | `Rectangle<float>` | `rect (x, y, w, h)`, `rect (point, size)` | `x y width height left top right bottom centerX centerY center position size topLeft ...`, `withX ... withCenter withSizeKeepingCenter translated scaled reduced enlarged contains intersects intersection unionWith largestFittingSquare transformed` |
+| `point` | `Point<float>` | `point (x, y)`, `[x, y]` | `x y length`, `distanceTo angleTo dot normalized translated scaled lerp transformed onCircle`, `+ - * /`, swizzles `p.yx` |
+| `size` | `Size<float>` | `size (w, h)`, `[w, h]` | `width height`, `* /` by a number |
+| `rect` | `Rectangle<float>` | `rect (x, y, w, h)`, `[x, y, w, h]`, `rect (point, size)` | `x y width height left top right bottom centerX centerY center position size topLeft ...`, `withX ... withCenter withSizeKeepingCenter translated scaled reduced enlarged contains intersects intersection unionWith largestFittingSquare transformed` |
 | `line` | `Line<float>` | `line (x1, y1, x2, y2)`, `line (point, point)` | `start end length`, `pointAt translated transformed reversed` |
 | `color` | `Color` | `#ff8800`, `#f80`, `#ff880080` (literals), `color (0xffff0000)`, `rgb`, `rgba` (0-255 ints or 0-1 floats), `hsl`, `hsla` | `r g b a hue saturation luminance` (0-1), `withAlpha withMultipliedAlpha brighter darker contrasting inverted mix` |
 | `transform` | `AffineTransform` | `transform ()`, `transform (a, b, c, d, tx, ty)` (the values of an SVG `matrix`), `transform.translation`, `transform.rotation`, `transform.scaling`, `transform.shearing` | `translated rotated scaled followedBy inverted` |
@@ -21,6 +21,15 @@ visualizations, or any data-driven vector content.
 | `font` | `Font` | `font ()` (empty, usually provided as an input) | `height isEmpty`, `withHeight withAxisValue` |
 | `gradient` | `ColorGradient` | `linearGradient (color, point, color, point)`, `radialGradient (color, center, color, edge)` or `(color, center, color, radius)`, `angularGradient (color, center, color, direction)` | `withStop (color, delta)` (adds a stop between the ends), `withAlpha withMultipliedAlpha withTransform`, `withSpread (spread)`, `mappedTo (rect)` |
 | `pattern` | `PatternPaint` | `pattern ()` (no paint, usually provided as an input) | `isEmpty` |
+
+An array of numbers (`float[]`) is the point, the size or the rect it is given
+to, and `dash (...)` takes one of any length. Written in place, `[a, b, ...]`
+has to hold the numbers of what it makes, two for a point or a size and four
+for a rect: a wrong count is an error when compiling, and the right one
+compiles to the constructor, so `[x, y, w, h]` runs what `rect (x, y, w, h)`
+runs. An array given as an input reads zeros for the numbers it lacks. An
+array has none of the members of what it makes: `rect ([0, 0, 100, 50]).center`
+names the rect first.
 
 It also registers enumerations, whose values are used by name:
 
@@ -191,7 +200,10 @@ ExpressionDrawing::Cache cache; // one per drawing, kept alongside it
 bars.getReference().draw (g, state, (int) data.size(), nullptr, &cache);
 ```
 
-`cache.wasRebuilt()` reports whether the last draw had to rebuild. Paths
+`cache.wasRebuilt()` reports whether the last draw had to rebuild. Outputs that
+change on consecutive draws, like animations, are drawn without being recorded,
+so a cache costs nothing while they animate; the first draw after they settle
+records the shapes again. Paths
 assigned to `path` and `clipPath` are compared by identity, so build a new path instead of
 modifying one in place; paths built per row in the program are new on every
 draw, so drawings using them always rebuild.

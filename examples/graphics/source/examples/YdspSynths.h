@@ -522,7 +522,7 @@ public:
             takeKeyboardFocus();
     }
 
-    void refreshDisplay (double) override
+    void refreshDisplay (double)
     {
         {
             const yup::AudioLockType::ScopedLockType sl (renderMutex);
@@ -1788,4 +1788,5 @@ private:
     std::unique_ptr<yup::TextEditor> diagnosticsEditor;
     bool showingEditorTab = false;
     bool hasCompileError = false;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&YdspSynthDemo::refreshDisplay, this) };
 };

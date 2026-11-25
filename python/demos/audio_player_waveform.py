@@ -109,6 +109,7 @@ class WaveformComponent(yup.Component):
 
     def __init__(self, player: AudioPlayer):
         yup.Component.__init__(self)
+        self.frameAttachment = yup.FrameAttachment(self, self.refreshDisplay)
         self.player = player
         self.setOpaque(True)
 

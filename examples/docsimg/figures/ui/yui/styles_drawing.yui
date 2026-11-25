@@ -1,0 +1,25 @@
+// size: 480 136
+drawing Meter {
+    property level: number = 0.5;
+    property tone: color = palette.accent;
+    property segments: integer = 12;
+
+    repeat i in 0 .. segments {
+        rect { bounds: rect (i * bounds.width / segments + 1, 0, bounds.width / segments - 2, bounds.height);
+               cornerRadius: 2; fill: i < level * segments ? tone : palette.outline.withAlpha (0.4); }
+    }
+}
+
+style {
+    .meter { drawing: Meter; }
+    .hot   { tone: #ff5544; level: 0.9; }
+    #fine  { segments: 32; level: 0.4; }
+}
+
+Column {
+    gap: 10;
+
+    Component { class: meter; flexGrow: 1; }
+    Component { class: "meter hot"; flexGrow: 1; }
+    Component { id: fine; class: meter; flexGrow: 1; }
+}

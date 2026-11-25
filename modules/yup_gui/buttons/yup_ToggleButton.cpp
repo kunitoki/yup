@@ -77,6 +77,13 @@ void ToggleButton::setToggleState (bool shouldBeToggled, NotificationType notifi
         if (bailOutChecker.shouldBailOut())
             return;
 
+        if (toggleState)
+        {
+            turnOffOtherButtonsInGroup();
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
         sendChangeNotification (notification, [this]
         {
             auto innerBailOut = BailOutChecker (this);
@@ -134,12 +141,13 @@ void ToggleButton::resized()
 
 //==============================================================================
 
-void ToggleButton::mouseUp (const MouseEvent& event)
+void ToggleButton::clicked()
 {
-    if (getLocalBounds().contains (event.getPosition()))
+    // The button of a radio group that is on stays on when clicked. A change of state runs onClick itself
+    if (toggleState && getRadioGroupId() != 0)
+        Button::clicked();
+    else
         setToggleState (! toggleState, sendNotification);
-
-    Button::mouseUp (event);
 }
 
 //==============================================================================

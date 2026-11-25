@@ -118,6 +118,48 @@ TEST_F (GraphicsExpressionTypesTests, RectangleOperations)
     EXPECT_EQ (Rectangle<float> (25.0f, 0.0f, 50.0f, 50.0f), evaluate<Rectangle<float>> ("bounds.largestFittingSquare()"));
 }
 
+TEST_F (GraphicsExpressionTypesTests, AnArrayWrittenInPlaceMakesWhatItIsGivenTo)
+{
+    EXPECT_EQ (Point<float> (1.0f, 2.0f), evaluate<Point<float>> ("point ([1, 2])"));
+    EXPECT_EQ (Size<float> (3.0f, 4.0f), evaluate<Size<float>> ("size ([3, 4])"));
+    EXPECT_EQ (Rectangle<float> (1.0f, 2.0f, 3.0f, 4.0f), evaluate<Rectangle<float>> ("rect ([1, 2, 3, 4])"));
+    EXPECT_EQ (Rectangle<float> (1.0f, 2.0f, 3.0f, 4.0f), evaluate<Rectangle<float>> ("rect ([1, 2], [3, 4])"));
+    EXPECT_EQ (Rectangle<float> (0.0f, 1.0f, 5.0f, 6.0f), evaluate<Rectangle<float>> ("rect ([1, 2, 3, 4]).enlarged (1)"));
+    EXPECT_FALSE (evaluate<bool> ("dash ([6, 3, 2, 3, 1, 3, 4]).isEmpty"));
+    EXPECT_FALSE (evaluate<bool> ("dash ([bounds.width, 3, 1]).isEmpty"));
+
+    // It compiles to the constructor taking its numbers, with nothing more to run
+    const auto written = CompiledExpression::compile ("rect ([bounds.x, 2, bounds.width, 4])", context);
+    const auto called = CompiledExpression::compile ("rect (bounds.x, 2, bounds.width, 4)", context);
+    ASSERT_TRUE (written.wasOk() && called.wasOk());
+    EXPECT_EQ (called.getReference().getNumInstructions(), written.getReference().getNumInstructions());
+    EXPECT_EQ (Rectangle<float> (0.0f, 2.0f, 100.0f, 4.0f), evaluate<Rectangle<float>> ("rect ([bounds.x, 2, bounds.width, 4])"));
+
+    // It has to hold the numbers of what it makes, and it has none of its members
+    EXPECT_FALSE (compiles ("point ([1, 2, 3])"));
+    EXPECT_FALSE (compiles ("rect ([1, 2])"));
+    EXPECT_FALSE (compiles ("[3, 4].length"));
+    EXPECT_FALSE (compiles ("[1, 2, 3, 4].enlarged (1)"));
+}
+
+TEST_F (GraphicsExpressionTypesTests, AnArrayOfNumbersMakesAPointASizeOrARect)
+{
+    const auto values = context.addArray<float> ("values");
+    auto program = CompiledExpression::compile ("rect (values)", context);
+    ASSERT_TRUE (program.wasOk()) << (program.failed() ? program.getErrorMessage() : String()).toStdString();
+
+    const auto output = program.getReference().getOutput<Rectangle<float>> ("result");
+    ASSERT_TRUE (output.wasOk());
+
+    const float numbers[] { 1.0f, 2.0f, 3.0f };
+    ExpressionState state (program.getReference());
+    state.bindArray (values, numbers, 3);
+    state.evaluate();
+
+    // A number the array lacks is zero
+    EXPECT_EQ (Rectangle<float> (1.0f, 2.0f, 3.0f, 0.0f), state.get (output.getValue()));
+}
+
 TEST_F (GraphicsExpressionTypesTests, LineOperations)
 {
     EXPECT_FLOAT_EQ (5.0f, evaluate<float> ("line (point (0, 0), point (3, 4)).length"));

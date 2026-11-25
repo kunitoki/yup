@@ -150,7 +150,7 @@ public:
         });
     }
 
-    void refreshDisplay (double) override
+    void refreshDisplay (double)
     {
         if (isLoading())
             repaint();
@@ -927,10 +927,8 @@ private:
             g.fillFittedText (status, font, area, yup::Justification::topLeft);
         }
 
-        void refreshDisplay (double lastFrameTimeSeconds) override
+        void updateAnimationState (double)
         {
-            yup::SceneComponent::refreshDisplay (lastFrameTimeSeconds);
-
             // The raster tier shades each draw with its own short list of lights: fewer show lights keep it fast
             if (const auto* capabilities = getRenderer().getCapabilities(); capabilities != nullptr)
             {
@@ -1605,6 +1603,7 @@ private:
         float dragDistance = 0.0f;
         int fingersDown = 0;
         bool multiTouch = false;
+        yup::FrameAttachment frameAttachment { *this, yup::bindFront (&MpcView::updateAnimationState, this) };
     };
 
     //==============================================================================
@@ -2578,6 +2577,7 @@ private:
     std::unique_ptr<MpcView> view;
     std::unique_ptr<RenderSettingsPanel> settingsPanel;
     yup::Graphics* loadingGraphics = nullptr; // Only set while paint() runs the render steps
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&Scene3DDemo::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Scene3DDemo)
 };

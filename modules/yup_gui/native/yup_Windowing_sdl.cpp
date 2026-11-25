@@ -1429,6 +1429,23 @@ bool SDLComponentNative::cancelMouseGestureIfReleasedElsewhere()
 
 //==============================================================================
 
+bool SDLComponentNative::isIdleFrame()
+{
+    if (shouldRenderContinuous.load (std::memory_order_relaxed) || hasFrameListeners())
+        return false;
+
+    // A lost surface is recreated by the frame
+    if (context != nullptr && ! context->isSurfaceAvailable())
+        return false;
+
+    const auto contentSize = getContentSize();
+    if (contentSize.getWidth() != currentContentWidth || contentSize.getHeight() != currentContentHeight)
+        return false;
+
+    const ScopedLock sl (repaintLock);
+    return currentRepaintAreas.isEmpty();
+}
+
 bool SDLComponentNative::renderFrame()
 {
     YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderFrame);
@@ -1449,7 +1466,7 @@ bool SDLComponentNative::renderFrame()
         if (contentWidth == 0 || contentHeight == 0 || ! isVisible())
             return false;
 
-        if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
+        if (currentContentWidth != contentWidth || currentContentHeight != contentHeight || ! context->isSurfaceAvailable())
         {
             YUP_PROFILE_NAMED_INTERNAL_TRACE (ResizeRenderer);
 
@@ -1479,6 +1496,10 @@ bool SDLComponentNative::renderFrame()
             repaint();
         }
 
+        // The surface is unavailable: skip the frame, the next one tries again
+        if (! context->isSurfaceAvailable())
+            return false;
+
         const auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
         const auto currentTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
 
@@ -1506,9 +1527,9 @@ bool SDLComponentNative::renderFrame()
         RectangleList<float> repaintAreas;
 
         {
-            YUP_PROFILE_NAMED_INTERNAL_TRACE (RefreshDisplay);
+            YUP_PROFILE_NAMED_INTERNAL_TRACE (FrameListeners);
 
-            component.internalRefreshDisplay (currentTimeSeconds - lastRenderTimeSeconds);
+            callFrameListeners (currentTimeSeconds - lastRenderTimeSeconds);
             lastRenderTimeSeconds = currentTimeSeconds;
         }
 
@@ -1640,6 +1661,13 @@ bool SDLComponentNative::renderFrame()
 #endif
     });
 
+    // Nothing to call and nothing to paint: the frame ends here, without stalling the message thread
+    if (isIdleFrame())
+    {
+        lastRenderTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+        return false;
+    }
+
     {
         YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderInternal);
 
@@ -1738,6 +1766,15 @@ void SDLComponentNative::renderAnimationFrame (double timestampMs)
         revalidateStationaryPointer();
 }
 
+void SDLComponentNative::renderNow()
+{
+    YUP_TRY
+    {
+        renderFrame();
+    }
+    YUP_CATCH_EXCEPTION
+}
+
 //==============================================================================
 // Called by the page shell. Getters return -1 until the application has created its window.
 extern "C"
@@ -1777,6 +1814,14 @@ extern "C"
     {
         if (auto* native = SDLComponentNative::getPrimaryNativeComponent(); native != nullptr && width > 0 && height > 0)
             native->getComponent().setSize (static_cast<float> (width), static_cast<float> (height));
+    }
+
+    // Draws the window now instead of at its next animation frame. The browser clears a canvas that changes
+    // size: what just gave the window another one calls this, or the canvas shows empty until that frame
+    void EMSCRIPTEN_KEEPALIVE yupRenderPrimaryWindow()
+    {
+        if (auto* native = SDLComponentNative::getPrimaryNativeComponent())
+            native->renderNow();
     }
 }
 #endif

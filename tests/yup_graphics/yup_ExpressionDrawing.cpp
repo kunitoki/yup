@@ -261,6 +261,7 @@ TEST_F (ExpressionDrawingTests, CacheReusesShapesWhileOutputsDontChange)
     cache.reset();
     EXPECT_FALSE (cache.wasRebuilt());
     EXPECT_TRUE (draw (3));
+    EXPECT_FALSE (draw (3));
 
     auto other = ExpressionDrawing::create ("rect = rect (row * 12, 0, 10, 10)", context);
     ASSERT_TRUE (other.wasOk()) << other.getErrorMessage().toStdString();
@@ -272,6 +273,42 @@ TEST_F (ExpressionDrawingTests, CacheReusesShapesWhileOutputsDontChange)
     EXPECT_TRUE (cache.wasRebuilt());
     other.getReference().draw (g, otherState, 3, nullptr, &cache);
     EXPECT_FALSE (cache.wasRebuilt());
+}
+
+TEST_F (ExpressionDrawingTests, CacheRecordsAgainWhenAnimatedOutputsSettle)
+{
+    auto graphicsContext = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    ASSERT_NE (graphicsContext, nullptr);
+    auto renderer = graphicsContext->makeRenderer (200, 200);
+    ASSERT_NE (renderer, nullptr);
+    Graphics g (*graphicsContext, *renderer);
+
+    auto drawing = ExpressionDrawing::create ("rect = rect (row * 12, 0, 10, values[row] * 50)", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    std::vector<float> data { 0.25f, 0.75f };
+
+    ExpressionState state (drawing.getReference().getProgram());
+    state.bindArray (values, data.data(), (int) data.size());
+    state.bindRowIndex (row);
+
+    ExpressionDrawing::Cache cache;
+
+    const auto draw = [&]
+    {
+        drawing.getReference().draw (g, state, (int) data.size(), nullptr, &cache);
+        return cache.wasRebuilt();
+    };
+
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        data[0] = 0.1f * (float) frame;
+        EXPECT_TRUE (draw());
+    }
+
+    // The last animated draw wasn't recorded, so the first settled draw records it
+    EXPECT_TRUE (draw());
+    EXPECT_FALSE (draw());
 }
 
 TEST_F (ExpressionDrawingTests, DrawsStylesTransformsAndClips)
@@ -648,3 +685,59 @@ TEST_F (ExpressionDrawingGpuTests, FillAndStrokeOpacityFadeTheirOwnPaint)
     EXPECT_LT (alphaAt (pixels, 4, 32), 10);
 }
 #endif
+
+TEST_F (ExpressionDrawingTests, LabelBoundsTellWhereTheLabelsLand)
+{
+    const auto font = loadTestFont (10.0f);
+
+    auto fitted = ExpressionDrawing::create (R"(
+        labelRect = rect (10 + row * 100, 20, 80, 40);
+        label = "abc";
+        labelJustification = justification.topLeft;
+    )", context);
+    ASSERT_TRUE (fitted.wasOk()) << fitted.getErrorMessage().toStdString();
+
+    ExpressionState state (fitted.getReference().getProgram());
+    state.bindRowIndex (row);
+
+    // The rectangles the labels are fitted in, and the part of them their glyphs take
+    EXPECT_EQ (fitted.getReference().getLabelBounds (state, 2, &font, false), Rectangle<float> (10.0f, 20.0f, 180.0f, 40.0f));
+
+    const auto glyphs = fitted.getReference().getLabelBounds (state, 1, &font);
+    EXPECT_FLOAT_EQ (glyphs.getX(), 10.0f);
+    EXPECT_FLOAT_EQ (glyphs.getY(), 20.0f);
+    EXPECT_GT (glyphs.getWidth(), 0.0f);
+    EXPECT_LT (glyphs.getWidth(), 80.0f);
+    EXPECT_LT (glyphs.getHeight(), 40.0f);
+
+    // Without a font there is no label, and a drawing of shapes has none either
+    EXPECT_TRUE (fitted.getReference().getLabelBounds (state, 1).isEmpty());
+    EXPECT_TRUE (fitted.getReference().getLabelBounds (state, 0, &font).isEmpty());
+
+    auto shapes = ExpressionDrawing::create ("rect = rect (0, 0, 10, 10);", context);
+    ASSERT_TRUE (shapes.wasOk());
+
+    ExpressionState shapesState (shapes.getReference().getProgram());
+    EXPECT_TRUE (shapes.getReference().getLabelBounds (shapesState, 1, &font).isEmpty());
+}
+
+TEST_F (ExpressionDrawingTests, LabelBoundsFollowTheAnchorAndTheTransform)
+{
+    const auto font = loadTestFont (10.0f);
+
+    auto anchored = ExpressionDrawing::create (R"(
+        labelAnchor = point (50, 30);
+        label = "abc";
+        transform = transform.translation (100, 0);
+    )", context);
+    ASSERT_TRUE (anchored.wasOk()) << anchored.getErrorMessage().toStdString();
+
+    ExpressionState state (anchored.getReference().getProgram());
+
+    // The text starts at its anchor, which is on its baseline
+    const auto glyphs = anchored.getReference().getLabelBounds (state, 1, &font);
+    EXPECT_FLOAT_EQ (glyphs.getX(), 150.0f);
+    EXPECT_LT (glyphs.getY(), 30.0f);
+    EXPECT_GT (glyphs.getBottom(), 25.0f);
+    EXPECT_GT (glyphs.getWidth(), 0.0f);
+}

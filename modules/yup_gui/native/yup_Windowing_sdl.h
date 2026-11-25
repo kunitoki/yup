@@ -171,6 +171,16 @@ public:
     /** Returns the first non-temporary (not popup/menu) window, or nullptr when none exists. */
     static SDLComponentNative* getPrimaryNativeComponent();
 
+#if YUP_EMSCRIPTEN
+    //==============================================================================
+    /** Draws the window now instead of at its next animation frame.
+
+        The browser clears a canvas that changes size and shows it empty until it is drawn again, so what
+        changes the size of the window outside of an animation frame calls this once it is done.
+    */
+    void renderNow();
+#endif
+
     //==============================================================================
     void handleMouseMoveOrDrag (const Point<float>& position, TouchFinger* touchFinger = nullptr);
     void revalidateStationaryPointer();
@@ -281,6 +291,7 @@ private:
     bool isRendering() const;
     void getRenderContext();
     void runWithComputeContext (const std::function<void()>& fn);
+    bool isIdleFrame();
     bool renderFrame();
 
     static int mouseCaptureRequestCount;

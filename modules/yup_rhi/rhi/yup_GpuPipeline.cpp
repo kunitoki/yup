@@ -1164,8 +1164,9 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GpuDevice::Ptr ctx
     if (fsInfo == nullptr)
         return makeResultValueFail ("Shader bundle has no fragment variant for the current graphics API");
 
-    auto vsMap = makeShaderBindingMapBlob (vsInfo->reflection, ShaderStage::vertex);
-    auto fsMap = makeShaderBindingMapBlob (fsInfo->reflection, ShaderStage::fragment);
+    // Each stage is given the other, so both give the textures they declare the same sample type
+    auto vsMap = makeShaderBindingMapBlob (vsInfo->reflection, ShaderStage::vertex, &fsInfo->reflection);
+    auto fsMap = makeShaderBindingMapBlob (fsInfo->reflection, ShaderStage::fragment, &vsInfo->reflection);
 
     // GL / GLES bind UBO blocks and sampler units by name after linking, so
     // build the name→slot fixup table for the GLSL/ESSL targets, plus the

@@ -1,0 +1,19 @@
+// size: 480 216
+component Strip : Row {
+    property name: string = "";
+
+    gap: 6; flexGrow: 1;
+
+    TextButton { text: root.name; preferredWidth: 120; }
+    TextButton { text: "B"; preferredWidth: 44; }
+    TextButton { text: "C"; preferredWidth: 44; }
+}
+
+Column {
+    gap: 8;
+
+    Strip { name: "start";        justify: start; }
+    Strip { name: "center";       justify: center; }
+    Strip { name: "end";          justify: end; }
+    Strip { name: "spaceBetween"; justify: spaceBetween; }
+}

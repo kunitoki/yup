@@ -278,6 +278,52 @@ void paintTwoValueSlider (Graphics& g, const ApplicationTheme& theme, const Slid
     */
 }
 
+void paintStepperSlider (Graphics& g, const ApplicationTheme& theme, const Slider& slider, Rectangle<float> sliderBounds)
+{
+    const auto colors = getSliderColors (theme, slider);
+    const auto decrement = slider.getDecrementButtonBounds();
+    const auto increment = slider.getIncrementButtonBounds();
+    const auto isOnALine = approximatelyEqual (decrement.getY(), increment.getY());
+    const auto radius = jmin (4.0f, jmin (sliderBounds.getWidth(), sliderBounds.getHeight()) * 0.5f);
+
+    g.setFillColor (colors.background);
+    g.fillRoundedRect (sliderBounds, radius);
+
+    const auto paintButton = [&] (const Rectangle<float>& bounds, int direction)
+    {
+        g.setFillColor (slider.getPressedStep() == direction ? colors.thumbDown : colors.track);
+        g.fillRoundedRect (bounds.reduced (1.0f), radius);
+
+        // A minus, crossed into a plus on the button raising the value
+        const auto center = bounds.getCenter();
+        const auto arm = jmin (bounds.getWidth(), bounds.getHeight()) * 0.22f;
+
+        g.setStrokeColor (colors.text);
+        g.setStrokeWidth (1.5f);
+        g.strokeLine (center.getX() - arm, center.getY(), center.getX() + arm, center.getY());
+
+        if (direction > 0)
+            g.strokeLine (center.getX(), center.getY() - arm, center.getX(), center.getY() + arm);
+    };
+
+    paintButton (decrement, -1);
+    paintButton (increment, 1);
+
+    const auto valueBounds = isOnALine ? Rectangle<float> (decrement.getRight(), sliderBounds.getY(), increment.getX() - decrement.getRight(), sliderBounds.getHeight())
+                                       : Rectangle<float> (sliderBounds.getX(), increment.getBottom(), sliderBounds.getWidth(), decrement.getY() - increment.getBottom());
+
+    if (valueBounds.isEmpty())
+        return;
+
+    // A range of whole steps is told in whole numbers
+    const auto interval = slider.getInterval();
+    const auto isWhole = interval > 0.0 && approximatelyEqual (interval, std::round (interval));
+    const auto text = isWhole ? String (roundToInt (slider.getValue())) : String (slider.getValue(), jlimit (0, 3, slider.getNumDecimalPlacesToDisplay()));
+
+    g.setFillColor (colors.text);
+    g.fillFittedText (text, theme.getDefaultFont().withHeight (jmin (14.0f, valueBounds.getHeight() * 0.6f)), valueBounds, Justification::center);
+}
+
 void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 {
     auto sliderBounds = s.getSliderBounds();
@@ -289,6 +335,10 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 
     switch (sliderType)
     {
+        case Slider::IncDecButtons:
+            paintStepperSlider (g, theme, s, sliderBounds);
+            break;
+
         case Slider::RotaryHorizontalDrag:
         case Slider::RotaryVerticalDrag:
         case Slider::Rotary:

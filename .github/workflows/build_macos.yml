@@ -36,7 +36,7 @@ jobs:
       CMAKE_OBJC_COMPILER_LAUNCHER: ccache
       CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: hendrikmuhs/ccache-action@v1.2
       with:
         key: macos-configure
@@ -70,7 +70,7 @@ jobs:
       CMAKE_OBJC_COMPILER_LAUNCHER: ccache
       CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: hendrikmuhs/ccache-action@v1.2
       with:
         key: macos-tests-${{ matrix.config }}
@@ -108,7 +108,7 @@ jobs:
       CMAKE_OBJC_COMPILER_LAUNCHER: ccache
       CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: hendrikmuhs/ccache-action@v1.2
       with:
         key: macos-example-${{ matrix.example }}
@@ -138,24 +138,24 @@ jobs:
         - { os: macos-latest, python: 311, platform_id: macosx_universal2, cibw_archs: universal2 }
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
 
     - name: Setup and install python
       uses: actions/setup-python@v7
       with:
-        python-version: "3.11"
+        python-version: "3.13"
 
     - name: Build wheels
-      uses: pypa/cibuildwheel@v3.0.0
+      uses: pypa/cibuildwheel@v4.3.5
       env:
         CIBW_ARCHS: ${{matrix.cibw_archs}}
         CIBW_BUILD: cp${{ matrix.python }}-${{ matrix.platform_id }}
         #CIBW_TEST_SKIP: "*-macosx_x86_64 *-macosx_universal2:x86_64"
         CIBW_DEBUG_TRACEBACK: TRUE
         CIBW_ENVIRONMENT: |
-          CIBW_DEBUG_TRACEBACK=TRUE MACOSX_DEPLOYMENT_TARGET=11.0 YUP_OSX_DEPLOYMENT_TARGET=11.0 YUP_OSX_ARCHITECTURES="x86_64;arm64"
+          CIBW_DEBUG_TRACEBACK=TRUE MACOSX_DEPLOYMENT_TARGET=12.0 YUP_OSX_DEPLOYMENT_TARGET=12.0 YUP_OSX_ARCHITECTURES="x86_64;arm64"
       with:
         package-dir: python
 

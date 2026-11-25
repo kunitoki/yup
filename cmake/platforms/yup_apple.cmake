@@ -58,7 +58,13 @@ endmacro()
 # so it reads its parsed YUP_ARG_* arguments and target_* variables directly.
 function (_yup_platform_setup_standalone_app target_name)
     if (NOT "${target_console}" AND NOT "${target_wheel}" AND NOT "${target_static_library}")
-        _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/${YUP_PLATFORM}/ApplicationInfo.plist")
+        if (NOT YUP_ARG_CUSTOM_PLIST)
+            _yup_set_default (YUP_ARG_MICROPHONE_USAGE "${target_product_name} needs access to your audio inputs.")
+            set (YUP_MICROPHONE_USAGE "${YUP_ARG_MICROPHONE_USAGE}")
+            set (YUP_ARG_CUSTOM_PLIST "${CMAKE_CURRENT_BINARY_DIR}/${target_name}.plist")
+            configure_file ("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/${YUP_PLATFORM}/ApplicationInfo.plist.in" "${YUP_ARG_CUSTOM_PLIST}" @ONLY)
+        endif()
+
         _yup_valid_identifier_string ("${target_app_identifier}" target_app_identifier)
 
         _yup_convert_png_to_icns ("${target_icon}" "${CMAKE_CURRENT_BINARY_DIR}/icons" target_iconset)

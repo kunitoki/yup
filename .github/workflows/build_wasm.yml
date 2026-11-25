@@ -40,14 +40,14 @@ jobs:
     env:
       EM_COMPILER_WRAPPER: ccache
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - uses: hendrikmuhs/ccache-action@v1.2
       with:
         key: wasm-tests-${{ matrix.config }}
         max-size: 1G
     - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v15
+      uses: mymindstorm/setup-emsdk@v16
       with:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: emsdk-cache
@@ -68,13 +68,13 @@ jobs:
     env:
       EM_COMPILER_WRAPPER: ccache
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - uses: hendrikmuhs/ccache-action@v1.2
       with:
         key: wasm-example-${{ matrix.example }}
     - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v15
+      uses: mymindstorm/setup-emsdk@v16
       with:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: emsdk-cache

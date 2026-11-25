@@ -10,8 +10,10 @@ and background work apart.
 
 A typical YUP application runs on three kinds of thread:
 
-- **The message thread** runs the event loop: input events, painting, timers
-  and most UI code. Components may only be touched from it. See
+- **The message thread** runs the event loop: input events, timers and most UI
+  code. Components may only be touched from it, or with the message manager
+  locked, which is how the render thread of a window paints them (see
+  [Threading](../../ui/component-basics.md#threading)). See
   [the message thread](message-thread.md).
 - **The audio thread** is started by the audio device and calls your audio
   callback at a fixed rate. It has hard deadlines, see

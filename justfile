@@ -127,12 +127,12 @@ python_wheel:
 [doc("install python wheel for yup_python bindings")]
 [working-directory: 'python']
 python_install:
-  uv pip install --force-reinstall dist/yup-*.whl
+  uv pip install --force-reinstall dist/yup_audio-*.whl
 
 [doc("uninstall python wheel for yup_python bindings")]
 [working-directory: 'python']
 python_uninstall:
-  uv pip uninstall -y yup
+  uv pip uninstall yup-audio
 
 [doc("run tests for yup_python bindings")]
 [working-directory: 'python']
@@ -213,6 +213,12 @@ yui_tool_wasm CONFIG="Release":
 yui_tool_wasm_test:
   @just yui_tool_wasm
   node --test tests/test_web.js
+
+[doc("run the tests of the YUI VSCode extension that need no editor")]
+[working-directory: 'modules/yup_gui/tools/vscode-yui']
+vscode_yui_test:
+  npm install
+  npm test
 
 [doc("build and install the YUI VSCode extension (needs the Emscripten SDK activated)")]
 [working-directory: 'modules/yup_gui/tools/vscode-yui']

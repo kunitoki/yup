@@ -158,6 +158,11 @@ are compiled once and linked into every format; each format only compiles its ow
 sources as `PRIVATE`, as `PUBLIC` or `INTERFACE` sources would be compiled again by every format. All arguments are optional unless noted otherwise. Keys
 that are not specified will fall back to sensible defaults.
 
+Every format has a target of its own, `<TARGET_NAME>_<format>_plugin`, and builds a plugin named after
+`PLUGIN_NAME`: `MyPlugin.vst3`, `MyPlugin.clap`, `MyPlugin.component`. As the formats share that name,
+each one is built in a directory of its own: `CLAP`, `AU`, `AUv3`, `AAX` and `LV2` in the binary
+directory of the plugin, `VST3` in the one of the whole build.
+
 #### Target Globals
 
 | Key | Type | Default | Description |
@@ -188,7 +193,7 @@ At least one format must be enabled, otherwise configuration fails with an error
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `PLUGIN_ID` | string | - | Globally-unique plugin identifier (e.g. `com.mycompany.MyPlugin`). |
-| `PLUGIN_NAME` | string | `<TARGET_NAME>` | Display name shown in DAWs. |
+| `PLUGIN_NAME` | string | `<TARGET_NAME>` | Display name shown in DAWs, and the name of the built plugins (`<PLUGIN_NAME>.vst3`, `<PLUGIN_NAME>.clap`, ...). |
 | `PLUGIN_VENDOR` | string | - | Vendor/company name. |
 | `PLUGIN_EMAIL` | string | - | Contact email address. |
 | `PLUGIN_VERSION` | string | `1` | Plugin version string. |
@@ -225,20 +230,15 @@ At least one format must be enabled, otherwise configuration fails with an error
 |---|---|---|---|
 | `PLUGIN_CLAP_FEATURES` | list | *(auto)* | Space-separated list of CLAP plugin features. If omitted, auto-derived from `IS_SYNTH` and `IS_MONO`. |
 
-Supported feature names:
+Supported feature names are the standard features of `clap/plugin-features.h`, each one the value
+of its `CLAP_PLUGIN_FEATURE_*` constant (`audio-effect` is `CLAP_PLUGIN_FEATURE_AUDIO_EFFECT`).
+Any other name is skipped with a warning while configuring.
 
-| Value | CLAP Constant |
+| Group | Values |
 |---|---|
-| `instrument` | `CLAP_PLUGIN_FEATURE_INSTRUMENT` |
-| `audio-effect` | `CLAP_PLUGIN_FEATURE_AUDIO_EFFECT` |
-| `note-effect` | `CLAP_PLUGIN_FEATURE_NOTE_EFFECT` |
-| `note-detector` | `CLAP_PLUGIN_FEATURE_NOTE_DETECTOR` |
-| `analyzer` | `CLAP_PLUGIN_FEATURE_ANALYZER` |
-| `synthesizer` | `CLAP_PLUGIN_FEATURE_SYNTHESIZER` |
-| `mono` | `CLAP_PLUGIN_FEATURE_MONO` |
-| `stereo` | `CLAP_PLUGIN_FEATURE_STEREO` |
-| `surround` | `CLAP_PLUGIN_FEATURE_SURROUND` |
-| `utility` | `CLAP_PLUGIN_FEATURE_UTILITY` |
+| Category | `instrument`, `audio-effect`, `note-effect`, `note-detector`, `analyzer` |
+| Sub-category | `synthesizer`, `sampler`, `drum`, `drum-machine`, `filter`, `phaser`, `equalizer`, `de-esser`, `phase-vocoder`, `granular`, `frequency-shifter`, `pitch-shifter`, `distortion`, `transient-shaper`, `compressor`, `expander`, `gate`, `limiter`, `flanger`, `chorus`, `delay`, `reverb`, `tremolo`, `glitch`, `utility`, `pitch-correction`, `restoration`, `multi-effects`, `mixing`, `mastering` |
+| Audio capabilities | `mono`, `stereo`, `surround`, `ambisonic` |
 
 #### VST3-Specific
 
@@ -250,6 +250,12 @@ Supported feature names:
 Common VST3 categories: `Fx`, `Instrument`, `Analyzer`, `Delay`, `Distortion`, `Drum`, `Dynamics`, `EQ`, `Filter`, `Generator`, `Mastering`, `Modulation`, `Reverb`, `Sampler`, `Spatial`, `Stereo`, `Surround`, `Synth`, `Tools`.
 
 Multiple categories are pipe-joined automatically. Example: `PLUGIN_VST3_CATEGORIES Fx Stereo` produces `"Fx|Stereo"`.
+
+#### Standalone-Specific
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `PLUGIN_MICROPHONE_USAGE` | string | `<app name> needs access to your audio inputs.` | Apple only: the reason shown when macOS or iOS asks the user to let the standalone record from an audio input, the `NSMicrophoneUsageDescription` of its `Info.plist`. |
 
 #### Codesigning & Entitlements
 
@@ -273,8 +279,8 @@ All codesigning options are macOS-only and have no effect on other platforms.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `PLUGIN_ICON_BIG` | path | - | Path to a large icon image file. |
-| `PLUGIN_ICON_SMALL` | path | - | Path to a small icon image file. |
+| `PLUGIN_ICON_BIG` | path | *(built-in)* | Path to the icon image of the plugin (PNG). The standalone application takes it as its `TARGET_ICON`, with the files beside it (see `yup_standalone_app`). On Windows the `<name>.ico` beside it is also the folder icon of the VST3 bundle, which otherwise has the one of the VST3 SDK. |
+| `PLUGIN_ICON_SMALL` | path | - | Used as the icon of the plugin when `PLUGIN_ICON_BIG` is not given. |
 
 #### Custom Plist Injection
 
@@ -322,7 +328,7 @@ also be used independently for non-plugin GUI applications.
 | `TARGET_STATIC_LIBRARY` | ON\|OFF | OFF | Build the `MODULES` once into a static library instead of an executable. Apps listing it in their `MODULES` link it and get the same compile settings, without compiling the modules again. |
 | `DEFINITIONS` | list | - | Additional compile definitions. |
 | `COMPILE_OPTIONS` | list | - | Additional compile options. |
-| `MODULES` | list | - | YUP module dependencies. |
+| `MODULES` | list | - | YUP and thirdparty module dependencies, with or without the `yup::` prefix (e.g. `yup::yup_gui yup::libpng`). |
 | `SOURCES` | list | - | Additional source files. |
 | `LINK_OPTIONS` | list | - | Additional linker options. |
 | `BUNDLE_RESOURCES` | list | - | Files to bundle for runtime access via `File::getSpecialLocation (File::bundleDirectory)`, as `"local/path@relative/dest"` pairs. See `yup_add_bundled_resources()` below. |
@@ -354,6 +360,7 @@ These arguments only affect the Emscripten build and are ignored elsewhere.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `CUSTOM_PLIST` | path | *(built-in)* | Custom `Info.plist` template for the app bundle. |
+| `MICROPHONE_USAGE` | string | `<TARGET_PRODUCT_NAME> needs access to your audio inputs.` | The reason shown when macOS or iOS asks the user to let the app record from an audio input, the `NSMicrophoneUsageDescription` of the built-in `Info.plist`. A `CUSTOM_PLIST` sets the key itself. |
 
 ---
 

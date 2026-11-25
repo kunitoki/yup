@@ -240,6 +240,22 @@ shapes.addEllipse (0, 120, 100, 50);
 shapes.addArc (arcBounds, 0.0f, MathConstants<float>::pi, true);
 ```
 
+A path can be reused as soon as it has been drawn: the draw keeps the outline the
+path had, so one `Path` can be cleared and rebuilt for every shape of a `paint()`.
+Copies are cheap as well, a copy shares the outline of the original until one of
+the two changes its own.
+
+```cpp
+Path bar;
+
+for (const auto& area : bars)
+{
+    bar.clear();
+    bar.addRoundedRectangle (area, 3.0f);
+    g.fillPath (bar);
+}
+```
+
 `createStrokePolygon` turns a path into the outline of its stroke, so a stroke can
 be filled with fill-only effects such as a feather. Closed contours become a ring,
 open contours end with the given cap, and overlaps are merged into simple contours.
@@ -261,6 +277,23 @@ g.fillPath (outline);
 simple non-overlapping contours: outer contours clockwise, holes counter-clockwise,
 curves flattened. Self-intersecting and overlapping contours are resolved, so the
 result fills the same area under any fill rule.
+
+Under the non-zero rule, contours running opposite ways cancel each other where
+they overlap, and the shape helpers do not all run the same way (a rectangle and
+an ellipse do not). `isClockwise` tells which way a path runs and `reversed`
+returns it running the other way, curves kept, so shapes can be added up into one
+path:
+
+```cpp
+Path dot;
+dot.addEllipse (30, 30, 60, 60);
+
+Path clip;
+clip.addRectangle (0, 0, 60, 60);
+clip.appendPath (dot.isClockwise() ? dot : dot.reversed());
+
+g.setClipPath (clip);                          // the rectangle and the ellipse together
+```
 
 ## Stroke types
 

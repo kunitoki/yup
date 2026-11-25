@@ -20,6 +20,7 @@
 */
 
 #include "yup_YuiCommands.h"
+#include "yup_YuiToolGuides.h"
 #include "yup_YuiToolSupport.h"
 
 #include <iostream>
@@ -28,48 +29,6 @@ using namespace yup;
 
 namespace
 {
-
-//==============================================================================
-/** Fills the image behind the interface with the background of the palette its root is drawn with. */
-class Backdrop final : public Component
-{
-public:
-    explicit Backdrop (Component& rootToShow)
-        : root (rootToShow)
-    {
-        addAndMakeVisible (root);
-    }
-
-    void paint (Graphics& g) override
-    {
-        g.setFillColor (ApplicationTheme::getGlobalTheme()->getPalette (root).getColor (ThemePalette::Role::background));
-        g.fillAll();
-    }
-
-    void resized() override
-    {
-        root.setBounds (getLocalBounds());
-    }
-
-private:
-    Component& root;
-};
-
-//==============================================================================
-// Drawing needs a device of the GPU but no window, which only some platforms give
-std::unique_ptr<GraphicsContext> createGraphicsContext()
-{
-#if YUP_MAC
-    return GraphicsContext::createContext (GpuPlatform::Metal, {});
-#elif YUP_WINDOWS
-    GraphicsContext::Options options;
-    options.allowHeadlessRendering = true;
-
-    return GraphicsContext::createContext (GpuPlatform::Direct3D, options);
-#else
-    return nullptr;
-#endif
-}
 
 bool writePng (const Image& image, const File& file)
 {
@@ -83,22 +42,38 @@ bool writePng (const Image& image, const File& file)
     return writer.writeImage (image);
 }
 
+bool isNumber (const String& text)
+{
+    return text.isNotEmpty() && text.containsOnly ("0123456789.") && text.indexOfChar ('.') == text.lastIndexOfChar ('.');
+}
+
+// Reads a part of an interface written as `<x>,<y>,<width>,<height>`
+std::optional<Rectangle<float>> parseRegion (const String& text)
+{
+    const auto numbers = StringArray::fromTokens (text, ",", "");
+
+    if (numbers.size() != 4)
+        return std::nullopt;
+
+    for (const auto& number : numbers)
+        if (! isNumber (number.trim()))
+            return std::nullopt;
+
+    return Rectangle<float> (numbers[0].getFloatValue(), numbers[1].getFloatValue(), numbers[2].getFloatValue(), numbers[3].getFloatValue());
+}
+
 } // namespace
 
 //==============================================================================
 
 int runYuiRenderCommand (int argc, char** argv)
 {
-    const auto workingDirectory = File::getCurrentWorkingDirectory();
-    File input;
     File output;
-    String drawing;
-    String palette;
-    String hostType;
-    Size<float> size;
-    Size<float> fallbackSize;
     float scale = 2.0f;
-    auto mode = ThemePalette::Mode::dark;
+    float margin = 8.0f;
+    std::optional<Rectangle<float>> region;
+    StringArray guided;
+    YuiToolViewOptions options;
     YuiToolModels models;
 
     for (int i = 2; i < argc; ++i)
@@ -108,37 +83,7 @@ int runYuiRenderCommand (int argc, char** argv)
 
         if (argument == "--output" && hasValue)
         {
-            output = workingDirectory.getChildFile (argv[++i]);
-        }
-        else if (argument == "--models" && hasValue)
-        {
-            if (! models.load (argv[++i]))
-                return 2;
-        }
-        else if (argument == "--drawing" && hasValue)
-        {
-            drawing = argv[++i];
-        }
-        else if (argument == "--palette" && hasValue)
-        {
-            palette = argv[++i];
-        }
-        else if (argument == "--as" && hasValue)
-        {
-            hostType = argv[++i];
-        }
-        else if ((argument == "--size" || argument == "--default-size") && hasValue)
-        {
-            const String value (argv[++i]);
-            const Size<float> parsed { value.upToFirstOccurrenceOf ("x", false, true).getFloatValue(), value.fromFirstOccurrenceOf ("x", false, true).getFloatValue() };
-
-            if (parsed.getWidth() < 1.0f || parsed.getHeight() < 1.0f)
-            {
-                std::cerr << "invalid size, expected <width>x<height>: " << value << "\n";
-                return 2;
-            }
-
-            (argument == "--size" ? size : fallbackSize) = parsed;
+            output = File::getCurrentWorkingDirectory().getChildFile (argv[++i]);
         }
         else if (argument == "--scale" && hasValue)
         {
@@ -150,13 +95,36 @@ int runYuiRenderCommand (int argc, char** argv)
                 return 2;
             }
         }
-        else if (argument == "--theme" && hasValue && (String (argv[i + 1]) == "dark" || String (argv[i + 1]) == "light"))
+        else if (argument == "--margin" && hasValue)
         {
-            mode = String (argv[++i]) == "light" ? ThemePalette::Mode::light : ThemePalette::Mode::dark;
+            const String value (argv[++i]);
+
+            if (! isNumber (value))
+            {
+                std::cerr << "invalid margin, expected logical pixels around the element: " << value << "\n";
+                return 2;
+            }
+
+            margin = value.getFloatValue();
         }
-        else if (input == File() && ! argument.startsWithChar ('-'))
+        else if (argument == "--guides" && hasValue)
         {
-            input = workingDirectory.getChildFile (argument);
+            guided.addTokens (argv[++i], ",", "");
+        }
+        else if (argument == "--region" && hasValue)
+        {
+            region = parseRegion (argv[++i]);
+
+            if (! region.has_value())
+            {
+                std::cerr << "invalid region, expected <x>,<y>,<width>,<height>: " << argv[i] << "\n";
+                return 2;
+            }
+        }
+        else if (const auto isValid = readYuiToolViewOption (argc, argv, i, options, models))
+        {
+            if (! *isValid)
+                return 2;
         }
         else
         {
@@ -165,29 +133,32 @@ int runYuiRenderCommand (int argc, char** argv)
         }
     }
 
-    if (input == File() || output == File() || (drawing.isNotEmpty() && palette.isNotEmpty()) || (hostType.isNotEmpty() && palette.isNotEmpty()))
+    const auto& target = options.target;
+
+    if (options.input == File() || output == File() || (target.drawing.isNotEmpty() && target.palette.isNotEmpty()) || (target.hostType.isNotEmpty() && target.palette.isNotEmpty()))
     {
         std::cerr << "Rendering requires an input file and --output <image.png>, with --drawing or --palette but not both\n";
         return 2;
     }
 
-    if (! input.existsAsFile())
+    if (options.element.isNotEmpty() && region.has_value())
     {
-        std::cerr << "can't read '" << input.getFullPathName() << "'\n";
+        std::cerr << "--element and --region both say what to draw: give one of them\n";
         return 2;
     }
 
-    ApplicationTheme::getGlobalTheme()->setPalette (ThemePalette ({}, mode));
+    if (! options.input.existsAsFile())
+    {
+        std::cerr << "can't read '" << options.input.getFullPathName() << "'\n";
+        return 2;
+    }
 
-    YuiDocument document;
-    YuiLoader loader (document);
-    models.attachTo (document);
-
-    const auto shown = loadYuiToolTarget (document, loader, input, { drawing, palette, hostType });
+    YuiToolView view (options, models);
+    const auto& shown = view.getShown();
 
     if (shown.status == YuiToolShown::Status::nothing)
     {
-        std::cerr << input.getFullPathName() << ": error: nothing to render, " << shown.message << "\n";
+        std::cerr << options.input.getFullPathName() << ": error: nothing to render, " << shown.message << "\n";
         return 1;
     }
 
@@ -197,34 +168,87 @@ int runYuiRenderCommand (int argc, char** argv)
         return 2;
     }
 
-    for (const auto& problem : findYuiToolProblems (document, input, shown.result))
+    for (const auto& problem : view.findProblems())
         if (problem.isError)
             problem.print();
 
-    if (shown.result.failed())
-    {
-        if (shown.target.drawing.isNotEmpty() && shown.target.hostType.isEmpty())
-            std::cerr << "hint: a drawing reading the properties of a widget needs it as its host, for example --as Slider\n";
+    if (shown.needsHost)
+        std::cerr << "hint: a drawing reading the properties of a widget needs it as its host, for example --as Slider\n";
 
+    if (! view.hasInterface())
+        return 1;
+
+    // All of the interface, or the part asked for, or the one a drawing or a type shown in context is framed on
+    const auto whole = view.getComponent()->getLocalBounds();
+    auto part = view.getFrame();
+
+    if (options.element.isNotEmpty())
+    {
+        const auto* component = findYuiToolElement (view.getDocument(), options.element);
+
+        if (component == nullptr)
+        {
+            std::cerr << options.input.getFullPathName() << ": error: nothing to render, there is no component with the id or at the path '" << options.element << "'\n";
+            return 1;
+        }
+
+        part = clipYuiToolRegion (component->getLocalBounds().translated (findYuiToolOrigin (*component, *view.getRoot())).enlarged (margin), whole);
+    }
+    else if (region.has_value())
+    {
+        part = clipYuiToolRegion (*region, whole);
+    }
+
+    if (part.getWidth() < 1.0f || part.getHeight() < 1.0f)
+    {
+        std::cerr << options.input.getFullPathName() << ": error: nothing to render, there is nothing of the interface there: it is "
+                  << roundToInt (whole.getWidth()) << "x" << roundToInt (whole.getHeight()) << " logical pixels\n";
         return 1;
     }
 
-    auto& root = *document.getRoot();
+    // The components the guides are drawn over
+    std::vector<Component*> marked;
 
-    // The size asked on the command line, else the one the root asks for, else a default one
-    if (size.getWidth() < 1.0f)
+    for (const auto& named : guided)
     {
-        if (root.getWidth() >= 1.0f && root.getHeight() >= 1.0f)
-            size = root.getSize();
-        else
-            size = fallbackSize.getWidth() >= 1.0f ? fallbackSize : shown.defaultSize;
+        auto* component = findYuiToolElement (view.getDocument(), named.trim());
+
+        if (component == nullptr)
+        {
+            std::cerr << options.input.getFullPathName() << ": error: nothing to render, there is no component with the id or at the path '" << named.trim() << "'\n";
+            return 1;
+        }
+
+        marked.push_back (component);
     }
 
-    Backdrop backdrop (root);
-    backdrop.setSize (size);
+    const auto context = createYuiToolGraphicsContext();
+    Image image;
 
-    const auto context = createGraphicsContext();
-    const auto image = context != nullptr ? backdrop.snapshotToImage (*context, true, scale) : Image();
+    if (context != nullptr && part == whole && marked.empty())
+    {
+        image = view.getComponent()->snapshotToImage (*context, true, scale);
+    }
+    else if (context != nullptr)
+    {
+        // Moving the interface into the frame may restyle it
+        YuiToolFrame frame (*view.getComponent(), part);
+        YuiToolGuides guides;
+
+        if (! marked.empty())
+        {
+            guides.setDocument (&view.getDocument());
+            guides.setView (part.getPosition(), 1.0f);
+            guides.setPicked (marked);
+
+            frame.addAndMakeVisible (guides);
+            guides.setBounds (frame.getLocalBounds());
+        }
+
+        view.settle();
+
+        image = frame.snapshotToImage (*context, true, scale);
+    }
 
     if (! image.isValid())
     {

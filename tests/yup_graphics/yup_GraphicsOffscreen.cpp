@@ -1222,6 +1222,27 @@ TEST_F (GraphicsGpuPixelTests, FrameDescriptorPassesTriangulationThresholds)
     EXPECT_TRUE (canvas->commit());
 }
 
+TEST_F (GraphicsGpuPixelTests, PathRebuiltAfterADrawLeavesThatDrawAlone)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        g.setFillColor (Colors::red);
+
+        Path path;
+        path.addRectangle (4.0f, 20.0f, 24.0f, 24.0f);
+        g.fillPath (path);
+
+        path.clear();
+        path.addEllipse (36.0f, 20.0f, 24.0f, 24.0f);
+        g.fillPath (path);
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 16, 32), 200);
+    EXPECT_GT (alphaAt (pixels, 48, 32), 200);
+    EXPECT_LT (alphaAt (pixels, 32, 32), 50);
+}
+
 TEST_F (GraphicsGpuPixelTests, CenteredClipStrokeKeepsOnlyTheBand)
 {
     const auto pixels = render ([] (Graphics& g)
@@ -2125,6 +2146,38 @@ TEST_F (GraphicsGpuPixelTests, DrawableFiltersTurnedContentInFullAndBlendsWithWh
     EXPECT_LT (channelAt (blended, 32, 32, 0), 10);
     EXPECT_LT (channelAt (blended, 32, 32, 1), 10);
     EXPECT_GT (alphaAt (blended, 32, 32), 200);
+}
+
+TEST_F (GraphicsGpuPixelTests, DrawableClipPathShapesAddUpWhicheverWayTheirOutlinesRun)
+{
+    const auto renderSvg = [] (const String& clipShapes)
+    {
+        Drawable drawable;
+        EXPECT_TRUE (drawable.parseSVG ("<svg viewBox=\"0 0 64 64\"><defs><clipPath id=\"c\">" + clipShapes + "</clipPath></defs>"
+                                        "<rect width=\"64\" height=\"64\" fill=\"#ff0000\" clip-path=\"url(#c)\"/></svg>"));
+
+        return render ([&drawable] (Graphics& g)
+        {
+            drawable.paint (g, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+        });
+    };
+
+    // A rect runs clockwise and a circle the other way: where they overlap is still inside
+    const auto mixed = renderSvg ("<rect width=\"40\" height=\"40\"/><circle cx=\"44\" cy=\"44\" r=\"20\"/>");
+    ASSERT_EQ (mixed.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (alphaAt (mixed, 8, 8), 200);
+    EXPECT_GT (alphaAt (mixed, 52, 52), 200);
+    EXPECT_GT (alphaAt (mixed, 34, 34), 200);
+    EXPECT_LT (alphaAt (mixed, 56, 8), 10);
+
+    // A mirrored shape runs the other way too
+    const auto mirrored = renderSvg ("<rect width=\"40\" height=\"40\"/>"
+                                     "<rect y=\"24\" width=\"40\" height=\"40\" transform=\"translate(64 0) scale(-1 1)\"/>");
+    ASSERT_EQ (mirrored.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (alphaAt (mirrored, 8, 8), 200);
+    EXPECT_GT (alphaAt (mirrored, 56, 56), 200);
+    EXPECT_GT (alphaAt (mirrored, 32, 32), 200);
+    EXPECT_LT (alphaAt (mirrored, 56, 8), 10);
 }
 
 //==============================================================================

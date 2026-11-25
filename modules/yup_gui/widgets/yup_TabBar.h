@@ -317,7 +317,7 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
     /** @internal */
     bool keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
@@ -395,6 +395,7 @@ private:
     bool ignoreMouseDownAfterMenuDismissal = false;
 
     ListenerList<Listener> listeners;
+    FrameAttachment frameAttachment { *this, bindFront (&TabBar::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TabBar)
 };

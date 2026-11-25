@@ -682,7 +682,7 @@ public:
         g.fillAll();
     }
 
-    void refreshDisplay (double) override
+    void refreshDisplay (double)
     {
         if (! hasLoadedAudio)
             return;
@@ -1262,4 +1262,5 @@ private:
     static constexpr int backendAutomaticId = 1;
     static constexpr int backendTimeDomainId = 2;
     static constexpr int backendBungeeId = 3;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&AudioFileDemo::refreshDisplay, this) };
 };

@@ -190,6 +190,7 @@ function (_yup_audio_plugin_create_au)
         VISIBILITY_INLINES_HIDDEN ON
         BUNDLE TRUE
         BUNDLE_EXTENSION "component"
+        OUTPUT_NAME "${YUP_ARG_PLUGIN_NAME}"
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_INFO_PLIST "${au_plist_output}"
         MACOSX_BUNDLE_BUNDLE_NAME "${YUP_ARG_PLUGIN_NAME}"
@@ -201,6 +202,8 @@ function (_yup_audio_plugin_create_au)
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_PACKAGE_TYPE BNDL
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${au_bundle_identifier}"
         XCODE_GENERATE_SCHEME ON)
+
+    _yup_audio_plugin_set_output_directory (${target_name}_au_plugin AU)
 
     _yup_audio_plugin_apply_binary_optimizations (${target_name}_au_plugin)
 
@@ -214,7 +217,7 @@ function (_yup_audio_plugin_create_au)
         "${YUP_ARG_PLUGIN_HARDENED_RUNTIME}")
 
     if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
-        yup_audio_plugin_copy_bundle (${target_name} au)
+        yup_audio_plugin_copy_bundle (${target_name} au "${YUP_ARG_PLUGIN_NAME}")
 
         # auval and pluginval only find installed components, so they must run after the copy
         yup_validate_au_plugin (

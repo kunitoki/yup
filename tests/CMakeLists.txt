@@ -95,6 +95,7 @@ set (target_gtest_modules
     GTest::gtest
     GTest::gmock)
 
+# Modules left out on a platform must be listed as "untested" for it in .github/smart_ci_config.json
 if (YUP_PLATFORM_DESKTOP OR YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND target_modules
         yup_dsp_jit)

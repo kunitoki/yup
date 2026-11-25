@@ -931,6 +931,58 @@ TEST (PathTests, CreateCopyPreservesOpenContourAndClose)
     EXPECT_NEAR (120.0f, closed.getLength(), 1.0e-3f);
 }
 
+TEST (PathTests, CopiesShareTheirOutlineUntilOneChanges)
+{
+    Path original;
+    original.moveTo (0.0f, 0.0f).lineTo (30.0f, 0.0f);
+
+    Path copy = original;
+    EXPECT_EQ (copy.getRenderPath(), original.getRenderPath());
+
+    copy.lineTo (30.0f, 40.0f);
+    EXPECT_EQ (2, original.size());
+    EXPECT_EQ (3, copy.size());
+
+    const Path kept = original;
+    original.clear();
+    EXPECT_TRUE (original.isEmpty());
+    EXPECT_EQ (2, kept.size());
+}
+
+TEST (PathTests, ChangingADrawnPathLeavesThePendingDrawAlone)
+{
+    Path path;
+    path.moveTo (0.0f, 0.0f).lineTo (30.0f, 0.0f);
+
+    // The renderer holds on to the render path of every draw, until the frame is flushed
+    auto pendingDraw = rive::ref_rcp (path.getRenderPath());
+
+    path.clear();
+    path.moveTo (5.0f, 5.0f).lineTo (5.0f, 10.0f).lineTo (10.0f, 10.0f);
+
+    EXPECT_EQ (3, path.size());
+    EXPECT_NE (path.getRenderPath(), pendingDraw.get());
+    ASSERT_EQ (2u, pendingDraw->getRawPath().verbs().size());
+    EXPECT_FLOAT_EQ (30.0f, pendingDraw->getRawPath().points()[1].x);
+
+    pendingDraw = rive::ref_rcp (path.getRenderPath());
+    path.lineTo (10.0f, 5.0f);
+
+    EXPECT_EQ (4, path.size());
+    EXPECT_EQ (3u, pendingDraw->getRawPath().verbs().size());
+
+    // Once the frame is flushed nothing else uses the outline, which is changed in place again
+    pendingDraw = rive::ref_rcp (path.getRenderPath());
+    const auto* flushedRenderPath = pendingDraw.get();
+    pendingDraw = nullptr;
+
+    path.clear();
+    path.moveTo (1.0f, 1.0f).lineTo (2.0f, 2.0f);
+
+    EXPECT_EQ (2, path.size());
+    EXPECT_EQ (path.getRenderPath(), flushedRenderPath);
+}
+
 TEST (PathTests, IteratorPostfixIncrement)
 {
     Path p;
@@ -1531,6 +1583,60 @@ protected:
 TEST_F (PathFillPolygonTests, EmptyPathReturnsEmptyPath)
 {
     EXPECT_TRUE (Path().createFillPolygon().isEmpty());
+}
+
+TEST_F (PathFillPolygonTests, IsClockwiseTellsWhichWayAPathRuns)
+{
+    EXPECT_TRUE (createSquare (0.0f, 0.0f, 10.0f, true).isClockwise());
+    EXPECT_FALSE (createSquare (0.0f, 0.0f, 10.0f, false).isClockwise());
+    EXPECT_TRUE (Path().isClockwise());
+
+    // A path runs the way most of its area does, so a hole does not turn it around
+    auto ring = createSquare (0.0f, 0.0f, 10.0f, false);
+    ring.appendPath (createSquare (3.0f, 3.0f, 4.0f, true));
+    EXPECT_FALSE (ring.isClockwise());
+}
+
+TEST_F (PathFillPolygonTests, ReversedRunsTheOtherWayThroughTheSameSegments)
+{
+    Path open;
+    open.moveTo (0.0f, 0.0f).lineTo (10.0f, 0.0f).quadTo (10.0f, 10.0f, 20.0f, 10.0f);
+
+    const auto backwards = open.reversed();
+    const auto contours = getContours (backwards);
+    ASSERT_EQ (contours.size(), 1u);
+    EXPECT_EQ (contours[0].front(), Point<double> (10.0, 10.0));
+    EXPECT_EQ (contours[0].back(), Point<double> (0.0, 0.0));
+    EXPECT_EQ (backwards.reversed().toString(), open.toString());
+
+    // Curves stay curves, contours stay closed, and the fill rule is kept
+    Path shapes;
+    shapes.setUsingNonZeroWinding (false);
+    shapes.addEllipse (0.0f, 0.0f, 20.0f, 10.0f);
+    shapes.addRectangle (0.0f, 20.0f, 4.0f, 4.0f);
+
+    const auto turned = shapes.reversed();
+    EXPECT_NE (turned.isClockwise(), shapes.isClockwise());
+    EXPECT_EQ (turned.size(), shapes.size());
+    EXPECT_EQ (turned.getBounds(), shapes.getBounds());
+    EXPECT_FALSE (turned.isUsingNonZeroWinding());
+    EXPECT_EQ (turned.reversed().toString(), shapes.toString());
+
+    const auto countVerbs = [] (const Path& path, Path::Verb verb)
+    {
+        int count = 0;
+
+        for (const auto& segment : path)
+            count += segment.verb == verb ? 1 : 0;
+
+        return count;
+    };
+
+    EXPECT_GT (countVerbs (turned, Path::Verb::CubicTo), 0);
+    EXPECT_EQ (countVerbs (turned, Path::Verb::CubicTo), countVerbs (shapes, Path::Verb::CubicTo));
+    EXPECT_EQ (countVerbs (turned, Path::Verb::Close), 2);
+
+    EXPECT_TRUE (Path().reversed().isEmpty());
 }
 
 TEST_F (PathFillPolygonTests, CounterClockwiseContourBecomesClockwise)

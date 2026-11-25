@@ -453,7 +453,7 @@ protected:
         EXPECT_EQ (CLAP_PROCESS_CONTINUE, plugin->process (plugin, &process));
     }
 
-    void sendBypassValue (double value)
+    clap_event_param_value_t makeBypassEvent (double value) const
     {
         clap_event_param_value_t paramEvent {};
         paramEvent.header.size = sizeof (paramEvent);
@@ -468,8 +468,13 @@ protected:
         paramEvent.channel = -1;
         paramEvent.key = -1;
         paramEvent.value = value;
+        return paramEvent;
+    }
 
-        runProcess (reinterpret_cast<const clap_event_header_t*> (&paramEvent));
+    void sendBypassValue (double value)
+    {
+        const auto paramEvent = makeBypassEvent (value);
+        runProcess (&paramEvent.header);
     }
 
     clap_host_t host;
@@ -526,6 +531,18 @@ TEST_F (CLAPBypassTests, NonBypassEventRoutesToProcessPath)
     double value = 1.0;
     ASSERT_TRUE (paramsExt->get_value (plugin, bypassParameterID, &value));
     EXPECT_DOUBLE_EQ (0.0, value);
+}
+
+TEST_F (CLAPBypassTests, FlushAppliesBypassEvent)
+{
+    const auto paramEvent = makeBypassEvent (1.0);
+    SingleInputEventList inputEvents (&paramEvent.header);
+
+    paramsExt->flush (plugin, &inputEvents, nullptr);
+
+    double value = 0.0;
+    ASSERT_TRUE (paramsExt->get_value (plugin, bypassParameterID, &value));
+    EXPECT_DOUBLE_EQ (1.0, value);
 }
 
 TEST_F (CLAPBypassTests, StateRoundTripsBypassState)
@@ -879,4 +896,31 @@ TEST_F (CLAPAudioPortsTests, SidechainPortNameIsExposed)
 
     // The port name should be non-empty
     EXPECT_NE (0, info.name[0]);
+}
+
+//------------------------------------------------------------------------------
+// In-place pair tests
+//------------------------------------------------------------------------------
+
+TEST_F (CLAPAudioPortsTests, MainPortsNameEachOtherAsInPlacePair)
+{
+    ASSERT_NE (nullptr, portsExt);
+
+    clap_audio_port_info_t input {};
+    clap_audio_port_info_t output {};
+    ASSERT_TRUE (portsExt->get (plugin, 0, true, &input));
+    ASSERT_TRUE (portsExt->get (plugin, 0, false, &output));
+
+    EXPECT_EQ (output.id, input.in_place_pair);
+    EXPECT_EQ (input.id, output.in_place_pair);
+}
+
+TEST_F (CLAPAudioPortsTests, AuxiliaryPortHasNoInPlacePair)
+{
+    ASSERT_NE (nullptr, portsExt);
+
+    clap_audio_port_info_t info {};
+    ASSERT_TRUE (portsExt->get (plugin, 1, true, &info));
+
+    EXPECT_EQ (CLAP_INVALID_ID, info.in_place_pair);
 }

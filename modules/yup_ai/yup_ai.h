@@ -47,6 +47,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <iosfwd>
 #include <map>
 #include <memory>
 #include <optional>
@@ -70,6 +71,7 @@
 #include "mcp/yup_MCPTypes.h"
 #include "mcp/yup_MCPTransport.h"
 #include "mcp/yup_MCPHttpServerTransport.h"
+#include "mcp/yup_MCPStdioServerTransport.h"
 #include "mcp/yup_MCPClient.h"
 #include "mcp/yup_MCPServer.h"
 

@@ -41,6 +41,7 @@ function (_yup_plugin_shared_args one_value_output multi_value_output)
         PLUGIN_COPYRIGHT
         PLUGIN_COPY_AFTER_BUILD
         PLUGIN_ICON_BIG PLUGIN_ICON_SMALL
+        PLUGIN_MICROPHONE_USAGE
         HAS_STANDALONE STANDALONE_TARGET
         CUSTOM_SHELL INITIAL_MEMORY PTHREAD_POOL_SIZE STACK_SIZE
         PARENT_SCOPE)
@@ -51,6 +52,45 @@ function (_yup_plugin_shared_args one_value_output multi_value_output)
         PLUGIN_CLAP_FEATURES PLUGIN_VST3_CATEGORIES PLUGIN_HARDENED_RUNTIME_OPTIONS PLUGIN_CUSTOM_PLIST
         PRELOAD_FILES
         PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+# The name of the plugin on disk: PLUGIN_NAME, or the target name when the plugin has none.
+# Called from the plugin format functions, so it reads their parsed YUP_ARG_* arguments directly.
+function (_yup_audio_plugin_get_product_name output_variable)
+    set (product_name "${YUP_ARG_PLUGIN_NAME}")
+    if ("${product_name}" STREQUAL "")
+        set (product_name "${YUP_ARG_TARGET_NAME}")
+    endif()
+
+    set (${output_variable} "${product_name}" PARENT_SCOPE)
+endfunction()
+
+# The icon of the plugin: PLUGIN_ICON_BIG, or PLUGIN_ICON_SMALL when it is the only one given.
+# Called from the plugin format functions, so it reads their parsed YUP_ARG_* arguments directly.
+function (_yup_audio_plugin_get_icon output_variable)
+    set (plugin_icon "${YUP_ARG_PLUGIN_ICON_BIG}")
+    if ("${plugin_icon}" STREQUAL "")
+        set (plugin_icon "${YUP_ARG_PLUGIN_ICON_SMALL}")
+    endif()
+
+    if (NOT "${plugin_icon}" STREQUAL "")
+        get_filename_component (plugin_icon "${plugin_icon}" ABSOLUTE)
+    endif()
+
+    set (${output_variable} "${plugin_icon}" PARENT_SCOPE)
+endfunction()
+
+# Builds a plugin format in the directory of that format. The formats share the plugin name, so
+# apart they don't overwrite what the linker writes beside each binary (.pdb, .lib, .ilk).
+function (_yup_audio_plugin_set_output_directory plugin_target plugin_format)
+    set (output_directory "${CMAKE_CURRENT_BINARY_DIR}/${plugin_format}")
+
+    set_target_properties (${plugin_target} PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY "${output_directory}"
+        LIBRARY_OUTPUT_DIRECTORY "${output_directory}"
+        RUNTIME_OUTPUT_DIRECTORY "${output_directory}")
 endfunction()
 
 #==============================================================================

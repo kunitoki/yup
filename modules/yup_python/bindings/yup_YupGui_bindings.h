@@ -476,11 +476,6 @@ struct PyComponent : PyGestureListener<PyMouseListener<Base>>
         PYBIND11_OVERRIDE (void, Base, safeAreaChanged);
     }
 
-    void refreshDisplay (double lastFrameTimeSeconds) override
-    {
-        PYBIND11_OVERRIDE (void, Base, refreshDisplay, lastFrameTimeSeconds);
-    }
-
     void paint (yup::Graphics& g) override
     {
         {

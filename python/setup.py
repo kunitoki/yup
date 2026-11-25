@@ -14,7 +14,7 @@ from setuptools.command.build_ext import build_ext
 from setuptools.command.install_scripts import install_scripts
 
 
-project_name = "yup"
+project_name = "yup-audio"
 root_dir = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -266,11 +266,9 @@ setuptools.setup(
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
         "Operating System :: MacOS :: MacOS X",
         "Operating System :: Microsoft :: Windows",
-        "Operating System :: POSIX :: Linux",
-        "Operating System :: Android",
-        "Operating System :: iOS",
-        "Operating System :: WebAssembly"
+        "Operating System :: POSIX :: Linux"
     ]
 )

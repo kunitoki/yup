@@ -149,6 +149,55 @@ TEST_F (YuiDocumentTests, APaletteWithADarkAndALightVersionFollowsTheTheme)
     EXPECT_EQ (backgroundOf (*inGiven), Color (0xff101418));
 }
 
+TEST_F (YuiDocumentTests, ARepeatOfComponentsFollowsItsModelAndKeepsTheStyles)
+{
+    DataTree tree ("sequencer");
+    tree.beginTransaction().setProperty ("length", 2);
+
+    DataTreeBindingProvider sequencer (tree, nullptr);
+
+    YuiDocument document;
+    document.setModel ("seq", sequencer);
+
+    const auto result = document.loadFromString (R"yui(
+        style {
+            .step { opacity: 0.5; }
+        }
+
+        Row {
+            id: row;
+            repeat i in 0 .. seq.length { Label { class: step; text: format ("%d", i); } }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+    ASSERT_EQ (document.findById ("row")->getNumChildComponents(), 2);
+
+    const auto sheet = document.getRoot()->getStyleSheet();
+
+    tree.beginTransaction().setProperty ("length", 3);
+    document.applyPendingChanges();
+
+    auto* row = document.findById ("row");
+    ASSERT_EQ (row->getNumChildComponents(), 3);
+    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+
+    // The document is as it was, so its stylesheet is kept and what it runs goes on
+    EXPECT_EQ (document.getRoot()->getStyleSheet(), sheet);
+
+    // The component added is styled as the others
+    row->getStyleContext()->restyleNow();
+    EXPECT_NEAR (row->getChildComponent (2)->getOpacity(), 0.5f, 0.01f);
+}
+
+TEST_F (YuiDocumentTests, ARepeatOfComponentsOnlyHoldsComponents)
+{
+    YuiDocument document;
+
+    EXPECT_TRUE (document.loadFromString ("Row { repeat i in 0 .. 2 { rect { } } }").failed());
+    EXPECT_TRUE (document.loadFromString ("Row { repeat i in 0 .. 2 { Label { } repeat j in 0 .. 2 { Label { } } } }").wasOk());
+}
+
 TEST_F (YuiDocumentTests, LoadsTheImportedFiles)
 {
     YuiDocument document;
@@ -809,6 +858,120 @@ TEST_F (YuiDocumentTests, LiveTreeMutationsUpdateComponentsAndStyleSheetAutomati
     styleDecl.beginTransaction().setProperty ("value", "12");
     EXPECT_EQ (document.findById<Slider> ("knob"), knob);
     EXPECT_DOUBLE_EQ (static_cast<double> (knob->findProperty (Identifier ("trackWidth"))), 12.0);
+}
+
+TEST_F (YuiDocumentTests, ADrawingTakesArraysForTheValuesNumbersMake)
+{
+    YuiDocument document;
+    const auto result = document.loadFromString (R"yui(
+        drawing Marks {
+            rect { id: box; bounds: [4, 6, 20, 10]; cornerSize: [3, 2]; fill: #ffffff; stroke: #ffffff; dash: [6, 3]; }
+            circle { id: dot; center: [30, 30]; radius: [3, 5, 8][1]; fill: #ffffff; stroke: #ffffff; dash: [8, 6, 2, 6, 1, 6, 3]; }
+            line { from: [0, 0]; to: [10, 10]; stroke: #ffffff; }
+        }
+
+        Component {
+            Component { id: painted; drawing: Marks; }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (document.getDiagnostics().empty()) << YuiDiagnostic::join (document.getDiagnostics());
+
+    auto* painted = document.findById ("painted");
+    auto* style = painted != nullptr ? dynamic_cast<DrawingStyle*> (painted->getStyle().get()) : nullptr;
+    ASSERT_NE (style, nullptr);
+
+    const auto boundsOf = [measured = style->measureElements (*painted)] (const String& id)
+    {
+        for (const auto& element : measured)
+            if (element.id == id)
+                return element.bounds;
+
+        return Rectangle<float>();
+    };
+
+    EXPECT_EQ (boundsOf ("box"), Rectangle<float> (4.0f, 6.0f, 20.0f, 10.0f));
+    EXPECT_EQ (boundsOf ("dot"), Rectangle<float> (25.0f, 25.0f, 10.0f, 10.0f));
+}
+
+TEST_F (YuiDocumentTests, ADrawingSetOnAComponentReadsTheComponentsOfTheLastLoad)
+{
+    YuiDocument document;
+    ASSERT_TRUE (document.loadFromString (R"yui(
+        drawing Dot { circle { id: dot; center: point (0, 0); radius: src.width; fill: #ffffff; } }
+
+        Component {
+            Slider { id: src; width: 10; }
+            Component { id: painted; drawing: Dot; }
+        })yui")
+                     .wasOk());
+
+    const auto dotWidth = [&document]
+    {
+        auto* painted = document.findById ("painted");
+        auto* style = painted != nullptr ? dynamic_cast<DrawingStyle*> (painted->getStyle().get()) : nullptr;
+        const auto measured = style != nullptr ? style->measureElements (*painted) : std::vector<DrawingStyle::ElementBounds>();
+
+        return measured.empty() ? -1.0f : measured.front().bounds.getWidth();
+    };
+
+    EXPECT_FLOAT_EQ (dotWidth(), 20.0f);
+
+    // The component the drawing reads is made again, the one it paints is kept
+    auto* painted = document.findById ("painted");
+    const auto previousStyle = painted->getStyle();
+
+    ASSERT_TRUE (document.loadFromString (R"yui(
+        drawing Dot { circle { id: dot; center: point (0, 0); radius: src.width; fill: #ffffff; } }
+
+        Component {
+            Label { id: src; width: 30; }
+            Component { id: painted; drawing: Dot; }
+        })yui")
+                     .wasOk());
+
+    EXPECT_EQ (document.findById ("painted"), painted);
+    EXPECT_FLOAT_EQ (dotWidth(), 60.0f);
+
+    // The drawing is made again too: the one of the load before finds components where that load kept them
+    EXPECT_NE (painted->getStyle(), previousStyle);
+}
+
+TEST_F (YuiDocumentTests, RepeatsInsideOneAnotherShareTheTurnsARepeatRuns)
+{
+    YuiDocument document;
+    const auto result = document.loadFromString (R"yui(
+        Component {
+            id: grid;
+            repeat i in 0 .. 64 { repeat j in 0 .. 64 { Component {} } }
+        })yui");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_EQ (document.findById ("grid")->getNumChildComponents(), 1024);
+    EXPECT_TRUE (YuiDiagnostic::join (document.getDiagnostics()).contains ("A repeat runs at most 16 times")) << YuiDiagnostic::join (document.getDiagnostics());
+}
+
+TEST_F (YuiDocumentTests, ARepeatStillFollowsItsModelAfterALoadThatFailed)
+{
+    DataTree tree ("sequencer");
+    tree.beginTransaction().setProperty ("length", 2);
+
+    DataTreeBindingProvider sequencer (tree, nullptr);
+
+    YuiDocument document;
+    document.setModel ("seq", sequencer);
+
+    ASSERT_TRUE (document.loadFromString ("Row { id: row; repeat i in 0 .. seq.length { Label {} } }").wasOk());
+    EXPECT_TRUE (document.loadFromString ("Row {").failed());
+    ASSERT_EQ (document.getDiagnostics().size(), 1u);
+
+    tree.beginTransaction().setProperty ("length", 3);
+    document.applyPendingChanges();
+
+    EXPECT_EQ (document.findById ("row")->getNumChildComponents(), 3);
+
+    // The problem of the load is still the one to show
+    EXPECT_EQ (document.getDiagnostics().size(), 1u);
 }
 
 

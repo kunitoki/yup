@@ -94,10 +94,11 @@ The contract of these hooks:
   still (auto rotation, animated camera), the window re-evaluates the pointer
   after each painted frame and sends the enter / exit, move or drag events the
   new mapping implies.
-- **Read a snapshot of the last drawn state.** The hooks run on the message
-  thread while painting runs on the render thread: publish the camera and mesh
-  from `paint()` under a lock or through atomics. This also keeps input consistent
-  with what is on screen.
+- **Map with the last drawn state.** The hooks run on the message thread and
+  painting on the render thread, but never at the same time (see
+  [Threading](component-basics.md#threading)): the lock above only matters when
+  yet another thread updates the mesh. Keep the camera and mesh `paint()` last
+  drew and map with those, which keeps input consistent with what is on screen.
 
 ---
 

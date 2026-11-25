@@ -108,13 +108,13 @@ public:
     Rectangle<float> getSwitchCircleBounds() const { return switchCircleBounds; }
 
     /** @internal */
-    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void refreshDisplay (double lastFrameTimeSeconds);
     /** @internal */
     void paintButton (Graphics& g) override;
     /** @internal */
     void resized() override;
     /** @internal */
-    void mouseUp (const MouseEvent& event) override;
+    void clicked() override;
 
 private:
     //==============================================================================
@@ -132,6 +132,7 @@ private:
     Rectangle<float> animationTargetBounds;
     Time animationStartTime;
     bool isAnimating = false;
+    FrameAttachment frameAttachment { *this, bindFront (&SwitchButton::refreshDisplay, this) };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwitchButton)
 };

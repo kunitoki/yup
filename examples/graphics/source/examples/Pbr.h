@@ -117,7 +117,7 @@ public:
     ~PbrDemo() override = default;
 
     //==============================================================================
-    void refreshDisplay (double lastFrameTimeSeconds) override
+    void refreshDisplay (double lastFrameTimeSeconds)
     {
         if (! isDragging)
             cameraYaw += (float) (lastFrameTimeSeconds * 0.25);
@@ -879,4 +879,5 @@ private:
     std::unique_ptr<yup::Slider> exposureSlider;
     std::unique_ptr<yup::Slider> sunSlider;
     std::unique_ptr<yup::Label> statusLabel;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&PbrDemo::refreshDisplay, this) };
 };

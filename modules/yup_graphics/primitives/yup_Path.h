@@ -130,10 +130,15 @@ public:
     Path (const Point<float>& p);
 
     //==============================================================================
-    /** Copy and move constructors and assignment operators. */
-    Path (const Path& other) noexcept = default;
+    /** Copy and move constructors and assignment operators.
+
+        Copying is cheap: a copy shares the outline of the path it was copied from, until one of
+        the two changes its own. The same holds for a path that was drawn, it can be changed or
+        cleared right away, as the draw keeps the outline the path had.
+    */
+    Path (const Path& other) noexcept;
     Path (Path&& other) noexcept = default;
-    Path& operator= (const Path& other) noexcept = default;
+    Path& operator= (const Path& other) noexcept;
     Path& operator= (Path&& other) noexcept = default;
 
     //==============================================================================
@@ -811,6 +816,29 @@ public:
     Path transformed (const AffineTransform& t) const;
 
     //==============================================================================
+    /** Returns true if this path runs clockwise.
+
+        A path runs clockwise when the area its contours go around clockwise, with the y axis pointing down,
+        outweighs the area they go around the other way. The holes of a shape therefore do not turn it around.
+        The area is estimated from flattened curves, and a path enclosing no area counts as clockwise.
+
+        Under the non-zero winding rule, contours running opposite ways cancel each other where they overlap.
+        Use this with reversed() to make paths run the same way before appending them into one.
+
+        @return True if the path runs clockwise as a whole.
+    */
+    [[nodiscard]] bool isClockwise() const;
+
+    /** Returns a copy of this path running the other way.
+
+        Each contour goes through the same points in the opposite order, and the contours come in the opposite
+        order. Curves stay curves, closed contours stay closed and the fill rule is kept.
+
+        @return A new Path running the other way.
+    */
+    [[nodiscard]] Path reversed() const;
+
+    //==============================================================================
     /** Scales the path to fit within the specified bounds.
 
         This method transforms the path so that it fits within the given rectangular area.
@@ -1002,12 +1030,16 @@ public:
     void appendPath (rive::rcp<rive::RiveRenderPath> other, const AffineTransform& transform);
 
 private:
+    rive::RiveRenderPath& getExclusiveRenderPath (bool keepOutline = true);
+    void detachRenderPath (bool keepOutline);
+
     rive::rcp<rive::RiveRenderPath> path;
     uint64 fillPolygonMutationID = 0;
     uint64 simpleContourMutationID = 0;
     mutable rive::rcp<rive::RiveRenderPath> cachedClockwisePath;
     mutable uint64 cachedClockwiseMutationID = 0;
     mutable bool cachedClockwiseNonZero = true;
+    mutable bool renderPathMayBeShared = false;
 };
 
 //==============================================================================

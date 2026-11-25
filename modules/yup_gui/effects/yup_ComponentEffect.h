@@ -31,6 +31,8 @@ class GpuTexture;
 
     When a ComponentEffect is attached to a Component, the component (and its
     entire subtree of visible children) is rendered into an offscreen GPU texture.
+    The texture covers the paint margin of the component too, so what is painted
+    there goes through the effect and the effect has room to draw past the bounds.
     The effect's apply() method is then called to composite the result back onto
     the main Graphics context, allowing arbitrary shader-based post-processing
     such as blurs, drop shadows, colour adjustments, or custom GLSL effects.
@@ -43,7 +45,7 @@ class GpuTexture;
     displayToContent() and contentToDisplay(), so that mouse input lands on the
     widget the user actually sees under the pointer.
 
-    @see Component::setComponentEffect
+    @see Component::setComponentEffect, Component::setPaintMargin
 */
 class YUP_API ComponentEffect : public ReferenceCountedObject
 {
@@ -67,7 +69,13 @@ public:
         @param g             The main Graphics context where the result is drawn.
         @param inputTexture  The GPU texture containing the rendered component subtree,
                              sized in device pixels.
-        @param bounds        The destination rectangle in g's coordinate space.
+        @param bounds        The destination rectangle in g's coordinate space, which is the
+                             area of the component held by the texture. For a component
+                             painted in its parent it is the local bounds enlarged by the
+                             paint margin, up to the whole units and pixels around it, so
+                             it starts at a negative position when there is a margin. It
+                             does not shrink when the margin does, as the texture keeps the
+                             room it has. For a snapshot it is the local bounds.
     */
     virtual void apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds) = 0;
 
@@ -91,7 +99,7 @@ public:
         The default implementation returns the point unchanged.
 
         @param displayPoint  The point as displayed, in the component's local coordinates.
-        @param bounds        The local bounds of the component.
+        @param bounds        The local bounds of the component, enlarged by its paint margin.
 
         @return The point in the content space, or std::nullopt if the mapping is degenerate.
 
@@ -113,7 +121,7 @@ public:
         displayToContent() but not this one only gets an approximate inverse mapping.
 
         @param contentPoint  The point in the content space, in the component's local coordinates.
-        @param bounds        The local bounds of the component.
+        @param bounds        The local bounds of the component, enlarged by its paint margin.
 
         @return The displayed point, or std::nullopt if the mapping is degenerate.
 

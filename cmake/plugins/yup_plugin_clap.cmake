@@ -54,6 +54,7 @@ function (_yup_audio_plugin_create_clap)
     set (target_bundle_id "${YUP_ARG_TARGET_BUNDLE_ID}")
     set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
+    _yup_audio_plugin_get_product_name (plugin_product_name)
 
     _yup_fetch_clap()
 
@@ -96,6 +97,7 @@ function (_yup_audio_plugin_create_clap)
         ${clap_plugin_bundle_libraries})
 
     set_target_properties (${target_name}_clap_plugin PROPERTIES
+        OUTPUT_NAME "${plugin_product_name}"
         C_VISIBILITY_PRESET hidden
         CXX_VISIBILITY_PRESET hidden
         OBJC_VISIBILITY_PRESET hidden
@@ -103,6 +105,8 @@ function (_yup_audio_plugin_create_clap)
         VISIBILITY_INLINES_HIDDEN ON
         FOLDER "${target_ide_group}"
         XCODE_GENERATE_SCHEME ON)
+
+    _yup_audio_plugin_set_output_directory (${target_name}_clap_plugin CLAP)
 
     _yup_audio_plugin_apply_binary_optimizations (${target_name}_clap_plugin
         EXPORTED_SYMBOLS clap_entry)
@@ -116,7 +120,7 @@ function (_yup_audio_plugin_create_clap)
             BUNDLE_EXTENSION "clap"
             MACOSX_BUNDLE TRUE
             MACOSX_BUNDLE_INFO_PLIST "${clap_plist_output}"
-            MACOSX_BUNDLE_BUNDLE_NAME "${target_name}_clap_plugin"
+            MACOSX_BUNDLE_BUNDLE_NAME "${plugin_product_name}"
             MACOSX_BUNDLE_BUNDLE_VERSION "${target_version}"
             MACOSX_BUNDLE_SHORT_VERSION_STRING "${target_version}"
             MACOSX_BUNDLE_GUI_IDENTIFIER "${target_bundle_id}.clap"
@@ -143,6 +147,6 @@ function (_yup_audio_plugin_create_clap)
     yup_validate_clap_plugin (${target_name}_clap_plugin "${clap_plugin_path}")
 
     if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
-        yup_audio_plugin_copy_bundle (${target_name} clap)
+        yup_audio_plugin_copy_bundle (${target_name} clap "${plugin_product_name}")
     endif()
 endfunction()

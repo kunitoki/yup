@@ -287,7 +287,7 @@ TEST_F (DrawingStyleTest, LetsCanShadowOutputsAndOuterLets)
     EXPECT_EQ (createError ("<drawing><let name=\"r\" value=\"1\"/><let name=\"r\" value=\"2\"/></drawing>"), "drawing/let[1].name: 'r' is already defined");
 }
 
-TEST_F (DrawingStyleTest, RejectsContainersInsideRepeat)
+TEST_F (DrawingStyleTest, RejectsLayersInsideRepeat)
 {
     EXPECT_EQ (createError ("<drawing><repeat name=\"i\" from=\"0\" to=\"3\"><layer/></repeat></drawing>"), "drawing/repeat[0]/layer[0]: a 'layer' can't be nested inside a repeat");
 }
@@ -331,6 +331,23 @@ TEST_F (DrawingStyleTest, DeclaresItsProperties)
     slider.setProperty (Identifier ("origin"), VariantConverter<Point<float>>::toVar ({ 10.0f, 20.0f }));
     slider.setProperty (Identifier ("lanes"), var (Array<var> { 0.25, 0.5, 0.75 }));
     EXPECT_NO_THROW (paintHeadless (*style.getReference(), slider));
+}
+
+TEST_F (DrawingStyleTest, ReturnsTheNameItWasDeclaredWith)
+{
+    Slider slider (Slider::RotaryVerticalDrag);
+    configure (slider);
+
+    const auto parsed = YuiParser::parse (knobDrawing);
+    ASSERT_TRUE (parsed.wasOk()) << parsed.diagnostics.front().toString();
+
+    auto named = DrawingStyle::create (slider, parsed.document.getChildWithName ("drawing"));
+    ASSERT_TRUE (named.wasOk()) << named.getErrorMessage();
+    EXPECT_EQ (named.getReference()->getName(), "Knob");
+
+    auto unnamed = DrawingStyle::create (slider, parseDrawing ("<drawing><rect bounds=\"bounds\" fill=\"trackColor\"/></drawing>"));
+    ASSERT_TRUE (unnamed.wasOk()) << unnamed.getErrorMessage();
+    EXPECT_TRUE (unnamed.getReference()->getName().isEmpty());
 }
 
 TEST_F (DrawingStyleTest, ReportsPropertyErrors)
@@ -404,7 +421,6 @@ TEST_F (DrawingStyleTest, CompilesAndPaintsDashedStrokesClipLayerMasksImagesAndS
     EXPECT_NO_THROW (paintHeadless (*style.getReference(), slider));
 
     EXPECT_EQ (createError ("<drawing><mask/></drawing>"), "drawing/mask[0]: a 'mask' can only appear inside a 'layer'");
-    EXPECT_EQ (createError ("<drawing><repeat name=\"i\" from=\"0\" to=\"2\"><clip/></repeat></drawing>"), "drawing/repeat[0]/clip[0]: a 'clip' can't be nested inside a repeat");
     EXPECT_EQ (createError ("<drawing><image/></drawing>"), "drawing/image[0]: missing the required property 'source'");
     EXPECT_EQ (createError ("<drawing><svg/></drawing>"), "drawing/svg[0]: missing the required property 'source'");
     EXPECT_EQ (createError ("<drawing><svg source=\"a.svg\" data=\"&lt;svg/&gt;\"/></drawing>"), "drawing/svg[0]: specify either 'source' or 'data', not both");
@@ -469,6 +485,35 @@ protected:
     }
 };
 
+TEST_F (DrawingStyleLanguageTest, ARepeatHoldsContainersButNoLayerOrDefinition)
+{
+    // Groups, clips, viewports, uses and other repeats, reading the index of the repeats around them
+    EXPECT_EQ (createYuiError (R"yui(
+        drawing {
+            drawing Leaf { rect { bounds: bounds; fill: thumbColor; } }
+
+            repeat i in 0 .. 2 {
+                group { transform: transform.translation (i, 0); rect { bounds: bounds; fill: thumbColor; } }
+                clip { bounds: rect (i, 0, 4, 4); rect { bounds: bounds; fill: thumbColor; } }
+                viewport { bounds: rect (i, 0, 4, 4); }
+                use Leaf { bounds: rect (i, 0, 4, 4); }
+                repeat j in 0 .. i + 1 { group { rect { bounds: rect (i, j, 1, 1); fill: thumbColor; } } }
+            }
+        })yui"),
+               String());
+
+    // Layers and definitions stay out of a repeat, however deep
+    EXPECT_EQ (createYuiError ("drawing { repeat i in 0 .. 2 { group { layer { } } } }"), "drawing/repeat[0]/group[0]/layer[0]: a 'layer' can't be nested inside a repeat");
+    EXPECT_EQ (createYuiError ("drawing { repeat i in 0 .. 2 { pattern Dots { tile: rect (0, 0, 4, 4); } } }"), "drawing/repeat[0]/pattern[0]: a 'pattern' can't be nested inside a repeat");
+    EXPECT_EQ (createYuiError ("drawing { repeat i in 0 .. 2 { drawing Leaf { } } }"), "drawing/repeat[0]/drawing[0]: a 'drawing' can't be nested inside a repeat");
+    EXPECT_EQ (createYuiError ("drawing { drawing Glow { layer { } } repeat i in 0 .. 2 { use Glow { } } }"), "drawing/repeat[0]/use[0]/Glow/layer[0]: a 'layer' can't be nested inside a repeat");
+
+    // The shapes of a clip path are still all a repeat holds there
+    EXPECT_EQ (createYuiError ("drawing { clip { clipPath { repeat i in 0 .. 2 { group { } } } } }"), "drawing/clip[0]/clipPath[0]/repeat[0]/group[0]: a 'group' can't be nested inside a repeat");
+
+    EXPECT_TRUE (createYuiError ("drawing { repeat i in 0 .. 5000 { group { } } }").contains ("4096"));
+}
+
 TEST_F (DrawingStyleLanguageTest, MapsAViewBoxToTheBoundsAndToViewports)
 {
     EXPECT_EQ (createYuiError (R"yui(
@@ -485,7 +530,6 @@ TEST_F (DrawingStyleLanguageTest, MapsAViewBoxToTheBoundsAndToViewports)
 
     EXPECT_EQ (createYuiError ("drawing { fitting: fill; }"), "drawing.fitting: needs a 'viewBox' to fit in the bounds");
     EXPECT_TRUE (createYuiError ("drawing { viewBox: 4; }").startsWith ("drawing.viewBox: "));
-    EXPECT_EQ (createYuiError ("drawing { repeat i in 0 .. 2 { viewport {} } }"), "drawing/repeat[0]/viewport[0]: a 'viewport' can't be nested inside a repeat");
 }
 
 TEST_F (DrawingStyleLanguageTest, GroupsSetThePaintOfTheShapesInsideThem)
@@ -571,7 +615,6 @@ TEST_F (DrawingStyleLanguageTest, UsePaintsDrawingsDefinedInsideOrFoundByName)
     EXPECT_EQ (createYuiError ("drawing { drawing Leaf {} drawing Leaf {} }"), "drawing/drawing[1].name: the drawing 'Leaf' is already defined");
     EXPECT_TRUE (createYuiError ("drawing { drawing Leaf { property tone: color; } use Leaf { tone: bounds; } }").startsWith ("drawing/use[0].tone: "));
     EXPECT_TRUE (createYuiError ("drawing { drawing Leaf { rect { bounds: bounds; fill: bounds; } } use Leaf {} }").startsWith ("drawing/use[0]/Leaf/rect[0].fill: "));
-    EXPECT_EQ (createYuiError ("drawing { repeat i in 0 .. 2 { use Leaf {} } }"), "drawing/repeat[0]/use[0]: a 'use' can't be nested inside a repeat");
 
     Slider slider (Slider::RotaryVerticalDrag);
     configure (slider);
@@ -1236,6 +1279,102 @@ TEST_F (DrawingStyleGpuTest, ClipPathsClipToAllTheirShapes)
     EXPECT_EQ (image.getPixelColor (2, 1).getAlpha(), 0);
 }
 
+TEST_F (DrawingStyleGpuTest, ClipPathShapesAddUpWhicheverWayTheirOutlinesRun)
+{
+    // A rect runs clockwise and an ellipse the other way: where they overlap is still inside
+    const auto overlapping = render (R"yui(
+        drawing {
+            clip {
+                clipPath {
+                    rect { bounds: rect (0, 0, 10, 10); }
+                    ellipse { bounds: rect (6, 6, 10, 10); }
+                }
+                rect { bounds: bounds; fill: #ff0000; }
+            }
+        })yui");
+    ASSERT_TRUE (overlapping.isValid());
+
+    EXPECT_EQ (overlapping.getPixelColor (2, 2), Color (0xffff0000));
+    EXPECT_EQ (overlapping.getPixelColor (12, 12), Color (0xffff0000));
+    EXPECT_EQ (overlapping.getPixelColor (8, 8), Color (0xffff0000));
+    EXPECT_EQ (overlapping.getPixelColor (14, 2).getAlpha(), 0);
+
+    // The hole of a shape stays one, until another shape covers it
+    const auto ring = render (R"yui(
+        drawing {
+            clip {
+                clipPath {
+                    path { data: "M 0 0 V 16 H 16 V 0 Z M 4 4 H 12 V 12 H 4 Z"; }
+                    rect { bounds: rect (4, 4, 2, 2); }
+                }
+                rect { bounds: bounds; fill: #ff0000; }
+            }
+        })yui");
+    ASSERT_TRUE (ring.isValid());
+
+    EXPECT_EQ (ring.getPixelColor (2, 2), Color (0xffff0000));
+    EXPECT_EQ (ring.getPixelColor (8, 8).getAlpha(), 0);
+    EXPECT_EQ (ring.getPixelColor (5, 5), Color (0xffff0000));
+}
+
+TEST_F (DrawingStyleGpuTest, ARepeatHoldingContainersDrawsThemOncePerTurn)
+{
+    const auto image = render (R"yui(
+        drawing {
+            drawing Dot {
+                property tone: color = #ff0000;
+                rect { bounds: bounds; fill: tone; }
+            }
+
+            repeat i in 0 .. 3 {
+                group {
+                    transform: transform.translation (i * 5, 0);
+                    rect { bounds: rect (0, 0, 3, 4); fill: #ff0000; }
+                }
+
+                use Dot { bounds: rect (i * 5, 6, 3, 4); tone: i == 1 ? #00ff00 : #0000ff; }
+            }
+
+            repeat row in 0 .. 2 {
+                repeat column in 0 .. row + 1 { rect { bounds: rect (column * 5, 12 + row * 2, 3, 2); fill: #ffffff; } }
+            }
+        })yui");
+    ASSERT_TRUE (image.isValid());
+
+    for (int turn = 0; turn < 3; ++turn)
+    {
+        // The group is moved by the index of its turn
+        EXPECT_EQ (image.getPixelColor (turn * 5 + 1, 2), Color (0xffff0000)) << turn;
+        EXPECT_EQ (image.getPixelColor (turn * 5 + 4, 2).getAlpha(), 0) << turn;
+
+        // A drawing is painted with what its turn sets
+        EXPECT_EQ (image.getPixelColor (turn * 5 + 1, 8), turn == 1 ? Color (0xff00ff00) : Color (0xff0000ff)) << turn;
+    }
+
+    // A repeat inside a repeat reads the index around it: one rectangle on the first row, two on the second
+    EXPECT_EQ (image.getPixelColor (1, 12), Color (0xffffffff));
+    EXPECT_EQ (image.getPixelColor (6, 12).getAlpha(), 0);
+    EXPECT_EQ (image.getPixelColor (6, 15), Color (0xffffffff));
+    EXPECT_EQ (image.getPixelColor (11, 15).getAlpha(), 0);
+}
+
+TEST_F (DrawingStyleGpuTest, TheTurnsOfARepeatHoldingContainersAreDrawnOneAfterTheOther)
+{
+    // Each turn draws a red bar, then a blue one over its right end: the red of the second turn covers the blue of the first
+    const auto image = render (R"yui(
+        drawing {
+            repeat i in 0 .. 2 {
+                group { rect { bounds: rect (i * 6, 0, 10, 16); fill: #ff0000; } }
+                rect { bounds: rect (i * 6 + 6, 0, 4, 16); fill: #0000ff; }
+            }
+        })yui");
+    ASSERT_TRUE (image.isValid());
+
+    EXPECT_EQ (image.getPixelColor (2, 8), Color (0xffff0000));
+    EXPECT_EQ (image.getPixelColor (8, 8), Color (0xffff0000));
+    EXPECT_EQ (image.getPixelColor (14, 8), Color (0xff0000ff));
+}
+
 TEST_F (DrawingStyleGpuTest, LayersAreDrawnThroughTheirFilter)
 {
     // The red square is moved four pixels to the right, and what leaves the bounds of the filter is lost
@@ -1347,3 +1486,230 @@ TEST_F (DrawingStyleGpuTest, CornerSizeRoundsRectanglesElliptically)
     EXPECT_LT (image.getPixelColor (0, 0).getAlpha(), 64);
 }
 
+TEST_F (DrawingStyleTest, ListsTheElementsADrawingIsMadeOf)
+{
+    const auto elements = DrawingStyle::getElementDescriptions();
+
+    const auto find = [&elements] (const String& type, const String& firstGeometry = {})
+    {
+        const auto found = std::find_if (elements.begin(), elements.end(), [&] (const DrawingStyle::ElementDescription& element)
+        {
+            return element.type == type && (firstGeometry.isEmpty() || element.geometry.contains (firstGeometry));
+        });
+
+        return found != elements.end() ? *found : DrawingStyle::ElementDescription();
+    };
+
+    EXPECT_EQ (find ("rect").role, String ("shape"));
+    EXPECT_EQ (find ("rect").geometry, StringArray ({ "bounds" }));
+    EXPECT_TRUE (find ("rect").properties.contains ("cornerRadius"));
+    EXPECT_FALSE (find ("rect").properties.contains ("markerEnd"));
+    EXPECT_TRUE (find ("line").properties.contains ("markerEnd"));
+    EXPECT_TRUE (find ("star").geometry.contains ("angle=0"));
+
+    // A text is fitted in its bounds or placed at an anchor, with other properties for each
+    EXPECT_TRUE (find ("text", "bounds").properties.contains ("justification"));
+    EXPECT_TRUE (find ("text", "anchor").properties.contains ("textAnchor"));
+
+    EXPECT_EQ (find ("group").role, String ("container"));
+    EXPECT_TRUE (find ("group").properties.contains ("transform"));
+    EXPECT_TRUE (find ("group").properties.contains ("fill"));
+    EXPECT_FALSE (find ("viewport").properties.contains ("fill"));
+    EXPECT_TRUE (find ("svg").properties.contains ("data"));
+    EXPECT_FALSE (find ("image").properties.contains ("data"));
+
+    EXPECT_EQ (find ("blur").role, String ("filterPrimitive"));
+    EXPECT_TRUE (find ("blur").properties.contains ("deviation"));
+    EXPECT_TRUE (find ("blur").properties.contains ("result"));
+
+    EXPECT_TRUE (DrawingStyle::getShapePaintProperties().contains ("strokeWidth"));
+    EXPECT_TRUE (DrawingStyle::getShapePaintProperties().contains ("dash"));
+}
+
+TEST_F (DrawingStyleTest, MeasuresWhatARepeatOfContainersDraws)
+{
+    const auto parsed = YuiParser::parse (R"yui(
+        drawing Panel {
+            repeat i in 0 .. 3 {
+                group {
+                    id: cell;
+                    transform: transform.translation (i * 10, 0);
+                    rect { id: step; bounds: rect (0, 40, 4, 4); fill: #ffffff; }
+                }
+            }
+
+            repeat row in 0 .. 100 {
+                repeat column in 0 .. 100 { group { rect { id: many; bounds: rect (column, row, 1, 1); fill: #ffffff; } } }
+            }
+        })yui");
+    ASSERT_TRUE (parsed.wasOk()) << parsed.diagnostics.front().toString();
+
+    Slider slider (Slider::RotaryVerticalDrag);
+    configure (slider);
+
+    auto style = DrawingStyle::create (slider, parsed.document.getChildWithName ("drawing"));
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    const auto measured = style.getReference()->measureElements (slider);
+
+    const auto find = [&measured] (const String& id)
+    {
+        const auto found = std::find_if (measured.begin(), measured.end(), [&id] (const DrawingStyle::ElementBounds& element)
+        {
+            return element.id == id;
+        });
+
+        return found != measured.end() ? *found : DrawingStyle::ElementBounds();
+    };
+
+    // An element is told once, covering what all the turns draw
+    EXPECT_EQ (find ("step").bounds, Rectangle<float> (0.0f, 40.0f, 24.0f, 4.0f));
+    EXPECT_EQ (find ("step").numRows, 3);
+    EXPECT_EQ (find ("cell").bounds, Rectangle<float> (0.0f, 40.0f, 24.0f, 4.0f));
+    EXPECT_EQ (find ("cell").numRows, 3);
+
+    EXPECT_EQ (std::count_if (measured.begin(), measured.end(), [] (const DrawingStyle::ElementBounds& element) { return element.id == "step"; }), 1);
+
+    // The turns of repeats inside one another add up to no more than a repeat runs
+    EXPECT_GT (find ("many").numRows, 100);
+    EXPECT_LE (find ("many").numRows, 4096);
+}
+
+TEST_F (DrawingStyleTest, MeasuresWhereTheElementsLand)
+{
+    const auto parsed = YuiParser::parse (R"yui(
+        drawing Panel {
+            rect { id: frame; bounds: rect (2, 4, 20, 10); fill: #ff0000; }
+
+            group {
+                id: shifted;
+                transform: transform.translation (10, 20);
+                circle { id: dot; center: point (5, 5); radius: 3; fill: #00ff00; }
+            }
+
+            viewport {
+                id: scaled;
+                bounds: rect (0, 24, 48, 24);
+                viewBox: rect (0, 0, 24, 12);
+                rect { id: half; bounds: rect (0, 0, 12, 12); fill: #0000ff; }
+            }
+
+            repeat i in 0 .. 3 {
+                rect { id: step; bounds: rect (i * 10, 40, 4, 4); fill: #ffffff; }
+            }
+
+            group {
+                visible: false;
+                rect { id: hidden; bounds: rect (0, 0, 4, 4); fill: #ffffff; }
+            }
+
+            text { id: caption; bounds: rect (0, 0, 48, 20); text: "Hi"; fill: #ffffff; justification: topLeft; }
+        })yui");
+    ASSERT_TRUE (parsed.wasOk()) << parsed.diagnostics.front().toString();
+
+    // The glyphs of a text are measured with the font of the theme
+    const auto font = Font::loadFontFromFile (File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts/Linefont-VariableFont_wdth,wght.ttf"));
+    ASSERT_TRUE (font.wasOk()) << font.getErrorMessage();
+    theme->setDefaultFont (font.getValue().withHeight (10.0f));
+
+    Slider slider (Slider::RotaryVerticalDrag);
+    configure (slider);
+
+    auto style = DrawingStyle::create (slider, parsed.document.getChildWithName ("drawing"));
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    const auto measured = style.getReference()->measureElements (slider);
+
+    const auto find = [&measured] (const String& id)
+    {
+        const auto found = std::find_if (measured.begin(), measured.end(), [&id] (const DrawingStyle::ElementBounds& element)
+        {
+            return element.id == id;
+        });
+
+        return found != measured.end() ? *found : DrawingStyle::ElementBounds();
+    };
+
+    EXPECT_EQ (find ("frame").bounds, Rectangle<float> (2.0f, 4.0f, 20.0f, 10.0f));
+    EXPECT_EQ (find ("frame").type, String ("rect"));
+    EXPECT_EQ (find ("frame").path, String ("Panel/rect#frame"));
+    EXPECT_EQ (find ("frame").numRows, 1);
+
+    // The transforms of the groups and the mapping of the viewports around an element place it
+    EXPECT_EQ (find ("dot").bounds, Rectangle<float> (12.0f, 22.0f, 6.0f, 6.0f));
+    EXPECT_EQ (find ("dot").path, String ("Panel/group#shifted/circle#dot"));
+    EXPECT_EQ (find ("half").bounds, Rectangle<float> (0.0f, 24.0f, 24.0f, 24.0f));
+
+    // A container covers what it holds, and what is repeated all its copies
+    EXPECT_EQ (find ("shifted").bounds, Rectangle<float> (12.0f, 22.0f, 6.0f, 6.0f));
+    EXPECT_EQ (find ("step").bounds, Rectangle<float> (0.0f, 40.0f, 24.0f, 4.0f));
+    EXPECT_EQ (find ("step").numRows, 3);
+
+    // What is not shown is not measured
+    EXPECT_TRUE (find ("hidden").path.isEmpty());
+
+    // A text is where it is fitted, and its glyphs in the part of it its justification gives them
+    EXPECT_EQ (find ("caption").bounds, Rectangle<float> (0.0f, 0.0f, 48.0f, 20.0f));
+    EXPECT_FLOAT_EQ (find ("caption").textBounds.getX(), 0.0f);
+    EXPECT_GT (find ("caption").textBounds.getWidth(), 0.0f);
+    EXPECT_LT (find ("caption").textBounds.getWidth(), 48.0f);
+
+    // Elements are told in the order they are painted, a container before what it holds
+    EXPECT_EQ (measured.front().id, String ("frame"));
+    EXPECT_EQ (measured[1].id, String ("shifted"));
+    EXPECT_EQ (measured[2].id, String ("dot"));
+}
+
+TEST_F (DrawingStyleTest, MeasuringFollowsTheStateOfTheComponent)
+{
+    const auto parsed = YuiParser::parse (R"yui(
+        drawing Bar {
+            rect { id: level; bounds: rect (0, 0, bounds.width * normalized, 8); fill: #ffffff; }
+        })yui");
+    ASSERT_TRUE (parsed.wasOk()) << parsed.diagnostics.front().toString();
+
+    Slider slider (Slider::LinearHorizontal);
+    configure (slider);
+
+    auto style = DrawingStyle::create (slider, parsed.document.getChildWithName ("drawing"));
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    EXPECT_EQ (style.getReference()->measureElements (slider).front().bounds, Rectangle<float> (0.0f, 0.0f, 24.0f, 8.0f));
+
+    slider.setValue (1.0, dontSendNotification);
+    EXPECT_EQ (style.getReference()->measureElements (slider).front().bounds, Rectangle<float> (0.0f, 0.0f, 48.0f, 8.0f));
+}
+
+TEST_F (DrawingStyleGpuTest, TiledImagesRepeatFromTheCornerOfTheirBounds)
+{
+    DrawnComponent component (parseYui (R"yui(
+        drawing {
+            image { bounds: rect (2, 0, 14, 16); source: "memory:halves"; fitting: tile; }
+            image { bounds: rect (268435456, 0, 40, 4); source: "memory:halves"; fitting: tile; }
+        })yui"));
+
+    auto* style = dynamic_cast<DrawingStyle*> (component.getStyle().get());
+    ASSERT_NE (style, nullptr);
+
+    // Red on its left half, blue on its right one
+    style->setImageResolver ([] (const String&) -> std::optional<Image>
+    {
+        Image image (4, 4);
+        image.fillColor (Color (0xff0000ff));
+
+        for (int y = 0; y < 4; ++y)
+            for (int x = 0; x < 2; ++x)
+                image.setPixelColor (x, y, Color (0xffff0000));
+
+        return image;
+    });
+
+    const auto painted = component.snapshotToImage (*gpuContext);
+    ASSERT_TRUE (painted.isValid());
+
+    EXPECT_EQ (painted.getPixelColor (1, 8).getAlpha(), 0);
+    EXPECT_EQ (painted.getPixelColor (3, 8), Color (0xffff0000));
+    EXPECT_EQ (painted.getPixelColor (4, 8), Color (0xff0000ff));
+    EXPECT_EQ (painted.getPixelColor (7, 8), Color (0xffff0000));
+    EXPECT_EQ (painted.getPixelColor (9, 8), Color (0xff0000ff));
+}

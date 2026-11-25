@@ -373,19 +373,41 @@ struct ExpressionDrawing::DrawBuffers
             modifier.setVerticalAlign (StyledText::toVerticalAlign (justification));
         }
 
-        void draw (Graphics& g, const Font* defaultFont, const std::optional<float>& fillOpacity, const std::optional<float>& strokeOpacity) const
+        /* Lays the text out with its font, or the one given when it has none. Returns false when there is nothing to draw. */
+        bool prepare (const Font* defaultFont) const
         {
             if (text.isEmpty())
-                return;
+                return false;
 
             const auto* textFont = font.has_value() && ! font->isEmpty() ? &*font : defaultFont;
             if (textFont == nullptr || textFont->isEmpty())
-                return;
+                return false;
 
             if (! isShaped || shapedFont != *textFont)
                 shape (*textFont);
 
-            if (anchorPoint && anchoredText.isEmpty())
+            return ! (anchorPoint && anchoredText.isEmpty());
+        }
+
+        /* Where the text lands: the part of its area its glyphs take, or all of it. */
+        Rectangle<float> getBounds (const Font* defaultFont, bool ofGlyphs) const
+        {
+            if (! prepare (defaultFont))
+                return {};
+
+            if (anchorPoint)
+                return anchoredText.getBounds();
+
+            if (! ofGlyphs)
+                return area;
+
+            const auto offset = fittedText->getOffset (area);
+            return fittedText->getComputedTextBounds().translated (area.getX() + offset.getX(), area.getY() + offset.getY());
+        }
+
+        void draw (Graphics& g, const Font* defaultFont, const std::optional<float>& fillOpacity, const std::optional<float>& strokeOpacity) const
+        {
+            if (! prepare (defaultFont))
                 return;
 
             const auto& shaped = anchorPoint ? anchoredText.getStyledText() : *fittedText;
@@ -408,16 +430,16 @@ struct ExpressionDrawing::DrawBuffers
     /* A shape or a label drawn with a style. */
     struct Operation
     {
-        Operation (const Style& shapeStyle, const Path& shape)
-            : style (shapeStyle)
-            , path (shape)
+        Operation (Style shapeStyle, Path shape)
+            : style (std::move (shapeStyle))
+            , path (std::move (shape))
         {
             if (style.shouldStroke && style.hasDash())
-                dashedPath = shape.createDashed (style.strokeDash->asSpan(), style.strokeDashOffset.value_or (0.0f));
+                dashedPath = path->createDashed (style.strokeDash->asSpan(), style.strokeDashOffset.value_or (0.0f));
         }
 
-        Operation (const Style& labelStyle, Text labelText)
-            : style (labelStyle)
+        Operation (Style labelStyle, Text labelText)
+            : style (std::move (labelStyle))
             , label (std::move (labelText))
         {
         }
@@ -467,6 +489,14 @@ struct ExpressionDrawing::DrawBuffers
     {
     }
 
+    /* Collects the area the labels cover instead of drawing them. */
+    DrawBuffers (Rectangle<float>& labelBoundsToBuild, const Font* font, bool shouldMeasureGlyphs)
+        : labelFont (font)
+        , labelBounds (std::addressof (labelBoundsToBuild))
+        , measuresGlyphs (shouldMeasureGlyphs)
+    {
+    }
+
     void addRow (const Lanes& lanes, int lane);
 
     /* Evaluates the rows of a state and adds them all. */
@@ -498,12 +528,12 @@ struct ExpressionDrawing::DrawBuffers
     {
         flush();
 
-        for (const auto& polyline : polylines)
+        for (auto& polyline : polylines)
         {
-            auto style = polyline.style;
+            auto& style = polyline.style;
             style.shouldFill = style.hasFill();
             style.shouldStroke = style.hasStroke() || ! style.hasFill();
-            emit (style, polyline.path);
+            emit (std::move (style), std::move (polyline.path));
         }
 
         polylines.clear();
@@ -544,16 +574,17 @@ private:
         if (batch.isEmpty())
             return;
 
-        emit (batchStyle, batch);
+        // The batch style is only compared again after a new batch reassigns it
+        emit (std::move (batchStyle), std::move (batch));
 
         // A new path, as the renderer or the cache still reference the emitted one
         batch = Path();
     }
 
-    void emit (const Style& style, const Path& shape)
+    void emit (Style style, Path shape)
     {
         if (outline == nullptr)
-            emit (Operation (style, shape));
+            emit (Operation (std::move (style), std::move (shape)));
         else if (appliesTransforms && style.transform)
             outline->appendPath (shape, *style.transform);
         else
@@ -566,6 +597,21 @@ private:
             recorded->push_back (std::move (operation));
         else if (g != nullptr)
             operation.draw (*g, labelFont);
+        else if (labelBounds != nullptr && operation.label)
+            addLabelBounds (*operation.label, operation.style);
+    }
+
+    void addLabelBounds (const Text& label, const Style& style)
+    {
+        auto bounds = label.getBounds (labelFont, measuresGlyphs);
+
+        if (bounds.isEmpty())
+            return;
+
+        if (style.transform)
+            bounds = bounds.transformed (*style.transform);
+
+        *labelBounds = labelBounds->isEmpty() ? bounds : labelBounds->unionWith (bounds);
     }
 
     void addVertex (const Point<float>& vertex, const Style& style, int series)
@@ -606,6 +652,8 @@ private:
     std::vector<Operation>* recorded = nullptr;
     Path* outline = nullptr;
     bool appliesTransforms = true;
+    Rectangle<float>* labelBounds = nullptr;
+    bool measuresGlyphs = true;
 
     Path batch;
     Style batchStyle;
@@ -746,7 +794,7 @@ void ExpressionDrawing::DrawBuffers::addRow (const Lanes& lanes, int lane)
     if (const auto* v = getDrawingOutput (lanes.vertex))
         addVertex (*v, style, getOptionalOutput (lanes.series).value_or (0));
 
-    if (settings.hasLabelFont && lanes.label != nullptr)
+    if ((settings.hasLabelFont || labelBounds != nullptr) && lanes.label != nullptr)
     {
         flush();
 
@@ -770,7 +818,7 @@ void ExpressionDrawing::DrawBuffers::addRow (const Lanes& lanes, int lane)
             text.area = lanes.labelRect[lane];
         }
 
-        emit (Operation (style, std::move (text)));
+        emit (Operation (std::move (style), std::move (text)));
     }
 }
 
@@ -783,6 +831,8 @@ struct ExpressionDrawing::Cache::Data
     Fields<ExpressionDrawingColumn> snapshot;
     std::vector<DrawBuffers::Operation> operations;
     bool wasRebuilt = false;
+    bool outputsChanged = false;
+    bool isRecorded = false;
 };
 
 ExpressionDrawing::Cache::Cache()
@@ -902,12 +952,19 @@ void ExpressionDrawing::draw (Graphics& g, ExpressionState& state, int numRows, 
         startRow += numEvaluated;
     }
 
-    data.wasRebuilt = hasChanged || data.numRows != startRow;
+    const bool outputsChanged = hasChanged || data.numRows != startRow;
+
+    // Outputs changing on consecutive draws are animated: recording them would only be thrown away
+    const bool shouldRecord = ! (outputsChanged && data.outputsChanged);
+
     data.numRows = startRow;
+    data.outputsChanged = outputsChanged;
+    data.wasRebuilt = outputsChanged || ! data.isRecorded;
 
     if (data.wasRebuilt)
     {
         data.operations.clear();
+        data.isRecorded = shouldRecord;
 
         DrawBuffers::Lanes lanes {};
 
@@ -916,12 +973,15 @@ void ExpressionDrawing::draw (Graphics& g, ExpressionState& state, int numRows, 
             values = output.isValid() ? column.values.get() : nullptr;
         }, *outputs, data.snapshot, lanes);
 
-        DrawBuffers buffers (settings, g, labelFont, &data.operations);
+        DrawBuffers buffers (settings, g, labelFont, shouldRecord ? &data.operations : nullptr);
 
         for (int row = 0; row < data.numRows; ++row)
             buffers.addRow (lanes, row);
 
         buffers.finish();
+
+        if (! shouldRecord)
+            return;
     }
 
     for (const auto& operation : data.operations)
@@ -933,6 +993,13 @@ Path ExpressionDrawing::getOutline (ExpressionState& state, int numRows, bool ap
     Path outline;
     DrawBuffers (outline, applyTransforms).addRows (*outputs, state, numRows);
     return outline;
+}
+
+Rectangle<float> ExpressionDrawing::getLabelBounds (ExpressionState& state, int numRows, const Font* labelFont, bool ofGlyphs) const
+{
+    Rectangle<float> bounds;
+    DrawBuffers (bounds, labelFont, ofGlyphs).addRows (*outputs, state, numRows);
+    return bounds;
 }
 
 } // namespace yup

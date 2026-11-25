@@ -61,6 +61,8 @@ public:
 
     rive::gpu::RenderTarget* getRenderTarget() override { return renderTarget.get(); }
 
+    bool isSurfaceAvailable() const noexcept override { return isHeadless || swapchain.Get() != nullptr; }
+
     void onSizeChanged (void* window, int width, int height, float dpiScale, uint32_t sampleCount) override
     {
         if (! isHeadless)
@@ -79,12 +81,23 @@ public:
             if ((GetWindowLongPtrW ((HWND) window, GWL_EXSTYLE) & WS_EX_NOREDIRECTIONBITMAP) != 0)
                 scd.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
 
-            VERIFY_OK (d3dFactory->CreateSwapChainForHwnd (device.Get(),
-                                                           (HWND) window,
-                                                           &scd,
-                                                           nullptr,
-                                                           nullptr,
-                                                           swapchain.ReleaseAndGetAddressOf()));
+            // Fails with a transient error while the session cannot present, such as a non-interactive one
+            const HRESULT hr = d3dFactory->CreateSwapChainForHwnd (device.Get(),
+                                                                   (HWND) window,
+                                                                   &scd,
+                                                                   nullptr,
+                                                                   nullptr,
+                                                                   swapchain.ReleaseAndGetAddressOf());
+            if (FAILED (hr))
+            {
+                if (std::exchange (swapchainError, hr) != hr)
+                    fprintf (stderr, "D3D: CreateSwapChainForHwnd failed, rendering is suspended until it succeeds: hr=0x%08X (%s)\n", static_cast<unsigned> (hr), std::system_category().message (hr).c_str());
+
+                renderTarget = nullptr;
+                return;
+            }
+
+            swapchainError = S_OK;
         }
         else
         {
@@ -153,6 +166,10 @@ public:
 private:
     bool flushIntoTargetTexture()
     {
+        jassert (isSurfaceAvailable());
+        if (! isSurfaceAvailable())
+            return false;
+
         if (renderTarget->targetTexture() == nullptr)
         {
             if (isHeadless)
@@ -189,6 +206,7 @@ private:
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> deviceContext;
     ComPtr<IDXGISwapChain1> swapchain;
+    HRESULT swapchainError = S_OK;
     ComPtr<ID3D11Texture2D> cachedBackbuffer;
     ComPtr<ID3D11Texture2D> readbackTexture;
     ComPtr<ID3D11Texture2D> headlessDrawTexture;

@@ -83,7 +83,13 @@ public:
     /** Returns true while a transport is active. */
     bool isRunning() const noexcept;
 
-    /** Convenience placeholder for future stdio transport support. */
+    /** Starts serving the standard input and output of the process, one message per line.
+
+        Use start() with an MCPStdioServerTransport to serve other streams, or to wait for the
+        client to leave.
+
+        @see MCPStdioServerTransport
+    */
     Result startStdio();
 
     /** Starts serving Streamable HTTP on `127.0.0.1` at the given port, at the default

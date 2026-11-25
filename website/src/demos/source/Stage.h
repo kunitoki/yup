@@ -56,7 +56,7 @@ public:
     static void requestOpen (bool isOpen) { requestedOpen.store (isOpen, std::memory_order_relaxed); }
 
     //==============================================================================
-    void refreshDisplay (double) override
+    void refreshDisplay (double)
     {
         const auto index = requestedDemo.load (std::memory_order_relaxed);
         if (index != currentDemo && yup::isPositiveAndBelow (index, static_cast<int> (demos.size())))
@@ -115,4 +115,5 @@ private:
 
     int currentDemo = -1;
     bool wasOpen = false;
+    yup::FrameAttachment frameAttachment { *this, yup::bindFront (&Stage::refreshDisplay, this) };
 };

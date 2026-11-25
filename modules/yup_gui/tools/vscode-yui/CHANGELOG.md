@@ -4,7 +4,7 @@ All notable changes to this extension will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [1.0.0] - Unreleased
+## [2.0.1] - Unreleased
 
 ### Added
 
@@ -25,16 +25,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The `yui.lint.models` setting points at a JSON file declaring the application
   models, so bindings such as `value <=> params.cutoff;` are resolved instead of
   being reported as unknown elements.
-- Completions from `yup_yui_tool schema`: instantiable types, the properties and
-  signals of the enclosing type, enumeration values, style pseudo classes and
-  palette roles.
+- Completions, outline, go to definition, hovers and color swatches, all
+  answered by `yup_yui_tool` (`complete`, `outline`, `definition`, `hover`) for
+  the document as it is typed: component types, the properties and signals of
+  the enclosing type, enumeration values, the elements and properties of
+  drawings, the drawings, palettes, palette colors and tokens declared, model
+  properties and style pseudo classes.
 - **YUI: Open Preview**, running the document live in a webview panel beside
   the editor: the interface answers the mouse and the keyboard, and follows
   what is typed, the active editor and the color theme. The toolbar of the
   panel chooses what is shown (the interface, or a drawing, a palette or a
-  component the document declares, a drawing painted by a chosen component
-  type), the size (automatic, the one of the panel or fixed), the theme and the
-  zoom. The size and the theme are the `yui.preview.size` and
+  component the document or the files it imports declare), the size (automatic,
+  the one of the panel or fixed), the theme and the zoom. A drawing and a
+  component are shown where the interface uses them, or a drawing on its own
+  painting a chosen component type. `Fit` scales what is shown to the panel, up
+  or down, and every zoom is drawn sharp. `Guides` shows the bounds, the paint
+  margin and the distances of the components clicked, or of the one the caret
+  is in. `Statistics` tells the frames a second, the time painting takes and
+  the components taking the longest to paint. The size and the theme are the `yui.preview.size` and
   `yui.preview.theme` settings.
 - **YUI: Import SVG as Drawing**, converting an `.svg` into a `drawing` block
   through `yup_yui_tool import-svg`.
@@ -43,3 +51,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The tool is packaged as a WebAssembly module (`tools/package-tool.sh`), so
   one package works on every platform and holds no native binary. A package
   built without it keeps highlighting and snippets, and turns the rest off.
+- **YUI: Set Up Agent Tools**, serving coding agents such as Claude Code and
+  GitHub Copilot the problems (`yui_check`), the layout (`yui_inspect`), an
+  image (`yui_render`), the component types (`yui_schema`) and the live preview
+  (`yui_capture_preview`) of the `.yui` documents of a workspace, over the Model
+  Context Protocol. It is off until the command is run, which sets
+  `yui.mcp.enabled` and `yui.mcp.port` for the workspace and lists the server in
+  its `.mcp.json`. The server only listens on this machine. A call naming a
+  `reference` image reads it, and one naming an `output` writes the image
+  there, both inside the workspace only.
+- The extension is bundled with esbuild, and needs VS Code 1.90 or later.

@@ -1,0 +1,23 @@
+// size: 320 144
+drawing Chart {
+    viewBox: rect (0, 0, 24, 24);
+
+    pattern Dots {
+        tile: rect (0, 0, 4, 4);
+        circle { center: bounds.center; radius: 1; fill: palette.accent; }
+    }
+
+    marker Arrow {
+        size: size (6, 6); ref: point (3, 3); viewBox: rect (0, 0, 6, 6);
+        path { data: "M 0 0 L 6 3 L 0 6 Z"; fill: palette.text; }
+    }
+
+    rect { bounds: bounds.reduced (4); fillPattern: Dots; }
+    path { data: "M 4 20 L 12 8 L 20 14"; fill: none; stroke: palette.text; strokeWidth: 0.75; markerMid: Arrow; markerEnd: Arrow; }
+}
+
+style {
+    .chart { drawing: Chart; }
+}
+
+Component { class: chart; }

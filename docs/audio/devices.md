@@ -306,8 +306,9 @@ yup::RuntimePermissions::request (yup::RuntimePermissions::recordAudio, [this] (
 it calls back immediately with `true`, so the same code is portable. On iOS
 and macOS the system asks the user the first time the input is opened,
 and Apple requires an `NSMicrophoneUsageDescription` entry in the app's
-`Info.plist` (see the `CUSTOM_PLIST` option in the
-[CMake API](../build-system/cmake-api.md)). In the browser, see
+`Info.plist`. The built-in one has it, with the text of the `MICROPHONE_USAGE`
+option of `yup_standalone_app` (`PLUGIN_MICROPHONE_USAGE` for the standalone of
+a plugin, see the [CMake API](../build-system/cmake-api.md)). In the browser, see
 [Web audio](web.md).
 
 ## MIDI inputs

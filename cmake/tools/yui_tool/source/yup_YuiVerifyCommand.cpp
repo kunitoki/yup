@@ -29,43 +29,6 @@
 
 using namespace yup;
 
-namespace
-{
-
-// A file holding only declarations (styles, drawings, components) is written to be imported
-bool hasNoRootComponent (const String& text, const YuiLoader& loader)
-{
-    const auto parsed = YuiParser::parse (text, [&loader] (const String& path)
-    {
-        return loader.getLoadedText (path);
-    });
-
-    return parsed.wasOk() && findYuiToolRootIndex (parsed.document) < 0;
-}
-
-std::vector<YuiToolProblem> findProblems (const File& file, const std::optional<String>& unsavedText, const YuiToolModels& models)
-{
-    YuiDocument document;
-    YuiLoader loader (document);
-    models.attachTo (document);
-
-    auto result = loader.loadFile (file);
-
-    if (unsavedText.has_value())
-        result = loader.reloadFromString (*unsavedText);
-
-    if (result.failed())
-    {
-        // There is no interface to build from declarations alone, so they are checked as those of an empty one
-        if (const auto text = loader.getLoadedText (file.getFileName()); text.has_value() && hasNoRootComponent (*text, loader))
-            result = loader.reloadFromString (*text + "\nComponent {}\n");
-    }
-
-    return findYuiToolProblems (document, file, result);
-}
-
-} // namespace
-
 int runYuiVerifyCommand (int argc, char** argv, bool includeWarnings)
 {
     StringArray paths;
@@ -154,7 +117,7 @@ int runYuiVerifyCommand (int argc, char** argv, bool includeWarnings)
 
     for (const auto& path : paths)
     {
-        for (const auto& problem : findProblems (workingDirectory.getChildFile (path), unsavedText, models))
+        for (const auto& problem : findYuiToolFileProblems (workingDirectory.getChildFile (path), unsavedText, models))
         {
             if (! problem.isError && ! includeWarnings)
                 continue;

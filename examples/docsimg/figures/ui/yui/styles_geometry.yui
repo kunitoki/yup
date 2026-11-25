@@ -1,0 +1,26 @@
+// size: 480 176
+style {
+    .styled TextButton   { cornerRadius: 16; outlineWidth: 2; }
+    .styled Slider       { trackWidth: 10; thumbSize: 24; }
+    .styled SwitchButton { cornerRadius: 4; thumbInset: 7; }
+}
+
+Row {
+    gap: 32;
+
+    Column {
+        gap: 10; flexGrow: 1;
+
+        TextButton   { text: "Default"; flexGrow: 1; }
+        Slider       { value: 0.6; flexGrow: 1; }
+        SwitchButton { checked: true; flexGrow: 1; }
+    }
+
+    Column {
+        class: styled; gap: 10; flexGrow: 1;
+
+        TextButton   { text: "Styled"; flexGrow: 1; }
+        Slider       { value: 0.6; flexGrow: 1; }
+        SwitchButton { checked: true; flexGrow: 1; }
+    }
+}

@@ -55,7 +55,7 @@ jobs:
       android_test_modules: ${{ steps.android.outputs.test_modules }}
       android_examples: ${{ steps.android.outputs.examples }}
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
     - id: linux

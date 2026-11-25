@@ -429,7 +429,15 @@ private:
     // After `name <=>`: the target of a two-way binding
     DataTree parseTwoWayBinding (const String& name)
     {
-        const auto target = parsePath ("Expected the property to bind to");
+        auto target = parsePath ("Expected the property to bind to");
+
+        // An element of a list, at an index that is an expression
+        if (match ("["))
+        {
+            target << "[" << parseExpressionText() << "]";
+            expect ("]");
+        }
+
         expect (";");
         return DataTree ("bind", { { "property", name }, { "target", target } });
     }
@@ -654,6 +662,11 @@ private:
     // The declarations of a component (properties, aliases and signals) go to its own transaction
     void parseBody (DataTree& element, DataTree::Transaction* declarations = nullptr)
     {
+        const ScopedValueSetter<int> nesting (nestingDepth, nestingDepth + 1);
+
+        if (nestingDepth > maxNestingDepth)
+            throw Error { position, "Elements are nested more than " + String (maxNestingDepth) + " deep" };
+
         expect ("{");
 
         auto transaction = element.beginTransaction();
@@ -823,7 +836,8 @@ private:
     }
 
     // Values are kept as written, the expression parser only finds where they end. A value starting
-    // with '[' is an array literal, whose elements are expressions of their own.
+    // with '[' is an array literal, whose elements are expressions of their own, unless it is read at
+    // an index, which makes it part of an expression.
     String parseExpressionText()
     {
         skipWhitespace();
@@ -839,7 +853,13 @@ private:
                 throw Error { start + offset, result.getErrorMessage() };
 
             position = start + offset;
-            return String::fromUTF8 (text + start, offset);
+            skipWhitespace();
+
+            if (text[position] != '[')
+            {
+                position = start + offset;
+                return String::fromUTF8 (text + start, offset);
+            }
         }
 
         // The expression parser counts lines from the start of what it gets, so it only gets the rest of the text
@@ -953,7 +973,11 @@ private:
     std::vector<int> lineStarts;
     std::vector<YuiDiagnostic> positions;
     int position = 0;
+    int nestingDepth = 0;
     bool insideDrawing = false;
+
+    // Each body is a call inside the one around it: this keeps the stack of any platform
+    static constexpr int maxNestingDepth = 128;
 };
 
 //==============================================================================
