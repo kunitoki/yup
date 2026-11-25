@@ -1146,6 +1146,79 @@ TEST (PathTests, FromStringParsesSignedExponentCoordinates)
     expectPointNear (segment.point, Point<float> (50.0f, -60.0f));
 }
 
+TEST (PathTests, FromStringParsesCoordinatesWithoutSeparators)
+{
+    Path p;
+    EXPECT_TRUE (p.fromString ("M.5.5L-1-2l+.25-.75"));
+
+    auto it = p.begin();
+    ASSERT_NE (it, p.end());
+    EXPECT_EQ ((*it).verb, Path::Verb::MoveTo);
+    expectPointNear ((*it).point, Point<float> (0.5f, 0.5f));
+
+    ++it;
+    ASSERT_NE (it, p.end());
+    EXPECT_EQ ((*it).verb, Path::Verb::LineTo);
+    expectPointNear ((*it).point, Point<float> (-1.0f, -2.0f));
+
+    ++it;
+    ASSERT_NE (it, p.end());
+    EXPECT_EQ ((*it).verb, Path::Verb::LineTo);
+    expectPointNear ((*it).point, Point<float> (-0.75f, -2.75f));
+
+    ++it;
+    EXPECT_EQ (it, p.end());
+}
+
+TEST (PathTests, FromStringLeavesAnExponentWithoutDigitsOutOfTheNumber)
+{
+    Path p;
+    EXPECT_TRUE (p.fromString ("M 1 2e L 3 4E+ L 5. 6"));
+
+    auto it = p.begin();
+    ASSERT_NE (it, p.end());
+    expectPointNear ((*it).point, Point<float> (1.0f, 2.0f));
+
+    ++it;
+    ASSERT_NE (it, p.end());
+    expectPointNear ((*it).point, Point<float> (3.0f, 4.0f));
+
+    ++it;
+    ASSERT_NE (it, p.end());
+    expectPointNear ((*it).point, Point<float> (5.0f, 6.0f));
+
+    ++it;
+    EXPECT_EQ (it, p.end());
+}
+
+TEST (PathTests, FromStringStopsACommandAtASignWithoutDigits)
+{
+    Path p;
+    EXPECT_TRUE (p.fromString ("M 1 2 L 5 6 - 7 8 . 9"));
+
+    auto it = p.begin();
+    ASSERT_NE (it, p.end());
+    expectPointNear ((*it).point, Point<float> (1.0f, 2.0f));
+
+    ++it;
+    ASSERT_NE (it, p.end());
+    EXPECT_EQ ((*it).verb, Path::Verb::LineTo);
+    expectPointNear ((*it).point, Point<float> (5.0f, 6.0f));
+
+    ++it;
+    EXPECT_EQ (it, p.end());
+}
+
+TEST (PathTests, FromStringParsesVeryLongNumbers)
+{
+    Path p;
+    EXPECT_TRUE (p.fromString ("M 1.5" + String::repeatedString ("0", 80) + " -2.25" + String::repeatedString ("0", 80) + "e1"));
+
+    auto it = p.begin();
+    ASSERT_NE (it, p.end());
+    expectPointNear ((*it).point, Point<float> (1.5f, -22.5f));
+}
+
 TEST (PathTests, FromStringSmoothCubicAbsolute)
 {
     Path p;

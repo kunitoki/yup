@@ -116,6 +116,27 @@ void registerYupExpressionBindings (py::module_& m)
 
             return Expression::call (functionName, std::move (argumentList));
         }, "functionName"_a, "arguments"_a)
+        .def_static ("ternary", [expressionFromObject] (py::object condition, py::object whenTrue, py::object whenFalse)
+        {
+            return Expression::ternary (expressionFromObject (condition), expressionFromObject (whenTrue), expressionFromObject (whenFalse));
+        }, "condition"_a, "whenTrue"_a, "whenFalse"_a)
+        .def_static ("let", [expressionFromObject] (const String& name, py::object value)
+        {
+            return Expression::let (name, expressionFromObject (value));
+        }, "name"_a, "value"_a)
+        .def_static ("output", [expressionFromObject] (const String& name, py::object value)
+        {
+            return Expression::output (name, expressionFromObject (value));
+        }, "name"_a, "value"_a)
+        .def_static ("block", [expressionFromObject] (py::list statements)
+        {
+            std::vector<Expression> statementList;
+
+            for (auto item : statements)
+                statementList.push_back (expressionFromObject (item));
+
+            return Expression::block (std::move (statementList));
+        }, "statements"_a)
         .def ("toString", &Expression::toString)
         .def ("__str__", &Expression::toString)
         .def ("getName", &Expression::getName)

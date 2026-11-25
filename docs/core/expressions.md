@@ -49,6 +49,10 @@ for (int row = 0; row < (int) data.size(); ++row)
 }
 ```
 
+`getOutput<T>` fails with a message when the output is missing or of another
+type. For the outputs a program may or may not assign, `findTypedOutput<T>`
+returns a handle that `isValid()` tells apart, without building a message.
+
 ## Compile once, evaluate many times
 
 Compiling parses, resolves symbols and overloads, folds constants and allocates
@@ -182,6 +186,41 @@ auto expression = Expression::parseExpression (text, offset); // stops at '}'
 
 On error the offset points at the failing character, and the message reports
 the line and column within the whole text.
+
+### Programs built from code
+
+A program doesn't have to go through a text. `Expression` values combine with
+the arithmetic operators, `Expression::text`, `symbol`, `call` and `ternary`
+make the other nodes, and `Expression::let`, `output` and `block` make the
+statements of a program:
+
+```cpp
+auto program = Expression::block ({
+    Expression::let ("w", Expression::symbol ("width") / Expression (2)),
+    Expression::output ("rect", Expression::call ("rect", { Expression (0), Expression (0), Expression::symbol ("w"), Expression (10) })),
+    Expression::output ("fill", Expression::ternary (Expression::symbol ("active"), Expression::symbol ("accent"), Expression::symbol ("muted")))
+});
+
+// Same as: let w = width / 2; rect = rect (0, 0, w, 10); fill = active ? accent : muted
+```
+
+Parsed and built nodes mix freely, so a tool reading expressions from a document
+can parse each one with `Expression::parseExpression` and assemble them into one
+program, instead of writing a text only to parse it again. `toString()` prints
+any of them back as source.
+
+Nodes built from code have no line and column, so the errors of compiling them
+carry no position. The `compile` overload taking a `failedStatement` tells
+which top-level statement failed instead, which is enough to point at where
+that statement comes from:
+
+```cpp
+int failedStatement = -1;
+auto compiled = CompiledExpression::compile (program, context, failedStatement);
+
+if (compiled.failed() && failedStatement >= 0)
+    report (origins[failedStatement], compiled.getErrorMessage());
+```
 
 ## The context
 

@@ -98,16 +98,24 @@ String CodeDocument::getLine (int lineNumber) const
 
 String CodeDocument::getText() const
 {
-    String result;
+    const std::string_view ending = lineEnding == LineEnding::crlf ? "\r\n" : "\n";
+
+    size_t numBytes = 0;
+    for (const auto& line : lines)
+        numBytes += line.getNumBytesAsUTF8() + ending.size();
+
+    std::string result;
+    result.reserve (numBytes);
+
     for (size_t i = 0; i < lines.size(); ++i)
     {
-        result << lines[i];
+        result.append (lines[i].toRawUTF8());
 
         if (i + 1 < lines.size())
-            result << (lineEnding == LineEnding::crlf ? "\r\n" : "\n");
+            result.append (ending);
     }
 
-    return result;
+    return String::fromUTF8 (result.data(), static_cast<int> (result.size()));
 }
 
 int CodeDocument::getNumCharacters() const
