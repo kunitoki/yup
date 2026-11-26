@@ -77,6 +77,10 @@ public:
         The base-class implementation asserts false so unoverridden processors are
         caught at runtime in debug builds.
 
+        Silent input is a regular call: to drain a processor, hosts keep calling this with
+        silent input for getLatencySamples() + getTailSamples() samples after the last
+        input, so the processor must keep producing its tail from silence.
+
         @param context  All per-block inputs: audio, MIDI, parameter changes, and position.
     */
     virtual void processBlock (DomainProcessContext<float>& context) = 0;

@@ -96,6 +96,8 @@ lock-free patterns to talk to the UI, are in
 - [Plugin hosting](plugin-hosting.md) - scanning, loading and sandboxing
   third-party plugins.
 - [Audio graph](audio-graph.md) - realtime routing of processors and plugins.
+- [Headless audio](headless.md) - the audio engine in a console application,
+  without `yup_gui`.
 
 **[DSP](dsp/index.md)**
 

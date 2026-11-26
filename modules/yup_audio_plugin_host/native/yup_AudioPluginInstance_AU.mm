@@ -165,6 +165,7 @@ AudioUnitEvent makeAUParameterEvent(AudioUnit audioUnit,
 
 //==============================================================================
 
+#if YUP_MODULE_AVAILABLE_yup_gui
 class AUEditor : public AudioProcessorEditor
 {
    public:
@@ -385,6 +386,7 @@ class AUEditor : public AudioProcessorEditor
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AUEditor)
 };
+#endif
 
 //==============================================================================
 
@@ -397,12 +399,12 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
         : AudioPluginInstance(desc, std::move(busLayout)), audioUnit(unit)
     {
         buildParameterList();
-        installLatencyListener();
+        installPropertyListeners();
     }
 
     ~AUInstance() override
     {
-        removeLatencyListener();
+        removePropertyListeners();
         removeParameterListeners();
         releaseResources();
 
@@ -743,6 +745,7 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
 
     bool hasEditor() const override
     {
+#if YUP_MODULE_AVAILABLE_yup_gui
         UInt32 size = 0;
         Boolean writable = false;
 
@@ -751,12 +754,17 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
                                         kAudioUnitScope_Global, 0,
                                         &size, &writable) == noErr &&
                size >= offsetof(AudioUnitCocoaViewInfo, mCocoaAUViewClass) + sizeof(CFStringRef);
+#else
+        return false;
+#endif
     }
 
     AudioProcessorEditor* createEditor() override
     {
+#if YUP_MODULE_AVAILABLE_yup_gui
         if (auto editor = AUEditor::create(audioUnit))
             return editor.release();
+#endif
 
         return nullptr;
     }
@@ -780,6 +788,32 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
         }
 
         return jmax(0, roundToInt(latencySeconds * static_cast<double>(getSampleRate())));
+    }
+
+    int getTailSamples() override
+    {
+        if (audioUnit == nullptr)
+            return 0;
+
+        Float64 tailSeconds = 0.0;
+        UInt32 propertySize = sizeof(tailSeconds);
+
+        if (AudioUnitGetProperty(audioUnit,
+                                 kAudioUnitProperty_TailTime,
+                                 kAudioUnitScope_Global,
+                                 0,
+                                 &tailSeconds,
+                                 &propertySize) != noErr)
+        {
+            return 0;
+        }
+
+        const auto tailSamples = tailSeconds * static_cast<double>(getSampleRate());
+
+        if (! (tailSamples > 0.0))
+            return 0;
+
+        return tailSamples >= static_cast<double>(infiniteTailSamples) ? infiniteTailSamples : roundToInt(tailSamples);
     }
 
     //==============================================================================
@@ -1469,16 +1503,24 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
         }
     }
 
-    void installLatencyListener()
+    static constexpr AudioUnitPropertyID observedProperties[] = { kAudioUnitProperty_Latency, kAudioUnitProperty_TailTime };
+
+    void installPropertyListeners()
     {
-        if (audioUnit != nullptr)
-            AudioUnitAddPropertyListener(audioUnit, kAudioUnitProperty_Latency, latencyPropertyChanged, this);
+        if (audioUnit == nullptr)
+            return;
+
+        for (const auto propertyID : observedProperties)
+            AudioUnitAddPropertyListener(audioUnit, propertyID, latencyOrTailChanged, this);
     }
 
-    void removeLatencyListener()
+    void removePropertyListeners()
     {
-        if (audioUnit != nullptr)
-            AudioUnitRemovePropertyListenerWithUserData(audioUnit, kAudioUnitProperty_Latency, latencyPropertyChanged, this);
+        if (audioUnit == nullptr)
+            return;
+
+        for (const auto propertyID : observedProperties)
+            AudioUnitRemovePropertyListenerWithUserData(audioUnit, propertyID, latencyOrTailChanged, this);
     }
 
     void updateOfflineRenderMode()
@@ -1495,18 +1537,20 @@ class AUInstance : public AudioPluginInstance, private AudioParameter::Listener
                              sizeof(offline));
     }
 
-    static void latencyPropertyChanged(void* userData,
-                                       AudioUnit,
-                                       AudioUnitPropertyID propertyID,
-                                       AudioUnitScope,
-                                       AudioUnitElement)
+    static void latencyOrTailChanged(void* userData,
+                                     AudioUnit,
+                                     AudioUnitPropertyID propertyID,
+                                     AudioUnitScope,
+                                     AudioUnitElement)
     {
-        if (propertyID != kAudioUnitProperty_Latency)
+        auto* instance = static_cast<AUInstance*> (userData);
+        if (instance == nullptr)
             return;
 
-        auto* instance = static_cast<AUInstance*> (userData);
-        if (instance != nullptr)
+        if (propertyID == kAudioUnitProperty_Latency)
             instance->setLatencySamples(instance->getLatencySamples());
+        else if (propertyID == kAudioUnitProperty_TailTime)
+            instance->updateHostDisplay(ChangeDetails().withTailChanged(true));
     }
 
     const AudioPlayHead::PositionInfo* getCurrentPlayHeadPosition()

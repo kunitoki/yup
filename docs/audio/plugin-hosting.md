@@ -46,6 +46,10 @@ format.
 Sandboxing (out-of-process scanning and `RemoteAudioPluginInstance`) launches
 helper processes and is only available on desktop platforms (`YUP_DESKTOP`).
 
+Plugin editors need the `yup_gui` module. A target that does not link it still
+scans, loads and processes plugins, and every instance reports no editor. See
+[Headless audio](headless.md).
+
 ## Registering formats
 
 `AudioPluginScanner` owns the format backends. Adding a format of a type that is
@@ -297,6 +301,30 @@ The instance adds a few host controls:
 `getDescription()` returns the description the instance was loaded from, and
 `getLatencySamples()` the latency the plugin reports.
 
+### Tail and draining
+
+`getTailSamples()` returns the tail the plugin reports, with the meaning it has for
+any processor (see
+[Latency, tail and change notifications](processors.md#latency-tail-and-change-notifications)):
+
+| Format | Tail |
+|---|---|
+| VST3 | `IAudioProcessor::getTailSamples()`; `kInfiniteTail` becomes `infiniteTailSamples` |
+| CLAP | The `tail` extension; 0 without it and while the plugin is not activated |
+| Audio Unit | `kAudioUnitProperty_TailTime`, converted to samples |
+| LV2 | Always 0: the format has no tail |
+
+A `RemoteAudioPluginInstance` returns the value of the plugin in the server process.
+
+Add an `AudioProcessorBase::Listener` to the instance to follow changes. VST3, CLAP and
+Audio Unit plugins report `latencyChanged`; CLAP and Audio Unit plugins also report
+`tailChanged`. Both getters ask the plugin, so read them on the message thread, at load
+time and in the listener, and keep the values for the audio thread.
+
+To let a plugin ring out before you remove it, keep calling `processBlock()` with silent
+input for `getLatencySamples() + getTailSamples()` samples. A plugin reporting
+`infiniteTailSamples` never falls silent: fade its output out instead.
+
 ## Parameters
 
 `getParameters()` exposes the plugin parameters as `AudioParameter` objects.
@@ -464,6 +492,7 @@ general rules.
 ## Related pages
 
 - [Audio graph](audio-graph.md) - routing hosted plugins together with your own processors.
+- [Headless audio](headless.md) - hosting plugins without `yup_gui`.
 - [Processors](processors.md) - the `AudioProcessor` interface every instance implements.
 - [Writing plugins](plugin-client.md) - building your own plugins.
 - [Audio devices](devices.md) - playing an instance on an audio device.

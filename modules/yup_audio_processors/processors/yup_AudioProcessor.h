@@ -50,7 +50,9 @@ enum class AudioPluginWrapperType
     It provides a common interface for processing audio and MIDI data, managing parameters, and
     communicating with hosts.
 
-    @see AudioProcessorEditor
+    The thread and realtime rules of its calls are described in AudioProcessorBase.
+
+    @see AudioProcessorBase, AudioProcessorEditor
 */
 class YUP_API AudioProcessor : public DomainProcessor<AudioProcessContext, AudioSpec>
 {

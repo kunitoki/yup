@@ -108,6 +108,7 @@ void AudioPluginInstance::processBlockBypassed (AudioProcessContext<double>& con
 
 //==============================================================================
 
+#if YUP_MODULE_AVAILABLE_yup_gui
 namespace
 {
 
@@ -161,5 +162,6 @@ void followHostedEditorSize (Component& editor, Size<int> editorSize)
 }
 
 } // namespace
+#endif
 
 } // namespace yup

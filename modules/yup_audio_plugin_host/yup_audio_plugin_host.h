@@ -33,6 +33,7 @@
     license:            ISC
 
     dependencies:       yup_audio_processors sqlite3_library
+    optionalDeps:       yup_gui
     searchpaths:        native
 
   END_YUP_MODULE_DECLARATION

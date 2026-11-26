@@ -233,6 +233,20 @@ public:
         MidiBuffer midiBuffer;
     };
 
+    struct TailNode
+    {
+        std::shared_ptr<AudioProcessor> processor;
+        std::vector<int> sources;
+        int outputTailSamples = 0;
+    };
+
+    // Control-side copy of what the tail depends on: a published plan belongs to the audio thread.
+    struct TailTopology
+    {
+        std::vector<TailNode> nodes; // in topological order, sources index into it
+        std::vector<int> outputSources;
+    };
+
     struct CompiledGraph
     {
         CompiledGraph* nextRetired = nullptr;
@@ -277,7 +291,7 @@ public:
 
     Result commitChanges()
     {
-        const std::lock_guard<std::mutex> commitLock (commitMutex);
+        const AudioLockType::ScopedLockType sl (commitLock);
         const ScopedCommitFlag scopedCommitFlag (commitInProgress);
 
         std::vector<ModelNode> nodesSnapshot;
@@ -338,6 +352,7 @@ public:
             preparedNodes[node.id.getRawID()] = { node.processor, sampleRate, maxBlockSize, true };
 
         storeStats (compiled->stats);
+        auto newTailTopology = createTailTopology (*compiled);
         const auto newLatencySamples = compiled->graphLatencySamples;
         const auto oldLatencySamples = latestLatencySamples.exchange (newLatencySamples);
         lastCommittedTopologyRevision.store (snapshotTopologyRevision);
@@ -350,8 +365,11 @@ public:
         hasPublishedPlan.store (true);
         deleteRetiredPlansIfUnused();
 
-        if (oldLatencySamples != newLatencySamples)
-            owner.updateHostDisplay (AudioProcessor::ChangeDetails().withLatencyChanged (true));
+        const bool latencyChanged = oldLatencySamples != newLatencySamples;
+        const bool tailChanged = updateTailSamples (&newTailTopology);
+
+        if (latencyChanged || tailChanged)
+            owner.updateHostDisplay (AudioProcessor::ChangeDetails().withLatencyChanged (latencyChanged).withTailChanged (tailChanged));
 
         return Result::ok();
     }
@@ -447,6 +465,9 @@ public:
                 ignoreUnused (commitChanges());
             }
         }
+
+        if (details.tailChanged && updateTailSamples())
+            owner.updateHostDisplay (AudioProcessor::ChangeDetails().withTailChanged (true));
     }
 
     void processBlock (AudioProcessContext<float>& context)
@@ -534,7 +555,7 @@ public:
 
     void setAudioWorkgroup (AudioWorkgroup newWorkgroup)
     {
-        const std::lock_guard<std::mutex> lock (workgroupMutex);
+        const AudioLockType::ScopedLockType sl (workgroupLock);
         workgroup = std::move (newWorkgroup);
     }
 
@@ -543,7 +564,7 @@ public:
         AudioWorkgroup currentWorkgroup;
 
         {
-            const std::lock_guard<std::mutex> lock (workgroupMutex);
+            const AudioLockType::ScopedLockType sl (workgroupLock);
             currentWorkgroup = workgroup;
         }
 
@@ -875,6 +896,72 @@ public:
                 graph.delayLines.push_back (std::move (delayLine));
             }
         }
+    }
+
+    static TailTopology createTailTopology (const CompiledGraph& graph)
+    {
+        TailTopology topology;
+        std::vector<int> positions (graph.nodes.size(), -1);
+
+        const auto addSource = [&] (std::vector<int>& sources, int connectionIndex)
+        {
+            const auto sourceNodeIndex = graph.connections[static_cast<size_t> (connectionIndex)].sourceNodeIndex;
+
+            if (sourceNodeIndex >= 0)
+                sources.push_back (positions[static_cast<size_t> (sourceNodeIndex)]);
+        };
+
+        topology.nodes.reserve (graph.nodes.size());
+
+        for (const auto nodeIndex : graph.topologicalOrder)
+        {
+            const auto& node = graph.nodes[static_cast<size_t> (nodeIndex)];
+            TailNode tailNode { node.processor, {}, 0 };
+
+            for (const auto connectionIndex : node.incomingConnections)
+                addSource (tailNode.sources, connectionIndex);
+
+            positions[static_cast<size_t> (nodeIndex)] = static_cast<int> (topology.nodes.size());
+            topology.nodes.push_back (std::move (tailNode));
+        }
+
+        for (const auto connectionIndex : graph.graphOutputConnections)
+            addSource (topology.outputSources, connectionIndex);
+
+        return topology;
+    }
+
+    // Recomputes the graph tail, from a newly committed topology when one is given.
+    // Returns true when the tail changed. Called by commits and by node notifications, on any thread.
+    bool updateTailSamples (TailTopology* newTopology = nullptr)
+    {
+        const AudioLockType::ScopedLockType sl (tailLock);
+
+        if (newTopology != nullptr)
+            std::swap (tailTopology, *newTopology);
+
+        const auto longestTail = [this] (const std::vector<int>& sources)
+        {
+            int tailSamples = 0;
+
+            for (const auto source : sources)
+                tailSamples = jmax (tailSamples, tailTopology.nodes[static_cast<size_t> (source)].outputTailSamples);
+
+            return tailSamples;
+        };
+
+        for (auto& node : tailTopology.nodes)
+        {
+            const auto inputTailSamples = longestTail (node.sources);
+            const auto nodeTailSamples = jmax (0, node.processor->getTailSamples());
+
+            node.outputTailSamples = nodeTailSamples >= AudioProcessor::infiniteTailSamples - inputTailSamples
+                                       ? AudioProcessor::infiniteTailSamples
+                                       : inputTailSamples + nodeTailSamples;
+        }
+
+        const auto newTailSamples = longestTail (tailTopology.outputSources);
+        return latestTailSamples.exchange (newTailSamples) != newTailSamples;
     }
 
     void fillStats (CompiledGraph& graph)
@@ -1250,14 +1337,17 @@ public:
 
     AudioGraphProcessor& owner;
     std::shared_ptr<AudioGraphModel> model;
-    mutable std::mutex commitMutex;
-    mutable std::mutex workgroupMutex;
+    AudioLockType commitLock;
+    AudioLockType workgroupLock;
+    AudioLockType tailLock;
+    TailTopology tailTopology;
     std::atomic<uint64_t> lastCommittedTopologyRevision { 0 };
     std::atomic<uint64_t> latencyChangeCounter { 0 };
     std::atomic<uint64_t> lastCommittedLatencyChangeCounter { 0 };
     std::atomic<bool> commitInProgress { false };
     std::atomic<int> desiredWorkerThreads { 0 };
     std::atomic<int> latestLatencySamples { 0 };
+    std::atomic<int> latestTailSamples { 0 };
     std::atomic<int> latestScratchAudioBuffers { 0 };
     std::atomic<int> latestMidiBuffers { 0 };
     std::atomic<int> latestDelayLines { 0 };
@@ -1422,6 +1512,11 @@ void AudioGraphProcessor::flush()
 int AudioGraphProcessor::getLatencySamples()
 {
     return pimpl->latestLatencySamples.load();
+}
+
+int AudioGraphProcessor::getTailSamples()
+{
+    return pimpl->latestTailSamples.load();
 }
 
 Result AudioGraphProcessor::loadStateFromMemory (const MemoryBlock& memoryBlock)

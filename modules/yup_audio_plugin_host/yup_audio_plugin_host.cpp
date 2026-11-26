@@ -90,16 +90,21 @@
 #include <pluginterfaces/vst/ivsthostapplication.h>
 #include <pluginterfaces/vst/ivstunits.h>
 #include <pluginterfaces/vst/vstpresetkeys.h>
-#include <pluginterfaces/gui/iplugview.h>
-#include <pluginterfaces/gui/iplugviewcontentscalesupport.h>
 #include <public.sdk/source/common/memorystream.h>
 #include <public.sdk/source/vst/hosting/eventlist.h>
 #include <public.sdk/source/vst/hosting/parameterchanges.h>
 #include <public.sdk/source/vst/moduleinfo/moduleinfoparser.h>
 #include <public.sdk/source/vst/vstpresetfile.h>
 
+#if YUP_MODULE_AVAILABLE_yup_gui
+#include <pluginterfaces/gui/iplugview.h>
+#include <pluginterfaces/gui/iplugviewcontentscalesupport.h>
+#endif
+
 #if YUP_MAC
+#if YUP_MODULE_AVAILABLE_yup_gui
 #import <AppKit/AppKit.h>
+#endif
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 
@@ -111,7 +116,9 @@
 #include <clap/clap.h>
 
 #if YUP_MAC
+#if YUP_MODULE_AVAILABLE_yup_gui
 #import <AppKit/AppKit.h>
+#endif
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 
@@ -134,9 +141,13 @@ using CLAPModuleHandle = void*;
 
 //==============================================================================
 #if YUP_AUDIO_PLUGIN_HOST_ENABLE_AU && YUP_MAC
+#if YUP_MODULE_AVAILABLE_yup_gui
 #import <AppKit/AppKit.h>
+#endif
 #import <AudioUnit/AudioUnit.h>
+#if YUP_MODULE_AVAILABLE_yup_gui
 #import <AudioUnit/AUCocoaUIView.h>
+#endif
 #import <AudioToolbox/AudioToolbox.h>
 #import <AudioToolbox/AudioUnitUtilities.h>
 #import <CoreAudio/CoreAudio.h>

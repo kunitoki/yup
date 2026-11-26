@@ -11,6 +11,8 @@ routed in a graph.
 - [Plugin hosting](plugin-hosting.md) - scanning, loading and sandboxing
   third-party plugins.
 - [Audio graph](audio-graph.md) - realtime routing of processors and plugins.
+- [Headless audio](headless.md) - the audio engine in a console application,
+  without `yup_gui`.
 
 ```{toctree}
 :hidden:
@@ -21,4 +23,5 @@ spectral
 plugin-client
 plugin-hosting
 audio-graph
+headless
 ```

@@ -2251,6 +2251,9 @@ public:
             return Vst::kNoTail;
 
         const auto tailSamples = processor->getTailSamples();
+        if (tailSamples == AudioProcessorBase::infiniteTailSamples)
+            return Vst::kInfiniteTail;
+
         return tailSamples > 0 ? static_cast<uint32> (tailSamples) : Vst::kNoTail;
     }
 

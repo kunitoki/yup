@@ -30,7 +30,8 @@ namespace yup
     validates the model, prepares newly compiled nodes for the current playback
     configuration, and publishes an immutable processing plan. Child processor
     latency notifications are handled by the graph as host notifications and
-    rebuild delay compensation. Metadata edits such as node positions and
+    rebuild delay compensation. Child tail notifications refresh the tail the
+    graph reports without rebuilding the plan. Metadata edits such as node positions and
     properties are saved by the model without invalidating the compiled plan.
     processBlock() only swaps pending plans at block boundaries and keeps retired
     plans alive until a later control-thread commit or destruction.
@@ -203,22 +204,18 @@ public:
     void flush() override;
 
     int getLatencySamples() override;
+    int getTailSamples() override;
 
     int getCurrentPreset() const noexcept override { return 0; }
-
     void setCurrentPreset (int) noexcept override {}
-
     int getNumPresets() const override { return 0; }
-
     String getPresetName (int) const override { return {}; }
-
     void setPresetName (int, StringRef) override {}
 
     Result loadStateFromMemory (const MemoryBlock& memoryBlock) override;
     Result saveStateIntoMemory (MemoryBlock& memoryBlock) override;
 
     bool hasEditor() const override { return false; }
-
     AudioProcessorEditor* createEditor() override { return nullptr; }
 
 private:

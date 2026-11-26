@@ -337,6 +337,7 @@ public:
 
         processor->setPlaybackConfiguration (static_cast<float> (sampleRate), maxBlockSize);
         audioBuffer.setSize (jmax (numInputChannels, numOutputChannels), maxBlockSize, false, true, false);
+        parameterChanges.reserve (getDefaultParameterChangeCapacity (*processor));
     }
 
     void run (uint32_t numSamples)
@@ -347,7 +348,6 @@ public:
         midiEvents.clear();
         playHead.invalidate();
         parameterChanges.clear();
-        parameterChanges.reserve (getDefaultParameterChangeCapacity (*processor));
 
         // The plugin requires bufsz:boundedBlockLength, so hosts never exceed maxBlockLength
         jassert (static_cast<int> (numSamples) <= maxBlockSize);
@@ -387,21 +387,13 @@ public:
                                              { outputBusViews.data(), outputBusViews.size() } };
 
         {
-            const ScopedLock lock (processor->getProcessLock());
+            const CriticalSection::ScopedTryLockType lock (processor->getProcessLock());
 
-            if (processor->isSuspended())
-            {
-                for (int ch = 0; ch < numOutputChannels; ++ch)
-                {
-                    auto* dst = audioPorts[static_cast<std::size_t> (indices.getAudioOutputPort (ch))];
-                    if (dst != nullptr)
-                        std::fill_n (dst, numSamplesInt, 0.0f);
-                }
-            }
-            else
-            {
+            // The outputs are copied from the processing buffer below, so silence has to be written there
+            if (lock.isLocked() && ! processor->isSuspended())
                 processAudioBlock (*processor, context, isBypassed || processorBypass.isBypassed());
-            }
+            else
+                audioBuffer.clear();
         }
 
         // Copy audio outputs
@@ -607,7 +599,7 @@ private:
             return;
 
         if (const auto value = readAtomNumber (valueAtom))
-            params[paramIndex]->setValueNotifyingHost (static_cast<float> (*value));
+            params[paramIndex]->setValue (static_cast<float> (*value));
     }
 
     std::optional<double> readAtomNumber (const LV2_Atom* atom) const

@@ -476,7 +476,9 @@ private:
             { CLAP_EXT_AUDIO_PORTS, &audioPorts },
             { CLAP_EXT_NOTE_PORTS, &notePorts },
             { CLAP_EXT_TRACK_INFO, &trackInfoExtension },
+#if YUP_MODULE_AVAILABLE_yup_gui
             { CLAP_EXT_GUI, &gui },
+#endif
         };
 
         for (const auto& [id, extension] : extensions)
@@ -581,6 +583,7 @@ private:
     String hostVersion;
 };
 
+#if YUP_MODULE_AVAILABLE_yup_gui
 //==============================================================================
 #if YUP_MAC
 void* getCLAPParentViewFromNativeHandle (void* nativeHandle)
@@ -871,6 +874,7 @@ private:
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CLAPEditor)
 };
+#endif
 
 //==============================================================================
 // Fixed capacity, sorted input event list: storage is reserved once so filling it never allocates.
@@ -1328,13 +1332,19 @@ public:
 
     bool hasEditor() const override
     {
+#if YUP_MODULE_AVAILABLE_yup_gui
         return canCreateCLAPEditor (clapPlugin);
+#else
+        return false;
+#endif
     }
 
     AudioProcessorEditor* createEditor() override
     {
+#if YUP_MODULE_AVAILABLE_yup_gui
         if (auto editor = CLAPEditor::create (clapPlugin, *yupHost))
             return editor.release();
+#endif
 
         return nullptr;
     }
@@ -1353,7 +1363,7 @@ public:
         if (! activated || tailExtension == nullptr || tailExtension->get == nullptr)
             return 0;
 
-        return static_cast<int> (jmin (tailExtension->get (clapPlugin), static_cast<uint32_t> (std::numeric_limits<int>::max())));
+        return static_cast<int> (jmin (tailExtension->get (clapPlugin), static_cast<uint32_t> (infiniteTailSamples)));
     }
 
     void hostInfoChanged (const HostInfo& newInfo) override

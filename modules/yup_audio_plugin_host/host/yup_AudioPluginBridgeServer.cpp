@@ -142,6 +142,7 @@ public:
 
     void openEditor (uint64 ownerWindowId, int ownerProcessId)
     {
+#if YUP_MODULE_AVAILABLE_yup_gui
         if (editorWindow == nullptr)
         {
             auto editor = std::unique_ptr<AudioProcessorEditor> (instance->hasEditor() ? instance->createEditor() : nullptr);
@@ -167,16 +168,23 @@ public:
             native->setForeignOwner (ownerWindowId, ownerProcessId);
 
         editorWindow->toFront (true);
+#else
+        ignoreUnused (ownerWindowId, ownerProcessId);
+        sendEditorClosed();
+#endif
     }
 
     void closeEditor()
     {
+#if YUP_MODULE_AVAILABLE_yup_gui
         editorWindow.reset();
+#endif
     }
 
 private:
     //==============================================================================
 
+#if YUP_MODULE_AVAILABLE_yup_gui
     class EditorWindow final : public DocumentWindow
     {
     public:
@@ -208,6 +216,7 @@ private:
         std::unique_ptr<AudioProcessorEditor> editor;
         std::function<void()> onClose;
     };
+#endif
 
     struct FixedPlayHead final : AudioPlayHead
     {
@@ -391,7 +400,10 @@ public:
 private:
     AudioPluginBridgeServer& server;
     std::unique_ptr<AudioPluginInstance> instance;
+
+#if YUP_MODULE_AVAILABLE_yup_gui
     std::unique_ptr<EditorWindow> editorWindow;
+#endif
 
     AudioPluginParameterMailbox toHost;
     std::atomic<int32> pendingChanges { 0 };
