@@ -27,44 +27,6 @@ namespace
 
 //==============================================================================
 
-#if YUP_APPLE
-ResultValue<Font> loadSystemUIFont (CTFontUIFontType fontType)
-{
-    if (auto systemFont = CTFontCreateUIFontForLanguage (fontType, 0.0, nullptr))
-    {
-        auto releaseSystemFont = ErasedScopeGuard ([systemFont]
-        {
-            CFRelease (systemFont);
-        });
-
-        if (auto font = HBFont::FromSystem (const_cast<void*> (static_cast<const void*> (systemFont)), true, 400, 100))
-            return yup::makeResultValueOk (Font (std::move (font)));
-    }
-
-    return yup::makeResultValueFail ("Unable to load the system UI font");
-}
-#endif
-
-#if YUP_APPLE
-ResultValue<Font> loadAppleColorEmojiFont()
-{
-    if (auto emojiFont = CTFontCreateWithName (CFSTR ("AppleColorEmoji"), 0.0, nullptr))
-    {
-        auto releaseEmojiFont = ErasedScopeGuard ([emojiFont]
-        {
-            CFRelease (emojiFont);
-        });
-
-        // Shaped by HarfBuzz: CoreText shaping reports fallback runs in UTF-16 offsets, which
-        // overrun the text for emoji outside the basic multilingual plane
-        if (auto font = HBFont::FromSystem (const_cast<void*> (static_cast<const void*> (emojiFont)), false, 400, 100))
-            return yup::makeResultValueOk (Font (std::move (font)));
-    }
-
-    return yup::makeResultValueFail ("Unable to load the Apple Color Emoji font");
-}
-#endif
-
 struct ColorEmojiFallback
 {
     CriticalSection lock;
@@ -135,6 +97,89 @@ String axisTagToString (uint32_t tag)
         << static_cast<char> (tag >> 8)
         << static_cast<char> (tag >> 0);
     return tagName;
+}
+
+//==============================================================================
+
+String readFontName (hb_face_t* face, hb_ot_name_id_t preferredId, hb_ot_name_id_t fallbackId)
+{
+    for (const auto nameId : { preferredId, fallbackId })
+    {
+        const auto length = hb_ot_name_get_utf8 (face, nameId, HB_LANGUAGE_INVALID, nullptr, nullptr);
+        if (length == 0)
+            continue;
+
+        HeapBlock<char> buffer (length + 1, true);
+        auto size = length + 1;
+        hb_ot_name_get_utf8 (face, nameId, HB_LANGUAGE_INVALID, &size, buffer.get());
+
+        if (auto name = String::fromUTF8 (buffer.get(), static_cast<int> (size)).trim(); name.isNotEmpty())
+            return name;
+    }
+
+    return {};
+}
+
+hb_face_t* getFontFace (const rive::rcp<rive::Font>& font)
+{
+    if (auto* hbFont = dynamic_cast<HBFont*> (font.get()); hbFont != nullptr && hbFont->font() != nullptr)
+        return hb_font_get_face (hbFont->font());
+
+    return nullptr;
+}
+
+//==============================================================================
+
+/** An installed font face, as listed by the native font enumeration. */
+struct SystemFontFace
+{
+    String familyName;
+    String styleName;
+    float weight = 400.0f;
+    bool italic = false;
+
+    String location;        // The file path, or the PostScript name where the system loads fonts by name
+    unsigned faceIndex = 0; // The face within a font collection file
+};
+
+// Implemented by the native/yup_Font_<platform> files
+ResultValue<Font> loadPlatformSerifFont();
+ResultValue<Font> loadPlatformMonospaceFont();
+ResultValue<Font> loadPlatformColorEmojiFont();
+StringArray getSystemFontFamilyNames();
+std::vector<SystemFontFace> findSystemFontFaces (const String& familyName);
+rive::rcp<rive::Font> loadSystemFontFace (const SystemFontFace& face);
+
+void sortByWeightThenSlant (std::vector<SystemFontFace>& faces)
+{
+    std::stable_sort (faces.begin(), faces.end(), [] (const auto& a, const auto& b)
+    {
+        if (! approximatelyEqual (a.weight, b.weight))
+            return a.weight < b.weight;
+
+        return ! a.italic && b.italic;
+    });
+}
+
+const SystemFontFace* findDefaultFace (const std::vector<SystemFontFace>& faces)
+{
+    for (const auto& face : faces)
+    {
+        if (face.styleName.equalsIgnoreCase ("Regular"))
+            return &face;
+    }
+
+    const SystemFontFace* best = nullptr;
+    for (const auto& face : faces)
+    {
+        if (face.italic)
+            continue;
+
+        if (best == nullptr || std::abs (face.weight - 400.0f) < std::abs (best->weight - 400.0f))
+            best = &face;
+    }
+
+    return best != nullptr ? best : (faces.empty() ? nullptr : &faces.front());
 }
 
 } // namespace
@@ -211,56 +256,12 @@ ResultValue<Font> Font::loadFontFromFirstAvailableFile (std::initializer_list<co
 
 ResultValue<Font> Font::loadSerifSystemTextFont()
 {
-#if YUP_APPLE
-    return loadSystemUIFont (kCTFontUIFontSystem);
-
-#elif YUP_WINDOWS
-    return loadFontFromFirstAvailableFile ({ R"(C:\Windows\Fonts\segoeui.ttf)",
-                                             R"(C:\Windows\Fonts\arial.ttf)" });
-
-#elif YUP_ANDROID
-    return loadFontFromFirstAvailableFile ({ "/system/fonts/Roboto-Regular.ttf",
-                                             "/system/fonts/NotoSans-Regular.ttf",
-                                             "/system/fonts/DroidSans.ttf" });
-
-#elif YUP_LINUX
-    return loadFontFromFirstAvailableFile ({ "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-                                             "/usr/share/fonts/noto/NotoSans-Regular.ttf",
-                                             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                                             "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-                                             "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
-                                             "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
-                                             "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf" });
-
-#else
-    return yup::makeResultValueFail ("No system serif font available on this platform");
-
-#endif
+    return loadPlatformSerifFont();
 }
 
 ResultValue<Font> Font::loadColorEmojiSystemFont()
 {
-#if YUP_APPLE
-    auto result = loadAppleColorEmojiFont();
-
-#elif YUP_WINDOWS
-    auto result = loadFontFromFirstAvailableFile ({ R"(C:\Windows\Fonts\seguiemj.ttf)" });
-
-#elif YUP_ANDROID
-    auto result = loadFontFromFirstAvailableFile ({ "/system/fonts/NotoColorEmoji.ttf",
-                                                    "/system/fonts/NotoColorEmojiLegacy.ttf" });
-
-#elif YUP_LINUX
-    auto result = loadFontFromFirstAvailableFile ({ "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
-                                                    "/usr/share/fonts/noto/NotoColorEmoji.ttf",
-                                                    "/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf",
-                                                    "/usr/share/fonts/noto-emoji/NotoColorEmoji.ttf",
-                                                    "/usr/share/fonts/truetype/noto-color-emoji/NotoColorEmoji.ttf" });
-
-#else
-    auto result = ResultValue<Font> (yup::makeResultValueFail ("No system color emoji font available on this platform"));
-
-#endif
+    auto result = loadPlatformColorEmojiFont();
 
     if (result.wasOk() && ! result.getValue().getFont()->hasColorGlyphs())
         return yup::makeResultValueFail ("The system emoji font has no color glyphs");
@@ -284,30 +285,83 @@ Font Font::getColorEmojiFallbackFont()
 
 ResultValue<Font> Font::loadMonospaceSystemTextFont()
 {
-#if YUP_MAC
-    return loadSystemUIFont (kCTFontUIFontUserFixedPitch);
+    return loadPlatformMonospaceFont();
+}
 
-#elif YUP_IOS
-    return loadSystemUIFont (kCTFontUIFontUserFixedPitch);
+//==============================================================================
 
-#elif YUP_WINDOWS
-    return loadFontFromFirstAvailableFile ({ R"(C:\Windows\Fonts\consola.ttf)",
-                                             R"(C:\Windows\Fonts\cour.ttf)" });
+StringArray Font::findSystemFontFamilies()
+{
+    StringArray names;
 
-#elif YUP_ANDROID
-    return loadFontFromFirstAvailableFile ({ "/system/fonts/DroidSansMono.ttf" });
+    for (const auto& name : getSystemFontFamilyNames())
+    {
+        if (name.isNotEmpty() && ! name.startsWithChar ('.'))
+            names.add (name);
+    }
 
-#elif YUP_LINUX
-    return loadFontFromFirstAvailableFile ({ "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-                                             "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
-                                             "/usr/share/fonts/truetype/liberation2/LiberationMono-Regular.ttf",
-                                             "/usr/share/fonts/liberation/LiberationMono-Regular.ttf",
-                                             "/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf" });
+    names.sortNatural();
 
-#else
-    return yup::makeResultValueFail ("No system monospace font available on this platform");
+    StringArray families;
+    for (const auto& name : names)
+    {
+        if (families.isEmpty() || ! families[families.size() - 1].equalsIgnoreCase (name))
+            families.add (name);
+    }
 
-#endif
+    return families;
+}
+
+StringArray Font::findSystemFontStyles (const String& familyName)
+{
+    StringArray styles;
+
+    auto faces = findSystemFontFaces (familyName);
+    sortByWeightThenSlant (faces);
+
+    for (const auto& face : faces)
+        styles.addIfNotAlreadyThere (face.styleName, true);
+
+    return styles;
+}
+
+ResultValue<Font> Font::loadSystemFont (const String& familyName, const String& styleName)
+{
+    if (familyName.isEmpty())
+        return yup::makeResultValueFail ("No font family name given");
+
+    auto faces = findSystemFontFaces (familyName);
+    sortByWeightThenSlant (faces);
+
+    if (faces.empty())
+        return yup::makeResultValueFail ("The font family \"" + familyName + "\" is not installed");
+
+    const SystemFontFace* face = nullptr;
+
+    if (styleName.isEmpty())
+    {
+        face = findDefaultFace (faces);
+    }
+    else
+    {
+        for (const auto& candidate : faces)
+        {
+            if (candidate.styleName.equalsIgnoreCase (styleName))
+            {
+                face = &candidate;
+                break;
+            }
+        }
+    }
+
+    if (face == nullptr)
+        return yup::makeResultValueFail ("The font family \"" + familyName + "\" has no style \"" + styleName + "\"");
+
+    auto font = loadSystemFontFace (*face);
+    if (font == nullptr)
+        return yup::makeResultValueFail ("Unable to load the font \"" + familyName + " " + face->styleName + "\"");
+
+    return yup::makeResultValueOk (Font (std::move (font)));
 }
 
 //==============================================================================
@@ -342,6 +396,54 @@ bool Font::isItalic() const
         return font->isItalic();
 
     return 0;
+}
+
+//==============================================================================
+
+String Font::getFamilyName() const
+{
+    if (auto* face = getFontFace (font))
+        return readFontName (face, HB_OT_NAME_ID_TYPOGRAPHIC_FAMILY, HB_OT_NAME_ID_FONT_FAMILY);
+
+    return {};
+}
+
+String Font::getStyleName() const
+{
+    if (auto* face = getFontFace (font))
+        return readFontName (face, HB_OT_NAME_ID_TYPOGRAPHIC_SUBFAMILY, HB_OT_NAME_ID_FONT_SUBFAMILY);
+
+    return {};
+}
+
+StringArray Font::getFeatureTags() const
+{
+    StringArray tags;
+
+    if (font == nullptr)
+        return tags;
+
+    for (const auto tag : font->features())
+        tags.add (axisTagToString (tag));
+
+    tags.removeDuplicates (false);
+    tags.sort (false);
+    return tags;
+}
+
+std::vector<yup_wchar> Font::getCodepoints() const
+{
+    std::vector<yup_wchar> result;
+
+    if (font == nullptr)
+        return result;
+
+    for (const auto codepoint : font->codepoints())
+        result.push_back (static_cast<yup_wchar> (codepoint));
+
+    std::sort (result.begin(), result.end());
+    result.erase (std::unique (result.begin(), result.end()), result.end());
+    return result;
 }
 
 //==============================================================================

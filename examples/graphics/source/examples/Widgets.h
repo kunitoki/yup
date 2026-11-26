@@ -24,7 +24,8 @@
 //==============================================================================
 
 /**
-    Shows the standard widgets inside a panel that can be freely transformed.
+    Shows the standard widgets inside a panel that can be freely transformed, on three pages:
+    buttons and inputs, every slider type, then tabs and progress bars.
 
     The three circles on the corners of the panel can be dragged: the affine transform that
     maps the panel corners onto them is applied to the panel, and the widgets keep painting
@@ -38,6 +39,7 @@ public:
         addAndMakeVisible (panel);
 
         setupWidgets();
+        setupPages();
 
         for (auto* handle : { &topLeftHandle, &topRightHandle, &bottomLeftHandle })
         {
@@ -65,7 +67,7 @@ private:
         {
             updateStatus ("Text Button clicked!");
         };
-        panel.addAndMakeVisible (textButton.get());
+        controlsPage.addAndMakeVisible (textButton.get());
 
         // Toggle Button
         toggleButton = std::make_unique<yup::ToggleButton> ("toggleButton");
@@ -74,7 +76,7 @@ private:
         {
             updateStatus ("Toggle Button: " + yup::String (toggleButton->getToggleState() ? "ON" : "OFF"));
         };
-        panel.addAndMakeVisible (toggleButton.get());
+        controlsPage.addAndMakeVisible (toggleButton.get());
 
         // Switch Button
         switchButton = std::make_unique<yup::SwitchButton> ("switchButton");
@@ -82,7 +84,7 @@ private:
         {
             updateStatus ("Switch Button: " + yup::String (switchButton->getToggleState() ? "ON" : "OFF"));
         };
-        panel.addAndMakeVisible (switchButton.get());
+        controlsPage.addAndMakeVisible (switchButton.get());
 
         // Image Button whose clickable area follows the logo's opaque pixels
         imageButton = std::make_unique<ImageHitTestButton>();
@@ -90,12 +92,12 @@ private:
         {
             updateStatus ("Image Button clicked on an opaque pixel!");
         };
-        panel.addAndMakeVisible (imageButton.get());
+        controlsPage.addAndMakeVisible (imageButton.get());
 
         imageButtonLabel = std::make_unique<yup::Label> ("imageButtonLabel");
         imageButtonLabel->setText ("Image Button: only the logo's opaque pixels are clickable",
                                    yup::dontSendNotification);
-        panel.addAndMakeVisible (imageButtonLabel.get());
+        controlsPage.addAndMakeVisible (imageButtonLabel.get());
 
         // Labels
         titleLabel = std::make_unique<yup::Label> ("titleLabel");
@@ -112,33 +114,13 @@ private:
         comboBox->addItem ("Option 2", 2);
         comboBox->addItem ("Option 3", 3);
         comboBox->setSelectedId (1);
-        panel.addAndMakeVisible (comboBox.get());
+        controlsPage.addAndMakeVisible (comboBox.get());
 
-        // Viewport with content
-        /*
-        viewport = std::make_unique<yup::Viewport> ("viewport");
-        viewportContent = std::make_unique<yup::Component> ("viewportContent");
-        viewportContent->setOpaque (false);
-        viewportContent->setSize (yup::Size<float> (800.0f, 600.0f)); // Larger than viewport
-
-        contentLabel = std::make_unique<yup::Label> ("contentLabel");
-        contentLabel->setText ("This is scrollable content\nYou can scroll to see more text...", yup::dontSendNotification);
-        contentLabel->setBounds (yup::Rectangle<float> (20.0f, 20.0f, 360.0f, 200.0f));
-        viewportContent->addAndMakeVisible (contentLabel.get());
-
-        viewport->setViewedComponent (viewportContent.release(), false);
-        panel.addAndMakeVisible (viewport.get());
-        */
-
-        // Slider
+        // Rotary slider driving the progress bar
         slider = std::make_unique<yup::Slider> (yup::Slider::Rotary, "slider");
         slider->setRange (yup::Range<double> (0.0, 100.0));
         slider->setValue (50.0);
-        slider->onValueChanged = [this] (double value)
-        {
-            updateStatus ("Slider value: " + yup::String (value, 1));
-        };
-        panel.addAndMakeVisible (slider.get());
+        valuesPage.addAndMakeVisible (slider.get());
 
         // Joystick that springs back to the center on release
         joystick = std::make_unique<yup::JoystickComponent> ("joystick");
@@ -152,13 +134,13 @@ private:
         {
             updateStatus ("Joystick: x " + yup::String (x, 2) + ", y " + yup::String (y, 2));
         };
-        panel.addAndMakeVisible (joystick.get());
+        controlsPage.addAndMakeVisible (joystick.get());
 
         // TextEditor
         textEditor = std::make_unique<yup::TextEditor> ("textEditor");
         textEditor->setText ("Type some text here...", yup::dontSendNotification);
         textEditor->setMultiLine (true);
-        panel.addAndMakeVisible (textEditor.get());
+        controlsPage.addAndMakeVisible (textEditor.get());
 
         // Progress Bar (normal mode - linked to slider)
         progressBar = std::make_unique<yup::ProgressBar> ("progressBar");
@@ -168,26 +150,25 @@ private:
             if (value >= 0.0)
                 updateStatus ("Progress: " + yup::String (value * 100.0, 0) + "%");
         };
-        panel.addAndMakeVisible (progressBar.get());
+        valuesPage.addAndMakeVisible (progressBar.get());
 
         // Progress Bar Label
         progressBarLabel = std::make_unique<yup::Label> ("progressBarLabel");
-        progressBarLabel->setText ("Progress Bar (linked to slider):", yup::dontSendNotification);
-        panel.addAndMakeVisible (progressBarLabel.get());
+        progressBarLabel->setText ("Progress Bar (driven by the knob):", yup::dontSendNotification);
+        valuesPage.addAndMakeVisible (progressBarLabel.get());
 
         // Indeterminate Progress Bar
         indeterminateProgressBar = std::make_unique<yup::ProgressBar> ("indeterminateProgressBar");
         indeterminateProgressBar->setProgress (-1.0, yup::dontSendNotification);
-        panel.addAndMakeVisible (indeterminateProgressBar.get());
+        valuesPage.addAndMakeVisible (indeterminateProgressBar.get());
 
         // Indeterminate Progress Bar Label
         indeterminateLabel = std::make_unique<yup::Label> ("indeterminateLabel");
         indeterminateLabel->setText ("Indeterminate Progress Bar:", yup::dontSendNotification);
-        panel.addAndMakeVisible (indeterminateLabel.get());
+        valuesPage.addAndMakeVisible (indeterminateLabel.get());
 
         setupTabs();
 
-        // Update slider to control progress bar
         slider->onValueChanged = [this] (double value)
         {
             updateStatus ("Slider value: " + yup::String (value, 1));
@@ -195,11 +176,35 @@ private:
         };
     }
 
+    void setupPages()
+    {
+        controlsPage.onLayout = [this] (yup::Rectangle<float> area)
+        {
+            layoutControls (area);
+        };
+        valuesPage.onLayout = [this] (yup::Rectangle<float> area)
+        {
+            layoutTabs (area);
+            area.removeFromTop (sectionSpacing);
+            layoutValues (area);
+        };
+        slidersPage.onValueChanged = [this] (const yup::String& description)
+        {
+            updateStatus (description);
+        };
+
+        pageTabs.addTab ("controls", "Controls", controlsPage);
+        pageTabs.addTab ("sliders", "Sliders", slidersPage);
+        pageTabs.addTab ("values", "Tabs & Progress", valuesPage);
+        pageTabs.getTabBar().setVariant (yup::TabBar::Variant::underline);
+        panel.addAndMakeVisible (pageTabs);
+    }
+
     void setupTabs()
     {
         tabsLabel = std::make_unique<yup::Label> ("tabsLabel");
         tabsLabel->setText ("Tabs: drag to reorder, narrow the window to see the More menu", yup::dontSendNotification);
-        panel.addAndMakeVisible (tabsLabel.get());
+        valuesPage.addAndMakeVisible (tabsLabel.get());
 
         // A segmented control of views, reorderable, that overflows into a menu
         viewTabs = std::make_unique<yup::TabBar> ("viewTabs");
@@ -228,7 +233,7 @@ private:
             updateStatus ("View tab " + tabId.toString() + " moved from " + yup::String (oldIndex) + " to " + yup::String (newIndex));
         };
 
-        panel.addAndMakeVisible (viewTabs.get());
+        valuesPage.addAndMakeVisible (viewTabs.get());
 
         // Browser-like tabs that can be closed and added
         documentTabs = std::make_unique<yup::TabBar> ("documentTabs");
@@ -251,14 +256,14 @@ private:
             updateStatus ("Document tab closed: " + tabId.toString());
         };
 
-        panel.addAndMakeVisible (documentTabs.get());
+        valuesPage.addAndMakeVisible (documentTabs.get());
 
         addTabButton = std::make_unique<yup::TextButton> ("Add tab");
         addTabButton->onClick = [this]
         {
             documentTabs->setSelectedTab (addDocumentTab());
         };
-        panel.addAndMakeVisible (addTabButton.get());
+        valuesPage.addAndMakeVisible (addTabButton.get());
     }
 
     yup::Identifier addDocumentTab()
@@ -334,13 +339,14 @@ private:
 
         titleLabel->setBounds (area.removeFromTop (32.0f));
         statusLabel->setBounds (area.removeFromTop (rowHeight));
-        area.removeFromTop (sectionSpacing);
+        area.removeFromTop (spacing);
 
-        // Full width, so the view tabs only overflow into the More menu when the panel is narrow
-        layoutTabs (area);
-        area.removeFromTop (sectionSpacing);
+        pageTabs.setBounds (area);
+    }
 
-        // Two columns side by side, stacked instead when the remaining area is taller than wide
+    void layoutControls (yup::Rectangle<float> area)
+    {
+        // Two columns side by side, stacked instead when the area is taller than wide
         if (area.getWidth() >= area.getHeight())
         {
             layoutInputs (area.removeFromLeft ((area.getWidth() - sectionSpacing) * 0.5f));
@@ -352,13 +358,21 @@ private:
             area.removeFromTop (sectionSpacing);
         }
 
-        layoutValues (area);
+        imageButtonLabel->setBounds (area.removeFromBottom (labelHeight));
+
+        // The joystick and the logo are square: take the largest two squares that fit
+        const auto squareSize = yup::jmax (0.0f, yup::jmin (area.getHeight(), (area.getWidth() - spacing) / 2.0f));
+        auto squaresRow = area.withSizeKeepingCenter (squareSize * 2.0f + spacing, squareSize);
+
+        joystick->setBounds (squaresRow.removeFromLeft (squareSize));
+        imageButton->setBounds (squaresRow.removeFromRight (squareSize));
     }
 
     void layoutTabs (yup::Rectangle<float>& area)
     {
         constexpr auto addTabButtonWidth = 90.0f;
 
+        // Full width, so the view tabs only overflow into the More menu when the panel is narrow
         tabsLabel->setBounds (area.removeFromTop (labelHeight));
         viewTabs->setBounds (area.removeFromTop (tabBarHeight));
         area.removeFromTop (spacing);
@@ -397,15 +411,8 @@ private:
         progressBarLabel->setBounds (area.removeFromBottom (labelHeight));
         area.removeFromBottom (spacing);
 
-        imageButtonLabel->setBounds (area.removeFromBottom (labelHeight));
-
-        // The rotary slider, the joystick and the logo are square: take the largest three squares that fit
-        const auto squareSize = yup::jmax (0.0f, yup::jmin (area.getHeight(), (area.getWidth() - spacing * 2.0f) / 3.0f));
-        auto squaresRow = area.withSizeKeepingCenter (squareSize * 3.0f + spacing * 2.0f, squareSize);
-
-        slider->setBounds (squaresRow.removeFromLeft (squareSize));
-        imageButton->setBounds (squaresRow.removeFromRight (squareSize));
-        joystick->setBounds (squaresRow.withSizeKeepingCenter (squareSize, squareSize));
+        const auto knobSize = yup::jmax (0.0f, yup::jmin (area.getWidth(), area.getHeight(), 120.0f));
+        slider->setBounds (area.withSizeKeepingCenter (knobSize, knobSize));
     }
 
     void paint (yup::Graphics& g) override
@@ -505,6 +512,166 @@ private:
         }
 
         yup::Image logo;
+    };
+
+    //==============================================================================
+    /** A transparent page of the panel, laid out by its owner. */
+    class WidgetsPage final : public yup::Component
+    {
+    public:
+        WidgetsPage()
+        {
+            setOpaque (false);
+        }
+
+        void resized() override
+        {
+            if (onLayout)
+                onLayout (getLocalBounds().reduced (0.0f, spacing));
+        }
+
+        std::function<void (yup::Rectangle<float>)> onLayout;
+    };
+
+    //==============================================================================
+    /** Every slider type, each captioned with its name and current value(s). */
+    class SlidersPage final : public yup::Component
+    {
+    public:
+        SlidersPage()
+        {
+            setOpaque (false);
+
+            using Type = yup::Slider::SliderType;
+
+            addSlider (Type::LinearHorizontal, "Linear horizontal");
+            addSlider (Type::LinearBarHorizontal, "Bar horizontal");
+            addSlider (Type::TwoValueHorizontal, "Two values horizontal");
+            addSlider (Type::ThreeValueHorizontal, "Three values horizontal");
+            addSlider (Type::IncDecButtons, "Inc / dec buttons");
+            addSlider (Type::LinearVertical, "Linear vertical");
+            addSlider (Type::LinearBarVertical, "Bar vertical");
+            addSlider (Type::TwoValueVertical, "Two values vertical");
+            addSlider (Type::ThreeValueVertical, "Three values vertical");
+            addSlider (Type::Rotary, "Rotary");
+            addSlider (Type::RotaryHorizontalDrag, "Rotary, horizontal drag");
+            addSlider (Type::RotaryVerticalDrag, "Rotary, vertical drag");
+        }
+
+        void paint (yup::Graphics& g) override
+        {
+            const auto theme = yup::ApplicationTheme::getGlobalTheme();
+            const auto& palette = theme->getPalette();
+            const auto font = theme->getDefaultFont().withHeight (12.0f);
+
+            for (const auto& entry : entries)
+            {
+                auto caption = entry.caption;
+
+                g.setFillColor (palette.getColor (yup::ThemePalette::Role::textMuted));
+                g.fillFittedText (entry.name, font, caption.removeFromTop (caption.getHeight() * 0.5f), yup::Justification::centerLeft);
+                g.setFillColor (palette.getColor (yup::ThemePalette::Role::text));
+                g.fillFittedText (describe (*entry.slider), font, caption, yup::Justification::centerLeft);
+            }
+        }
+
+        void resized() override
+        {
+            constexpr auto captionHeight = 32.0f;
+            constexpr auto numHorizontal = 5;
+
+            auto area = getLocalBounds().reduced (0.0f, spacing);
+
+            // Horizontal sliders stacked on the left, vertical and rotary ones in two rows on the right
+            auto left = area.removeFromLeft (area.getWidth() * 0.45f);
+            area.removeFromLeft (sectionSpacing);
+
+            const auto cellHeight = left.getHeight() / numHorizontal;
+            for (int i = 0; i < numHorizontal; ++i)
+            {
+                auto cell = left.removeFromTop (cellHeight).reduced (0.0f, 2.0f);
+                place (entries[(size_t) i], cell.removeFromTop (captionHeight), cell.withSizeKeepingCenter (cell.getWidth(), yup::jmin (cell.getHeight(), 36.0f)));
+            }
+
+            auto verticalRow = area.removeFromTop (area.getHeight() * 0.6f);
+            auto rotaryRow = area.withTrimmedTop (spacing);
+
+            const auto verticalWidth = verticalRow.getWidth() / 4.0f;
+            for (int i = numHorizontal; i < numHorizontal + 4; ++i)
+            {
+                auto cell = verticalRow.removeFromLeft (verticalWidth).reduced (4.0f, 0.0f);
+                place (entries[(size_t) i], cell.removeFromTop (captionHeight), cell.withSizeKeepingCenter (yup::jmin (cell.getWidth(), 48.0f), cell.getHeight()));
+            }
+
+            const auto rotaryWidth = rotaryRow.getWidth() / 3.0f;
+            for (int i = numHorizontal + 4; i < (int) entries.size(); ++i)
+            {
+                auto cell = rotaryRow.removeFromLeft (rotaryWidth).reduced (4.0f, 0.0f);
+                auto caption = cell.removeFromTop (captionHeight);
+                const auto knobSize = yup::jmax (0.0f, yup::jmin (cell.getWidth(), cell.getHeight()));
+                place (entries[(size_t) i], caption, cell.withSizeKeepingCenter (knobSize, knobSize));
+            }
+        }
+
+        std::function<void (const yup::String&)> onValueChanged;
+
+    private:
+        struct Entry
+        {
+            std::unique_ptr<yup::Slider> slider;
+            yup::String name;
+            yup::Rectangle<float> caption;
+        };
+
+        void addSlider (yup::Slider::SliderType type, const yup::String& name)
+        {
+            auto slider = std::make_unique<yup::Slider> (type, "slider" + yup::String ((int) entries.size()));
+            slider->setRange (0.0, 100.0, type == yup::Slider::IncDecButtons ? 1.0 : 0.0);
+            slider->setValue (50.0, yup::dontSendNotification);
+            slider->setMinValue (25.0, yup::dontSendNotification);
+            slider->setMaxValue (75.0, yup::dontSendNotification);
+
+            auto* sliderPtr = slider.get();
+            auto notify = [this, sliderPtr, name] (double)
+            {
+                repaint();
+
+                if (onValueChanged)
+                    onValueChanged (name + ": " + describe (*sliderPtr));
+            };
+
+            slider->onValueChanged = notify;
+            slider->onMinValueChanged = notify;
+            slider->onMaxValueChanged = notify;
+
+            addAndMakeVisible (*slider);
+            entries.push_back ({ std::move (slider), name, {} });
+        }
+
+        static void place (Entry& entry, yup::Rectangle<float> caption, yup::Rectangle<float> sliderBounds)
+        {
+            entry.caption = caption;
+            entry.slider->setBounds (sliderBounds);
+        }
+
+        static yup::String describe (const yup::Slider& slider)
+        {
+            switch (slider.getSliderType())
+            {
+                case yup::Slider::TwoValueHorizontal:
+                case yup::Slider::TwoValueVertical:
+                    return yup::String (slider.getMinValue(), 1) + " - " + yup::String (slider.getMaxValue(), 1);
+
+                case yup::Slider::ThreeValueHorizontal:
+                case yup::Slider::ThreeValueVertical:
+                    return yup::String (slider.getMinValue(), 1) + " < " + yup::String (slider.getValue(), 1) + " < " + yup::String (slider.getMaxValue(), 1);
+
+                default:
+                    return yup::String (slider.getValue(), 1);
+            }
+        }
+
+        std::vector<Entry> entries;
     };
 
     //==============================================================================
@@ -617,6 +784,10 @@ private:
     static constexpr float tabBarHeight = 36.0f;
 
     WidgetsPanel panel;
+    WidgetsPage controlsPage;
+    SlidersPage slidersPage;
+    WidgetsPage valuesPage;
+    yup::TabComponent pageTabs { "widgetsPages" };
     CornerHandle topLeftHandle;
     CornerHandle topRightHandle;
     CornerHandle bottomLeftHandle;
@@ -629,11 +800,6 @@ private:
     std::unique_ptr<yup::Label> titleLabel;
     std::unique_ptr<yup::Label> statusLabel;
     std::unique_ptr<CustomComboBox> comboBox;
-    /*
-    std::unique_ptr<yup::Viewport> viewport;
-    std::unique_ptr<yup::Component> viewportContent;
-    */
-    std::unique_ptr<yup::Label> contentLabel;
     std::unique_ptr<yup::Slider> slider;
     std::unique_ptr<yup::JoystickComponent> joystick;
     std::unique_ptr<yup::TextEditor> textEditor;

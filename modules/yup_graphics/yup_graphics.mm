@@ -19,4 +19,7 @@
   ==============================================================================
 */
 
+#define YUP_CORE_INCLUDE_OBJC_HELPERS 1
+#define YUP_CORE_INCLUDE_NATIVE_HEADERS 1
+
 #include "yup_graphics.cpp"

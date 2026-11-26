@@ -87,18 +87,18 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 
 <div>
   <a href="./examples/graphics/source/examples/CodeEditor.h"><img src="./docs/_static/images/yup_code_editor.jpg" style="width:24.125%;" /></a>
-  <a href="./examples/graphics/source/examples/PaintProfiler.h"><img src="./docs/_static/images/yup_component_profiler.jpg" style="width:24.125%;" /></a>
+  <a href="./examples/graphics/source/common/PaintProfilerPanel.h"><img src="./docs/_static/images/yup_component_profiler.jpg" style="width:24.125%;" /></a>
   <a href="./examples/graphics/source/examples/Layout.h"><img src="./docs/_static/images/yup_flex_grid_layouts.jpg" style="width:24.125%;" /></a>
   <a href="./examples/graphics/source/examples/ComponentEffects.h"><img src="./docs/_static/images/yup_component_effects.jpg" style="width:24.125%;" /></a>
 </div>
 
 <div>
-  <a href="./examples/graphics/source/examples/ImageMesh.h"><img src="./docs/_static/images/yup_image_mesh.jpg" style="width:49.25%;" /></a>
+  <a href="./examples/graphics/source/examples/images/ImageMeshPage.h"><img src="./docs/_static/images/yup_image_mesh.jpg" style="width:49.25%;" /></a>
   <a href="./examples/graphics/source/examples/ListBox.h"><img src="./docs/_static/images/yup_list_box.jpg" style="width:49.25%;" /></a>
 </div>
 
 <div>
-  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/_static/images/yup_gradient_editor.jpg" style="width:24.125%;" /></a>
+  <a href="./examples/graphics/source/examples/colorlab/GradientEditorPage.h"><img src="./docs/_static/images/yup_gradient_editor.jpg" style="width:24.125%;" /></a>
   <a href="./examples/graphics/source/examples/Lottie.h"><img src="./docs/_static/images/yup_lottie.jpg" style="width:24.125%;" /></a>
   <a href="./examples/graphics/source/examples/Emoji.h"><img src="./docs/_static/images/yup_emojis.jpg" style="width:24.125%;" /></a>
   <a href="./examples/graphics/source/examples/TouchTrails.h"><img src="./docs/_static/images/yup_multitouch.jpg" style="width:24.125%;" /></a>

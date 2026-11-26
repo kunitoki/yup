@@ -1344,3 +1344,129 @@ TEST_F (FontColorEmojiTests, FallbackFontHasNoFallbackOfItsOwn)
     EXPECT_NE (0, runs[1]->glyphs[0]);
     EXPECT_EQ (0, runs[1]->glyphs[1]);
 }
+
+// ==============================================================================
+// Names, Features and Coverage Tests
+// ==============================================================================
+
+TEST (FontTests, EmptyFontHasNoNamesFeaturesOrCodepoints)
+{
+    Font font;
+
+    EXPECT_TRUE (font.getFamilyName().isEmpty());
+    EXPECT_TRUE (font.getStyleName().isEmpty());
+    EXPECT_TRUE (font.getFeatureTags().isEmpty());
+    EXPECT_TRUE (font.getCodepoints().empty());
+}
+
+TEST (FontTests, ReportsFamilyAndStyleNames)
+{
+    const auto font = loadTestFont();
+
+    EXPECT_EQ (String ("Linefont"), font.getFamilyName());
+    EXPECT_EQ (String ("Thin"), font.getStyleName());
+}
+
+TEST (FontTests, NamesSurviveVariationsAndHeight)
+{
+    const auto font = loadTestFont().withAxisValue ("wght", 500.0f).withHeight (32.0f);
+
+    EXPECT_EQ (String ("Linefont"), font.getFamilyName());
+    EXPECT_EQ (String ("Thin"), font.getStyleName());
+}
+
+TEST (FontTests, ReportsSortedFeatureTags)
+{
+    const auto tags = loadTestFont().getFeatureTags();
+
+    EXPECT_EQ (StringArray ({ "mark", "rlig" }), tags);
+}
+
+TEST (FontTests, ReportsCodepointsWithGlyphs)
+{
+    const auto font = loadTestFont();
+    const auto codepoints = font.getCodepoints();
+
+    ASSERT_FALSE (codepoints.empty());
+    EXPECT_TRUE (std::is_sorted (codepoints.begin(), codepoints.end()));
+    EXPECT_NE (codepoints.end(), std::find (codepoints.begin(), codepoints.end(), static_cast<yup_wchar> ('E')));
+
+    for (const auto codepoint : codepoints)
+        EXPECT_TRUE (font.getFont()->hasGlyph (codepoint));
+}
+
+// ==============================================================================
+// System Font Tests
+// ==============================================================================
+
+class FontSystemTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        families = Font::findSystemFontFamilies();
+
+#if YUP_WASM
+        EXPECT_TRUE (families.isEmpty());
+#endif
+
+        if (families.isEmpty())
+            GTEST_SKIP() << "The platform reports no system fonts";
+    }
+
+    StringArray families;
+};
+
+TEST_F (FontSystemTests, FamiliesAreSortedUniqueAndVisible)
+{
+    for (int i = 0; i < families.size(); ++i)
+    {
+        EXPECT_FALSE (families[i].isEmpty());
+        EXPECT_FALSE (families[i].startsWithChar ('.'));
+
+        if (i > 0)
+            EXPECT_LT (families[i - 1].compareNatural (families[i]), 0) << families[i - 1] << " / " << families[i];
+    }
+}
+
+TEST_F (FontSystemTests, EveryStyleOfTheFirstFamiliesLoads)
+{
+    for (int i = 0; i < jmin (3, families.size()); ++i)
+    {
+        const auto styles = Font::findSystemFontStyles (families[i]);
+        EXPECT_FALSE (styles.isEmpty()) << families[i];
+
+        for (const auto& style : styles)
+        {
+            const auto font = Font::loadSystemFont (families[i], style);
+            ASSERT_TRUE (font.wasOk()) << families[i] << " " << style << ": " << font.getErrorMessage();
+            EXPECT_FALSE (font.getValue().isEmpty());
+            EXPECT_FALSE (font.getValue().getFamilyName().isEmpty());
+        }
+    }
+}
+
+TEST_F (FontSystemTests, EmptyStyleLoadsADefaultFace)
+{
+    const auto font = Font::loadSystemFont (families[0]);
+
+    ASSERT_TRUE (font.wasOk()) << font.getErrorMessage();
+    EXPECT_FALSE (font.getValue().isEmpty());
+}
+
+TEST_F (FontSystemTests, FamilyNamesAreMatchedIgnoringCase)
+{
+    EXPECT_TRUE (Font::loadSystemFont (families[0].toUpperCase()).wasOk());
+}
+
+TEST (FontTests, UnknownSystemFamilyFails)
+{
+    EXPECT_TRUE (Font::findSystemFontStyles ("No Such Font Family 1234").isEmpty());
+    EXPECT_TRUE (Font::loadSystemFont ("No Such Font Family 1234").failed());
+    EXPECT_TRUE (Font::loadSystemFont ({}).failed());
+}
+
+TEST_F (FontSystemTests, UnknownStyleOfKnownFamilyFails)
+{
+    EXPECT_TRUE (Font::loadSystemFont (families[0], "No Such Style 1234").failed());
+}

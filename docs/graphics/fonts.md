@@ -49,6 +49,40 @@ else
     Logger::outputDebugString (result.getErrorMessage());
 ```
 
+### Browsing system fonts
+
+`findSystemFontFamilies()` lists the installed font families, sorted, and
+`findSystemFontStyles()` the styles of one of them. `loadSystemFont()` loads a
+family by name, in the given style or, without one, its regular style:
+
+```cpp
+for (const auto& family : Font::findSystemFontFamilies())
+{
+    for (const auto& style : Font::findSystemFontStyles (family))
+        DBG (family << " " << style);
+}
+
+if (auto result = Font::loadSystemFont ("Helvetica Neue", "Bold"); result.wasOk())
+    auto font = result.getValue().withHeight (16.0f);
+```
+
+On macOS and iOS the fonts come from CoreText. On Windows, Linux and Android the
+system font folders are scanned on first use, and the list is kept for the
+lifetime of the app. WebAssembly has no system fonts: the list is empty and
+`loadSystemFont()` fails, so ship the fonts your app needs.
+
+### Font names, features and characters
+
+```cpp
+String family = font.getFamilyName();      // "Helvetica Neue"
+String style  = font.getStyleName();       // "Bold"
+StringArray features = font.getFeatureTags(); // "kern", "liga", "tnum", ...
+std::vector<yup_wchar> characters = font.getCodepoints();
+```
+
+`getFeatureTags()` lists the OpenType features you can set with `withFeature()`,
+and `getCodepoints()` the characters the font has glyphs for.
+
 ### Font metrics
 
 ```cpp

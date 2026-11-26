@@ -52,6 +52,11 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
 
+#include <hb.h>
+#include <hb-ot.h>
+
+//==============================================================================
+
 #if YUP_ENABLE_SHADER_COMPILER
 #include <glslang/glslang.h>
 #include <spirv_cross/spirv_cross.h>
@@ -182,6 +187,22 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "svg/yup_SVGParser.cpp"
 #include "drawables/yup_Drawable.cpp"
 #include "rhi/yup_GpuCanvas.cpp"
+
+//==============================================================================
+#if YUP_APPLE
+#include "native/yup_Font_apple.mm"
+#elif YUP_WINDOWS
+#include "native/yup_Font_windows.cpp"
+#include "native/yup_SystemFontScanner.cpp"
+#elif YUP_ANDROID
+#include "native/yup_Font_android.cpp"
+#include "native/yup_SystemFontScanner.cpp"
+#elif YUP_LINUX
+#include "native/yup_Font_linux.cpp"
+#include "native/yup_SystemFontScanner.cpp"
+#else
+#include "native/yup_Font_wasm.cpp"
+#endif
 
 //==============================================================================
 #if YUP_IMAGE_FORMAT_BMP

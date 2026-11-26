@@ -213,34 +213,6 @@ public:
 
 private:
     //==============================================================================
-    // A themed button showing a Font Awesome glyph instead of text
-    struct IconButton final : yup::TextButton
-    {
-        IconButton (yup::StringRef componentID, const char* utf8Glyph)
-            : TextButton (componentID)
-            , glyph (yup::CharPointer_UTF8 (utf8Glyph))
-        {
-            setButtonText ({});
-        }
-
-        void paintButton (yup::Graphics& g) override
-        {
-            TextButton::paintButton (g);
-
-            const auto theme = yup::ApplicationTheme::getGlobalTheme();
-            const auto& palette = theme->getPalette (*this);
-            const auto color = isButtonDown()
-                                 ? theme->findColor (*this, Style::textPressedColorId).value_or (palette.getColor (yup::ThemePalette::Role::onAccent))
-                                 : theme->findColor (*this, Style::textColorId).value_or (palette.getColor (yup::ThemePalette::Role::text));
-
-            g.setFillColor (color);
-            g.fillFittedText (glyph, theme->getDefaultIconFont().withHeight (getHeight() * 0.45f), getLocalBounds(), yup::Justification::center);
-        }
-
-        yup::String glyph;
-    };
-
-    //==============================================================================
     struct SvgPreview final : yup::Component
     {
         SvgPreview()

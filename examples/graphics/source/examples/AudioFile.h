@@ -21,9 +21,12 @@
 
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cmath>
+#include <functional>
 #include <memory>
+#include <tuple>
 #include <vector>
 
 #include <yup_audio_basics/yup_audio_basics.h>
@@ -541,12 +544,6 @@ public:
     AudioFileDemo()
         : Component ("AudioFileDemo")
         , waveformCache (std::make_shared<yup::AudioPeakProfileCache>())
-        , loadButton ("Load Audio")
-        , playButton ("Play")
-        , stopButton ("Stop")
-        , saveButton ("Save As")
-        , loopButton ("Loop")
-        , labelsButton ("Labels")
         , waveformDisplay (waveformCache)
         , meterState (48000.0, 2)
         , leftMeter (meterState, 0)
@@ -571,6 +568,8 @@ public:
         timeStretchSupported = yup::TimeStretchProcessor::isBackendAvailable (yup::TimeStretchProcessor::Backend::automatic);
 
         setupUi();
+
+        loadAudioFile (getAssetPath ("data/audio/break_boomblastic_92bpm.wav"));
     }
 
     ~AudioFileDemo() override
@@ -590,71 +589,42 @@ public:
     void resized() override
     {
         auto bounds = getLocalBounds().reduced (8);
-        auto header = bounds.removeFromTop (156);
+        auto header = bounds.removeFromTop (100);
 
-        const int buttonHeight = 28;
-        const int buttonWidth = 100;
-        const int smallButtonWidth = 60;
-        const int mediumButtonWidth = 85;
-        const int buttonMargin = 6;
+        constexpr float rowHeight = 28.0f;
+        constexpr float gap = 6.0f;
 
-        // First row of buttons
-        auto buttonRow = header.removeFromTop (buttonHeight);
-        loadButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
-        buttonRow.removeFromLeft (buttonMargin);
-        playButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
-        buttonRow.removeFromLeft (buttonMargin);
-        stopButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
-        buttonRow.removeFromLeft (buttonMargin);
-        saveButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
-        buttonRow.removeFromLeft (buttonMargin);
-        loopButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
-        buttonRow.removeFromLeft (buttonMargin);
-        labelsButton.setBounds (buttonRow.removeFromLeft (buttonWidth));
+        auto toolbar = header.removeFromTop (rowHeight);
+        for (auto* button : { &loadButton, &playButton, &stopButton, &saveButton, &loopButton, &labelsButton })
+        {
+            button->setBounds (toolbar.removeFromLeft (rowHeight + 8.0f));
+            toolbar.removeFromLeft (button == &saveButton ? gap * 3.0f : gap);
+        }
 
-        // Second row for K-scale buttons
-        header.removeFromTop (4);
-        auto scaleRow = header.removeFromTop (buttonHeight);
-        k20Button.setBounds (scaleRow.removeFromLeft (smallButtonWidth));
-        scaleRow.removeFromLeft (buttonMargin);
-        k14Button.setBounds (scaleRow.removeFromLeft (smallButtonWidth));
-        scaleRow.removeFromLeft (buttonMargin);
-        k12Button.setBounds (scaleRow.removeFromLeft (smallButtonWidth));
+        toolbar.removeFromLeft (gap * 2.0f);
+        onsetsButton.setBounds (toolbar.removeFromLeft (130.0f));
 
-        // Third row for metering standard buttons
-        header.removeFromTop (4);
-        auto standardRow = header.removeFromTop (buttonHeight);
-        rmsButton.setBounds (standardRow.removeFromLeft (mediumButtonWidth));
-        standardRow.removeFromLeft (buttonMargin);
-        ituButton.setBounds (standardRow.removeFromLeft (mediumButtonWidth));
-        standardRow.removeFromLeft (buttonMargin);
-        ebuButton.setBounds (standardRow.removeFromLeft (mediumButtonWidth));
+        header.removeFromTop (8.0f);
+        auto meterRow = header.removeFromTop (rowHeight);
+        for (auto [label, combo, width] : { std::tuple (&scaleLabel, &scaleComboBox, 90.0f),
+                                            std::tuple (&standardLabel, &standardComboBox, 140.0f),
+                                            std::tuple (&oversLabel, &oversComboBox, 120.0f) })
+        {
+            label->setBounds (meterRow.removeFromLeft (70.0f));
+            combo->setBounds (meterRow.removeFromLeft (width));
+            meterRow.removeFromLeft (gap * 3.0f);
+        }
 
-        // Fourth row for over counter mode buttons
-        header.removeFromTop (4);
-        auto modeRow = header.removeFromTop (buttonHeight);
-        contiguousButton.setBounds (modeRow.removeFromLeft (mediumButtonWidth));
-        modeRow.removeFromLeft (buttonMargin);
-        totalButton.setBounds (modeRow.removeFromLeft (mediumButtonWidth));
-
-        // Fifth row for time/pitch controls
-        header.removeFromTop (4);
-        auto stretchRow = header.removeFromTop (buttonHeight);
-        const int sliderLabelWidth = 70;
-        const int sliderWidth = 165;
-        const int backendWidth = 150;
-
-        timeLabel.setBounds (stretchRow.removeFromLeft (sliderLabelWidth));
-        stretchRow.removeFromLeft (buttonMargin);
-        timeStretchSlider.setBounds (stretchRow.removeFromLeft (sliderWidth));
-        stretchRow.removeFromLeft (buttonMargin * 2);
-        pitchLabel.setBounds (stretchRow.removeFromLeft (sliderLabelWidth));
-        stretchRow.removeFromLeft (buttonMargin);
-        pitchShiftSlider.setBounds (stretchRow.removeFromLeft (sliderWidth));
-        stretchRow.removeFromLeft (buttonMargin * 2);
-        backendLabel.setBounds (stretchRow.removeFromLeft (sliderLabelWidth));
-        stretchRow.removeFromLeft (buttonMargin);
-        backendComboBox.setBounds (stretchRow.removeFromLeft (backendWidth));
+        header.removeFromTop (8.0f);
+        auto stretchRow = header.removeFromTop (rowHeight);
+        for (auto [label, control, width] : { std::tuple<yup::Label*, yup::Component*, float> (&timeLabel, &timeStretchSlider, 165.0f),
+                                              std::tuple<yup::Label*, yup::Component*, float> (&pitchLabel, &pitchShiftSlider, 165.0f),
+                                              std::tuple<yup::Label*, yup::Component*, float> (&backendLabel, &backendComboBox, 150.0f) })
+        {
+            label->setBounds (stretchRow.removeFromLeft (70.0f));
+            control->setBounds (stretchRow.removeFromLeft (width));
+            stretchRow.removeFromLeft (gap * 3.0f);
+        }
 
         bounds.removeFromTop (6);
         infoLabel.setBounds (bounds.removeFromTop (22));
@@ -742,121 +712,52 @@ private:
         };
 
         addAndMakeVisible (loopButton);
-        loopButton.setToggleState (false, yup::NotificationType::dontSendNotification);
         loopButton.onClick = [this]
         {
-            loopEnabled = loopButton.getToggleState();
+            loopEnabled = ! loopEnabled;
+            loopButton.setOn (loopEnabled);
             if (memorySource != nullptr)
                 memorySource->setLooping (loopEnabled);
         };
 
         addAndMakeVisible (labelsButton);
-        labelsButton.setToggleState (true, yup::NotificationType::dontSendNotification);
+        labelsButton.setOn (true);
         labelsButton.onClick = [this]
         {
-            waveformDisplay.setChannelLabelsVisible (labelsButton.getToggleState());
+            labelsButton.setOn (! labelsButton.isOn());
+            waveformDisplay.setChannelLabelsVisible (labelsButton.isOn());
         };
 
-        // K-Scale selection buttons (manual radio button behavior)
-        addAndMakeVisible (k20Button);
-        k20Button.setButtonText ("K-20");
-        k20Button.setToggleState (true, yup::NotificationType::dontSendNotification);
-        k20Button.onClick = [this]
+        addAndMakeVisible (onsetsButton);
+        onsetsButton.setButtonText ("Detect onsets");
+        onsetsButton.onClick = [this]
         {
-            k20Button.setToggleState (true, yup::NotificationType::dontSendNotification);
-            k14Button.setToggleState (false, yup::NotificationType::dontSendNotification);
-            k12Button.setToggleState (false, yup::NotificationType::dontSendNotification);
-            meterState.setScale (yup::KMeterState::Scale::k20);
+            detectOnsets();
+        };
+
+        setupComboBox (scaleLabel, "Scale", scaleComboBox, { "K-20", "K-14", "K-12" }, [this] (int index)
+        {
+            constexpr std::array scales { yup::KMeterState::Scale::k20, yup::KMeterState::Scale::k14, yup::KMeterState::Scale::k12 };
+            meterState.setScale (scales[(size_t) index]);
             leftMeter.repaint();
             rightMeter.repaint();
-        };
+        });
 
-        addAndMakeVisible (k14Button);
-        k14Button.setButtonText ("K-14");
-        k14Button.setToggleState (false, yup::NotificationType::dontSendNotification);
-        k14Button.onClick = [this]
+        setupComboBox (standardLabel, "Standard", standardComboBox, { "RMS Flat", "ITU BS.1770-4", "EBU R128" }, [this] (int index)
         {
-            k20Button.setToggleState (false, yup::NotificationType::dontSendNotification);
-            k14Button.setToggleState (true, yup::NotificationType::dontSendNotification);
-            k12Button.setToggleState (false, yup::NotificationType::dontSendNotification);
-            meterState.setScale (yup::KMeterState::Scale::k14);
+            constexpr std::array standards { yup::KMeterState::MeteringStandard::rmsFlat,
+                                             yup::KMeterState::MeteringStandard::ituBS1770_4,
+                                             yup::KMeterState::MeteringStandard::ebuR128 };
+            meterState.setMeteringStandard (standards[(size_t) index]);
             leftMeter.repaint();
             rightMeter.repaint();
-        };
+        });
 
-        addAndMakeVisible (k12Button);
-        k12Button.setButtonText ("K-12");
-        k12Button.setToggleState (false, yup::NotificationType::dontSendNotification);
-        k12Button.onClick = [this]
+        setupComboBox (oversLabel, "Overs", oversComboBox, { "Contiguous", "Total" }, [this] (int index)
         {
-            k20Button.setToggleState (false, yup::NotificationType::dontSendNotification);
-            k14Button.setToggleState (false, yup::NotificationType::dontSendNotification);
-            k12Button.setToggleState (true, yup::NotificationType::dontSendNotification);
-            meterState.setScale (yup::KMeterState::Scale::k12);
-            leftMeter.repaint();
-            rightMeter.repaint();
-        };
-
-        // Metering standard selection buttons
-        addAndMakeVisible (rmsButton);
-        rmsButton.setButtonText ("RMS Flat");
-        rmsButton.setToggleState (true, yup::NotificationType::dontSendNotification);
-        rmsButton.onClick = [this]
-        {
-            rmsButton.setToggleState (true, yup::NotificationType::dontSendNotification);
-            ituButton.setToggleState (false, yup::NotificationType::dontSendNotification);
-            ebuButton.setToggleState (false, yup::NotificationType::dontSendNotification);
-            meterState.setMeteringStandard (yup::KMeterState::MeteringStandard::rmsFlat);
-            leftMeter.repaint();
-            rightMeter.repaint();
-        };
-
-        addAndMakeVisible (ituButton);
-        ituButton.setButtonText ("ITU BS.1770-4");
-        ituButton.setToggleState (false, yup::NotificationType::dontSendNotification);
-        ituButton.onClick = [this]
-        {
-            rmsButton.setToggleState (false, yup::NotificationType::dontSendNotification);
-            ituButton.setToggleState (true, yup::NotificationType::dontSendNotification);
-            ebuButton.setToggleState (false, yup::NotificationType::dontSendNotification);
-            meterState.setMeteringStandard (yup::KMeterState::MeteringStandard::ituBS1770_4);
-            leftMeter.repaint();
-            rightMeter.repaint();
-        };
-
-        addAndMakeVisible (ebuButton);
-        ebuButton.setButtonText ("EBU R128");
-        ebuButton.setToggleState (false, yup::NotificationType::dontSendNotification);
-        ebuButton.onClick = [this]
-        {
-            rmsButton.setToggleState (false, yup::NotificationType::dontSendNotification);
-            ituButton.setToggleState (false, yup::NotificationType::dontSendNotification);
-            ebuButton.setToggleState (true, yup::NotificationType::dontSendNotification);
-            meterState.setMeteringStandard (yup::KMeterState::MeteringStandard::ebuR128);
-            leftMeter.repaint();
-            rightMeter.repaint();
-        };
-
-        // Over counter mode selection buttons
-        addAndMakeVisible (contiguousButton);
-        contiguousButton.setButtonText ("Contiguous");
-        contiguousButton.setToggleState (true, yup::NotificationType::dontSendNotification);
-        contiguousButton.onClick = [this]
-        {
-            contiguousButton.setToggleState (true, yup::NotificationType::dontSendNotification);
-            totalButton.setToggleState (false, yup::NotificationType::dontSendNotification);
-            meterState.setOverCounterMode (yup::KMeterState::OverCounterMode::contiguous);
-        };
-
-        addAndMakeVisible (totalButton);
-        totalButton.setButtonText ("Total");
-        totalButton.setToggleState (false, yup::NotificationType::dontSendNotification);
-        totalButton.onClick = [this]
-        {
-            contiguousButton.setToggleState (false, yup::NotificationType::dontSendNotification);
-            totalButton.setToggleState (true, yup::NotificationType::dontSendNotification);
-            meterState.setOverCounterMode (yup::KMeterState::OverCounterMode::total);
-        };
+            meterState.setOverCounterMode (index == 0 ? yup::KMeterState::OverCounterMode::contiguous
+                                                      : yup::KMeterState::OverCounterMode::total);
+        });
 
         addAndMakeVisible (infoLabel);
         infoLabel.setText ("No audio loaded.", yup::NotificationType::dontSendNotification);
@@ -926,7 +827,21 @@ private:
 
         addAndMakeVisible (waveformDisplay);
         waveformDisplay.setSelectable (true);
-        waveformDisplay.setChannelLabelsVisible (labelsButton.getToggleState());
+        waveformDisplay.setChannelLabelsVisible (labelsButton.isOn());
+    }
+
+    void setupComboBox (yup::Label& label, const yup::String& text, yup::ComboBox& comboBox, const yup::StringArray& items, std::function<void (int)> onChange)
+    {
+        addAndMakeVisible (label);
+        label.setText (text, yup::NotificationType::dontSendNotification);
+
+        addAndMakeVisible (comboBox);
+        comboBox.addItemList (items, 1);
+        comboBox.setSelectedItemIndex (0, yup::NotificationType::dontSendNotification);
+        comboBox.onSelectedItemChanged = [&comboBox, onChange = std::move (onChange)]
+        {
+            onChange (comboBox.getSelectedId() - 1);
+        };
     }
 
     void updateStatus (const yup::String& newStatus)
@@ -991,12 +906,12 @@ private:
         if (transportSource.isPlaying())
         {
             transportSource.stop();
-            playButton.setButtonText ("Play");
+            playButton.setGlyph (YUP_ICON_PLAY);
         }
         else
         {
             transportSource.start();
-            playButton.setButtonText ("Pause");
+            playButton.setGlyph (YUP_ICON_PAUSE);
         }
     }
 
@@ -1007,7 +922,7 @@ private:
 
         transportSource.stop();
         transportSource.setPosition (0.0);
-        playButton.setButtonText ("Play");
+        playButton.setGlyph (YUP_ICON_PLAY);
         waveformDisplay.setPlayhead (0.0, audioLengthSeconds);
         updatePlaybackStatus();
     }
@@ -1056,30 +971,48 @@ private:
         waveformDisplay.setSource (&audioBuffer, loadedSampleRate);
         waveformDisplay.setPlayhead (0.0, audioLengthSeconds);
 
-        // Compute onsets in background
-        waveformThreadPool.addJob ([this, weakThis = yup::WeakReference<yup::Component> (this)]
-        {
-            superFlux.prepare ({ .spectrogram = { .fftSize = 2048, .fps = 200 },
-                                 .peakPicker = { .threshold = 0.8f },
-                                 .useFilterBank = true,
-                                 .refineOnsets = true },
-                               loadedSampleRate);
-
-            superFlux.processOffline (audioBuffer);
-            onsetTimes = superFlux.getOnsetTimes();
-            hasOnsets = true;
-
-            yup::MessageManager::callAsync ([this, weakThis]
-            {
-                if (weakThis.get() != nullptr)
-                    waveformDisplay.setOnsetData (onsetTimes);
-            });
-        });
+        // A detection still running belongs to the previous file, its results are dropped
+        ++audioGeneration;
+        waveformDisplay.setOnsetData ({});
+        onsetsButton.setEnabled (true);
 
         updateStatus ("Loaded " + file.getFileName() + " | " + yup::String (numChannels)
                       + " ch | " + yup::String (loadedSampleRate, 1) + " Hz | "
                       + formatTime (audioLengthSeconds));
         updatePlaybackStatus();
+    }
+
+    void detectOnsets()
+    {
+        if (! hasLoadedAudio)
+        {
+            updateStatus ("Load an audio file before detecting onsets.");
+            return;
+        }
+
+        onsetsButton.setEnabled (false);
+        updateStatus ("Detecting onsets...");
+
+        waveformThreadPool.addJob ([this, generation = audioGeneration, sampleRate = loadedSampleRate, weakThis = yup::WeakReference<yup::Component> (this)]
+        {
+            yup::OnsetDetector detector;
+            detector.prepare ({ .spectrogram = { .fftSize = 2048, .fps = 200 },
+                                .peakPicker = { .threshold = 0.8f },
+                                .useFilterBank = true,
+                                .refineOnsets = true },
+                              sampleRate);
+            detector.processOffline (audioBuffer);
+
+            yup::MessageManager::callAsync ([this, generation, weakThis, onsets = detector.getOnsetTimes()]
+            {
+                if (weakThis.get() == nullptr || generation != audioGeneration)
+                    return;
+
+                waveformDisplay.setOnsetData (onsets);
+                onsetsButton.setEnabled (true);
+                updateStatus ("Detected " + yup::String ((int) onsets.size()) + " onsets.");
+            });
+        });
     }
 
     void saveAudioFile()
@@ -1213,20 +1146,20 @@ private:
     yup::ThreadPool waveformThreadPool;
     std::shared_ptr<yup::AudioPeakProfileCache> waveformCache;
 
-    yup::TextButton loadButton;
-    yup::TextButton playButton;
-    yup::TextButton stopButton;
-    yup::TextButton saveButton;
-    yup::ToggleButton loopButton;
-    yup::ToggleButton labelsButton;
-    yup::ToggleButton k20Button;
-    yup::ToggleButton k14Button;
-    yup::ToggleButton k12Button;
-    yup::ToggleButton rmsButton;
-    yup::ToggleButton ituButton;
-    yup::ToggleButton ebuButton;
-    yup::ToggleButton contiguousButton;
-    yup::ToggleButton totalButton;
+    IconButton loadButton { "loadAudio", YUP_ICON_FOLDER_OPEN };
+    IconButton playButton { "play", YUP_ICON_PLAY };
+    IconButton stopButton { "stop", YUP_ICON_STOP };
+    IconButton saveButton { "saveAudio", YUP_ICON_FLOPPY_DISK };
+    IconButton loopButton { "loop", YUP_ICON_REPEAT };
+    IconButton labelsButton { "labels", YUP_ICON_TAG };
+    yup::TextButton onsetsButton { "detectOnsets" };
+
+    yup::Label scaleLabel;
+    yup::Label standardLabel;
+    yup::Label oversLabel;
+    yup::ComboBox scaleComboBox { "meterScale" };
+    yup::ComboBox standardComboBox { "meterStandard" };
+    yup::ComboBox oversComboBox { "meterOvers" };
 
     yup::Label timeLabel;
     yup::Label pitchLabel;
@@ -1255,9 +1188,7 @@ private:
     bool loopEnabled = false;
     bool timeStretchSupported = false;
 
-    yup::OnsetDetector superFlux;
-    std::vector<double> onsetTimes;
-    bool hasOnsets = false;
+    int audioGeneration = 0;
 
     static constexpr int backendAutomaticId = 1;
     static constexpr int backendTimeDomainId = 2;
