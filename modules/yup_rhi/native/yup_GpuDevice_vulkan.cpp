@@ -316,44 +316,12 @@ public:
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0 || renderContext == nullptr)
-            return nullptr;
-
-        return withDevice ([&]() -> std::unique_ptr<OffscreenTarget>
-                           {
-            auto target = std::make_unique<OffscreenTargetVulkan>();
-            target->width = width;
-            target->height = height;
-            target->renderCanvas = renderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));
-            if (target->renderCanvas == nullptr || target->renderCanvas->renderTarget() == nullptr)
-                return nullptr;
-
-            return target;
-        });
+        return makeOffscreenTarget (width, height, false);
     }
 
     std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0)
-            return nullptr;
-
-        return withDevice ([&]() -> std::unique_ptr<RenderableTarget>
-                           {
-            auto* contextSlot = acquireOffscreenContext();
-            if (contextSlot == nullptr)
-                return nullptr;
-
-            auto target = std::make_unique<OffscreenTargetVulkan>();
-            target->width = width;
-            target->height = height;
-            target->renderContext = contextSlot->renderContext.get();
-            target->contextSlot = contextSlot;
-            target->renderCanvas = target->renderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));
-            if (target->renderCanvas == nullptr || target->renderCanvas->renderTarget() == nullptr)
-                return nullptr;
-
-            return target;
-        });
+        return makeOffscreenTarget (width, height, true);
     }
 
     void beginOffscreen (OffscreenTarget& baseTarget, const GpuFrameDescriptor& frameDesc) override
@@ -361,12 +329,14 @@ public:
         withDevice ([&]
                     {
             auto& target = static_cast<OffscreenTargetVulkan&> (baseTarget);
-            auto* rc = target.getRenderContext();
 
-            if (rc == nullptr || target.contextSlot == nullptr || target.contextSlot->frameActive)
+            if (target.isRenderable && target.contextSlot == nullptr)
+                target.contextSlot = acquireOffscreenContext();
+
+            if (target.contextSlot == nullptr || target.contextSlot->frameActive)
                 return;
 
-            rc->beginFrame (toRiveFrameDescriptor (frameDesc));
+            target.contextSlot->renderContext->beginFrame (toRiveFrameDescriptor (frameDesc));
             target.contextSlot->frameActive = true;
         });
     }
@@ -376,12 +346,13 @@ public:
         withDevice ([&]
                     {
             auto& target = static_cast<OffscreenTargetVulkan&> (baseTarget);
-            auto* rc = target.getRenderContext();
+            auto* slot = std::exchange (target.contextSlot, nullptr);
 
-            if (rc == nullptr || target.contextSlot == nullptr || ! target.contextSlot->frameActive)
+            if (slot == nullptr || ! slot->frameActive)
                 return;
 
-            target.contextSlot->frameActive = false;
+            slot->frameActive = false;
+            slot->leased = false;
 
             // The generation is taken now, at flush time, so frames nested in the paint
             // that opened this one keep the frame numbers increasing
@@ -390,10 +361,10 @@ public:
             if (! commands.isValid())
                 return;
 
-            rc->flush ({ .renderTarget = target.getRenderTarget(),
-                         .externalCommandBuffer = commands.commandBuffer,
-                         .currentFrameNumber = commands.frameNumber,
-                         .safeFrameNumber = commands.safeFrameNumber });
+            slot->renderContext->flush ({ .renderTarget = target.getRenderTarget(),
+                                          .externalCommandBuffer = commands.commandBuffer,
+                                          .currentFrameNumber = commands.frameNumber,
+                                          .safeFrameNumber = commands.safeFrameNumber });
 
             vulkanDevice->submitCommands (commands.commandBuffer);
         });
@@ -906,7 +877,7 @@ private:
         int height = 0;
         rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
         rive::rcp<rive::gpu::vkutil::Buffer> readbackBuffer;
-        rive::gpu::RenderContext* renderContext = nullptr;
+        bool isRenderable = false;
         OffscreenContextSlot* contextSlot = nullptr;
 
         int getWidth() const noexcept override { return width; }
@@ -920,7 +891,7 @@ private:
 
         rive::gpu::RenderContext* getRenderContext() noexcept override
         {
-            return renderContext;
+            return contextSlot != nullptr ? contextSlot->renderContext.get() : nullptr;
         }
 
         rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() noexcept override
@@ -1032,6 +1003,25 @@ private:
             context->static_impl_cast<rive::gpu::RenderContextVulkanImpl>()->setCanvasQueue (vulkanDevice->getQueue(), vulkanDevice->getQueueFamilyIndex());
 
         return context;
+    }
+
+    std::unique_ptr<OffscreenTargetVulkan> makeOffscreenTarget (int width, int height, bool isRenderable)
+    {
+        if (width <= 0 || height <= 0 || renderContext == nullptr)
+            return nullptr;
+
+        return withDevice ([&]() -> std::unique_ptr<OffscreenTargetVulkan>
+                           {
+            auto target = std::make_unique<OffscreenTargetVulkan>();
+            target->width = width;
+            target->height = height;
+            target->isRenderable = isRenderable;
+            target->renderCanvas = renderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));
+            if (target->renderCanvas == nullptr || target->renderCanvas->renderTarget() == nullptr)
+                return nullptr;
+
+            return target;
+        });
     }
 
     OffscreenContextSlot* acquireOffscreenContext()

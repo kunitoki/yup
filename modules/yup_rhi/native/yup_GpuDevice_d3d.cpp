@@ -215,7 +215,7 @@ public:
         int height = 0;
         ComPtr<ID3D11Texture2D> stagingTexture;
         rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
-        rive::gpu::RenderContext* renderContext = nullptr;
+        bool isRenderable = false;
         OffscreenContextSlot* contextSlot = nullptr;
 
         int getWidth() const noexcept override { return width; }
@@ -229,7 +229,7 @@ public:
 
         rive::gpu::RenderContext* getRenderContext() noexcept override
         {
-            return renderContext;
+            return contextSlot != nullptr ? contextSlot->renderContext.get() : nullptr;
         }
 
         rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() noexcept override
@@ -266,83 +266,42 @@ public:
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0 || renderContext == nullptr)
-            return nullptr;
-
-        auto target = std::make_unique<OffscreenTargetD3D>();
-        target->width = width;
-        target->height = height;
-        target->renderContext = nullptr;
-        target->contextSlot = nullptr;
-
-        target->renderCanvas = renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
-                                                                static_cast<uint32_t> (height));
-        if (target->renderCanvas == nullptr)
-            return nullptr;
-
-        target->stagingTexture = createStagingTexture (width, height);
-        if (target->stagingTexture == nullptr)
-            return nullptr;
-
-        return target;
+        return makeOffscreenTarget (width, height, false);
     }
 
     std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0)
-            return nullptr;
-
-        auto* contextSlot = acquireOffscreenContext();
-        if (contextSlot == nullptr)
-            return nullptr;
-
-        auto target = std::make_unique<OffscreenTargetD3D>();
-        target->width = width;
-        target->height = height;
-        target->renderContext = contextSlot->renderContext.get();
-        target->contextSlot = contextSlot;
-
-        target->renderCanvas = target->renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
-                                                                        static_cast<uint32_t> (height));
-        if (target->renderCanvas == nullptr)
-            return nullptr;
-
-        target->stagingTexture = createStagingTexture (width, height);
-        if (target->stagingTexture == nullptr)
-            return nullptr;
-
-        return target;
+        return makeOffscreenTarget (width, height, true);
     }
 
     void beginOffscreen (OffscreenTarget& baseTarget, const GpuFrameDescriptor& frameDesc) override
     {
         auto& target = static_cast<OffscreenTargetD3D&> (baseTarget);
-        auto* renderContext = target.getRenderContext();
 
-        if (renderContext != nullptr)
-        {
-            if (target.contextSlot == nullptr || target.contextSlot->frameActive)
-                return;
+        if (target.isRenderable && target.contextSlot == nullptr)
+            target.contextSlot = acquireOffscreenContext();
 
-            renderContext->beginFrame (toRiveFrameDescriptor (frameDesc));
-            target.contextSlot->frameActive = true;
-        }
+        if (target.contextSlot == nullptr || target.contextSlot->frameActive)
+            return;
+
+        target.contextSlot->renderContext->beginFrame (toRiveFrameDescriptor (frameDesc));
+        target.contextSlot->frameActive = true;
     }
 
     void endOffscreen (OffscreenTarget& baseTarget) override
     {
         auto& target = static_cast<OffscreenTargetD3D&> (baseTarget);
-        auto* renderContext = target.getRenderContext();
+        auto* slot = std::exchange (target.contextSlot, nullptr);
 
-        if (renderContext == nullptr || target.contextSlot == nullptr || ! target.contextSlot->frameActive)
+        if (slot == nullptr || ! slot->frameActive)
             return;
 
         rive::gpu::RenderContext::FlushResources flushDesc;
         flushDesc.renderTarget = target.getRenderTarget();
-        renderContext->flush (flushDesc);
+        slot->renderContext->flush (flushDesc);
 
-
-        target.contextSlot->frameActive = false;
+        slot->frameActive = false;
+        slot->leased = false;
     }
 
     bool clearOffscreen (OffscreenTarget& baseTarget, GpuColor color) override
@@ -398,6 +357,28 @@ public:
     }
 
 private:
+    std::unique_ptr<OffscreenTargetD3D> makeOffscreenTarget (int width, int height, bool isRenderable)
+    {
+        if (width <= 0 || height <= 0 || renderContext == nullptr)
+            return nullptr;
+
+        auto target = std::make_unique<OffscreenTargetD3D>();
+        target->width = width;
+        target->height = height;
+        target->isRenderable = isRenderable;
+
+        target->renderCanvas = renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                static_cast<uint32_t> (height));
+        if (target->renderCanvas == nullptr)
+            return nullptr;
+
+        target->stagingTexture = createStagingTexture (width, height);
+        if (target->stagingTexture == nullptr)
+            return nullptr;
+
+        return target;
+    }
+
     OffscreenContextSlot* acquireOffscreenContext()
     {
         for (const auto& slot : offscreenContextPool)

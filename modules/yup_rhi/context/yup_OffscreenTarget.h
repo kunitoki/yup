@@ -29,10 +29,9 @@ namespace yup
     beginOffscreen/endOffscreen and readOffscreenPixels.
 
     An OffscreenTarget is the low-level render surface used by GPU render passes
-    (GpuTarget/GpuRenderPass). Its backing RenderCanvas is allocated from the
-    context's main RenderContext, so it does not reserve a dedicated offscreen
-    render context and cannot drive a 2D Graphics frame. Use RenderableTarget
-    (created via createRenderableTarget) when 2D drawing is required.
+    (GpuTarget/GpuRenderPass). It leases no render context for a frame, so it
+    cannot drive a 2D Graphics frame. Use RenderableTarget (created via
+    createRenderableTarget) when 2D drawing is required.
 
     The GraphicsContext must outlive every OffscreenTarget it creates.
 */

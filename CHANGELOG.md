@@ -78,6 +78,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fixed `Prefab::instantiate` making the parts of an entity destroyed by an attach callback, `ShaderBundle` loading a bundle with an unknown shader stage or language, and `SceneComponent` crashing when it paints its error message with no global `ApplicationTheme`.
 - `SceneComponent` takes the frames of its window only while it has something to do, so a window showing a still scene can idle. While it is not showing it no longer updates its scene, `setContinuousUpdates (true)` included, and releases its render targets (`SceneRenderer::releaseTargets()`).
 - Added `reducePolylineToPixelColumns`, which reduces a line with more points than the pixels it is drawn across to the first, lowest, highest and last point of each pixel column. `CartesianPlane` draws its signals with it and keeps their paths between paints.
+- A `GpuCanvas` leases a Rive render context for each frame drawn into it instead of keeping one for its whole life, so the cached, filtered and effect canvases of an interface share a few contexts rather than holding about 1 MB each. **Breaking:** `RenderableTarget::getRenderContext()` returns nullptr outside a frame.
 
 ### UI
 

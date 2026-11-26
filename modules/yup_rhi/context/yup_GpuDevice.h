@@ -491,11 +491,10 @@ public:
     //==============================================================================
     /** Creates platform-specific GPU offscreen resources for the given dimensions.
 
-        The returned target is backed by the device's main render context and does
-        not reserve a dedicated one, so it cannot drive a 2D Graphics frame. Use it
-        for render-pass-only surfaces. A target must outlive its corresponding
-        beginOffscreen()/endOffscreen() pair and the GpuDevice must outlive every
-        target it creates.
+        The returned target leases no render context for a frame, so it cannot
+        drive a 2D Graphics frame. Use it for render-pass-only surfaces. A target
+        must outlive its corresponding beginOffscreen()/endOffscreen() pair and the
+        GpuDevice must outlive every target it creates.
 
         @param width The width of the offscreen target in pixels.
         @param height The height of the offscreen target in pixels.
@@ -504,16 +503,16 @@ public:
     */
     virtual std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) = 0;
 
-    /** Creates platform-specific GPU offscreen resources backed by a dedicated render context.
+    /** Creates platform-specific GPU offscreen resources a 2D Graphics frame can draw into.
 
-        Unlike createOffscreenTarget(), the returned RenderableTarget reserves a
-        backend-owned RenderContext, which is required to drive a 2D Graphics frame
-        (GpuCanvas::beginDraw). Prefer createOffscreenTarget() for render-pass-only
-        surfaces to avoid allocating a dedicated context.
+        Unlike createOffscreenTarget(), the returned RenderableTarget is drawn with
+        a backend-owned RenderContext, which is required to drive a 2D Graphics
+        frame (GpuCanvas::beginDraw).
 
-        The reservation is exclusive and lasts for the target's whole lifetime; the
-        context returns to the pool when the target is destroyed. Two live targets
-        therefore never share a context, which is what allows their frames to nest.
+        The context is leased from a pool by beginOffscreen() and returns to it at
+        endOffscreen(). The lease is exclusive while the frame is open, which is
+        what allows the frames of two targets to nest; between frames a target
+        keeps no context.
 
         @param width The width of the offscreen target in pixels.
         @param height The height of the offscreen target in pixels.
