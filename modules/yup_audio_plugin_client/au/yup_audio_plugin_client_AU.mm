@@ -444,7 +444,11 @@ public:
         if (processor == nullptr || sampleRate <= 0.0)
             return 0.0;
 
-        return static_cast<Float64> (processor->getTailSamples()) / sampleRate;
+        const auto tailSamples = processor->getTailSamples();
+        if (tailSamples == AudioProcessorBase::infiniteTailSamples)
+            return std::numeric_limits<Float64>::infinity();
+
+        return static_cast<Float64> (tailSamples) / sampleRate;
     }
 
     Float64 GetLatency() override

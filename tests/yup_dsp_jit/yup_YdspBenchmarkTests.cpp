@@ -143,6 +143,16 @@ struct BenchmarkTiming
     double average = 0.0;
 };
 
+/** Hands a native reference a parameter the way a kernel gets one: a value
+    the compiler cannot fold, read once per block. Without it the references
+    would be specialised for the default values of the patch they mirror. */
+template <typename Type>
+Type benchmarkParameter (Type value) noexcept
+{
+    volatile Type opaque = value;
+    return opaque;
+}
+
 template <typename Fn>
 BenchmarkTiming benchmarkTimeRepeats (Fn&& fn)
 {
@@ -582,6 +592,9 @@ class BenchmarkNativeLadder
 public:
     void process (const float* in, float* out, int numSamples)
     {
+        const auto cutoff = benchmarkParameter (0.25f);
+        const auto resonance = benchmarkParameter (0.5f);
+
         const auto g = std::min (std::max (cutoff, 0.01f), 0.99f);
         const auto fb = resonance * 3.8f;
 
@@ -599,9 +612,6 @@ public:
     }
 
 private:
-    float cutoff = 0.25f;
-    float resonance = 0.5f;
-
     float z1 = 0.0f, z2 = 0.0f, z3 = 0.0f, z4 = 0.0f;
 };
 
@@ -614,6 +624,9 @@ public:
 #pragma clang fp contract(off)
 #endif
 
+        const auto cutoff = benchmarkParameter (0.25f);
+        const auto resonance = benchmarkParameter (0.5f);
+
         const auto g = std::min (std::max (cutoff, 0.01f), 0.99f);
         const auto fb = resonance * 3.8f;
 
@@ -631,9 +644,6 @@ public:
     }
 
 private:
-    float cutoff = 0.25f;
-    float resonance = 0.5f;
-
     float z1 = 0.0f, z2 = 0.0f, z3 = 0.0f, z4 = 0.0f;
 };
 
@@ -1050,6 +1060,8 @@ class BenchmarkNativeModal
 public:
     void process (const float* in, float* out, int numSamples)
     {
+        const auto damping = benchmarkParameter (0.5f);
+
         for (int s = 0; s < numSamples; ++s)
         {
             const auto x = in[s];
@@ -1073,7 +1085,6 @@ public:
 private:
     static constexpr int modes = 16;
 
-    float damping = 0.5f;
     float env = 0.0f;
     float z[modes] {};
 };
@@ -2336,6 +2347,12 @@ public:
 
     void process (const float* in, float* out, int numSamples)
     {
+        const auto sampleRate = benchmarkParameter (48000.0f);
+        const auto delaySeconds = benchmarkParameter (0.375f);
+        const auto feedback = benchmarkParameter (0.4f);
+        const auto damping = benchmarkParameter (0.5f);
+        const auto mix = benchmarkParameter (0.35f);
+
         for (int i = 0; i < numSamples; ++i)
         {
             const auto x = in[i];
@@ -2368,11 +2385,6 @@ public:
 
 private:
     static constexpr int ringSize = 96000;
-    static constexpr float sampleRate = 48000.0f;
-    static constexpr float delaySeconds = 0.375f;
-    static constexpr float feedback = 0.4f;
-    static constexpr float damping = 0.5f;
-    static constexpr float mix = 0.35f;
 
     std::vector<float> ring;
     int wp = 0;
@@ -2435,6 +2447,11 @@ public:
 
     void process (const float* in, float* out, int numSamples)
     {
+        const auto sampleRate = benchmarkParameter (48000.0f);
+        const auto rate = benchmarkParameter (1.5f);
+        const auto depth = benchmarkParameter (0.004f);
+        const auto mix = benchmarkParameter (0.5f);
+
         for (int i = 0; i < numSamples; ++i)
         {
             const auto x = in[i];
@@ -2459,10 +2476,6 @@ public:
 
 private:
     static constexpr int ringSize = 4096;
-    static constexpr float sampleRate = 48000.0f;
-    static constexpr float rate = 1.5f;
-    static constexpr float depth = 0.004f;
-    static constexpr float mix = 0.5f;
     static constexpr float twoPi = 6.283185307f;
 
     std::vector<float> ring;
@@ -2636,6 +2649,10 @@ public:
 
     void process (const float* in, float* out, int numSamples)
     {
+        const auto damping = benchmarkParameter (0.5f);
+        const auto roomSize = benchmarkParameter (0.8f);
+        const auto mix = benchmarkParameter (0.33f);
+
         for (int i = 0; i < numSamples; ++i)
         {
             const auto x = in[i];
@@ -2682,9 +2699,6 @@ public:
 private:
     static constexpr int combLengths[8] = { 1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617 };
     static constexpr int allpassLengths[4] = { 225, 341, 441, 556 };
-    static constexpr float damping = 0.5f;
-    static constexpr float roomSize = 0.8f;
-    static constexpr float mix = 0.33f;
 
     std::vector<float> combs[8];
     std::vector<float> allpasses[4];
@@ -2744,6 +2758,13 @@ class BenchmarkNativeCompressor
 public:
     void process (const float* in, float* out, int numSamples)
     {
+        const auto sampleRate = benchmarkParameter (48000.0f);
+        const auto threshold = benchmarkParameter (-18.0f);
+        const auto ratio = benchmarkParameter (4.0f);
+        const auto attack = benchmarkParameter (0.005f);
+        const auto release = benchmarkParameter (0.15f);
+        const auto makeup = benchmarkParameter (1.0f);
+
         for (int i = 0; i < numSamples; ++i)
         {
             const auto x = in[i];
@@ -2766,13 +2787,6 @@ public:
     }
 
 private:
-    static constexpr float sampleRate = 48000.0f;
-    static constexpr float threshold = -18.0f;
-    static constexpr float ratio = 4.0f;
-    static constexpr float attack = 0.005f;
-    static constexpr float release = 0.15f;
-    static constexpr float makeup = 1.0f;
-
     float env = 0.0f;
 };
 
@@ -2817,6 +2831,10 @@ class BenchmarkNativeDistortion
 public:
     void process (const float* in, float* out, int numSamples)
     {
+        const auto drive = benchmarkParameter (1.0f);
+        const auto tone = benchmarkParameter (0.5f);
+        const auto mix = benchmarkParameter (0.7f);
+
         for (int i = 0; i < numSamples; ++i)
         {
             const auto x = in[i];
@@ -2831,10 +2849,6 @@ public:
     }
 
 private:
-    static constexpr float drive = 1.0f;
-    static constexpr float tone = 0.5f;
-    static constexpr float mix = 0.7f;
-
     float z1 = 0.0f;
 };
 
@@ -2893,6 +2907,10 @@ class BenchmarkNativeSvf
 public:
     void process (const float* in, float* out, int numSamples)
     {
+        const auto samplePeriod = benchmarkParameter (1.0f / 48000.0f);
+        const auto cutoff = benchmarkParameter (1000.0f);
+        const auto resonance = benchmarkParameter (0.7f);
+
         for (int i = 0; i < numSamples; ++i)
         {
             const auto x = in[i];
@@ -2916,10 +2934,7 @@ public:
     }
 
 private:
-    static constexpr float samplePeriod = 1.0f / 48000.0f;
     static constexpr float pi = 3.14159265358979323846f;
-    static constexpr float cutoff = 1000.0f;
-    static constexpr float resonance = 0.7f;
 
     float ic1eq = 0.0f;
     float ic2eq = 0.0f;
@@ -2998,6 +3013,10 @@ class BenchmarkNativePhaser
 public:
     void process (const float* in, float* out, int numSamples)
     {
+        const auto sampleRate = benchmarkParameter (48000.0f);
+        const auto rate = benchmarkParameter (0.4f);
+        const auto depth = benchmarkParameter (0.7f);
+
         for (int i = 0; i < numSamples; ++i)
         {
             const auto x = in[i];
@@ -3022,9 +3041,6 @@ public:
     }
 
 private:
-    static constexpr float sampleRate = 48000.0f;
-    static constexpr float rate = 0.4f;
-    static constexpr float depth = 0.7f;
     static constexpr float twoPi = 6.283185307f;
 
     float phase = 0.0f;
@@ -3153,6 +3169,8 @@ class BenchmarkNativeLoFi
 public:
     void process (const float* in, float* out, int numSamples)
     {
+        const auto drive = benchmarkParameter (2.0f);
+
         for (int i = 0; i < numSamples; ++i)
         {
             const auto x = in[i];
@@ -3170,7 +3188,6 @@ public:
 
 private:
     static constexpr int hold = 12;
-    static constexpr float drive = 2.0f;
 
     float held = 0.0f;
     int counter = 0;

@@ -31,14 +31,14 @@ jobs:
           - { os: macos-latest, id: macosx_arm64, archs: arm64 }
           - { os: windows-latest, id: win_amd64, archs: AMD64 }
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.4.1
+        uses: pypa/cibuildwheel@v4.3.5
         env:
           CIBW_ARCHS: ${{ matrix.platform.archs }}
           CIBW_BUILD: cp${{ matrix.python }}-${{ matrix.platform.id }}

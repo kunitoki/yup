@@ -73,6 +73,20 @@ public:
     /** Compiles a parsed program. */
     static ResultValue<CompiledExpression> compile (const Expression& expression, const ExpressionContext& context);
 
+    /** Compiles a parsed program, telling which of its statements failed to compile.
+
+        This is what maps an error back to where a statement comes from when the program is built
+        with Expression::block rather than parsed from a text, as its nodes have no position then.
+
+        @param expression       The program to compile.
+        @param context          The context the program is compiled against.
+        @param failedStatement  Set to -1 on success. On failure, the index of the top-level
+                                statement that failed (0 when the program is a single statement),
+                                or -1 when the failure is not the one of a statement, like a
+                                program without outputs.
+    */
+    static ResultValue<CompiledExpression> compile (const Expression& expression, const ExpressionContext& context, int& failedStatement);
+
     //==============================================================================
     /** Returns the number of outputs, in the order they are assigned in the program. */
     int getNumOutputs() const noexcept;
@@ -99,6 +113,23 @@ public:
             return makeResultValueFail ("Output '" + String (name) + "' has type '" + getOutputType (index)->getName() + "'");
 
         return makeResultValueOk (ExpressionOutput<T> { index });
+    }
+
+    /** Returns a typed handle to an output, invalid if it doesn't exist or has a different type.
+
+        Unlike getOutput this builds no error message, which makes it the cheap way of looking
+        for the outputs a program may or may not assign.
+
+        @code
+        if (const auto fill = program.findTypedOutput<Color> ("fill"); fill.isValid())
+            color = state.get (fill);
+        @endcode
+    */
+    template <class T>
+    ExpressionOutput<T> findTypedOutput (StringRef name) const
+    {
+        const auto index = findOutput (name);
+        return index >= 0 && getOutputType (index)->is<T>() ? ExpressionOutput<T> { index } : ExpressionOutput<T> {};
     }
 
     //==============================================================================

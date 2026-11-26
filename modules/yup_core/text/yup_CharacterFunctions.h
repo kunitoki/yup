@@ -405,6 +405,30 @@ public:
     }
 
     //==============================================================================
+    /** The size of a buffer large enough for writeShortestFloat, null terminator included. */
+    static constexpr size_t shortestFloatBufferSize = 32;
+
+    /** Writes the shortest `%g` style text that reads back as exactly the same `float`.
+
+        The decimal separator is always `.`, whatever the current locale is, and no memory is
+        allocated. Whole numbers are written without a fraction (`125`), an exponent is used when it
+        makes the text shorter (`1e+02`, `1e-07`), and values that aren't finite are `inf`, `-inf`
+        or `nan`.
+
+        @param value   The value to write.
+        @param buffer  Where the null terminated text is written, at least shortestFloatBufferSize characters.
+
+        @returns The number of characters written, excluding the null terminator.
+    */
+    static size_t writeShortestFloat (float value, char* buffer) noexcept;
+
+    /** Writes the shortest `%g` style text that reads back as exactly the same `double`.
+
+        @see writeShortestFloat (float, char*)
+    */
+    static size_t writeShortestFloat (double value, char* buffer) noexcept;
+
+    //==============================================================================
     /** Parses a character string, to read an integer value. */
     template <typename IntType, typename CharPointerType>
     static IntType getIntValue (const CharPointerType text) noexcept

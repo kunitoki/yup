@@ -57,6 +57,7 @@ enum class YdspVectorizationReason
     emitInBody,                  //!< the body emits an output event
     nothingToWiden,              //!< the body has no array or stream access
     runtimeBoundWithoutStreams,  //!< a blockSize loop needs a stream access at the loop variable
+    streamOverlapUnprovable,     //!< widening would reorder a stream store against another stream that no run time check can clear
     keptScalarForContraction     //!< an implicit per-sample stream loop holds a fusable mul->add/sub chain and the target contracts without a packed fused multiply-add
 };
 

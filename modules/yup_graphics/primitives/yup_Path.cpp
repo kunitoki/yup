@@ -31,7 +31,8 @@ namespace
 
 bool isControlMarker (String::CharPointerType data)
 {
-    return ! data.isEmpty() && String ("MmLlHhVvQqTtCcSsAaZz").containsChar (*data);
+    const auto character = *data;
+    return character > 0 && character < 128 && std::strchr ("MmLlHhVvQqTtCcSsAaZz", static_cast<int> (character)) != nullptr;
 }
 
 void skipWhitespace (String::CharPointerType& data)
@@ -67,38 +68,30 @@ bool parseCoordinate (String::CharPointerType& data, float& coord)
 {
     skipWhitespaceOrComma (data);
 
-    auto start = data;
+    const auto start = data;
 
     if (data.isEmpty() || isControlMarker (data))
         return false;
 
-    String number;
-    bool hasDigits = false;
+    const auto skipDigits = [&data]
+    {
+        const auto first = data;
+
+        while (*data >= '0' && *data <= '9')
+            ++data;
+
+        return data != first;
+    };
 
     if (*data == '-' || *data == '+')
-    {
-        number += *data;
-        ++data;
-    }
-
-    while (! data.isEmpty() && *data >= '0' && *data <= '9')
-    {
-        hasDigits = true;
-        number += *data;
-        ++data;
-    }
-
-    if (! data.isEmpty() && *data == '.')
-    {
-        number += *data;
         ++data;
 
-        while (! data.isEmpty() && *data >= '0' && *data <= '9')
-        {
-            hasDigits = true;
-            number += *data;
-            ++data;
-        }
+    bool hasDigits = skipDigits();
+
+    if (*data == '.')
+    {
+        ++data;
+        hasDigits = skipDigits() || hasDigits;
     }
 
     if (! hasDigits)
@@ -107,39 +100,33 @@ bool parseCoordinate (String::CharPointerType& data, float& coord)
         return false;
     }
 
-    if (! data.isEmpty() && (*data == 'e' || *data == 'E'))
+    if (*data == 'e' || *data == 'E')
     {
-        auto exponentStart = data;
-        String exponent;
-
-        exponent += *data;
+        const auto exponentStart = data;
         ++data;
 
-        if (! data.isEmpty() && (*data == '-' || *data == '+'))
-        {
-            exponent += *data;
+        if (*data == '-' || *data == '+')
             ++data;
-        }
 
-        bool hasExponentDigits = false;
-        while (! data.isEmpty() && *data >= '0' && *data <= '9')
-        {
-            hasExponentDigits = true;
-            exponent += *data;
-            ++data;
-        }
-
-        if (hasExponentDigits)
-        {
-            number += exponent;
-        }
-        else
-        {
+        if (! skipDigits())
             data = exponentStart;
-        }
     }
 
-    coord = number.getFloatValue();
+    // The number is made of ASCII characters only, so it is read from the stack unless it is unusually long
+    const auto numBytes = static_cast<size_t> (data.getAddress() - start.getAddress());
+    char number[64];
+
+    if (numBytes < sizeof (number))
+    {
+        std::memcpy (number, start.getAddress(), numBytes);
+        number[numBytes] = 0;
+        coord = static_cast<float> (CharacterFunctions::getDoubleValue (CharPointer_ASCII (number)));
+    }
+    else
+    {
+        coord = String (start, data).getFloatValue();
+    }
+
     skipWhitespaceOrComma (data);
     return true;
 }

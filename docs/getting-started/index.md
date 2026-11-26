@@ -42,9 +42,10 @@ The repository ships with working example apps you can build immediately:
 - [audiograph](https://github.com/kunitoki/yup/tree/main/examples/audiograph) -
   a node-based audio graph editor and plugin host, with a browser of nodes and
   plugins, tabbed subgraph editing, settings, and sandboxed plugin loading.
-- [plugin](https://github.com/kunitoki/yup/tree/main/examples/plugin) - RETRACE, a
-  spectral synthesiser plugin (CLAP, VST3, AU, LV2 and standalone) with host
-  automation, a reorderable master effects chain, factory and user presets.
+- [plugin](https://github.com/kunitoki/yup/tree/main/examples/plugin) - a small
+  polyphonic instrument plugin (CLAP, VST3, AU, LV2 and standalone) with host
+  automation, saved state and a resizable editor with a playable keyboard. For a
+  full product see [Retrace](https://github.com/kunitoki/retrace), a spectral FM synthesiser.
 - [console](https://github.com/kunitoki/yup/tree/main/examples/console) - a
   headless command-line app.
 

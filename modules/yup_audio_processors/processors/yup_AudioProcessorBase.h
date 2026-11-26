@@ -33,7 +33,22 @@ class AudioProcessorEditor;
     presets, dealing with latency and tails, suspending and resuming processing, and
     communicating with hosts.
 
-    @see AudioProcessorEditor
+    Threading: besides processBlock(), the audio thread may call what never locks or
+    allocates here: getParameters(), getParameterByHostID(), getParameterIndexByHostID(),
+    getLatencySamples(), getTailSamples(), isSuspended(), isOfflineProcessing(),
+    getSampleRate() and getSamplesPerBlock(), plus the realtime-safe calls of AudioParameter.
+
+    Keep the rest on a non-realtime thread, as it locks, allocates or calls listeners:
+    updateHostDisplay(), setLatencySamples(), suspendProcessing(), addListener(),
+    removeListener(), setHostInfo(), getParameterByID() (it builds a String), the preset
+    functions and every state load or save.
+
+    State loads and saves are not synchronized with processBlock(): a host may call them
+    while audio is running. Parameter values written with AudioParameter::setValue() are
+    safe at any time; guard any other state yourself, with atomics or a
+    ScopedProcessSuspension.
+
+    @see AudioProcessorEditor, AudioParameter, AudioParameterHandle
 */
 class YUP_API AudioProcessorBase
 {
@@ -288,7 +303,23 @@ public:
     int getSamplesPerBlock() const { return samplesPerBlock; }
 
     //==============================================================================
-    /** Returns the number of tail samples. */
+    /** The value getTailSamples() returns for a tail that never ends. */
+    static constexpr int infiniteTailSamples = std::numeric_limits<int>::max();
+
+    /** Returns the length of the tail in samples.
+
+        The tail is the output the processor keeps producing after its input went silent
+        (reverbs, delays), not counting the latency reported by getLatencySamples(). Return 0
+        when there is none and infiniteTailSamples when the output never ends (a frozen
+        reverb, a self-oscillating filter).
+
+        Hosts and plugin wrappers may call this from any thread, including the audio thread,
+        so it must not block or allocate: return a constant or an atomic value. When the value
+        changes, call updateHostDisplay() with ChangeDetails::withTailChanged from a
+        non-realtime thread.
+
+        @see infiniteTailSamples, getLatencySamples, DomainProcessor::processBlock
+    */
     virtual int getTailSamples() { return 0; }
 
     /** Returns the latency in samples. */

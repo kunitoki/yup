@@ -190,6 +190,13 @@ private:
     // Sample-mode implicit loop
 
     void buildSampleLoop();
+
+    /** Loads every declared scalar state into a register that the process
+        body then reads and writes in place of the state memory. */
+    void loadScalarStateRegisters();
+
+    /** Writes those registers back, once, where the kernel ends. */
+    void storeScalarStateRegisters();
     void collectSharedInputDelays();
 
     //==============================================================================

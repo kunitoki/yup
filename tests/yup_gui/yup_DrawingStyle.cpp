@@ -771,6 +771,60 @@ TEST_F (DrawingStyleLanguageTest, UsePaintsDrawingsDefinedInsideOrFoundByName)
     EXPECT_EQ (lanes.getErrorMessage(), "drawing/use[0]: the array property 'lanes' of the drawing can't be set by a 'use'");
 }
 
+TEST_F (DrawingStyleLanguageTest, LetsStayInTheScopeDeclaringThem)
+{
+    EXPECT_TRUE (createYuiError ("drawing { group { let r: 4; } group { circle { center: bounds.center; radius: r; } } }").startsWith ("drawing/group[1]/circle[0].radius: "));
+    EXPECT_TRUE (createYuiError ("drawing { layer { let r: 4; } clip { circle { center: bounds.center; radius: r; } } }").startsWith ("drawing/clip[0]/circle[0].radius: "));
+    EXPECT_TRUE (createYuiError ("drawing { circle { color: #f00; center: bounds.center; radius: 4; } rect { bounds: bounds; fill: currentColor; } }").startsWith ("drawing/rect[0].fill: "));
+
+    EXPECT_EQ (createYuiError (R"yui(
+        drawing {
+            let r: 1;
+            group { let r: r + 1; let s: r * 2; group { let r: s + r; circle { center: bounds.center; radius: r; } } }
+            group { let s: "text"; let r: r + 2; circle { center: bounds.center; radius: r; } }
+            circle { center: bounds.center; radius: r; }
+        })yui"),
+               String());
+
+    EXPECT_EQ (createYuiError ("drawing { group { let r: 1; let r: 2; } }"), "drawing/group[0]/let[1].name: 'r' is already defined");
+    EXPECT_EQ (createYuiError ("drawing { viewport { let bounds: bounds.reduced (2); rect { bounds: bounds; } } }"), String());
+}
+
+TEST_F (DrawingStyleLanguageTest, AUsedDrawingSeesTheNamesOfWhereItIsDefined)
+{
+    EXPECT_EQ (createYuiError (R"yui(
+        drawing {
+            let r: 4;
+            drawing Leaf { circle { center: bounds.center; radius: r; } }
+            group { let r: "text"; let other: 2; use Leaf {} }
+        })yui"),
+               String());
+
+    EXPECT_TRUE (createYuiError (R"yui(
+        drawing {
+            drawing Leaf { circle { center: bounds.center; radius: other; } }
+            group { let other: 2; use Leaf {} }
+        })yui")
+                     .startsWith ("drawing/group[0]/use[0]/Leaf/circle[0].radius: "));
+
+    // What is declared after the drawing is not part of what it sees
+    EXPECT_TRUE (createYuiError (R"yui(
+        drawing {
+            drawing Leaf { circle { center: bounds.center; radius: late; } }
+            let late: 2;
+            use Leaf {}
+        })yui")
+                     .startsWith ("drawing/use[0]/Leaf/circle[0].radius: "));
+
+    // The properties of the drawing are read where it is used
+    EXPECT_EQ (createYuiError (R"yui(
+        drawing {
+            drawing Leaf { property size: number = 1; circle { center: bounds.center; radius: size; } }
+            group { let r: 3; use Leaf { size: r * 2; } }
+        })yui"),
+               String());
+}
+
 TEST_F (DrawingStyleLanguageTest, DrawingsFoundByNameAreCompiledAgainWhenTheyChange)
 {
     Slider first (Slider::RotaryVerticalDrag);

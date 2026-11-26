@@ -509,7 +509,7 @@ public:
             const auto path = name.isNotEmpty() ? name : String ("drawing");
 
             Scope scope;
-            scope.symbols["objectBounds"] = objectBoundsSymbol;
+            scope.frame->symbols["objectBounds"] = { objectBoundsSymbol };
 
             expansions.push_back (drawing);
             compileDrawing (drawing, path, std::move (scope), nullptr, result.nodes);
@@ -591,18 +591,10 @@ private:
         Identifier property;
     };
 
+    /* A statement of a program, and the element property it comes from, for the problems compiling it finds. */
     struct Statement
     {
-        String text;
-        String label;
-        DataTree element;
-        Identifier property;
-        String symbol;
-        StringArray uses;
-    };
-
-    struct LineOrigin
-    {
+        Expression node;
         String label;
         DataTree element;
         Identifier property;
@@ -618,11 +610,24 @@ private:
         bool isSet = false;
     };
 
-    /* A property value ready to embed in a program, and the internal names of the lets it reads. */
+    /* What a value reads of what the compiler declares: the lets, by index, and the bounds of the shape it paints. */
+    struct Uses
+    {
+        void add (const Uses& other)
+        {
+            lets.insert (lets.end(), other.lets.begin(), other.lets.end());
+            objectBounds = objectBounds || other.objectBounds;
+        }
+
+        std::vector<int> lets;
+        bool objectBounds = false;
+    };
+
+    /* A property value ready to be part of a program, and what it reads. */
     struct Value
     {
-        String text;
-        StringArray uses;
+        Expression expression;
+        Uses uses;
     };
 
     /* A paint property a group sets for its children: an expression, a pattern or a marker, or no paint at all. */
@@ -633,48 +638,166 @@ private:
         bool isNone = false;
     };
 
-    struct Scope;
+    /* A let of the drawing, `_letN` being the one at the index N, and the lets it reads: all declared before it. */
+    struct Let
+    {
+        Statement statement;
+        std::vector<int> uses;
+    };
 
-    /* A pattern or a marker compiled where it is defined, or a drawing compiled where it is used. */
+    struct Frame;
+
+    /* A pattern or a marker compiled where it is defined, or a drawing compiled where it is used,
+       seeing the names that were visible where it is defined. */
     struct Definition
     {
         int index = -1;
         DataTree drawing;
-        std::shared_ptr<const Scope> closure;
+        std::shared_ptr<const Frame> closure;
     };
 
-    /* What is visible to an element: the statements declaring the lets under internal names, the
-       internal name of each visible name, the names declared by the current scope itself, the paint
-       set by the groups around it, the definitions it can refer to and the level of its `bounds`. */
+    /* A visible name: the internal name it is read as, the let it is when it is one, and whether
+       the scope declared it itself, so that it can't be declared again. */
+    struct Symbol
+    {
+        String name;
+        int let = -1;
+        bool isDeclared = false;
+    };
+
+    /* What a scope adds to the scopes around it: the names it makes visible and the definitions
+       they can refer to. The rest is found walking up the parents, so entering a scope copies nothing. */
+    struct Frame
+    {
+        explicit Frame (std::shared_ptr<const Frame> parentToUse = nullptr)
+            : parent (std::move (parentToUse))
+        {
+        }
+
+        std::shared_ptr<const Frame> parent;
+        std::map<String, Symbol> symbols;
+        std::map<String, Definition> definitions;
+    };
+
+    /* What is visible to an element: the frame of what its scope declares, on top of the ones
+       around it, the paint set by the groups around it and the level of its `bounds`. */
     struct Scope
     {
-        Statements lets;
-        std::map<String, String> symbols;
-        StringArray declared;
-        std::map<String, Inherited> inherited;
-        std::map<String, Definition> definitions;
-        int boundsLevel = 0;
+        explicit Scope (std::shared_ptr<const Frame> parent = nullptr)
+            : frame (std::make_shared<Frame> (std::move (parent)))
+        {
+        }
 
         Scope enter() const
         {
-            auto inner = *this;
-            inner.declared.clear();
+            Scope inner (frame);
+            inner.inherited = inherited;
+            inner.boundsLevel = boundsLevel;
             return inner;
         }
+
+        std::shared_ptr<Frame> frame;
+        std::map<String, Inherited> inherited;
+        int boundsLevel = 0;
+    };
+
+    /* A property compiled into the program of an element: the output it is written to, and the
+       function it is given to first when there is one. */
+    struct PropertyEntry
+    {
+        String name;
+        Identifier property;
+        String output;
+        String function;
     };
 
     /* A shape: its geometry properties (`name=default` when optional), the statements drawing it
        from the `_name` locals holding them or the path it draws, the paint properties it adds
-       (`property:output`), the bounding box of its geometry and whether markers follow it. */
+       (`property:output`), the bounding box of its geometry and whether markers follow it. What
+       compiling one needs of these is worked out once, when the shape is listed. */
     struct Shape
     {
+        /* A geometry property: the local holding it, the type it is given to when it is a point or a rect, and its default. */
+        struct Geometry
+        {
+            String name;
+            Identifier property;
+            String local;
+            const char* type = nullptr;
+            std::optional<Expression> fallback;
+        };
+
+        Shape (const char* typeToUse,
+               StringArray geometryToUse,
+               const char* loweringText,
+               const char* shapePathText,
+               StringArray paintToUse,
+               const char* objectBoundsText,
+               bool acceptsMarkersToUse = false)
+            : type (typeToUse)
+            , geometry (std::move (geometryToUse))
+            , paint (std::move (paintToUse))
+            , acceptsMarkers (acceptsMarkersToUse)
+        {
+            for (const auto& entry : geometry)
+            {
+                const auto name = entry.upToFirstOccurrenceOf ("=", false, false);
+                const auto fallback = entry.fromFirstOccurrenceOf ("=", false, false);
+
+                geometryProperties.push_back ({ name,
+                                                Identifier (name),
+                                                "_" + name,
+                                                findGeometryType (type, name),
+                                                fallback.isNotEmpty() ? std::optional<Expression> (parseStatic (fallback)) : std::nullopt });
+            }
+
+            if (loweringText != nullptr)
+                lowering = parseStatements (loweringText);
+
+            if (shapePathText != nullptr)
+                shapePath = parseStatic (shapePathText);
+
+            if (objectBoundsText != nullptr)
+                objectBounds = parseStatic (objectBoundsText);
+
+            // The paint of the shape comes before the one every shape takes
+            for (const StringArray* table : { static_cast<const StringArray*> (&paint), &getCommonPaint() })
+                for (const auto& entry : makePropertyEntries (*table))
+                    paintOutputs.emplace (entry.name, entry.output);
+
+            allowed = getShapeProperties (*this);
+
+            for (const auto& property : geometryProperties)
+                allowed.add (property.name);
+
+            addPropertyNames (allowed, getCommonPaint());
+        }
+
+        bool hasGeometry (const String& property) const
+        {
+            return std::any_of (geometryProperties.begin(), geometryProperties.end(), [&property] (const Geometry& candidate)
+            {
+                return candidate.name == property;
+            });
+        }
+
+        /* Returns the output a paint property is written to, or an empty text when the shape doesn't take it. */
+        String findPaintOutput (const String& property) const
+        {
+            const auto found = paintOutputs.find (property);
+            return found != paintOutputs.end() ? found->second : String();
+        }
+
         const char* type;
         StringArray geometry;
-        String lowering;
-        String shapePath;
         StringArray paint;
-        String objectBounds;
         bool acceptsMarkers = false;
+
+        std::vector<Geometry> geometryProperties;
+        std::vector<Expression> lowering;
+        std::optional<Expression> shapePath, objectBounds;
+        std::map<String, String> paintOutputs;
+        StringArray allowed;
     };
 
     /* Where a drawing is painted by a `use`, which sets its properties. */
@@ -776,6 +899,59 @@ private:
     {
         for (const auto& entry : table)
             names.add (entry.upToFirstOccurrenceOf (":", false, false));
+    }
+
+    /* Reads a table of `property`, `property:output` for one written to an output of another name,
+       or `property:output:function` for one given to a function first. */
+    static std::vector<PropertyEntry> makePropertyEntries (const StringArray& table)
+    {
+        std::vector<PropertyEntry> entries;
+        entries.reserve (static_cast<size_t> (table.size()));
+
+        for (const auto& entry : table)
+        {
+            const auto fields = StringArray::fromTokens (entry, ":", "");
+            entries.push_back ({ fields[0], Identifier (fields[0]), fields.size() > 1 ? fields[1] : fields[0], fields.size() > 2 ? fields[2] : String() });
+        }
+
+        return entries;
+    }
+
+    static const std::vector<PropertyEntry>& getInheritablePaintEntries()
+    {
+        static const auto entries = makePropertyEntries (getInheritablePaint());
+        return entries;
+    }
+
+    /* The properties a group or a use takes: its own, and the paint it hands down. */
+    static StringArray getPaintingContainerProperties (const char* type)
+    {
+        auto properties = getElementProperties (type);
+        addPropertyNames (properties, getInheritablePaint());
+        return properties;
+    }
+
+    /* Parses a text the compiler itself is made of: these are parsed once and kept. */
+    static Expression parseStatic (const String& text)
+    {
+        auto parsed = Expression::parse (text);
+        jassert (parsed.wasOk());
+        return parsed.wasOk() ? parsed.getReference() : Expression();
+    }
+
+    static std::vector<Expression> parseStatements (const String& text)
+    {
+        const auto program = parseStatic (text);
+
+        if (program.getKind() != Expression::Kind::block)
+            return { program };
+
+        std::vector<Expression> statements;
+
+        for (int i = 0; i < program.getNumInputs(); ++i)
+            statements.push_back (program.getInput (i));
+
+        return statements;
     }
 
     /* An element that is not a shape: what it is for a tool listing it, and the properties it
@@ -912,15 +1088,15 @@ private:
         return element.getProperty (property).toString().trim() == "none";
     }
 
-    static String wrapForOutput (const String& output, const String& value)
+    static Expression wrapForOutput (const String& output, const Expression& value)
     {
-        return output == "strokeDash" ? ("dash (" + value + ")") : value;
+        return output == "strokeDash" ? Expression::call ("dash", { value }) : value;
     }
 
     /* The type a geometry property is of when it is a point or a rect, or nullptr. The shapes read the
        members of these, which an array of numbers lacks until it is given to one. Naming the type around
        a value already of it adds nothing to the program. */
-    static const char* findGeometryType (const Shape& shape, const String& property)
+    static const char* findGeometryType (const char* shapeType, const String& property)
     {
         if (property == "bounds")
             return "rect";
@@ -928,7 +1104,7 @@ private:
         if (property == "center" || property == "anchor" || property == "at")
             return "point";
 
-        return String (shape.type) == "line" && (property == "from" || property == "to") ? "point" : nullptr;
+        return std::strcmp (shapeType, "line") == 0 && (property == "from" || property == "to") ? "point" : nullptr;
     }
 
     static String levelSymbol (int level)
@@ -951,20 +1127,10 @@ private:
         });
     }
 
-    static String findPaintOutput (const StringArray& table, const String& property)
-    {
-        for (const auto& entry : table)
-            if (entry.upToFirstOccurrenceOf (":", false, false) == property)
-                return entry.containsChar (':') ? entry.fromFirstOccurrenceOf (":", false, false) : entry;
-
-        return {};
-    }
-
     template <class T>
     static ExpressionOutput<T> findOutput (const CompiledExpression& program, StringRef name)
     {
-        auto output = program.getOutput<T> (name);
-        return output.wasOk() ? output.getReference() : ExpressionOutput<T> {};
+        return program.findTypedOutput<T> (name);
     }
 
     //==============================================================================
@@ -1009,9 +1175,17 @@ private:
         return name;
     }
 
-    /* Parses a property as a single expression and returns it normalized and parenthesized, so
-       it can be embedded in a program on one line without leaking comments or extra statements.
-       References to lets are renamed to their internal names. */
+    static const Symbol* findSymbol (const Scope& scope, const String& name)
+    {
+        for (const auto* frame = scope.frame.get(); frame != nullptr; frame = frame->parent.get())
+            if (const auto found = frame->symbols.find (name); found != frame->symbols.end())
+                return &found->second;
+
+        return nullptr;
+    }
+
+    /* Parses a property as a single expression, ready to be part of a program. References to
+       lets are renamed to their internal names. */
     static Value parseValue (const DataTree& element, const Identifier& property, const String& path, const Scope& scope, bool isShapePaint = false)
     {
         const auto label = path + "." + property.toString();
@@ -1026,64 +1200,105 @@ private:
         if (offset != (int) text.getNumBytesAsUTF8())
             fail (label + ": unexpected text after the expression", element, property);
 
-        auto expression = parsed.getReference();
-        Value value;
+        Value value { parsed.getReference(), {} };
+        StringArray renamed;
 
-        for (const auto& reference : expression.getReferencedSymbols())
+        for (const auto& reference : parsed.getReference().getReferencedSymbols())
         {
-            const auto found = scope.symbols.find (reference.upToFirstOccurrenceOf (".", false, false));
-            if (found == scope.symbols.end() || value.uses.contains (found->second))
+            const auto name = reference.upToFirstOccurrenceOf (".", false, false);
+            const auto* symbol = findSymbol (scope, name);
+
+            if (symbol == nullptr || renamed.contains (symbol->name))
                 continue;
 
-            expression = expression.withRenamedSymbol (found->first, found->second);
-            value.uses.add (found->second);
+            value.expression = value.expression.withRenamedSymbol (name, symbol->name);
+            renamed.add (symbol->name);
+
+            if (symbol->let >= 0)
+                value.uses.lets.push_back (symbol->let);
+
+            value.uses.objectBounds = value.uses.objectBounds || symbol->name == objectBoundsSymbol;
         }
 
-        if (! isShapePaint && value.uses.contains (objectBoundsSymbol))
+        if (! isShapePaint && value.uses.objectBounds)
             fail (label + ": 'objectBounds' can only be read by the paint properties of a shape, or of the groups around it", element, property);
 
-        value.text = "(" + expression.toString() + ")";
         return value;
     }
 
-    /* Returns the lets of a scope the given internal names read, directly or through other lets,
+    /* Returns the lets the given ones are, with the lets they read, directly or through other lets,
        in declaration order. Compiling only those keeps each program small. */
-    static Statements selectLets (const Scope& scope, StringArray needed)
+    Statements selectLets (const Uses& uses)
     {
-        std::vector<bool> selected (scope.lets.size(), false);
+        selectedLets.clear();
+        pendingLets.assign (uses.lets.begin(), uses.lets.end());
+        letIsSelected.resize (lets.size(), false);
 
-        for (auto i = scope.lets.size(); i-- > 0;)
+        while (! pendingLets.empty())
         {
-            if (! needed.contains (scope.lets[i].symbol))
+            const auto index = pendingLets.back();
+            pendingLets.pop_back();
+
+            if (letIsSelected[static_cast<size_t> (index)])
                 continue;
 
-            selected[i] = true;
-            needed.addArray (scope.lets[i].uses);
+            letIsSelected[static_cast<size_t> (index)] = true;
+            selectedLets.push_back (index);
+
+            const auto& read = lets[static_cast<size_t> (index)].uses;
+            pendingLets.insert (pendingLets.end(), read.begin(), read.end());
         }
 
-        Statements lets;
-        for (size_t i = 0; i < scope.lets.size(); ++i)
-            if (selected[i])
-                lets.push_back (scope.lets[i]);
+        // A let is declared after the ones it reads, so the order of the indices is the one of the declarations
+        std::sort (selectedLets.begin(), selectedLets.end());
 
-        return lets;
+        Statements statements;
+        statements.reserve (selectedLets.size());
+
+        for (const auto index : selectedLets)
+        {
+            statements.push_back (lets[static_cast<size_t> (index)].statement);
+            letIsSelected[static_cast<size_t> (index)] = false;
+        }
+
+        return statements;
     }
 
-    /* Maps a `line:column: message` compiler error to the element property that emitted the line. */
+    /* Returns a compiler error without the `line:column:` it starts with when its node was parsed from a text. */
+    static String withoutPosition (const String& error)
+    {
+        auto text = error.getCharPointer();
+
+        for (int part = 0; part < 2; ++part)
+        {
+            if (! text.isDigit())
+                return error;
+
+            while (text.isDigit())
+                ++text;
+
+            if (*text != ':')
+                return error;
+
+            ++text;
+        }
+
+        return String (text).trimStart();
+    }
+
+    /* Maps a compiler error to the element property the statement that failed comes from. */
     static Error locateError (const String& error,
-                              const std::vector<LineOrigin>& lineOrigins,
+                              int failedStatement,
+                              const Statements& statements,
                               const String& path,
                               const DataTree& fallbackElement,
                               const Identifier& fallbackProperty = {})
     {
-        const auto line = error.upToFirstOccurrenceOf (":", false, false);
-        const auto index = line.getIntValue() - 1;
-
-        if (line.containsOnly ("0123456789") && isPositiveAndBelow (index, static_cast<int> (lineOrigins.size())))
+        if (isPositiveAndBelow (failedStatement, static_cast<int> (statements.size())))
         {
-            const auto& origin = lineOrigins[static_cast<size_t> (index)];
+            const auto& origin = statements[static_cast<size_t> (failedStatement)];
             return {
-                origin.label + ": " + error.fromFirstOccurrenceOf (":", false, false).fromFirstOccurrenceOf (":", false, false).trimStart(),
+                origin.label + ": " + withoutPosition (error),
                 origin.element.isValid() ? origin.element : fallbackElement,
                 origin.property
             };
@@ -1092,54 +1307,66 @@ private:
         return { path + ": " + error, fallbackElement, fallbackProperty };
     }
 
+    /* Compiles the statements as the program they make, straight from their expressions. */
     CompiledExpression compileStatements (const Statements& statements,
                                           const String& path,
                                           const DataTree& fallbackElement,
                                           const Identifier& fallbackProperty = {},
                                           StringArray* referencedSymbols = nullptr)
     {
-        String text;
-        std::vector<LineOrigin> lineOrigins;
+        std::vector<Expression> nodes;
+        nodes.reserve (statements.size());
 
         for (const auto& statement : statements)
-        {
-            text << statement.text << "\n";
+            nodes.push_back (statement.node);
 
-            for (int i = StringArray::fromLines (statement.text).size(); --i >= 0;)
-                lineOrigins.push_back ({ statement.label, statement.element, statement.property });
-        }
-
-        auto parsed = Expression::parse (text);
-        if (parsed.failed())
-            throw locateError (parsed.getErrorMessage(), lineOrigins, path, fallbackElement, fallbackProperty);
+        const auto program = Expression::block (std::move (nodes));
 
         if (referencedSymbols != nullptr)
-            *referencedSymbols = parsed.getReference().getReferencedSymbols();
+            *referencedSymbols = program.getReferencedSymbols();
 
-        auto compiled = CompiledExpression::compile (parsed.getReference(), context);
+        int failedStatement = -1;
+        auto compiled = CompiledExpression::compile (program, context, failedStatement);
+
         if (compiled.failed())
-            throw locateError (compiled.getErrorMessage(), lineOrigins, path, fallbackElement, fallbackProperty);
+            throw locateError (compiled.getErrorMessage(), failedStatement, statements, path, fallbackElement, fallbackProperty);
 
         return compiled.getReference();
     }
 
-    /* Declares a let under an internal name, so it can't clash with the outputs the elements assign. */
-    void declare (Scope& scope,
-                  const String& name,
-                  const Value& value,
-                  const String& path,
-                  const String& label,
-                  const DataTree& element,
-                  const Identifier& property = {})
+    /* Declares a let under an internal name, so it can't clash with the outputs the elements assign, and returns its index. */
+    int declare (Scope& scope,
+                 const String& name,
+                 const Value& value,
+                 const String& path,
+                 const String& label,
+                 const DataTree& element,
+                 const Identifier& property = {})
     {
-        if (scope.declared.contains (name))
+        auto& symbols = scope.frame->symbols;
+
+        if (const auto found = symbols.find (name); found != symbols.end() && found->second.isDeclared)
             fail (path + ".name: '" + name + "' is already defined", element, "name");
 
-        const auto symbol = "_let" + String (numSymbols++);
+        const auto index = static_cast<int> (lets.size());
+        const auto symbol = letSymbol (index);
 
-        scope.lets.push_back ({ "let " + symbol + " = " + value.text + ";", label, element, property, symbol, value.uses });
-        scope.symbols[name] = symbol;
-        scope.declared.add (name);
+        lets.push_back ({ { Expression::let (symbol, value.expression), label, element, property }, value.uses.lets });
+        symbols[name] = { symbol, index, true };
+        return index;
+    }
+
+    /* Returns what reading a let alone uses. */
+    static Uses usesOfLet (int index)
+    {
+        Uses uses;
+        uses.lets.push_back (index);
+        return uses;
+    }
+
+    static String letSymbol (int index)
+    {
+        return "_let" + String (index);
     }
 
     void addSlot (Node& node, bool repeated)
@@ -1225,7 +1452,8 @@ private:
 
             const auto path = elementPath (drawingPath, element, index++);
 
-            checkElement (element, path, getElementProperties ("property"), false);
+            static const auto allowed = getElementProperties ("property");
+            checkElement (element, path, allowed, false);
 
             const auto name = parseName (element, path);
             const auto typeName = getRequired (element, "type", path);
@@ -1254,23 +1482,23 @@ private:
                 if (element.hasProperty ("value"))
                     fail (path + ".value: an array property can't have a default", element, "value");
 
-                declare (scope, name, { input, {} }, path, path, element);
+                declare (scope, name, { Expression::symbol (input), {} }, path, path, element);
                 continue;
             }
 
-            auto fallback = element.hasProperty ("value") ? parseValue (element, "value", path, scope) : Value { getDefaultText (type), {} };
+            auto fallback = element.hasProperty ("value") ? parseValue (element, "value", path, scope) : Value { getDefault (type), {} };
 
             if (element.hasProperty ("value"))
-                checkPropertyValue (scope, fallback, type, typeName, path + ".value", element, "value");
+                checkPropertyValue (fallback, type, typeName, path + ".value", element, "value");
 
             // A number default can be any number, the property is a float
             if (type == ComponentProperty::Type::number)
-                fallback.text = "float " + fallback.text;
+                fallback.expression = Expression::call ("float", { fallback.expression });
 
             const auto isSet = "_hasProperty_" + name;
             propertyInputs[isSet] = { context.getType<bool>(), property, true };
 
-            declare (scope, name, { "(" + isSet + " ? " + input + " : " + fallback.text + ")", fallback.uses }, path, path + ".value", element, element.hasProperty ("value") ? Identifier ("value") : Identifier {});
+            declare (scope, name, { Expression::ternary (Expression::symbol (isSet), Expression::symbol (input), fallback.expression), fallback.uses }, path, path + ".value", element, element.hasProperty ("value") ? Identifier ("value") : Identifier {});
         }
     }
 
@@ -1294,20 +1522,20 @@ private:
         if (isSet)
         {
             value = parseValue (use.element, argument, use.path, use.scope);
-            checkPropertyValue (use.scope, value, type, typeName, use.path + "." + name, use.element, argument);
+            checkPropertyValue (value, type, typeName, use.path + "." + name, use.element, argument);
         }
         else if (element.hasProperty ("value"))
         {
             value = parseValue (element, "value", path, scope);
-            checkPropertyValue (scope, value, type, typeName, path + ".value", element, "value");
+            checkPropertyValue (value, type, typeName, path + ".value", element, "value");
         }
         else
         {
-            value = { getDefaultText (type), {} };
+            value = { getDefault (type), {} };
         }
 
         if (type == ComponentProperty::Type::number)
-            value.text = "float " + value.text;
+            value.expression = Expression::call ("float", { value.expression });
 
         if (isSet)
             declare (scope, name, value, path, use.path + "." + name, use.element, argument);
@@ -1315,40 +1543,43 @@ private:
             declare (scope, name, value, path, path + ".value", element, element.hasProperty ("value") ? Identifier ("value") : Identifier {});
     }
 
-    static String getDefaultText (ComponentProperty::Type type)
+    /* Returns the value a property has when neither the component nor the drawing gives it one. */
+    static const Expression& getDefault (ComponentProperty::Type type)
     {
+        static const auto integer = parseStatic ("0");
+        static const auto boolean = parseStatic ("false");
+        static const auto string = parseStatic ("\"\"");
+        static const auto color = parseStatic ("#00000000");
+        static const auto point = parseStatic ("point (0, 0)");
+        static const auto rectangle = parseStatic ("rect (0, 0, 0, 0)");
+        static const auto transform = parseStatic ("transform()");
+        static const auto font = parseStatic ("font()");
+        static const auto number = parseStatic ("0.0");
+
         switch (type)
         {
-            case ComponentProperty::Type::integer: return "(0)";
-            case ComponentProperty::Type::boolean: return "(false)";
-            case ComponentProperty::Type::string:  return "(\"\")";
-            case ComponentProperty::Type::color:   return "(#00000000)";
-            case ComponentProperty::Type::point:   return "(point (0, 0))";
-
-            case ComponentProperty::Type::rectangle:
-                return "(rect (0, 0, 0, 0))";
-
-            case ComponentProperty::Type::transform:
-                return "(transform())";
-
-            case ComponentProperty::Type::font:
-                return "(font())";
-
-            default: return "(0.0)";
+            case ComponentProperty::Type::integer:   return integer;
+            case ComponentProperty::Type::boolean:   return boolean;
+            case ComponentProperty::Type::string:    return string;
+            case ComponentProperty::Type::color:     return color;
+            case ComponentProperty::Type::point:     return point;
+            case ComponentProperty::Type::rectangle: return rectangle;
+            case ComponentProperty::Type::transform: return transform;
+            case ComponentProperty::Type::font:      return font;
+            default:                                 return number;
         }
     }
 
     /* Compiles the value of a property on its own, failing when its type doesn't match the property. */
-    void checkPropertyValue (const Scope& scope,
-                             const Value& value,
+    void checkPropertyValue (const Value& value,
                              ComponentProperty::Type type,
                              const String& typeName,
                              const String& label,
                              const DataTree& element,
                              const Identifier& property)
     {
-        auto statements = selectLets (scope, value.uses);
-        statements.push_back ({ value.text + ";", label, element, property });
+        auto statements = selectLets (value.uses);
+        statements.push_back ({ value.expression, label, element, property });
 
         const auto program = compileStatements (statements, label, element, property);
         const ExpressionType* actual = nullptr;
@@ -1370,7 +1601,8 @@ private:
     /* Compiles a drawing: its properties, then its elements, mapped from its view box when it has one. */
     void compileDrawing (const DataTree& drawing, const String& path, Scope scope, const UseSite* use, std::vector<std::unique_ptr<Node>>& target)
     {
-        checkElement (drawing, path, getElementProperties ("drawing"), true);
+        static const auto allowed = getElementProperties ("drawing");
+        checkElement (drawing, path, allowed, true);
         declareProperties (drawing, path, scope, use);
 
         if (! drawing.hasProperty ("viewBox"))
@@ -1388,7 +1620,8 @@ private:
         node->mapsToArea = true;
         node->boundsLevel = numLevels++;
 
-        compileProperties (*node, drawing, path, scope, { "viewBox:_viewBox", "fitting:_fitting", "justification:_justification" }, { { "_area = (" + levelSymbol (scope.boundsLevel) + ");", path, drawing } });
+        static const auto properties = makePropertyEntries ({ "viewBox:_viewBox", "fitting:_fitting", "justification:_justification" });
+        compileProperties (*node, drawing, path, scope, properties, { areaOfLevel (scope.boundsLevel, path, drawing) });
         compileElements (drawing, path, enterLevel (scope, node->boundsLevel), Placement::normal, node->children);
 
         target.push_back (std::move (node));
@@ -1422,13 +1655,14 @@ private:
 
             if (type == "let")
             {
-                checkElement (element, path, getElementProperties ("let"), false);
+                static const auto allowed = getElementProperties ("let");
+                checkElement (element, path, allowed, false);
 
                 const auto name = parseName (element, path);
-                declare (scope, name, parseValue (element, "value", path, scope), path, path + ".value", element, "value");
+                const auto let = declare (scope, name, parseValue (element, "value", path, scope), path, path + ".value", element, "value");
 
-                auto check = selectLets (scope, { scope.symbols[name] });
-                check.push_back ({ scope.symbols[name] + ";", path + ".value", element, "value" });
+                auto check = selectLets (usesOfLet (let));
+                check.push_back ({ Expression::symbol (letSymbol (let)), path + ".value", element, "value" });
                 compileStatements (check, path + ".value", element, "value");
                 continue;
             }
@@ -1476,7 +1710,8 @@ private:
 
             if (type == "drawing")
             {
-                addDefinition (scope, "drawing", element, path, { -1, element, std::make_shared<Scope> (scope) });
+                // The drawing sees what is visible here and now, not what its scope declares later
+                addDefinition (scope, "drawing", element, path, { -1, element, std::make_shared<Frame> (*scope.frame) });
                 continue;
             }
 
@@ -1529,18 +1764,23 @@ private:
     {
         const auto name = parseName (element, path);
         const auto key = String (kind) + ":" + name;
+        auto& definitions = scope.frame->definitions;
 
-        if (scope.declared.contains (key))
+        if (definitions.find (key) != definitions.end())
             fail (path + ".name: the " + kind + " '" + name + "' is already defined", element, "name");
 
-        scope.declared.add (key);
-        scope.definitions[key] = std::move (definition);
+        definitions[key] = std::move (definition);
     }
 
     static const Definition* findDefinition (const Scope& scope, const char* kind, const String& name)
     {
-        const auto found = scope.definitions.find (String (kind) + ":" + name);
-        return found != scope.definitions.end() ? &found->second : nullptr;
+        const auto key = String (kind) + ":" + name;
+
+        for (const auto* frame = scope.frame.get(); frame != nullptr; frame = frame->parent.get())
+            if (const auto found = frame->definitions.find (key); found != frame->definitions.end())
+                return &found->second;
+
+        return nullptr;
     }
 
     /* Reads a property naming a pattern or a marker, and returns where it is in the result. */
@@ -1560,8 +1800,14 @@ private:
     {
         auto inner = scope.enter();
         inner.boundsLevel = level;
-        inner.symbols["bounds"] = levelSymbol (level);
+        inner.frame->symbols["bounds"] = { levelSymbol (level) };
         return inner;
+    }
+
+    /* Returns the statement of an element drawing in the bounds of a level, when it has none of its own. */
+    static Statement areaOfLevel (int level, const String& path, const DataTree& element)
+    {
+        return { Expression::output ("_area", Expression::symbol (levelSymbol (level))), path, element };
     }
 
     /* Returns the scope the properties of an element are read in, where its `color` is `currentColor`. */
@@ -1572,10 +1818,10 @@ private:
         if (! element.hasProperty ("color"))
             return inner;
 
-        declare (inner, "currentColor", parseValue (element, "color", path, scope), path, path + ".color", element, "color");
+        const auto let = declare (inner, "currentColor", parseValue (element, "color", path, scope), path, path + ".color", element, "color");
 
-        auto check = selectLets (inner, { inner.symbols["currentColor"] });
-        check.push_back ({ "_color = " + inner.symbols["currentColor"] + ";", path + ".color", element, "color" });
+        auto check = selectLets (usesOfLet (let));
+        check.push_back ({ Expression::output ("_color", Expression::symbol (letSymbol (let))), path + ".color", element, "color" });
         compileStatements (check, path + ".color", element, "color");
 
         return inner;
@@ -1585,12 +1831,12 @@ private:
     void inheritPaint (const DataTree& element, const String& path, Scope& scope)
     {
         Statements checks;
-        StringArray uses;
+        Uses uses;
 
-        for (const auto& entry : getInheritablePaint())
+        for (const auto& entry : getInheritablePaintEntries())
         {
-            const auto property = entry.upToFirstOccurrenceOf (":", false, false);
-            const Identifier propId (property);
+            const auto& property = entry.name;
+            const auto& propId = entry.property;
 
             if (! element.hasProperty (propId))
                 continue;
@@ -1618,59 +1864,59 @@ private:
                 continue;
             }
 
-            const auto output = entry.containsChar (':') ? entry.fromFirstOccurrenceOf (":", false, false) : property;
             const auto value = parseValue (element, propId, path, scope, true);
 
-            checks.push_back ({ output + " = " + wrapForOutput (output, value.text) + ";", path + "." + property, element, propId });
-            uses.addArray (value.uses);
+            checks.push_back ({ Expression::output (entry.output, wrapForOutput (entry.output, value.expression)), path + "." + property, element, propId });
+            uses.add (value.uses);
             scope.inherited[property] = { value, -1, false };
         }
 
         if (checks.empty())
             return;
 
-        auto statements = selectLets (scope, uses);
+        auto statements = selectLets (uses);
 
-        if (uses.contains (objectBoundsSymbol))
-            statements.push_back ({ String ("let ") + objectBoundsSymbol + " = rect (0, 0, 0, 0);", path, element });
+        if (uses.objectBounds)
+        {
+            static const auto noBounds = parseStatic ("rect (0, 0, 0, 0)");
+            statements.push_back ({ Expression::let (objectBoundsSymbol, noBounds), path, element });
+        }
 
         statements.insert (statements.end(), checks.begin(), checks.end());
         compileStatements (statements, path, element);
     }
 
-    /* Compiles the properties of a group into its program: `property:output` entries, after the statements it always needs. */
-    /* Compiles properties of an element into the program of its node. Each is `property`, `property:output`
-       for one written to an output of another name, or `property:output:function` for one given to a function first.
-       The statements given are compiled before them, with the lets `uses` tells they read. */
+    /* Compiles properties of an element into the program of its node, after the statements it always needs. */
+    void compileProperties (Node& node, const DataTree& element, const String& path, const Scope& scope, const std::vector<PropertyEntry>& properties, Statements assignments = {})
+    {
+        compileProperties (node, element, path, scope, properties, std::move (assignments), Uses());
+    }
+
+    /* Compiles properties of an element after statements that read the lets `uses` tells. */
     void compileProperties (Node& node,
                             const DataTree& element,
                             const String& path,
                             const Scope& scope,
-                            const StringArray& properties,
-                            Statements assignments = {},
-                            StringArray uses = {})
+                            const std::vector<PropertyEntry>& properties,
+                            Statements assignments,
+                            Uses uses)
     {
         for (const auto& entry : properties)
         {
-            const auto fields = StringArray::fromTokens (entry, ":", "");
-            const auto property = fields[0];
-            const Identifier propId (property);
-
-            if (! element.hasProperty (propId))
+            if (! element.hasProperty (entry.property))
                 continue;
 
-            const auto output = fields.size() > 1 ? fields[1] : property;
-            const auto value = parseValue (element, propId, path, scope);
-            const auto text = fields.size() > 2 ? fields[2] + " (" + value.text + ")" : value.text;
+            const auto value = parseValue (element, entry.property, path, scope);
+            const auto made = entry.function.isNotEmpty() ? Expression::call (entry.function, { value.expression }) : value.expression;
 
-            assignments.push_back ({ output + " = " + text + ";", path + "." + property, element, propId });
-            uses.addArray (value.uses);
+            assignments.push_back ({ Expression::output (entry.output, made), path + "." + entry.name, element, entry.property });
+            uses.add (value.uses);
         }
 
         if (assignments.empty())
             return;
 
-        auto statements = selectLets (scope, uses);
+        auto statements = selectLets (uses);
         statements.insert (statements.end(), assignments.begin(), assignments.end());
 
         node.program = compileStatements (statements, path, element);
@@ -1694,8 +1940,7 @@ private:
 
     std::unique_ptr<Node> compileGroup (const DataTree& element, const String& path, const Scope& outerScope)
     {
-        auto allowed = getElementProperties ("group");
-        addPropertyNames (allowed, getInheritablePaint());
+        static const auto allowed = getPaintingContainerProperties ("group");
         checkElement (element, path, allowed, true);
 
         auto scope = enterElement (element, path, outerScope);
@@ -1704,14 +1949,16 @@ private:
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::group;
 
-        compileProperties (*node, element, path, scope, { "transform", "visible", "opacity", "blend" });
+        static const auto properties = makePropertyEntries ({ "transform", "visible", "opacity", "blend" });
+        compileProperties (*node, element, path, scope, properties);
         compileElements (element, path, scope.enter(), Placement::normal, node->children);
         return node;
     }
 
     std::unique_ptr<Node> compileViewport (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, getElementProperties ("viewport"), true);
+        static const auto allowed = getElementProperties ("viewport");
+        checkElement (element, path, allowed, true);
 
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::group;
@@ -1721,9 +1968,10 @@ private:
 
         Statements defaults;
         if (! element.hasProperty ("bounds"))
-            defaults.push_back ({ "_area = (" + levelSymbol (scope.boundsLevel) + ");", path, element });
+            defaults.push_back (areaOfLevel (scope.boundsLevel, path, element));
 
-        compileProperties (*node, element, path, scope, { "bounds:_area", "viewBox:_viewBox", "fitting:_fitting", "justification:_justification", "visible" }, std::move (defaults));
+        static const auto properties = makePropertyEntries ({ "bounds:_area", "viewBox:_viewBox", "fitting:_fitting", "justification:_justification", "visible" });
+        compileProperties (*node, element, path, scope, properties, std::move (defaults));
         compileElements (element, path, enterLevel (scope, node->boundsLevel), Placement::normal, node->children);
         return node;
     }
@@ -1734,7 +1982,7 @@ private:
         const auto name = getRequired (element, "drawing", path).trim();
 
         DataTree drawing;
-        std::shared_ptr<const Scope> closure;
+        std::shared_ptr<const Frame> closure;
 
         if (const auto* definition = findDefinition (outerScope, "drawing", name))
         {
@@ -1762,8 +2010,8 @@ private:
         if (closure == nullptr && std::none_of (result.dependencies.begin(), result.dependencies.end(), [&name] (const auto& dependency) { return dependency.first == name; }))
             result.dependencies.push_back ({ name, drawing.clone() });
 
-        auto allowed = getElementProperties ("use");
-        addPropertyNames (allowed, getInheritablePaint());
+        static const auto ownProperties = getPaintingContainerProperties ("use");
+        auto allowed = ownProperties;
 
         for (const auto& child : drawing)
             if (child.getType().toString() == "property")
@@ -1780,25 +2028,22 @@ private:
 
         Statements defaults;
         if (! element.hasProperty ("bounds"))
-            defaults.push_back ({ "_area = (" + levelSymbol (outerScope.boundsLevel) + ");", path, element });
+            defaults.push_back (areaOfLevel (outerScope.boundsLevel, path, element));
 
-        compileProperties (*node, element, path, scope, { "bounds:_area", "transform", "visible", "opacity", "blend" }, std::move (defaults));
+        static const auto properties = makePropertyEntries ({ "bounds:_area", "transform", "visible", "opacity", "blend" });
+        compileProperties (*node, element, path, scope, properties, std::move (defaults));
 
-        Scope body;
-        body.lets = scope.lets;
+        // The body starts from the names of where the drawing is defined, not from the ones of where it is used
+        Scope body (closure);
         body.inherited = scope.inherited;
+        body.boundsLevel = node->boundsLevel;
 
-        if (closure != nullptr)
-        {
-            body.symbols = closure->symbols;
-            body.definitions = closure->definitions;
-        }
+        auto& symbols = body.frame->symbols;
+        symbols["bounds"] = { levelSymbol (node->boundsLevel) };
+        symbols["objectBounds"] = { objectBoundsSymbol };
 
-        body = enterLevel (body, node->boundsLevel);
-        body.symbols["objectBounds"] = objectBoundsSymbol;
-
-        if (const auto color = scope.symbols.find ("currentColor"); color != scope.symbols.end())
-            body.symbols["currentColor"] = color->second;
+        if (const auto* color = findSymbol (scope, "currentColor"))
+            symbols["currentColor"] = { color->name, color->let };
 
         const UseSite site { element, path, scope };
 
@@ -1876,7 +2121,7 @@ private:
                           StringArray allowed,
                           const StringArray& reserved,
                           Statements& assignments,
-                          StringArray& uses)
+                          Uses& uses)
     {
         for (const auto& property : found.block)
             if (property.getType().toString() == "property")
@@ -1929,11 +2174,11 @@ private:
             context.declareOutput (output, *expressionType);
 
             if (isSet)
-                assignments.push_back ({ output + " = " + value.text + ";", path + "." + propertyName, element, propId });
+                assignments.push_back ({ Expression::output (output, value.expression), path + "." + propertyName, element, propId });
             else
-                assignments.push_back ({ output + " = " + value.text + ";", propertyPath + ".value", property, "value" });
+                assignments.push_back ({ Expression::output (output, value.expression), propertyPath + ".value", property, "value" });
 
-            uses.addArray (value.uses);
+            uses.add (value.uses);
         }
 
         use->isGivenTime = found.shader != nullptr && detail::isShaderGivenTime (*found.shader, use->properties);
@@ -1965,13 +2210,15 @@ private:
         node->kind = Node::Kind::shader;
 
         Statements assignments;
-        StringArray uses;
+        Uses uses;
 
         if (! element.hasProperty ("bounds"))
-            assignments.push_back ({ "_area = (" + levelSymbol (scope.boundsLevel) + ");", path, element });
+            assignments.push_back (areaOfLevel (scope.boundsLevel, path, element));
+
+        static const auto properties = makePropertyEntries ({ "bounds:_area", "transform", "visible", "opacity", "blend", "clip", "clipPath" });
 
         compileUniforms (*node, name, found, element, path, scope, getShaderUseProperties(), { "id", "drawing" }, assignments, uses);
-        compileProperties (*node, element, path, scope, { "bounds:_area", "transform", "visible", "opacity", "blend", "clip", "clipPath" }, std::move (assignments), std::move (uses));
+        compileProperties (*node, element, path, scope, properties, std::move (assignments), std::move (uses));
         bindUniforms (*node);
 
         // What is given the time changes at every frame, and so does the tile or the filtered layer it is drawn in
@@ -1984,14 +2231,16 @@ private:
     /* Compiles a pattern where it is defined, and returns where it is in the result. */
     int compilePattern (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, getElementProperties ("pattern"), true);
+        static const auto allowed = getElementProperties ("pattern");
+        checkElement (element, path, allowed, true);
         getRequired (element, "tile", path);
 
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::pattern;
         node->boundsLevel = numLevels++;
 
-        compileProperties (*node, element, path, scope, { "tile:_area", "viewBox:_viewBox", "fitting:_fitting", "justification:_justification", "transform" });
+        static const auto properties = makePropertyEntries ({ "tile:_area", "viewBox:_viewBox", "fitting:_fitting", "justification:_justification", "transform" });
+        compileProperties (*node, element, path, scope, properties);
 
         {
             const ScopedValueSetter<Node*> compiling (pattern, node.get());
@@ -2005,33 +2254,39 @@ private:
     /* Compiles a marker where it is defined, and returns where it is in the result. */
     int compileMarker (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, getElementProperties ("marker"), true);
+        static const auto allowed = getElementProperties ("marker");
+        checkElement (element, path, allowed, true);
 
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::marker;
         node->boundsLevel = numLevels++;
 
-        StringArray properties { "size:_size", "ref:_reference", "viewBox:_viewBox" };
+        static const auto following = makePropertyEntries ({ "size:_size", "ref:_reference", "viewBox:_viewBox" });
+        static const auto angled = makePropertyEntries ({ "size:_size", "ref:_reference", "viewBox:_viewBox", "orient:_angle" });
+        static const auto defaultSize = parseStatic ("size (3, 3)");
+        static const auto defaultReference = parseStatic ("point (0, 0)");
+
+        const auto* properties = &following;
         Statements defaults;
 
         if (! element.hasProperty ("size"))
-            defaults.push_back ({ "_size = (size (3, 3));", path, element });
+            defaults.push_back ({ Expression::output ("_size", defaultSize), path, element });
 
         if (! element.hasProperty ("ref"))
-            defaults.push_back ({ "_reference = (point (0, 0));", path, element });
+            defaults.push_back ({ Expression::output ("_reference", defaultReference), path, element });
 
         // A marker follows the direction of the path unless it is given an angle
         if (const auto orient = element.getProperty ("orient").toString().trim(); orient == "autoStartReverse")
             node->reversesStart = true;
         else if (orient.isNotEmpty() && orient != "auto")
-            properties.add ("orient:_angle");
+            properties = &angled;
 
         if (const auto units = element.getProperty ("units").toString().trim(); units == "userSpace")
             node->scalesWithStrokeWidth = false;
         else if (units.isNotEmpty() && units != "strokeWidth")
             fail (path + ".units: expected 'strokeWidth' or 'userSpace'", element, "units");
 
-        compileProperties (*node, element, path, scope, properties, std::move (defaults));
+        compileProperties (*node, element, path, scope, *properties, std::move (defaults));
         compileElements (element, path, enterLevel (scope, node->boundsLevel), Placement::normal, node->children);
 
         result.markers.push_back (std::move (node));
@@ -2041,7 +2296,8 @@ private:
     /* Compiles the shapes a clip is made of: only their geometry is used. */
     std::unique_ptr<Node> compileClipShapes (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, getElementProperties ("clipPath"), true);
+        static const auto allowed = getElementProperties ("clipPath");
+        checkElement (element, path, allowed, true);
 
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::clipShapes;
@@ -2056,12 +2312,14 @@ private:
 
     std::unique_ptr<Node> compileLayer (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, getElementProperties ("layer"), true);
+        static const auto allowed = getElementProperties ("layer");
+        checkElement (element, path, allowed, true);
 
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::layer;
 
-        compileProperties (*node, element, path, scope, { "opacity", "blend", "clip", "clipPath", "mask:_maskPath:_toMaskPath", "maskMode:_maskMode", "visible" });
+        static const auto properties = makePropertyEntries ({ "opacity", "blend", "clip", "clipPath", "mask:_maskPath:_toMaskPath", "maskMode:_maskMode", "visible" });
+        compileProperties (*node, element, path, scope, properties);
 
         // What a filtered layer draws is kept, like the tile of a pattern, until what its elements read around it changes
         const bool isFiltered = element.getChildWithName ("filter").isValid();
@@ -2091,7 +2349,8 @@ private:
     /* Compiles the filter of a layer: where it is rendered, and its primitives in the order they run. */
     std::unique_ptr<Node> compileFilter (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, getElementProperties ("filter"), true);
+        static const auto allowed = getElementProperties ("filter");
+        checkElement (element, path, allowed, true);
 
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::filter;
@@ -2099,9 +2358,10 @@ private:
 
         Statements defaults;
         if (! element.hasProperty ("bounds"))
-            defaults.push_back ({ "_area = (" + levelSymbol (scope.boundsLevel) + ");", path, element });
+            defaults.push_back (areaOfLevel (scope.boundsLevel, path, element));
 
-        compileProperties (*node, element, path, scope, { "bounds:_area" }, std::move (defaults));
+        static const auto properties = makePropertyEntries ({ "bounds:_area" });
+        compileProperties (*node, element, path, scope, properties, std::move (defaults));
 
         std::map<String, int> counts;
 
@@ -2190,7 +2450,8 @@ private:
 
         // The other properties are expressions: numbers, but for the two points, the color and the blend mode
         Statements assignments;
-        StringArray uses, given;
+        Uses uses;
+        StringArray given;
 
         for (const auto* name : { "deviation", "radius", "scale", "constant", "exponent", "azimuth", "elevation", "height", "saturate", "hueRotate", "k1", "k2", "k3", "k4", "offset", "position", "color", "mode" })
         {
@@ -2202,18 +2463,19 @@ private:
             const auto value = parseValue (element, propId, path, scope);
             const bool isNumber = property != "offset" && property != "position" && property != "color" && property != "mode";
 
-            assignments.push_back ({ (property == "mode" ? String ("blend") : "_" + property) + " = " + (isNumber ? "float (" + value.text + ")" : value.text) + ";",
+            assignments.push_back ({ Expression::output (property == "mode" ? String ("blend") : "_" + property,
+                                                         isNumber ? Expression::call ("float", { value.expression }) : value.expression),
                                      path + "." + property,
                                      element,
                                      propId });
-            uses.addArray (value.uses);
+            uses.add (value.uses);
             given.add (property);
         }
 
         if (assignments.empty())
             return node;
 
-        auto statements = selectLets (scope, uses);
+        auto statements = selectLets (uses);
         statements.insert (statements.end(), assignments.begin(), assignments.end());
         node->program = compileStatements (statements, path, element);
 
@@ -2283,7 +2545,7 @@ private:
         // A shader that is not loaded may read two pictures
         const auto allowed = getShaderPrimitiveProperties (found.shader != nullptr ? found.shader->getNumInputTextures() : 2);
         Statements assignments;
-        StringArray uses;
+        Uses uses;
 
         compileUniforms (*node, name, found, element, path, scope, allowed, allowed, assignments, uses);
 
@@ -2293,7 +2555,7 @@ private:
 
         if (! assignments.empty())
         {
-            auto statements = selectLets (scope, uses);
+            auto statements = selectLets (uses);
             statements.insert (statements.end(), assignments.begin(), assignments.end());
 
             node->program = compileStatements (statements, path, element);
@@ -2319,7 +2581,8 @@ private:
 
     std::unique_ptr<Node> compileClip (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, getElementProperties ("clip"), true);
+        static const auto allowed = getElementProperties ("clip");
+        checkElement (element, path, allowed, true);
 
         if (element.hasProperty ("bounds") && element.hasProperty ("rect"))
             fail (path + ": specify either 'bounds' or 'rect', not both", element, "rect");
@@ -2330,7 +2593,8 @@ private:
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::clip;
 
-        compileProperties (*node, element, path, scope, { "bounds:clip", "rect:clip", "path:clipPath", "clipPath", "visible" });
+        static const auto properties = makePropertyEntries ({ "bounds:clip", "rect:clip", "path:clipPath", "clipPath", "visible" });
+        compileProperties (*node, element, path, scope, properties);
 
         compileElements (element, path, scope.enter(), Placement::normal, node->children, { nullptr, &node->clipShapes });
         return node;
@@ -2338,7 +2602,8 @@ private:
 
     std::unique_ptr<Node> compileMask (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, getElementProperties ("mask"), true);
+        static const auto allowed = getElementProperties ("mask");
+        checkElement (element, path, allowed, true);
 
         if (element.hasProperty ("mode") && element.hasProperty ("maskMode"))
             fail (path + ": specify either 'mode' or 'maskMode', not both", element, "maskMode");
@@ -2346,7 +2611,8 @@ private:
         auto node = std::make_unique<Node>();
         node->kind = Node::Kind::mask;
 
-        compileProperties (*node, element, path, scope, { "mode:_maskMode", "maskMode:_maskMode", "visible" });
+        static const auto properties = makePropertyEntries ({ "mode:_maskMode", "maskMode:_maskMode", "visible" });
+        compileProperties (*node, element, path, scope, properties);
 
         compileElements (element, path, scope.enter(), Placement::normal, node->children);
         return node;
@@ -2354,7 +2620,9 @@ private:
 
     std::unique_ptr<Node> compileMedia (const DataTree& element, const String& path, const Scope& scope, bool repeated, Node::Kind kind)
     {
-        checkElement (element, path, getElementProperties (kind == Node::Kind::svg ? "svg" : "image"), false);
+        static const auto svgProperties = getElementProperties ("svg");
+        static const auto imageProperties = getElementProperties ("image");
+        checkElement (element, path, kind == Node::Kind::svg ? svgProperties : imageProperties, false);
 
         Identifier sourceProp ("source");
         bool inlineOnly = false;
@@ -2381,48 +2649,31 @@ private:
             fail (path + ": missing the required property 'source'", element);
         }
 
+        static const Identifier boundsProp ("bounds");
+        static const auto optional = makePropertyEntries ({ "fitting:_fitting", "justification:_justification", "opacity", "blend", "tint", "transform", "clip", "clipPath", "visible" });
+
         Statements own;
-        StringArray uses;
+        Uses uses;
 
-        if (element.hasProperty ("bounds"))
+        const auto add = [&] (const Identifier& property, const String& output)
         {
-            const auto value = parseValue (element, "bounds", path, scope);
-            own.push_back ({ "_area = " + value.text + ";", path + ".bounds", element, "bounds" });
-            uses.addArray (value.uses);
-        }
-        else
-        {
-            own.push_back ({ "_area = (" + levelSymbol (scope.boundsLevel) + ");", path, element });
-        }
-
-        {
-            const auto value = parseValue (element, sourceProp, path, scope);
-            own.push_back ({ "_source = " + value.text + ";", path + "." + sourceProp.toString(), element, sourceProp });
-            uses.addArray (value.uses);
-        }
-
-        const auto addOptionalMediaProp = [&] (const char* propName, const char* outputName)
-        {
-            const Identifier propId (propName);
-            if (! element.hasProperty (propId))
-                return;
-
-            const auto value = parseValue (element, propId, path, scope);
-            own.push_back ({ String (outputName) + " = " + value.text + ";", path + "." + propName, element, propId });
-            uses.addArray (value.uses);
+            const auto value = parseValue (element, property, path, scope);
+            own.push_back ({ Expression::output (output, value.expression), path + "." + property.toString(), element, property });
+            uses.add (value.uses);
         };
 
-        addOptionalMediaProp ("fitting", "_fitting");
-        addOptionalMediaProp ("justification", "_justification");
-        addOptionalMediaProp ("opacity", "opacity");
-        addOptionalMediaProp ("blend", "blend");
-        addOptionalMediaProp ("tint", "tint");
-        addOptionalMediaProp ("transform", "transform");
-        addOptionalMediaProp ("clip", "clip");
-        addOptionalMediaProp ("clipPath", "clipPath");
-        addOptionalMediaProp ("visible", "visible");
+        if (element.hasProperty (boundsProp))
+            add (boundsProp, "_area");
+        else
+            own.push_back (areaOfLevel (scope.boundsLevel, path, element));
 
-        auto statements = selectLets (scope, uses);
+        add (sourceProp, "_source");
+
+        for (const auto& entry : optional)
+            if (element.hasProperty (entry.property))
+                add (entry.property, entry.output);
+
+        auto statements = selectLets (uses);
         statements.insert (statements.end(), own.begin(), own.end());
 
         auto node = std::make_unique<Node>();
@@ -2477,17 +2728,17 @@ private:
             pattern->isStatic = false;
 
         Statements own;
-        StringArray uses;
+        Uses uses;
 
         if (element.hasProperty ("bounds"))
         {
             const auto value = parseValue (element, "bounds", path, scope);
-            own.push_back ({ "_area = " + value.text + ";", path + ".bounds", element, "bounds" });
-            uses.addArray (value.uses);
+            own.push_back ({ Expression::output ("_area", value.expression), path + ".bounds", element, "bounds" });
+            uses.add (value.uses);
         }
         else
         {
-            own.push_back ({ "_area = (" + levelSymbol (scope.boundsLevel) + ");", path, element });
+            own.push_back (areaOfLevel (scope.boundsLevel, path, element));
         }
 
         for (const auto* property : { "fill", "stroke", "strokeWidth", "opacity", "blend", "tint", "transform", "clip", "clipPath", "visible" })
@@ -2498,11 +2749,11 @@ private:
                 continue;
 
             const auto value = parseValue (element, propId, path, scope);
-            own.push_back ({ String (property) + " = " + value.text + ";", path + "." + property, element, propId });
-            uses.addArray (value.uses);
+            own.push_back ({ Expression::output (property, value.expression), path + "." + property, element, propId });
+            uses.add (value.uses);
         }
 
-        auto statements = selectLets (scope, uses);
+        auto statements = selectLets (uses);
         statements.insert (statements.end(), own.begin(), own.end());
 
         auto node = std::make_unique<Node>();
@@ -2527,7 +2778,8 @@ private:
 
     std::unique_ptr<Node> compileRepeat (const DataTree& element, const String& path, const Scope& scope)
     {
-        checkElement (element, path, getElementProperties ("repeat"), true);
+        static const auto allowed = getElementProperties ("repeat");
+        checkElement (element, path, allowed, true);
 
         const auto name = parseName (element, path);
         const auto from = parseValue (element, "from", path, scope);
@@ -2537,11 +2789,13 @@ private:
         node->kind = Node::Kind::repeat;
 
         auto uses = from.uses;
-        uses.addArray (to.uses);
+        uses.add (to.uses);
 
-        auto statements = selectLets (scope, uses);
-        statements.push_back ({ "_start = int " + from.text + ";", path + ".from", element, "from" });
-        statements.push_back ({ "_end = int " + to.text + ";", path + ".to", element, "to" });
+        const auto first = Expression::call ("int", { from.expression });
+
+        auto statements = selectLets (uses);
+        statements.push_back ({ Expression::output ("_start", first), path + ".from", element, "from" });
+        statements.push_back ({ Expression::output ("_end", Expression::call ("int", { to.expression })), path + ".to", element, "to" });
 
         StringArray referencedSymbols;
         node->program = compileStatements (statements, path, element, {}, &referencedSymbols);
@@ -2577,7 +2831,7 @@ private:
         addSlot (*node, false);
 
         auto inner = scope.enter();
-        declare (inner, name, { "int " + from.text + " + " + (isLoop ? loopPrefix + String (node->loopLevel) : String ("_index")), from.uses }, path, path + ".from", element, "from");
+        declare (inner, name, { first + Expression::symbol (isLoop ? loopPrefix + String (node->loopLevel) : String ("_index")), from.uses }, path, path + ".from", element, "from");
 
         const ScopedValueSetter<int> repeating (repeatDepth, repeatDepth + 1);
         compileElements (element, path, std::move (inner), isLoop ? Placement::loop : Placement::repeat, node->children);
@@ -2605,34 +2859,22 @@ private:
         if (isVertex && ! repeated)
             fail (path + ": a 'vertex' is one point of a line, it can only be among the shapes of a 'repeat' giving the others", element);
 
-        auto allowed = getShapeProperties (*shape);
-        for (const auto& entry : shape->geometry)
-            allowed.add (entry.upToFirstOccurrenceOf ("=", false, false));
-
-        addPropertyNames (allowed, getCommonPaint());
-
-        checkElement (element, path, allowed, false);
+        checkElement (element, path, shape->allowed, false);
 
         std::optional<Scope> colored;
         const auto& scope = element.hasProperty ("color") ? colored.emplace (enterElement (element, path, outerScope)) : outerScope;
 
         Statements own, paint;
-        StringArray geometry, uses;
+        Uses uses;
 
-        for (const auto& entry : shape->geometry)
+        for (const auto& geometry : shape->geometryProperties)
         {
-            const auto property = entry.upToFirstOccurrenceOf ("=", false, false);
-            const Identifier propId (property);
-            const auto fallback = entry.fromFirstOccurrenceOf ("=", false, false);
-            const bool isExplicit = fallback.isEmpty() || element.hasProperty (propId);
-            const auto value = isExplicit ? parseValue (element, propId, path, scope) : Value { "(" + fallback + ")", {} };
+            const bool isExplicit = ! geometry.fallback.has_value() || element.hasProperty (geometry.property);
+            const auto value = isExplicit ? parseValue (element, geometry.property, path, scope) : Value { *geometry.fallback, {} };
+            const auto made = geometry.type != nullptr ? Expression::call (geometry.type, { value.expression }) : value.expression;
 
-            const auto* geometryType = findGeometryType (*shape, property);
-            const auto made = geometryType != nullptr ? String (geometryType) + " " + value.text : value.text;
-
-            geometry.add (property);
-            own.push_back ({ "let _" + property + " = " + made + ";", path + "." + property, element, isExplicit ? propId : Identifier {} });
-            uses.addArray (value.uses);
+            own.push_back ({ Expression::let (geometry.local, made), path + "." + geometry.name, element, isExplicit ? geometry.property : Identifier {} });
+            uses.add (value.uses);
         }
 
         // The paint of the shape itself comes first, then the paint the groups around it set and it doesn't
@@ -2640,24 +2882,18 @@ private:
         std::array<int, 3> markers { -1, -1, -1 };
         bool hasFill = false, hasStroke = false;
 
-        const auto addPaint = [&] (const String& property, const String& output, const String& value, const DataTree& origin, const Identifier& originProperty)
+        const auto addPaint = [&] (const String& property, const String& output, const Expression& value, const DataTree& origin, const Identifier& originProperty)
         {
-            paint.push_back ({ output + " = " + value + ";", path + "." + property, origin, originProperty });
+            paint.push_back ({ Expression::output (output, value), path + "." + property, origin, originProperty });
             hasFill = hasFill || isFillPaint (property);
             hasStroke = hasStroke || (isText ? output == "labelStroke" : isStrokePaint (property));
-        };
-
-        const auto findOutputOf = [&] (const String& property)
-        {
-            const auto output = findPaintOutput (shape->paint, property);
-            return output.isNotEmpty() ? output : findPaintOutput (getCommonPaint(), property);
         };
 
         for (int i = 0; i < element.getNumProperties(); ++i)
         {
             const auto propId = element.getPropertyName (i);
             const auto property = propId.toString();
-            if (property == "id" || property == "color" || geometry.contains (property))
+            if (property == "id" || property == "color" || shape->hasGeometry (property))
                 continue;
 
             if (isFillPaint (property))
@@ -2688,24 +2924,22 @@ private:
 
             if (isPatternProperty (property))
             {
-                const auto symbol = patternPrefix + String (findDefinitionIndex (element, propId, path, scope));
-                addPaint (property, property, symbol, element, propId);
-                uses.add (symbol);
+                addPaint (property, property, Expression::symbol (patternPrefix + String (findDefinitionIndex (element, propId, path, scope))), element, propId);
                 continue;
             }
 
-            const auto output = findOutputOf (property);
+            const auto output = shape->findPaintOutput (property);
             const auto value = parseValue (element, propId, path, scope, true);
 
-            addPaint (property, output, wrapForOutput (output, value.text), element, propId);
-            uses.addArray (value.uses);
+            addPaint (property, output, wrapForOutput (output, value.expression), element, propId);
+            uses.add (value.uses);
         }
 
         bool fillIsNone = false;
 
-        for (const auto& entry : getInheritablePaint())
+        for (const auto& entry : getInheritablePaintEntries())
         {
-            const auto property = entry.upToFirstOccurrenceOf (":", false, false);
+            const auto& property = entry.name;
             const auto found = inherited.find (property);
 
             if (found == inherited.end())
@@ -2726,54 +2960,57 @@ private:
             }
 
             // Text is only stroked with a color
-            const auto output = findOutputOf (property);
+            const auto output = shape->findPaintOutput (property);
             if (output.isEmpty() || (isText && isStrokePaint (property) && property != "stroke"))
                 continue;
 
             if (isPatternProperty (property))
             {
-                const auto symbol = patternPrefix + String (found->second.definition);
-                addPaint (property, output, symbol, element, {});
-                uses.add (symbol);
+                addPaint (property, output, Expression::symbol (patternPrefix + String (found->second.definition)), element, {});
                 continue;
             }
 
-            addPaint (property, output, wrapForOutput (output, found->second.value.text), element, {});
-            uses.addArray (found->second.value.uses);
+            addPaint (property, output, wrapForOutput (output, found->second.value.expression), element, {});
+            uses.add (found->second.value.uses);
         }
 
         // A shape without a paint is filled with the color of the Graphics, so no fill at all has to be one drawing nothing
         if (fillIsNone && ! hasFill && ! hasStroke)
-            paint.push_back ({ "fill = #00000000;", path, element });
+        {
+            static const auto transparent = parseStatic ("#00000000");
+            paint.push_back ({ Expression::output ("fill", transparent), path, element });
+        }
 
-        const bool usesObjectBounds = uses.contains (objectBoundsSymbol);
-
-        if (usesObjectBounds && shape->objectBounds.isEmpty() && shape->shapePath.isEmpty())
+        if (uses.objectBounds && ! shape->objectBounds.has_value() && ! shape->shapePath.has_value())
         {
             fail (path + (isVertex ? ": 'objectBounds' is not available to a 'vertex', which is one point of its line"
                                    : ": 'objectBounds' is not available to a text placed from an 'anchor'"),
                   element);
         }
 
-        if (shape->shapePath.isEmpty())
+        if (! shape->shapePath.has_value())
         {
-            if (usesObjectBounds)
-                own.push_back ({ String ("let ") + objectBoundsSymbol + " = " + shape->objectBounds + ";", path, element });
+            if (uses.objectBounds)
+                own.push_back ({ Expression::let (objectBoundsSymbol, *shape->objectBounds), path, element });
 
-            own.push_back ({ shape->lowering, path, element });
+            for (const auto& statement : shape->lowering)
+                own.push_back ({ statement, path, element });
         }
-        else if (usesObjectBounds)
+        else if (uses.objectBounds)
         {
-            own.push_back ({ "let _shape = " + shape->shapePath + "; let " + objectBoundsSymbol + " = _shape.bounds; path = _shape;", path, element });
+            own.push_back ({ Expression::let ("_shape", *shape->shapePath), path, element });
+            own.push_back ({ Expression::let (objectBoundsSymbol, Expression::symbol ("_shape.bounds")), path, element });
+            own.push_back ({ Expression::output ("path", Expression::symbol ("_shape")), path, element });
         }
         else
         {
-            own.push_back ({ "path = " + shape->shapePath + ";", path, element });
+            own.push_back ({ Expression::output ("path", *shape->shapePath), path, element });
         }
 
-        auto statements = selectLets (scope, uses);
-        statements.insert (statements.end(), own.begin(), own.end());
-        statements.insert (statements.end(), paint.begin(), paint.end());
+        auto statements = selectLets (uses);
+        statements.reserve (statements.size() + own.size() + paint.size());
+        statements.insert (statements.end(), std::make_move_iterator (own.begin()), std::make_move_iterator (own.end()));
+        statements.insert (statements.end(), std::make_move_iterator (paint.begin()), std::make_move_iterator (paint.end()));
 
         auto created = ExpressionDrawing::create (compileStatements (statements, path, element));
         if (created.failed())
@@ -2805,9 +3042,11 @@ private:
     Compiled& result;
     std::map<String, PropertyInput> propertyInputs;
     std::vector<DataTree> expansions;
+    std::vector<Let> lets;
+    std::vector<int> selectedLets, pendingLets;
+    std::vector<bool> letIsSelected;
     Node* pattern = nullptr;
     bool collectsOutlines = false;
-    int numSymbols = 0;
     int numLevels = 1;
     int numLoops = 0;
     int repeatDepth = 0;

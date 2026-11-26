@@ -765,6 +765,7 @@ private:
 
 IMPLEMENT_FUNKNOWN_METHODS (HostComponentHandler, Vst::IComponentHandler, Vst::IComponentHandler::iid)
 
+#if YUP_MODULE_AVAILABLE_yup_gui
 //==============================================================================
 FIDString getVST3PlatformType()
 {
@@ -1230,6 +1231,7 @@ tresult PLUGIN_API VST3EditorFrame::resizeView (IPlugView* view, ViewRect* newSi
 
     return owner->handleResizeRequest (view, newSize);
 }
+#endif
 
 } // namespace
 
@@ -1529,7 +1531,7 @@ public:
             return 0;
 
         const auto tail = vst3Processor->getTailSamples();
-        return tail == Vst::kInfiniteTail ? std::numeric_limits<int>::max() : static_cast<int> (jmin (tail, static_cast<uint32> (std::numeric_limits<int>::max())));
+        return static_cast<int> (jmin (tail, static_cast<uint32> (infiniteTailSamples)));
     }
 
     //==============================================================================
@@ -1651,13 +1653,19 @@ public:
 
     bool hasEditor() const override
     {
+#if YUP_MODULE_AVAILABLE_yup_gui
         return VST3Editor::create (vst3Controller.get()) != nullptr;
+#else
+        return false;
+#endif
     }
 
     AudioProcessorEditor* createEditor() override
     {
+#if YUP_MODULE_AVAILABLE_yup_gui
         if (auto editor = VST3Editor::create (vst3Controller.get()))
             return editor.release();
+#endif
 
         return nullptr;
     }

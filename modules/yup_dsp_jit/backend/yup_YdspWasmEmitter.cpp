@@ -349,6 +349,12 @@ void YdspWasmEmitter::localSet (uint32_t index)
     appendUnsignedLeb (body, index);
 }
 
+void YdspWasmEmitter::localTee (uint32_t index)
+{
+    op (opLocalTee);
+    appendUnsignedLeb (body, index);
+}
+
 void YdspWasmEmitter::i32Const (int32_t value)
 {
     op (opI32Const);

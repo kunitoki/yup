@@ -724,4 +724,361 @@ TEST (YdspFusedMultiplyAddTests, TheContractedSubtractRoundsOnce)
         EXPECT_EQ (expected, sample);
 }
 
+//==============================================================================
+
+TEST (YdspFusedMultiplyAddTests, FastMathFeedsTheCarriedValueThroughOneMultiplyAdd)
+{
+    const auto source = R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float x1;
+            state float y1;
+            state float y2;
+            process {
+                let y = 0.2 * in + 0.4 * x1 + 0.37 * y1 - 0.19 * y2;
+                x1 = in;
+                y2 = y1;
+                y1 = y;
+                out = y;
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP";
+
+    for (const bool fastMath : { false, true })
+    {
+        SCOPED_TRACE (fastMath);
+
+        YdspDiagnostics diagnostics;
+        YdspLexer lexer (source, diagnostics);
+        YdspParser parser (lexer.tokenize(), diagnostics);
+        auto program = parser.parseProgram();
+        ASSERT_NE (nullptr, program);
+
+        YdspSemanticAnalyzer analyzer (diagnostics);
+        auto analyzed = analyzer.analyze (std::move (program));
+        ASSERT_NE (nullptr, analyzed);
+
+        YdspOptimizer optimizer (diagnostics);
+        optimizer.setContractionEnabled (true);
+        optimizer.setFastMath (fastMath);
+        auto ir = optimizer.build (*analyzed);
+        ASSERT_NE (nullptr, ir) << diagnostics.toString();
+
+        // y1 is fed back from the previous sample, so the multiply-add it enters
+        // is on the path every sample has to wait for. As written that is the
+        // third of four chained operations; reordered, it is the last one, which
+        // then both reads and writes y1.
+        int carriedThroughOne = 0;
+
+        for (const auto& block : ir->kernels[0]->blocks)
+            for (const auto& inst : block.insts)
+                if ((inst.op == YdspIrOp::fmaF || inst.op == YdspIrOp::fmsubF)
+                    && (inst.result == inst.a || inst.result == inst.b))
+                    ++carriedThroughOne;
+
+        EXPECT_EQ (fastMath ? 1 : 0, carriedThroughOne);
+    }
+}
+
+//==============================================================================
+
+TEST (YdspFusedMultiplyAddTests, UnrollsFir32AndPeq10ScalarLoops)
+{
+    const auto fir32Source = fmaPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float c[32], h[32];
+            state int idx;
+            process {
+                h[idx] = in;
+                float acc = 0.0;
+                for i in 0..32 { acc = acc + c[i] * h[(idx - i) & 31]; }
+                idx = (idx + 1) & 31;
+                out = acc;
+            }
+        }
+    )YDSP");
+
+    const auto peq10Source = fmaPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float b0[10], b1[10], b2[10], a1[10], a2[10];
+            state float z1[10], z2[10];
+            process {
+                float x = in;
+                for i in 0..10 {
+                    let y = b0[i] * x + z1[i];
+                    z1[i] = b1[i] * x - a1[i] * y + z2[i];
+                    z2[i] = b2[i] * x - a2[i] * y;
+                    x = y;
+                }
+                out = x;
+            }
+        }
+    )YDSP");
+
+    for (const auto& source : { fir32Source, peq10Source })
+    {
+        YdspDiagnostics diagnostics;
+        YdspLexer lexer (source, diagnostics);
+        YdspParser parser (lexer.tokenize(), diagnostics);
+        auto program = parser.parseProgram();
+        ASSERT_NE (nullptr, program) << diagnostics.toString();
+
+        YdspSemanticAnalyzer analyzer (diagnostics);
+        auto analyzed = analyzer.analyze (std::move (program));
+        ASSERT_NE (nullptr, analyzed) << diagnostics.toString();
+
+        YdspOptimizer optimizer (diagnostics);
+        optimizer.setUnrollingEnabled (true);
+        auto ir = optimizer.build (*analyzed);
+        ASSERT_NE (nullptr, ir) << diagnostics.toString();
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+        const auto* kernel = fmaKernel (*ir);
+        ASSERT_NE (nullptr, kernel);
+
+        const auto constantLoop = std::find_if (kernel->loops.begin(), kernel->loops.end(), [] (const YdspIrLoop& loop)
+        {
+            return loop.bound.kind == YdspLoopBoundKind::constant;
+        });
+        ASSERT_NE (kernel->loops.end(), constantLoop);
+        EXPECT_TRUE (constantLoop->unrolled);
+    }
+}
+
+TEST (YdspFusedMultiplyAddTests, SplitsScalarReductionChainOnlyUnderFastMath)
+{
+    const auto fir32Source = fmaPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float c[32], h[32];
+            state int idx;
+            process {
+                h[idx] = in;
+                float acc = 0.0;
+                for i in 0..32 { acc = acc + c[i] * h[(idx - i) & 31]; }
+                idx = (idx + 1) & 31;
+                out = acc;
+            }
+        }
+    )YDSP");
+
+    for (const bool fastMath : { false, true })
+    {
+        SCOPED_TRACE (fastMath);
+
+        YdspDiagnostics diagnostics;
+        YdspLexer lexer (fir32Source, diagnostics);
+        YdspParser parser (lexer.tokenize(), diagnostics);
+        auto program = parser.parseProgram();
+        ASSERT_NE (nullptr, program);
+
+        YdspSemanticAnalyzer analyzer (diagnostics);
+        auto analyzed = analyzer.analyze (std::move (program));
+        ASSERT_NE (nullptr, analyzed);
+
+        YdspOptimizer optimizer (diagnostics);
+        optimizer.setUnrollingEnabled (true);
+        optimizer.setReductionSplittingEnabled (true);
+        optimizer.setContractionEnabled (true);
+        optimizer.setFastMath (fastMath);
+
+        auto ir = optimizer.build (*analyzed);
+        ASSERT_NE (nullptr, ir) << diagnostics.toString();
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+        const auto* kernel = fmaKernel (*ir);
+        ASSERT_NE (nullptr, kernel);
+        EXPECT_FALSE (kernel->vectorized);
+        EXPECT_EQ (fastMath, kernel->reductionSplit);
+
+        if (fastMath)
+        {
+            EXPECT_EQ (4, fmaCountInst (*kernel, YdspIrOp::mulF));
+            EXPECT_EQ (28, fmaCountInst (*kernel, YdspIrOp::fmaF));
+            EXPECT_EQ (4, fmaCountInst (*kernel, YdspIrOp::addF));
+        }
+        else
+        {
+            EXPECT_EQ (0, fmaCountInst (*kernel, YdspIrOp::mulF));
+            EXPECT_EQ (32, fmaCountInst (*kernel, YdspIrOp::fmaF));
+            EXPECT_EQ (0, fmaCountInst (*kernel, YdspIrOp::addF));
+        }
+    }
+
+    // Explicit scalar fma() accumulation chains also split into 4 partials under fastMath.
+    const auto fmaFir32Source = fmaPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float c[32], h[32];
+            state int idx;
+            process {
+                h[idx] = in;
+                float acc = 0.0;
+                for i in 0..32 { acc = fma (c[i], h[(idx - i) & 31], acc); }
+                idx = (idx + 1) & 31;
+                out = acc;
+            }
+        }
+    )YDSP");
+
+    for (const bool fastMath : { false, true })
+    {
+        SCOPED_TRACE (fastMath);
+
+        YdspDiagnostics diagnostics;
+        YdspLexer lexer (fmaFir32Source, diagnostics);
+        YdspParser parser (lexer.tokenize(), diagnostics);
+        auto program = parser.parseProgram();
+        ASSERT_NE (nullptr, program);
+
+        YdspSemanticAnalyzer analyzer (diagnostics);
+        auto analyzed = analyzer.analyze (std::move (program));
+        ASSERT_NE (nullptr, analyzed);
+
+        YdspOptimizer optimizer (diagnostics);
+        optimizer.setUnrollingEnabled (true);
+        optimizer.setReductionSplittingEnabled (true);
+        optimizer.setFastMath (fastMath);
+
+        auto ir = optimizer.build (*analyzed);
+        ASSERT_NE (nullptr, ir) << diagnostics.toString();
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+        const auto* kernel = fmaKernel (*ir);
+        ASSERT_NE (nullptr, kernel);
+        EXPECT_EQ (fastMath, kernel->reductionSplit);
+
+        if (fastMath)
+        {
+            EXPECT_EQ (4, fmaCountInst (*kernel, YdspIrOp::mulF));
+            EXPECT_EQ (28, fmaCountInst (*kernel, YdspIrOp::fmaF));
+            EXPECT_EQ (4, fmaCountInst (*kernel, YdspIrOp::addF));
+        }
+        else
+        {
+            EXPECT_EQ (0, fmaCountInst (*kernel, YdspIrOp::mulF));
+            EXPECT_EQ (32, fmaCountInst (*kernel, YdspIrOp::fmaF));
+        }
+    }
+}
+
+TEST (YdspFusedMultiplyAddTests, StrengthReducesIntegerAndHalfPowersOnlyUnderFastMath)
+{
+    struct Case
+    {
+        const char* exponent;
+        int expectedMul;
+        int expectedDiv;
+        int expectedSqrt;
+        int expectedLoads;
+    };
+
+    const Case cases[] {
+        { "0.0", 0, 0, 0, 0 },
+        { "1.0", 0, 0, 0, 1 },
+        { "2.0", 1, 0, 0, 1 },
+        { "3.0", 2, 0, 0, 1 },
+        { "4.0", 2, 0, 0, 1 },
+        { "-1.0", 0, 1, 0, 1 },
+        { "-2.0", 1, 1, 0, 1 },
+        { "-4.0", 2, 1, 0, 1 },
+        { "0.5", 0, 0, 1, 1 },
+    };
+
+    for (const auto& item : cases)
+    {
+        const auto source = fmaPatch (String ("processor P { input stream in; output stream out; process { out = pow (in, ")
+                                     + item.exponent + "); } }");
+
+        for (const bool fastMath : { false, true })
+        {
+            SCOPED_TRACE (String (item.exponent) + (fastMath ? " fast" : " strict"));
+
+            YdspDiagnostics diagnostics;
+            YdspLexer lexer (source, diagnostics);
+            YdspParser parser (lexer.tokenize(), diagnostics);
+            auto program = parser.parseProgram();
+            ASSERT_NE (nullptr, program);
+
+            YdspSemanticAnalyzer analyzer (diagnostics);
+            auto analyzed = analyzer.analyze (std::move (program));
+            ASSERT_NE (nullptr, analyzed);
+
+            YdspOptimizer optimizer (diagnostics);
+            optimizer.setFastMath (fastMath);
+
+            auto ir = optimizer.build (*analyzed);
+            ASSERT_NE (nullptr, ir) << diagnostics.toString();
+            ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+            const auto* kernel = fmaKernel (*ir);
+            ASSERT_NE (nullptr, kernel);
+
+            if (fastMath)
+            {
+                EXPECT_EQ (0, fmaCountInst (*kernel, YdspIrOp::powF));
+                EXPECT_EQ (0, fmaCountInst (*kernel, YdspIrOp::expF));
+                EXPECT_EQ (item.expectedMul, fmaCountInst (*kernel, YdspIrOp::mulF));
+                EXPECT_EQ (item.expectedDiv, fmaCountInst (*kernel, YdspIrOp::divF));
+                EXPECT_EQ (item.expectedSqrt, fmaCountInst (*kernel, YdspIrOp::sqrtF));
+                EXPECT_EQ (item.expectedLoads, fmaCountInst (*kernel, YdspIrOp::loadInput));
+            }
+            else
+            {
+                EXPECT_EQ (1, fmaCountInst (*kernel, YdspIrOp::powF));
+            }
+        }
+    }
+
+    // Widened powF(x, -4.0) preserves 4-lane shape and broadcasts 1.0 via vsplat.
+    {
+        YdspDiagnostics diagnostics;
+        YdspOptimizer optimizer (diagnostics);
+        YdspIrFunction fn;
+        fn.fastMath = true;
+        fn.vectorized = true;
+        fn.vectorWidth = 4;
+        fn.valueTypes = { YdspValueType::float32Type, YdspValueType::float32Type, YdspValueType::float32Type, YdspValueType::float32Type };
+        fn.valueLanes = { 4, 1, 4, 4 };
+        fn.blocks.resize (1);
+        fn.blocks[0].insts = {
+            { YdspIrOp::loadParam, 0, 0 },
+            { YdspIrOp::constF, 1, -1, -1, -1, -1, -4.0 },
+            { YdspIrOp::vsplat, 2, 1 },
+            { YdspIrOp::powF, 3, 0, 2 }
+        };
+
+        EXPECT_TRUE (optimizer.algebraicSimplification (fn));
+        EXPECT_EQ (0, fmaCountInst (fn, YdspIrOp::powF));
+        EXPECT_EQ (2, fmaCountInst (fn, YdspIrOp::mulF));
+        EXPECT_EQ (1, fmaCountInst (fn, YdspIrOp::divF));
+        EXPECT_EQ (2, fmaCountInst (fn, YdspIrOp::vsplat));
+        EXPECT_EQ (4, fn.laneCountOf (3));
+    }
+
+    // Compiled execution check for pow(x, 3.0) and pow(x, -4.0).
+    const std::vector<float> input { 0.5f, 1.0f, 2.0f, 3.0f };
+
+    const auto cubeOut = fmaRun (fmaPatch ("processor P { input stream in; output stream out; process { out = pow (in, 3.0); } }"), input);
+    ASSERT_EQ (input.size(), cubeOut.size());
+    for (size_t i = 0; i < input.size(); ++i)
+        EXPECT_FLOAT_EQ (input[i] * input[i] * input[i], cubeOut[i]);
+
+    const auto invQuarticOut = fmaRun (fmaPatch ("processor P { input stream in; output stream out; process { out = pow (in, -4.0); } }"), input);
+    ASSERT_EQ (input.size(), invQuarticOut.size());
+    for (size_t i = 0; i < input.size(); ++i)
+    {
+        const float x2 = input[i] * input[i];
+        EXPECT_FLOAT_EQ (1.0f / (x2 * x2), invQuarticOut[i]);
+    }
+}
+
 } // namespace yup::test

@@ -126,6 +126,34 @@ public:
     /** Creates a free function call. */
     static Expression call (const String& functionName, std::vector<Expression> arguments);
 
+    /** Creates `condition ? whenTrue : whenFalse`. */
+    static Expression ternary (const Expression& condition, const Expression& whenTrue, const Expression& whenFalse);
+
+    /** Creates the statement `let name = value`, an immutable local of a program. */
+    static Expression let (const String& name, const Expression& value);
+
+    /** Creates the statement `name = value`, assigning an output of a program. */
+    static Expression output (const String& name, const Expression& value);
+
+    /** Creates a program from its statements, without going through a text.
+
+        The statements are the ones made by let and output. The last one can also be a plain
+        expression, which is the output named `result`. Statements are only allowed here, at the
+        top level of a program.
+
+        @code
+        auto program = Expression::block ({
+            Expression::let ("w", Expression::symbol ("width") / Expression (2)),
+            Expression::output ("rect", Expression::call ("rect", { Expression (0), Expression (0), Expression::symbol ("w"), Expression (10) }))
+        });
+
+        // Same as Expression::parse ("let w = width / 2; rect = rect (0, 0, w, 10)")
+        @endcode
+
+        A statement that fails to compile is reported by index, see CompiledExpression::compile.
+    */
+    static Expression block (std::vector<Expression> statements);
+
     //==============================================================================
     /** Parses a program.
 

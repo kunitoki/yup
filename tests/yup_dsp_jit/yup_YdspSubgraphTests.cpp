@@ -23,6 +23,10 @@
 
 #include <yup_dsp_jit/yup_dsp_jit.h>
 
+#include "yup_YdspTestPatches.h"
+#include "yup_YdspAllocationCounter.h"
+
+#include <cmath>
 #include <vector>
 
 using namespace yup;
@@ -925,4 +929,404 @@ TEST (YdspSubgraphTests, FansASubgraphsOutputEventToTwoParentDestinations)
 
     for (size_t i = 0; i < subgraphInput.size(); ++i)
         EXPECT_NEAR (144.0f, output[i], 1e-4f) << "sample " << i;
+}
+
+//==============================================================================
+
+namespace
+{
+
+YdspCompileOptions crossVoiceBaselineOptions()
+{
+    YdspCompileOptions options;
+    options.optimizationTier = YdspOptimizationTier::baseline;
+    options.targetPolicy = YdspTargetPolicy::baseline;
+    options.baselineTarget = YdspNativeTarget::scalar;
+    return options;
+}
+
+YdspCompileOptions crossVoiceSimdOptions()
+{
+    YdspCompileOptions options;
+    options.optimizationTier = YdspOptimizationTier::automatic;
+    options.targetPolicy = YdspTargetPolicy::host;
+    return options;
+}
+
+void runMidiStereoBlock (YdspAudioGraph& graph,
+                         const MidiBuffer* midi,
+                         std::vector<float>& outL,
+                         std::vector<float>& outR,
+                         int blockSize)
+{
+    outL.assign (static_cast<size_t> (blockSize), 0.0f);
+    outR.assign (static_cast<size_t> (blockSize), 0.0f);
+
+    YdspOutputBuffer outputs[] {
+        Span<float> (outL.data(), outL.size()),
+        Span<float> (outR.data(), outR.size())
+    };
+
+    const MidiBuffer* eventInputs[] { midi };
+
+    ASSERT_EQ (YdspProcessResult::ok,
+               graph.process (YdspProcessRequest {
+                   {},
+                   outputs,
+                   blockSize,
+                   Span<const MidiBuffer*> (eventInputs, midi != nullptr ? 1u : 0u),
+                   {}
+               }));
+}
+
+void runMidiMonoBlock (YdspAudioGraph& graph,
+                       const MidiBuffer* midi,
+                       std::vector<float>& out,
+                       int blockSize)
+{
+    out.assign (static_cast<size_t> (blockSize), 0.0f);
+
+    YdspOutputBuffer outputs[] { Span<float> (out.data(), out.size()) };
+
+    const MidiBuffer* eventInputs[] { midi };
+
+    ASSERT_EQ (YdspProcessResult::ok,
+               graph.process (YdspProcessRequest {
+                   {},
+                   outputs,
+                   blockSize,
+                   Span<const MidiBuffer*> (eventInputs, midi != nullptr ? 1u : 0u),
+                   {}
+               }));
+}
+
+void runInputMidiMonoBlock (YdspAudioGraph& graph,
+                            const std::vector<float>& in,
+                            const MidiBuffer* midi,
+                            std::vector<float>& out,
+                            int blockSize)
+{
+    out.assign (static_cast<size_t> (blockSize), 0.0f);
+
+    const YdspInputBuffer inputs[] { Span<const float> (in.data(), static_cast<size_t> (blockSize)) };
+    YdspOutputBuffer outputs[] { Span<float> (out.data(), static_cast<size_t> (blockSize)) };
+    const MidiBuffer* eventInputs[] { midi };
+
+    ASSERT_EQ (YdspProcessResult::ok,
+               graph.process (YdspProcessRequest {
+                   inputs,
+                   outputs,
+                   blockSize,
+                   Span<const MidiBuffer*> (eventInputs, midi != nullptr ? 1u : 0u),
+                   {}
+               }));
+}
+
+} // namespace
+
+TEST (YdspSubgraphTests, CrossVoiceSimdPolySynthMatchesScalarBaselineAcrossVoiceCountsAndEvents)
+{
+    static constexpr const char* polySynthSource = R"YDSP(
+        processor PolySynthVoice {
+            output stream out;
+
+            input parameter float gain = 0.25;
+            input parameter float cutoff = 0.35;
+            input event midi;
+
+            state float phase;
+            state float inc;
+            state float env;
+            state float decayMul = 0.9995;
+            state float filterState;
+            state float pan = 0.5;
+            state int released;
+            state int active [[ role: voiceActivity ]];
+
+            event midi (e: noteOn) {
+                let freq = 440.0 * pow (2.0, (e.pitch - 69.0) / 12.0);
+                inc = freq * samplePeriod;
+                phase = 0.0;
+                env = clamp (e.velocity, 0.05, 1.0);
+                decayMul = 0.9995;
+                filterState = 0.0;
+                pan = clamp ((e.pitch - 48.0) / 36.0, 0.1, 0.9);
+                released = 0;
+                active = 1;
+            }
+
+            event midi (e: noteOff) {
+                released = 1;
+                decayMul = 0.985;
+            }
+
+            process {
+                phase = phase + inc;
+                if (phase >= 1.0) { phase = phase - 1.0; }
+
+                let saw = 2.0 * phase - 1.0;
+                let shaped = tanh (saw * 1.5);
+                filterState = filterState + cutoff * (shaped - filterState);
+
+                env = env * decayMul;
+                let voiceOut = filterState * env * gain;
+
+                active = select (env < 0.0001, select (released > 0, 0, 1), 1);
+
+                out = voiceOut * (0.5 + 0.5 * pan);
+            }
+        }
+
+        graph PolySynth [[ main ]] {
+            input event midi;
+            output stream out;
+
+            node voices = PolySynthVoice[16] [[ mode: poly, stealing: oldest ]];
+
+            connection {
+                midi -> voices.midi;
+                voices.out -> out;
+            }
+        }
+    )YDSP";
+
+    YdspCompiler baselineCompiler;
+    auto baselineGraph = yup::test::patches::compilePatch (polySynthSource, baselineCompiler, crossVoiceBaselineOptions());
+    ASSERT_TRUE (baselineGraph.isValid());
+
+    YdspCompiler simdCompiler;
+    auto simdGraph = yup::test::patches::compilePatch (polySynthSource, simdCompiler, crossVoiceSimdOptions());
+    ASSERT_TRUE (simdGraph.isValid());
+
+    constexpr double sampleRate = 44100.0;
+    constexpr int blockSize = 64;
+    ASSERT_TRUE (baselineGraph.prepare (sampleRate, blockSize).wasOk());
+    ASSERT_TRUE (simdGraph.prepare (sampleRate, blockSize).wasOk());
+
+    std::vector<float> baseOut, simdOut;
+    MidiBuffer midi;
+
+    auto verifyBlock = [&] (const char* label)
+    {
+        runMidiMonoBlock (baselineGraph, &midi, baseOut, blockSize);
+        runMidiMonoBlock (simdGraph, &midi, simdOut, blockSize);
+        midi.clear();
+
+        EXPECT_EQ (baselineGraph.getActiveVoiceCount ("voices"), simdGraph.getActiveVoiceCount ("voices")) << label;
+
+        for (int i = 0; i < blockSize; ++i)
+        {
+            const auto idx = static_cast<size_t> (i);
+            EXPECT_NEAR (baseOut[idx], simdOut[idx], 1e-4f) << label << " sample " << i;
+        }
+    };
+
+    // Block 1: 1 voice triggered (scalar <3 fallback).
+    midi.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
+    verifyBlock ("1 voice noteOn");
+
+    // Block 2: 2 voices triggered -> 2 sustaining (<3 fallback).
+    midi.addEvent (MidiMessage::noteOn (1, 64, 0.7f), 16);
+    verifyBlock ("2 voices noteOn");
+    verifyBlock ("2 voices steady");
+
+    // Block 3: +4 voices mid-block (mixed sustaining + mid-block split voices).
+    midi.addEvent (MidiMessage::noteOn (1, 67, 0.9f), 0);
+    midi.addEvent (MidiMessage::noteOn (1, 71, 0.6f), 12);
+    midi.addEvent (MidiMessage::noteOn (1, 72, 0.85f), 27);
+    midi.addEvent (MidiMessage::noteOn (1, 76, 0.75f), 45);
+    verifyBlock ("6 voices mid-block noteOn");
+
+    // Block 4: 6 voices sustaining cleanly in SoA SIMD batch (with zeroed padding lanes).
+    verifyBlock ("6 voices steady batch");
+
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    {
+        yup::test::YdspAllocationCounter allocations;
+        allocations.start();
+        runMidiMonoBlock (simdGraph, &midi, simdOut, blockSize);
+        EXPECT_EQ (0u, allocations.stop());
+
+        // Advance baseline to stay in lockstep after the allocation check block.
+        runMidiMonoBlock (baselineGraph, &midi, baseOut, blockSize);
+        for (int i = 0; i < blockSize; ++i)
+            EXPECT_NEAR (baseOut[static_cast<size_t> (i)], simdOut[static_cast<size_t> (i)], 1e-4f);
+    }
+#endif
+
+    // Block 5: 8 voices total (full 8-lane AVX2 or 2x4-lane ASIMD/SSE2 batch).
+    midi.addEvent (MidiMessage::noteOn (1, 55, 0.9f), 8);
+    midi.addEvent (MidiMessage::noteOn (1, 59, 0.65f), 32);
+    verifyBlock ("8 voices mid-block noteOn");
+    verifyBlock ("8 voices steady batch");
+
+    // Block 6: release 3 notes mid-block, leaving 5 held + 3 releasing, then let released tails decay to sleep.
+    midi.addEvent (MidiMessage::noteOff (1, 60, 0.5f), 5);
+    midi.addEvent (MidiMessage::noteOff (1, 64, 0.5f), 20);
+    midi.addEvent (MidiMessage::noteOff (1, 67, 0.5f), 40);
+    verifyBlock ("mid-block noteOff");
+
+    for (int block = 0; block < 14; ++block)
+        verifyBlock ("release decay");
+
+    EXPECT_EQ (5, simdGraph.getActiveVoiceCount ("voices"));
+}
+
+TEST (YdspSubgraphTests, CrossVoiceSimdWithSharedInputAndNonZeroBiasMatchesBaseline)
+{
+    static constexpr const char* sharedInputSource = R"YDSP(
+        processor ModVoice {
+            input stream in;
+            output stream out;
+            input event midi;
+
+            state float gain = 0.0;
+            state float z1 = 0.0;
+            state float bias = 0.0;
+            state int active [[ role: voiceActivity ]];
+
+            event midi (e: noteOn) {
+                gain = 0.1 + 0.4 * e.velocity;
+                bias = 0.02;
+                active = 1;
+            }
+
+            event midi (e: noteOff) {
+                gain = 0.0;
+                bias = 0.0;
+                active = 0;
+            }
+
+            process {
+                z1 = z1 + 0.25 * (in * gain - z1);
+                out = z1 + bias;
+            }
+        }
+
+        graph Main [[ main ]] {
+            input stream x;
+            input event midi;
+            output stream y;
+
+            node voices = ModVoice[8] [[ mode: poly, stealing: oldest ]];
+
+            connection {
+                x -> voices.in;
+                midi -> voices.midi;
+                voices.out -> y;
+            }
+        }
+    )YDSP";
+
+    YdspCompiler baselineCompiler;
+    auto baselineGraph = yup::test::patches::compilePatch (sharedInputSource, baselineCompiler, crossVoiceBaselineOptions());
+    ASSERT_TRUE (baselineGraph.isValid());
+
+    YdspCompiler simdCompiler;
+    auto simdGraph = yup::test::patches::compilePatch (sharedInputSource, simdCompiler, crossVoiceSimdOptions());
+    ASSERT_TRUE (simdGraph.isValid());
+
+    constexpr double sampleRate = 44100.0;
+    constexpr int blockSize = 32;
+    ASSERT_TRUE (baselineGraph.prepare (sampleRate, blockSize).wasOk());
+    ASSERT_TRUE (simdGraph.prepare (sampleRate, blockSize).wasOk());
+
+    const auto input = yup::test::patches::makeRamp (blockSize, -0.5f);
+    std::vector<float> baseOut, simdOut;
+    MidiBuffer midi;
+
+    // Trigger 3 voices first (exercises 1 padding lane on V=4, 5 padding lanes on V=8).
+    midi.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
+    midi.addEvent (MidiMessage::noteOn (1, 64, 0.6f), 0);
+    midi.addEvent (MidiMessage::noteOn (1, 67, 0.9f), 0);
+
+    runInputMidiMonoBlock (baselineGraph, input, &midi, baseOut, blockSize);
+    runInputMidiMonoBlock (simdGraph, input, &midi, simdOut, blockSize);
+    midi.clear();
+
+    for (int i = 0; i < blockSize; ++i)
+        EXPECT_NEAR (baseOut[static_cast<size_t> (i)], simdOut[static_cast<size_t> (i)], 1e-4f) << "3 voices noteOn sample " << i;
+
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    {
+        yup::test::YdspAllocationCounter allocations;
+        allocations.start();
+        runInputMidiMonoBlock (simdGraph, input, &midi, simdOut, blockSize);
+        EXPECT_EQ (0u, allocations.stop());
+    }
+    runInputMidiMonoBlock (baselineGraph, input, &midi, baseOut, blockSize);
+#else
+    runInputMidiMonoBlock (baselineGraph, input, &midi, baseOut, blockSize);
+    runInputMidiMonoBlock (simdGraph, input, &midi, simdOut, blockSize);
+#endif
+
+    for (int i = 0; i < blockSize; ++i)
+        EXPECT_NEAR (baseOut[static_cast<size_t> (i)], simdOut[static_cast<size_t> (i)], 1e-4f) << "3 voices steady sample " << i;
+
+    // Trigger 2 more voices (5 voices total).
+    midi.addEvent (MidiMessage::noteOn (1, 71, 0.5f), 4);
+    midi.addEvent (MidiMessage::noteOn (1, 74, 0.7f), 12);
+
+    runInputMidiMonoBlock (baselineGraph, input, &midi, baseOut, blockSize);
+    runInputMidiMonoBlock (simdGraph, input, &midi, simdOut, blockSize);
+    midi.clear();
+
+    runInputMidiMonoBlock (baselineGraph, input, &midi, baseOut, blockSize);
+    runInputMidiMonoBlock (simdGraph, input, &midi, simdOut, blockSize);
+
+    for (int i = 0; i < blockSize; ++i)
+        EXPECT_NEAR (baseOut[static_cast<size_t> (i)], simdOut[static_cast<size_t> (i)], 1e-4f) << "5 voices steady sample " << i;
+}
+
+TEST (YdspSubgraphTests, CrossVoiceSimdElectricPianoMatchesBaselineAndDoesNotAllocate)
+{
+    YdspCompiler baselineCompiler;
+    auto baselineGraph = yup::test::patches::compilePatch (yup::test::patches::electricPiano, baselineCompiler, crossVoiceBaselineOptions());
+    ASSERT_TRUE (baselineGraph.isValid());
+
+    YdspCompiler simdCompiler;
+    auto simdGraph = yup::test::patches::compilePatch (yup::test::patches::electricPiano, simdCompiler, crossVoiceSimdOptions());
+    ASSERT_TRUE (simdGraph.isValid());
+
+    constexpr double sampleRate = 44100.0;
+    constexpr int blockSize = 64;
+    ASSERT_TRUE (baselineGraph.prepare (sampleRate, blockSize).wasOk());
+    ASSERT_TRUE (simdGraph.prepare (sampleRate, blockSize).wasOk());
+
+    std::vector<float> baseL, baseR, simdL, simdR;
+    MidiBuffer midi;
+    midi.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
+    midi.addEvent (MidiMessage::noteOn (1, 64, 0.75f), 0);
+    midi.addEvent (MidiMessage::noteOn (1, 67, 0.85f), 0);
+    midi.addEvent (MidiMessage::noteOn (1, 71, 0.7f), 0);
+    midi.addEvent (MidiMessage::noteOn (1, 74, 0.9f), 16);
+
+    runMidiStereoBlock (baselineGraph, &midi, baseL, baseR, blockSize);
+    runMidiStereoBlock (simdGraph, &midi, simdL, simdR, blockSize);
+    midi.clear();
+
+    for (int i = 0; i < blockSize; ++i)
+    {
+        EXPECT_NEAR (baseL[static_cast<size_t> (i)], simdL[static_cast<size_t> (i)], 1e-4f);
+        EXPECT_NEAR (baseR[static_cast<size_t> (i)], simdR[static_cast<size_t> (i)], 1e-4f);
+    }
+
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    {
+        yup::test::YdspAllocationCounter allocations;
+        allocations.start();
+        runMidiStereoBlock (simdGraph, &midi, simdL, simdR, blockSize);
+        EXPECT_EQ (0u, allocations.stop());
+    }
+    runMidiStereoBlock (baselineGraph, &midi, baseL, baseR, blockSize);
+#else
+    runMidiStereoBlock (baselineGraph, &midi, baseL, baseR, blockSize);
+    runMidiStereoBlock (simdGraph, &midi, simdL, simdR, blockSize);
+#endif
+
+    for (int i = 0; i < blockSize; ++i)
+    {
+        EXPECT_NEAR (baseL[static_cast<size_t> (i)], simdL[static_cast<size_t> (i)], 1e-4f);
+        EXPECT_NEAR (baseR[static_cast<size_t> (i)], simdR[static_cast<size_t> (i)], 1e-4f);
+    }
 }

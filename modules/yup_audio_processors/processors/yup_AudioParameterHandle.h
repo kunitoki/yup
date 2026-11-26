@@ -30,6 +30,15 @@ namespace yup
     This class provides a way to access and modify the value of a parameter of an
     AudioProcessor. It also provides a way to smooth the value of the parameter.
 
+    Every method is realtime-safe, with smoothing enabled or disabled: it reads the
+    parameter with one atomic load and does arithmetic on the smoother, without allocating,
+    locking or calling the system. advanceToSample() also writes the automated value back
+    to the parameter, which is lock-free as well (see AudioParameter::setValue).
+
+    Create the handles in prepareToPlay(), where the sample rate is known, and keep them as
+    members. A handle owns the smoother state and is not thread-safe: use one handle per
+    thread that reads the parameter. The parameter must outlive its handles.
+
     @see AudioParameter
 */
 class AudioParameterHandle

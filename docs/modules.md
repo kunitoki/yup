@@ -418,15 +418,19 @@ flowchart LR
 ### yup_audio_processors
 
 The `AudioProcessor` model - the unit of audio processing that plugins and the
-audio graph are built from - plus parameter handling.
+audio graph are built from - plus parameter handling. Editors
+(`AudioProcessorEditor`, `AudioParameterAttachment`) are compiled when `yup_gui`
+is linked.
 
 ```mermaid
 flowchart LR
     yup_audio_processors:::self --> yup_audio_basics
     yup_audio_processors --> yup_data_model
     yup_audio_processors --> yup_dsp
+    yup_audio_processors -. optional .-> yup_gui:::opt
     classDef self fill:#005aff,color:#fff,stroke:#003db3;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+    classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
 ### yup_audio_graph
@@ -458,12 +462,16 @@ flowchart LR
 ### yup_audio_plugin_host
 
 In-process hosting of third-party VST3, CLAP, LV2, and AU (v2/v3) plugins.
+Plugin editors are compiled when `yup_gui` is linked; without it plugins are
+still scanned, loaded and processed (see [Headless audio](audio/headless.md)).
 
 ```mermaid
 flowchart LR
     yup_audio_plugin_host:::self --> yup_audio_processors
+    yup_audio_plugin_host -. optional .-> yup_gui:::opt
     classDef self fill:#005aff,color:#fff,stroke:#003db3;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+    classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
 ## Scripting

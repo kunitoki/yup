@@ -30,7 +30,17 @@ namespace yup
 
     Use AudioParameterBuilder to construct instances of this class.
 
-    @see AudioParameterBuilder
+    Threading: getValue(), getNormalizedValue(), setValue() and setNormalizedValue() never
+    lock or allocate, so any thread can call them, the audio thread included, while other
+    threads read or write the same parameter. The value conversions run the range functions
+    inline: a range with custom functions must keep them realtime-safe.
+
+    setValueNotifyingHost(), beginChangeGesture() and endChangeGesture() call the listeners
+    while holding a lock, so they belong to the message thread and never to the audio
+    thread. toString(), fromString(), convertToString() and convertFromString() create
+    strings and allocate. The metadata is fixed once the parameter is constructed.
+
+    @see AudioParameterBuilder, AudioParameterHandle
 */
 class AudioParameter : public ReferenceCountedObject
 {
@@ -442,6 +452,9 @@ public:
     /**
         Sets the real (un-normalized) parameter value and notifies the host.
 
+        Calls the listeners while holding their lock, so call it from the message thread
+        and never from the audio thread, where setValue() is the realtime-safe choice.
+
         @param value The new real value.
     */
     void setValueNotifyingHost (float value);
@@ -449,6 +462,7 @@ public:
     /**
         Sets the real (un-normalized) parameter value.
 
+        Lock-free and non-allocating, safe from any thread while audio is running.
         Non-finite values (NaN or infinity) are ignored and the current value is kept. A value
         that differs from the current one is reported to each processor containing this
         parameter. Registration and destruction of those processors must not overlap

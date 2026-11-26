@@ -302,7 +302,7 @@ int YdspIrBuilder::lowerIdentifier (const String& name, const YdspLocation& loca
             return emitConstF (0.0);
         }
 
-        if (fn.isSampleMode && state->arraySize <= 0)
+        if (state->arraySize <= 0)
         {
             if (const auto it = stateRegs.find (state); it != stateRegs.end())
                 return it->second;
@@ -366,7 +366,7 @@ int YdspIrBuilder::captureValue (const YdspExpr& expr)
         if (const auto it = locals.find (name); it != locals.end())
             return it->second;
 
-        if (const auto* state = findState (name); state != nullptr && fn.isSampleMode && state->arraySize <= 0)
+        if (const auto* state = findState (name); state != nullptr && state->arraySize <= 0)
         {
             if (const auto it = stateRegs.find (state); it != stateRegs.end())
                 return it->second;
@@ -556,6 +556,7 @@ int YdspIrBuilder::lowerBinary (const YdspExpr& expr)
                       : expr.op == YdspOperator::sub ? YdspIrOp::subI : YdspIrOp::mulI;
         YdspIrInst arithmetic { op, newValue (resultType), lhsU, rhsU };
         arithmetic.saturatingIntegerArithmetic = boundedIntegerArithmetic == nullptr || boundedIntegerArithmetic->count (&expr) == 0;
+        arithmetic.overflowFreeIntegerArithmetic = ! arithmetic.saturatingIntegerArithmetic;
         return emitInst (arithmetic);
     }
 
@@ -1048,9 +1049,9 @@ bool YdspIrBuilder::resolveStructFieldLayout (const YdspExpr& memberExpr, int& o
 
 void YdspIrBuilder::lowerStateStore (const YdspStateDecl* state, int value)
 {
-    if (fn.isSampleMode && state->arraySize <= 0)
+    if (const auto held = stateRegs.find (state); held != stateRegs.end() && state->arraySize <= 0)
     {
-        const auto reg = stateRegs[state];
+        const auto reg = held->second;
         const auto regType = valueTypes[static_cast<size_t> (reg)];
         const auto coerced = coerceTo (value, regType);
         emitInst ({ moveOpcodeFor (regType), reg, coerced });

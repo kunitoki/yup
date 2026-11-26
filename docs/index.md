@@ -7,7 +7,7 @@ rendering through the open source [Rive](https://rive.app/) renderer and YUP's
 own graphics, GUI, DSP, audio graph, and plugin layers.
 
 <p align="center">
-  <img class="rounded" src="_static/images/yup_retrace_plugin.jpg" alt="RETRACE, the spectral synthesizer plugin of the examples, built with YUP" width="640">
+  <img class="rounded" src="_static/images/yup_retrace_plugin.jpg" alt="RETRACE, a spectral synthesizer plugin built with YUP" width="640">
 </p>
 
 ```{warning}
@@ -42,6 +42,7 @@ concept guides, walkthroughs, and reference material.
 - [Building standalone applications](build-system/building-standalone.md)
 - [Building audio plugins](build-system/building-plugins.md)
 - Example apps: [graphics](https://github.com/kunitoki/yup/tree/main/examples/graphics), [audio graph](https://github.com/kunitoki/yup/tree/main/examples/audiograph), [plugin](https://github.com/kunitoki/yup/tree/main/examples/plugin), [console](https://github.com/kunitoki/yup/tree/main/examples/console).
+- A full plugin built with YUP: [Retrace](https://github.com/kunitoki/retrace), a spectral FM synthesiser.
 
 ## External resources
 

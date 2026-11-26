@@ -47,6 +47,30 @@ Wrappers try-lock the processor's process lock before each block. When the lock 
 processing is suspended (see [Suspending processing](#suspending-processing)) the block
 is skipped or silenced, so `processBlock` never races with a reconfiguration.
 
+What the audio thread may call:
+
+| Call | Audio thread | Why |
+| --- | --- | --- |
+| `AudioParameter::getValue()`, `setValue()` and their `Normalized` variants | Yes | Lock-free, from any thread at any time |
+| Every `AudioParameterHandle` method | Yes | One atomic read plus arithmetic; use one handle per thread |
+| `getLatencySamples()`, `getTailSamples()`, `isSuspended()`, `isOfflineProcessing()` | Yes | Atomic reads; keep a `getTailSamples()` override that way |
+| `getParameters()`, `getParameterByHostID()` | Yes | No lock, no allocation |
+| `getParameterByID()` | No | Builds a `String`: look parameters up once and keep the pointers |
+| `setValueNotifyingHost()`, `beginChangeGesture()`, `endChangeGesture()` | No | Call listeners under a lock |
+| `updateHostDisplay()`, `setLatencySamples()` | No | Call listeners under a lock |
+| `toString()`, `fromString()`, `convertToString()`, `convertFromString()` | No | Allocate strings |
+| State and preset methods | No | Allocate, and run on a host thread |
+
+To load a preset or change many parameters at once, call `setValue()` on each of them, from
+any thread and with audio running. Every write is one atomic store: the processor reads the
+new values at its next block, and editors are told through the `ParameterChangeQueue`, which
+merges repeated changes and never drops one. Then call
+`updateHostDisplay (ChangeDetails().withParameterValuesChanged (true))` from the message
+thread so the host reads the values again. The values do not change as one unit, so a block
+can run with only some of them updated: suspend the processor around the update when that
+matters. Do not use `context.params` for this. It has a fixed capacity, reserved by the
+wrapper for host automation, and events beyond it are dropped.
+
 ## Buses and layouts
 
 The bus layout is passed to the constructor and lists the input and output buses. Each
@@ -244,7 +268,23 @@ Presets are exposed through `getNumPresets()`, `getCurrentPreset()`, `setCurrent
 ## Latency, tail and change notifications
 
 Report latency with `setLatencySamples()`, which notifies the host when the value changes.
+
 Override `getTailSamples()` when the output rings on after the input stops (reverbs, delays).
+It returns the length of that tail in samples, not counting the latency: 0 for no tail, which
+is the default, and `infiniteTailSamples` when the output never ends, as with a frozen reverb.
+Hosts may call it from the audio thread, so return a constant or an atomic value, and call
+`updateHostDisplay (ChangeDetails().withTailChanged (true))` when it changes.
+
+```cpp
+int getTailSamples() override
+{
+    return frozen.load() ? infiniteTailSamples : decaySamples.load();
+}
+```
+
+Hosts use both values to drain a processor. After the last input they keep calling
+`processBlock` with silent input for `getLatencySamples() + getTailSamples()` samples.
+Silent input is a regular block, so keep rendering the tail from it.
 
 `updateHostDisplay()` tells hosts that something changed, using `ChangeDetails` flags:
 `withLatencyChanged`, `withTailChanged`, `withParameterValuesChanged`,

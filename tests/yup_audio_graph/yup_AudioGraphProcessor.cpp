@@ -356,6 +356,38 @@ private:
     std::atomic<int> latencySamples { 0 };
 };
 
+class TailProcessor : public TestProcessor
+{
+public:
+    explicit TailProcessor (int tailToUse)
+        : tailSamples (tailToUse)
+    {
+    }
+
+    int getTailSamples() override { return tailSamples.load(); }
+
+    void setTailSamplesForTest (int newTailSamples)
+    {
+        tailSamples.store (newTailSamples);
+        updateHostDisplay (ChangeDetails().withTailChanged (true));
+    }
+
+private:
+    std::atomic<int> tailSamples { 0 };
+};
+
+class TailChangeCounter : public AudioProcessorBase::Listener
+{
+public:
+    void audioProcessorChanged (AudioProcessorBase*, const AudioProcessorBase::ChangeDetails& details) override
+    {
+        if (details.tailChanged)
+            ++tailChanges;
+    }
+
+    int tailChanges = 0;
+};
+
 class StatefulGainProcessor : public AudioProcessor
 {
 public:
@@ -2766,6 +2798,87 @@ TEST (AudioGraphProcessorTests, PdcRecompileAfterRemovingLatencyPathClearsCompen
     graph.processBlock (ctx);
 
     EXPECT_FLOAT_EQ (1.0f, audio.getReadPointer (0)[0]);
+}
+
+TEST (AudioGraphProcessorTests, TailAccumulatesAlongSerialPath)
+{
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto first = model->addNode (std::make_unique<TailProcessor> (100));
+    const auto second = model->addNode (std::make_unique<TailProcessor> (50));
+
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (first, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (first, 0), AudioGraphEndpoint::nodeInput (second, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (second, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_EQ (0, graph.getTailSamples());
+
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+    EXPECT_EQ (150, graph.getTailSamples());
+
+    EXPECT_TRUE (model->removeNode (first));
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+    EXPECT_EQ (50, graph.getTailSamples());
+}
+
+TEST (AudioGraphProcessorTests, TailUsesLongestParallelPath)
+{
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto shortTail = model->addNode (std::make_unique<TailProcessor> (10));
+    const auto longTail = model->addNode (std::make_unique<TailProcessor> (300));
+    const auto unrouted = model->addNode (std::make_unique<TailProcessor> (1000));
+
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (shortTail, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (longTail, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (unrouted, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (shortTail, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (longTail, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+
+    EXPECT_EQ (300, graph.getTailSamples());
+}
+
+TEST (AudioGraphProcessorTests, InfiniteNodeTailMakesGraphTailInfinite)
+{
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    const auto frozen = model->addNode (std::make_unique<TailProcessor> (AudioProcessorBase::infiniteTailSamples));
+    const auto finite = model->addNode (std::make_unique<TailProcessor> (64));
+
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (frozen, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (frozen, 0), AudioGraphEndpoint::nodeInput (finite, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (finite, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+
+    EXPECT_EQ (AudioProcessorBase::infiniteTailSamples, graph.getTailSamples());
+}
+
+TEST (AudioGraphProcessorTests, NodeTailChangeUpdatesGraphTailAndNotifiesListeners)
+{
+    auto model = std::make_shared<AudioGraphModel>();
+    AudioGraphProcessor graph (model);
+    auto processor = std::make_unique<TailProcessor> (10);
+    auto* processorPtr = processor.get();
+    const auto node = model->addNode (std::move (processor));
+
+    TailChangeCounter listener;
+    graph.addListener (&listener);
+
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::graphInput (0), AudioGraphEndpoint::nodeInput (node, 0) }).wasOk());
+    EXPECT_TRUE (model->addConnection ({ AudioGraphEndpoint::nodeOutput (node, 0), AudioGraphEndpoint::graphOutput (0) }).wasOk());
+    EXPECT_TRUE (graph.commitChanges().wasOk());
+    EXPECT_EQ (10, graph.getTailSamples());
+    EXPECT_EQ (1, listener.tailChanges);
+
+    processorPtr->setTailSamplesForTest (40);
+    EXPECT_EQ (40, graph.getTailSamples());
+    EXPECT_EQ (2, listener.tailChanges);
+    EXPECT_FALSE (graph.hasUncommittedChanges());
+
+    processorPtr->setTailSamplesForTest (40);
+    EXPECT_EQ (2, listener.tailChanges);
+
+    graph.removeListener (&listener);
 }
 
 TEST (AudioGraphProcessorTests, WorkerThreadsProcessManyBlocksCorrectly)

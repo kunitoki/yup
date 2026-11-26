@@ -264,6 +264,29 @@ uint32_t packedFloatCompareSimdOp (YdspIrOp op) noexcept
     return 0;
 }
 
+uint32_t packedIntCompareSimdOp (YdspIrOp op) noexcept
+{
+    switch (op)
+    {
+        case YdspIrOp::eqI:
+            return YdspWasmEmitter::opI32x4Eq;
+        case YdspIrOp::neI:
+            return YdspWasmEmitter::opI32x4Ne;
+        case YdspIrOp::ltI:
+            return YdspWasmEmitter::opI32x4LtS;
+        case YdspIrOp::leI:
+            return YdspWasmEmitter::opI32x4LeS;
+        case YdspIrOp::gtI:
+            return YdspWasmEmitter::opI32x4GtS;
+        case YdspIrOp::geI:
+            return YdspWasmEmitter::opI32x4GeS;
+        default:
+            break;
+    }
+
+    return 0;
+}
+
 #endif
 
 // Round-toward-zero (used by the modF lowering; there is no IR op for it).
@@ -351,6 +374,22 @@ uint8_t intCompareOpcode (YdspIrOp op, bool is64) noexcept
     }
 
     return 0;
+}
+
+YdspIrOp flippedComparisonOp (YdspIrOp op) noexcept
+{
+    switch (op)
+    {
+        case YdspIrOp::ltF: return YdspIrOp::gtF;
+        case YdspIrOp::leF: return YdspIrOp::geF;
+        case YdspIrOp::gtF: return YdspIrOp::ltF;
+        case YdspIrOp::geF: return YdspIrOp::leF;
+        case YdspIrOp::ltI: return YdspIrOp::gtI;
+        case YdspIrOp::leI: return YdspIrOp::geI;
+        case YdspIrOp::gtI: return YdspIrOp::ltI;
+        case YdspIrOp::geI: return YdspIrOp::leI;
+        default:            return op;
+    }
 }
 
 // Conversion opcode for `dst = convert (src)`.
@@ -644,18 +683,76 @@ private:
                 return "v128.load";
             case YdspWasmEmitter::opV128Store:
                 return "v128.store";
+            case YdspWasmEmitter::opV128Const:
+                return "v128.const";
             case YdspWasmEmitter::opI8x16Shuffle:
                 return "i8x16.shuffle";
+            case YdspWasmEmitter::opI32x4Splat:
+                return "i32x4.splat";
             case YdspWasmEmitter::opF32x4Splat:
                 return "f32x4.splat";
+            case YdspWasmEmitter::opI32x4ExtractLane:
+                return "i32x4.extract_lane";
+            case YdspWasmEmitter::opI32x4ReplaceLane:
+                return "i32x4.replace_lane";
             case YdspWasmEmitter::opF32x4ExtractLane:
                 return "f32x4.extract_lane";
+            case YdspWasmEmitter::opF32x4ReplaceLane:
+                return "f32x4.replace_lane";
             case YdspWasmEmitter::opF32x4Ceil:
                 return "f32x4.ceil";
             case YdspWasmEmitter::opF32x4Floor:
                 return "f32x4.floor";
             case YdspWasmEmitter::opF32x4Nearest:
                 return "f32x4.nearest";
+            case YdspWasmEmitter::opI32x4Eq:
+                return "i32x4.eq";
+            case YdspWasmEmitter::opI32x4Ne:
+                return "i32x4.ne";
+            case YdspWasmEmitter::opI32x4LtS:
+                return "i32x4.lt_s";
+            case YdspWasmEmitter::opI32x4GtS:
+                return "i32x4.gt_s";
+            case YdspWasmEmitter::opI32x4LeS:
+                return "i32x4.le_s";
+            case YdspWasmEmitter::opI32x4GeS:
+                return "i32x4.ge_s";
+            case YdspWasmEmitter::opV128Not:
+                return "v128.not";
+            case YdspWasmEmitter::opV128And:
+                return "v128.and";
+            case YdspWasmEmitter::opV128Andnot:
+                return "v128.andnot";
+            case YdspWasmEmitter::opV128Or:
+                return "v128.or";
+            case YdspWasmEmitter::opV128Xor:
+                return "v128.xor";
+            case YdspWasmEmitter::opI32x4Abs:
+                return "i32x4.abs";
+            case YdspWasmEmitter::opI32x4Neg:
+                return "i32x4.neg";
+            case YdspWasmEmitter::opI32x4Shl:
+                return "i32x4.shl";
+            case YdspWasmEmitter::opI32x4ShrS:
+                return "i32x4.shr_s";
+            case YdspWasmEmitter::opI32x4Add:
+                return "i32x4.add";
+            case YdspWasmEmitter::opI32x4Sub:
+                return "i32x4.sub";
+            case YdspWasmEmitter::opI32x4Mul:
+                return "i32x4.mul";
+            case YdspWasmEmitter::opI32x4MinS:
+                return "i32x4.min_s";
+            case YdspWasmEmitter::opI32x4MaxS:
+                return "i32x4.max_s";
+            case YdspWasmEmitter::opI64x2ExtmulLowI32x4S:
+                return "i64x2.extmul_low_i32x4_s";
+            case YdspWasmEmitter::opI64x2ExtmulHighI32x4S:
+                return "i64x2.extmul_high_i32x4_s";
+            case YdspWasmEmitter::opI32x4TruncSatF32x4S:
+                return "i32x4.trunc_sat_f32x4_s";
+            case YdspWasmEmitter::opF32x4ConvertI32x4S:
+                return "f32x4.convert_i32x4_s";
             case YdspWasmEmitter::opF32x4Abs:
                 return "f32x4.abs";
             case YdspWasmEmitter::opF32x4Neg:
@@ -1037,6 +1134,18 @@ private:
                             break;
                         }
 
+                        case YdspWasmEmitter::opV128Const:
+                        {
+                            uint32_t words[4] = {};
+
+                            for (int w = 0; w < 4; ++w)
+                                for (int b = 0; b < 4; ++b)
+                                    words[w] |= static_cast<uint32_t> (readByte (p)) << (b * 8);
+
+                            line += " i32x4 " + hex (words[0], 8) + " " + hex (words[1], 8) + " " + hex (words[2], 8) + " " + hex (words[3], 8);
+                            break;
+                        }
+
                         case YdspWasmEmitter::opI8x16Shuffle:
                             line += " [" + String (static_cast<int> (readByte (p)));
 
@@ -1046,7 +1155,10 @@ private:
                             line += "]";
                             break;
 
+                        case YdspWasmEmitter::opI32x4ExtractLane:
+                        case YdspWasmEmitter::opI32x4ReplaceLane:
                         case YdspWasmEmitter::opF32x4ExtractLane:
+                        case YdspWasmEmitter::opF32x4ReplaceLane:
                             line += " " + String (static_cast<int> (readByte (p)));
                             break;
 
@@ -1234,6 +1346,8 @@ private:
                 return "i64.shl";
             case 0x87:
                 return "i64.shr_s";
+            case 0x88:
+                return "i64.shr_u";
             case 0x8B:
                 return "f32.abs";
             case 0x8C:
@@ -1298,6 +1412,8 @@ private:
                 return "i32.trunc_f64_s";
             case 0xAC:
                 return "i64.extend_i32_s";
+            case 0xAD:
+                return "i64.extend_i32_u";
             case 0xAE:
                 return "i64.trunc_f32_s";
             case 0xB0:
@@ -1314,6 +1430,10 @@ private:
                 return "f64.convert_i64_s";
             case 0xBB:
                 return "f64.promote_f32";
+            case 0xBC:
+                return "i32.reinterpret_f32";
+            case 0xBE:
+                return "f32.reinterpret_i32";
             default:
                 return hex (opcode, 2);
         }
@@ -1443,6 +1563,7 @@ public:
 
         emitter.beginBody();
         declareValueLocals();
+        emitPrologue();
         emitBlocks (0, static_cast<int> (fn.blocks.size()));
 
         if (! labels.empty())
@@ -1464,11 +1585,46 @@ private:
     //==============================================================================
     // Analysis: value types, max value id, and the used libm imports.
 
+    struct UsageStats
+    {
+        int count = 0;
+        bool inLoop = false;
+
+        void record (bool insideLoop) noexcept
+        {
+            ++count;
+            inLoop = inLoop || insideLoop;
+        }
+
+        bool shouldHoist() const noexcept
+        {
+            return inLoop || count >= 2;
+        }
+    };
+
     bool analyze (const YdspIrFunction& fn)
     {
         int maxResult = -1;
 
-        for (const auto& block : fn.blocks)
+        std::vector<bool> blockInLoop (fn.blocks.size(), false);
+
+        for (const auto& loop : fn.loops)
+        {
+            if (loop.unrolled)
+                continue;
+
+            const int startBlock = std::max (0, loop.headerBlock);
+            const int endBlock = std::min (static_cast<int> (fn.blocks.size()), loop.exitBlock);
+
+            for (int b = startBlock; b < endBlock; ++b)
+                blockInLoop[static_cast<size_t> (b)] = true;
+        }
+
+        for (size_t b = 0; b < fn.blocks.size(); ++b)
+        {
+            const auto& block = fn.blocks[b];
+            const bool inLoop = blockInLoop[b];
+
             for (const auto& inst : block.insts)
             {
                 if (inst.result > maxResult)
@@ -1480,9 +1636,72 @@ private:
                 if (inst.op == YdspIrOp::emitEvent)
                     usesEmitEvent = true;
 
+                switch (inst.op)
+                {
+                    case YdspIrOp::loadStateF:
+                    case YdspIrOp::loadStateI:
+                    case YdspIrOp::storeStateF:
+                    case YdspIrOp::storeStateI:
+                        stateUsage.record (inLoop);
+                        break;
+
+                    case YdspIrOp::loadStateArrayF:
+                    case YdspIrOp::loadStateArrayI:
+                    case YdspIrOp::storeStateArrayF:
+                    case YdspIrOp::storeStateArrayI:
+                        stateArraysUsage.record (inLoop);
+                        break;
+
+                    case YdspIrOp::loadParam:
+                    case YdspIrOp::storeParam:
+                        paramsUsage.record (inLoop);
+                        break;
+
+                    case YdspIrOp::loadParamOut:
+                    case YdspIrOp::storeParamOut:
+                        paramOutUsage.record (inLoop);
+                        break;
+
+                    case YdspIrOp::storeEventFieldF:
+                    case YdspIrOp::storeEventFieldI:
+                    case YdspIrOp::emitEvent:
+                        outputEventsUsage.record (inLoop);
+                        break;
+
+                    case YdspIrOp::traceInt:
+                    case YdspIrOp::traceFloat:
+                    case YdspIrOp::traceCommit:
+                        traceQueueUsage.record (inLoop);
+                        break;
+
+                    case YdspIrOp::loadSampleRate:
+                        sampleRateUsage.record (inLoop);
+                        break;
+
+                    case YdspIrOp::loadBlockSize:
+                        numSamplesUsage.record (inLoop);
+                        break;
+
+                    case YdspIrOp::loadInput:
+                    case YdspIrOp::loadInputAddress:
+                        if (inst.memIndex >= 0)
+                            inputStreamUsage[inst.memIndex].record (inLoop);
+                        break;
+
+                    case YdspIrOp::loadOutput:
+                    case YdspIrOp::storeOutput:
+                    case YdspIrOp::loadOutputAddress:
+                        if (inst.memIndex >= 0)
+                            outputStreamUsage[inst.memIndex].record (inLoop);
+                        break;
+
+                    default:
+                        break;
+                }
+
 #if defined(__wasm_simd128__)
-                if (inst.op == YdspIrOp::vreduceAddF)
-                    usesVreduce = true;
+                if (inst.op == YdspIrOp::vreduceAddF || fn.laneCountOf (inst.result) > 1)
+                    usesSimdScratch = true;
 #endif
 
                 if (isLibmOp (inst.op))
@@ -1500,11 +1719,45 @@ private:
                     }
                 }
             }
+        }
 
         if (maxResult < 0)
             return true; // no values; a valid (empty) kernel
 
         valueTypes = resolveValueTypes (fn);
+        valueUses.assign (valueTypes.size(), 0);
+
+        const auto countUse = [this] (int valueId)
+        {
+            if (valueId >= 0 && static_cast<size_t> (valueId) < valueUses.size())
+                ++valueUses[static_cast<size_t> (valueId)];
+        };
+
+        for (const auto& block : fn.blocks)
+        {
+            for (const auto& inst : block.insts)
+            {
+                if (inst.op == YdspIrOp::phi)
+                {
+                    for (const auto& [predBlock, valueId] : inst.phiIncoming)
+                    {
+                        (void) predBlock;
+                        countUse (valueId);
+                    }
+
+                    continue;
+                }
+
+                if (! ydspFirstOperandIsSlot (inst.op))
+                    countUse (inst.a);
+
+                countUse (inst.b);
+                countUse (inst.c);
+            }
+
+            if (block.term == YdspIrTerm::branchIf)
+                countUse (block.termCond);
+        }
 
         return true;
     }
@@ -1570,12 +1823,119 @@ private:
             i += count;
         }
 
+        uint32_t nextLocal = static_cast<uint32_t> (valueTypes.size()) + 1u;
+
 #if defined(__wasm_simd128__)
-        // One scratch v128 local for the horizontal-reduction fold, parked
-        // right after the value locals (index valueTypes.size() + 1).
-        if (usesVreduce)
-            emitter.declareLocals (1, ValType::v128);
+        // Scratch v128 locals for SIMD reductions and widened integer ops.
+        if (usesSimdScratch)
+        {
+            simdScratchBase = nextLocal;
+            emitter.declareLocals (4, ValType::v128);
+            nextLocal += 4u;
+        }
 #endif
+
+        uint32_t hoistedI32Count = 0;
+        const auto allocI32Local = [&] () -> int
+        {
+            ++hoistedI32Count;
+            return static_cast<int> (nextLocal++);
+        };
+
+        if (stateUsage.shouldHoist())
+            stateBaseLocal = allocI32Local();
+        if (stateArraysUsage.shouldHoist())
+            stateArraysBaseLocal = allocI32Local();
+        if (paramsUsage.shouldHoist())
+            paramsBaseLocal = allocI32Local();
+        if (paramOutUsage.shouldHoist())
+            paramOutBaseLocal = allocI32Local();
+        if (outputEventsUsage.shouldHoist())
+            outputEventsBaseLocal = allocI32Local();
+        if (traceQueueUsage.shouldHoist())
+            traceQueueBaseLocal = allocI32Local();
+        if (numSamplesUsage.shouldHoist())
+            numSamplesLocal = allocI32Local();
+
+        for (const auto& [memIndex, stats] : inputStreamUsage)
+            if (stats.shouldHoist())
+                inStreamLocals[memIndex] = allocI32Local();
+
+        for (const auto& [memIndex, stats] : outputStreamUsage)
+            if (stats.shouldHoist())
+                outStreamLocals[memIndex] = allocI32Local();
+
+        if (hoistedI32Count > 0)
+            emitter.declareLocals (hoistedI32Count, ValType::i32);
+
+        if (sampleRateUsage.shouldHoist())
+        {
+            sampleRateLocal = static_cast<int> (nextLocal++);
+            emitter.declareLocals (1, ValType::f32);
+        }
+    }
+
+    void emitStreamTableHoist (int tableFieldOffset, const std::map<int, int>& streamLocals)
+    {
+        if (streamLocals.empty())
+            return;
+
+        pushCtxLoad (tableFieldOffset, YdspValueType::int32Type);
+
+        if (streamLocals.size() == 1)
+        {
+            const auto& [memIndex, localIdx] = *streamLocals.begin();
+            emitter.load (YdspWasmEmitter::opI32Load, 2, static_cast<uint32_t> (memIndex * 4));
+            emitter.localSet (static_cast<uint32_t> (localIdx));
+            return;
+        }
+
+        // Reuse the last stream's local to hold the pointer table during
+        // prologue initialization; local.tee leaves the table pointer on the
+        // stack for the first stream load.
+        const auto tableLocal = static_cast<uint32_t> (streamLocals.rbegin()->second);
+        emitter.localTee (tableLocal);
+
+        size_t index = 0;
+
+        for (const auto& [memIndex, localIdx] : streamLocals)
+        {
+            if (index > 0)
+                emitter.localGet (tableLocal);
+
+            emitter.load (YdspWasmEmitter::opI32Load, 2, static_cast<uint32_t> (memIndex * 4));
+            emitter.localSet (static_cast<uint32_t> (localIdx));
+            ++index;
+        }
+    }
+
+    void emitPrologue()
+    {
+        const auto hoistI32Field = [this] (int localIdx, int fieldOff)
+        {
+            if (localIdx < 0)
+                return;
+
+            pushCtxLoad (fieldOff, YdspValueType::int32Type);
+            emitter.localSet (static_cast<uint32_t> (localIdx));
+        };
+
+        hoistI32Field (stateBaseLocal, stateOff);
+        hoistI32Field (stateArraysBaseLocal, stateArraysOff);
+        hoistI32Field (paramsBaseLocal, paramsOff);
+        hoistI32Field (paramOutBaseLocal, kernelParamOutOff);
+        hoistI32Field (outputEventsBaseLocal, outputEventsOff);
+        hoistI32Field (traceQueueBaseLocal, traceQueueOff);
+        hoistI32Field (numSamplesLocal, kernelNumSamplesOff);
+
+        if (sampleRateLocal >= 0)
+        {
+            pushCtxLoad (sampleRateOff, YdspValueType::float32Type);
+            emitter.localSet (static_cast<uint32_t> (sampleRateLocal));
+        }
+
+        emitStreamTableHoist (kernelInputsOff, inStreamLocals);
+        emitStreamTableHoist (kernelOutputsOff, outStreamLocals);
     }
 
     uint32_t localIndex (int valueId) const
@@ -1585,12 +1945,17 @@ private:
 
     void pushValue (int valueId)
     {
-        emitter.localGet (localIndex (valueId));
-    }
+        if (pendingCount > 0 && pendingOnStack[0] == valueId)
+        {
+            if (pendingCount == 2)
+                pendingOnStack[0] = pendingOnStack[1];
 
-    void setValue (int valueId)
-    {
-        emitter.localSet (localIndex (valueId));
+            --pendingCount;
+            return;
+        }
+
+        jassert (pendingCount == 0);
+        emitter.localGet (localIndex (valueId));
     }
 
     void pushCtxLoad (int fieldOffset, YdspValueType fieldType)
@@ -1599,24 +1964,87 @@ private:
         emitter.load (loadOpcode (fieldType), scaleLog2 (fieldType), static_cast<uint32_t> (fieldOffset));
     }
 
-    // Pushes the effective address = ctxField(baseFieldOffset) + byteOffset.
-    void pushAddress (int baseFieldOffset, int byteOffset)
+    void pushBasePointer (int baseFieldOffset, int hoistedLocal)
     {
-        pushCtxLoad (baseFieldOffset, YdspValueType::int32Type);
-        emitter.i32Const (byteOffset);
-        emitter.op (YdspWasmEmitter::opI32Add);
+        if (hoistedLocal >= 0)
+            emitter.localGet (static_cast<uint32_t> (hoistedLocal));
+        else
+            pushCtxLoad (baseFieldOffset, YdspValueType::int32Type);
     }
 
-    // Pushes the effective address = ctxField(baseFieldOffset) + arrayBaseOffset
-    // + (indexValueId << scaleLog2(elementType)).
-    void pushIndexedAddress (int baseFieldOffset, int arrayBaseOffset, int indexValueId, YdspValueType elementType)
+    void pushStreamBase (bool isInput, int memIndex)
     {
-        pushCtxLoad (baseFieldOffset, YdspValueType::int32Type);
-        emitter.i32Const (arrayBaseOffset);
+        const auto& locals = isInput ? inStreamLocals : outStreamLocals;
+
+        if (const auto it = locals.find (memIndex); it != locals.end())
+        {
+            emitter.localGet (static_cast<uint32_t> (it->second));
+            return;
+        }
+
+        pushCtxLoad (isInput ? kernelInputsOff : kernelOutputsOff, YdspValueType::int32Type);
+
+        if (memIndex >= 0)
+        {
+            emitter.load (YdspWasmEmitter::opI32Load, 2, static_cast<uint32_t> (memIndex * 4));
+        }
+        else
+        {
+            emitter.i32Const (memIndex * 4);
+            emitter.op (YdspWasmEmitter::opI32Add);
+            emitter.load (YdspWasmEmitter::opI32Load, 2, 0);
+        }
+    }
+
+    void emitLoadAtOffset (int baseFieldOffset, int hoistedLocal, int byteOffset, YdspValueType type)
+    {
+        pushBasePointer (baseFieldOffset, hoistedLocal);
+
+        if (byteOffset >= 0)
+        {
+            emitter.load (loadOpcode (type), scaleLog2 (type), static_cast<uint32_t> (byteOffset));
+            return;
+        }
+
+        emitter.i32Const (byteOffset);
         emitter.op (YdspWasmEmitter::opI32Add);
+        emitter.load (loadOpcode (type), scaleLog2 (type), 0);
+    }
+
+    void emitStoreAtOffset (int baseFieldOffset, int hoistedLocal, int byteOffset, int valueId, YdspValueType type)
+    {
+        pushBasePointer (baseFieldOffset, hoistedLocal);
+
+        if (byteOffset >= 0)
+        {
+            pushValue (valueId);
+            emitter.store (storeOpcode (type), scaleLog2 (type), static_cast<uint32_t> (byteOffset));
+            return;
+        }
+
+        emitter.i32Const (byteOffset);
+        emitter.op (YdspWasmEmitter::opI32Add);
+        pushValue (valueId);
+        emitter.store (storeOpcode (type), scaleLog2 (type), 0);
+    }
+
+    // Pushes the effective address = (indexValueId << scaleLog2(elementType)) + basePtr.
+    // Pushing index first lets single-use index values flow directly from the stack.
+    void pushIndexedBaseAddress (int baseFieldOffset, int hoistedLocal, int indexValueId, YdspValueType elementType)
+    {
         pushValue (indexValueId);
         emitter.i32Const (static_cast<int32_t> (scaleLog2 (elementType)));
         emitter.op (YdspWasmEmitter::opI32Shl);
+        pushBasePointer (baseFieldOffset, hoistedLocal);
+        emitter.op (YdspWasmEmitter::opI32Add);
+    }
+
+    void pushStreamIndexedAddress (bool isInput, int memIndex, int indexValueId, YdspValueType elementType)
+    {
+        pushValue (indexValueId);
+        emitter.i32Const (static_cast<int32_t> (scaleLog2 (elementType)));
+        emitter.op (YdspWasmEmitter::opI32Shl);
+        pushStreamBase (isInput, memIndex);
         emitter.op (YdspWasmEmitter::opI32Add);
     }
 
@@ -1730,7 +2158,7 @@ private:
                 continue;
             }
 
-            emitInstructions (block);
+            emitInstructions (block, false);
 
             switch (block.term)
             {
@@ -1745,7 +2173,7 @@ private:
                 case YdspIrTerm::branchIf:
                 {
                     // A conditional branch that is neither a loop header nor
-                    // an if/else cond (then == block + 1) — the IR is not
+                    // an if/else cond (then == block + 1) - the IR is not
                     // structured as expected.
                     String message = "Wasm codegen: unexpected conditional branch in the IR control flow (block " + String (i) + ": target="
                                    + String (block.termTarget) + ", target2=" + String (block.termTarget2) + ")";
@@ -1769,14 +2197,17 @@ private:
         const int headerLabel = pushLabel (Label::loop, headerIndex);
         emitter.loop();
 
-        emitInstructions (header);
-
         // Header terminator: branchIf(cond, body, exit) -> br_if exit. The
         // body immediately follows the header, so a false condition exits;
         // br_if branches on nonzero, so invert the condition first.
-        if (header.term == YdspIrTerm::branchIf && header.termTarget == headerIndex + 1)
+        const bool condValid = header.term == YdspIrTerm::branchIf && header.termTarget == headerIndex + 1;
+        const bool condOnStack = emitInstructions (header, condValid);
+
+        if (condValid)
         {
-            pushValue (header.termCond);
+            if (! condOnStack && header.termCond >= 0)
+                emitter.localGet (localIndex (header.termCond));
+
             emitter.op (YdspWasmEmitter::opI32Eqz);
             emitter.brIf (depthOf (exitLabel));
         }
@@ -1826,9 +2257,11 @@ private:
         const int joinLabel = pushLabel (Label::block, join);
         emitter.block();
 
-        emitInstructions (cond);
+        const bool condOnStack = emitInstructions (cond, cond.termCond >= 0);
 
-        pushValue (cond.termCond);
+        if (! condOnStack && cond.termCond >= 0)
+            emitter.localGet (localIndex (cond.termCond));
+
         emitter.if_();
 
         const int ifLabel = pushLabel (Label::if_, -1);
@@ -1851,76 +2284,464 @@ private:
     }
 
     //==============================================================================
-    // Instruction lowering
+    // Stack-top / local.tee planning and instruction lowering
 
-    void emitInstructions (const YdspIrBlock& block)
+    enum class EmitAction : uint8_t
     {
-        for (const auto& inst : block.insts)
-            emitInstruction (inst);
+        none,
+        localSet,
+        localTee,
+        drop
+    };
+
+    struct InstEmitPlan
+    {
+        EmitAction action = EmitAction::none;
+        bool swapOperands = false;
+        int consumedFromStack = 0; // 0, 1, or 2
+    };
+
+    struct OperandSpec
+    {
+        int first = -1;
+        int second = -1;
+        bool swappable = false;
+        bool multiReadFirst = false;
+        bool multiReadSecond = false;
+    };
+
+    OperandSpec describeOperands (const YdspIrInst& inst) const
+    {
+        const bool simd = fn->laneCountOf (inst.result) > 1;
+
+        switch (inst.op)
+        {
+            case YdspIrOp::loadStateArrayF:
+            case YdspIrOp::loadStateArrayI:
+            case YdspIrOp::loadInput:
+            case YdspIrOp::loadOutput:
+            case YdspIrOp::storeOutput:
+            case YdspIrOp::negF:
+            case YdspIrOp::absF:
+            case YdspIrOp::sqrtF:
+            case YdspIrOp::floorF:
+            case YdspIrOp::ceilF:
+            case YdspIrOp::rintF:
+            case YdspIrOp::itof:
+            case YdspIrOp::ftoi:
+            case YdspIrOp::extI:
+            case YdspIrOp::truncI:
+            case YdspIrOp::extF:
+            case YdspIrOp::truncF:
+            case YdspIrOp::bitcastFtoI:
+            case YdspIrOp::bitcastItoF:
+            case YdspIrOp::notB:
+            case YdspIrOp::movF:
+            case YdspIrOp::movI:
+            case YdspIrOp::movB:
+            case YdspIrOp::vsplat:
+            case YdspIrOp::vreduceAddF:
+            case YdspIrOp::vextractF:
+            case YdspIrOp::advanceWrapI:
+                return { inst.a, -1, false, false, false };
+
+            case YdspIrOp::vinsertF:
+                if (inst.a >= 0)
+                    return { inst.a, inst.b, false, false, false };
+
+                return {};
+
+            case YdspIrOp::wrapI:
+                if (inst.result != inst.b)
+                    return { inst.a, -1, false, false, false };
+
+                return {};
+
+            case YdspIrOp::negI:
+            case YdspIrOp::absI:
+                if (simd)
+                    return { inst.a, -1, false, false, false };
+
+                return { inst.a, -1, false, true, false };
+
+            case YdspIrOp::signF:
+                return { inst.a, -1, false, true, false };
+
+            case YdspIrOp::divI:
+            case YdspIrOp::modI:
+                return { inst.b, -1, false, true, false };
+
+            case YdspIrOp::addF:
+            case YdspIrOp::mulF:
+            case YdspIrOp::minF:
+            case YdspIrOp::maxF:
+            case YdspIrOp::andI:
+            case YdspIrOp::orI:
+            case YdspIrOp::xorI:
+            case YdspIrOp::andB:
+            case YdspIrOp::orB:
+            case YdspIrOp::eqF:
+            case YdspIrOp::neF:
+            case YdspIrOp::eqI:
+            case YdspIrOp::neI:
+            case YdspIrOp::ltF:
+            case YdspIrOp::leF:
+            case YdspIrOp::gtF:
+            case YdspIrOp::geF:
+            case YdspIrOp::ltI:
+            case YdspIrOp::leI:
+            case YdspIrOp::gtI:
+            case YdspIrOp::geI:
+                return { inst.a, inst.b, true, false, false };
+
+            case YdspIrOp::subF:
+            case YdspIrOp::divF:
+            case YdspIrOp::ltUI:
+            case YdspIrOp::clampF:
+            case YdspIrOp::powF:
+            case YdspIrOp::atan2F:
+            case YdspIrOp::fmodF:
+            case YdspIrOp::copysignF:
+                return { inst.a, inst.b, false, false, false };
+
+            case YdspIrOp::addI:
+            case YdspIrOp::subI:
+            case YdspIrOp::mulI:
+                if (! inst.saturatingIntegerArithmetic)
+                    return { inst.a, inst.b, inst.op != YdspIrOp::subI, false, false };
+
+                if (simd)
+                    return { inst.a, -1, false, false, false };
+
+                if (inst.op == YdspIrOp::mulI)
+                    return { inst.b, -1, false, true, false };
+
+                return {};
+
+            case YdspIrOp::shlI:
+            case YdspIrOp::shrI:
+                if (simd && fn->laneCountOf (inst.b) > 1)
+                    return { inst.a, -1, false, false, false };
+
+                return { inst.a, inst.b, false, false, false };
+
+            case YdspIrOp::minI:
+            case YdspIrOp::maxI:
+                if (simd)
+                    return { inst.a, inst.b, true, false, false };
+
+                return { inst.a, inst.b, true, true, true };
+
+            case YdspIrOp::clampI:
+                if (simd)
+                    return { inst.a, inst.b, false, false, false };
+
+                return { inst.a, inst.b, false, true, true };
+
+            case YdspIrOp::modF:
+                return { inst.a, inst.b, false, true, true };
+
+            case YdspIrOp::lerpF:
+                return { inst.b, inst.a, false, false, true };
+
+            case YdspIrOp::selectB:
+                return { inst.b, inst.c, false, false, false };
+
+            default:
+                if (isLibmOp (inst.op) && ! isLibmBinaryOp (inst.op))
+                    return { inst.a, -1, false, false, false };
+
+                return {};
+        }
     }
 
-    void emitInstruction (const YdspIrInst& inst)
+    bool planBlock (const YdspIrBlock& block, bool canForwardTermCond, std::vector<InstEmitPlan>& plans) const
+    {
+        struct StackEntry
+        {
+            int valueId = -1;
+            int producerIndex = -1;
+            bool needsLocalWrite = false;
+        };
+
+        plans.assign (block.insts.size(), {});
+        std::vector<StackEntry> simStack;
+
+        const auto spillEntry = [&] (size_t idx)
+        {
+            const auto entry = simStack[idx];
+            const bool unused = entry.valueId >= 0
+                             && static_cast<size_t> (entry.valueId) < valueUses.size()
+                             && valueUses[static_cast<size_t> (entry.valueId)] == 0;
+            plans[static_cast<size_t> (entry.producerIndex)].action = (! entry.needsLocalWrite && unused)
+                                                                    ? EmitAction::drop
+                                                                    : EmitAction::localSet;
+            simStack.erase (simStack.begin() + static_cast<ptrdiff_t> (idx));
+        };
+
+        const auto requireInLocal = [&] (int valueId)
+        {
+            if (valueId < 0)
+                return;
+
+            for (size_t idx = 0; idx < simStack.size(); ++idx)
+            {
+                if (simStack[idx].valueId == valueId)
+                {
+                    simStack[idx].needsLocalWrite = true;
+
+                    if (static_cast<size_t> (valueId) < valueUses.size() && valueUses[static_cast<size_t> (valueId)] <= 1)
+                        spillEntry (idx);
+
+                    break;
+                }
+            }
+        };
+
+        for (size_t k = 0; k < block.insts.size(); ++k)
+        {
+            const auto& inst = block.insts[k];
+            auto& plan = plans[k];
+            const auto spec = describeOperands (inst);
+
+            if (spec.second >= 0 && simStack.size() >= 2)
+            {
+                const size_t sz = simStack.size();
+
+                if (simStack[sz - 2].valueId == spec.first && simStack[sz - 1].valueId == spec.second)
+                {
+                    plan.consumedFromStack = 2;
+                }
+                else if (spec.swappable && simStack[sz - 2].valueId == spec.second && simStack[sz - 1].valueId == spec.first)
+                {
+                    plan.swapOperands = true;
+                    plan.consumedFromStack = 2;
+                }
+            }
+
+            if (plan.consumedFromStack == 0 && spec.first >= 0 && ! simStack.empty())
+            {
+                if (simStack.back().valueId == spec.first)
+                {
+                    plan.consumedFromStack = 1;
+                }
+                else if (spec.second >= 0 && spec.swappable && simStack.back().valueId == spec.second)
+                {
+                    plan.swapOperands = true;
+                    plan.consumedFromStack = 1;
+                }
+            }
+
+            int consumedOp0 = -1;
+            int consumedOp1 = -1;
+
+            if (plan.consumedFromStack == 2)
+            {
+                auto secondEntry = simStack.back();
+                simStack.pop_back();
+                auto firstEntry = simStack.back();
+                simStack.pop_back();
+
+                const bool firstNeedsWrite = firstEntry.needsLocalWrite || (plan.swapOperands ? spec.multiReadSecond : spec.multiReadFirst);
+                const bool secondNeedsWrite = secondEntry.needsLocalWrite || (plan.swapOperands ? spec.multiReadFirst : spec.multiReadSecond);
+
+                plans[static_cast<size_t> (firstEntry.producerIndex)].action = firstNeedsWrite ? EmitAction::localTee : EmitAction::none;
+                plans[static_cast<size_t> (secondEntry.producerIndex)].action = secondNeedsWrite ? EmitAction::localTee : EmitAction::none;
+
+                consumedOp0 = spec.first;
+                consumedOp1 = spec.second;
+            }
+            else if (plan.consumedFromStack == 1)
+            {
+                auto topEntry = simStack.back();
+                simStack.pop_back();
+
+                const bool topNeedsWrite = topEntry.needsLocalWrite || (plan.swapOperands ? spec.multiReadSecond : spec.multiReadFirst);
+                plans[static_cast<size_t> (topEntry.producerIndex)].action = topNeedsWrite ? EmitAction::localTee : EmitAction::none;
+
+                consumedOp0 = plan.swapOperands ? spec.second : spec.first;
+            }
+
+            const int operandFields[3] = {
+                ydspFirstOperandIsSlot (inst.op) ? -1 : inst.a,
+                inst.b,
+                inst.c
+            };
+
+            for (const int operandId : operandFields)
+            {
+                if (operandId < 0)
+                    continue;
+
+                if (operandId == consumedOp0)
+                {
+                    consumedOp0 = -1;
+                    continue;
+                }
+
+                if (operandId == consumedOp1)
+                {
+                    consumedOp1 = -1;
+                    continue;
+                }
+
+                requireInLocal (operandId);
+            }
+
+            if (inst.result >= 0)
+            {
+                // Non-SSA redefinition invalidates any prior unconsumed value
+                // with the same id on the simulated stack.
+                for (size_t idx = simStack.size(); idx > 0; --idx)
+                    if (simStack[idx - 1].valueId == inst.result)
+                        spillEntry (idx - 1);
+
+                constexpr size_t maxSimulatedStackDepth = 16;
+
+                if (simStack.size() >= maxSimulatedStackDepth)
+                    spillEntry (0);
+
+                const bool multiUse = static_cast<size_t> (inst.result) < valueUses.size()
+                                   && valueUses[static_cast<size_t> (inst.result)] > 1;
+                simStack.push_back ({ inst.result, static_cast<int> (k), multiUse });
+            }
+        }
+
+        bool termCondOnStack = false;
+
+        if (canForwardTermCond && block.termCond >= 0 && ! simStack.empty() && simStack.back().valueId == block.termCond)
+        {
+            const auto topEntry = simStack.back();
+            simStack.pop_back();
+            plans[static_cast<size_t> (topEntry.producerIndex)].action = topEntry.needsLocalWrite ? EmitAction::localTee : EmitAction::none;
+            termCondOnStack = true;
+        }
+
+        while (! simStack.empty())
+            spillEntry (simStack.size() - 1);
+
+        return termCondOnStack;
+    }
+
+    void beginInstruction (const YdspIrInst& inst, const InstEmitPlan& plan)
+    {
+        if (plan.consumedFromStack == 0)
+        {
+            pendingCount = 0;
+            return;
+        }
+
+        const auto spec = describeOperands (inst);
+
+        if (plan.consumedFromStack == 2)
+        {
+            pendingOnStack[0] = plan.swapOperands ? spec.second : spec.first;
+            pendingOnStack[1] = plan.swapOperands ? spec.first : spec.second;
+            pendingCount = 2;
+        }
+        else
+        {
+            pendingOnStack[0] = plan.swapOperands ? spec.second : spec.first;
+            pendingCount = 1;
+        }
+    }
+
+    void finishInstructionResult (int valueId, EmitAction action)
+    {
+        switch (action)
+        {
+            case EmitAction::none:
+                break;
+
+            case EmitAction::localSet:
+                emitter.localSet (localIndex (valueId));
+                break;
+
+            case EmitAction::localTee:
+                emitter.localTee (localIndex (valueId));
+                break;
+
+            case EmitAction::drop:
+                emitter.op (YdspWasmEmitter::opDrop);
+                break;
+        }
+    }
+
+    bool emitInstructions (const YdspIrBlock& block, bool canForwardTermCond)
+    {
+        std::vector<InstEmitPlan> plans;
+        const bool termCondOnStack = planBlock (block, canForwardTermCond, plans);
+
+        for (size_t k = 0; k < block.insts.size(); ++k)
+        {
+            const auto& inst = block.insts[k];
+            const auto& plan = plans[k];
+
+            if (isMoveOpcode (inst.op) && inst.result == inst.a
+                && plan.consumedFromStack == 0 && plan.action == EmitAction::localSet)
+                continue;
+
+            beginInstruction (inst, plan);
+            const bool ok = emitInstruction (inst, plan);
+            jassert (pendingCount == 0);
+
+            if (ok && inst.result >= 0)
+                finishInstructionResult (inst.result, plan.action);
+        }
+
+        return termCondOnStack;
+    }
+
+    bool emitInstruction (const YdspIrInst& inst, const InstEmitPlan& plan)
     {
         switch (inst.op)
         {
             // ---- constants ----
             case YdspIrOp::constF:
-            {
-                const auto type = valueType (inst.result);
-                loadFloatConst (inst.fvalue, type);
-                setValue (inst.result);
-                return;
-            }
+                loadFloatConst (inst.fvalue, valueType (inst.result));
+                return true;
 
             case YdspIrOp::constI:
-            {
                 if (valueType (inst.result) == YdspValueType::int64Type)
                     emitter.i64Const (inst.ivalue);
                 else
                     emitter.i32Const (static_cast<int32_t> (inst.ivalue));
-
-                setValue (inst.result);
-                return;
-            }
+                return true;
 
             case YdspIrOp::constB:
                 emitter.i32Const (inst.bvalue ? 1 : 0);
-                setValue (inst.result);
-                return;
+                return true;
 
             // ---- runtime values ----
             case YdspIrOp::loadBlockSize:
-                pushCtxLoad (kernelNumSamplesOff, YdspValueType::int32Type);
-                setValue (inst.result);
-                return;
+                if (numSamplesLocal >= 0)
+                    emitter.localGet (static_cast<uint32_t> (numSamplesLocal));
+                else
+                    pushCtxLoad (kernelNumSamplesOff, YdspValueType::int32Type);
+                return true;
 
             case YdspIrOp::loadSampleRate:
-                pushCtxLoad (sampleRateOff, YdspValueType::float32Type);
-                setValue (inst.result);
-                return;
+                if (sampleRateLocal >= 0)
+                    emitter.localGet (static_cast<uint32_t> (sampleRateLocal));
+                else
+                    pushCtxLoad (sampleRateOff, YdspValueType::float32Type);
+                return true;
 
             case YdspIrOp::loadEventFieldF:
                 pushCtxLoad (wasmEventPayloadOffset (inst.memIndex), YdspValueType::float32Type);
-                setValue (inst.result);
-                return;
+                return true;
 
             case YdspIrOp::loadEventFieldI:
                 pushCtxLoad (wasmEventPayloadOffset (inst.memIndex), YdspValueType::int32Type);
-                setValue (inst.result);
-                return;
+                return true;
 
             case YdspIrOp::storeEventFieldF:
             case YdspIrOp::storeEventFieldI:
-            {
-                const auto type = valueType (inst.a);
-                pushAddress (outputEventsOff, wasmEventPayloadOffset (inst.memIndex));
-                pushValue (inst.a);
-                emitter.store (storeOpcode (type), scaleLog2 (type), 0);
-                return;
-            }
+                emitStoreAtOffset (outputEventsOff, outputEventsBaseLocal, wasmEventPayloadOffset (inst.memIndex), inst.a, valueType (inst.a));
+                return true;
 
             case YdspIrOp::traceInt:
-                pushCtxLoad (traceQueueOff, YdspValueType::int32Type);
+                pushBasePointer (traceQueueOff, traceQueueBaseLocal);
                 emitter.i32Const (inst.memIndex);
                 pushValue (inst.a);
                 if (is64BitValueType (valueType (inst.a)))
@@ -1935,25 +2756,28 @@ private:
                 else
                     emitter.i32Const (0); // bool
                 emitter.call (static_cast<uint32_t> (traceIntFunc));
-                return;
+                return true;
+
             case YdspIrOp::traceFloat:
-                pushCtxLoad (traceQueueOff, YdspValueType::int32Type);
+                pushBasePointer (traceQueueOff, traceQueueBaseLocal);
                 emitter.i32Const (inst.memIndex);
                 pushValue (inst.a);
                 emitter.call (static_cast<uint32_t> (traceFloatFunc));
-                return;
+                return true;
+
             case YdspIrOp::traceCommit:
-                pushCtxLoad (traceQueueOff, YdspValueType::int32Type);
+                pushBasePointer (traceQueueOff, traceQueueBaseLocal);
                 emitter.i32Const (inst.memIndex);
                 emitter.call (static_cast<uint32_t> (traceCommitFunc));
-                return;
+                return true;
+
             case YdspIrOp::emitEvent:
-                pushCtxLoad (outputEventsOff, YdspValueType::int32Type);
+                pushBasePointer (outputEventsOff, outputEventsBaseLocal);
                 emitter.i32Const (static_cast<int32_t> (inst.ivalue));
                 pushValue (inst.a);
                 emitter.i32Const (inst.memIndex);
                 emitter.call (static_cast<uint32_t> (emitEventFuncIndex));
-                return;
+                return true;
 
             // ---- params and meters ----
             case YdspIrOp::loadParam:
@@ -1962,11 +2786,10 @@ private:
                 const auto type = valueType (inst.result);
                 const auto& offsets = inst.op == YdspIrOp::loadParam ? paramOffsets : paramOutOffsets;
                 const auto fieldOff = inst.op == YdspIrOp::loadParam ? paramsOff : kernelParamOutOff;
+                const auto hoistedLocal = inst.op == YdspIrOp::loadParam ? paramsBaseLocal : paramOutBaseLocal;
 
-                pushAddress (fieldOff, offsets[static_cast<size_t> (inst.a)]);
-                emitter.load (loadOpcode (type), scaleLog2 (type), 0);
-                setValue (inst.result);
-                return;
+                emitLoadAtOffset (fieldOff, hoistedLocal, offsets[static_cast<size_t> (inst.a)], type);
+                return true;
             }
 
             case YdspIrOp::storeParam:
@@ -1975,11 +2798,10 @@ private:
                 const auto type = valueType (inst.a);
                 const auto& offsets = inst.op == YdspIrOp::storeParam ? paramOffsets : paramOutOffsets;
                 const auto fieldOff = inst.op == YdspIrOp::storeParam ? paramsOff : kernelParamOutOff;
+                const auto hoistedLocal = inst.op == YdspIrOp::storeParam ? paramsBaseLocal : paramOutBaseLocal;
 
-                pushAddress (fieldOff, offsets[static_cast<size_t> (inst.memIndex)]);
-                pushValue (inst.a);
-                emitter.store (storeOpcode (type), scaleLog2 (type), 0);
-                return;
+                emitStoreAtOffset (fieldOff, hoistedLocal, offsets[static_cast<size_t> (inst.memIndex)], inst.a, type);
+                return true;
             }
 
             // ---- state scalars ----
@@ -1987,20 +2809,16 @@ private:
             case YdspIrOp::loadStateI:
             {
                 const auto type = valueType (inst.result);
-                pushAddress (stateOff, stateScalarBase (type, inst.a));
-                emitter.load (loadOpcode (type), scaleLog2 (type), 0);
-                setValue (inst.result);
-                return;
+                emitLoadAtOffset (stateOff, stateBaseLocal, stateScalarBase (type, inst.a), type);
+                return true;
             }
 
             case YdspIrOp::storeStateF:
             case YdspIrOp::storeStateI:
             {
                 const auto type = valueType (inst.a);
-                pushAddress (stateOff, stateScalarBase (type, inst.memIndex));
-                pushValue (inst.a);
-                emitter.store (storeOpcode (type), scaleLog2 (type), 0);
-                return;
+                emitStoreAtOffset (stateOff, stateBaseLocal, stateScalarBase (type, inst.memIndex), inst.a, type);
+                return true;
             }
 
             // ---- state arrays ----
@@ -2008,55 +2826,74 @@ private:
             case YdspIrOp::loadStateArrayI:
             {
                 const auto type = valueType (inst.result);
-                pushIndexedAddress (stateArraysOff, stateArrayBase (type, inst.memIndex), inst.a, type);
+                const auto baseOffset = stateArrayBase (type, inst.memIndex);
+                pushIndexedBaseAddress (stateArraysOff, stateArraysBaseLocal, inst.a, type);
+
+                uint32_t memOffset = 0;
+
+                if (baseOffset >= 0)
+                {
+                    memOffset = static_cast<uint32_t> (baseOffset);
+                }
+                else
+                {
+                    emitter.i32Const (baseOffset);
+                    emitter.op (YdspWasmEmitter::opI32Add);
+                }
 
 #if defined(__wasm_simd128__)
-                if (inst.op == YdspIrOp::loadStateArrayF && fn->laneCountOf (inst.result) > 1)
-                    emitter.simdLoad (YdspWasmEmitter::opV128Load, 2, 0);
+                if (fn->laneCountOf (inst.result) > 1)
+                    emitter.simdLoad (YdspWasmEmitter::opV128Load, 2, memOffset);
                 else
 #endif
-                    emitter.load (loadOpcode (type), scaleLog2 (type), 0);
+                    emitter.load (loadOpcode (type), scaleLog2 (type), memOffset);
 
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::storeStateArrayF:
             case YdspIrOp::storeStateArrayI:
             {
                 const auto type = valueType (inst.b);
-                pushIndexedAddress (stateArraysOff, stateArrayBase (type, inst.memIndex), inst.a, type);
+                const auto baseOffset = stateArrayBase (type, inst.memIndex);
+                pushIndexedBaseAddress (stateArraysOff, stateArraysBaseLocal, inst.a, type);
+
+                uint32_t memOffset = 0;
+
+                if (baseOffset >= 0)
+                {
+                    memOffset = static_cast<uint32_t> (baseOffset);
+                }
+                else
+                {
+                    emitter.i32Const (baseOffset);
+                    emitter.op (YdspWasmEmitter::opI32Add);
+                }
+
                 pushValue (inst.b);
 
 #if defined(__wasm_simd128__)
-                if (inst.op == YdspIrOp::storeStateArrayF && fn->laneCountOf (inst.b) > 1)
-                    emitter.simdStore (YdspWasmEmitter::opV128Store, 2, 0);
+                if (fn->laneCountOf (inst.b) > 1)
+                    emitter.simdStore (YdspWasmEmitter::opV128Store, 2, memOffset);
                 else
 #endif
-                    emitter.store (storeOpcode (type), scaleLog2 (type), 0);
+                    emitter.store (storeOpcode (type), scaleLog2 (type), memOffset);
 
-                return;
+                return true;
             }
 
             // ---- streams ----
+            case YdspIrOp::loadInputAddress:
+            case YdspIrOp::loadOutputAddress:
+                pushStreamBase (inst.op == YdspIrOp::loadInputAddress, inst.memIndex);
+                emitter.op (YdspWasmEmitter::opI64ExtendI32U);
+                return true;
+
             case YdspIrOp::loadInput:
             case YdspIrOp::loadOutput:
             {
                 const auto type = valueType (inst.result);
-                const auto fieldOff = inst.op == YdspIrOp::loadInput ? kernelInputsOff : kernelOutputsOff;
-
-                // inputs/outputs is a pointer array; first load the channel
-                // pointer inputs/outputs[memIndex], then index into the stream.
-                pushCtxLoad (fieldOff, YdspValueType::int32Type);
-                emitter.i32Const (inst.memIndex * 4);
-                emitter.op (YdspWasmEmitter::opI32Add);
-                emitter.load (YdspWasmEmitter::opI32Load, 2, 0);
-
-                // address = channel + (sampleIndex << scale)
-                pushValue (inst.a);
-                emitter.i32Const (static_cast<int32_t> (scaleLog2 (type)));
-                emitter.op (YdspWasmEmitter::opI32Shl);
-                emitter.op (YdspWasmEmitter::opI32Add);
+                pushStreamIndexedAddress (inst.op == YdspIrOp::loadInput, inst.memIndex, inst.a, type);
 
 #if defined(__wasm_simd128__)
                 if (fn->laneCountOf (inst.result) > 1)
@@ -2065,24 +2902,13 @@ private:
 #endif
                     emitter.load (loadOpcode (type), scaleLog2 (type), 0);
 
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::storeOutput:
             {
                 const auto type = valueType (inst.b);
-
-                pushCtxLoad (kernelOutputsOff, YdspValueType::int32Type);
-                emitter.i32Const (inst.memIndex * 4);
-                emitter.op (YdspWasmEmitter::opI32Add);
-                emitter.load (YdspWasmEmitter::opI32Load, 2, 0);
-
-                pushValue (inst.a);
-                emitter.i32Const (static_cast<int32_t> (scaleLog2 (type)));
-                emitter.op (YdspWasmEmitter::opI32Shl);
-                emitter.op (YdspWasmEmitter::opI32Add);
-
+                pushStreamIndexedAddress (false, inst.memIndex, inst.a, type);
                 pushValue (inst.b);
 
 #if defined(__wasm_simd128__)
@@ -2092,7 +2918,7 @@ private:
 #endif
                     emitter.store (storeOpcode (type), scaleLog2 (type), 0);
 
-                return;
+                return true;
             }
 
             // ---- float arithmetic ----
@@ -2104,23 +2930,23 @@ private:
             case YdspIrOp::maxF:
             {
                 const auto type = valueType (inst.result);
+                const int lhs = plan.swapOperands ? inst.b : inst.a;
+                const int rhs = plan.swapOperands ? inst.a : inst.b;
 
 #if defined(__wasm_simd128__)
                 if (fn->laneCountOf (inst.result) > 1)
                 {
-                    pushValue (inst.a);
-                    pushValue (inst.b);
+                    pushValue (lhs);
+                    pushValue (rhs);
                     emitter.simdOp (packedFloatBinarySimdOp (inst.op));
-                    setValue (inst.result);
-                    return;
+                    return true;
                 }
 #endif
 
-                pushValue (inst.a);
-                pushValue (inst.b);
+                pushValue (lhs);
+                pushValue (rhs);
                 emitter.op (floatBinaryOpcode (inst.op, is64BitValueType (type)));
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::modF:
@@ -2138,8 +2964,7 @@ private:
                 emitter.op (floatBinaryOpcode (YdspIrOp::mulF, is64));
                 pushValue (inst.a);
                 emitter.op (floatBinaryOpcode (YdspIrOp::addF, is64));
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::negF:
@@ -2156,15 +2981,13 @@ private:
                 {
                     pushValue (inst.a);
                     emitter.simdOp (packedFloatUnarySimdOp (inst.op));
-                    setValue (inst.result);
-                    return;
+                    return true;
                 }
 #endif
 
                 pushValue (inst.a);
                 emitter.op (floatUnaryOpcode (inst.op, is64BitValueType (type)));
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::clampF:
@@ -2181,8 +3004,7 @@ private:
                     emitter.simdOp (YdspWasmEmitter::opF32x4Max);
                     pushValue (inst.c);
                     emitter.simdOp (YdspWasmEmitter::opF32x4Min);
-                    setValue (inst.result);
-                    return;
+                    return true;
                 }
 #endif
 
@@ -2192,8 +3014,7 @@ private:
                 emitter.op (floatBinaryOpcode (YdspIrOp::maxF, is64));
                 pushValue (inst.c);
                 emitter.op (floatBinaryOpcode (YdspIrOp::minF, is64));
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::lerpF:
@@ -2212,8 +3033,7 @@ private:
                     emitter.simdOp (YdspWasmEmitter::opF32x4Mul);
                     pushValue (inst.a);
                     emitter.simdOp (YdspWasmEmitter::opF32x4Add);
-                    setValue (inst.result);
-                    return;
+                    return true;
                 }
 #endif
 
@@ -2225,8 +3045,7 @@ private:
                 emitter.op (floatBinaryOpcode (YdspIrOp::mulF, is64));
                 pushValue (inst.a);
                 emitter.op (floatBinaryOpcode (YdspIrOp::addF, is64));
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             // ---- int arithmetic ----
@@ -2234,13 +3053,120 @@ private:
             case YdspIrOp::subI:
             case YdspIrOp::mulI:
             {
+#if defined(__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    if (! inst.saturatingIntegerArithmetic)
+                    {
+                        const int lhs = plan.swapOperands ? inst.b : inst.a;
+                        const int rhs = plan.swapOperands ? inst.a : inst.b;
+                        pushValue (lhs);
+                        pushValue (rhs);
+                        emitter.simdOp (inst.op == YdspIrOp::addI ? YdspWasmEmitter::opI32x4Add
+                                      : inst.op == YdspIrOp::subI ? YdspWasmEmitter::opI32x4Sub
+                                                                  : YdspWasmEmitter::opI32x4Mul);
+                        return true;
+                    }
+
+                    const auto scratch0 = simdScratchBase;
+                    const auto scratch1 = scratch0 + 1u;
+                    const auto scratch2 = scratch0 + 2u;
+                    const auto scratch3 = scratch0 + 3u;
+
+                    pushValue (inst.a);
+                    emitter.localSet (scratch0);
+                    pushValue (inst.b);
+                    emitter.localSet (scratch1);
+
+                    if (inst.op == YdspIrOp::mulI)
+                    {
+                        static const uint8_t loShuffle[16] = { 0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27 };
+                        static const uint8_t hiShuffle[16] = { 4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29, 30, 31 };
+
+                        emitter.localGet (scratch0);
+                        emitter.localGet (scratch1);
+                        emitter.simdOp (YdspWasmEmitter::opI64x2ExtmulLowI32x4S);
+                        emitter.localSet (scratch2);
+
+                        emitter.localGet (scratch0);
+                        emitter.localGet (scratch1);
+                        emitter.simdOp (YdspWasmEmitter::opI64x2ExtmulHighI32x4S);
+                        emitter.localSet (scratch3);
+
+                        // lo32
+                        emitter.localGet (scratch2);
+                        emitter.localGet (scratch3);
+                        emitter.i8x16Shuffle (loShuffle);
+
+                        // limit = ((a ^ b) >> 31) ^ INT32_MAX
+                        emitter.localGet (scratch0);
+                        emitter.localGet (scratch1);
+                        emitter.simdOp (YdspWasmEmitter::opV128Xor);
+                        emitter.i32Const (31);
+                        emitter.simdOp (YdspWasmEmitter::opI32x4ShrS);
+                        emitter.i32Const (std::numeric_limits<int32_t>::max());
+                        emitter.simdOp (YdspWasmEmitter::opI32x4Splat);
+                        emitter.simdOp (YdspWasmEmitter::opV128Xor);
+
+                        // ok = (hi32 == (lo32 >> 31))
+                        emitter.localGet (scratch2);
+                        emitter.localGet (scratch3);
+                        emitter.i8x16Shuffle (hiShuffle);
+                        emitter.localGet (scratch2);
+                        emitter.localGet (scratch3);
+                        emitter.i8x16Shuffle (loShuffle);
+                        emitter.i32Const (31);
+                        emitter.simdOp (YdspWasmEmitter::opI32x4ShrS);
+                        emitter.simdOp (YdspWasmEmitter::opI32x4Eq);
+
+                        emitter.simdOp (YdspWasmEmitter::opV128Bitselect);
+                        return true;
+                    }
+
+                    // sum/diff = a +/- b
+                    emitter.localGet (scratch0);
+                    emitter.localGet (scratch1);
+                    emitter.simdOp (inst.op == YdspIrOp::addI ? YdspWasmEmitter::opI32x4Add : YdspWasmEmitter::opI32x4Sub);
+                    emitter.localSet (scratch2);
+
+                    // limit = (a >> 31) ^ INT32_MAX
+                    emitter.localGet (scratch0);
+                    emitter.i32Const (31);
+                    emitter.simdOp (YdspWasmEmitter::opI32x4ShrS);
+                    emitter.i32Const (std::numeric_limits<int32_t>::max());
+                    emitter.simdOp (YdspWasmEmitter::opI32x4Splat);
+                    emitter.simdOp (YdspWasmEmitter::opV128Xor);
+
+                    // sum/diff
+                    emitter.localGet (scratch2);
+
+                    // overflow = ((~(a ^ b) & (a ^ sum)) >> 31)  [add]
+                    //          = (((a ^ b) & (a ^ diff)) >> 31)   [sub]
+                    emitter.localGet (scratch0);
+                    emitter.localGet (scratch1);
+                    emitter.simdOp (YdspWasmEmitter::opV128Xor);
+                    if (inst.op == YdspIrOp::addI)
+                        emitter.simdOp (YdspWasmEmitter::opV128Not);
+                    emitter.localGet (scratch0);
+                    emitter.localGet (scratch2);
+                    emitter.simdOp (YdspWasmEmitter::opV128Xor);
+                    emitter.simdOp (YdspWasmEmitter::opV128And);
+                    emitter.i32Const (31);
+                    emitter.simdOp (YdspWasmEmitter::opI32x4ShrS);
+
+                    emitter.simdOp (YdspWasmEmitter::opV128Bitselect);
+                    return true;
+                }
+#endif
+
                 if (! inst.saturatingIntegerArithmetic)
                 {
-                    pushValue (inst.a);
-                    pushValue (inst.b);
+                    const int lhs = plan.swapOperands ? inst.b : inst.a;
+                    const int rhs = plan.swapOperands ? inst.a : inst.b;
+                    pushValue (lhs);
+                    pushValue (rhs);
                     emitter.op (intBinaryOpcode (inst.op, is64BitValueType (valueType (inst.result))));
-                    setValue (inst.result);
-                    return;
+                    return true;
                 }
                 const bool wide = is64BitValueType (valueType (inst.result));
                 const auto constant = [&] (int64_t value)
@@ -2329,24 +3255,74 @@ private:
                 emitter.select();
                 if (inst.op == YdspIrOp::mulI)
                     emitter.end();
-                setValue (inst.result);
-                return;
+                return true;
             }
             case YdspIrOp::andI:
             case YdspIrOp::orI:
             case YdspIrOp::xorI:
             {
+                const int lhs = plan.swapOperands ? inst.b : inst.a;
+                const int rhs = plan.swapOperands ? inst.a : inst.b;
+
+#if defined(__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    pushValue (lhs);
+                    pushValue (rhs);
+                    emitter.simdOp (inst.op == YdspIrOp::andI ? YdspWasmEmitter::opV128And
+                                  : inst.op == YdspIrOp::orI  ? YdspWasmEmitter::opV128Or
+                                                              : YdspWasmEmitter::opV128Xor);
+                    return true;
+                }
+#endif
+
                 const auto type = valueType (inst.result);
-                pushValue (inst.a);
-                pushValue (inst.b);
+                pushValue (lhs);
+                pushValue (rhs);
                 emitter.op (intBinaryOpcode (inst.op, is64BitValueType (type)));
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::shlI:
             case YdspIrOp::shrI:
             {
+#if defined(__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    if (fn->laneCountOf (inst.b) == 1)
+                    {
+                        pushValue (inst.a);
+                        pushValue (inst.b);
+                        emitter.simdOp (inst.op == YdspIrOp::shlI ? YdspWasmEmitter::opI32x4Shl : YdspWasmEmitter::opI32x4ShrS);
+                        return true;
+                    }
+
+                    const auto scratch0 = simdScratchBase;
+                    const auto scratch1 = scratch0 + 1u;
+                    pushValue (inst.a);
+                    emitter.localSet (scratch0);
+                    pushValue (inst.b);
+                    emitter.localSet (scratch1);
+
+                    emitter.localGet (scratch0);
+
+                    for (uint32_t lane = 0; lane < 4; ++lane)
+                    {
+                        emitter.localGet (scratch0);
+                        emitter.i32x4ExtractLane (lane);
+                        emitter.localGet (scratch1);
+                        emitter.i32x4ExtractLane (lane);
+                        emitter.op (inst.op == YdspIrOp::shlI ? YdspWasmEmitter::opI32Shl : YdspWasmEmitter::opI32ShrS);
+                        emitter.i32x4ReplaceLane (lane);
+
+                        if (lane < 3)
+                            emitter.localTee (scratch0);
+                    }
+
+                    return true;
+                }
+#endif
+
                 const auto type = valueType (inst.result);
                 const bool is64 = is64BitValueType (type);
 
@@ -2358,13 +3334,29 @@ private:
                 else
                     emitter.op (is64 ? YdspWasmEmitter::opI64ShrS : YdspWasmEmitter::opI32ShrS);
 
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::negI:
             case YdspIrOp::absI:
             {
+#if defined(__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    const auto scratch0 = simdScratchBase;
+                    pushValue (inst.a);
+                    emitter.simdOp (inst.op == YdspIrOp::negI ? YdspWasmEmitter::opI32x4Neg : YdspWasmEmitter::opI32x4Abs);
+                    emitter.localTee (scratch0);
+
+                    emitter.localGet (scratch0);
+                    emitter.i32Const (std::numeric_limits<int32_t>::min());
+                    emitter.simdOp (YdspWasmEmitter::opI32x4Splat);
+                    emitter.simdOp (YdspWasmEmitter::opI32x4Eq);
+                    emitter.simdOp (YdspWasmEmitter::opI32x4Add);
+                    return true;
+                }
+#endif
+
                 const bool is64 = is64BitValueType (valueType (inst.result));
                 pushValue (inst.a);
                 if (is64)
@@ -2396,8 +3388,7 @@ private:
                     emitter.select();
                 }
                 emitter.end();
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::divI:
@@ -2451,14 +3442,31 @@ private:
 
                 emitter.end();
 
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::wrapI:
             {
                 const auto type = valueType (inst.result);
                 const bool is64 = is64BitValueType (type);
+
+                if (inst.result != inst.b)
+                {
+                    // (a < b) ? a : 0 - matches (a >= b) ? 0 : a while pushing `a` first once.
+                    pushValue (inst.a);
+                    emitter.localTee (localIndex (inst.result));
+
+                    if (is64)
+                        emitter.i64Const (0);
+                    else
+                        emitter.i32Const (0);
+
+                    emitter.localGet (localIndex (inst.result));
+                    pushValue (inst.b);
+                    emitter.op (intCompareOpcode (YdspIrOp::ltI, is64));
+                    emitter.select();
+                    return true;
+                }
 
                 // (a >= b) ? 0 : a  - see YdspIrOp::wrapI.
                 if (is64)
@@ -2467,68 +3475,91 @@ private:
                     emitter.i32Const (0);
 
                 pushValue (inst.a);
-
                 pushValue (inst.a);
                 pushValue (inst.b);
                 emitter.op (intCompareOpcode (YdspIrOp::geI, is64));
 
                 emitter.select();
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::advanceWrapI:
             {
                 const auto type = valueType (inst.result);
                 const bool is64 = is64BitValueType (type);
+
+                // next = a + 1; (next < bound) ? next : 0
                 pushValue (inst.a);
+
                 if (is64)
                     emitter.i64Const (1);
                 else
                     emitter.i32Const (1);
+
                 emitter.op (is64 ? YdspWasmEmitter::opI64Add : YdspWasmEmitter::opI32Add);
-                if (is64)
-                    emitter.i64Const (inst.ivalue);
-                else
-                    emitter.i32Const (static_cast<int32_t> (inst.ivalue));
-                emitter.op (is64 ? YdspWasmEmitter::opI64LtS : YdspWasmEmitter::opI32LtS);
-                emitter.ifValue (is64 ? ValType::i64 : ValType::i32);
-                pushValue (inst.a);
-                if (is64)
-                    emitter.i64Const (1);
-                else
-                    emitter.i32Const (1);
-                emitter.op (is64 ? YdspWasmEmitter::opI64Add : YdspWasmEmitter::opI32Add);
-                emitter.else_();
+                emitter.localTee (localIndex (inst.result));
+
                 if (is64)
                     emitter.i64Const (0);
                 else
                     emitter.i32Const (0);
-                emitter.end();
-                setValue (inst.result);
-                return;
+
+                emitter.localGet (localIndex (inst.result));
+
+                if (is64)
+                    emitter.i64Const (inst.ivalue);
+                else
+                    emitter.i32Const (static_cast<int32_t> (inst.ivalue));
+
+                emitter.op (is64 ? YdspWasmEmitter::opI64LtS : YdspWasmEmitter::opI32LtS);
+                emitter.select();
+                return true;
             }
 
             case YdspIrOp::minI:
             case YdspIrOp::maxI:
             {
+                const int lhs = plan.swapOperands ? inst.b : inst.a;
+                const int rhs = plan.swapOperands ? inst.a : inst.b;
+
+#if defined(__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    pushValue (lhs);
+                    pushValue (rhs);
+                    emitter.simdOp (inst.op == YdspIrOp::minI ? YdspWasmEmitter::opI32x4MinS : YdspWasmEmitter::opI32x4MaxS);
+                    return true;
+                }
+#endif
+
                 const auto type = valueType (inst.result);
                 const bool is64 = is64BitValueType (type);
 
-                pushValue (inst.a);
-                pushValue (inst.b);
+                pushValue (lhs);
+                pushValue (rhs);
 
-                pushValue (inst.a);
-                pushValue (inst.b);
+                pushValue (lhs);
+                pushValue (rhs);
                 emitter.op (intCompareOpcode (inst.op == YdspIrOp::minI ? YdspIrOp::ltI : YdspIrOp::gtI, is64));
 
                 emitter.select();
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::clampI:
             {
+#if defined(__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    pushValue (inst.a);
+                    pushValue (inst.b);
+                    emitter.simdOp (YdspWasmEmitter::opI32x4MaxS);
+                    pushValue (inst.c);
+                    emitter.simdOp (YdspWasmEmitter::opI32x4MinS);
+                    return true;
+                }
+#endif
+
                 const auto type = valueType (inst.result);
                 const bool is64 = is64BitValueType (type);
 
@@ -2538,6 +3569,17 @@ private:
                 pushValue (inst.b);
                 emitter.op (intCompareOpcode (YdspIrOp::gtI, is64));
                 emitter.select();
+
+                if (inst.result != inst.c)
+                {
+                    emitter.localTee (localIndex (inst.result));
+                    pushValue (inst.c);
+                    emitter.localGet (localIndex (inst.result));
+                    pushValue (inst.c);
+                    emitter.op (intCompareOpcode (YdspIrOp::ltI, is64));
+                    emitter.select();
+                    return true;
+                }
 
                 pushValue (inst.c);
 
@@ -2551,8 +3593,7 @@ private:
                 emitter.op (intCompareOpcode (YdspIrOp::ltI, is64));
 
                 emitter.select();
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::signI:
@@ -2589,14 +3630,23 @@ private:
                 emitter.op (intCompareOpcode (YdspIrOp::gtI, is64));
 
                 emitter.select();
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             // ---- conversions ----
             case YdspIrOp::itof:
             case YdspIrOp::ftoi:
             {
+#if defined(__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    pushValue (inst.a);
+                    emitter.simdOp (inst.op == YdspIrOp::itof ? YdspWasmEmitter::opF32x4ConvertI32x4S
+                                                              : YdspWasmEmitter::opI32x4TruncSatF32x4S);
+                    return true;
+                }
+#endif
+
                 const auto src = valueType (inst.a);
                 const auto dst = valueType (inst.result);
                 pushValue (inst.a);
@@ -2607,33 +3657,56 @@ private:
                 }
                 else
                     emitter.op (convertOpcode (inst.op, src, dst));
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             case YdspIrOp::extI:
                 pushValue (inst.a);
                 emitter.op (YdspWasmEmitter::opI64ExtendI32S);
-                setValue (inst.result);
-                return;
+                return true;
 
             case YdspIrOp::truncI:
                 pushValue (inst.a);
                 emitter.op (YdspWasmEmitter::opI32WrapI64);
-                setValue (inst.result);
-                return;
+                return true;
 
             case YdspIrOp::extF:
                 pushValue (inst.a);
                 emitter.op (YdspWasmEmitter::opF64PromoteF32);
-                setValue (inst.result);
-                return;
+                return true;
 
             case YdspIrOp::truncF:
                 pushValue (inst.a);
                 emitter.op (YdspWasmEmitter::opF32DemoteF64);
-                setValue (inst.result);
-                return;
+                return true;
+
+            case YdspIrOp::bitcastFtoI:
+            {
+#if defined(__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    pushValue (inst.a);
+                    return true;
+                }
+#endif
+                pushValue (inst.a);
+                emitter.op (YdspWasmEmitter::opI32ReinterpretF32);
+                return true;
+            }
+
+            case YdspIrOp::bitcastItoF:
+            {
+#if defined(__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    pushValue (inst.a);
+                    return true;
+                }
+#endif
+                pushValue (inst.a);
+                emitter.op (YdspWasmEmitter::opF32ReinterpretI32);
+                return true;
+            }
 
             // ---- comparisons ----
             case YdspIrOp::eqF:
@@ -2643,23 +3716,25 @@ private:
             case YdspIrOp::gtF:
             case YdspIrOp::geF:
             {
+                const int lhs = plan.swapOperands ? inst.b : inst.a;
+                const int rhs = plan.swapOperands ? inst.a : inst.b;
+                const auto cmpOp = plan.swapOperands ? flippedComparisonOp (inst.op) : inst.op;
+
 #if defined(__wasm_simd128__)
                 if (fn->laneCountOf (inst.result) > 1)
                 {
-                    pushValue (inst.a);
-                    pushValue (inst.b);
-                    emitter.simdOp (packedFloatCompareSimdOp (inst.op));
-                    setValue (inst.result);
-                    return;
+                    pushValue (lhs);
+                    pushValue (rhs);
+                    emitter.simdOp (packedFloatCompareSimdOp (cmpOp));
+                    return true;
                 }
 #endif
 
                 const auto type = valueType (inst.a);
-                pushValue (inst.a);
-                pushValue (inst.b);
-                emitter.op (floatCompareOpcode (inst.op, is64BitValueType (type)));
-                setValue (inst.result);
-                return;
+                pushValue (lhs);
+                pushValue (rhs);
+                emitter.op (floatCompareOpcode (cmpOp, is64BitValueType (type)));
+                return true;
             }
 
             case YdspIrOp::eqI:
@@ -2670,43 +3745,88 @@ private:
             case YdspIrOp::gtI:
             case YdspIrOp::geI:
             {
+                const int lhs = plan.swapOperands ? inst.b : inst.a;
+                const int rhs = plan.swapOperands ? inst.a : inst.b;
+                const auto cmpOp = plan.swapOperands ? flippedComparisonOp (inst.op) : inst.op;
+
+#if defined(__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    pushValue (lhs);
+                    pushValue (rhs);
+                    emitter.simdOp (packedIntCompareSimdOp (cmpOp));
+                    return true;
+                }
+#endif
+
                 const auto type = valueType (inst.a);
-                pushValue (inst.a);
-                pushValue (inst.b);
-                emitter.op (intCompareOpcode (inst.op, is64BitValueType (type)));
-                setValue (inst.result);
-                return;
+                pushValue (lhs);
+                pushValue (rhs);
+                emitter.op (intCompareOpcode (cmpOp, is64BitValueType (type)));
+                return true;
             }
 
             // ---- logic ----
             case YdspIrOp::andB:
-                pushValue (inst.a);
-                pushValue (inst.b);
+            {
+                const int lhs = plan.swapOperands ? inst.b : inst.a;
+                const int rhs = plan.swapOperands ? inst.a : inst.b;
+
+#if defined(__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    pushValue (lhs);
+                    pushValue (rhs);
+                    emitter.simdOp (YdspWasmEmitter::opV128And);
+                    return true;
+                }
+#endif
+                pushValue (lhs);
+                pushValue (rhs);
                 emitter.op (YdspWasmEmitter::opI32And);
-                setValue (inst.result);
-                return;
+                return true;
+            }
 
             case YdspIrOp::orB:
-                pushValue (inst.a);
-                pushValue (inst.b);
+            {
+                const int lhs = plan.swapOperands ? inst.b : inst.a;
+                const int rhs = plan.swapOperands ? inst.a : inst.b;
+
+#if defined(__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    pushValue (lhs);
+                    pushValue (rhs);
+                    emitter.simdOp (YdspWasmEmitter::opV128Or);
+                    return true;
+                }
+#endif
+                pushValue (lhs);
+                pushValue (rhs);
                 emitter.op (YdspWasmEmitter::opI32Or);
-                setValue (inst.result);
-                return;
+                return true;
+            }
 
             case YdspIrOp::notB:
+#if defined(__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    pushValue (inst.a);
+                    emitter.simdOp (YdspWasmEmitter::opV128Not);
+                    return true;
+                }
+#endif
                 pushValue (inst.a);
                 emitter.i32Const (1);
                 emitter.op (YdspWasmEmitter::opI32Xor);
-                setValue (inst.result);
-                return;
+                return true;
 
             // ---- moves ----
             case YdspIrOp::movF:
             case YdspIrOp::movI:
             case YdspIrOp::movB:
                 pushValue (inst.a);
-                setValue (inst.result);
-                return;
+                return true;
 
             // ---- select ----
             case YdspIrOp::selectB:
@@ -2721,16 +3841,14 @@ private:
                     pushValue (inst.c);
                     pushValue (inst.a);
                     emitter.simdOp (YdspWasmEmitter::opV128Bitselect);
-                    setValue (inst.result);
-                    return;
+                    return true;
                 }
 #endif
                 pushValue (inst.b);
                 pushValue (inst.c);
                 pushValue (inst.a);
                 emitter.select();
-                setValue (inst.result);
-                return;
+                return true;
 
             // ---- sign ----
             case YdspIrOp::signF:
@@ -2750,8 +3868,7 @@ private:
 
                 emitter.op (YdspWasmEmitter::opI32Sub);
                 emitter.op (convertOpcode (YdspIrOp::itof, YdspValueType::int32Type, resultType));
-                setValue (inst.result);
-                return;
+                return true;
             }
 
             // ---- libm intrinsics ----
@@ -2790,54 +3907,80 @@ private:
                 }
 
                 emitter.call (static_cast<uint32_t> (libmFuncIndex[name]));
-                setValue (inst.result);
-                return;
+                return true;
             }
 
 #if defined(__wasm_simd128__)
             // ---- lane movement (SIMD) ----
             case YdspIrOp::vsplat:
                 pushValue (inst.a);
-                emitter.simdOp (YdspWasmEmitter::opF32x4Splat);
-                setValue (inst.result);
-                return;
+                emitter.simdOp (isFloatValueType (valueType (inst.result)) ? YdspWasmEmitter::opF32x4Splat
+                                                                           : YdspWasmEmitter::opI32x4Splat);
+                return true;
+
+            case YdspIrOp::vinsertF:
+            {
+                if (inst.memIndex < 0 || inst.memIndex >= 4)
+                {
+                    pendingCount = 0;
+                    diagnostics->addError ({}, "Wasm codegen: vinsertF lane index out of range");
+                    return false;
+                }
+
+                if (inst.a >= 0)
+                    pushValue (inst.a);
+                else
+                    emitter.v128ConstZero();
+
+                pushValue (inst.b);
+                emitter.f32x4ReplaceLane (static_cast<uint32_t> (inst.memIndex));
+                return true;
+            }
+
+            case YdspIrOp::vextractF:
+            {
+                if (inst.memIndex < 0 || inst.memIndex >= 4)
+                {
+                    pendingCount = 0;
+                    diagnostics->addError ({}, "Wasm codegen: vextractF lane index out of range");
+                    return false;
+                }
+
+                pushValue (inst.a);
+                emitter.f32x4ExtractLane (static_cast<uint32_t> (inst.memIndex));
+                return true;
+            }
 
             case YdspIrOp::vreduceAddF:
             {
-                // Horizontal f32x4 sum as a shuffle tree. i8x16.shuffle and
-                // f32x4.add are binary, so the operand is re-pushed before
-                // each of them: shuffle [2,3,0,1] over two copies of a, add a
-                // back in, park the partials in the scratch v128 local, then
-                // shuffle [1,0,3,2] over two copies of the partials and add
-                // one copy back. Lane j of the accumulator already holds the
-                // reassociated partial sum (see YdspVectorizer), so the
-                // grouping (l0 + l2) + (l1 + l3) is exactly the tree the
-                // widened reduction's semantics promise.
+                // Horizontal f32x4 sum as a shuffle tree. Park the input in
+                // scratch via local.tee so it only needs one operand push (and
+                // can consume from the stack top), then fold [2,3,0,1] and
+                // [1,0,3,2] with local.tee on the intermediate partials.
                 static const uint8_t swap64Mask[16] = { 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7 };
                 static const uint8_t swap32Mask[16] = { 4, 5, 6, 7, 0, 1, 2, 3, 12, 13, 14, 15, 8, 9, 10, 11 };
 
-                const auto scratch = static_cast<uint32_t> (valueTypes.size()) + 1u;
+                const auto scratch = simdScratchBase;
 
                 pushValue (inst.a);
-                pushValue (inst.a);
-                emitter.i8x16Shuffle (swap64Mask);
-                pushValue (inst.a);
-                emitter.simdOp (YdspWasmEmitter::opF32x4Add);
-                emitter.localSet (scratch);
+                emitter.localTee (scratch);
                 emitter.localGet (scratch);
+                emitter.i8x16Shuffle (swap64Mask);
+                emitter.localGet (scratch);
+                emitter.simdOp (YdspWasmEmitter::opF32x4Add);
+                emitter.localTee (scratch);
                 emitter.localGet (scratch);
                 emitter.i8x16Shuffle (swap32Mask);
                 emitter.localGet (scratch);
                 emitter.simdOp (YdspWasmEmitter::opF32x4Add);
                 emitter.f32x4ExtractLane (0);
-                setValue (inst.result);
-                return;
+                return true;
             }
 #endif
 
             default:
                 diagnostics->addError ({}, "Wasm codegen: unsupported instruction in the IR");
-                return;
+                return false;
         }
     }
 
@@ -2859,6 +4002,34 @@ private:
     std::vector<int> paramOutOffsets; // byte offset per meter slot (heterogeneous)
 
     std::vector<YdspValueType> valueTypes;
+    std::vector<int> valueUses;
+
+    // Usage tracking and hoisted Wasm local indices (-1 = not hoisted).
+    UsageStats stateUsage;
+    UsageStats stateArraysUsage;
+    UsageStats paramsUsage;
+    UsageStats paramOutUsage;
+    UsageStats outputEventsUsage;
+    UsageStats traceQueueUsage;
+    UsageStats sampleRateUsage;
+    UsageStats numSamplesUsage;
+    std::map<int, UsageStats> inputStreamUsage;
+    std::map<int, UsageStats> outputStreamUsage;
+
+    int stateBaseLocal = -1;
+    int stateArraysBaseLocal = -1;
+    int paramsBaseLocal = -1;
+    int paramOutBaseLocal = -1;
+    int outputEventsBaseLocal = -1;
+    int traceQueueBaseLocal = -1;
+    int numSamplesLocal = -1;
+    int sampleRateLocal = -1;
+    std::map<int, int> inStreamLocals;
+    std::map<int, int> outStreamLocals;
+
+    // Stack-top operand tracking for the currently emitting instruction.
+    int pendingOnStack[2] = { -1, -1 };
+    int pendingCount = 0;
 
     // libm imports, deterministic order (sorted by name).
     std::set<std::string> libmNames;
@@ -2876,9 +4047,10 @@ private:
     int emitEventFuncIndex = 0;
 
 #if defined(__wasm_simd128__)
-    // Set when the function folds a widened reduction (vreduceAddF), which
-    // needs the scratch v128 local declared after the value locals.
-    bool usesVreduce = false;
+    // Set when the function uses widened operations or vreduceAddF, which
+    // need scratch v128 locals declared after the value locals.
+    bool usesSimdScratch = false;
+    uint32_t simdScratchBase = 0;
 #endif
 
     // IR loop headers -> index into fn.loops.

@@ -39,7 +39,7 @@ jobs:
       run:
         working-directory: modules/yup_gui_markup/tools/vscode-yui
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: modules/yup_gui_markup/tools/vscode-yui
 

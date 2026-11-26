@@ -61,6 +61,19 @@ def test_to_string_and_call():
 
 #==================================================================================================
 
+def test_builds_programs_from_statements():
+    program = yup.Expression.block([
+        yup.Expression.let("w", yup.Expression.symbol("x") * yup.Expression(2)),
+        yup.Expression.output("a", yup.Expression.ternary(True, yup.Expression.symbol("w"), 0)),
+        yup.Expression.call("max", [yup.Expression.symbol("a"), 3]),
+    ])
+
+    assert program.toString() == "let w = x * 2; a = true ? w : 0; max (a, 3)"
+    assert program.toString() == yup.Expression.parse(program.toString()).toString()
+    assert program.getReferencedSymbols() == ["x"]
+
+#==================================================================================================
+
 def test_symbol_introspection_and_renaming():
     expression = yup.Expression.parse("let k = a * 2; out = k + b.c + sin (d); z = out")
     assert expression.getReferencedSymbols() == ["a", "b.c", "d"]

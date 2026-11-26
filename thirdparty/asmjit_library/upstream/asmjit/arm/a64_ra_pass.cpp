@@ -667,6 +667,28 @@ void ARMRAPass::on_init() noexcept {
   }
   make_unavailable(RegGroup::kGp, Gp::kIdSp);
   make_unavailable(RegGroup::kGp, Gp::kIdOs); // OS-specific use, usually TLS.
+
+  // x16 (IP0) is reserved as a stack-address scratch register only when the function's stack frame can reach the
+  // 4 KB unscaled threshold, so typical functions keep full GP register capacity. Local change over upstream AsmJit.
+  uint32_t max_call_stack_size = 0;
+  for (BaseNode* node = _func->next(); node != _stop; node = node->next()) {
+    if (node->is_invoke()) {
+      max_call_stack_size = axl::max(max_call_stack_size, node->as<InvokeNode>()->detail().arg_stack_size());
+    }
+  }
+
+  uint64_t estimated_stack_bytes = max_call_stack_size;
+  for (const VirtReg* virt_reg : cc()._virt_regs) {
+    if (virt_reg != nullptr) {
+      uint32_t align = axl::max<uint32_t>(virt_reg->alignment(), 1u);
+      estimated_stack_bytes += axl::align_up(uint64_t(virt_reg->virt_size()), uint64_t(align));
+    }
+  }
+
+  _has_stack_scratch = estimated_stack_bytes >= 3072u;
+  if (_has_stack_scratch) {
+    make_unavailable(RegGroup::kGp, kStackScratchId);
+  }
   make_unavailable(frame._unavailable_regs);
 
   _sp = sp;
@@ -769,6 +791,32 @@ ASMJIT_FAVOR_SPEED Error ARMRAPass::rewrite() noexcept {
               mem._set_base(_sp.reg_type(), slot->base_reg_id());
               mem.clear_reg_home();
               mem.add_offset_lo32(offset);
+
+              // Every stack slot gets its own offset, so a function with many spilled registers has slots beyond
+              // 4 KB. A load or store encodes at most a 12-bit offset scaled by its access size (16380 bytes for a
+              // 32-bit register), or a signed 9-bit one: past 4 KB, form the high part of the address in the scratch
+              // register and keep the low part in the instruction, which then always fits, the slot being aligned to
+              // its size. Local change over upstream AsmJit.
+              int32_t final_offset = mem.offset_lo32();
+              if (inst->real_id() != Inst::kIdAdr && final_offset >= 4096 && !mem.has_index() && op.as<Mem>().offset_mode() == OffsetMode::kFixed) {
+                if (ASMJIT_UNLIKELY(!_has_stack_scratch)) {
+                  return make_error(Error::kInvalidState);
+                }
+                uint32_t high = uint32_t(final_offset) & ~uint32_t(0xFFFu);
+                Gp base = mem.base_id() == Gp::kIdSp ? sp : Gp::make_r64(mem.base_id());
+                Gp scratch = Gp::make_r64(kStackScratchId);
+                BaseNode* saved_cursor = cc().set_cursor(node->prev());
+                if (high <= 0xFFFFFFu) {
+                  ASMJIT_PROPAGATE(cc().add(scratch, base, Imm(high)));
+                }
+                else {
+                  ASMJIT_PROPAGATE(cc().mov(scratch, Imm(high)));
+                  ASMJIT_PROPAGATE(cc().add(scratch, base, scratch));
+                }
+                cc().set_cursor(saved_cursor);
+                mem._set_base(RegType::kGp64, kStackScratchId);
+                mem.set_offset_lo32(final_offset - int32_t(high));
+              }
             }
           }
         }

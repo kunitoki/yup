@@ -703,6 +703,64 @@ TEST (CharacterFunctionsGeneralTests, GetIntValueHandlesMostNegativeValues)
     EXPECT_EQ (String ("-42").getIntValue(), -42);
 }
 
+TEST (CharacterFunctionsGeneralTests, WriteShortestFloatUsesTheFewestDigitsGivingTheValueBack)
+{
+    const auto text = [] (auto value)
+    {
+        char buffer[CharacterFunctions::shortestFloatBufferSize];
+        const auto length = CharacterFunctions::writeShortestFloat (value, buffer);
+
+        EXPECT_EQ (length, std::strlen (buffer));
+        return String (buffer);
+    };
+
+    EXPECT_EQ (String ("0"), text (0.0f));
+    EXPECT_EQ (String ("-0"), text (-0.0f));
+    EXPECT_EQ (String ("0.1"), text (0.1f));
+    EXPECT_EQ (String ("-2.5"), text (-2.5f));
+    EXPECT_EQ (String ("1e+02"), text (100.0f));
+    EXPECT_EQ (String ("125"), text (125.0f));
+    EXPECT_EQ (String ("16777216"), text (16777216.0f));
+    EXPECT_EQ (String ("0.33333334"), text (1.0f / 3.0f));
+    EXPECT_EQ (String ("1e+21"), text (1.0e21f));
+    EXPECT_EQ (String ("3.4028235e+38"), text (std::numeric_limits<float>::max()));
+    EXPECT_EQ (String ("1e-45"), text (std::numeric_limits<float>::denorm_min()));
+
+    EXPECT_EQ (String ("0"), text (0.0));
+    EXPECT_EQ (String ("-0"), text (-0.0));
+    EXPECT_EQ (String ("0.1"), text (0.1));
+    EXPECT_EQ (String ("1e+02"), text (100.0));
+    EXPECT_EQ (String ("125"), text (125.0));
+    EXPECT_EQ (String ("0.3333333333333333"), text (1.0 / 3.0));
+    EXPECT_EQ (String ("1e+21"), text (1.0e21));
+    EXPECT_EQ (String ("1e-07"), text (1.0e-7));
+    EXPECT_EQ (String ("1.7976931348623157e+308"), text (std::numeric_limits<double>::max()));
+
+    EXPECT_EQ (String ("inf"), text (std::numeric_limits<float>::infinity()));
+    EXPECT_EQ (String ("-inf"), text (-std::numeric_limits<double>::infinity()));
+    EXPECT_TRUE (text (std::numeric_limits<double>::quiet_NaN()).contains ("nan"));
+}
+
+TEST (CharacterFunctionsGeneralTests, WriteShortestFloatReadsBackExactly)
+{
+    char buffer[CharacterFunctions::shortestFloatBufferSize];
+
+    for (const float value : { 1.0e-38f, 1.17549435e-38f, 0.3f, 1.1f, 123.456f, 8388608.5f, 6.02214076e23f, -9.87654321e-12f, std::numeric_limits<float>::epsilon() })
+    {
+        CharacterFunctions::writeShortestFloat (value, buffer);
+        EXPECT_EQ (String (buffer).getFloatValue(), value) << buffer;
+    }
+
+    for (const double value : { 2.2250738585072014e-308, 0.3, 1.1, 123.456, 6.02214076e23, -9.87654321e-12, 9007199254740993.0, std::numeric_limits<double>::epsilon() })
+    {
+        CharacterFunctions::writeShortestFloat (value, buffer);
+        EXPECT_EQ (String (buffer).getDoubleValue(), value) << buffer;
+    }
+
+    CharacterFunctions::writeShortestFloat (std::numeric_limits<double>::denorm_min(), buffer);
+    EXPECT_EQ (std::strtod (buffer, nullptr), std::numeric_limits<double>::denorm_min());
+}
+
 TEST (CharacterFunctionsGeneralTests, GetUnicodeCharFromWindows1252Codepage)
 {
     // Values below 0x80 should pass through unchanged

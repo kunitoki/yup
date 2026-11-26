@@ -199,6 +199,22 @@ itself and notifies its listeners with `updateHostDisplay()`, so a host above it
 learns the new value. The recompile runs on the thread that reported the change,
 so change latency from the message thread, not from `processBlock()`.
 
+## Tail
+
+The graph reports a tail through `getTailSamples()`, like any processor. The tail
+of a path is the sum of the tails of its nodes, and the graph tail is the longest
+one reaching a graph output; nodes that reach no output do not count. It is
+`infiniteTailSamples` as soon as one node on such a path never ends.
+
+The value is computed by `commitChanges()` and cached, so reading it is safe on
+the audio thread. When a node reports a tail change with
+`updateHostDisplay (ChangeDetails().withTailChanged (true))`, the graph refreshes
+the value without recompiling and notifies its own listeners when it changed.
+
+To remove a node without cutting its sound, stop feeding it, keep processing for
+its `getLatencySamples() + getTailSamples()` samples, then remove it and commit.
+Fade out a node whose tail is infinite.
+
 ## Running the graph on a device
 
 `AudioGraphProcessor` is a regular processor. To play it on an audio device,

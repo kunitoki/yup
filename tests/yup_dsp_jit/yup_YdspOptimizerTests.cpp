@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <vector>
 
 using namespace yup;
 
@@ -343,9 +344,9 @@ TEST (YdspOptimizerTests, ConstantFoldingKeepsBoundedLoopInductionLive)
 
     const auto& fn = *ir->kernels[0];
 
-    // The loop condition and two stream bounds guards must remain.
+    // The loop condition and deduplicated stream bounds guard must remain.
     EXPECT_EQ (1, countInst (fn, YdspIrOp::ltI));
-    EXPECT_EQ (2, countInst (fn, YdspIrOp::ltUI));
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::ltUI));
     EXPECT_TRUE (fn.hasGuardedControlFlow);
     EXPECT_EQ (1, countInst (fn, YdspIrOp::addI));
     // The constant-bound loop keeps its canonical seed and write-back moves
@@ -391,8 +392,8 @@ TEST (YdspOptimizerTests, IfConversionSpeculatesASampleHoldInputLoad)
 
     const auto& fn = *ir->kernels[0];
 
-    // Only the sample loop header still branches: the hold and the wrap are
-    // both straight-line selects now.
+    // Only the sample loop header still branches: the hold is a straight-line
+    // select, and the increment, wrap test and wrap select are one operation.
     int branchIfCount = 0;
 
     for (const auto& block : fn.blocks)
@@ -400,7 +401,61 @@ TEST (YdspOptimizerTests, IfConversionSpeculatesASampleHoldInputLoad)
             ++branchIfCount;
 
     EXPECT_EQ (1, branchIfCount);
-    EXPECT_GE (countInst (fn, YdspIrOp::selectB), 2);
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::selectB));
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::advanceWrapI));
+    EXPECT_EQ (0, countInst (fn, YdspIrOp::geI));
+}
+
+TEST (YdspOptimizerTests, HoistsALoopInvariantTernaryOutOfTheSampleLoop)
+{
+    YdspDiagnostics diagnostics;
+
+    // The choice depends on a parameter only, so it is the same on every
+    // sample: both arms and the select belong ahead of the loop, not behind a
+    // branch (and a call) inside it.
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            input parameter float f = 0.5;
+            process {
+                let c = f > 0.49 * sampleRate ? -1.0 : cos (2.0 * pi * f / sampleRate);
+                out = in * sqrt (1.0 - c);
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                       diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = *ir->kernels[0];
+    ASSERT_EQ (1u, fn.loops.size());
+
+    const auto header = static_cast<size_t> (fn.loops[0].headerBlock);
+    const auto countBefore = [&] (YdspIrOp op)
+    {
+        int count = 0;
+
+        for (size_t b = 0; b < header; ++b)
+            for (const auto& inst : fn.blocks[b].insts)
+                count += inst.op == op ? 1 : 0;
+
+        return count;
+    };
+
+    int branchIfCount = 0;
+
+    for (const auto& block : fn.blocks)
+        if (block.term == YdspIrTerm::branchIf)
+            ++branchIfCount;
+
+    EXPECT_EQ (1, branchIfCount);
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::cosF));
+    EXPECT_EQ (1, countBefore (YdspIrOp::cosF));
+    EXPECT_EQ (1, countBefore (YdspIrOp::selectB));
+    EXPECT_EQ (1, countBefore (YdspIrOp::sqrtF));
 }
 
 TEST (YdspOptimizerTests, RematerializesConstantsBetweenCallsAndAfterTheLastCall)
@@ -1077,7 +1132,9 @@ TEST (YdspOptimizerTests, HoistsIterationLocalClampAndConversionChain)
         entrySelects += inst.op == YdspIrOp::selectB;
         entryConversions += inst.op == YdspIrOp::ftoi;
     }
-    EXPECT_EQ (2, entrySelects);
+    // The two clamps, plus the NaN guard of a conversion whose operand is
+    // now known to lie in [1, 8].
+    EXPECT_EQ (3, entrySelects);
     EXPECT_EQ (1, entryConversions);
     EXPECT_EQ (1, countInst (fn, YdspIrOp::ftoi));
 }
@@ -1166,13 +1223,10 @@ TEST (YdspOptimizerTests, RingProofAuditsInitializationEventsAndEveryUpdate)
         const auto& fn = *ir->kernels[0];
         if (String (extra) == "wp = -1;")
         {
-            // Constant folding replaces the comparison, but does not require
-            // removal of the safe fallback load or the guarded store block.
-            bool hasRejectedAccess = false;
-            for (const auto& block : fn.blocks)
-                for (const auto& inst : block.insts)
-                    hasRejectedAccess |= inst.op == YdspIrOp::constB && ! inst.bvalue;
-            EXPECT_TRUE (hasRejectedAccess);
+            // Constant folding and unreachable-block cleanup eliminate the dead
+            // guarded access when wp is proven -1, leaving only the 0.0 fallback.
+            EXPECT_EQ (0, countInst (fn, YdspIrOp::loadStateArrayF));
+            EXPECT_EQ (0, countInst (fn, YdspIrOp::storeStateArrayF));
             EXPECT_EQ (1, countInst (fn, YdspIrOp::storeOutput));
             EXPECT_TRUE (hasConstF (fn, 0.0));
         }
@@ -1365,7 +1419,8 @@ TEST (YdspOptimizerTests, HoistsClampAndConversionBeforeAnArrayGuard)
         entrySelects += inst.op == YdspIrOp::selectB;
         entryConversions += inst.op == YdspIrOp::ftoi;
     }
-    EXPECT_EQ (2, entrySelects);
+    // The two clamps, plus the NaN guard of the bounded conversion.
+    EXPECT_EQ (3, entrySelects);
     EXPECT_EQ (1, entryConversions);
     EXPECT_EQ (2, countInst (fn, YdspIrOp::ftoi));
 }
@@ -1511,9 +1566,9 @@ TEST (YdspOptimizerTests, LoopInvariantCodeMotionKeepsPathDependentValuesInLoop)
             sawCopyInEntry = true;
 
     EXPECT_FALSE (sawCopyInEntry);
-    // The declaration's zero-init copy and the array arm's copy stay in the loop;
-    // the other arm becomes a constant.
-    EXPECT_EQ (2, countInst (fn, YdspIrOp::movF));
+    // SSA eliminates the overwritten zero-init copy; the array arm's select
+    // folds its write-back while the constant arm's copy stays in the loop.
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::movF));
     EXPECT_EQ (0, std::count_if (fn.blocks[0].insts.begin(), fn.blocks[0].insts.end(), [] (const YdspIrInst& inst)
     {
         return inst.op == YdspIrOp::loadStateArrayF;
@@ -3637,7 +3692,7 @@ TEST (YdspOptimizerTests, BoundsUnrollingAroundFourLaneMathCalls)
                     connection { x -> p.in; p.out -> y; } }
             )YDSP")
                                     .replace ("MODES", String (modes))
-                                    .replace ("SHAPE", calls == 1 ? "sin (phase[i])" : "sin (phase[i]) + cos (phase[i])");
+                                    .replace ("SHAPE", calls == 1 ? "sinh (phase[i])" : "sinh (phase[i]) + asinh (phase[i])");
             YdspLexer lexer (source, diagnostics);
             YdspParser parser (lexer.tokenize(), diagnostics);
             auto parsed = parser.parseProgram();
@@ -3693,11 +3748,11 @@ TEST (YdspOptimizerTests, BoundsUnrollingAroundFourLaneMathCalls)
             ASSERT_NE (nullptr, innerLoop (fn));
             const bool expected = modes == 8 && calls == 1;
             EXPECT_EQ (expected, innerLoop (fn)->unrolled);
-            EXPECT_EQ (expected ? 2 : 1, countInst (fn, YdspIrOp::sinF));
+            EXPECT_EQ (expected ? 2 : 1, countInst (fn, YdspIrOp::sinhF));
             EXPECT_TRUE (ydspEveryUseIsDefined (fn));
             for (const auto& block : fn.blocks)
                 for (const auto& inst : block.insts)
-                    if (inst.op == YdspIrOp::sinF)
+                    if (inst.op == YdspIrOp::sinhF)
                         EXPECT_EQ (4, fn.laneCountOf (inst.result));
         }
 }
@@ -4581,3 +4636,1483 @@ TEST (YdspOptimizerTests, CleanupPassesReportAnAlreadyStableFunction)
     EXPECT_FALSE (optimizer.commonSubexpressionElimination (fn));
     EXPECT_FALSE (optimizer.deadCodeElimination (fn));
 }
+
+TEST (YdspOptimizerTests, StateArraySegmentAndRegionsStartOnCacheLineBoundaries)
+{
+    YdspDiagnostics diagnostics;
+
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float a[3];
+            state int n[70];
+            state float64 d[5];
+            process {
+                a[0] = in; n[0] = 1; d[0] = 0.5;
+                out = (in @ 200) + a[0];
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                       diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = *ir->kernels[0];
+
+    // Arrays stay packed inside their region: 3 declared elements, then the
+    // 201 element hidden delay ring.
+    EXPECT_EQ (204, fn.float32ArrayElements);
+
+    // The array segment and each typed region inside it start on a cache line,
+    // so every element sits at a multiple of its own size.
+    EXPECT_GT (fn.stateScalarSize(), 0u);
+    EXPECT_EQ (0u, fn.stateScalarSize() % 64);
+    EXPECT_EQ (832, fn.int32ArrayRegionOffset());
+    EXPECT_EQ (832 + 320, fn.float64ArrayRegionOffset());
+    EXPECT_EQ (832 + 320 + 64, fn.int64ArrayRegionOffset());
+    EXPECT_EQ (fn.stateScalarSize() + 832u + 320u + 64u, fn.stateSize());
+}
+
+TEST (YdspOptimizerTests, TernaryBetweenExistingValuesBecomesASelect)
+{
+    YdspDiagnostics diagnostics;
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            input parameter float attack = 0.2, release = 0.01;
+            state float env;
+            process {
+                let level = abs (in);
+                let coeff = level > env ? attack : release;
+                env = env + coeff * (level - env);
+                out = env > 0.5 ? 1.0 : exp (env);
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP", diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = *ir->kernels[0];
+
+    // Choosing between two parameters evaluates nothing, so it is a select; the
+    // second `?:` still branches around its exp().
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::selectB));
+    EXPECT_EQ (1, std::count_if (fn.blocks.begin(), fn.blocks.end(), [] (const YdspIrBlock& block)
+    {
+        return block.preservesConditionalEvaluation && block.term == YdspIrTerm::branchIf;
+    }));
+}
+
+TEST (YdspOptimizerTests, StateRotationKeepsNoMoveOnTheCarriedChain)
+{
+    YdspDiagnostics diagnostics;
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float y1;
+            state float y2;
+            process {
+                let y = in + 0.5 * y1 - 0.25 * y2;
+                y2 = y1;
+                y1 = y;
+                out = y;
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP", diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = *ir->kernels[0];
+
+    // `y1 = y` is folded into the instruction that computes y even though
+    // `y2 = y1` reads y1 in between, which leaves that one copy as the only move.
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::movF));
+
+    for (const auto& block : fn.blocks)
+        for (const auto& inst : block.insts)
+            if (inst.op == YdspIrOp::storeOutput)
+                for (const auto& producer : block.insts)
+                    if (producer.result == inst.b)
+                        EXPECT_EQ (YdspIrOp::subF, producer.op);
+}
+
+TEST (YdspOptimizerTests, ConstantIndexedStateArraysAreKeptInRegisters)
+{
+    YdspDiagnostics diagnostics;
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            input parameter int k = 1;
+            state float z[4];
+            state float big[32];
+            state float v[4];
+            process {
+                let a = in + z[0] * 0.5;
+                z[0] = a;
+                z[1] = a - z[3];
+                big[0] = a;
+                v[k] = a;
+                out = z[1] + big[0] + v[0];
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP", diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = *ir->kernels[0];
+    ASSERT_EQ (3u, fn.stateArrays.size());
+
+    const auto exitBlock = static_cast<size_t> (fn.loops[0].exitBlock);
+
+    const auto countAccesses = [&fn] (size_t firstBlock, size_t lastBlock, int base, bool stores)
+    {
+        int count = 0;
+
+        for (size_t b = firstBlock; b < lastBlock; ++b)
+            for (const auto& inst : fn.blocks[b].insts)
+                if (inst.memIndex == base && inst.op == (stores ? YdspIrOp::storeStateArrayF : YdspIrOp::loadStateArrayF))
+                    ++count;
+
+        return count;
+    };
+
+    // z is only ever indexed by constants: its three touched elements are
+    // loaded ahead of the sample loop, live in registers inside it, and the two
+    // that are written are stored back after it.
+    const auto z = fn.stateArrays[0].base;
+    EXPECT_EQ (3, countAccesses (0, 1, z, false));
+    EXPECT_EQ (0, countAccesses (1, exitBlock, z, false) + countAccesses (1, exitBlock, z, true));
+    EXPECT_EQ (2, countAccesses (exitBlock, exitBlock + 1, z, true));
+
+    // big is too long to spend registers on, and v has an index only known at
+    // run time: both stay in memory.
+    EXPECT_GT (countAccesses (1, exitBlock, fn.stateArrays[1].base, true), 0);
+    EXPECT_GT (countAccesses (1, exitBlock, fn.stateArrays[2].base, true), 0);
+    EXPECT_EQ (0, countAccesses (0, 1, fn.stateArrays[2].base, false));
+}
+
+TEST (YdspOptimizerTests, FastMathMultipliesByTwoFixedFactorsOnce)
+{
+    for (const bool fastMath : { false, true })
+    {
+        SCOPED_TRACE (fastMath);
+
+        YdspDiagnostics diagnostics;
+        auto ir = buildIr (R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                input parameter float drive = 2.0;
+                process { out = floor (in * 64.0) * 0.015625 * drive; }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP", diagnostics, fastMath);
+
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        ASSERT_NE (nullptr, ir);
+
+        const auto& fn = *ir->kernels[0];
+
+        const auto multipliesIn = [&fn] (size_t firstBlock, size_t lastBlock)
+        {
+            int count = 0;
+
+            for (size_t b = firstBlock; b < lastBlock; ++b)
+                for (const auto& inst : fn.blocks[b].insts)
+                    count += inst.op == YdspIrOp::mulF ? 1 : 0;
+
+            return count;
+        };
+
+        // `0.015625 * drive` is the same for every sample: fast math computes
+        // it once ahead of the loop, strict math keeps the order as written.
+        EXPECT_EQ (fastMath ? 1 : 0, multipliesIn (0, 1));
+        EXPECT_EQ (fastMath ? 2 : 3, multipliesIn (1, fn.blocks.size()));
+    }
+}
+
+//==============================================================================
+// block processes, range proofs and tables
+//==============================================================================
+
+namespace
+{
+
+const YdspIrFunction& processKernelOf (const YdspIrProgram& ir)
+{
+    for (const auto& kernel : ir.kernels)
+        if (! kernel->isInit && ! kernel->isEventHandler)
+            return *kernel;
+
+    return *ir.kernels[0];
+}
+
+int countSaturatingArithmetic (const YdspIrFunction& fn)
+{
+    int count = 0;
+
+    for (const auto& block : fn.blocks)
+        for (const auto& inst : block.insts)
+            count += inst.saturatingIntegerArithmetic ? 1 : 0;
+
+    return count;
+}
+
+} // namespace
+
+TEST (YdspOptimizerTests, BlockProcessKeepsScalarStateInARegisterAcrossItsLoop)
+{
+    YdspDiagnostics diagnostics;
+
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z;
+            process block {
+                for n in 0..blockSize { z = z * 0.5 + in[n]; out[n] = z; }
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                       diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = processKernelOf (*ir);
+    ASSERT_EQ (1u, fn.loops.size());
+
+    // Read once on the way in and written once on the way out: the recurrence
+    // itself never touches the state memory.
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::loadStateF));
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::storeStateF));
+
+    for (int b = fn.loops[0].headerBlock; b < fn.loops[0].exitBlock; ++b)
+        for (const auto& inst : fn.blocks[static_cast<size_t> (b)].insts)
+            EXPECT_TRUE (inst.op != YdspIrOp::loadStateF && inst.op != YdspIrOp::storeStateF);
+}
+
+TEST (YdspOptimizerTests, RangeProofCoversMaskedPositionsAndLoopVariablesInABlockProcess)
+{
+    for (const auto* advance : { "idx = (idx + 1) & 31;", "idx = idx + 1;" })
+    {
+        YdspDiagnostics diagnostics;
+
+        // A FIR over a ring written the usual way: the position is masked, the
+        // taps count down from it.
+        auto ir = buildIr (String (R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                state float h[32];
+                state int idx;
+                process block {
+                    for n in 0..blockSize {
+                        h[idx & 31] = in[n];
+                        float acc = 0.0;
+                        for i in 0..32 { acc = acc + h[(idx - i) & 31]; }
+                        ADVANCE
+                        out[n] = acc;
+                    }
+                }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP").replace ("ADVANCE", advance),
+                           diagnostics);
+
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        ASSERT_NE (nullptr, ir);
+
+        const auto& fn = processKernelOf (*ir);
+        const bool masked = String (advance).contains ("&");
+
+        // Every index is masked into range either way. Only the masked
+        // position is known to stay small, so only then can `idx - i` and
+        // `idx + 1` not overflow.
+        EXPECT_EQ (0, countInst (fn, YdspIrOp::ltUI)) << advance;
+        EXPECT_EQ (masked, countSaturatingArithmetic (fn) == 0) << advance;
+    }
+}
+
+TEST (YdspOptimizerTests, WideIntermediateOfA32BitCongruentialStepDoesNotSaturate)
+{
+    YdspDiagnostics diagnostics;
+
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            output stream out;
+            state int seed;
+            process {
+                seed = int32 (int64 (seed) * 1103515245 + 12345);
+                out = float (seed) * (1.0 / 2147483647.0);
+            }
+        }
+        graph G { output stream y; node p = P; connection { p.out -> y; } }
+    )YDSP",
+                       diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    // An int32 times a constant below 2^31, plus a small constant, is far
+    // inside int64: neither operation needs its overflow check.
+    const auto& fn = processKernelOf (*ir);
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::mulI));
+    EXPECT_EQ (0, countSaturatingArithmetic (fn));
+}
+
+TEST (YdspOptimizerTests, StateArrayWrittenOnlyByItsInitialiserIsATableOfConstants)
+{
+    for (const auto* extra : { "", "m[3] = in;" })
+    {
+        YdspDiagnostics diagnostics;
+
+        auto ir = buildIr (String (R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                state float m[4] = { 0.5, -0.25, 2.0 };
+                process {
+                    EXTRA
+                    out = in * m[1] + m[2] + m[3];
+                }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP").replace ("EXTRA", extra),
+                           diagnostics);
+
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        ASSERT_NE (nullptr, ir);
+
+        const auto& fn = processKernelOf (*ir);
+        const bool isTable = String (extra).isEmpty();
+
+        bool readsCoefficientAsConstant = false;
+
+        for (const auto& block : fn.blocks)
+            for (const auto& inst : block.insts)
+                readsCoefficientAsConstant |= inst.op == YdspIrOp::constF && inst.fvalue == -0.25;
+
+        // Nothing but the declaration writes the table, so its elements are
+        // their initial values (zero past the list). One write anywhere in the
+        // processor and they are state again.
+        EXPECT_EQ (isTable, readsCoefficientAsConstant) << extra;
+        EXPECT_EQ (isTable, countInst (fn, YdspIrOp::loadStateArrayF) == 0) << extra;
+    }
+}
+
+TEST (YdspOptimizerTests, SampleLoopReadsCopiesOfWhatIsLiveAcrossTheCallsAheadOfIt)
+{
+    YdspDiagnostics diagnostics;
+
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            input parameter float a = 0.5, b = 0.25;
+            state float z;
+            process {
+                let g = exp (-a);
+                let h = sin (b);
+                z = z * g + in * h;
+                out = z;
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                       diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = processKernelOf (*ir);
+    ASSERT_EQ (1u, fn.loops.size());
+    ASSERT_GT (fn.loops[0].headerBlock, 0);
+
+    // Where the last call ahead of the loop is, and where each value is made.
+    std::pair<int, int> lastCall { -1, -1 };
+    std::vector<std::pair<int, int>> definedAt (fn.valueTypes.size(), { -1, -1 });
+
+    for (int b = 0; b < static_cast<int> (fn.blocks.size()); ++b)
+    {
+        const auto& insts = fn.blocks[static_cast<size_t> (b)].insts;
+
+        for (int i = 0; i < static_cast<int> (insts.size()); ++i)
+        {
+            if (insts[static_cast<size_t> (i)].op == YdspIrOp::expF || insts[static_cast<size_t> (i)].op == YdspIrOp::sinF)
+                lastCall = { b, i };
+
+            if (insts[static_cast<size_t> (i)].result >= 0)
+                definedAt[static_cast<size_t> (insts[static_cast<size_t> (i)].result)] = { b, i };
+        }
+    }
+
+    ASSERT_LT (lastCall.first, fn.loops[0].headerBlock);
+    ASSERT_GE (lastCall.first, 0);
+
+    // Nothing the loop touches was made before that call: a value that is
+    // live across a call can only sit in the few registers a call preserves.
+    for (int b = fn.loops[0].headerBlock; b < fn.loops[0].exitBlock; ++b)
+    {
+        for (const auto& inst : fn.blocks[static_cast<size_t> (b)].insts)
+        {
+            const int operands[] { inst.a, inst.b, inst.c };
+
+            for (int operand = 0; operand < 3; ++operand)
+            {
+                if (operands[operand] < 0 || ! ydspIsValueIdOperandForTest (inst.op, operand))
+                    continue;
+
+                const auto made = definedAt[static_cast<size_t> (operands[operand])];
+                EXPECT_TRUE (made.first >= fn.loops[0].headerBlock || made > lastCall) << "value " << operands[operand];
+            }
+        }
+    }
+
+    EXPECT_TRUE (ydspEveryUseIsDefined (fn));
+}
+
+//==============================================================================
+// SSA, Global Value Numbering (GVN) and cross-block optimizations
+//==============================================================================
+
+TEST (YdspOptimizerTests, SsaConstructionAndDestructionPreservesLoopsAndDefinitions)
+{
+    YdspDiagnostics diagnostics;
+    YdspOptimizer optimizer (diagnostics);
+
+    // Hand-built bounded loop:
+    // B0 (preheader): zero = constI 0, one = constI 1, bound = constI 8, acc = constF 1.0, i = movI zero
+    // B1 (header):    cond = ltI i, bound; branchIf cond -> B2, B3
+    // B2 (body):      acc_next = addF acc, acc; acc = movF acc_next; next = addI i, one; i = movI next; branch B1
+    // B3 (exit):      storeOutput out = acc
+    YdspIrFunction fn;
+    fn.valueTypes = {
+        YdspValueType::int32Type,   // 0: zero
+        YdspValueType::int32Type,   // 1: one
+        YdspValueType::int32Type,   // 2: bound
+        YdspValueType::int32Type,   // 3: i (induction)
+        YdspValueType::boolType,    // 4: cond
+        YdspValueType::int32Type,   // 5: next
+        YdspValueType::float32Type, // 6: acc
+        YdspValueType::float32Type  // 7: acc_next
+    };
+
+    fn.blocks.resize (4);
+    fn.blocks[0].insts = {
+        { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+        { YdspIrOp::constI, 1, -1, -1, -1, -1, 0.0, 1 },
+        { YdspIrOp::constI, 2, -1, -1, -1, -1, 0.0, 8 },
+        { YdspIrOp::constF, 6, -1, -1, -1, -1, 1.0 },
+        { YdspIrOp::movI, 3, 0 }
+    };
+    fn.blocks[0].term = YdspIrTerm::fallthrough;
+
+    fn.blocks[1].insts = { ydspInst (YdspIrOp::ltI, 4, 3, 2) };
+    fn.blocks[1].term = YdspIrTerm::branchIf;
+    fn.blocks[1].termCond = 4;
+    fn.blocks[1].termTarget = 2;
+    fn.blocks[1].termTarget2 = 3;
+
+    fn.blocks[2].insts = {
+        ydspInst (YdspIrOp::addF, 7, 6, 6),
+        ydspInst (YdspIrOp::movF, 6, 7),
+        ydspInst (YdspIrOp::addI, 5, 3, 1),
+        ydspInst (YdspIrOp::movI, 3, 5)
+    };
+    fn.blocks[2].term = YdspIrTerm::branch;
+    fn.blocks[2].termTarget = 1;
+
+    fn.blocks[3].insts = {
+        { YdspIrOp::storeOutput, -1, 0, 6, -1, 0 }
+    };
+
+    YdspIrLoop loop;
+    loop.id = 0;
+    loop.headerBlock = 1;
+    loop.exitBlock = 3;
+    loop.induction = 3;
+    loop.bound = { YdspLoopBoundKind::constant, 8 };
+    fn.loops.push_back (loop);
+
+    EXPECT_TRUE (optimizer.constructSsa (fn));
+
+    // Loop header must receive phi nodes for both `i` and `acc`.
+    EXPECT_EQ (2, std::count_if (fn.blocks[1].insts.begin(), fn.blocks[1].insts.end(), [] (const YdspIrInst& inst)
+    {
+        return inst.op == YdspIrOp::phi && inst.phiIncoming.size() == 2;
+    }));
+
+    // In SSA form every value id must have at most one definition.
+    std::vector<int> defs (fn.valueTypes.size(), 0);
+    for (const auto& block : fn.blocks)
+        for (const auto& inst : block.insts)
+            if (inst.result >= 0)
+                ++defs[static_cast<size_t> (inst.result)];
+
+    for (const int count : defs)
+        EXPECT_LE (count, 1);
+
+    EXPECT_TRUE (optimizer.copyPropagation (fn));
+    EXPECT_TRUE (optimizer.deadCodeElimination (fn));
+    EXPECT_TRUE (optimizer.destructSsa (fn));
+
+    // No phi ops remain after destruction, loop layout is preserved, and the
+    // canonical preheader movI into loop.induction survives for constant-bound loops.
+    EXPECT_EQ (0, countInst (fn, YdspIrOp::phi));
+    ASSERT_EQ (1u, fn.loops.size());
+    EXPECT_EQ (1, fn.loops[0].headerBlock);
+    EXPECT_EQ (3, fn.loops[0].exitBlock);
+    EXPECT_TRUE (ydspEveryUseIsDefined (fn));
+
+    const int induction = fn.loops[0].induction;
+    EXPECT_GE (induction, 0);
+    EXPECT_TRUE (std::any_of (fn.blocks[0].insts.begin(), fn.blocks[0].insts.end(), [induction] (const YdspIrInst& inst)
+    {
+        return inst.op == YdspIrOp::movI && inst.result == induction;
+    }));
+}
+
+TEST (YdspOptimizerTests, SsaDestructionHandlesCriticalEdgesAndSwapCycles)
+{
+    YdspDiagnostics diagnostics;
+    YdspOptimizer optimizer (diagnostics);
+
+    // B0 -> B2 is a critical edge (else-less if), and B1 -> B2 has a swap cycle
+    // (p0, p1) = (p1, p0) that must be sequentialized through a temporary.
+    YdspIrFunction fn;
+    fn.valueTypes = {
+        YdspValueType::boolType,    // 0: cond
+        YdspValueType::float32Type, // 1: v0
+        YdspValueType::float32Type, // 2: v1
+        YdspValueType::float32Type, // 3: p0
+        YdspValueType::float32Type, // 4: p1
+        YdspValueType::float32Type, // 5: sum
+        YdspValueType::int32Type    // 6: idx
+    };
+
+    fn.blocks.resize (3);
+    fn.blocks[0].insts = {
+        ydspInst (YdspIrOp::loadBlockSize, 6),
+        { YdspIrOp::constB, 0, -1, -1, -1, -1, 0.0, 0, true },
+        { YdspIrOp::constF, 1, -1, -1, -1, -1, 1.0 },
+        { YdspIrOp::constF, 2, -1, -1, -1, -1, 2.0 }
+    };
+    fn.blocks[0].term = YdspIrTerm::branchIf;
+    fn.blocks[0].termCond = 0;
+    fn.blocks[0].termTarget = 1;
+    fn.blocks[0].termTarget2 = 2;
+
+    fn.blocks[1].insts = {};
+    fn.blocks[1].term = YdspIrTerm::branch;
+    fn.blocks[1].termTarget = 2;
+
+    YdspIrInst phiA;
+    phiA.op = YdspIrOp::phi;
+    phiA.result = 3;
+    phiA.phiIncoming = { { 0, 1 }, { 1, 4 } };
+
+    YdspIrInst phiB;
+    phiB.op = YdspIrOp::phi;
+    phiB.result = 4;
+    phiB.phiIncoming = { { 0, 2 }, { 1, 3 } };
+
+    fn.blocks[2].insts = {
+        phiA,
+        phiB,
+        ydspInst (YdspIrOp::addF, 5, 3, 4),
+        { YdspIrOp::storeOutput, -1, 6, 5, -1, 0 }
+    };
+
+    EXPECT_TRUE (optimizer.destructSsa (fn));
+    EXPECT_EQ (0, countInst (fn, YdspIrOp::phi));
+    EXPECT_TRUE (ydspEveryUseIsDefined (fn));
+
+    // Critical edge B0 -> B2 was split into structured B0 -> B1 / B2(else) -> B3(join).
+    ASSERT_EQ (4u, fn.blocks.size());
+    EXPECT_EQ (1, fn.blocks[0].termTarget);
+    EXPECT_EQ (2, fn.blocks[0].termTarget2);
+    EXPECT_EQ (3, fn.blocks[1].termTarget);
+    EXPECT_EQ (YdspIrTerm::fallthrough, fn.blocks[2].term);
+
+    // Swap cycle in B1 must break through a fresh temporary (3 movFs: tmp=p0, p0=p1, p1=tmp).
+    EXPECT_EQ (3, std::count_if (fn.blocks[1].insts.begin(), fn.blocks[1].insts.end(), [] (const YdspIrInst& inst)
+    {
+        return inst.op == YdspIrOp::movF;
+    }));
+}
+
+TEST (YdspOptimizerTests, GlobalValueNumberingEliminatesRedundantExpressionsAcrossDominatedDiamonds)
+{
+    YdspDiagnostics diagnostics;
+    YdspOptimizer optimizer (diagnostics);
+
+    // B0 (entry): p = loadParam 0; k = constF 2.0; e0 = mulF(p, k); branchIf cond -> B1, B2
+    // B1 (then):  e1 = mulF(k, p); branch -> B3   (commuted duplicate of e0 -> eliminated!)
+    // B2 (else):  s2 = addF(p, k); e2 = mulF(p, k); branch -> B3  (e2 eliminated, s2 unique to B2)
+    // B3 (join):  e3 = mulF(p, k); s3 = addF(p, k);  (e3 eliminated, s3 NOT eliminated because B2 does not dominate B3!)
+    YdspIrFunction fn;
+    fn.valueTypes.assign (9, YdspValueType::float32Type);
+    fn.valueTypes[2] = YdspValueType::boolType;
+
+    fn.blocks.resize (4);
+    fn.blocks[0].insts = {
+        { YdspIrOp::loadParam, 0, 0 },
+        { YdspIrOp::constF, 1, -1, -1, -1, -1, 2.0 },
+        ydspInst (YdspIrOp::ltF, 2, 0, 1),
+        ydspInst (YdspIrOp::mulF, 3, 0, 1)
+    };
+    fn.blocks[0].term = YdspIrTerm::branchIf;
+    fn.blocks[0].termCond = 2;
+    fn.blocks[0].termTarget = 1;
+    fn.blocks[0].termTarget2 = 2;
+
+    fn.blocks[1].insts = {
+        ydspInst (YdspIrOp::mulF, 4, 1, 0) // commuted p * k
+    };
+    fn.blocks[1].term = YdspIrTerm::branch;
+    fn.blocks[1].termTarget = 3;
+
+    fn.blocks[2].insts = {
+        ydspInst (YdspIrOp::addF, 5, 0, 1),
+        ydspInst (YdspIrOp::mulF, 6, 0, 1)
+    };
+    fn.blocks[2].term = YdspIrTerm::branch;
+    fn.blocks[2].termTarget = 3;
+
+    fn.blocks[3].insts = {
+        ydspInst (YdspIrOp::mulF, 7, 0, 1),
+        ydspInst (YdspIrOp::addF, 8, 0, 1)
+    };
+
+    EXPECT_TRUE (optimizer.globalValueNumbering (fn));
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::mulF));
+    EXPECT_EQ (2, countInst (fn, YdspIrOp::addF)); // B2 and B3 must both keep their addF
+    EXPECT_TRUE (ydspEveryUseIsDefined (fn));
+}
+
+TEST (YdspOptimizerTests, SsaCrossBlockConstantFoldingAndCopyPropagation)
+{
+    YdspDiagnostics diagnostics;
+    YdspOptimizer optimizer (diagnostics);
+
+    // B0: cond = constB true; x0 = constF 4.0; c0 = movF x0; branchIf cond -> B1, B2
+    // B1: x1 = addF c0, x0; branch -> B3
+    // B2: x2 = constF 9.0; branch -> B3
+    // B3: phiRes = phi(B1: x1, B2: x2); out = addF phiRes, c0
+    YdspIrFunction fn;
+    fn.valueTypes = {
+        YdspValueType::boolType,    // 0: cond
+        YdspValueType::float32Type, // 1: x0
+        YdspValueType::float32Type, // 2: c0
+        YdspValueType::float32Type, // 3: x1
+        YdspValueType::float32Type, // 4: x2
+        YdspValueType::float32Type, // 5: phiRes
+        YdspValueType::float32Type, // 6: out
+        YdspValueType::int32Type    // 7: idx
+    };
+
+    fn.blocks.resize (4);
+    fn.blocks[0].insts = {
+        { YdspIrOp::loadBlockSize, 7 },
+        { YdspIrOp::constB, 0, -1, -1, -1, -1, 0.0, 0, true },
+        { YdspIrOp::constF, 1, -1, -1, -1, -1, 4.0 },
+        ydspInst (YdspIrOp::movF, 2, 1)
+    };
+    fn.blocks[0].term = YdspIrTerm::branchIf;
+    fn.blocks[0].termCond = 0;
+    fn.blocks[0].termTarget = 1;
+    fn.blocks[0].termTarget2 = 2;
+
+    fn.blocks[1].insts = { ydspInst (YdspIrOp::addF, 3, 2, 1) };
+    fn.blocks[1].term = YdspIrTerm::branch;
+    fn.blocks[1].termTarget = 3;
+
+    fn.blocks[2].insts = { { YdspIrOp::constF, 4, -1, -1, -1, -1, 9.0 } };
+    fn.blocks[2].term = YdspIrTerm::branch;
+    fn.blocks[2].termTarget = 3;
+
+    YdspIrInst phiInst;
+    phiInst.op = YdspIrOp::phi;
+    phiInst.result = 5;
+    phiInst.phiIncoming = { { 1, 3 }, { 2, 4 } };
+
+    fn.blocks[3].insts = {
+        phiInst,
+        ydspInst (YdspIrOp::addF, 6, 5, 2),
+        { YdspIrOp::storeOutput, -1, 7, 6, -1, 0 }
+    };
+
+    EXPECT_TRUE (optimizer.copyPropagation (fn));
+    EXPECT_TRUE (optimizer.constantFolding (fn));
+    // Dead block B2 was pruned and phiIncoming updated to only B1: 8.0; folding again
+    // collapses the single-incoming phi and final addF into constF 12.0.
+    EXPECT_TRUE (optimizer.constantFolding (fn));
+    EXPECT_TRUE (hasConstF (fn, 12.0));
+    EXPECT_EQ (0, countInst (fn, YdspIrOp::addF));
+    EXPECT_TRUE (ydspEveryUseIsDefined (fn));
+}
+
+TEST (YdspOptimizerTests, CrossBlockStoreToLoadForwardingAcrossDominatedBlocksAndDiamonds)
+{
+    YdspDiagnostics diagnostics;
+    YdspOptimizer optimizer (diagnostics);
+
+    // Part 1: Store in B0 forwards across a diamond (B1 clean, B2 writes disjoint element 1) into B3.
+    {
+        YdspIrFunction fn;
+        fn.valueTypes = {
+            YdspValueType::int32Type,   // 0: idx0 = 0
+            YdspValueType::int32Type,   // 1: idx1 = 1
+            YdspValueType::float32Type, // 2: v0
+            YdspValueType::float32Type, // 3: v1
+            YdspValueType::boolType,    // 4: cond
+            YdspValueType::float32Type  // 5: loaded
+        };
+
+        fn.blocks.resize (4);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::constI, 1, -1, -1, -1, -1, 0.0, 1 },
+            { YdspIrOp::loadParam, 2, 0 },
+            { YdspIrOp::loadParam, 3, 1 },
+            ydspInst (YdspIrOp::ltF, 4, 2, 3),
+            { YdspIrOp::storeStateArrayF, -1, 0, 2, -1, 0 }
+        };
+        fn.blocks[0].term = YdspIrTerm::branchIf;
+        fn.blocks[0].termCond = 4;
+        fn.blocks[0].termTarget = 1;
+        fn.blocks[0].termTarget2 = 2;
+
+        fn.blocks[1].insts = {};
+        fn.blocks[1].term = YdspIrTerm::branch;
+        fn.blocks[1].termTarget = 3;
+
+        fn.blocks[2].insts = { { YdspIrOp::storeStateArrayF, -1, 1, 3, -1, 0 } };
+        fn.blocks[2].term = YdspIrTerm::branch;
+        fn.blocks[2].termTarget = 3;
+
+        fn.blocks[3].insts = { { YdspIrOp::loadStateArrayF, 5, 0, -1, -1, 0 } };
+
+        EXPECT_TRUE (optimizer.storeToLoadForwarding (fn));
+        EXPECT_EQ (0, countInst (fn, YdspIrOp::loadStateArrayF));
+        EXPECT_EQ (YdspIrOp::movF, fn.blocks[3].insts[0].op);
+        EXPECT_EQ (2, fn.blocks[3].insts[0].a);
+    }
+
+    // Part 2: Aliasing store to element 0 in B2 must block forwarding from B0 to B3.
+    {
+        YdspIrFunction fn;
+        fn.valueTypes = {
+            YdspValueType::int32Type,   // 0: idx0 = 0
+            YdspValueType::float32Type, // 1: v0
+            YdspValueType::float32Type, // 2: v1
+            YdspValueType::boolType,    // 3: cond
+            YdspValueType::float32Type  // 4: loaded
+        };
+
+        fn.blocks.resize (4);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::loadParam, 1, 0 },
+            { YdspIrOp::loadParam, 2, 1 },
+            ydspInst (YdspIrOp::ltF, 3, 1, 2),
+            { YdspIrOp::storeStateArrayF, -1, 0, 1, -1, 0 }
+        };
+        fn.blocks[0].term = YdspIrTerm::branchIf;
+        fn.blocks[0].termCond = 3;
+        fn.blocks[0].termTarget = 1;
+        fn.blocks[0].termTarget2 = 2;
+
+        fn.blocks[1].insts = {};
+        fn.blocks[1].term = YdspIrTerm::branch;
+        fn.blocks[1].termTarget = 3;
+
+        fn.blocks[2].insts = { { YdspIrOp::storeStateArrayF, -1, 0, 2, -1, 0 } };
+        fn.blocks[2].term = YdspIrTerm::branch;
+        fn.blocks[2].termTarget = 3;
+
+        fn.blocks[3].insts = { { YdspIrOp::loadStateArrayF, 4, 0, -1, -1, 0 } };
+
+        EXPECT_FALSE (optimizer.storeToLoadForwarding (fn));
+        EXPECT_EQ (1, countInst (fn, YdspIrOp::loadStateArrayF));
+    }
+
+    // Part 3: Store in B0 must NOT forward into a loop when the loop body writes the same element after the load.
+    {
+        YdspIrFunction fn;
+        fn.valueTypes = {
+            YdspValueType::int32Type,   // 0: idx0 = 0
+            YdspValueType::float32Type, // 1: v0
+            YdspValueType::float32Type, // 2: loaded
+            YdspValueType::boolType     // 3: cond
+        };
+
+        fn.blocks.resize (4);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::loadParam, 1, 0 },
+            { YdspIrOp::storeStateArrayF, -1, 0, 1, -1, 0 }
+        };
+        fn.blocks[0].term = YdspIrTerm::fallthrough;
+
+        fn.blocks[1].insts = { { YdspIrOp::constB, 3, -1, -1, -1, -1, 0.0, 0, true } };
+        fn.blocks[1].term = YdspIrTerm::branchIf;
+        fn.blocks[1].termCond = 3;
+        fn.blocks[1].termTarget = 2;
+        fn.blocks[1].termTarget2 = 3;
+
+        fn.blocks[2].insts = {
+            { YdspIrOp::loadStateArrayF, 2, 0, -1, -1, 0 },
+            { YdspIrOp::storeStateArrayF, -1, 0, 1, -1, 0 }
+        };
+        fn.blocks[2].term = YdspIrTerm::branch;
+        fn.blocks[2].termTarget = 1;
+
+        fn.blocks[3].insts = {};
+
+        EXPECT_FALSE (optimizer.storeToLoadForwarding (fn));
+        EXPECT_EQ (1, countInst (fn, YdspIrOp::loadStateArrayF));
+    }
+}
+
+TEST (YdspOptimizerTests, EndToEndSsaGvnDeduplicatesAcrossControlFlow)
+{
+    YdspDiagnostics diagnostics;
+
+    // `sin (in[i] + drive)` is computed in the dominating block and repeated inside
+    // both arms of a branchy `if/else` (kept branchy by state-array loads).
+    // Dominator-tree GVN must reuse the dominating sin() call across all blocks
+    // and destructSsa must leave zero phi nodes and valid definitions.
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            input parameter float drive = 0.5;
+            state float table[32];
+            process block {
+                for i in 0..blockSize {
+                    let s = sin (in[i] + drive);
+                    float y;
+                    if (in[i] > 0.0) {
+                        y = table[i & 31] + sin (drive + in[i]);
+                    } else {
+                        y = table[(i + 1) & 31] - sin (in[i] + drive);
+                    }
+                    out[i] = y + s;
+                }
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                       diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = processKernelOf (*ir);
+    EXPECT_EQ (0, countInst (fn, YdspIrOp::phi));
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::sinF));
+    EXPECT_TRUE (ydspEveryUseIsDefined (fn));
+}
+
+//==============================================================================
+// Read-only state array hoisting & constant-table folding
+//==============================================================================
+
+TEST (YdspOptimizerTests, ConstantFoldingFoldsLiteralStateArraysAndRespectsWrites)
+{
+    // 1. hoa_decoder-style matrix with zeros + int64 constant table:
+    //    M[1] == 0.0 folds to constF 0.0 and algebraicSimplification drops 0.0 * in and + 0.0.
+    {
+        YdspDiagnostics diagnostics;
+
+        auto ir = buildIr (R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                state float M[8] = { 0.5, 0.0, -0.25, 0.0, 0.0, 0.75, 0.0, 0.0 };
+                state int64 K[2] = { 4611686018427387905, -2 };
+                process {
+                    let offset = float (K[0] - 4611686018427387905 + K[1] + 2);
+                    out = M[0] * in + M[1] * in + M[2] * in + offset;
+                }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP",
+                           diagnostics,
+                           true);
+
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        ASSERT_NE (nullptr, ir);
+        ASSERT_EQ (2u, ir->kernels.size());
+
+        const auto& fn = processKernelOf (*ir);
+        ASSERT_EQ (2u, fn.stateArrays.size());
+
+        EXPECT_TRUE (fn.stateArrays[0].readOnlyInProcess);
+        EXPECT_TRUE (fn.stateArrays[0].compileTimeConstant);
+        ASSERT_EQ (8u, fn.stateArrays[0].constFloatValues.size());
+        EXPECT_DOUBLE_EQ (0.5, fn.stateArrays[0].constFloatValues[0]);
+        EXPECT_DOUBLE_EQ (0.0, fn.stateArrays[0].constFloatValues[1]);
+        EXPECT_DOUBLE_EQ (-0.25, fn.stateArrays[0].constFloatValues[2]);
+        EXPECT_DOUBLE_EQ (0.75, fn.stateArrays[0].constFloatValues[5]);
+
+        EXPECT_TRUE (fn.stateArrays[1].readOnlyInProcess);
+        EXPECT_TRUE (fn.stateArrays[1].compileTimeConstant);
+        ASSERT_EQ (2u, fn.stateArrays[1].constIntValues.size());
+        EXPECT_EQ (int64_t { 4611686018427387905 }, fn.stateArrays[1].constIntValues[0]);
+        EXPECT_EQ (int64_t { -2 }, fn.stateArrays[1].constIntValues[1]);
+
+        EXPECT_EQ (0, countInst (fn, YdspIrOp::loadStateArrayF));
+        EXPECT_EQ (0, countInst (fn, YdspIrOp::loadStateArrayI));
+        EXPECT_EQ (2, countInst (fn, YdspIrOp::mulF));
+        EXPECT_EQ (1, countInst (fn, YdspIrOp::addF));
+
+        const auto& initFn = *ir->kernels[1];
+        ASSERT_TRUE (initFn.isInit);
+        ASSERT_EQ (2u, initFn.stateArrays.size());
+        EXPECT_FALSE (initFn.stateArrays[0].readOnlyInProcess);
+        EXPECT_FALSE (initFn.stateArrays[0].compileTimeConstant);
+        EXPECT_FALSE (initFn.stateArrays[1].readOnlyInProcess);
+        EXPECT_FALSE (initFn.stateArrays[1].compileTimeConstant);
+    }
+
+    // 2. Writes in init (via loop), process, or eventHandlers (direct or via helper) must prevent constant folding.
+    {
+        YdspDiagnostics diagnostics;
+
+        auto ir = buildIr (R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                input event midi;
+                state float initLoop[4] = { 1.0, 2.0, 3.0, 4.0 };
+                state float procWritten[4] = { 1.0, 2.0, 3.0, 4.0 };
+                state float eventWritten[4] = { 1.0, 2.0, 3.0, 4.0 };
+                state float eventHelperWritten[4] = { 1.0, 2.0, 3.0, 4.0 };
+
+                func writeHelper (idx: int, v: float) : float {
+                    eventHelperWritten[idx] = v;
+                    return v;
+                }
+
+                init {
+                    for i in 0..4 { initLoop[i] = float (i) + 1.0; }
+                }
+
+                event midi (e: controlChange) {
+                    if (e.control == 1) { eventWritten[0] = e.value; }
+                    if (e.control == 2) { let unused = writeHelper (0, e.value); }
+                }
+
+                process {
+                    procWritten[1] = in;
+                    out = initLoop[0] + procWritten[0] + eventWritten[0] + eventHelperWritten[0];
+                }
+            }
+            graph G { input stream x; input event midi; output stream y; node p = P; connection { x -> p.in; midi -> p.midi; p.out -> y; } }
+        )YDSP",
+                           diagnostics);
+
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        ASSERT_NE (nullptr, ir);
+
+        const auto& fn = processKernelOf (*ir);
+        ASSERT_EQ (4u, fn.stateArrays.size());
+
+        EXPECT_TRUE (fn.stateArrays[0].readOnlyInProcess);
+        EXPECT_FALSE (fn.stateArrays[0].compileTimeConstant);
+
+        EXPECT_FALSE (fn.stateArrays[1].readOnlyInProcess);
+        EXPECT_FALSE (fn.stateArrays[1].compileTimeConstant);
+
+        EXPECT_FALSE (fn.stateArrays[2].readOnlyInProcess);
+        EXPECT_FALSE (fn.stateArrays[2].compileTimeConstant);
+
+        EXPECT_FALSE (fn.stateArrays[3].readOnlyInProcess);
+        EXPECT_FALSE (fn.stateArrays[3].compileTimeConstant);
+
+        EXPECT_FALSE (hasConstF (fn, 1.0));
+        EXPECT_GE (countInst (fn, YdspIrOp::loadStateArrayF), 4);
+    }
+}
+
+TEST (YdspOptimizerTests, LicmHoistsReadOnlyStateArrayLoadsAndDependentMathOutOfLoops)
+{
+    // 1. Sample mode: arrays populated in an init loop (not compile-time constants)
+    //    must have both constant-indexed and parameter-indexed loads plus
+    //    dependent pow/cos/sin hoisted out of the sample loop, while arrays written
+    //    inside the loop or indexed by a loop-variant value remain in the loop.
+    {
+        YdspDiagnostics diagnostics;
+
+        auto ir = buildIr (R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                input parameter int ch = 3;
+                state float gain[16];
+                state float pan[16];
+                state float buf[16];
+
+                init {
+                    for i in 0..16 {
+                        gain[i] = float (i) * -0.5;
+                        pan[i] = float (i) * 0.0625;
+                        buf[i] = 0.0;
+                    }
+                }
+
+                process {
+                    let g0 = pow (10.0, gain[0] * 0.05);
+                    let gCh = pow (10.0, gain[ch] * 0.05);
+                    let p0 = pan[0] * (pi * 0.5);
+                    buf[0] = in;
+                    let variantIdx = int32 (abs (in) * 15.0) & 15;
+                    out = (in * g0 * cos (p0) + in * gCh * sin (p0)) + buf[0] + gain[variantIdx];
+                }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP",
+                           diagnostics);
+
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        ASSERT_NE (nullptr, ir);
+
+        const auto& fn = processKernelOf (*ir);
+        ASSERT_EQ (1u, fn.loops.size());
+        const int header = fn.loops[0].headerBlock;
+        const int exit = fn.loops[0].exitBlock;
+
+        const auto countInRange = [&] (int beginBlock, int endBlock, YdspIrOp op)
+        {
+            int count = 0;
+
+            for (int b = beginBlock; b < endBlock; ++b)
+                for (const auto& inst : fn.blocks[static_cast<size_t> (b)].insts)
+                    if (inst.op == op)
+                        ++count;
+
+            return count;
+        };
+
+        // gain[0], gain[ch], pan[0] plus dependent pow/cos/sin hoist into block 0.
+        EXPECT_EQ (3, countInRange (0, header, YdspIrOp::loadStateArrayF));
+        EXPECT_EQ (2, countInRange (0, header, YdspIrOp::powF));
+        EXPECT_EQ (1, countInRange (0, header, YdspIrOp::cosF));
+        EXPECT_EQ (1, countInRange (0, header, YdspIrOp::sinF));
+
+        // Only gain[variantIdx] stays inside the sample loop (buf[0] was forwarded from store).
+        EXPECT_EQ (0, countInRange (header, exit, YdspIrOp::powF));
+        EXPECT_EQ (0, countInRange (header, exit, YdspIrOp::cosF));
+        EXPECT_EQ (0, countInRange (header, exit, YdspIrOp::sinF));
+        EXPECT_EQ (1, countInRange (header, exit, YdspIrOp::loadStateArrayF));
+    }
+
+    // 2. Direct LICM unit check: a loop writing array A[0] keeps A[0] load in the
+    //    loop while hoisting read-only array B[0] load to preheader; loop-variant
+    //    index load on B stays in the loop.
+    {
+        YdspDiagnostics diagnostics;
+        YdspOptimizer optimizer (diagnostics);
+
+        YdspIrFunction fn;
+        fn.stateArrays = {
+            { YdspValueType::float32Type, 0, 8, {}, {}, false, false },
+            { YdspValueType::float32Type, 8, 8, {}, {}, true, false }
+        };
+        fn.valueTypes = {
+            YdspValueType::int32Type,   // 0: zero
+            YdspValueType::int32Type,   // 1: one
+            YdspValueType::int32Type,   // 2: bound = 4
+            YdspValueType::int32Type,   // 3: i
+            YdspValueType::boolType,    // 4: cond
+            YdspValueType::int32Type,   // 5: next
+            YdspValueType::float32Type, // 6: valA
+            YdspValueType::float32Type, // 7: valB_inv
+            YdspValueType::float32Type, // 8: valB_var
+            YdspValueType::float32Type, // 9: sum1
+            YdspValueType::float32Type  // 10: sum2
+        };
+
+        fn.blocks.resize (4);
+        fn.blocks[0].insts = {
+            { YdspIrOp::constI, 0, -1, -1, -1, -1, 0.0, 0 },
+            { YdspIrOp::constI, 1, -1, -1, -1, -1, 0.0, 1 },
+            { YdspIrOp::constI, 2, -1, -1, -1, -1, 0.0, 4 },
+            { YdspIrOp::movI, 3, 0 }
+        };
+        fn.blocks[1].insts = { ydspInst (YdspIrOp::ltI, 4, 3, 2) };
+        fn.blocks[1].term = YdspIrTerm::branchIf;
+        fn.blocks[1].termCond = 4;
+        fn.blocks[1].termTarget = 2;
+        fn.blocks[1].termTarget2 = 3;
+
+        fn.blocks[2].insts = {
+            { YdspIrOp::loadStateArrayF, 6, 0, -1, -1, 0 },
+            { YdspIrOp::loadStateArrayF, 7, 0, -1, -1, 8 },
+            { YdspIrOp::loadStateArrayF, 8, 3, -1, -1, 8 },
+            ydspInst (YdspIrOp::addF, 9, 6, 7),
+            ydspInst (YdspIrOp::addF, 10, 9, 8),
+            { YdspIrOp::storeStateArrayF, -1, 0, 10, -1, 0 },
+            ydspInst (YdspIrOp::addI, 5, 3, 1),
+            ydspInst (YdspIrOp::movI, 3, 5)
+        };
+        fn.blocks[2].term = YdspIrTerm::branch;
+        fn.blocks[2].termTarget = 1;
+
+        YdspIrLoop loop;
+        loop.id = 0;
+        loop.headerBlock = 1;
+        loop.exitBlock = 3;
+        loop.induction = 3;
+        loop.bound = { YdspLoopBoundKind::constant, 4 };
+        fn.loops.push_back (loop);
+
+        optimizer.loopInvariantCodeMotion (fn);
+
+        // Preheader receives only valB_inv (memIndex 8, index 0).
+        const auto hoistedLoad = std::find_if (fn.blocks[0].insts.begin(), fn.blocks[0].insts.end(), [] (const YdspIrInst& inst)
+        {
+            return inst.op == YdspIrOp::loadStateArrayF;
+        });
+        ASSERT_NE (fn.blocks[0].insts.end(), hoistedLoad);
+        EXPECT_EQ (1, std::count_if (fn.blocks[0].insts.begin(), fn.blocks[0].insts.end(), [] (const YdspIrInst& inst)
+        {
+            return inst.op == YdspIrOp::loadStateArrayF;
+        }));
+        EXPECT_EQ (8, hoistedLoad->memIndex);
+        EXPECT_EQ (0, hoistedLoad->a);
+
+        // valA (written in loop) and valB_var (loop-variant index) remain in loop body.
+        EXPECT_EQ (2, std::count_if (fn.blocks[2].insts.begin(), fn.blocks[2].insts.end(), [] (const YdspIrInst& inst)
+        {
+            return inst.op == YdspIrOp::loadStateArrayF;
+        }));
+    }
+
+    // 3. Block mode: pre-loop write loop followed by sample loop reading coefficients
+    //    hoists coefficients to the sample loop's preheader, not ahead of the write loop.
+    {
+        YdspDiagnostics diagnostics;
+
+        auto ir = buildIr (R"YDSP(
+            processor P {
+                input stream in;
+                output stream out;
+                input parameter float drive = 0.5;
+                state float coeffs[4];
+                process block {
+                    for k in 0..4 { coeffs[k] = drive * float (k + 1) * 0.25; }
+                    for n in 0..blockSize { out[n] = in[n] * (coeffs[0] + coeffs[1]); }
+                }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP",
+                           diagnostics);
+
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        ASSERT_NE (nullptr, ir);
+
+        const auto& fn = processKernelOf (*ir);
+        ASSERT_EQ (2u, fn.loops.size());
+
+        const auto& writeLoop = fn.loops[0];
+        const auto& audioLoop = fn.loops[1];
+        const int audioPreheader = audioLoop.headerBlock - 1;
+
+        ASSERT_GE (audioPreheader, writeLoop.exitBlock);
+
+        int loadsInPreheader = 0;
+        for (const auto& inst : fn.blocks[static_cast<size_t> (audioPreheader)].insts)
+            if (inst.op == YdspIrOp::loadStateArrayF)
+                ++loadsInPreheader;
+
+        int loadsInAudioLoop = 0;
+        for (int b = audioLoop.headerBlock; b < audioLoop.exitBlock; ++b)
+            for (const auto& inst : fn.blocks[static_cast<size_t> (b)].insts)
+                if (inst.op == YdspIrOp::loadStateArrayF)
+                    ++loadsInAudioLoop;
+
+        EXPECT_EQ (2, loadsInPreheader);
+        EXPECT_EQ (0, loadsInAudioLoop);
+    }
+}
+
+TEST (YdspOptimizerTests, Mixer16AndHoaDecoderEndToEndNumericalEquivalence)
+{
+    const String mixer16Source = R"YDSP(
+        processor Mixer16 {
+            input stream in0, in1, in2, in3, in4, in5, in6, in7;
+            input stream in8, in9, in10, in11, in12, in13, in14, in15;
+            output stream out;
+            input event midi;
+            state float gain[16];
+            state float pan[16];
+
+            init {
+                for i in 0..16 {
+                    gain[i] = -6.0 + float (i) * 0.5;
+                    pan[i] = float (i) / 15.0;
+                }
+            }
+
+            event midi (e: controlChange) {
+                if (e.control >= 0 && e.control < 16) {
+                    gain[e.control] = e.value * 12.0 - 12.0;
+                }
+            }
+
+            process {
+                let halfPi = pi * 0.5;
+                let l0 = in0 * pow (10.0, gain[0] * 0.05) * cos (pan[0] * halfPi);
+                let r0 = in0 * pow (10.0, gain[0] * 0.05) * sin (pan[0] * halfPi);
+                let l1 = in1 * pow (10.0, gain[1] * 0.05) * cos (pan[1] * halfPi);
+                let r1 = in1 * pow (10.0, gain[1] * 0.05) * sin (pan[1] * halfPi);
+                let l2 = in2 * pow (10.0, gain[2] * 0.05) * cos (pan[2] * halfPi);
+                let r2 = in2 * pow (10.0, gain[2] * 0.05) * sin (pan[2] * halfPi);
+                let l3 = in3 * pow (10.0, gain[3] * 0.05) * cos (pan[3] * halfPi);
+                let r3 = in3 * pow (10.0, gain[3] * 0.05) * sin (pan[3] * halfPi);
+                let l4 = in4 * pow (10.0, gain[4] * 0.05) * cos (pan[4] * halfPi);
+                let r4 = in4 * pow (10.0, gain[4] * 0.05) * sin (pan[4] * halfPi);
+                let l5 = in5 * pow (10.0, gain[5] * 0.05) * cos (pan[5] * halfPi);
+                let r5 = in5 * pow (10.0, gain[5] * 0.05) * sin (pan[5] * halfPi);
+                let l6 = in6 * pow (10.0, gain[6] * 0.05) * cos (pan[6] * halfPi);
+                let r6 = in6 * pow (10.0, gain[6] * 0.05) * sin (pan[6] * halfPi);
+                let l7 = in7 * pow (10.0, gain[7] * 0.05) * cos (pan[7] * halfPi);
+                let r7 = in7 * pow (10.0, gain[7] * 0.05) * sin (pan[7] * halfPi);
+                let l8 = in8 * pow (10.0, gain[8] * 0.05) * cos (pan[8] * halfPi);
+                let r8 = in8 * pow (10.0, gain[8] * 0.05) * sin (pan[8] * halfPi);
+                let l9 = in9 * pow (10.0, gain[9] * 0.05) * cos (pan[9] * halfPi);
+                let r9 = in9 * pow (10.0, gain[9] * 0.05) * sin (pan[9] * halfPi);
+                let l10 = in10 * pow (10.0, gain[10] * 0.05) * cos (pan[10] * halfPi);
+                let r10 = in10 * pow (10.0, gain[10] * 0.05) * sin (pan[10] * halfPi);
+                let l11 = in11 * pow (10.0, gain[11] * 0.05) * cos (pan[11] * halfPi);
+                let r11 = in11 * pow (10.0, gain[11] * 0.05) * sin (pan[11] * halfPi);
+                let l12 = in12 * pow (10.0, gain[12] * 0.05) * cos (pan[12] * halfPi);
+                let r12 = in12 * pow (10.0, gain[12] * 0.05) * sin (pan[12] * halfPi);
+                let l13 = in13 * pow (10.0, gain[13] * 0.05) * cos (pan[13] * halfPi);
+                let r13 = in13 * pow (10.0, gain[13] * 0.05) * sin (pan[13] * halfPi);
+                let l14 = in14 * pow (10.0, gain[14] * 0.05) * cos (pan[14] * halfPi);
+                let r14 = in14 * pow (10.0, gain[14] * 0.05) * sin (pan[14] * halfPi);
+                let l15 = in15 * pow (10.0, gain[15] * 0.05) * cos (pan[15] * halfPi);
+                let r15 = in15 * pow (10.0, gain[15] * 0.05) * sin (pan[15] * halfPi);
+
+                let outL = l0 + l1 + l2 + l3 + l4 + l5 + l6 + l7 + l8 + l9 + l10 + l11 + l12 + l13 + l14 + l15;
+                let outR = r0 + r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8 + r9 + r10 + r11 + r12 + r13 + r14 + r15;
+                out = outL + 0.5 * outR;
+            }
+        }
+        graph G {
+            input stream i0, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14, i15;
+            input event midi;
+            output stream out;
+            node m = Mixer16;
+            connection {
+                midi -> m.midi;
+                i0 -> m.in0; i1 -> m.in1; i2 -> m.in2; i3 -> m.in3;
+                i4 -> m.in4; i5 -> m.in5; i6 -> m.in6; i7 -> m.in7;
+                i8 -> m.in8; i9 -> m.in9; i10 -> m.in10; i11 -> m.in11;
+                i12 -> m.in12; i13 -> m.in13; i14 -> m.in14; i15 -> m.in15;
+                m.out -> out;
+            }
+        }
+    )YDSP";
+
+    const String hoaDecoderSource = R"YDSP(
+        processor HoaDecoder {
+            input stream w, y, z, x;
+            output stream s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13;
+            state float M[56] = {
+                0.25, 0.0,  0.0,  0.25,
+                0.25, 0.25, 0.0,  0.0,
+                0.25, 0.0,  0.0, -0.25,
+                0.25, -0.25, 0.0, 0.0,
+                0.25, 0.0,  0.25, 0.0,
+                0.25, 0.0, -0.25, 0.0,
+                0.25, 0.15, 0.15, 0.0,
+                0.25, -0.15, 0.15, 0.0,
+                0.25, 0.15, -0.15, 0.0,
+                0.25, -0.15, -0.15, 0.0,
+                0.25, 0.0,  0.15, 0.15,
+                0.25, 0.0,  0.15, -0.15,
+                0.25, 0.0, -0.15, 0.15,
+                0.25, 0.0, -0.15, -0.15
+            };
+
+            process {
+                s0  = M[0]  * w + M[1]  * y + M[2]  * z + M[3]  * x;
+                s1  = M[4]  * w + M[5]  * y + M[6]  * z + M[7]  * x;
+                s2  = M[8]  * w + M[9]  * y + M[10] * z + M[11] * x;
+                s3  = M[12] * w + M[13] * y + M[14] * z + M[15] * x;
+                s4  = M[16] * w + M[17] * y + M[18] * z + M[19] * x;
+                s5  = M[20] * w + M[21] * y + M[22] * z + M[23] * x;
+                s6  = M[24] * w + M[25] * y + M[26] * z + M[27] * x;
+                s7  = M[28] * w + M[29] * y + M[30] * z + M[31] * x;
+                s8  = M[32] * w + M[33] * y + M[34] * z + M[35] * x;
+                s9  = M[36] * w + M[37] * y + M[38] * z + M[39] * x;
+                s10 = M[40] * w + M[41] * y + M[42] * z + M[43] * x;
+                s11 = M[44] * w + M[45] * y + M[46] * z + M[47] * x;
+                s12 = M[48] * w + M[49] * y + M[50] * z + M[51] * x;
+                s13 = M[52] * w + M[53] * y + M[54] * z + M[55] * x;
+            }
+        }
+        graph G {
+            input stream w, y, z, x;
+            output stream o0, o1, o2, o3, o4, o5, o6, o7, o8, o9, o10, o11, o12, o13;
+            node d = HoaDecoder;
+            connection {
+                w -> d.w; y -> d.y; z -> d.z; x -> d.x;
+                d.s0 -> o0; d.s1 -> o1; d.s2 -> o2; d.s3 -> o3;
+                d.s4 -> o4; d.s5 -> o5; d.s6 -> o6; d.s7 -> o7;
+                d.s8 -> o8; d.s9 -> o9; d.s10 -> o10; d.s11 -> o11;
+                d.s12 -> o12; d.s13 -> o13;
+            }
+        }
+    )YDSP";
+
+    // IR verification for both patches
+    {
+        YdspDiagnostics diagnostics;
+        auto mixerIr = buildIr (mixer16Source, diagnostics, true);
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        ASSERT_NE (nullptr, mixerIr);
+
+        const auto& mixerFn = processKernelOf (*mixerIr);
+        ASSERT_EQ (1u, mixerFn.loops.size());
+        const int header = mixerFn.loops[0].headerBlock;
+        const int exit = mixerFn.loops[0].exitBlock;
+
+        for (int b = header; b < exit; ++b)
+            for (const auto& inst : mixerFn.blocks[static_cast<size_t> (b)].insts)
+            {
+                EXPECT_NE (YdspIrOp::loadStateArrayF, inst.op);
+                EXPECT_NE (YdspIrOp::powF, inst.op);
+                EXPECT_NE (YdspIrOp::expF, inst.op);
+                EXPECT_NE (YdspIrOp::cosF, inst.op);
+                EXPECT_NE (YdspIrOp::sinF, inst.op);
+            }
+
+        auto hoaIr = buildIr (hoaDecoderSource, diagnostics, true);
+        ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+        ASSERT_NE (nullptr, hoaIr);
+
+        const auto& hoaFn = processKernelOf (*hoaIr);
+        EXPECT_EQ (0, countInst (hoaFn, YdspIrOp::loadStateArrayF));
+        EXPECT_LE (countInst (hoaFn, YdspIrOp::mulF), 36);
+    }
+
+    YdspCompileOptions baselineOptions;
+    baselineOptions.targetPolicy = YdspTargetPolicy::baseline;
+    baselineOptions.baselineTarget = YdspNativeTarget::scalar;
+    baselineOptions.optimizationTier = YdspOptimizationTier::baseline;
+    baselineOptions.fastMath = false;
+
+    YdspCompileOptions fastOptions;
+    fastOptions.targetPolicy = YdspTargetPolicy::host;
+    fastOptions.optimizationTier = YdspOptimizationTier::automatic;
+    fastOptions.fastMath = true;
+
+    constexpr int numSamples = 64;
+
+    // End-to-end Mixer16 execution equivalence (including mid-block CC event)
+    {
+        YdspCompiler compiler;
+        auto refResult = compiler.compile (mixer16Source, baselineOptions);
+        ASSERT_TRUE (refResult.wasOk()) << compiler.getDiagnostics().toString();
+        auto optResult = compiler.compile (mixer16Source, fastOptions);
+        ASSERT_TRUE (optResult.wasOk()) << compiler.getDiagnostics().toString();
+
+        auto refGraph = std::move (refResult).getValue();
+        auto optGraph = std::move (optResult).getValue();
+
+        refGraph.prepare (48000.0, numSamples);
+        optGraph.prepare (48000.0, numSamples);
+
+        std::vector<std::vector<float>> inputs (16, std::vector<float> (static_cast<size_t> (numSamples)));
+        std::vector<YdspInputBuffer> inputBuffers;
+
+        for (int ch = 0; ch < 16; ++ch)
+        {
+            for (int n = 0; n < numSamples; ++n)
+                inputs[static_cast<size_t> (ch)][static_cast<size_t> (n)] = 0.05f * static_cast<float> (ch + 1) + 0.01f * static_cast<float> (n);
+
+            inputBuffers.emplace_back (Span<const float> (inputs[static_cast<size_t> (ch)]));
+        }
+
+        std::vector<float> refOut (numSamples), optOut (numSamples);
+        std::vector<YdspOutputBuffer> refOutputs { Span<float> (refOut) };
+        std::vector<YdspOutputBuffer> optOutputs { Span<float> (optOut) };
+
+        MidiBuffer midi;
+        midi.addEvent (MidiMessage::controllerEvent (1, 3, 100), 16);
+        const MidiBuffer* midiPtrs[] { &midi };
+
+        ASSERT_EQ (YdspProcessResult::ok, refGraph.process ({ inputBuffers, refOutputs, numSamples, Span<const MidiBuffer*> (midiPtrs, 1) }));
+        ASSERT_EQ (YdspProcessResult::ok, optGraph.process ({ inputBuffers, optOutputs, numSamples, Span<const MidiBuffer*> (midiPtrs, 1) }));
+
+        for (int n = 0; n < numSamples; ++n)
+            EXPECT_NEAR (refOut[static_cast<size_t> (n)], optOut[static_cast<size_t> (n)], 1e-4f) << "sample " << n;
+    }
+
+    // End-to-end HoaDecoder execution equivalence
+    {
+        YdspCompiler compiler;
+        auto refResult = compiler.compile (hoaDecoderSource, baselineOptions);
+        ASSERT_TRUE (refResult.wasOk()) << compiler.getDiagnostics().toString();
+        auto optResult = compiler.compile (hoaDecoderSource, fastOptions);
+        ASSERT_TRUE (optResult.wasOk()) << compiler.getDiagnostics().toString();
+
+        auto refGraph = std::move (refResult).getValue();
+        auto optGraph = std::move (optResult).getValue();
+
+        refGraph.prepare (48000.0, numSamples);
+        optGraph.prepare (48000.0, numSamples);
+
+        std::vector<std::vector<float>> inputs (4, std::vector<float> (static_cast<size_t> (numSamples)));
+        std::vector<YdspInputBuffer> inputBuffers;
+
+        for (int ch = 0; ch < 4; ++ch)
+        {
+            for (int n = 0; n < numSamples; ++n)
+                inputs[static_cast<size_t> (ch)][static_cast<size_t> (n)] = std::sin (0.1f * static_cast<float> (n + ch * 3));
+
+            inputBuffers.emplace_back (Span<const float> (inputs[static_cast<size_t> (ch)]));
+        }
+
+        std::vector<std::vector<float>> refOut (14, std::vector<float> (static_cast<size_t> (numSamples)));
+        std::vector<std::vector<float>> optOut (14, std::vector<float> (static_cast<size_t> (numSamples)));
+        std::vector<YdspOutputBuffer> refOutputs, optOutputs;
+
+        for (int ch = 0; ch < 14; ++ch)
+        {
+            refOutputs.emplace_back (Span<float> (refOut[static_cast<size_t> (ch)]));
+            optOutputs.emplace_back (Span<float> (optOut[static_cast<size_t> (ch)]));
+        }
+
+        ASSERT_EQ (YdspProcessResult::ok, refGraph.process ({ inputBuffers, refOutputs, numSamples }));
+        ASSERT_EQ (YdspProcessResult::ok, optGraph.process ({ inputBuffers, optOutputs, numSamples }));
+
+        for (int ch = 0; ch < 14; ++ch)
+            for (int n = 0; n < numSamples; ++n)
+                EXPECT_NEAR (refOut[static_cast<size_t> (ch)][static_cast<size_t> (n)],
+                             optOut[static_cast<size_t> (ch)][static_cast<size_t> (n)],
+                             1e-5f)
+                    << "channel " << ch << " sample " << n;
+    }
+}
+

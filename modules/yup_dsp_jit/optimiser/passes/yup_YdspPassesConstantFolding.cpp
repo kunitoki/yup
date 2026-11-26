@@ -153,8 +153,64 @@ bool YdspOptimizer::constantFolding (YdspIrFunction& fn)
                     continue;
                 }
 
-                if (inst.result < 0 || ! hasValueResult (inst.op))
+                if (inst.result < 0 || ! hasValueResult (inst.op) || fn.laneCountOf (inst.result) != 1)
                     continue;
+
+                if (inst.op == YdspIrOp::phi)
+                {
+                    if (definitionCount[static_cast<size_t> (inst.result)] != 1 || inst.phiIncoming.empty())
+                        continue;
+
+                    bool allSameConst = true;
+                    ConstEntry firstEntry;
+
+                    for (const auto& [pred, val] : inst.phiIncoming)
+                    {
+                        (void) pred;
+
+                        if (val == inst.result)
+                            continue;
+
+                        if (val < 0 || static_cast<size_t> (val) >= constants.size()
+                            || ! constants[static_cast<size_t> (val)].isConst)
+                        {
+                            allSameConst = false;
+                            break;
+                        }
+
+                        const auto& candidate = constants[static_cast<size_t> (val)];
+
+                        if (! firstEntry.isConst)
+                        {
+                            firstEntry = candidate;
+                        }
+                        else if (firstEntry.isFloat != candidate.isFloat
+                                 || firstEntry.isBool != candidate.isBool
+                                 || std::bit_cast<uint64_t> (firstEntry.f) != std::bit_cast<uint64_t> (candidate.f)
+                                 || firstEntry.i != candidate.i
+                                 || firstEntry.b != candidate.b)
+                        {
+                            allSameConst = false;
+                            break;
+                        }
+                    }
+
+                    if (! allSameConst || ! firstEntry.isConst)
+                        continue;
+
+                    constants[static_cast<size_t> (inst.result)] = firstEntry;
+                    inst.op = firstEntry.isBool ? YdspIrOp::constB : (firstEntry.isFloat ? YdspIrOp::constF : YdspIrOp::constI);
+                    inst.a = inst.b = inst.c = -1;
+                    inst.memIndex = -1;
+                    inst.fvalue = firstEntry.f;
+                    inst.ivalue = firstEntry.i;
+                    inst.bvalue = firstEntry.b;
+                    inst.phiIncoming.clear();
+
+                    changed = true;
+                    anyChanged = true;
+                    continue;
+                }
 
                 auto operand = [&] (int id) -> const ConstEntry&
                 {
@@ -165,6 +221,85 @@ bool YdspOptimizer::constantFolding (YdspIrFunction& fn)
                 const auto& a = operand (inst.a);
                 const auto& b = operand (inst.b);
                 const auto& c = operand (inst.c);
+
+                if (inst.op == YdspIrOp::selectB && a.isConst && a.isBool
+                    && definitionCount[static_cast<size_t> (inst.result)] == 1
+                    && fn.laneCountOf (inst.result) == 1
+                    && (! b.isConst || ! c.isConst))
+                {
+                    const int chosen = a.b ? inst.b : inst.c;
+                    const auto type = static_cast<size_t> (inst.result) < fn.valueTypes.size()
+                                          ? fn.valueTypes[static_cast<size_t> (inst.result)]
+                                          : YdspValueType::float32Type;
+
+                    if (chosen >= 0)
+                    {
+                        inst.op = moveOpcodeFor (type);
+                        inst.a = chosen;
+                        inst.b = -1;
+                        inst.c = -1;
+                        changed = true;
+                        anyChanged = true;
+                        continue;
+                    }
+                }
+
+                // An element of a table: the array is written by its
+                // initialiser list alone, so a known index names a value.
+                if (inst.op == YdspIrOp::loadStateArrayF || inst.op == YdspIrOp::loadStateArrayI)
+                {
+                    if (static_cast<size_t> (inst.result) >= fn.valueTypes.size())
+                        continue;
+
+                    const auto type = fn.valueTypes[static_cast<size_t> (inst.result)];
+                    const bool isFloat = isFloatValueType (type);
+
+                    if ((inst.op == YdspIrOp::loadStateArrayF) != isFloat)
+                        continue;
+
+                    const auto table = std::find_if (fn.stateArrays.begin(), fn.stateArrays.end(), [&] (const YdspIrFunction::StateArray& array)
+                    {
+                        return array.compileTimeConstant && array.base == inst.memIndex && array.type == type;
+                    });
+
+                    if (table == fn.stateArrays.end() || ! a.isConst || a.isFloat || a.isBool || a.i < 0 || a.i >= table->length
+                        || definitionCount[static_cast<size_t> (inst.result)] != 1 || fn.laneCountOf (inst.result) != 1)
+                        continue;
+
+                    if (isFloat)
+                    {
+                        if (static_cast<size_t> (a.i) >= table->constFloatValues.size())
+                            continue;
+
+                        const auto value = table->constFloatValues[static_cast<size_t> (a.i)];
+                        constants[static_cast<size_t> (inst.result)] = { true, true, false, value, 0, false };
+
+                        inst.op = YdspIrOp::constF;
+                        inst.a = inst.b = inst.c = -1;
+                        inst.memIndex = -1;
+                        inst.fvalue = value;
+                    }
+                    else
+                    {
+                        if (static_cast<size_t> (a.i) >= table->constIntValues.size())
+                            continue;
+
+                        const auto rawValue = table->constIntValues[static_cast<size_t> (a.i)];
+                        const auto value = type == YdspValueType::int32Type
+                                             ? static_cast<int64_t> (static_cast<int32_t> (rawValue))
+                                             : rawValue;
+                        constants[static_cast<size_t> (inst.result)] = { true, false, false, 0.0, value, false };
+
+                        inst.op = YdspIrOp::constI;
+                        inst.a = inst.b = inst.c = -1;
+                        inst.memIndex = -1;
+                        inst.ivalue = value;
+                    }
+
+                    changed = true;
+                    anyChanged = true;
+                    continue;
+                }
 
                 const bool allConst = (inst.a < 0 || a.isConst) && (inst.b < 0 || b.isConst) && (inst.c < 0 || c.isConst);
 
@@ -452,8 +587,11 @@ bool YdspOptimizer::constantFolding (YdspIrFunction& fn)
         }
     }
     bool foldedBranch = false;
-    for (auto& block : fn.blocks)
+
+    for (size_t blockIdx = 0; blockIdx < fn.blocks.size(); ++blockIdx)
     {
+        auto& block = fn.blocks[blockIdx];
+
         if (block.term != YdspIrTerm::branchIf || block.termCond < 0
             || static_cast<size_t> (block.termCond) >= constants.size())
             continue;
@@ -463,14 +601,100 @@ bool YdspOptimizer::constantFolding (YdspIrFunction& fn)
             || definitionCount[static_cast<size_t> (block.termCond)] != 1)
             continue;
 
+        const int keptTarget = condition.b ? block.termTarget : block.termTarget2;
+        const int deadTarget = condition.b ? block.termTarget2 : block.termTarget;
+
         block.term = YdspIrTerm::branch;
-        block.termTarget = condition.b ? block.termTarget : block.termTarget2;
+        block.termTarget = keptTarget;
         block.termTarget2 = -1;
         block.termCond = -1;
         foldedBranch = true;
+
+        if (deadTarget >= 0 && static_cast<size_t> (deadTarget) < fn.blocks.size() && deadTarget != keptTarget)
+        {
+            for (auto& inst : fn.blocks[static_cast<size_t> (deadTarget)].insts)
+            {
+                if (inst.op != YdspIrOp::phi)
+                    continue;
+
+                inst.phiIncoming.erase (std::remove_if (inst.phiIncoming.begin(), inst.phiIncoming.end(), [blockIdx] (const auto& entry)
+                {
+                    return entry.first == static_cast<int> (blockIdx);
+                }), inst.phiIncoming.end());
+            }
+        }
     }
+
     if (foldedBranch)
+    {
+        // Keep phiIncoming predecessor indices synchronized with block
+        // compaction performed by removeUnreachableBlocks().
+        if (fn.blocks.size() >= 2)
+        {
+            std::vector<char> reachable (fn.blocks.size(), 0);
+            std::vector<int> stack { 0 };
+            reachable[0] = 1;
+
+            while (! stack.empty())
+            {
+                const auto index = stack.back();
+                stack.pop_back();
+
+                const auto& block = fn.blocks[static_cast<size_t> (index)];
+                const auto visit = [&] (int target)
+                {
+                    if (target >= 0 && static_cast<size_t> (target) < fn.blocks.size() && ! reachable[static_cast<size_t> (target)])
+                    {
+                        reachable[static_cast<size_t> (target)] = 1;
+                        stack.push_back (target);
+                    }
+                };
+
+                if (block.term == YdspIrTerm::fallthrough)
+                {
+                    if (index + 1 < static_cast<int> (fn.blocks.size()))
+                        visit (index + 1);
+                    continue;
+                }
+
+                visit (block.termTarget);
+                visit (block.termTarget2);
+            }
+
+            if (std::find (reachable.begin(), reachable.end(), 0) != reachable.end())
+            {
+                std::vector<int> remap (fn.blocks.size(), -1);
+                int next = 0;
+
+                for (size_t i = 0; i < fn.blocks.size(); ++i)
+                    if (reachable[i])
+                        remap[i] = next++;
+
+                for (size_t i = 0; i < fn.blocks.size(); ++i)
+                {
+                    if (! reachable[i])
+                        continue;
+
+                    for (auto& inst : fn.blocks[i].insts)
+                    {
+                        if (inst.op != YdspIrOp::phi)
+                            continue;
+
+                        inst.phiIncoming.erase (std::remove_if (inst.phiIncoming.begin(), inst.phiIncoming.end(), [&remap] (const auto& entry)
+                        {
+                            return entry.first < 0 || static_cast<size_t> (entry.first) >= remap.size()
+                                || remap[static_cast<size_t> (entry.first)] < 0;
+                        }), inst.phiIncoming.end());
+
+                        for (auto& entry : inst.phiIncoming)
+                            entry.first = remap[static_cast<size_t> (entry.first)];
+                    }
+                }
+            }
+        }
+
         removeUnreachableBlocks (fn);
+    }
 
     return anyChanged || foldedBranch;
 }

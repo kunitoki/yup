@@ -31,6 +31,7 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 
 - Create an app/plugin from the template: [https://github.com/kunitoki/yup-template](https://github.com/kunitoki/yup-template)
 - Explore the example apps: [graphics](./examples/graphics), [audio graph](./examples/audiograph), [plugin](./examples/plugin), [console](./examples/console).
+- See a full plugin built with YUP: [Retrace](https://github.com/kunitoki/retrace), a spectral FM synthesiser.
 - Read the build guides: [standalone applications](./docs/build-system/building-standalone.md), [audio plugins](./docs/build-system/building-plugins.md), [module format](./docs/build-system/module-format.md).
 
 ## Screenshots

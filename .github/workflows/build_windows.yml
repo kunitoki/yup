@@ -37,7 +37,7 @@ jobs:
       matrix:
         config: [Debug, Release]
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON '-DYUP_TEST_MODULES=${{ inputs.test_modules }}'
     - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests
     - name: Run tests
@@ -56,7 +56,7 @@ jobs:
       matrix:
         example: ${{ fromJson(inputs.examples) }}
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_BUILD_TESTS=OFF -DYUP_BUILD_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
     - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
@@ -72,10 +72,10 @@ jobs:
       matrix:
         include:
         - { os: windows-latest, python: 311, platform_id: win_amd64, cibw_archs: AMD64 }
-        - { os: windows-latest, python: 311, platform_id: win_arm64, cibw_archs: ARM64 }
+        #- { os: windows-latest, python: 311, platform_id: win_arm64, cibw_archs: ARM64 }
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
 
@@ -85,11 +85,11 @@ jobs:
         python-version: "3.13"
 
     - name: Build wheels
-      uses: pypa/cibuildwheel@v3.4.1
+      uses: pypa/cibuildwheel@v4.3.5
       env:
         CIBW_ARCHS: ${{matrix.cibw_archs}}
         CIBW_BUILD: cp${{ matrix.python }}-${{ matrix.platform_id }}
-        CIBW_TEST_SKIP: "*-win_arm64"
+        #CIBW_TEST_SKIP: "*-win_arm64"
         CIBW_DEBUG_TRACEBACK: TRUE
         CIBW_ENVIRONMENT: CIBW_DEBUG_TRACEBACK=TRUE
       with:

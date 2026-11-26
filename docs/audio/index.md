@@ -96,6 +96,8 @@ lock-free patterns to talk to the UI, are in
 - [Plugin hosting](plugin-hosting.md) - scanning, loading and sandboxing
   third-party plugins.
 - [Audio graph](audio-graph.md) - realtime routing of processors and plugins.
+- [Headless audio](headless.md) - the audio engine in a console application,
+  without `yup_gui`.
 
 **[DSP](dsp/index.md)**
 
@@ -116,8 +118,10 @@ lock-free patterns to talk to the UI, are in
 
 - [audiograph](https://github.com/kunitoki/yup/tree/main/examples/audiograph) -
   a modular host with a node editor, plugin scanning and hosting.
-- [plugin](https://github.com/kunitoki/yup/tree/main/examples/plugin) - the
-  Retrace plugin, built in every format and as a standalone app.
+- [plugin](https://github.com/kunitoki/yup/tree/main/examples/plugin) - a small
+  polyphonic instrument, built in every format and as a standalone app.
+- [Retrace](https://github.com/kunitoki/retrace) - a spectral FM synthesiser, a full plugin in a
+  repository of its own.
 - [graphics](https://github.com/kunitoki/yup/tree/main/examples/graphics) -
   includes audio demos: file playback, a spectrum analyzer, filters, a
   crossover, convolution and YDSP synths, each opening an audio device.

@@ -673,20 +673,11 @@ TEST (YdspFusionTests, EventEdgeSurvivesCompactionAfterAnUnrelatedFusion)
 }
 
 //==============================================================================
-// What fusion must leave alone
+// DAG fusion: multi-input, fan-out, fan-in, and what fusion must leave alone
 //==============================================================================
 
-// The `fanOut != 1` half of the fusion rule became reachable when node outputs
-// gained the ability to fan out: a tapped intermediate is observable, so the
-// link it sits on must not fuse. See DoesNotFuseATappedIntermediate below.
-
-TEST (YdspFusionTests, DoesNotFuseIntoAMultipleInputNode)
+TEST (YdspFusionTests, FusesIntoAMultipleInputNode)
 {
-    // Only a single-in/single-out kernel can become a stage of one fused loop,
-    // so a chain running into a mixer stops there. The second graph input keeps
-    // the two mixer inputs on distinct producers, which is what this test is
-    // about - one producer feeding both would now be legal but would be testing
-    // fan-out instead.
     YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
@@ -707,7 +698,29 @@ TEST (YdspFusionTests, DoesNotFuseIntoAMultipleInputNode)
                                 compiler);
 
     ASSERT_TRUE (graph.isValid()) << compiler.getDiagnostics().toString();
-    EXPECT_FALSE (fusionHappened (graph));
+    EXPECT_TRUE (fusionHappened (graph));
+    EXPECT_EQ (1u, graph.getExecutionReport().getKernels().size());
+
+    graph.prepare (44100.0, 8);
+
+    std::vector<float> x { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f };
+    std::vector<float> w { 0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f };
+    std::vector<float> y (8, 0.0f);
+
+    std::vector<YdspInputBuffer> inputs {
+        YdspInputBuffer (Span<const float> (x.data(), x.size())),
+        YdspInputBuffer (Span<const float> (w.data(), w.size()))
+    };
+    std::vector<YdspOutputBuffer> outputs {
+        YdspOutputBuffer (Span<float> (y.data(), y.size()))
+    };
+
+    graph.process (yup::YdspProcessRequest { inputs, outputs, 8 });
+
+    for (size_t i = 0; i < x.size(); ++i)
+        EXPECT_FLOAT_EQ (x[i] * 0.5f + w[i], y[i]) << "sample " << i;
+
+    fusionDumpOnFailure (graph);
 }
 
 //==============================================================================
@@ -719,8 +732,8 @@ TEST (YdspFusionTests, DoesNotFuseIntoAMultipleInputNode)
 // members concatenates their bodies into one, so those hidden allocations have to
 // accumulate across both. Getting it wrong writes outside the node's state slice.
 //
-// The two shapes below are the same patch; the second taps the intermediate to a
-// second graph output, which makes the producer fan out and so blocks the fusion.
+// The two shapes below are the same patch; the second inserts a block-mode pass
+// node between the two stages to block fusion while leaving the output identical.
 // Comparing them is what turns a layout error into a number rather than a crash.
 
 namespace
@@ -765,16 +778,21 @@ TEST (YdspFusionTests, FusingAMemberWithHiddenDelayStateMatchesTheUnfusedChain)
     )YDSP",
                                 fusedCompiler);
 
-    // The tap gives `r.out` a second destination, so this one cannot fuse - it
-    // is the reference the fused version has to agree with.
+    // A block-mode identity stage between `r` and `t` prevents fusion, giving
+    // an unfused reference that produces the exact same samples.
     auto split = fusionCompile (String (fusionHiddenStateBody) + R"YDSP(
+        processor BlockPass {
+            input stream in;
+            output stream out;
+            process block { for i in 0..blockSize { out[i] = in[i]; } }
+        }
         graph G {
             input stream x;
             output stream y;
-            output stream tap;
             node r = Rings;
+            node p = BlockPass;
             node t = Trim;
-            connection { x -> r.in; r.out -> t.in; r.out -> tap; t.out -> y; }
+            connection { x -> r.in; r.out -> p.in; p.out -> t.in; t.out -> y; }
         }
     )YDSP",
                                 splitCompiler);
@@ -802,20 +820,9 @@ TEST (YdspFusionTests, FusingAMemberWithHiddenDelayStateMatchesTheUnfusedChain)
     {
         std::vector<float> fusedOut (static_cast<size_t> (blockSize), 0.0f);
         std::vector<float> splitOut (static_cast<size_t> (blockSize), 0.0f);
-        std::vector<float> splitTap (static_cast<size_t> (blockSize), 0.0f);
 
         fusionRun (fused, input.data(), fusedOut.data(), blockSize);
-
-        {
-            std::vector<YdspInputBuffer> inputs {
-                YdspInputBuffer (Span<const float> (input.data(), input.size()))
-            };
-            std::vector<YdspOutputBuffer> outputs {
-                YdspOutputBuffer (Span<float> (splitOut.data(), splitOut.size())),
-                YdspOutputBuffer (Span<float> (splitTap.data(), splitTap.size()))
-            };
-            split.process (yup::YdspProcessRequest { inputs, outputs, blockSize });
-        }
+        fusionRun (split, input.data(), splitOut.data(), blockSize);
 
         for (int i = 0; i < blockSize; ++i)
             EXPECT_NEAR (splitOut[static_cast<size_t> (i)], fusedOut[static_cast<size_t> (i)], 1e-5f)
@@ -1021,12 +1028,10 @@ TEST (YdspFusionTests, FusesAMemberWithReverbSizedDelayRings)
     fusionDumpOnFailure (graph);
 }
 
-TEST (YdspFusionTests, DoesNotFuseATappedIntermediate)
+TEST (YdspFusionTests, FusesATappedIntermediateIntoMultipleOutputs)
 {
-    // `h.out` feeds both the next stage and a graph output, so the intermediate
-    // is observable and the h -> t link cannot become a register. This is the
-    // `fanOut != 1` half of the fusion rule, unreachable before node outputs
-    // could fan out.
+    // `h.out` feeds both the next stage and a graph output, so DAG fusion keeps
+    // `h.out` in a local variable and exports a second output stream for `tap`.
     YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
@@ -1047,7 +1052,8 @@ TEST (YdspFusionTests, DoesNotFuseATappedIntermediate)
                                 compiler);
 
     ASSERT_TRUE (graph.isValid()) << compiler.getDiagnostics().toString();
-    EXPECT_FALSE (fusionHappened (graph));
+    EXPECT_TRUE (fusionHappened (graph));
+    EXPECT_EQ (1u, graph.getExecutionReport().getKernels().size());
 
     graph.prepare (44100.0, 8);
 
@@ -1068,6 +1074,470 @@ TEST (YdspFusionTests, DoesNotFuseATappedIntermediate)
         EXPECT_NEAR (input[i], out[i], 1e-6f) << "sample " << i;
         EXPECT_NEAR (input[i] * 0.5f, tap[i], 1e-6f) << "sample " << i;
     }
+
+    fusionDumpOnFailure (graph);
+}
+
+TEST (YdspFusionTests, FusesFannedDryWetGraphToMatchInlinedProcessor)
+{
+    YdspCompiler fannedCompiler, inlineCompiler;
+
+    auto fanned = fusionCompile (R"YDSP(
+        processor DryTrim {
+            input stream in;
+            output stream out;
+            input parameter float mix = 0.35;
+            process { out = (1.0 - mix) * in; }
+        }
+
+        processor WetShaper {
+            input stream in;
+            output stream out;
+            input parameter float mix = 0.35;
+            process { out = mix * tanh (in * 3.0); }
+        }
+
+        graph G {
+            input stream x;
+            output stream y;
+
+            node dry = DryTrim;
+            node wet = WetShaper;
+
+            connection {
+                x -> dry.in;
+                x -> wet.in;
+                dry.out -> y;
+                wet.out -> y;
+            }
+        }
+    )YDSP",
+                                 fannedCompiler);
+
+    auto inlined = fusionCompile (R"YDSP(
+        processor InlineDryWet {
+            input stream in;
+            output stream out;
+            input parameter float mix = 0.35;
+            process { out = (1.0 - mix) * in + mix * tanh (in * 3.0); }
+        }
+
+        graph G {
+            input stream x;
+            output stream y;
+            node d = InlineDryWet;
+            connection { x -> d.in; d.out -> y; }
+        }
+    )YDSP",
+                                  inlineCompiler);
+
+    ASSERT_TRUE (fanned.isValid()) << fannedCompiler.getDiagnostics().toString();
+    ASSERT_TRUE (inlined.isValid()) << inlineCompiler.getDiagnostics().toString();
+
+    EXPECT_TRUE (fusionHappened (fanned));
+    EXPECT_EQ (1u, fanned.getExecutionReport().getKernels().size());
+    EXPECT_FALSE (fusionHappened (inlined));
+
+    fanned.prepare (44100.0, fusionBlockSize);
+    inlined.prepare (44100.0, fusionBlockSize);
+
+    const auto input = fusionRamp();
+    std::vector<float> fannedOut (static_cast<size_t> (fusionBlockSize), 0.0f);
+    std::vector<float> inlinedOut (static_cast<size_t> (fusionBlockSize), 0.0f);
+
+    for (int block = 0; block < 4; ++block)
+    {
+        fusionRun (fanned, input.data(), fannedOut.data(), fusionBlockSize);
+        fusionRun (inlined, input.data(), inlinedOut.data(), fusionBlockSize);
+
+        for (int i = 0; i < fusionBlockSize; ++i)
+            EXPECT_NEAR (inlinedOut[static_cast<size_t> (i)], fannedOut[static_cast<size_t> (i)], 1e-6f)
+                << "block " << block << " sample " << i;
+    }
+
+    fusionDumpOnFailure (fanned);
+}
+
+TEST (YdspFusionTests, FusesFannedDryWetAlgebraFormIdentically)
+{
+    YdspCompiler algebraCompiler, connectionCompiler;
+
+    auto algebra = fusionCompile (R"YDSP(
+        processor DryTrim {
+            input stream in;
+            output stream out;
+            input parameter float mix = 0.35;
+            process { out = (1.0 - mix) * in; }
+        }
+
+        processor WetShaper {
+            input stream in;
+            output stream out;
+            input parameter float mix = 0.35;
+            process { out = mix * tanh (in * 3.0); }
+        }
+
+        graph G {
+            input stream x;
+            output stream y;
+            process = x <: (DryTrim, WetShaper) :> y;
+        }
+    )YDSP",
+                                  algebraCompiler);
+
+    auto connections = fusionCompile (R"YDSP(
+        processor DryTrim {
+            input stream in;
+            output stream out;
+            input parameter float mix = 0.35;
+            process { out = (1.0 - mix) * in; }
+        }
+
+        processor WetShaper {
+            input stream in;
+            output stream out;
+            input parameter float mix = 0.35;
+            process { out = mix * tanh (in * 3.0); }
+        }
+
+        graph G {
+            input stream x;
+            output stream y;
+            node dry = DryTrim;
+            node wet = WetShaper;
+            connection { x -> dry.in; x -> wet.in; dry.out -> y; wet.out -> y; }
+        }
+    )YDSP",
+                                      connectionCompiler);
+
+    ASSERT_TRUE (algebra.isValid()) << algebraCompiler.getDiagnostics().toString();
+    ASSERT_TRUE (connections.isValid()) << connectionCompiler.getDiagnostics().toString();
+
+    EXPECT_TRUE (fusionHappened (algebra));
+    EXPECT_TRUE (fusionHappened (connections));
+    EXPECT_EQ (1u, algebra.getExecutionReport().getKernels().size());
+
+    algebra.prepare (44100.0, fusionBlockSize);
+    connections.prepare (44100.0, fusionBlockSize);
+
+    const auto input = fusionRamp();
+    std::vector<float> algebraOut (static_cast<size_t> (fusionBlockSize), 0.0f);
+    std::vector<float> connOut (static_cast<size_t> (fusionBlockSize), 0.0f);
+
+    fusionRun (algebra, input.data(), algebraOut.data(), fusionBlockSize);
+    fusionRun (connections, input.data(), connOut.data(), fusionBlockSize);
+
+    for (int i = 0; i < fusionBlockSize; ++i)
+        EXPECT_FLOAT_EQ (connOut[static_cast<size_t> (i)], algebraOut[static_cast<size_t> (i)]) << "sample " << i;
+}
+
+TEST (YdspFusionTests, FusesMultiInputMultiOutputDagAndPreservesExternalWiring)
+{
+    YdspCompiler compiler;
+
+    auto graph = fusionCompile (R"YDSP(
+        processor Scale {
+            input stream in;
+            output stream out;
+            input parameter float g = 1.0;
+            process { out = in * g; }
+        }
+
+        processor StereoMatrix {
+            input stream l;
+            input stream r;
+            output stream outL;
+            output stream outR;
+            process {
+                outL = l + r * 0.5;
+                outR = r - l * 0.25;
+            }
+        }
+
+        graph G {
+            input stream inL;
+            input stream inR;
+            output stream outL;
+            output stream outR;
+            output stream dryL;
+
+            node preL = Scale (g = 2.0);
+            node preR = Scale (g = 0.5);
+            node mat = StereoMatrix;
+            node postR = Scale (g = 4.0);
+
+            connection {
+                inL -> preL.in;
+                inR -> preR.in;
+                preL.out -> mat.l;
+                preR.out -> mat.r;
+                preL.out -> dryL;
+                mat.outL -> outL;
+                mat.outR -> postR.in;
+                postR.out -> outR;
+            }
+        }
+    )YDSP",
+                                compiler);
+
+    ASSERT_TRUE (graph.isValid()) << compiler.getDiagnostics().toString();
+    EXPECT_TRUE (fusionHappened (graph));
+    EXPECT_EQ (1u, graph.getExecutionReport().getKernels().size());
+
+    graph.prepare (44100.0, 8);
+
+    std::vector<float> inL { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f };
+    std::vector<float> inR { 0.5f, 1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 3.5f, 4.0f };
+    std::vector<float> outL (8, 0.0f);
+    std::vector<float> outR (8, 0.0f);
+    std::vector<float> dryL (8, 0.0f);
+
+    std::vector<YdspInputBuffer> inputs {
+        YdspInputBuffer (Span<const float> (inL.data(), inL.size())),
+        YdspInputBuffer (Span<const float> (inR.data(), inR.size()))
+    };
+    std::vector<YdspOutputBuffer> outputs {
+        YdspOutputBuffer (Span<float> (outL.data(), outL.size())),
+        YdspOutputBuffer (Span<float> (outR.data(), outR.size())),
+        YdspOutputBuffer (Span<float> (dryL.data(), dryL.size()))
+    };
+
+    graph.process (yup::YdspProcessRequest { inputs, outputs, 8 });
+
+    for (size_t i = 0; i < inL.size(); ++i)
+    {
+        const float l = inL[i] * 2.0f;
+        const float r = inR[i] * 0.5f;
+        EXPECT_FLOAT_EQ (l, dryL[i]) << "sample " << i;
+        EXPECT_FLOAT_EQ (l + r * 0.5f, outL[i]) << "sample " << i;
+        EXPECT_FLOAT_EQ ((r - l * 0.25f) * 4.0f, outR[i]) << "sample " << i;
+    }
+
+    fusionDumpOnFailure (graph);
+}
+
+TEST (YdspFusionTests, PreservesParameterOverridesRoutingAndMetersOnFusedDag)
+{
+    YdspCompiler compiler;
+
+    auto graph = fusionCompile (R"YDSP(
+        processor Branch {
+            input stream in;
+            output stream out;
+            input parameter float gain = 1.0;
+            input parameter float trim = 1.0;
+            output parameter float level;
+            process {
+                let s = in * gain * trim;
+                level = abs (s);
+                out = s;
+            }
+        }
+
+        graph G {
+            input stream x;
+            output stream y;
+            input parameter float master = 2.0;
+            output parameter float wetPeak;
+
+            node a = Branch (gain = 0.25);
+            node b = Branch (gain = 0.5);
+
+            connection {
+                x -> a.in;
+                x -> b.in;
+                a.out -> y;
+                b.out -> y;
+                master -> a.trim;
+                master -> b.trim;
+                b.level -> wetPeak;
+            }
+        }
+    )YDSP",
+                                compiler);
+
+    ASSERT_TRUE (graph.isValid()) << compiler.getDiagnostics().toString();
+    EXPECT_TRUE (fusionHappened (graph));
+    EXPECT_EQ (1u, graph.getExecutionReport().getKernels().size());
+
+    ASSERT_TRUE (graph.hasParameter ("a.gain"));
+    ASSERT_TRUE (graph.hasParameter ("b.gain"));
+    ASSERT_TRUE (graph.hasParameter ("master"));
+    EXPECT_FLOAT_EQ (0.25f, graph.getParameter ("a.gain"));
+    EXPECT_FLOAT_EQ (0.5f, graph.getParameter ("b.gain"));
+    EXPECT_FLOAT_EQ (2.0f, graph.getParameter ("master"));
+
+    graph.prepare (44100.0, fusionBlockSize);
+
+    graph.setParameter ("a.gain", 0.75f);
+    graph.setParameter ("master", 1.5f);
+
+    const auto input = fusionRamp();
+    std::vector<float> output (static_cast<size_t> (fusionBlockSize), 0.0f);
+
+    fusionRun (graph, input.data(), output.data(), fusionBlockSize);
+
+    for (int i = 0; i < fusionBlockSize; ++i)
+    {
+        const float expected = input[static_cast<size_t> (i)] * (0.75f * 1.5f + 0.5f * 1.5f);
+        EXPECT_NEAR (expected, output[static_cast<size_t> (i)], 1e-6f) << "sample " << i;
+    }
+
+    EXPECT_NEAR (std::fabs (input.back() * 0.5f * 1.5f), graph.getOutputValue ("wetPeak"), 1e-6f);
+    EXPECT_NEAR (std::fabs (input.back() * 0.75f * 1.5f), graph.getOutputValue ("a.level"), 1e-6f);
+
+    fusionDumpOnFailure (graph);
+}
+
+TEST (YdspFusionTests, SplitsDagComponentsCleanlyAcrossDelaysAndNonFusableNodes)
+{
+    YdspCompiler compiler;
+
+    // `a` fans out directly to `m.a` and through a block-mode bypass `p` to
+    // `m.b`, so `a` and `m` cannot merge without creating a cycle through `p`.
+    // Meanwhile `m -> t` fuses, while `m.out -> [2] -> d.b` prevents `d` from
+    // merging into `{m, t}` because of the inline delay.
+    auto graph = fusionCompile (R"YDSP(
+        processor Half { input stream in; output stream out; process { out = in * 0.5; } }
+        processor Twice { input stream in; output stream out; process { out = in * 2.0; } }
+        processor Mix { input stream a; input stream b; output stream out; process { out = a + b; } }
+        processor BlockPass {
+            input stream in;
+            output stream out;
+            process block { for i in 0..blockSize { out[i] = in[i]; } }
+        }
+
+        graph G {
+            input stream x;
+            output stream y;
+
+            node a = Half;
+            node p = BlockPass;
+            node m = Mix;
+            node t = Twice;
+            node d = Mix;
+
+            connection {
+                x -> a.in;
+                a.out -> m.a;
+                a.out -> p.in;
+                p.out -> m.b;
+                m.out -> t.in;
+                t.out -> d.a;
+                m.out -> [2] -> d.b;
+                d.out -> y;
+            }
+        }
+    )YDSP",
+                                compiler);
+
+    ASSERT_TRUE (graph.isValid()) << compiler.getDiagnostics().toString();
+    EXPECT_TRUE (fusionHappened (graph)); // `m -> t` fuses while `a`, `p`, and `d` stay split
+
+    graph.prepare (44100.0, 8);
+
+    std::vector<float> input { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f };
+    std::vector<float> output (8, 0.0f);
+
+    fusionRun (graph, input.data(), output.data(), 8);
+
+    for (size_t i = 0; i < input.size(); ++i)
+    {
+        const float delayed = i >= 2 ? input[i - 2] : 0.0f;
+        EXPECT_NEAR (input[i] * 2.0f + delayed, output[i], 1e-6f) << "sample " << i;
+    }
+
+    fusionDumpOnFailure (graph);
+}
+
+TEST (YdspFusionTests, FusesSampleModeDagInsidePolyphonicVoiceBank)
+{
+    YdspCompiler compiler;
+
+    auto graph = fusionCompile (R"YDSP(
+        processor PitchVoice {
+            output stream out;
+            input event midi;
+            state float s;
+            event midi (e: noteOn) { s = e.pitch; }
+            process { out = s; }
+        }
+
+        processor Scale {
+            input stream in;
+            output stream out;
+            input parameter float g = 1.0;
+            process { out = in * g; }
+        }
+
+        processor Mix {
+            input stream a;
+            input stream b;
+            output stream out;
+            process { out = a + b; }
+        }
+
+        graph VoiceChain {
+            input event midi;
+            output stream out;
+            node osc = PitchVoice;
+            node dry = Scale (g = 0.25);
+            node wet = Scale (g = 0.75);
+            node mix = Mix;
+            connection {
+                midi -> osc.midi;
+                osc.out -> dry.in;
+                osc.out -> wet.in;
+                dry.out -> mix.a;
+                wet.out -> mix.b;
+                mix.out -> out;
+            }
+        }
+
+        graph Main [[ main ]] {
+            input event midi;
+            output stream y;
+            node v = VoiceChain[4];
+            node master = Scale (g = 0.5);
+            connection { midi -> v.midi; v.out -> master.in; master.out -> y; }
+        }
+    )YDSP",
+                                compiler);
+
+    ASSERT_TRUE (graph.isValid()) << compiler.getDiagnostics().toString();
+    EXPECT_TRUE (fusionHappened (graph));
+
+    // `PitchVoice`, the fused voice DAG (`dry+wet+mix`), and `master` stay distinct
+    // because `PitchVoice` is event-driven and `master` is outside the voice group.
+    EXPECT_EQ (3u, graph.getExecutionReport().getKernels().size());
+    EXPECT_TRUE (graph.hasParameter ("v.dry.g"));
+    EXPECT_TRUE (graph.hasParameter ("v.wet.g"));
+    EXPECT_TRUE (graph.hasParameter ("master.g"));
+
+    graph.prepare (44100.0, 16);
+
+    std::vector<float> output (16, 0.0f);
+    yup::MidiBuffer midi;
+    midi.addEvent (yup::MidiMessage::noteOn (1, 60, static_cast<uint8> (100)), 0);
+    const yup::MidiBuffer* buffers[] = { &midi };
+
+    std::vector<yup::YdspOutputBuffer> outputBuffers {
+        yup::YdspOutputBuffer (yup::Span<float> (output.data(), output.size()))
+    };
+
+    EXPECT_EQ (yup::YdspProcessResult::ok,
+               graph.process (yup::YdspProcessRequest {
+                   {},
+                   yup::Span<yup::YdspOutputBuffer> (outputBuffers.data(), outputBuffers.size()),
+                   16,
+                   yup::Span<const yup::MidiBuffer*> (buffers, 1),
+                   {}
+               }));
+
+    for (int i = 0; i < 16; ++i)
+        EXPECT_FLOAT_EQ (30.0f, output[static_cast<size_t> (i)]) << "sample " << i;
+
+    fusionDumpOnFailure (graph);
 }
 
 TEST (YdspFusionTests, DoesNotFuseAcrossAnInlineDelay)

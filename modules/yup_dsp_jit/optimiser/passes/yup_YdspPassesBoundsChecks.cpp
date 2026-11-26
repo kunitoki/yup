@@ -29,23 +29,44 @@ bool YdspOptimizer::eliminateProvenBoundsChecks (YdspIrFunction& fn)
         int64_t lower = std::numeric_limits<int32_t>::min();
         int64_t upper = std::numeric_limits<int32_t>::max();
     };
+
+    // An int64 range is only tracked while it stays well inside the type, so
+    // the interval arithmetic below cannot itself overflow.
+    constexpr int64_t wideLimit = int64_t (1) << 62;
+
+    const auto wholeTypeOf = [&fn] (int value) -> Range
+    {
+        if (value >= 0 && fn.valueTypes[static_cast<size_t> (value)] == YdspValueType::int64Type)
+            return { std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max() };
+        return {};
+    };
+
+    const auto isTracked = [&fn] (int value)
+    {
+        const auto type = fn.valueTypes[static_cast<size_t> (value)];
+        return (type == YdspValueType::int32Type || type == YdspValueType::int64Type) && fn.laneCountOf (value) == 1;
+    };
+
     bool arithmeticChanged = false;
     const auto count = fn.valueTypes.size();
     std::vector<int> definitions (count, 0);
     std::vector<Range> ranges (count);
+    for (size_t value = 0; value < count; ++value)
+        ranges[value] = wholeTypeOf (static_cast<int> (value));
     for (const auto& block : fn.blocks)
         for (const auto& inst : block.insts)
             if (inst.result >= 0)
                 ++definitions[static_cast<size_t> (inst.result)];
 
+    // A value written more than once is only known to fit its type.
     const auto rangeOf = [&] (int value) -> Range
     {
-        if (value < 0 || definitions[static_cast<size_t> (value)] != 1
-            || fn.valueTypes[static_cast<size_t> (value)] != YdspValueType::int32Type
-            || fn.laneCountOf (value) != 1)
-            return {};
+        if (value < 0 || definitions[static_cast<size_t> (value)] != 1 || ! isTracked (value))
+            return wholeTypeOf (value);
         return ranges[static_cast<size_t> (value)];
     };
+
+    const auto fitsWide = [] (double value) { return std::abs (value) <= static_cast<double> (wideLimit); };
 
     // Begin with the full domain and only narrow it. A bounded number of
     // rounds limits compile time; stopping early merely keeps more checks.
@@ -55,18 +76,38 @@ bool YdspOptimizer::eliminateProvenBoundsChecks (YdspIrFunction& fn)
         for (auto& block : fn.blocks)
             for (auto& inst : block.insts)
             {
-                if (inst.result < 0 || definitions[static_cast<size_t> (inst.result)] != 1
-                    || fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::int32Type
-                    || fn.laneCountOf (inst.result) != 1)
+                if (inst.result < 0 || definitions[static_cast<size_t> (inst.result)] != 1 || ! isTracked (inst.result))
                     continue;
+                const bool wide = fn.valueTypes[static_cast<size_t> (inst.result)] == YdspValueType::int64Type;
                 const auto a = rangeOf (inst.a);
                 const auto b = rangeOf (inst.b);
                 const auto c = rangeOf (inst.c);
-                Range result;
+
+                // Near the ends of int64 the interval arithmetic would itself
+                // overflow: check the corners in floating point first, and
+                // leave such a result at its whole type.
+                if (inst.op == YdspIrOp::addI || inst.op == YdspIrOp::subI || inst.op == YdspIrOp::mulI)
+                {
+                    const auto corner = [&inst] (int64_t x, int64_t y)
+                    {
+                        const auto left = static_cast<double> (x), right = static_cast<double> (y);
+                        return inst.op == YdspIrOp::addI ? left + right : (inst.op == YdspIrOp::subI ? left - right : left * right);
+                    };
+
+                    if (! (fitsWide (corner (a.lower, b.lower)) && fitsWide (corner (a.lower, b.upper))
+                           && fitsWide (corner (a.upper, b.lower)) && fitsWide (corner (a.upper, b.upper))))
+                        continue;
+                }
+
+                Range result = wholeTypeOf (inst.result);
                 switch (inst.op)
                 {
                     case YdspIrOp::constI:
-                        result = { static_cast<int32_t> (inst.ivalue), static_cast<int32_t> (inst.ivalue) };
+                        result = wide ? Range { inst.ivalue, inst.ivalue }
+                                      : Range { static_cast<int32_t> (inst.ivalue), static_cast<int32_t> (inst.ivalue) };
+                        break;
+                    case YdspIrOp::extI:
+                        result = a;
                         break;
                     case YdspIrOp::movI:
                         result = a;
@@ -98,7 +139,6 @@ bool YdspOptimizer::eliminateProvenBoundsChecks (YdspIrFunction& fn)
                         break;
                     case YdspIrOp::mulI:
                     {
-                        // Products of int32 endpoints fit in int64, including MIN * MIN.
                         const auto limits = std::minmax ({ a.lower * b.lower, a.lower * b.upper,
                                                           a.upper * b.lower, a.upper * b.upper });
                         result = { limits.first, limits.second };
@@ -108,12 +148,13 @@ bool YdspOptimizer::eliminateProvenBoundsChecks (YdspIrFunction& fn)
                         continue;
                 }
                 // Never use wrapping arithmetic as an address-range proof.
-                if (result.lower < std::numeric_limits<int32_t>::min()
-                    || result.upper > std::numeric_limits<int32_t>::max())
+                if (wide ? std::max (std::abs (static_cast<double> (result.lower)), std::abs (static_cast<double> (result.upper))) > static_cast<double> (wideLimit)
+                         : result.lower < std::numeric_limits<int32_t>::min() || result.upper > std::numeric_limits<int32_t>::max())
                     continue;
                 if (inst.saturatingIntegerArithmetic && (inst.op == YdspIrOp::addI || inst.op == YdspIrOp::subI || inst.op == YdspIrOp::mulI))
                 {
                     inst.saturatingIntegerArithmetic = false;
+                    inst.overflowFreeIntegerArithmetic = true;
                     arithmeticChanged = true;
                 }
                 auto& known = ranges[static_cast<size_t> (inst.result)];
