@@ -194,6 +194,9 @@ TEST_F (GpuImageShaderTests, ReadsTheBlockAndTheTexturesOfTheFragmentStage)
     const auto shader = created.getValue();
     EXPECT_EQ (shader->getNumInputTextures(), 2);
 
+    // The inputs are told in the order they are given: by set, then by binding
+    EXPECT_EQ (shader->getInputTextureNames(), StringArray ({ "source", "overlay" }));
+
     const auto uniforms = shader->createUniforms();
     EXPECT_EQ (uniforms.getSizeInBytes(), 16u);
     EXPECT_TRUE (uniforms.hasMember ("intensity"));
@@ -206,6 +209,7 @@ TEST_F (GpuImageShaderTests, ShaderDeclaringNothingHasNoInputNorUniforms)
     ASSERT_TRUE (created.wasOk()) << created.getErrorMessage();
 
     EXPECT_EQ (created.getValue()->getNumInputTextures(), 0);
+    EXPECT_TRUE (created.getValue()->getInputTextureNames().isEmpty());
     EXPECT_TRUE (created.getValue()->createUniforms().isEmpty());
 }
 
@@ -219,9 +223,18 @@ TEST_F (GpuImageShaderTests, RefusesWhatADrawCannotBind)
     twoBlocks.uniformBuffers = { makeBlock (0, 0), makeBlock (0, 1) };
     EXPECT_TRUE (getFailure (GpuImageShader::createFromBundle (makeBundle (twoBlocks))).contains ("uniform blocks"));
 
-    ShaderReflection threeTextures;
-    threeTextures.separateImages = { makeTexture ("first", 0, 0), makeTexture ("second", 0, 1), makeTexture ("third", 0, 2) };
-    EXPECT_TRUE (getFailure (GpuImageShader::createFromBundle (makeBundle (threeTextures))).contains ("textures"));
+    // As many textures as an image shader takes, then one more
+    ShaderReflection manyTextures;
+
+    for (int i = 0; i < GpuImageShader::maxInputTextures; ++i)
+        manyTextures.separateImages.push_back (makeTexture ("texture" + String (i), 0, static_cast<uint32> (i)));
+
+    const auto most = GpuImageShader::createFromBundle (makeBundle (manyTextures));
+    ASSERT_TRUE (most.wasOk()) << most.getErrorMessage();
+    EXPECT_EQ (most.getValue()->getNumInputTextures(), GpuImageShader::maxInputTextures);
+
+    manyTextures.separateImages.push_back (makeTexture ("oneTooMany", 0, static_cast<uint32> (GpuImageShader::maxInputTextures)));
+    EXPECT_TRUE (getFailure (GpuImageShader::createFromBundle (makeBundle (manyTextures))).contains ("textures"));
 
     ShaderReflection cube;
     cube.separateImages = { makeTexture ("environment", 0, 0) };
@@ -483,6 +496,11 @@ TEST_F (GpuImageShaderMockedTests, DrawFailsWithoutTheInputsTheShaderDeclares)
 
     EXPECT_TRUE (shader->draw (device, frame, *target, shader->createUniforms()).failed());
     EXPECT_TRUE (shader->draw (device, frame, *target, shader->createUniforms(), target->asTexture()).failed());
+
+    // The inputs given together are checked the same: there has to be one for every texture
+    const GpuTexture::Ptr one[] = { target->asTexture() };
+    EXPECT_TRUE (shader->draw (device, frame, *target, shader->createUniforms(), Span<const GpuTexture::Ptr> (one, 1)).failed());
+    EXPECT_TRUE (shader->draw (device, frame, *target, shader->createUniforms(), Span<const GpuTexture::Ptr>()).failed());
 }
 
 TEST_F (GpuImageShaderMockedTests, PipelineThatCannotBeCompiledIsNotCompiledAgain)

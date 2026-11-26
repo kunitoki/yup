@@ -94,6 +94,7 @@ public:
 
         static const Identifier cornerRadiusId; /**< Corner radius, unset for a pill */
         static const Identifier thumbInsetId;   /**< Inset of the handle inside its slot, 4 by default */
+        static const Identifier thumbSizeId;    /**< Thickness of the switch, which is twice as long: 28 by default */
     };
 
     //==============================================================================
@@ -104,8 +105,17 @@ public:
     const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
 
     //==============================================================================
-    /** @internal */
-    Rectangle<float> getSwitchCircleBounds() const { return switchCircleBounds; }
+    /** Returns the area of the switch in the component.
+
+        The switch keeps the thickness its style gives it (Style::thumbSizeId) and is twice as long, whatever the
+        size of the component: it is centered in it, and only gets smaller in a component with less room.
+    */
+    Rectangle<float> getSwitchBounds() const;
+
+    /** Returns the area of the handle in the switch, before the inset of its style: it slides from one end of
+        getSwitchBounds() to the other when the switch is toggled.
+    */
+    Rectangle<float> getSwitchCircleBounds() const;
 
     /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds);
@@ -125,11 +135,11 @@ private:
     bool isVerticalValue = false;
     int millisecondsToSpendMoving = 50;
 
-    Rectangle<float> switchCircleBounds;
+    // Where the handle is between the end it has when off (0) and the one it has when on (1)
+    float handlePosition = 0.0f;
 
     // Animation state
-    Rectangle<float> animationStartBounds;
-    Rectangle<float> animationTargetBounds;
+    float animationStartPosition = 0.0f;
     Time animationStartTime;
     bool isAnimating = false;
     FrameAttachment frameAttachment { *this, bindFront (&SwitchButton::refreshDisplay, this) };

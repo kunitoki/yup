@@ -43,8 +43,15 @@ struct SliderIds
     static inline const Identifier normalized { "normalized" };
     static inline const Identifier minValue { "minValue" };
     static inline const Identifier maxValue { "maxValue" };
+    static inline const Identifier minNormalized { "minNormalized" };
+    static inline const Identifier maxNormalized { "maxNormalized" };
     static inline const Identifier dragging { "dragging" };
     static inline const Identifier thumbSize { "thumbSize" };
+    static inline const Identifier trackBounds { "trackBounds" };
+    static inline const Identifier decrementBounds { "decrementBounds" };
+    static inline const Identifier incrementBounds { "incrementBounds" };
+    static inline const Identifier pressedStep { "pressedStep" };
+    static inline const Identifier decimalPlaces { "decimalPlaces" };
 };
 
 void setSliderRangeBound (Slider& slider, double bound, bool isMinimum)
@@ -136,7 +143,14 @@ const ComponentTypeInfo& Slider::getClassTypeInfo()
                                  .readOnly (SliderIds::normalized, &Slider::getValueNormalised)
                                  .property (SliderIds::minValue, &Slider::getMinValue, [] (Slider& s, double v) { s.setMinValue (v); })
                                  .property (SliderIds::maxValue, &Slider::getMaxValue, [] (Slider& s, double v) { s.setMaxValue (v); })
+                                 .readOnly (SliderIds::minNormalized, &Slider::getMinValueNormalised, 0.0, "Where the lower value of a two-value slider is along the range, from 0 to 1.")
+                                 .readOnly (SliderIds::maxNormalized, &Slider::getMaxValueNormalised, 1.0, "Where the upper value of a two-value slider is along the range, from 0 to 1.")
                                  .state (SliderIds::dragging, &Slider::isCurrentlyBeingDragged, false)
+                                 .readOnly (SliderIds::trackBounds, &Slider::getSliderBounds, {}, "The area the value moves in: the track of a linear slider, the square of a rotary one.")
+                                 .readOnly (SliderIds::decrementBounds, &Slider::getDecrementButtonBounds, {}, "The area of the button lowering the value of an incDecButtons slider, empty for the others.")
+                                 .readOnly (SliderIds::incrementBounds, &Slider::getIncrementButtonBounds, {}, "The area of the button raising the value of an incDecButtons slider, empty for the others.")
+                                 .readOnly (SliderIds::pressedStep, &Slider::getPressedStep, 0, "The button of an incDecButtons slider that is pressed: -1 for the one lowering the value, 1 for the one raising it, 0 for none.")
+                                 .property (SliderIds::decimalPlaces, &Slider::getNumDecimalPlacesToDisplay, &Slider::setNumDecimalPlacesToDisplay, 7, "The decimal places the value is shown with, negative for as many as it needs.")
                                  .signal ("onValueChanged", &Slider::onValueChanged, "Emitted with the new value when the value changes", { { Identifier ("value"), ComponentProperty::Type::number } })
                                  .build();
 
@@ -235,6 +249,10 @@ void Slider::setMinValue (double newMinValue, NotificationType notification, boo
         if (bailOutChecker.shouldBailOut())
             return;
 
+        notifyPropertyChanged (SliderIds::minNormalized);
+        if (bailOutChecker.shouldBailOut())
+            return;
+
         sendMinValueChanged (notification);
 
         if (! bailOutChecker.shouldBailOut())
@@ -245,6 +263,11 @@ void Slider::setMinValue (double newMinValue, NotificationType notification, boo
 double Slider::getMinValue() const
 {
     return minValue;
+}
+
+double Slider::getMinValueNormalised() const
+{
+    return range.convertTo0to1 (minValue);
 }
 
 void Slider::setMaxValue (double newMaxValue, NotificationType notification, bool allowNudgingOfOtherValues)
@@ -270,6 +293,10 @@ void Slider::setMaxValue (double newMaxValue, NotificationType notification, boo
         if (bailOutChecker.shouldBailOut())
             return;
 
+        notifyPropertyChanged (SliderIds::maxNormalized);
+        if (bailOutChecker.shouldBailOut())
+            return;
+
         sendMaxValueChanged (notification);
 
         if (! bailOutChecker.shouldBailOut())
@@ -280,6 +307,11 @@ void Slider::setMaxValue (double newMaxValue, NotificationType notification, boo
 double Slider::getMaxValue() const
 {
     return maxValue;
+}
+
+double Slider::getMaxValueNormalised() const
+{
+    return range.convertTo0to1 (maxValue);
 }
 
 void Slider::minValueChanged() {}
@@ -382,8 +414,12 @@ double Slider::getSkewFactor() const
 
 void Slider::setNumDecimalPlacesToDisplay (int decimalPlaces)
 {
+    if (numDecimalPlaces == decimalPlaces)
+        return;
+
     numDecimalPlaces = decimalPlaces;
     repaint();
+    notifyPropertyChanged (SliderIds::decimalPlaces);
 }
 
 int Slider::getNumDecimalPlacesToDisplay() const
@@ -538,6 +574,11 @@ void Slider::mouseDown (const MouseEvent& event)
         if (bailOutChecker.shouldBailOut())
             return;
 
+        notifyPropertyChanged (SliderIds::pressedStep);
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+
         stepRepeater.startTimer (stepRepeatDelayMs);
 
         if (getClickingGrabFocus())
@@ -634,9 +675,16 @@ void Slider::mouseUp (const MouseEvent& event)
 {
     if (pressedStep != 0)
     {
+        const BailOutChecker bailOutChecker (this);
+
         pressedStep = 0;
         stepRepeater.stopTimer();
         repaint();
+
+        notifyPropertyChanged (SliderIds::pressedStep);
+
+        if (bailOutChecker.shouldBailOut())
+            return;
     }
 
     if (dragMode != notDragging)
@@ -689,8 +737,15 @@ bool Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
 
 void Slider::mouseDoubleClick (const MouseEvent& event)
 {
-    if (isEnabled())
-        resetToDefaultValue();
+    if (! isEnabled())
+        return;
+
+    // Two quick presses on a button of a stepper are two steps, not a way back to the default value
+    for (const auto direction : { -1, 1 })
+        if (getStepButtonBounds (direction).contains (event.getPosition()))
+            return;
+
+    resetToDefaultValue();
 }
 
 //==============================================================================
@@ -795,6 +850,8 @@ void Slider::updateValueFromMousePosition (Point<float> mousePos, DragMode dragM
     {
         case LinearVertical:
         case LinearBarVertical:
+        case TwoValueVertical:
+        case ThreeValueVertical:
             mouseDelta = mouseDragStartPosition.getY() - mousePos.getY();
             totalRange = sliderBounds.getHeight();
             break;
@@ -850,14 +907,14 @@ void Slider::updateValueFromMousePosition (Point<float> mousePos, DragMode dragM
         case draggingForMinValue:
         {
             const double newNormalisedValue = range.convertTo0to1 (minValueOnMouseDown) + normalizedDelta;
-            setMinValue (range.convertFrom0to1 (std::clamp (newNormalisedValue, 0.0, 1.0)));
+            setMinValue (jmin (range.convertFrom0to1 (std::clamp (newNormalisedValue, 0.0, 1.0)), maxValue));
             break;
         }
 
         case draggingForMaxValue:
         {
             const double newNormalisedValue = range.convertTo0to1 (maxValueOnMouseDown) + normalizedDelta;
-            setMaxValue (range.convertFrom0to1 (std::clamp (newNormalisedValue, 0.0, 1.0)));
+            setMaxValue (jmax (range.convertFrom0to1 (std::clamp (newNormalisedValue, 0.0, 1.0)), minValue));
             break;
         }
 
@@ -951,6 +1008,8 @@ Rectangle<float> Slider::getSliderBounds() const
     {
         case LinearHorizontal:
         case LinearBarHorizontal:
+        case TwoValueHorizontal:
+        case ThreeValueHorizontal:
         {
             const float thumbSize = jmax (std::min (20.0f, bounds.getHeight() * 0.8f), findPropertyAs<float> (SliderIds::thumbSize));
             const float thumbMargin = thumbSize * 0.5f;
@@ -959,10 +1018,24 @@ Rectangle<float> Slider::getSliderBounds() const
 
         case LinearVertical:
         case LinearBarVertical:
+        case TwoValueVertical:
+        case ThreeValueVertical:
         {
             const float thumbSize = jmax (std::min (20.0f, bounds.getWidth() * 0.8f), findPropertyAs<float> (SliderIds::thumbSize));
             const float thumbMargin = thumbSize * 0.5f;
             return Rectangle<float> (bounds.getX() + margin, bounds.getY() + thumbMargin, bounds.getWidth() - (margin * 2), bounds.getHeight() - (thumbMargin * 2));
+        }
+
+        case IncDecButtons:
+        {
+            // A stepper keeps the thickness of a button in whatever room it is given, and stays in the middle of it:
+            // on a line in a wide area, its buttons one above the other in a narrow one
+            const auto area = Rectangle<float> (bounds.getX() + margin, bounds.getY() + margin, bounds.getWidth() - (margin * 2), bounds.getHeight() - (margin * 2));
+            const float thickness = jmax (20.0f, findPropertyAs<float> (SliderIds::thumbSize) * 1.75f);
+
+            return area.getWidth() >= area.getHeight()
+                     ? area.withSizeKeepingCenter (area.getWidth(), jmin (area.getHeight(), thickness))
+                     : area.withSizeKeepingCenter (jmin (area.getWidth(), thickness), area.getHeight());
         }
 
         default:

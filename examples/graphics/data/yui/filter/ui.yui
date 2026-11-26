@@ -33,7 +33,7 @@ Grid {
         gridArea: "head";
         gap: spacing;
 
-        Image { id: brand; class: brand; source: "../logo_black.png"; preferredWidth: 26; fitting: scaleToFit; }
+        Image { id: brand; class: brand; source: "../../logo_black.png"; preferredWidth: 26; fitting: scaleToFit; }
         Label { class: title; text: "Filter"; flexGrow: 1; textHeightProportion: 0.7; }
         ComboBox {
             id: mode;

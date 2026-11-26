@@ -368,6 +368,64 @@ TEST_F (ApplicationThemeTest, FindComponentStylePrefersComponentInstanceStyle)
     EXPECT_EQ (instanceStyle.get(), found.get());
 }
 
+TEST_F (ApplicationThemeTest, PaintsAPartOfAComponentTypeWithThePainterSetForIt)
+{
+    struct TitleLabel : Label
+    {
+        TitleLabel()
+            : Label ("title")
+        {
+        }
+    };
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (64, 16);
+    Graphics g (*context, *renderer);
+
+    Label label ("test");
+    const Identifier text ("text");
+    const Rectangle<float> area (4.0f, 2.0f, 40.0f, 12.0f);
+
+    // A theme paints nothing of a part it has no painter for
+    EXPECT_FALSE (theme->paintPart (g, label, text, area));
+    EXPECT_FALSE (ApplicationTheme::paintComponentPart (g, label, text, area));
+
+    const Label* paintedLabel = nullptr;
+    Rectangle<float> paintedArea;
+
+    theme->setComponentPart<Label> (text, [&] (Graphics&, const ApplicationTheme& paintingTheme, const Label& l, const Rectangle<float>& a)
+    {
+        EXPECT_EQ (std::addressof (paintingTheme), theme.get());
+
+        paintedLabel = std::addressof (l);
+        paintedArea = a;
+    });
+
+    EXPECT_TRUE (ApplicationTheme::paintComponentPart (g, label, text, area));
+    EXPECT_EQ (paintedLabel, std::addressof (label));
+    EXPECT_EQ (paintedArea, area);
+
+    // The other parts of the type are still unpainted
+    EXPECT_FALSE (theme->paintPart (g, label, Identifier ("textOutline"), area));
+
+    // A class deriving from the type is painted as the type is
+    TitleLabel title;
+    EXPECT_TRUE (theme->paintPart (g, title, text, area));
+    EXPECT_EQ (paintedLabel, static_cast<const Label*> (std::addressof (title)));
+
+    // A painter set again replaces the one before
+    int numReplaced = 0;
+    theme->setComponentPart<Label> (text, [&numReplaced] (Graphics&, const ApplicationTheme&, const Label&, const Rectangle<float>&)
+    {
+        ++numReplaced;
+    });
+
+    paintedLabel = nullptr;
+    EXPECT_TRUE (theme->paintPart (g, label, text, area));
+    EXPECT_EQ (numReplaced, 1);
+    EXPECT_EQ (paintedLabel, nullptr);
+}
+
 TEST_F (ApplicationThemeTest, FindColorInstanceMethod)
 {
     Component c ("testComponent");

@@ -1,0 +1,55 @@
+// Shaders: a series as the input of a shader. A `number[]` property named as a `texture2D` of
+// the fragment stage fills a texture one pixel high, which the shader reads along x: the
+// levels of the analyzer go from where it keeps them to the GPU, uploaded when they change.
+// The chart under it gives the same shader the numbers of a property, with a gain as uniform.
+// The state of the analyzer is given by the page from C++: without one the curve is flat.
+shader Scope {
+    fragment: "fx/spectrum.frag";
+    property levels: number[];
+    property tint: color = palette.accent;
+    property gain: number = 1;
+}
+
+component Chart : Component {
+    property values: number[] = [0.12, 0.3, 0.26, 0.55, 0.48, 0.8, 0.62, 0.9, 0.7, 0.52, 0.6, 0.34, 0.4, 0.2, 0.28, 0.1];
+    property gain: number = 1;
+
+    class: chart;
+}
+
+drawing ShaderSpectrum {
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+    use Scope { bounds: bounds.reduced (6); levels: levels; }
+}
+
+drawing ShaderChart {
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+    use Scope { bounds: bounds.reduced (6); levels: values; gain: gain; tint: palette.text; }
+}
+
+style {
+    .caption { textFillColor: palette.textMuted; }
+    .readout { textFillColor: palette.accent; }
+
+    SpectrumAnalyzer { drawing: ShaderSpectrum; }
+    .chart           { drawing: ShaderChart; }
+}
+
+Column {
+    padding: 12;
+    gap: 8;
+
+    Label { class: caption; text: "The levels of an analyzer, sampled by a shader"; preferredHeight: 14; }
+    SpectrumAnalyzer { id: analyzer; flexGrow: 1; }
+
+    Row {
+        gap: 8;
+        preferredHeight: 26;
+
+        Label  { class: caption; text: "The numbers of a property, with a gain"; flexGrow: 1; }
+        Slider { id: gain; minimum: 0; maximum: 1.5; value: 1; flexGrow: 1; }
+        Label  { class: readout; text: format ("%.2f", gain.value); preferredWidth: 40; }
+    }
+
+    Chart { id: chart; gain: gain.value; flexGrow: 1; }
+}

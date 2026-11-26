@@ -200,9 +200,9 @@ shader that does not compile, or a file a document reads that the call does
 not list fails the build instead of shipping. See
 [Tools for `.yui` files](tooling.md#checking-while-configuring).
 
-The `YuiDrawing` graphics example loads its files this way in a `YuiView`,
-watches them, and shows them in editable tabs after every load; a tab edited
-overrides its file. Its `YUI 3D` page does the same for scenes, with their
+The `YuiDrawing` graphics example loads the files of each of its pages this
+way in a `YuiView`, watches them, and shows them in editable tabs after every
+load; a tab edited overrides its file. Its `YUI 3D` page does the same for scenes, with their
 shaders and their models.
 
 ## See also

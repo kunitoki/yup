@@ -29,6 +29,7 @@ struct ProgressBarIds
 {
     static inline const Identifier progress { "progress" };
     static inline const Identifier indeterminate { "indeterminate" };
+    static inline const Identifier phase { "phase" };
 };
 
 } // namespace
@@ -47,6 +48,7 @@ const ComponentTypeInfo& ProgressBar::getClassTypeInfo()
                                  .number ("cornerRadius", Style::cornerRadiusId, {}, "The corner radius, unset for a pill.")
                                  .property (ProgressBarIds::progress, &ProgressBar::getProgress, [] (ProgressBar& p, double v) { p.setProgress (v); })
                                  .readOnly (ProgressBarIds::indeterminate, &ProgressBar::isIndeterminate)
+                                 .readOnly (ProgressBarIds::phase, &ProgressBar::getAnimationPhase, 0.0, "How far an indeterminate bar is in the cycle of its animation, from 0 to 1.")
                                  .build();
 
     return info;

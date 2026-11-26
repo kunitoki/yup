@@ -506,11 +506,12 @@ Row {
 }
 ```
 
-Until it is given a state a component is idle: the keyboard plays nothing, the
-wheels are moved by the user alone, the analyzers draw their grid and the meter
-shows silence. That is how they appear in the
-[tools](../ui/yui/tooling.md) previewing a document, which have no application
-to ask.
+Until it is given a state a component is idle: the keyboard shows the keys
+held on it and plays them to nothing, the wheels are moved by the user alone,
+the analyzers draw their grid and the meter shows silence. That is how they
+appear in the [tools](../ui/yui/tooling.md) drawing a document, which have no
+application to ask. The live preview of the VS Code extension feeds the
+analyzers and the meters a generated signal instead.
 
 `setState()` swaps or removes the state of a component built in C++ as well.
 Call it on the message thread, and keep the state alive as long as a component
@@ -521,6 +522,39 @@ document: the FFT size and the overlap of a `SpectrumAnalyzerState`, which the
 audio thread fills, and the scale and the ballistics of a `KMeterState`, which
 several meters share. The properties a document writes on each type are listed
 by the [schema](../ui/yui/tooling.md#the-schema).
+
+### Painting them with a drawing
+
+A stylesheet can give these components a
+[drawing](../ui/yui/drawing.md) instead of what they paint themselves. They
+tell a drawing what they show:
+
+| Type | A drawing reads |
+|---|---|
+| `SpectrumAnalyzer` | `levels`, the 512 levels of the curve from 0 to 1 (`getLevels()` in C++), with the ranges as `minFrequency`, `maxFrequency`, `minDecibels` and `maxDecibels` |
+| `KMeter` | `peakDb`, `averageDb`, `peakHoldDb`, `clipping`, `rangeMinDb`, `rangeMaxDb` |
+| `MidiKeyboard` | `keyBounds`, `keyNotes`, `keyBlack`, `keyPressed`, `keyHovered`, one value for each visible key |
+
+```yui
+drawing Spectrum {
+    repeat i in 0 .. bounds.width {
+        let x: bounds.x + i;
+
+        vertex { at: point (x, bounds.bottom - sample (levels, i / bounds.width) * bounds.height);
+                 base: point (x, bounds.bottom); smooth: 0.5;
+                 fill: palette.accent.withAlpha (0.25); stroke: palette.accent; strokeWidth: 1.5; }
+    }
+}
+
+style {
+    SpectrumAnalyzer { drawing: Spectrum; }
+}
+```
+
+The levels are read where the analyzer keeps them, at every frame it updates,
+with no copy. A [shader](../ui/yui/shaders.md#series) reads the same `levels`
+as a texture. See [Widgets in drawings](../ui/yui/widgets.md#audio) for the
+meter and the keyboard.
 
 ## Threading rules
 

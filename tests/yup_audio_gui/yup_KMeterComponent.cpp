@@ -182,6 +182,45 @@ TEST (KMeterComponentTests, SetStateMovesTheMeterToAnotherState)
     EXPECT_EQ (nullptr, meter.getState());
 }
 
+TEST (KMeterComponentTests, TellsItStoppedClippingWhenItsStateIsRemoved)
+{
+    struct Listener : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override
+        {
+            if (name == Identifier ("clipping"))
+                ++clippingChanges;
+        }
+
+        int clippingChanges = 0;
+    };
+
+    KMeterState state (48000.0, 2);
+    KMeterComponent meter (state, 0);
+
+    Listener listener;
+    meter.addComponentListener (&listener);
+
+    state.setOverThreshold (0.8f);
+
+    std::vector<float> samples (512, 0.9f);
+    const float* channels[2] = { samples.data(), samples.data() };
+    state.pushSamples (channels, 2, 512);
+    state.processPendingAudio();
+    ASSERT_TRUE (state.isClipping());
+
+    meter.refreshDisplay (1.0);
+    EXPECT_TRUE (static_cast<bool> (meter.getProperty ("clipping")));
+    EXPECT_EQ (listener.clippingChanges, 1);
+
+    // Without a state the meter shows silence, and what selects it by its clipping is told
+    meter.setState (nullptr);
+    EXPECT_FALSE (static_cast<bool> (meter.getProperty ("clipping")));
+    EXPECT_EQ (listener.clippingChanges, 2);
+
+    meter.removeComponentListener (&listener);
+}
+
 TEST (KMeterComponentTests, TheTypeInfoCreatesAMeterAndSetsItsChannel)
 {
     const auto& type = KMeterComponent::getClassTypeInfo();

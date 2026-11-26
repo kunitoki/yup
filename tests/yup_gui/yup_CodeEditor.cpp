@@ -80,6 +80,21 @@ TEST (CodeEditorTest, DefaultConstructorOwnsInternalDocument)
     EXPECT_TRUE (editor.getText().isEmpty());
 }
 
+TEST (CodeEditorTest, TellsADrawingWhereItsTextIsAndPaintsItselfAsOnePart)
+{
+    CodeEditor editor;
+    editor.setBounds (0.0f, 0.0f, 320.0f, 200.0f);
+
+    // What an editor shows is one part, painted as the theme paints it: a drawing frames it
+    const auto* content = editor.getTypeInfo().findPart (Identifier ("content"));
+    ASSERT_NE (content, nullptr);
+    EXPECT_FALSE (content->isPlaceable);
+    EXPECT_EQ (content->getArea (editor), editor.getLocalBounds());
+
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (editor.getProperty (Identifier ("textBounds"))), editor.getTextArea());
+    EXPECT_FLOAT_EQ (static_cast<float> (editor.getProperty (Identifier ("gutterWidth"))), editor.getGutterWidth());
+}
+
 TEST (CodeEditorTest, BindsToExternalDocument)
 {
     CodeDocument document;

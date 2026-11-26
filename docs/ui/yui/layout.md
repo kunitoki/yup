@@ -275,6 +275,11 @@ setting `width` and `height`: `x`, `y`, `width` and `height` reflect the live
 bounds written by the layout pass, whereas `preferredWidth` and
 `preferredHeight` express the size the container should allocate.
 
+An item with `flexGrow` and no `flexBasis` or preferred size along the main
+axis grows from nothing, so the items of a `Row` share its free space by their
+`flexGrow` alone, whatever they were given before: a `repeat` adding items
+gives each one the same share as the others.
+
 ```yui
 Row {
     gap: 6;

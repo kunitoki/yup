@@ -1,0 +1,129 @@
+// Styles: what a stylesheet does to a component tree. Selectors on types, classes, ids,
+// properties and states; tokens; palettes scoped to a part of the tree; values that change
+// with a transition or run as an animation; shadows, glows, filters and cursors; and the
+// geometry a rule gives the widgets of the theme.
+tokens {
+    property radius: number = 8;
+    property brand: color = #ff8800;
+}
+
+palette Ember { colors: "#1b1b1e #ff8800 #f2efe9"; accent: #ff9a1f; }
+
+palette Porcelain {
+    mode: light;
+    colors: #ece9e1, #9aa3c0, #8d8b85, #3a3a3e, #fbfaf6;
+}
+
+drawing Panel {
+    rect { bounds: bounds; cornerRadius: 8; fill: palette.background; stroke: palette.outline; strokePosition: inside; }
+}
+
+// A lamp whose glow is a property, animated by the keyframes of the stylesheet
+drawing Lamp {
+    property glow: number = 0.2;
+
+    circle { center: bounds.center; radius: bounds.height * 0.45; fill: palette.accent.withAlpha (0.35 * glow); feather: 8; }
+    circle { center: bounds.center; radius: bounds.height * 0.22; fill: palette.accent; }
+}
+
+style {
+    .caption { textFillColor: palette.textMuted; }
+    .panel   { drawing: Panel; }
+    .ember   { palette: Ember; }
+    .light   { palette: Porcelain; }
+
+    // Selectors, from the least to the most specific
+    TextButton          { cornerRadius: radius; }
+    .primary            { backgroundColor: palette.accent; textColor: palette.onAccent; }
+    .brand              { backgroundColor: brand; textColor: #1b1b1e; }
+    #reset              { textColor: #ff5544; outlineColor: #ff5544; }
+    [text="[text]"]     { cornerRadius: 16; }
+    .bar > ToggleButton { cornerRadius: 0; }
+    :checked            { backgroundToggledColor: #2e9e5b; }
+    :disabled           { opacity: 0.35; }
+
+    // States with a transition between their values
+    .morph         { cursor: hand; cornerRadius: 4; backgroundColor: palette.surfaceRaised;
+                     transition: cornerRadius 200ms easeOut, backgroundColor 200ms; }
+    .morph:hover   { cornerRadius: 14; backgroundColor: palette.accent.withAlpha (0.4); }
+    .morph:pressed { backgroundColor: palette.accent; }
+
+    // An animation running for as long as the rule matches: the lamp is a toggle, lit while checked
+    .lamp         { drawing: Lamp; cursor: hand; }
+    .lamp:checked { animation: breathe 0.8s easeInOut infinite alternate; }
+
+    @keyframes breathe {
+        from { glow: 0.2; }
+        to { glow: 1.6; }
+    }
+
+    // Effects painted around or over a component
+    .shadow { shadow: 0 4 12 #00000060; }
+    .glow   { glow: 10 2 palette.accent.withAlpha (0.4); }
+    .blur   { filter: blur(2px); }
+    .hue    { filter: hue-rotate(120deg); }
+    .gray   { filter: grayscale(100%); }
+
+    // The geometry of the widgets of the theme
+    .styled Slider       { trackWidth: 10; thumbSize: 24; }
+    .styled SwitchButton { cornerRadius: 4; thumbInset: 7; }
+    .styled TextButton   { cornerRadius: 16; outlineWidth: 2; }
+}
+
+Column {
+    padding: 12;
+    gap: 8;
+
+    Label { class: caption; text: "Selectors"; preferredHeight: 14; }
+    Row {
+        class: bar; gap: 6; flexGrow: 1;
+
+        TextButton   { text: "Type"; flexGrow: 1; }
+        TextButton   { text: ".class"; class: primary; flexGrow: 1; }
+        TextButton   { id: reset; text: "#id"; flexGrow: 1; }
+        TextButton   { text: "[text]"; flexGrow: 1; }
+        TextButton   { text: "token"; class: brand; flexGrow: 1; }
+        ToggleButton { text: ":checked"; checked: true; flexGrow: 1; }
+        TextButton   { text: ":disabled"; enabled: false; flexGrow: 1; }
+    }
+
+    Label { class: caption; text: "Palettes scoped to a panel"; preferredHeight: 14; }
+    Row {
+        gap: 8; flexGrow: 2;
+
+        Row { class: panel; padding: 8; gap: 6; flexGrow: 1;
+              TextButton { text: "Default"; class: primary; flexGrow: 1; } Slider { value: 0.6; flexGrow: 1; } }
+        Row { class: "panel ember"; padding: 8; gap: 6; flexGrow: 1;
+              TextButton { text: "Ember"; class: primary; flexGrow: 1; } Slider { value: 0.6; flexGrow: 1; } }
+        Row { class: "panel light"; padding: 8; gap: 6; flexGrow: 1;
+              TextButton { text: "Light"; class: primary; flexGrow: 1; } Slider { value: 0.6; flexGrow: 1; } }
+    }
+
+    Label { class: caption; text: "Transitions and animations: hover, press, click the lamp"; preferredHeight: 14; }
+    Row {
+        gap: 8; flexGrow: 2;
+
+        TextButton { text: "hover me"; class: morph; flexGrow: 1; }
+        TextButton { text: "press me"; class: morph; flexGrow: 1; }
+        ToggleButton { class: lamp; checked: true; preferredWidth: 164; }
+    }
+
+    Label { class: caption; text: "Shadows, glows and filters"; preferredHeight: 14; }
+    Row {
+        padding: 6; gap: 16; flexGrow: 2;
+
+        TextButton { text: "shadow"; class: shadow; flexGrow: 1; }
+        TextButton { text: "glow"; class: glow; flexGrow: 1; }
+        TextButton { text: "blur"; class: "primary blur"; flexGrow: 1; }
+        TextButton { text: "hue"; class: "primary hue"; flexGrow: 1; }
+        TextButton { text: "gray"; class: "primary gray"; flexGrow: 1; }
+    }
+
+    Label { class: caption; text: "Geometry of the theme"; preferredHeight: 14; }
+    Row {
+        gap: 8; flexGrow: 2;
+
+        Row { gap: 8; flexGrow: 1; TextButton { text: "Default"; flexGrow: 1; } Slider { value: 0.6; flexGrow: 1; } SwitchButton { checked: true; preferredWidth: 56; } }
+        Row { class: styled; gap: 8; flexGrow: 1; TextButton { text: "Styled"; flexGrow: 1; } Slider { value: 0.6; flexGrow: 1; } SwitchButton { checked: true; preferredWidth: 56; } }
+    }
+}

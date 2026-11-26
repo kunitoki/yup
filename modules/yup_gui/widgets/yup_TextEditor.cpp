@@ -32,6 +32,13 @@ struct TextEditorIds
     static inline const Identifier text { "text" };
     static inline const Identifier readOnly { "readOnly" };
     static inline const Identifier multiLine { "multiLine" };
+    static inline const Identifier textBounds { "textBounds" };
+    static inline const Identifier caretBounds { "caretBounds" };
+    static inline const Identifier caretVisible { "caretVisible" };
+    static inline const Identifier hasSelection { "hasSelection" };
+    static inline const Identifier scrollOffset { "scrollOffset" };
+    static inline const Identifier selectionPart { "selection" };
+    static inline const Identifier caretPart { "caret" };
 };
 
 } // namespace
@@ -66,6 +73,14 @@ const ComponentTypeInfo& TextEditor::getClassTypeInfo()
                                  .property (TextEditorIds::readOnly, &TextEditor::isReadOnly, &TextEditor::setReadOnly)
                                  .property (TextEditorIds::multiLine, &TextEditor::isMultiLine, &TextEditor::setMultiLine)
                                  .signal ("onTextChange", &TextEditor::onTextChange, "Emitted when the text is edited")
+                                 .readOnly (TextEditorIds::textBounds, &TextEditor::getTextBounds, {}, "The area the text is shown in.")
+                                 .readOnly (TextEditorIds::caretBounds, &TextEditor::getCaretBounds, {}, "The area of the caret.")
+                                 .readOnly (TextEditorIds::caretVisible, [] (const TextEditor& e) { return e.hasKeyboardFocus() && e.isCaretVisible(); }, false, "Whether the caret shows: the editor has the keyboard focus, and the caret is in the lit half of its blink.")
+                                 .readOnly (TextEditorIds::hasSelection, &TextEditor::hasSelection, false, "Whether some of the text is selected.")
+                                 .readOnly (TextEditorIds::scrollOffset, &TextEditor::getScrollOffset, {}, "How far the text is scrolled inside the area it is shown in.")
+                                 .fixedPart (TextEditorIds::selectionPart, &TextEditor::getTextBounds, "The background of the selected text, filled with the fill color.")
+                                 .fixedPart (TextEditorIds::text, &TextEditor::getTextBounds, "The text as the editor laid it out and scrolled it, filled with the fill color.")
+                                 .fixedPart (TextEditorIds::caretPart, &TextEditor::getCaretBounds, "The caret, filled with the fill color while it shows.")
                                  .build();
 
     return info;

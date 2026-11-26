@@ -339,6 +339,36 @@ TEST_F (TreeViewTests, HiddenRootShowsItsSubItemsAtTheTop)
     EXPECT_EQ ("root,a,b,c", rowNames());
 }
 
+TEST_F (TreeViewTests, FillsItselfFromThePathsOfItsItems)
+{
+    const StringArray paths { "Sources/main.cpp", "Sources/Editor.cpp", "Resources/ui.yui", "README.md" };
+
+    tree->setItems (paths);
+
+    // An item is made for each level no path named before, under a root that has no row, and those holding others are open
+    EXPECT_FALSE (tree->isRootItemVisible());
+    EXPECT_EQ ("Sources,main.cpp,Editor.cpp,Resources,ui.yui,README.md", rowNames());
+
+    auto* root = tree->getRootItem();
+    ASSERT_NE (nullptr, root);
+    ASSERT_EQ (3, root->getNumSubItems());
+    EXPECT_EQ (2, root->getSubItem (0)->getNumSubItems());
+    EXPECT_TRUE (root->getSubItem (0)->isOpen());
+    EXPECT_FALSE (root->getSubItem (2)->mightContainSubItems());
+
+    // The paths are a property, which a document writes
+    EXPECT_EQ (paths, tree->getItems());
+    Array<var> others;
+    others.add ("One");
+    others.add ("Two/Three");
+    tree->setProperty (Identifier ("items"), others);
+    EXPECT_EQ ("One,Two,Three", rowNames());
+
+    // A root set another way is not one of paths
+    buildTree();
+    EXPECT_TRUE (tree->getItems().isEmpty());
+}
+
 TEST_F (TreeViewTests, RowsMakeRoomForItemsThatPaintAnIcon)
 {
     buildFlatTree (2);

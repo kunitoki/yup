@@ -417,6 +417,69 @@ TEST_F (SpectrumAnalyzerComponentTests, DISABLED_SetSampleRateNegative)
 // Display Type Tests
 //==============================================================================
 
+TEST_F (SpectrumAnalyzerComponentTests, TellsItsLevelsAsASeriesWithARevision)
+{
+    // One level for each display point, at rest until a spectrum is analyzed
+    const auto levels = analyzer->getLevels();
+    ASSERT_EQ (levels.size(), static_cast<size_t> (SpectrumAnalyzerComponent::scopeSize));
+    EXPECT_TRUE (std::all_of (levels.begin(), levels.end(), [] (float level) { return level == 0.0f; }));
+
+    const auto* property = analyzer->getTypeInfo().findProperty (Identifier ("levels"));
+    ASSERT_NE (property, nullptr);
+    EXPECT_TRUE (property->isSeries());
+    EXPECT_TRUE (property->isReadOnly());
+    EXPECT_EQ (property->elementType, ComponentProperty::Type::number);
+
+    // A drawing reads the levels where the analyzer keeps them
+    const auto view = property->arrayGetter (*analyzer);
+    EXPECT_EQ (view.data, levels.data());
+    EXPECT_EQ (view.size, static_cast<int> (SpectrumAnalyzerComponent::scopeSize));
+    EXPECT_EQ (view.revision, analyzer->getLevelsRevision());
+    EXPECT_NE (view.revision, 0u);
+
+    // The revision tells when they change: another state starts from silence
+    const auto revision = analyzer->getLevelsRevision();
+    SpectrumAnalyzerState other (2048);
+
+    analyzer->setState (&other);
+    EXPECT_NE (analyzer->getLevelsRevision(), revision);
+    EXPECT_EQ (analyzer->getLevels().data(), levels.data());
+
+    analyzer->setState (state.get());
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, AStyleSetOnTheAnalyzerPaintsItInPlaceOfItsOwnPaint)
+{
+    struct CountingStyle final : ComponentStyle
+    {
+        void paint (Graphics&, const ApplicationTheme&, const Component&) override { ++numPaints; }
+
+        int numPaints = 0;
+    };
+
+    const auto oldTheme = ApplicationTheme::getGlobalTheme();
+    ApplicationTheme::setGlobalTheme (new ApplicationTheme());
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (800, 400);
+
+    {
+        Graphics g (*context, *renderer);
+
+        ReferenceCountedObjectPtr<CountingStyle> style (new CountingStyle());
+        analyzer->setStyle (style);
+        analyzer->paint (g);
+        EXPECT_EQ (style->numPaints, 1);
+
+        // Without one the analyzer paints itself
+        analyzer->setStyle (nullptr);
+        analyzer->paint (g);
+        EXPECT_EQ (style->numPaints, 1);
+    }
+
+    ApplicationTheme::setGlobalTheme (oldTheme.get());
+}
+
 TEST_F (SpectrumAnalyzerComponentTests, DefaultDisplayTypeIsFilled)
 {
     EXPECT_EQ (SpectrumAnalyzerComponent::DisplayType::filled, analyzer->getDisplayType());

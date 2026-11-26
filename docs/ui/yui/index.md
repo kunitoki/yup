@@ -63,6 +63,8 @@ Start with the language, then pick the area you need.
   shadows, glows, CSS filters and cursors for any component tree.
 - [Data-driven drawing](drawing.md) - paint components from a tree of shapes
   whose values are expressions over the component's properties.
+- [Widgets in drawings](widgets.md) - what each widget tells a drawing: its
+  geometry, its data series and its parts.
 - [Shaders](shaders.md) - GLSL shaders declared in a document: as the effect of
   a component, painted by a drawing, in a filter, or as a 3D material.
 - [3D scenes](scenes.md) - `Scene3D`, cameras, lights, meshes, glTF models and
@@ -104,6 +106,7 @@ architecture
 layout
 styles
 drawing
+widgets
 shaders
 scenes
 reactivity

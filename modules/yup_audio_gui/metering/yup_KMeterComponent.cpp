@@ -32,6 +32,8 @@ const Identifier KMeterComponent::Style::peakLevelColorId { "peakLevelColorId" }
 const Identifier KMeterComponent::Style::peakLevelClipColorId { "peakLevelClipColorId" };
 const Identifier KMeterComponent::Style::peakHoldColorId { "peakHoldColorId" };
 
+const Identifier KMeterComponent::clippingPropertyId { "clipping" };
+
 //==============================================================================
 const ComponentTypeInfo& KMeterComponent::getClassTypeInfo()
 {
@@ -57,6 +59,12 @@ const ComponentTypeInfo& KMeterComponent::getClassTypeInfo()
                                      &M::setScaleMapping,
                                      "How the levels are placed along the meter: with the segments of the K-System, or linearly in dB.")
                                  .property ("refreshRate", &M::getRefreshRate, &M::setRefreshRate, 30, "The updates a second, from 10 to 60.")
+                                 .readOnly ("peakDb", [] (const M& m) { return m.currentPeakDb.get(); }, -100.0, "The peak level shown, in dB.")
+                                 .readOnly ("averageDb", [] (const M& m) { return m.currentAverageDb.get(); }, -100.0, "The average level shown, in dB.")
+                                 .readOnly ("peakHoldDb", [] (const M& m) { return m.currentPeakHoldDb.get(); }, -100.0, "The peak level held, in dB.")
+                                 .state (clippingPropertyId, [] (const M& m) { return m.currentClipping.get(); }, false, "Whether the signal is clipping.")
+                                 .readOnly ("rangeMinDb", [] (const M& m) { return KMeterState::rangeMinForScale (m.meterState != nullptr ? m.meterState->getScale() : KMeterState::Scale::k20); }, {}, "The lowest level of the scale of the meter, in dB.")
+                                 .readOnly ("rangeMaxDb", [] (const M& m) { return KMeterState::rangeMaxForScale (m.meterState != nullptr ? m.meterState->getScale() : KMeterState::Scale::k20); }, {}, "The highest level of the scale of the meter, in dB.")
                                  .signal ("onLevelChanged", &M::onLevelChanged, "Emitted with the peak and the average level, in dB, when either moved by half a dB.", { { Identifier ("peakDb"), ComponentProperty::Type::number }, { Identifier ("averageDb"), ComponentProperty::Type::number } })
                                  .signal ("onClippingChanged", &M::onClippingChanged, "Emitted when the signal starts or stops clipping.", { { Identifier ("clipping"), ComponentProperty::Type::boolean } })
                                  .build();
@@ -93,6 +101,7 @@ void KMeterComponent::setState (KMeterState* newState)
     // The levels shown are the ones of the previous state
     updateLevels();
     repaint();
+    notifyClippingChange();
 }
 
 void KMeterComponent::setChannel (int channel)
@@ -229,8 +238,27 @@ void KMeterComponent::checkForCallbacks()
     // Clipping state changed callback
     if (onClippingChanged && clipping != lastCallbackClipping)
     {
+        const BailOutChecker bailOutChecker (this);
+
         lastCallbackClipping = clipping;
         onClippingChanged (clipping);
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
+    notifyClippingChange();
+}
+
+void KMeterComponent::notifyClippingChange()
+{
+    // What follows the state, as a rule of a stylesheet selecting it, is told when it changes
+    const bool clipping = currentClipping.get();
+
+    if (clipping != lastNotifiedClipping)
+    {
+        lastNotifiedClipping = clipping;
+        notifyPropertyChanged (clippingPropertyId);
     }
 }
 

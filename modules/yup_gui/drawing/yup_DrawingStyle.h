@@ -36,6 +36,14 @@ class DependencyObserver;
     - shapes: `rect`, `ellipse`, `circle`, `arc`, `line`, `path`, `polygon`, `star`, `text`,
       `image` and `svg`, each with its own geometry and paint properties (including `dash`
       and `dashOffset` for stroked shapes);
+    - `vertex` (`at`, `series`, `base`, `smooth` and paint properties), only among the shapes of a
+      `repeat`: one point of the line its turns make together, which is how a data series becomes
+      a polyline, an area down to its `base` or a band between two curves;
+    - `part` (`name`, `bounds`, `fill`, `stroke`, `strokeWidth`, `opacity`, `blend`, `tint`,
+      `transform`, `clip`, `clipPath`, `visible`): what the type of the component declares it shows
+      beside its shapes, such as the text it laid out, its caret or its icon (see ComponentPart),
+      painted by the theme among the shapes with the paint the element gives it. Only a part that
+      fits any area takes `bounds`: the others are painted where the component puts them;
     - `let` (`name`, `value`): a local visible to the following siblings and their children;
     - `layer` (`opacity`, `blend`, `clip`, `clipPath`, `mask`, `maskMode`, `visible` and optional
       `mask` and `clipPath` children): draws its children into a transparency layer. With a `filter`
@@ -342,9 +350,12 @@ private:
     void drawNode (Graphics& g, const Node& node, const PaintContext& context, int numRows);
     int getRepeatCount (const Node& node, const Slot& slot) const;
     ShaderUniforms readUniforms (const Node& node, const Slot* slot) const;
+    uint32 findSeriesRevision (const void* numbers) const noexcept;
     ShaderUniforms readFilterUniforms (const Node& node, const PaintContext& context, const Rectangle<float>& region, const AffineTransform& transform, float contextScale);
     ShaderPicture prepareShader (const Node& node, const Slot* slot, const Rectangle<float>& area, const AffineTransform& transform, float contextScale, int maxSize) const;
     void drawShader (Graphics& g, const Node& node, Slot& slot, const PaintContext& context, int numRows);
+    void drawPart (Graphics& g, const Node& node, Slot& slot, const PaintContext& context, int numRows);
+    const Component* getPaintedComponent() const;
     bool drawFilteredLayer (Graphics& g, const Node& node, const PaintContext& context, int numRows);
     void drawFilteredContent (Graphics& g, const FilterSource& source);
 
@@ -363,9 +374,11 @@ private:
     ImageResolver imageResolver;
     std::map<const Node*, std::unique_ptr<FilterSource>> filterSources;
     const Font* paintFont = nullptr;
+    const Component* paintedComponent = nullptr;
     uint32 paintSerial = 0;
     std::vector<var> propertyValues;
     std::vector<DrawingScope::ArrayInput> propertyArrays;
+    std::vector<std::optional<ComponentArrayView>> propertySeries;
     std::vector<DrawingScope::Dependency> dependencies;
     std::unique_ptr<DependencyObserver> observer;
     double shaderTime = 0.0;

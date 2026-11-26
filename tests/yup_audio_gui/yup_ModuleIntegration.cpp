@@ -44,6 +44,25 @@ protected:
 #endif
     }
 
+    /** Makes a theme of its own the global one for as long as it lives. */
+    struct ScopedTheme
+    {
+        ScopedTheme()
+            : previous (ApplicationTheme::getGlobalTheme())
+            , theme (new ApplicationTheme())
+        {
+            ApplicationTheme::setGlobalTheme (theme);
+        }
+
+        ~ScopedTheme()
+        {
+            ApplicationTheme::setGlobalTheme (previous.get());
+        }
+
+        ApplicationTheme::Ptr previous;
+        ApplicationTheme::Ptr theme;
+    };
+
     MessageManager* messageManager = nullptr;
 };
 
@@ -267,3 +286,115 @@ TEST_F (AudioGuiModuleIntegrationTests, AWheelFollowsTheStateItIsGivenAfterItsCo
     EXPECT_EQ (mod.getState(), nullptr);
     EXPECT_EQ (pitch.getState(), nullptr);
 }
+
+TEST_F (AudioGuiModuleIntegrationTests, DrawingsPaintTheAudioComponentsFromTheSeriesTheyTell)
+{
+    const auto figure = File (__FILE__)
+                            .getParentDirectory()
+                            .getParentDirectory()
+                            .getParentDirectory()
+                            .getChildFile ("examples/docsimg/figures/ui/yui/widgets_audio.yui");
+
+    if (! figure.existsAsFile())
+        GTEST_SKIP() << "The figures of the documentation are not available";
+
+    const ScopedTheme scopedTheme;
+
+    {
+        MidiKeyboardState keyboardState;
+        YuiDocument document;
+
+        const auto loaded = document.loadFromString (figure.loadFileAsString());
+        ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+        ASSERT_NE (document.getRoot(), nullptr);
+
+        document.getRoot()->setBounds (0.0f, 0.0f, 560.0f, 190.0f);
+        document.getRoot()->getStyleContext()->restyleNow();
+        EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+        auto* analyzer = document.findById<SpectrumAnalyzerComponent> ("analyzer");
+        auto* meter = document.findById<KMeterComponent> ("meter");
+        auto* keys = document.findById<MidiKeyboardComponent> ("keys");
+        ASSERT_NE (analyzer, nullptr);
+        ASSERT_NE (meter, nullptr);
+        ASSERT_NE (keys, nullptr);
+
+        auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+        auto renderer = context->makeRenderer (560, 190);
+        Graphics g (*context, *renderer);
+
+        const auto measure = [] (Component& component, const String& id)
+        {
+            auto* style = dynamic_cast<DrawingStyle*> (component.getStyle().get());
+            EXPECT_NE (style, nullptr);
+
+            if (style != nullptr)
+                for (const auto& element : style->measureElements (component))
+                    if (element.id == id)
+                        return element;
+
+            return DrawingStyle::ElementBounds();
+        };
+
+        // The curve of the analyzer has one vertex for each unit of its width, reading the levels at rest
+        const auto curve = measure (*analyzer, "curve");
+        EXPECT_EQ (curve.type, String ("vertex"));
+        EXPECT_GT (analyzer->getWidth(), 1.0f);
+        EXPECT_EQ (curve.numRows, static_cast<int> (analyzer->getWidth()));
+
+        // The keys are the ones the keyboard shows, each where the keyboard puts it
+        const auto numKeys = keys->getHighestVisibleKey() - keys->getLowestVisibleKey() + 1;
+        EXPECT_EQ (measure (*keys, "white").numRows, numKeys);
+        EXPECT_EQ (measure (*keys, "black").numRows, numKeys);
+
+        const auto keyBounds = keys->getProperty (Identifier ("keyBounds"));
+        ASSERT_EQ (keyBounds.size(), numKeys);
+        EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (keyBounds[0]), keys->getRectangleForKey (keys->getLowestVisibleKey()));
+
+        // A note played on the state the keyboard is given is a key told as pressed
+        keys->setState (&keyboardState);
+        keyboardState.noteOn (1, keys->getLowestVisibleKey() + 2, 1.0f);
+
+        const auto pressed = keys->getProperty (Identifier ("keyPressed"));
+        ASSERT_EQ (pressed.size(), numKeys);
+        EXPECT_FALSE (static_cast<bool> (pressed[0]));
+        EXPECT_TRUE (static_cast<bool> (pressed[2]));
+
+        // The drawings paint all three, the meter at rest
+        for (auto* component : { static_cast<Component*> (analyzer), static_cast<Component*> (meter), static_cast<Component*> (keys) })
+        {
+            ASSERT_NE (component->getStyle().get(), nullptr);
+            component->getStyle()->paint (g, *scopedTheme.theme, *component);
+        }
+
+        EXPECT_FLOAT_EQ (measure (*meter, "level").bounds.getHeight(), 0.0f);
+
+        keys->setState (nullptr);
+    }
+}
+
+TEST_F (AudioGuiModuleIntegrationTests, AnAliasOfASeriesIsAValueOfTheComposite)
+{
+    YuiDocument document;
+
+    const auto loaded = document.loadFromString (R"yui(
+        component Scope : Column {
+            property alias levels <=> analyzer.levels;
+            SpectrumAnalyzer { id: analyzer; }
+        }
+
+        Scope { })yui");
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+    const auto* type = document.findTypeInfo ("Scope");
+    ASSERT_NE (type, nullptr);
+
+    const auto* levels = type->findProperty (Identifier ("levels"));
+    ASSERT_NE (levels, nullptr);
+    EXPECT_EQ (levels->type, ComponentProperty::Type::array);
+
+    // The levels are in the memory of the analyzer: the composite has their name, and no such memory to be read in place
+    EXPECT_FALSE (levels->isSeries());
+    EXPECT_TRUE (levels->arrayGetter == nullptr);
+}
+

@@ -23,6 +23,10 @@ labels and text editors covered by [component basics](component-basics.md).
   custom content, drag and drop reordering, `DataTree` mirroring and saved
   openness state.
 
+Every widget can be painted by a `.yui` drawing instead of the theme:
+[Widgets in drawings](yui/widgets.md) lists the geometry, the data series and
+the parts each one gives a drawing.
+
 ```{toctree}
 :hidden:
 :maxdepth: 1

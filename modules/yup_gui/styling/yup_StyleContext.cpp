@@ -1566,13 +1566,19 @@ bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
                             || ComponentProperty::getElementTypeFromName (typeName) == ComponentProperty::Type::number;
 
         const auto numComponents = isFilling ? ShaderEffect::getNumUniformComponents (type) : 0;
+
+        // An array named as a texture of the shader fills that texture, not a member of the block
+        const bool fillsTexture = isFilling
+                               && type == ComponentProperty::Type::array
+                               && created.getReference()->getInputTextureNames().contains (propertyName);
+
         String problem;
 
         if (numComponents == 0)
             problem = "The property '" + propertyName + "' of the shader '" + name + "' can't be of type '" + typeName + "': a shader takes a number, an integer, a boolean, a color, a point, a rectangle or a number[]";
-        else if (! uniforms.hasMember (propertyName))
+        else if (! fillsTexture && ! uniforms.hasMember (propertyName))
             problem = "The uniform block of the shader '" + name + "' has no member '" + propertyName + "'";
-        else if (uniforms.getNumComponents (propertyName) < numComponents)
+        else if (! fillsTexture && uniforms.getNumComponents (propertyName) < numComponents)
             problem = "The member '" + propertyName + "' of the uniform block of the shader '" + name + "' is too small for a " + typeName;
 
         if (problem.isEmpty())
@@ -1609,7 +1615,7 @@ void StyleContext::refreshShaders()
             continue;
 
         // The effects running the shader take the new one, unless it now reads more textures than an effect has: those are made again
-        const bool runsAsEffect = entry.loaded.shader->getNumInputTextures() <= 1;
+        const bool runsAsEffect = ShaderEffect::getNumPictures (*entry.loaded.shader, entry.loaded.properties) <= 1;
 
         for (auto& [component, cache] : *caches)
         {
@@ -1673,7 +1679,7 @@ ComponentEffect::Ptr StyleContext::createEffect (Component& component, const Sty
     if (loaded == nullptr)
         return nullptr;
 
-    if (loaded->shader->getNumInputTextures() > 1)
+    if (ShaderEffect::getNumPictures (*loaded->shader, loaded->properties) > 1)
     {
         report ({ .message = "The shader '" + name + "' reads two textures, an effect gives it one", .element = effectDecl.element });
         return nullptr;

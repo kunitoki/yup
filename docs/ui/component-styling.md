@@ -88,7 +88,7 @@ Every themable widget exposes color IDs:
 |---|---|
 | `TextButton::Style` | `backgroundColorId`, `backgroundPressedColorId`, `textColorId`, `textPressedColorId`, `outlineColorId`, `outlineFocusedColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
 | `ToggleButton::Style` | `backgroundColorId`, `backgroundToggledColorId`, `textColorId`, `textToggledColorId`, `borderColorId`, `borderToggledColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
-| `SwitchButton::Style` | `switchColorId`, `switchOffBackgroundColorId`, `switchOnBackgroundColorId` (curated geometry: `cornerRadiusId`, `thumbInsetId`) |
+| `SwitchButton::Style` | `switchColorId`, `switchOffBackgroundColorId`, `switchOnBackgroundColorId` (curated geometry: `cornerRadiusId`, `thumbInsetId`, `thumbSizeId`) |
 | `Slider::Style` | `backgroundColorId`, `trackColorId`, `thumbColorId`, `thumbOverColorId`, `thumbDownColorId`, `textColorId` (curated geometry: `trackWidthId`, `thumbSizeId`, `rotaryInsetId`) |
 | `Label::Style` | `textFillColorId`, `textStrokeColorId`, `backgroundColorId`, `outlineColorId` (curated geometry: `textHeightProportionId`) |
 | `TextEditor::Style` | `backgroundColorId`, `textColorId`, `caretColorId`, `selectionColorId`, `outlineColorId`, `focusedOutlineColorId` (curated geometry: `cornerRadiusId`, `outlineWidthId`, `focusedOutlineWidthId`) |
@@ -250,6 +250,74 @@ if (style.wasOk())
 
 See [Data-driven drawing](yui/drawing.md) for the elements, the `let`, `layer`,
 `group` and `repeat` scopes, and error reporting.
+
+### Series and parts
+
+Two declarations of a type info let a drawing paint a component of your own
+whole: a *series* for the data it shows, a *part* for what a drawing has no
+shape for.
+
+```cpp
+const ComponentTypeInfo& LevelGraph::getClassTypeInfo()
+{
+    static const auto info = ComponentTypeBuilder<LevelGraph> (Identifier ("LevelGraph"), Component::getClassTypeInfo())
+        .series ("levels", &LevelGraph::getLevels, &LevelGraph::getLevelsRevision, "The level of each band, 0 to 1.")
+        .part ("logo", "The logo, painted in the area it is given.")
+        .fixedPart ("cursor", &LevelGraph::getCursorBounds, "The cursor, filled with the fill color where the graph puts it.")
+        .build();
+
+    return info;
+}
+```
+
+- **`series`** declares a read-only array property read in place. The getter
+  returns a `Span<const T>` over elements the component holds in one block,
+  with `T` one of `float`, `int`, `bool`, `String`, `Color`, `Point<float>`,
+  `Rectangle<float>`, `AffineTransform` or `Font`. A drawing reading the name
+  binds that memory instead of a copy, see
+  [Data series](yui/drawing.md#data-series). Change the elements on the message
+  thread between two paints, then `repaint()`.
+- The optional **revision** getter returns a `uint32` the component changes
+  whenever it changes the elements (never 0, which means untracked). A
+  [shader sampling the series](yui/shaders.md#series) uploads its texture only
+  when the revision moves, instead of comparing the elements.
+- **`part`** declares what a drawing places with a `part` element, in the
+  area the drawing gives it with `bounds`. Pass an area getter as well to tell
+  where the component puts it when the drawing gives none.
+- **`fixedPart`** declares a part the component lays out itself, such as the
+  text of an editor: a drawing decides when it is painted and with which
+  paint, not where.
+
+The type only declares a part: the theme paints it, as it paints the
+component, so the drawing code of a component stays in one place.
+
+```cpp
+auto theme = ApplicationTheme::getGlobalTheme();
+
+theme->setComponentPart<LevelGraph> ("logo", [] (Graphics& g, const ApplicationTheme&, const LevelGraph& graph, const Rectangle<float>& area)
+{
+    g.drawImage (graph.getLogo(), area);
+});
+
+theme->setComponentPart<LevelGraph> ("cursor", [] (Graphics& g, const ApplicationTheme&, const LevelGraph&, const Rectangle<float>& area)
+{
+    g.fillRect (area);
+});
+```
+
+A part painter paints with the paint set on the `Graphics` it gets, so one
+function serves the style of the type, which calls it where it wants the part,
+and the drawing. A theme that sets no painter for a part paints nothing of it.
+A `ComponentStyle` set on one component places a part with
+`Component::paintPart`:
+
+```cpp
+g.setFillColor (label.findColor (Label::Style::textFillColorId).value_or (Colors::white));
+label.paintPart (g, "text");
+```
+
+[Widgets in drawings](yui/widgets.md) lists the series and the parts of the
+built-in widgets.
 
 ---
 

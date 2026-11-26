@@ -577,6 +577,100 @@ TEST_F (SliderStepperTest, HasAButtonAtEachEndWithTheValueBetweenThem)
     EXPECT_TRUE (linear.getIncrementButtonBounds().isEmpty());
 }
 
+TEST_F (SliderStepperTest, TwoQuickPressesOnAButtonAreTwoSteps)
+{
+    stepper.setDefaultValue (2.0);
+
+    // The second press steps as the first did: the double click it makes does not bring the default value back
+    pointer.doubleClick (stepper.getIncrementButtonBounds().getCenter());
+    EXPECT_DOUBLE_EQ (stepper.getValue(), 7.0);
+
+    pointer.doubleClick (stepper.getDecrementButtonBounds().getCenter());
+    EXPECT_DOUBLE_EQ (stepper.getValue(), 5.0);
+
+    // Between the buttons it still does, as on any slider
+    pointer.doubleClick (stepper.getLocalBounds().getCenter());
+    EXPECT_DOUBLE_EQ (stepper.getValue(), 2.0);
+}
+
+TEST_F (SliderStepperTest, KeepsTheThicknessOfAButtonInATallerArea)
+{
+    stepper.setBounds (0.0f, 0.0f, 200.0f, 120.0f);
+
+    const auto decrement = stepper.getDecrementButtonBounds();
+    const auto increment = stepper.getIncrementButtonBounds();
+
+    // The buttons don't grow with the area: they keep their size, in the middle of it
+    EXPECT_FLOAT_EQ (decrement.getHeight(), 28.0f);
+    EXPECT_FLOAT_EQ (increment.getHeight(), 28.0f);
+    EXPECT_FLOAT_EQ (decrement.getCenterY(), 60.0f);
+    EXPECT_FLOAT_EQ (increment.getCenterY(), 60.0f);
+    EXPECT_LT (decrement.getRight(), increment.getX());
+
+    // One above the other in a narrow area, they keep their width instead
+    stepper.setBounds (0.0f, 0.0f, 120.0f, 200.0f);
+    EXPECT_FLOAT_EQ (stepper.getIncrementButtonBounds().getWidth(), 28.0f);
+    EXPECT_FLOAT_EQ (stepper.getIncrementButtonBounds().getCenterX(), 60.0f);
+    EXPECT_LT (stepper.getIncrementButtonBounds().getBottom(), stepper.getDecrementButtonBounds().getY());
+}
+
+//==============================================================================
+/** A slider of two values under a pointer: each thumb is dragged on its own, and stops at the other one. */
+class SliderTwoValueTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        panel.setVisible (true);
+        panel.setBounds (0.0f, 0.0f, 220.0f, 30.0f);
+
+        slider.setBounds (0.0f, 0.0f, 220.0f, 30.0f);
+        slider.setMinValue (0.25, dontSendNotification);
+        slider.setMaxValue (0.75, dontSendNotification);
+        panel.addAndMakeVisible (slider);
+    }
+
+    Component panel;
+    Slider slider { Slider::TwoValueHorizontal };
+    PointerSimulator pointer { panel };
+};
+
+TEST_F (SliderTwoValueTest, TellsWhereItsValuesAreAndLeavesRoomForItsThumbs)
+{
+    EXPECT_DOUBLE_EQ (slider.getMinValueNormalised(), 0.25);
+    EXPECT_DOUBLE_EQ (slider.getMaxValueNormalised(), 0.75);
+    EXPECT_DOUBLE_EQ (static_cast<double> (slider.getProperty (Identifier ("minNormalized"))), 0.25);
+    EXPECT_DOUBLE_EQ (static_cast<double> (slider.getProperty (Identifier ("maxNormalized"))), 0.75);
+
+    // A thumb at an end of the range is whole inside the slider
+    const auto track = slider.getSliderBounds();
+    EXPECT_FLOAT_EQ (track.getX(), 10.0f);
+    EXPECT_FLOAT_EQ (track.getRight(), 210.0f);
+}
+
+TEST_F (SliderTwoValueTest, EachThumbIsDraggedOnItsOwnAndStopsAtTheOther)
+{
+    const auto track = slider.getSliderBounds();
+    const auto at = [&track] (double normalized)
+    {
+        return Point<float> (track.getX() + static_cast<float> (normalized) * track.getWidth(), track.getCenterY());
+    };
+
+    // The thumb nearest to the pointer follows it
+    pointer.drag (at (0.25), at (0.5));
+    EXPECT_NEAR (slider.getMinValue(), 0.5, 1.0e-4);
+    EXPECT_NEAR (slider.getMaxValue(), 0.75, 1.0e-4);
+
+    // And goes no further than the other one
+    pointer.drag (at (0.5), at (1.0));
+    EXPECT_NEAR (slider.getMinValue(), 0.75, 1.0e-4);
+    EXPECT_NEAR (slider.getMaxValue(), 0.75, 1.0e-4);
+
+    pointer.drag (at (0.75), at (0.9));
+    EXPECT_NEAR (slider.getMinValue(), 0.75, 1.0e-4);
+    EXPECT_NEAR (slider.getMaxValue(), 0.9, 1.0e-4);
+}
+
 TEST_F (SliderStepperTest, AButtonStepsByTheInterval)
 {
     const auto decrement = stepper.getDecrementButtonBounds().getCenter();

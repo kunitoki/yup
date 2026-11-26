@@ -140,6 +140,84 @@ TEST_F (PopupMenuTest, AddMultipleItemsWithShortcuts)
     EXPECT_EQ (3, itemCount);
 }
 
+TEST_F (PopupMenuTest, TellsItsItemsAsSeriesADrawingReadsWithOneIndex)
+{
+    auto subMenu = PopupMenu::create();
+    subMenu->addItem ("Sub Item 1", 10);
+
+    auto menu = PopupMenu::create();
+    menu->addItem (kPopupTestText1, kPopupTestId1, true, false, kShortcutText);
+    menu->addSeparator();
+    menu->addItem (kPopupTestText2, kPopupTestId2, false, true);
+    menu->addSubMenu (kSubMenuText, subMenu, true);
+
+    const auto read = [&menu] (const char* name)
+    {
+        return menu->getProperty (Identifier (name));
+    };
+
+    // One value for each item in every series, so that one index reads all there is to tell of an item
+    for (const auto* name : { "itemBounds", "itemTexts", "itemShortcuts", "itemColors", "itemEnabled", "itemTicked", "itemHovered", "itemSeparator", "itemSubMenu", "itemActive", "itemCustom" })
+    {
+        const auto* property = menu->getTypeInfo().findProperty (Identifier (name));
+
+        ASSERT_NE (property, nullptr) << name;
+        EXPECT_TRUE (property->isSeries()) << name;
+        EXPECT_EQ (read (name).size(), 4) << name;
+    }
+
+    EXPECT_EQ (read ("itemTexts")[0].toString(), kPopupTestText1);
+    EXPECT_EQ (read ("itemShortcuts")[0].toString(), kShortcutText);
+    EXPECT_TRUE (read ("itemShortcuts")[2].toString().isEmpty());
+    EXPECT_FALSE (static_cast<bool> (read ("itemSeparator")[0]));
+    EXPECT_TRUE (static_cast<bool> (read ("itemSeparator")[1]));
+    EXPECT_TRUE (static_cast<bool> (read ("itemEnabled")[0]));
+    EXPECT_FALSE (static_cast<bool> (read ("itemEnabled")[2]));
+    EXPECT_TRUE (static_cast<bool> (read ("itemTicked")[2]));
+    EXPECT_TRUE (static_cast<bool> (read ("itemSubMenu")[3]));
+    EXPECT_FALSE (static_cast<bool> (read ("itemHovered")[0]));
+    EXPECT_FALSE (static_cast<bool> (read ("itemActive")[3]));
+    EXPECT_FALSE (static_cast<bool> (read ("itemCustom")[0]));
+
+    // A drawing paints the menu from them, a turn of a repeat for each item
+    const auto parsed = YuiParser::parse (R"yui(
+        drawing Menu {
+            rect { bounds: bounds; cornerRadius: 6; fill: palette.surfaceRaised; }
+
+            repeat i in 0 .. len (itemTexts) {
+                rect { id: highlight; bounds: itemBounds[i].reduced (2, 1); cornerRadius: 3; fill: palette.accent.withAlpha (0.3);
+                       visible: itemHovered[i] && itemEnabled[i] && ! itemSeparator[i]; }
+
+                line { id: rule; from: point (itemBounds[i].x + 8, itemBounds[i].centerY); to: point (itemBounds[i].right - 8, itemBounds[i].centerY);
+                       stroke: palette.outline; visible: itemSeparator[i]; }
+
+                text { id: label; bounds: itemBounds[i].reduced (12, 2); text: itemTexts[i]; justification: centerLeft;
+                       fill: itemEnabled[i] ? palette.text : palette.textMuted; visible: ! itemSeparator[i] && ! itemCustom[i]; }
+
+                text { id: shortcut; bounds: itemBounds[i].reduced (12, 2); text: itemShortcuts[i]; justification: centerRight;
+                       fill: palette.textMuted; visible: len (itemShortcuts[i]) > 0; }
+            }
+        })yui");
+    ASSERT_TRUE (parsed.wasOk()) << DataTreeDiagnostic::join (parsed.diagnostics);
+
+    const auto style = DrawingStyle::create (*menu, parsed.document.getChildWithName ("drawing"));
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    int numLabelRows = 0;
+
+    for (const auto& element : style.getReference()->measureElements (*menu))
+        if (element.id == "label")
+            numLabelRows = element.numRows;
+
+    EXPECT_EQ (numLabelRows, 4);
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (200, 120);
+    Graphics g (*context, *renderer);
+
+    style.getReference()->paint (g, *theme, *menu);
+}
+
 TEST_F (PopupMenuTest, AddSeparatorIncreasesCount)
 {
     auto menu = PopupMenu::create();

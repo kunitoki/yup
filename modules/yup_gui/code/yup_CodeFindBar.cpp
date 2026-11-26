@@ -328,6 +328,15 @@ void CodeFindBar::updateVisibleComponents()
 
 void CodeFindBar::paint (Graphics& g)
 {
+    // A style set on the bar paints it in place of the colors of the scheme, as it does for any component
+    if (auto style = getStyle())
+    {
+        if (auto theme = ApplicationTheme::getGlobalTheme())
+            style->paint (g, *theme, *this);
+
+        return;
+    }
+
     const auto& scheme = editor.getScheme();
     const auto bounds = getLocalBounds();
 

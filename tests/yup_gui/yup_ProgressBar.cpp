@@ -109,6 +109,43 @@ TEST_F (ProgressBarTests, SetProgressToNegativeEnablesIndeterminateMode)
     EXPECT_EQ (-1.0, progressBar->getProgress());
 }
 
+TEST_F (ProgressBarTests, TellsADrawingItsProgressAndThePhaseOfItsAnimation)
+{
+    const auto* phase = progressBar->getTypeInfo().findProperty (Identifier ("phase"));
+    ASSERT_NE (phase, nullptr);
+    EXPECT_TRUE (phase->isReadOnly());
+    EXPECT_DOUBLE_EQ (static_cast<double> (progressBar->getProperty (Identifier ("phase"))), progressBar->getAnimationPhase());
+    EXPECT_DOUBLE_EQ (progressBar->getAnimationPhase(), 0.0);
+
+    const auto xml = XmlDocument::parse (R"xml(<drawing>
+        <rect id="filled" bounds="rect (0, 0, bounds.width * progress, bounds.height)" fill="#ffffff" visible="! indeterminate"/>
+        <rect id="ribbon" bounds="rect ((bounds.width - 40) * phase, 0, 40, bounds.height)" fill="#ffffff" visible="indeterminate"/>
+    </drawing>)xml");
+    ASSERT_NE (xml, nullptr);
+
+    const auto style = DrawingStyle::create (*progressBar, DataTree::fromXml (*xml));
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    const auto measure = [&] (const String& id)
+    {
+        for (const auto& element : style.getReference()->measureElements (*progressBar))
+            if (element.id == id)
+                return element.bounds;
+
+        return Rectangle<float>();
+    };
+
+    // The part of the bar its progress covers
+    progressBar->setProgress (0.25, dontSendNotification);
+    EXPECT_EQ (measure ("filled"), Rectangle<float> (0.0f, 0.0f, 50.0f, 30.0f));
+    EXPECT_TRUE (measure ("ribbon").isEmpty());
+
+    // And a ribbon moving with the phase while there is no progress to tell
+    progressBar->setProgress (-1.0, dontSendNotification);
+    EXPECT_TRUE (measure ("filled").isEmpty());
+    EXPECT_EQ (measure ("ribbon"), Rectangle<float> (0.0f, 0.0f, 40.0f, 30.0f));
+}
+
 TEST_F (ProgressBarTests, TransitionFromIndeterminateToNormalMode)
 {
     progressBar->setProgress (-1.0, dontSendNotification);

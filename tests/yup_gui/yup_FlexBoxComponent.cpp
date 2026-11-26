@@ -50,6 +50,36 @@ TEST_F (FlexBoxComponentTests, DistributesTheFreeSpaceByFlexGrow)
     EXPECT_EQ (second.getBounds(), Rectangle<float> (25.0f, 0.0f, 75.0f, 40.0f));
 }
 
+TEST_F (FlexBoxComponentTests, AGrowingItemAddedLaterGetsTheSameShareAsTheOthers)
+{
+    RowComponent row;
+    Component third { "third" };
+
+    for (auto* child : { &first, &second, &third })
+        child->setProperty (Identifier ("flexGrow"), 1.0);
+
+    row.setGap (10.0f);
+    row.addAndMakeVisible (first);
+    row.addAndMakeVisible (second);
+    row.setBounds (0, 0, 110, 40);
+
+    EXPECT_EQ (first.getBounds(), Rectangle<float> (0.0f, 0.0f, 50.0f, 40.0f));
+    EXPECT_EQ (second.getBounds(), Rectangle<float> (60.0f, 0.0f, 50.0f, 40.0f));
+
+    // The two laid out before don't start from what they were given: each of the three takes a third of what the gaps leave
+    row.addAndMakeVisible (third);
+
+    EXPECT_EQ (first.getBounds(), Rectangle<float> (0.0f, 0.0f, 30.0f, 40.0f));
+    EXPECT_EQ (second.getBounds(), Rectangle<float> (40.0f, 0.0f, 30.0f, 40.0f));
+    EXPECT_EQ (third.getBounds(), Rectangle<float> (80.0f, 0.0f, 30.0f, 40.0f));
+
+    // And one that goes leaves its share to the others
+    row.removeChildComponent (&second);
+
+    EXPECT_EQ (first.getBounds(), Rectangle<float> (0.0f, 0.0f, 50.0f, 40.0f));
+    EXPECT_EQ (third.getBounds(), Rectangle<float> (60.0f, 0.0f, 50.0f, 40.0f));
+}
+
 TEST_F (FlexBoxComponentTests, LaysColumnsOutTopToBottomWithAGap)
 {
     ColumnComponent column;

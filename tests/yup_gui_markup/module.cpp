@@ -19,6 +19,7 @@
   ==============================================================================
 */
 
+#include "yup_ModuleIntegration.cpp"
 #include "yup_YuiBuilder.cpp"
 #include "yup_YuiDocument.cpp"
 #include "yup_YuiHandler.cpp"

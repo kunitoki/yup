@@ -672,7 +672,7 @@ public:
         addDemo ("Yui3D", "YUI 3D", [] { return std::make_unique<Yui3DDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_YuiDrawing
-        addDemo ("YuiDrawing", "YUI Drawing", [] { return std::make_unique<YuiDrawingDemo>(); });
+        addDemo ("YuiDrawing", "YUI", [] { return std::make_unique<YuiDrawingDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_YdspSynths && YUP_MODULE_AVAILABLE_yup_dsp_jit
         addDemo ("YdspSynths", "YDSP Synths", [] { return std::make_unique<YdspSynthDemo>(); });

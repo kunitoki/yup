@@ -115,6 +115,9 @@ public:
     /** Returns the minimum value for two-value and three-value sliders. */
     double getMinValue() const;
 
+    /** Returns the minimum value as a normalised position (0.0 to 1.0) along the range. */
+    double getMinValueNormalised() const;
+
     /** Sets the maximum value for two-value and three-value sliders.
 
         @param newMaxValue The new maximum value
@@ -127,6 +130,9 @@ public:
 
     /** Returns the maximum value for two-value and three-value sliders. */
     double getMaxValue() const;
+
+    /** Returns the maximum value as a normalised position (0.0 to 1.0) along the range. */
+    double getMaxValueNormalised() const;
 
     /** Called when the minimum value changes for multi-value sliders. */
     virtual void minValueChanged();

@@ -1,0 +1,195 @@
+// Controls: widgets painted whole by drawings, from the geometry they tell. A slider tells its
+// track, a stepper its two buttons and the one pressed, a switch and a scroll bar where their
+// thumb is, a tab bar where its indicator slides, a row of a list where its text goes, and a
+// popup menu its items as series read with one index. The widgets still do everything else:
+// layout, input, values, animation.
+drawing Fader {
+    let y: trackBounds.centerY;
+    let x: trackBounds.x + normalized * trackBounds.width;
+
+    line { from: point (trackBounds.x, y); to: point (trackBounds.right, y); stroke: palette.outline; strokeWidth: 4; cap: round; }
+    line { from: point (trackBounds.x, y); to: point (x, y); stroke: palette.accent; strokeWidth: 4; cap: round; }
+    circle { id: thumb; center: point (x, y); radius: dragging ? 9 : 7; fill: palette.text; }
+}
+
+drawing Dial {
+    let c: trackBounds.center;
+    let r: min (trackBounds.width, trackBounds.height) / 2 - 3;
+    let angle: lerp (135deg, 405deg, normalized);
+
+    arc { center: c; radius: r; from: 135deg; to: 405deg; stroke: palette.outline; strokeWidth: 3; cap: round; }
+    arc { id: sweep; center: c; radius: r; from: 135deg; to: angle; stroke: palette.accent; strokeWidth: 3; cap: round; }
+    line { from: polar (c, r * 0.3, angle); to: polar (c, r * 0.75, angle); stroke: palette.text; strokeWidth: 2; cap: round; }
+}
+
+// The two thumbs of a slider of two values are where its values are along the track
+drawing Range {
+    let y: trackBounds.centerY;
+    let low: trackBounds.x + minNormalized * trackBounds.width;
+    let high: trackBounds.x + maxNormalized * trackBounds.width;
+
+    line { from: point (trackBounds.x, y); to: point (trackBounds.right, y); stroke: palette.outline; strokeWidth: 4; cap: round; }
+    line { from: point (low, y); to: point (high, y); stroke: palette.accent; strokeWidth: 4; cap: round; }
+    circle { id: lower; center: point (low, y); radius: 7; fill: palette.text; }
+    circle { id: upper; center: point (high, y); radius: 7; fill: palette.text; }
+}
+
+drawing Stepper {
+    rect { bounds: trackBounds; cornerRadius: 4; fill: palette.surface; }
+    rect { id: minus; bounds: decrementBounds.reduced (1); cornerRadius: 4; fill: pressedStep < 0 ? palette.accent : palette.surfaceRaised; }
+    rect { id: plus; bounds: incrementBounds.reduced (1); cornerRadius: 4; fill: pressedStep > 0 ? palette.accent : palette.surfaceRaised; }
+
+    text { bounds: decrementBounds; text: "-"; fill: palette.text; justification: center; }
+    text { bounds: incrementBounds; text: "+"; fill: palette.text; justification: center; }
+    text { bounds: rect (decrementBounds.right, trackBounds.y, incrementBounds.x - decrementBounds.right, trackBounds.height);
+           text: format ("%.0f", value); fill: palette.text; justification: center; }
+}
+
+drawing Switch {
+    let slot: trackBounds.reduced (4);
+
+    rect { bounds: slot; cornerRadius: slot.height / 2; fill: checked ? palette.accent : palette.surfaceRaised; }
+    ellipse { id: handle; bounds: thumbBounds.reduced (4); fill: palette.text; }
+}
+
+drawing Grip {
+    rect { bounds: trackBounds; cornerRadius: 3; fill: palette.surface; }
+    rect { id: grip; bounds: thumbBounds.reduced (3); cornerRadius: 3;
+           fill: dragging ? palette.accent : (thumbHovered ? palette.text : palette.textMuted); }
+}
+
+drawing Choice {
+    rect { bounds: bounds.reduced (1); cornerRadius: 6; fill: palette.surface; stroke: open ? palette.accent : palette.outline; }
+    part text { bounds: rect (bounds.x + 10, bounds.y, bounds.width - 36, bounds.height); fill: palette.text; }
+    circle { center: point (bounds.right - 14, bounds.centerY); radius: 3; fill: open ? palette.accent : palette.textMuted; }
+}
+
+// The items of a menu are not components: they are told as series of the same length
+drawing Menu {
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surfaceRaised; stroke: palette.outline; strokePosition: inside; }
+
+    repeat i in 0 .. len (itemTexts) {
+        rect { id: highlight; bounds: itemBounds[i].reduced (3, 1); cornerRadius: 4; fill: palette.accent.withAlpha (0.3);
+               visible: itemHovered[i] && itemEnabled[i] && ! itemSeparator[i]; }
+
+        line { from: point (itemBounds[i].x + 8, itemBounds[i].centerY); to: point (itemBounds[i].right - 8, itemBounds[i].centerY);
+               stroke: palette.outline; visible: itemSeparator[i]; }
+
+        circle { id: tick; center: point (itemBounds[i].x + 11, itemBounds[i].centerY); radius: 2.5; fill: palette.accent;
+                 visible: itemTicked[i]; }
+
+        text { id: item; bounds: rect (itemBounds[i].x + 22, itemBounds[i].y, itemBounds[i].width - 30, itemBounds[i].height);
+               text: itemTexts[i]; justification: centerLeft; fill: itemEnabled[i] ? palette.text : palette.textMuted;
+               visible: ! itemSeparator[i]; }
+    }
+}
+
+drawing ListRow {
+    rect { id: back; bounds: bounds.reduced (2, 1); cornerRadius: 4;
+           fill: selected ? palette.accent : (hovered ? palette.outline : palette.surface); }
+
+    part icon { }
+    text { id: label; bounds: textBounds; text: text; justification: centerLeft; fill: selected ? palette.onAccent : palette.text; }
+}
+
+drawing Tabs {
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+    rect { id: indicator; bounds: indicatorBounds.reduced (2); cornerRadius: 5; fill: palette.accent; }
+}
+
+drawing Tab {
+    text { id: label; bounds: textBounds; text: text; justification: center;
+           fill: selected ? palette.onAccent : (hovered ? palette.text : palette.textMuted); }
+}
+
+style {
+    .caption { textFillColor: palette.textMuted; }
+    .readout { textFillColor: palette.accent; }
+
+    .fader       { drawing: Fader; cursor: hand; }
+    .dial        { drawing: Dial; cursor: resizeUpDown; }
+    .range       { drawing: Range; cursor: hand; }
+    .stepper     { drawing: Stepper; }
+    SwitchButton { drawing: Switch; }
+    ScrollBar    { drawing: Grip; }
+    ComboBox     { drawing: Choice; }
+    PopupMenu    { drawing: Menu; }
+    ListBoxItem  { drawing: ListRow; }
+    TabBar       { drawing: Tabs; }
+    TabButton    { drawing: Tab; }
+}
+
+Column {
+    padding: 12;
+    gap: 8;
+
+    Row {
+        gap: 8;
+        flexGrow: 1;
+
+        Label  { class: caption; text: "Slider"; preferredWidth: 72; }
+        Slider { id: fader; class: fader; value: 0.6; flexGrow: 1; }
+        Slider { id: dial; class: dial; sliderType: rotaryVerticalDrag; value <=> fader.value; preferredWidth: 44; }
+        Label  { class: readout; text: format ("%.2f", fader.value); preferredWidth: 44; }
+    }
+
+    Row {
+        gap: 8;
+        flexGrow: 1;
+
+        Label  { class: caption; text: "Range"; preferredWidth: 72; }
+        Slider { id: range; class: range; sliderType: twoValueHorizontal; minValue: 0.2; maxValue: 0.8; flexGrow: 1; }
+        Label  { class: readout; text: format ("%.1f", range.minValue) + format (" - %.1f", range.maxValue); preferredWidth: 72; }
+    }
+
+    Row {
+        gap: 8;
+        flexGrow: 1;
+
+        Label  { class: caption; text: "Stepper"; preferredWidth: 72; }
+        Slider { id: stepper; class: stepper; sliderType: incDecButtons; minimum: 0; maximum: 10; interval: 1; value: 4; flexGrow: 1; }
+        SwitchButton { id: toggle; checked: true; preferredWidth: 56; }
+        Label  { class: readout; text: toggle.checked ? "on" : "off"; preferredWidth: 44; }
+    }
+
+    Row {
+        gap: 8;
+        flexGrow: 1;
+
+        Label    { class: caption; text: "Menu"; preferredWidth: 72; }
+        ComboBox { id: choice; items: ["Lowpass", "Bandpass", "Highpass", "Notch"]; selectedIndex: 0; flexGrow: 1; }
+        Label    { class: readout; text: choice.text; preferredWidth: 72; }
+    }
+
+    Row {
+        gap: 8;
+        flexGrow: 5;
+
+        ListBox { id: list; items: ["Kick", "Snare", "Hat", "Clap", "Tom", "Ride", "Crash"]; selectedRow: 2; flexGrow: 1; }
+
+        Viewport {
+            id: scrolled;
+            flexGrow: 1;
+
+            Column {
+                width: 150;
+                height: 420;
+                gap: 4;
+
+                repeat i in 0 .. 12 {
+                    Label { text: format ("Line %d", i + 1); flexGrow: 1; }
+                }
+            }
+        }
+
+        TabComponent {
+            id: tabs;
+            selectedTab: "one";
+            flexGrow: 1;
+
+            Column { id: one; title: "One"; Label { text: "First page"; justification: center; flexGrow: 1; } }
+            Column { id: two; title: "Two"; Label { text: "Second page"; justification: center; flexGrow: 1; } }
+            Column { id: three; title: "Three"; Label { text: "Third page"; justification: center; flexGrow: 1; } }
+        }
+    }
+}

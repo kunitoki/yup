@@ -1,0 +1,149 @@
+// Series: many numbers drawn as one line, one area or a row of bars. A `vertex` is one point
+// of a line, a `repeat` gives the others. The numbers are the `values` of a component, an
+// array a drawing reads with values[i], len(), sample(), min() and max(). The sliders set how
+// the charts read them: `gain` scales the numbers, `smoothing` curves the lines.
+component Chart : Component {
+    property values: number[] = [0.12, 0.3, 0.26, 0.55, 0.48, 0.8, 0.62, 0.9, 0.7, 0.52, 0.6, 0.34, 0.4, 0.2, 0.28, 0.1];
+    property gain: number = 1;
+    property smoothing: number = 0;
+}
+
+// One vertex for each number: the turns of the repeat are joined in order into one line
+drawing Line {
+    let plot: bounds.reduced (8);
+    let count: len (values);
+    let step: plot.width / (count - 1.0);
+
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+
+    repeat i in 0 .. count {
+        vertex { id: line; at: point (plot.x + i * step, plot.bottom - clamp (values[i] * gain, 0.0, 1.0) * plot.height);
+                 smooth: smoothing; stroke: palette.accent; strokeWidth: 2; }
+    }
+
+    repeat i in 0 .. count {
+        circle { center: point (plot.x + i * step, plot.bottom - clamp (values[i] * gain, 0.0, 1.0) * plot.height);
+                 radius: 2.5; fill: palette.text; }
+    }
+}
+
+// An area: `base` brings the line back under each point, and the fill takes what lies between.
+// sample() reads the numbers every 4 pixels, so the curve has as many points as it has room for
+drawing Area {
+    let plot: bounds.reduced (8);
+    let turns: plot.width / 4 + 1;
+
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+
+    repeat i in 0 .. turns {
+        let x: plot.x + i * 4;
+        let level: clamp (sample (values, i * 4 / plot.width) * gain, 0.0, 1.0);
+
+        vertex { id: area; at: point (x, plot.bottom - level * plot.height); base: point (x, plot.bottom); smooth: smoothing;
+                 fill: palette.accent.withAlpha (0.25); stroke: palette.accent; strokeWidth: 1.5; }
+    }
+}
+
+// A band: the bases are the points of another curve. Here the highest and the lowest of each
+// three numbers, read with max() and min(), and a second series through the middle of them
+drawing Band {
+    let plot: bounds.reduced (8);
+    let columns: len (values) / 2;
+    let step: plot.width / (columns - 1.0);
+
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+
+    repeat i in 0 .. columns {
+        let x: plot.x + i * step;
+        let high: clamp (max (values, i * 2, i * 2 + 3) * gain, 0.0, 1.0);
+        let low: clamp (min (values, i * 2, i * 2 + 3) * gain, 0.0, 1.0);
+
+        vertex { id: band; at: point (x, plot.bottom - high * plot.height); base: point (x, plot.bottom - low * plot.height);
+                 smooth: smoothing; fill: palette.accent.withAlpha (0.3); }
+        vertex { id: middle; series: 1; at: point (x, plot.bottom - (high + low) * 0.5 * plot.height);
+                 smooth: smoothing; stroke: palette.text; strokeWidth: 1.5; }
+    }
+}
+
+// Bars: the rows of a repeat read one number each, with no vertex
+drawing Bars {
+    let plot: bounds.reduced (8);
+    let count: len (values);
+    let slot: plot.width / count;
+
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+
+    repeat i in 0 .. count {
+        let level: clamp (values[i] * gain, 0.0, 1.0);
+
+        rect { id: bar; bounds: rect (plot.x + i * slot + 1, plot.bottom - level * plot.height, slot - 2, level * plot.height);
+               cornerRadius: 2; fill: level > 0.75 ? palette.text : palette.accent; }
+    }
+}
+
+// Two lines that move: their phase is a property of the drawing, animated by the stylesheet
+drawing Wave {
+    property phase: number = 0;
+
+    let plot: bounds.reduced (8);
+    let turns: plot.width / 3 + 1;
+    let middle: plot.centerY;
+
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+
+    repeat i in 0 .. turns {
+        let x: plot.x + i * 3;
+
+        vertex { id: wave; at: point (x, middle + plot.height * 0.35 * gain * sin (i * 0.12 + phase) * cos (i * 0.031));
+                 stroke: palette.accent; strokeWidth: 2; }
+        vertex { id: slow; series: 1; at: point (x, middle + plot.height * 0.2 * sin (i * 0.05 - phase));
+                 stroke: palette.textMuted; strokeWidth: 1; }
+    }
+}
+
+style {
+    .caption { textFillColor: palette.textMuted; }
+    .readout { textFillColor: palette.accent; }
+
+    .line { drawing: Line; }
+    .area { drawing: Area; }
+    .band { drawing: Band; }
+    .bars { drawing: Bars; }
+    .wave { drawing: Wave; phase: 0; animation: travel 3s linear infinite; }
+
+    @keyframes travel {
+        from { phase: 0; }
+        to { phase: 6.2832; }
+    }
+}
+
+Column {
+    padding: 12;
+    gap: 8;
+
+    Row {
+        gap: 8;
+        preferredHeight: 26;
+
+        Label  { class: caption; text: "gain"; preferredWidth: 36; }
+        Slider { id: gain; minimum: 0; maximum: 1.5; value: 1; flexGrow: 1; }
+        Label  { class: readout; text: format ("%.2f", gain.value); preferredWidth: 40; }
+        Label  { class: caption; text: "smooth"; preferredWidth: 52; }
+        Slider { id: smoothing; value: 0.5; flexGrow: 1; }
+        Label  { class: readout; text: format ("%.2f", smoothing.value); preferredWidth: 40; }
+    }
+
+    Grid {
+        columns: "1fr 1fr";
+        rows: "1fr 1fr";
+        gap: 8;
+        flexGrow: 2;
+
+        Chart { id: line; class: line; gain: gain.value; smoothing: smoothing.value; }
+        Chart { id: area; class: area; gain: gain.value; smoothing: smoothing.value; }
+        Chart { id: band; class: band; gain: gain.value; smoothing: smoothing.value; }
+        Chart { id: bars; class: bars; gain: gain.value; }
+    }
+
+    Chart { id: wave; class: wave; gain: gain.value; flexGrow: 1; }
+}

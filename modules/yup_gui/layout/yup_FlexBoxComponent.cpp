@@ -102,6 +102,8 @@ void FlexBoxComponent::performLayout (Rectangle<float> area)
     FlexBox flexBox;
 
     flexBox.flexDirection = getDirection();
+
+    const bool isRow = flexBox.flexDirection == FlexBox::Direction::row || flexBox.flexDirection == FlexBox::Direction::rowReverse;
     flexBox.flexWrap = flexWraps.toEnum (findProperty (Properties::wrapId).toString(), FlexBox::Wrap::noWrap);
     flexBox.justifyContent = flexJustifications.toEnum (findProperty (Properties::justifyId).toString(), FlexBox::JustifyContent::flexStart);
     flexBox.alignItems = flexAlignments.toEnum (findProperty (Properties::alignId).toString(), FlexBox::AlignItems::stretch);
@@ -117,6 +119,11 @@ void FlexBoxComponent::performLayout (Rectangle<float> area)
         item.order = getItemInteger (*child, Properties::orderId);
         item.alignSelf = flexSelfAlignments.toEnum (getItemString (*child, Properties::alignSelfId), FlexItem::AlignSelf::autoAlign);
         readItemSizing (item, *child);
+
+        // An item that grows and declares no size along the main axis grows from nothing. Its bounds are what the layout
+        // before gave it: starting from them, an item added among others that have their share would get none
+        if (item.flexGrow > 0.0f && item.flexBasis < 0.0f && (isRow ? item.width : item.height) < 0.0f)
+            item.flexBasis = 0.0f;
 
         flexBox.items.add (item);
     }

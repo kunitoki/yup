@@ -54,6 +54,41 @@ uint32 ApplicationTheme::makeGeneration() noexcept
 
 //==============================================================================
 
+void ApplicationTheme::setComponentPart (const ComponentTypeInfo& type, const Identifier& partName, ComponentPartPainter painter)
+{
+    jassert (type.hasPart (partName)); // The type has to declare the part: see ComponentTypeBuilder::part
+
+    componentParts[std::addressof (type)][partName] = std::move (painter);
+}
+
+bool ApplicationTheme::paintComponentPart (Graphics& g, const Component& component, const Identifier& partName, const Rectangle<float>& area)
+{
+    const auto& theme = getGlobalThemeInstance();
+
+    return theme != nullptr && theme->paintPart (g, component, partName, area);
+}
+
+bool ApplicationTheme::paintPart (Graphics& g, const Component& component, const Identifier& partName, const Rectangle<float>& area) const
+{
+    for (const auto* type = std::addressof (component.getTypeInfo()); type != nullptr; type = type->getBaseTypeInfo())
+    {
+        const auto painters = componentParts.find (type);
+        if (painters == componentParts.end())
+            continue;
+
+        const auto painter = painters->second.find (partName);
+        if (painter == painters->second.end() || painter->second == nullptr)
+            continue;
+
+        painter->second (g, *this, component, area);
+        return true;
+    }
+
+    return false;
+}
+
+//==============================================================================
+
 std::optional<Color> ApplicationTheme::findComponentColor (const Component& component, const Identifier& colorId)
 {
     jassert (getGlobalThemeInstance() != nullptr);

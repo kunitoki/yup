@@ -51,7 +51,7 @@
     "declarations": {
       "patterns": [
         {
-          "match": "\\b(drawing|shader|palette|component|pattern|marker|use)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "\\b(drawing|shader|palette|component|pattern|marker|use|part)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": { "name": "storage.type.yui" },
             "2": { "name": "entity.name.type.yui" }
@@ -142,7 +142,7 @@
     },
     "shapes": {
       "patterns": [
-        { "name": "support.class.shape.yui", "match": "\\b(?:rect|circle|ellipse|arc|line|path|polygon|star|text|image|svg|layer|group|clipPath|clip|mask|viewport|filter|blur|offset|flood|colorMatrix|composite|blend|morphology|lighting|displacement|dropShadow)\\b(?=\\s*\\{)" }
+        { "name": "support.class.shape.yui", "match": "\\b(?:rect|circle|ellipse|arc|line|path|polygon|star|vertex|part|text|image|svg|layer|group|clipPath|clip|mask|viewport|filter|blur|offset|flood|colorMatrix|composite|blend|morphology|lighting|displacement|dropShadow)\\b(?=\\s*\\{)" }
       ]
     },
     "functions": {
@@ -154,7 +154,7 @@
     "keywords": {
       "patterns": [
         { "name": "keyword.control.yui", "match": "\\b(?:import|repeat|in|changed|from|to)\\b" },
-        { "name": "storage.type.yui", "match": "\\b(?:tokens|style|component|drawing|shader|palette|pattern|marker|use|property|alias|signal|let)\\b" },
+        { "name": "storage.type.yui", "match": "\\b(?:tokens|style|component|drawing|shader|palette|pattern|marker|use|part|property|alias|signal|let)\\b" },
         { "name": "storage.type.primitive.yui", "match": "\\b(?:number|integer|boolean|string|color|point|rectangle|transform|font|any|bool|int|float|double)\\b" },
         { "name": "constant.language.yui", "match": "\\b(?:true|false|pi|tau)\\b" },
         { "name": "variable.language.yui", "match": "\\b(?:self|parent|root|theme)\\b" },

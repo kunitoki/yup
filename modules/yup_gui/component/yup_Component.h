@@ -98,6 +98,35 @@ public:
     */
     virtual const ComponentTypeInfo& getDefaultTypeInfo() const { return getClassTypeInfo(); }
 
+    /**
+        Paints a part of what the component shows, where the component puts it.
+
+        A part is what the type of the component declares it shows beside its shapes, such as the
+        text it laid out or its caret (see ComponentPart). The global theme paints it, with the paint
+        set on the Graphics (see ApplicationTheme::setComponentPart): a style written in C++ places
+        a part with this, as a `.yui` drawing does with a `part` element.
+
+        @param g          The Graphics to paint with.
+        @param partName   The name of the part.
+
+        @returns False, having painted nothing, when the type declares no part of this name or the
+                 theme doesn't paint it.
+    */
+    bool paintPart (Graphics& g, const Identifier& partName) const;
+
+    /**
+        Paints a part of what the component shows in an area.
+
+        @param g          The Graphics to paint with.
+        @param partName   The name of the part.
+        @param area       Where to paint it, in the coordinates of the component. A part the component
+                          lays out itself is painted where the component puts it instead.
+
+        @returns False, having painted nothing, when the type declares no part of this name or the
+                 theme doesn't paint it.
+    */
+    bool paintPart (Graphics& g, const Identifier& partName, const Rectangle<float>& area) const;
+
     /** Returns the static type info describing the Component base type. */
     static const ComponentTypeInfo& getClassTypeInfo();
 

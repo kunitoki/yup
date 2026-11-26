@@ -67,6 +67,8 @@ struct TabBarIds
     static inline const Identifier overflowText { "overflowText" };
     static inline const Identifier animationDuration { "animationDuration" };
     static inline const Identifier selectedTab { "selectedTab" };
+    static inline const Identifier indicatorBounds { "indicatorBounds" };
+    static inline const Identifier focusIndicatorVisible { "focusIndicatorVisible" };
 };
 
 } // namespace
@@ -93,6 +95,8 @@ const ComponentTypeInfo& TabBar::getClassTypeInfo()
                                      [] (TabBar& c, const String& v) { c.setSelectedTab (v.isEmpty() ? Identifier() : Identifier (v)); },
                                      String(),
                                      "The id of the selected tab.")
+                                 .readOnly (TabBarIds::indicatorBounds, &TabBar::getIndicatorBounds, {}, "The area marking the selected tab, which slides to the one selected next. Empty when no tab is selected.")
+                                 .readOnly (TabBarIds::focusIndicatorVisible, &TabBar::isFocusIndicatorVisible, false, "Whether the bar shows that it has the keyboard focus.")
                                  .signal (ComponentSignal {
                                      .name = Identifier ("onSelectionChanged"),
                                      .connect = [] (Component& component, ComponentSignal::Handler handler)

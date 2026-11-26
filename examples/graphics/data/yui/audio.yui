@@ -1,0 +1,113 @@
+// Audio: the displays of yup_audio_gui, as the theme paints them and painted by drawings from
+// what they tell. An analyzer tells its 512 levels as a series, read where it keeps them: an
+// area through sample(), bars through max(). A meter tells its levels in dB, a keyboard its
+// keys as series. The states these widgets show are given by the page from C++, with an
+// initializer for each type: without one they are idle, which is how a tool shows this file.
+drawing Curve {
+    let turns: bounds.width / 2 + 1;
+
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+
+    repeat i in 0 .. turns {
+        let x: bounds.x + i * 2;
+
+        vertex { id: curve; at: point (x, bounds.bottom - sample (levels, i * 2 / bounds.width) * bounds.height);
+                 base: point (x, bounds.bottom); smooth: 0.5;
+                 fill: palette.accent.withAlpha (0.25); stroke: palette.accent; strokeWidth: 1.5; }
+    }
+}
+
+// Each bar shows the highest of the levels it stands for, so no peak is lost between two bars
+drawing Bars {
+    let columns: 48;
+    let slot: bounds.width / columns;
+    let span: len (levels) / columns;
+
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+
+    repeat i in 0 .. columns {
+        let level: max (levels, i * span, (i + 1) * span);
+
+        rect { id: bar; bounds: rect (bounds.x + i * slot + 1, bounds.bottom - level * bounds.height, slot - 2, level * bounds.height);
+               cornerRadius: 1; fill: level > 0.8 ? palette.text : palette.accent; }
+    }
+}
+
+drawing Meter {
+    let span: rangeMaxDb - rangeMinDb;
+    let level: clamp ((averageDb - rangeMinDb) / span, 0.0, 1.0);
+    let peak: clamp ((peakDb - rangeMinDb) / span, 0.0, 1.0);
+
+    rect { bounds: bounds; cornerRadius: 3; fill: palette.surface; }
+
+    rect { id: level; bounds: rect (bounds.x, bounds.bottom - level * bounds.height, bounds.width, level * bounds.height);
+           cornerRadius: 3; fill: clipping ? #ff4040 : palette.accent; }
+
+    line { id: peak; from: point (bounds.x, bounds.bottom - peak * bounds.height); to: point (bounds.right, bounds.bottom - peak * bounds.height);
+           stroke: palette.text; strokeWidth: 2; }
+}
+
+// The black keys lie over the white ones, so they are drawn after them
+drawing Keys {
+    rect { bounds: bounds; fill: palette.surface; }
+
+    repeat i in 0 .. len (keyNotes) {
+        rect { id: white; bounds: keyBounds[i].reduced (0.5); cornerRadius: 2; visible: ! keyBlack[i];
+               fill: keyPressed[i] ? palette.accent : (keyHovered[i] ? palette.textMuted : palette.text); }
+    }
+
+    repeat i in 0 .. len (keyNotes) {
+        rect { id: black; bounds: keyBounds[i]; cornerRadius: 2; visible: keyBlack[i];
+               fill: keyPressed[i] ? palette.accent : (keyHovered[i] ? palette.outline : palette.surfaceRaised); }
+    }
+}
+
+style {
+    .caption { textFillColor: palette.textMuted; }
+    .curve   { drawing: Curve; }
+    .bars    { drawing: Bars; }
+    .meter   { drawing: Meter; }
+    .keys    { drawing: Keys; }
+}
+
+Column {
+    padding: 12;
+    gap: 8;
+
+    Row {
+        gap: 8;
+        flexGrow: 3;
+
+        Column {
+            gap: 4; flexGrow: 1;
+            Label { class: caption; text: "Theme"; preferredHeight: 14; }
+            SpectrumAnalyzer { id: themed; flexGrow: 1; }
+        }
+
+        Column {
+            gap: 4; flexGrow: 1;
+            Label { class: caption; text: "Area: sample()"; preferredHeight: 14; }
+            SpectrumAnalyzer { id: curve; class: curve; flexGrow: 1; }
+        }
+
+        Column {
+            gap: 4; flexGrow: 1;
+            Label { class: caption; text: "Bars: max()"; preferredHeight: 14; }
+            SpectrumAnalyzer { id: bars; class: bars; flexGrow: 1; }
+        }
+
+        KMeter { id: themedMeter; channel: 0; preferredWidth: 24; }
+        KMeter { id: meter; class: meter; channel: 1; preferredWidth: 14; }
+    }
+
+    Row {
+        gap: 8;
+        flexGrow: 2;
+
+        PitchWheel { preferredWidth: 32; }
+        ModWheel { preferredWidth: 32; }
+        MidiKeyboard { id: themedKeys; rangeStart: 48; rangeEnd: 72; flexGrow: 1; }
+    }
+
+    MidiKeyboard { id: keys; class: keys; rangeStart: 48; rangeEnd: 72; scrollButtonsVisible: false; flexGrow: 2; }
+}

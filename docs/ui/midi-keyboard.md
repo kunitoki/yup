@@ -112,5 +112,7 @@ document.setInitializer<yup::MidiKeyboardComponent> ([this] (yup::MidiKeyboardCo
 });
 ```
 
-A keyboard with no state shows no pressed key and plays nothing. `setState()`
-releases the notes held on the previous state, and a null state removes it.
+A keyboard with no state plays into one of its own, that nothing else hears:
+it still shows the keys held on it, so it can be tried out where no
+application gives it a state. `setState()` releases the notes held on the
+previous state, and a null state removes it.

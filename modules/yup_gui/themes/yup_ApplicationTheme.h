@@ -120,6 +120,86 @@ public:
     }
 
     //==============================================================================
+    /** Paints a part of a component: what its type declares it shows beside its shapes (see ComponentPart).
+
+        @param g           The Graphics to paint with, holding the paint the part uses.
+        @param theme       The theme painting the part.
+        @param component   The component, of the type the part was set for.
+        @param area        Where the part goes, in the coordinates of the component.
+    */
+    using ComponentPartPainter = std::function<void (Graphics& g, const ApplicationTheme& theme, const Component& component, const Rectangle<float>& area)>;
+
+    /**
+        Sets how this theme paints a part of a component type.
+
+        The type declares its parts (see ComponentTypeBuilder::part) and the theme paints them, as it
+        paints the component: the style of the type calls the painter where it wants the part, and a
+        `.yui` drawing places the same one with a `part` element. A painter set again replaces the
+        one before.
+
+        @code
+        theme->setComponentPart<Label> ("text", [] (Graphics& g, const ApplicationTheme&, const Label& label, const Rectangle<float>& area)
+        {
+            g.fillFittedText (label.getStyledText(), area);
+        });
+        @endcode
+
+        @param partName  The name of a part @p ComponentType declares in its `getClassTypeInfo()`.
+        @param painter   Paints it: `void (Graphics&, const ApplicationTheme&, const ComponentType&, const Rectangle<float>& area)`.
+
+        @see ComponentPart, paintPart
+    */
+    template <class ComponentType, class F>
+        requires std::invocable<F&, Graphics&, const ApplicationTheme&, const ComponentType&, const Rectangle<float>&>
+    void setComponentPart (const Identifier& partName, F&& painter)
+    {
+        setComponentPart (ComponentType::getClassTypeInfo(), partName, [painter = std::forward<F> (painter)] (Graphics& g, const ApplicationTheme& theme, const Component& component, const Rectangle<float>& area) mutable
+        {
+            std::invoke (painter, g, theme, static_cast<const ComponentType&> (component), area);
+        });
+    }
+
+    /**
+        Sets how this theme paints a part of the components of a type info.
+
+        As the overload naming a class, for a type that tells its type info another way than with
+        `getClassTypeInfo()`. The painter is given the components whose type info is @p type or derives from it.
+
+        @param type      The type info declaring the part.
+        @param partName  The name of the part.
+        @param painter   Paints it.
+    */
+    void setComponentPart (const ComponentTypeInfo& type, const Identifier& partName, ComponentPartPainter painter);
+
+    /**
+        Paints a part of a component as the global theme does.
+
+        @param g          The Graphics to paint with, holding the paint the part uses.
+        @param component  The component to paint the part of.
+        @param partName   The name of the part.
+        @param area       Where the part goes, in the coordinates of the component.
+
+        @returns False, having painted nothing, when the global theme paints no such part.
+
+        @see Component::paintPart
+    */
+    static bool paintComponentPart (Graphics& g, const Component& component, const Identifier& partName, const Rectangle<float>& area);
+
+    /**
+        Paints a part of a component as this theme does.
+
+        The painter is the one set for the type of the component, or else for the closest of its base types.
+
+        @param g          The Graphics to paint with, holding the paint the part uses.
+        @param component  The component to paint the part of.
+        @param partName   The name of the part.
+        @param area       Where the part goes, in the coordinates of the component.
+
+        @returns False, having painted nothing, when this theme paints no such part.
+    */
+    bool paintPart (Graphics& g, const Component& component, const Identifier& partName, const Rectangle<float>& area) const;
+
+    //==============================================================================
     /** Returns a color from the global theme.
 
         This method looks for the color in the component's properties first (walking up its parents), then in
@@ -327,6 +407,7 @@ private:
 
     //==============================================================================
     std::unordered_map<std::type_index, ComponentStyle::Ptr> componentStyles;
+    std::unordered_map<const ComponentTypeInfo*, std::unordered_map<Identifier, ComponentPartPainter>> componentParts;
     std::unordered_map<Identifier, Color> defaultColors;
     std::unordered_map<Identifier, Color> paletteColors;
     ThemePalette palette;

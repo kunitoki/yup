@@ -224,7 +224,7 @@ private:
         return drawing;
     }
 
-    // After `drawing`, `pattern`, `marker` or `use` inside a drawing: the name it defines or refers to, then its body
+    // After `drawing`, `pattern`, `marker`, `use` or `part` inside a drawing: the name it defines or refers to, then its body
     DataTree parseNamedDrawingBlock (const String& type)
     {
         const auto name = parseIdentifier ("Expected a name after '" + type + "'");
@@ -236,7 +236,7 @@ private:
 
     static bool isNamedDrawingBlock (const String& name)
     {
-        return name == "drawing" || name == "pattern" || name == "marker" || name == "use";
+        return name == "drawing" || name == "pattern" || name == "marker" || name == "use" || name == "part";
     }
 
     DataTree parsePalette()

@@ -176,7 +176,7 @@ private:
         {
             writeElement ("use " + text (element, "drawing"), element, depth, { "drawing" }, &YuiTextWriter::writeBodyMember);
         }
-        else if ((type == "drawing" || type == "pattern" || type == "marker") && element.hasProperty ("name"))
+        else if ((type == "drawing" || type == "pattern" || type == "marker" || type == "part") && element.hasProperty ("name"))
         {
             writeElement (type + " " + text (element, "name"), element, depth, { "name" }, &YuiTextWriter::writeBodyMember);
         }

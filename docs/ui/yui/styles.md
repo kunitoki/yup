@@ -183,7 +183,7 @@ stylesheet can reshape the built-in widgets without a drawing:
 | `Slider` | `trackWidth` (4) and `thumbSize` (16) for linear sliders; for rotary ones, whose dial is a circle as large as the smaller side allows, as proportions of that side, `rotaryInset` (0.1), `rotaryArcWidth` (0.075), `rotaryDialInset` (0.105), `rotaryDialOutlineWidth` (0.0175), `rotaryPointerInset` (0.175) and `rotaryPointerWidth` (0.03) |
 | `TextButton`, `ToggleButton`, `TextEditor`, `ComboBox` | `cornerRadius` (4), `outlineWidth` (1), `focusedOutlineWidth` (2) |
 | `PopupMenu` | `cornerRadius` (4), `outlineWidth` (1), `itemCornerRadius` (2), `itemHeight` (22), `verticalPadding` (4) |
-| `SwitchButton` | `cornerRadius` (unset: a pill), `thumbInset` (4) |
+| `SwitchButton` | `cornerRadius` (unset: a pill), `thumbInset` (4), `thumbSize` (28: the thickness of the switch, twice as long) |
 | `ProgressBar` | `cornerRadius` (unset: a pill) |
 | `ScrollBar` | `thumbInset` (3), `cornerRadius` (unset: a pill) |
 | `Label` | `textHeightProportion` (unset: the font keeps its height) |

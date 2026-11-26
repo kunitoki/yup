@@ -261,6 +261,9 @@ private:
 
     void updateLevels();
     void checkForCallbacks();
+    void notifyClippingChange();
+
+    static const Identifier clippingPropertyId;
 
     //==============================================================================
     KMeterState* meterState = nullptr;
@@ -283,6 +286,7 @@ private:
     float lastCallbackPeak = -100.0f;
     float lastCallbackAverage = -100.0f;
     bool lastCallbackClipping = false;
+    bool lastNotifiedClipping = false;
     FrameAttachment frameAttachment { *this, bindFront (&KMeterComponent::refreshDisplay, this) };
 
     //==============================================================================

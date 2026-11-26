@@ -1,0 +1,81 @@
+// Bindings: how the values of a document are wired. A property set from an expression follows
+// what it reads, `<=>` links two properties both ways, tokens are read by name everywhere, a
+// composite component has properties, an alias and a signal of its own, a handler runs calls
+// when a signal fires, and a repeat makes as many components as its range tells.
+tokens {
+    property spacing: number = 8;
+    property unit: string = "dB";
+}
+
+// A slider with its name and its value, declared once. `value` is the value of the slider
+// inside, `onMoved` is emitted with it in percent.
+component Fader : Row {
+    property label: string = "VALUE";
+    property alias value <=> slider.value;
+    signal onMoved (percent: number);
+
+    gap: spacing;
+    flexGrow: 1;
+
+    Label  { class: caption; text: root.label; preferredWidth: 64; }
+    Slider { id: slider; flexGrow: 1; onValueChanged: (v) => root.onMoved (v * 100); }
+    Label  { class: readout; text: format ("%.0f %%", slider.value * 100); preferredWidth: 56; }
+}
+
+style {
+    .caption { textFillColor: palette.textMuted; }
+    .readout { textFillColor: palette.accent; }
+    .step:checked { backgroundToggledColor: palette.accent; }
+}
+
+Column {
+    padding: 12;
+    gap: spacing;
+
+    Label { class: caption; text: "An expression follows what it reads"; preferredHeight: 14; }
+    Row {
+        gap: spacing; flexGrow: 1;
+
+        Slider { id: gain; value: 0.25; flexGrow: 1; }
+        Label  { class: readout; text: format ("%.1f ", lerp (-60.0, 6.0, gain.value)) + unit; preferredWidth: 72; }
+        SwitchButton { id: bypass; preferredWidth: 56; }
+        TextButton { text: bypass.checked ? "Bypassed" : "Active"; enabled: ! bypass.checked; preferredWidth: 88; }
+    }
+
+    Label { class: caption; text: "Two properties linked both ways"; preferredHeight: 14; }
+    Row {
+        gap: spacing; flexGrow: 1;
+
+        Slider { id: coarse; value: 0.5; flexGrow: 1; }
+        Slider { sliderType: linearBarHorizontal; value <=> coarse.value; flexGrow: 1; }
+        Slider { sliderType: rotaryVerticalDrag; value <=> coarse.value; preferredWidth: 40; }
+    }
+
+    Label { class: caption; text: "A composite component: properties, an alias and a signal"; preferredHeight: 14; }
+    Fader { id: cutoff; label: "CUTOFF"; value: 0.7; onMoved: (percent) => action ("moved", "cutoff", percent); }
+    Fader { id: follower; label: "FOLLOWS"; value <=> cutoff.value; onMoved: { action ("moved", "follower"); action ("done"); } }
+
+    Label { class: caption; text: "A handler on a property: changed value"; preferredHeight: 14; }
+    Row {
+        gap: spacing; flexGrow: 1;
+
+        Slider { id: watched; sliderType: incDecButtons; minimum: 0; maximum: 10; interval: 1; value: 3; flexGrow: 1;
+                 changed value: (v) => action ("changed", v); }
+        Label { class: readout; text: watched.value > 5 ? "high" : "low"; preferredWidth: 56; }
+    }
+
+    Label { class: caption; text: "A repeat follows the stepper: " + format ("%.0f steps", count.value); preferredHeight: 14; }
+    Row {
+        gap: spacing; flexGrow: 1;
+
+        Slider { id: count; sliderType: incDecButtons; minimum: 1; maximum: 12; interval: 1; value: 8; preferredWidth: 120; }
+
+        Row {
+            gap: 3; flexGrow: 1;
+
+            repeat i in 0 .. count.value {
+                ToggleButton { class: step; text: format ("%d", i + 1); checked: i % 4 == 0; flexGrow: 1; onClick: action ("step", i + 1); }
+            }
+        }
+    }
+}

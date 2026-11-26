@@ -108,6 +108,11 @@ const ComponentTypeInfo& MidiKeyboardComponent::getClassTypeInfo()
                                  .property (MidiKeyboardComponentIds::blackNoteLengthProportion, &K::getBlackNoteLengthProportion, &K::setBlackNoteLengthProportion, 0.6f, "The length of the black keys, as a proportion of the one of the white keys.")
                                  .property (MidiKeyboardComponentIds::blackNoteWidthProportion, &K::getBlackNoteWidthProportion, &K::setBlackNoteWidthProportion, 0.7f, "The width of the black keys, as a proportion of the one of the white keys.")
                                  .signal ("onVisibleRangeChanged", &K::onVisibleRangeChanged, "Emitted when the visible range changes.")
+                                 .series ("keyBounds", [] (const K& k) { return k.readKeys (k.keySeries.bounds, [&k] (int note) { return k.getRectangleForKey (note); }); }, "The area of each visible key, from the lowest one. The black keys lie over the white ones around them.")
+                                 .series ("keyNotes", [] (const K& k) { return k.readKeys (k.keySeries.notes, [] (int note) { return note; }); }, "The note of each visible key, from 0 to 127.")
+                                 .series ("keyBlack", [] (const K& k) { return k.readKeys (k.keySeries.black, [&k] (int note) { return k.isBlackKey (note); }); }, "Whether each visible key is a black one.")
+                                 .series ("keyPressed", [] (const K& k) { return k.readKeys (k.keySeries.pressed, [&k] (int note) { return k.isNoteOn (note); }); }, "Whether the note of each visible key is on, on one of the channels shown.")
+                                 .series ("keyHovered", [] (const K& k) { return k.readKeys (k.keySeries.hovered, [&k] (int note) { return k.isMouseOverNote (note); }); }, "Whether the mouse pointer is over each visible key.")
                                  .build();
 
     return info;
@@ -153,6 +158,8 @@ MidiKeyboardComponent::MidiKeyboardComponent (Orientation orientationToUse)
     };
     addChildComponent (scrollUpButton);
 
+    ownState.addListener (this);
+
     updateScrollButtons();
 }
 
@@ -164,8 +171,7 @@ MidiKeyboardComponent::MidiKeyboardComponent (MidiKeyboardState& stateToUse, Ori
 
 MidiKeyboardComponent::~MidiKeyboardComponent()
 {
-    if (state != nullptr)
-        state->removeListener (this);
+    getActiveState().removeListener (this);
 }
 
 //==============================================================================
@@ -177,13 +183,9 @@ void MidiKeyboardComponent::setState (MidiKeyboardState* newState)
     // The notes held are released on the state they were played into
     resetAnyKeysInUse();
 
-    if (state != nullptr)
-        state->removeListener (this);
-
+    getActiveState().removeListener (this);
     state = newState;
-
-    if (state != nullptr)
-        state->addListener (this);
+    getActiveState().addListener (this);
 
     repaint();
 }
@@ -646,7 +648,7 @@ int MidiKeyboardComponent::whiteKeyToNote (int whiteKeyIndex) const
 //==============================================================================
 bool MidiKeyboardComponent::isNoteOn (int midiNoteNumber) const
 {
-    return state != nullptr && state->isNoteOnForChannels (midiInChannelMask, midiNoteNumber);
+    return getActiveState().isNoteOnForChannels (midiInChannelMask, midiNoteNumber);
 }
 
 //==============================================================================
@@ -783,14 +785,12 @@ void MidiKeyboardComponent::repaintNote (int midiNoteNumber)
 
 void MidiKeyboardComponent::sendNoteOn (int midiNoteNumber, float noteVelocity)
 {
-    if (state != nullptr)
-        state->noteOn (midiChannel, midiNoteNumber, noteVelocity);
+    getActiveState().noteOn (midiChannel, midiNoteNumber, noteVelocity);
 }
 
 void MidiKeyboardComponent::sendNoteOff (int midiNoteNumber, float noteVelocity)
 {
-    if (state != nullptr)
-        state->noteOff (midiChannel, midiNoteNumber, noteVelocity);
+    getActiveState().noteOff (midiChannel, midiNoteNumber, noteVelocity);
 }
 
 void MidiKeyboardComponent::updateNoteUnderMouse (Point<float> pos, bool isDown, int pointerSlot)

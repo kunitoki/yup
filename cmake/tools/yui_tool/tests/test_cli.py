@@ -667,6 +667,89 @@ class YuiToolCliTests(unittest.TestCase):
         signals = {entry["name"]: entry for entry in types["PitchWheel"]["signals"]}
         self.assertEqual([argument["name"] for argument in signals["onValueChanged"]["arguments"]], ["value"])
 
+    def test_schema_tells_the_series_and_the_parts_a_drawing_reads_and_places(self):
+        schema = json.loads(self.invoke("schema").stdout)
+        types = {entry["name"]: entry for entry in schema["types"]}
+
+        # A series is an array a drawing reads where the component keeps it
+        analyzer = {entry["name"]: entry for entry in types["SpectrumAnalyzer"]["properties"]}
+        self.assertEqual((analyzer["levels"]["type"], analyzer["levels"]["elementType"]), ("array", "number"))
+        self.assertTrue(analyzer["levels"]["series"])
+        self.assertTrue(analyzer["levels"]["readOnly"])
+
+        menu = {entry["name"]: entry for entry in types["PopupMenu"]["properties"]}
+        self.assertEqual(menu["itemBounds"]["elementType"], "rectangle")
+        self.assertEqual(menu["itemTexts"]["elementType"], "string")
+        self.assertEqual(menu["itemTicked"]["elementType"], "boolean")
+
+        # An array kept as a value is not one
+        combo = {entry["name"]: entry for entry in types["ComboBox"]["properties"]}
+        self.assertNotIn("series", combo["items"])
+
+        # The parts a `part` element names, and whether it can give them bounds
+        editor = {entry["name"]: entry for entry in types["TextEditor"]["parts"]}
+        self.assertEqual(set(editor), {"selection", "text", "caret"})
+        self.assertFalse(editor["text"]["placeable"])
+
+        item = {entry["name"]: entry for entry in types["ListBoxItem"]["parts"]}
+        self.assertTrue(item["icon"]["placeable"])
+
+        self.assertNotIn("parts", types["Slider"])
+
+        # What a drawing reads of a widget to paint it
+        scroll_bar = {entry["name"]: entry for entry in types["ScrollBar"]["properties"]}
+        self.assertEqual(scroll_bar["thumbBounds"]["type"], "rectangle")
+        self.assertTrue(scroll_bar["thumbBounds"]["readOnly"])
+        self.assertTrue(scroll_bar["thumbHovered"]["state"])
+
+    def test_verify_accepts_a_drawing_reading_a_series_and_placing_parts(self):
+        self.write("ui/main.yui", '''
+            drawing Spectrum {
+                rect { bounds: bounds; fill: palette.surface; }
+
+                repeat i in 0 .. bounds.width {
+                    vertex {
+                        at: point (bounds.x + i, bounds.bottom - sample (levels, i / bounds.width) * bounds.height);
+                        base: point (bounds.x + i, bounds.bottom);
+                        smooth: 0.5;
+                        fill: palette.accent.withAlpha (0.25);
+                        stroke: palette.accent;
+                    }
+                }
+            }
+
+            drawing Field {
+                rect { bounds: bounds; fill: palette.surface; stroke: focused ? palette.accent : palette.outline; }
+                part selection { fill: palette.accent.withAlpha (0.4); }
+                part text { fill: palette.text; }
+                part caret { fill: palette.text; }
+            }
+
+            style {
+                SpectrumAnalyzer { drawing: Spectrum; }
+                TextEditor { drawing: Field; }
+            }
+
+            Column {
+                SpectrumAnalyzer { height: 80; }
+                TextEditor { height: 24; }
+            }
+        ''')
+
+        result = self.invoke("verify", "ui/main.yui")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        # A part the type doesn't have is told where it is written
+        self.write("ui/broken.yui", '''
+            drawing Knob { part caret { fill: palette.text; } }
+            style { Slider { drawing: Knob; } }
+            Slider { }
+        ''')
+
+        broken = self.invoke("verify", "ui/broken.yui")
+        self.assertNotEqual(broken.returncode, 0)
+        self.assertIn("the component has no part 'caret'", broken.stdout + broken.stderr)
+
     def test_schema_describes_the_3d_types(self):
         schema = json.loads(self.invoke("schema").stdout)
         types = {entry["name"]: entry for entry in schema["types"]}

@@ -160,6 +160,14 @@ area * 2                      // trailing expression: output named 'result'
   one of them changed. A type named around a value none of its constructors
   take converts it, so `rect ([x, y, w, h])` is `rect (x, y, w, h)` where the
   context converts arrays to a `rect`.
+- **Arrays of numbers** (`float[]`, `int[]`) are also read a range at a time,
+  which is how many values become the few a drawing has room for:
+  `sample (values, t)` is the value at `t`, from 0 at the first one to 1 at
+  the last, interpolated between the two around it. `min (values, from, to)`
+  and `max (values, from, to)` are the extremes of the values from the index
+  `from` up to `to`, which is left out: a range holds at least the value it
+  starts at, so one narrower than a value still reads it. Positions and
+  indices outside the array read its ends, and an empty array gives 0.
 - **Safety**: integer division or modulo by zero yields 0 and integer overflow
   wraps. `?:`, `&&` and `||` evaluate both sides, so functions should be pure.
 - **Built-in functions**: `sin cos tan asin acos atan atan2 sqrt pow exp log log2

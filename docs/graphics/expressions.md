@@ -101,6 +101,8 @@ shape per row. Assign the outputs you need:
 | `line` | `line` | Line, drawn with `stroke` (or `fill`). |
 | `path` | `path` | Path, filled with its own winding rule. |
 | `vertex`, `series` | `point`, `int` | One vertex per row, connected into one polyline per `series` (default 0). Polylines are drawn after the other shapes, with the style of their first row. |
+| `vertexBase` | `point` | Where the polyline goes back to under the vertex, making it an area: the fill takes what lies between the vertices and their bases, the stroke only the line through the vertices. A base on one level fills under a curve, the vertices of another curve fill the band between both. |
+| `vertexSmooth` | `float` | Curves the polyline through its vertices instead of joining them with straight lines, from 0 (lines) to 1. The first row of a series sets it. |
 | `label`, `labelRect` | `string`, `rect` | Text fitted in the rectangle, drawn when a font is passed to `draw` or assigned to `labelFont`. Assign both, or `labelAnchor` instead of `labelRect`. |
 | `labelAnchor`, `labelTextAnchor` | `point`, `textAnchor` | Places the label from a point on its baseline, at the size of its font, instead of fitting it in `labelRect`. The text starts (default), is centered or ends at the point. |
 | `labelColor`, `labelStroke` | `color` | Label fill and stroke colors. |

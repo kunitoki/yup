@@ -86,8 +86,8 @@ binds, and nothing has a fixed set or binding number:
 | Declaration | What it is |
 | --- | --- |
 | A uniform block | The parameters. Optional, one at most, no larger than 64 KiB. `createUniforms()` is laid out for it. |
-| `uniform texture2D` | An input: none, one or two. The first input is the texture with the lowest set, then the lowest binding, whatever the order they are declared in. |
-| `uniform sampler` | Declared apart from the textures and combined where they are read. Filters linearly and clamps to the edge. One sampler can read both textures. |
+| `uniform texture2D` | An input: none, or up to four (`GpuImageShader::maxInputTextures`). The first input is the texture with the lowest set, then the lowest binding, whatever the order they are declared in, and `getInputTextureNames()` tells the name of each. |
+| `uniform sampler` | Declared apart from the textures and combined where they are read. Filters linearly and clamps to the edge. One sampler can read every texture. |
 | `layout(location = 0) in vec2 uv` | From (0, 0) at the top left of the target to (1, 1) at its bottom right, on every graphics API. Optional. |
 | `layout(location = 0) out vec4` | The pixel. |
 
@@ -98,7 +98,7 @@ binds, and nothing has a fixed set or binding number:
   written.
 - Sets 0 to 3 can be used, each block, texture and sampler taking a binding of
   its own in its set.
-- A combined `uniform sampler2D`, a second uniform block, a third texture and a
+- A combined `uniform sampler2D`, a second uniform block, a fifth texture and a
   texture that is not a `texture2D` can't be bound: the shader is refused when
   it is created, with a message.
 
@@ -154,7 +154,7 @@ Each returns a `ResultValue`: the shader, or what prevents it.
 ```text
 The fragment stage declares a combined sampler2D, which cannot be bound: declare a texture2D and a sampler, and combine them where the texture is read
 The fragment stage declares 2 uniform blocks: an image shader has one at most
-The fragment stage declares 3 textures: an image shader has two at most
+The fragment stage declares 5 textures: an image shader has 4 at most
 ShaderBundleCompiler: SPIR-V compilation failed for stage fragment: ERROR: 0:3: 'missingValue' : undeclared identifier
 ```
 
@@ -213,6 +213,12 @@ Result draw (const GpuDevice::Ptr& device,
              const ShaderUniforms& uniforms,
              const GpuTexture::Ptr& firstInput = nullptr,
              const GpuTexture::Ptr& secondInput = nullptr) const;
+
+Result draw (const GpuDevice::Ptr& device,
+             GpuFrame& frame,
+             GpuTarget& target,
+             const ShaderUniforms& uniforms,
+             Span<const GpuTexture::Ptr> inputs) const;
 ```
 
 `draw()` records one render pass into the frame: it clears the target, binds
@@ -233,6 +239,8 @@ frame.submit();
   inputs were created with.
 - The inputs a shader does not declare are ignored, so a caller can always pass
   what it has. An input can't be the texture of the target.
+- A shader reading more than two inputs takes them as a span, in the order of
+  `getInputTextureNames()`.
 - The uniforms have to come from `createUniforms()` of the same shader.
 - The target has a color format and is not multisampled.
 - It returns a failed `Result`, having recorded nothing, when the device has no

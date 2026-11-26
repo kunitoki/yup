@@ -615,8 +615,33 @@ Row {
 - [`.yui` interfaces from Python](../../scripting/python-yui.md) - documents,
   actions and models from the Python bindings.
 
-The `YuiDrawing` graphics example edits a complete UI built this way, split
-across `ui.yui`, `components.yui`, four knob drawings (`knob.yui`,
-`haloknob.yui`, `flutedknob.yui`, `brushedknob.yui`), `palette.yui` and
-`style.yui`. It rebuilds shortly after each keystroke, and on desktop it
-reloads when one of the files is saved in another editor.
+The `YuiDrawing` graphics example (the `YUI` page) edits a complete UI built
+this way, its Filter, split across `ui.yui`, `components.yui`, four knob
+drawings (`knob.yui`, `haloknob.yui`, `flutedknob.yui`, `brushedknob.yui`),
+`palette.yui` and `style.yui` in
+[`examples/graphics/data/yui/filter`](https://github.com/kunitoki/yup/tree/main/examples/graphics/data/yui/filter).
+It rebuilds shortly after each keystroke, and on desktop it reloads when one
+of the files is saved in another editor.
+
+The other pages of the example are single files, each complete by itself and
+covering one area:
+
+| Page | File | Shows |
+| --- | --- | --- |
+| Widgets | `widgets.yui` | Every control with the readout of what it tells |
+| Lists | `lists.yui` | `ListBox`, `TreeView`, `Viewport`, `TabComponent`, `CodeEditor` |
+| Layout | `layout.yui` | `Row`, `Column`, `FlexBox`, `Grid`, `Stack` and item properties |
+| Styles | `styles.yui` | Selectors, tokens, scoped palettes, transitions, animations, effects |
+| Bindings | `bindings.yui` | Expressions, links, composite components, handlers, `repeat` |
+| Drawing | `drawing.yui` | Shapes, paints, text, scopes, filters, patterns and markers |
+| Series | `series.yui` | `vertex` lines, areas and bands, `sample`, `min` and `max` |
+| Parts | `parts.yui` | The `part` elements of editors, buttons, labels and images |
+| Controls | `controls.yui` | Widgets painted whole from their geometry, a menu from its item series |
+| Audio | `audio.yui` | The analyzer, the meter and the keyboard painted from what they tell |
+| Shaders | `shaders.yui` | A series sampled by a shader as a texture |
+
+The page gives the documents what they can't write, with
+[initializers](#setting-up-components-from-c): the states of the audio
+widgets. The tests load and paint every page
+(`YuiExamplePagesTests`), so they are the first place to look when a widget,
+a part or a series stops working.

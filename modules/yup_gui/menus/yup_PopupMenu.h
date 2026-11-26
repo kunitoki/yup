@@ -482,6 +482,30 @@ private:
     static constexpr float shadowMargin = 16.0f;
     static constexpr int scrollSpeed = 1; // Number of items to scroll per wheel event
 
+    // What a drawing reads of the items: one array for each thing told of them, all read with the index of an item
+    struct ItemSeries
+    {
+        Array<Rectangle<float>> bounds;
+        Array<String> texts, shortcuts;
+        Array<Color> colors;
+        Array<bool> enabled, ticked, hovered, separator, subMenu, active, custom;
+    };
+
+    /* Fills an array with one value for each item, and returns it as the series a property gives. */
+    template <class ValueType, class Reader>
+    Span<const ValueType> readItems (Array<ValueType>& values, Reader&& read) const
+    {
+        values.clearQuick();
+        values.ensureStorageAllocated (static_cast<int> (items.size()));
+
+        for (size_t index = 0; index < items.size(); ++index)
+            values.add (read (*items[index], static_cast<int> (index)));
+
+        return { values.data(), static_cast<size_t> (values.size()) };
+    }
+
+    mutable ItemSeries itemSeries;
+
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PopupMenu)
 };
 

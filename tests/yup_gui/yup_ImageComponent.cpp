@@ -53,7 +53,20 @@ protected:
 
     void TearDown() override
     {
+        if (themeReplaced)
+            ApplicationTheme::setGlobalTheme (oldTheme.get());
+
         folder.deleteRecursively();
+    }
+
+    /** Makes a theme the global one until the test ends: an image is painted by the theme. */
+    void useTheme (ApplicationTheme::Ptr theme)
+    {
+        if (! themeReplaced)
+            oldTheme = ApplicationTheme::getGlobalTheme();
+
+        themeReplaced = true;
+        ApplicationTheme::setGlobalTheme (std::move (theme));
     }
 
     static String svgText()
@@ -77,6 +90,8 @@ protected:
 
     ImageComponent image;
     File folder;
+    ApplicationTheme::Ptr oldTheme;
+    bool themeReplaced = false;
 };
 
 TEST_F (ImageComponentTests, StartsEmptyAndTransparent)
@@ -244,8 +259,47 @@ TEST_F (ImageComponentTests, ShowsEitherAnImageOrADrawable)
     EXPECT_TRUE (image.getImage().isValid());
 }
 
+TEST_F (ImageComponentTests, IsPaintedByTheStyleOfTheThemeOrByItsOwn)
+{
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (64, 64);
+    Graphics g (*context, *renderer);
+
+    image.setBounds (0, 0, 64, 64);
+    image.setImage (Image (4, 2));
+
+    ApplicationTheme::Ptr theme = new ApplicationTheme();
+    useTheme (theme);
+
+    int numThemePaints = 0, numOwnPaints = 0;
+    const ImageComponent* painted = nullptr;
+
+    theme->setComponentStyle<ImageComponent> (ComponentStyle::createStyle<ImageComponent> ([&] (Graphics&, const ApplicationTheme& paintingTheme, const ImageComponent& c)
+    {
+        EXPECT_EQ (std::addressof (paintingTheme), theme.get());
+
+        ++numThemePaints;
+        painted = std::addressof (c);
+    }));
+
+    image.paint (g);
+    EXPECT_EQ (numThemePaints, 1);
+    EXPECT_EQ (painted, std::addressof (image));
+
+    image.setStyle (ComponentStyle::createStyle<ImageComponent> ([&numOwnPaints] (Graphics&, const ApplicationTheme&, const ImageComponent&)
+    {
+        ++numOwnPaints;
+    }));
+
+    image.paint (g);
+    EXPECT_EQ (numThemePaints, 1);
+    EXPECT_EQ (numOwnPaints, 1);
+}
+
 TEST_F (ImageComponentTests, PaintingLeavesTheGraphicsStateUntouched)
 {
+    useTheme (createThemeVersion1());
+
     auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics g (*context, *renderer);

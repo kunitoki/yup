@@ -611,10 +611,112 @@ TEST_F (CompiledExpressionTests, Arrays)
     EXPECT_EQ (0, (int) state.getVar (2));
 }
 
+TEST_F (CompiledExpressionTests, SamplesArraysBetweenTheirValues)
+{
+    const float data[] = { 0.0f, 10.0f, 30.0f };
+
+    const auto program = compile ("first = sample (values, 0); middle = sample (values, 0.5); between = sample (values, x); last = sample (values, 1)");
+    ExpressionState state (program);
+    state.bindArray (values, data, 3);
+
+    state.set (x, 0.75f);
+    state.evaluate();
+    EXPECT_FLOAT_EQ (0.0f, (float) state.getVar (0));
+    EXPECT_FLOAT_EQ (10.0f, (float) state.getVar (1));
+    EXPECT_FLOAT_EQ (20.0f, (float) state.getVar (2));
+    EXPECT_FLOAT_EQ (30.0f, (float) state.getVar (3));
+    EXPECT_EQ (&ExpressionType::floatType(), program.getOutputType (2));
+
+    // Positions outside the array read its ends
+    state.set (x, 4.0f);
+    state.evaluate();
+    EXPECT_FLOAT_EQ (30.0f, (float) state.getVar (2));
+
+    state.set (x, -1.0f);
+    state.evaluate();
+    EXPECT_FLOAT_EQ (0.0f, (float) state.getVar (2));
+
+    state.set (x, std::numeric_limits<float>::quiet_NaN());
+    state.evaluate();
+    EXPECT_FLOAT_EQ (0.0f, (float) state.getVar (2));
+
+    state.bindArray (values, data, 1);
+    state.set (x, 0.5f);
+    state.evaluate();
+    EXPECT_FLOAT_EQ (0.0f, (float) state.getVar (2));
+
+    state.bindArray (values, data, 0);
+    state.evaluate();
+    EXPECT_FLOAT_EQ (0.0f, (float) state.getVar (2));
+}
+
+TEST_F (CompiledExpressionTests, ReadsTheExtremesOfARangeOfAnArray)
+{
+    const float data[] = { 3.0f, -1.0f, 7.0f, 2.0f, 5.0f };
+
+    const auto program = compile ("low = min (values, 0, 3); high = max (values, 0, 3); tail = max (values, n, len (values)); none = max (values, n, n)");
+    ExpressionState state (program);
+    state.bindArray (values, data, 5);
+
+    state.set (n, 3);
+    state.evaluate();
+    EXPECT_FLOAT_EQ (-1.0f, (float) state.getVar (0));
+    EXPECT_FLOAT_EQ (7.0f, (float) state.getVar (1));
+    EXPECT_FLOAT_EQ (5.0f, (float) state.getVar (2));
+    EXPECT_EQ (&ExpressionType::floatType(), program.getOutputType (0));
+
+    // A range holding nothing still reads the value it starts at
+    EXPECT_FLOAT_EQ (2.0f, (float) state.getVar (3));
+
+    // Indices outside the array read its ends
+    state.set (n, -10);
+    state.evaluate();
+    EXPECT_FLOAT_EQ (7.0f, (float) state.getVar (2));
+    EXPECT_FLOAT_EQ (3.0f, (float) state.getVar (3));
+
+    state.set (n, 100);
+    state.evaluate();
+    EXPECT_FLOAT_EQ (5.0f, (float) state.getVar (2));
+
+    state.bindArray (values, data, 0);
+    state.evaluate();
+    EXPECT_FLOAT_EQ (0.0f, (float) state.getVar (0));
+    EXPECT_FLOAT_EQ (0.0f, (float) state.getVar (1));
+}
+
+TEST_F (CompiledExpressionTests, ReadsArraysChangedInPlaceAgain)
+{
+    float data[] = { 1.0f, 2.0f };
+
+    ExpressionState state (compile ("high = max (values, 0, 2); half = sample (values, 0.5)"));
+    state.bindArray (values, data, 2);
+
+    state.evaluate();
+    EXPECT_FLOAT_EQ (2.0f, (float) state.getVar (0));
+    EXPECT_FLOAT_EQ (1.5f, (float) state.getVar (1));
+
+    data[0] = 9.0f;
+    state.evaluate();
+    EXPECT_FLOAT_EQ (9.0f, (float) state.getVar (0));
+    EXPECT_FLOAT_EQ (5.5f, (float) state.getVar (1));
+}
+
+TEST_F (CompiledExpressionTests, ArraysWrittenInPlaceAreSampledAndRanged)
+{
+    EXPECT_FLOAT_EQ (15.0f, (float) evaluate ("sample ([10, 20], 0.5)"));
+    EXPECT_FLOAT_EQ (8.0f, (float) evaluate ("max ([2, 8, 4], 0, 3)"));
+    EXPECT_FLOAT_EQ (4.0f, (float) evaluate ("min ([2, 8, 4], 1, 3)"));
+
+    // Three numbers are still three numbers
+    EXPECT_EQ (1, (int) evaluate ("min (3, 1, 2)"));
+    EXPECT_EQ (3, (int) evaluate ("max (3, 1, 2)"));
+}
+
 TEST_F (CompiledExpressionTests, ArrayErrors)
 {
     EXPECT_EQ (String ("1:8: An array index must be an 'int', not 'float'"), compileError ("values[x]"));
     EXPECT_TRUE (compileError ("x[0]").contains ("The type 'float' can't be indexed"));
+    EXPECT_TRUE (compileError ("max (values, x, 2)").contains ("Cannot convert 'float' to 'int'"));
 }
 
 TEST_F (CompiledExpressionTests, CompilesExpressionObjects)

@@ -32,7 +32,7 @@ struct ExpressionDrawing::Fields
     Field<Color> fill, stroke, tint, labelColor, labelStroke;
     Field<ColorGradient> fillGradient, strokeGradient;
     Field<PatternPaint> fillPattern, strokePattern;
-    Field<float> strokeWidth, strokeMiterLimit, strokeDashOffset, opacity, fillOpacity, strokeOpacity, feather, radius;
+    Field<float> strokeWidth, strokeMiterLimit, strokeDashOffset, opacity, fillOpacity, strokeOpacity, feather, radius, vertexSmooth;
     Field<float> cornerRadius, topLeftRadius, topRightRadius, bottomLeftRadius, bottomRightRadius;
     Field<Size<float>> cornerSize;
     Field<StrokeDashPattern> strokeDash;
@@ -42,7 +42,7 @@ struct ExpressionDrawing::Fields
     Field<BlendMode> blend;
     Field<AffineTransform> transform;
     Field<Rectangle<float>> rect, ellipse, clip, labelRect;
-    Field<Point<float>> point, vertex, labelAnchor;
+    Field<Point<float>> point, vertex, vertexBase, labelAnchor;
     Field<Line<float>> line;
     Field<Path> path, clipPath;
     Field<String> label;
@@ -129,6 +129,8 @@ void forEachDrawingField (F&& f, Values&&... fields)
     f ("labelRect", fields.labelRect...);
     f ("point", fields.point...);
     f ("vertex", fields.vertex...);
+    f ("vertexBase", fields.vertexBase...);
+    f ("vertexSmooth", fields.vertexSmooth...);
     f ("line", fields.line...);
     f ("path", fields.path...);
     f ("clipPath", fields.clipPath...);
@@ -474,6 +476,16 @@ struct ExpressionDrawing::DrawBuffers
         }
     };
 
+    /* The vertices of the rows of a series, drawn with the style of its first row: joined by a line, which goes back
+       along their bases to close an area when they have one. */
+    struct Polyline
+    {
+        int series = 0;
+        float smooth = 0.0f;
+        Style style;
+        std::vector<Point<float>> vertices, bases;
+    };
+
     DrawBuffers (const Settings& drawSettings, Graphics& graphics, const Font* font, std::vector<Operation>* recordedOperations)
         : settings (drawSettings)
         , g (std::addressof (graphics))
@@ -528,26 +540,19 @@ struct ExpressionDrawing::DrawBuffers
     {
         flush();
 
-        for (auto& polyline : polylines)
-        {
-            auto& style = polyline.style;
-            style.shouldFill = style.hasFill();
-            style.shouldStroke = style.hasStroke() || ! style.hasFill();
-            emit (std::move (style), std::move (polyline.path));
-        }
+        for (int i = 0; i < numPolylines; ++i)
+            emitPolyline ((*polylines)[(size_t) i]);
 
-        polylines.clear();
+        numPolylines = 0;
+    }
+
+    /* Collects the vertices in buffers outliving the draw, so that the next one finds them already allocated. */
+    void setPolylineStorage (std::vector<Polyline>& storage) noexcept
+    {
+        polylines = std::addressof (storage);
     }
 
 private:
-    /* The vertices of the rows of a series, drawn with the style of its first row. */
-    struct Polyline
-    {
-        int series;
-        Style style;
-        Path path;
-    };
-
     template <class F>
     void addShape (const Style& style, ShapeKind kind, const Rectangle<float>& bounds, bool usesNonZeroWinding, F&& addToPath)
     {
@@ -614,21 +619,123 @@ private:
         *labelBounds = labelBounds->isEmpty() ? bounds : labelBounds->unionWith (bounds);
     }
 
-    void addVertex (const Point<float>& vertex, const Style& style, int series)
+    void addVertex (const Point<float>& vertex, const Point<float>* base, float smooth, const Style& style, int series)
     {
-        const auto polyline = std::find_if (polylines.rbegin(), polylines.rend(), [series] (const Polyline& p)
-        {
-            return p.series == series;
-        });
+        auto& polyline = findPolyline (series, style, smooth);
 
-        if (polyline != polylines.rend())
+        polyline.vertices.push_back (vertex);
+
+        if (base != nullptr)
+            polyline.bases.push_back (*base);
+    }
+
+    /* Returns the polyline of a series, started with the style and the smoothing of the row that is its first. */
+    Polyline& findPolyline (int series, const Style& style, float smooth)
+    {
+        // A row mostly goes on with the series of the one before
+        for (int i = numPolylines; --i >= 0;)
         {
-            polyline->path.lineTo (vertex);
+            if ((*polylines)[(size_t) i].series == series)
+                return (*polylines)[(size_t) i];
+        }
+
+        if (numPolylines == static_cast<int> (polylines->size()))
+            polylines->emplace_back();
+
+        auto& polyline = (*polylines)[(size_t) numPolylines++];
+        polyline.series = series;
+        polyline.smooth = smooth;
+        polyline.style = style;
+        polyline.vertices.clear();
+        polyline.bases.clear();
+
+        return polyline;
+    }
+
+    /* Adds points to a path in order, or backwards: joined by lines, or by the curves of a cardinal spline going
+       through them when smoothed, whose tangent at a point follows the points around it. The first point starts a
+       subpath, or is joined by a line to where the path is. */
+    static void addPoints (Path& path, const std::vector<Point<float>>& points, float smooth, bool startsSubpath, bool backwards)
+    {
+        const auto numPoints = static_cast<int> (points.size());
+
+        if (numPoints == 0)
+            return;
+
+        const auto pointAt = [&points, numPoints, backwards] (int index)
+        {
+            const auto clamped = jlimit (0, numPoints - 1, index);
+            return points[(size_t) (backwards ? numPoints - 1 - clamped : clamped)];
+        };
+
+        if (startsSubpath)
+            path.moveTo (pointAt (0));
+        else
+            path.lineTo (pointAt (0));
+
+        if (smooth <= 0.0f || numPoints < 3)
+        {
+            for (int i = 1; i < numPoints; ++i)
+                path.lineTo (pointAt (i));
+
             return;
         }
 
-        polylines.push_back ({ series, style, Path() });
-        polylines.back().path.moveTo (vertex);
+        const auto tension = jmin (smooth, 1.0f) / 6.0f;
+
+        for (int i = 0; i + 1 < numPoints; ++i)
+        {
+            const auto from = pointAt (i);
+            const auto to = pointAt (i + 1);
+            const auto first = from + (to - pointAt (i - 1)) * tension;
+            const auto second = to - (pointAt (i + 2) - from) * tension;
+
+            path.cubicTo (first.getX(), first.getY(), second.getX(), second.getY(), to.getX(), to.getY());
+        }
+    }
+
+    void emitPolyline (const Polyline& polyline)
+    {
+        const auto numVertices = static_cast<int> (polyline.vertices.size());
+        auto style = polyline.style;
+
+        // A curve takes three points where a line takes one
+        const auto numPoints = polyline.smooth > 0.0f ? numVertices * 3 : numVertices;
+
+        Path line;
+        line.reserveSpace (numPoints);
+        addPoints (line, polyline.vertices, polyline.smooth, true, false);
+
+        if (polyline.bases.empty())
+        {
+            style.shouldFill = style.hasFill();
+            style.shouldStroke = style.hasStroke() || ! style.hasFill();
+            emit (std::move (style), std::move (line));
+            return;
+        }
+
+        // With a base the fill takes the area between the vertices and their bases, and the stroke the line alone.
+        // The area is the outline of the series, whatever paints it
+        if (style.hasFill() || outline != nullptr)
+        {
+            Path area;
+            area.reserveSpace (numPoints * 2 + 1);
+            addPoints (area, polyline.vertices, polyline.smooth, true, false);
+            addPoints (area, polyline.bases, polyline.smooth, false, true);
+            area.close();
+
+            auto areaStyle = style;
+            areaStyle.shouldFill = true;
+            areaStyle.shouldStroke = false;
+            emit (std::move (areaStyle), std::move (area));
+        }
+
+        if (outline == nullptr && (style.hasStroke() || ! style.hasFill()))
+        {
+            style.shouldFill = false;
+            style.shouldStroke = true;
+            emit (std::move (style), std::move (line));
+        }
     }
 
     bool canAppend (const Style& style, ShapeKind kind, const Rectangle<float>& bounds, bool usesNonZeroWinding) const
@@ -660,7 +767,10 @@ private:
     ShapeKind batchKind = ShapeKind::mixed;
     Rectangle<float> batchBounds;
 
-    std::vector<Polyline> polylines;
+    // The polylines of the draw are the first ones of the storage, which keeps the buffers of those of the draws before
+    std::vector<Polyline> ownPolylines;
+    std::vector<Polyline>* polylines = std::addressof (ownPolylines);
+    int numPolylines = 0;
 };
 
 void ExpressionDrawing::DrawBuffers::addRow (const Lanes& lanes, int lane)
@@ -792,7 +902,13 @@ void ExpressionDrawing::DrawBuffers::addRow (const Lanes& lanes, int lane)
     }
 
     if (const auto* v = getDrawingOutput (lanes.vertex))
-        addVertex (*v, style, getOptionalOutput (lanes.series).value_or (0));
+    {
+        addVertex (*v,
+                   getDrawingOutput (lanes.vertexBase),
+                   getOptionalOutput (lanes.vertexSmooth).value_or (0.0f),
+                   style,
+                   getOptionalOutput (lanes.series).value_or (0));
+    }
 
     if ((settings.hasLabelFont || labelBounds != nullptr) && lanes.label != nullptr)
     {
@@ -830,6 +946,7 @@ struct ExpressionDrawing::Cache::Data
     int numRows = 0;
     Fields<ExpressionDrawingColumn> snapshot;
     std::vector<DrawBuffers::Operation> operations;
+    std::vector<DrawBuffers::Polyline> polylines;
     bool wasRebuilt = false;
     bool outputsChanged = false;
     bool isRecorded = false;
@@ -974,6 +1091,7 @@ void ExpressionDrawing::draw (Graphics& g, ExpressionState& state, int numRows, 
         }, *outputs, data.snapshot, lanes);
 
         DrawBuffers buffers (settings, g, labelFont, shouldRecord ? &data.operations : nullptr);
+        buffers.setPolylineStorage (data.polylines);
 
         for (int row = 0; row < data.numRows; ++row)
             buffers.addRow (lanes, row);

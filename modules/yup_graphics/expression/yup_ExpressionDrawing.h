@@ -41,6 +41,8 @@ namespace yup
     | `line`                | `line`           | A stroked line.                                                |
     | `path`                | `path`           | A path, filled with its own winding rule.                      |
     | `vertex`              | `point`          | A vertex of the polyline of the row `series` (`int`, default 0)|
+    | `vertexBase`          | `point`          | Where the polyline goes back to under the vertex, for an area. |
+    | `vertexSmooth`        | `float`          | Curves the polyline through its vertices, from 0 to 1.         |
     | `label`               | `string`         | Text fitted in `labelRect` (`rect`), or starting at            |
     |                       |                  | `labelAnchor` (`point`) on its baseline.                       |
     | `fill`                | `color`          | Fills the shapes of the row.                                   |
@@ -81,6 +83,13 @@ namespace yup
     row: stroked with the stroke paint (or the current stroke color) and filled with the fill paint when
     assigned. Polylines are drawn after the other shapes. Labels are filled with `labelColor` (or the
     fill paint of the row) unless only `labelStroke` is assigned, and stroked with `labelStroke`.
+
+    A polyline whose rows assign `vertexBase` is an area: the fill takes what lies between the vertices
+    and their bases, the line going back along the bases in reverse, and the stroke only the line through
+    the vertices. A base on one level makes the area under a curve, and the vertices of another curve as
+    bases the band between both. `vertexSmooth` joins the vertices, and the bases, with curves going
+    through them instead of straight lines: 0 keeps the lines, 1 follows the points around each one most.
+    The first visible row of a series gives it its smoothing, as it gives its style.
 
     The `transform` of a row is applied before the transform of the Graphics, so shapes are positioned
     in the coordinates of the drawing as usual; `clip` and `clipPath` are not transformed by it. Bare
@@ -165,7 +174,9 @@ public:
 
         Outputs that change on consecutive draws (animations) are drawn without being recorded, so they
         cost no more than drawing without a cache; once they stop changing, the next draw records the
-        shapes again and the following ones reuse them.
+        shapes again and the following ones reuse them. The cache also keeps the buffers the vertices
+        of the polylines are collected in, so a series that changes at every draw allocates only the
+        path it is drawn as.
 
         Paths assigned to `path` and `clipPath` are compared by identity (copies of a Path share its data), so assign new
         paths instead of modifying a path in place.
@@ -206,8 +217,9 @@ public:
     /** Evaluates rows 0 to numRows - 1 and returns their geometry, without drawing it.
 
         The path holds the rectangles, ellipses, points, lines, paths and polylines draw would paint,
-        in the same order and skipping the rows that are not visible. Labels have no outline. Use it to
-        clip to the shapes of a drawing, or to place content along them.
+        in the same order and skipping the rows that are not visible. A polyline with bases gives its
+        closed area. Labels have no outline. Use it to clip to the shapes of a drawing, or to place
+        content along them.
 
         @param state            A state created from getProgram().
         @param numRows          The number of rows to evaluate.

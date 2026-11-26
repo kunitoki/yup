@@ -59,7 +59,8 @@ namespace yup
 
     The state can be given after construction with setState(), which is how a keyboard
     created by a `.yui` document as `MidiKeyboard` gets it (see YuiDocument::setInitializer).
-    Without a state the keyboard shows no pressed key and plays nothing.
+    Without a state the keyboard plays into one of its own, that nothing else hears: it still
+    shows the keys held on it, which is how it is tried out where no application gives it a state.
 
     @tags{AudioGUI}
 */
@@ -150,11 +151,11 @@ public:
         message thread. The state must outlive the keyboard, or be removed first by
         setting a null one.
 
-        @param newState   the state to use, or nullptr for none
+        @param newState   the state to use, or nullptr for the keyboard to play into its own
     */
     void setState (MidiKeyboardState* newState);
 
-    /** Returns the state the keyboard uses, or nullptr if it has none. */
+    /** Returns the state the keyboard was given, or nullptr when it plays into its own. */
     MidiKeyboardState* getState() const noexcept { return state; }
 
     //==============================================================================
@@ -554,6 +555,11 @@ private:
     void zoomBy (float zoomDelta, int anchorNote);
     int whiteKeyToNote (int whiteKeyIndex) const;
 
+    MidiKeyboardState& getActiveState() noexcept { return state != nullptr ? *state : ownState; }
+    const MidiKeyboardState& getActiveState() const noexcept { return state != nullptr ? *state : ownState; }
+
+    // What is played on a keyboard given no state, so that it shows the keys held on it
+    MidiKeyboardState ownState;
     MidiKeyboardState* state = nullptr;
 
     int midiChannel = 1;
@@ -581,6 +587,29 @@ private:
     ScrollButton scrollUpButton;
     float scrollButtonWidth = 16.0f;
     bool scrollButtonsVisible = true;
+
+    // What a drawing reads of the visible keys: one array for each thing told of them, all read with the index of a key
+    struct KeySeries
+    {
+        Array<Rectangle<float>> bounds;
+        Array<int> notes;
+        Array<bool> black, pressed, hovered;
+    };
+
+    /* Fills an array with one value for each visible key, from the lowest, and returns it as the series a property gives. */
+    template <class ValueType, class Reader>
+    Span<const ValueType> readKeys (Array<ValueType>& values, Reader&& read) const
+    {
+        values.clearQuick();
+        values.ensureStorageAllocated (jmax (0, highestVisibleKey - lowestVisibleKey + 1));
+
+        for (int note = lowestVisibleKey; note <= highestVisibleKey; ++note)
+            values.add (read (note));
+
+        return { values.data(), static_cast<size_t> (values.size()) };
+    }
+
+    mutable KeySeries keySeries;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiKeyboardComponent)
 };

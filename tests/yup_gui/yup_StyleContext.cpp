@@ -2080,6 +2080,27 @@ TEST_F (StyleContextTests, ReportsAShaderReadingTwoTexturesSelectedAsAnEffect)
     EXPECT_EQ (root->getStyleContext()->getDiagnostics()[0].message, "The shader 'Mix' reads two textures, an effect gives it one");
 }
 
+TEST_F (StyleContextTests, AShaderSamplingASeriesReadsOnePictureAsAnEffect)
+{
+    setAsset ("fx/mix.frag", twoInputsFragment);
+
+    YuiDocument document;
+    serveAssets (document);
+
+    // The second texture is filled with the numbers of a property, which leaves the shader one picture to read
+    const auto loaded = document.loadFromString ("shader Mix { fragment: \"fx/mix.frag\"; property overlay: number[]; }\n"
+                                                 "style { #screen { effect: Mix; } }\n"
+                                                 "Component { Component { id: screen; } }");
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_NE (getShaderEffect (document.findById ("screen")), nullptr);
+
+    const auto* shader = document.getRoot()->getStyleContext()->findShader ("Mix");
+    ASSERT_NE (shader, nullptr);
+    EXPECT_EQ (ShaderEffect::getNumPictures (*shader->shader, shader->properties), 1);
+}
+
 TEST_F (StyleContextTests, TheDefaultsOfAShaderAreStyledValuesOfTheComponentItIsTheEffectOf)
 {
     setAsset ("fx/crt.frag", crtFragment);

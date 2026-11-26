@@ -26,6 +26,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -1614,3 +1615,124 @@ bool encodeYuiToolPng (const Image& image, MemoryBlock& data)
     PngImageFormatWriter writer (new MemoryOutputStream (data, false), image.getPixelFormat());
     return writer.writeImage (image);
 }
+
+//==============================================================================
+YuiToolSignals::YuiToolSignals()
+{
+    startTimerHz (ticksPerSecond);
+}
+
+YuiToolSignals::~YuiToolSignals()
+{
+    stopTimer();
+
+    // The states go with this: no display is left reading one
+    for (auto& fed : spectrums)
+    {
+        if (auto* analyzer = dynamic_cast<SpectrumAnalyzerComponent*> (fed.display.get()))
+            analyzer->setState (nullptr);
+        else if (auto* spectrogram = dynamic_cast<SpectrogramComponent*> (fed.display.get()))
+            spectrogram->setState (nullptr);
+    }
+
+    for (auto& display : meters)
+        if (auto* meter = dynamic_cast<KMeterComponent*> (display.get()))
+            meter->setState (nullptr);
+}
+
+void YuiToolSignals::setRoot (Component* newRoot)
+{
+    root = newRoot;
+}
+
+void YuiToolSignals::timerCallback()
+{
+    // The displays that went with their interface are let go, and those a new one brought are given a state
+    std::erase_if (spectrums, [] (const Fed& fed)
+    {
+        return fed.display.get() == nullptr;
+    });
+
+    std::erase_if (meters, [] (const WeakReference<Component>& display)
+    {
+        return display.get() == nullptr;
+    });
+
+    if (auto* component = root.get())
+        feed (*component);
+
+    if (! spectrums.empty() || ! meters.empty())
+        makeSignal();
+}
+
+void YuiToolSignals::feed (Component& component)
+{
+    if (auto* analyzer = dynamic_cast<SpectrumAnalyzerComponent*> (&component))
+    {
+        if (analyzer->getState() == nullptr)
+        {
+            auto& fed = spectrums.emplace_back (Fed { &component, std::make_unique<SpectrumAnalyzerState>() });
+            analyzer->setState (fed.state.get());
+            analyzer->setSampleRate (sampleRate);
+        }
+    }
+    else if (auto* spectrogram = dynamic_cast<SpectrogramComponent*> (&component))
+    {
+        if (spectrogram->getState() == nullptr)
+        {
+            auto& fed = spectrums.emplace_back (Fed { &component, std::make_unique<SpectrumAnalyzerState>() });
+            spectrogram->setState (fed.state.get());
+            spectrogram->setSampleRate (sampleRate);
+        }
+    }
+    else if (auto* meter = dynamic_cast<KMeterComponent*> (&component))
+    {
+        if (meter->getState() == nullptr)
+        {
+            meters.emplace_back (&component);
+            meter->setState (&meterState);
+        }
+    }
+
+    for (int index = 0; index < component.getNumChildComponents(); ++index)
+        if (auto* child = component.getChildComponent (index))
+            feed (*child);
+}
+
+void YuiToolSignals::makeSignal()
+{
+    static constexpr int numSamples = static_cast<int> (sampleRate) / ticksPerSecond;
+
+    std::array<float, numSamples> left {};
+    std::array<float, numSamples> right {};
+
+    const auto advance = [] (double& phase, double frequency)
+    {
+        phase += MathConstants<double>::twoPi * frequency / sampleRate;
+
+        if (phase > MathConstants<double>::twoPi)
+            phase -= MathConstants<double>::twoPi;
+
+        return std::sin (phase);
+    };
+
+    for (int index = 0; index < numSamples; ++index)
+    {
+        const auto swell = 0.5 + 0.5 * advance (swellPhase, 0.35);
+        const auto sweep = 2400.0 + 2000.0 * advance (sweepPhase, 0.11);
+
+        const auto sample = swell * (0.45 * advance (lowPhase, 220.0) + 0.3 * advance (midPhase, 880.0))
+                          + 0.2 * advance (highPhase, sweep);
+
+        left[static_cast<std::size_t> (index)] = static_cast<float> (sample);
+        right[static_cast<std::size_t> (index)] = static_cast<float> (sample * 0.5);
+    }
+
+    for (auto& fed : spectrums)
+        fed.state->pushSamples (left.data(), numSamples);
+
+    const float* channels[2] = { left.data(), right.data() };
+    meterState.pushSamples (channels, 2, numSamples);
+    meterState.processPendingAudio();
+}
+

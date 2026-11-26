@@ -109,6 +109,14 @@ public:
         type->indexThunk = &ArrayOperations<T>::index;
         type->lengthThunk = &ArrayOperations<T>::length;
         type->makeThunk = &ArrayOperations<T>::make;
+
+        if constexpr (std::is_arithmetic_v<T> && ! std::is_same_v<T, bool>)
+        {
+            type->sampleThunk = &NumericArrayOperations<T>::sample;
+            type->rangeMinThunk = &NumericArrayOperations<T>::rangeMin;
+            type->rangeMaxThunk = &NumericArrayOperations<T>::rangeMax;
+        }
+
         return type;
     }
 
@@ -217,6 +225,25 @@ public:
     /** Returns the thunk implementing `len (array)` for array types. */
     ExpressionThunk getLengthThunk() const noexcept { return lengthThunk; }
 
+    /** Returns the thunk implementing `sample (array, position)` for arrays of numbers, nullptr for any other type.
+
+        The position goes from 0 at the first value to 1 at the last one, and the value there is
+        interpolated between the two around it, as a `float`.
+    */
+    ExpressionThunk getSampleThunk() const noexcept { return sampleThunk; }
+
+    /** Returns the thunk implementing `min (array, from, to)` for arrays of numbers, nullptr for any other type.
+
+        The result is the smallest of the values from the index `from` up to `to`, which is left out.
+    */
+    ExpressionThunk getRangeMinThunk() const noexcept { return rangeMinThunk; }
+
+    /** Returns the thunk implementing `max (array, from, to)` for arrays of numbers, nullptr for any other type.
+
+        The result is the largest of the values from the index `from` up to `to`, which is left out.
+    */
+    ExpressionThunk getRangeMaxThunk() const noexcept { return rangeMaxThunk; }
+
     /** Returns the thunk implementing `[a, b, ...]` for array types.
 
         Its state is the number of values, an `int`. Its arguments are the values, followed by the
@@ -317,6 +344,81 @@ private:
         }
     };
 
+    /* What is read of an array of numbers at once: a value between two of them, and the extreme of a range.
+       An empty array gives zero, and what is asked outside the array is read at its ends. */
+    template <class T>
+    struct NumericArrayOperations
+    {
+        static void sample (const void*, void* output, const void* const* args, int numRows)
+        {
+            auto* result = static_cast<float*> (output);
+            auto* arrays = static_cast<const ExpressionArrayView<T>*> (args[0]);
+            auto* positions = static_cast<const float*> (args[1]);
+
+            for (int i = 0; i < numRows; ++i)
+            {
+                const auto& array = arrays[i];
+
+                if (array.size <= 0)
+                {
+                    result[i] = 0.0f;
+                    continue;
+                }
+
+                // A position that is not a number reads the first value
+                const auto position = positions[i] > 0.0f ? jmin (positions[i], 1.0f) * static_cast<float> (array.size - 1) : 0.0f;
+                const auto lower = jmin (static_cast<int> (position), array.size - 1);
+                const auto upper = jmin (lower + 1, array.size - 1);
+                const auto lowerValue = static_cast<float> (array.data[lower]);
+
+                result[i] = lowerValue + (static_cast<float> (array.data[upper]) - lowerValue) * (position - static_cast<float> (lower));
+            }
+        }
+
+        static void rangeMin (const void*, void* output, const void* const* args, int numRows)
+        {
+            findExtremes (output, args, numRows, [] (T value, T best) { return value < best; });
+        }
+
+        static void rangeMax (const void*, void* output, const void* const* args, int numRows)
+        {
+            findExtremes (output, args, numRows, [] (T value, T best) { return value > best; });
+        }
+
+        template <class IsBetter>
+        static void findExtremes (void* output, const void* const* args, int numRows, IsBetter&& isBetter)
+        {
+            auto* result = static_cast<T*> (output);
+            auto* arrays = static_cast<const ExpressionArrayView<T>*> (args[0]);
+            auto* starts = static_cast<const int*> (args[1]);
+            auto* ends = static_cast<const int*> (args[2]);
+
+            for (int i = 0; i < numRows; ++i)
+            {
+                const auto& array = arrays[i];
+
+                if (array.size <= 0)
+                {
+                    result[i] = T();
+                    continue;
+                }
+
+                // A range always holds the value it starts at, so one narrower than a value still reads it
+                const auto first = jlimit (0, array.size - 1, starts[i]);
+                const auto last = jlimit (first + 1, array.size, ends[i]);
+                auto best = array.data[first];
+
+                for (int index = first + 1; index < last; ++index)
+                {
+                    if (isBetter (array.data[index], best))
+                        best = array.data[index];
+                }
+
+                result[i] = best;
+            }
+        }
+    };
+
     ExpressionType (const String& typeName, const std::type_info& type, size_t typeSize, size_t typeAlignment);
 
     template <class>
@@ -336,6 +438,9 @@ private:
     ExpressionThunk indexThunk = nullptr;
     ExpressionThunk lengthThunk = nullptr;
     ExpressionThunk makeThunk = nullptr;
+    ExpressionThunk sampleThunk = nullptr;
+    ExpressionThunk rangeMinThunk = nullptr;
+    ExpressionThunk rangeMaxThunk = nullptr;
     const ExpressionType* elementType = nullptr;
     StringArray componentNames;
 

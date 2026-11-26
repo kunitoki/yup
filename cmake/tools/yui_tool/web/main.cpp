@@ -249,6 +249,7 @@ public:
             sessionKey = key;
 
             session = std::make_unique<Session>();
+            session->signals.setRoot (&session->view);
 
             if (modelsFile.existsAsFile() && session->models.load (modelsFile.getFullPathName()))
                 session->models.attachTo (session->view.getDocument());
@@ -608,10 +609,11 @@ private:
         PaintProfiler::getInstance().enableSubtree (*this, options);
     }
 
-    // The models outlive the document they are set on
+    // The models outlive the document they are set on, and what the audio displays of the interface show outlives them
     struct Session
     {
         YuiToolModels models;
+        YuiToolSignals signals;
         YuiView view;
     };
 

@@ -48,8 +48,10 @@ namespace yup
       its bytes to fill by member name, and draw() binds them. There can be one
       block at most, no larger than ShaderUniforms::maxSizeInBytes.
     - Its textures are the inputs: none for a shader that makes its picture alone,
-      two at most. The first input is the texture with the lowest set, then the
-      lowest binding. They are `texture2D`, declared apart from their `sampler`
+      maxInputTextures at most. The first input is the texture with the lowest set,
+      then the lowest binding, and getInputTextureNames() tells the name of each, for
+      what gives a shader more than pictures: a texture can hold any numbers the
+      shader samples. They are `texture2D`, declared apart from their `sampler`
       as Vulkan does and combined where they are read: a combined `sampler2D`
       cannot be bound and is refused.
     - Its samplers filter linearly and clamp to the edge. One sampler can read
@@ -113,6 +115,9 @@ class YUP_API GpuImageShader : public ReferenceCountedObject
 public:
     using Ptr = ReferenceCountedObjectPtr<GpuImageShader>;
 
+    /** The most textures the fragment stage can declare. */
+    static constexpr int maxInputTextures = 4;
+
     //==============================================================================
     /** Destructor. Touches no device: each one releases the pipelines it compiled for the shader. */
     ~GpuImageShader() override;
@@ -131,8 +136,8 @@ public:
         @returns The shader, or what prevents the bundle from being one: a missing
                  stage, or a fragment stage declaring a combined `sampler2D`,
                  several uniform blocks, a block larger than
-                 ShaderUniforms::maxSizeInBytes, more than two textures, or a
-                 texture that is not a `texture2D`.
+                 ShaderUniforms::maxSizeInBytes, more than maxInputTextures textures,
+                 or a texture that is not a `texture2D`.
     */
     static ResultValue<GpuImageShader::Ptr> createFromBundle (ShaderBundle::Ptr bundle);
 
@@ -169,8 +174,13 @@ public:
 
     //==============================================================================
     /** Returns the number of input textures the fragment stage declares: 0 for a
-        shader that makes its picture alone, 1 or 2 for one that reads pictures. */
+        shader that makes its picture alone, up to maxInputTextures for one that
+        reads textures. */
     int getNumInputTextures() const noexcept;
+
+    /** Returns the names the fragment stage declares its input textures with, in
+        the order draw() takes them: the first one is the name of the first input. */
+    const StringArray& getInputTextureNames() const noexcept { return textureNames; }
 
     /** Returns the uniforms of the shader, zeroed: the bytes of its uniform block
         with the layout of its members, to fill by name and pass to draw().
@@ -224,11 +234,32 @@ public:
                  const GpuTexture::Ptr& firstInput = nullptr,
                  const GpuTexture::Ptr& secondInput = nullptr) const;
 
+    /** Draws the shader over a whole target, reading any number of inputs.
+
+        As the overload taking two inputs, for a shader declaring more of them.
+
+        @param device    The device @p frame was begun on and @p target was created with.
+        @param frame     The frame the pass is recorded into.
+        @param target    The target to draw into, of a color format and not multisampled.
+        @param uniforms  The values of the uniform block, from createUniforms().
+        @param inputs    The textures the inputs read, in the order of
+                         getInputTextureNames(): as many as getNumInputTextures() at
+                         least. None can be the texture of @p target.
+
+        @returns Result::ok() once the pass is recorded, or why it was not.
+    */
+    Result draw (const GpuDevice::Ptr& device,
+                 GpuFrame& frame,
+                 GpuTarget& target,
+                 const ShaderUniforms& uniforms,
+                 Span<const GpuTexture::Ptr> inputs) const;
+
 private:
     struct Binding
     {
         int group = 0;
         int binding = 0;
+        String name;
     };
 
     GpuImageShader() = default;
@@ -237,6 +268,7 @@ private:
     ShaderUniforms blockUniforms;
     Binding blockBinding;
     std::vector<Binding> textureBindings;
+    StringArray textureNames;
 
     // What every device keeps the pipelines of the shader under, so the shader holds no device
     const std::shared_ptr<void> pipelineOwner = std::make_shared<char>();

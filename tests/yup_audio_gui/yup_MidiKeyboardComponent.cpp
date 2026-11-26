@@ -1044,7 +1044,7 @@ TEST_F (MidiKeyboardComponentTests, KeyHooksCanSuppressNotes)
     EXPECT_EQ (62, hooked.releasedKeys[0]);
 }
 
-TEST_F (MidiKeyboardComponentTests, AKeyboardWithoutAStatePlaysNothing)
+TEST_F (MidiKeyboardComponentTests, AKeyboardWithoutAStateShowsTheKeysHeldOnIt)
 {
     MidiKeyboardComponent stateless;
     stateless.setBounds (0.0f, 0.0f, 1000.0f, 200.0f);
@@ -1055,15 +1055,18 @@ TEST_F (MidiKeyboardComponentTests, AKeyboardWithoutAStatePlaysNothing)
     EXPECT_TRUE (stateless.handleNoteKey (KeyPress ('z'), true));
     stateless.mouseDown (makePointerEvent (stateless.getRectangleForKey (60).getCenter(), -1, true));
 
-    EXPECT_FALSE (stateless.isNoteOn (60));
-    EXPECT_FALSE (stateless.isNoteOn (kDefaultOctaveOffset));
+    // It plays into a state of its own, that it doesn't give away: the keys held are shown
+    EXPECT_EQ (nullptr, stateless.getState());
+    EXPECT_TRUE (stateless.isNoteOn (60));
+    EXPECT_TRUE (stateless.isNoteOn (kDefaultOctaveOffset));
 
-    // What was pressed before a state is there isn't played into it, nor released on it
+    // What was held before a state is there is let go, and isn't played into it nor released on it
     stateless.setState (state.get());
 
     EXPECT_EQ (state.get(), stateless.getState());
     EXPECT_TRUE (listener->noteOnCalls.empty());
     EXPECT_TRUE (listener->noteOffCalls.empty());
+    EXPECT_FALSE (stateless.isNoteOn (60));
 
     stateless.handleNoteKey (KeyPress ('z'), true);
 

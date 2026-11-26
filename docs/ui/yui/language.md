@@ -95,7 +95,9 @@ TabComponent {
 }
 ```
 
-Lists have no children either, they are filled from their `items` property;
+Lists have no children either, they are filled from their `items` property
+(the items of a `TreeView` are paths, `"Sources/main.cpp"` being an item
+inside another);
 `Image` displays a raster or SVG file (`source`, `fitting`, `justification`,
 `imageOpacity`), and `Window` can serve as the root element to carry window
 metadata (`title`, `resizable`, `fullScreen`):
@@ -103,6 +105,7 @@ metadata (`title`, `resizable`, `fullScreen`):
 ```yui
 ComboBox { items: ["sine", "square"]; selectedId: 1; }
 ListBox  { items: ["left", "right"]; selectedRow: 0; }
+TreeView { items: ["Sources/main.cpp", "Sources/Editor.cpp", "README.md"]; }
 Image    { source: "logo.svg"; fitting: scaleToFit; }
 ```
 

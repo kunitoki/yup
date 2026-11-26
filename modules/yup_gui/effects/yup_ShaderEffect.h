@@ -108,6 +108,15 @@ namespace yup
     the component the defaults of the `shader` block as styled values, so they are read here as
     any other value.
 
+    An array of numbers also fills a texture: when the fragment stage declares a `texture2D` of
+    the name of the property instead of a member of the block, the numbers are written to a
+    texture one pixel high, one number per pixel, which the shader samples along `x` from 0 at
+    the first number to 1 at the last. A texture takes any length, where a block is limited in
+    size, and reading it between two pixels interpolates the numbers. The numbers are kept as 16
+    bit floats. The texture is only written when the array changes: a component declaring the
+    array as a series with a revision (see ComponentTypeBuilder::series) tells so with it, and
+    any other array is compared.
+
     The effect fills three more members itself, when the block has them and no Property has
     their name:
 
@@ -123,8 +132,9 @@ namespace yup
 
     The picture has the size of the component in pixels, its paint margin included (see
     Component::setPaintMargin). A shader declaring no texture makes its picture alone: it fills
-    that area, and what the component painted is not shown. A shader declaring two textures
-    can't be drawn, as an effect has one picture to give.
+    that area, and what the component painted is not shown. A shader reading two pictures can't
+    be drawn, as an effect has one to give: the textures filled from arrays don't count (see
+    getNumPictures).
 
     When the shader can't run, the component is drawn as it is: without a shader, without a
     GPU, or when the shader fails to compile for the device. A shader that could not be drawn
@@ -223,20 +233,36 @@ public:
     */
     static bool setUniform (ShaderUniforms& uniforms, const Property& property, const var& value);
 
+    /** Returns how many pictures a shader reads, given the properties it is filled from.
+
+        A texture of the shader that an array Property has the name of is no picture: it is
+        filled with the numbers of that property, one per pixel (see the class description). The
+        other textures are the pictures the shader reads: what the component painted, for an
+        effect.
+
+        @param shader      The shader.
+        @param properties  The properties the shader is filled from.
+    */
+    static int getNumPictures (const GpuImageShader& shader, const std::vector<Property>& properties);
+
     //==============================================================================
     /** @internal */
     void apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds) override;
 
 private:
+    struct SeriesTextures;
+
     void updateFrameAttachment();
     void advance (double elapsedSeconds);
     GpuTexture::Ptr render (Graphics& g, const GpuTexture::Ptr& input);
+    std::pair<Span<const float>, uint32> readSeries (const Component& shown, const Identifier& name);
 
     WeakReference<Component> component;
     GpuImageShader::Ptr shader;
     std::vector<Property> properties;
     GpuDevice::Ptr targetDevice;
     GpuTarget::Ptr target;
+    std::unique_ptr<SeriesTextures> series;
     std::optional<FrameAttachment> frameAttachment;
     double time = 0.0;
     bool drawFailed = false;

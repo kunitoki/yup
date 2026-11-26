@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <yup_audio_gui/yup_audio_gui.h>
 #include <yup_gui_markup/yup_gui_markup.h>
 
 #include <functional>
@@ -446,3 +447,46 @@ yup::ResultValue<yup::Image> drawYuiToolImage (yup::Component& component, const 
 
 /** Encodes an image as a PNG. */
 bool encodeYuiToolPng (const yup::Image& image, yup::MemoryBlock& data);
+
+//==============================================================================
+/** What the audio displays of an interface show where no application gives them a state: a signal made here.
+
+    A document can't write the state of a `SpectrumAnalyzer`, a `Spectrogram` or a `KMeter`: an application gives
+    it, and a tool showing the document has none to give, so they would stay still. While this lives, every such
+    display of the tree it looks through that has no state is given one, fed with a chord swelling under a partial
+    sweeping the spectrum: what a drawing or a shader makes of their levels is seen moving. A keyboard needs
+    nothing, it shows the keys held on it.
+
+    The displays are looked for again at every tick, so those a document makes when it is loaded again are fed too,
+    and the ones that went are let go. A display still there when this goes is left without a state.
+*/
+class YuiToolSignals final : private yup::Timer
+{
+public:
+    YuiToolSignals();
+    ~YuiToolSignals() override;
+
+    /** Sets the component whose tree is looked through for displays, or nullptr for none. */
+    void setRoot (yup::Component* newRoot);
+
+private:
+    void timerCallback() override;
+    void feed (yup::Component& component);
+    void makeSignal();
+
+    static constexpr double sampleRate = 48000.0;
+    static constexpr int ticksPerSecond = 30;
+
+    /** A display fed by a state of its own: two reading one state would take each other's samples. */
+    struct Fed
+    {
+        yup::WeakReference<yup::Component> display;
+        std::unique_ptr<yup::SpectrumAnalyzerState> state;
+    };
+
+    yup::WeakReference<yup::Component> root;
+    std::vector<Fed> spectrums;
+    std::vector<yup::WeakReference<yup::Component>> meters;
+    yup::KMeterState meterState { sampleRate, 2 };
+    double lowPhase = 0.0, midPhase = 0.0, highPhase = 0.0, sweepPhase = 0.0, swellPhase = 0.0;
+};

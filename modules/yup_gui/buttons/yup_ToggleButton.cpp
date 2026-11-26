@@ -50,6 +50,7 @@ const ComponentTypeInfo& ToggleButton::getClassTypeInfo()
                                  .number ("focusedOutlineWidth", Style::focusedOutlineWidthId, 2.0, "The outline width when focused.")
                                  .state (checkedPropertyId, &ToggleButton::getToggleState, [] (ToggleButton& b, bool v) { b.setToggleState (v); })
                                  .property (textPropertyId, &ToggleButton::getButtonText, &ToggleButton::setButtonText)
+                                 .fixedPart ("text", "The text as the button laid it out, filled with the fill color.")
                                  .build();
 
     return info;

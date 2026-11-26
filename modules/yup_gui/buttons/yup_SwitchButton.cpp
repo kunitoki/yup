@@ -28,6 +28,9 @@ namespace
 {
 
 const Identifier switchVerticalPropertyId ("vertical");
+const Identifier switchThumbBoundsPropertyId ("thumbBounds");
+const Identifier switchTrackBoundsPropertyId ("trackBounds");
+const Identifier switchThumbSizePropertyId ("thumbSize");
 
 } // namespace
 
@@ -38,6 +41,7 @@ const Identifier SwitchButton::Style::switchOffBackgroundColorId = "switchButton
 const Identifier SwitchButton::Style::switchOnBackgroundColorId = "switchButtonOnBackground";
 const Identifier SwitchButton::Style::cornerRadiusId = "switchButtonCornerRadius";
 const Identifier SwitchButton::Style::thumbInsetId = "switchButtonThumbInset";
+const Identifier SwitchButton::Style::thumbSizeId = "switchButtonThumbSize";
 
 //==============================================================================
 
@@ -49,8 +53,11 @@ const ComponentTypeInfo& SwitchButton::getClassTypeInfo()
                                  .color ("switchOnBackgroundColor", Style::switchOnBackgroundColorId)
                                  .number ("cornerRadius", Style::cornerRadiusId, {}, "The corner radius, unset for a pill.")
                                  .number ("thumbInset", Style::thumbInsetId, 4.0, "The inset of the handle inside its slot.")
+                                 .number (switchThumbSizePropertyId, Style::thumbSizeId, 28.0, "The thickness of the switch, which is twice as long: it keeps this size in a larger component and is centered in it.")
                                  .state (checkedPropertyId, &SwitchButton::getToggleState, [] (SwitchButton& b, bool v) { b.setToggleState (v); })
                                  .property (switchVerticalPropertyId, &SwitchButton::isVertical, &SwitchButton::setVertical)
+                                 .readOnly (switchTrackBoundsPropertyId, &SwitchButton::getSwitchBounds, {}, "The area of the switch, of the size its style gives it and centered in the component.")
+                                 .readOnly (switchThumbBoundsPropertyId, &SwitchButton::getSwitchCircleBounds, {}, "The area of the handle, before its inset: it slides from one end of the switch to the other when it is toggled.")
                                  .build();
 
     return info;
@@ -146,11 +153,13 @@ void SwitchButton::refreshDisplay (double lastFrameTimeSeconds)
     auto currentTime = Time::getCurrentTime();
     auto elapsedMs = (currentTime - animationStartTime).inMilliseconds();
 
+    const float targetPosition = toggleState ? 1.0f : 0.0f;
+
     if (elapsedMs >= millisecondsToSpendMoving)
     {
         isAnimating = false;
 
-        switchCircleBounds = animationTargetBounds;
+        handlePosition = targetPosition;
     }
     else
     {
@@ -158,11 +167,7 @@ void SwitchButton::refreshDisplay (double lastFrameTimeSeconds)
 
         progress = progress * progress * (3.0f - 2.0f * progress);
 
-        auto startPos = animationStartBounds.getPosition();
-        auto targetPos = animationTargetBounds.getPosition();
-        auto currentPos = startPos + (targetPos - startPos) * progress;
-
-        switchCircleBounds = Rectangle<float> (currentPos, animationTargetBounds.getSize());
+        handlePosition = animationStartPosition + (targetPosition - animationStartPosition) * progress;
     }
 
     repaint();
@@ -174,9 +179,34 @@ void SwitchButton::resized()
 {
     Button::resized();
 
+    // The handle is where its state puts it in the new bounds, with nothing to slide from
     isAnimating = false;
+    handlePosition = toggleState ? 1.0f : 0.0f;
+}
 
-    updateSwitchCirclePosition();
+Rectangle<float> SwitchButton::getSwitchBounds() const
+{
+    const auto bounds = getLocalBounds();
+    const auto across = isVerticalValue ? bounds.getWidth() : bounds.getHeight();
+    const auto along = isVerticalValue ? bounds.getHeight() : bounds.getWidth();
+
+    const auto thickness = jmin (across, jmax (1.0f, findPropertyAs<float> (switchThumbSizePropertyId)));
+    const auto length = jmin (along, thickness * 2.0f);
+
+    return bounds.withSizeKeepingCenter (isVerticalValue ? thickness : length, isVerticalValue ? length : thickness);
+}
+
+Rectangle<float> SwitchButton::getSwitchCircleBounds() const
+{
+    const auto bounds = getSwitchBounds();
+    const auto size = isVerticalValue ? bounds.getWidth() : bounds.getHeight();
+    const auto travel = jmax (0.0f, (isVerticalValue ? bounds.getHeight() : bounds.getWidth()) - size);
+
+    const auto circle = isVerticalValue
+                          ? Rectangle<float> (bounds.getX(), bounds.getY() + travel * handlePosition, size, size)
+                          : Rectangle<float> (bounds.getX() + travel * handlePosition, bounds.getY(), size, size);
+
+    return circle.reduced (jmin (1.0f, size * 0.5f));
 }
 
 void SwitchButton::clicked()
@@ -192,39 +222,19 @@ void SwitchButton::clicked()
 
 void SwitchButton::updateSwitchCirclePosition()
 {
-    auto bounds = getLocalBounds();
-    Rectangle<float> targetBounds;
+    const float targetPosition = toggleState ? 1.0f : 0.0f;
 
-    if (isVerticalValue)
+    // A switch with no room yet has nowhere to slide
+    if (millisecondsToSpendMoving <= 0 || getWidth() <= 0.0f || getHeight() <= 0.0f)
     {
-        targetBounds = Rectangle<float> (
-            bounds.getX(),
-            getToggleState() ? bounds.getBottom() - bounds.getWidth() : bounds.getY(),
-            bounds.getWidth(),
-            bounds.getWidth());
-    }
-    else
-    {
-        targetBounds = Rectangle<float> (
-            getToggleState() ? bounds.getRight() - bounds.getHeight() : bounds.getX(),
-            bounds.getY(),
-            bounds.getHeight(),
-            bounds.getHeight());
-    }
-
-    targetBounds = targetBounds.reduced (1).toNearestInt();
-
-    if (millisecondsToSpendMoving <= 0 || switchCircleBounds.isEmpty())
-    {
-        switchCircleBounds = targetBounds;
+        handlePosition = targetPosition;
         isAnimating = false;
 
         repaint();
     }
-    else if (targetBounds != switchCircleBounds)
+    else if (! approximatelyEqual (targetPosition, handlePosition))
     {
-        animationStartBounds = switchCircleBounds;
-        animationTargetBounds = targetBounds;
+        animationStartPosition = handlePosition;
         animationStartTime = Time::getCurrentTime();
         isAnimating = true;
     }

@@ -746,6 +746,12 @@ while the document changes under it, as [hot reload](hot-reload.md) does in
 an application, and while its theme is switched. The problems of the document
 are listed under it.
 
+What an application gives its components from C++ has no one to give it in the
+preview, so the preview makes it up: a `SpectrumAnalyzer`, a `Spectrogram` and
+a `KMeter` are fed a generated signal, so that a drawing or a shader made of
+their levels is seen moving. A `MidiKeyboard` shows the keys held on it, and a
+`TreeView` the `items` the document writes.
+
 What a document reads beside its texts is given to the tool with it: the
 sources of its shaders or the bundles compiled from them, its models with
 their buffers and images, and its textures. They count for the problems, the

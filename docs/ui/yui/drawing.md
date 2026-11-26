@@ -14,7 +14,7 @@ any paint code.
 </p>
 
 These knobs are sliders painted by one drawing of the `YuiDrawing` graphics
-example, [`flutedknob.yui`](https://github.com/kunitoki/yup/blob/main/examples/graphics/data/yui/flutedknob.yui):
+example, [`flutedknob.yui`](https://github.com/kunitoki/yup/blob/main/examples/graphics/data/yui/filter/flutedknob.yui):
 gradients, feathered shadows, clipped notches and a repeated scale that follow
 the value, with no image and no paint code.
 
@@ -105,6 +105,7 @@ the text and in the tree.
 | `path`    | `data`                                                       | A path from SVG path data or a `path()` value. |
 | `polygon` | `center`, `sides`, `radius`, `angle` (default `0`)           | A regular polygon.                 |
 | `star`    | `center`, `points`, `innerRadius`, `outerRadius`, `angle`    | A star, `angle` defaults to `0`.   |
+| `vertex`  | `at`                                                         | One point of a line, only inside a `repeat`: see [Data series](#data-series). |
 | `text`    | `bounds` or `anchor`, `text`                                 | A text label fitted in `bounds`, or starting from the `anchor` point on its baseline. |
 | `image`   | `source`, `bounds` (default `bounds`)                        | A raster image from a file path or `data:image/...;base64,...` URI. |
 | `svg`     | `source` or `data`, `bounds` (default `bounds`)              | An SVG from a file path (`source`) or inline SVG XML (`data` or `source`). |
@@ -804,6 +805,130 @@ Row {
 From C++, set them on the component with `setProperty ("bezelSize", 0.7)`, and
 list them with `DrawingStyle::getProperties()`.
 
+## Data series
+
+A level meter, a spectrum or a curve is many numbers, drawn as one line. A
+`vertex` is one point of that line: a `repeat` gives the others, and its turns
+are joined in order.
+
+```yui
+drawing Spectrum {
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+
+    repeat i in 0 .. bounds.width {
+        let x: bounds.x + i;
+
+        vertex { at: point (x, bounds.bottom - sample (levels, i / bounds.width) * bounds.height);
+                 base: point (x, bounds.bottom); smooth: 0.5;
+                 fill: palette.accent.withAlpha (0.25); stroke: palette.accent; strokeWidth: 1.5; }
+    }
+}
+
+style {
+    SpectrumAnalyzer { drawing: Spectrum; }
+}
+```
+
+| Property | Meaning |
+| --- | --- |
+| `at` | The point of this turn. |
+| `series` | Which line it belongs to, `0` by default: vertices of several series in one `repeat` make as many lines. |
+| `base` | Where the line comes back to under this point. With it the fill takes the area between the points and their bases, and the stroke only the line through the points. |
+| `smooth` | `0` joins the points with straight lines, the default. Up to `1` it curves the line through them. |
+| paint | As any shape. The first turn of a series gives the whole line its paint and its smoothing. |
+
+- A `base` on one level closes the area under a curve. The points of another
+  curve as bases make the band between both, such as a range from a minimum
+  to a maximum.
+- Without a paint the line is stroked with the current color. It is filled
+  only when it is given a `fill`.
+- A `vertex` is a shape: it takes the paint of the groups around it, and a
+  `clipPath` clips to the area of a series. It has no `objectBounds`, as it is
+  one point of what has them.
+
+**Where the numbers come from.** A component that keeps numbers to show
+declares them as a *series*, an array property a drawing reads where the
+component keeps it: nothing is copied or converted, however many numbers there
+are and however often the drawing is painted. `levels` above is one, the 512
+levels a `SpectrumAnalyzer` shows. [Widgets in drawings](widgets.md) lists the
+series of every widget, and `yup_yui_tool schema` marks them with
+`"series": true`. Any other array works the same way and is converted once
+for each paint: a `number[]` property of the drawing, or a value of a model.
+
+**As many points as there is room for.** A line has no use for more points
+than the pixels it is drawn across, and a `repeat` runs 4096 turns at most.
+So the turns follow the width, as above, and each reads the series where it
+stands:
+
+| Function | Reads |
+| --- | --- |
+| `sample (levels, t)` | The value at `t`, from 0 at the first number to 1 at the last, interpolated between the two around it. |
+| `max (levels, from, to)`, `min (levels, from, to)` | The extreme of the numbers from the index `from` up to `to`, which is left out. A range narrower than one number still reads the one it starts at. |
+| `levels[i]`, `len (levels)` | One number, and how many there are. |
+
+`sample` suits what is already smooth. `max` over the numbers each pixel
+stands for keeps the peaks a long series would lose:
+
+```yui
+repeat i in 0 .. bounds.width {
+    let from: int (i * len (levels) / bounds.width);
+    let to: int ((i + 1) * len (levels) / bounds.width);
+
+    vertex { at: point (bounds.x + i, bounds.bottom - max (levels, from, to) * bounds.height); stroke: palette.accent; }
+}
+```
+
+A series can also be the input of a [shader](shaders.md#series), which reads
+it for every pixel instead of every point.
+
+## Parts of a widget
+
+Some of what a widget shows can't be told as shapes: the text it laid out, its
+caret and its selection, the icon it was given. A widget declares each as a
+*part*, the theme paints it, and a drawing places it among its shapes with a
+`part` element named after it:
+
+```yui
+drawing Field {
+    rect { bounds: bounds.reduced (1); cornerRadius: 6; fill: palette.surface;
+           stroke: focused ? palette.accent : palette.outline; strokeWidth: focused ? 2 : 1; }
+
+    part selection { fill: palette.accent.withAlpha (0.35); }
+    part text { fill: palette.text; }
+    part caret { fill: palette.accent; }
+}
+
+style {
+    TextEditor { drawing: Field; }
+}
+```
+
+The drawing decides what is painted around the parts, in which order, and
+with which paint. The widget still lays the text out, edits it and answers the
+pointer, so the editor above works as any other.
+
+| Property | Meaning |
+| --- | --- |
+| name | The part, written after `part`. One the type of the component doesn't declare is an error telling the ones it has. |
+| `fill`, `stroke`, `strokeWidth` | The paint the part uses: a text is filled with `fill`, a text outline is stroked with `stroke`. A part with colors of its own, as an image, ignores them. |
+| `bounds` | Where the part goes, for one that fits any area: an icon, an image. Without it the part is where the widget puts it. |
+| `opacity`, `blend`, `tint`, `transform`, `clip`, `clipPath`, `visible` | As for an `image`. |
+
+- A part the widget lays out itself, as a text, its caret and its selection,
+  can't be given `bounds`: what the pointer hits has to be where it is
+  painted. A `transform` moves it when only its look matters. The widget tells
+  where such a part is as a property, as `textBounds`, for the shapes drawn
+  around it.
+- A `repeat` holding a `part` paints it turn after turn.
+- A part takes its paint from its own `fill` and `stroke`: the paint a `group`
+  sets is for the shapes of the group.
+- [Widgets in drawings](widgets.md) lists the parts of every widget, and
+  `yup_yui_tool schema` lists them under `parts`.
+
+A component of your own declares its parts and its series with its type, and
+tells the theme how to paint the parts, see
+[Component styling](../component-styling.md#series-and-parts).
+
 ## Errors
 
 `DrawingStyle::create` fails with a message that starts with the path of the
@@ -814,6 +939,8 @@ Knob/layer[0]/arc#value.to: Unknown symbol 'avv'
 drawing/circle[0]: missing the required property 'radius'
 drawing/repeat[0]/layer[0]: a 'layer' can't be nested inside a repeat
 Screen/use[0]: the shader 'Crt' reads a picture, run it in the 'filter' of a layer or as an 'effect:'
+drawing/vertex[0]: a 'vertex' is one point of a line, it can only be among the shapes of a 'repeat' giving the others
+Field/part[1]: the component has no part 'icon', it has selection, text, caret
 ```
 
 Elements are numbered by type within their parent, or named by their `id`. The
@@ -962,6 +1089,11 @@ component paints, not its children.
   component, and looks soft when the shape it fills is scaled up much further.
 - Text has no outline: it can't be part of a `clipPath`, and has no
   `objectBounds` when placed from an `anchor`.
+- A drawing has no time of its own: what moves is a property of the component,
+  as the `phase` of a `ProgressBar`, or a property a stylesheet animates with
+  a transition. A shader painted by a `use` is given the time.
+- A `part` is painted by the theme: a drawing chooses its paint and its
+  place, not what it is made of.
 
 ## See also
 

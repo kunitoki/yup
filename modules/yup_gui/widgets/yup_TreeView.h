@@ -81,6 +81,23 @@ public:
     /** Returns the root item, or nullptr. */
     TreeViewItem* getRootItem() const noexcept;
 
+    /** Fills the tree with items of plain text, from their paths.
+
+        Each text is the path of an item, its levels separated by `/`: `"Sources/main.cpp"` is the item
+        `main.cpp` inside the item `Sources`, which is made when no path before named it. The items replace the
+        root item set before, under a root that has no row, and those holding others start open. This is what the
+        `items` property of `.yui` sets, so that a tree of texts is shown without writing its items.
+
+        @param newItems  The paths of the items, in the order they are shown
+    */
+    void setItems (const StringArray& newItems);
+
+    /** Returns the paths given to @ref setItems.
+
+        @return The paths, or an empty array when the root item was set another way
+    */
+    StringArray getItems() const;
+
     /** Shows or hides the root item's row.
 
         When hidden, the root is kept open and its sub-items become the top level rows. Visible by default.
@@ -392,6 +409,10 @@ private:
     std::unique_ptr<TreeListModel> model;
     std::unique_ptr<TreeListBox> list;
     std::unique_ptr<TreeViewItem> rootItem;
+
+    /** The paths the items were made from, and the root made for them: null when the root was set another way. */
+    StringArray itemPaths;
+    TreeViewItem* itemsRoot = nullptr;
 
     /** The visible items, in row order; each caches its index in TreeViewItem::rowIndex. */
     std::vector<TreeViewItem*> rows;

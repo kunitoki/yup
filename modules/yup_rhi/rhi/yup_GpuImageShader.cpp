@@ -94,8 +94,8 @@ ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromBundle (ShaderBundle:
     if (! reflection.uniformBuffers.empty() && reflection.uniformBuffers.front().blockSize > ShaderUniforms::maxSizeInBytes)
         return makeResultValueFail ("The fragment stage declares a uniform block of " + String (reflection.uniformBuffers.front().blockSize) + " bytes: an image shader takes " + String (static_cast<int> (ShaderUniforms::maxSizeInBytes)) + " at most");
 
-    if (reflection.separateImages.size() > 2)
-        return makeResultValueFail ("The fragment stage declares " + String (static_cast<int> (reflection.separateImages.size())) + " textures: an image shader has two at most");
+    if (reflection.separateImages.size() > static_cast<size_t> (maxInputTextures))
+        return makeResultValueFail ("The fragment stage declares " + String (static_cast<int> (reflection.separateImages.size())) + " textures: an image shader has " + String (maxInputTextures) + " at most");
 
     Ptr shader (new GpuImageShader());
     shader->bundle = bundle;
@@ -112,13 +112,16 @@ ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromBundle (ShaderBundle:
         if (image.imageDim != ShaderReflection::ImageDimension::dim2D || image.imageArrayed || image.imageMS)
             return makeResultValueFail ("The fragment stage declares the texture " + image.name + ", which is not a texture2D");
 
-        shader->textureBindings.push_back ({ static_cast<int> (image.set), static_cast<int> (image.binding) });
+        shader->textureBindings.push_back ({ static_cast<int> (image.set), static_cast<int> (image.binding), image.name });
     }
 
     std::sort (shader->textureBindings.begin(), shader->textureBindings.end(), [] (const Binding& a, const Binding& b)
     {
         return std::tie (a.group, a.binding) < std::tie (b.group, b.binding);
     });
+
+    for (const auto& texture : shader->textureBindings)
+        shader->textureNames.add (texture.name);
 
     return makeResultValueOk (std::move (shader));
 }
@@ -194,6 +197,17 @@ Result GpuImageShader::draw (const GpuDevice::Ptr& device,
                              const GpuTexture::Ptr& firstInput,
                              const GpuTexture::Ptr& secondInput) const
 {
+    const GpuTexture::Ptr inputs[] = { firstInput, secondInput };
+
+    return draw (device, frame, target, uniforms, Span<const GpuTexture::Ptr> (inputs, std::size (inputs)));
+}
+
+Result GpuImageShader::draw (const GpuDevice::Ptr& device,
+                             GpuFrame& frame,
+                             GpuTarget& target,
+                             const ShaderUniforms& uniforms,
+                             Span<const GpuTexture::Ptr> inputs) const
+{
     if (device == nullptr || ! device->isGpuAvailable() || device->isDeviceLost())
         return Result::fail ("The device has no GPU to draw the image shader with");
 
@@ -202,11 +216,9 @@ Result GpuImageShader::draw (const GpuDevice::Ptr& device,
     if (uniforms.getSizeInBytes() != blockUniforms.getSizeInBytes())
         return Result::fail ("The uniforms are not the ones of the image shader: take them from createUniforms()");
 
-    const GpuTexture::Ptr inputs[] = { firstInput, secondInput };
-
     for (size_t i = 0; i < textureBindings.size(); ++i)
     {
-        if (inputs[i] == nullptr || ! inputs[i]->isValid())
+        if (i >= inputs.size() || inputs[i] == nullptr || ! inputs[i]->isValid())
             return Result::fail ("The image shader has no texture to read as its input " + String (static_cast<int> (i) + 1));
     }
 

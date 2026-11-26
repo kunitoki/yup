@@ -931,6 +931,7 @@ Result YuiBuilder::resolveComposite (const Identifier& typeName, Composite& comp
             alias.name = name;
             alias.storageId = {};
             alias.getter = nullptr;
+            alias.arrayGetter = nullptr;
             alias.setter = nullptr;
             alias.isState = false;
             alias.isInherited = false;

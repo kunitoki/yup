@@ -182,6 +182,7 @@ class DeferredReplayer;
 #include "component/yup_ComponentListener.h"
 #include "component/yup_ComponentProperty.h"
 #include "component/yup_ComponentSignal.h"
+#include "component/yup_ComponentPart.h"
 #include "component/yup_Component.h"
 #include "component/yup_FrameAttachment.h"
 #include "mouse/yup_PointerSimulator.h"

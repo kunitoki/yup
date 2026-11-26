@@ -79,6 +79,19 @@ struct CuratedGeometry
     }
 };
 
+// The parts widgets declare (see ComponentPart): each has one painter here, called by the painter of its widget
+// and by whoever places the part, as a drawing does
+struct ThemeParts
+{
+    static inline const Identifier text { "text" };
+    static inline const Identifier textOutline { "textOutline" };
+    static inline const Identifier icon { "icon" };
+    static inline const Identifier image { "image" };
+    static inline const Identifier selection { "selection" };
+    static inline const Identifier caret { "caret" };
+    static inline const Identifier content { "content" };
+};
+
 //==============================================================================
 
 struct SliderColors
@@ -388,8 +401,8 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
         {
             Rectangle<float> minThumbBounds, maxThumbBounds;
             const bool isHorizontal = (sliderType == Slider::TwoValueHorizontal);
-            const float minNorm = 0.0f; // static_cast<float>(s.getMinValueNormalised());
-            const float maxNorm = 1.0f; // static_cast<float>(s.getMaxValueNormalised());
+            const float minNorm = static_cast<float> (s.getMinValueNormalised());
+            const float maxNorm = static_cast<float> (s.getMaxValueNormalised());
 
             if (isHorizontal)
             {
@@ -425,11 +438,34 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 
 //==============================================================================
 
+void paintTextEditorSelection (Graphics& g, const ApplicationTheme&, const TextEditor& t, const Rectangle<float>& area)
+{
+    if (! t.hasSelection())
+        return;
+
+    // The selection is told from where the text starts, and moves with it as it scrolls
+    const auto offset = area.getTopLeft() - t.getScrollOffset();
+
+    for (const auto& selected : t.getSelectedTextAreas())
+        g.fillRect (selected.translated (offset));
+}
+
+void paintTextEditorText (Graphics& g, const ApplicationTheme&, const TextEditor& t, const Rectangle<float>& area)
+{
+    const auto offset = t.getScrollOffset();
+
+    g.fillFittedText (t.getStyledText(), area.translated (-offset.getX(), -offset.getY()));
+}
+
+void paintTextEditorCaret (Graphics& g, const ApplicationTheme&, const TextEditor& t, const Rectangle<float>& area)
+{
+    if (t.hasKeyboardFocus() && t.isCaretVisible())
+        g.fillRect (area);
+}
+
 void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEditor& t)
 {
     auto bounds = t.getLocalBounds();
-    auto textBounds = t.getTextBounds();
-    auto scrollOffset = t.getScrollOffset();
     const auto cornerRadius = t.findPropertyAs<float> (CuratedGeometry::cornerRadius);
     const auto& palette = theme.getPalette (t);
 
@@ -453,32 +489,20 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     {
         auto selectionColor = theme.findColor (t, TextEditor::Style::selectionColorId).value_or (palette.getColor (PaletteRole::accent).withAlpha (0.4f));
         g.setFillColor (selectionColor);
-
-        // Get all selection rectangles for proper multiline selection rendering
-        auto selectionRects = t.getSelectedTextAreas();
-        for (const auto& rect : selectionRects)
-        {
-            // Adjust each rectangle for scroll offset and text bounds
-            auto adjustedRect = rect.translated (textBounds.getTopLeft() - scrollOffset);
-            g.fillRect (adjustedRect);
-        }
+        paintTextEditorSelection (g, theme, t, t.getTextBounds());
     }
 
     // Draw text with scroll offset
     auto textColor = theme.findColor (t, TextEditor::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
     g.setFillColor (textColor);
-
-    auto scrolledTextBounds = textBounds.translated (-scrollOffset.getX(), -scrollOffset.getY());
-    g.fillFittedText (t.getStyledText(), scrolledTextBounds);
+    paintTextEditorText (g, theme, t, t.getTextBounds());
 
     // Draw caret
     if (t.hasKeyboardFocus() && t.isCaretVisible())
     {
         auto caretColor = theme.findColor (t, TextEditor::Style::caretColorId).value_or (palette.getColor (PaletteRole::text));
         g.setFillColor (caretColor);
-
-        auto caretBounds = t.getCaretBounds();
-        g.fillRect (caretBounds);
+        paintTextEditorCaret (g, theme, t, t.getCaretBounds());
     }
 }
 
@@ -671,7 +695,18 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
     clipState.restore();
 }
 
+void paintCodeEditorContent (Graphics& g, const ApplicationTheme& theme, const CodeEditor& editor, const Rectangle<float>&)
+{
+    // What an editor shows is told by its scheme, so it is one part: a drawing frames it
+    paintCodeEditor (g, theme, editor);
+}
+
 //==============================================================================
+
+void paintTextButtonText (Graphics& g, const ApplicationTheme&, const TextButton& b, const Rectangle<float>& area)
+{
+    g.fillFittedText (b.getStyledText(), area);
+}
 
 void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButton& b)
 {
@@ -711,10 +746,16 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
 
     // Draw text
     g.setFillColor (textColor);
-    g.fillFittedText (b.getStyledText(), b.getTextBounds());
+    paintTextButtonText (g, theme, b, b.getTextBounds());
 }
 
 //==============================================================================
+
+void paintToggleButtonText (Graphics& g, const ApplicationTheme&, const ToggleButton& b, const Rectangle<float>& area)
+{
+    if (b.getButtonText().isNotEmpty())
+        g.fillFittedText (b.getStyledText(), area);
+}
 
 void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const ToggleButton& b)
 {
@@ -756,18 +797,15 @@ void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const Toggle
     g.strokeRoundedRect (bounds.reduced (0.5f), cornerRadius);
 
     // Draw text
-    if (b.getButtonText().isNotEmpty())
-    {
-        g.setFillColor (textColor);
-        g.fillFittedText (b.getStyledText(), bounds);
-    }
+    g.setFillColor (textColor);
+    paintToggleButtonText (g, theme, b, b.getLocalBounds());
 }
 
 //==============================================================================
 
 void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const SwitchButton& s)
 {
-    auto bounds = s.getLocalBounds().reduced (4);
+    auto bounds = s.getSwitchBounds().reduced (4);
     auto cornerSize = CuratedGeometry::getCornerRadius (s, s.isVertical() ? bounds.getWidth() : bounds.getHeight());
 
     // Draw shadow/outline
@@ -799,9 +837,14 @@ void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const Switch
 
 //==============================================================================
 
+void paintComboBoxText (Graphics& g, const ApplicationTheme&, const ComboBox& c, const Rectangle<float>& area)
+{
+    if (! c.getStyledText().isEmpty())
+        g.fillFittedText (c.getStyledText(), area);
+}
+
 void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& c)
 {
-    auto& styledText = c.getStyledText();
     const auto bounds = c.getLocalBounds();
     const auto& palette = theme.getPalette (c);
     const auto cornerRadius = c.findPropertyAs<float> (CuratedGeometry::cornerRadius);
@@ -831,12 +874,9 @@ void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& 
     arrowBounds.removeFromLeft (bounds.getWidth() - arrowWidth);
 
     // Draw text
-    if (! styledText.isEmpty())
-    {
-        auto textColor = theme.findColor (c, ComboBox::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
-        g.setFillColor (textColor);
-        g.fillFittedText (styledText, textBounds);
-    }
+    auto textColor = theme.findColor (c, ComboBox::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
+    g.setFillColor (textColor);
+    paintComboBoxText (g, theme, c, textBounds);
 
     // Draw arrow
     auto arrowColor = theme.findColor (c, ComboBox::Style::arrowColorId).value_or (palette.getColor (PaletteRole::textMuted));
@@ -855,9 +895,20 @@ void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& 
 
 //==============================================================================
 
+void paintLabelText (Graphics& g, const ApplicationTheme&, const Label& l, const Rectangle<float>& area)
+{
+    if (! l.getStyledText().isEmpty())
+        g.fillFittedText (l.getStyledText(), area);
+}
+
+void paintLabelTextOutline (Graphics& g, const ApplicationTheme&, const Label& l, const Rectangle<float>& area)
+{
+    if (! l.getStyledText().isEmpty())
+        g.strokeFittedText (l.getStyledText(), area);
+}
+
 void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 {
-    auto& styledText = l.getStyledText();
     const auto bounds = l.getLocalBounds();
 
     if (const auto backgroundColor = theme.findColor (l, Label::Style::backgroundColorId); backgroundColor && ! backgroundColor->isTransparent())
@@ -877,15 +928,70 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
     {
         g.setStrokeColor (*strokeColor);
         g.setStrokeWidth (l.getStrokeWidth());
-        g.strokeFittedText (styledText, bounds);
+        paintLabelTextOutline (g, theme, l, bounds);
     }
 
-    if (! styledText.isEmpty())
+    const auto fillColor = theme.findColor (l, Label::Style::textFillColorId).value_or (theme.getPalette (l).getColor (PaletteRole::text));
+    g.setFillColor (fillColor);
+    paintLabelText (g, theme, l, bounds);
+}
+
+//==============================================================================
+
+void paintImageComponentImage (Graphics& g, const ApplicationTheme&, const ImageComponent& c, const Rectangle<float>& area)
+{
+    const auto imageOpacity = c.getImageOpacity();
+    if (imageOpacity <= 0.0f || area.isEmpty())
+        return;
+
+    if (const auto& drawable = c.getDrawable())
     {
-        const auto fillColor = theme.findColor (l, Label::Style::textFillColorId).value_or (theme.getPalette (l).getColor (PaletteRole::text));
-        g.setFillColor (fillColor);
-        g.fillFittedText (styledText, bounds);
+        const auto savedState = g.saveState();
+        if (imageOpacity < 1.0f)
+            g.setOpacity (g.getOpacity() * imageOpacity);
+
+        drawable->paint (g, area, c.getFitting(), c.getJustification());
+        return;
     }
+
+    const auto& image = c.getImage();
+    if (! image.isValid())
+        return;
+
+    const auto savedState = g.saveState();
+    if (imageOpacity < 1.0f)
+        g.setOpacity (g.getOpacity() * imageOpacity);
+
+    const Rectangle<float> sourceBounds { 0.0f, 0.0f, static_cast<float> (image.getWidth()), static_cast<float> (image.getHeight()) };
+
+    if (c.getFitting() == Fitting::tile)
+    {
+        g.setClipPath (area);
+
+        for (float y = area.getY(); y < area.getBottom(); y += sourceBounds.getHeight())
+        {
+            for (float x = area.getX(); x < area.getRight(); x += sourceBounds.getWidth())
+                g.drawImage (image, { x, y, sourceBounds.getWidth(), sourceBounds.getHeight() });
+        }
+
+        return;
+    }
+
+    // The image starts at the origin, so the transform fitting it tells where it goes and how much it is scaled
+    const auto fit = sourceBounds.getTransformToFit (area, c.getFitting(), c.getJustification());
+    const Rectangle<float> destBounds { fit.getTranslateX(), fit.getTranslateY(), sourceBounds.getWidth() * fit.getScaleX(), sourceBounds.getHeight() * fit.getScaleY() };
+    if (destBounds.isEmpty())
+        return;
+
+    if (! area.contains (destBounds))
+        g.setClipPath (area);
+
+    g.drawImage (image, destBounds);
+}
+
+void paintImageComponent (Graphics& g, const ApplicationTheme& theme, const ImageComponent& c)
+{
+    paintImageComponentImage (g, theme, c, c.getLocalBounds());
 }
 
 //==============================================================================
@@ -1404,6 +1510,17 @@ void paintListBox (Graphics& g, const ApplicationTheme& theme, const ListBox& li
 
 //==============================================================================
 
+void paintListBoxItemIcon (Graphics& g, const ApplicationTheme&, const ListBoxItem& item, const Rectangle<float>& area)
+{
+    if (area.isEmpty())
+        return;
+
+    if (const auto drawable = item.getIconDrawable())
+        drawable->paint (g, area, Fitting::scaleToFit, Justification::center);
+    else if (const auto image = item.getIconImage(); image.isValid())
+        g.drawImage (image, area);
+}
+
 void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBoxItem& item)
 {
     const auto& palette = theme.getPalette (item);
@@ -1426,12 +1543,7 @@ void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBox
     }
 
     // Draw icon
-    auto iconDrawable = item.getIconDrawable();
-    auto iconBounds = item.getIconBoundsForRendering();
-    if (iconDrawable != nullptr && ! iconBounds.isEmpty())
-        iconDrawable->paint (g, iconBounds, Fitting::scaleToFit, Justification::center);
-    else if (const auto iconImage = item.getIconImage(); iconImage.isValid() && ! iconBounds.isEmpty())
-        g.drawImage (iconImage, iconBounds);
+    paintListBoxItemIcon (g, theme, item, item.getIconBoundsForRendering());
 
     // Draw text
     auto text = item.getText();
@@ -1466,6 +1578,12 @@ void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBox
 }
 
 //==============================================================================
+
+void paintTreeViewRowIcon (Graphics& g, const ApplicationTheme&, const TreeViewRow& row, const Rectangle<float>& area)
+{
+    if (row.getItem() != nullptr && row.hasItemIcon() && ! area.isEmpty())
+        row.getItem()->paintItemIcon (g, area, row.isItemSelected());
+}
 
 void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeViewRow& row)
 {
@@ -1522,8 +1640,7 @@ void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeVie
     if (row.hasCustomContent())
         return;
 
-    if (row.hasItemIcon())
-        row.getItem()->paintItemIcon (g, row.getIconBounds(), row.isItemSelected());
+    paintTreeViewRowIcon (g, theme, row, row.getIconBounds());
 
     const auto& text = row.getItemText();
     const auto textBounds = row.getTextBounds();
@@ -1615,6 +1732,12 @@ void paintTabBar (Graphics& g, const ApplicationTheme& theme, const TabBar& bar)
     }
 }
 
+void paintTabButtonIcon (Graphics& g, const ApplicationTheme&, const TabButton& button, const Rectangle<float>& area)
+{
+    if (button.getIconImage().isValid() && ! area.isEmpty())
+        g.drawImage (button.getIconImage(), area);
+}
+
 void paintTabButton (Graphics& g, const ApplicationTheme& theme, const TabButton& button)
 {
     const auto& palette = theme.getPalette (button);
@@ -1637,7 +1760,7 @@ void paintTabButton (Graphics& g, const ApplicationTheme& theme, const TabButton
     {
         if (button.getIconImage().isValid())
         {
-            g.drawImage (button.getIconImage(), iconBounds);
+            paintTabButtonIcon (g, theme, button, iconBounds);
         }
         else
         {
@@ -2838,6 +2961,7 @@ ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
     theme->setComponentStyle<CodeEditor> (ComponentStyle::createStyle<CodeEditor> (paintCodeEditor));
     theme->setComponentStyle<ComboBox> (ComponentStyle::createStyle<ComboBox> (paintComboBox));
     theme->setComponentStyle<Label> (ComponentStyle::createStyle<Label> (paintLabel));
+    theme->setComponentStyle<ImageComponent> (ComponentStyle::createStyle<ImageComponent> (paintImageComponent));
     theme->setComponentStyle<PopupMenu> (ComponentStyle::createStyle<PopupMenu> (paintPopupMenu));
     theme->setComponentStyle<ScrollBar> (ComponentStyle::createStyle<ScrollBar> (paintScrollBar));
     theme->setComponentStyle<ProgressBar> (ComponentStyle::createStyle<ProgressBar> (paintProgressBar));
@@ -2853,6 +2977,21 @@ ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
     theme->setComponentStyle<TabButton> (ComponentStyle::createStyle<TabButton> (paintTabButton));
 
     theme->setComponentStyle<TreeViewRow> (ComponentStyle::createStyle<TreeViewRow> (paintTreeViewRow));
+
+    // The parts the widgets declare, for whoever places them: the painters above and the drawings of a `.yui` file
+    theme->setComponentPart<TextButton> (ThemeParts::text, paintTextButtonText);
+    theme->setComponentPart<ToggleButton> (ThemeParts::text, paintToggleButtonText);
+    theme->setComponentPart<ComboBox> (ThemeParts::text, paintComboBoxText);
+    theme->setComponentPart<Label> (ThemeParts::text, paintLabelText);
+    theme->setComponentPart<Label> (ThemeParts::textOutline, paintLabelTextOutline);
+    theme->setComponentPart<ImageComponent> (ThemeParts::image, paintImageComponentImage);
+    theme->setComponentPart<TextEditor> (ThemeParts::selection, paintTextEditorSelection);
+    theme->setComponentPart<TextEditor> (ThemeParts::text, paintTextEditorText);
+    theme->setComponentPart<TextEditor> (ThemeParts::caret, paintTextEditorCaret);
+    theme->setComponentPart<CodeEditor> (ThemeParts::content, paintCodeEditorContent);
+    theme->setComponentPart<ListBoxItem> (ThemeParts::icon, paintListBoxItemIcon);
+    theme->setComponentPart<TreeViewRow> (ThemeParts::icon, paintTreeViewRowIcon);
+    theme->setComponentPart<TabButton> (ThemeParts::icon, paintTabButtonIcon);
 
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
     theme->setComponentStyle<MidiKeyboardComponent> (ComponentStyle::createStyle<MidiKeyboardComponent> (paintMidiKeyboard));

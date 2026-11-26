@@ -7,7 +7,7 @@ component FilterDisplay : Component {
     property cutoff: number = 0.65;
     property resonance: number = 0.3;
     property mix: number = 0.5;
-    property logo: string = "../logo.png";
+    property logo: string = "../../logo.png";
 
     class: scope;
 }

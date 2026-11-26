@@ -34,6 +34,7 @@ struct ComboBoxIds
     static inline const Identifier selectedIndex { "selectedIndex" };
     static inline const Identifier text { "text" };
     static inline const Identifier open { "open" };
+    static inline const Identifier textPart { "text" };
 };
 
 } // namespace
@@ -68,6 +69,7 @@ const ComponentTypeInfo& ComboBox::getClassTypeInfo()
                                  .readOnly (ComboBoxIds::text, &ComboBox::getText)
                                  .state (ComboBoxIds::open, &ComboBox::isPopupShown)
                                  .signal ("onSelectedItemChanged", &ComboBox::onSelectedItemChanged, "Emitted when another item is selected")
+                                 .part (ComboBoxIds::textPart, "The text of the selected item, filled with the fill color in the area it is given.")
                                  .build();
 
     return info;

@@ -285,6 +285,9 @@ const ComponentTypeInfo& CodeEditor::getClassTypeInfo()
                                  .property (CodeEditorIds::indentGuidesVisible, &CodeEditor::isIndentGuidesVisible, &CodeEditor::setIndentGuidesVisible, true, "Whether vertical indent guides are painted.")
                                  .property (CodeEditorIds::whitespaceVisible, &CodeEditor::isWhitespaceVisible, &CodeEditor::setWhitespaceVisible, false, "Whether whitespace markers are rendered.")
                                  .property (CodeEditorIds::minimapVisible, &CodeEditor::isMinimapVisible, &CodeEditor::setMinimapVisible, false, "Whether the minimap overview is visible.")
+                                 .readOnly ("gutterWidth", &CodeEditor::getGutterWidth, 0.0, "The width of the gutter holding the line numbers and the markers.")
+                                 .readOnly ("textBounds", &CodeEditor::getTextArea, {}, "The area the lines of text are shown in.")
+                                 .fixedPart ("content", "The editor as the theme paints it, with the colors of its scheme: background, gutter, selection, markers, text and caret.")
                                  .build();
 
     return info;

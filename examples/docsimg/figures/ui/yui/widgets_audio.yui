@@ -1,0 +1,61 @@
+// size: 560 190
+drawing Spectrum {
+    rect { bounds: bounds; cornerRadius: 6; fill: palette.surface; }
+
+    repeat i in 0 .. bounds.width {
+        let x: bounds.x + i;
+
+        vertex { id: curve; at: point (x, bounds.bottom - sample (levels, i / bounds.width) * bounds.height);
+                 base: point (x, bounds.bottom); smooth: 0.5;
+                 fill: palette.accent.withAlpha (0.25); stroke: palette.accent; strokeWidth: 1.5; }
+    }
+}
+
+drawing Meter {
+    let span: rangeMaxDb - rangeMinDb;
+    let level: clamp ((averageDb - rangeMinDb) / span, 0.0, 1.0);
+    let peak: clamp ((peakDb - rangeMinDb) / span, 0.0, 1.0);
+
+    rect { bounds: bounds; cornerRadius: 3; fill: palette.surface; }
+
+    rect { id: level; bounds: rect (bounds.x, bounds.bottom - level * bounds.height, bounds.width, level * bounds.height);
+           cornerRadius: 3; fill: clipping ? #ff4040 : palette.accent; }
+
+    line { id: peak; from: point (bounds.x, bounds.bottom - peak * bounds.height); to: point (bounds.right, bounds.bottom - peak * bounds.height);
+           stroke: palette.text; strokeWidth: 2; }
+}
+
+drawing Keys {
+    rect { bounds: bounds; fill: palette.surface; }
+
+    repeat i in 0 .. len (keyNotes) {
+        rect { id: white; bounds: keyBounds[i].reduced (0.5); cornerRadius: 2; visible: ! keyBlack[i];
+               fill: keyPressed[i] ? palette.accent : palette.text; }
+    }
+
+    repeat i in 0 .. len (keyNotes) {
+        rect { id: black; bounds: keyBounds[i]; cornerRadius: 2; visible: keyBlack[i];
+               fill: keyPressed[i] ? palette.accent : palette.surfaceRaised; }
+    }
+}
+
+style {
+    SpectrumAnalyzer { drawing: Spectrum; }
+    KMeter           { drawing: Meter; }
+    MidiKeyboard     { drawing: Keys; }
+}
+
+Column {
+    gap: 10;
+    padding: 12;
+
+    Row {
+        gap: 10;
+        flexGrow: 1;
+
+        SpectrumAnalyzer { id: analyzer; flexGrow: 1; }
+        KMeter { id: meter; preferredWidth: 14; }
+    }
+
+    MidiKeyboard { id: keys; rangeStart: 48; rangeEnd: 72; scrollButtonsVisible: false; preferredHeight: 60; }
+}

@@ -33,6 +33,14 @@ struct TreeViewRowIds
     static inline const Identifier openFraction { "openFraction" };
     static inline const Identifier itemHeight { "itemHeight" };
     static inline const Identifier text { "text" };
+    static inline const Identifier hasIcon { "hasIcon" };
+    static inline const Identifier hasCustomContent { "hasCustomContent" };
+    static inline const Identifier disclosureBounds { "disclosureBounds" };
+    static inline const Identifier iconBounds { "iconBounds" };
+    static inline const Identifier textBounds { "textBounds" };
+    static inline const Identifier indentSize { "indentSize" };
+    static inline const Identifier indentGuidesVisible { "indentGuidesVisible" };
+    static inline const Identifier icon { "icon" };
 };
 
 } // namespace
@@ -47,6 +55,14 @@ const ComponentTypeInfo& TreeViewRow::getClassTypeInfo()
                                  .readOnly (TreeViewRowIds::openFraction, &TreeViewRow::getOpenFraction, 0.0, "How open the row's item is, from 0 to 1.")
                                  .readOnly (TreeViewRowIds::itemHeight, &TreeViewRow::getItemHeight, 0.0, "The full unclipped height of the row's item.")
                                  .readOnly (TreeViewRowIds::text, &TreeViewRow::getItemText, String(), "The text displayed by the row's item.")
+                                 .readOnly (TreeViewRowIds::hasIcon, &TreeViewRow::hasItemIcon, false, "Whether the row's item has an icon, which the part 'icon' paints.")
+                                 .readOnly (TreeViewRowIds::hasCustomContent, &TreeViewRow::hasCustomContent, false, "Whether the row's item shows a component of its own in place of its icon and text.")
+                                 .readOnly (TreeViewRowIds::disclosureBounds, &TreeViewRow::getDisclosureBounds, {}, "The area of the button opening the row's item, empty for an item that can't be opened.")
+                                 .readOnly (TreeViewRowIds::iconBounds, &TreeViewRow::getIconBounds, {}, "The area of the icon of the row's item.")
+                                 .readOnly (TreeViewRowIds::textBounds, &TreeViewRow::getTextBounds, {}, "The area of the text of the row's item.")
+                                 .readOnly (TreeViewRowIds::indentSize, [] (const TreeViewRow& r) { return r.getOwnerView() != nullptr ? r.getOwnerView()->getIndentSize() : 0.0f; }, 0.0, "How far the tree indents each level of depth.")
+                                 .readOnly (TreeViewRowIds::indentGuidesVisible, [] (const TreeViewRow& r) { return r.getOwnerView() != nullptr && r.getOwnerView()->areIndentGuidesVisible(); }, false, "Whether the tree shows a guide for each level of depth.")
+                                 .part (TreeViewRowIds::icon, &TreeViewRow::getIconBounds, "The icon of the row's item, as the item paints it.")
                                  .build();
 
     return info;

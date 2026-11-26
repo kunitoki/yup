@@ -251,6 +251,26 @@ public:
     float getReleaseTimeSeconds() const noexcept { return releaseTimeSeconds; }
 
     //==============================================================================
+    /** Returns the levels the analyzer shows: one for each of its scopeSize display points.
+
+        The points are evenly spaced along the frequency axis as it is displayed, from the lowest
+        frequency to the highest on a logarithmic scale, and each level goes from 0 at the lowest
+        decibel of the display range to 1 at the highest. They are the levels the analyzer draws,
+        falling as its release time tells.
+
+        This is what the `levels` property gives a `.yui` drawing or a shader painting the
+        analyzer in place of its own paint (see Component::setStyle): they read the levels where
+        they are, with no copy. The values change in place at every update, on the message
+        thread.
+
+        @see getLevelsRevision
+    */
+    Span<const float> getLevels() const noexcept { return scopeData; }
+
+    /** Returns a number that changes whenever the levels do, and is never 0. */
+    uint32 getLevelsRevision() const noexcept { return levelsRevision; }
+
+    //==============================================================================
     /** Sets the overlap factor of the analyzer state, for more responsive spectrum analysis.
 
         It is ignored while the analyzer has no state.
@@ -292,6 +312,7 @@ private:
     void updateSpectrum();
     void processFFT();
     void updateTargets();
+    void levelsChanged() noexcept;
     void generateWindow();
     void initializeFFTBuffers();
     void resizeFFT (int size);
@@ -328,6 +349,7 @@ private:
 
     // Display data
     std::vector<float> scopeData;
+    uint32 levelsRevision = 1;
     std::vector<float> targetData;     // Latest FFT level of every display point, the release target
     std::vector<float> binLevelBuffer; // Calibrated linear level of every FFT bin
     SpectrumBinMapping binMapping;     // Log-frequency > fractional FFT bin mapping

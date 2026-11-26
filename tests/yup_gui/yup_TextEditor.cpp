@@ -128,6 +128,59 @@ TEST_F (TextEditorTests, SelectionHandling)
     EXPECT_FALSE (editor->hasSelection());
 }
 
+TEST_F (TextEditorTests, DeclaresItsTextItsSelectionAndItsCaretAsPartsPaintedWhereItLaidThemOut)
+{
+    editor->setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+    editor->setText (kSingleText);
+
+    const auto& info = editor->getTypeInfo();
+
+    for (const auto* name : { "selection", "text", "caret" })
+    {
+        const auto* part = info.findPart (Identifier (name));
+
+        ASSERT_NE (part, nullptr) << name;
+        EXPECT_FALSE (part->isPlaceable) << name;
+    }
+
+    // The parts are where the editor puts them, which it tells as properties too
+    EXPECT_EQ (info.findPart (Identifier ("text"))->getArea (*editor), editor->getTextBounds());
+    EXPECT_EQ (info.findPart (Identifier ("selection"))->getArea (*editor), editor->getTextBounds());
+    EXPECT_EQ (info.findPart (Identifier ("caret"))->getArea (*editor), editor->getCaretBounds());
+
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (editor->getProperty (Identifier ("textBounds"))), editor->getTextBounds());
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (editor->getProperty (Identifier ("caretBounds"))), editor->getCaretBounds());
+
+    EXPECT_FALSE (static_cast<bool> (editor->getProperty (Identifier ("hasSelection"))));
+    editor->selectAll();
+    EXPECT_TRUE (static_cast<bool> (editor->getProperty (Identifier ("hasSelection"))));
+
+    // The caret only shows in an editor that has the keyboard focus
+    EXPECT_FALSE (static_cast<bool> (editor->getProperty (Identifier ("caretVisible"))));
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    auto renderer = context->makeRenderer (200, 30);
+    Graphics g (*context, *renderer);
+
+    // The theme paints them, where the editor laid them out wherever they are asked to go
+    std::map<String, Rectangle<float>> painted;
+
+    for (const auto* name : { "selection", "text", "caret" })
+    {
+        theme->setComponentPart<TextEditor> (Identifier (name), [&painted, name] (Graphics&, const ApplicationTheme&, const TextEditor&, const Rectangle<float>& area)
+        {
+            painted[name] = area;
+        });
+
+        EXPECT_TRUE (editor->paintPart (g, Identifier (name), { 1.0f, 2.0f, 3.0f, 4.0f })) << name;
+    }
+
+    EXPECT_EQ (painted["selection"], editor->getTextBounds());
+    EXPECT_EQ (painted["text"], editor->getTextBounds());
+    EXPECT_EQ (painted["caret"], editor->getCaretBounds());
+    EXPECT_FALSE (editor->paintPart (g, Identifier ("icon")));
+}
+
 TEST_F (TextEditorTests, TextInsertion)
 {
     editor->setText ("Hello");

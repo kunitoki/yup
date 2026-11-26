@@ -98,7 +98,7 @@ bool isGrammarNodeType (const Identifier& type) noexcept
         "yui", "import", "tokens", "palette", "style", "rule", "keyframes", "keyframe",
         "declaration", "property", "alias", "signal", "argument", "component", "drawing", "shader",
         "let", "repeat", "group", "clip", "layer", "mask", "rect", "ellipse", "circle", "line",
-        "arc", "path", "polygon", "star", "text", "image", "svg", "bind", "changed",
+        "arc", "path", "polygon", "star", "vertex", "part", "text", "image", "svg", "bind", "changed",
         "viewport", "use", "pattern", "marker", "clipPath", "filter", "blur", "offset", "flood",
         "colorMatrix", "composite", "blend", "morphology", "lighting", "displacement", "dropShadow"
     };
@@ -194,9 +194,9 @@ DataTreeSchema::Ptr YuiDocument::createSchema()
 
     const StringArray drawingBodyChildren {
         "let", "repeat", "group", "clip", "layer", "viewport", "use", "drawing", "pattern", "marker",
-        "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "text", "image", "svg"
+        "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "vertex", "part", "text", "image", "svg"
     };
-    const StringArray clipPathChildren { "let", "repeat", "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star" };
+    const StringArray clipPathChildren { "let", "repeat", "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "vertex" };
     StringArray clipChildren = drawingBodyChildren;
     clipChildren.add ("clipPath");
     StringArray layerChildren = clipChildren;
@@ -351,7 +351,13 @@ DataTreeSchema::Ptr YuiDocument::createSchema()
         nodeTypes->setProperty ("use", makeSchemaNode (props, {}, 0));
     }
 
-    for (const auto* leafType : { "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "text", "image", "svg" })
+    {
+        DynamicObject::Ptr props (new DynamicObject());
+        props->setProperty ("name", makeSchemaProperty ("string", true, "Name of the part of the component to paint."));
+        nodeTypes->setProperty ("part", makeSchemaNode (props, {}, 0));
+    }
+
+    for (const auto* leafType : { "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "vertex", "text", "image", "svg" })
         nodeTypes->setProperty (leafType, makeSchemaNode (nullptr, {}, 0));
 
     {

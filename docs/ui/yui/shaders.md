@@ -142,7 +142,7 @@ decides what it is given, and nothing has a fixed set or binding number:
 | Declaration | What it is |
 | --- | --- |
 | A uniform block | The parameters. One at most, with any name: its members are matched with the properties by name (`params.tint` is `tint`). |
-| `uniform texture2D` | A picture the shader reads: none, one or two. The first one is the texture with the lowest set, then the lowest binding. |
+| `uniform texture2D` | A picture the shader reads: none, one or two. The first one is the texture with the lowest set, then the lowest binding. One named as a `number[]` property is no picture but a [series](#series). Four textures at most. |
 | `uniform sampler` | How the pictures are read: filtered linearly and clamped to their edges. One sampler can read both pictures. |
 | `layout(location = 0) in vec2 uv` | Where the pixel is: (0, 0) at the top left of the picture and (1, 1) at its bottom right. Optional. |
 | `layout(location = 0) out vec4` | The color of the pixel. |
@@ -159,7 +159,8 @@ decides what it is given, and nothing has a fixed set or binding number:
   within the GLSL the WebGPU target takes, whatever the application runs on.
   See [GLSL on the WebGPU target](../../graphics/rhi/wgsl-shaders.md).
 
-How many pictures a shader reads decides where it can be used:
+How many pictures a shader reads decides where it can be used. The textures a
+series fills don't count:
 
 | Textures | As an `effect:` | Painted by a `use` | In a `filter` |
 | --- | --- | --- | --- |
@@ -205,6 +206,64 @@ Three members are filled in when the block has them, without being declared:
 - Declaring a property of one of these names takes the member back:
   `property time: number;` lets the document set the time itself, and nothing
   asks for frames anymore.
+
+## Series
+
+A `number[]` property fills an array of the uniform block, which is fine for
+a few numbers. A block has a fixed size though, and a shader reading an array
+between two numbers has to interpolate them itself. So a `number[]` property
+also fills a **texture**, when the fragment stage declares a `texture2D` of
+its name instead of a member of the block:
+
+```yui
+shader Scope {
+    fragment: "fx/scope.frag";
+    property levels: number[];
+    property tint: color = palette.accent;
+}
+
+drawing Spectrum {
+    use Scope { levels: levels; }
+}
+
+style {
+    SpectrumAnalyzer { drawing: Spectrum; }
+}
+```
+
+```glsl
+layout(set = 0, binding = 0) uniform Parameters { vec4 tint; } params;
+layout(set = 0, binding = 1) uniform texture2D levels;
+layout(set = 0, binding = 2) uniform sampler levelsSampler;
+
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+
+void main()
+{
+    float level = texture (sampler2D (levels, levelsSampler), vec2 (uv.x, 0.5)).r;
+    float lit = step (1.0 - uv.y, level);
+
+    color = vec4 (params.tint.rgb, 1.0) * lit;
+}
+```
+
+- The texture is one pixel high and holds one number per pixel, in its red
+  channel. The shader reads it along `x`, from 0 at the first number to 1 at
+  the last, and the sampler interpolates between two numbers.
+- It takes any length, and the numbers are kept as 16 bit floats: exact to
+  about three digits, which is what a display shows.
+- It is written again only when the series changes. A series a component
+  declares with a revision, as the `levels` of a `SpectrumAnalyzer`, tells so
+  with it and is not even compared. Any other array is compared with the
+  numbers the texture holds.
+- A series is read where the component keeps it, as in a
+  [drawing](drawing.md#data-series): the numbers go from the component to the
+  texture with no conversion in between.
+- The same goes for a shader set as an `effect:`, which then reads both the
+  picture of the component and the series.
+- A `filter` gives its shaders pictures only: one sampling a series is
+  reported there.
 
 ## As the effect of a component
 

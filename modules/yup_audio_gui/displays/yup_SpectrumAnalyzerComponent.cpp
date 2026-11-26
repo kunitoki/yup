@@ -31,6 +31,7 @@ struct SpectrumAnalyzerComponentIds
     static inline const Identifier levelMode { "levelMode" };
     static inline const Identifier releaseTime { "releaseTime" };
     static inline const Identifier updateRate { "updateRate" };
+    static inline const Identifier levels { "levels" };
 };
 
 } // namespace
@@ -79,6 +80,7 @@ const ComponentTypeInfo& SpectrumAnalyzerComponent::getClassTypeInfo()
 
         return builder.property (SpectrumAnalyzerComponentIds::releaseTime, &A::getReleaseTimeSeconds, &A::setReleaseTimeSeconds, 1.0f, "The time the spectrum takes to fall, in seconds.")
             .property (SpectrumAnalyzerComponentIds::updateRate, &A::getUpdateRate, &A::setUpdateRate, 0, "The updates a second, 0 to follow the display refresh rate.")
+            .series (SpectrumAnalyzerComponentIds::levels, &A::getLevels, &A::getLevelsRevision, "The level of each display point from 0 to 1 between minDecibels and maxDecibels, the points evenly spaced along the displayed frequency axis.")
             .build();
     }();
 
@@ -117,6 +119,7 @@ void SpectrumAnalyzerComponent::setState (SpectrumAnalyzerState* newState)
     // What is shown is the spectrum of the previous state
     std::fill (scopeData.begin(), scopeData.end(), 0.0f);
     std::fill (targetData.begin(), targetData.end(), 0.0f);
+    levelsChanged();
 
     if (analyzerState != nullptr && analyzerState->getFftSize() != fftSize)
         resizeFFT (analyzerState->getFftSize());
@@ -188,7 +191,15 @@ void SpectrumAnalyzerComponent::updateSpectrum()
     if (nowSeconds - lastFFTSeconds > jmax (2.0 * hopSeconds, 0.1))
         std::fill (targetData.begin(), targetData.end(), 0.0f);
 
+    levelsChanged();
     repaint();
+}
+
+void SpectrumAnalyzerComponent::levelsChanged() noexcept
+{
+    // Never 0, which tells that a revision is not tracked
+    if (++levelsRevision == 0)
+        ++levelsRevision;
 }
 
 void SpectrumAnalyzerComponent::processFFT()
@@ -365,6 +376,15 @@ void SpectrumAnalyzerComponent::refreshDisplay ([[maybe_unused]] double lastFram
 
 void SpectrumAnalyzerComponent::paint (Graphics& g)
 {
+    // A style set on the analyzer paints it from its levels, in place of what follows
+    if (auto style = getStyle())
+    {
+        if (auto theme = ApplicationTheme::getGlobalTheme())
+            style->paint (g, *theme, *this);
+
+        return;
+    }
+
     const auto bounds = getLocalBounds();
 
     const auto backgroundTop = ApplicationTheme::findComponentColor (*this, Style::backgroundTopColorId).value_or (Color (0xff1a1a1a));

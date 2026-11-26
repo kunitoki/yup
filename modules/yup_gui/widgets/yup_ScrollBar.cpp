@@ -28,6 +28,11 @@ namespace
 struct ScrollBarIds
 {
     static inline const Identifier dragging { "dragging" };
+    static inline const Identifier thumbHovered { "thumbHovered" };
+    static inline const Identifier thumbBounds { "thumbBounds" };
+    static inline const Identifier trackBounds { "trackBounds" };
+    static inline const Identifier scrollingNeeded { "scrollingNeeded" };
+    static inline const Identifier visibilityMode { "visibilityMode" };
 };
 
 } // namespace
@@ -51,6 +56,17 @@ const ComponentTypeInfo& ScrollBar::getClassTypeInfo()
                                  .number ("thumbInset", Style::thumbInsetId, 3.0, "The inset of the thumb inside the bar.")
                                  .number ("cornerRadius", Style::cornerRadiusId, {}, "The thumb corner radius, unset for a pill.")
                                  .state (ScrollBarIds::dragging, &ScrollBar::isDragging)
+                                 .state (ScrollBarIds::thumbHovered, [] (const ScrollBar& s) { return s.isThumbHovered(); }, false, "Whether the mouse pointer is over the bar.")
+                                 .readOnly (ScrollBarIds::thumbBounds, &ScrollBar::getThumbBoundsForRendering, {}, "The area of the thumb, before its inset.")
+                                 .readOnly (ScrollBarIds::trackBounds, &ScrollBar::getTrackBoundsForRendering, {}, "The area the thumb moves in.")
+                                 .readOnly (ScrollBarIds::scrollingNeeded, &ScrollBar::isScrollingNeeded, false, "Whether there is more content than the bar shows at once.")
+                                 .enumeration<VisibilityMode> (ScrollBarIds::visibilityMode,
+                                                               { { "autoHide", VisibilityMode::autoHide },
+                                                                 { "alwaysVisible", VisibilityMode::alwaysVisible },
+                                                                 { "alwaysHidden", VisibilityMode::alwaysHidden } },
+                                                               &ScrollBar::getVisibilityMode,
+                                                               &ScrollBar::setVisibilityMode,
+                                                               "When the bar is shown: always, only while there is something to scroll, or never.")
                                  .build();
 
     return info;
@@ -90,6 +106,7 @@ void ScrollBar::setVisibilityMode (VisibilityMode mode)
     {
         visibilityMode = mode;
         updateVisibility();
+        notifyPropertyChanged (ScrollBarIds::visibilityMode);
     }
 }
 
@@ -299,6 +316,7 @@ void ScrollBar::mouseEnter (const MouseEvent& event)
     ignoreUnused (event);
     isThumbHover = true;
     repaint();
+    notifyPropertyChanged (ScrollBarIds::thumbHovered);
 }
 
 void ScrollBar::mouseExit (const MouseEvent& event)
@@ -306,6 +324,7 @@ void ScrollBar::mouseExit (const MouseEvent& event)
     ignoreUnused (event);
     isThumbHover = false;
     repaint();
+    notifyPropertyChanged (ScrollBarIds::thumbHovered);
 }
 
 bool ScrollBar::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)

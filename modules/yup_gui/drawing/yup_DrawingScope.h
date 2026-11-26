@@ -49,6 +49,12 @@ namespace yup
     registered on the context (see addGraphicsExpressionTypes); other property types are
     left unresolved, so referencing them is a compile error.
 
+    An array a component declares as a series (see ComponentTypeBuilder::series) is read where
+    the component keeps it: the state views its elements, and nothing is copied or converted.
+    Any other array is a var, converted to the elements the expression reads. That is done for
+    every update, or once for all the updates of a round when the rounds are told with
+    @ref beginUpdates, as a style evaluating many programs for one paint does.
+
     The roles of the palette the component is drawn with resolve as `palette.<role>` colors
     (for example `palette.accent` or `palette.textMuted`, see ThemePalette::Role), and
     `palette.dark` is true for a dark palette. The palette is the closest one set on the
@@ -86,7 +92,7 @@ public:
     /** The typed values an array property feeds an expression input, kept alive until the next update.
 
         An expression reads an array input as a view of the values it is bound to, so they have to
-        outlive the evaluation. This holds one converted copy of them for one input.
+        outlive the evaluation. This holds one converted copy of them, for the inputs reading it.
     */
     class YUP_API ArrayInput
     {
@@ -101,6 +107,26 @@ public:
             @param value         The value of the property, normally an array var.
         */
         void bind (ExpressionState& state, int input, ComponentProperty::Type elementType, const var& value);
+
+        /** Converts a var holding an array and keeps its values, without binding them.
+
+            Convert once and @ref attach the values to every input reading them, rather than
+            converting them again for each.
+
+            @param elementType   The type of the elements, which must be bridged.
+            @param value         The value of the property, normally an array var.
+        */
+        void assign (ComponentProperty::Type elementType, const var& value);
+
+        /** Binds the values kept to an input of a state.
+
+            Values of another type than the one the program of the state reads leave the input with
+            nothing to read. The values have to stay as they are while the state is evaluated.
+
+            @param state   The state the values are bound to.
+            @param input   The index of the array input.
+        */
+        void attach (ExpressionState& state, int input) const;
 
     private:
         std::variant<Array<float>, Array<int>, Array<bool>, Array<String>, Array<Color>, Array<Point<float>>, Array<Rectangle<float>>, Array<AffineTransform>, Array<Font>> values;
@@ -169,6 +195,27 @@ public:
     */
     const ExpressionType* resolveSymbol (const String& symbol) const;
 
+    /** Returns the revision of a series bound in this round of updates, told by where its elements are.
+
+        What is made of a series and kept between two paints, such as the texture a shader samples
+        it from, is made again when this changes (see ComponentArrayView::revision).
+
+        @param elements   The address of the first element, as a state views it.
+
+        @returns The revision, or 0 for elements that are no series bound since @ref beginUpdates, and
+                 for a series whose revision is not tracked.
+    */
+    uint32 findSeriesRevision (const void* elements) const noexcept;
+
+    /** Returns a part the type of the component declares, or nullptr when it declares none of this name.
+
+        @see ComponentPart, ComponentTypeInfo::findPart
+    */
+    const ComponentPart* findPart (const Identifier& name) const;
+
+    /** Returns the names of the parts the type of the component declares, the ones of its own type first. */
+    StringArray getPartNames() const;
+
     /** Pre-parses the scope inputs referenced by @p program, skipping context-declared inputs.
 
         Store the returned value alongside the program's ExpressionState so array input
@@ -178,10 +225,24 @@ public:
 
     /** Writes the component's live property values into @p state before evaluation.
 
+        An array a component gives as a series is bound where the component keeps it, so evaluate
+        the state before the component changes it.
+
         @param inputs    Bound inputs previously created with @ref bindInputs.
         @param state     A state created from the same program.
     */
     void updateInputs (BoundInputs& inputs, ExpressionState& state) const;
+
+    /** Starts a round of updates, during which the components are known to stay as they are.
+
+        An array a component gives as a var is then read and converted once for the round, whichever
+        inputs read it, and the states updated in the round view those values until the next one
+        starts. Call it before updating the programs evaluated together, such as the ones of a
+        drawing for one paint, and again whenever the components may have changed.
+
+        A scope that is never told its rounds converts the arrays for every update.
+    */
+    void beginUpdates();
 
     /** Returns the component properties the program reads, so changes to them can be tracked.
 
@@ -252,6 +313,21 @@ public:
                                const var& value,
                                ArrayInput& arrayInput);
 
+    /** Binds the elements a component keeps for an array property to an expression input, without copying them.
+
+        Elements of another type than the one the program of the state reads leave the input with
+        nothing to read. The elements have to stay where they are while the state is evaluated.
+
+        @param state         The state the elements are bound to.
+        @param input         The index of the array input.
+        @param elementType   The type of the elements, which must be bridged.
+        @param view          The elements, as ComponentProperty::arrayGetter returns them.
+    */
+    static void bindArrayView (ExpressionState& state,
+                               int input,
+                               ComponentProperty::Type elementType,
+                               const ComponentArrayView& view);
+
 private:
     //==============================================================================
     struct ParsedInput
@@ -305,14 +381,27 @@ private:
         const ComponentProperty* descriptor = nullptr;
     };
 
+    /* The values of an array a component gave as a var, converted for the round they were read in. */
+    struct ConvertedArray
+    {
+        const Component* component = nullptr;
+        const ComponentProperty* descriptor = nullptr;
+        uint32 round = 0;
+        ArrayInput values;
+    };
+
     static ParsedInput parse (const String& symbol, int index = 0);
     ResolvedProperty resolve (const ParsedInput& input) const;
+    const ArrayInput& convertArray (const Component& source, const ComponentProperty& descriptor, const Identifier& property) const;
 
     WeakReference<Component> component;
     ExpressionContext& context;
     ComponentResolver componentResolver;
     WeakReference<Component> locals;
     uint32 resolverGeneration = 1;
+    mutable std::vector<ConvertedArray> convertedArrays;
+    mutable std::vector<ComponentArrayView> boundSeries;
+    uint32 updateRound = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrawingScope)
 };

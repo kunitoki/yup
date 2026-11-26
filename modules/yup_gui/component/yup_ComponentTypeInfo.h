@@ -32,8 +32,9 @@ class Component;
 
     A ComponentTypeInfo carries the type name (for example "Slider"), a pointer to
     its base type's info, the property descriptors declared on the type, the signals
-    it emits (events such as "onValueChanged"), and an optional factory used to
-    create instances from `.yui`.
+    it emits (events such as "onValueChanged"), the parts of what it shows that a
+    style can place (see ComponentPart), and an optional factory used to create
+    instances from `.yui`.
 
     Each widget returns a single shared instance from Component::getDefaultTypeInfo(),
     and a single component can be given its own with Component::setTypeInfo(). Type
@@ -41,7 +42,7 @@ class Component;
     walk up to the base. Unregistered user subclasses simply inherit the info of the
     nearest registered base.
 
-    @see Component, ComponentProperty, ComponentTypeRegistry
+    @see Component, ComponentProperty, ComponentPart, ComponentTypeRegistry
 
     @tags{UI}
 */
@@ -69,13 +70,15 @@ public:
         @param signals         The signals (events) this type emits.
         @param factory         An optional factory used to instantiate this type.
         @param childAttacher   An optional way to add a child, inherited by the derived types.
+        @param parts           The parts of what this type paints that a style can place.
     */
     ComponentTypeInfo (Identifier typeName,
                        const ComponentTypeInfo* baseTypeInfo,
                        std::vector<ComponentProperty> properties,
                        std::vector<ComponentSignal> signals = {},
                        Factory factory = {},
-                       ChildAttacher childAttacher = {});
+                       ChildAttacher childAttacher = {},
+                       std::vector<ComponentPart> parts = {});
 
     //==============================================================================
     /** Returns the type name, for example "Slider". */
@@ -135,6 +138,26 @@ public:
     bool hasSignal (const Identifier& signalName) const { return findSignal (signalName) != nullptr; }
 
     //==============================================================================
+    /** Returns the parts declared directly on this type (not inherited). */
+    const std::vector<ComponentPart>& getOwnParts() const noexcept { return parts; }
+
+    /** Finds a part by name, walking up the base chain.
+
+        A part declared on a derived type overrides one with the same name on a base.
+
+        @param partName    The part name to find.
+
+        @return The matching descriptor, or nullptr if the type declares no such part.
+    */
+    const ComponentPart* findPart (const Identifier& partName) const;
+
+    /** Returns true when this type or a base declares the given part. */
+    bool hasPart (const Identifier& partName) const { return findPart (partName) != nullptr; }
+
+    /** Returns every part visible on this type, with derived declarations overriding base ones. */
+    std::vector<const ComponentPart*> getAllParts() const;
+
+    //==============================================================================
     /** Returns true when a factory is available to instantiate this type. */
     bool hasFactory() const noexcept { return factory != nullptr; }
 
@@ -162,6 +185,7 @@ private:
     std::unordered_map<Identifier, const ComponentProperty*> mergedPropertyIndex;
     std::unordered_map<Identifier, const ComponentProperty*> storageKeyIndex;
     std::vector<ComponentSignal> signals;
+    std::vector<ComponentPart> parts;
     Factory factory;
     ChildAttacher childAttacher;
 
@@ -274,6 +298,28 @@ struct ComponentPropertyValueTraits<Font>
     static Font fromVar (const var& v) { return VariantConverter<Font>::fromVar (v); }
 };
 
+/* The type of the elements a getter of a series returns a span of: only a Span of const values has one. */
+template <class SpanType>
+struct ComponentSeriesElement;
+
+template <class ElementType>
+struct ComponentSeriesElement<Span<const ElementType>>
+{
+    using type = ElementType;
+};
+
+/* True for the C++ types the elements of an array are bridged as, which is what a view of them is read as. */
+template <class ElementType>
+inline constexpr bool isComponentSeriesElement = std::is_same_v<ElementType, float>
+                                              || std::is_same_v<ElementType, int>
+                                              || std::is_same_v<ElementType, bool>
+                                              || std::is_same_v<ElementType, String>
+                                              || std::is_same_v<ElementType, Color>
+                                              || std::is_same_v<ElementType, Point<float>>
+                                              || std::is_same_v<ElementType, Rectangle<float>>
+                                              || std::is_same_v<ElementType, AffineTransform>
+                                              || std::is_same_v<ElementType, Font>;
+
 } // namespace detail
 #endif
 
@@ -347,6 +393,9 @@ public:
 
     ComponentTypeBuilder& addProperty (ComponentProperty prop)
     {
+        // A name declared twice hides its first declaration: a getter of the second reading the first by name calls itself
+        jassert (std::none_of (properties.begin(), properties.end(), [&prop] (const ComponentProperty& known) { return known.name == prop.name; }));
+
         properties.push_back (std::move (prop));
         return *this;
     }
@@ -568,6 +617,82 @@ public:
             .description = std::move (description) });
     }
 
+    /** Declares a read-only array property whose elements are read where the component keeps them.
+
+        The getter returns a `Span<const ElementType>` over elements the component holds in one block,
+        of the type an array of them is bridged as: `float`, `int`, `bool`, String, Color, Point<float>,
+        Rectangle<float>, AffineTransform or Font. A drawing reading the property binds that memory,
+        so the values of a meter, a spectrum or a list of items reach it without being copied or
+        converted, however often it is painted. Whatever needs a var still gets one, made of the same
+        elements.
+
+        The elements have to stay where they are while the component is painted: change them
+        between two paints, on the message thread, and repaint the component.
+
+        Several series of the same length describe a list of things with more than one value each,
+        read with one index: `itemBounds[i]`, `itemTexts[i]`.
+
+        @code
+        .series ("levels", &Analyzer::getLevels, &Analyzer::getLevelsRevision, "The level of each band, 0 to 1.")
+        @endcode
+
+        @param name          The name of the property.
+        @param getter        Returns the span of the elements, for example `Span<const float> (Analyzer::*)() const`.
+        @param description   A human readable description, surfaced by the schema and tooling.
+
+        @see ComponentArrayView, ComponentProperty::arrayGetter
+    */
+    template <class Getter>
+        requires detail::isComponentSeriesElement<typename detail::ComponentSeriesElement<std::invoke_result_t<Getter, const T&>>::type>
+    ComponentTypeBuilder& series (Identifier name, Getter getter, String description = {})
+    {
+        return series (std::move (name), std::move (getter), [] (const T&) -> uint32 { return 0; }, std::move (description));
+    }
+
+    /** Declares a read-only array property read in place, with a number telling when its elements change.
+
+        As the overload without it, with a revision: a number the component changes whenever it changes
+        the elements. What keeps something made of them between two paints, such as the texture a shader
+        samples a series from, then knows when to make it again without comparing the elements.
+
+        @param name             The name of the property.
+        @param getter           Returns the span of the elements.
+        @param revisionGetter   Returns the revision, for example `uint32 (Analyzer::*)() const`. It is never
+                                0 once the elements changed: 0 means the revision is not tracked.
+        @param description      A human readable description, surfaced by the schema and tooling.
+    */
+    template <class Getter, class RevisionGetter>
+        requires detail::isComponentSeriesElement<typename detail::ComponentSeriesElement<std::invoke_result_t<Getter, const T&>>::type>
+              && std::is_invocable_r_v<uint32, RevisionGetter, const T&>
+    ComponentTypeBuilder& series (Identifier name, Getter getter, RevisionGetter revisionGetter, String description = {})
+    {
+        using ElementType = typename detail::ComponentSeriesElement<std::invoke_result_t<Getter, const T&>>::type;
+        using Traits = detail::ComponentPropertyValueTraits<ElementType>;
+
+        return addProperty (ComponentProperty {
+            .name = std::move (name),
+            .type = ComponentProperty::Type::array,
+            .elementType = Traits::type,
+            .getter = [getter] (const Component& c)
+            {
+                Array<var> values;
+
+                for (const auto& element : std::invoke (getter, static_cast<const T&> (c)))
+                    values.add (Traits::toVar (element));
+
+                return var (values);
+            },
+            .arrayGetter = [getter, revisionGetter = std::move (revisionGetter)] (const Component& c)
+            {
+                const auto& component = static_cast<const T&> (c);
+                const Span<const ElementType> elements = std::invoke (getter, component);
+
+                return ComponentArrayView { elements.data(), static_cast<int> (elements.size()), static_cast<uint32> (std::invoke (revisionGetter, component)) };
+            },
+            .isStyleable = false,
+            .description = std::move (description) });
+    }
+
     ComponentTypeBuilder& signal (ComponentSignal sig)
     {
         signals.push_back (std::move (sig));
@@ -584,6 +709,77 @@ public:
         return signal (makeSignal<T> (std::move (name), member, std::move (description), std::move (arguments)));
     }
 
+    ComponentTypeBuilder& addPart (ComponentPart part)
+    {
+        parts.push_back (std::move (part));
+        return *this;
+    }
+
+    /** Declares a part of what the component shows, painted in the area it is given (see ComponentPart).
+
+        A drawing can move such a part with `bounds`, so declare this way what fits any area: an icon,
+        an image. Without `bounds` it is painted in the bounds of the component. The theme paints the
+        part, see ApplicationTheme::setComponentPart.
+
+        @param name          The name of the part.
+        @param description   A human readable description, surfaced by the schema and tooling.
+    */
+    ComponentTypeBuilder& part (Identifier name, String description = {})
+    {
+        return addPart (ComponentPart {
+            .name = std::move (name),
+            .description = std::move (description) });
+    }
+
+    /** Declares a part painted in the area it is given, which the component puts in an area of its own.
+
+        As the overload without it, with where the component puts the part itself: a drawing giving
+        the part no `bounds` paints it there.
+
+        @param name          The name of the part.
+        @param area          Returns where the component puts it, for example `Rectangle<float> (T::*)() const`.
+        @param description   A human readable description, surfaced by the schema and tooling.
+    */
+    template <class AreaGetter>
+        requires std::is_invocable_r_v<Rectangle<float>, AreaGetter, const T&>
+    ComponentTypeBuilder& part (Identifier name, AreaGetter area, String description = {})
+    {
+        return addPart (ComponentPart {
+            .name = std::move (name),
+            .area = makePartArea (std::move (area)),
+            .description = std::move (description) });
+    }
+
+    /** Declares a part the component lays out itself, painted where it puts it and nowhere else.
+
+        Declare this way what the component placed for more than painting it: a text it laid out for
+        an area, a caret and a selection that follow that text, what the pointer is tested against. A
+        drawing decides when such a part is painted and with which paint, and can't give it `bounds`.
+
+        @param name          The name of the part.
+        @param area          Returns where the component puts it, for example `Rectangle<float> (T::*)() const`.
+        @param description   A human readable description, surfaced by the schema and tooling.
+    */
+    template <class AreaGetter>
+        requires std::is_invocable_r_v<Rectangle<float>, AreaGetter, const T&>
+    ComponentTypeBuilder& fixedPart (Identifier name, AreaGetter area, String description = {})
+    {
+        return addPart (ComponentPart {
+            .name = std::move (name),
+            .area = makePartArea (std::move (area)),
+            .isPlaceable = false,
+            .description = std::move (description) });
+    }
+
+    /** Declares a part the component lays out itself, in its own bounds. */
+    ComponentTypeBuilder& fixedPart (Identifier name, String description = {})
+    {
+        return addPart (ComponentPart {
+            .name = std::move (name),
+            .isPlaceable = false,
+            .description = std::move (description) });
+    }
+
     ComponentTypeInfo build()
     {
         return ComponentTypeInfo {
@@ -592,7 +788,8 @@ public:
             std::move (properties),
             std::move (signals),
             std::move (typeFactory),
-            std::move (typeChildAttacher)
+            std::move (typeChildAttacher),
+            std::move (parts)
         };
     }
 
@@ -601,6 +798,15 @@ private:
     {
         if constexpr (! std::is_abstract_v<T> && std::is_default_constructible_v<T>)
             typeFactory = [] () -> std::unique_ptr<Component> { return std::make_unique<T>(); };
+    }
+
+    template <class AreaGetter>
+    static ComponentPart::AreaGetter makePartArea (AreaGetter area)
+    {
+        return [area = std::move (area)] (const Component& c) -> Rectangle<float>
+        {
+            return std::invoke (area, static_cast<const T&> (c));
+        };
     }
 
     template <class Getter, class DefaultType>
@@ -651,6 +857,7 @@ private:
     const ComponentTypeInfo* baseTypeInfo = nullptr;
     std::vector<ComponentProperty> properties;
     std::vector<ComponentSignal> signals;
+    std::vector<ComponentPart> parts;
     ComponentTypeInfo::Factory typeFactory;
     ComponentTypeInfo::ChildAttacher typeChildAttacher;
 };

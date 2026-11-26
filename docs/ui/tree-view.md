@@ -59,6 +59,18 @@ When what an item shows changes, call `itemChanged()`.
 from code. Only visible items can be selected. Closing an item that holds the
 selection moves the selection to the item.
 
+A tree of plain texts needs no item class: `setItems()` takes the path of each
+item, its levels separated by `/`, and makes the items under a root that has
+no row. It is the `items` property a `.yui` document writes:
+
+```cpp
+tree.setItems ({ "Sources/main.cpp", "Sources/Editor.cpp", "README.md" });
+```
+
+```yui
+TreeView { items: ["Sources/main.cpp", "Sources/Editor.cpp", "README.md"]; }
+```
+
 ## Opening and closing
 
 The user opens and closes items with the disclosure buttons, with a

@@ -83,6 +83,15 @@ public:
     */
     bool isIndeterminate() const noexcept;
 
+    /** Returns how far an indeterminate bar is in the cycle of its animation.
+
+        The bar repaints at every frame while it is indeterminate, and what paints it moves its
+        ribbons by this: it goes from 0 to 1 every two seconds, then starts again.
+
+        @return The phase of the animation, from 0 to 1. It stays where it is while the bar shows a progress.
+    */
+    double getAnimationPhase() const noexcept { return animationPhase; }
+
     //==============================================================================
     /** Called when the progress value changes.
 

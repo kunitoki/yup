@@ -120,8 +120,24 @@ var describeProperty (const ComponentProperty& property)
     record->setProperty ("inherited", property.isInherited);
     record->setProperty ("readOnly", property.isReadOnly());
 
+    // An array a drawing or a shader reads where the component keeps it, with no copy
+    if (property.isSeries())
+        record->setProperty ("series", true);
+
     if (property.description.isNotEmpty())
         record->setProperty ("description", property.description);
+
+    return var (record);
+}
+
+var describePart (const ComponentPart& part)
+{
+    auto* record = new DynamicObject();
+    record->setProperty ("name", part.name.toString());
+    record->setProperty ("placeable", part.isPlaceable);
+
+    if (part.description.isNotEmpty())
+        record->setProperty ("description", part.description);
 
     return var (record);
 }
@@ -152,14 +168,16 @@ var describeSignal (const ComponentSignal& signal)
 
 } // namespace
 
-// The properties and signals are the ones the type declares: the inherited ones are those of its base,
+// The properties, signals and parts are the ones the type declares: the inherited ones are those of its base,
 // listed here too when asked, each with the type it comes from
 var describeYuiToolComponentType (const ComponentTypeInfo& info, bool includeInherited)
 {
     Array<var> properties;
     Array<var> signals;
+    Array<var> parts;
     std::set<String> listedProperties;
     std::set<String> listedSignals;
+    std::set<String> listedParts;
 
     for (const auto* type = &info; type != nullptr; type = includeInherited ? type->getBaseTypeInfo() : nullptr)
     {
@@ -188,6 +206,19 @@ var describeYuiToolComponentType (const ComponentTypeInfo& info, bool includeInh
 
             signals.add (described);
         }
+
+        for (const auto& part : type->getOwnParts())
+        {
+            if (! listedParts.insert (part.name.toString()).second)
+                continue;
+
+            auto described = describePart (part);
+
+            if (type != &info)
+                described.getDynamicObject()->setProperty ("from", type->getTypeName().toString());
+
+            parts.add (described);
+        }
     }
 
     auto* record = new DynamicObject();
@@ -199,6 +230,10 @@ var describeYuiToolComponentType (const ComponentTypeInfo& info, bool includeInh
     record->setProperty ("instantiable", info.hasFactory());
     record->setProperty ("properties", var (properties));
     record->setProperty ("signals", var (signals));
+
+    // What a drawing places of the component with a `part` element
+    if (! parts.isEmpty())
+        record->setProperty ("parts", var (parts));
 
     return var (record);
 }
@@ -234,7 +269,9 @@ var describeDrawingTopic()
     topic->setProperty ("elements", var (elements));
     topic->setProperty ("shapePaint", var (DrawingStyle::getShapePaintProperties()));
     topic->setProperty ("notes", "A shape takes its geometry, its properties and those of shapePaint. In geometry, a name followed by '=' has that default. "
-                                 "A 'use' also takes the properties its drawing declares. Every value is an expression.");
+                                 "A 'use' also takes the properties its drawing declares. Every value is an expression. "
+                                 "A 'vertex' is one point of a line and only goes among the shapes of a 'repeat'. "
+                                 "A 'part' names one of the parts the type of the component lists in the schema.");
     topic->setProperty ("docs", "docs/ui/yui/drawing.md");
 
     return var (topic);

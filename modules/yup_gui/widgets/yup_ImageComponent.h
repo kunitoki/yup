@@ -28,6 +28,9 @@ namespace yup
 /**
     A component that displays a raster @ref Image or an SVG @ref Drawable fitted into its bounds.
 
+    As every widget it is painted by its style: the one set on it, or else the one the theme sets
+    for the type, which fits, aligns and fades the image as the component is set to.
+
     In `.yui` markup this component is registered under the `Image` type name:
 
     @code
@@ -117,7 +120,6 @@ public:
 
 private:
     void reloadSource();
-    Rectangle<float> computeFittedBounds (Rectangle<float> sourceBounds, Rectangle<float> targetArea) const noexcept;
 
     String source;
     File baseDirectory;

@@ -163,7 +163,8 @@ public:
 
         /** The inputs the block declares, in the order it declares them. Each has a type a uniform
             takes, and fills the member of the uniform block of the shader that has its name (see
-            ShaderEffect::setUniform).
+            ShaderEffect::setUniform). An array of numbers named as a texture of the shader fills
+            that texture instead (see ShaderEffect::getNumPictures).
         */
         std::vector<ShaderEffect::Property> properties;
 

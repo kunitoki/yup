@@ -31,6 +31,10 @@ struct ListBoxItemIds
     static inline const Identifier iconPosition { "iconPosition" };
     static inline const Identifier selected { "selected" };
     static inline const Identifier hovered { "hovered" };
+    static inline const Identifier hasIcon { "hasIcon" };
+    static inline const Identifier iconBounds { "iconBounds" };
+    static inline const Identifier textBounds { "textBounds" };
+    static inline const Identifier icon { "icon" };
 };
 
 } // namespace
@@ -55,6 +59,10 @@ const ComponentTypeInfo& ListBoxItem::getClassTypeInfo()
                                  .enumeration (ListBoxItemIds::iconPosition, { "left", "right", "above", "below" }, &ListBoxItem::getIconPosition, &ListBoxItem::setIconPosition, "Where the icon is positioned relative to the text.")
                                  .state (ListBoxItemIds::selected, &ListBoxItem::isSelected, &ListBoxItem::setSelected, false, "Whether this list item is selected.")
                                  .state (ListBoxItemIds::hovered, &ListBoxItem::isHovered, &ListBoxItem::setHovered, false, "Whether this list item is hovered.")
+                                 .readOnly (ListBoxItemIds::hasIcon, [] (const ListBoxItem& i) { return i.getIconDrawable() != nullptr || i.getIconImage().isValid(); }, false, "Whether the item was given an icon, which the part 'icon' paints.")
+                                 .readOnly (ListBoxItemIds::iconBounds, &ListBoxItem::getIconBoundsForRendering, {}, "The area of the icon, empty for an item without one.")
+                                 .readOnly (ListBoxItemIds::textBounds, &ListBoxItem::getTextBoundsForRendering, {}, "The area of the text.")
+                                 .part (ListBoxItemIds::icon, &ListBoxItem::getIconBoundsForRendering, "The drawable or the image the item was given as its icon.")
                                  .build();
 
     return info;

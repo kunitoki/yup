@@ -271,6 +271,30 @@ TEST_F (SwitchButtonTest, VerticalSwitchBehavior)
     EXPECT_LE (toggledBounds.getBottom(), static_cast<float> (verticalSwitch->getHeight()));
 }
 
+TEST_F (SwitchButtonTest, KeepsItsSizeInALargerComponentAndStaysInItsMiddle)
+{
+    switchButton->setMillisecondsToSpendMoving (0);
+    switchButton->setBounds (0, 0, 200, 100);
+
+    // Twice as long as it is thick, whatever room it is given
+    EXPECT_EQ (switchButton->getSwitchBounds(), Rectangle<float> (72.0f, 36.0f, 56.0f, 28.0f));
+    EXPECT_EQ (switchButton->getSwitchCircleBounds(), Rectangle<float> (73.0f, 37.0f, 26.0f, 26.0f));
+
+    switchButton->setToggleState (true, dontSendNotification);
+    EXPECT_EQ (switchButton->getSwitchCircleBounds(), Rectangle<float> (101.0f, 37.0f, 26.0f, 26.0f));
+
+    // A style makes it larger, and a component with less room makes it fit
+    switchButton->setProperty (Identifier ("thumbSize"), 40.0);
+    EXPECT_EQ (switchButton->getSwitchBounds(), Rectangle<float> (60.0f, 30.0f, 80.0f, 40.0f));
+
+    switchButton->setBounds (0, 0, 30, 10);
+    EXPECT_EQ (switchButton->getSwitchBounds(), Rectangle<float> (5.0f, 0.0f, 20.0f, 10.0f));
+
+    // Where it is and where its handle is are told as properties, for a style painting it
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (switchButton->getProperty (Identifier ("trackBounds"))), switchButton->getSwitchBounds());
+    EXPECT_EQ (VariantConverter<Rectangle<float>>::fromVar (switchButton->getProperty (Identifier ("thumbBounds"))), switchButton->getSwitchCircleBounds());
+}
+
 TEST_F (SwitchButtonTest, LargeAnimationTime)
 {
     switchButton->setMillisecondsToSpendMoving (5000);

@@ -90,6 +90,19 @@ layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 color;
 void main() { color = texture (sampler2D (source, sourceSampler), uv) * params.tint; })";
 
+    /** The picture of the component, where the series sampled along its width is above a half. */
+    static constexpr const char* gateFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D source;
+layout(set = 0, binding = 1) uniform sampler sourceSampler;
+layout(set = 0, binding = 2) uniform texture2D gates;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    float gate = texture (sampler2D (gates, sourceSampler), vec2 (uv.x, 0.5)).r;
+    color = texture (sampler2D (source, sourceSampler), uv) * step (0.5, gate);
+})";
+
     /** Fills with its color, reading no picture. */
     static constexpr const char* fillFragment = R"(#version 450
 layout(set = 0, binding = 0) uniform Parameters { vec4 tint; } params;
@@ -490,6 +503,35 @@ TEST_F (ShaderEffectMetalTests, AShaderReadingNoPictureFillsTheBounds)
     // What the component painted is not shown
     for (const auto point : { Point<int> (1, 1), Point<int> (16, 8), Point<int> (30, 14) })
         expectPixel (screen, point.getX(), point.getY(), Color (0xff00ff00));
+}
+
+TEST_F (ShaderEffectMetalTests, AnArrayFillsTheTextureOfItsNameBesideThePictureOfTheComponent)
+{
+    const auto shader = compile (gateFragment);
+    ASSERT_NE (shader, nullptr);
+    EXPECT_EQ (shader->getInputTextureNames(), StringArray ({ "source", "gates" }));
+
+    // The texture an array names is no picture: the shader still reads one, the component
+    const std::vector<ShaderEffect::Property> properties { { "gates", Type::array } };
+    EXPECT_EQ (ShaderEffect::getNumPictures (*shader, properties), 1);
+    EXPECT_EQ (ShaderEffect::getNumPictures (*shader, {}), 2);
+
+    Filled screen ("screen", Color (0xff0000ff));
+    screen.setComponentEffect (new ShaderEffect (screen, shader, properties));
+
+    // Open on the left, closed on the right
+    screen.setProperty (Identifier ("gates"), var (Array<var> { 1.0, 1.0, 0.0, 0.0 }));
+    expectPixel (screen, 2, 8, Color (0xff0000ff));
+    expectPixel (screen, 29, 8, Colors::transparentBlack);
+
+    screen.setProperty (Identifier ("gates"), var (Array<var> { 0.0, 0.0, 1.0, 1.0 }));
+    expectPixel (screen, 2, 8, Colors::transparentBlack);
+    expectPixel (screen, 29, 8, Color (0xff0000ff));
+
+    // Without the property the texture is a second picture, which an effect doesn't have: the component is drawn as it is
+    screen.setComponentEffect (new ShaderEffect (screen, shader));
+    expectPixel (screen, 2, 8, Color (0xff0000ff));
+    expectPixel (screen, 29, 8, Color (0xff0000ff));
 }
 
 TEST_F (ShaderEffectMetalTests, WithoutAShaderTheComponentIsDrawnAsItIs)

@@ -1,0 +1,9 @@
+{
+    "params": {
+        "mode": 0,
+        "cutoff": 0.65,
+        "resonance": 0.3,
+        "drive": 0.2,
+        "mix": 0.5
+    }
+}

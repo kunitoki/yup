@@ -2087,6 +2087,20 @@ void Component::setTypeInfo (const ComponentTypeInfo* newTypeInfo)
     markStyleDirty();
 }
 
+bool Component::paintPart (Graphics& g, const Identifier& partName) const
+{
+    const auto* part = getTypeInfo().findPart (partName);
+
+    return part != nullptr && ApplicationTheme::paintComponentPart (g, *this, partName, part->getArea (*this));
+}
+
+bool Component::paintPart (Graphics& g, const Identifier& partName, const Rectangle<float>& area) const
+{
+    const auto* part = getTypeInfo().findPart (partName);
+
+    return part != nullptr && ApplicationTheme::paintComponentPart (g, *this, partName, part->isPlaceable ? area : part->getArea (*this));
+}
+
 const ComponentTypeInfo& Component::getClassTypeInfo()
 {
     using Type = ComponentProperty::Type;
