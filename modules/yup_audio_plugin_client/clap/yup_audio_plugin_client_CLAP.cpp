@@ -1035,7 +1035,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         }
 
         const auto tailSamples = audioProcessor.getTailSamples();
-        if (tailSamples < 0 || tailSamples == std::numeric_limits<int>::max())
+        if (tailSamples < 0 || tailSamples == AudioProcessorBase::infiniteTailSamples)
             return CLAP_PROCESS_CONTINUE;
 
         if (audioProcessor.getBusLayout().getNumAudioInputChannels() == 0)

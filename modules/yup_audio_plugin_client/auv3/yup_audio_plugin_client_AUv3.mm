@@ -1438,7 +1438,11 @@ public:
         if (processor == nullptr)
             return 0.0;
 
-        return static_cast<NSTimeInterval> (processor->getTailSamples()) / processor->getSampleRate();
+        const auto tailSamples = processor->getTailSamples();
+        if (tailSamples == AudioProcessorBase::infiniteTailSamples)
+            return std::numeric_limits<NSTimeInterval>::infinity();
+
+        return static_cast<NSTimeInterval> (tailSamples) / processor->getSampleRate();
     }
 
     bool getRenderingOffline() const
@@ -1612,6 +1616,16 @@ public:
             }
             {
                 ObjCMsgSendSuper<AUAudioUnit, void> (au, @selector (didChangeValueForKey:), @"latency");
+            }
+        }
+
+        if (details.tailChanged)
+        {
+            {
+                ObjCMsgSendSuper<AUAudioUnit, void> (au, @selector (willChangeValueForKey:), @"tailTime");
+            }
+            {
+                ObjCMsgSendSuper<AUAudioUnit, void> (au, @selector (didChangeValueForKey:), @"tailTime");
             }
         }
 

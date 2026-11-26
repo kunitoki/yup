@@ -55,7 +55,8 @@ namespace yup
 
     The plugin is loaded and controlled on the message thread of the server process, which
     must be running a dispatch loop, and processes audio on a dedicated real-time thread.
-    Plugin editors open in a floating window owned by the server process. The server
+    Plugin editors open in a floating window owned by the server process, which needs the
+    yup_gui module: a server built without it reports no editor. The server
     terminates itself as soon as the host disconnects.
 
     @see RemoteAudioPluginInstance

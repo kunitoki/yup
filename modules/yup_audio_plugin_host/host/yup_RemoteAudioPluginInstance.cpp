@@ -42,6 +42,10 @@ struct RemoteAudioPluginInstance::PluginInfo
         for (auto* flag : { &hasEditor, &acceptsMidi, &producesMidi, &supportsNoteExpression, &supportsMpe })
             *flag = stream.readBool();
 
+#if ! YUP_MODULE_AVAILABLE_yup_gui
+        hasEditor = false;
+#endif
+
         std::tie (currentPreset, presetNames) = Protocol::readPresets (stream);
     }
 
@@ -475,6 +479,7 @@ private:
 
 //==============================================================================
 
+#if YUP_MODULE_AVAILABLE_yup_gui
 /** Stands in for the editor, which opens in a window of the bridge server process. */
 class RemoteAudioPluginInstance::RemoteEditor final : public AudioProcessorEditor
 {
@@ -521,6 +526,7 @@ private:
     RemoteAudioPluginInstance& owner;
     Label label;
 };
+#endif
 
 //==============================================================================
 
@@ -873,12 +879,15 @@ bool RemoteAudioPluginInstance::hasEditor() const { return editorAvailable; }
 
 AudioProcessorEditor* RemoteAudioPluginInstance::createEditor()
 {
-    if (! editorAvailable || crashed.load())
-        return nullptr;
+#if YUP_MODULE_AVAILABLE_yup_gui
+    if (editorAvailable && ! crashed.load())
+        return new RemoteEditor (*this);
+#endif
 
-    return new RemoteEditor (*this);
+    return nullptr;
 }
 
+#if YUP_MODULE_AVAILABLE_yup_gui
 void RemoteAudioPluginInstance::showEditor (Component* ownerWindow)
 {
     if (editorAvailable)
@@ -931,6 +940,7 @@ void RemoteAudioPluginInstance::sendEditorRequest (bool shouldOpen, Component* o
     stream.writeInt (processId);
     connection->post (Protocol::MessageType::openEditor, stream.getMemoryBlock());
 }
+#endif
 
 //==============================================================================
 
@@ -1164,8 +1174,10 @@ void RemoteAudioPluginInstance::handleAsyncUpdate()
         return;
     }
 
+#if YUP_MODULE_AVAILABLE_yup_gui
     if (editorClosedPending.exchange (false) && onEditorClosed != nullptr)
         onEditorClosed();
+#endif
 
     const auto parameters = getParameters();
 

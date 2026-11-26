@@ -43,7 +43,8 @@ class AudioPluginParameterMailbox;
     Limitations: only single precision processing, parameter metadata changes after loading
     are not reflected, MIDI controller mappings are not exposed, and the editor opens in a
     separate window of the server process that the host manages (use showEditor(); createEditor()
-    returns a placeholder).
+    returns a placeholder). Editors need the yup_gui module: without it the instance reports
+    no editor and the editor functions are not available.
 
     @see AudioPluginBridgeServer
 */
@@ -105,6 +106,7 @@ public:
     */
     Result reload();
 
+#if YUP_MODULE_AVAILABLE_yup_gui
     //==============================================================================
 
     /**
@@ -132,6 +134,7 @@ public:
 
     /** Called on the message thread when the user closes the editor window, or it fails to open. */
     std::function<void()> onEditorClosed;
+#endif
 
     //==============================================================================
 
@@ -180,8 +183,12 @@ public:
 private:
     class Connection;
     class AudioChannel;
-    class RemoteEditor;
     struct PluginInfo;
+
+#if YUP_MODULE_AVAILABLE_yup_gui
+    class RemoteEditor;
+    void sendEditorRequest (bool shouldOpen, Component* ownerWindow = nullptr);
+#endif
 
     RemoteAudioPluginInstance (const AudioPluginDescription& description,
                                const AudioPluginHostContext& context,
@@ -197,7 +204,6 @@ private:
     void bypassStateChanged() override;
 
     void writeParameterChanges (const ParameterChangeBuffer& changes);
-    void sendEditorRequest (bool shouldOpen, Component* ownerWindow = nullptr);
     String convertValueToText (int index, float value);
     float convertTextToValue (int index, const String& text);
 

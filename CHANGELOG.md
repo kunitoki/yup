@@ -44,6 +44,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fixed CLAP plugins declaring the in-place pair on the output port only, which clap-validator rejects: the main input and output ports now name each other when their layouts match. `PLUGIN_CLAP_FEATURES` accepts every standard CLAP feature (`mixing`, `mastering`, `filter`, ...) instead of only ten of them.
 - Every plugin wrapper (CLAP, VST3, AU, AUv3, LV2, AAX and standalone) now calls `processBlock` and `processBlockBypassed` with denormals disabled, as `AudioGraphProcessor` and the plugin hosts already did, and restores the host thread's floating point mode afterwards.
 - The RETRACE synthesiser moved to a repository of its own, [kunitoki/retrace](https://github.com/kunitoki/retrace). `examples/plugin` is now a small polyphonic instrument (`YupSynth`) with four parameters, saved state and a resizable editor; the `example_plugin` targets keep their names.
+- Added `AudioProcessorBase::infiniteTailSamples`, the value `getTailSamples()` returns for a tail that never ends. VST3, AU and AUv3 plugins now report it to the host as an infinite tail, AUv3 plugins notify the host when the tail changes, and the AU host reads the tail of the plugins it loads and reports its changes (it always returned 0).
+- `yup_gui` is now an optional dependency of `yup_audio_plugin_host`: without it plugins are still scanned, loaded and processed, and instances report no editor. See the new headless audio page of the documentation.
+- Fixed LV2 plugins blocking the audio thread: `run()` try-locks the process lock like the other wrappers, no longer reserves the parameter change buffer on its first call and no longer calls the parameter listeners when the host sets a value. Suspended LV2 plugins now output silence instead of passing their input through.
 
 ### Core
 
@@ -129,6 +132,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `AppleCoreAudioFormat` picks the AAC container from the file extension and only claims AAC container extensions for writing.
 - `CartesianPlane` gains `setLegendTextColor`, so the legend is readable on light backgrounds.
 - `KMeterComponent` skips scale labels that would overlap, which crowded the compressed bottom of the segmented scale.
+- `AudioGraphProcessor` reports a tail with `getTailSamples()`: the longest tail of the paths reaching its outputs, refreshed without recompiling when a node reports a tail change. It now locks with `AudioLockType` instead of `std::mutex`, like the other audio classes.
 
 ### DSP
 
