@@ -253,6 +253,15 @@ public:
         the material, where the shader transpiler is built in (see
         MaterialShader::createFromSource).
 
+        A source is compiled for one graphics API, the one drawing the scene: the API of the
+        window the component is in, else the one of what painted it last, as a snapshot does, and
+        until there is either the one a window is given by default (see
+        ComponentNative::getDefaultGraphicsApi). When the scene turns out to be drawn with
+        another API, its next display frame forgets the material as it does when its file
+        changes, and the components naming it have it compiled again for that one, once. So what
+        a source has wrong for another API than the one in use is not told here: `yup_yui_tool`, and
+        compiling the material ahead into its variants, check the others.
+
         @param path The path of the material, as the `material` of a `shader` block writes it.
 
         @returns The shader, or what prevented it: a message starting with "can't read" when
@@ -412,6 +421,8 @@ private:
     void releaseLeavingNodes();
     SceneNodeComponent* pickNode (Point<float> position);
     void assetChanged (const String& path);
+    GpuPlatform findGraphicsApi();
+    void updateCompiledMaterials();
     bool updateAnimatedComponents (double elapsedSeconds);
     void requestFrame();
     void takeFrame (double elapsedSeconds);
@@ -427,6 +438,8 @@ private:
     std::map<String, ResultValue<GltfModel>> models;
     std::map<std::pair<String, bool>, ResultValue<Texture::Ptr>> textures;
     std::map<String, ResultValue<MaterialShader::Ptr>> materialShaders;
+    std::map<String, GpuPlatform> compiledMaterials; // The graphics API each material shader compiled from its source was compiled for, by its path
+    std::optional<GpuPlatform> paintedApi;           // The graphics API of what painted the scene last
     std::vector<Problem> problems;
     Array<WeakReference<Component>> changedMeshes;
     std::vector<WeakReference<Component>> leavingNodes; // The nodes that left the scene with an entity it keeps for them until its next frame

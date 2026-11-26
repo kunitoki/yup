@@ -91,6 +91,13 @@ namespace yup
     through them instead of straight lines: 0 keeps the lines, 1 follows the points around each one most.
     The first visible row of a series gives it its smoothing, as it gives its style.
 
+    A polyline joined by straight lines that has more vertices than the pixels it is drawn across is drawn
+    with what each column of pixels shows of it: the first, the lowest, the highest and the last of the
+    vertices sharing a column, which looks the same to within a pixel (see reducePolylineToPixelColumns).
+    This applies when the x of the vertices never decreases, and so do the bases. A smoothed polyline,
+    and one whose rows assign a `transform` or a `strokeDash`, keep all their vertices, as does the
+    outline getOutline returns.
+
     The `transform` of a row is applied before the transform of the Graphics, so shapes are positioned
     in the coordinates of the drawing as usual; `clip` and `clipPath` are not transformed by it. Bare
     enumeration values like `round` resolve to the type of the output they are assigned to.
@@ -170,7 +177,9 @@ public:
         Pass the same cache to every draw of a drawing: when the outputs of all the rows, the number of rows
         and the merging conditions of the Graphics (opacity, feather, blend mode, tint, stroke position) match
         the previous draw, the cached shapes are drawn again as they are, which saves building their paths
-        and lets the renderer reuse them. Programs are still evaluated on every draw.
+        and lets the renderer reuse them. Programs are still evaluated on every draw. A polyline kept with
+        fewer vertices than its rows gave it, for the pixels it was drawn across, is built again when the
+        Graphics draws it at a larger scale.
 
         Outputs that change on consecutive draws (animations) are drawn without being recorded, so they
         cost no more than drawing without a cache; once they stop changing, the next draw records the

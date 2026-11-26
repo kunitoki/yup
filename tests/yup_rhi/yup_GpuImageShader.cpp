@@ -149,6 +149,41 @@ layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 color;
 void main() { color = vec4 (uv, 0.0, 1.0); })";
 
+    /** Members and a texture named as other languages name things of their own: `point` in HLSL, `level`, `bias`
+        and `kernel` in MSL, whose variants declare them under other names.
+    */
+    static constexpr const char* keywordFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform Parameters
+{
+    vec4 point;
+    float level;
+    float bias;
+} params;
+layout(set = 0, binding = 1) uniform texture2D kernel;
+layout(set = 0, binding = 2) uniform sampler kernelSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    vec4 pixel = texture (sampler2D (kernel, kernelSampler), uv);
+    color = mix (pixel, pixel * params.point, params.level) * params.bias;
+})";
+
+    /** Compares two structures, which WGSL does not take: a source every graphics API compiles but WebGPU. */
+    static constexpr const char* notForWebGpuFragment = R"(#version 450
+struct Level { float value; };
+layout(location = 0) out vec4 color;
+void main()
+{
+    Level low = Level (0.0);
+    Level high = Level (1.0);
+    bool same = low == high;
+    color = same ? vec4 (1.0) : vec4 (0.0, 0.0, 0.0, 1.0);
+})";
+
+    /** The graphics APIs a shader is drawn with. */
+    static constexpr GpuPlatform drawingPlatforms[] = { GpuPlatform::OpenGL, GpuPlatform::OpenGLES, GpuPlatform::Direct3D, GpuPlatform::Metal, GpuPlatform::WebGPU, GpuPlatform::Vulkan };
+
     /** Compiles @p fragment behind a fullscreen vertex stage for the languages yup_shader_bundler targets by default. */
     static ResultValue<ShaderBundle> compileBundle (const char* fragment)
     {
@@ -614,6 +649,96 @@ TEST_F (GpuImageShaderTests, BundleBytesGiveTheReflectionOfTheSource)
         EXPECT_TRUE (loaded.getValue()->createUniforms() == fromSource.getValue()->createUniforms());
         EXPECT_FALSE (loaded.getValue()->createUniforms().isEmpty());
     }
+}
+
+TEST_F (GpuImageShaderTests, GlslCompiledForAGraphicsApiHasItsVariantAloneAndDeclaresTheSame)
+{
+    const auto everywhere = GpuImageShader::createFromGlsl (keywordFragment);
+    ASSERT_TRUE (everywhere.wasOk()) << everywhere.getErrorMessage();
+
+    const auto& expected = everywhere.getReference();
+    ASSERT_EQ (expected->getNumInputTextures(), 1);
+
+    for (const auto platform : drawingPlatforms)
+    {
+        const auto created = GpuImageShader::createFromGlsl (keywordFragment, platform);
+        ASSERT_TRUE (created.wasOk()) << static_cast<int> (platform) << ": " << created.getErrorMessage();
+
+        const auto& shader = created.getReference();
+
+        // OpenGL ES takes the GLSL variant of a shader compiled for OpenGL, as a draw does
+        for (const auto other : drawingPlatforms)
+        {
+            const bool canDraw = other == platform || (platform == GpuPlatform::OpenGL && other == GpuPlatform::OpenGLES);
+            EXPECT_EQ (shader->canDrawWith (other), canDraw) << static_cast<int> (platform) << " drawn with " << static_cast<int> (other);
+        }
+
+        // The block and the texture the source declares, by the names it gives them, whatever the language calls them
+        const auto& uniforms = shader->getUniformLayout();
+        EXPECT_TRUE (uniforms.hasSameLayoutAs (expected->getUniformLayout())) << static_cast<int> (platform);
+        EXPECT_EQ (uniforms.getNumComponents ("point"), 4) << static_cast<int> (platform);
+        EXPECT_EQ (uniforms.getNumComponents ("level"), 1) << static_cast<int> (platform);
+        EXPECT_EQ (uniforms.getNumComponents ("bias"), 1) << static_cast<int> (platform);
+        EXPECT_TRUE (shader->getInputTextureNames() == expected->getInputTextureNames()) << static_cast<int> (platform);
+        EXPECT_EQ (shader->getInputTextureNames()[0], String ("kernel")) << static_cast<int> (platform);
+    }
+}
+
+TEST_F (GpuImageShaderTests, GlslErrorsAreTheSameWhicheverGraphicsApiIsNamedAndWhatAnotherApiRefusesIsNotTold)
+{
+    static constexpr const char* broken = R"(#version 450
+layout(location = 0) out vec4 color;
+void main() { color = vec4 (missingValue); })";
+
+    const auto everywhere = GpuImageShader::createFromGlsl (broken);
+    ASSERT_TRUE (everywhere.failed());
+
+    for (const auto platform : drawingPlatforms)
+    {
+        const auto created = GpuImageShader::createFromGlsl (broken, platform);
+        ASSERT_TRUE (created.failed()) << static_cast<int> (platform);
+        EXPECT_EQ (created.getErrorMessage(), everywhere.getErrorMessage()) << static_cast<int> (platform);
+    }
+
+    // What one language alone does not take fails the source compiled for every API, and for the API of that language
+    const auto refused = GpuImageShader::createFromGlsl (notForWebGpuFragment);
+    ASSERT_TRUE (refused.failed());
+    EXPECT_TRUE (refused.getErrorMessage().containsIgnoreCase ("wgsl")) << refused.getErrorMessage();
+    EXPECT_EQ (getFailure (GpuImageShader::createFromGlsl (notForWebGpuFragment, GpuPlatform::WebGPU)), refused.getErrorMessage());
+
+    // Compiled for another API it is a shader, which that API draws
+    for (const auto platform : { GpuPlatform::OpenGL, GpuPlatform::OpenGLES, GpuPlatform::Direct3D, GpuPlatform::Metal, GpuPlatform::Vulkan })
+    {
+        const auto created = GpuImageShader::createFromGlsl (notForWebGpuFragment, platform);
+        ASSERT_TRUE (created.wasOk()) << static_cast<int> (platform) << ": " << getFailure (created);
+        EXPECT_TRUE (created.getReference()->canDrawWith (platform)) << static_cast<int> (platform);
+    }
+}
+
+TEST_F (GpuImageShaderTests, BytesOfASourceAreCompiledForTheGraphicsApiNamedAndABundleIsLoadedAsItIs)
+{
+    EXPECT_FALSE (GpuImageShader::isCompiledBundle (tintFragment, std::strlen (tintFragment)));
+
+    const auto fromSource = GpuImageShader::createFromData (tintFragment, std::strlen (tintFragment), GpuPlatform::Vulkan);
+    ASSERT_TRUE (fromSource.wasOk()) << fromSource.getErrorMessage();
+    EXPECT_TRUE (fromSource.getReference()->canDrawWith (GpuPlatform::Vulkan));
+    EXPECT_FALSE (fromSource.getReference()->canDrawWith (GpuPlatform::Metal));
+
+    const auto compiled = compileBundle (tintFragment);
+    ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+
+    MemoryBlock bytes;
+    ASSERT_TRUE (compiled.getReference().saveToMemoryBlock (bytes).wasOk());
+    EXPECT_TRUE (GpuImageShader::isCompiledBundle (bytes.getData(), bytes.getSize()));
+
+    // A bundle holds the variants it was built with, whatever the API it is loaded for
+    const auto loaded = GpuImageShader::createFromData (bytes.getData(), bytes.getSize(), GpuPlatform::Vulkan);
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+    for (const auto platform : drawingPlatforms)
+        EXPECT_TRUE (loaded.getReference()->canDrawWith (platform)) << static_cast<int> (platform);
+
+    EXPECT_TRUE (loaded.getReference()->getUniformLayout().hasSameLayoutAs (fromSource.getReference()->getUniformLayout()));
 }
 
 #endif // YUP_ENABLE_SHADER_TRANSPILER

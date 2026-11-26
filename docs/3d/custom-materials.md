@@ -105,9 +105,10 @@ and the derivatives included.
   `linearClamp`, `pointClamp`, `fragColor`, `outVelocity`, `MaterialParams`,
   `MaterialSurface`, `BsdfSurface` and `BsdfLayers`: call your own functions
   and variables something else.
-- A material is compiled for every graphics API at once, so it has to stay
-  within the GLSL the WebGPU target takes, whatever the application runs on.
-  See [GLSL on the WebGPU target](../graphics/rhi/wgsl-shaders.md).
+- A build, and `yup_yui_tool`, compile a material for every graphics API at
+  once, so it has to stay within the GLSL the WebGPU target takes, whatever the
+  application runs on. See
+  [GLSL on the WebGPU target](../graphics/rhi/wgsl-shaders.md).
 
 ## What the material of the mesh still decides
 
@@ -154,7 +155,7 @@ shader bundles: a raster variant and a full variant.
 
 | Function | Takes |
 | --- | --- |
-| `createFromSource (source)` | The GLSL text of the material, compiled when the application runs. |
+| `createFromSource (source, shaderDirectory, platform)` | The GLSL text of the material, compiled when the application runs. |
 | `createFromData (raster, rasterSize, full, fullSize)` | The bytes of the two compiled variants. |
 | `createFromBundles (raster, full)` | The two variants, as `ShaderBundle::Ptr`. |
 | `createDefault()` | Nothing: the stock material, the base color of the `Material`, unlit. |
@@ -175,6 +176,23 @@ without a GPU can tell what is wrong with a material.
   ERROR: material:3: 'missingValue' : undeclared identifier
   ```
 
+- `createFromSource (source)` compiles both variants for every graphics API,
+  which is what a tool checking a material wants and takes a moment. Naming
+  the API of the device that draws compiles them for that one alone, in a
+  fraction of the time:
+
+  ```cpp
+  auto created = yup::MaterialShader::createFromSource (source, yup::MaterialShader::getSourceDirectory(), device->getPlatform());
+  ```
+
+  The shader has the same uniform block and draws the same picture. A renderer
+  of another API can't draw with it and leaves the meshes to their `Material`,
+  and an error that only another API would give is not reported.
+- A `Scene3D` compiles the materials of its document this way, for the API
+  that draws it: the one of its window, or the one a window gets by default
+  while it is in none. When it turns out to be drawn with another API, it
+  compiles them again for that one, once. `yup_yui_tool` and the build, which
+  compile for every API, report what another API would refuse.
 - An application that ships creates its shaders from compiled variants. One
   that compiles materials where the sources of YUP are not, in a browser or on
   a phone, bundles `yup_MaterialShader.vert`, `yup_MaterialShader.frag` and the

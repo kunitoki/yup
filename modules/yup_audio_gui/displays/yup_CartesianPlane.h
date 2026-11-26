@@ -326,9 +326,40 @@ public:
 private:
     //==============================================================================
 
+    /* How the values of an axis are placed along it, worked out once for all the values of a paint. */
+    struct AxisMapping
+    {
+        /* Places the values of a range from an origin, over an extent that is negative for values growing backwards. */
+        static AxisMapping create (AxisScaleType scaleType, double minValue, double maxValue, float origin, float extent) noexcept;
+
+        float toPosition (double value) const noexcept;
+
+        bool operator== (const AxisMapping& other) const = default;
+
+        bool isLogarithmic = false;
+        double start = 0.0;
+        double length = 1.0;
+        float origin = 0.0f;
+        float extent = 0.0f;
+    };
+
+    /* What the paths of the signals are made for: the axes, the plot and the pixels a unit takes where they are painted. */
+    struct SignalMapping
+    {
+        bool operator== (const SignalMapping& other) const = default;
+
+        AxisMapping x, y;
+        Rectangle<float> bounds;
+        float pixelsPerUnit = 0.0f;
+    };
+
+    AxisMapping getXMapping (const Rectangle<float>& bounds) const;
+    AxisMapping getYMapping (const Rectangle<float>& bounds) const;
+
     void drawBackground (Graphics& g);
     void drawGrid (Graphics& g, const Rectangle<float>& bounds);
     void drawSignals (Graphics& g, const Rectangle<float>& bounds);
+    Path createSignalPath (const PlotSignal& signal, const SignalMapping& mapping);
     void drawAxisLabels (Graphics& g, const Rectangle<float>& bounds);
     void drawTitle (Graphics& g);
     void drawLegend (Graphics& g, const Rectangle<float>& bounds);
@@ -367,6 +398,11 @@ private:
 
     // Signals
     std::vector<PlotSignal> signals;
+
+    // The path each signal was last painted as, kept while its data and what the paths are made for are the same
+    std::vector<std::optional<Path>> signalPaths;
+    SignalMapping signalMapping;
+    std::vector<Point<float>> signalRun;
 
     // Legend
     bool showLegend { true };

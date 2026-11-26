@@ -198,6 +198,34 @@ g.strokePath (wave);
   <img class="dark-only rounded" src="../_static/images/graphics/drawing_path_dark.jpg#gh-dark-mode-only" alt="A sine wave stroked as a path" width="400">
 </p>
 
+## Draw a series with more points than pixels
+
+A signal or a spectrum often has many points for each pixel of its width, which
+draw over each other. `reducePolylineToPixelColumns` keeps what each column of
+pixels shows of such a line - its first, lowest, highest and last point - so the
+path is short and looks the same:
+
+```cpp
+std::vector<Point<float>> points = ...; // At least one, where they are drawn
+
+points.resize (reducePolylineToPixelColumns (points, g.getContextScale()));
+
+Path line;
+line.moveTo (points.front());
+for (size_t i = 1; i < points.size(); ++i)
+    line.lineTo (points[i]);
+
+g.strokePath (line);
+```
+
+The second argument is the number of pixels a unit of x takes where the line is
+drawn: the scale of the `Graphics`, times the one of its transform when it
+scales. A line whose x goes back, or with no more than four points a column, is
+left as it is. Points reduced for a scale lack what a larger one shows: reduce
+them again from all of them to draw larger. The series of an
+[`ExpressionDrawing`](expressions.md) and the signals of a `CartesianPlane` are
+drawn this way.
+
 ## Layer drawings at group opacity
 
 ```cpp

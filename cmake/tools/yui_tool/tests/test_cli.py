@@ -111,6 +111,14 @@ TINT_FRAGMENT = ('#version 450\n'
                  'void main()\n{\n    vec4 pixel = texture (sampler2D (source, sourceSampler), uv);\n'
                  '    color = mix (pixel, pixel * params.tint, params.intensity);\n}\n')
 BROKEN_FRAGMENT = '#version 450\nlayout(location = 0) out vec4 color;\nvoid main() { color = vec4 (missingValue); }\n'
+# A fragment every graphics API compiles but WebGPU, which does not compare structures
+NOT_FOR_WEBGPU_FRAGMENT = ('#version 450\n'
+                           'struct Level { float value; };\n'
+                           'layout(location = 0) out vec4 color;\n'
+                           'void main()\n{\n'
+                           '    Level low = Level (0.0);\n'
+                           '    Level high = Level (1.0);\n'
+                           '    color = low == high ? vec4 (1.0) : vec4 (0.0, 0.0, 0.0, 1.0);\n}\n')
 # A material lit at its rim, and one whose third line does not compile
 RIM_MATERIAL = ('YUP_MATERIAL_PARAMS\n{\n    vec4 rim;\n    float strength;\n} params;\n\n'
                 'vec4 yupMaterial (YupSurface surface)\n{\n'
@@ -450,6 +458,18 @@ class YuiToolCliTests(unittest.TestCase):
 
         # A file of declarations names its files from the folder of the file importing it, so it is checked with that file
         self.assertEqual(self.diagnostics("verify", "parts/fx.yui", code=0), [])
+
+    def test_verify_compiles_the_source_of_a_shader_for_every_graphics_api(self):
+        self.write("fx/tint.frag", NOT_FOR_WEBGPU_FRAGMENT)
+        path = self.write("parts/fx.yui", UNUSED)
+        self.write("ui.yui", 'import "parts/fx.yui";\n\nComponent { }\n')
+
+        # An interface compiles the source for the graphics API it is drawn with: what another one refuses is told here
+        found = self.diagnostics("verify", "ui.yui", code=1)
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual((found[0]["file"], found[0]["line"], found[0]["column"]), (str(path), 2, 5))
+        self.assertTrue(found[0]["message"].startswith("shader Tint: "), found[0]["message"])
+        self.assertIn("wgsl", found[0]["message"].lower())
 
     def test_verify_compiles_a_material(self):
         self.write("fx/rim.glsl", RIM_MATERIAL)

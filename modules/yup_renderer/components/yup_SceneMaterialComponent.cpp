@@ -189,8 +189,13 @@ void SceneMaterialComponent::updateTexture (size_t slot)
 
 void SceneMaterialComponent::assetChanged (const String& path)
 {
-    // The next frame asks the scene for the shader again: it is another one when the file that changed was one of its own
-    shaderSheet = nullptr;
+    if (shaderSheet != nullptr)
+    {
+        const auto source = shaderSheet->findShader (shaderName).getProperty ("material").toString();
+
+        if (source.isEmpty() || path == source || path == source + ".raster.ysl" || path == source + ".full.ysl")
+            shaderSheet = nullptr;
+    }
 
     for (size_t slot = 0; slot < texturePaths.size(); ++slot)
     {

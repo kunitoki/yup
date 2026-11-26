@@ -287,6 +287,7 @@ void CartesianPlane::setYAxisLabels (const std::vector<double>& values, const Co
 void CartesianPlane::clearSignals()
 {
     signals.clear();
+    signalPaths.clear();
     repaint();
 }
 
@@ -302,6 +303,10 @@ void CartesianPlane::updateSignalData (int signalIndex, const std::vector<Point<
     if (isPositiveAndBelow (signalIndex, signals.size()))
     {
         signals[static_cast<size_t> (signalIndex)].data = data;
+
+        if (isPositiveAndBelow (signalIndex, signalPaths.size()))
+            signalPaths[static_cast<size_t> (signalIndex)].reset();
+
         repaint();
     }
 }
@@ -370,50 +375,47 @@ void CartesianPlane::setLegendTextColor (const Color& color)
 //==============================================================================
 // Coordinate transformations
 
+CartesianPlane::AxisMapping CartesianPlane::AxisMapping::create (AxisScaleType scaleType, double minValue, double maxValue, float origin, float extent) noexcept
+{
+    if (scaleType != AxisScaleType::logarithmic)
+        return { false, minValue, maxValue - minValue, origin, extent };
+
+    const auto logMin = std::log10 (minValue);
+
+    return { true, logMin, std::log10 (maxValue) - logMin, origin, extent };
+}
+
+float CartesianPlane::AxisMapping::toPosition (double value) const noexcept
+{
+    if (isLogarithmic)
+    {
+        if (value <= 0.0)
+            return origin;
+
+        value = std::log10 (value);
+    }
+
+    return origin + static_cast<float> ((value - start) / length * extent);
+}
+
+CartesianPlane::AxisMapping CartesianPlane::getXMapping (const Rectangle<float>& bounds) const
+{
+    return AxisMapping::create (getXScaleType(), xMin, xMax, bounds.getX(), bounds.getWidth());
+}
+
+CartesianPlane::AxisMapping CartesianPlane::getYMapping (const Rectangle<float>& bounds) const
+{
+    return AxisMapping::create (getYScaleType(), yMin, yMax, bounds.getBottom(), -bounds.getHeight());
+}
+
 float CartesianPlane::valueToX (double value) const
 {
-    auto bounds = getPlotBounds();
-
-    double normalised = 0.0;
-    if (getXScaleType() == AxisScaleType::logarithmic)
-    {
-        if (value <= 0.0 || xMin <= 0.0 || xMax <= 0.0)
-            return bounds.getX();
-
-        double logValue = std::log10 (value);
-        double logMin = std::log10 (xMin);
-        double logMax = std::log10 (xMax);
-        normalised = (logValue - logMin) / (logMax - logMin);
-    }
-    else
-    {
-        normalised = (value - xMin) / (xMax - xMin);
-    }
-
-    return bounds.getX() + static_cast<float> (normalised * bounds.getWidth());
+    return getXMapping (getPlotBounds()).toPosition (value);
 }
 
 float CartesianPlane::valueToY (double value) const
 {
-    auto bounds = getPlotBounds();
-
-    double normalised = 0.0;
-    if (getYScaleType() == AxisScaleType::logarithmic)
-    {
-        if (value <= 0.0 || yMin <= 0.0 || yMax <= 0.0)
-            return bounds.getBottom();
-
-        double logValue = std::log10 (value);
-        double logMin = std::log10 (yMin);
-        double logMax = std::log10 (yMax);
-        normalised = (logValue - logMin) / (logMax - logMin);
-    }
-    else
-    {
-        normalised = (value - yMin) / (yMax - yMin);
-    }
-
-    return bounds.getBottom() - static_cast<float> (normalised * bounds.getHeight());
+    return getYMapping (getPlotBounds()).toPosition (value);
 }
 
 double CartesianPlane::xToValue (float x) const
@@ -532,71 +534,123 @@ void CartesianPlane::drawGrid (Graphics& g, const Rectangle<float>& bounds)
 
 void CartesianPlane::drawSignals (Graphics& g, const Rectangle<float>& bounds)
 {
-    for (const auto& signal : signals)
+    const auto graphicsTransform = g.getTransform();
+    const SignalMapping mapping { getXMapping (bounds),
+                                  getYMapping (bounds),
+                                  bounds,
+                                  g.getContextScale() * std::hypot (graphicsTransform.getScaleX(), graphicsTransform.getShearY()) };
+
+    // A path is made for the axes, the plot and the pixels it is painted across: none outlives a change of these
+    if (! (mapping == signalMapping))
     {
+        signalPaths.clear();
+        signalMapping = mapping;
+    }
+
+    signalPaths.resize (signals.size());
+
+    for (size_t i = 0; i < signals.size(); ++i)
+    {
+        const auto& signal = signals[i];
+
         if (! signal.visible || signal.data.empty())
             continue;
 
         g.setStrokeColor (signal.color);
         g.setStrokeWidth (signal.strokeWidth);
 
-        Path path;
-        bool firstPoint = true;
-        Point<float> previousPoint;
-        bool previousPointValid = false;
+        auto& path = signalPaths[i];
 
-        for (const auto& point : signal.data)
+        if (! path.has_value())
+            path = createSignalPath (signal, mapping);
+
+        if (! path->isEmpty())
+            g.strokePath (*path);
+    }
+}
+
+Path CartesianPlane::createSignalPath (const PlotSignal& signal, const SignalMapping& mapping)
+{
+    const auto& bounds = mapping.bounds;
+
+    Path path;
+    signalRun.clear();
+
+    // The points of a line across the plot are collected up to where it leaves it, and joined once they are reduced
+    // to the pixels they are drawn across
+    const auto endRun = [this, &path, &mapping]
+    {
+        if (signalRun.empty())
+            return;
+
+        const auto numPoints = reducePolylineToPixelColumns (signalRun, mapping.pixelsPerUnit);
+
+        path.startNewSubPath (signalRun.front());
+
+        for (size_t i = 1; i < numPoints; ++i)
+            path.lineTo (signalRun[i]);
+
+        signalRun.clear();
+    };
+
+    const auto startRun = [this, &endRun] (const Point<float>& point)
+    {
+        endRun();
+        signalRun.push_back (point);
+    };
+
+    bool firstPoint = true;
+    Point<float> previousPoint;
+    bool previousPointValid = false;
+
+    for (const auto& point : signal.data)
+    {
+        const Point<float> currentPoint (mapping.x.toPosition (point.getX()), mapping.y.toPosition (point.getY()));
+        bool currentPointInBounds = bounds.contains (currentPoint);
+
+        // Handle visibility and path continuity
+        if (currentPointInBounds)
         {
-            float x = valueToX (point.getX());
-            float y = valueToY (point.getY());
-
-            Point<float> currentPoint (x, y);
-            bool currentPointInBounds = bounds.contains (currentPoint);
-
-            // Handle visibility and path continuity
-            if (currentPointInBounds)
+            if (firstPoint)
             {
-                if (firstPoint)
-                {
-                    path.startNewSubPath (x, y);
-                    firstPoint = false;
-                }
-                else if (previousPointValid && ! bounds.contains (previousPoint))
-                {
-                    // Previous point was outside, current is inside - find intersection and start new subpath
-                    auto intersection = findBoundsIntersection (previousPoint, currentPoint, bounds);
-                    if (intersection.has_value())
-                    {
-                        path.startNewSubPath (intersection->getX(), intersection->getY());
-                        path.lineTo (x, y);
-                    }
-                    else
-                    {
-                        path.startNewSubPath (x, y);
-                    }
-                }
-                else
-                {
-                    path.lineTo (x, y);
-                }
+                startRun (currentPoint);
+                firstPoint = false;
             }
-            else if (previousPointValid && bounds.contains (previousPoint))
+            else if (previousPointValid && ! bounds.contains (previousPoint))
             {
-                // Previous point was inside, current is outside - draw to intersection
+                // Previous point was outside, current is inside - find intersection and start new subpath
                 auto intersection = findBoundsIntersection (previousPoint, currentPoint, bounds);
                 if (intersection.has_value())
                 {
-                    path.lineTo (intersection->getX(), intersection->getY());
+                    startRun (*intersection);
+                    signalRun.push_back (currentPoint);
+                }
+                else
+                {
+                    startRun (currentPoint);
                 }
             }
-
-            previousPoint = currentPoint;
-            previousPointValid = true;
+            else
+            {
+                signalRun.push_back (currentPoint);
+            }
+        }
+        else if (previousPointValid && bounds.contains (previousPoint))
+        {
+            // Previous point was inside, current is outside - draw to intersection
+            auto intersection = findBoundsIntersection (previousPoint, currentPoint, bounds);
+            if (intersection.has_value())
+            {
+                signalRun.push_back (*intersection);
+            }
         }
 
-        if (! firstPoint)
-            g.strokePath (path);
+        previousPoint = currentPoint;
+        previousPointValid = true;
     }
+
+    endRun();
+    return path;
 }
 
 void CartesianPlane::drawAxisLabels (Graphics& g, const Rectangle<float>& bounds)

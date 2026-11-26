@@ -176,7 +176,8 @@ public:
     void parentHierarchyChanged() override;
     /** @internal Gives the entity of a 3D component the material of its first Material3D: what a parent whose entity changed calls. */
     static void updateHost (Component& hostToUpdate);
-    /** @internal Loads again the textures made from the file that changed, and has the shader looked for again. */
+    /** @internal Loads again the textures made from the file that changed, and has the shader looked for again when
+        the file is one of its own: the material its `shader` block names, or one of its two compiled variants. */
     void assetChanged (const String& path);
     /** @internal Looks for the shaders the Material3D components shown by a scene name and reads their values again, on
         every display frame. Returns true when a value given to the renderer changed. */

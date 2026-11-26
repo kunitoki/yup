@@ -77,6 +77,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Breaking:** `Mesh::addPrimitive` returns a `Result` and refuses what is not a list of triangles of its vertices instead of asserting. `GltfModel::getWarnings` also reports the unsupported extensions a file uses, the primitives a mesh refused and values that are not finite.
 - Fixed `Prefab::instantiate` making the parts of an entity destroyed by an attach callback, `ShaderBundle` loading a bundle with an unknown shader stage or language, and `SceneComponent` crashing when it paints its error message with no global `ApplicationTheme`.
 - `SceneComponent` takes the frames of its window only while it has something to do, so a window showing a still scene can idle. While it is not showing it no longer updates its scene, `setContinuousUpdates (true)` included, and releases its render targets (`SceneRenderer::releaseTargets()`).
+- Added `reducePolylineToPixelColumns`, which reduces a line with more points than the pixels it is drawn across to the first, lowest, highest and last point of each pixel column. `CartesianPlane` draws its signals with it and keeps their paths between paints.
 
 ### UI
 
@@ -139,6 +140,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fixed an indeterminate `ProgressBar` lower than a pixel dividing by zero when painted. Added `ComboBox::getTextBounds` and `getArrowBounds`.
 - `SwitchButton`, `ProgressBar`, `ListBox`, `TabBar`, `TreeView`, `Viewport` and `Artboard` ask their window for frames only while they animate and are showing, so a window with nothing moving idles. Their animations pause while hidden, and a subclass overriding `visibilityChanged()` or `parentHierarchyChanged()` has to call the base.
 - `SwitchButton` slides by the time of the frames instead of the clock and no longer slides when toggled out of sight, and `TextEditor` repaints only its caret when it blinks.
+- Added `ComponentNative::getDefaultGraphicsApi()`, the graphics API a window is given when it asks for none.
 
 ### Audio
 

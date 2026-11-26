@@ -1832,7 +1832,7 @@ private:
                                                    found.block.clone(),
                                                    isLoaded,
                                                    isLoaded ? found.shader->getInputTextureNames() : StringArray(),
-                                                   isLoaded && found.shader->createUniforms().hasMember ("time") });
+                                                   isLoaded && found.shader->getUniformLayout().hasMember ("time") });
         }
 
         return found;
@@ -2921,7 +2921,7 @@ public:
 
                     return found.shader == nullptr
                         || (found.shader->getInputTextureNames() == dependency.textureNames
-                            && found.shader->createUniforms().hasMember ("time") == dependency.hasTime);
+                            && found.shader->getUniformLayout().hasMember ("time") == dependency.hasTime);
                 }))
             {
                 return candidate;

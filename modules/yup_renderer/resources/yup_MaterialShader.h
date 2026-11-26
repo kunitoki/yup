@@ -158,6 +158,13 @@ public:
         `material`. Only available when the shader transpiler is compiled in
         (YUP_ENABLE_SHADER_TRANSPILER = 1).
 
+        Naming a graphics API compiles both variants for the language of that API alone (see
+        GpuImageShader::getShaderLanguage), in a fraction of the time: what a `Scene3D` does with
+        the materials of its document, for the API it is drawn with. A renderer of another API
+        can't draw with the shader then, and leaves the meshes to their material (see
+        SceneRenderer::getMaterialShaderError), and what would not compile for another API is not
+        told. The uniform block is the same whichever API the material is compiled for.
+
         The template and the shader library it includes are read from @p shaderDirectory: they
         are files of this module, not part of the binary. An application that ships without the
         sources of the module creates its shaders from compiled variants instead, or bundles
@@ -167,10 +174,14 @@ public:
                                 its uniform block if it has one.
         @param shaderDirectory  The `shaders` folder of the yup_renderer module, holding
                                 yup_MaterialShader.vert, yup_MaterialShader.frag and `lib`.
+        @param platform         The graphics API to compile the material for, or nothing to
+                                compile it for all of them.
 
         @returns The shader, or the errors of the compiler, or that the template was not found.
     */
-    static ResultValue<MaterialShader::Ptr> createFromSource (const String& source, const File& shaderDirectory = getSourceDirectory());
+    static ResultValue<MaterialShader::Ptr> createFromSource (const String& source,
+                                                              const File& shaderDirectory = getSourceDirectory(),
+                                                              std::optional<GpuPlatform> platform = std::nullopt);
 
     /** Returns the folder createFromSource() reads by default: the one given to
         setSourceDirectory(), else the `shaders` folder of this module where the binary was built
@@ -236,6 +247,8 @@ public:
 
 private:
     MaterialShader();
+
+    static ResultValue<Ptr> createFromVariants (ShaderBundle::Ptr rasterBundle, ShaderBundle::Ptr fullBundle, bool describedAsGlsl);
 
     ShaderBundle::Ptr rasterBundle;
     ShaderBundle::Ptr fullBundle;

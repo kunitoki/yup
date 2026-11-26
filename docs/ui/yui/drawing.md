@@ -277,7 +277,9 @@ overridden per component.
   through each other at an `opacity` below 1. Use a `layer` to fade them as one image.
 - `repeat` exposes the current index as an integer `let` named by `name`. Integer
   division truncates, so write `i / 10.0` for a fraction. Its iteration count is
-  capped at `4096` (constant ranges above `4096` fail to compile).
+  capped at `4096`: a constant range above `4096` fails to compile, and one
+  that is only known when painting runs its first `4096` turns, without a
+  diagnostic.
 - A `repeat` holding only shapes and `let`s runs each shape for every index
   before the next shape, as the rows of one program, which keeps long repeats
   cheap. One holding a `group`, a `clip`, a `viewport`, a `use` or another
@@ -852,6 +854,9 @@ style {
 - A `vertex` is a shape: it takes the paint of the groups around it, and a
   `clipPath` clips to the area of a series. It has no `objectBounds`, as it is
   one point of what has them.
+- Each `vertex` element draws lines of its own. Two elements in one `repeat`
+  are never joined, whatever their `series`, so a line has a `base` under
+  every one of its points or under none.
 
 **Where the numbers come from.** A component that keeps numbers to show
 declares them as a *series*, an array property a drawing reads where the
@@ -863,7 +868,12 @@ series of every widget, and `yup_yui_tool schema` marks them with
 for each paint: a `number[]` property of the drawing, or a value of a model.
 
 **As many points as there is room for.** A line has no use for more points
-than the pixels it is drawn across, and a `repeat` runs 4096 turns at most.
+than the pixels it is drawn across. One made of straight lines, whose points
+never go back along x, is drawn with what each column of pixels shows of it:
+the first, the lowest, the highest and the last of the points sharing the
+column, which looks the same and is faster to draw. Its points are still all
+evaluated though, a line with a `smooth` above 0, a `dash` or a `transform`
+of its own keeps every one of them, and a `repeat` runs 4096 turns at most.
 So the turns follow the width, as above, and each reads the series where it
 stands:
 

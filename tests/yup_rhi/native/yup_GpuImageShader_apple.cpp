@@ -237,6 +237,66 @@ TEST_F (GpuImageShaderMetalTests, DrawsWithUniformsSetByHandleAndWithTheOnesOfTh
         expectPixel (pixels, index, 102, 51, 26, 128);
 }
 
+TEST_F (GpuImageShaderMetalTests, ShaderCompiledForMetalAloneDrawsWithTheMembersTheSourceNames)
+{
+    /** `level` and `bias` are names of Metal's own, and so is `kernel`: its variant declares them under other names. */
+    static constexpr const char* fragment = R"(#version 450
+layout(set = 0, binding = 0) uniform Parameters
+{
+    float level;
+    float bias;
+} params;
+layout(set = 0, binding = 1) uniform texture2D kernel;
+layout(set = 0, binding = 2) uniform sampler kernelSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main() { color = texture (sampler2D (kernel, kernelSampler), uv) * params.level + vec4 (params.bias); })";
+
+    const auto created = GpuImageShader::createFromGlsl (fragment, GpuPlatform::Metal);
+    ASSERT_TRUE (created.wasOk()) << created.getErrorMessage();
+
+    const auto shader = created.getValue();
+    EXPECT_TRUE (shader->canDrawWith (GpuPlatform::Metal));
+    EXPECT_FALSE (shader->canDrawWith (GpuPlatform::OpenGL));
+    ASSERT_EQ (shader->getNumInputTextures(), 1);
+    EXPECT_EQ (shader->getInputTextureNames()[0], String ("kernel"));
+
+    auto uniforms = shader->createUniforms();
+    ASSERT_TRUE (uniforms.set ("level", 0.5f));
+    ASSERT_TRUE (uniforms.set ("bias", 0.2f));
+
+    auto source = makeTexture (1, 1, { 200, 100, 0, 255 });
+    ASSERT_NE (source, nullptr);
+
+    const auto pixels = drawAndRead (*shader, 2, uniforms, source);
+    ASSERT_EQ (pixels.size(), 16u);
+
+    for (size_t index = 0; index < 4; ++index)
+        expectPixel (pixels, index, 151, 101, 51, 178);
+
+    // The shader compiled for every API draws the same picture, with the same uniforms
+    const auto everywhere = createShader (fragment);
+    ASSERT_NE (everywhere, nullptr);
+    ASSERT_TRUE (everywhere->getUniformLayout().hasSameLayoutAs (shader->getUniformLayout()));
+    EXPECT_EQ (drawAndRead (*everywhere, 2, uniforms, source), pixels);
+}
+
+TEST_F (GpuImageShaderMetalTests, ShaderCompiledForAnotherApiIsNotDrawn)
+{
+    const auto created = GpuImageShader::createFromGlsl (fillFragment, GpuPlatform::OpenGL);
+    ASSERT_TRUE (created.wasOk()) << created.getErrorMessage();
+
+    auto target = GpuTarget::create (device, 2, 2);
+    ASSERT_NE (target, nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    const auto drawn = created.getReference()->draw (device, frame, *target, created.getReference()->createUniforms());
+    frame.submit();
+
+    ASSERT_TRUE (drawn.failed());
+    EXPECT_TRUE (drawn.getErrorMessage().contains ("variant")) << drawn.getErrorMessage();
+}
+
 TEST_F (GpuImageShaderMetalTests, DrawFailsWithoutTheInputTheShaderDeclares)
 {
     const auto shader = createShader (copyFragment);

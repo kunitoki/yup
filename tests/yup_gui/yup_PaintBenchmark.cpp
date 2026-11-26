@@ -510,26 +510,36 @@ TEST_F (PaintBenchmarkTests, DISABLED_SeriesPolylinePaintTimes)
     Drawn component (512.0f, 256.0f);
     component.levels.resize (2048);
 
-    ASSERT_NO_FATAL_FAILURE (setDrawing (component, R"yui(
-        drawing Scope {
-            let count: len (levels);
-            let step: bounds.width / (count - 1.0);
+    // More points than the pixels they are drawn across: 4096 across the 512 pixels of 256 units
+    Drawn dense (256.0f, 128.0f);
+    dense.levels.resize (4096);
 
-            repeat i in 0 .. count {
-                vertex { at: point (i * step, bounds.bottom - levels[i] * bounds.height); base: point (i * step, bounds.bottom); fill: palette.accent; }
-            }
-        })yui"));
+    for (auto* drawn : { &component, &dense })
+    {
+        ASSERT_NO_FATAL_FAILURE (setDrawing (*drawn, R"yui(
+            drawing Scope {
+                let count: len (levels);
+                let step: bounds.width / (count - 1.0);
+
+                repeat i in 0 .. count {
+                    vertex { at: point (i * step, bounds.bottom - levels[i] * bounds.height); base: point (i * step, bounds.bottom); fill: palette.accent; }
+                }
+            })yui"));
+    }
 
     const auto canvas = makeCanvas (component);
+    const auto denseCanvas = makeCanvas (dense);
     ASSERT_NE (canvas, nullptr);
+    ASSERT_NE (denseCanvas, nullptr);
 
-    const auto moveLevels = [&component] (int iteration)
+    const auto moveLevels = [] (Drawn& drawn, int iteration)
     {
-        for (size_t i = 0; i < component.levels.size(); ++i)
-            component.levels[i] = 0.5f + 0.4f * std::sin (0.02f * static_cast<float> (i) + 0.1f * static_cast<float> (iteration));
+        for (size_t i = 0; i < drawn.levels.size(); ++i)
+            drawn.levels[i] = 0.5f + 0.4f * std::sin (0.02f * static_cast<float> (i) + 0.1f * static_cast<float> (iteration));
     };
 
-    timeRows ({ { "series polyline 2048 points 512x256", [&] (int) { paintFrame (component, *canvas); }, moveLevels } });
+    timeRows ({ { "series polyline 2048 points 512x256", [&] (int) { paintFrame (component, *canvas); }, [&] (int iteration) { moveLevels (component, iteration); } },
+                { "series polyline 4096 points 256x128", [&] (int) { paintFrame (dense, *denseCanvas); }, [&] (int iteration) { moveLevels (dense, iteration); } } });
 }
 
 /** 200 plain shapes, each reading the size and the states of the component, two properties its
@@ -559,6 +569,34 @@ TEST_F (PaintBenchmarkTests, DISABLED_ManyShapesPaintTimes)
 }
 
 #if YUP_ENABLE_SHADER_TRANSPILER
+
+/** A fragment shader made from its source, as the `shader` block of a stylesheet is when it is loaded and each
+    time its file changes: the source is another one at each iteration, as an edited file is. For every graphics
+    API, as a tool checks it, and for the one a window draws with, as an interface loads it. */
+TEST_F (PaintBenchmarkTests, DISABLED_ShaderLoadTimes)
+{
+    ASSERT_TRUE (GpuImageShader::createFromGlsl (pulseFragment).wasOk());
+
+    const auto makeSource = [] (int iteration)
+    {
+        return String (pulseFragment) + "\n// " + String (iteration) + "\n";
+    };
+
+    const auto load = [&makeSource] (int iteration)
+    {
+        const auto shader = GpuImageShader::createFromGlsl (makeSource (iteration));
+        ignoreUnused (shader);
+    };
+
+    const auto loadForOneApi = [&makeSource] (int iteration)
+    {
+        const auto shader = GpuImageShader::createFromGlsl (makeSource (iteration), ComponentNative::getDefaultGraphicsApi());
+        ignoreUnused (shader);
+    };
+
+    timeRows ({ { "image shader made from its source", load },
+                { "image shader made from its source for one graphics API", loadForOneApi } });
+}
 
 /** A panel of 48 children drawn through a ShaderEffect whose shader is given the time: every frame
     of its window advances the time, which repaints the panel, then the window is painted. */

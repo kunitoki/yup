@@ -48,35 +48,15 @@ File& getMaterialShaderSourceDirectory()
 }
 #endif
 
-/** Checks that @p bundle is the template compiled around a material for one tier, whose fragment
+/** Checks that two stages are the template compiled around a material for one tier, whose fragment
     stage writes @p numOutputs outputs, and returns the uniforms of the block the material
     declares, empty without one.
 */
-ResultValue<ShaderUniforms> validateMaterialVariant (const ShaderBundle& bundle, const char* tier, size_t numOutputs)
+ResultValue<ShaderUniforms> validateMaterialStages (const ShaderReflection& vertex, const ShaderReflection& reflection, const char* tier, size_t numOutputs)
 {
-    // Every variant of a stage reflects the same shader, so the first one tells what it declares
-    const auto findStage = [&bundle] (ShaderStage stage) -> const ShaderInfo*
+    const auto declaresBlock = [] (const ShaderReflection& stage, uint32 set, uint32 binding)
     {
-        for (const auto& shader : bundle.getShaders())
-        {
-            if (shader.stage == stage)
-                return &shader;
-        }
-
-        return nullptr;
-    };
-
-    const auto* vertex = findStage (ShaderStage::vertex);
-    if (vertex == nullptr)
-        return makeResultValueFail (String ("The ") + tier + " variant of the material shader has no vertex stage");
-
-    const auto* fragment = findStage (ShaderStage::fragment);
-    if (fragment == nullptr)
-        return makeResultValueFail (String ("The ") + tier + " variant of the material shader has no fragment stage");
-
-    const auto declaresBlock = [] (const ShaderReflection& reflection, uint32 set, uint32 binding)
-    {
-        return std::any_of (reflection.uniformBuffers.begin(), reflection.uniformBuffers.end(), [set, binding] (const auto& block)
+        return std::any_of (stage.uniformBuffers.begin(), stage.uniformBuffers.end(), [set, binding] (const auto& block)
         {
             return block.set == set && block.binding == binding;
         });
@@ -84,8 +64,7 @@ ResultValue<ShaderUniforms> validateMaterialVariant (const ShaderBundle& bundle,
 
     // The template reads the DrawBlock in its vertex stage and the MaterialBlock in its fragment
     // stage, which writes the color, and the motion with it on the full tier
-    const auto& reflection = fragment->reflection;
-    if (! declaresBlock (vertex->reflection, 2, 0) || ! declaresBlock (reflection, 2, 1) || reflection.stageOutputs.size() != numOutputs)
+    if (! declaresBlock (vertex, 2, 0) || ! declaresBlock (reflection, 2, 1) || reflection.stageOutputs.size() != numOutputs)
         return makeResultValueFail (String ("The ") + tier + " variant is not the material shader template compiled for the " + tier + " tier");
 
     ShaderUniforms uniforms;
@@ -121,12 +100,12 @@ ResultValue<ShaderUniforms> validateMaterialVariant (const ShaderBundle& bundle,
         return makeResultValueFail ("The material declares a texture, which nothing binds: it reads the textures of the Material of the mesh through its YupSurface");
 
     // Nor does anything bind the other resources a stage can declare, none of which the template has
-    for (const auto* stage : { vertex, fragment })
+    for (const auto* stage : { &vertex, &reflection })
     {
-        for (const auto& [resources, kind] : { std::pair { &stage->reflection.storageBuffers, "storage buffer" },
-                                               std::pair { &stage->reflection.storageImages, "storage image" },
-                                               std::pair { &stage->reflection.subpassInputs, "subpass input" },
-                                               std::pair { &stage->reflection.pushConstantBuffers, "push constant block" } })
+        for (const auto& [resources, kind] : { std::pair { &stage->storageBuffers, "storage buffer" },
+                                               std::pair { &stage->storageImages, "storage image" },
+                                               std::pair { &stage->subpassInputs, "subpass input" },
+                                               std::pair { &stage->pushConstantBuffers, "push constant block" } })
         {
             if (! resources->empty())
                 return makeResultValueFail (String ("The material declares the ") + kind + " " + resources->front().name
@@ -135,6 +114,57 @@ ResultValue<ShaderUniforms> validateMaterialVariant (const ShaderBundle& bundle,
     }
 
     return makeResultValueOk (std::move (uniforms));
+}
+
+/** Checks that @p bundle is the template compiled around a material for one tier, as
+    validateMaterialStages() does, and returns the uniforms of the block the material declares.
+
+    The first variant of each stage tells what it declares. A bundle compiled here for one language
+    that is not GLSL, which names some members its own way, is told as its GLSL variant would tell
+    it, from the SPIR-V both are made of: the material then has the same uniform block whichever
+    graphics API it is compiled for.
+*/
+ResultValue<ShaderUniforms> validateMaterialVariant (const ShaderBundle& bundle, const char* tier, size_t numOutputs, [[maybe_unused]] bool describedAsGlsl)
+{
+#if YUP_ENABLE_SHADER_TRANSPILER
+    const auto* vertexSpirv = describedAsGlsl ? bundle.getSPIRV (ShaderStage::vertex) : nullptr;
+    const auto* fragmentSpirv = describedAsGlsl ? bundle.getSPIRV (ShaderStage::fragment) : nullptr;
+
+    if (vertexSpirv != nullptr && fragmentSpirv != nullptr)
+    {
+        ShaderTranspiler transpiler;
+
+        const auto vertex = transpiler.reflectFromSPIRV (*vertexSpirv, ShaderLanguage::glsl);
+        const auto fragment = transpiler.reflectFromSPIRV (*fragmentSpirv, ShaderLanguage::glsl);
+
+        if (vertex.failed() || fragment.failed())
+            return makeResultValueFail ((vertex.failed() ? vertex : fragment).getErrorMessage());
+
+        return validateMaterialStages (vertex.getReference(), fragment.getReference(), tier, numOutputs);
+    }
+#endif
+
+    // Every variant of a stage reflects the same shader, so the first one tells what it declares
+    const auto findStage = [&bundle] (ShaderStage stage) -> const ShaderInfo*
+    {
+        for (const auto& shader : bundle.getShaders())
+        {
+            if (shader.stage == stage)
+                return &shader;
+        }
+
+        return nullptr;
+    };
+
+    const auto* vertex = findStage (ShaderStage::vertex);
+    if (vertex == nullptr)
+        return makeResultValueFail (String ("The ") + tier + " variant of the material shader has no vertex stage");
+
+    const auto* fragment = findStage (ShaderStage::fragment);
+    if (fragment == nullptr)
+        return makeResultValueFail (String ("The ") + tier + " variant of the material shader has no fragment stage");
+
+    return validateMaterialStages (vertex->reflection, fragment->reflection, tier, numOutputs);
 }
 
 } // namespace
@@ -148,6 +178,11 @@ MaterialShader::MaterialShader()
 //==============================================================================
 ResultValue<MaterialShader::Ptr> MaterialShader::createFromBundles (ShaderBundle::Ptr rasterBundle, ShaderBundle::Ptr fullBundle)
 {
+    return createFromVariants (std::move (rasterBundle), std::move (fullBundle), false);
+}
+
+ResultValue<MaterialShader::Ptr> MaterialShader::createFromVariants (ShaderBundle::Ptr rasterBundle, ShaderBundle::Ptr fullBundle, bool describedAsGlsl)
+{
     if (rasterBundle == nullptr && fullBundle == nullptr)
         return makeResultValueFail ("No shader bundle");
 
@@ -159,7 +194,7 @@ ResultValue<MaterialShader::Ptr> MaterialShader::createFromBundles (ShaderBundle
         if (bundle == nullptr)
             continue;
 
-        auto uniforms = validateMaterialVariant (*bundle, tier, numOutputs);
+        auto uniforms = validateMaterialVariant (*bundle, tier, numOutputs, describedAsGlsl);
         if (uniforms.failed())
             return makeResultValueFail (uniforms.getErrorMessage());
 
@@ -203,7 +238,7 @@ ResultValue<MaterialShader::Ptr> MaterialShader::createFromData (const void* ras
 
 #if YUP_ENABLE_SHADER_TRANSPILER
 
-ResultValue<MaterialShader::Ptr> MaterialShader::createFromSource (const String& source, const File& shaderDirectory)
+ResultValue<MaterialShader::Ptr> MaterialShader::createFromSource (const String& source, const File& shaderDirectory, std::optional<GpuPlatform> platform)
 {
     // Where shaders/yup_MaterialShader.frag includes the material file
     static constexpr const char* sourceInclude = "#include \"yup_MaterialSource.glsl\"";
@@ -226,17 +261,22 @@ ResultValue<MaterialShader::Ptr> MaterialShader::createFromSource (const String&
     const auto includeLine = 1 + static_cast<int> (std::count (templateStart.begin(), templateStart.end(), '\n'));
     const auto materialFragment = fragment.replace (sourceInclude, "#line 1 \"material\"\n" + source + "\n#line " + String (includeLine + 1) + " 0");
 
+    // The language of the graphics API that is to draw the material, or the ones yup_shader_bundler targets by default
+    const auto languages = platform.has_value()
+                             ? std::vector<ShaderLanguage> { GpuImageShader::getShaderLanguage (*platform) }
+                             : std::vector<ShaderLanguage> { ShaderLanguage::glsl, ShaderLanguage::essl, ShaderLanguage::hlsl, ShaderLanguage::msl, ShaderLanguage::spirv, ShaderLanguage::wgsl };
+
     const auto compile = [&] (bool full) -> ResultValue<ShaderBundle::Ptr>
     {
         ShaderBundleCompileRequest request;
 
-        // Both stages go in one request, for the languages yup_shader_bundler targets by default
+        // Both stages go in one request
         for (const auto& [stage, stageSource] : { std::pair { ShaderStage::vertex, vertex }, std::pair { ShaderStage::fragment, materialFragment } })
         {
             auto& entry = request.entries.emplace_back();
             entry.stage = stage;
             entry.source = stageSource;
-            entry.targetLanguages = { ShaderLanguage::glsl, ShaderLanguage::essl, ShaderLanguage::hlsl, ShaderLanguage::msl, ShaderLanguage::spirv, ShaderLanguage::wgsl };
+            entry.targetLanguages = languages;
             entry.options.includePaths.push_back (shaderDirectory.getFullPathName());
             entry.options.defines.set ("YUP_3D_MATERIAL_SOURCE", {});
 
@@ -259,7 +299,7 @@ ResultValue<MaterialShader::Ptr> MaterialShader::createFromSource (const String&
     if (full.failed())
         return makeResultValueFail (full.getErrorMessage());
 
-    return createFromBundles (raster.getReference(), full.getReference());
+    return createFromVariants (raster.getReference(), full.getReference(), languages.front() != ShaderLanguage::glsl);
 }
 
 File MaterialShader::getSourceDirectory()

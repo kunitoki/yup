@@ -155,9 +155,12 @@ decides what it is given, and nothing has a fixed set or binding number:
   `uniform sampler2D` can't be bound and is refused.
 - Sets 0 to 3 can be used, each block, texture and sampler having a binding of
   its own in its set.
-- The shader is compiled for every graphics API at once, so it has to stay
-  within the GLSL the WebGPU target takes, whatever the application runs on.
-  See [GLSL on the WebGPU target](../../graphics/rhi/wgsl-shaders.md).
+- A build, and `yup_yui_tool`, compile the shader for every graphics API at
+  once, so it has to stay within the GLSL the WebGPU target takes, whatever the
+  application runs on. See
+  [GLSL on the WebGPU target](../../graphics/rhi/wgsl-shaders.md). An
+  application compiling the source while it runs does it for the API in use
+  only, see [Loading and shipping](#loading-and-shipping).
 
 How many pictures a shader reads decides where it can be used. The textures a
 series fills don't count:
@@ -522,6 +525,14 @@ bundle first when there is one:
   built from, or from the folder given to
   [`MaterialShader::setSourceDirectory`](../../3d/custom-materials.md#creating-a-shader)
   where those are not, as in a browser.
+- **A source is compiled for the graphics API that draws it**, and for that
+  one only: the API of the window the document is in, or the one a window gets
+  by default while the document is in none, which is usually the case when it
+  loads. A window created with another API, or a component moved to one, has
+  the shader compiled again for that API, once. So an error that only another
+  API would give is not reported while the application runs: `yup_yui_tool`
+  and the build, which compile for every API, report it. A compiled bundle is
+  loaded as it is.
 - **A shipped application embeds the bundles.**
   [`yup_add_yui_resources`](../../build-system/cmake-api.md#yup_add_yui_resources)
   compiles the files listed in `SHADERS` and `MATERIAL_SHADERS` when the

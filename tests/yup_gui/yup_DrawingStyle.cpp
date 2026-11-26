@@ -1992,6 +1992,49 @@ TEST_F (DrawingStyleDataTest, VerticesJoinTheTurnsOfARepeatIntoALineOrAnArea)
     paintHeadless (*style.getReference(), widget);
 }
 
+TEST_F (DrawingStyleDataTest, EachVertexElementDrawsLinesOfItsOwnWhateverItsSeries)
+{
+    const auto style = createStyle (R"yui(
+        drawing Curves {
+            repeat i in 0 .. len (levels) {
+                vertex { id: line; series: 1; at: point (i * 10, levels[i]); stroke: #ffffff; }
+                vertex { id: area; series: 1; at: point (i * 10, 20 + levels[i]); base: point (i * 10, 40); fill: #40ffffff; }
+            }
+        })yui");
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    // Two elements giving the same series are two lines: the one with no base is not closed down to the bases of the other
+    EXPECT_EQ (measure (*style.getReference(), "line").bounds, Rectangle<float> (0.0f, 1.0f, 20.0f, 3.0f));
+    EXPECT_EQ (measure (*style.getReference(), "area").bounds, Rectangle<float> (0.0f, 21.0f, 20.0f, 19.0f));
+
+    paintHeadless (*style.getReference(), widget);
+}
+
+TEST_F (DrawingStyleDataTest, ASeriesDenserThanItsPixelsIsMeasuredWithAllItsPoints)
+{
+    const auto style = createStyle (R"yui(
+        drawing Scope {
+            repeat i in 0 .. len (levels) {
+                vertex { id: line; at: point (i / 64.0, levels[i]); base: point (i / 64.0, 40); fill: #40ffffff; stroke: #ffffff; }
+            }
+        })yui");
+    ASSERT_TRUE (style.wasOk()) << style.getErrorMessage();
+
+    // 64 levels for each unit of the 48 the widget is wide, one of them alone far above the others
+    widget.levels.assign (3072, 20.0f);
+    widget.levels[1000] = 2.0f;
+
+    const Rectangle<float> expected (0.0f, 2.0f, 3071.0f / 64.0f, 38.0f);
+    EXPECT_EQ (measure (*style.getReference(), "line").bounds, expected);
+
+    // A paint draws what each column of pixels shows of the line: it is still measured with all its points
+    paintHeadless (*style.getReference(), widget);
+    paintHeadless (*style.getReference(), widget);
+
+    EXPECT_EQ (measure (*style.getReference(), "line").bounds, expected);
+    EXPECT_EQ (measure (*style.getReference(), "line").numRows, 3072);
+}
+
 TEST_F (DrawingStyleDataTest, AVertexOnlyLivesAmongTheShapesOfARepeat)
 {
     EXPECT_EQ (createDataError ("drawing { vertex { at: point (0, 0); } }"),

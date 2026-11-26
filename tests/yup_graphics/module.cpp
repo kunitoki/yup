@@ -66,6 +66,7 @@
 #include "yup_Path.cpp"
 #include "yup_PathMarkers.cpp"
 #include "yup_Point.cpp"
+#include "yup_PolylineReduction.cpp"
 #include "yup_Quaternion.cpp"
 #include "yup_Rectangle.cpp"
 #include "yup_Ray.cpp"

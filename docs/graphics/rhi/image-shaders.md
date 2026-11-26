@@ -122,10 +122,11 @@ void main() { color = params.tint * uv.x; }
 | Function | Takes |
 | --- | --- |
 | `createFromBundle (bundle)` | A compiled [`ShaderBundle`](offline-shaders.md) with a vertex and a fragment stage. |
-| `createFromData (data, size)` | The bytes of a file: a `.ysl` bundle, or the GLSL source of the fragment stage. |
-| `createFromGlsl (source)` | The GLSL source of the fragment stage. |
+| `createFromData (data, size, platform)` | The bytes of a file: a `.ysl` bundle, or the GLSL source of the fragment stage. |
+| `createFromGlsl (source, platform)` | The GLSL source of the fragment stage. |
 
-Each returns a `ResultValue`: the shader, or what prevents it.
+Each returns a `ResultValue`: the shader, or what prevents it. `platform` is
+optional: it names the one graphics API to compile a source for.
 
 - **No device is needed.** The shader is checked when it is created, so a tool
   without a GPU can report what is wrong with it.
@@ -136,6 +137,19 @@ Each returns a `ResultValue`: the shader, or what prevents it.
   This needs the shader transpiler (`YUP_ENABLE_SHADER_TRANSPILER`, the
   `glslang` and `spirv_cross` modules): without it `createFromGlsl()` does not
   exist, and `createFromData()` asks for a compiled bundle.
+- **From GLSL, for one graphics API.** Compiling for every API is what a tool
+  and a build do. An application that loads a source while it runs draws it
+  with one device, and names its API to compile for that one alone, in a
+  fraction of the time:
+
+  ```cpp
+  auto created = yup::GpuImageShader::createFromGlsl (source, device->getPlatform());
+  ```
+
+  The shader is the same one: the same uniform block, the same textures, the
+  same picture. It only draws with that API, and a source that another API
+  would refuse is not told here. A `.ysl` bundle is loaded with the variants
+  it holds, whatever API is named.
 - **Ahead of time**, pair the fragment with `shaders/yup_GpuImageShader.vert`
   of the `yup_rhi` module:
 
@@ -153,9 +167,10 @@ Each returns a `ResultValue`: the shader, or what prevents it.
 
 - A shader is immutable and reference counted: create it once and draw it from
   as many places as needed.
-- A bundle can be built for some graphics APIs only. `canDrawWith (platform)`
-  tells whether the shader has a variant of both stages for one, before any
-  device draws it: `shader->canDrawWith (device->getPlatform())`.
+- A bundle can be built for some graphics APIs only, and a source compiled
+  for one has that one. `canDrawWith (platform)` tells whether the shader has
+  a variant of both stages for an API, before any device draws it:
+  `shader->canDrawWith (device->getPlatform())`.
 
 ```text
 The fragment stage declares a combined sampler2D, which cannot be bound: declare a texture2D and a sampler, and combine them where the texture is read

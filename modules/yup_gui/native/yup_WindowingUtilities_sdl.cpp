@@ -790,6 +790,11 @@ GpuPlatform resolveGraphicsApi (const std::optional<GpuPlatform>& requestedApi)
     return candidates.back();
 }
 
+GpuPlatform ComponentNative::getDefaultGraphicsApi()
+{
+    return resolveGraphicsApi (std::nullopt);
+}
+
 //==============================================================================
 
 Uint32 setContextWindowHints (GpuPlatform desiredApi)

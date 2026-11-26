@@ -692,6 +692,114 @@ TEST_F (ExpressionDrawingTests, CacheDrawsASeriesAgainWithTheBuffersItKept)
     }
 }
 
+TEST_F (ExpressionDrawingTests, CacheBuildsASeriesReducedToItsPixelsAgainForALargerScale)
+{
+    auto graphicsContext = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    ASSERT_NE (graphicsContext, nullptr);
+    auto renderer = graphicsContext->makeRenderer (200, 200);
+    ASSERT_NE (renderer, nullptr);
+    Graphics g (*graphicsContext, *renderer);
+
+    // 16 vertices for each unit of x, across 64 units
+    auto drawing = ExpressionDrawing::create ("vertex = point (row / 16.0, values[row] * 100); stroke = rgb (255, 0, 0);", context);
+    ASSERT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+
+    std::vector<float> data (1024);
+    for (std::size_t i = 0; i < data.size(); ++i)
+        data[i] = static_cast<float> (i % 7) / 6.0f;
+
+    ExpressionState state (drawing.getReference().getProgram(), 4);
+    state.bindArray (values, data.data(), (int) data.size());
+    state.bindRowIndex (row);
+
+    ExpressionDrawing::Cache cache;
+
+    const auto drawAt = [&] (const AffineTransform& transform)
+    {
+        g.setTransform (transform);
+        drawing.getReference().draw (g, state, (int) data.size(), nullptr, &cache);
+        return cache.wasRebuilt();
+    };
+
+    // 16 vertices a pixel: the line is kept as what each column of pixels shows of it
+    EXPECT_TRUE (drawAt (AffineTransform()));
+    EXPECT_FALSE (drawAt (AffineTransform()));
+
+    // Twice the columns show what half of them could not: the line is built again from all its vertices
+    EXPECT_TRUE (drawAt (AffineTransform::scaling (2.0f)));
+    EXPECT_FALSE (drawAt (AffineTransform::scaling (2.0f)));
+
+    // Drawn smaller, taller or elsewhere it has all the vertices it takes
+    EXPECT_FALSE (drawAt (AffineTransform()));
+    EXPECT_FALSE (drawAt (AffineTransform::scaling (0.5f)));
+    EXPECT_FALSE (drawAt (AffineTransform::scaling (2.0f, 6.0f)));
+    EXPECT_FALSE (drawAt (AffineTransform::scaling (2.0f).translated (30.0f, 10.0f)));
+
+    // At 4 vertices a pixel none is taken away: the line is kept whole, for any scale after that
+    EXPECT_TRUE (drawAt (AffineTransform::scaling (4.0f)));
+    EXPECT_FALSE (drawAt (AffineTransform::scaling (4.0f)));
+    EXPECT_FALSE (drawAt (AffineTransform::scaling (8.0f)));
+    EXPECT_FALSE (drawAt (AffineTransform()));
+}
+
+TEST_F (ExpressionDrawingTests, OnlyADenseSeriesOfStraightLinesGoingOneWayIsReducedToItsPixels)
+{
+    auto graphicsContext = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    ASSERT_NE (graphicsContext, nullptr);
+    auto renderer = graphicsContext->makeRenderer (200, 200);
+    ASSERT_NE (renderer, nullptr);
+    Graphics g (*graphicsContext, *renderer);
+
+    std::vector<float> data (1024);
+    for (std::size_t i = 0; i < data.size(); ++i)
+        data[i] = static_cast<float> (i % 7) / 6.0f;
+
+    // A series kept with fewer vertices than it has is the one a cache builds again when it is drawn twice as large
+    const auto isReduced = [&] (const String& text, int numRows = 1024)
+    {
+        auto drawing = ExpressionDrawing::create (text, context);
+        EXPECT_TRUE (drawing.wasOk()) << drawing.getErrorMessage().toStdString();
+        if (drawing.failed())
+            return false;
+
+        ExpressionState state (drawing.getReference().getProgram(), 4);
+        state.bindArray (values, data.data(), (int) data.size());
+        state.bindRowIndex (row);
+
+        ExpressionDrawing::Cache cache;
+
+        g.setTransform (AffineTransform());
+        drawing.getReference().draw (g, state, numRows, nullptr, &cache);
+        drawing.getReference().draw (g, state, numRows, nullptr, &cache);
+        EXPECT_FALSE (cache.wasRebuilt());
+
+        g.setTransform (AffineTransform::scaling (2.0f));
+        drawing.getReference().draw (g, state, numRows, nullptr, &cache);
+        return cache.wasRebuilt();
+    };
+
+    // 16 vertices for each unit of x
+    const String dense ("vertex = point (row / 16.0, values[row] * 100);");
+    EXPECT_TRUE (isReduced (dense));
+
+    // Four vertices a pixel at most are all drawn
+    EXPECT_FALSE (isReduced ("vertex = point (row / 4.0, values[row] * 100);"));
+    EXPECT_FALSE (isReduced (dense, 4));
+
+    // A line coming back has no column of its own to be reduced to
+    EXPECT_FALSE (isReduced ("vertex = point ((row < 512 ? row : 1023 - row) / 16.0, values[row] * 100);"));
+
+    // A curve follows the vertices around each one, the transform of a row gives its units another size, and dashes
+    // are laid along the whole length of the line
+    EXPECT_FALSE (isReduced (dense + " vertexSmooth = 0.5;"));
+    EXPECT_FALSE (isReduced (dense + " transform = transform.translation (0, 5);"));
+    EXPECT_FALSE (isReduced (dense + " stroke = rgb (255, 0, 0); strokeDash = dash (6, 3);"));
+
+    // The bases are reduced as the vertices are, and each series alone
+    EXPECT_TRUE (isReduced (dense + " vertexBase = point (row / 16.0, 100); fill = rgb (0, 0, 255);"));
+    EXPECT_TRUE (isReduced ("series = row % 2; vertex = point (row / 32.0, values[row] * 50 + series * 50);"));
+}
+
 TEST_F (ExpressionDrawingTests, RoundsRectanglesWithEllipticalCorners)
 {
     auto drawing = ExpressionDrawing::create ("rect = rect (0, 0, 100, 60); cornerSize = size (20, 5); cornerRadius = 30", context);
@@ -897,6 +1005,40 @@ TEST_F (ExpressionDrawingGpuTests, ASeriesWithBasesFillsItsAreaAndStrokesOnlyIts
     EXPECT_GT (alphaAt (both, 32, 16), 240);
     EXPECT_GT (alphaAt (both, 32, 32), 240);
     EXPECT_LT (alphaAt (both, 32, 56), 10);
+}
+
+TEST_F (ExpressionDrawingGpuTests, ASeriesDenserThanItsPixelsPaintsWhatEachColumnShows)
+{
+    const auto bindRows = [this] (ExpressionState& state)
+    {
+        state.bindRowIndex (row);
+    };
+
+    // 16 vertices for each of the 64 columns of pixels, going from y = 16 down to y = 48 and back
+    const String zigzag ("vertex = point (row / 16.0, row % 2 == 0 ? 16 : 48);");
+
+    const auto stroked = render (zigzag + " stroke = rgb (255, 0, 0); strokeWidth = 2;", bindRows, 1024);
+    ASSERT_FALSE (stroked.empty());
+
+    for (const auto x : { 8, 32, 56 })
+    {
+        for (const auto y : { 20, 32, 44 })
+            EXPECT_GT (alphaAt (stroked, x, y), 200) << "at " << x << ", " << y;
+
+        EXPECT_LT (alphaAt (stroked, x, 6), 10) << "at x = " << x;
+        EXPECT_LT (alphaAt (stroked, x, 58), 10) << "at x = " << x;
+    }
+
+    // Filled down to y = 60: what lies under the line is covered, and nothing over the line or under its bases
+    const auto filled = render (zigzag + " vertexBase = point (row / 16.0, 60); fill = rgb (0, 0, 255);", bindRows, 1024);
+    ASSERT_FALSE (filled.empty());
+
+    for (const auto x : { 8, 32, 56 })
+    {
+        EXPECT_GT (alphaAt (filled, x, 54), 240) << "at x = " << x;
+        EXPECT_LT (alphaAt (filled, x, 8), 10) << "at x = " << x;
+        EXPECT_LT (alphaAt (filled, x, 63), 10) << "at x = " << x;
+    }
 }
 #endif
 

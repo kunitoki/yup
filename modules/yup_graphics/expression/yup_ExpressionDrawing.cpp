@@ -171,6 +171,15 @@ void declareDrawingOutput (ExpressionContext& context, const char* name, const E
     context.declareOutput<T> (name);
 }
 
+/* The pixels a unit along the x of a drawing takes where a Graphics paints it: the columns of pixels a polyline is
+   reduced to are counted along it, whatever else the transform does. */
+float getDrawingPixelsPerUnit (const Graphics& g)
+{
+    const auto transform = g.getTransform();
+
+    return g.getContextScale() * std::hypot (transform.getScaleX(), transform.getShearY());
+}
+
 } // namespace
 
 //==============================================================================
@@ -477,7 +486,8 @@ struct ExpressionDrawing::DrawBuffers
     };
 
     /* The vertices of the rows of a series, drawn with the style of its first row: joined by a line, which goes back
-       along their bases to close an area when they have one. */
+       along their bases to close an area when they have one. A drawing assigns `vertexBase` in every row or in none,
+       so a series has a base for each of its vertices or no base at all. */
     struct Polyline
     {
         int series = 0;
@@ -486,11 +496,12 @@ struct ExpressionDrawing::DrawBuffers
         std::vector<Point<float>> vertices, bases;
     };
 
-    DrawBuffers (const Settings& drawSettings, Graphics& graphics, const Font* font, std::vector<Operation>* recordedOperations)
+    DrawBuffers (const Settings& drawSettings, Graphics& graphics, const Font* font, std::vector<Operation>* recordedOperations, float polylinePixelsPerUnit)
         : settings (drawSettings)
         , g (std::addressof (graphics))
         , labelFont (font)
         , recorded (recordedOperations)
+        , pixelsPerUnit (polylinePixelsPerUnit)
     {
     }
 
@@ -550,6 +561,12 @@ struct ExpressionDrawing::DrawBuffers
     void setPolylineStorage (std::vector<Polyline>& storage) noexcept
     {
         polylines = std::addressof (storage);
+    }
+
+    /* Whether a polyline was drawn with fewer points than its rows gave it, for the scale it was drawn at. */
+    bool hasReducedPolylines() const noexcept
+    {
+        return reducedPolylines;
     }
 
 private:
@@ -694,33 +711,55 @@ private:
         }
     }
 
-    void emitPolyline (const Polyline& polyline)
+    /* Leaves a line with more points than the pixels it is drawn across the ones each column of pixels shows.
+       Returns true when it took some away. */
+    bool reduceToPixelColumns (std::vector<Point<float>>& points) const
     {
-        const auto numVertices = static_cast<int> (polyline.vertices.size());
-        auto style = polyline.style;
+        const auto numKept = reducePolylineToPixelColumns (points, pixelsPerUnit);
 
-        // A curve takes three points where a line takes one
-        const auto numPoints = polyline.smooth > 0.0f ? numVertices * 3 : numVertices;
+        if (numKept == points.size())
+            return false;
 
-        Path line;
-        line.reserveSpace (numPoints);
-        addPoints (line, polyline.vertices, polyline.smooth, true, false);
+        points.resize (numKept);
+        return true;
+    }
 
-        if (polyline.bases.empty())
+    void emitPolyline (Polyline& polyline)
+    {
+        // Only straight lines painted with the transform of the Graphics alone, and with no dashes: a curve follows the
+        // points around each of its points, the transform of a row gives its units another size than the Graphics
+        // does, and dashes are laid along the whole length of the line
+        if (pixelsPerUnit > 0.0f && polyline.smooth <= 0.0f && ! polyline.style.transform && ! polyline.style.hasDash())
         {
-            style.shouldFill = style.hasFill();
-            style.shouldStroke = style.hasStroke() || ! style.hasFill();
-            emit (std::move (style), std::move (line));
-            return;
+            const bool reducedVertices = reduceToPixelColumns (polyline.vertices);
+            const bool reducedBases = reduceToPixelColumns (polyline.bases);
+
+            reducedPolylines = reducedPolylines || reducedVertices || reducedBases;
         }
+
+        auto style = polyline.style;
 
         // With a base the fill takes the area between the vertices and their bases, and the stroke the line alone.
         // The area is the outline of the series, whatever paints it
-        if (style.hasFill() || outline != nullptr)
+        const bool hasBases = ! polyline.bases.empty();
+        const bool drawsArea = hasBases && (style.hasFill() || outline != nullptr);
+        const bool drawsLine = ! hasBases || (outline == nullptr && (style.hasStroke() || ! style.hasFill()));
+
+        // A curve takes three points where a line takes one. The area adds its bases to the line, and closes
+        const auto pointsPerVertex = polyline.smooth > 0.0f ? 3 : 1;
+        const auto numLinePoints = static_cast<int> (polyline.vertices.size()) * pointsPerVertex;
+        const auto numAreaPoints = static_cast<int> (polyline.bases.size()) * pointsPerVertex + 1;
+
+        Path line;
+        line.reserveSpace (drawsLine ? numLinePoints : numLinePoints + numAreaPoints);
+        addPoints (line, polyline.vertices, polyline.smooth, true, false);
+
+        if (drawsArea)
         {
-            Path area;
-            area.reserveSpace (numPoints * 2 + 1);
-            addPoints (area, polyline.vertices, polyline.smooth, true, false);
+            // The area goes on from the line, whose points are computed once: from a copy of them when the line is
+            // drawn as well
+            auto area = drawsLine ? line : std::move (line);
+            area.reserveSpace (numAreaPoints);
             addPoints (area, polyline.bases, polyline.smooth, false, true);
             area.close();
 
@@ -730,12 +769,12 @@ private:
             emit (std::move (areaStyle), std::move (area));
         }
 
-        if (outline == nullptr && (style.hasStroke() || ! style.hasFill()))
-        {
-            style.shouldFill = false;
-            style.shouldStroke = true;
-            emit (std::move (style), std::move (line));
-        }
+        if (! drawsLine)
+            return;
+
+        style.shouldFill = ! hasBases && style.hasFill();
+        style.shouldStroke = hasBases || style.hasStroke() || ! style.hasFill();
+        emit (std::move (style), std::move (line));
     }
 
     bool canAppend (const Style& style, ShapeKind kind, const Rectangle<float>& bounds, bool usesNonZeroWinding) const
@@ -771,6 +810,10 @@ private:
     std::vector<Polyline> ownPolylines;
     std::vector<Polyline>* polylines = std::addressof (ownPolylines);
     int numPolylines = 0;
+
+    // The pixels a unit along x takes where the polylines are drawn, 0 where they keep all their points
+    float pixelsPerUnit = 0.0f;
+    bool reducedPolylines = false;
 };
 
 void ExpressionDrawing::DrawBuffers::addRow (const Lanes& lanes, int lane)
@@ -947,6 +990,9 @@ struct ExpressionDrawing::Cache::Data
     Fields<ExpressionDrawingColumn> snapshot;
     std::vector<DrawBuffers::Operation> operations;
     std::vector<DrawBuffers::Polyline> polylines;
+
+    // The pixels a unit took where the polylines of the operations were reduced to them, 0 when they have all their points
+    float reducedPixelsPerUnit = 0.0f;
     bool wasRebuilt = false;
     bool outputsChanged = false;
     bool isRecorded = false;
@@ -1034,14 +1080,21 @@ void ExpressionDrawing::draw (Graphics& g, ExpressionState& state, int numRows, 
     const auto savedState = g.saveState();
     const DrawBuffers::Settings settings (g, labelFont != nullptr || outputs->labelFont.isValid());
 
+    // Only a series has points to lose to the pixels it is drawn across
+    const auto pixelsPerUnit = outputs->vertex.isValid() ? getDrawingPixelsPerUnit (g) : 0.0f;
+
     if (cache == nullptr)
     {
-        DrawBuffers (settings, g, labelFont, nullptr).addRows (*outputs, state, numRows);
+        DrawBuffers (settings, g, labelFont, nullptr, pixelsPerUnit).addRows (*outputs, state, numRows);
         return;
     }
 
     auto& data = *cache->data;
-    bool hasChanged = data.outputs != outputs || data.settings != settings;
+
+    // Polylines reduced to the pixels of a smaller scale lack the points a larger one shows
+    bool hasChanged = data.outputs != outputs
+                   || data.settings != settings
+                   || (data.reducedPixelsPerUnit > 0.0f && pixelsPerUnit > data.reducedPixelsPerUnit);
 
     data.outputs = outputs;
     data.settings = settings;
@@ -1090,13 +1143,15 @@ void ExpressionDrawing::draw (Graphics& g, ExpressionState& state, int numRows, 
             values = output.isValid() ? column.values.get() : nullptr;
         }, *outputs, data.snapshot, lanes);
 
-        DrawBuffers buffers (settings, g, labelFont, shouldRecord ? &data.operations : nullptr);
+        DrawBuffers buffers (settings, g, labelFont, shouldRecord ? &data.operations : nullptr, pixelsPerUnit);
         buffers.setPolylineStorage (data.polylines);
 
         for (int row = 0; row < data.numRows; ++row)
             buffers.addRow (lanes, row);
 
         buffers.finish();
+
+        data.reducedPixelsPerUnit = shouldRecord && buffers.hasReducedPolylines() ? pixelsPerUnit : 0.0f;
 
         if (! shouldRecord)
             return;

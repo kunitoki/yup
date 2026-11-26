@@ -100,9 +100,9 @@ shape per row. Assign the outputs you need:
 | `point` | `point` | Dot of `radius` (default 2). |
 | `line` | `line` | Line, drawn with `stroke` (or `fill`). |
 | `path` | `path` | Path, filled with its own winding rule. |
-| `vertex`, `series` | `point`, `int` | One vertex per row, connected into one polyline per `series` (default 0). Polylines are drawn after the other shapes, with the style of their first row. |
+| `vertex`, `series` | `point`, `int` | One vertex per row, connected into one polyline per `series` (default 0). Polylines are drawn after the other shapes, with the style of their first row. A polyline of straight lines with more vertices than the pixels it is drawn across, whose x never goes back, is drawn with the first, the lowest, the highest and the last vertex of each column of pixels, unless its rows assign `transform` or `strokeDash`. |
 | `vertexBase` | `point` | Where the polyline goes back to under the vertex, making it an area: the fill takes what lies between the vertices and their bases, the stroke only the line through the vertices. A base on one level fills under a curve, the vertices of another curve fill the band between both. |
-| `vertexSmooth` | `float` | Curves the polyline through its vertices instead of joining them with straight lines, from 0 (lines) to 1. The first row of a series sets it. |
+| `vertexSmooth` | `float` | Curves the polyline through its vertices instead of joining them with straight lines, from 0 (lines) to 1. The first row of a series sets it. A curve keeps all its vertices. |
 | `label`, `labelRect` | `string`, `rect` | Text fitted in the rectangle, drawn when a font is passed to `draw` or assigned to `labelFont`. Assign both, or `labelAnchor` instead of `labelRect`. |
 | `labelAnchor`, `labelTextAnchor` | `point`, `textAnchor` | Places the label from a point on its baseline, at the size of its font, instead of fitting it in `labelRect`. The text starts (default), is centered or ends at the point. |
 | `labelColor`, `labelStroke` | `color` | Label fill and stroke colors. |
@@ -205,7 +205,8 @@ bars.getReference().draw (g, state, (int) data.size(), nullptr, &cache);
 `cache.wasRebuilt()` reports whether the last draw had to rebuild. Outputs that
 change on consecutive draws, like animations, are drawn without being recorded,
 so a cache costs nothing while they animate; the first draw after they settle
-records the shapes again. Paths
+records the shapes again. A series kept with fewer vertices than it has, for
+the pixels it was drawn across, is rebuilt when it is drawn at a larger scale. Paths
 assigned to `path` and `clipPath` are compared by identity, so build a new path instead of
 modifying one in place; paths built per row in the program are new on every
 draw, so drawings using them always rebuild.

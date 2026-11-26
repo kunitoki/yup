@@ -38,7 +38,9 @@ class DependencyObserver;
       and `dashOffset` for stroked shapes);
     - `vertex` (`at`, `series`, `base`, `smooth` and paint properties), only among the shapes of a
       `repeat`: one point of the line its turns make together, which is how a data series becomes
-      a polyline, an area down to its `base` or a band between two curves;
+      a polyline, an area down to its `base` or a band between two curves. Each `vertex` element
+      draws lines of its own, whatever its `series`, and a line with more points than the pixels
+      it is drawn across is drawn with what each column of pixels shows of it (see ExpressionDrawing);
     - `part` (`name`, `bounds`, `fill`, `stroke`, `strokeWidth`, `opacity`, `blend`, `tint`,
       `transform`, `clip`, `clipPath`, `visible`): what the type of the component declares it shows
       beside its shapes, such as the text it laid out, its caret or its icon (see ComponentPart),
@@ -57,7 +59,8 @@ class DependencyObserver;
     - `viewport` (`bounds`, `viewBox`, `fitting`, `justification`, `visible`): draws its children
       in the coordinates of a view box fitted in a rectangle, which it clips them to;
     - `repeat` (`name`, `from`, `to`): draws its shapes once for every int from `from` up to,
-      but not including, `to`, exposed to them under `name`;
+      but not including, `to`, exposed to them under `name`, 4096 times at most: a constant count
+      above that fails to compile, and one only known when painting is cut to it with no diagnostic;
     - `drawing`, `pattern` and `marker` (`name`): definitions visible to the elements after them,
       a drawing painted by `use`, a tile painting shapes through `fillPattern` and `strokePattern`,
       and content drawn at the vertices of shapes through `markerStart`, `markerMid` and `markerEnd`;

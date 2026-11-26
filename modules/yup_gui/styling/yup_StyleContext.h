@@ -186,7 +186,9 @@ public:
     struct Shader
     {
         /** The compiled shader, to draw with GpuImageShader::draw(). It is replaced when its file
-            changes (see assetChanged), so read it each time it is drawn rather than keeping it.
+            changes (see assetChanged), and when one compiled from its source is compiled again for
+            the graphics API that turns out to draw it (see findShader), so read it each time it is
+            drawn rather than keeping it.
         */
         GpuImageShader::Ptr shader;
 
@@ -221,12 +223,22 @@ public:
         bundle, or GLSL source when the shader transpiler is built in (see
         GpuImageShader::createFromData). A path ending in `.ysl` is read as it is.
 
+        A source is compiled for one graphics API, the one that draws it: the API of the window
+        the root is in, or the one a window is given by default while the root is in none (see
+        ComponentNative::getDefaultGraphicsApi). When the window turns out to draw with another
+        API, the next restyle compiles the source again for that one, once, and gives the new
+        shader to what runs the one before as when its file changes (see assetChanged). A root
+        painted in no window, as a snapshot is, has nothing to tell its API: a source that could
+        not be drawn there is compiled once more, for every API. So what a source has wrong for
+        another API than the one in use is not told here: `yup_yui_tool`, and compiling the shader
+        ahead into a bundle, check the others. A bundle is loaded with the variants it holds.
+
         Loading needs no GPU, and reports what prevents it as a diagnostic (see @ref onDiagnostic):
         the file can't be read, the shader does not compile, or a property the block declares has
         a type a uniform can't take, or no member of its name that is large enough in the uniform
         block of the shader. So is a member named `resolution`, `scale` or `time` that no property
         of the block fills and that is not what a shader is given there (see ShaderEffect), and a
-        shader with no variant for the graphics API of the window the root is in, when it is in
+        bundle with no variant for the graphics API of the window the root is in, when it is in
         one. A shader is reported when it is loaded and not each time it is asked
         for, then again with the other problems of the stylesheet once its values are compiled
         again (see @ref setComponentResolver), as they are each time a document is loaded. Call
@@ -360,6 +372,7 @@ private:
     bool syncStyledFilterAndMargins (Component& component, ComponentCache& cache);
     ShaderEntry* findShaderEntry (const String& name);
     bool loadShader (const String& name, ShaderEntry& entry);
+    void reloadShader (const String& name, ShaderEntry& entry);
     void refreshShaders();
     void reportShaderFailures (const Component& component);
     ComponentEffect::Ptr createEffect (Component& component, const StyleSheet::Declaration& effectDeclaration);

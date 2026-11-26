@@ -225,10 +225,7 @@ std::vector<YuiToolProblem> findYuiToolProblems (const YuiDocument& document, co
 namespace
 {
 
-#if YUP_MODULE_AVAILABLE_yup_renderer
-
-// The frames a scene is given to show its final picture: four times those it accumulates when nothing changes
-constexpr int maximumSceneFrames = 64;
+#if YUP_ENABLE_SHADER_TRANSPILER || YUP_MODULE_AVAILABLE_yup_renderer
 
 // Adds a problem the tool finds to those of a document, which tells where it is written
 void report (YuiDocument& document, const DataTreeDiagnostic& problem)
@@ -236,6 +233,36 @@ void report (YuiDocument& document, const DataTreeDiagnostic& problem)
     if (const auto& tell = document.getBuilder().onDiagnostic; tell != nullptr)
         tell (problem);
 }
+
+#endif
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+
+// Compiles the source of a shader made from a `fragment` for every graphics API: the styles compile it for the one that
+// draws, so what it has wrong for another is told here
+void checkFragmentShader (YuiDocument& document, const DataTree& block)
+{
+    const auto path = block.getProperty ("fragment").toString();
+
+    // A bundle compiled ahead is loaded as it is, with the variants it holds
+    if (! path.endsWithIgnoreCase (".ysl") && document.readAsset (path + ".ysl").has_value())
+        return;
+
+    const auto source = document.readAsset (path);
+
+    if (! source.has_value() || GpuImageShader::isCompiledBundle (source->getData(), source->getSize()))
+        return;
+
+    if (const auto created = GpuImageShader::createFromData (source->getData(), source->getSize()); created.failed())
+        report (document, { .message = "shader " + block.getProperty ("name").toString().trim() + ": " + created.getErrorMessage(), .element = block, .property = "fragment" });
+}
+
+#endif
+
+#if YUP_MODULE_AVAILABLE_yup_renderer
+
+// The frames a scene is given to show its final picture: four times those it accumulates when nothing changes
+constexpr int maximumSceneFrames = 64;
 
 // The scenes an interface shows, in the order of its tree
 void collectScenes (Component& component, std::vector<SceneComponent*>& scenes)
@@ -326,9 +353,13 @@ void checkResources (YuiDocument& document)
         if (element.getType().toString() != "shader")
             continue;
 
-        // One made from a fragment is loaded by the styles, which tell what prevents it once, however many components use it
+        // One made from a fragment is loaded by the styles, which tell what prevents it once, however many components use
+        // it. They compile it for one graphics API: the others are checked once that one loads
         if (auto* context = root->getStyleContext(); context != nullptr && element.hasProperty ("fragment"))
-            context->findShader (element.getProperty ("name").toString().trim());
+        {
+            if (context->findShader (element.getProperty ("name").toString().trim()) != nullptr)
+                checkFragmentShader (document, element);
+        }
 
 #if YUP_MODULE_AVAILABLE_yup_renderer
         if (element.hasProperty ("material"))

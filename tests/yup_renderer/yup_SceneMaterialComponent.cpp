@@ -231,6 +231,254 @@ protected:
             ++index;
         }
     }
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    //==============================================================================
+    /** Stands in for a window drawing with a graphics API: its device tells that API and that it has a GPU, and is
+        never drawn with. The API can be changed, as it is for a scene moved to another window.
+    */
+    class ApiWindow final : public ComponentNative
+    {
+    public:
+        ApiWindow (Component& componentToShow, GpuPlatform api)
+            : ComponentNative (componentToShow, ComponentNative::defaultFlags)
+        {
+            setGraphicsApi (api);
+        }
+
+        void setGraphicsApi (GpuPlatform api)
+        {
+            context = std::make_unique<Context> (api);
+        }
+
+        void setTitle (const String&) override {}
+
+        String getTitle() const override { return {}; }
+
+        void setVisible (bool) override {}
+
+        bool isVisible() const override { return true; }
+
+        bool isResizable() const override { return false; }
+
+        void setResizable (bool) override {}
+
+        void toFront() override {}
+
+        void setSize (const Size<int>&) override {}
+
+        Size<int> getSize() const override { return {}; }
+
+        Size<int> getContentSize() const override { return {}; }
+
+        Point<int> getPosition() const override { return {}; }
+
+        void setPosition (const Point<int>&) override {}
+
+        Rectangle<int> getBounds() const override { return {}; }
+
+        void setBounds (const Rectangle<int>&) override {}
+
+        Rectangle<int> getSafeAreaBounds() const override { return {}; }
+
+        void setFullScreen (bool) override {}
+
+        bool isFullScreen() const override { return false; }
+
+        bool isDecorated() const override { return false; }
+
+        void setAspectRatio (std::optional<float>) override {}
+
+        std::optional<float> getAspectRatio() const override { return std::nullopt; }
+
+        void setOpacity (float) override {}
+
+        float getOpacity() const override { return 1.0f; }
+
+        void setFocusedComponent (Component*, FocusChangeType) override {}
+
+        Component* getFocusedComponent() const override { return nullptr; }
+
+        Component* getPointerTarget() const override { return nullptr; }
+
+        bool isContinuousRepaintingEnabled() const override { return false; }
+
+        void enableContinuousRepainting (bool) override {}
+
+        bool isAtomicModeEnabled() const override { return false; }
+
+        void enableAtomicMode (bool) override {}
+
+        bool isWireframeEnabled() const override { return false; }
+
+        void enableWireframe (bool) override {}
+
+        GpuTriangulationThresholds getTriangulationThresholds() const override { return {}; }
+
+        void setTriangulationThresholds (const GpuTriangulationThresholds&) override {}
+
+        void repaint() override {}
+
+        void repaint (const Rectangle<float>&) override {}
+
+        const RectangleList<float>& getRepaintAreas() const override { return repaintAreas; }
+
+        void setGlobalMouseCaptureActive (bool) override {}
+
+        void cancelCurrentMouseGesture() override {}
+
+        void startTextInput (Component&) override {}
+
+        void stopTextInput (Component&) override {}
+
+        void updateTextInputRect (Component&) override {}
+
+        float getScaleDpi() const override { return 1.0f; }
+
+        float getCurrentFrameRate() const override { return 60.0f; }
+
+        float getDesiredFrameRate() const override { return 60.0f; }
+
+        void setDesiredFrameRate (std::optional<float>) override {}
+
+        bool isVsyncEnabled() const override { return false; }
+
+        void setVsyncEnabled (bool) override {}
+
+        void* getNativeHandle() const override { return nullptr; }
+
+        rive::Factory* getFactory() override { return nullptr; }
+
+        GraphicsContext* getGraphicsContext() override { return context.get(); }
+
+    private:
+        class Device final : public GpuDevice
+        {
+        public:
+            explicit Device (GpuPlatform apiToTell)
+                : api (apiToTell)
+            {
+            }
+
+            GpuPlatform getPlatform() const noexcept override { return api; }
+
+            rive::ore::Context* getGpuContext() const noexcept override { return &oreContext; }
+
+            std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override { return nullptr; }
+
+            std::unique_ptr<RenderableTarget> createRenderableTarget (int, int) override { return nullptr; }
+
+            void beginOffscreen (OffscreenTarget&, const GpuFrameDescriptor&) override {}
+
+            void endOffscreen (OffscreenTarget&) override {}
+
+            bool readOffscreenPixels (OffscreenTarget&, void*, size_t) override { return false; }
+
+        private:
+            const GpuPlatform api;
+            mutable ::testing::NiceMock<MockOreContext> oreContext;
+        };
+
+        class Context final : public GraphicsContext
+        {
+        public:
+            explicit Context (GpuPlatform api)
+                : device (new Device (api))
+            {
+            }
+
+            GpuPlatform getPlatform() const noexcept override { return device->getPlatform(); }
+
+            GpuDevice::Ptr getGpuDevice() const noexcept override { return device; }
+
+            rive::Factory* getFactory() override { return nullptr; }
+
+            rive::gpu::RenderContext* getRenderContext() override { return nullptr; }
+
+            rive::gpu::RenderTarget* getRenderTarget() override { return nullptr; }
+
+            std::unique_ptr<rive::Renderer> makeRenderer (int, int) override { return nullptr; }
+
+            void onSizeChanged (void*, int, int, float, uint32_t) override {}
+
+            void begin (const rive::gpu::RenderContext::FrameDescriptor&) override {}
+
+            void end (void*) override {}
+
+        private:
+            const GpuDevice::Ptr device;
+        };
+
+        std::unique_ptr<Context> context;
+        RectangleList<float> repaintAreas;
+
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ApiWindow)
+    };
+
+    /** Makes a component a window drawing with a graphics API, visible and 200 pixels wide and high, and returns that window. */
+    static ApiWindow& makeWindowDrawingWith (Component& component, GpuPlatform api)
+    {
+        auto* window = new ApiWindow (component, api);
+        Internals::attachNative (component, window);
+
+        component.setVisible (true);
+        component.setBounds (0.0f, 0.0f, 200.0f, 200.0f);
+
+        return *window;
+    }
+
+    /** A graphics API drawing in another language than the given one, which neither can draw the shaders of the other. */
+    static GpuPlatform otherApiThan (GpuPlatform api)
+    {
+        return api == GpuPlatform::Metal ? GpuPlatform::Direct3D : GpuPlatform::Metal;
+    }
+
+    /** Returns true if a shader holds, on both tiers, the variants of the language of a graphics API and of no other. */
+    static bool isCompiledFor (const MaterialShader::Ptr& shader, GpuPlatform api)
+    {
+        if (shader == nullptr)
+            return false;
+
+        for (const auto& bundle : { shader->getRasterBundle(), shader->getFullBundle() })
+        {
+            if (bundle == nullptr || bundle->getShaders().empty())
+                return false;
+
+            for (const auto& variant : bundle->getShaders())
+            {
+                if (variant.language != GpuImageShader::getShaderLanguage (api))
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** A material with the uniform block `vec4 rim; float strength;`. */
+    static constexpr const char* hologramSource = R"(YUP_MATERIAL_PARAMS
+{
+    vec4 rim;
+    float strength;
+} params;
+
+vec4 yupMaterial (YupSurface surface)
+{
+    return vec4 (surface.baseColor.rgb + params.rim.rgb * params.strength, surface.baseColor.a);
+}
+)";
+
+    /** A material comparing two structures, which WGSL does not take: every graphics API compiles it but WebGPU. */
+    static constexpr const char* notForWebGpuSource = R"(struct Level { float value; };
+
+vec4 yupMaterial (YupSurface surface)
+{
+    Level low = Level (0.0);
+    Level high = Level (1.0);
+    bool same = low == high;
+    return same ? surface.baseColor : vec4 (surface.baseColor.rgb * 0.5, surface.baseColor.a);
+}
+)";
+#endif
 };
 
 TEST_F (SceneMaterialComponentTests, PropertiesAreTheFactorsOfTheMaterial)
@@ -957,6 +1205,74 @@ TEST_F (SceneMaterialComponentTests, AMaterialIsLoadedAgainWhenOneOfItsFilesChan
     expectFloats (floatsAt (shown.shaderNode(), 16), { 4.0f });
 }
 
+TEST_F (SceneMaterialComponentTests, AFileThatChangesHasOnlyTheMaterialsReadingItLookForTheirShaderAgain)
+{
+    serveMaterial ("fx/glow.glsl", glowMembers());
+    serveMaterial ("fx/other.glsl", glowMembers());
+
+    YuiDocument document;
+    serve (document);
+
+    int numTold = 0;
+    DiagnosticListener listener (document, [&numTold] (const DataTreeDiagnostic&)
+    {
+        ++numTold;
+    });
+
+    // The default of a property of Glow can't be used, which a material tells each time it looks for that shader
+    const auto result = document.loadFromString ("shader Glow { material: \"fx/glow.glsl\"; property strength: number = 1; property rim: color = nothing.value; }\n"
+                                                 "shader Other { material: \"fx/other.glsl\"; property strength: number = 3; }\n"
+                                                 "Scene3D {\n"
+                                                 "    id: view;\n"
+                                                 "    Mesh3D { id: quad; vertices: [0, 0, 0,  1, 0, 0,  0, 1, 0]; Material3D { id: paint; shader: Glow; } }\n"
+                                                 "    Mesh3D { id: other; vertices: [0, 0, 0,  1, 0, 0,  0, 1, 0]; Material3D { shader: Other; } }\n"
+                                                 "}");
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const Shown shown (document);
+    ASSERT_TRUE (shown.isValid());
+
+    auto* other = document.findById<SceneMeshComponent> ("other");
+    ASSERT_NE (other, nullptr);
+
+    shown.view->refreshDisplay (0.0);
+
+    ASSERT_NE (shown.shaderNode(), nullptr);
+    ASSERT_NE (shaderNodeOf (*other), nullptr);
+    expectDiagnostic (document, "The default of the property 'rim' of the shader 'Glow' can't be used: ");
+
+    const auto glow = shown.shaderNode()->getShader();
+    const auto otherShader = shaderNodeOf (*other)->getShader();
+    const auto toldByTheLoad = numTold;
+
+    // A file of the other material: that one is loaded again, and the material of Glow is left with its shader, which
+    // it does not look for again
+    document.notifyAssetChanged ("fx/other.glsl.raster.ysl");
+    shown.view->refreshDisplay (0.0);
+
+    ASSERT_NE (shown.shaderNode(), nullptr);
+    ASSERT_NE (shaderNodeOf (*other), nullptr);
+    EXPECT_NE (shaderNodeOf (*other)->getShader(), otherShader);
+    EXPECT_EQ (shown.shaderNode()->getShader(), glow);
+    EXPECT_EQ (numTold, toldByTheLoad);
+    EXPECT_EQ (reads["fx/other.glsl.raster.ysl"], 2);
+    EXPECT_EQ (reads["fx/glow.glsl.raster.ysl"], 1);
+    expectFloats (floatsAt (shown.shaderNode(), 16), { 1.0f });
+    expectFloats (floatsAt (shaderNodeOf (*other), 16), { 3.0f });
+
+    // A file of its own: it is loaded again. What its block has wrong was told already, and a document tells a problem once
+    document.notifyAssetChanged ("fx/glow.glsl.full.ysl");
+    shown.view->refreshDisplay (0.0);
+
+    ASSERT_NE (shown.shaderNode(), nullptr);
+    EXPECT_NE (shown.shaderNode()->getShader(), glow);
+    EXPECT_EQ (numTold, toldByTheLoad);
+    EXPECT_EQ (reads["fx/glow.glsl.full.ysl"], 2);
+    EXPECT_EQ (reads["fx/other.glsl.raster.ysl"], 2);
+    expectFloats (floatsAt (shown.shaderNode(), 16), { 1.0f });
+}
+
 TEST_F (SceneMaterialComponentTests, TheShaderFollowsTheMaterialAndTheNameItIsGiven)
 {
     serveMaterial ("fx/glow.glsl", glowMembers());
@@ -1636,6 +1952,117 @@ vec4 yupMaterial (YupSurface surface)
     // And the source is not compiled again for it
     shown.view->refreshDisplay (0.0);
     EXPECT_EQ (reads["fx/wrong.glsl"], 1);
+}
+
+TEST_F (SceneMaterialComponentTests, AMaterialIsCompiledForTheGraphicsApiDrawingItsSceneAndOnceForAnother)
+{
+    files["fx/hologram.glsl"] = bytesOf (hologramSource);
+
+    Component window;
+
+    YuiDocument document;
+    serve (document);
+    load (document, "shader Hologram { material: \"fx/hologram.glsl\"; property strength: number = 2; }\n"
+                        + quadWith ("Material3D { id: paint; shader: Hologram; }"));
+
+    const Shown shown (document);
+    ASSERT_TRUE (shown.isValid());
+
+    shown.view->refreshDisplay (0.0);
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    const auto defaultApi = ComponentNative::getDefaultGraphicsApi();
+    const auto otherApi = otherApiThan (defaultApi);
+
+    // In no window, and never painted: for the API a window is given by default, and for that one alone
+    ASSERT_NE (shown.shaderNode(), nullptr);
+
+    const auto first = shown.shaderNode()->getShader();
+    EXPECT_TRUE (isCompiledFor (first, defaultApi));
+    EXPECT_EQ (reads["fx/hologram.glsl"], 1);
+    expectFloats (floatsAt (shown.shaderNode(), 16), { 2.0f });
+
+    // A window drawing with that API has nothing to change
+    auto& native = makeWindowDrawingWith (window, defaultApi);
+    window.addChildComponent (*shown.view);
+    shown.view->refreshDisplay (0.0);
+
+    ASSERT_NE (shown.shaderNode(), nullptr);
+    EXPECT_EQ (shown.shaderNode()->getShader(), first);
+    EXPECT_EQ (reads["fx/hologram.glsl"], 1);
+
+    // One drawing with another API has the next frame compile the material for it, into a shader given the values at once
+    native.setGraphicsApi (otherApi);
+    shown.view->refreshDisplay (0.0);
+
+    ASSERT_NE (shown.shaderNode(), nullptr);
+
+    const auto second = shown.shaderNode()->getShader();
+    EXPECT_NE (second, first);
+    EXPECT_TRUE (isCompiledFor (second, otherApi));
+    EXPECT_TRUE (second->createUniforms() == first->createUniforms());
+    EXPECT_EQ (reads["fx/hologram.glsl"], 2);
+    expectFloats (floatsAt (shown.shaderNode(), 16), { 2.0f });
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    // Once: the frames that follow keep it
+    shown.view->refreshDisplay (0.0);
+    shown.view->refreshDisplay (0.0);
+
+    ASSERT_NE (shown.shaderNode(), nullptr);
+    EXPECT_EQ (shown.shaderNode()->getShader(), second);
+    EXPECT_EQ (reads["fx/hologram.glsl"], 2);
+}
+
+TEST_F (SceneMaterialComponentTests, AMaterialTheGraphicsApiOfTheSceneDoesNotCompileIsReportedOnceAndKeepsItsShader)
+{
+    // What WebGPU alone refuses is not told while another API is the one in use
+    if (ComponentNative::getDefaultGraphicsApi() == GpuPlatform::WebGPU)
+        GTEST_SKIP() << "The source of this test is one the default graphics API does not compile";
+
+    files["fx/level.glsl"] = bytesOf (notForWebGpuSource);
+
+    Component window;
+
+    YuiDocument document;
+    serve (document);
+    load (document, "shader Level { material: \"fx/level.glsl\"; }\n" + quadWith ("Material3D { id: paint; shader: Level; }"));
+
+    const Shown shown (document);
+    ASSERT_TRUE (shown.isValid());
+
+    shown.view->refreshDisplay (0.0);
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+    ASSERT_NE (shown.shaderNode(), nullptr);
+
+    const auto first = shown.shaderNode()->getShader();
+    ASSERT_NE (first, nullptr);
+    EXPECT_EQ (reads["fx/level.glsl"], 1);
+
+    // In a window drawing with WebGPU the material is compiled for it, which fails: told at the block, and the shader
+    // that colored the meshes is left to
+    makeWindowDrawingWith (window, GpuPlatform::WebGPU);
+    window.addChildComponent (*shown.view);
+    shown.view->refreshDisplay (0.0);
+
+    ASSERT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_TRUE (document.getDiagnostics().front().message.startsWith ("shader Level: ")) << document.getDiagnostics().front().message;
+    EXPECT_TRUE (document.getDiagnostics().front().message.containsIgnoreCase ("wgsl")) << document.getDiagnostics().front().message;
+    EXPECT_EQ (document.getDiagnostics().front().line, 1);
+    EXPECT_EQ (document.getDiagnostics().front().property.toString(), "material");
+
+    ASSERT_NE (shown.shaderNode(), nullptr);
+    EXPECT_EQ (shown.shaderNode()->getShader(), first);
+    EXPECT_EQ (reads["fx/level.glsl"], 2);
+
+    // The frames that follow neither compile it nor tell it again
+    shown.view->refreshDisplay (0.0);
+    shown.view->refreshDisplay (0.0);
+
+    EXPECT_EQ (document.getDiagnostics().size(), 1u) << DataTreeDiagnostic::join (document.getDiagnostics());
+    EXPECT_EQ (reads["fx/level.glsl"], 2);
+    ASSERT_NE (shown.shaderNode(), nullptr);
+    EXPECT_EQ (shown.shaderNode()->getShader(), first);
 }
 
 #else

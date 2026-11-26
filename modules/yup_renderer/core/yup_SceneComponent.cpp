@@ -589,7 +589,14 @@ ResultValue<MaterialShader::Ptr> SceneComponent::loadMaterialShader (const Strin
             return makeResultValueFail ("can't read '" + path + "' nor its compiled variants '" + path + ".raster.ysl' and '" + path + ".full.ysl'");
 
 #if YUP_ENABLE_SHADER_TRANSPILER
-        return MaterialShader::createFromSource (source->toString());
+        // For the graphics API drawing the scene, kept with the material: it is compiled again once another one draws it
+        const auto api = findGraphicsApi();
+        auto compiled = MaterialShader::createFromSource (source->toString(), MaterialShader::getSourceDirectory(), api);
+
+        if (compiled.wasOk())
+            compiledMaterials[path] = api;
+
+        return compiled;
 #else
         return makeResultValueFail ("'" + path + "' is the source of a material, which this build can't compile, and there is no '" + path + ".raster.ysl' nor '" + path + ".full.ysl'");
 #endif
@@ -623,8 +630,13 @@ void SceneComponent::assetChanged (const String& path)
     // A material shader is kept by the path of its source, whichever of its files changed: that one, or one of its two variants
     for (const auto* suffix : { "", ".raster.ysl", ".full.ysl" })
     {
-        if (path.endsWith (suffix))
-            materialShaders.erase (path.dropLastCharacters (static_cast<int> (std::strlen (suffix))));
+        if (! path.endsWith (suffix))
+            continue;
+
+        const auto source = path.dropLastCharacters (static_cast<int> (std::strlen (suffix)));
+
+        materialShaders.erase (source);
+        compiledMaterials.erase (source);
     }
 
     // Found before any of them is told: one telling what is wrong with its file may be heard by something that
@@ -638,6 +650,42 @@ void SceneComponent::assetChanged (const String& path)
             material->assetChanged (path);
         else if (auto* model = dynamic_cast<SceneModelComponent*> (user.get()))
             model->assetChanged (path);
+    }
+}
+
+GpuPlatform SceneComponent::findGraphicsApi()
+{
+    if (auto* native = getNativeComponent())
+    {
+        if (auto* context = native->getGraphicsContext(); context != nullptr && context->isGpuAvailable())
+            return context->getPlatform();
+    }
+
+    return paintedApi.has_value() ? *paintedApi : ComponentNative::getDefaultGraphicsApi();
+}
+
+void SceneComponent::updateCompiledMaterials()
+{
+    if (compiledMaterials.empty())
+        return;
+
+    const auto api = findGraphicsApi();
+    StringArray outdated;
+
+    for (const auto& [path, compiledFor] : compiledMaterials)
+    {
+        if (compiledFor != api)
+            outdated.add (path);
+    }
+
+    const BailOutChecker checker (this);
+
+    for (const auto& path : outdated)
+    {
+        assetChanged (path);
+
+        if (checker.shouldBailOut())
+            return;
     }
 }
 
@@ -1022,6 +1070,8 @@ void SceneComponent::paint (Graphics& g)
     }
     else
     {
+        paintedApi = context.getPlatform();
+
         const auto width = roundToInt (bounds.getWidth() * g.getContextScale());
         const auto height = roundToInt (bounds.getHeight() * g.getContextScale());
         if (width < 1 || height < 1)
@@ -1153,6 +1203,11 @@ bool SceneComponent::updateAnimatedComponents (double elapsedSeconds)
         isSceneOutdated = false;
         shown->update (elapsedSeconds);
     }
+
+    updateCompiledMaterials();
+
+    if (checker.shouldBailOut())
+        return false;
 
     // The shaders of the materials take the values their properties have by then, and tell when one changed
     const auto isChanged = SceneMaterialComponent::updateShaders (*shown, elapsedSeconds) || isUpdated;

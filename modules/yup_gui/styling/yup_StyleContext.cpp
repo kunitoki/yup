@@ -47,6 +47,14 @@ String getShaderBundlePath (const String& sourcePath)
     return sourcePath.endsWithIgnoreCase (".ysl") ? String() : sourcePath + ".ysl";
 }
 
+/* Returns the graphics API of the window a component is in, or nothing when it is in none that draws with a GPU. */
+std::optional<GpuPlatform> findWindowGraphicsApi (Component& component)
+{
+    const auto device = detail::findWindowDevice (&component);
+
+    return device != nullptr && device->isGpuAvailable() ? std::optional<GpuPlatform> (device->getPlatform()) : std::nullopt;
+}
+
 /* Tracks one component state property (style, cursor, effect, paint margin) owned by a
    stylesheet while leaving later explicit application overrides untouched. */
 template <class T>
@@ -294,6 +302,14 @@ struct StyleContext::ShaderEntry
 
     // Set when the problems of the stylesheet are found again, for the next restyle to report the ones kept here with them
     bool reportsAgain = false;
+
+    // The graphics API the last load compiled the source of the shader for, whatever came of it, so that a source is
+    // compiled once for an API: nothing for a bundle, loaded with the variants it holds, and for a source compiled for all
+    std::optional<GpuPlatform> sourceApi;
+
+    // Set once a paint in no window could not draw the shader, where nothing tells which graphics API paints: its source
+    // is compiled for all of them from then on
+    bool compilesForEveryApi = false;
 };
 
 struct StyleContext::ShaderMap : std::map<String, ShaderEntry>
@@ -1704,6 +1720,16 @@ bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
     const auto path = block.getProperty ("fragment").toString();
     const auto bundlePath = getShaderBundlePath (path);
 
+    // A source is compiled for the graphics API that draws it: the one of the window the root is in, or the one a window
+    // is given by default while it is in none. What a paint in no window could not draw is compiled for all of them
+    const auto windowApi = findWindowGraphicsApi (root);
+    std::optional<GpuPlatform> api;
+
+    if (! entry.compilesForEveryApi)
+        api = windowApi.has_value() ? *windowApi : ComponentNative::getDefaultGraphicsApi();
+
+    entry.sourceApi = api;
+
     auto bytes = ComponentDocument::readAssetFor (&root, bundlePath);
     const bool hasBundle = bytes.has_value();
 
@@ -1717,7 +1743,11 @@ bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
         return fail ({ .message = "The shader '" + name + "' can't read " + missing, .element = block, .property = "fragment" });
     }
 
-    auto created = GpuImageShader::createFromData (bytes->getData(), bytes->getSize());
+    // A bundle is loaded with the variants it was built with, whichever API draws it
+    if (GpuImageShader::isCompiledBundle (bytes->getData(), bytes->getSize()))
+        entry.sourceApi.reset();
+
+    auto created = GpuImageShader::createFromData (bytes->getData(), bytes->getSize(), api);
 
     if (created.failed())
     {
@@ -1734,15 +1764,15 @@ bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
 
     // A bundle built for other graphics APIs than the one of the window is told now when the window is known, and else
     // by the first paint drawing the shader
-    if (const auto device = detail::findWindowDevice (&root);
-        device != nullptr && device->isGpuAvailable() && ! created.getReference()->canDrawWith (device->getPlatform()))
+    if (windowApi.has_value() && ! created.getReference()->canDrawWith (*windowApi))
     {
         return fail ({ .message = "The shader '" + name + "' has no variant for the graphics API of its window: compile it for every language yup_shader_bundler targets",
                        .element = block,
                        .property = "fragment" });
     }
 
-    const auto uniforms = created.getReference()->createUniforms();
+    // The members of the shader, which `created` keeps until the load is over
+    const auto& uniforms = created.getReference()->getUniformLayout();
     std::vector<ShaderEffect::Property> properties;
     StringArray declared;
 
@@ -1811,8 +1841,21 @@ bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
 
 void StyleContext::refreshShaders()
 {
+    if (shaders->empty())
+        return;
+
+    const auto windowApi = findWindowGraphicsApi (root);
+
     for (auto& [name, entry] : *shaders)
     {
+        // A window drawing with another graphics API than the one the source of a shader was compiled for, as one created
+        // with an API of its own does: the source is compiled for that one, once whatever comes of it
+        if (entry.loaded.shader != nullptr && windowApi.has_value() && entry.sourceApi.has_value() && entry.sourceApi != windowApi)
+        {
+            entry.isStale = true;
+            markDirty (root);
+        }
+
         if (! entry.isStale)
         {
             if (std::exchange (entry.reportsAgain, false))
@@ -1827,32 +1870,42 @@ void StyleContext::refreshShaders()
             continue;
         }
 
-        // A shader that fails to load leaves the one it was to replace running
-        if (! loadShader (name, entry))
+        reloadShader (name, entry);
+    }
+}
+
+/* Loads a shader again and gives it to the effects running the one it replaces. The drawings using it are made again by
+   the restyle of their components. */
+void StyleContext::reloadShader (const String& name, ShaderEntry& entry)
+{
+    // A shader that fails to load leaves the one it was to replace running
+    if (! loadShader (name, entry))
+        return;
+
+    // The effects running the shader take the new one, unless it now reads more textures than an effect has: those are made again
+    const bool runsAsEffect = ShaderEffect::getNumPictures (*entry.loaded.shader, entry.loaded.properties) <= 1;
+
+    for (auto& [component, cache] : *caches)
+    {
+        if (cache.effectName != name)
             continue;
 
-        // The effects running the shader take the new one, unless it now reads more textures than an effect has: those are made again
-        const bool runsAsEffect = ShaderEffect::getNumPictures (*entry.loaded.shader, entry.loaded.properties) <= 1;
+        auto* effect = cache.effectOverride.applied.has_value() ? dynamic_cast<ShaderEffect*> (cache.effectOverride.applied->get()) : nullptr;
 
-        for (auto& [component, cache] : *caches)
-        {
-            if (cache.effectName != name)
-                continue;
-
-            auto* effect = cache.effectOverride.applied.has_value() ? dynamic_cast<ShaderEffect*> (cache.effectOverride.applied->get()) : nullptr;
-
-            if (runsAsEffect && effect != nullptr)
-                effect->setShader (entry.loaded.shader);
-            else
-                cache.effectName = {};
-        }
+        if (runsAsEffect && effect != nullptr)
+            effect->setShader (entry.loaded.shader);
+        else
+            cache.effectName = {};
     }
 }
 
 /* Tells what a device refused of the shaders of the sheet a component is drawn with. It was found while the component was
    painted, where nothing is reported, and had the component restyled: it is told here, at the block declaring the shader,
    once for as long as that shader is loaded and however many components it could not be drawn for. And again with the
-   problems of the sheet when they are told again, as what prevents a shader from loading is. */
+   problems of the sheet when they are told again, as what prevents a shader from loading is.
+
+   A source compiled for one graphics API that a root in no window could not be painted with is not told at first: nothing
+   says which API painted there, so it is compiled for all of them, once, and what the next paint can't draw of it is told. */
 void StyleContext::reportShaderFailures (const Component& component)
 {
     if (shaders->empty())
@@ -1867,6 +1920,14 @@ void StyleContext::reportShaderFailures (const Component& component)
         {
             if (entry.loaded.shader.get() != shader)
                 continue;
+
+            if (entry.sourceApi.has_value() && ! entry.compilesForEveryApi && ! findWindowGraphicsApi (root).has_value())
+            {
+                entry.compilesForEveryApi = true;
+                reloadShader (name, entry);
+                markDirty (root);
+                return;
+            }
 
             const DataTreeDiagnostic problem { .message = "The shader '" + name + "' can't be drawn: " + error, .element = entry.loaded.block, .property = "fragment" };
 

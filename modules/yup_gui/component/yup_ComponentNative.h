@@ -841,6 +841,19 @@ public:
                                            const Options& options,
                                            void* parent);
 
+    /** Returns the graphics API a window is given when it asks for none (see Options::withGraphicsApi):
+        the first one this platform prefers that the build and the machine support.
+
+        It needs no window and creates none, so it tells which API is to draw a component before the
+        component is in a window. This is what a shader made from its source is compiled for until
+        then (see StyleContext::findShader). A window created with another API draws with that one.
+
+        Call it on the message thread, or with the message manager locked.
+
+        @return The graphics API of a window created with no Options::graphicsApi.
+    */
+    static GpuPlatform getDefaultGraphicsApi();
+
 protected:
     /** Returns true when at least one frame listener is registered.
 

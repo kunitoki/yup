@@ -24,6 +24,8 @@
 
 #include <gtest/gtest.h>
 
+#include "../mocks/rive_ore.h"
+
 #include <cstring>
 
 using namespace yup;
@@ -175,6 +177,201 @@ protected:
     }
 
 #if YUP_ENABLE_SHADER_TRANSPILER
+    /** Stands in for a window drawing with a graphics API: its device tells that API and that it has a GPU, and is
+        never drawn with. The API can be changed, as it is for a component moved to another window.
+    */
+    class ApiWindow final : public ComponentNative
+    {
+    public:
+        ApiWindow (Component& componentToShow, GpuPlatform api)
+            : ComponentNative (componentToShow, ComponentNative::defaultFlags)
+        {
+            setGraphicsApi (api);
+        }
+
+        void setGraphicsApi (GpuPlatform api)
+        {
+            context = std::make_unique<Context> (api);
+        }
+
+        void setTitle (const String&) override {}
+
+        String getTitle() const override { return {}; }
+
+        void setVisible (bool) override {}
+
+        bool isVisible() const override { return true; }
+
+        bool isResizable() const override { return false; }
+
+        void setResizable (bool) override {}
+
+        void toFront() override {}
+
+        void setSize (const Size<int>&) override {}
+
+        Size<int> getSize() const override { return {}; }
+
+        Size<int> getContentSize() const override { return {}; }
+
+        Point<int> getPosition() const override { return {}; }
+
+        void setPosition (const Point<int>&) override {}
+
+        Rectangle<int> getBounds() const override { return {}; }
+
+        void setBounds (const Rectangle<int>&) override {}
+
+        Rectangle<int> getSafeAreaBounds() const override { return {}; }
+
+        void setFullScreen (bool) override {}
+
+        bool isFullScreen() const override { return false; }
+
+        bool isDecorated() const override { return false; }
+
+        void setAspectRatio (std::optional<float>) override {}
+
+        std::optional<float> getAspectRatio() const override { return std::nullopt; }
+
+        void setOpacity (float) override {}
+
+        float getOpacity() const override { return 1.0f; }
+
+        void setFocusedComponent (Component*, FocusChangeType) override {}
+
+        Component* getFocusedComponent() const override { return nullptr; }
+
+        Component* getPointerTarget() const override { return nullptr; }
+
+        bool isContinuousRepaintingEnabled() const override { return false; }
+
+        void enableContinuousRepainting (bool) override {}
+
+        bool isAtomicModeEnabled() const override { return false; }
+
+        void enableAtomicMode (bool) override {}
+
+        bool isWireframeEnabled() const override { return false; }
+
+        void enableWireframe (bool) override {}
+
+        GpuTriangulationThresholds getTriangulationThresholds() const override { return {}; }
+
+        void setTriangulationThresholds (const GpuTriangulationThresholds&) override {}
+
+        void repaint() override {}
+
+        void repaint (const Rectangle<float>&) override {}
+
+        const RectangleList<float>& getRepaintAreas() const override { return repaintAreas; }
+
+        void setGlobalMouseCaptureActive (bool) override {}
+
+        void cancelCurrentMouseGesture() override {}
+
+        void startTextInput (Component&) override {}
+
+        void stopTextInput (Component&) override {}
+
+        void updateTextInputRect (Component&) override {}
+
+        float getScaleDpi() const override { return 1.0f; }
+
+        float getCurrentFrameRate() const override { return 60.0f; }
+
+        float getDesiredFrameRate() const override { return 60.0f; }
+
+        void setDesiredFrameRate (std::optional<float>) override {}
+
+        bool isVsyncEnabled() const override { return false; }
+
+        void setVsyncEnabled (bool) override {}
+
+        void* getNativeHandle() const override { return nullptr; }
+
+        rive::Factory* getFactory() override { return nullptr; }
+
+        GraphicsContext* getGraphicsContext() override { return context.get(); }
+
+    private:
+        class Device final : public GpuDevice
+        {
+        public:
+            explicit Device (GpuPlatform apiToTell)
+                : api (apiToTell)
+            {
+            }
+
+            GpuPlatform getPlatform() const noexcept override { return api; }
+
+            rive::ore::Context* getGpuContext() const noexcept override { return &oreContext; }
+
+            std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override { return nullptr; }
+
+            std::unique_ptr<RenderableTarget> createRenderableTarget (int, int) override { return nullptr; }
+
+            void beginOffscreen (OffscreenTarget&, const GpuFrameDescriptor&) override {}
+
+            void endOffscreen (OffscreenTarget&) override {}
+
+            bool readOffscreenPixels (OffscreenTarget&, void*, size_t) override { return false; }
+
+        private:
+            const GpuPlatform api;
+            mutable ::testing::NiceMock<MockOreContext> oreContext;
+        };
+
+        class Context final : public GraphicsContext
+        {
+        public:
+            explicit Context (GpuPlatform api)
+                : device (new Device (api))
+            {
+            }
+
+            GpuPlatform getPlatform() const noexcept override { return device->getPlatform(); }
+
+            GpuDevice::Ptr getGpuDevice() const noexcept override { return device; }
+
+            rive::Factory* getFactory() override { return nullptr; }
+
+            rive::gpu::RenderContext* getRenderContext() override { return nullptr; }
+
+            rive::gpu::RenderTarget* getRenderTarget() override { return nullptr; }
+
+            std::unique_ptr<rive::Renderer> makeRenderer (int, int) override { return nullptr; }
+
+            void onSizeChanged (void*, int, int, float, uint32_t) override {}
+
+            void begin (const rive::gpu::RenderContext::FrameDescriptor&) override {}
+
+            void end (void*) override {}
+
+        private:
+            const GpuDevice::Ptr device;
+        };
+
+        std::unique_ptr<Context> context;
+        RectangleList<float> repaintAreas;
+
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ApiWindow)
+    };
+
+    /** Puts a component in a window drawing with a graphics API, and returns that window. */
+    static ApiWindow& showInAWindowDrawingWith (Component& component, GpuPlatform api)
+    {
+        auto* window = new ApiWindow (component, api);
+        yup::ComponentTestHelper<Component>::attachNative (component, window);
+        return *window;
+    }
+
+    /** A graphics API drawing in another language than the given one, which neither can draw the shaders of the other. */
+    static GpuPlatform otherApiThan (GpuPlatform api)
+    {
+        return api == GpuPlatform::Metal ? GpuPlatform::Direct3D : GpuPlatform::Metal;
+    }
+
     /** Tints the picture it reads: the members `shader Crt` of the tests declares as properties, and one texture. */
     static constexpr const char* crtFragment = R"(#version 450
 layout(set = 0, binding = 0) uniform Parameters
@@ -235,8 +432,23 @@ layout(set = 0, binding = 0) uniform Parameters { vec2 scale; } params;
 layout(location = 0) out vec4 color;
 void main() { color = vec4 (params.scale, 0.0, 1.0); })";
 
-    /** The bytes of the bundle a build makes of a fragment shader: compiled behind the vertex stage of an image shader. */
-    static MemoryBlock compileBundle (const char* fragment)
+    /** Compares two structures, which WGSL does not take: a source every graphics API compiles but WebGPU. */
+    static constexpr const char* notForWebGpuFragment = R"(#version 450
+struct Level { float value; };
+layout(location = 0) out vec4 color;
+void main()
+{
+    Level low = Level (0.0);
+    Level high = Level (1.0);
+    bool same = low == high;
+    color = same ? vec4 (1.0) : vec4 (0.0, 0.0, 0.0, 1.0);
+})";
+
+    /** The bytes of the bundle a build makes of a fragment shader: compiled behind the vertex stage of an image shader,
+        for the languages yup_shader_bundler targets by default or for the ones given.
+    */
+    static MemoryBlock compileBundle (const char* fragment,
+                                      const std::vector<ShaderLanguage>& languages = { ShaderLanguage::glsl, ShaderLanguage::essl, ShaderLanguage::hlsl, ShaderLanguage::msl, ShaderLanguage::spirv, ShaderLanguage::wgsl })
     {
         static constexpr const char* vertex = R"(#version 450
 layout(location = 0) out vec2 uv;
@@ -254,7 +466,7 @@ void main()
             ShaderBundleEntry entry;
             entry.stage = stage;
             entry.source = source;
-            entry.targetLanguages = { ShaderLanguage::glsl, ShaderLanguage::essl, ShaderLanguage::hlsl, ShaderLanguage::msl, ShaderLanguage::spirv, ShaderLanguage::wgsl };
+            entry.targetLanguages = languages;
             request.entries.push_back (entry);
         }
 
@@ -3553,6 +3765,331 @@ TEST_F (StyleContextTests, ADrawingIsMadeAgainOnlyWhenAShaderItRunsIsLoadedAgain
     expectShader (element, "Plasma");
     EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 }
+
+TEST_F (StyleContextTests, ASourceIsCompiledForTheDefaultGraphicsApiAndOnceForTheOneOfAWindowDrawingWithAnother)
+{
+    setAsset ("fx/crt.frag", crtFragment);
+    setAsset ("fx/plasma.frag", proceduralFragment);
+
+    YuiDocument document;
+    serveAssets (document);
+
+    const auto loaded = document.loadFromString ("shader Crt { fragment: \"fx/crt.frag\"; property intensity: number = 0.5; }\n"
+                                                 "shader Plasma { fragment: \"fx/plasma.frag\"; property intensity: number = 0.5; }\n"
+                                                 "drawing Screen { use Plasma { } }\n"
+                                                 "style { #tube { effect: Crt; } #screen { drawing: Screen; } }\n"
+                                                 "Component { Component { id: tube; } Component { id: screen; } }");
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    auto* root = document.getRoot();
+    auto* context = root->getStyleContext();
+    auto* screen = document.findById ("screen");
+    auto* effect = getShaderEffect (document.findById ("tube"));
+    ASSERT_NE (effect, nullptr);
+    ASSERT_NE (getDrawingStyle (screen), nullptr);
+
+    const auto defaultApi = ComponentNative::getDefaultGraphicsApi();
+    const auto otherApi = otherApiThan (defaultApi);
+
+    // In no window, a source is compiled for the API a window is given by default, and for that one alone
+    const auto first = effect->getShader();
+    const auto firstPlasma = context->findShader ("Plasma")->shader;
+    ASSERT_NE (first, nullptr);
+    ASSERT_NE (firstPlasma, nullptr);
+
+    for (const auto& shader : { first, firstPlasma })
+    {
+        EXPECT_TRUE (shader->canDrawWith (defaultApi));
+        EXPECT_FALSE (shader->canDrawWith (otherApi));
+    }
+
+    EXPECT_EQ (assetReads["fx/crt.frag"], 1);
+    EXPECT_EQ (assetReads["fx/plasma.frag"], 1);
+
+    // A window drawing with that API has nothing to change
+    auto& window = showInAWindowDrawingWith (*root, defaultApi);
+    const auto screenStyle = screen->getStyle();
+
+    EXPECT_EQ (countProblemsOfARestyle (*root), 0u);
+    EXPECT_EQ (effect->getShader(), first);
+    EXPECT_EQ (screen->getStyle(), screenStyle);
+    EXPECT_EQ (assetReads["fx/crt.frag"], 1);
+
+    // One drawing with another API has the next restyle compile the sources for it: the effect runs the new shader and
+    // the drawing is made again with its own, which declare what the ones before did
+    window.setGraphicsApi (otherApi);
+    EXPECT_EQ (countProblemsOfARestyle (*root), 0u);
+
+    const auto second = effect->getShader();
+    const auto secondPlasma = context->findShader ("Plasma")->shader;
+    ASSERT_NE (second, nullptr);
+    ASSERT_NE (secondPlasma, nullptr);
+    EXPECT_NE (second, first);
+    EXPECT_NE (secondPlasma, firstPlasma);
+    EXPECT_EQ (context->findShader ("Crt")->shader, second);
+
+    for (const auto& shader : { second, secondPlasma })
+    {
+        EXPECT_TRUE (shader->canDrawWith (otherApi));
+        EXPECT_FALSE (shader->canDrawWith (defaultApi));
+    }
+
+    EXPECT_TRUE (second->getUniformLayout().hasSameLayoutAs (first->getUniformLayout()));
+    EXPECT_EQ (second->getNumInputTextures(), 1);
+
+    ASSERT_NE (getDrawingStyle (screen), nullptr);
+    EXPECT_NE (screen->getStyle(), screenStyle);
+    ASSERT_EQ (getDrawingStyle (screen)->getShaders().size(), 1u);
+    EXPECT_EQ (getDrawingStyle (screen)->getShaders().front().shader, secondPlasma);
+
+    EXPECT_EQ (assetReads["fx/crt.frag"], 2);
+    EXPECT_EQ (assetReads["fx/plasma.frag"], 2);
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    // Once: the restyles that follow keep the shaders, and read nothing
+    const auto remadeStyle = screen->getStyle();
+
+    EXPECT_EQ (countProblemsOfARestyle (*root), 0u);
+    EXPECT_EQ (effect->getShader(), second);
+    EXPECT_EQ (screen->getStyle(), remadeStyle);
+    EXPECT_EQ (assetReads["fx/crt.frag"], 2);
+    EXPECT_EQ (assetReads["fx/plasma.frag"], 2);
+
+    // A file that changes is compiled for the API of the window at once
+    setAsset ("fx/crt.frag", proceduralFragment);
+    document.notifyAssetChanged ("fx/crt.frag");
+    restyle (*root);
+
+    ASSERT_NE (effect->getShader(), nullptr);
+    EXPECT_NE (effect->getShader(), second);
+    EXPECT_TRUE (effect->getShader()->canDrawWith (otherApi));
+    EXPECT_FALSE (effect->getShader()->canDrawWith (defaultApi));
+    EXPECT_EQ (assetReads["fx/crt.frag"], 3);
+}
+
+TEST_F (StyleContextTests, ASourceTheGraphicsApiOfTheWindowDoesNotCompileIsReportedOnceAndLeavesTheShaderRunning)
+{
+    // What WebGPU alone refuses is not told while another API is the one in use
+    if (ComponentNative::getDefaultGraphicsApi() == GpuPlatform::WebGPU)
+        GTEST_SKIP() << "The source of this test is one the default graphics API does not compile";
+
+    setAsset ("fx/level.frag", notForWebGpuFragment);
+
+    YuiDocument document;
+    serveAssets (document);
+
+    const auto loaded = document.loadFromString ("shader Level { fragment: \"fx/level.frag\"; }\n"
+                                                 "style { #screen { effect: Level; } }\n"
+                                                 "Component { Component { id: screen; } }");
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    auto* root = document.getRoot();
+    auto* effect = getShaderEffect (document.findById ("screen"));
+    ASSERT_NE (effect, nullptr);
+
+    const auto first = effect->getShader();
+    ASSERT_NE (first, nullptr);
+    EXPECT_EQ (assetReads["fx/level.frag"], 1);
+
+    // In a window drawing with WebGPU the source is compiled for it, which fails: told where the file is named, and
+    // the shader that was running is left to
+    showInAWindowDrawingWith (*root, GpuPlatform::WebGPU);
+    EXPECT_EQ (countProblemsOfARestyle (*root), 1u);
+
+    const auto& diagnostics = document.getDiagnostics();
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
+    EXPECT_TRUE (diagnostics[0].message.startsWith ("shader Level: ")) << diagnostics[0].message;
+    EXPECT_TRUE (diagnostics[0].message.containsIgnoreCase ("wgsl")) << diagnostics[0].message;
+    EXPECT_EQ (diagnostics[0].line, 1);
+    EXPECT_EQ (diagnostics[0].property, Identifier ("fragment"));
+    EXPECT_EQ (effect->getShader(), first);
+    EXPECT_EQ (assetReads["fx/level.frag"], 2);
+
+    // The restyles that follow neither compile it nor tell it again
+    EXPECT_EQ (countProblemsOfARestyle (*root), 0u);
+    EXPECT_EQ (countProblemsOfARestyle (*root), 0u);
+    EXPECT_EQ (document.getDiagnostics().size(), 1u);
+    EXPECT_EQ (assetReads["fx/level.frag"], 2);
+    EXPECT_EQ (effect->getShader(), first);
+
+    // Until its file changes: one WebGPU compiles is then the shader of the effect
+    setAsset ("fx/level.frag", proceduralFragment);
+    document.notifyAssetChanged ("fx/level.frag");
+    restyle (*root);
+
+    ASSERT_NE (effect->getShader(), nullptr);
+    EXPECT_NE (effect->getShader(), first);
+    EXPECT_TRUE (effect->getShader()->canDrawWith (GpuPlatform::WebGPU));
+    EXPECT_EQ (assetReads["fx/level.frag"], 3);
+}
+
+TEST_F (StyleContextTests, ABundleWithoutAVariantForTheWindowIsReportedAndNeverCompiledAgain)
+{
+    // The bundle a build made of the shader for OpenGL alone, and a window drawing with Metal
+    assets["fx/crt.frag.ysl"] = compileBundle (crtFragment, { ShaderLanguage::glsl });
+    ASSERT_GT (assets["fx/crt.frag.ysl"].getSize(), 0u);
+
+    const String text ("shader Crt { fragment: \"fx/crt.frag\"; property intensity: number = 0.5; }\n"
+                       "style { #screen { effect: Crt; } }\n"
+                       "Component { Component { id: screen; } }");
+
+    {
+        // Loaded with no window, the bundle is the shader of the effect: nothing tells yet that its window can't draw it
+        YuiDocument document;
+        serveAssets (document);
+
+        ASSERT_TRUE (document.loadFromString (text).wasOk());
+        EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+        auto* root = document.getRoot();
+        auto* effect = getShaderEffect (document.findById ("screen"));
+        ASSERT_NE (effect, nullptr);
+
+        const auto shader = effect->getShader();
+        ASSERT_NE (shader, nullptr);
+        EXPECT_TRUE (shader->canDrawWith (GpuPlatform::OpenGL));
+        EXPECT_FALSE (shader->canDrawWith (GpuPlatform::Metal));
+        EXPECT_EQ (assetReads["fx/crt.frag.ysl"], 1);
+
+        // Nor does the restyle in its window, which leaves the bundle as it is: the paint that can't draw it tells
+        showInAWindowDrawingWith (*root, GpuPlatform::Metal);
+        EXPECT_EQ (countProblemsOfARestyle (*root), 0u);
+        EXPECT_EQ (effect->getShader(), shader);
+        EXPECT_EQ (assetReads["fx/crt.frag.ysl"], 1);
+        EXPECT_EQ (assetReads["fx/crt.frag"], 0);
+    }
+
+    // Loaded in its window, it is told at once, and once
+    YuiDocument document;
+    serveAssets (document);
+    assetReads.clear();
+
+    ASSERT_TRUE (document.loadFromString ("shader Crt { fragment: \"fx/crt.frag\"; property intensity: number = 0.5; }\n"
+                                          "style { #screen { effect: Crt; } }\n"
+                                          "Component { }")
+                     .wasOk());
+
+    // A shader is loaded when it is first used: by a component made in code, once the root is in its window
+    auto* root = document.getRoot();
+    showInAWindowDrawingWith (*root, GpuPlatform::Metal);
+
+    Component screen ("screen");
+    root->addAndMakeVisible (screen);
+    restyle (*root);
+
+    const auto& diagnostics = document.getDiagnostics();
+    ASSERT_EQ (diagnostics.size(), 1u) << DataTreeDiagnostic::join (diagnostics);
+    EXPECT_EQ (diagnostics[0].message, "The shader 'Crt' has no variant for the graphics API of its window: compile it for every language yup_shader_bundler targets");
+    EXPECT_EQ (diagnostics[0].line, 1);
+    EXPECT_EQ (diagnostics[0].property, Identifier ("fragment"));
+    EXPECT_EQ (screen.getComponentEffect(), nullptr);
+
+    EXPECT_EQ (countProblemsOfARestyle (*root), 0u);
+    EXPECT_EQ (assetReads["fx/crt.frag.ysl"], 1);
+    EXPECT_EQ (assetReads["fx/crt.frag"], 0);
+}
+
+#if YUP_MAC
+
+TEST_F (StyleContextTests, ASourceAPaintInNoWindowCouldNotDrawIsCompiledForEveryGraphicsApi)
+{
+    GraphicsContext::Options options;
+    options.synchronousShaderCompilations = true;
+
+    const auto gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, options);
+    if (gpuContext == nullptr || ! gpuContext->isGpuAvailable())
+        GTEST_SKIP() << "No Metal GPU context available";
+
+    /** Fills itself with a color, which its effect reads. Unclipped, as the components ShaderEffectMetalTests paints. */
+    struct Filled : Component
+    {
+        Filled()
+            : Component ("screen")
+        {
+            setBounds (0.0f, 0.0f, 32.0f, 16.0f);
+            enableRenderingUnclipped (true);
+        }
+
+        void paint (Graphics& g) override
+        {
+            g.setFillColor (Colors::white);
+            g.fillAll();
+        }
+    };
+
+    setAsset ("fx/crt.frag", crtFragment);
+
+    YuiDocument document;
+    serveAssets (document);
+
+    const auto loaded = document.loadFromString ("shader Crt { fragment: \"fx/crt.frag\"; property intensity: number = 0.5; }\n"
+                                                 "style { #screen { effect: Crt; } }\n"
+                                                 "Component { }");
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+    auto* root = document.getRoot();
+    auto* context = root->getStyleContext();
+
+    // Under a window drawing with Direct3D, the source is compiled for that API
+    Component desktop;
+    showInAWindowDrawingWith (desktop, GpuPlatform::Direct3D);
+    desktop.addAndMakeVisible (*root);
+
+    Filled screen;
+    root->addAndMakeVisible (screen);
+    context->restyleNow();
+
+    auto* effect = getShaderEffect (&screen);
+    ASSERT_NE (effect, nullptr);
+
+    const auto first = effect->getShader();
+    ASSERT_NE (first, nullptr);
+    EXPECT_TRUE (first->canDrawWith (GpuPlatform::Direct3D));
+    EXPECT_FALSE (first->canDrawWith (GpuPlatform::Metal));
+    EXPECT_EQ (assetReads["fx/crt.frag"], 1);
+
+    // Out of the window, the component is painted by Metal: nothing tells the styles which API that is
+    desktop.removeChildComponent (root);
+    context->restyleNow();
+    EXPECT_EQ (effect->getShader(), first);
+
+    ignoreUnused (screen.snapshotToImage (*gpuContext));
+    EXPECT_TRUE (effect->getDrawError().isNotEmpty());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    // The restyle its paint asked for compiles the source for every API, and tells nothing
+    context->restyleNow();
+
+    const auto second = effect->getShader();
+    ASSERT_NE (second, nullptr);
+    EXPECT_NE (second, first);
+    EXPECT_TRUE (second->canDrawWith (GpuPlatform::Metal));
+    EXPECT_TRUE (second->canDrawWith (GpuPlatform::Direct3D));
+    EXPECT_EQ (assetReads["fx/crt.frag"], 2);
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    // Which Metal draws, and the restyles that follow leave as it is
+    ignoreUnused (screen.snapshotToImage (*gpuContext));
+    EXPECT_EQ (effect->getDrawError(), String());
+
+    EXPECT_EQ (countProblemsOfARestyle (*root), 0u);
+    EXPECT_EQ (effect->getShader(), second);
+    EXPECT_EQ (assetReads["fx/crt.frag"], 2);
+
+    // A file that changes is compiled for every API too, from then on
+    setAsset ("fx/crt.frag", proceduralFragment);
+    document.notifyAssetChanged ("fx/crt.frag");
+    context->restyleNow();
+
+    ASSERT_NE (effect->getShader(), nullptr);
+    EXPECT_NE (effect->getShader(), second);
+    EXPECT_TRUE (effect->getShader()->canDrawWith (GpuPlatform::Metal));
+    EXPECT_TRUE (effect->getShader()->canDrawWith (GpuPlatform::Direct3D));
+}
+
+#endif // YUP_MAC
 
 #endif // YUP_ENABLE_SHADER_TRANSPILER
 

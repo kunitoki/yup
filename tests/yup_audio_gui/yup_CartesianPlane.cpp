@@ -737,6 +737,60 @@ TEST_F (CartesianPlaneTests, CoordinateTransformationRoundTrip)
     EXPECT_NEAR (originalValue, convertedValue, 1.0);
 }
 
+TEST_F (CartesianPlaneTests, ValuesArePlacedInProportionOnALinearScale)
+{
+    plane->setXRange (-10.0, 30.0);
+    plane->setYRange (2.0, 6.0);
+
+    const auto plot = plane->getPlotBounds();
+
+    // The ends of the ranges are the edges of the plot
+    EXPECT_FLOAT_EQ (plane->valueToX (-10.0), plot.getX());
+    EXPECT_FLOAT_EQ (plane->valueToX (30.0), plot.getRight());
+    EXPECT_FLOAT_EQ (plane->valueToY (2.0), plot.getBottom());
+    EXPECT_FLOAT_EQ (plane->valueToY (6.0), plot.getY());
+
+    // A quarter of the way along the ranges is a quarter of the way across the plot, y going up
+    EXPECT_FLOAT_EQ (plane->valueToX (0.0), plot.getX() + 0.25f * plot.getWidth());
+    EXPECT_FLOAT_EQ (plane->valueToY (3.0), plot.getBottom() - 0.25f * plot.getHeight());
+
+    // Values out of the ranges are as far out of the plot
+    EXPECT_FLOAT_EQ (plane->valueToX (-20.0), plot.getX() - 0.25f * plot.getWidth());
+    EXPECT_FLOAT_EQ (plane->valueToY (7.0), plot.getY() - 0.25f * plot.getHeight());
+
+    EXPECT_NEAR (plane->xToValue (plane->valueToX (12.5)), 12.5, 1.0e-3);
+    EXPECT_NEAR (plane->yToValue (plane->valueToY (4.5)), 4.5, 1.0e-3);
+}
+
+TEST_F (CartesianPlaneTests, ValuesArePlacedByTheirLogarithmOnALogarithmicScale)
+{
+    plane->setXRange (10.0, 10000.0);
+    plane->setYRange (1.0, 100.0);
+    plane->setXScaleType (CartesianPlane::AxisScaleType::logarithmic);
+    plane->setYScaleType (CartesianPlane::AxisScaleType::logarithmic);
+
+    const auto plot = plane->getPlotBounds();
+
+    // Every decade takes the same room
+    EXPECT_NEAR (plane->valueToX (10.0), plot.getX(), 0.01f);
+    EXPECT_NEAR (plane->valueToX (100.0), plot.getX() + plot.getWidth() / 3.0f, 0.01f);
+    EXPECT_NEAR (plane->valueToX (1000.0), plot.getX() + plot.getWidth() * 2.0f / 3.0f, 0.01f);
+    EXPECT_NEAR (plane->valueToX (10000.0), plot.getRight(), 0.01f);
+    EXPECT_NEAR (plane->valueToY (1.0), plot.getBottom(), 0.01f);
+    EXPECT_NEAR (plane->valueToY (10.0), plot.getCenterY(), 0.01f);
+    EXPECT_NEAR (plane->valueToY (100.0), plot.getY(), 0.01f);
+
+    // A value under the range is before the plot, and one with no logarithm at the start of its axis
+    EXPECT_NEAR (plane->valueToX (1.0), plot.getX() - plot.getWidth() / 3.0f, 0.01f);
+    EXPECT_FLOAT_EQ (plane->valueToX (0.0), plot.getX());
+    EXPECT_FLOAT_EQ (plane->valueToX (-5.0), plot.getX());
+    EXPECT_FLOAT_EQ (plane->valueToY (0.0), plot.getBottom());
+    EXPECT_FLOAT_EQ (plane->valueToY (-5.0), plot.getBottom());
+
+    EXPECT_NEAR (plane->xToValue (plane->valueToX (250.0)), 250.0, 0.1);
+    EXPECT_NEAR (plane->yToValue (plane->valueToY (25.0)), 25.0, 0.01);
+}
+
 //==============================================================================
 // Logarithmic Scale Tests
 //==============================================================================
@@ -943,6 +997,49 @@ TEST_F (CartesianPlaneTests, PaintsALegendThatDoesNotFitInThePlot)
     EXPECT_GE (plane->getPlotBounds().getHeight(), 0.0f);
 }
 
+TEST_F (CartesianPlaneTests, PaintsASignalDenserThanThePixelsOfThePlotAndPaintsItAgain)
+{
+    plane->setXRange (0.0, 1.0);
+    plane->setYRange (-1.0, 1.0);
+    plane->setXScaleType (CartesianPlane::AxisScaleType::logarithmic);
+
+    // Many points for each pixel of the plot, some of them over and under it
+    const auto makeData = [] (double level)
+    {
+        std::vector<Point<double>> data;
+
+        for (int i = 0; i < 20000; ++i)
+            data.push_back ({ i / 19999.0, level * std::sin (i * 0.37) });
+
+        return data;
+    };
+
+    const int index = plane->addSignal ("Dense");
+    plane->updateSignalData (index, makeData (1.5));
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (800, 600);
+    Graphics g (*context, *renderer);
+
+    // The second paint finds the signal as the first one left it, and the ones after a change make it again
+    plane->paint (g);
+    plane->paint (g);
+
+    plane->updateSignalData (index, makeData (0.5));
+    plane->paint (g);
+
+    plane->setXRange (0.001, 1.0);
+    plane->paint (g);
+
+    g.setTransform (AffineTransform::scaling (0.5f));
+    plane->paint (g);
+
+    plane->clearSignals();
+    plane->paint (g);
+
+    EXPECT_EQ (0, plane->getNumSignals());
+}
+
 //==============================================================================
 // Edge Cases
 //==============================================================================
@@ -1052,4 +1149,264 @@ TEST_F (CartesianPlaneTests, TheTypeInfoSetsTheRangesInAnyOrderAndTheScalesAfter
 
     instance->setProperty ("legendVisible", false);
     EXPECT_FALSE (instance->isLegendVisible());
+}
+
+//==============================================================================
+// GPU Path Tests (skipped when no GPU backend is available)
+//==============================================================================
+
+class CartesianPlaneGpuTests : public ::testing::Test
+{
+protected:
+    static constexpr int width = 400;
+    static constexpr int height = 300;
+
+    static void SetUpTestSuite()
+    {
+        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
+        if (gpuContext == nullptr)
+            return;
+
+        if (GpuCanvas::create (*gpuContext, 64, 64) == nullptr)
+            gpuContext.reset();
+    }
+
+    static void TearDownTestSuite()
+    {
+        gpuContext.reset();
+    }
+
+    void SetUp() override
+    {
+        if (gpuContext == nullptr)
+            GTEST_SKIP() << "No Metal GPU context available";
+
+        canvas = GpuCanvas::create (*gpuContext, width, height);
+        if (canvas == nullptr)
+            GTEST_SKIP() << "Unable to create paint GpuCanvas";
+
+        // A plot taking the whole plane, with nothing on it but a red signal over black
+        plane = std::make_unique<CartesianPlane>();
+        plane->setBounds (0.0f, 0.0f, static_cast<float> (width), static_cast<float> (height));
+        plane->setMargins (0, 0, 0, 0);
+        plane->setLegendVisible (false);
+        plane->setBackgroundColor (Colors::black);
+        signalIndex = plane->addSignal ("Signal", Color (0xffff0000), 4.0f);
+    }
+
+    void TearDown() override
+    {
+        plane.reset();
+        canvas.reset();
+    }
+
+    /** Paints the plane into the canvas, at a number of pixels a unit, and reads its pixels back. */
+    bool paintPlane (float pixelsPerUnit = 1.0f)
+    {
+        plane->paint (canvas->beginDraw ({}, pixelsPerUnit));
+        canvas->commit();
+
+        pixels.assign (static_cast<size_t> (width) * static_cast<size_t> (height) * 4u, 0);
+        return canvas->readPixels (pixels.data(), pixels.size());
+    }
+
+    /** Whether the signal covers a pixel of the canvas, as it was last painted. */
+    bool isSignalAt (int x, int y) const
+    {
+        return pixels[(static_cast<size_t> (y) * static_cast<size_t> (width) + static_cast<size_t> (x)) * 4u] > 128;
+    }
+
+    /** A level line of two points, from 5% to 95% of the default range of x. */
+    static std::vector<Point<double>> makeLine (double level)
+    {
+        return { { 0.05, level }, { 0.95, level } };
+    }
+
+    /** Many points for each pixel, going from a level to another and back, from 5% to 95% of the default range of x. */
+    static std::vector<Point<double>> makeZigzag (double low, double high)
+    {
+        std::vector<Point<double>> data;
+
+        for (int i = 0; i < 16000; ++i)
+            data.push_back ({ 0.05 + 0.9 * i / 15999.0, i % 2 == 0 ? low : high });
+
+        return data;
+    }
+
+    static std::unique_ptr<GraphicsContext> gpuContext;
+
+    GpuCanvas::Ptr canvas;
+    std::unique_ptr<CartesianPlane> plane;
+    std::vector<uint8> pixels;
+    int signalIndex = -1;
+};
+
+std::unique_ptr<GraphicsContext> CartesianPlaneGpuTests::gpuContext;
+
+TEST_F (CartesianPlaneGpuTests, PaintsASparseSignalAndADenseOneWhereTheirValuesAre)
+{
+    // Two points: a line a quarter of the way up the plot
+    plane->updateSignalData (signalIndex, makeLine (0.25));
+    ASSERT_TRUE (paintPlane());
+
+    for (const auto x : { 30, 200, 370 })
+    {
+        EXPECT_TRUE (isSignalAt (x, 225)) << "at x = " << x;
+        EXPECT_FALSE (isSignalAt (x, 150)) << "at x = " << x;
+        EXPECT_FALSE (isSignalAt (x, 75)) << "at x = " << x;
+    }
+
+    EXPECT_FALSE (isSignalAt (5, 225));
+    EXPECT_FALSE (isSignalAt (395, 225));
+
+    // 16000 points going between a quarter and three quarters of the way up: the band they cover
+    plane->updateSignalData (signalIndex, makeZigzag (0.25, 0.75));
+    ASSERT_TRUE (paintPlane());
+
+    for (const auto x : { 30, 200, 370 })
+    {
+        for (const auto y : { 85, 150, 215 })
+            EXPECT_TRUE (isSignalAt (x, y)) << "at " << x << ", " << y;
+
+        EXPECT_FALSE (isSignalAt (x, 30)) << "at x = " << x;
+        EXPECT_FALSE (isSignalAt (x, 270)) << "at x = " << x;
+    }
+
+    EXPECT_FALSE (isSignalAt (5, 150));
+    EXPECT_FALSE (isSignalAt (395, 150));
+}
+
+TEST_F (CartesianPlaneGpuTests, ADenseSignalIsOnlyPaintedWhereItIsInsideThePlot)
+{
+    // Level across the plot, but for its middle third which is far over it
+    std::vector<Point<double>> data;
+
+    for (int i = 0; i < 16000; ++i)
+    {
+        const auto position = i / 15999.0;
+        data.push_back ({ 0.05 + 0.9 * position, position > 0.35 && position < 0.65 ? 5.0 : 0.5 });
+    }
+
+    plane->updateSignalData (signalIndex, data);
+    ASSERT_TRUE (paintPlane());
+
+    EXPECT_TRUE (isSignalAt (60, 150));
+    EXPECT_TRUE (isSignalAt (340, 150));
+    EXPECT_FALSE (isSignalAt (200, 150));
+    EXPECT_FALSE (isSignalAt (200, 20));
+}
+
+TEST_F (CartesianPlaneGpuTests, ASignalIsPaintedAgainWhereItsNewDataIs)
+{
+    plane->updateSignalData (signalIndex, makeLine (0.25));
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (200, 225));
+
+    plane->updateSignalData (signalIndex, makeLine (0.75));
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (200, 75));
+    EXPECT_FALSE (isSignalAt (200, 225));
+
+    // A signal added once the others were cleared is not the one that was painted in its place
+    plane->clearSignals();
+    const auto added = plane->addSignal ("Other", Color (0xffff0000), 4.0f);
+    plane->updateSignalData (added, makeLine (0.5));
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (200, 150));
+    EXPECT_FALSE (isSignalAt (200, 75));
+
+    // What is kept of a signal is not painted while it is hidden
+    plane->setSignalVisible (added, false);
+    ASSERT_TRUE (paintPlane());
+    EXPECT_FALSE (isSignalAt (200, 150));
+
+    plane->setSignalVisible (added, true);
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (200, 150));
+}
+
+TEST_F (CartesianPlaneGpuTests, ASignalIsPaintedAgainWhereTheRangesOfItsAxesPlaceIt)
+{
+    plane->updateSignalData (signalIndex, makeLine (0.25));
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (300, 225));
+
+    // Twice the range of y: half as high
+    plane->setYRange (0.0, 2.0);
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (300, 262));
+    EXPECT_FALSE (isSignalAt (300, 225));
+
+    // Twice the range of x: half as long
+    plane->setXRange (0.0, 2.0);
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (100, 262));
+    EXPECT_FALSE (isSignalAt (300, 262));
+}
+
+TEST_F (CartesianPlaneGpuTests, ASignalIsPaintedAgainWhereTheScalesOfItsAxesPlaceIt)
+{
+    plane->setXRange (1.0, 100.0);
+    plane->setYRange (1.0, 100.0);
+    plane->updateSignalData (signalIndex, { { 2.0, 10.0 }, { 10.0, 10.0 } });
+    ASSERT_TRUE (paintPlane());
+
+    // Linear: from 4 to 36 pixels along x, 27 pixels up
+    EXPECT_TRUE (isSignalAt (20, 272));
+    EXPECT_FALSE (isSignalAt (20, 150));
+
+    // 10 is half the way from 1 to 100 on a logarithmic scale
+    plane->setYScaleType (CartesianPlane::AxisScaleType::logarithmic);
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (20, 150));
+    EXPECT_FALSE (isSignalAt (20, 272));
+    EXPECT_FALSE (isSignalAt (150, 150));
+
+    // And 2 a little under a sixth of it: from 60 to 200 pixels
+    plane->setXScaleType (CartesianPlane::AxisScaleType::logarithmic);
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (150, 150));
+    EXPECT_FALSE (isSignalAt (20, 150));
+}
+
+TEST_F (CartesianPlaneGpuTests, ASignalIsPaintedAgainWhereThePlotIs)
+{
+    plane->updateSignalData (signalIndex, makeLine (0.25));
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (300, 225));
+
+    // A margin at the top leaves the plot two thirds of the height
+    plane->setMargins (100, 0, 0, 0);
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (300, 250));
+    EXPECT_FALSE (isSignalAt (300, 225));
+
+    // And a plane half as wide half of the width
+    plane->setBounds (0.0f, 0.0f, 200.0f, static_cast<float> (height));
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (100, 250));
+    EXPECT_FALSE (isSignalAt (300, 250));
+}
+
+TEST_F (CartesianPlaneGpuTests, ADenseSignalIsPaintedForThePixelsOfTheScaleItIsPaintedAt)
+{
+    // Half the canvas each way, which it fills at two pixels a unit
+    plane->setBounds (0.0f, 0.0f, 200.0f, 150.0f);
+    plane->updateSignalData (signalIndex, makeZigzag (0.25, 0.75));
+
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (100, 75));
+    EXPECT_FALSE (isSignalAt (100, 20));
+    EXPECT_FALSE (isSignalAt (300, 150));
+
+    ASSERT_TRUE (paintPlane (2.0f));
+    EXPECT_TRUE (isSignalAt (200, 150));
+    EXPECT_TRUE (isSignalAt (300, 100));
+    EXPECT_TRUE (isSignalAt (300, 200));
+    EXPECT_FALSE (isSignalAt (300, 40));
+    EXPECT_FALSE (isSignalAt (300, 260));
+
+    ASSERT_TRUE (paintPlane());
+    EXPECT_TRUE (isSignalAt (100, 75));
+    EXPECT_FALSE (isSignalAt (300, 150));
 }

@@ -556,4 +556,74 @@ TEST_F (MaterialShaderTests, SourceIsCompiledInsideTheFolderAnApplicationGives)
     EXPECT_EQ (MaterialShader::getSourceDirectory(), builtFrom);
 }
 
+TEST_F (MaterialShaderTests, MaterialCompiledForAGraphicsApiHasItsVariantAloneOnBothTiersAndTheSameUniforms)
+{
+    /** Members named as other languages name things of their own: `point` in HLSL and `level` in MSL, whose variants
+        declare them under other names.
+    */
+    static constexpr const char* source = R"(YUP_MATERIAL_PARAMS
+{
+    vec4 point;
+    float level;
+} params;
+
+vec4 yupMaterial (YupSurface surface)
+{
+    return vec4 (params.point.rgb * params.level, surface.baseColor.a);
+}
+)";
+
+    const auto everywhere = MaterialShader::createFromSource (source, getShaderDirectory());
+    ASSERT_TRUE (everywhere.wasOk()) << getFailure (everywhere);
+
+    const auto expected = everywhere.getReference()->createUniforms();
+    ASSERT_EQ (expected.getNumComponents ("point"), 4);
+    ASSERT_EQ (expected.getNumComponents ("level"), 1);
+
+    for (const auto platform : { GpuPlatform::OpenGL, GpuPlatform::OpenGLES, GpuPlatform::Direct3D, GpuPlatform::Metal, GpuPlatform::WebGPU, GpuPlatform::Vulkan })
+    {
+        const auto created = MaterialShader::createFromSource (source, getShaderDirectory(), platform);
+        ASSERT_TRUE (created.wasOk()) << static_cast<int> (platform) << ": " << getFailure (created);
+
+        const auto& shader = created.getReference();
+        ASSERT_NE (shader->getRasterBundle(), nullptr);
+        ASSERT_NE (shader->getFullBundle(), nullptr);
+
+        // Both tiers, in the language of the API and in no other
+        for (const auto& bundle : { shader->getRasterBundle(), shader->getFullBundle() })
+        {
+            for (const auto language : { ShaderLanguage::glsl, ShaderLanguage::essl, ShaderLanguage::hlsl, ShaderLanguage::msl, ShaderLanguage::spirv, ShaderLanguage::wgsl })
+            {
+                for (const auto stage : { ShaderStage::vertex, ShaderStage::fragment })
+                {
+                    EXPECT_EQ (bundle->findShader (stage, language) != nullptr, language == GpuImageShader::getShaderLanguage (platform))
+                        << static_cast<int> (platform) << ": " << toString (language) << " " << toString (stage);
+                }
+            }
+        }
+
+        // The block the material declares, by the names it gives its members, whatever the language calls them
+        EXPECT_TRUE (shader->createUniforms() == expected) << static_cast<int> (platform);
+    }
+}
+
+TEST_F (MaterialShaderTests, GlslErrorsAreTheSameWhicheverGraphicsApiIsNamed)
+{
+    static constexpr const char* broken = R"(vec4 yupMaterial (YupSurface surface)
+{
+    return vec4 (missingValue);
+}
+)";
+
+    const auto everywhere = MaterialShader::createFromSource (broken, getShaderDirectory());
+    ASSERT_TRUE (everywhere.failed());
+
+    for (const auto platform : { GpuPlatform::Metal, GpuPlatform::Vulkan })
+    {
+        const auto created = MaterialShader::createFromSource (broken, getShaderDirectory(), platform);
+        ASSERT_TRUE (created.failed()) << static_cast<int> (platform);
+        EXPECT_EQ (created.getErrorMessage(), everywhere.getErrorMessage()) << static_cast<int> (platform);
+    }
+}
+
 #endif

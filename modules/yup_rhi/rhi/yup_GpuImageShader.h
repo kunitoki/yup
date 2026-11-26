@@ -152,18 +152,31 @@ public:
 
     /** Creates an image shader from the bytes of a shader file.
 
-        Bytes starting with the RIFF magic are a compiled `.ysl` bundle, taken as
-        createFromBundle() takes one. Any other bytes are the GLSL 450 source text
-        of a fragment stage, compiled as createFromGlsl() does: that needs the
-        shader transpiler (YUP_ENABLE_SHADER_TRANSPILER), and fails without it
-        with a message asking for a compiled bundle.
+        Bytes starting with the RIFF magic are a compiled `.ysl` bundle (see
+        isCompiledBundle), taken as createFromBundle() takes one. Any other bytes
+        are the GLSL 450 source text of a fragment stage, compiled as
+        createFromGlsl() does: that needs the shader transpiler
+        (YUP_ENABLE_SHADER_TRANSPILER), and fails without it with a message asking
+        for a compiled bundle.
 
-        @param data  Start of the bytes.
-        @param size  Number of bytes.
+        @param data      Start of the bytes.
+        @param size      Number of bytes.
+        @param platform  The graphics API to compile GLSL source for, as
+                         createFromGlsl() takes it. A bundle is loaded with the
+                         variants it holds, whatever is asked here.
 
         @returns The shader, or why the bytes could not be loaded or compiled.
     */
-    static ResultValue<GpuImageShader::Ptr> createFromData (const void* data, size_t size);
+    static ResultValue<GpuImageShader::Ptr> createFromData (const void* data, size_t size, std::optional<GpuPlatform> platform = std::nullopt);
+
+    /** Returns true if the bytes of a shader file are a compiled `.ysl` bundle, which
+        createFromData() loads as it is, rather than the GLSL source it compiles: they
+        start with the RIFF magic.
+
+        @param data  Start of the bytes.
+        @param size  Number of bytes.
+    */
+    static bool isCompiledBundle (const void* data, size_t size) noexcept;
 
 #if YUP_ENABLE_SHADER_TRANSPILER
     /** Creates an image shader from the GLSL 450 source of its fragment stage.
@@ -171,15 +184,37 @@ public:
         The source is paired with the stock vertex stage and compiled for the
         languages yup_shader_bundler targets by default (GLSL, ESSL, HLSL, MSL,
         SPIR-V and WGSL): the shader then draws with every graphics API, and what
-        compiles here also compiles ahead of time. Only available when the shader
-        transpiler is compiled in (YUP_ENABLE_SHADER_TRANSPILER = 1).
+        compiles here also compiles ahead of time.
+
+        Naming a graphics API compiles the source for the language of that API
+        alone (see getShaderLanguage), in a fraction of the time: what an
+        application does with a source it loads while it runs, for the API of the
+        device that draws it (see GpuDevice::getPlatform). The shader then has that
+        variant only (see canDrawWith), and what would not compile for another API
+        is not told. Its uniform block and its textures are the same whichever API
+        it is compiled for.
+
+        Only available when the shader transpiler is compiled in
+        (YUP_ENABLE_SHADER_TRANSPILER = 1).
 
         @param fragmentGlsl  GLSL 450 fragment shader source.
+        @param platform      The graphics API to compile the source for, or nothing
+                             to compile it for all of them.
 
         @returns The shader, or the errors of the compiler.
     */
-    static ResultValue<GpuImageShader::Ptr> createFromGlsl (const String& fragmentGlsl);
+    static ResultValue<GpuImageShader::Ptr> createFromGlsl (const String& fragmentGlsl, std::optional<GpuPlatform> platform = std::nullopt);
 #endif
+
+    /** Returns the shader language a graphics API draws with: the one of the variant
+        of a ShaderBundle a pipeline is compiled from for a device of that API (see
+        GpuPipeline::compileFromBundle), which is the one a source is compiled for
+        when the API is named (see createFromGlsl).
+
+        @param platform  The graphics API. GpuPlatform::Headless, which draws
+                         nothing, is given GLSL.
+    */
+    static ShaderLanguage getShaderLanguage (GpuPlatform platform) noexcept;
 
     //==============================================================================
     /** Returns the number of input textures the fragment stage declares: 0 for a
@@ -213,7 +248,8 @@ public:
         the one a pipeline is compiled from when the shader is drawn with a device of
         that API (see GpuDevice::getPlatform).
 
-        A shader compiled from GLSL source has one for every graphics API. A bundle
+        A shader compiled from GLSL source has one for every graphics API, or for
+        the one it was compiled for when one was named (see createFromGlsl). A bundle
         can be built for some of them only: drawing it with another fails, which
         this tells before any device draws it, such as when the shader is loaded.
         OpenGL ES takes the GLSL variant when the bundle has no ESSL one, as a draw
@@ -296,6 +332,9 @@ private:
     };
 
     GpuImageShader() = default;
+
+    // Creates the shader of a bundle from what its two stages declare, whichever variants the bundle holds
+    static ResultValue<Ptr> createFromReflection (ShaderBundle::Ptr bundle, const ShaderReflection& vertex, const ShaderReflection& fragment);
 
     ShaderBundle::Ptr bundle;
     ShaderUniforms blockUniforms;

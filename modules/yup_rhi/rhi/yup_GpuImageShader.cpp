@@ -82,8 +82,11 @@ ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromBundle (ShaderBundle:
     if (fragment == nullptr)
         return makeResultValueFail ("The shader bundle has no fragment stage");
 
-    const auto& reflection = fragment->reflection;
+    return createFromReflection (bundle, vertex->reflection, fragment->reflection);
+}
 
+ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromReflection (ShaderBundle::Ptr bundle, const ShaderReflection& vertex, const ShaderReflection& reflection)
+{
     // GLSL and ESSL variants also list the samplers they fold each texture and sampler into
     if (reflection.sampledImages.size() > reflection.glCombinedSamplers.size())
         return makeResultValueFail ("The fragment stage declares a combined sampler2D, which cannot be bound: declare a texture2D and a sampler, and combine them where the texture is read");
@@ -99,25 +102,25 @@ ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromBundle (ShaderBundle:
         return makeResultValueFail ("The fragment stage declares " + String (static_cast<int> (reflection.separateImages.size())) + " textures: an image shader has " + String (maxInputTextures) + " at most");
 
     // A draw binds one uniform block, textures and their samplers: anything else a stage declares would be drawn unbound
-    for (const auto* stage : { vertex, fragment })
+    for (const auto& [stage, declared] : { std::pair { ShaderStage::vertex, &vertex }, std::pair { ShaderStage::fragment, &reflection } })
     {
-        for (const auto& [resources, kind] : { std::pair { &stage->reflection.storageBuffers, "storage buffer" },
-                                               std::pair { &stage->reflection.storageImages, "storage image" },
-                                               std::pair { &stage->reflection.subpassInputs, "subpass input" },
-                                               std::pair { &stage->reflection.pushConstantBuffers, "push constant block" } })
+        for (const auto& [resources, kind] : { std::pair { &declared->storageBuffers, "storage buffer" },
+                                               std::pair { &declared->storageImages, "storage image" },
+                                               std::pair { &declared->subpassInputs, "subpass input" },
+                                               std::pair { &declared->pushConstantBuffers, "push constant block" } })
         {
             if (! resources->empty())
-                return makeResultValueFail (String ("The ") + toString (stage->stage) + " stage declares the " + kind + " " + resources->front().name
+                return makeResultValueFail (String ("The ") + toString (stage) + " stage declares the " + kind + " " + resources->front().name
                                             + ", which cannot be bound: an image shader takes its values through one uniform block and its textures");
         }
     }
 
     // What the vertex stage reads is bound where the fragment stage declares it, or not at all
-    if (vertex->reflection.sampledImages.size() > vertex->reflection.glCombinedSamplers.size())
+    if (vertex.sampledImages.size() > vertex.glCombinedSamplers.size())
         return makeResultValueFail ("The vertex stage declares a combined sampler2D, which cannot be bound");
 
-    for (const auto& [resources, bound, kind] : { std::tuple { &vertex->reflection.uniformBuffers, &reflection.uniformBuffers, "uniform block" },
-                                                  std::tuple { &vertex->reflection.separateImages, &reflection.separateImages, "texture" } })
+    for (const auto& [resources, bound, kind] : { std::tuple { &vertex.uniformBuffers, &reflection.uniformBuffers, "uniform block" },
+                                                  std::tuple { &vertex.separateImages, &reflection.separateImages, "texture" } })
     {
         for (const auto& resource : *resources)
         {
@@ -186,14 +189,19 @@ ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromBundle (ShaderBundle:
     return makeResultValueOk (std::move (shader));
 }
 
-ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromData (const void* data, size_t size)
+bool GpuImageShader::isCompiledBundle (const void* data, size_t size) noexcept
+{
+    static constexpr char riffMagic[] = { 'R', 'I', 'F', 'F' };
+
+    return data != nullptr && size >= sizeof (riffMagic) && std::memcmp (data, riffMagic, sizeof (riffMagic)) == 0;
+}
+
+ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromData (const void* data, size_t size, [[maybe_unused]] std::optional<GpuPlatform> platform)
 {
     if (data == nullptr || size == 0)
         return makeResultValueFail ("No shader data");
 
-    static constexpr char riffMagic[] = { 'R', 'I', 'F', 'F' };
-
-    if (size >= sizeof (riffMagic) && std::memcmp (data, riffMagic, sizeof (riffMagic)) == 0)
+    if (isCompiledBundle (data, size))
     {
         auto loaded = ShaderBundle::loadFromData (data, size);
         if (loaded.failed())
@@ -203,7 +211,7 @@ ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromData (const void* dat
     }
 
 #if YUP_ENABLE_SHADER_TRANSPILER
-    return createFromGlsl (String::createStringFromData (data, static_cast<int> (size)));
+    return createFromGlsl (String::createStringFromData (data, static_cast<int> (size)), platform);
 #else
     return makeResultValueFail ("The shader is not a compiled .ysl bundle: GLSL source is only compiled when the shader transpiler is built in");
 #endif
@@ -211,32 +219,65 @@ ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromData (const void* dat
 
 #if YUP_ENABLE_SHADER_TRANSPILER
 
-ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromGlsl (const String& fragmentGlsl)
+ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromGlsl (const String& fragmentGlsl, std::optional<GpuPlatform> platform)
 {
+    // The language of the graphics API that is to draw the shader, or the ones yup_shader_bundler targets by default
+    const auto languages = platform.has_value()
+                             ? std::vector<ShaderLanguage> { getShaderLanguage (*platform) }
+                             : std::vector<ShaderLanguage> { ShaderLanguage::glsl, ShaderLanguage::essl, ShaderLanguage::hlsl, ShaderLanguage::msl, ShaderLanguage::spirv, ShaderLanguage::wgsl };
+
     ShaderBundleCompileRequest request;
 
-    // Both stages go in one request, for the languages yup_shader_bundler targets by default
-    const auto addStage = [&request] (ShaderStage stage, const String& source)
+    // Both stages go in one request
+    const auto addStage = [&request, &languages] (ShaderStage stage, const String& source)
     {
         auto& entry = request.entries.emplace_back();
         entry.stage = stage;
         entry.source = source;
-        entry.targetLanguages = { ShaderLanguage::glsl, ShaderLanguage::essl, ShaderLanguage::hlsl, ShaderLanguage::msl, ShaderLanguage::spirv, ShaderLanguage::wgsl };
+        entry.targetLanguages = languages;
     };
 
     addStage (ShaderStage::vertex, imageShaderVertexSource);
     addStage (ShaderStage::fragment, fragmentGlsl);
 
-    auto compiled = ShaderBundleCompiler().compile (request);
+    const ShaderTranspiler::Ptr transpiler (new ShaderTranspiler());
+
+    auto compiled = ShaderBundleCompiler (transpiler).compile (request);
     if (compiled.failed())
         return makeResultValueFail (compiled.getErrorMessage());
 
-    return createFromBundle (new ShaderBundle (std::move (compiled.getReference())));
+    const ShaderBundle::Ptr bundle (new ShaderBundle (std::move (compiled.getReference())));
+
+    // The first variant tells what the shader declares, and it is the GLSL one of a shader compiled for every language
+    if (languages.front() == ShaderLanguage::glsl)
+        return createFromBundle (bundle);
+
+    // Another language names some members and textures its own way: the shader is told as its GLSL variant would tell
+    // it, from the SPIR-V both are made of, so that it is the same shader whichever graphics API it is compiled for
+    const auto* vertexSpirv = bundle->getSPIRV (ShaderStage::vertex);
+    const auto* fragmentSpirv = bundle->getSPIRV (ShaderStage::fragment);
+
+    jassert (vertexSpirv != nullptr && fragmentSpirv != nullptr);
+    if (vertexSpirv == nullptr || fragmentSpirv == nullptr)
+        return createFromBundle (bundle);
+
+    const auto vertex = transpiler->reflectFromSPIRV (*vertexSpirv, ShaderLanguage::glsl);
+    const auto fragment = transpiler->reflectFromSPIRV (*fragmentSpirv, ShaderLanguage::glsl);
+
+    if (vertex.failed() || fragment.failed())
+        return makeResultValueFail ((vertex.failed() ? vertex : fragment).getErrorMessage());
+
+    return createFromReflection (bundle, vertex.getReference(), fragment.getReference());
 }
 
 #endif
 
 //==============================================================================
+
+ShaderLanguage GpuImageShader::getShaderLanguage (GpuPlatform platform) noexcept
+{
+    return shaderLanguageForApi (platform);
+}
 
 int GpuImageShader::getNumInputTextures() const noexcept
 {
