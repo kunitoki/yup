@@ -242,6 +242,47 @@ TEST_F (GpuImageShaderTests, ShaderDeclaringNothingHasNoInputNorUniforms)
     EXPECT_EQ (created.getValue()->getNumInputTextures(), 0);
     EXPECT_TRUE (created.getValue()->getInputTextureNames().isEmpty());
     EXPECT_TRUE (created.getValue()->createUniforms().isEmpty());
+    EXPECT_TRUE (created.getValue()->getUniformLayout().isEmpty());
+}
+
+TEST_F (GpuImageShaderTests, TellsTheMembersOfItsBlockWithoutCreatingUniforms)
+{
+    ShaderReflection reflection;
+    reflection.uniformBuffers = { makeBlock (0, 0) };
+
+    const auto created = GpuImageShader::createFromBundle (makeBundle (reflection));
+    ASSERT_TRUE (created.wasOk()) << created.getErrorMessage();
+
+    const auto shader = created.getValue();
+
+    // The same uniforms at every call, zeroed, where each createUniforms() makes others
+    const auto& layout = shader->getUniformLayout();
+    EXPECT_EQ (std::addressof (layout), std::addressof (shader->getUniformLayout()));
+    EXPECT_EQ (layout.getSizeInBytes(), 16u);
+    EXPECT_TRUE (layout.hasMember ("intensity"));
+    EXPECT_FALSE (layout.hasMember ("time"));
+
+    ASSERT_EQ (layout.getMembers().size(), 1u);
+    EXPECT_EQ (layout.getMembers().front().name, String ("intensity"));
+
+    // The uniforms the shader creates are copies of them sharing their members, so a member found once in the
+    // shader is set in each with the handle it was found with
+    const auto intensity = layout.findMember ("intensity");
+    ASSERT_TRUE (intensity.isValid());
+
+    auto uniforms = shader->createUniforms();
+    EXPECT_TRUE (uniforms == layout);
+    EXPECT_EQ (uniforms.getMembers().data(), layout.getMembers().data());
+    EXPECT_EQ (shader->createUniforms().getMembers().data(), layout.getMembers().data());
+
+    EXPECT_TRUE (uniforms.set (intensity, { 0.5f }));
+    EXPECT_FALSE (uniforms == layout);
+    EXPECT_TRUE (uniforms.hasSameLayoutAs (layout));
+    EXPECT_TRUE (shader->createUniforms() == layout);
+
+    float stored = 0.0f;
+    std::memcpy (&stored, uniforms.getData() + layout.getMembers().front().offset, sizeof (stored));
+    EXPECT_FLOAT_EQ (stored, 0.5f);
 }
 
 TEST_F (GpuImageShaderTests, RefusesWhatADrawCannotBind)
@@ -740,6 +781,38 @@ TEST_F (GpuImageShaderMockedTests, DrawFailsWithTheUniformsOfAnotherBlock)
         ASSERT_TRUE (drawn.failed());
         EXPECT_TRUE (drawn.getErrorMessage().contains ("uniforms")) << drawn.getErrorMessage();
     }
+}
+
+TEST_F (GpuImageShaderMockedTests, DrawTakesTheUniformsOfTheSameBlockMadeApart)
+{
+    ShaderReflection reflection;
+    reflection.uniformBuffers = { makeBlock (0, 0) };
+
+    // Another shader of the same block, whose uniforms describe their members apart, and the block itself
+    const auto shader = createShader (reflection);
+    const auto twin = createShader (reflection);
+    ASSERT_NE (shader, nullptr);
+    ASSERT_NE (twin, nullptr);
+    ASSERT_NE (twin->getUniformLayout().getMembers().data(), shader->getUniformLayout().getMembers().data());
+
+    auto frame = GpuFrame::begin (device);
+    ASSERT_TRUE (frame.isValid());
+
+    // The mocked GPU compiles no pipeline, which is where a draw given the uniforms of the shader stops
+    const auto own = shader->draw (device, frame, *target, shader->createUniforms());
+    ASSERT_TRUE (own.failed());
+
+    // Uniforms laid out the same get as far, and not refused before for not being the ones of the shader
+    for (const auto& uniforms : { twin->createUniforms(), ShaderUniforms (reflection.uniformBuffers.front()) })
+    {
+        const auto drawn = shader->draw (device, frame, *target, uniforms);
+        ASSERT_TRUE (drawn.failed());
+        EXPECT_EQ (drawn.getErrorMessage(), own.getErrorMessage());
+    }
+
+    const auto refused = shader->draw (device, frame, *target, ShaderUniforms());
+    ASSERT_TRUE (refused.failed());
+    EXPECT_NE (refused.getErrorMessage(), own.getErrorMessage());
 }
 
 TEST_F (GpuImageShaderMockedTests, PipelineThatCannotBeCompiledIsNotCompiledAgain)

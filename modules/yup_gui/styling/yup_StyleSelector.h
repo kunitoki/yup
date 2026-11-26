@@ -103,6 +103,36 @@ public:
     */
     const Array<Identifier>& getReferencedProperties() const noexcept { return referencedProperties; }
 
+    /** Returns true when a change of a property on a component can change which of its descendants
+        the selector matches.
+
+        A pseudo-class of the last compound is read on the component the selector matches, so a
+        change of that state concerns the component alone, as the hover of `Slider:hover`. The
+        pseudo-classes and the id of a compound before a combinator select the descendants of the
+        component having them, as the hover of `.row:hover .icon`, and so does an attribute of any
+        compound, whose value a component can take from a parent.
+
+        @param name A property name, among those @ref getReferencedProperties returns.
+    */
+    bool selectsDescendantsBy (const Identifier& name) const;
+
+    //==============================================================================
+    /** Returns the id a component must have for the selector to match it, as its last compound
+        requires it, or an empty string when it requires none.
+    */
+    String getSubjectId() const;
+
+    /** Returns the classes a component must have for the selector to match it, as its last compound
+        requires them.
+    */
+    Array<Identifier> getSubjectClasses() const;
+
+    /** Returns the type a component must be of, or derive from, for the selector to match it, as
+        its last compound requires it, or an invalid name when it requires none.
+    */
+    Identifier getSubjectType() const;
+
+    //==============================================================================
     /** Returns the selector text it was parsed from. */
     const String& toString() const noexcept { return source; }
 

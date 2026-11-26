@@ -498,6 +498,7 @@ std::optional<DataTreeDiagnostic> StyleSheet::addElements (const DataTree& paren
                 rule.selector = std::move (selector);
                 rule.declarations = declarations;
                 rule.order = static_cast<int> (rules.size());
+                indexRule (rule);
                 rules.push_back (std::move (rule));
             }
         }
@@ -570,6 +571,72 @@ std::optional<DataTreeDiagnostic> StyleSheet::findSharedName() const
             return DataTreeDiagnostic { .message = "The shader '" + name + "' has the same name as a drawing", .element = shader };
 
     return std::nullopt;
+}
+
+/* Files a rule under what the last compound of its selector requires of a component, and keeps the properties it reads
+   whose change on a component reaches the descendants of that component. Called with each rule as it is added. */
+void StyleSheet::indexRule (const Rule& rule)
+{
+    const auto& selector = rule.selector;
+
+    // Under what the fewest components have: a component matching the rule has every one of them
+    if (const auto id = selector.getSubjectId(); id.isNotEmpty())
+        rulesById[id].push_back (rule.order);
+    else if (const auto classes = selector.getSubjectClasses(); ! classes.isEmpty())
+        rulesByClass[classes.getFirst()].push_back (rule.order);
+    else if (const auto type = selector.getSubjectType(); type.isValid())
+        rulesByType[type].push_back (rule.order);
+    else
+        rulesWithoutKey.push_back (rule.order);
+
+    // The descendants inherit a qualified declaration, so whatever makes its rule match changes them too
+    const bool holdsQualified = std::any_of (rule.declarations.begin(), rule.declarations.end(), [] (const Declaration& declaration)
+    {
+        return declaration.qualifier.isValid();
+    });
+
+    for (const auto& property : selector.getReferencedProperties())
+        if (holdsQualified || selector.selectsDescendantsBy (property))
+            descendantProperties.addIfNotAlreadyThere (property);
+}
+
+void StyleSheet::findCandidateRules (const Component& component, std::vector<const Rule*>& candidates) const
+{
+    candidates.clear();
+
+    const auto add = [this, &candidates] (const std::vector<int>& indices)
+    {
+        for (const auto index : indices)
+            candidates.push_back (&rules[static_cast<size_t> (index)]);
+    };
+
+    add (rulesWithoutKey);
+
+    // A type selector matches the types deriving from the one it names
+    if (! rulesByType.empty())
+    {
+        for (const auto* info = &component.getTypeInfo(); info != nullptr; info = info->getBaseTypeInfo())
+            if (const auto found = rulesByType.find (info->getTypeName()); found != rulesByType.end())
+                add (found->second);
+    }
+
+    if (! rulesByClass.empty())
+    {
+        for (const auto& styleClass : component.getStyleClasses())
+            if (const auto found = rulesByClass.find (styleClass); found != rulesByClass.end())
+                add (found->second);
+    }
+
+    if (! rulesById.empty())
+    {
+        if (const auto found = rulesById.find (component.getComponentID()); found != rulesById.end())
+            add (found->second);
+    }
+
+    // The rules are in one vector, so their addresses order them as the source does. A class the component has twice,
+    // or a type deriving from one of its own name, finds its rules twice
+    std::sort (candidates.begin(), candidates.end(), std::less<const Rule*>());
+    candidates.erase (std::unique (candidates.begin(), candidates.end()), candidates.end());
 }
 
 const StringArray& StyleSheet::getDeclarationNames()
@@ -672,6 +739,11 @@ StringArray StyleSheet::getPaletteNames() const
 bool StyleSheet::watchesProperty (const Identifier& name) const
 {
     return watchedProperties.contains (name);
+}
+
+bool StyleSheet::watchesPropertyForDescendants (const Identifier& name) const
+{
+    return descendantProperties.contains (name);
 }
 
 } // namespace yup

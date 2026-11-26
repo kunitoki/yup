@@ -113,10 +113,14 @@ and safe for the application:
 - A value the document no longer writes goes back to what a new component has,
   and the components of removed elements are destroyed.
 - Changing the type of an element creates a new component.
-- When the `style`, `palette`, `drawing`, `shader` and `keyframes` blocks are
-  unchanged and in the same place, the stylesheet is kept: running transitions and
-  animations go on, and a class changed by the reload transitions as it would
-  from code. Any change to them restyles the interface from scratch.
+- The stylesheet is kept when the `style`, `palette`, `drawing`, `shader` and
+  `keyframes` blocks are unchanged, the `tokens` and `component` blocks still
+  declare the same properties with the same types, and each of these blocks is
+  still at the same place among the blocks of the document: running transitions
+  and animations go on, and a class changed by the reload transitions as it
+  would from code. What else a `tokens` or `component` block holds, the value of
+  a token or the components a `component` is made of, can change too. Any other
+  change to these blocks restyles the interface from scratch.
 
 Reloads can be undone. With an `UndoManager` set, each successful load is one
 transaction, and undoing it loads the previous document in place:
@@ -137,8 +141,10 @@ visual editor does to write an edit without going through the text. The
 interface is built again once the changes are over, from the message loop,
 whatever their number, and the listeners are told as for a load. A tool or a
 test with no message loop calls `document.applyPendingChanges()` to have it
-done at once. Problems found after an element was added, removed or moved this
-way have no line and column until a text is loaded again.
+done at once. The stylesheet is kept as it is by a reload, so an edit that
+leaves the style alone restarts no transition. Problems found after an element
+was added, removed or moved this way have no line and column until a text is
+loaded again, and until then each change makes the stylesheet again.
 
 To load from files, reload when they change on disk, or load files embedded in
 the binary, use a `YuiLoader`, see [Hot reloading](hot-reload.md).

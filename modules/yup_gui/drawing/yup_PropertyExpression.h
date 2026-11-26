@@ -140,6 +140,7 @@ private:
     String source;
     ComponentProperty::Type type = ComponentProperty::Type::number;
     ComponentProperty::Type elementType = ComponentProperty::Type::any;
+    var literal; // The value of a text that is only a number, a boolean or a string, which then has no program
     std::vector<std::unique_ptr<PropertyExpression>> elements;
     ExpressionContext context;
     std::optional<DrawingScope> scope;

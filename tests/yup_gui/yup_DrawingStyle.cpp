@@ -3244,3 +3244,308 @@ TEST_F (DrawingStyleShaderGpuTest, AShaderSamplesASeriesAsATextureWrittenWhenThe
 }
 
 #endif // YUP_ENABLE_SHADER_TRANSPILER
+
+//==============================================================================
+/** The tiles of patterns and the filtered layers, kept while what they draw stays the same: drawn by Metal, as
+    there is nothing to keep of them without a GPU. */
+class DrawingStyleKeptContentTest : public DrawingStyleGpuTest
+{
+protected:
+    /** A component counting what a drawing asks of it: each read of its level, and each paint of its part. */
+    struct CountingComponent : Component
+    {
+        CountingComponent()
+        {
+            setOpaque (false);
+            setBounds (0.0f, 0.0f, 16.0f, 16.0f);
+        }
+
+        const ComponentTypeInfo& getDefaultTypeInfo() const override
+        {
+            static const ComponentTypeInfo info = ComponentTypeBuilder<CountingComponent> ("DrawingStyleCountingComponent")
+                .readOnly ("level", &CountingComponent::getLevel)
+                .part ("glow")
+                .build();
+            return info;
+        }
+
+        void paint (Graphics& g) override
+        {
+            if (auto currentStyle = getStyle())
+                currentStyle->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
+        }
+
+        float getLevel() const
+        {
+            ++numLevelReads;
+            return level;
+        }
+
+        float level = 1.0f;
+        mutable int numLevelReads = 0;
+        mutable int numGlows = 0;
+    };
+
+    /** What a paint of a component gave: the color of a pixel of its picture, and how many times its level was read. */
+    struct Painted
+    {
+        Color color;
+        int numLevelReads = 0;
+    };
+
+    void SetUp() override
+    {
+        DrawingStyleGpuTest::SetUp();
+
+        // The theme paints the part the component declares: this one counts how many times it is asked to
+        theme->setComponentPart (CountingComponent().getTypeInfo(), Identifier ("glow"), [] (Graphics&, const ApplicationTheme&, const Component& c, const Rectangle<float>&)
+        {
+            ++static_cast<const CountingComponent&> (c).numGlows;
+        });
+    }
+
+    static void setDrawing (CountingComponent& component, const String& text)
+    {
+        const auto created = DrawingStyle::create (component, parseYui (text));
+        ASSERT_TRUE (created.wasOk()) << created.getErrorMessage();
+
+        component.setStyle (created.getReference());
+    }
+
+    static void setAccent (CountingComponent& component, Color accent)
+    {
+        auto palette = ThemePalette();
+        palette.setColor (ThemePalette::Role::accent, accent);
+        component.setPalette (palette);
+    }
+
+    static Painted paintAndRead (CountingComponent& component, int x, int y)
+    {
+        component.numLevelReads = 0;
+
+        const auto image = component.snapshotToImage (*gpuContext);
+        EXPECT_TRUE (image.isValid());
+
+        return { image.isValid() ? image.getPixelColor (x, y) : Color(), component.numLevelReads };
+    }
+
+    /** Paints a component whose drawing keeps a rectangle in a raster: one 4 units wide from its corner, or 8
+        once the component is wider than 20, filled with what `fill` reads, which the pixels at (2, 2) and (6, 2)
+        show. Expects the raster to be kept while nothing changes, and drawn again for each thing the rectangle reads.
+    */
+    void expectContentIsKeptUntilWhatItReadsChanges (const String& text)
+    {
+        CountingComponent component;
+        setAccent (component, Color (0xff00ff00));
+
+        ASSERT_NO_FATAL_FAILURE (setDrawing (component, text));
+
+        // The first paint draws the rectangle, and the next one keeps what was drawn
+        EXPECT_EQ (paintAndRead (component, 2, 2).color, Color (0xffff0000));
+
+        const auto kept = paintAndRead (component, 2, 2);
+        EXPECT_EQ (kept.color, Color (0xffff0000));
+
+        // Telling that the rectangle is the same reads the component, and drawing it again reads it once more
+        const auto expectDrawnAgain = [&] (int x, int y, Color expected, const char* change)
+        {
+            const auto changed = paintAndRead (component, x, y);
+            EXPECT_EQ (changed.color, expected) << change;
+            EXPECT_GT (changed.numLevelReads, kept.numLevelReads) << change;
+
+            const auto same = paintAndRead (component, x, y);
+            EXPECT_EQ (same.color, expected) << change;
+            EXPECT_EQ (same.numLevelReads, kept.numLevelReads) << change;
+        };
+
+        component.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xffff00ff)));
+        expectDrawnAgain (2, 2, Color (0xffff00ff), "a property of the drawing");
+
+        component.level = 0.0f;
+        expectDrawnAgain (2, 2, Color (0xff00ff00), "a property of the component");
+
+        setAccent (component, Color (0xffffff00));
+        expectDrawnAgain (2, 2, Color (0xffffff00), "a role of the palette");
+
+        component.setEnabled (false);
+        expectDrawnAgain (2, 2, Color (0xff0000ff), "a state of the component");
+
+        EXPECT_EQ (paintAndRead (component, 6, 2).color.getAlpha(), 0);
+
+        component.setBounds (0.0f, 0.0f, 32.0f, 16.0f);
+        expectDrawnAgain (6, 2, Color (0xff0000ff), "the bounds of the component");
+
+        component.setStyle (nullptr);
+    }
+
+    static constexpr const char* readingFill = "enabled ? (level > 0.5 ? shade : palette.accent) : #0000ff";
+};
+
+TEST_F (DrawingStyleKeptContentTest, ATileIsKeptUntilWhatItsElementsReadChanges)
+{
+    expectContentIsKeptUntilWhatItReadsChanges (String (R"yui(
+        drawing {
+            property shade: color = #ff0000;
+            let wide: bounds.width > 20;
+
+            pattern Tile { tile: rect (0, 0, 8, 8); rect { bounds: rect (0, 0, wide ? 8 : 4, 8); fill: )yui")
+                                                + readingFill + R"yui(; } }
+            rect { bounds: bounds; fillPattern: Tile; }
+        })yui");
+}
+
+TEST_F (DrawingStyleKeptContentTest, AFilteredLayerIsKeptUntilWhatItsElementsReadChanges)
+{
+    expectContentIsKeptUntilWhatItReadsChanges (String (R"yui(
+        drawing {
+            property shade: color = #ff0000;
+            let wide: bounds.width > 20;
+
+            layer {
+                filter { bounds: rect (0, 0, 16, 16); offset { offset: point (0, 0); } }
+                rect { bounds: rect (0, 0, wide ? 8 : 4, 8); fill: )yui")
+                                                + readingFill + R"yui(; }
+            }
+        })yui");
+}
+
+TEST_F (DrawingStyleKeptContentTest, ATileNotDrawnWhenWhatItReadsChangedIsDrawnOnceItIsPaintedWith)
+{
+    CountingComponent component;
+
+    ASSERT_NO_FATAL_FAILURE (setDrawing (component, R"yui(
+        drawing {
+            property shade: color = #ff0000;
+            property shown: boolean = true;
+
+            pattern Tile { tile: rect (0, 0, 8, 8); rect { bounds: bounds; fill: shade; } }
+            rect { bounds: bounds; fillPattern: Tile; visible: shown; }
+        })yui"));
+
+    EXPECT_EQ (paintAndRead (component, 8, 8).color, Color (0xffff0000));
+
+    // Nothing is painted with the tile while its color changes
+    component.setProperty (Identifier ("shown"), false);
+    component.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xff0000ff)));
+    EXPECT_EQ (paintAndRead (component, 8, 8).color.getAlpha(), 0);
+
+    component.setProperty (Identifier ("shown"), true);
+    EXPECT_EQ (paintAndRead (component, 8, 8).color, Color (0xff0000ff));
+
+    component.setStyle (nullptr);
+}
+
+TEST_F (DrawingStyleKeptContentTest, AFilteredLayerDrawnAsItIsWhenWhatItReadsChangedIsDrawnAgainForItsFilter)
+{
+    CountingComponent component;
+
+    ASSERT_NO_FATAL_FAILURE (setDrawing (component, R"yui(
+        drawing {
+            property shade: color = #ff0000;
+            property span: number = 16;
+
+            layer {
+                filter { bounds: rect (0, 0, span, 16); offset { offset: point (0, 0); } }
+                rect { bounds: rect (0, 0, 8, 16); fill: shade; }
+            }
+        })yui"));
+
+    EXPECT_EQ (paintAndRead (component, 2, 8).color, Color (0xffff0000));
+
+    // A filter with nowhere to run leaves the layer to be drawn as it is, with the color it has by then
+    component.setProperty (Identifier ("span"), 0.0);
+    component.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xff0000ff)));
+    EXPECT_EQ (paintAndRead (component, 2, 8).color, Color (0xff0000ff));
+
+    // Back where it was, the filter is not given what was drawn for it before the color changed
+    component.setProperty (Identifier ("span"), 16.0);
+    EXPECT_EQ (paintAndRead (component, 2, 8).color, Color (0xff0000ff));
+
+    component.setStyle (nullptr);
+}
+
+TEST_F (DrawingStyleKeptContentTest, WhatHoldsAPartIsDrawnAgainAtEveryPaint)
+{
+    // What a part paints is not told by what the drawing reads: nothing holding one is kept
+    for (const auto* text : { R"yui(
+        drawing {
+            pattern Tile { tile: rect (0, 0, 8, 8); part glow { bounds: bounds; } }
+            rect { bounds: bounds; fillPattern: Tile; }
+        })yui",
+                              R"yui(
+        drawing {
+            layer {
+                filter { offset { offset: point (0, 0); } }
+                part glow { bounds: bounds; }
+            }
+        })yui" })
+    {
+        CountingComponent component;
+        ASSERT_NO_FATAL_FAILURE (setDrawing (component, text));
+
+        int numGlows = 0;
+
+        for (int paint = 0; paint < 3; ++paint)
+        {
+            paintAndRead (component, 8, 8);
+            EXPECT_GT (component.numGlows, numGlows) << "paint " << paint << " of" << text;
+
+            numGlows = component.numGlows;
+        }
+
+        component.setStyle (nullptr);
+    }
+}
+
+TEST_F (DrawingStyleKeptContentTest, AFilteredLayerIsDrawnAgainWhenATileItIsPaintedWithIs)
+{
+    CountingComponent component;
+
+    ASSERT_NO_FATAL_FAILURE (setDrawing (component, R"yui(
+        drawing {
+            property shade: color = #ff0000;
+
+            pattern Tile { tile: rect (0, 0, 8, 8); rect { bounds: bounds; fill: shade; } }
+
+            layer {
+                filter { bounds: rect (0, 0, 16, 16); offset { offset: point (0, 0); } }
+                rect { bounds: rect (0, 0, 16, 16); fillPattern: Tile; }
+            }
+        })yui"));
+
+    EXPECT_EQ (paintAndRead (component, 8, 8).color, Color (0xffff0000));
+    EXPECT_EQ (paintAndRead (component, 8, 8).color, Color (0xffff0000));
+
+    // Nothing the rectangle of the layer reads changes, but what it is filled with does
+    component.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xff0000ff)));
+    EXPECT_EQ (paintAndRead (component, 8, 8).color, Color (0xff0000ff));
+
+    component.setStyle (nullptr);
+}
+
+TEST_F (DrawingStyleKeptContentTest, WhatARepeatDrawsOnSomeOfItsTurnsIsDrawnAgainWhenItChanges)
+{
+    CountingComponent component;
+
+    ASSERT_NO_FATAL_FAILURE (setDrawing (component, R"yui(
+        drawing {
+            property shade: color = #ff0000;
+
+            layer {
+                filter { bounds: rect (0, 0, 16, 16); offset { offset: point (0, 0); } }
+
+                repeat i in 0 .. 2 {
+                    group { visible: i < 1; rect { bounds: rect (0, 0, 8, 16); fill: shade; } }
+                }
+            }
+        })yui"));
+
+    EXPECT_EQ (paintAndRead (component, 2, 8).color, Color (0xffff0000));
+    EXPECT_EQ (paintAndRead (component, 2, 8).color, Color (0xffff0000));
+
+    // The group is hidden on the last turn of the repeat: what it drew on the first one still follows what it reads
+    component.setProperty (Identifier ("shade"), VariantConverter<Color>::toVar (Color (0xff0000ff)));
+    EXPECT_EQ (paintAndRead (component, 2, 8).color, Color (0xff0000ff));
+
+    component.setStyle (nullptr);
+}

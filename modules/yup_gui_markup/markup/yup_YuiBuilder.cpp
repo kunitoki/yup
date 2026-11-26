@@ -136,25 +136,35 @@ DataTree findElementById (const DataTree& element, const String& id)
     return {};
 }
 
-std::size_t declarationRankOf (const ComponentTypeInfo& type, const Identifier& name)
+// What a component kept from the pass before is found by: the element it was made from, its parent and its turn
+std::size_t hashRecord (const DataTree& element, const Component* parent, const String& turn)
+{
+    auto hash = std::hash<DataTree>() (element);
+    hash = hash * 31 + std::hash<const Component*>() (parent);
+    return hash * 31 + turn.hash();
+}
+
+// The names of the properties a type declares, in the order it declares them, bases first
+std::vector<Identifier> findDeclarationOrder (const ComponentTypeInfo& type)
 {
     std::vector<const ComponentTypeInfo*> chain;
 
     for (const auto* info = &type; info != nullptr; info = info->getBaseTypeInfo())
-        chain.insert (chain.begin(), info);
+        chain.push_back (info);
 
-    std::size_t rank = 0;
+    std::vector<Identifier> names;
 
-    for (const auto* info : chain)
-    {
-        for (const auto& property : info->getOwnProperties())
-        {
-            if (property.name == name)
-                return rank;
+    for (auto info = chain.rbegin(); info != chain.rend(); ++info)
+        for (const auto& property : (*info)->getOwnProperties())
+            names.push_back (property.name);
 
-            ++rank;
-        }
-    }
+    return names;
+}
+
+std::size_t declarationRankOf (const std::vector<Identifier>& order, const Identifier& name)
+{
+    if (const auto declared = std::find (order.begin(), order.end(), name); declared != order.end())
+        return static_cast<std::size_t> (declared - order.begin());
 
     if (name == paletteProperty())
         return std::numeric_limits<std::size_t>::max() - 2;
@@ -163,28 +173,6 @@ std::size_t declarationRankOf (const ComponentTypeInfo& type, const Identifier& 
         return std::numeric_limits<std::size_t>::max() - 1;
 
     return std::numeric_limits<std::size_t>::max();
-}
-
-// Like C++ members, values apply in the order the type declares them (bases first), so a property constraining
-// another one, a Slider range, applies before it wherever the document writes it; undeclared names come last
-template <class Value>
-std::vector<const Value*> inDeclarationOrder (const ComponentTypeInfo& type, const std::vector<Value>& values)
-{
-    std::vector<std::pair<std::size_t, const Value*>> ranked;
-    ranked.reserve (values.size());
-
-    for (const auto& value : values)
-        ranked.emplace_back (declarationRankOf (type, value.name), &value);
-
-    std::stable_sort (ranked.begin(), ranked.end(), [] (const auto& a, const auto& b) { return a.first < b.first; });
-
-    std::vector<const Value*> result;
-    result.reserve (ranked.size());
-
-    for (const auto& [rank, value] : ranked)
-        result.push_back (value);
-
-    return result;
 }
 
 ComponentProperty makeDeclaredProperty (const DataTree& declaration, bool isInherited)
@@ -429,7 +417,21 @@ Result YuiBuilder::build (const DataTree& document)
 
         scopes.clear();
         ranges.clear();
+        lastPlaced.clear();
+        declarationOrders.clear();
         previousComponents = std::exchange (components, {});
+
+        // A component kept is found by what it was made from, among the ones sharing its hash, not among them all
+        previousByHash.clear();
+        previousByHash.reserve (previousComponents.size());
+
+        for (std::size_t index = 0; index < previousComponents.size(); ++index)
+        {
+            const auto& record = previousComponents[index];
+            previousByHash.emplace_back (hashRecord (record.element, record.parent, record.turn), index);
+        }
+
+        std::sort (previousByHash.begin(), previousByHash.end());
 
         {
             // A container is laid out once its children are made and have their values, not at each of them
@@ -461,6 +463,8 @@ Result YuiBuilder::build (const DataTree& document)
             // Children go first, so that no parent is destroyed while still holding them
             while (! previousComponents.empty())
                 previousComponents.pop_back();
+
+            previousByHash.clear();
         }
 
         if (! bindRanges())
@@ -574,6 +578,8 @@ void YuiBuilder::clear()
     applied.clear();
     scopes.clear();
     ranges.clear();
+    lastPlaced.clear();
+    declarationOrders.clear();
     hasPendingTreeChange = false;
     hasPendingRangeChange = false;
     changeUpdater->cancelPendingUpdate();
@@ -1213,8 +1219,14 @@ void YuiBuilder::createRepeated (const DataTree& repeat, Component& parent, Scop
 
 std::unique_ptr<Component> YuiBuilder::reuseComponent (const DataTree& element, Component* parent, const ComponentTypeInfo& type, const String& turn)
 {
-    for (auto& record : previousComponents)
+    const auto hash = hashRecord (element, parent, turn);
+    auto candidate = std::lower_bound (previousByHash.begin(), previousByHash.end(), std::make_pair (hash, std::size_t (0)));
+
+    // In the order they were made in: the first one made is the one kept
+    for (; candidate != previousByHash.end() && candidate->first == hash; ++candidate)
     {
+        auto& record = previousComponents[candidate->second];
+
         if (record.component == nullptr || record.element != element || record.parent != parent || record.type != &type || record.turn != turn)
             continue;
 
@@ -1229,6 +1241,7 @@ std::unique_ptr<Component> YuiBuilder::reuseComponent (const DataTree& element, 
 void YuiBuilder::placeChild (Component& parent, Component& child, bool isReused)
 {
     const auto& parentType = parent.getTypeInfo();
+    const auto previous = std::exchange (lastPlaced[&parent], Placed { &child });
 
     if (! isReused)
     {
@@ -1240,17 +1253,30 @@ void YuiBuilder::placeChild (Component& parent, Component& child, bool isReused)
     if (parentType.hasChildAttacher())
         return;
 
-    // A kept child only moves when it isn't after its previous sibling, so its subtree isn't notified for nothing
-    for (auto it = components.rbegin(); it != components.rend(); ++it)
+    // The first child placed in a parent has no sibling to come after
+    if (previous.child == nullptr)
+        return;
+
+    // A kept child only moves when it isn't after its previous sibling, so its subtree isn't notified for nothing. The
+    // sibling is where it was left and the child most often right after it: each is only looked for when it is not
+    const auto numChildren = parent.getNumChildComponents();
+    auto previousIndex = previous.index;
+
+    if (! isPositiveAndBelow (previousIndex, numChildren) || parent.getChildComponent (previousIndex) != previous.child)
+        previousIndex = parent.getIndexOfChildComponent (previous.child);
+
+    auto index = previousIndex + 1;
+
+    if (! isPositiveAndBelow (index, numChildren) || parent.getChildComponent (index) != &child)
+        index = parent.getIndexOfChildComponent (&child);
+
+    if (index < previousIndex)
     {
-        if (it->parent != &parent)
-            continue;
-
-        if (parent.getIndexOfChildComponent (&child) < parent.getIndexOfChildComponent (it->component.get()))
-            parent.addChildComponent (child);
-
-        break;
+        parent.addChildComponent (child);
+        index = parent.getNumChildComponents() - 1;
     }
+
+    lastPlaced[&parent].index = index;
 }
 
 void YuiBuilder::applyIdentity (Component& component, const DataTree& element, Scope& scope, bool isUseSite)
@@ -1381,6 +1407,8 @@ void YuiBuilder::applyValues (const AppliedValues& previous)
             values[link.name] = { link.text, link.element, link.property, true };
     }
 
+    PristineInstances pristine;
+
     for (const auto& record : components)
     {
         auto* component = record.component.get();
@@ -1405,14 +1433,21 @@ void YuiBuilder::applyValues (const AppliedValues& previous)
             }
         }
 
-        std::sort (removed.begin(), removed.end(), [&record] (const Identifier& a, const Identifier& b)
+        if (removed.size() > 1)
         {
-            return declarationRankOf (*record.type, a) < declarationRankOf (*record.type, b);
-        });
+            const auto& order = declarationOrderOf (*record.type);
+
+            std::sort (removed.begin(), removed.end(), [&order] (const Identifier& a, const Identifier& b)
+            {
+                return declarationRankOf (order, a) < declarationRankOf (order, b);
+            });
+        }
 
         for (const auto& name : removed)
-            resetValue (*component, *record.type, name);
+            resetValue (*component, *record.type, name, pristine);
     }
+
+    pristine.clear();
 
     for (const auto& entry : pending)
         applyPending (entry);
@@ -1420,7 +1455,7 @@ void YuiBuilder::applyValues (const AppliedValues& previous)
     pending.clear();
 }
 
-void YuiBuilder::resetValue (Component& component, const ComponentTypeInfo& type, const Identifier& name)
+void YuiBuilder::resetValue (Component& component, const ComponentTypeInfo& type, const Identifier& name, PristineInstances& pristine)
 {
     const auto& typeInfo = component.getTypeInfo();
 
@@ -1450,16 +1485,68 @@ void YuiBuilder::resetValue (Component& component, const ComponentTypeInfo& type
         return;
     }
 
-    // A state-backed value goes back to the one a new component has. It is shown when placed, a new instance is still hidden
+    // A state-backed value goes back to the one a new component has, read from one made for all the values the components
+    // of its type lose. It is shown when placed, a new instance is still hidden
     static const Identifier visible ("visible");
 
+    const auto readFromNewInstance = [&]
+    {
+        auto& instance = pristine[&type];
+
+        if (instance == nullptr)
+            instance = type.createInstance();
+
+        return instance->getProperty (name);
+    };
+
     if (! descriptor->isReadOnly())
-        component.setProperty (name, name == visible ? var (true) : type.createInstance()->getProperty (name));
+        component.setProperty (name, name == visible ? var (true) : readFromNewInstance());
 
     // Nor has a new instance the bounds a layout container gives its items: the container gives them again
     // shortcut: a TabComponent shows and places its pages itself and is not asked, upgrade if documents set those
     if (auto* parent = component.getParentComponent())
         parent->childLayoutChanged (component);
+}
+
+const std::vector<Identifier>& YuiBuilder::declarationOrderOf (const ComponentTypeInfo& type)
+{
+    const auto [found, isNew] = declarationOrders.try_emplace (&type);
+
+    if (isNew)
+        found->second = findDeclarationOrder (type);
+
+    return found->second;
+}
+
+// Like C++ members, values apply in the order the type declares them (bases first), so a property constraining
+// another one, a Slider range, applies before it wherever the document writes it; undeclared names come last
+std::vector<const YuiBuilder::Value*> YuiBuilder::inDeclarationOrder (const ComponentTypeInfo& type, const std::vector<Value>& values)
+{
+    std::vector<const Value*> result;
+    result.reserve (values.size());
+
+    // A value alone comes before no other: the order of its type is only looked for when there are several
+    if (values.size() < 2)
+    {
+        for (const auto& value : values)
+            result.push_back (&value);
+
+        return result;
+    }
+
+    const auto& order = declarationOrderOf (type);
+    std::vector<std::pair<std::size_t, const Value*>> ranked;
+    ranked.reserve (values.size());
+
+    for (const auto& value : values)
+        ranked.emplace_back (declarationRankOf (order, value.name), &value);
+
+    std::stable_sort (ranked.begin(), ranked.end(), [] (const auto& a, const auto& b) { return a.first < b.first; });
+
+    for (const auto& [rank, value] : ranked)
+        result.push_back (value);
+
+    return result;
 }
 
 void YuiBuilder::applyPending (const Pending& entry)

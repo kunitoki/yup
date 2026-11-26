@@ -536,8 +536,12 @@ drawing Chart {
 
 - Both are definitions, like nested drawings: visible to the elements after
   them, and painted with the paint of where they are written.
-- A tile is drawn once into an image and repeated. A tile reading the component
-  is drawn again on every paint. Its content is clipped to the tile.
+- A tile is drawn once into an image and repeated. It is drawn again when
+  something its elements read changes: a property, a palette color or a state of
+  the component, its bounds, the font. It is drawn again on every paint when it
+  holds a `part` or a shader given the time, when its elements read an array,
+  and when they read the component next to an `image`, an `svg` read from a
+  file or a shape with markers. Its content is clipped to the tile.
 - `markerStart` is drawn at the first vertex of every sub-path, `markerEnd` at
   the last one unless the sub-path is closed, `markerMid` at the others. A shape
   run as a row of a `repeat` can't have markers.
@@ -615,11 +619,14 @@ layer {
   the `bounds` of the filter is lost, so leave room for blurs and shadows.
 - `linearColors: true` on the `filter` runs it on linear colors, as SVG does by
   default, instead of the sRGB colors drawings are made of.
-- The picture is kept from one paint to the next when the elements of the layer
-  read nothing of the component (no property, palette color or `bounds`), and is
-  drawn again on every paint otherwise. The filter only runs again when the
-  picture or one of its values changes. It needs a GPU: without one the layer is
-  drawn as it is.
+- The picture is kept from one paint to the next, and drawn again when
+  something the elements of the layer read changes: a property, a palette color
+  or a state of the component, its `bounds`, the font. It is drawn again on
+  every paint when the layer holds a `part` or a shader given the time, when its
+  elements read an array, whose numbers can change where they are, and when they
+  read the component next to an `image`, an `svg` read from a file or a shape
+  with markers. The filter only runs again when the picture or one of its values
+  changes. It needs a GPU: without one the layer is drawn as it is.
 - A layer with a `filter` can't have a `mask`: put it inside the masked layer.
 - A `use` in a filter names a shader, never a drawing. Its properties are
   expressions, its `resolution` and `scale` are in pixels of the screen, and it

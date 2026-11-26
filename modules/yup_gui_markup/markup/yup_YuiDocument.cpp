@@ -36,15 +36,87 @@ std::vector<std::pair<int, DataTree>> findStyleElements (const DataTree& documen
     return found;
 }
 
-/** True when both documents hold equivalent style elements at the same positions, so a stylesheet read from one
-    describes the other too, down to where each declaration is written.
+// A tokens or component block gives a stylesheet the properties it declares, and nothing else of what it holds
+bool declaresPropertiesOnly (const DataTree& element)
+{
+    const auto type = element.getType().toString();
+    return type == "tokens" || type == "component";
+}
+
+bool isPropertyDeclaration (const DataTree& element)
+{
+    return element.getType().toString() == "property";
+}
+
+/** True when a stylesheet reads the same from two elements: all there is in a style, rule, palette, drawing, shader or
+    keyframes block, and the properties a tokens or component block declares, by their name and their type.
+*/
+bool readsSameStyle (const DataTree& a, const DataTree& b)
+{
+    if (a.getType() != b.getType() || ! declaresPropertiesOnly (a))
+        return a.isEquivalentTo (b);
+
+    const auto findDeclarations = [] (const DataTree& block)
+    {
+        std::vector<DataTree> declarations;
+
+        for (const auto& child : block)
+            if (isPropertyDeclaration (child))
+                declarations.push_back (child);
+
+        return declarations;
+    };
+
+    return std::ranges::equal (findDeclarations (a), findDeclarations (b), [] (const DataTree& x, const DataTree& y)
+    {
+        return x.getProperty ("name") == y.getProperty ("name") && x.getProperty ("type") == y.getProperty ("type");
+    });
+}
+
+/** True when both documents hold, at the same positions, style elements a stylesheet reads the same from, so a
+    stylesheet read from one describes the other too, down to where each declaration is written.
 */
 bool hasSameStyle (const DataTree& a, const DataTree& b)
 {
     return std::ranges::equal (findStyleElements (a), findStyleElements (b), [] (const auto& x, const auto& y)
     {
-        return x.first == y.first && x.second.isEquivalentTo (y.second);
+        return x.first == y.first && readsSameStyle (x.second, y.second);
     });
+}
+
+/** Copies what a stylesheet reads of a document, each element where the document has it, so that what the stylesheet
+    tells about one is located as in the document: the style elements, the properties the tokens and component blocks
+    declare, and an empty element in place of each of the others.
+*/
+DataTree copyStyle (const DataTree& document)
+{
+    DataTree copy (document.getType());
+    auto transaction = copy.beginTransaction();
+
+    for (const auto& element : document)
+    {
+        DataTree copied (element.getType());
+
+        if (StyleSheet::isStyleElement (element))
+        {
+            if (! declaresPropertiesOnly (element))
+            {
+                copied = element.clone();
+            }
+            else
+            {
+                auto declarations = copied.beginTransaction();
+
+                for (const auto& child : element)
+                    declarations.addChild (isPropertyDeclaration (child) ? child.clone() : DataTree (child.getType()));
+            }
+        }
+
+        transaction.addChild (copied);
+    }
+
+    transaction.commit();
+    return copy;
 }
 
 var makeSchemaProperty (const String& type, bool required = false, const String& description = {})
@@ -92,20 +164,170 @@ var makeSchemaNode (DynamicObject::Ptr properties, const StringArray& allowedChi
     return var (node.get());
 }
 
-bool isGrammarNodeType (const Identifier& type) noexcept
+//==============================================================================
+// A property of an element of the grammar: a string, or the position of a keyframe
+struct GrammarProperty
 {
-    static const StringArray grammarTypes {
-        "yui", "import", "tokens", "palette", "style", "rule", "keyframes", "keyframe",
-        "declaration", "property", "alias", "signal", "argument", "component", "drawing", "shader",
-        "let", "repeat", "group", "clip", "layer", "mask", "rect", "ellipse", "circle", "line",
-        "arc", "path", "polygon", "star", "vertex", "part", "text", "image", "svg", "bind", "changed",
-        "viewport", "use", "pattern", "marker", "clipPath", "filter", "blur", "offset", "flood",
-        "colorMatrix", "composite", "blend", "morphology", "lighting", "displacement", "dropShadow"
-    };
+    const char* name = nullptr;
+    bool isRequired = false;
+    const char* description = "";
+    bool isKeyframePosition = false;
+};
 
-    return grammarTypes.contains (type.toString());
+// An element of the grammar, which is what a document is written with around its components
+struct GrammarNode
+{
+    static constexpr int maxProperties = 3;
+
+    const char* type = nullptr;
+    GrammarProperty properties[maxProperties];
+    Span<const char* const> children;
+    int maxChildren = -1;
+};
+
+template <std::size_t NumFirst, std::size_t NumSecond>
+constexpr std::array<const char*, NumFirst + NumSecond> joinGrammarNames (const std::array<const char*, NumFirst>& first, const std::array<const char*, NumSecond>& second)
+{
+    std::array<const char*, NumFirst + NumSecond> names {};
+
+    for (std::size_t i = 0; i < NumFirst; ++i)
+        names[i] = first[i];
+
+    for (std::size_t i = 0; i < NumSecond; ++i)
+        names[NumFirst + i] = second[i];
+
+    return names;
 }
 
+constexpr std::array documentChildren { "import", "tokens", "palette", "style", "drawing", "shader", "component" };
+constexpr std::array styleChildren { "rule", "palette", "drawing", "keyframes", "property" };
+constexpr std::array ruleChildren { "declaration", "property" };
+constexpr std::array propertyChild { "property" };
+constexpr std::array keyframeChild { "keyframe" };
+constexpr std::array declarationChild { "declaration" };
+constexpr std::array argumentChild { "argument" };
+
+constexpr std::array drawingBodyChildren {
+    "let", "repeat", "group", "clip", "layer", "viewport", "use", "drawing", "pattern", "marker",
+    "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "vertex", "part", "text", "image", "svg"
+};
+
+constexpr std::array clipPathChildren { "let", "repeat", "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "vertex" };
+constexpr std::array filterPrimitives { "blur", "offset", "flood", "colorMatrix", "composite", "blend", "morphology", "lighting", "displacement", "dropShadow" };
+
+constexpr auto drawingChildren = joinGrammarNames (propertyChild, drawingBodyChildren);
+constexpr auto clipChildren = joinGrammarNames (drawingBodyChildren, std::array { "clipPath" });
+constexpr auto layerChildren = joinGrammarNames (clipChildren, std::array { "mask", "filter" });
+
+// A filter also runs the shaders a `use` names
+constexpr auto filterChildren = joinGrammarNames (filterPrimitives, std::array { "use" });
+
+/* The grammar, in the order the schema lists it: each element with its properties, the elements it holds and how many of
+   them at most. An element that tells neither holds any element, and the document holds the components too.
+*/
+constexpr GrammarNode grammarNodes[] = {
+    { "yui", {}, documentChildren },
+    { "import", { { "path", true, "Imported .yui path." } }, {}, 0 },
+    { "tokens", {}, propertyChild },
+    { "palette", { { "name", true, "Palette name." }, { "colors", false, "Seed color list." }, { "mode", false, "Palette mode (dark or light)." } }, {}, 0 },
+    { "style", {}, styleChildren },
+    { "rule", { { "selector", true, "CSS-like rule selector." } }, ruleChildren },
+    { "keyframes", { { "name", true, "Keyframe sequence name." } }, keyframeChild },
+    { "keyframe", { { "at", true, "", true } }, declarationChild },
+    { "declaration", { { "name", true }, { "value", true } }, {}, 0 },
+    { "property", { { "name", true }, { "type", true }, { "value" } }, {}, 0 },
+    { "alias", { { "name", true }, { "target", true } }, {}, 0 },
+    { "signal", { { "name", true } }, argumentChild },
+    { "argument", { { "name", true }, { "type", true } }, {}, 0 },
+    { "component", { { "name", true }, { "base", true } } },
+    { "drawing", { { "name" } }, drawingChildren },
+    { "shader", { { "name", true, "Shader name." }, { "fragment", false, "Path of the fragment shader, GLSL source or a compiled bundle." }, { "material", false, "Path of a material function for 3D meshes." } }, propertyChild },
+    { "let", { { "name", true }, { "value", true } }, {}, 0 },
+    { "repeat", { { "name", true }, { "from", true }, { "to", true } }, drawingBodyChildren },
+    { "group", {}, drawingBodyChildren },
+    { "mask", {}, drawingBodyChildren },
+    { "viewport", {}, drawingBodyChildren },
+    { "clip", {}, clipChildren },
+    { "layer", {}, layerChildren },
+    { "clipPath", {}, clipPathChildren },
+    { "filter", {}, filterChildren },
+    { "blur", {}, {}, 0 },
+    { "offset", {}, {}, 0 },
+    { "flood", {}, {}, 0 },
+    { "colorMatrix", {}, {}, 0 },
+    { "composite", {}, {}, 0 },
+    { "blend", {}, {}, 0 },
+    { "morphology", {}, {}, 0 },
+    { "lighting", {}, {}, 0 },
+    { "displacement", {}, {}, 0 },
+    { "dropShadow", {}, {}, 0 },
+    { "pattern", { { "name", true } }, drawingBodyChildren },
+    { "marker", { { "name", true } }, drawingBodyChildren },
+    { "use", { { "drawing", true, "Name of the drawing to paint, or of the shader to paint or to run in a filter." } }, {}, 0 },
+    { "part", { { "name", true, "Name of the part of the component to paint." } }, {}, 0 },
+    { "rect", {}, {}, 0 },
+    { "ellipse", {}, {}, 0 },
+    { "circle", {}, {}, 0 },
+    { "line", {}, {}, 0 },
+    { "arc", {}, {}, 0 },
+    { "path", {}, {}, 0 },
+    { "polygon", {}, {}, 0 },
+    { "star", {}, {}, 0 },
+    { "vertex", {}, {}, 0 },
+    { "text", {}, {}, 0 },
+    { "image", {}, {}, 0 },
+    { "svg", {}, {}, 0 },
+    { "bind", { { "property", true }, { "target", true } }, {}, 0 },
+    { "changed", { { "property", true }, { "handler", true } }, {}, 0 }
+};
+
+// Describes the elements of the grammar, the document holding the components of the types named too
+DynamicObject::Ptr makeGrammarNodeTypes (const StringArray& componentTypeNames)
+{
+    DynamicObject::Ptr nodeTypes (new DynamicObject());
+
+    for (const auto& node : grammarNodes)
+    {
+        DynamicObject::Ptr properties;
+
+        for (const auto& property : node.properties)
+        {
+            if (property.name == nullptr)
+                break;
+
+            if (properties == nullptr)
+                properties = new DynamicObject();
+
+            auto described = makeSchemaProperty (property.isKeyframePosition ? "number" : "string", property.isRequired, property.description);
+
+            if (property.isKeyframePosition)
+            {
+                described.getDynamicObject()->setProperty ("minimum", 0.0);
+                described.getDynamicObject()->setProperty ("maximum", 1.0);
+            }
+
+            properties->setProperty (property.name, described);
+        }
+
+        StringArray children (node.children.data(), static_cast<int> (node.children.size()));
+
+        if (std::string_view (node.type) == "yui")
+            children.addArray (componentTypeNames);
+
+        nodeTypes->setProperty (node.type, makeSchemaNode (properties, children, node.maxChildren));
+    }
+
+    return nodeTypes;
+}
+
+DataTreeSchema::Ptr makeSchema (const DynamicObject::Ptr& nodeTypes)
+{
+    DynamicObject::Ptr rootSchema (new DynamicObject());
+    rootSchema->setProperty ("nodeTypes", var (nodeTypes.get()));
+    return DataTreeSchema::fromJsonSchema (var (rootSchema.get()));
+}
+
+// The schema is the one of the grammar alone, which holds no component type: a component is checked by what builds it
 std::optional<DataTreeDiagnostic> validateGrammarNodes (const DataTreeSchema& schema, const DataTree& node, bool isAmongComponents = false, int depth = 0)
 {
     if (! node.isValid())
@@ -122,7 +344,7 @@ std::optional<DataTreeDiagnostic> validateGrammarNodes (const DataTreeSchema& sc
     // A repeat among components holds components, where the one of a drawing holds what a drawing does
     const auto repeatsComponents = isAmongComponents && nodeType == repeatType;
 
-    if (isGrammarNodeType (nodeType))
+    if (schema.hasNodeType (nodeType))
     {
         const auto propNames = schema.getPropertyNames (nodeType);
 
@@ -194,190 +416,7 @@ DataTreeSchema::Ptr YuiDocument::createSchema()
     for (const auto* info : registeredTypes)
         componentTypeNames.add (info->getTypeName().toString());
 
-    StringArray yuiChildren { "import", "tokens", "palette", "style", "drawing", "shader", "component" };
-    yuiChildren.addArray (componentTypeNames);
-
-    const StringArray drawingBodyChildren {
-        "let", "repeat", "group", "clip", "layer", "viewport", "use", "drawing", "pattern", "marker",
-        "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "vertex", "part", "text", "image", "svg"
-    };
-    const StringArray clipPathChildren { "let", "repeat", "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "vertex" };
-    StringArray clipChildren = drawingBodyChildren;
-    clipChildren.add ("clipPath");
-    StringArray layerChildren = clipChildren;
-    layerChildren.add ("mask");
-    layerChildren.add ("filter");
-    const StringArray filterChildren { "blur", "offset", "flood", "colorMatrix", "composite", "blend", "morphology", "lighting", "displacement", "dropShadow" };
-    StringArray drawingChildren { "property" };
-    drawingChildren.addArray (drawingBodyChildren);
-
-    DynamicObject::Ptr nodeTypes (new DynamicObject());
-
-    nodeTypes->setProperty ("yui", makeSchemaNode (nullptr, yuiChildren));
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("path", makeSchemaProperty ("string", true, "Imported .yui path."));
-        nodeTypes->setProperty ("import", makeSchemaNode (props, {}, 0));
-    }
-
-    nodeTypes->setProperty ("tokens", makeSchemaNode (nullptr, { "property" }));
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", true, "Palette name."));
-        props->setProperty ("colors", makeSchemaProperty ("string", false, "Seed color list."));
-        props->setProperty ("mode", makeSchemaProperty ("string", false, "Palette mode (dark or light)."));
-        nodeTypes->setProperty ("palette", makeSchemaNode (props, {}, 0));
-    }
-
-    nodeTypes->setProperty ("style", makeSchemaNode (nullptr, { "rule", "palette", "drawing", "keyframes", "property" }));
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("selector", makeSchemaProperty ("string", true, "CSS-like rule selector."));
-        nodeTypes->setProperty ("rule", makeSchemaNode (props, { "declaration", "property" }));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", true, "Keyframe sequence name."));
-        nodeTypes->setProperty ("keyframes", makeSchemaNode (props, { "keyframe" }));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        DynamicObject::Ptr atProp (new DynamicObject());
-        atProp->setProperty ("type", "number");
-        atProp->setProperty ("required", true);
-        atProp->setProperty ("minimum", 0.0);
-        atProp->setProperty ("maximum", 1.0);
-        props->setProperty ("at", var (atProp.get()));
-        nodeTypes->setProperty ("keyframe", makeSchemaNode (props, { "declaration" }));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", true));
-        props->setProperty ("value", makeSchemaProperty ("string", true));
-        nodeTypes->setProperty ("declaration", makeSchemaNode (props, {}, 0));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", true));
-        props->setProperty ("type", makeSchemaProperty ("string", true));
-        props->setProperty ("value", makeSchemaProperty ("string", false));
-        nodeTypes->setProperty ("property", makeSchemaNode (props, {}, 0));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", true));
-        props->setProperty ("target", makeSchemaProperty ("string", true));
-        nodeTypes->setProperty ("alias", makeSchemaNode (props, {}, 0));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", true));
-        nodeTypes->setProperty ("signal", makeSchemaNode (props, { "argument" }));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", true));
-        props->setProperty ("type", makeSchemaProperty ("string", true));
-        nodeTypes->setProperty ("argument", makeSchemaNode (props, {}, 0));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", true));
-        props->setProperty ("base", makeSchemaProperty ("string", true));
-        nodeTypes->setProperty ("component", makeSchemaNode (props));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", false));
-        nodeTypes->setProperty ("drawing", makeSchemaNode (props, drawingChildren));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", true, "Shader name."));
-        props->setProperty ("fragment", makeSchemaProperty ("string", false, "Path of the fragment shader, GLSL source or a compiled bundle."));
-        props->setProperty ("material", makeSchemaProperty ("string", false, "Path of a material function for 3D meshes."));
-        nodeTypes->setProperty ("shader", makeSchemaNode (props, { "property" }));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", true));
-        props->setProperty ("value", makeSchemaProperty ("string", true));
-        nodeTypes->setProperty ("let", makeSchemaNode (props, {}, 0));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", true));
-        props->setProperty ("from", makeSchemaProperty ("string", true));
-        props->setProperty ("to", makeSchemaProperty ("string", true));
-        nodeTypes->setProperty ("repeat", makeSchemaNode (props, drawingBodyChildren));
-    }
-
-    for (const auto* containerType : { "group", "mask", "viewport" })
-        nodeTypes->setProperty (containerType, makeSchemaNode (nullptr, drawingBodyChildren));
-
-    nodeTypes->setProperty ("clip", makeSchemaNode (nullptr, clipChildren));
-    nodeTypes->setProperty ("layer", makeSchemaNode (nullptr, layerChildren));
-    nodeTypes->setProperty ("clipPath", makeSchemaNode (nullptr, clipPathChildren));
-    {
-        // A filter also runs the shaders a `use` names
-        auto filterElements = filterChildren;
-        filterElements.add ("use");
-        nodeTypes->setProperty ("filter", makeSchemaNode (nullptr, filterElements));
-    }
-
-    for (const auto& primitiveType : filterChildren)
-        nodeTypes->setProperty (Identifier (primitiveType), makeSchemaNode (nullptr, {}, 0));
-
-    for (const auto* definitionType : { "pattern", "marker" })
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", true));
-        nodeTypes->setProperty (definitionType, makeSchemaNode (props, drawingBodyChildren));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("drawing", makeSchemaProperty ("string", true, "Name of the drawing to paint, or of the shader to paint or to run in a filter."));
-        nodeTypes->setProperty ("use", makeSchemaNode (props, {}, 0));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("name", makeSchemaProperty ("string", true, "Name of the part of the component to paint."));
-        nodeTypes->setProperty ("part", makeSchemaNode (props, {}, 0));
-    }
-
-    for (const auto* leafType : { "rect", "ellipse", "circle", "line", "arc", "path", "polygon", "star", "vertex", "text", "image", "svg" })
-        nodeTypes->setProperty (leafType, makeSchemaNode (nullptr, {}, 0));
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("property", makeSchemaProperty ("string", true));
-        props->setProperty ("target", makeSchemaProperty ("string", true));
-        nodeTypes->setProperty ("bind", makeSchemaNode (props, {}, 0));
-    }
-
-    {
-        DynamicObject::Ptr props (new DynamicObject());
-        props->setProperty ("property", makeSchemaProperty ("string", true));
-        props->setProperty ("handler", makeSchemaProperty ("string", true));
-        nodeTypes->setProperty ("changed", makeSchemaNode (props, {}, 0));
-    }
+    const auto nodeTypes = makeGrammarNodeTypes (componentTypeNames);
 
     for (const auto* typeInfo : registeredTypes)
     {
@@ -401,9 +440,7 @@ DataTreeSchema::Ptr YuiDocument::createSchema()
         nodeTypes->setProperty (typeInfo->getTypeName(), makeSchemaNode (props));
     }
 
-    DynamicObject::Ptr rootSchema (new DynamicObject());
-    rootSchema->setProperty ("nodeTypes", var (nodeTypes.get()));
-    return DataTreeSchema::fromJsonSchema (var (rootSchema.get()));
+    return makeSchema (nodeTypes);
 }
 
 //==============================================================================
@@ -657,6 +694,39 @@ void YuiDocument::report (const std::shared_ptr<const DataTreeSourceMap>& map, c
     }
 }
 
+const DataTreeSchema* YuiDocument::getGrammarSchema()
+{
+    // The grammar is the same whatever the document and the types registered: its schema is made once, for the first
+    // tree to check
+    if (grammarSchema == nullptr)
+        grammarSchema = makeSchema (makeGrammarNodeTypes ({}));
+
+    return grammarSchema.get();
+}
+
+std::optional<YuiDocument::Style> YuiDocument::readStyle (const DataTree& document, const std::shared_ptr<const DataTreeSourceMap>& map, bool canKeep)
+{
+    // An unchanged style keeps the stylesheet, so nothing is restyled from scratch and transitions keep running
+    if (canKeep && styleSheet != nullptr && hasSameStyle (styleSource, document))
+        return Style { styleSheet, styleSource };
+
+    // The stylesheet is made from a copy that nothing changes: it keeps the elements it reads, and the tree of the
+    // document is changed in place. The copy also tells, later, whether a document still reads the same
+    Style style { {}, copyStyle (document) };
+
+    DataTreeDiagnostic failure;
+    auto parsed = StyleSheet::fromTree (style.source, &failure);
+
+    if (parsed.failed())
+    {
+        report (map, failure);
+        return std::nullopt;
+    }
+
+    style.sheet = parsed.getReference();
+    return style;
+}
+
 Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<const DataTreeSourceMap>& map)
 {
     const ScopedValueSetter<bool> loading (isLoading, true);
@@ -664,7 +734,7 @@ Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<c
     builder.setIgnoreTreeChanges (true);
     diagnostics.clear();
 
-    if (const auto schema = createSchema(); schema != nullptr)
+    if (const auto* schema = getGrammarSchema(); schema != nullptr)
     {
         if (! document.isValid() || (document.getType() != Identifier ("yui") && document.getType() != Identifier ("style")))
         {
@@ -681,22 +751,12 @@ Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<c
         }
     }
 
-    // An unchanged style keeps the stylesheet, so nothing is restyled from scratch and transitions keep running
-    auto sheet = styleSheet;
+    const auto style = readStyle (document, map, true);
 
-    if (sheet == nullptr || ! hasSameStyle (tree, document))
+    if (! style.has_value())
     {
-        DataTreeDiagnostic failure;
-        auto parsed = StyleSheet::fromTree (document, &failure);
-
-        if (parsed.failed())
-        {
-            report (map, failure);
-            builder.setIgnoreTreeChanges (previousIgnore);
-            return fail (diagnostics.back().toString());
-        }
-
-        sheet = parsed.getReference();
+        builder.setIgnoreTreeChanges (previousIgnore);
+        return fail (diagnostics.back().toString());
     }
 
     // The builder keeps the components of the elements still in the patched tree
@@ -730,7 +790,8 @@ Result YuiDocument::buildTree (const DataTree& document, const std::shared_ptr<c
 
     builder.setIgnoreTreeChanges (previousIgnore);
 
-    styleSheet = sheet;
+    styleSheet = style->sheet;
+    styleSource = style->source;
     sourceMap = map;
     lastLoadSucceeded = true;
 
@@ -775,7 +836,7 @@ Result YuiDocument::handleLiveTreeMutation()
     if (builder.hasTreeStructureChanged())
         sourceMap.reset();
 
-    if (const auto schema = createSchema(); schema != nullptr)
+    if (const auto* schema = getGrammarSchema(); schema != nullptr)
     {
         if (auto problem = validateGrammarNodes (*schema, tree))
         {
@@ -785,11 +846,13 @@ Result YuiDocument::handleLiveTreeMutation()
         }
     }
 
-    DataTreeDiagnostic failure;
-    auto parsedSheet = StyleSheet::fromTree (tree, &failure);
-    if (parsedSheet.failed())
+    // The problems told so far are forgotten, and a component with some to tell again knows it by the stylesheet or the
+    // source map being another one (see getSourceMap). A stylesheet that still reads the same is therefore kept when
+    // there is a map to give another one of, and made again when there is none
+    const auto style = readStyle (tree, sourceMap, sourceMap != nullptr);
+
+    if (! style.has_value())
     {
-        report (sourceMap, failure);
         builder.setIgnoreTreeChanges (previousIgnore);
         return Result::fail (diagnostics.back().toString());
     }
@@ -805,7 +868,11 @@ Result YuiDocument::handleLiveTreeMutation()
 
     builder.setIgnoreTreeChanges (previousIgnore);
 
-    styleSheet = parsedSheet.getReference();
+    if (style->sheet == styleSheet && sourceMap != nullptr)
+        sourceMap = std::make_shared<const DataTreeSourceMap> (*sourceMap);
+
+    styleSheet = style->sheet;
+    styleSource = style->source;
     auto& root = *builder.getRoot();
     root.setStyleSheet (styleSheet);
 
@@ -863,6 +930,7 @@ void YuiDocument::resetState()
     tree = {};
     sourceMap.reset();
     styleSheet = nullptr;
+    styleSource = {};
     diagnostics.clear();
     lastLoadSucceeded = false;
 }

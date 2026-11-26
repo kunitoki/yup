@@ -108,6 +108,36 @@ protected:
         static inline int numLayouts = 0;
     };
 
+    // A label counting the instances made of it, which documents name once it is registered
+    struct CountingLabel : Label
+    {
+        CountingLabel()
+        {
+            ++numCreated;
+        }
+
+        static const ComponentTypeInfo& getClassTypeInfo()
+        {
+            static const auto info = ComponentTypeBuilder<CountingLabel> (Identifier ("CountingLabel"), Label::getClassTypeInfo()).build();
+            return info;
+        }
+
+        const ComponentTypeInfo& getDefaultTypeInfo() const override { return getClassTypeInfo(); }
+
+        static inline int numCreated = 0;
+    };
+
+    // The children of a component, in their order
+    static std::vector<Component*> childrenOf (const Component* parent)
+    {
+        std::vector<Component*> children;
+
+        for (int index = 0; index < parent->getNumChildComponents(); ++index)
+            children.push_back (parent->getChildComponent (index));
+
+        return children;
+    }
+
     ApplicationTheme::Ptr theme;
     ApplicationTheme::Ptr oldTheme;
 };
@@ -545,6 +575,148 @@ TEST_F (YuiBuilderTests, KeepsWhatWasBuiltWhenTheNewDocumentCantBeBuilt)
 
     EXPECT_EQ (builder.getRoot(), root);
     EXPECT_NE (builder.findById ("knob"), nullptr);
+}
+
+TEST_F (YuiBuilderTests, RebuildingKeepsEachComponentOfARepeatAndOfADeclaredComponentWhereItsElementIs)
+{
+    auto document = parse (R"yui(
+        component Pair : Row { Label { } Label { } }
+
+        Column {
+            id: list;
+            Label { id: first; }
+            repeat r in 0 .. 2 { repeat c in 0 .. 3 { Slider { } } }
+            Pair { id: left; }
+            Pair { id: right; }
+            Label { id: middle; }
+            TextButton { id: last; }
+        })yui");
+
+    YuiBuilder builder;
+    ASSERT_TRUE (builder.build (document).wasOk());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    auto* list = builder.findById ("list");
+    ASSERT_NE (list, nullptr);
+
+    // The first label, the six sliders of the repeats, the two pairs, the label in the middle and the button
+    const auto made = childrenOf (list);
+    ASSERT_EQ (made.size(), 11u);
+    EXPECT_EQ (made[7], builder.findById ("left"));
+    EXPECT_EQ (made[10], builder.findById ("last"));
+
+    const auto inLeft = childrenOf (made[7]);
+    const auto inRight = childrenOf (made[8]);
+    ASSERT_EQ (inLeft.size(), 2u);
+    ASSERT_EQ (inRight.size(), 2u);
+
+    // Built again as it is, every component is the one it was, where it was: the one of each turn of the repeats, and the
+    // ones each pair holds, which are made from the same elements
+    ASSERT_TRUE (builder.build (document).wasOk());
+    EXPECT_EQ (childrenOf (list), made);
+    EXPECT_EQ (childrenOf (made[7]), inLeft);
+    EXPECT_EQ (childrenOf (made[8]), inRight);
+
+    // The button comes before the repeats, the second pair before the first, and the label in the middle goes
+    YuiTreeDiff::apply (document, parse (R"yui(
+        component Pair : Row { Label { } Label { } }
+
+        Column {
+            id: list;
+            Label { id: first; }
+            TextButton { id: last; }
+            repeat r in 0 .. 2 { repeat c in 0 .. 3 { Slider { } } }
+            Pair { id: right; }
+            Pair { id: left; }
+        })yui"));
+
+    ASSERT_TRUE (builder.build (document).wasOk());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    const std::vector<Component*> moved { made[0], made[10], made[1], made[2], made[3], made[4], made[5], made[6], made[8], made[7] };
+    EXPECT_EQ (childrenOf (list), moved);
+    EXPECT_EQ (childrenOf (made[7]), inLeft);
+    EXPECT_EQ (childrenOf (made[8]), inRight);
+    EXPECT_EQ (builder.findById ("middle"), nullptr);
+}
+
+TEST_F (YuiBuilderTests, AppliesTheValuesOfADeclaredComponentInTheOrderItsTypeDeclaresThem)
+{
+    YuiBuilder builder;
+    const auto result = builder.build (parse (R"yui(
+        component Dial : Slider { property caption: string; }
+
+        Component {
+            Dial { id: dial; caption: "Cutoff"; value: 1000; maximum: 20000; minimum: 20; }
+            Slider { id: plain; value: 500; maximum: 20000; minimum: 20; }
+            Dial { id: other; value: 250; maximum: 300; minimum: 200; caption: "Gain"; }
+        })yui"));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    // The range of the base comes before its value for the instances too, whose type declares more after them
+    EXPECT_DOUBLE_EQ (builder.findById<Slider> ("dial")->getValue(), 1000.0);
+    EXPECT_DOUBLE_EQ (builder.findById<Slider> ("plain")->getValue(), 500.0);
+    EXPECT_DOUBLE_EQ (builder.findById<Slider> ("other")->getValue(), 250.0);
+    EXPECT_EQ (builder.findById ("dial")->getProperty (Identifier ("caption")).toString(), "Cutoff");
+    EXPECT_EQ (builder.findById ("other")->getProperty (Identifier ("caption")).toString(), "Gain");
+}
+
+TEST_F (YuiBuilderTests, RebuildingResetsTheValuesNoLongerWrittenInTheOrderTheTypeDeclaresThem)
+{
+    auto document = parse ("Component { Slider { id: knob; value: 1000; maximum: 20000; minimum: 20; } }");
+
+    YuiBuilder builder;
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    auto* knob = builder.findById<Slider> ("knob");
+    ASSERT_NE (knob, nullptr);
+    EXPECT_DOUBLE_EQ (knob->getValue(), 1000.0);
+
+    YuiTreeDiff::apply (document, parse ("Component { Slider { id: knob; } }"));
+    ASSERT_TRUE (builder.build (document).wasOk());
+    ASSERT_EQ (builder.findById<Slider> ("knob"), knob);
+
+    // The range goes back before the value, as it is applied before it: the value of a new slider then fits in it
+    const Slider fresh (Slider::LinearHorizontal);
+    EXPECT_DOUBLE_EQ (knob->getRange().start, fresh.getRange().start);
+    EXPECT_DOUBLE_EQ (knob->getRange().end, fresh.getRange().end);
+    EXPECT_DOUBLE_EQ (knob->getValue(), fresh.getValue());
+}
+
+TEST_F (YuiBuilderTests, RebuildingReadsWhatNewComponentsHaveFromOneInstanceOfTheirType)
+{
+    ComponentTypeRegistry::getInstance().registerType (CountingLabel::getClassTypeInfo());
+
+    auto document = parse ("Column { id: list; repeat i in 0 .. 4 { CountingLabel { text: \"step\"; strokeWidth: 2; } } }");
+
+    YuiBuilder builder;
+    ASSERT_TRUE (builder.build (document).wasOk());
+    EXPECT_TRUE (builder.getDiagnostics().empty()) << DataTreeDiagnostic::join (builder.getDiagnostics());
+
+    const auto labels = childrenOf (builder.findById ("list"));
+    ASSERT_EQ (labels.size(), 4u);
+    EXPECT_EQ (dynamic_cast<Label*> (labels[3])->getText(), "step");
+
+    YuiTreeDiff::apply (document, parse ("Column { id: list; repeat i in 0 .. 4 { CountingLabel { } } }"));
+
+    const auto numCreatedBefore = CountingLabel::numCreated;
+    ASSERT_TRUE (builder.build (document).wasOk());
+
+    // The four labels are kept and lose two values each: what a new label has is read from one label, not from eight
+    EXPECT_EQ (childrenOf (builder.findById ("list")), labels);
+    EXPECT_EQ (CountingLabel::numCreated - numCreatedBefore, 1);
+
+    const Label fresh;
+
+    for (auto* component : labels)
+    {
+        auto* label = dynamic_cast<Label*> (component);
+        ASSERT_NE (label, nullptr);
+        EXPECT_EQ (label->getText(), fresh.getText());
+        EXPECT_FLOAT_EQ (label->getStrokeWidth(), fresh.getStrokeWidth());
+    }
 }
 
 TEST_F (YuiBuilderTests, BuildsALayoutContainerThatPositionsItsChildren)

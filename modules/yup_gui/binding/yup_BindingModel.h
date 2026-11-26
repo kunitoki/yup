@@ -68,7 +68,11 @@ public:
     /** Returns the underlying provider, or nullptr if it was destroyed. */
     BindingProvider* getProvider() const noexcept { return provider; }
 
-    /** Rebuilds the reflected property table from the provider's current properties. */
+    /** Brings the reflected property table up to date with the provider's current properties.
+
+        The type info is made again only when the provider exposes other properties, or the same ones
+        with other types. While they stay the same it is kept, and so is what was read from it.
+    */
     void refreshProperties();
 
     /** Bridges `pressed` state changes on @p component to gesture begin/end calls for @p property. */
@@ -85,7 +89,7 @@ private:
         bool isInGesture = false;
     };
 
-    static std::vector<ComponentProperty> makeProperties (BindingProvider& provider);
+    static std::vector<ComponentProperty> makeProperties (const std::vector<BindingProvider::Property>& exposed);
 
     bool isTracking (const Component& component) const;
     void write (const Identifier& name, const var& value);

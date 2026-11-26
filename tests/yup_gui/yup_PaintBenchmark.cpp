@@ -147,6 +147,39 @@ protected:
         std::vector<std::unique_ptr<Filled>> cells;
     };
 
+    /** 344 components under a root: 8 panels of 6 rows of 6 cells, each with the class of what it is and the class
+        of its index among its siblings. */
+    struct StyledTree
+    {
+        StyledTree()
+        {
+            for (int p = 0; p < 8; ++p)
+            {
+                auto& panel = add (root, "panel", p);
+
+                for (int r = 0; r < 6; ++r)
+                {
+                    auto& row = add (panel, "row", r);
+
+                    for (int c = 0; c < 6; ++c)
+                        add (row, "cell", c);
+                }
+            }
+        }
+
+        Component& add (Component& parent, const String& styleClass, int index)
+        {
+            auto& component = *components.emplace_back (std::make_unique<Component> (styleClass + String (index)));
+            component.addStyleClass (Identifier (styleClass));
+            component.addStyleClass (Identifier ("kind" + String (index)));
+            parent.addAndMakeVisible (component);
+            return component;
+        }
+
+        Component root { "root" };
+        std::vector<std::unique_ptr<Component>> components;
+    };
+
     /** Sets the drawing of a `.yui` text as the style of a component. */
     static void setDrawing (Component& component, const String& text)
     {
@@ -565,30 +598,9 @@ TEST_F (PaintBenchmarkTests, DISABLED_ShaderEffectSubtreePaintTimes)
     after a class of the root changed, which the rules reading it take to every cell. */
 TEST_F (PaintBenchmarkTests, DISABLED_RestyleTimes)
 {
-    Component root ("root");
-    std::vector<std::unique_ptr<Component>> components;
-
-    const auto add = [&components] (Component& parent, const String& styleClass, int index) -> Component&
-    {
-        auto& component = *components.emplace_back (std::make_unique<Component> (styleClass + String (index)));
-        component.addStyleClass (Identifier (styleClass));
-        component.addStyleClass (Identifier ("kind" + String (index)));
-        parent.addAndMakeVisible (component);
-        return component;
-    };
-
-    for (int p = 0; p < 8; ++p)
-    {
-        auto& panel = add (root, "panel", p);
-
-        for (int r = 0; r < 6; ++r)
-        {
-            auto& row = add (panel, "row", r);
-
-            for (int c = 0; c < 6; ++c)
-                add (row, "cell", c);
-        }
-    }
+    StyledTree tree;
+    auto& root = tree.root;
+    auto& components = tree.components;
 
     String text ("style {\n"
                  "    .panel { trackWidth: 1; }\n"
@@ -632,6 +644,41 @@ TEST_F (PaintBenchmarkTests, DISABLED_RestyleTimes)
     };
 
     timeRows ({ { "restyle of 344 components under 39 rules", [context] (int) { context->restyleNow(); }, toggleClass } });
+}
+
+/** The same 344 components under rules reading the hover of the component they match: the restyle after the pointer
+    came over a cell or left it, which the cell and each of its parents up to the root are told. */
+TEST_F (PaintBenchmarkTests, DISABLED_HoverRestyleTimes)
+{
+    StyledTree tree;
+
+    const auto sheet = YuiParser::parseStyleSheet ("style {\n"
+                                                   "    .panel { trackWidth: 1; }\n"
+                                                   "    .row { trackWidth: 2; }\n"
+                                                   "    .row:hover { opacity: 0.9; }\n"
+                                                   "    .cell { trackWidth: 3; }\n"
+                                                   "    .cell:hover { trackWidth: 6; }\n"
+                                                   "}\n");
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+    tree.root.setStyleSheet (sheet.getReference());
+
+    auto* context = tree.root.getStyleContext();
+    ASSERT_NE (context, nullptr);
+    context->restyleNow();
+
+    // The hover has to restyle the cell, or the row below times a restyle of nothing
+    auto& cell = *tree.components.back();
+    const auto getCellWidth = [&cell] { return static_cast<double> (cell.findProperty (Identifier ("trackWidth"))); };
+    const auto idleWidth = getCellWidth();
+    cell.setHovered (true);
+    context->restyleNow();
+    ASSERT_NE (getCellWidth(), idleWidth);
+    cell.setHovered (false);
+    context->restyleNow();
+
+    const auto toggleHover = [&cell] (int iteration) { cell.setHovered (iteration % 2 == 0); };
+
+    timeRows ({ { "restyle of a hovered cell among 344 components", [context] (int) { context->restyleNow(); }, toggleHover } });
 }
 
 /** A document whose `repeat` makes 256 labels over a range bound to a model: making its components
@@ -678,6 +725,35 @@ TEST_F (PaintBenchmarkTests, DISABLED_DocumentRebuildTimes)
                 { "document live mutation with 256 labels", renameTitle } });
 
     EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+}
+
+/** A document of 256 labels written one by one, each with the plain values an interface is mostly made of, a text, a
+    number and two booleans: loading it into a new document, and releasing that document. */
+TEST_F (PaintBenchmarkTests, DISABLED_DocumentLoadTimes)
+{
+    String text ("style {\n    .step { visible: true; }\n}\n\nColumn {\n");
+
+    for (int i = 0; i < 256; ++i)
+        text << "    Label { id: step" << i << "; class: step; text: \"Step " << i << "\"; opacity: 0.75; enabled: true; cached: false; }\n";
+
+    text << "}\n";
+
+    {
+        YuiDocument document;
+        const auto loaded = document.loadFromString (text);
+
+        ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+        ASSERT_NE (document.findById ("step255"), nullptr);
+        EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+    }
+
+    const auto load = [&text] (int)
+    {
+        YuiDocument document;
+        document.loadFromString (text);
+    };
+
+    timeRows ({ { "document first load of 256 labels", load } });
 }
 
 #endif // YUP_MAC

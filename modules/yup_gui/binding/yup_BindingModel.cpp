@@ -24,7 +24,7 @@ namespace yup
 
 BindingModel::BindingModel (BindingProvider& providerToUse)
     : provider (&providerToUse)
-    , info (std::make_unique<ComponentTypeInfo> (Identifier ("Model"), nullptr, makeProperties (providerToUse)))
+    , info (std::make_unique<ComponentTypeInfo> (Identifier ("Model"), nullptr, makeProperties (providerToUse.getProperties())))
 {
     provider->addListener (this);
 }
@@ -42,7 +42,17 @@ void BindingModel::refreshProperties()
     if (provider == nullptr)
         return;
 
-    info = std::make_unique<ComponentTypeInfo> (Identifier ("Model"), nullptr, makeProperties (*provider));
+    const auto exposed = provider->getProperties();
+    const auto& reflected = info->getOwnProperties();
+
+    // What reads the model holds on to its type info, which is only made again for other properties or other types
+    const auto isUpToDate = std::equal (exposed.begin(), exposed.end(), reflected.begin(), reflected.end(), [] (const BindingProvider::Property& property, const ComponentProperty& known)
+    {
+        return property.name == known.name && property.type == known.type && property.elementType == known.elementType;
+    });
+
+    if (! isUpToDate)
+        info = std::make_unique<ComponentTypeInfo> (Identifier ("Model"), nullptr, makeProperties (exposed));
 }
 
 void BindingModel::trackGestures (Component& component, const Identifier& property)
@@ -59,11 +69,11 @@ void BindingModel::stopTrackingGestures()
         stopTracking (*tracked.back().component);
 }
 
-std::vector<ComponentProperty> BindingModel::makeProperties (BindingProvider& provider)
+std::vector<ComponentProperty> BindingModel::makeProperties (const std::vector<BindingProvider::Property>& exposed)
 {
     std::vector<ComponentProperty> properties;
 
-    for (const auto& property : provider.getProperties())
+    for (const auto& property : exposed)
     {
         properties.push_back ({
             .name = property.name,

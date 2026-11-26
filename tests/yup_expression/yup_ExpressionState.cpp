@@ -514,3 +514,83 @@ TEST_F (ExpressionStateTests, OutputsComputedPerRowAlwaysChange)
     state.evaluate();
     EXPECT_FALSE (state.hasChanged());
 }
+
+TEST_F (ExpressionStateTests, TellsWhetherTheOutputsAreStillTheOnesOfTheLastEvaluation)
+{
+    const auto program = compile ("y = value * scale");
+    const auto y = output<float> (program, "y");
+
+    ExpressionState state (program);
+    EXPECT_FALSE (state.isUpToDate());
+
+    state.set (value, 2.0f);
+    state.set (scale, 3.0f);
+    EXPECT_FALSE (state.isUpToDate());
+
+    state.evaluate();
+    EXPECT_TRUE (state.isUpToDate());
+
+    // The value an input has is no change, and neither is an input the program doesn't read
+    state.set (value, 2.0f);
+    state.set (name, String ("unused"));
+    EXPECT_TRUE (state.isUpToDate());
+
+    // Nothing is evaluated to tell: the output stays the one of the last evaluation
+    state.set (scale, 4.0f);
+    EXPECT_FALSE (state.isUpToDate());
+    EXPECT_FLOAT_EQ (6.0f, state.get (y));
+
+    // An input set back is still a change until the next evaluation
+    state.set (scale, 3.0f);
+    EXPECT_FALSE (state.isUpToDate());
+
+    state.evaluate();
+    EXPECT_TRUE (state.isUpToDate());
+    EXPECT_FLOAT_EQ (6.0f, state.get (y));
+}
+
+TEST_F (ExpressionStateTests, IsNeverUpToDateWhenWhatItReadsChangesWithNoInputBeingSet)
+{
+    context.addFunction ("tick", [] (float x)
+    {
+        return x;
+    }, false);
+
+    // The elements of an array change in place
+    const float data[] = { 1.0f, 2.0f };
+
+    const auto reading = compile ("y = values[0] * scale");
+    ExpressionState arrayState (reading);
+    arrayState.bindArray (values, data, 2);
+    arrayState.set (scale, 1.0f);
+    arrayState.evaluate();
+    EXPECT_FALSE (arrayState.isUpToDate());
+
+    // A column is read from memory
+    const auto column = makeValues (4);
+
+    const auto scaling = compile ("y = value * scale");
+    ExpressionState columnState (scaling, 4);
+    columnState.bindColumn (value, column.data());
+    columnState.set (scale, 1.0f);
+    columnState.evaluateRows (4);
+    EXPECT_FALSE (columnState.isUpToDate());
+
+    // A function that isn't pure gives what it likes
+    const auto ticking = compile ("y = tick (scale)");
+    ExpressionState impureState (ticking);
+    impureState.set (scale, 1.0f);
+    impureState.evaluate();
+    EXPECT_FALSE (impureState.isUpToDate());
+
+    // The index of the row is the same for the same rows, until the binding changes
+    const auto indexing = compile ("y = i * scale");
+    ExpressionState rowState (indexing, 4);
+    rowState.bindRowIndex (row);
+    rowState.set (scale, 2.0f);
+    rowState.evaluateRows (8);
+    EXPECT_TRUE (rowState.isUpToDate());
+
+    rowState.clearBindings();
+    EXPECT_FALSE (rowState.isUpToDate());
+}

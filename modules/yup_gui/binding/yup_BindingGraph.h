@@ -208,14 +208,37 @@ private:
         }
     };
 
+    /** One property of one component: what the bindings and the links are found by when it changes. */
+    struct PropertyKey
+    {
+        const Component* component = nullptr;
+        Identifier property;
+
+        bool operator== (const PropertyKey& other) const noexcept
+        {
+            return component == other.component && property == other.property;
+        }
+    };
+
+    struct PropertyKeyHash
+    {
+        std::size_t operator() (const PropertyKey& key) const noexcept
+        {
+            return std::hash<const void*>() (key.component) ^ (std::hash<Identifier>() (key.property) * 0x9e3779b9u);
+        }
+    };
+
     void handlePropertyChanged (Component& component, const Identifier& property);
     void handleComponentDeleted (Component& component);
 
     void addObservedOf (const Binding& binding);
     void removeObservedOf (const Binding& binding);
+    void addToIndex (Binding& binding);
+    void removeFromIndex (const Binding& binding);
     void removeBinding (int index);
+    void removeBinding (const Binding& binding);
     void removeLink (int index);
-    void syncLinks (Component& component, const Identifier& property);
+    void syncLinks (const PropertyKey& changed);
 
     /** Returns what a component was given for a property, or what it shows for one it was given
         nothing for. A link moves this rather than the value in effect, which for `enabled`
@@ -228,13 +251,21 @@ private:
 
     /** Gives a side of a link its value: an element of a list is written with the rest of the list. */
     static void writeLinkSide (const Link& link, bool isFirst, const var& value);
-    void invalidate (const Component& component, const Identifier& property);
+    void invalidate (const PropertyKey& changed);
     void markDirty (Binding& binding);
     void flush();
 
     //==============================================================================
     std::vector<std::unique_ptr<Binding>> bindings;
     std::vector<std::shared_ptr<Link>> links;
+
+    // What a change is looked up in, each list in the order its bindings or links were made. A key is there only
+    // while one of them holds it, and all of them go when its component is deleted: none outlives its component
+    std::unordered_map<PropertyKey, Binding*, PropertyKeyHash> bindingsByTarget;
+    std::unordered_map<PropertyKey, std::vector<Binding*>, PropertyKeyHash> bindingsByInput;
+    std::unordered_map<PropertyKey, std::vector<std::shared_ptr<Link>>, PropertyKeyHash> linksByProperty;
+    const Identifier paletteProperty { "palette" };
+
     std::vector<Binding*> dirty;
     DependencyObserver observer;
     Binding* writingBinding = nullptr;

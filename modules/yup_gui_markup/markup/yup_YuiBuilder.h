@@ -442,6 +442,16 @@ private:
         ComponentSignal::Handler handler;
     };
 
+    // The child last placed in a parent by the build under way, and its index among the children when it is known
+    struct Placed
+    {
+        Component* child = nullptr;
+        int index = -1;
+    };
+
+    // A component of each type as it is when new, made for the first value read from it
+    using PristineInstances = std::unordered_map<const ComponentTypeInfo*, std::unique_ptr<Component>>;
+
     struct TreeWatcher;
     struct ChangeUpdater;
 
@@ -465,7 +475,9 @@ private:
     void applyIdentity (Component& component, const DataTree& element, Scope& scope, bool isUseSite);
     void applyTokens (Component& root, Scope& scope);
     void applyValues (const AppliedValues& previous);
-    void resetValue (Component& component, const ComponentTypeInfo& type, const Identifier& name);
+    void resetValue (Component& component, const ComponentTypeInfo& type, const Identifier& name, PristineInstances& pristine);
+    const std::vector<Identifier>& declarationOrderOf (const ComponentTypeInfo& type);
+    std::vector<const Value*> inDeclarationOrder (const ComponentTypeInfo& type, const std::vector<Value>& values);
     void applyPending (const Pending& pending);
     ApplyOutcome applyProperty (Component& component, const Value& value, Scope& scope);
     void applyLink (Component& component, const Value& link, Scope& scope);
@@ -481,6 +493,13 @@ private:
 
     std::vector<Record> components;
     std::vector<Record> previousComponents;
+
+    // What a pass of a build finds things by, all cleared with it: the components of the pass before by the hash of what
+    // they were made from, the child last placed in each parent, and the names each type declares in their order
+    std::vector<std::pair<std::size_t, std::size_t>> previousByHash;
+    std::unordered_map<Component*, Placed> lastPlaced;
+    std::unordered_map<const ComponentTypeInfo*, std::vector<Identifier>> declarationOrders;
+
     AppliedValues applied;
     std::vector<std::shared_ptr<Scope>> scopes;
     std::vector<RepeatRange> ranges;

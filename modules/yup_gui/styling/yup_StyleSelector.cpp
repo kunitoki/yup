@@ -190,8 +190,9 @@ ResultValue<StyleSelector> StyleSelector::parse (const String& text)
                     {
                         if (name == entry.name)
                         {
-                            compound.pseudoClasses.push_back ({ entry.kind, {} });
-                            selector.referencedProperties.addIfNotAlreadyThere (Identifier (entry.watchedProperty));
+                            const Identifier watched (entry.watchedProperty);
+                            compound.pseudoClasses.push_back ({ entry.kind, watched });
+                            selector.referencedProperties.addIfNotAlreadyThere (watched);
                             matchedBuiltin = true;
                             break;
                         }
@@ -476,6 +477,50 @@ bool StyleSelector::matchesFrom (const Component& component,
     }
 
     return false;
+}
+
+//==============================================================================
+
+bool StyleSelector::selectsDescendantsBy (const Identifier& name) const
+{
+    const Identifier idProperty ("id");
+
+    for (size_t index = 0; index < compounds.size(); ++index)
+    {
+        const auto& compound = compounds[index];
+
+        // The value of an attribute is found on the parents of a component that has none of its own
+        for (const auto& attribute : compound.attributes)
+            if (attribute.name == name)
+                return true;
+
+        if (index + 1 == compounds.size())
+            break;
+
+        if (compound.id.isNotEmpty() && name == idProperty)
+            return true;
+
+        for (const auto& pseudoClass : compound.pseudoClasses)
+            if (pseudoClass.property == name)
+                return true;
+    }
+
+    return false;
+}
+
+String StyleSelector::getSubjectId() const
+{
+    return compounds.empty() ? String() : compounds.back().id;
+}
+
+Array<Identifier> StyleSelector::getSubjectClasses() const
+{
+    return compounds.empty() ? Array<Identifier>() : compounds.back().classes;
+}
+
+Identifier StyleSelector::getSubjectType() const
+{
+    return compounds.empty() ? Identifier() : compounds.back().type;
 }
 
 } // namespace yup

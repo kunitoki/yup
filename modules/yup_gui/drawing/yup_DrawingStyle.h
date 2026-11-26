@@ -107,6 +107,13 @@ class DependencyObserver;
     does not tell the time: a shader whose block has `time` is refused there, unless a property
     of that name sets it.
 
+    The tile of a `pattern`, and what a `layer` draws for its `filter`, are drawn once and kept
+    from one paint to the next. They are drawn again when something their elements read changes:
+    a property, a palette color or a state of the component, its bounds, the font. They are drawn
+    again at every paint when they hold a `part` or a shader given the time, when their elements
+    read an array, and when they read the component next to an `image`, an `svg` read from a file
+    or a shape with markers.
+
     A style keeps the shaders it was created with. One created before a shader is loaded is
     compiled against the block of the shader alone: that `use` paints nothing, and a filter
     running it leaves its layer as it is. createWithShaders() makes the style to install in its
@@ -368,9 +375,12 @@ private:
 
     void instantiate (std::shared_ptr<const Compiled> compiledToUse, const ShaderResolver& shaderResolver);
     void advance (double elapsedSeconds);
+    uint32 feedInputs (const Node& node, Slot& slot, const PaintContext& context, int numLevels);
     Slot* prepare (const Node& node, const PaintContext& context);
+    bool hasContentChanged (const std::vector<std::unique_ptr<Node>>& nodes, const PaintContext& context, int numLevels, bool isDrawnByTurns);
+    bool hasContentChanged (const Node& node, const PaintContext& context, int numLevels, bool isDrawnByTurns);
     PatternSource& preparePattern (int index, const PaintContext& context);
-    void drawPattern (Graphics& g, const PatternSource& source);
+    void drawPattern (Graphics& g, PatternSource& source);
     void drawMarkers (Graphics& g, const Node& node, Slot& slot, const PaintContext& context);
     Path collectOutline (const std::vector<std::unique_ptr<Node>>& shapes, const PaintContext& context, int numRows);
     void applyClips (Graphics& g, const Node& node, Slot* slot, const PaintContext& context, int numRows);
@@ -390,7 +400,7 @@ private:
     void drawPart (Graphics& g, const Node& node, Slot& slot, const PaintContext& context, int numRows);
     const Component* getPaintedComponent() const;
     bool drawFilteredLayer (Graphics& g, const Node& node, const PaintContext& context, int numRows);
-    void drawFilteredContent (Graphics& g, const FilterSource& source);
+    void drawFilteredContent (Graphics& g, FilterSource& source);
 
     WeakReference<Component> targetComponent;
     DrawingScope::ComponentResolver componentResolver;
@@ -405,7 +415,7 @@ private:
     int numLoopTurns = 1;
     std::vector<std::unique_ptr<PatternSource>> patternSources;
     ImageResolver imageResolver;
-    std::map<const Node*, std::unique_ptr<FilterSource>> filterSources;
+    std::vector<std::unique_ptr<FilterSource>> filterSources;
     const Font* paintFont = nullptr;
     const Component* paintedComponent = nullptr;
     uint32 paintSerial = 0;

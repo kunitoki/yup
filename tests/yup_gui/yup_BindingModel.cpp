@@ -68,6 +68,37 @@ protected:
         StringArray endedGestures;
     };
 
+    /** A provider exposing the properties the test lists, whatever their values are. */
+    class MockDynamicProvider final : public BindingProvider
+    {
+    public:
+        std::vector<Property> getProperties() const override
+        {
+            return properties;
+        }
+
+        var getValue (const Identifier& name) const override
+        {
+            if (const auto* value = values.getVarPointer (name))
+                return *value;
+
+            return {};
+        }
+
+        void setValue (const Identifier& name, const var& value) override
+        {
+            if (values.set (name, value))
+                notifyValueChanged (name);
+        }
+
+        std::vector<Property> properties {
+            { Identifier ("payload"), ComponentProperty::Type::any },
+            { Identifier ("gain"), ComponentProperty::Type::number }
+        };
+
+        NamedValueSet values;
+    };
+
     class PressableControl final : public Component
     {
     public:
@@ -136,4 +167,89 @@ TEST_F (BindingModelTests, TracksControlPressGesturesAndDetachesWhenProviderOrCo
 
     provider.reset();
     EXPECT_EQ (model.getProvider(), nullptr);
+}
+
+TEST_F (BindingModelTests, KeepsItsTypeInfoWhileTheProviderExposesTheSameProperties)
+{
+    struct Listener : ComponentListener
+    {
+        void componentPropertyChanged (Component&, const Identifier& name) override
+        {
+            changed.add (name.toString());
+        }
+
+        StringArray changed;
+    };
+
+    Listener listener;
+    MockDynamicProvider provider;
+    BindingModel model (provider);
+    model.addComponentListener (&listener);
+
+    const auto* info = &model.getTypeInfo();
+    const auto* payload = info->findProperty (Identifier ("payload"));
+    ASSERT_NE (payload, nullptr);
+    EXPECT_EQ (payload->type, ComponentProperty::Type::any);
+
+    // An untyped property takes values of any kind, and the properties stay the ones that were read
+    provider.setValue (Identifier ("payload"), 1.0);
+    provider.setValue (Identifier ("payload"), "text");
+
+    EXPECT_EQ (&model.getTypeInfo(), info);
+    EXPECT_EQ (model.getTypeInfo().findProperty (Identifier ("payload")), payload);
+    EXPECT_EQ (model.getProperty (Identifier ("payload")).toString(), "text");
+    EXPECT_EQ (listener.changed, StringArray ({ "payload", "payload" }));
+
+    // They stay as well when they are asked for with nothing that differs
+    model.refreshProperties();
+    EXPECT_EQ (&model.getTypeInfo(), info);
+}
+
+TEST_F (BindingModelTests, MakesItsTypeInfoAgainWhenThePropertiesOrTheirTypesDiffer)
+{
+    MockDynamicProvider provider;
+    BindingModel model (provider);
+
+    // An untyped property that is given a type, told by one of its values changing
+    auto* info = &model.getTypeInfo();
+    provider.properties[0].type = ComponentProperty::Type::string;
+    provider.setValue (Identifier ("payload"), "text");
+
+    EXPECT_NE (&model.getTypeInfo(), info);
+    ASSERT_NE (model.getTypeInfo().findProperty (Identifier ("payload")), nullptr);
+    EXPECT_EQ (model.getTypeInfo().findProperty (Identifier ("payload"))->type, ComponentProperty::Type::string);
+
+    // The type of the elements of a list
+    info = &model.getTypeInfo();
+    provider.properties[1] = { Identifier ("gain"), ComponentProperty::Type::array, ComponentProperty::Type::number };
+    model.refreshProperties();
+
+    EXPECT_NE (&model.getTypeInfo(), info);
+    ASSERT_NE (model.getTypeInfo().findProperty (Identifier ("gain")), nullptr);
+    EXPECT_EQ (model.getTypeInfo().findProperty (Identifier ("gain"))->elementType, ComponentProperty::Type::number);
+
+    // A property that appears, told by its first value
+    info = &model.getTypeInfo();
+    provider.properties.push_back ({ Identifier ("drive"), ComponentProperty::Type::number });
+    provider.setValue (Identifier ("drive"), 3.0);
+
+    EXPECT_NE (&model.getTypeInfo(), info);
+    EXPECT_TRUE (model.getTypeInfo().hasProperty (Identifier ("drive")));
+    EXPECT_DOUBLE_EQ (static_cast<double> (model.getProperty (Identifier ("drive"))), 3.0);
+
+    // A property that goes
+    info = &model.getTypeInfo();
+    provider.properties.erase (provider.properties.begin());
+    model.refreshProperties();
+
+    EXPECT_NE (&model.getTypeInfo(), info);
+    EXPECT_FALSE (model.getTypeInfo().hasProperty (Identifier ("payload")));
+    EXPECT_TRUE (model.getTypeInfo().hasProperty (Identifier ("gain")));
+
+    // The same properties in another order
+    info = &model.getTypeInfo();
+    std::swap (provider.properties[0], provider.properties[1]);
+    model.refreshProperties();
+
+    EXPECT_NE (&model.getTypeInfo(), info);
 }

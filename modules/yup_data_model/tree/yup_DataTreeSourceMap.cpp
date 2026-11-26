@@ -26,12 +26,18 @@ namespace yup
 
 void DataTreeSourceMap::add (const DataTree& element, const Identifier& property, int line, int column, const String& source)
 {
-    positions[{ getPath (element), property.toString() }] = { source, line, column };
+    // A map and its copies share their positions: the one a position is added to takes its own first
+    if (positions == nullptr)
+        positions = std::make_shared<Positions>();
+    else if (positions.use_count() > 1)
+        positions = std::make_shared<Positions> (*positions);
+
+    (*positions)[{ getPath (element), property.toString() }] = { source, line, column };
 }
 
 DataTreeDiagnostic DataTreeSourceMap::locate (DataTreeDiagnostic diagnostic) const
 {
-    if (diagnostic.line > 0 || ! diagnostic.element.isValid())
+    if (diagnostic.line > 0 || ! diagnostic.element.isValid() || positions == nullptr)
         return diagnostic;
 
     // The path goes from the element up, so dropping its front moves to the parent
@@ -39,7 +45,7 @@ DataTreeDiagnostic DataTreeSourceMap::locate (DataTreeDiagnostic diagnostic) con
 
     for (;;)
     {
-        if (const auto found = positions.find (key); found != positions.end())
+        if (const auto found = positions->find (key); found != positions->end())
         {
             diagnostic.source = found->second.source;
             diagnostic.line = found->second.line;
@@ -58,7 +64,19 @@ DataTreeDiagnostic DataTreeSourceMap::locate (DataTreeDiagnostic diagnostic) con
 
 bool DataTreeSourceMap::operator== (const DataTreeSourceMap& other) const
 {
-    return positions == other.positions;
+    // A map and its copies hold the same positions until one of them is added one
+    if (positions == other.positions)
+        return true;
+
+    const auto isEmpty = [] (const std::shared_ptr<Positions>& held)
+    {
+        return held == nullptr || held->empty();
+    };
+
+    if (isEmpty (positions) || isEmpty (other.positions))
+        return isEmpty (positions) && isEmpty (other.positions);
+
+    return *positions == *other.positions;
 }
 
 std::vector<int> DataTreeSourceMap::getPath (const DataTree& element)

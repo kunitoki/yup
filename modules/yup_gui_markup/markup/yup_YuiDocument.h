@@ -189,8 +189,10 @@ public:
 
         The interface follows the changes made to this tree in place: it is built again once they
         are over, from the message loop, keeping the components still described (see
-        @ref applyPendingChanges). A change that adds, removes or moves an element leaves the
-        problems listed afterwards without a line and a column, until a text is loaded again.
+        @ref applyPendingChanges). As for a load, the stylesheet is kept when what it reads of the
+        document is unchanged, so what it runs goes on. A change that adds, removes or moves an
+        element leaves the problems listed afterwards without a line and a column, until a text
+        is loaded again, and has the stylesheet made again with each change until then.
     */
     const DataTree& getTree() const noexcept { return tree; }
 
@@ -278,6 +280,11 @@ public:
 
         The map turns an element or a property of the tree into the line and column it was
         written at, which is how a development tool jumps from a component to its markup.
+
+        Each load gives another map. So does each time the interface is built again for a
+        change of the tree that keeps the stylesheet (see @ref getTree): the problems listed
+        so far are forgotten then too, and either the map or the stylesheet being another one
+        tells a component to tell its own again.
     */
     std::shared_ptr<const DataTreeSourceMap> getSourceMap() const noexcept override { return sourceMap; }
 
@@ -364,10 +371,19 @@ private:
     //==============================================================================
     class LoadAction;
 
+    // A stylesheet with the copy of the document it reads
+    struct Style
+    {
+        StyleSheet::Ptr sheet;
+        DataTree source;
+    };
+
     Result loadTree (const DataTree& document, const std::shared_ptr<const DataTreeSourceMap>& map);
     Result buildTree (const DataTree& document, const std::shared_ptr<const DataTreeSourceMap>& map);
     Result handleLiveTreeMutation();
     Result handleRangeChange();
+    const DataTreeSchema* getGrammarSchema();
+    std::optional<Style> readStyle (const DataTree& document, const std::shared_ptr<const DataTreeSourceMap>& map, bool canKeep);
     void attachStyleContext (Component& root);
     Result fail (const String& message);
     void resetState();
@@ -378,6 +394,8 @@ private:
     DataTree tree;
     std::shared_ptr<const DataTreeSourceMap> sourceMap;
     StyleSheet::Ptr styleSheet;
+    DataTree styleSource;
+    DataTreeSchema::Ptr grammarSchema;
     std::vector<DataTreeDiagnostic> diagnostics;
     AssetReader assetReader;
     UndoManager* undoManager = nullptr;

@@ -468,3 +468,274 @@ TEST_F (ShaderUniformsTests, TellsTheUniformsOfTheSameBlockWhateverTheyHold)
     larger.blockSize = 64;
     EXPECT_FALSE (first.hasSameLayoutAs (ShaderUniforms (larger)));
 }
+
+TEST_F (ShaderUniformsTests, CopiesShareTheirMembersAndKeepBytesOfTheirOwn)
+{
+    ShaderUniforms original (makeVectorBlock());
+    ASSERT_TRUE (original.set ("intensity", 0.5f));
+
+    auto copy = original;
+
+    // The members are described once, for every copy
+    EXPECT_EQ (copy.getMembers().data(), original.getMembers().data());
+    EXPECT_TRUE (copy == original);
+
+    EXPECT_TRUE (copy.set ("intensity", 0.75f));
+    EXPECT_FLOAT_EQ (read<float> (original, 0), 0.5f);
+    EXPECT_FLOAT_EQ (read<float> (copy, 0), 0.75f);
+    EXPECT_FALSE (copy == original);
+    EXPECT_TRUE (copy.hasSameLayoutAs (original));
+
+    // Assigning takes the members of the other ones with their bytes
+    ShaderUniforms assigned (makeBlock (16, { makeMember ("gain", BaseType::float32, 0) }));
+    assigned = original;
+    EXPECT_EQ (assigned.getMembers().data(), original.getMembers().data());
+    EXPECT_TRUE (assigned == original);
+
+    // Uniforms made apart from the same block describe their members apart, and are the same all the same
+    ShaderUniforms apart (makeVectorBlock());
+    EXPECT_NE (apart.getMembers().data(), original.getMembers().data());
+    EXPECT_TRUE (apart.hasSameLayoutAs (original));
+    EXPECT_FALSE (apart == original);
+
+    EXPECT_TRUE (apart.set ("intensity", 0.5f));
+    EXPECT_TRUE (apart == original);
+    EXPECT_TRUE (original == apart);
+}
+
+TEST_F (ShaderUniformsTests, ListsTheMembersItCanSet)
+{
+    // { float intensity; Light light; ivec2 cell; mat3 rotation; vec2 points[2]; }
+    const ShaderUniforms uniforms (makeBlock (112, { makeMember ("intensity", BaseType::float32, 0), makeMember ("light", BaseType::structType, 4), makeMember ("cell", BaseType::int32, 8, 2), makeMember ("rotation", BaseType::float32, 16, 3, 3, 16), makeArray (makeMember ("points", BaseType::float32, 64, 2), 2, 16) }));
+
+    // In the order of the block, without the member that can't be set
+    const auto members = uniforms.getMembers();
+    ASSERT_EQ (members.size(), 4u);
+
+    EXPECT_EQ (members[0].name, String ("intensity"));
+    EXPECT_EQ (members[0].type, BaseType::float32);
+    EXPECT_EQ (members[0].offset, 0u);
+    EXPECT_EQ (members[0].getNumComponents(), 1);
+
+    EXPECT_EQ (members[1].name, String ("cell"));
+    EXPECT_EQ (members[1].type, BaseType::int32);
+    EXPECT_EQ (members[1].offset, 8u);
+    EXPECT_EQ (members[1].numRows, 2u);
+    EXPECT_EQ (members[1].getNumComponents(), 2);
+
+    EXPECT_EQ (members[2].name, String ("rotation"));
+    EXPECT_EQ (members[2].offset, 16u);
+    EXPECT_EQ (members[2].numColumns, 3u);
+    EXPECT_EQ (members[2].columnStride, 16u);
+    EXPECT_EQ (members[2].numRows, 3u);
+    EXPECT_EQ (members[2].getNumComponents(), 9);
+
+    EXPECT_EQ (members[3].name, String ("points"));
+    EXPECT_EQ (members[3].offset, 64u);
+    EXPECT_EQ (members[3].numElements, 2u);
+    EXPECT_EQ (members[3].elementStride, 16u);
+    EXPECT_EQ (members[3].numRows, 2u);
+    EXPECT_EQ (members[3].getNumComponents(), 4);
+
+    // Each is what the uniforms tell of the member of its name, at the index its handle has
+    for (size_t index = 0; index < members.size(); ++index)
+    {
+        const auto& member = members[index];
+
+        EXPECT_TRUE (uniforms.hasMember (member.name)) << member.name;
+        EXPECT_EQ (uniforms.getMemberType (member.name), member.type) << member.name;
+        EXPECT_EQ (uniforms.getNumComponents (member.name), member.getNumComponents()) << member.name;
+        EXPECT_EQ (uniforms.findMember (member.name).getIndex(), static_cast<int> (index)) << member.name;
+    }
+
+    // The bytes of a member are read where it tells: the second column of the matrix, the second element of the array
+    auto filled = uniforms;
+    EXPECT_TRUE (filled.set ("rotation", { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f }));
+    EXPECT_TRUE (filled.set ("points", { 10.0f, 11.0f, 12.0f, 13.0f }));
+    EXPECT_FLOAT_EQ (read<float> (filled, members[2].offset + members[2].columnStride + 2 * sizeof (float)), 6.0f);
+    EXPECT_FLOAT_EQ (read<float> (filled, members[3].offset + members[3].elementStride + sizeof (float)), 13.0f);
+
+    EXPECT_TRUE (ShaderUniforms().getMembers().empty());
+    EXPECT_TRUE (ShaderUniforms (makeBlock (16, { makeMember ("light", BaseType::structType, 0) })).getMembers().empty());
+}
+
+TEST_F (ShaderUniformsTests, FindsAMemberOnceToSetItWithNoSearch)
+{
+    ShaderUniforms uniforms (makeVectorBlock());
+
+    const auto tint = uniforms.findMember ("tint");
+    ASSERT_TRUE (tint.isValid());
+    EXPECT_EQ (tint.getIndex(), 3);
+    EXPECT_EQ (uniforms.getMembers()[static_cast<size_t> (tint.getIndex())].name, String ("tint"));
+    EXPECT_TRUE (uniforms.findMember (String ("point")).isValid());
+
+    EXPECT_TRUE (uniforms.set (tint, { 0.25f, 0.5f, 0.75f, 1.0f }));
+    EXPECT_FLOAT_EQ (read<float> (uniforms, 32), 0.25f);
+    EXPECT_FLOAT_EQ (read<float> (uniforms, 44), 1.0f);
+
+    // A handle is good for the copies of the uniforms it was found in, and for the ones made apart from the same block
+    auto copy = uniforms;
+    EXPECT_TRUE (copy.set (tint, { 0.5f }));
+    EXPECT_FLOAT_EQ (read<float> (copy, 32), 0.5f);
+    EXPECT_FLOAT_EQ (read<float> (uniforms, 32), 0.25f);
+
+    ShaderUniforms apart (makeVectorBlock());
+    EXPECT_TRUE (apart.set (tint, { 0.5f, 0.5f, 0.75f, 1.0f }));
+    EXPECT_TRUE (apart == copy);
+}
+
+TEST_F (ShaderUniformsTests, HandleOfNoMemberSetsNothing)
+{
+    ShaderUniforms uniforms (makeVectorBlock());
+
+    const auto missing = uniforms.findMember ("time");
+    EXPECT_FALSE (missing.isValid());
+    EXPECT_EQ (missing.getIndex(), -1);
+
+    EXPECT_FALSE (ShaderUniforms::MemberHandle().isValid());
+    EXPECT_FALSE (uniforms.findMember ("Tint").isValid());
+    EXPECT_FALSE (ShaderUniforms().findMember ("tint").isValid());
+
+    const float values[] = { 1.0f, 2.0f };
+    EXPECT_FALSE (uniforms.set (missing, { 1.0f }));
+    EXPECT_FALSE (uniforms.set (missing, values));
+    EXPECT_FALSE (uniforms.set (missing, Span<const float> (values, 2)));
+    EXPECT_FALSE (uniforms.set (missing, 1.0f));
+    EXPECT_FALSE (uniforms.set (missing, var::array ({ 1.0, 2.0 })));
+    EXPECT_TRUE (isZeroed (uniforms));
+
+    // Nor does one found among more members than these uniforms have, or in none
+    const auto tint = uniforms.findMember ("tint");
+    ASSERT_TRUE (tint.isValid());
+
+    ShaderUniforms smaller (makeBlock (16, { makeMember ("gain", BaseType::float32, 0) }));
+    EXPECT_FALSE (smaller.set (tint, { 1.0f }));
+    EXPECT_TRUE (isZeroed (smaller));
+
+    ShaderUniforms none;
+    EXPECT_FALSE (none.set (tint, { 1.0f }));
+}
+
+TEST_F (ShaderUniformsTests, SettingByHandleWritesWhatSettingByNameDoes)
+{
+    // { float intensity; int count; uint mask; bool enabled; vec4 tint; mat3 rotation; vec2 points[2]; ivec2 cell; }
+    const auto block = makeBlock (128, { makeMember ("intensity", BaseType::float32, 0), makeMember ("count", BaseType::int32, 4), makeMember ("mask", BaseType::uint32, 8), makeMember ("enabled", BaseType::boolean, 12), makeMember ("tint", BaseType::float32, 16, 4), makeMember ("rotation", BaseType::float32, 32, 3, 3, 16), makeArray (makeMember ("points", BaseType::float32, 80, 2), 2, 16), makeMember ("cell", BaseType::int32, 112, 2) });
+
+    ShaderUniforms byName (block);
+    ShaderUniforms byHandle (block);
+    ASSERT_EQ (byName.getMembers().size(), 8u);
+
+    const auto find = [&byHandle] (const char* name)
+    {
+        const auto member = byHandle.findMember (name);
+        EXPECT_TRUE (member.isValid()) << name;
+        return member;
+    };
+
+    // A list in braces, an array, a container and a span
+    const float tint[] = { 0.25f, 0.5f, 0.75f, 1.0f };
+    const std::vector<float> rotation { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f };
+    const std::array<float, 4> points { 4.0f, 5.0f, 6.0f, 7.0f };
+
+    EXPECT_TRUE (byName.set ("intensity", { 0.5f }));
+    EXPECT_TRUE (byHandle.set (find ("intensity"), { 0.5f }));
+
+    EXPECT_TRUE (byName.set ("tint", tint));
+    EXPECT_TRUE (byHandle.set (find ("tint"), tint));
+
+    EXPECT_TRUE (byName.set ("rotation", rotation));
+    EXPECT_TRUE (byHandle.set (find ("rotation"), rotation));
+
+    EXPECT_TRUE (byName.set ("points", Span<const float> (points)));
+    EXPECT_TRUE (byHandle.set (find ("points"), Span<const float> (points)));
+    EXPECT_TRUE (byHandle == byName);
+
+    // Converted to the type of the member the same way
+    EXPECT_TRUE (byName.set ("count", { -3.6f }));
+    EXPECT_TRUE (byHandle.set (find ("count"), { -3.6f }));
+
+    EXPECT_TRUE (byName.set ("mask", { 1.0e20f }));
+    EXPECT_TRUE (byHandle.set (find ("mask"), { 1.0e20f }));
+
+    EXPECT_TRUE (byName.set ("enabled", { 0.25f }));
+    EXPECT_TRUE (byHandle.set (find ("enabled"), { 0.25f }));
+    EXPECT_TRUE (byHandle == byName);
+
+    EXPECT_EQ (read<int32> (byHandle, 4), -4);
+    EXPECT_EQ (read<uint32> (byHandle, 8), std::numeric_limits<uint32>::max());
+    EXPECT_EQ (read<uint32> (byHandle, 12), 1u);
+    EXPECT_FLOAT_EQ (read<float> (byHandle, 32 + 16 + 4), 5.0f);
+    EXPECT_FLOAT_EQ (read<float> (byHandle, 80 + 16 + 4), 7.0f);
+
+    // A var: a number, a boolean, an array, and the numbers a caller passes as they are
+    EXPECT_TRUE (byName.set ("intensity", var (0.75)));
+    EXPECT_TRUE (byHandle.set (find ("intensity"), var (0.75)));
+
+    EXPECT_TRUE (byName.set ("count", var (3)));
+    EXPECT_TRUE (byHandle.set (find ("count"), var (3)));
+
+    EXPECT_TRUE (byName.set ("enabled", var (false)));
+    EXPECT_TRUE (byHandle.set (find ("enabled"), var (false)));
+
+    EXPECT_TRUE (byName.set ("cell", var::array ({ 7, true })));
+    EXPECT_TRUE (byHandle.set (find ("cell"), var::array ({ 7, true })));
+
+    EXPECT_TRUE (byName.set ("tint", var::array ({ 1.0, 0.0 })));
+    EXPECT_TRUE (byHandle.set (find ("tint"), var::array ({ 1.0, 0.0 })));
+
+    EXPECT_TRUE (byName.set ("mask", 2.0f));
+    EXPECT_TRUE (byHandle.set (find ("mask"), 2.0f));
+    EXPECT_TRUE (byHandle == byName);
+
+    EXPECT_FLOAT_EQ (read<float> (byHandle, 0), 0.75f);
+    EXPECT_EQ (read<int32> (byHandle, 4), 3);
+    EXPECT_EQ (read<uint32> (byHandle, 8), 2u);
+    EXPECT_EQ (read<uint32> (byHandle, 12), 0u);
+    EXPECT_EQ (read<int32> (byHandle, 112), 7);
+    EXPECT_EQ (read<int32> (byHandle, 116), 1);
+
+    // An array of fewer numbers than the member holds leaves the rest of it, and the ones past its end are ignored
+    EXPECT_FLOAT_EQ (read<float> (byHandle, 16), 1.0f);
+    EXPECT_FLOAT_EQ (read<float> (byHandle, 20), 0.0f);
+    EXPECT_FLOAT_EQ (read<float> (byHandle, 24), 0.75f);
+
+    EXPECT_TRUE (byHandle.set (find ("cell"), var::array ({ 1, 2, 3, 4 })));
+    EXPECT_EQ (read<int32> (byHandle, 116), 2);
+    EXPECT_EQ (read<uint32> (byHandle, 120), 0u);
+
+    // What a var can't give is refused the same, with nothing written
+    const auto before = byHandle;
+    EXPECT_FALSE (byHandle.set (find ("intensity"), var ("0.5")));
+    EXPECT_FALSE (byHandle.set (find ("intensity"), var()));
+    EXPECT_FALSE (byHandle.set (find ("tint"), var::array ({ 0.25, "0.5", 0.75, 1.0 })));
+    EXPECT_TRUE (byHandle == before);
+
+    EXPECT_TRUE (byHandle.set (find ("tint"), var::array ({})));
+    EXPECT_TRUE (byHandle == before);
+}
+
+TEST_F (ShaderUniformsTests, ClearingZeroesTheBytesAndKeepsTheMembers)
+{
+    ShaderUniforms uniforms (makeVectorBlock());
+    const ShaderUniforms zeroed (uniforms);
+
+    const auto intensity = uniforms.findMember ("intensity");
+    EXPECT_TRUE (uniforms.set (intensity, { 0.5f }));
+    EXPECT_TRUE (uniforms.set ("tint", { 0.25f, 0.5f, 0.75f, 1.0f }));
+    EXPECT_FALSE (isZeroed (uniforms));
+
+    uniforms.clear();
+
+    EXPECT_TRUE (isZeroed (uniforms));
+    EXPECT_EQ (uniforms.getSizeInBytes(), 48u);
+    EXPECT_TRUE (uniforms == zeroed);
+    EXPECT_EQ (uniforms.getMembers().data(), zeroed.getMembers().data());
+
+    // The members are there to be set again, with the handles found before
+    EXPECT_TRUE (uniforms.set (intensity, { 0.75f }));
+    EXPECT_FLOAT_EQ (read<float> (uniforms, 0), 0.75f);
+
+    ShaderUniforms none;
+    none.clear();
+    EXPECT_TRUE (none.isEmpty());
+}

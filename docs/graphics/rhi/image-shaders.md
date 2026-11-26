@@ -85,7 +85,7 @@ binds, and nothing has a fixed set or binding number:
 
 | Declaration | What it is |
 | --- | --- |
-| A uniform block | The parameters. Optional, one at most, no larger than 64 KiB. `createUniforms()` is laid out for it. |
+| A uniform block | The parameters. Optional, one at most, no larger than 64 KiB. `createUniforms()` is laid out for it, and `getUniformLayout()` tells its members. |
 | `uniform texture2D` | An input: none, or up to four (`GpuImageShader::maxInputTextures`). The first input is the texture with the lowest set, then the lowest binding, whatever the order they are declared in, and `getInputTextureNames()` tells the name of each. |
 | `uniform sampler` | Declared apart from the textures and combined where they are read. Filters linearly and clamps to the edge. One sampler can read every texture. |
 | `layout(location = 0) in vec2 uv` | From (0, 0) at the top left of the target to (1, 1) at its bottom right, on every graphics API. Optional, and the only input. |
@@ -185,9 +185,13 @@ uniforms.set ("points", points);                            // a std::vector<flo
 | Method | What it does |
 | --- | --- |
 | `set (name, values)` | Sets the scalars of a member. Returns false, having written nothing, for a name the block does not have. |
+| `findMember (name)` | Finds a member once: a `MemberHandle`, not valid for a name the block does not have. |
+| `set (member, values)` | Sets the scalars of a member found by `findMember()`, with no search by name. |
 | `hasMember (name)` | Whether the block has a member `set()` can write. |
 | `getMemberType (name)` | The type of its scalars: `float32`, `int32`, `uint32` or `boolean`. |
 | `getNumComponents (name)` | How many scalars it holds: 3 for a `vec3`, 16 for a `mat4`, 8 for a `vec2[4]`. |
+| `getMembers()` | The members `set()` can write, in the order of the block: the name, the type, the offset and the shape of each. |
+| `clear()` | Sets every byte back to zero. |
 | `getData()`, `getSizeInBytes()` | The bytes, for `GpuRenderPass::setUniformBuffer()`. |
 
 - A member is a scalar, a vector, a matrix of up to 4 columns and rows, or a
@@ -205,9 +209,40 @@ uniforms.set ("points", points);                            // a std::vector<flo
 - Names are the ones of the members, not of the block nor of its instance:
   `params.tint` is `"tint"`.
 - It is a plain value, with no GPU object behind it: it can be copied, kept
-  from one draw to the next and compared.
+  from one draw to the next and compared. The copies share the description of
+  the members and each has its own bytes, so a copy is cheap.
 - It knows nothing of what the values mean. A color is 3 or 4 numbers, which
   the caller multiplies by its alpha when the shader expects that.
+
+Setting by name looks for the member each time. What fills the same uniforms
+at every frame finds each member once, keeps the uniforms, and sets them by
+handle:
+
+```cpp
+// Once, when the shader is loaded
+const auto intensity = shader->getUniformLayout().findMember ("intensity");
+const auto tint = shader->getUniformLayout().findMember ("tint");
+auto uniforms = shader->createUniforms();
+
+// At every frame
+uniforms.set (intensity, { level });
+uniforms.set (tint, { 1.0f, 0.5f, 0.25f, 1.0f });
+```
+
+- `getUniformLayout()` returns the zeroed uniforms of the shader without
+  copying them, to ask what its block declares. A handle found there sets the
+  member in every uniforms `createUniforms()` returns.
+- Setting through a handle that is not valid writes nothing and returns false,
+  as setting a name the block does not have.
+- `clear()` zeroes kept uniforms again, when the members that are not set at a
+  frame have to be zero rather than what they were.
+- `getMembers()` lists what a tool shows of a shader, or what a test reads the
+  bytes with:
+
+```cpp
+for (const auto& member : shader->getUniformLayout().getMembers())
+    YUP_DBG (member.name << ": " << member.getNumComponents() << " scalars at byte " << static_cast<int> (member.offset));
+```
 
 `ShaderUniforms` is not tied to image shaders: it is made from any reflected
 uniform block (`ShaderUniforms uniforms (reflection.uniformBuffers.front());`),
@@ -253,7 +288,8 @@ frame.submit();
   `getInputTextureNames()`.
 - The uniforms have to come from `createUniforms()` of the same shader: the
   draw fails with those of another block, of the same size or not
-  (`ShaderUniforms::hasSameLayoutAs()` tells them apart).
+  (`ShaderUniforms::hasSameLayoutAs()` tells them apart). Uniforms made apart
+  for a block declaring the same members at the same places are taken too.
 - The target has a color format and is not multisampled.
 - It returns a failed `Result`, having recorded nothing, when the device has no
   GPU or was lost, an input the shader declares is missing or is the texture of

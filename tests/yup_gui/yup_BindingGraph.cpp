@@ -90,6 +90,57 @@ protected:
         return graph.bind (target, Identifier (property), text, type, resolver());
     }
 
+    /** A model of two numbers, counting how many times each of them is read. */
+    class CountingProvider final : public BindingProvider
+    {
+    public:
+        std::vector<Property> getProperties() const override
+        {
+            return {
+                { Identifier ("first"), ComponentProperty::Type::number },
+                { Identifier ("second"), ComponentProperty::Type::number }
+            };
+        }
+
+        var getValue (const Identifier& name) const override
+        {
+            ++reads[name.toString()];
+
+            if (const auto* value = values.getVarPointer (name))
+                return *value;
+
+            return {};
+        }
+
+        void setValue (const Identifier& name, const var& value) override
+        {
+            if (values.set (name, value))
+                notifyValueChanged (name);
+        }
+
+        NamedValueSet values { { Identifier ("first"), 1.0 }, { Identifier ("second"), 2.0 } };
+        mutable std::map<String, int> reads;
+    };
+
+    /** Tells the changes of the `value` of the components it listens to, in the order they come. */
+    class ValueChangeListener final : public ComponentListener
+    {
+    public:
+        void componentPropertyChanged (Component& component, const Identifier& name) override
+        {
+            if (name != Identifier (valueId))
+                return;
+
+            changed.add (component.getComponentID());
+
+            if (onValueChanged != nullptr)
+                onValueChanged();
+        }
+
+        StringArray changed;
+        std::function<void()> onValueChanged;
+    };
+
     static constexpr auto valueId = "value";
     static constexpr auto widthId = "width";
 
@@ -433,4 +484,303 @@ TEST_F (BindingGraphTests, LinkToAnElementOutsideTheListDoesNothingUntilItIsTher
     model.setProperty ("steps", var (Array<var> { true, true, false }));
     EXPECT_FALSE (button.getToggleState());
     EXPECT_EQ (JSON::toString (model.getProperty ("steps"), true), String ("[true, true, false]"));
+}
+
+TEST_F (BindingGraphTests, AConstantReplacesTheBindingOfItsProperty)
+{
+    Slider source { Slider::LinearHorizontal }, target { Slider::LinearHorizontal };
+    source.setRange (0.0, 10.0);
+    target.setRange (0.0, 10.0);
+    nameIt ("source", source);
+
+    ASSERT_TRUE (bind (target, valueId, "source.value", ComponentProperty::Type::number).wasOk());
+    EXPECT_EQ (graph.getNumBindings(), 1);
+
+    bool isLive = true;
+    ASSERT_TRUE (graph.bind (target, Identifier (valueId), "4", ComponentProperty::Type::number, resolver(), &isLive).wasOk());
+
+    EXPECT_FALSE (isLive);
+    EXPECT_EQ (graph.getNumBindings(), 0);
+    EXPECT_FALSE (graph.hasBinding (target, Identifier (valueId)));
+    EXPECT_FLOAT_EQ (static_cast<float> (target.getValue()), 4.0f);
+
+    source.setValue (2.0);
+    EXPECT_FLOAT_EQ (static_cast<float> (target.getValue()), 4.0f);
+}
+
+TEST_F (BindingGraphTests, UnbindingWhatHasNoBindingLeavesTheOthersInPlace)
+{
+    Slider source { Slider::LinearHorizontal }, target { Slider::LinearHorizontal }, other { Slider::LinearHorizontal };
+    source.setRange (0.0, 10.0);
+    target.setRange (0.0, 10.0);
+    nameIt ("source", source);
+
+    ASSERT_TRUE (bind (target, valueId, "source.value", ComponentProperty::Type::number).wasOk());
+
+    // Another component, another property of the bound one, and what the binding reads rather than writes
+    EXPECT_FALSE (graph.unbind (other, Identifier (valueId)));
+    EXPECT_FALSE (graph.unbind (target, Identifier (widthId)));
+    EXPECT_FALSE (graph.unbind (source, Identifier (valueId)));
+
+    EXPECT_EQ (graph.getNumBindings(), 1);
+    EXPECT_TRUE (graph.hasBinding (target, Identifier (valueId)));
+    EXPECT_FALSE (graph.hasBinding (source, Identifier (valueId)));
+
+    source.setValue (3.0);
+    EXPECT_FLOAT_EQ (static_cast<float> (target.getValue()), 3.0f);
+}
+
+TEST_F (BindingGraphTests, UpdatesTheBindingsOfOneSourceInTheOrderTheyWereMade)
+{
+    ValueChangeListener listener;
+
+    Slider source { Slider::LinearHorizontal };
+    source.setRange (0.0, 10.0);
+    nameIt ("source", source);
+
+    std::vector<std::unique_ptr<Slider>> targets;
+
+    for (int index = 0; index < 6; ++index)
+    {
+        auto& target = *targets.emplace_back (std::make_unique<Slider> (Slider::LinearHorizontal));
+        target.setRange (0.0, 10.0);
+        target.setComponentID (String (index));
+        target.addComponentListener (&listener);
+    }
+
+    // Made in an order that is neither the one of the components nor the one of their addresses
+    for (const auto index : { 3, 0, 5, 1, 4, 2 })
+        ASSERT_TRUE (bind (*targets[static_cast<size_t> (index)], valueId, "source.value", ComponentProperty::Type::number).wasOk());
+
+    source.setValue (2.0);
+    EXPECT_EQ (listener.changed.joinIntoString (" "), "3 0 5 1 4 2");
+
+    // A binding made again comes last
+    ASSERT_TRUE (bind (*targets[0], valueId, "source.value + 1", ComponentProperty::Type::number).wasOk());
+    EXPECT_EQ (graph.getNumBindings(), 6);
+
+    listener.changed.clear();
+    source.setValue (4.0);
+    EXPECT_EQ (listener.changed.joinIntoString (" "), "3 5 1 4 2 0");
+    EXPECT_FLOAT_EQ (static_cast<float> (targets[0]->getValue()), 5.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (targets[2]->getValue()), 4.0f);
+}
+
+TEST_F (BindingGraphTests, AChangeOfOnePropertyLeavesTheBindingsReadingAnotherAlone)
+{
+    CountingProvider provider;
+    BindingModel model (provider);
+    nameIt ("model", model);
+
+    Slider first { Slider::LinearHorizontal }, second { Slider::LinearHorizontal };
+    first.setRange (0.0, 10.0);
+    second.setRange (0.0, 10.0);
+
+    ASSERT_TRUE (bind (first, valueId, "model.first", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (second, valueId, "model.second", ComponentProperty::Type::number).wasOk());
+    EXPECT_FLOAT_EQ (static_cast<float> (first.getValue()), 1.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (second.getValue()), 2.0f);
+
+    provider.reads.clear();
+    provider.setValue (Identifier ("first"), 5.0);
+
+    EXPECT_FLOAT_EQ (static_cast<float> (first.getValue()), 5.0f);
+    EXPECT_GT (provider.reads["first"], 0);
+    EXPECT_EQ (provider.reads["second"], 0);
+
+    provider.reads.clear();
+    provider.setValue (Identifier ("second"), 7.0);
+
+    EXPECT_FLOAT_EQ (static_cast<float> (second.getValue()), 7.0f);
+    EXPECT_EQ (provider.reads["first"], 0);
+    EXPECT_GT (provider.reads["second"], 0);
+}
+
+TEST_F (BindingGraphTests, RemovesOnlyTheBindingsOfADeletedTarget)
+{
+    Slider source { Slider::LinearHorizontal }, kept { Slider::LinearHorizontal };
+    source.setRange (0.0, 10.0);
+    kept.setRange (0.0, 10.0);
+    nameIt ("source", source);
+
+    auto target = std::make_unique<Slider> (Slider::LinearHorizontal);
+    target->setRange (0.0, 10.0);
+
+    ASSERT_TRUE (bind (*target, valueId, "source.value", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (kept, valueId, "source.value + 1", ComponentProperty::Type::number).wasOk());
+    EXPECT_EQ (graph.getNumBindings(), 2);
+
+    target.reset();
+
+    EXPECT_EQ (graph.getNumBindings(), 1);
+    EXPECT_TRUE (graph.hasBinding (kept, Identifier (valueId)));
+
+    source.setValue (3.0);
+    EXPECT_FLOAT_EQ (static_cast<float> (kept.getValue()), 4.0f);
+}
+
+TEST_F (BindingGraphTests, RemovesTheBindingsAndTheLinksOfADeletedModel)
+{
+    CountingProvider provider;
+    auto model = std::make_unique<BindingModel> (provider);
+    nameIt ("model", *model);
+
+    Slider bound { Slider::LinearHorizontal }, linked { Slider::LinearHorizontal };
+    bound.setRange (0.0, 10.0);
+    linked.setRange (0.0, 10.0);
+
+    ASSERT_TRUE (bind (bound, valueId, "model.first * 2", ComponentProperty::Type::number).wasOk());
+    graph.link (linked, Identifier (valueId), *model, Identifier ("second"));
+
+    EXPECT_EQ (graph.getNumBindings(), 1);
+    EXPECT_EQ (graph.getNumLinks(), 1);
+    EXPECT_FLOAT_EQ (static_cast<float> (bound.getValue()), 2.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (linked.getValue()), 2.0f);
+
+    named.clear();
+    model.reset();
+
+    EXPECT_EQ (graph.getNumBindings(), 0);
+    EXPECT_EQ (graph.getNumLinks(), 0);
+    EXPECT_FALSE (graph.hasBinding (bound, Identifier (valueId)));
+
+    // Nothing is left that follows the model, or writes to it
+    provider.setValue (Identifier ("first"), 4.0);
+    linked.setValue (7.0);
+
+    EXPECT_FLOAT_EQ (static_cast<float> (bound.getValue()), 2.0f);
+    EXPECT_DOUBLE_EQ (static_cast<double> (provider.getValue (Identifier ("second"))), 2.0);
+
+    // The components that are left can be bound again
+    Slider source { Slider::LinearHorizontal };
+    source.setRange (0.0, 10.0);
+    nameIt ("source", source);
+
+    ASSERT_TRUE (bind (bound, valueId, "source.value + 1", ComponentProperty::Type::number).wasOk());
+    source.setValue (5.0);
+    EXPECT_FLOAT_EQ (static_cast<float> (bound.getValue()), 6.0f);
+}
+
+TEST_F (BindingGraphTests, ABindingWhoseUpdateUnbindsAnotherLeavesItAsItWas)
+{
+    ValueChangeListener listener;
+
+    Slider source { Slider::LinearHorizontal }, first { Slider::LinearHorizontal }, second { Slider::LinearHorizontal }, third { Slider::LinearHorizontal };
+    source.setRange (0.0, 10.0);
+    first.setRange (0.0, 10.0);
+    second.setRange (0.0, 10.0);
+    third.setRange (0.0, 10.0);
+    nameIt ("source", source);
+
+    ASSERT_TRUE (bind (first, valueId, "source.value", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (second, valueId, "source.value", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (third, valueId, "source.value", ComponentProperty::Type::number).wasOk());
+
+    listener.onValueChanged = [&]
+    {
+        graph.unbind (second, Identifier (valueId));
+    };
+
+    first.addComponentListener (&listener);
+    source.setValue (3.0);
+
+    // The second one was waiting for its turn when the first one removed it
+    EXPECT_EQ (graph.getNumBindings(), 2);
+    EXPECT_FALSE (graph.hasBinding (second, Identifier (valueId)));
+    EXPECT_FLOAT_EQ (static_cast<float> (first.getValue()), 3.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (second.getValue()), 0.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (third.getValue()), 3.0f);
+}
+
+TEST_F (BindingGraphTests, ABindingWhoseUpdateBindsAnotherAgainEvaluatesTheNewOne)
+{
+    ValueChangeListener listener;
+
+    Slider source { Slider::LinearHorizontal }, first { Slider::LinearHorizontal }, second { Slider::LinearHorizontal };
+    source.setRange (0.0, 10.0);
+    first.setRange (0.0, 10.0);
+    second.setRange (0.0, 10.0);
+    nameIt ("source", source);
+
+    ASSERT_TRUE (bind (first, valueId, "source.value", ComponentProperty::Type::number).wasOk());
+    ASSERT_TRUE (bind (second, valueId, "source.value", ComponentProperty::Type::number).wasOk());
+
+    listener.onValueChanged = [&]
+    {
+        EXPECT_TRUE (bind (second, valueId, "source.value + 1", ComponentProperty::Type::number).wasOk());
+    };
+
+    first.addComponentListener (&listener);
+    source.setValue (3.0);
+
+    EXPECT_EQ (graph.getNumBindings(), 2);
+    EXPECT_FLOAT_EQ (static_cast<float> (first.getValue()), 3.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (second.getValue()), 4.0f);
+
+    listener.onValueChanged = nullptr;
+    source.setValue (5.0);
+
+    EXPECT_FLOAT_EQ (static_cast<float> (first.getValue()), 5.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (second.getValue()), 6.0f);
+}
+
+TEST_F (BindingGraphTests, UnlinkingAPropertyLeavesTheLinksOfTheOthers)
+{
+    Component model;
+    Slider first { Slider::LinearHorizontal }, second { Slider::LinearHorizontal }, third { Slider::LinearHorizontal };
+    first.setRange (0.0, 10.0);
+    second.setRange (0.0, 10.0);
+    third.setRange (0.0, 10.0);
+
+    model.setProperty ("cutoff", 1.0);
+    model.setProperty ("gain", 2.0);
+
+    graph.link (first, Identifier (valueId), model, Identifier ("cutoff"));
+    graph.link (second, Identifier (valueId), model, Identifier ("gain"));
+    graph.link (third, Identifier (valueId), model, Identifier ("cutoff"));
+    EXPECT_EQ (graph.getNumLinks(), 3);
+
+    // Both links of the property go, whichever side it is on
+    EXPECT_TRUE (graph.unlink (model, Identifier ("cutoff")));
+    EXPECT_EQ (graph.getNumLinks(), 1);
+
+    model.setProperty ("cutoff", 5.0);
+    model.setProperty ("gain", 6.0);
+
+    EXPECT_FLOAT_EQ (static_cast<float> (first.getValue()), 1.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (second.getValue()), 6.0f);
+    EXPECT_FLOAT_EQ (static_cast<float> (third.getValue()), 1.0f);
+
+    second.setValue (8.0);
+    EXPECT_DOUBLE_EQ (static_cast<double> (model.getProperty ("gain")), 8.0);
+}
+
+TEST_F (BindingGraphTests, ALiteralStoresWhatAnExpressionOfTheSameValueStores)
+{
+    Component literal, computed;
+
+    const auto expectSame = [&] (const String& literalText, const String& expressionText)
+    {
+        bool isLive = true;
+        const auto bound = graph.bind (literal, Identifier ("custom"), literalText, std::nullopt, nullptr, &isLive);
+
+        EXPECT_TRUE (bound.wasOk()) << literalText << ": " << bound.getErrorMessage();
+        EXPECT_FALSE (isLive) << literalText;
+        EXPECT_TRUE (graph.bind (computed, Identifier ("custom"), expressionText, std::nullopt).wasOk()) << expressionText;
+
+        EXPECT_FALSE (literal.getProperty ("custom").isVoid()) << literalText;
+        EXPECT_TRUE (literal.getProperty ("custom").equalsWithSameType (computed.getProperty ("custom")))
+            << literalText << " gives " << literal.getProperty ("custom").toString()
+            << ", " << expressionText << " gives " << computed.getProperty ("custom").toString();
+    };
+
+    expectSame ("200", "100 + 100");
+    expectSame ("-7", "3 - 10");
+    expectSame ("0.5", "1 / 2.0");
+    expectSame ("true", "! false");
+    expectSame ("false", "! true");
+    expectSame ("\"Reset\"", "\"Re\" + \"set\"");
+
+    EXPECT_EQ (graph.getNumBindings(), 0);
+    EXPECT_FALSE (graph.hasBinding (literal, Identifier ("custom")));
 }

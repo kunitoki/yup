@@ -45,7 +45,7 @@ graphics (e.g. audio DSP on the GPU), use `GpuDevice` directly — no
 - **`GpuImageShader`** - a fragment shader drawn over a whole target, with its
   pipeline, its bindings and its fullscreen triangle taken care of.
 - **`ShaderUniforms`** - the bytes of a uniform block, set member by member by
-  name.
+  name, or by a handle found once.
 - **`GpuBuffer`** - an immutable vertex, index, uniform, or storage buffer.
 - **`GpuTexture`** - an opaque GPU texture, the currency between passes,
   `Image`, and `Graphics::drawTexture`.

@@ -204,6 +204,39 @@ TEST_F (GpuImageShaderMetalTests, DrawsIntoTargetsOfDifferentFormats)
         expectPixel (copied, index, 51, 102, 26, 128);
 }
 
+TEST_F (GpuImageShaderMetalTests, DrawsWithUniformsSetByHandleAndWithTheOnesOfTheSameBlockMadeApart)
+{
+    const auto shader = createShader (fillFragment);
+    const auto twin = createShader (fillFragment);
+    ASSERT_NE (shader, nullptr);
+    ASSERT_NE (twin, nullptr);
+
+    // A member found once in the shader is set with no search in the uniforms the shader creates
+    const auto tint = shader->getUniformLayout().findMember ("tint");
+    ASSERT_TRUE (tint.isValid());
+
+    auto uniforms = shader->createUniforms();
+    ASSERT_TRUE (uniforms.set (tint, { 0.2f, 0.4f, 0.1f, 0.5f }));
+
+    constexpr int size = 2;
+    auto pixels = drawAndRead (*shader, size, uniforms);
+    ASSERT_EQ (pixels.size(), static_cast<size_t> (size * size * 4));
+
+    for (size_t index = 0; index < static_cast<size_t> (size * size); ++index)
+        expectPixel (pixels, index, 51, 102, 26, 128);
+
+    // The uniforms of a shader made apart from the same source are laid out the same: the draw takes them as its own
+    auto fromTwin = twin->createUniforms();
+    ASSERT_NE (fromTwin.getMembers().data(), uniforms.getMembers().data());
+    ASSERT_TRUE (fromTwin.set (tint, { 0.4f, 0.2f, 0.1f, 0.5f }));
+
+    pixels = drawAndRead (*shader, size, fromTwin);
+    ASSERT_EQ (pixels.size(), static_cast<size_t> (size * size * 4));
+
+    for (size_t index = 0; index < static_cast<size_t> (size * size); ++index)
+        expectPixel (pixels, index, 102, 51, 26, 128);
+}
+
 TEST_F (GpuImageShaderMetalTests, DrawFailsWithoutTheInputTheShaderDeclares)
 {
     const auto shader = createShader (copyFragment);

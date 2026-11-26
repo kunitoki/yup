@@ -194,9 +194,20 @@ public:
     /** Returns the uniforms of the shader, zeroed: the bytes of its uniform block
         with the layout of its members, to fill by name and pass to draw().
 
-        They are empty when the fragment stage declares no uniform block.
+        They are empty when the fragment stage declares no uniform block. All the
+        ones the shader returns share the description of its members, so creating
+        them copies the bytes only.
     */
     ShaderUniforms createUniforms() const;
+
+    /** Returns the uniforms createUniforms() copies, zeroed, without copying them:
+        what to ask which members the uniform block of the shader has, with
+        ShaderUniforms::hasMember(), getMembers() and the like.
+
+        A member that ShaderUniforms::findMember() finds in them is found for all the
+        uniforms the shader creates: its handle sets it in each of them.
+    */
+    const ShaderUniforms& getUniformLayout() const noexcept { return blockUniforms; }
 
     /** Returns true if the shader has a variant of both stages for a graphics API,
         the one a pipeline is compiled from when the shader is drawn with a device of
@@ -282,7 +293,6 @@ private:
     {
         int group = 0;
         int binding = 0;
-        String name;
     };
 
     GpuImageShader() = default;

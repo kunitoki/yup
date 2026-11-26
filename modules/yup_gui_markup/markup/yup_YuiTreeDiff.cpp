@@ -64,39 +64,58 @@ bool patchProperties (const DataTree& target, const DataTree& source, DataTree::
 
 std::vector<DataTree> matchChildren (const DataTree& target, const DataTree& source)
 {
-    std::vector<DataTree> matches (static_cast<size_t> (source.getNumChildren()));
-    std::vector<bool> used (static_cast<size_t> (target.getNumChildren()), false);
-
-    const auto match = [&] (int sourceIndex, bool byId)
+    // What a child is matched by is read once: telling an id makes strings, and each child of the source is compared
+    // with the ones of the target
+    struct Child
     {
-        const auto sourceChild = source.getChild (sourceIndex);
-        const auto id = detail::getYuiElementId (sourceChild);
+        DataTree element;
+        Identifier type;
+        String id;
+        bool isMatched = false;
+    };
 
-        if (byId && id.isEmpty())
+    const auto readChildren = [] (const DataTree& parent)
+    {
+        std::vector<Child> children;
+        children.reserve (static_cast<size_t> (parent.getNumChildren()));
+
+        for (const auto& child : parent)
+            children.push_back ({ child, child.getType(), detail::getYuiElementId (child) });
+
+        return children;
+    };
+
+    auto targetChildren = readChildren (target);
+    const auto sourceChildren = readChildren (source);
+    std::vector<DataTree> matches (sourceChildren.size());
+
+    const auto match = [&] (size_t sourceIndex, bool byId)
+    {
+        const auto& sourceChild = sourceChildren[sourceIndex];
+
+        if (byId && sourceChild.id.isEmpty())
             return;
 
-        for (int i = 0; i < target.getNumChildren(); ++i)
+        for (auto& targetChild : targetChildren)
         {
-            const auto targetChild = target.getChild (i);
-
-            if (used[static_cast<size_t> (i)] || targetChild.getType() != sourceChild.getType())
+            if (targetChild.isMatched || targetChild.type != sourceChild.type)
                 continue;
 
-            if (byId && detail::getYuiElementId (targetChild) != id)
+            if (byId && targetChild.id != sourceChild.id)
                 continue;
 
-            matches[static_cast<size_t> (sourceIndex)] = targetChild;
-            used[static_cast<size_t> (i)] = true;
+            matches[sourceIndex] = targetChild.element;
+            targetChild.isMatched = true;
             return;
         }
     };
 
-    for (int j = 0; j < source.getNumChildren(); ++j)
+    for (size_t j = 0; j < sourceChildren.size(); ++j)
         match (j, true);
 
-    for (int j = 0; j < source.getNumChildren(); ++j)
+    for (size_t j = 0; j < sourceChildren.size(); ++j)
     {
-        if (! matches[static_cast<size_t> (j)].isValid())
+        if (! matches[j].isValid())
             match (j, false);
     }
 

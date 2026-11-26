@@ -161,21 +161,27 @@ ResultValue<GpuImageShader::Ptr> GpuImageShader::createFromBundle (ShaderBundle:
         shader->blockBinding = { static_cast<int> (block.set), static_cast<int> (block.binding) };
     }
 
+    std::vector<const ShaderReflection::ResourceBinding*> images;
+
     for (const auto& image : reflection.separateImages)
     {
         if (image.imageDim != ShaderReflection::ImageDimension::dim2D || image.imageArrayed || image.imageMS)
             return makeResultValueFail ("The fragment stage declares the texture " + image.name + ", which is not a texture2D");
 
-        shader->textureBindings.push_back ({ static_cast<int> (image.set), static_cast<int> (image.binding), image.name });
+        images.push_back (&image);
     }
 
-    std::sort (shader->textureBindings.begin(), shader->textureBindings.end(), [] (const Binding& a, const Binding& b)
+    // Ordered by the signed numbers they are bound with
+    std::sort (images.begin(), images.end(), [] (const ShaderReflection::ResourceBinding* a, const ShaderReflection::ResourceBinding* b)
     {
-        return std::tie (a.group, a.binding) < std::tie (b.group, b.binding);
+        return std::pair (static_cast<int> (a->set), static_cast<int> (a->binding)) < std::pair (static_cast<int> (b->set), static_cast<int> (b->binding));
     });
 
-    for (const auto& texture : shader->textureBindings)
-        shader->textureNames.add (texture.name);
+    for (const auto* image : images)
+    {
+        shader->textureBindings.push_back ({ static_cast<int> (image->set), static_cast<int> (image->binding) });
+        shader->textureNames.add (image->name);
+    }
 
     return makeResultValueOk (std::move (shader));
 }

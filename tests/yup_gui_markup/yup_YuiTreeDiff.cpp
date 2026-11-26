@@ -93,6 +93,30 @@ TEST_F (YuiTreeDiffTests, ReplacesTheElementsWhoseTypeChanged)
     EXPECT_TRUE (root.getChild (1) == slider);
 }
 
+TEST_F (YuiTreeDiffTests, MatchesEachChildOnceWhereSeveralShareAnIdOrHaveNone)
+{
+    auto target = parse ("Component { Label { id: a; } Label { } Slider { id: a; } Label { id: a; } Label { } }");
+    const auto source = parse ("Component { Label { } Label { id: a; } Slider { } Label { id: a; } Label { id: b; } }");
+
+    const auto root = target.getChild (0);
+    const auto firstA = root.getChild (0);
+    const auto plain = root.getChild (1);
+    const auto slider = root.getChild (2);
+    const auto secondA = root.getChild (3);
+    const auto last = root.getChild (4);
+
+    EXPECT_TRUE (YuiTreeDiff::apply (target, source));
+    EXPECT_TRUE (target.isEquivalentTo (source));
+
+    // The ids first, each taking the first element of its type that has it and is not taken: an id is not looked for
+    // on another type. Then the first element of the type left, whatever its id was
+    EXPECT_TRUE (root.getChild (0) == plain);
+    EXPECT_TRUE (root.getChild (1) == firstA);
+    EXPECT_TRUE (root.getChild (2) == slider);
+    EXPECT_TRUE (root.getChild (3) == secondA);
+    EXPECT_TRUE (root.getChild (4) == last);
+}
+
 TEST_F (YuiTreeDiffTests, KeepsThePropertiesInTheOrderOfTheSource)
 {
     auto target = parse ("Slider { value: 5; }");

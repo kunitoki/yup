@@ -255,6 +255,24 @@ public:
     */
     static bool setUniform (ShaderUniforms& uniforms, const Property& property, const var& value);
 
+    /** Writes the value of a property to a member of a uniform block found once, converted by
+        the type of the property as the overload taking the name of the member does.
+
+        Setting by name looks for the member each time. What fills the same uniforms again and
+        again finds each member once, with ShaderUniforms::findMember() on the uniforms of the
+        shader (see GpuImageShader::getUniformLayout), and gives its handle here.
+
+        @param uniforms  The uniforms to write into.
+        @param member    The handle of the member to write.
+        @param type      The type of the value.
+        @param value     The value, as a property of that type holds it (see VariantConverter).
+
+        @returns False when nothing was written: the handle is not valid, the type is not one a
+                 uniform takes, or the value of a point, a rectangle or an array is not made of
+                 numbers.
+    */
+    static bool setUniform (ShaderUniforms& uniforms, ShaderUniforms::MemberHandle member, ComponentProperty::Type type, const var& value);
+
     /** Returns how many pictures a shader reads, given the properties it is filled from.
 
         A texture of the shader that an array Property has the name of is no picture: it is
@@ -311,8 +329,10 @@ public:
     void releaseResources() override;
 
 private:
+    struct ShaderMembers;
     struct SeriesTextures;
 
+    void resolveShader();
     void updateFrameAttachment();
     void advance (double elapsedSeconds);
     GpuTexture::Ptr render (Graphics& g, const GpuTexture::Ptr& input);
@@ -324,7 +344,12 @@ private:
     GpuDevice::Ptr targetDevice;
     GpuTarget::Ptr target;
     GpuTexture::Ptr drawnInput;
+
+    // Both the uniforms of the shader, kept from a paint to the next: the ones a paint fills, and the ones drawn last
+    ShaderUniforms filledUniforms;
     ShaderUniforms drawnUniforms;
+
+    std::unique_ptr<ShaderMembers> members;
     std::unique_ptr<SeriesTextures> series;
     std::optional<FrameAttachment> frameAttachment;
     double time = 0.0;

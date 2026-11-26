@@ -130,6 +130,30 @@ bool hasAncestorInSet (Component& component, const Component& root, const std::s
     return false;
 }
 
+int countAncestors (const Component& component)
+{
+    int count = 0;
+
+    for (auto* parent = component.getParentComponent(); parent != nullptr; parent = parent->getParentComponent())
+        ++count;
+
+    return count;
+}
+
+/* Tells whether a property is a state of the component alone: one a pseudo-class reads on the component, that each
+   component it changes for is told about, and that no descendant takes from it as it would a value of its store. */
+bool isOwnStyleState (const Component& component, const Identifier& name)
+{
+    const auto* descriptor = component.getTypeInfo().findProperty (name);
+
+    // No property: each component the focus is within is told
+    if (descriptor == nullptr)
+        return name == StringRef ("focus-within");
+
+    // The enablement is told to each descendant it changes for
+    return descriptor->isStateBacked() && (descriptor->isState || name == StringRef ("enabled"));
+}
+
 /* The type an animated value interpolates as, guessed from the value when no descriptor types it. */
 ComponentProperty::Type inferAnimatedType (const ComponentProperty* descriptor, const var& value)
 {
@@ -232,6 +256,13 @@ struct StyleContext::ComponentCache
     String drawingName;
     DrawingStyle::Ptr drawingStyle;
     StyledOverride<ComponentStyle::Ptr> drawingOverride;
+
+    // The drawing made again here for one the component was given itself, kept to tell it from another one set since
+    DrawingStyle::Ptr attachedDrawing;
+
+    // What the context had loaded of its shaders when each of these drawings was last found to run them
+    std::optional<uint32> drawingShaderGeneration;
+    std::optional<uint32> attachedShaderGeneration;
 
     String effectName;
     StyledOverride<ComponentEffect::Ptr> effectOverride;
@@ -365,6 +396,23 @@ bool StyleContext::isManagedPopup (const Component& component) const noexcept
     return false;
 }
 
+bool StyleContext::isInsidePopup (const Component& component) const noexcept
+{
+    if (popups->empty())
+        return false;
+
+    for (auto* current = &component; current != nullptr; current = current->getParentComponent())
+    {
+        if (isManagedPopup (*current))
+            return true;
+
+        if (current == &root)
+            break;
+    }
+
+    return false;
+}
+
 Component* StyleContext::findPopupOwner (const Component& component) const noexcept
 {
     if (const auto it = popups->find (const_cast<Component*> (&component));
@@ -409,6 +457,7 @@ void StyleContext::resetCompiledValues()
             cache.drawingName = {};
             cache.drawingStyle = nullptr;
             cache.drawingOverride = {};
+            cache.attachedDrawing = nullptr;
         }
     }
 
@@ -426,13 +475,21 @@ void StyleContext::resetCompiledValues()
 
 void StyleContext::markDirty (Component& component)
 {
+    addDirtyComponent (component, true);
+}
+
+void StyleContext::addDirtyComponent (Component& component, bool withDescendants)
+{
     // The frame that follows restyles the component before it is painted
     frameAttachment.setActive (true);
 
-    if (! dirtyComponents.isEmpty() && dirtyComponents.getLast().get() == &component)
+    if (! dirtyComponents.empty() && dirtyComponents.back().component.get() == &component)
+    {
+        dirtyComponents.back().withDescendants |= withDescendants;
         return;
+    }
 
-    dirtyComponents.add (WeakReference<Component> (&component));
+    dirtyComponents.push_back ({ WeakReference<Component> (&component), withDescendants });
 }
 
 void StyleContext::propertyChanged (Component& component, const Identifier& name)
@@ -441,7 +498,8 @@ void StyleContext::propertyChanged (Component& component, const Identifier& name
 
     if (styleSheet != nullptr && styleSheet->watchesProperty (name))
     {
-        markDirty (component);
+        // A state the rules read on the component they match alone leaves its descendants to what its restyle changes
+        addDirtyComponent (component, styleSheet->watchesPropertyForDescendants (name) || ! isOwnStyleState (component, name));
     }
     else if (! isRestyling && name == paletteProperty)
     {
@@ -479,7 +537,7 @@ void StyleContext::refresh (double elapsedSeconds)
     }
 
     // With every style applied and nothing left running, the window is free to skip its frames
-    frameAttachment.setActive (! dirtyComponents.isEmpty() || animator.isAnimating());
+    frameAttachment.setActive (! dirtyComponents.empty() || animator.isAnimating());
 }
 
 void StyleContext::themeChanged()
@@ -489,14 +547,14 @@ void StyleContext::themeChanged()
 
 void StyleContext::restyleNow()
 {
-    if (dirtyComponents.isEmpty())
+    if (dirtyComponents.empty())
         return;
 
     const ScopedValueSetter<bool> restyling (isRestyling, true);
     diagnostics.clear();
     refreshShaders();
 
-    for (int pass = 0; pass < 4 && ! dirtyComponents.isEmpty(); ++pass)
+    for (int pass = 0; pass < 4 && ! dirtyComponents.empty(); ++pass)
     {
         const LayoutComponent::ScopedLayoutBatch layouts;
 
@@ -505,16 +563,56 @@ void StyleContext::restyleNow()
 
         std::vector<Component*> ordered;
         std::set<Component*> candidates;
+        std::vector<std::pair<int, Component*>> states;
+        std::set<Component*> stateCandidates;
 
         for (const auto& dirty : pending)
         {
-            auto* component = dirty.get();
+            auto* component = dirty.component.get();
 
             if (component == nullptr || (! isManagedByRoot (*component, root) && ! isManagedPopup (*component)))
                 continue;
 
+            // A popup is styled as a child of its owner and not of its parent: what is in one takes its descendants along
+            if (! dirty.withDescendants && ! isInsidePopup (*component))
+            {
+                if (stateCandidates.insert (component).second)
+                    states.emplace_back (countAncestors (*component), component);
+
+                continue;
+            }
+
             if (candidates.insert (component).second)
                 ordered.push_back (component);
+        }
+
+        // The components a state of their own changed on are restyled alone, the parents first. One whose style changed
+        // takes its descendants along, which read it, and is then a component restyled with them like the others
+        if (candidates.find (&root) == candidates.end())
+        {
+            std::stable_sort (states.begin(), states.end(), [] (const auto& a, const auto& b)
+            {
+                return a.first < b.first;
+            });
+
+            std::set<Component*> changed;
+
+            for (const auto& state : states)
+            {
+                auto* component = state.second;
+
+                if (candidates.find (component) != candidates.end() || hasAncestorInSet (*component, root, candidates))
+                    continue;
+
+                if (restyleSubtree (*component, collectInherited (*component), true))
+                {
+                    candidates.insert (component);
+                    changed.insert (component);
+                }
+            }
+
+            if (! changed.empty())
+                markReadersDirty (changed);
         }
 
         const bool rootRestyled = candidates.find (&root) != candidates.end();
@@ -557,22 +655,33 @@ void StyleContext::restyleNow()
 
 //==============================================================================
 
-void StyleContext::restyleSubtree (Component& component, const DeclarationMap& inherited)
+/* Restyles a component, then its descendants: all of them, or only when the restyle changed the style of the component
+   for one that is dirty by a state of its own. Returns whether the descendants were restyled. */
+bool StyleContext::restyleSubtree (Component& component, const DeclarationMap& inherited, bool descendantsOnlyWhenChanged)
 {
     if (&component != &root && component.getStyleContext() != nullptr)
-        return;
+        return false;
 
     if (const auto* menu = dynamic_cast<const PopupMenu*> (&component); menu != nullptr && menu->isSubmenu())
-        return;
+        return false;
 
-    DeclarationMap inheritedForChildren;
+    std::optional<DeclarationMap> popupInherited;
+    const auto* base = &inherited;
+
     if (isManagedPopup (component))
-        applyToComponent (component, collectInherited (component), inheritedForChildren);
-    else
-        applyToComponent (component, inherited, inheritedForChildren);
+        base = &popupInherited.emplace (collectInherited (component));
+
+    // The children inherit what the component does, as it is, unless the component adds to it
+    DeclarationMap extended;
+    const bool changed = applyToComponent (component, *base, extended);
+    const auto& inheritedForChildren = extended.empty() ? *base : extended;
 
     if (auto* menu = dynamic_cast<PopupMenu*> (&component))
         menu->refreshSubmenuStyle();
+
+    // No rule reads the state for the descendants: it reaches them through what they read of the style of the component
+    if (descendantsOnlyWhenChanged && ! changed)
+        return false;
 
     for (int i = 0; i < component.getNumChildComponents(); ++i)
         if (auto* child = component.getChildComponent (i))
@@ -601,9 +710,11 @@ void StyleContext::restyleSubtree (Component& component, const DeclarationMap& i
             if (auto* popup = popupRef.get())
                 restyleSubtree (*popup, collectInherited (*popup));
     }
+
+    return true;
 }
 
-StyleContext::DeclarationMap StyleContext::collectInherited (Component& component) const
+StyleContext::DeclarationMap StyleContext::collectInherited (Component& component)
 {
     std::vector<Component*> chain;
 
@@ -633,23 +744,26 @@ StyleContext::DeclarationMap StyleContext::collectInherited (Component& componen
     return inherited;
 }
 
-void StyleContext::collectDeclarations (Component& component, DeclarationMap& direct, DeclarationMap& qualified) const
+void StyleContext::collectDeclarations (Component& component, DeclarationMap& direct, DeclarationMap& qualified)
 {
     if (styleSheet == nullptr)
         return;
 
     auto* parentOverride = findPopupOwner (component);
 
-    for (const auto& rule : styleSheet->getRules())
+    // The rules the component can match, in the order of the sheet: the others need an id, a class or a type it has not
+    styleSheet->findCandidateRules (component, candidateRules);
+
+    for (const auto* rule : candidateRules)
     {
-        if (! rule.selector.matches (component, &root, parentOverride))
+        if (! rule->selector.matches (component, &root, parentOverride))
             continue;
 
-        const auto specificity = rule.selector.getSpecificity();
+        const auto specificity = rule->selector.getSpecificity();
 
-        for (const auto& declaration : rule.declarations)
+        for (const auto& declaration : rule->declarations)
         {
-            const ResolvedDeclaration resolved { &declaration, specificity, rule.order, true };
+            const ResolvedDeclaration resolved { &declaration, specificity, rule->order, true };
             auto& target = declaration.qualifier.isValid() ? qualified : direct;
             const auto& key = declaration.cascadeKey.isValid() ? declaration.cascadeKey : declaration.name;
 
@@ -658,7 +772,10 @@ void StyleContext::collectDeclarations (Component& component, DeclarationMap& di
     }
 }
 
-void StyleContext::applyToComponent (Component& component, const DeclarationMap& inherited, DeclarationMap& inheritedForChildren)
+/* Applies the rules matching a component to it. `extended` is left empty when the children of the component inherit
+   what it does, and else receives what they inherit. Returns whether anything of the style of the component changed,
+   which is what its descendants may read of it. */
+bool StyleContext::applyToComponent (Component& component, const DeclarationMap& inherited, DeclarationMap& extended)
 {
     // What its last paint found of the shaders the component is drawn with, before any of them is replaced
     reportShaderFailures (component);
@@ -666,11 +783,17 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     DeclarationMap direct, qualified;
     collectDeclarations (component, direct, qualified);
 
-    // The qualified declarations of the ancestors keep flowing down, the closer ones winning
-    inheritedForChildren = inherited;
+    // The qualified declarations of the ancestors keep flowing down, the closer ones winning: as they are, unless the
+    // component has its own
+    if (! qualified.empty())
+    {
+        extended = inherited;
 
-    for (const auto& [key, declaration] : qualified)
-        mergeResolvedDeclaration (inheritedForChildren, key, declaration);
+        for (const auto& [key, declaration] : qualified)
+            mergeResolvedDeclaration (extended, key, declaration);
+    }
+
+    const auto& inheritedForChildren = qualified.empty() ? inherited : extended;
 
     // An inherited qualified declaration applies when the component is of the type it names
     const auto& typeInfo = component.getTypeInfo();
@@ -696,7 +819,9 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
                                     : nullptr;
 
     if (explicitDrawing != nullptr)
-        explicitDrawing = attachDrawingShaders (component, *explicitDrawing);
+        explicitDrawing = attachDrawingShaders (component, cache, *explicitDrawing);
+    else
+        cache.attachedDrawing = nullptr;
 
     using LayoutEffect = ComponentProperty::LayoutEffect;
     bool ownLayoutChanged = false;
@@ -732,6 +857,9 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
 
     if (direct.empty())
     {
+        // Every value the style holds is cleared below, with whatever a descendant read of them
+        bool hadValues = false;
+
         if (const auto* styleState = component.styleState.get())
         {
             const auto& computed = styleState->getComputedValues();
@@ -741,6 +869,8 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
             const auto& animated = styleState->getAnimatedValues();
             for (int i = 0; i < animated.size(); ++i)
                 recordStoredLayoutEffect (animated.getName (i));
+
+            hadValues = computed.size() > 0 || animated.size() > 0;
         }
 
         animator.removeComponent (component);
@@ -755,7 +885,7 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
             component.repaint();
 
         notifyLayoutEffects();
-        return;
+        return changed || hadValues || firstStyle;
     }
 
     auto& state = component.getOrCreateStyleState();
@@ -976,9 +1106,12 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
             recordStoredLayoutEffect (storageId);
     }
 
-    // A property the component holds itself can only be styled through its setter
+    // A property the component holds itself can only be styled through its setter. One the component was given another
+    // value of since is set again here with no value of the style changing: its descendants read it as they do the others
+    bool stateChanged = false;
+
     for (const auto& storageId : touched)
-        syncStateBacked (component, cache, storageId);
+        stateChanged |= syncStateBacked (component, cache, storageId);
 
     changed |= applyEffects (component, cache, cursorDecl, effectDecl, shadowDecl, glowDecl, &paletteDependent);
     cache.paletteDependent = paletteDependent;
@@ -994,6 +1127,7 @@ void StyleContext::applyToComponent (Component& component, const DeclarationMap&
     }
 
     notifyLayoutEffects();
+    return changed || stateChanged || firstStyle;
 }
 
 //==============================================================================
@@ -1112,33 +1246,35 @@ bool StyleContext::evaluate (Component& component,
     return ! result.isVoid();
 }
 
-void StyleContext::syncStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId)
+/* Gives the component the value its style has for a property it holds itself. Returns whether that changed the component. */
+bool StyleContext::syncStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId)
 {
     if (storageId == styleContextTransformId)
     {
         const auto* styled = component.styleState != nullptr ? component.styleState->getStyleValue (storageId) : nullptr;
-        component.setStyleTransform (styled != nullptr ? VariantConverter<AffineTransform>::fromVar (*styled) : AffineTransform());
-        return;
+        const auto next = styled != nullptr ? VariantConverter<AffineTransform>::fromVar (*styled) : AffineTransform();
+        const bool differs = (component.styleState != nullptr ? component.styleState->getStyleTransform() : AffineTransform()) != next;
+
+        component.setStyleTransform (next);
+        return differs;
     }
 
     // The paint margin a rule sets is widened by what the shadows and the filter reach, so it is set with them
     if (storageId == styleContextFilterStorageId || storageId == styleContextPaintMarginId)
-    {
-        syncStyledFilterAndMargins (component, cache);
-        return;
-    }
+        return syncStyledFilterAndMargins (component, cache);
 
     const auto* descriptor = findStoredProperty (component.getTypeInfo(), storageId);
 
     if (descriptor == nullptr || ! descriptor->isStateBacked() || descriptor->setter == nullptr)
-        return;
+        return false;
 
     const auto* styled = component.styleState != nullptr ? component.styleState->getStyleValue (storageId) : nullptr;
 
     if (styled == nullptr)
     {
+        const bool isRestored = cache.savedState.contains (storageId);
         restoreStateBacked (component, cache, storageId);
-        return;
+        return isRestored;
     }
 
     const auto value = *styled;
@@ -1146,8 +1282,11 @@ void StyleContext::syncStateBacked (Component& component, ComponentCache& cache,
     if (! cache.savedState.contains (storageId))
         cache.savedState.set (storageId, descriptor->getter (component));
 
-    if (! descriptor->getter (component).equals (value))
-        descriptor->setter (component, value);
+    if (descriptor->getter (component).equals (value))
+        return false;
+
+    descriptor->setter (component, value);
+    return true;
 }
 
 void StyleContext::restoreStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId)
@@ -1184,7 +1323,7 @@ const DrawingStyle* StyleContext::installDrawing (Component& component, Componen
     if (cache.drawingName == name
         && cache.drawingStyle != nullptr
         && cache.drawingOverride.isActive (component, getStyle)
-        && ! holdsOtherShaders (*cache.drawingStyle))
+        && runsLoadedShaders (*cache.drawingStyle, cache.drawingShaderGeneration))
     {
         return cache.drawingStyle.get();
     }
@@ -1221,6 +1360,7 @@ const DrawingStyle* StyleContext::installDrawing (Component& component, Componen
 
     cache.drawingName = name;
     cache.drawingStyle = created.getReference();
+    cache.drawingShaderGeneration.reset();
     cache.drawingOverride.apply (component, ComponentStyle::Ptr (cache.drawingStyle.get()), getStyle, setStyle);
     return cache.drawingStyle.get();
 }
@@ -1288,12 +1428,16 @@ DrawingStyle::Shader StyleContext::findDrawingShader (const String& name)
    before the shader was there, or the one its file was loaded as before it changed. */
 bool StyleContext::holdsOtherShaders (const DrawingStyle& drawing)
 {
+    if (styleSheet == nullptr)
+        return false;
+
     for (const auto& used : drawing.getShaders())
     {
         const auto name = used.block.getProperty ("name").toString();
+        const auto block = styleSheet->findShader (name);
 
         // A shader of another block is not one of the sheet, whatever its name: nothing is loaded for it
-        if (styleSheet == nullptr || ! styleSheet->findShader (name).isEquivalentTo (used.block))
+        if (block != used.block && ! block.isEquivalentTo (used.block))
             continue;
 
         if (const auto* loaded = findShader (name); loaded != nullptr && loaded->shader != used.shader)
@@ -1303,12 +1447,33 @@ bool StyleContext::holdsOtherShaders (const DrawingStyle& drawing)
     return false;
 }
 
+/* Tells whether a drawing the context keeps for a component runs the shaders the sheet has loaded. It does while none is
+   loaded after it was found to, so it is compared with them again only once one was. */
+bool StyleContext::runsLoadedShaders (const DrawingStyle& drawing, std::optional<uint32>& generation)
+{
+    if (generation == shaderGeneration)
+        return true;
+
+    if (holdsOtherShaders (drawing))
+        return false;
+
+    generation = shaderGeneration;
+    return true;
+}
+
 /* A drawing set on the component itself, by its element or from C++, runs the shaders of the sheet as one a rule selects
    does: it is made again with the ones the sheet has loaded when it holds others, which repaints the component. The
    builder of a document makes such a drawing before the sheet is there, with no shader at all. */
-const DrawingStyle* StyleContext::attachDrawingShaders (Component& component, const DrawingStyle& drawing)
+const DrawingStyle* StyleContext::attachDrawingShaders (Component& component, ComponentCache& cache, const DrawingStyle& drawing)
 {
-    if (! holdsOtherShaders (drawing))
+    // Only the drawing made here is kept, so only that one is known to be the one compared before
+    if (cache.attachedDrawing.get() != &drawing)
+        cache.attachedDrawing = nullptr;
+
+    const bool isCurrent = cache.attachedDrawing != nullptr ? runsLoadedShaders (drawing, cache.attachedShaderGeneration)
+                                                            : ! holdsOtherShaders (drawing);
+
+    if (isCurrent)
         return &drawing;
 
     DataTreeDiagnostic failure;
@@ -1320,6 +1485,8 @@ const DrawingStyle* StyleContext::attachDrawingShaders (Component& component, co
         return &drawing;
     }
 
+    cache.attachedDrawing = remade.getReference();
+    cache.attachedShaderGeneration.reset();
     component.setStyle (remade.getReference());
     return remade.getReference().get();
 }
@@ -1636,6 +1803,9 @@ bool StyleContext::loadShader (const String& name, ShaderEntry& entry)
     entry.loaded.shader = created.getValue();
     entry.loaded.properties = std::move (properties);
     entry.drawProblems.clear();
+
+    // The drawings made with the shaders loaded before are compared with them again
+    ++shaderGeneration;
     return true;
 }
 
@@ -2274,9 +2444,11 @@ void StyleContext::release (Component& subtreeRoot, ReleaseMode mode)
     {
         animator.removeComponent (component);
 
-        for (int i = dirtyComponents.size(); --i >= 0;)
-            if (dirtyComponents.getReference (i).get() == &component || dirtyComponents.getReference (i).get() == nullptr)
-                dirtyComponents.remove (i);
+        std::erase_if (dirtyComponents, [&component] (const DirtyComponent& dirty)
+        {
+            const auto* dirtyComponent = dirty.component.get();
+            return dirtyComponent == &component || dirtyComponent == nullptr;
+        });
 
         const auto it = caches->find (&component);
         auto* cache = it != caches->end() ? &it->second : nullptr;
@@ -2315,6 +2487,7 @@ void StyleContext::detach()
     popups->clear();
     clearAllCaches();
     shaders->clear();
+    ++shaderGeneration;
     animator.clear();
     dirtyComponents.clear();
     diagnostics.clear();
@@ -2430,6 +2603,47 @@ void StyleContext::invalidateDependencies (const Component& sourceComponent, con
         });
 
         if (matched)
+            markDirty (*styled);
+    }
+}
+
+/* The values reading a component by its name, as `knob.thumbColor`, read what the sheet computed for it too, which no
+   listener is told about. They followed the restyle of everything a state used to cause: the components holding them
+   follow the ones a state restyled with their descendants, in the pass that comes next. One restyled with what it
+   reads, below the same component, has read it. */
+void StyleContext::markReadersDirty (const std::set<Component*>& restyled)
+{
+    const auto findRestyled = [this, &restyled] (const Component* component) -> const Component*
+    {
+        for (; component != nullptr; component = component->getParentComponent())
+        {
+            if (restyled.find (const_cast<Component*> (component)) != restyled.end())
+                return component;
+
+            if (component == &root)
+                break;
+        }
+
+        return nullptr;
+    };
+
+    for (const auto& [ptr, cache] : *caches)
+    {
+        auto* styled = cache.component.get();
+        if (styled == nullptr || styled != ptr)
+            continue;
+
+        const bool reads = std::any_of (cache.values.begin(), cache.values.end(), [&] (const auto& entry)
+        {
+            const auto& dependencies = entry.second.dependencies;
+            return std::any_of (dependencies.begin(), dependencies.end(), [&] (const auto& dependency)
+            {
+                const auto* source = findRestyled (dependency.component);
+                return source != nullptr && source != findRestyled (styled);
+            });
+        });
+
+        if (reads)
             markDirty (*styled);
     }
 }

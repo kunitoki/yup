@@ -222,6 +222,19 @@ struct DrawingStyle::Node
         return std::any_of (markers.begin(), markers.end(), [] (int marker) { return marker >= 0; });
     }
 
+    /* Whether what the node paints is not told by its program alone: a part is painted by the component, an image
+       is looked for while painting, the markers of a shape are evaluated for every shape having them, and the time
+       a shader is given goes by. A tile or a filtered layer that is not static is drawn again at every paint when
+       it holds one. */
+    bool paintsMoreThanItReads() const noexcept
+    {
+        return kind == Kind::part
+            || kind == Kind::image
+            || (kind == Kind::svg && ! svgInlineOnly)
+            || hasMarkers()
+            || (shader != nullptr && shader->isGivenTime);
+    }
+
     Kind kind = Kind::shape;
 
     // The element the node was compiled from: its path in the drawing, as problems tell it, its name and its id
@@ -238,16 +251,21 @@ struct DrawingStyle::Node
     // Repeats holding containers: they are drawn turn after turn, and this is where the index of the turn is kept
     int loopLevel = -1;
 
-    // Groups drawing their children in a rectangle of their own: the level of its bounds, and how it is mapped
+    // Groups drawing their children in a rectangle of their own: the level of its bounds, and how it is mapped.
+    // A pattern has one for its tile, and a filtered layer is given the level its first group would take: the
+    // levels below it are the bounds their elements read from around them
     int boundsLevel = -1;
     bool mapsToArea = false;
     bool clipsToArea = false;
 
-    // Patterns and filtered layers: what they draw is only drawn again when it changes
+    // Patterns and filtered layers: what they draw never changes, as their elements only read what they set
+    // themselves. The others are drawn again when what their elements read changes
     bool isStatic = true;
 
-    // Layers: the filter they are drawn through. Filters: their primitives are their children
+    // Layers: the filter they are drawn through, and where the style keeps what it draws of them.
+    // Filters: their primitives are their children
     std::unique_ptr<Node> filter;
+    int filterIndex = -1;
     std::unique_ptr<FilterPrimitive> filterPrimitive;
     bool linearColors = false;
 
@@ -338,6 +356,9 @@ struct DrawingStyle::Compiled
     /* The nodes running a shader, in the order a style keeps what it found for each. */
     std::vector<const Node*> shaders;
 
+    /* The layers drawn through a filter, in the order a style keeps what it draws of each. */
+    std::vector<const Node*> filtered;
+
     /* The rectangles `bounds` can be: the one of the component, then one per group with bounds of its own. */
     int numLevels = 1;
 
@@ -353,6 +374,9 @@ struct DrawingStyle::Slot
     ExpressionDrawing::Cache cache;
     std::map<String, Image> imageCache;
     std::map<String, std::shared_ptr<Drawable>> svgCache;
+
+    // The revisions of the patterns the node paints with, added up, as they were when it was last prepared
+    uint32 patternRevisions = 0;
 };
 
 /* What a style keeps for a shader it runs: the shader its resolver found and, for one it paints, the texture it was drawn
@@ -405,11 +429,25 @@ struct DrawingStyle::PatternSource final : PaintSource
     AffineTransform contentTransform;
     PatternPaint paint;
     uint32 preparedSerial = 0;
+
+    // The font the tile was last asked to be drawn with, and how many times it was asked to be drawn again
+    Font font;
+    uint32 revision = 0;
 };
 
 /* Draws the elements of a layer for its filter. */
 struct DrawingStyle::FilterSource final : PaintSource
 {
+    /* What the elements take from the Graphics the layer is drawn in when they set no paint of their own. */
+    struct Paint
+    {
+        Color fill, stroke;
+        StrokeType strokeType;
+        float feather = 0.0f;
+
+        bool operator== (const Paint&) const = default;
+    };
+
     FilterSource (DrawingStyle& ownerToUse, const Node& nodeToDraw)
         : owner (ownerToUse)
         , node (nodeToDraw)
@@ -425,6 +463,14 @@ struct DrawingStyle::FilterSource final : PaintSource
     Rectangle<float> region;
     const Graphics* parent = nullptr;
     int numRows = 1;
+
+    // What the elements were last asked to be drawn with, beside what their programs read
+    Font font;
+    Paint paint;
+    int numLoopTurns = 1;
+
+    // The filter of the last paint, whose primitives are written again in place
+    FilterGraph graph;
 };
 
 //==============================================================================
@@ -2022,7 +2068,11 @@ private:
         auto* const outerPattern = pattern;
 
         if (isFiltered)
+        {
             node->boundsLevel = numLevels;
+            node->filterIndex = (int) result.filtered.size();
+            result.filtered.push_back (node.get());
+        }
 
         {
             const ScopedValueSetter<Node*> compiling (pattern, isFiltered ? node.get() : pattern);
@@ -2830,16 +2880,21 @@ public:
                                           const DrawingResolver& drawingResolver,
                                           const ShaderResolver& shaderResolver)
     {
+        const auto shape = getShape (drawing);
+
         for (auto it = entries.begin(); it != entries.end();)
         {
-            auto candidate = it->compiled.lock();
-            if (candidate == nullptr)
+            if (it->compiled.expired())
             {
                 it = entries.erase (it);
                 continue;
             }
 
-            if (it->drawing.isEquivalentTo (drawing)
+            // Most entries are told apart by their shape alone, without comparing their trees
+            auto candidate = it->shape == shape ? it->compiled.lock() : nullptr;
+
+            if (candidate != nullptr
+                && it->drawing.isEquivalentTo (drawing)
                 && std::all_of (candidate->symbols.begin(), candidate->symbols.end(), [&] (const auto& symbol)
                 {
                     return scope.resolveSymbol (symbol.first) == symbol.second;
@@ -2886,15 +2941,37 @@ public:
         }),
                        entries.end());
 
-        entries.push_back ({ drawing.clone(), compiled });
+        entries.push_back ({ drawing.clone(), getShape (drawing), compiled });
     }
 
 private:
     struct Entry
     {
         DataTree drawing;
+        size_t shape = 0;
         std::weak_ptr<const Compiled> compiled;
     };
+
+    /* A number that trees which are equivalent share: the type of the root with how many properties and children
+       it has, then the same of each of its children. Those are compared exactly, when the value of a property can
+       be equal to another in more than one form. */
+    static size_t getShape (const DataTree& tree)
+    {
+        const auto add = [] (size_t shape, const DataTree& element)
+        {
+            for (const auto part : { std::hash<Identifier>() (element.getType()), (size_t) element.getNumProperties(), (size_t) element.getNumChildren() })
+                shape = shape * 1000003 + part;
+
+            return shape;
+        };
+
+        auto shape = add (0, tree);
+
+        for (const auto& child : tree)
+            shape = add (shape, child);
+
+        return shape;
+    }
 
     std::vector<Entry> entries;
 };
@@ -2952,6 +3029,9 @@ void DrawingStyle::instantiate (std::shared_ptr<const Compiled> compiledToUse, c
 
     for (const auto& pattern : compiled->patterns)
         patternSources.push_back (std::make_unique<PatternSource> (*this, *pattern));
+
+    for (const auto* layer : compiled->filtered)
+        filterSources.push_back (std::make_unique<FilterSource> (*this, *layer));
 
     // The compilation is shared with styles finding other shaders under the same names, so each keeps the ones it found
     bool isGivenTime = false;
@@ -3118,7 +3198,7 @@ void DrawingStyle::releaseResources()
     for (auto& source : patternSources)
         source->releaseResources();
 
-    for (auto& [node, source] : filterSources)
+    for (auto& source : filterSources)
         source->releaseResources();
 }
 
@@ -3158,7 +3238,7 @@ void DrawingStyle::setImageResolver (ImageResolver newResolver)
     for (auto& source : patternSources)
         source->markDirty();
 
-    for (auto& [node, source] : filterSources)
+    for (auto& source : filterSources)
         source->markDirty();
 
     if (auto* target = targetComponent.get())
@@ -3226,6 +3306,11 @@ std::vector<DrawingStyle::ElementBounds> DrawingStyle::measureElements (const Co
     const ScopedValueSetter<const Font*> painting (paintFont, std::addressof (font));
     const ScopedValueSetter<const Component*> painted (paintedComponent, std::addressof (component));
     measureNodes (compiled->nodes, { font, bounds, {} }, {}, 1, measured);
+
+    // The elements of the filtered layers were evaluated here, where nothing is drawn: what is kept of them
+    // can't be told from their states any more
+    for (auto& source : filterSources)
+        source->markDirty();
 
     return measured;
 }
@@ -3490,26 +3575,31 @@ void DrawingStyle::measureFilterShaders (const Node& filterNode,
             measured.push_back ({ child->path, child->type, child->id, region.transformed (transform), {}, numRows, readFilterUniforms (*child, context, region, transform, 1.0f) });
 }
 
-DrawingStyle::Slot* DrawingStyle::prepare (const Node& node, const PaintContext& context)
+/* Gives the state of a node what its program reads, but the turns of the repeats around it: the component, the font,
+   the properties of the drawing, the bounds of the levels below a given one and the patterns defined below it.
+   Returns the revisions of the patterns the node paints with, added up. */
+uint32 DrawingStyle::feedInputs (const Node& node, Slot& slot, const PaintContext& context, int numLevels)
 {
-    if (node.slot < 0)
-        return nullptr;
-
-    auto& slot = slots[(size_t) node.slot];
     const auto& base = getDrawingBaseContext();
+    uint32 patternRevisions = 0;
 
     slot.state->set (base.bounds, levelBounds.front());
     slot.state->set (base.font, context.font);
     scope.updateInputs (slot.inputs, *slot.state);
 
     for (const auto& input : node.levels)
-        slot.state->set (ExpressionInput<Rectangle<float>> { input.input }, levelBounds[(size_t) input.index]);
-
-    for (const auto& input : node.loops)
-        slot.state->set (ExpressionInput<int> { input.input }, loopIndices[(size_t) input.index]);
+        if (input.index < numLevels)
+            slot.state->set (ExpressionInput<Rectangle<float>> { input.input }, levelBounds[(size_t) input.index]);
 
     for (const auto& input : node.patterns)
-        slot.state->set (ExpressionInput<PatternPaint> { input.input }, preparePattern (input.index, context).paint);
+    {
+        auto& pattern = *patternSources[(size_t) input.index];
+
+        if (pattern.node.boundsLevel < numLevels)
+            slot.state->set (ExpressionInput<PatternPaint> { input.input }, preparePattern (input.index, context).paint);
+
+        patternRevisions += pattern.revision;
+    }
 
     for (const auto& input : node.properties)
     {
@@ -3526,7 +3616,83 @@ DrawingStyle::Slot* DrawingStyle::prepare (const Node& node, const PaintContext&
             DrawingScope::setInputValue (*slot.state, input.input, property.type, property.elementType, value, propertyArrays[(size_t) input.property]);
     }
 
+    return patternRevisions;
+}
+
+DrawingStyle::Slot* DrawingStyle::prepare (const Node& node, const PaintContext& context)
+{
+    if (node.slot < 0)
+        return nullptr;
+
+    auto& slot = slots[(size_t) node.slot];
+
+    slot.patternRevisions = feedInputs (node, slot, context, compiled->numLevels);
+
+    for (const auto& input : node.loops)
+        slot.state->set (ExpressionInput<int> { input.input }, loopIndices[(size_t) input.index]);
+
     return &slot;
+}
+
+/* Tells whether the elements of a tile or of a filtered layer may draw something else than they did the last time
+   they were drawn, without evaluating them: they can't while each of their programs still reads what it was last
+   evaluated with, which was when they were drawn. Whatever evaluates them elsewhere, as measuring or drawing a
+   layer without its filter do, has to mark what is kept of them. Only what comes from around them is given to
+   their programs: the levels from the given one on, the patterns defined there and the turns of the repeats, none
+   of which is around a tile or a filtered layer, are made of what the elements before them read. What a repeat
+   draws turn after turn is told for all its turns. */
+bool DrawingStyle::hasContentChanged (const std::vector<std::unique_ptr<Node>>& nodes, const PaintContext& context, int numLevels, bool isDrawnByTurns)
+{
+    // The ones that always may are found before anything is given to the programs of the others
+    const bool holdsMoreThanIsRead = std::any_of (nodes.begin(), nodes.end(), [] (const auto& node)
+    {
+        return node->paintsMoreThanItReads();
+    });
+
+    return holdsMoreThanIsRead || std::any_of (nodes.begin(), nodes.end(), [&] (const auto& node)
+    {
+        return hasContentChanged (*node, context, numLevels, isDrawnByTurns);
+    });
+}
+
+bool DrawingStyle::hasContentChanged (const Node& node, const PaintContext& context, int numLevels, bool isDrawnByTurns)
+{
+    if (node.paintsMoreThanItReads())
+        return true;
+
+    if (node.slot >= 0)
+    {
+        auto& slot = slots[(size_t) node.slot];
+        const auto& state = *slot.state;
+
+        // The tile of a pattern drawn again since the node was drawn changes what the node paints
+        if (feedInputs (node, slot, context, numLevels) != slot.patternRevisions || ! state.isUpToDate())
+            return true;
+
+        // What the node holds was not drawn then, and would not be now. A state evaluated turn after turn only
+        // tells it of its last turn, so what it holds is looked at whatever it tells
+        const bool isHidden = (node.visible.isValid() && ! state.get (node.visible))
+                           || (node.opacity.isValid() && state.get (node.opacity) <= 0.0f)
+                           || (node.kind == Node::Kind::repeat && state.get (node.end) <= state.get (node.start));
+
+        if (isHidden && ! isDrawnByTurns)
+            return false;
+    }
+
+    for (const auto& input : node.patterns)
+    {
+        const auto& pattern = *compiled->patterns[(size_t) input.index];
+
+        if (pattern.boundsLevel >= numLevels && hasContentChanged (pattern, context, numLevels, false))
+            return true;
+    }
+
+    const bool holdsTurns = isDrawnByTurns || node.loopLevel >= 0;
+
+    return hasContentChanged (node.children, context, numLevels, holdsTurns)
+        || hasContentChanged (node.masks, context, numLevels, holdsTurns)
+        || hasContentChanged (node.clipShapes, context, numLevels, holdsTurns)
+        || (node.filter != nullptr && hasContentChanged (*node.filter, context, numLevels, holdsTurns));
 }
 
 /* Evaluates a pattern once per paint: where its tiles are, and whether the tile has to be drawn again. */
@@ -3554,8 +3720,19 @@ DrawingStyle::PatternSource& DrawingStyle::preparePattern (int index, const Pain
                                                            Justification (node.justification.isValid() ? state.get (node.justification) : Justification::center));
     }
 
-    if (! node.isStatic || tile != source.tile || contentBounds != source.contentBounds || contentTransform != source.contentTransform)
+    // A static tile only changes with where it is drawn, any other one with what its elements read too
+    const bool isKept = tile == source.tile
+                     && contentBounds == source.contentBounds
+                     && contentTransform == source.contentTransform
+                     && context.font == source.font
+                     && (node.isStatic || ! hasContentChanged (node.children, context, node.boundsLevel, false));
+
+    if (! isKept)
+    {
         source.markDirty();
+        source.font = context.font;
+        ++source.revision;
+    }
 
     source.tile = tile;
     source.contentBounds = contentBounds;
@@ -3567,10 +3744,14 @@ DrawingStyle::PatternSource& DrawingStyle::preparePattern (int index, const Pain
     return source;
 }
 
-void DrawingStyle::drawPattern (Graphics& g, const PatternSource& source)
+void DrawingStyle::drawPattern (Graphics& g, PatternSource& source)
 {
+    // A tile asked for outside of a paint is not drawn, and is not kept as if it were
     if (paintFont == nullptr)
+    {
+        source.markDirty();
         return;
+    }
 
     const auto savedState = g.saveState();
     const PaintContext context { *paintFont, source.tile.withZeroPosition(), g.getTransform() };
@@ -3918,6 +4099,10 @@ void DrawingStyle::drawNode (Graphics& g, const Node& node, const PaintContext& 
 
                 if (drawFilteredLayer (g, node, context, numRows))
                     break;
+
+                // Drawn as they are, the elements are evaluated where no raster is made of them: the one kept of
+                // them is no longer what their states tell
+                filterSources[(size_t) node.filterIndex]->markDirty();
             }
 
             if (opacity >= 1.0f && ! hasBlend && ! hasMasks)
@@ -4269,8 +4454,12 @@ bool DrawingStyle::drawFilteredLayer (Graphics& g, const Node& node, const Paint
     if (region.isEmpty())
         return false;
 
-    FilterGraph filter;
+    auto* const source = filterSources[(size_t) node.filterIndex].get();
+
+    // The primitives are written again over those of the last paint, which the source is only given when they differ
+    auto& filter = source->graph;
     filter.linearColors = filterNode.linearColors;
+    filter.primitives.clear();
 
     for (const auto& child : filterNode.children)
     {
@@ -4336,15 +4525,27 @@ bool DrawingStyle::drawFilteredLayer (Graphics& g, const Node& node, const Paint
         filter.primitives.push_back (std::move (primitive));
     }
 
-    auto& source = filterSources[std::addressof (node)];
-    if (source == nullptr)
-        source = std::make_unique<FilterSource> (*this, node);
+    // The elements are drawn again when what they are drawn with changed: the region, the paint and the font they
+    // start from, the turns their repeats are left and, unless the layer is static, what their programs read
+    const FilterSource::Paint inherited { g.getFillColor(), g.getStrokeColor(), g.getStrokeType(), g.getFeather() };
 
-    if (! node.isStatic || region != source->region)
+    const bool isKept = region == source->region
+                     && inherited == source->paint
+                     && numLoopTurns == source->numLoopTurns
+                     && context.font == source->font
+                     && (node.isStatic || ! hasContentChanged (node.children, context, node.boundsLevel, false));
+
+    if (! isKept)
+    {
         source->markDirty();
+        source->region = region;
+        source->paint = inherited;
+        source->numLoopTurns = numLoopTurns;
+        source->font = context.font;
+    }
 
-    source->region = region;
-    source->setFilter (std::move (filter));
+    if (source->getFilter() != filter)
+        source->setFilter (filter);
 
     // The source only draws while the layer is
     const ScopedValueSetter<const Graphics*> parentScope (source->parent, std::addressof (g));
@@ -4379,10 +4580,14 @@ bool DrawingStyle::drawFilteredLayer (Graphics& g, const Node& node, const Paint
     return drawn;
 }
 
-void DrawingStyle::drawFilteredContent (Graphics& g, const FilterSource& source)
+void DrawingStyle::drawFilteredContent (Graphics& g, FilterSource& source)
 {
+    // A layer asked for outside of its paint is not drawn, and is not kept as if it were
     if (paintFont == nullptr || source.parent == nullptr)
+    {
+        source.markDirty();
         return;
+    }
 
     const auto savedState = g.saveState();
 

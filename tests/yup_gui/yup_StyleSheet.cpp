@@ -179,6 +179,123 @@ TEST_F (StyleSheetTests, CollectsWatchedProperties)
     EXPECT_FALSE (sheet->watchesProperty (Identifier ("opacity")));
 }
 
+TEST_F (StyleSheetTests, TellsThePropertiesWhoseChangeReachesTheDescendants)
+{
+    const auto rule = [] (const String& selector, const String& name)
+    {
+        return DataTree ("rule", { { "selector", selector } }, { declaration (name, "1") });
+    };
+
+    auto sheet = build (DataTree ("style",
+                                  { rule ("Slider:hover", "opacity"),
+                                    rule (".row:pressed .icon", "opacity"),
+                                    rule ("ToggleButton:checked", "Slider.trackWidth"),
+                                    rule ("Label[title=\"a\"]", "opacity"),
+                                    rule ("#gain:focus", "opacity") }));
+
+    ASSERT_NE (sheet, nullptr);
+
+    // Read on the component a rule matches, by rules whose declarations stay on it
+    for (const auto* name : { "hovered", "focused" })
+    {
+        EXPECT_TRUE (sheet->watchesProperty (Identifier (name))) << name;
+        EXPECT_FALSE (sheet->watchesPropertyForDescendants (Identifier (name))) << name;
+    }
+
+    // Read before a combinator, by a rule the descendants inherit a declaration of, and as an attribute
+    for (const auto* name : { "pressed", "checked", "title" })
+    {
+        EXPECT_TRUE (sheet->watchesProperty (Identifier (name))) << name;
+        EXPECT_TRUE (sheet->watchesPropertyForDescendants (Identifier (name))) << name;
+    }
+
+    EXPECT_FALSE (sheet->watchesPropertyForDescendants (Identifier ("opacity")));
+}
+
+TEST_F (StyleSheetTests, FindsTheRulesAComponentCanMatchInSourceOrder)
+{
+    const auto rule = [] (const String& selector)
+    {
+        return DataTree ("rule", { { "selector", selector } }, { declaration ("opacity", "1") });
+    };
+
+    auto sheet = build (DataTree ("style",
+                                  { rule ("*"),                  // 0
+                                    rule ("Slider"),             // 1
+                                    rule ("Component"),          // 2
+                                    rule ("Label"),              // 3
+                                    rule (".knob"),              // 4
+                                    rule (".other"),             // 5
+                                    rule ("#gain"),              // 6
+                                    rule ("#pan"),               // 7
+                                    rule (".panel Slider.knob"), // 8
+                                    rule ("Slider#gain.wide"),   // 9
+                                    rule (":hover"),             // 10
+                                    rule ("[title=\"a\"]"),      // 11
+                                    rule (":root"),              // 12
+                                    rule (".panel > *"),         // 13
+                                    rule ("#gain, .other") }));  // 14 and 15
+
+    ASSERT_NE (sheet, nullptr);
+    ASSERT_EQ (sheet->getRules().size(), 16u);
+
+    const auto ordersOf = [] (const std::vector<const StyleSheet::Rule*>& rules)
+    {
+        std::vector<int> orders;
+
+        for (const auto* found : rules)
+            orders.push_back (found->order);
+
+        return orders;
+    };
+
+    Slider slider (Slider::LinearHorizontal, "gain");
+    slider.addStyleClass (Identifier ("knob"));
+
+    // The rules requiring nothing, then a type of the slider, one of its classes or its id: not another type, class or id
+    std::vector<const StyleSheet::Rule*> candidates;
+    sheet->findCandidateRules (slider, candidates);
+    EXPECT_EQ (ordersOf (candidates), (std::vector<int> { 0, 1, 2, 4, 6, 8, 9, 10, 11, 12, 13, 14 }));
+
+    // What the vector held is replaced, and a class set twice finds its rules once
+    Array<Identifier> twice;
+    twice.add (Identifier ("knob"));
+    twice.add (Identifier ("knob"));
+    slider.setStyleClasses (twice);
+
+    sheet->findCandidateRules (slider, candidates);
+    EXPECT_EQ (ordersOf (candidates), (std::vector<int> { 0, 1, 2, 4, 6, 8, 9, 10, 11, 12, 13, 14 }));
+
+    Component plain ("pan");
+    plain.addStyleClass (Identifier ("other"));
+    sheet->findCandidateRules (plain, candidates);
+    EXPECT_EQ (ordersOf (candidates), (std::vector<int> { 0, 2, 5, 7, 10, 11, 12, 13, 15 }));
+
+    // Every rule matching a component is among the ones found for it, in the same order
+    Label label;
+    label.setTitle ("a");
+    slider.setHovered (true);
+
+    for (auto* component : { static_cast<Component*> (&slider), &plain, static_cast<Component*> (&label) })
+    {
+        std::vector<int> scanned;
+
+        for (const auto& scannedRule : sheet->getRules())
+            if (scannedRule.selector.matches (*component, component))
+                scanned.push_back (scannedRule.order);
+
+        std::vector<int> indexed;
+        sheet->findCandidateRules (*component, candidates);
+
+        for (const auto* found : candidates)
+            if (found->selector.matches (*component, component))
+                indexed.push_back (found->order);
+
+        EXPECT_FALSE (scanned.empty());
+        EXPECT_EQ (indexed, scanned) << component->getComponentID();
+    }
+}
+
 TEST_F (StyleSheetTests, ParsesWholeDocuments)
 {
     auto sheet = YuiParser::parseStyleSheet (R"yui(

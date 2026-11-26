@@ -225,6 +225,20 @@ public:
     /** Returns the rules of the sheet, in source order. */
     const std::vector<Rule>& getRules() const noexcept { return rules; }
 
+    /** Finds the rules a component can match, in source order.
+
+        The sheet files each rule under what the last compound of its selector requires of a
+        component: its id, or else one of its classes, or else its type. The rules found are the
+        ones filed under the id, the classes and the types of the component, and the ones requiring
+        none of those, such as `*`, `:root`, `:hover` and `[text="Off"]`. Every rule matching the
+        component is among them, so testing them with StyleSelector::matches gives what testing
+        every rule of the sheet does.
+
+        @param component  The component to find the rules for.
+        @param candidates Receives the rules, in place of what it holds.
+    */
+    void findCandidateRules (const Component& component, std::vector<const Rule*>& candidates) const;
+
     /** Returns the keyframe sequence with a given name, or nullptr.
 
         @param name The sequence name.
@@ -276,21 +290,41 @@ public:
     */
     bool watchesProperty (const Identifier& name) const;
 
+    /** Returns true when changing a property on a component can change the style of its descendants.
+
+        That is so when a selector reads the property on a compound before a combinator, as in
+        `.row:hover .icon`, or as an attribute, whose value a component can take from a parent, and
+        when a rule reading it holds a qualified declaration such as `Slider.thumbColor`, which the
+        descendants inherit. A state only read as a pseudo-class of the component a rule matches, as
+        in `Slider:hover`, changes which rules that component matches and nothing below it.
+
+        @param name The property name.
+
+        @see watchesProperty, StyleSelector::selectsDescendantsBy
+    */
+    bool watchesPropertyForDescendants (const Identifier& name) const;
+
 private:
     //==============================================================================
     StyleSheet() = default;
 
     std::optional<DataTreeDiagnostic> addElements (const DataTree& parent);
     std::optional<DataTreeDiagnostic> findSharedName() const;
+    void indexRule (const Rule& rule);
 
     DataTree tree;
     std::vector<Rule> rules;
+    std::unordered_map<String, std::vector<int>> rulesById;
+    std::unordered_map<Identifier, std::vector<int>> rulesByClass;
+    std::unordered_map<Identifier, std::vector<int>> rulesByType;
+    std::vector<int> rulesWithoutKey;
     std::vector<KeyframeSequence> keyframes;
     Palettes palettes;
     std::map<String, DataTree> drawings;
     std::map<String, DataTree> shaders;
     std::map<Identifier, ComponentProperty> declaredProperties;
     Array<Identifier> watchedProperties;
+    Array<Identifier> descendantProperties;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StyleSheet)
 };

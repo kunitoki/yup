@@ -37,9 +37,11 @@ namespace yup
 
     Restyling is batched: class, state, property and hierarchy changes only mark components
     dirty, and the work happens once per frame in the refresh pass, top-down so that
-    descendant selectors see their ancestors' state. A change of the theme palette, or of a
-    palette scoped by a `palette:` declaration, restyles the components whose values read
-    palette roles.
+    descendant selectors see their ancestors' state. A state that only the rules matching the
+    component itself read, such as the hover of `Slider:hover`, restyles that component, and its
+    descendants only when its style changed; any other change restyles them all. A change of the
+    theme palette, or of a palette scoped by a `palette:` declaration, restyles the components
+    whose values read palette roles.
 
     A context only asks the window of its root for frames while it has styles to apply or to
     animate: with every style applied and nothing running, it leaves that window free to skip
@@ -108,6 +110,12 @@ public:
     void markDirty (Component& component);
 
     /** Marks a component dirty when the sheet's selectors read the property that changed.
+
+        The descendants of the component are restyled with it, unless the property is a state of
+        the component alone, such as `hovered`, `pressed`, `focused`, `enabled` or the `checked` of
+        a ToggleButton, that the sheet only reads on the components its rules match (see
+        StyleSheet::watchesPropertyForDescendants). The restyle of the component then reaches them
+        only when it changed a value, a palette or anything else of its style, which they may read.
 
         @param component The component whose property changed.
         @param name      The property name.
@@ -301,13 +309,22 @@ private:
 
     using DeclarationMap = std::unordered_map<Identifier, ResolvedDeclaration>;
 
+    /* A component to restyle: with its descendants, or alone when only a state of its own changed. */
+    struct DirtyComponent
+    {
+        WeakReference<Component> component;
+        bool withDescendants = true;
+    };
+
     template <class Fn>
     void forEachManaged (Component& component, Fn&& fn);
 
-    void restyleSubtree (Component& component, const DeclarationMap& inherited);
-    void applyToComponent (Component& component, const DeclarationMap& inherited, DeclarationMap& inheritedForChildren);
-    DeclarationMap collectInherited (Component& component) const;
-    void collectDeclarations (Component& component, DeclarationMap& direct, DeclarationMap& qualified) const;
+    void addDirtyComponent (Component& component, bool withDescendants);
+    bool isInsidePopup (const Component& component) const noexcept;
+    bool restyleSubtree (Component& component, const DeclarationMap& inherited, bool descendantsOnlyWhenChanged = false);
+    bool applyToComponent (Component& component, const DeclarationMap& inherited, DeclarationMap& extended);
+    DeclarationMap collectInherited (Component& component);
+    void collectDeclarations (Component& component, DeclarationMap& direct, DeclarationMap& qualified);
     static void mergeResolvedDeclaration (DeclarationMap& target, const Identifier& key, const ResolvedDeclaration& candidate);
     bool evaluate (Component& component,
                    ComponentCache& cache,
@@ -326,14 +343,15 @@ private:
     void resetCompiledValues();
     bool resetStyle (Component& component, ComponentCache* cache, bool keepAnimatedValues = false, bool* paletteCleared = nullptr);
     void release (Component& subtreeRoot, ReleaseMode mode);
-    void syncStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId);
+    bool syncStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId);
     void restoreStateBacked (Component& component, ComponentCache& cache, const Identifier& storageId);
     void restoreAllStateBacked (Component& component, ComponentCache& cache);
     const DrawingStyle* installDrawing (Component& component, ComponentCache& cache, const StyleSheet::Declaration& declaration);
     void restoreDrawing (Component& component, ComponentCache& cache);
     DrawingStyle::Shader findDrawingShader (const String& name);
     bool holdsOtherShaders (const DrawingStyle& drawing);
-    const DrawingStyle* attachDrawingShaders (Component& component, const DrawingStyle& drawing);
+    bool runsLoadedShaders (const DrawingStyle& drawing, std::optional<uint32>& generation);
+    const DrawingStyle* attachDrawingShaders (Component& component, ComponentCache& cache, const DrawingStyle& drawing);
     bool evaluateFilterDeclaration (Component& component,
                                     ComponentCache& cache,
                                     const StyleSheet::Declaration& filterDeclaration,
@@ -363,6 +381,7 @@ private:
     void report (const DataTreeDiagnostic& diagnostic);
     void rebuildObserver();
     void invalidateDependencies (const Component& sourceComponent, const Identifier& property);
+    void markReadersDirty (const std::set<Component*>& restyled);
 
     bool isManagedPopup (const Component& component) const noexcept;
     Component* findPopupOwner (const Component& component) const noexcept;
@@ -370,7 +389,8 @@ private:
     Component& root;
     StyleSheet::Ptr styleSheet;
     ComponentResolver componentResolver;
-    Array<WeakReference<Component>> dirtyComponents;
+    std::vector<DirtyComponent> dirtyComponents;
+    std::vector<const StyleSheet::Rule*> candidateRules;
     std::unique_ptr<CacheMap> caches;
     std::unique_ptr<PopupMap> popups;
     std::unique_ptr<ShaderMap> shaders;
@@ -379,6 +399,7 @@ private:
     std::vector<DataTreeDiagnostic> diagnostics;
     double clock = 0.0;
     uint32 lastPaletteGeneration = 0;
+    uint32 shaderGeneration = 0;
     bool isRestyling = false;
     bool observerDirty = false;
     FrameAttachment frameAttachment { root, bindFront (&StyleContext::refresh, this) };

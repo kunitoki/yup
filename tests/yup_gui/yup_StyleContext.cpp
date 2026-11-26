@@ -372,6 +372,64 @@ TEST_F (StyleContextTests, QualifiedDeclarationsCascadeToDescendants)
     EXPECT_TRUE (other.getStyleState() == nullptr || other.getStyleState()->getComputedValues().isEmpty());
 }
 
+TEST_F (StyleContextTests, QualifiedDeclarationsReachEachDescendantWithTheOnesOfItsOwnAncestors)
+{
+    Component root ("root");
+    Slider first (Slider::LinearHorizontal, "first");
+    Component group ("group");
+    Slider inGroup (Slider::LinearHorizontal, "inGroup");
+    Component plain ("plain");
+    Slider inPlain (Slider::LinearHorizontal, "inPlain");
+    Slider last (Slider::LinearHorizontal, "last");
+
+    root.addChildComponent (first);
+    root.addChildComponent (group);
+    group.addChildComponent (inGroup);
+    root.addChildComponent (plain);
+    plain.addChildComponent (inPlain);
+    root.addChildComponent (last);
+
+    root.addStyleClass (Identifier ("panel"));
+    group.addStyleClass (Identifier ("own"));
+
+    root.setStyleSheet (build (DataTree ("style",
+                                         { rule (".panel", { declaration ("Slider.trackWidth", "7") }),
+                                           rule (".wide", { declaration ("Slider.trackWidth", "11") }),
+                                           rule (".own", { declaration ("Slider.trackWidth", "9") }) })));
+    restyle (root);
+
+    const auto trackWidth = [] (const Component& slider)
+    {
+        return static_cast<double> (slider.findProperty (Identifier ("trackWidth")));
+    };
+
+    // A child and a grandchild take what the root declares for them
+    EXPECT_DOUBLE_EQ (trackWidth (first), 7.0);
+    EXPECT_DOUBLE_EQ (trackWidth (inPlain), 7.0);
+
+    // What a component declares over it is for its own descendants, not for the components that come after it
+    EXPECT_DOUBLE_EQ (trackWidth (inGroup), 9.0);
+    EXPECT_DOUBLE_EQ (trackWidth (last), 7.0);
+
+    // A change at the root reaches all the ones taking its value
+    root.addStyleClass (Identifier ("wide"));
+    restyle (root);
+
+    EXPECT_DOUBLE_EQ (trackWidth (first), 11.0);
+    EXPECT_DOUBLE_EQ (trackWidth (inPlain), 11.0);
+    EXPECT_DOUBLE_EQ (trackWidth (inGroup), 9.0);
+    EXPECT_DOUBLE_EQ (trackWidth (last), 11.0);
+
+    root.removeStyleClass (Identifier ("wide"));
+    root.removeStyleClass (Identifier ("panel"));
+    restyle (root);
+
+    EXPECT_DOUBLE_EQ (trackWidth (inGroup), 9.0);
+
+    for (const auto* slider : { &first, &inPlain, &last })
+        EXPECT_TRUE (slider->getStyleState() == nullptr || slider->getStyleState()->getComputedValues().isEmpty()) << slider->getComponentID();
+}
+
 TEST_F (StyleContextTests, RestylingLaysAContainerOutOnce)
 {
     struct CountingColumn : ColumnComponent
@@ -425,6 +483,148 @@ TEST_F (StyleContextTests, ChangingStyleClassesRestyles)
     restyle (root);
 
     EXPECT_TRUE (child.getStyleState() == nullptr || child.getStyleState()->getComputedValues().isEmpty());
+}
+
+TEST_F (StyleContextTests, ChangingTheIdRestyles)
+{
+    Component root ("root");
+    Component child ("child");
+    Component inner ("inner");
+    root.addChildComponent (child);
+    child.addChildComponent (inner);
+
+    root.setStyleSheet (build (DataTree ("style",
+                                         { rule ("#named", { declaration ("trackWidth", "9") }),
+                                           rule ("#named > #inner", { declaration ("glow", "2") }) })));
+    restyle (root);
+
+    EXPECT_TRUE (child.getStyleState() == nullptr || child.getStyleState()->getComputedValues().isEmpty());
+    EXPECT_TRUE (inner.getStyleState() == nullptr || inner.getStyleState()->getComputedValues().isEmpty());
+
+    child.setComponentID ("named");
+    restyle (root);
+
+    EXPECT_DOUBLE_EQ (static_cast<double> (child.findProperty (Identifier ("trackWidth"))), 9.0);
+    EXPECT_DOUBLE_EQ (glow (inner), 2.0);
+
+    child.setComponentID ("child");
+    restyle (root);
+
+    EXPECT_TRUE (child.getStyleState() == nullptr || child.getStyleState()->getComputedValues().isEmpty());
+    EXPECT_TRUE (inner.getStyleState() == nullptr || inner.getStyleState()->getComputedValues().isEmpty());
+}
+
+TEST_F (StyleContextTests, RulesOfEveryKindOfSelectorStyleTheComponentsTheyMatch)
+{
+    Component root ("root");
+    Component panel ("panel");
+    Slider slider (Slider::LinearHorizontal, "slider");
+    Component plain ("plain");
+
+    panel.addStyleClass (Identifier ("panel"));
+    plain.setTitle ("named");
+    root.addAndMakeVisible (panel);
+    panel.addAndMakeVisible (slider);
+    panel.addAndMakeVisible (plain);
+
+    // Each rule sets a property of its own, which tells the components it styled
+    root.setStyleSheet (build (DataTree ("style",
+                                         { rule ("*", { declaration ("byUniversal", "1") }),
+                                           rule ("Slider", { declaration ("byType", "1") }),
+                                           rule ("Component", { declaration ("byBaseType", "1") }),
+                                           rule (".panel", { declaration ("byClass", "1") }),
+                                           rule ("#plain", { declaration ("byId", "1") }),
+                                           rule ("#slider, .panel", { declaration ("byList", "1") }),
+                                           rule (".panel Slider", { declaration ("byDescendant", "1") }),
+                                           rule (".panel > #plain", { declaration ("byChild", "1") }),
+                                           rule ("#root > Slider", { declaration ("byNoChild", "1") }),
+                                           rule (":root", { declaration ("byRoot", "1") }),
+                                           rule ("[title=\"named\"]", { declaration ("byAttribute", "1") }),
+                                           rule ("Slider:hover", { declaration ("byTypeState", "1") }),
+                                           rule (":hover", { declaration ("byState", "1") }) })));
+    restyle (root);
+
+    const auto styledBy = [&] (const char* name)
+    {
+        StringArray ids;
+
+        for (auto* component : { &root, &panel, static_cast<Component*> (&slider), &plain })
+            if (const auto* state = component->getStyleState(); state != nullptr && state->getComputedValue (Identifier (name)) != nullptr)
+                ids.add (component->getComponentID());
+
+        return ids.joinIntoString (" ");
+    };
+
+    EXPECT_EQ (styledBy ("byUniversal"), "root panel slider plain");
+    EXPECT_EQ (styledBy ("byType"), "slider");
+    EXPECT_EQ (styledBy ("byBaseType"), "root panel slider plain");
+    EXPECT_EQ (styledBy ("byClass"), "panel");
+    EXPECT_EQ (styledBy ("byId"), "plain");
+    EXPECT_EQ (styledBy ("byList"), "panel slider");
+    EXPECT_EQ (styledBy ("byDescendant"), "slider");
+    EXPECT_EQ (styledBy ("byChild"), "plain");
+    EXPECT_EQ (styledBy ("byNoChild"), "");
+    EXPECT_EQ (styledBy ("byRoot"), "root");
+    EXPECT_EQ (styledBy ("byAttribute"), "plain");
+    EXPECT_EQ (styledBy ("byTypeState"), "");
+    EXPECT_EQ (styledBy ("byState"), "");
+
+    // The hover of the slider is the one of its parents too
+    slider.setHovered (true);
+    restyle (root);
+
+    EXPECT_EQ (styledBy ("byTypeState"), "slider");
+    EXPECT_EQ (styledBy ("byState"), "root panel slider");
+    EXPECT_EQ (styledBy ("byUniversal"), "root panel slider plain");
+
+    slider.setHovered (false);
+    restyle (root);
+
+    EXPECT_EQ (styledBy ("byTypeState"), "");
+    EXPECT_EQ (styledBy ("byState"), "");
+    EXPECT_EQ (styledBy ("byDescendant"), "slider");
+}
+
+TEST_F (StyleContextTests, TheCascadeOrdersTheRulesWhateverTheyRequireOfAComponent)
+{
+    Slider root (Slider::LinearHorizontal, "root");
+    root.addStyleClass (Identifier ("knob"));
+
+    root.setStyleSheet (build (DataTree ("style",
+                                         { rule (":root", { declaration ("first", "1") }),
+                                           rule (".knob", { declaration ("first", "2") }),
+                                           rule (".knob", { declaration ("second", "1") }),
+                                           rule (":root", { declaration ("second", "2") }),
+                                           rule ("Slider", { declaration ("third", "1") }),
+                                           rule ("Component", { declaration ("third", "2") }),
+                                           rule ("Component", { declaration ("fourth", "1") }),
+                                           rule ("Slider", { declaration ("fourth", "2") }),
+                                           rule ("#root", { declaration ("fifth", "1") }),
+                                           rule (".knob", { declaration ("fifth", "2") }),
+                                           rule ("Slider", { declaration ("fifth", "3") }),
+                                           rule ("*", { declaration ("fifth", "4") }),
+                                           rule ("*", { declaration ("sixth", "1") }),
+                                           rule ("Slider", { declaration ("sixth", "2") }),
+                                           rule (".knob", { declaration ("sixth", "3") }),
+                                           rule ("Slider", { declaration ("seventh", "2") }),
+                                           rule ("*", { declaration ("seventh", "1") }) })));
+    restyle (root);
+
+    const auto value = [&root] (const char* name)
+    {
+        return static_cast<double> (root.findProperty (Identifier (name)));
+    };
+
+    // With the same specificity the later rule wins: a class and a pseudo-class, a type and one it derives from
+    EXPECT_DOUBLE_EQ (value ("first"), 2.0);
+    EXPECT_DOUBLE_EQ (value ("second"), 2.0);
+    EXPECT_DOUBLE_EQ (value ("third"), 2.0);
+    EXPECT_DOUBLE_EQ (value ("fourth"), 2.0);
+
+    // And else the most specific one, wherever it is: an id, then a class, then a type
+    EXPECT_DOUBLE_EQ (value ("fifth"), 1.0);
+    EXPECT_DOUBLE_EQ (value ("sixth"), 3.0);
+    EXPECT_DOUBLE_EQ (value ("seventh"), 2.0);
 }
 
 TEST_F (StyleContextTests, StateBackedPropertiesAreAppliedAndRestored)
@@ -1459,6 +1659,143 @@ TEST_F (StyleContextTests, FocusWithinAndActiveRestyleAncestorsAndSiblings)
     restyle (root);
     EXPECT_TRUE (input.getProperty (Identifier ("glow")).isVoid());
     EXPECT_DOUBLE_EQ (glow (input), 1.0);
+}
+
+TEST_F (StyleContextTests, AStateOfAComponentRestylesItsDescendantsOnlyWhenItChangesItsStyle)
+{
+    const ComponentTypeInfo tokens (Identifier ("Tokens"),
+                                    &Component::getClassTypeInfo(),
+                                    { ComponentProperty { .name = Identifier ("unit"),
+                                                          .type = ComponentProperty::Type::number,
+                                                          .defaultValue = 1.0,
+                                                          .isInherited = true } });
+
+    Component root ("root");
+    Component row ("row");
+    Component icon ("icon");
+    Component other ("other");
+    Component label ("label");
+
+    row.setTypeInfo (&tokens);
+    root.addAndMakeVisible (row);
+    row.addAndMakeVisible (icon);
+    root.addAndMakeVisible (other);
+    other.addAndMakeVisible (label);
+
+    attach (root, R"yui(
+        style {
+            #row { unit: 2; }
+            #row:hover { unit: 5; }
+            #icon { glow: unit * 2; }
+            #label { glow: 1; }
+            #other:pressed { trackWidth: 3; }
+        })yui");
+
+    EXPECT_DOUBLE_EQ (glow (icon), 4.0);
+    EXPECT_DOUBLE_EQ (glow (label), 1.0);
+
+    // A value no type declares is told at each restyle of the component it is set on, which counts those restyles
+    int iconRestyles = 0;
+    int labelRestyles = 0;
+
+    root.getStyleContext()->onDiagnostic = [&] (const DataTreeDiagnostic& diagnostic)
+    {
+        if (! diagnostic.message.startsWith ("Undeclared property 'glow'"))
+            return;
+
+        if (diagnostic.element.getProperty ("value").toString().contains ("unit"))
+            ++iconRestyles;
+        else
+            ++labelRestyles;
+    };
+
+    // The hover of the row changes a value its icon reads, and nothing for the rest of the tree
+    row.setHovered (true);
+    restyle (root);
+
+    EXPECT_TRUE (root.isHovered());
+    EXPECT_DOUBLE_EQ (glow (icon), 10.0);
+    EXPECT_EQ (iconRestyles, 1);
+    EXPECT_EQ (labelRestyles, 0);
+
+    row.setHovered (false);
+    restyle (root);
+
+    EXPECT_DOUBLE_EQ (glow (icon), 4.0);
+    EXPECT_EQ (iconRestyles, 2);
+    EXPECT_EQ (labelRestyles, 0);
+
+    // A press changing the style of a component takes what is inside along, which may read it
+    other.setPressed (true);
+    restyle (root);
+
+    EXPECT_DOUBLE_EQ (static_cast<double> (label.findProperty (Identifier ("trackWidth"))), 3.0);
+    EXPECT_EQ (labelRestyles, 1);
+    EXPECT_EQ (iconRestyles, 2);
+
+    // A hover no rule reads for the component leaves its style, and what is inside, as they are
+    other.setHovered (true);
+    restyle (root);
+
+    EXPECT_TRUE (other.isHovered());
+    EXPECT_EQ (labelRestyles, 1);
+    EXPECT_EQ (iconRestyles, 2);
+    EXPECT_DOUBLE_EQ (glow (label), 1.0);
+}
+
+TEST_F (StyleContextTests, AStateRuleWithAQualifiedDeclarationRestylesTheDescendants)
+{
+    Component root ("root");
+    Component row ("row");
+    Slider slider (Slider::LinearHorizontal, "slider");
+
+    root.addAndMakeVisible (row);
+    row.addAndMakeVisible (slider);
+
+    attach (root, "style { #row:hover { Slider.trackWidth: 9; } }");
+    EXPECT_TRUE (slider.getStyleState() == nullptr || slider.getStyleState()->getComputedValues().isEmpty());
+
+    // Nothing of the style of the row changes: the declaration is one its descendants inherit
+    row.setHovered (true);
+    restyle (root);
+    EXPECT_DOUBLE_EQ (static_cast<double> (slider.findProperty (Identifier ("trackWidth"))), 9.0);
+
+    row.setHovered (false);
+    restyle (root);
+    EXPECT_TRUE (slider.getStyleState() == nullptr || slider.getStyleState()->getComputedValues().isEmpty());
+}
+
+TEST_F (StyleContextTests, AValueReadingAComponentByNameFollowsTheStyleAStateGivesIt)
+{
+    Component root ("root");
+    Slider source (Slider::LinearHorizontal, "source");
+    Component panel ("panel");
+    Component target ("target");
+
+    root.addAndMakeVisible (source);
+    root.addAndMakeVisible (panel);
+    panel.addAndMakeVisible (target);
+
+    auto sheet = YuiParser::parseStyleSheet ("style { #source { trackWidth: 2; } #source:hover { trackWidth: 6; } #target { glow: source.trackWidth * 2; } }");
+    ASSERT_TRUE (sheet.wasOk()) << sheet.getErrorMessage();
+
+    root.setStyleSheet (sheet.getReference());
+    root.getStyleContext()->setComponentResolver ([&source] (const String& name) -> Component*
+    {
+        return name == "source" ? &source : nullptr;
+    });
+    restyle (root);
+
+    EXPECT_DOUBLE_EQ (glow (target), 4.0);
+
+    // The target is no descendant of the slider: it follows what the hover computes for the slider it reads
+    source.setHovered (true);
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (target), 12.0);
+
+    source.setHovered (false);
+    restyle (root);
+    EXPECT_DOUBLE_EQ (glow (target), 4.0);
 }
 
 TEST_F (StyleContextTests, DetachingAChildStopsItsAnimationsAndClearsCachedState)
@@ -3111,6 +3448,110 @@ TEST_F (StyleContextTests, ADrawingAnElementCantSelectAnymoreIsNotMadeAgainWithT
     EXPECT_EQ (getDrawingStyle (other)->getShaders().front().shader, second);
     EXPECT_EQ (painted->getStyle(), nullptr);
     EXPECT_TRUE (context->getDiagnostics().empty()) << DataTreeDiagnostic::join (context->getDiagnostics());
+}
+
+TEST_F (StyleContextTests, ADrawingIsMadeAgainOnlyWhenAShaderItRunsIsLoadedAgain)
+{
+    setAsset ("fx/plasma.frag", proceduralFragment);
+    setAsset ("fx/waves.frag", proceduralFragment);
+
+    YuiDocument document;
+    serveAssets (document);
+
+    // The same drawing selected by a rule and on an element, and a drawing running another shader
+    const auto loaded = document.loadFromString ("shader Plasma { fragment: \"fx/plasma.frag\"; property intensity: number = 0.5; }\n"
+                                                 "shader Waves { fragment: \"fx/waves.frag\"; property intensity: number = 0.5; }\n"
+                                                 "drawing Screen { use Plasma { } }\n"
+                                                 "drawing Sea { use Waves { } }\n"
+                                                 "style { #styled { drawing: Screen; } }\n"
+                                                 "Component { Component { id: styled; } Component { id: element; drawing: Screen; } Component { id: sea; drawing: Sea; } }");
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+    auto* root = document.getRoot();
+    auto* context = root->getStyleContext();
+    auto* styled = document.findById ("styled");
+    auto* element = document.findById ("element");
+    auto* sea = document.findById ("sea");
+
+    const auto expectShader = [&] (const Component* component, const String& name)
+    {
+        ASSERT_NE (getDrawingStyle (component), nullptr) << name;
+        ASSERT_EQ (getDrawingStyle (component)->getShaders().size(), 1u) << name;
+        ASSERT_NE (context->findShader (name), nullptr) << name;
+        EXPECT_EQ (getDrawingStyle (component)->getShaders().front().shader, context->findShader (name)->shader) << name;
+    };
+
+    expectShader (styled, "Plasma");
+    expectShader (element, "Plasma");
+    expectShader (sea, "Waves");
+
+    // The restyles loading nothing keep the drawings
+    auto styledStyle = styled->getStyle();
+    auto elementStyle = element->getStyle();
+    auto seaStyle = sea->getStyle();
+
+    EXPECT_EQ (countProblemsOfARestyle (*root), 0u);
+    EXPECT_EQ (countProblemsOfARestyle (*root), 0u);
+    EXPECT_EQ (styled->getStyle(), styledStyle);
+    EXPECT_EQ (element->getStyle(), elementStyle);
+    EXPECT_EQ (sea->getStyle(), seaStyle);
+
+    // A shader loaded again makes again the drawing running it, and not the ones running another
+    setAsset ("fx/waves.frag", reorderedFragment);
+    document.notifyAssetChanged ("fx/waves.frag");
+    restyle (*root);
+
+    EXPECT_EQ (styled->getStyle(), styledStyle);
+    EXPECT_EQ (element->getStyle(), elementStyle);
+    EXPECT_NE (sea->getStyle(), seaStyle);
+    expectShader (sea, "Waves");
+
+    seaStyle = sea->getStyle();
+    setAsset ("fx/plasma.frag", reorderedFragment);
+    document.notifyAssetChanged ("fx/plasma.frag");
+    restyle (*root);
+
+    EXPECT_NE (styled->getStyle(), styledStyle);
+    EXPECT_NE (element->getStyle(), elementStyle);
+    EXPECT_EQ (sea->getStyle(), seaStyle);
+    expectShader (styled, "Plasma");
+    expectShader (element, "Plasma");
+
+    // And the restyles that follow keep them again
+    styledStyle = styled->getStyle();
+    elementStyle = element->getStyle();
+
+    EXPECT_EQ (countProblemsOfARestyle (*root), 0u);
+    EXPECT_EQ (countProblemsOfARestyle (*root), 0u);
+    EXPECT_EQ (styled->getStyle(), styledStyle);
+    EXPECT_EQ (element->getStyle(), elementStyle);
+    EXPECT_EQ (sea->getStyle(), seaStyle);
+
+    // Another drawing set on the element, made without the shader, is made again with it though nothing was loaded since
+    const auto sheet = document.getStyleSheet();
+
+    const auto findDrawing = [&sheet] (const String& name)
+    {
+        return sheet->findDrawing (name);
+    };
+
+    const auto withoutShaders = [&sheet] (const String& name)
+    {
+        return DrawingStyle::Shader { sheet->findShader (name), nullptr };
+    };
+
+    const auto bare = DrawingStyle::create (*element, sheet->findDrawing ("Screen"), nullptr, nullptr, findDrawing, withoutShaders);
+    ASSERT_TRUE (bare.wasOk()) << bare.getErrorMessage();
+    ASSERT_EQ (bare.getReference()->getShaders().size(), 1u);
+    EXPECT_EQ (bare.getReference()->getShaders().front().shader, nullptr);
+
+    element->setStyle (bare.getReference());
+    context->markDirty (*element);
+    restyle (*root);
+
+    EXPECT_NE (element->getStyle().get(), bare.getReference().get());
+    expectShader (element, "Plasma");
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 }
 
 #endif // YUP_ENABLE_SHADER_TRANSPILER

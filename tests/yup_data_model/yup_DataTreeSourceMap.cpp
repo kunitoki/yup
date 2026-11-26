@@ -89,3 +89,58 @@ TEST_F (DataTreeSourceMapTests, KeepsDiagnosticsItCantLocate)
     EXPECT_EQ (map.locate ({ .message = "Root", .element = document }).toString(), "Root");
     EXPECT_EQ (map.locate ({ .message = "Other tree", .element = DataTree ("Slider") }).toString(), "Other tree");
 }
+
+TEST_F (DataTreeSourceMapTests, ACopyKeepsItsPositionsWhenTheMapItIsOfIsAddedOne)
+{
+    const auto document = makeDocument();
+    const auto column = document.getChild (0);
+    const auto slider = column.getChild (0);
+
+    DataTreeSourceMap map;
+    map.add (column, {}, 1, 1, "main.yui");
+
+    // A copy holds what the map does
+    auto copy = map;
+    EXPECT_TRUE (copy == map);
+    EXPECT_EQ (copy.locate ({ .message = "Bad", .element = slider }).toString(), "main.yui:1:1: Bad");
+
+    // Until one of them is added a position, which the other does not get
+    map.add (slider, {}, 2, 5, "main.yui");
+    EXPECT_FALSE (copy == map);
+    EXPECT_EQ (map.locate ({ .message = "Bad", .element = slider }).toString(), "main.yui:2:5: Bad");
+    EXPECT_EQ (copy.locate ({ .message = "Bad", .element = slider }).toString(), "main.yui:1:1: Bad");
+
+    copy.add (slider, "value", 2, 14, "main.yui");
+    EXPECT_EQ (copy.locate ({ .message = "Bad", .element = slider, .property = "value" }).toString(), "main.yui:2:14: Bad");
+    EXPECT_EQ (map.locate ({ .message = "Bad", .element = slider, .property = "value" }).toString(), "main.yui:2:5: Bad");
+}
+
+TEST_F (DataTreeSourceMapTests, IsEqualToAMapHoldingTheSamePositions)
+{
+    const auto document = makeDocument();
+    const auto slider = document.getChild (0).getChild (0);
+
+    // Maps holding nothing, made or copied
+    DataTreeSourceMap empty;
+    EXPECT_TRUE (empty == DataTreeSourceMap());
+    EXPECT_TRUE (DataTreeSourceMap (empty) == empty);
+
+    // The positions of a text, and of that text parsed again into another tree
+    DataTreeSourceMap first, second;
+    first.add (slider, "value", 3, 7, "main.yui");
+    EXPECT_FALSE (first == empty);
+    EXPECT_FALSE (empty == first);
+
+    second.add (document.clone().getChild (0).getChild (0), "value", 3, 7, "main.yui");
+    EXPECT_TRUE (first == second);
+
+    // Another place, another text or another property is another map
+    DataTreeSourceMap moved, imported, other;
+    moved.add (slider, "value", 3, 8, "main.yui");
+    imported.add (slider, "value", 3, 7, "parts.yui");
+    other.add (slider, "minimum", 3, 7, "main.yui");
+
+    EXPECT_FALSE (first == moved);
+    EXPECT_FALSE (first == imported);
+    EXPECT_FALSE (first == other);
+}

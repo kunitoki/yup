@@ -32,6 +32,9 @@ namespace yup
     the place of the element in its tree rather than by the element itself, so they also apply
     to a copy of the tree, or to a tree patched to match it.
 
+    A map is cheap to copy: it shares its positions with its copies, and the one a position is
+    added to takes its own first, which leaves the others as they are.
+
     @code
     DataTreeSourceMap sourceMap;
     sourceMap.add (slider, "value", 12, 9, "ui.yui");
@@ -79,10 +82,11 @@ private:
     };
 
     using Key = std::pair<std::vector<int>, String>;
+    using Positions = std::map<Key, Position>;
 
     static std::vector<int> getPath (const DataTree& element);
 
-    std::map<Key, Position> positions;
+    std::shared_ptr<Positions> positions;
 };
 
 } // namespace yup

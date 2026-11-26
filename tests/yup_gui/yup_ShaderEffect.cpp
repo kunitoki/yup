@@ -275,6 +275,55 @@ TEST_F (ShaderEffectTests, WritesAnArrayOfNumbersToAnArray)
     EXPECT_TRUE (uniforms == expected);
 }
 
+TEST_F (ShaderEffectTests, WritesAPropertyToAMemberFoundOnceAsToTheMemberOfItsName)
+{
+    const auto shader = compile (typesFragment);
+    ASSERT_NE (shader, nullptr);
+
+    // The members are found in the shader, once, for all the uniforms it creates
+    const auto& layout = shader->getUniformLayout();
+
+    auto byHandle = shader->createUniforms();
+    auto byName = shader->createUniforms();
+
+    struct Value
+    {
+        ShaderEffect::Property property;
+        var value;
+    };
+
+    const Value values[] = { { { "tint", Type::color }, VariantConverter<Color>::toVar (Color (0x80ff4000)) },
+                             { { "shade", Type::color }, VariantConverter<Color>::toVar (Color (0xffffff00)) },
+                             { { "area", Type::rectangle }, VariantConverter<Rectangle<float>>::toVar ({ 1.0f, 2.0f, 3.0f, 4.0f }) },
+                             { { "origin", Type::point }, VariantConverter<Point<float>>::toVar ({ 5.0f, 6.0f }) },
+                             { { "amount", Type::number }, 0.5 },
+                             { { "steps", Type::integer }, 2.75 },
+                             { { "inverted", Type::boolean }, true } };
+
+    for (const auto& [property, value] : values)
+    {
+        const auto member = layout.findMember (property.name.toString());
+        ASSERT_TRUE (member.isValid()) << property.name.toString();
+
+        EXPECT_TRUE (ShaderEffect::setUniform (byHandle, member, property.type, value)) << property.name.toString();
+        EXPECT_TRUE (ShaderEffect::setUniform (byName, property, value)) << property.name.toString();
+    }
+
+    EXPECT_TRUE (byHandle == byName);
+    EXPECT_FALSE (byHandle == layout);
+
+    // What can't be written leaves the uniforms as they are: no member, a type no uniform takes, a value that is no point
+    const auto amount = layout.findMember ("amount");
+    const auto origin = layout.findMember ("origin");
+
+    EXPECT_FALSE (ShaderEffect::setUniform (byHandle, layout.findMember ("missing"), Type::number, 1.0));
+    EXPECT_FALSE (ShaderEffect::setUniform (byHandle, ShaderUniforms::MemberHandle(), Type::color, VariantConverter<Color>::toVar (Colors::white)));
+    EXPECT_FALSE (ShaderEffect::setUniform (byHandle, amount, Type::string, "high"));
+    EXPECT_FALSE (ShaderEffect::setUniform (byHandle, origin, Type::point, "here"));
+    EXPECT_FALSE (ShaderEffect::setUniform (byHandle, origin, Type::point, var()));
+    EXPECT_TRUE (byHandle == byName);
+}
+
 TEST_F (ShaderEffectTests, AShaderGivenTheTimeRepaintsItsComponentAtEveryFrame)
 {
     Component window ("window");
@@ -840,6 +889,36 @@ TEST_F (ShaderEffectMetalTests, AnArrayFillsTheTextureOfItsNameBesideThePictureO
     screen.setComponentEffect (new ShaderEffect (screen, shader));
     expectPixel (screen, 2, 8, Color (0xff0000ff));
     expectPixel (screen, 29, 8, Color (0xff0000ff));
+}
+
+TEST_F (ShaderEffectMetalTests, AMemberIsZeroAgainOnceItsPropertyHasNothingToGiveIt)
+{
+    const auto filling = compile (fillFragment);
+    const auto levelled = compile (levelsFragment);
+    ASSERT_NE (filling, nullptr);
+    ASSERT_NE (levelled, nullptr);
+
+    Filled screen ("screen", Colors::white);
+
+    // A rectangle fills the four numbers of the color the shader writes
+    screen.setComponentEffect (new ShaderEffect (screen, filling, { { "tint", Type::rectangle } }));
+    screen.setProperty (Identifier ("tint"), VariantConverter<Rectangle<float>>::toVar ({ 0.0f, 1.0f, 0.0f, 1.0f }));
+    expectPixel (screen, 16, 8, Color (0xff00ff00));
+
+    // The effect keeps its uniforms from a paint to the next, but not what they held: with no value the member is zero
+    screen.removeProperty (Identifier ("tint"));
+    expectPixel (screen, 16, 8, Colors::transparentBlack);
+
+    screen.setProperty (Identifier ("tint"), VariantConverter<Rectangle<float>>::toVar ({ 0.0f, 0.0f, 1.0f, 1.0f }));
+    expectPixel (screen, 16, 8, Color (0xff0000ff));
+
+    // Nor what an array held past the numbers it has now
+    screen.setComponentEffect (new ShaderEffect (screen, levelled, { { "levels", Type::array } }));
+    screen.setProperty (Identifier ("levels"), var (Array<var> { 1.0, 1.0, 1.0 }));
+    expectPixel (screen, 16, 8, Colors::white);
+
+    screen.setProperty (Identifier ("levels"), var (Array<var> { 1.0 }));
+    expectPixel (screen, 16, 8, Color (0xffff0000));
 }
 
 TEST_F (ShaderEffectMetalTests, WithoutAShaderTheComponentIsDrawnAsItIs)

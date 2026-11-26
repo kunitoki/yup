@@ -1707,5 +1707,274 @@ TEST_F (YuiDocumentTests, AFilterTakesTheShadersItRunsAndWritesThemBack)
     EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
 }
 
+TEST_F (YuiDocumentTests, TheSchemaDescribesTheGrammarAndTheComponentTypes)
+{
+    const auto schema = YuiDocument::createSchema();
+    ASSERT_NE (schema, nullptr);
 
+    const auto childrenOf = [&schema] (const char* type)
+    {
+        return schema->getChildConstraints (Identifier (type));
+    };
+
+    const auto propertyOf = [&schema] (const char* type, const char* name)
+    {
+        return schema->getPropertyInfo (Identifier (type), Identifier (name));
+    };
+
+    // Each element of the grammar once, and each registered type
+    EXPECT_EQ (schema->getNodeTypeNames().size(), 53 + static_cast<int> (ComponentTypeRegistry::getInstance().getRegisteredTypes().size()));
+
+    // The document holds its blocks, then the components of every type
+    const auto inDocument = childrenOf ("yui").allowedTypes;
+    const StringArray blocks ({ "import", "tokens", "palette", "style", "drawing", "shader", "component" });
+    ASSERT_GT (inDocument.size(), blocks.size());
+
+    for (int index = 0; index < blocks.size(); ++index)
+        EXPECT_EQ (inDocument[index], blocks[index]);
+
+    EXPECT_TRUE (inDocument.contains ("Slider"));
+    EXPECT_EQ (childrenOf ("yui").maxCount, -1);
+
+    // The properties of an element, with what tells them and whether they have to be written
+    EXPECT_EQ (schema->getPropertyNames (Identifier ("palette")).size(), 3);
+    EXPECT_TRUE (propertyOf ("palette", "name").required);
+    EXPECT_EQ (propertyOf ("palette", "name").description, "Palette name.");
+    EXPECT_EQ (propertyOf ("palette", "colors").type, "string");
+    EXPECT_FALSE (propertyOf ("palette", "mode").required);
+    EXPECT_EQ (propertyOf ("palette", "mode").description, "Palette mode (dark or light).");
+    EXPECT_EQ (childrenOf ("palette").maxCount, 0);
+
+    const auto at = propertyOf ("keyframe", "at");
+    EXPECT_EQ (at.type, "number");
+    EXPECT_TRUE (at.required);
+    ASSERT_TRUE (at.minimum.has_value() && at.maximum.has_value());
+    EXPECT_DOUBLE_EQ (*at.minimum, 0.0);
+    EXPECT_DOUBLE_EQ (*at.maximum, 1.0);
+    EXPECT_EQ (childrenOf ("keyframe").allowedTypes, StringArray ("declaration"));
+
+    // The elements each one holds, in their order
+    const StringArray drawn ({ "let", "repeat", "group", "clip", "layer", "viewport", "use", "drawing", "pattern", "marker", "rect", "ellipse",
+                               "circle", "line", "arc", "path", "polygon", "star", "vertex", "part", "text", "image", "svg" });
+
+    auto inDrawing = drawn;
+    inDrawing.insert (0, "property");
+
+    auto inLayer = drawn;
+    inLayer.add ("clipPath");
+    inLayer.add ("mask");
+    inLayer.add ("filter");
+
+    EXPECT_EQ (childrenOf ("group").allowedTypes, drawn);
+    EXPECT_EQ (childrenOf ("repeat").allowedTypes, drawn);
+    EXPECT_EQ (childrenOf ("drawing").allowedTypes, inDrawing);
+    EXPECT_EQ (childrenOf ("layer").allowedTypes, inLayer);
+    EXPECT_EQ (childrenOf ("style").allowedTypes, StringArray ({ "rule", "palette", "drawing", "keyframes", "property" }));
+    EXPECT_EQ (childrenOf ("filter").allowedTypes, StringArray ({ "blur", "offset", "flood", "colorMatrix", "composite", "blend", "morphology", "lighting", "displacement", "dropShadow", "use" }));
+
+    // A component block holds anything, a shape nothing
+    EXPECT_TRUE (propertyOf ("component", "base").required);
+    EXPECT_TRUE (childrenOf ("component").allowedTypes.isEmpty());
+    EXPECT_EQ (childrenOf ("component").maxCount, -1);
+    EXPECT_TRUE (schema->getPropertyNames (Identifier ("rect")).isEmpty());
+    EXPECT_EQ (childrenOf ("rect").maxCount, 0);
+
+    // A component type has what every element is written with, its properties and signals and the ones of its bases
+    const auto ofSlider = schema->getPropertyNames (Identifier ("Slider"));
+
+    for (const auto* name : { "id", "class", "palette", "drawing", "value", "minimum", "visible", "onValueChanged" })
+        EXPECT_TRUE (ofSlider.contains (name)) << name;
+
+    EXPECT_EQ (propertyOf ("Slider", "id").description, "Component identifier.");
+    EXPECT_EQ (propertyOf ("Slider", "minimum").description, "The lowest value of the range.");
+    EXPECT_FALSE (propertyOf ("Slider", "value").required);
+    EXPECT_TRUE (childrenOf ("Slider").allowedTypes.isEmpty());
+
+    // A tree is held to the grammar and its components to what builds them, which takes the values a tree made in code
+    // holds as they are: numbers, where a text has what was written
+    YuiDocument document;
+    const auto result = document.load (DataTree ("yui", { DataTree ("Column", { DataTree ("Slider", { { "id", "knob" }, { "maximum", 10 }, { "value", 2.5 } }) }) }));
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    ASSERT_NE (document.findById<Slider> ("knob"), nullptr);
+    EXPECT_DOUBLE_EQ (document.findById<Slider> ("knob")->getValue(), 2.5);
+}
+
+TEST_F (YuiDocumentTests, AChangeInsideAComponentOrTokensBlockKeepsTheStyleSheetUnlessItDeclaresOtherProperties)
+{
+    const auto text = [] (const String& tokens, const String& declared, const String& caption, const String& classes)
+    {
+        return "tokens { " + tokens + " } "
+             + "style { .knob { glow: 0; transition: glow 1s; } .lit { glow: 10; } } "
+             + "component Panel : Column { " + declared + " Label { text: \"" + caption + "\"; } } "
+             + "Component { Component { id: knob; class: \"" + classes + "\"; } Panel { id: panel; } }";
+    };
+
+    const auto glow = [] (const Component& c) { return static_cast<double> (c.findProperty (Identifier ("glow"))); };
+
+    YuiDocument document;
+    ASSERT_TRUE (document.loadFromString (text ("property spacing: number = 4;", "property title: string = \"a\";", "one", "knob")).wasOk());
+
+    const auto sheet = document.getStyleSheet();
+    auto* knob = document.findById ("knob");
+    ASSERT_NE (knob, nullptr);
+    auto& context = *document.getRoot()->getStyleContext();
+
+    // A stylesheet reads neither what a component is made of nor the value of a token: it is kept, and the class the
+    // same load adds transitions like one added from code
+    ASSERT_TRUE (document.loadFromString (text ("property spacing: number = 8;", "property title: string = \"a\";", "two", "knob lit")).wasOk());
+    EXPECT_EQ (document.getStyleSheet(), sheet);
+    EXPECT_EQ (document.findById ("knob"), knob);
+    EXPECT_EQ (dynamic_cast<Label*> (document.findById ("panel")->getChildComponent (0))->getText(), "two");
+    context.refresh (0.0);
+    context.refresh (0.25);
+    EXPECT_DOUBLE_EQ (glow (*knob), 2.5);
+
+    // Nor the value a declared property starts with
+    ASSERT_TRUE (document.loadFromString (text ("property spacing: number = 8;", "property title: string = \"b\";", "two", "knob lit")).wasOk());
+    EXPECT_EQ (document.getStyleSheet(), sheet);
+    EXPECT_DOUBLE_EQ (glow (*knob), 2.5);
+
+    context.refresh (0.25);
+    EXPECT_DOUBLE_EQ (glow (*knob), 5.0);
+
+    // It reads the properties the blocks declare: another type, one more or another name make it again
+    ASSERT_TRUE (document.loadFromString (text ("property spacing: number = 8;", "property title: color = #ff0000;", "two", "knob lit")).wasOk());
+    EXPECT_NE (document.getStyleSheet(), sheet);
+
+    const auto retyped = document.getStyleSheet();
+    ASSERT_TRUE (document.loadFromString (text ("property spacing: number = 8; property corner: number = 2;", "property title: color = #ff0000;", "two", "knob lit")).wasOk());
+    EXPECT_NE (document.getStyleSheet(), retyped);
+
+    const auto extended = document.getStyleSheet();
+    ASSERT_TRUE (document.loadFromString (text ("property unit: number = 8; property corner: number = 2;", "property title: color = #ff0000;", "two", "knob lit")).wasOk());
+    EXPECT_NE (document.getStyleSheet(), extended);
+}
+
+TEST_F (YuiDocumentTests, AChangeOfTheTreeKeepsTheStyleSheetAndItsTransitionsWhenTheStyleIsTheSame)
+{
+    YuiDocument document;
+    ASSERT_TRUE (document.loadFromString ("style { .knob { glow: 0; transition: glow 1s; } .lit { glow: 10; } }\n"
+                                          "Component {\n"
+                                          "    Component { id: knob; class: \"knob\"; }\n"
+                                          "    Slider { id: slider; value: missing; }\n"
+                                          "    Label { id: caption; text: \"a\"; }\n"
+                                          "}")
+                     .wasOk());
+
+    // The line the problem of the slider is listed at, or none when it is not listed
+    const auto findSliderProblem = [&document]
+    {
+        for (const auto& diagnostic : document.getDiagnostics())
+            if (diagnostic.message.startsWith ("Slider.value: "))
+                return diagnostic.line;
+
+        return -1;
+    };
+
+    EXPECT_EQ (findSliderProblem(), 4);
+
+    const auto glow = [] (const Component& c) { return static_cast<double> (c.findProperty (Identifier ("glow"))); };
+
+    const auto sheet = document.getStyleSheet();
+    const auto map = document.getSourceMap();
+    auto* knob = document.findById ("knob");
+    ASSERT_NE (knob, nullptr);
+    auto& context = *document.getRoot()->getStyleContext();
+
+    // The style is as it was, so the class set in the tree transitions like one set from code
+    auto root = document.getTree().getChildWithName ("Component");
+    root.getChild (0).beginTransaction().setProperty ("class", "\"knob lit\"");
+    document.applyPendingChanges();
+
+    EXPECT_EQ (document.getStyleSheet(), sheet);
+    EXPECT_EQ (document.findById ("knob"), knob);
+    context.refresh (0.0);
+    context.refresh (0.25);
+    EXPECT_DOUBLE_EQ (glow (*knob), 2.5);
+
+    // The problems are forgotten and told again where they are written. The map is another one, which is how a
+    // component with a problem of its own knows it has to tell it again while the stylesheet is the same
+    ASSERT_TRUE (document.getSourceMap() != nullptr);
+    EXPECT_TRUE (document.getSourceMap() != map);
+    EXPECT_EQ (findSliderProblem(), 4);
+
+    root.getChild (2).beginTransaction().setProperty ("text", "\"b\"");
+    document.applyPendingChanges();
+
+    EXPECT_EQ (document.getStyleSheet(), sheet);
+    EXPECT_EQ (document.findById<Label> ("caption")->getText(), "b");
+    EXPECT_DOUBLE_EQ (glow (*knob), 2.5);
+
+    context.refresh (0.25);
+    EXPECT_DOUBLE_EQ (glow (*knob), 5.0);
+}
+
+TEST_F (YuiDocumentTests, AChangeOfTheTreeMakesTheStyleSheetAgainWhenItReadsSomethingElse)
+{
+    const String text ("tokens { property spacing: number = 4; }\n"
+                       "style { .lit { opacity: 0.5; } }\n"
+                       "component Panel : Column { property title: string = \"a\"; Label { text: \"one\"; } }\n"
+                       "Component { Label { id: reading; width: spacing * 10; } Panel { id: panel; } }");
+
+    YuiDocument document;
+    ASSERT_TRUE (document.loadFromString (text).wasOk());
+    EXPECT_TRUE (document.getDiagnostics().empty()) << DataTreeDiagnostic::join (document.getDiagnostics());
+
+    auto sheet = document.getStyleSheet();
+
+    // Applies the changes made to the tree, and tells whether the stylesheet is the one there was
+    const auto keepsTheStyleSheet = [&document, &sheet]
+    {
+        document.applyPendingChanges();
+
+        const auto isKept = document.getStyleSheet() == sheet;
+        sheet = document.getStyleSheet();
+        return isKept;
+    };
+
+    const auto tree = document.getTree();
+    auto token = tree.getChildWithName ("tokens").getChildWithName ("property");
+    auto declared = tree.getChildWithName ("component").getChildWithName ("property");
+    auto label = tree.getChildWithName ("component").getChildWithName ("Column").getChildWithName ("Label");
+    auto declaration = tree.getChildWithName ("style").getChildWithName ("rule").getChildWithName ("declaration");
+    ASSERT_TRUE (token.isValid() && declared.isValid() && label.isValid() && declaration.isValid());
+
+    // What a component is made of, the value of a token and the one a declared property starts with are not read by it
+    label.beginTransaction().setProperty ("text", "\"two\"");
+    EXPECT_TRUE (keepsTheStyleSheet());
+    EXPECT_EQ (dynamic_cast<Label*> (document.findById ("panel")->getChildComponent (0))->getText(), "two");
+
+    token.beginTransaction().setProperty ("value", "8");
+    EXPECT_TRUE (keepsTheStyleSheet());
+    EXPECT_FLOAT_EQ (document.findById ("reading")->getWidth(), 80.0f);
+
+    declared.beginTransaction().setProperty ("value", "\"b\"");
+    EXPECT_TRUE (keepsTheStyleSheet());
+
+    // The properties declared are, by their name and their type, and so is all of a style block
+    declared.beginTransaction().setProperty ("name", "heading");
+    EXPECT_FALSE (keepsTheStyleSheet());
+
+    token.beginTransaction().setProperty ("type", "integer");
+    EXPECT_FALSE (keepsTheStyleSheet());
+
+    declaration.beginTransaction().setProperty ("value", "0.25");
+    EXPECT_FALSE (keepsTheStyleSheet());
+
+    // An element added leaves no map to tell a build from the one before: the stylesheet is made again whatever changes
+    tree.getChildWithName ("Component").beginTransaction().addChild (DataTree ("Label"));
+    EXPECT_FALSE (keepsTheStyleSheet());
+    EXPECT_TRUE (document.getSourceMap() == nullptr);
+
+    label.beginTransaction().setProperty ("text", "\"three\"");
+    EXPECT_FALSE (keepsTheStyleSheet());
+
+    // Until a text is loaded
+    ASSERT_TRUE (document.loadFromString (text).wasOk());
+    sheet = document.getStyleSheet();
+
+    document.getTree().getChildWithName ("component").getChildWithName ("Column").getChildWithName ("Label").beginTransaction().setProperty ("text", "\"four\"");
+    EXPECT_TRUE (keepsTheStyleSheet());
+}
 
